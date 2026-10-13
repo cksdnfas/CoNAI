@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, DatabaseZap, RotateCw } from 'lucide-react'
+import { Alert } from '@/components/ui/alert'
 import { IconButton } from '@/components/ui/icon-button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -153,22 +154,20 @@ export function DataRematchSection() {
       ))}
 
       {dataRematchOptions.hash ? (
-        <div className="my-2 rounded-sm bg-destructive-soft px-4 py-3 text-sm text-destructive-soft-foreground">
-          <div className="flex gap-3">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div className="space-y-2">
-              <p>{t({ ko: '그룹·자동 폴더 그룹·모델 정보·임시 링크·생성 기록과의 연결은 옮겨지지 않고 끊어져. 필요하면 다시 지정해야 해.', en: 'Links to groups, auto-folder groups, model info, temporary links and generation history are not carried over — they are removed and must be set again if needed.' })}</p>
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold">
-                <Checkbox
-                  checked={hashConfirmed}
-                  disabled={isDataRematchBusy}
-                  onCheckedChange={(checked) => setHashConfirmed(checked === true)}
-                />
-                {t({ ko: '위 내용을 확인했어', en: 'I understand the above' })}
-              </label>
-            </div>
+        <Alert variant="destructive" className="my-2">
+          <AlertTriangle />
+          <div className="col-start-2 space-y-2">
+            <p>{t({ ko: '그룹·자동 폴더 그룹·모델 정보·임시 링크·생성 기록과의 연결은 옮겨지지 않고 끊어져. 필요하면 다시 지정해야 해.', en: 'Links to groups, auto-folder groups, model info, temporary links and generation history are not carried over — they are removed and must be set again if needed.' })}</p>
+            <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold">
+              <Checkbox
+                checked={hashConfirmed}
+                disabled={isDataRematchBusy}
+                onCheckedChange={(checked) => setHashConfirmed(checked === true)}
+              />
+              {t({ ko: '위 내용을 확인했어', en: 'I understand the above' })}
+            </label>
           </div>
-        </div>
+        </Alert>
       ) : null}
 
       <div className="space-y-2 pt-3">
@@ -199,13 +198,15 @@ export function DataRematchSection() {
         ) : null}
 
         {latestErrors.length > 0 ? (
-          <div className="space-y-1 rounded-sm bg-destructive-soft px-4 py-3 text-xs text-destructive-soft-foreground">
-            {latestErrors.map((error) => (
-              <div key={`${error.target}-${error.error}`} className="truncate" title={`${error.target}: ${error.error}`}>
-                {error.target}: {error.error}
-              </div>
-            ))}
-          </div>
+          <Alert variant="destructive" className="text-xs">
+            <div className="col-start-2 min-w-0 space-y-1">
+              {latestErrors.map((error) => (
+                <div key={`${error.target}-${error.error}`} className="truncate" title={`${error.target}: ${error.error}`}>
+                  {error.target}: {error.error}
+                </div>
+              ))}
+            </div>
+          </Alert>
         ) : null}
       </div>
     </RowGroup>

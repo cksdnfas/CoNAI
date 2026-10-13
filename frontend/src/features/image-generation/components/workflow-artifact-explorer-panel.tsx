@@ -2,6 +2,7 @@ import { useMemo, useState, type MouseEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Download, File, FileAudio, FileText, FileVideo, Folder, ImageIcon, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CodeBlock } from '@/components/ui/code-block'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
@@ -12,6 +13,7 @@ import type { WorkflowArtifactEntry } from '@/lib/api-image-generation-types'
 import { getGenerationWorkflowArtifacts } from '@/lib/api-image-generation-workflows'
 import { getPublicGenerationWorkflowArtifacts } from '@/lib/api-public-workflows'
 import { cn } from '@/lib/utils'
+import { FLOATING_DROPDOWN_MENU_CLASS } from './floating-dropdown-utils'
 import { getErrorMessage } from '../image-generation-shared'
 
 type WorkflowArtifactExplorerPanelProps = {
@@ -296,7 +298,7 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
 
       {hoverPreview?.entry.fileUrl && hoverPreviewStyle ? (
         <div
-          className="pointer-events-none fixed z-popover w-72 rounded-md bg-surface-high p-2 text-foreground shadow-elevation-2"
+          className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'pointer-events-none w-72 p-2 text-foreground')}
           style={hoverPreviewStyle}
         >
           <img src={hoverPreview.entry.fileUrl} alt={hoverPreview.entry.name} className="max-h-72 w-full rounded-sm object-contain" />
@@ -326,7 +328,7 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
                     <AlertDescription>{artifactModal.error}</AlertDescription>
                   </Alert>
                 ) : (
-                  <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground">{artifactModal.content}</pre>
+                  <CodeBlock fill={false}>{artifactModal.content}</CodeBlock>
                 )}
               </div>
             )}

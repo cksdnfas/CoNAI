@@ -17,6 +17,7 @@ import type {
 } from '@/lib/api-auth'
 import { Field } from '@/components/ui/field'
 import { Modal } from '@/components/ui/modal'
+import { textVariants } from '@/components/ui/text'
 import { SecurityAccountManagementList } from './security-account-management-list'
 import { SecurityPermissionChecklist } from './security-permission-checklist'
 import {
@@ -191,7 +192,7 @@ export function SecurityPermissionGroupEditorModal({
             {isCreateMode ? (
               // A new group has no members yet: one section, so a heading rather than a one-tab strip.
               <div className="flex min-h-7 items-center gap-3 border-b border-line pb-2">
-                <h3 className="flex-1 text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
+                <h3 className={textVariants({ variant: 'overline', className: 'flex-1' })}>
                   {t({ ko: '권한', en: 'Permissions' })} <span className="tabular-nums">{draft.permissionKeys.length}</span>
                 </h3>
                 {!canEditPermissions ? readOnlyBadge : null}
@@ -255,7 +256,6 @@ export function SecurityPermissionGroupEditorModal({
                   groupLabels={groupLabels}
                   pageSize={10}
                   searchPlaceholder={t({ ko: '멤버 검색', en: 'Search members' })}
-                  searchAriaLabel={t({ ko: '그룹 멤버 검색', en: 'Search group members' })}
                   emptyMessage={members.length === 0 ? t({ ko: '멤버가 없어.', en: 'There are no members.' }) : t({ ko: '멤버 계정 정보를 불러오는 중이야.', en: 'Loading member account details.' })}
                   paginationClassName="pt-4"
                   isUpdatingAccountGroup={isUpdatingAccountGroup}

@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from 'react'
+import { useId, type ComponentProps, type ReactNode } from 'react'
 import { Info } from 'lucide-react'
 import { Tip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -10,16 +10,41 @@ interface FieldProps extends ComponentProps<'label'> {
   children: ReactNode
 }
 
+const FIELD_LABEL_CLASS = 'flex items-center gap-1 text-2xs font-semibold tracking-overline text-muted-foreground uppercase'
+
 /** Render a labelled form field with an overline label and an optional info tooltip. */
 function Field({ label, info, children, className, ...props }: FieldProps) {
   return (
     <label data-slot="field" className={cn('theme-settings-field flex flex-col text-sm', className)} {...props}>
-      <span className="flex items-center gap-1 text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
+      <span className={FIELD_LABEL_CLASS}>
         <span className="min-w-0 truncate">{label}</span>
         {info ? <FieldInfo>{info}</FieldInfo> : null}
       </span>
       {children}
     </label>
+  )
+}
+
+interface FieldGroupProps extends Omit<ComponentProps<'div'>, 'role'> {
+  label: ReactNode
+  info?: ReactNode
+  children: ReactNode
+}
+
+/**
+ * `Field` for content that holds several controls (segments, a picker, buttons): the same overline label, but a
+ * `role="group"` div named by it instead of a `<label>`, so a click on empty space never presses the first button.
+ */
+function FieldGroup({ label, info, children, className, ...props }: FieldGroupProps) {
+  const labelId = useId()
+  return (
+    <div data-slot="field" role="group" aria-labelledby={labelId} className={cn('theme-settings-field flex min-w-0 flex-col text-sm', className)} {...props}>
+      <span className={FIELD_LABEL_CLASS}>
+        <span id={labelId} className="min-w-0 truncate">{label}</span>
+        {info ? <FieldInfo>{info}</FieldInfo> : null}
+      </span>
+      {children}
+    </div>
   )
 }
 
@@ -39,4 +64,4 @@ function FieldInfo({ children }: { children: ReactNode }) {
   )
 }
 
-export { Field, FieldInfo }
+export { Field, FieldGroup, FieldInfo }

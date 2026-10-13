@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { FileText, FolderTree, Music, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CountBadge } from '@/components/ui/count-badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalFooter } from '@/components/ui/modal'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TextTabs, type TextTabItem } from '@/components/common/text-tabs'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-url'
@@ -17,8 +18,6 @@ import { ExtensionTile, attachMarkdown, type AttachItem, type AttachTab, type Po
 import { usePostPermissions } from './use-post-permissions'
 
 export type { AttachTab } from './post-attach-shared'
-
-const TAB_TRIGGER = 'relative flex-none rounded-none bg-transparent px-0 pb-2 pt-1 text-base font-semibold text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary after:opacity-0 data-[state=active]:after:opacity-100'
 
 /** One small square in the tray: what was picked, in order; a click takes it back out. */
 function TrayThumb({ item, position, onRemove }: { item: AttachItem; position: number; onRemove: () => void }) {
@@ -40,7 +39,7 @@ function TrayThumb({ item, position, onRemove }: { item: AttachItem; position: n
       <Button variant="ghost" onClick={onRemove} aria-label={t({ ko: '{name} 빼기', en: 'Remove {name}' }, { name: label })}
         className="relative size-10 shrink-0 rounded-sm bg-surface-high p-0 text-muted-foreground has-[>svg]:px-0">
         <span className="flex size-full items-center justify-center overflow-hidden rounded-sm">{body}</span>
-        <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-2xs font-bold leading-none text-primary-foreground tabular-nums">{position}</span>
+        <CountBadge corner="top-right" count={position} className="-top-1 -right-1 font-bold" />
         {item.kind === 'group' && !failed ? <FolderTree className="absolute bottom-0.5 left-0.5 size-3 text-white drop-shadow" /> : null}
       </Button>
     </Tip>
@@ -54,12 +53,12 @@ function TrayThumb({ item, position, onRemove }: { item: AttachItem; position: n
 export function PostAttachPicker({ initialTab, onClose, onInsert }: { initialTab: AttachTab; onClose: () => void; onInsert: (lines: string[]) => void }) {
   const { t } = useI18n()
   const { canViewImages, canViewAudio, canUseFiles } = usePostPermissions()
-  const tabs = ([
-    canViewImages ? { value: 'media', label: t({ ko: '미디어', en: 'Media' }) } : null,
-    canViewAudio ? { value: 'audio', label: t({ ko: '오디오', en: 'Audio' }) } : null,
+  const tabs: Array<TextTabItem<AttachTab>> = [
+    ...(canViewImages ? [{ value: 'media' as const, label: t({ ko: '미디어', en: 'Media' }) }] : []),
+    ...(canViewAudio ? [{ value: 'audio' as const, label: t({ ko: '오디오', en: 'Audio' }) }] : []),
     { value: 'post', label: t({ ko: '게시물', en: 'Posts' }) },
-    canUseFiles ? { value: 'file', label: t({ ko: '파일', en: 'Files' }) } : null,
-  ] as const).filter((item): item is NonNullable<typeof item> => item !== null)
+    ...(canUseFiles ? [{ value: 'file' as const, label: t({ ko: '파일', en: 'Files' }) }] : []),
+  ]
   const [tab, setTab] = useState<AttachTab>(tabs.some((item) => item.value === initialTab) ? initialTab : 'post')
   const [selected, setSelected] = useState<AttachItem[]>([])
   const [postStyle, setPostStyle] = useState<PostInsertStyle>('card')
@@ -72,11 +71,7 @@ export function PostAttachPicker({ initialTab, onClose, onInsert }: { initialTab
       height="tall"
       title={<span className="sr-only">{t({ ko: '앱 자료 넣기', en: 'Insert from the app' })}</span>}
       headerActions={(
-        <Tabs value={tab} onValueChange={(value) => setTab(value as AttachTab)} className="order-first min-w-0 flex-1 gap-0">
-          <TabsList aria-label={t({ ko: '넣을 자료', en: 'What to insert' })} className="h-auto gap-5 rounded-none bg-transparent p-0">
-            {tabs.map((item) => <TabsTrigger key={item.value} value={item.value} className={TAB_TRIGGER}>{item.label}</TabsTrigger>)}
-          </TabsList>
-        </Tabs>
+        <TextTabs value={tab} onChange={setTab} items={tabs} ariaLabel={t({ ko: '넣을 자료', en: 'What to insert' })} hairline={false} className="order-first flex-1" />
       )}
     >
       {tab === 'media' ? <AttachMediaTab selected={selected} setSelected={setSelected} />
@@ -84,7 +79,7 @@ export function PostAttachPicker({ initialTab, onClose, onInsert }: { initialTab
         : tab === 'file' ? <AttachFilesTab selected={selected} setSelected={setSelected} />
         : <AttachPostsTab selected={selected} setSelected={setSelected} postStyle={postStyle} onPostStyleChange={setPostStyle} />}
       <ModalFooter className="flex-nowrap justify-start gap-3 pt-3">
-        <div className={cn('flex min-w-0 flex-1 items-center gap-2.5 overflow-x-auto py-1 pr-1', !selected.length && 'hidden')}>
+        <div className={cn('flex min-w-0 flex-1 items-center gap-2.5 scroll-x py-1 pr-1', !selected.length && 'hidden')}>
           {selected.map((item, index) => <TrayThumb key={item.key} item={item} position={index + 1} onRemove={() => setSelected((current) => current.filter((entry) => entry.key !== item.key))} />)}
         </div>
         <span className={cn('shrink-0 text-sm tabular-nums text-muted-foreground', !selected.length && 'mr-auto')}>{t({ ko: '{count}개', en: '{count} picked' }, { count: selected.length })}</span>

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AudioLines, ChevronLeft, ChevronRight, History, ImageIcon, Info, Maximize2 } from 'lucide-react'
 import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
@@ -305,7 +306,7 @@ export function GenerationResultStage({
             onClickCapture={handleItemClick}
             style={{ touchAction: 'pan-y pinch-zoom' }}
             // Scrollbar hidden (it ran into the active thumb's ring); edge chevrons + drag replace it.
-            className={cn('theme-nav-scroll flex gap-2 overflow-x-auto p-1.5', isDragging && 'cursor-grabbing select-none')}
+            className={cn('scroll-x theme-nav-scroll flex gap-2 p-1.5', isDragging && 'cursor-grabbing select-none')}
           >
             {items.map((item) => {
               const id = String(item.id)
@@ -342,9 +343,9 @@ export function GenerationResultStage({
                     />
                   )}
                   {item.audio?.length && item.composite_hash ? (
-                    <span className="absolute right-1 bottom-1 rounded-sm bg-backdrop/70 p-0.5 text-white">
-                      <AudioLines className="size-3" />
-                    </span>
+                    <Badge variant="overlay" className="absolute right-1 bottom-1 p-0.5">
+                      <AudioLines />
+                    </Badge>
                   ) : null}
                 </Button>
               )

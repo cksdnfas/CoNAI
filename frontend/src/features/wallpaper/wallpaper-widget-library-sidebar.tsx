@@ -20,7 +20,6 @@ import {
   MessagesSquare,
   Newspaper,
   Plus,
-  Search,
   Sparkles,
   Type,
   UserRound,
@@ -30,10 +29,10 @@ import {
   Gauge,
   Play,
 } from 'lucide-react'
+import { SearchField } from '@/components/common/search-field'
 import { TextTabs } from '@/components/common/text-tabs'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
 import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -93,17 +92,7 @@ function WidgetLibrary({ onAddWidget }: { onAddWidget: (widgetType: WallpaperWid
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input
-          type="search"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder={t({ ko: '위젯 검색', en: 'Search widgets' })}
-          aria-label={t({ ko: '위젯 검색', en: 'Search widgets' })}
-          className="h-8 pl-8 text-xs"
-        />
-      </div>
+      <SearchField value={searchQuery} onChange={setSearchQuery} placeholder={t({ ko: '위젯 검색', en: 'Search widgets' })} />
       <SidebarNav aria-label={t({ ko: '위젯 라이브러리', en: 'Widget library' })}>
         {searchSummary.visibleFolders.map((folder) => (
           <div key={folder.id}>

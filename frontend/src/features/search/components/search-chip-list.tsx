@@ -3,6 +3,7 @@ import { SEARCH_OPERATOR_CYCLE_HINT, SEARCH_OPERATOR_DESCRIPTIONS, SEARCH_OPERAT
 import { getSearchScopeStyle, isFixedOperatorChip } from '@/features/search/search-utils'
 import type { SearchChip } from '@/features/search/search-types'
 import { Button } from '@/components/ui/button'
+import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { Text } from '@/components/ui/text'
@@ -45,7 +46,7 @@ export function SearchChipList({
                 {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
               </span>
               {isFixedOperatorChip(chip) ? (
-                <span className="rounded-sm bg-primary/10 px-2 py-1 text-xs font-bold text-primary">{t(SEARCH_OPERATOR_LABELS[chip.operator])}</span>
+                <Chip tone="primary" className="font-bold">{t(SEARCH_OPERATOR_LABELS[chip.operator])}</Chip>
               ) : (
                 <Tip content={[t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator]), t(SEARCH_OPERATOR_CYCLE_HINT)].join('\n')} className="whitespace-pre-line">
                   <Button

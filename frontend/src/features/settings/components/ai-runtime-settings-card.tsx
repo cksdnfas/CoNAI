@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Download, RefreshCw, ScrollText, X } from 'lucide-react'
 import type { AiRuntimeInstallStep, AiRuntimeSettings, AiRuntimeStatus, AiTorchBackend, AiTorchBackendPreference } from '@conai/shared'
+import { CodeBlock } from '@/components/ui/code-block'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -179,9 +180,9 @@ export function AiRuntimeSettingsCard({
                 </>
               ) : null}
               {logOpen || failed ? (
-                <pre className="max-h-32 overflow-auto rounded-md bg-surface-lowest px-3 py-2 font-mono text-2xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                <CodeBlock size="2xs" maxHeight="xs" className="text-muted-foreground">
                   {[...log.slice(-12), ...(failed && install?.error ? [install.error] : [])].join('\n')}
-                </pre>
+                </CodeBlock>
               ) : null}
             </div>
           ) : null}

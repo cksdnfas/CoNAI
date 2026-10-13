@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { GripVertical, Search, Sparkles, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
+import { SearchField } from '@/components/common/search-field'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
@@ -104,22 +106,20 @@ export function ComfyWorkflowMarkedFieldList({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-11 shrink-0 items-center gap-2 pr-2 pl-4">
         {isSearchOpen ? (
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
+          <div
+            className="min-w-0 flex-1"
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape') return
+              event.preventDefault()
+              setQuery('')
+              setIsSearchOpen(false)
+            }}
+          >
+            <SearchField
               autoFocus
-              variant="settings"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== 'Escape') return
-                event.preventDefault()
-                setQuery('')
-                setIsSearchOpen(false)
-              }}
+              onChange={setQuery}
               placeholder={t({ ko: '필드 검색', en: 'Search fields' })}
-              aria-label={t({ ko: '필드 검색', en: 'Search fields' })}
-              className="h-8 pl-8"
             />
           </div>
         ) : (
@@ -149,9 +149,11 @@ export function ComfyWorkflowMarkedFieldList({
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2">
         {groups.length === 0 ? (
-          <div className="px-4 py-3 text-sm text-muted-foreground">
-            {isFiltering ? t({ ko: '맞는 필드가 없어', en: 'No matching fields' }) : t({ ko: '아직 필드가 없어', en: 'No fields yet' })}
-          </div>
+          <EmptyState
+            size="compact"
+            className="px-4"
+            title={isFiltering ? t({ ko: '맞는 필드가 없어', en: 'No matching fields' }) : t({ ko: '아직 필드가 없어', en: 'No fields yet' })}
+          />
         ) : groups.map((group) => (
           <div
             key={group.key}
@@ -170,10 +172,10 @@ export function ComfyWorkflowMarkedFieldList({
                   <GripVertical className="size-3.5" />
                 </span>
               </Tip>
-              <span className="min-w-0 truncate text-2xs font-bold tracking-overline text-muted-foreground uppercase">
+              <Text as="span" variant="overline" className="min-w-0 truncate">
                 {group.nodeTitle ?? t({ ko: '노드 없음', en: 'No node' })}
                 {group.nodeId ? <span className="font-mono font-normal normal-case"> · #{group.nodeId}</span> : null}
-              </span>
+              </Text>
             </div>
             {group.fields.map((field) => {
               const isSelected = field.id === selectedFieldId

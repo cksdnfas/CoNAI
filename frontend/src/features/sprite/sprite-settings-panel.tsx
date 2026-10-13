@@ -4,6 +4,8 @@ import { Pipette, Plus, Wand2, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
+import { SliderRow } from '@/components/ui/slider-row'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { Tip } from '@/components/ui/tooltip'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { useI18n } from '@/i18n'
@@ -12,7 +14,7 @@ import type { SpriteVideoInfo } from '@/lib/api-sprite'
 import { cn } from '@/lib/utils'
 import { MAX_KEY_COLORS, MAX_SPRITE_FRAMES, normalizeHex, withDespill, type ExtractForm, type OutputForm, type SaveForm } from './sprite-options'
 import { HexInput } from './sprite-result-panel'
-import { MiniField, SliderLine, SpriteSection, SwitchLine } from './sprite-ui'
+import { MiniField, SpriteSection } from './sprite-ui'
 
 const COLUMN_PRESETS = [0, 2, 3, 4, 6, 8]
 const SPRITE_GROUP = '스프라이트'
@@ -94,7 +96,7 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
         <SwitchLine
           label={t({ ko: '연속 중복 프레임 빼기', en: 'Drop repeated frames' })}
           checked={form.removeDuplicateFrames}
-          onChange={(checked) => update({ removeDuplicateFrames: checked })}
+          onCheckedChange={(checked) => update({ removeDuplicateFrames: checked })}
           extra={form.removeDuplicateFrames ? <NumberStepperInput className="h-7 w-32 text-xs" value={form.similarityPercent} min={1} max={100} step={0.5} onValueCommit={(value) => update({ similarityPercent: Math.max(1, Math.min(100, Number(value) || 99)) })} aria-label={t({ ko: '유사도 %', en: 'Similarity %' })} /> : undefined}
         />
       </SpriteSection>
@@ -120,12 +122,12 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
             </div>
           ))}
         </div>
-        <SliderLine label={t({ ko: '허용치', en: 'Tolerance' })} value={form.tolerancePercent} min={1} max={100} format={(value) => `${Math.round(value)}%`} onChange={(value) => update({ tolerancePercent: value })} />
-        <SliderLine label={t({ ko: '부드러움', en: 'Softness' })} value={form.softnessPercent} min={form.despill ? 1 : 0} max={100} format={(value) => `${Math.round(value)}%`} onChange={(value) => update({ softnessPercent: value })} />
-        <SwitchLine label={t({ ko: '디스필', en: 'Despill' })} checked={form.despill} onChange={(checked) => { setForm(withDespill(form, checked)); onActiveColorChange(0) }} />
+        <SliderRow label={t({ ko: '허용치', en: 'Tolerance' })} value={form.tolerancePercent} min={1} max={100} readout={`${Math.round(form.tolerancePercent)}%`} onChange={(value) => update({ tolerancePercent: value })} />
+        <SliderRow label={t({ ko: '부드러움', en: 'Softness' })} value={form.softnessPercent} min={form.despill ? 1 : 0} max={100} readout={`${Math.round(form.softnessPercent)}%`} onChange={(value) => update({ softnessPercent: value })} />
+        <SwitchLine label={t({ ko: '디스필', en: 'Despill' })} checked={form.despill} onCheckedChange={(checked) => { setForm(withDespill(form, checked)); onActiveColorChange(0) }} />
         {form.despill ? (
           <div className="border-l-2 border-line pl-3">
-            <SwitchLine muted label={t({ ko: '가장자리 정리', en: 'Edge clean-up' })} checked={form.edgeCleanup} onChange={(checked) => update({ edgeCleanup: checked })} />
+            <SwitchLine muted label={t({ ko: '가장자리 정리', en: 'Edge clean-up' })} checked={form.edgeCleanup} onCheckedChange={(checked) => update({ edgeCleanup: checked })} />
           </div>
         ) : null}
       </SpriteSection>
@@ -134,14 +136,14 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
         <SwitchLine
           label={t({ ko: '자동 크롭', en: 'Auto crop' })}
           checked={form.autoCrop}
-          onChange={(checked) => update({ autoCrop: checked })}
+          onCheckedChange={(checked) => update({ autoCrop: checked })}
           extra={form.autoCrop ? <NumberStepperInput className="h-7 w-32 text-xs" value={form.alphaThreshold} min={1} max={255} step={1} onValueCommit={(value) => update({ alphaThreshold: Math.max(1, Math.min(255, Number(value) || 20)) })} aria-label={t({ ko: '알파 임계값', en: 'Alpha threshold' })} /> : undefined}
         />
         <SwitchLine
           label={t({ ko: '사전 크롭', en: 'Pre-crop' })}
           checked={Boolean(form.preCrop)}
           disabled={!info}
-          onChange={(checked) => update({ preCrop: checked && info ? { x: Math.round(info.width * 0.1), y: Math.round(info.height * 0.1), width: Math.round(info.width * 0.8), height: Math.round(info.height * 0.8) } : null })}
+          onCheckedChange={(checked) => update({ preCrop: checked && info ? { x: Math.round(info.width * 0.1), y: Math.round(info.height * 0.1), width: Math.round(info.width * 0.8), height: Math.round(info.height * 0.8) } : null })}
         />
         {form.preCrop ? (
           <div className="grid grid-cols-2 gap-2">
@@ -193,7 +195,7 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
         <div className="flex items-center justify-end gap-3 text-sm">
           <SegmentedControl size="sm" value={output.format} onChange={(format) => setOutput({ ...output, format: format as OutputForm['format'] })} items={[{ value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }]} ariaLabel={t({ ko: '포맷', en: 'Format' })} />
         </div>
-        {output.format === 'webp' ? <SliderLine label={t({ ko: '품질', en: 'Quality' })} value={output.quality} min={1} max={100} onChange={(quality) => setOutput({ ...output, quality })} /> : null}
+        {output.format === 'webp' ? <SliderRow label={t({ ko: '품질', en: 'Quality' })} value={output.quality} min={1} max={100} onChange={(quality) => setOutput({ ...output, quality })} /> : null}
       </SpriteSection>
 
       {canSave ? (
@@ -207,7 +209,7 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
               </Select>
             </Tip>
           </div>
-          <SwitchLine label={t({ ko: 'ZIP으로도 받기', en: 'Also download a ZIP' })} checked={save.zip} onChange={(zip) => setSave({ ...save, zip })} />
+          <SwitchLine label={t({ ko: 'ZIP으로도 받기', en: 'Also download a ZIP' })} checked={save.zip} onCheckedChange={(zip) => setSave({ ...save, zip })} />
         </SpriteSection>
       ) : null}
     </div>

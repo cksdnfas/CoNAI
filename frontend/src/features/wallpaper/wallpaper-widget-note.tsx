@@ -3,10 +3,17 @@ import { useI18n } from '@/i18n'
 import { ApiRequestError } from '@/lib/api-request'
 import { cn } from '@/lib/utils'
 
-/** Quiet one-line state (loading, empty, no access) centered in the widget. */
-export function WallpaperWidgetNote({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'error' }) {
+const NOTE_TONE_CLASS = {
+  muted: 'opacity-60',
+  error: 'text-destructive',
+  /** Not set up yet (no group picked, nothing to show): a dashed slot where the content will go. */
+  placeholder: 'rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-muted-foreground',
+} as const
+
+/** Quiet one-line state (loading, empty, no access, not set up) centered in the widget. */
+export function WallpaperWidgetNote({ children, tone = 'muted', className }: { children: ReactNode; tone?: keyof typeof NOTE_TONE_CLASS; className?: string }) {
   return (
-    <div className={cn('flex h-full items-center justify-center px-2 text-center text-sm', tone === 'error' ? 'text-destructive' : 'opacity-60')}>
+    <div className={cn('flex h-full items-center justify-center px-2 text-center text-sm', NOTE_TONE_CLASS[tone], className)}>
       {children}
     </div>
   )

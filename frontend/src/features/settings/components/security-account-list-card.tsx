@@ -64,7 +64,6 @@ export function SecurityAccountListCard({
             groupLabels={groupLabels}
             pageSize={20}
             searchPlaceholder={t({ ko: '계정 검색', en: 'Search accounts' })}
-            searchAriaLabel={t({ ko: '계정 검색', en: 'Search accounts' })}
             emptyMessage={t({ ko: '맞는 계정이 없어.', en: 'No matching accounts.' })}
             isUpdatingAccountGroup={isUpdatingAccountGroup}
             isUpdatingAccountPassword={isUpdatingAccountPassword}

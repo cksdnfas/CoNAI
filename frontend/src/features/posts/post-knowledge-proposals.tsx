@@ -13,6 +13,7 @@ import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Section } from '@/components/ui/section'
 import { Select } from '@/components/ui/select'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { diffLines } from '@/features/files/file-revisions'
@@ -133,7 +134,7 @@ export function PostKnowledgeProposals({ postId, standalone = false, bare = fals
   })
   const items = query.data?.pages.flatMap((page) => page.items) ?? []
   const body = <>
-      {query.isPending ? <LoadingState /> : query.isError ? <ErrorState size="compact" error={query.error} onRetry={() => void query.refetch()} /> : query.data ? <div>{items.map((item) => <ListRow key={item.id} asChild interactive><button type="button" onClick={() => setPicked(item.id)} className="w-full text-left"><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.title}</span><span className="text-xs text-muted-foreground">{item.proposedByName} · {formatDateTime(item.createdAt)}</span></span><Badge variant="ghost">{item.kind === 'create' ? t({ ko: '새 문서', en: 'New document' }) : t({ ko: '수정', en: 'Update' })}</Badge></button></ListRow>)}{!items.length ? <p className="py-3 text-sm text-muted-foreground">{t({ ko: '해당 제안이 없어', en: 'No matching proposals' })}</p> : null}{query.hasNextPage ? <Button variant="ghost" size="sm" disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{t({ ko: '더 보기', en: 'Load more' })}</Button> : null}</div> : null}
+      {query.isPending ? <LoadingState /> : query.isError ? <ErrorState size="compact" error={query.error} onRetry={() => void query.refetch()} /> : query.data ? <div>{items.map((item) => <ListRow key={item.id} asChild interactive><button type="button" onClick={() => setPicked(item.id)} className="w-full text-left"><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.title}</span><span className="text-xs text-muted-foreground">{item.proposedByName} · {formatDateTime(item.createdAt)}</span></span><Badge variant="ghost">{item.kind === 'create' ? t({ ko: '새 문서', en: 'New document' }) : t({ ko: '수정', en: 'Update' })}</Badge></button></ListRow>)}{!items.length ? <EmptyState size="compact" title={t({ ko: '해당 제안이 없어', en: 'No matching proposals' })} /> : null}{query.hasNextPage ? <Button variant="ghost" size="sm" disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{t({ ko: '더 보기', en: 'Load more' })}</Button> : null}</div> : null}
       {picked ? <KnowledgeProposalReview proposalId={picked} onClose={() => setPicked(null)} /> : null}
   </>
   if (bare) return <div>{body}</div>

@@ -16,6 +16,7 @@ import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { SidebarGroupLabel, SidebarItem } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { DataCheckTd, DataCheckTh, DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { useI18n } from '@/i18n'
 import { formatFileSize } from '@/lib/api-files'
 import {
@@ -294,85 +295,78 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
     )
   } else if (isBin) {
     const allSelected = files.length > 0 && files.every((entry) => selected.includes(entry.name))
-    // `relative` keeps the absolutely positioned sr-only header labels inside the scroll box.
     list = (
-      <div className="relative overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-line text-xs text-muted-foreground">
-            <tr>
-              <th className="w-10 py-3 pr-3">
-                <Checkbox aria-label={t({ ko: '전체 선택', en: 'Select all' })} disabled={files.length === 0} checked={allSelected} onCheckedChange={(checked) => setSelected(checked ? files.map((entry) => entry.name) : [])} />
-              </th>
-              <th className="py-3 font-normal">{t({ ko: '이름', en: 'Name' })}</th>
-              <th className="hidden px-3 font-normal md:table-cell">{t({ ko: '원래 위치', en: 'Original location' })}</th>
-              <th className="hidden px-3 font-normal lg:table-cell">{t({ ko: '삭제한 곳', en: 'Deleted by' })}</th>
-              <th className="hidden px-3 font-normal sm:table-cell">{t({ ko: '삭제일', en: 'Deleted' })}</th>
-              <th className="hidden px-3 text-right font-normal sm:table-cell">{t({ ko: '크기', en: 'Size' })}</th>
-              <th className="w-20"><span className="sr-only">{t({ ko: '작업', en: 'Actions' })}</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry) => {
-              const isSelected = selected.includes(entry.name)
-              const recycle = entry.recycle
-              return (
-                <tr key={entry.path} className={cn('border-b border-line last:border-0 hover:bg-fill', isSelected && 'bg-fill')}>
-                  <td className="py-2 pr-3">
-                    {entry.kind === 'file' ? <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: displayName(entry) })} checked={isSelected} onCheckedChange={(checked) => toggle(entry.name, checked === true)} /> : null}
-                  </td>
-                  {/* w-full + max-w-0: the name takes the free width and truncates instead of widening the table. */}
-                  <td className="w-full max-w-0">
-                    <Button variant="ghost" className="max-w-full justify-start" title={entry.name} onClick={() => open(entry)}>
-                      <EntryThumb root={root} entry={entry} className="size-7" />
-                      <span className="truncate">{displayName(entry)}</span>
-                    </Button>
-                  </td>
-                  <td className="hidden max-w-56 px-3 text-xs text-muted-foreground md:table-cell" title={recycle?.originalPath ?? undefined}>
-                    {/* Right-to-left clipping keeps the file end of a long path visible. */}
-                    <span className="block truncate [direction:rtl] text-left">{recycle?.originalPath ?? '—'}</span>
-                  </td>
-                  <td className="hidden whitespace-nowrap px-3 text-xs text-muted-foreground lg:table-cell">{sourceLabel(recycle?.source ?? null, t) ?? '—'}</td>
-                  <td className="hidden whitespace-nowrap px-3 text-xs text-muted-foreground sm:table-cell">{formatDateTime(recycle?.deletedAt ?? entry.modifiedAt)}</td>
-                  <td className="hidden whitespace-nowrap px-3 text-right text-xs text-muted-foreground sm:table-cell">{entry.kind === 'folder' ? '' : formatFileSize(entry.size)}</td>
-                  <td className="whitespace-nowrap text-right">
-                    {entry.kind === 'file' ? <>{restoreButton(entry)}{deleteButton(entry)}</> : null}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        head={(
+          <>
+            <DataCheckTh>
+              <Checkbox aria-label={t({ ko: '전체 선택', en: 'Select all' })} disabled={files.length === 0} checked={allSelected} onCheckedChange={(checked) => setSelected(checked ? files.map((entry) => entry.name) : [])} />
+            </DataCheckTh>
+            <DataTh>{t({ ko: '이름', en: 'Name' })}</DataTh>
+            <DataTh className="hidden md:table-cell">{t({ ko: '원래 위치', en: 'Original location' })}</DataTh>
+            <DataTh className="hidden lg:table-cell">{t({ ko: '삭제한 곳', en: 'Deleted by' })}</DataTh>
+            <DataTh className="hidden sm:table-cell">{t({ ko: '삭제일', en: 'Deleted' })}</DataTh>
+            <DataTh className="hidden text-right sm:table-cell">{t({ ko: '크기', en: 'Size' })}</DataTh>
+            <DataTh className="w-20"><span className="sr-only">{t({ ko: '작업', en: 'Actions' })}</span></DataTh>
+          </>
+        )}
+      >
+        {entries.map((entry) => {
+          const isSelected = selected.includes(entry.name)
+          const recycle = entry.recycle
+          return (
+            <DataTr interactive key={entry.path} selected={isSelected}>
+              <DataCheckTd>
+                {entry.kind === 'file' ? <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: displayName(entry) })} checked={isSelected} onCheckedChange={(checked) => toggle(entry.name, checked === true)} /> : null}
+              </DataCheckTd>
+              {/* w-full + max-w-0: the name takes the free width and truncates instead of widening the table. */}
+              <DataTd flush className="w-full max-w-0">
+                <Button variant="ghost" className="max-w-full justify-start" title={entry.name} onClick={() => open(entry)}>
+                  <EntryThumb root={root} entry={entry} className="size-7" />
+                  <span className="truncate">{displayName(entry)}</span>
+                </Button>
+              </DataTd>
+              <DataTd meta flush className="hidden max-w-56 md:table-cell" title={recycle?.originalPath ?? undefined}>
+                {/* Right-to-left clipping keeps the file end of a long path visible. */}
+                <span className="block truncate [direction:rtl] text-left">{recycle?.originalPath ?? '—'}</span>
+              </DataTd>
+              <DataTd meta flush className="hidden lg:table-cell">{sourceLabel(recycle?.source ?? null, t) ?? '—'}</DataTd>
+              <DataTd meta flush className="hidden sm:table-cell">{formatDateTime(recycle?.deletedAt ?? entry.modifiedAt)}</DataTd>
+              <DataTd meta flush className="hidden text-right sm:table-cell">{entry.kind === 'folder' ? '' : formatFileSize(entry.size)}</DataTd>
+              <DataTd flush className="whitespace-nowrap text-right">
+                {entry.kind === 'file' ? <>{restoreButton(entry)}{deleteButton(entry)}</> : null}
+              </DataTd>
+            </DataTr>
+          )
+        })}
+      </DataTable>
     )
   } else {
     list = (
-      <div className="relative overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-line text-xs text-muted-foreground">
-            <tr>
-              <th className="py-3 font-normal">{t({ ko: '이름', en: 'Name' })}</th>
-              <th className="hidden px-3 font-normal sm:table-cell">{t({ ko: '수정일', en: 'Modified' })}</th>
-              <th className="px-3 text-right font-normal">{t({ ko: '크기', en: 'Size' })}</th>
-              <th className="w-10"><span className="sr-only">{t({ ko: '다운로드', en: 'Download' })}</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry) => (
-              <tr key={entry.path} className="border-b border-line last:border-0 hover:bg-fill">
-                <td className="w-full max-w-0">
-                  <Button variant="ghost" className="max-w-full justify-start" title={entry.name} onClick={() => open(entry)}>
-                    <EntryIcon entry={entry} />
-                    <span className="truncate">{entry.name}</span>
-                  </Button>
-                </td>
-                <td className="hidden whitespace-nowrap px-3 text-xs text-muted-foreground sm:table-cell">{entry.kind === 'folder' ? '' : formatDateTime(entry.modifiedAt)}</td>
-                <td className="whitespace-nowrap px-3 text-right text-xs text-muted-foreground">{entry.kind === 'folder' ? '' : formatFileSize(entry.size)}</td>
-                <td>{entry.kind === 'file' ? downloadButton(entry) : null}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        head={(
+          <>
+            <DataTh>{t({ ko: '이름', en: 'Name' })}</DataTh>
+            <DataTh className="hidden sm:table-cell">{t({ ko: '수정일', en: 'Modified' })}</DataTh>
+            <DataTh className="text-right">{t({ ko: '크기', en: 'Size' })}</DataTh>
+            <DataTh className="w-10"><span className="sr-only">{t({ ko: '다운로드', en: 'Download' })}</span></DataTh>
+          </>
+        )}
+      >
+        {entries.map((entry) => (
+          <DataTr interactive key={entry.path}>
+            <DataTd flush className="w-full max-w-0">
+              <Button variant="ghost" className="max-w-full justify-start" title={entry.name} onClick={() => open(entry)}>
+                <EntryIcon entry={entry} />
+                <span className="truncate">{entry.name}</span>
+              </Button>
+            </DataTd>
+            <DataTd meta flush className="hidden sm:table-cell">{entry.kind === 'folder' ? '' : formatDateTime(entry.modifiedAt)}</DataTd>
+            <DataTd meta flush className="text-right">{entry.kind === 'folder' ? '' : formatFileSize(entry.size)}</DataTd>
+            <DataTd flush>{entry.kind === 'file' ? downloadButton(entry) : null}</DataTd>
+          </DataTr>
+        ))}
+      </DataTable>
     )
   }
 

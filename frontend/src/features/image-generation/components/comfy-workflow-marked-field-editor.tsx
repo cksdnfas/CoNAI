@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { LocateFixed, Trash2, X } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Field } from '@/components/ui/field'
+import { Field, FieldGroup } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -104,16 +104,6 @@ function buildNodeNumericBounds(
 
 function stringifyDefaultValue(value: WorkflowMarkedField['default_value']) {
   return value === undefined || value === null ? '' : String(value)
-}
-
-/** A labelled group of several controls; a div, not a <label>, so the controls inside keep their own labels. */
-function FieldGroup({ label, children }: { label: ReactNode, children: ReactNode }) {
-  return (
-    <div role="group" aria-label={typeof label === 'string' ? label : undefined} className="theme-settings-field flex flex-col text-sm">
-      <span className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{label}</span>
-      {children}
-    </div>
-  )
 }
 
 /** One labelled checkbox row; tonal hover instead of an outlined box. */

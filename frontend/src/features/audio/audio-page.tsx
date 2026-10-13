@@ -8,6 +8,7 @@ import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
 import { BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
 import { Button } from '@/components/ui/button'
+import { CountBadge } from '@/components/ui/count-badge'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   DropdownMenu,
@@ -19,6 +20,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -29,6 +31,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useStreamFallbackInterval } from '@/features/runtime-events/use-runtime-event-stream'
+import { TextTabs, type TextTabItem } from '@/components/common/text-tabs'
 import { useI18n } from '@/i18n'
 import {
   AUDIO_QUERY_KEY,
@@ -69,7 +72,7 @@ import { runtimeJobQueryKey, useRuntimeJob } from '@/lib/use-runtime-job'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { AudioCandidateRow, AudioOrderRow, activeJobCount, arrangeCandidates } from './audio-candidate-list'
-import { AudioCleanupDialog, AudioCommentsDialog, AudioGroupDialog, AudioProjectDialog, TextTabs } from './audio-dialogs'
+import { AudioCleanupDialog, AudioCommentsDialog, AudioGroupDialog, AudioProjectDialog } from './audio-dialogs'
 import { AudioEditorPanel } from './audio-editor-panel'
 import { AudioGenerateBar } from './audio-generate-bar'
 import { autoAudioLabel } from './audio-naming'
@@ -578,11 +581,11 @@ export function AudioPage() {
 
   /* ---------------------------------------------------------------------------------------------- render */
 
-  const tabs: Array<[ReviewTab, string, number?]> = group ? [
-    ['all', t({ ko: '전체', en: 'All' }), group.candidate_count],
-    ['pending', t({ ko: '미검수', en: 'Unreviewed' }), group.pending_review_count],
-    ['selected', t({ ko: '채택', en: 'Adopted' }), group.selected_count],
-    ['rejected', t({ ko: '보류', en: 'Rejected' }), Math.max(0, group.candidate_count - group.selected_count - group.pending_review_count)],
+  const tabs: Array<TextTabItem<ReviewTab>> = group ? [
+    { value: 'all', label: t({ ko: '전체', en: 'All' }), count: group.candidate_count },
+    { value: 'pending', label: t({ ko: '미검수', en: 'Unreviewed' }), count: group.pending_review_count },
+    { value: 'selected', label: t({ ko: '채택', en: 'Adopted' }), count: group.selected_count },
+    { value: 'rejected', label: t({ ko: '보류', en: 'Rejected' }), count: Math.max(0, group.candidate_count - group.selected_count - group.pending_review_count) },
   ] : []
   const inbox = group?.is_inbox === true
   const groupTitle = group
@@ -624,7 +627,7 @@ export function AudioPage() {
       {!inbox ? (
         <span className="relative inline-flex">
           <IconButton variant="ghost" label={t({ ko: '코멘트', en: 'Comments' })} onClick={() => setDialog('comments')}><MessageSquare /></IconButton>
-          {group.pending_comment_count > 0 ? <span className="pointer-events-none absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-primary px-1 text-center text-2xs leading-4 font-semibold text-primary-foreground">{group.pending_comment_count}</span> : null}
+          {group.pending_comment_count > 0 ? <CountBadge corner="top-right" count={group.pending_comment_count} /> : null}
         </span>
       ) : null}
       {permissions.canEdit ? <IconButton variant="ghost" label={t({ ko: '업로드', en: 'Upload' })} onClick={() => uploadInputRef.current?.click()}><Upload /></IconButton> : null}
@@ -824,7 +827,7 @@ export function AudioPage() {
                   />
                 ))}
                 {rows.length === 0 && candidatesQuery.isSuccess && visibleOrders.length === 0 ? (
-                  <p className="py-3 text-center text-xs text-muted-foreground">{t({ ko: '후보 없음', en: 'No takes' })}</p>
+                  <EmptyState size="compact" className="text-center" title={t({ ko: '후보 없음', en: 'No takes' })} />
                 ) : null}
                 <div ref={loadMoreRef} className="h-px" />
               </div>

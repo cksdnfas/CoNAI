@@ -899,6 +899,13 @@
     scrollbar-gutter: stable both-edges;
   }
 
+  /* A horizontal strip that scrolls sideways. overflow-x alone turns overflow-y to auto too, so a 1px underline or
+     focus ring below the row grows a stray vertical scrollbar; always use this instead of a bare overflow-x-auto. */
+  .scroll-x {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
   .theme-nav-scroll {
     -ms-overflow-style: none;
     scrollbar-width: none;

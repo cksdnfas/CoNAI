@@ -4,6 +4,7 @@ import type { PostCategory, PostSummary } from '@conai/shared'
 import { EyeOff, FileClock, Images, MessageCircle, MessageSquare, Pin } from 'lucide-react'
 import { ActionContextMenu, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { ToggleChip } from '@/components/ui/chip'
 import { useI18n } from '@/i18n'
 import { getImage } from '@/lib/api-images'
@@ -181,7 +182,7 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible }: Omit<ListProps
         {media.length > 0 ? (
           <div className="relative min-h-0 flex-1 overflow-hidden rounded-sm bg-black">
             <div
-              className="flex size-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none]"
+              className="flex size-full snap-x snap-mandatory scroll-x theme-nav-scroll"
               onScroll={(event) => {
                 const target = event.currentTarget
                 setIndex(Math.round(target.scrollLeft / Math.max(1, target.clientWidth)))
@@ -195,7 +196,7 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible }: Omit<ListProps
             </div>
             {media.length > 1 ? (
               <>
-                <span className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-sm bg-backdrop px-1.5 text-2xs leading-5 text-white"><Images className="size-3" />{index + 1}/{media.length}</span>
+                <Badge variant="overlay" size="sm" className="pointer-events-none absolute top-2 right-2"><Images />{index + 1}/{media.length}</Badge>
                 <span className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center gap-1">
                   {media.map((item, dot) => <span key={item.ref} className={cn('size-1.5 rounded-full', dot === index ? 'bg-white' : 'bg-white/40')} />)}
                 </span>

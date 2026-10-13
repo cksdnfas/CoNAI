@@ -1,8 +1,10 @@
 import { useRef, type ChangeEvent } from 'react'
 import { Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { AvatarButton } from '@/components/ui/avatar-button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { ListRow } from '@/components/ui/list-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
@@ -29,13 +31,35 @@ function CastRow({ member, onChange, onDelete }: { member: ChatCastMember; onCha
   }
 
   return (
-    <div className="flex min-h-12 items-center gap-2 border-t border-line py-1.5 first:border-t-0">
-      <Tip content={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
-        {/* eslint-disable-next-line no-restricted-syntax -- the avatar itself is the control; Button padding would crop it */}
-        <button type="button" className="shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40" onClick={() => fileInputRef.current?.click()} aria-label={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
-          <ChatProfileAvatar name={member.name || '?'} avatar={member.avatar} engine="llm" size="md" />
-        </button>
-      </Tip>
+    <ListRow
+      className="gap-2"
+      leading={(
+        <Tip content={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
+          <AvatarButton onClick={() => fileInputRef.current?.click()} aria-label={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
+            <ChatProfileAvatar name={member.name || '?'} avatar={member.avatar} engine="llm" size="md" />
+          </AvatarButton>
+        </Tip>
+      )}
+      trailing={(
+        <>
+          <input
+            type="color"
+            aria-label={t({ ko: '이름 색', en: 'Name colour' })}
+            value={member.color || '#ffffff'}
+            onChange={(event) => onChange({ color: event.target.value })}
+            className="h-9 w-12 shrink-0 cursor-pointer rounded-sm border border-line bg-transparent p-1"
+          />
+          {member.color ? (
+            <IconButton size="icon-xs" variant="ghost" onClick={() => onChange({ color: '' })} label={t({ ko: '기본 색으로', en: 'Default colour' })}>
+              <RotateCcw />
+            </IconButton>
+          ) : null}
+          <IconButton size="icon-sm" variant="ghost" onClick={onDelete} label={t({ ko: '등장인물 삭제', en: 'Remove character' })}>
+            <Trash2 />
+          </IconButton>
+        </>
+      )}
+    >
       <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(event) => void handleFile(event)} />
       <Input
         variant="settings"
@@ -46,22 +70,7 @@ function CastRow({ member, onChange, onDelete }: { member: ChatCastMember; onCha
         aria-label={t({ ko: '이름', en: 'Name' })}
         onChange={(event) => onChange({ name: event.target.value.replace(/[[\]]/g, '') })}
       />
-      <input
-        type="color"
-        aria-label={t({ ko: '이름 색', en: 'Name colour' })}
-        value={member.color || '#ffffff'}
-        onChange={(event) => onChange({ color: event.target.value })}
-        className="h-9 w-12 shrink-0 cursor-pointer rounded-sm border border-line bg-transparent p-1"
-      />
-      {member.color ? (
-        <IconButton size="icon-xs" variant="ghost" onClick={() => onChange({ color: '' })} label={t({ ko: '기본 색으로', en: 'Default colour' })}>
-          <RotateCcw />
-        </IconButton>
-      ) : null}
-      <IconButton size="icon-sm" variant="ghost" onClick={onDelete} label={t({ ko: '등장인물 삭제', en: 'Remove character' })}>
-        <Trash2 />
-      </IconButton>
-    </div>
+    </ListRow>
   )
 }
 

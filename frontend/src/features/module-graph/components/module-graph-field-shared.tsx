@@ -5,6 +5,9 @@ import type { TranslationDictionary } from '@/i18n/resources/types'
 import type { ModulePortDefinition } from '@/lib/api-module-graph'
 export { hasMeaningfulValue } from '../module-graph-value-utils'
 
+/** Flat: one hairline row per input field (node inspector ports / settings, exposed workflow inputs), no plinth. */
+export const MODULE_INPUT_FIELD_ROW_CLASS = 'space-y-2 border-b border-line py-3 last:border-b-0'
+
 const MODULE_GRAPH_PORT_TYPE_LABELS: Record<ModulePortDefinition['data_type'], TranslationDictionary> = {
   image: { ko: '이미지', en: 'Image' },
   video: { ko: '영상', en: 'Video' },

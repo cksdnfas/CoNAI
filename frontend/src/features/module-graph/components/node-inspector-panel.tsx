@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, ChevronDown, ChevronRight, Eraser, MousePointerClick } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { CodeBlock } from '@/components/ui/code-block'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Panel } from '@/components/ui/panel'
@@ -20,11 +21,10 @@ import { formatModuleGraphDefaultOptionLabel } from './module-graph-simple-value
 import { PowerLoraLoaderInput, hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
-import { TechnicalReferenceHint, getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
+import { MODULE_INPUT_FIELD_ROW_CLASS, TechnicalReferenceHint, getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
 import { getWorkflowInputSourcePort } from '../module-graph-workflow-inputs'
 import {
   NODE_INSPECTOR_EDGE_SURFACE_CLASS,
-  NODE_INSPECTOR_INPUT_SURFACE_CLASS,
   NODE_INSPECTOR_NODE_SURFACE_CLASS,
   EdgeEndpointCard,
   PortHeader,
@@ -170,7 +170,7 @@ export function NodeInspectorPanel({
         ? ({ boxShadow: 'inset 2px 0 0 var(--warning)', paddingLeft: '0.625rem' } as CSSProperties)
         : undefined
     const renderPortCard = (children: ReactNode) => (
-      <div key={port.key} data-field-key={port.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS} style={cardStyle}>
+      <div key={port.key} data-field-key={port.key} className={MODULE_INPUT_FIELD_ROW_CLASS} style={cardStyle}>
         <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
         {children}
       </div>
@@ -212,9 +212,9 @@ export function NodeInspectorPanel({
             emptyLabel={llmPresetsQuery.isLoading ? t({ ko: '불러오는 중', en: 'Loading' }) : t({ ko: '프리셋 선택', en: 'Select preset' })}
           />
           {selectedPreset ? (
-            <div className="mt-2 rounded-sm bg-surface-container px-3 py-2">
+            <div className="mt-2">
               <Text as="div" variant="overline" className="mb-1 font-semibold">{t({ ko: '선택 내용', en: 'Selected content' })}</Text>
-              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs leading-5 text-foreground">{summarizeLlmPresetContent(selectedPreset.content)}</pre>
+              <CodeBlock maxHeight="sm">{summarizeLlmPresetContent(selectedPreset.content)}</CodeBlock>
             </div>
           ) : null}
         </>,
@@ -357,7 +357,7 @@ export function NodeInspectorPanel({
     }
 
     return (
-      <div key={field.key} data-field-key={field.key} className={NODE_INSPECTOR_INPUT_SURFACE_CLASS}>
+      <div key={field.key} data-field-key={field.key} className={MODULE_INPUT_FIELD_ROW_CLASS}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1">

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { Crown, FileUp, FolderOpen, HardDriveUpload, X } from 'lucide-react'
 import type { StoredFileEntry } from '@conai/shared'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -138,7 +139,7 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
             </div>
           })}
         </div>
-        {usable.length === 0 ? <p className="py-6 text-sm text-muted-foreground">{t({ ko: '프로필이 없어.', en: 'No profiles.' })}</p> : null}
+        {usable.length === 0 ? <EmptyState size="compact" className="px-0 py-6" title={t({ ko: '프로필이 없어.', en: 'No profiles.' })} /> : null}
       </div>
     </div>
 

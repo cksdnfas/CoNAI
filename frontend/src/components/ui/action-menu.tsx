@@ -3,6 +3,7 @@ import { ContextMenu as ContextMenuPrimitive, DropdownMenu as DropdownMenuPrimit
 import { Check, MoreHorizontal } from 'lucide-react'
 import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
+import { floatingMenuClassName, floatingMenuItemClassName, floatingMenuItemDestructiveClassName, floatingMenuSeparatorClassName } from './floating-surface'
 import { IconButton } from './icon-button'
 
 /**
@@ -21,17 +22,10 @@ export type ActionMenuAction = {
 }
 export type ActionMenuEntry = ActionMenuAction | '-' | null | false
 
-const surfaceClassName = cn(
-  'z-floating min-w-44 overflow-x-hidden overflow-y-auto rounded-md bg-surface-high p-1 text-sm text-foreground shadow-elevation-2 outline-none',
-  'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 motion-reduce:animate-none',
-)
-const itemClassName = cn(
-  'relative flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none select-none',
-  'focus:bg-surface-highest focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
-  '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=size-])]:size-4 [&_svg:not([class*=text-])]:text-muted-foreground',
-)
-const destructiveClassName = 'text-destructive focus:bg-destructive-soft focus:text-destructive-soft-foreground [&_svg:not([class*=text-])]:text-current'
-const separatorClassName = '-mx-1 my-1 h-px bg-surface-highest'
+const surfaceClassName = cn(floatingMenuClassName, 'min-w-44')
+const itemClassName = floatingMenuItemClassName
+const destructiveClassName = floatingMenuItemDestructiveClassName
+const separatorClassName = floatingMenuSeparatorClassName
 
 /** Drop missing actions, and separators at the edges or doubled, so callers can put `'-'` between groups that may be empty. */
 export function tidyActionEntries(entries: ActionMenuEntry[]) {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Sparkles, TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -11,6 +12,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import {
@@ -205,7 +207,7 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
                   </button>
                 )
               })}
-              {preview.items.length === 0 ? <p className="py-2 text-sm text-muted-foreground">{t({ ko: '옮길 항목이 없어.', en: 'Nothing to merge.' })}</p> : null}
+              {preview.items.length === 0 ? <EmptyState size="compact" className="px-0 py-2" title={t({ ko: '옮길 항목이 없어.', en: 'Nothing to merge.' })} /> : null}
             </div>
             {selected && selectedChoice ? (
               <div className="space-y-3">
@@ -274,10 +276,10 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
 function ComparePane({ label, extra, text }: { label: string; extra?: string; text: string }) {
   return (
     <div className="min-w-0 border-t border-line pt-2 text-sm">
-      <div className="mb-1 flex items-center justify-between gap-2 text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
+      <Text as="div" variant="overline" className="mb-1 flex items-center justify-between gap-2">
         <span className="min-w-0 truncate">{label}</span>
         {extra ? <span className="shrink-0">{extra}</span> : null}
-      </div>
+      </Text>
       <div className="leading-relaxed whitespace-pre-wrap text-foreground/85">{text}</div>
     </div>
   )

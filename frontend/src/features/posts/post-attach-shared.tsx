@@ -71,6 +71,15 @@ export function AttachToolbar({ children, className }: { children: ReactNode; cl
   return <div className={cn('flex shrink-0 flex-wrap items-center gap-2 px-3 py-2.5', className)}>{children}</div>
 }
 
+/** A list row's pick slot: an empty ring, or the pick's order number once picked. */
+export function PickOrderMark({ position }: { position: number | undefined }) {
+  return (
+    <span className={cn('flex size-5 items-center justify-center rounded-full text-2xs font-bold tabular-nums', position ? 'bg-primary text-primary-foreground' : 'border-2 border-outline-input')}>
+      {position ?? null}
+    </span>
+  )
+}
+
 /** Wraps every case-insensitive occurrence of `term` in a highlight. */
 export function Highlight({ text, term }: { text: string; term: string }) {
   const needle = term.trim()

@@ -1,7 +1,7 @@
-import { useId, useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { loreKeyLanguageTag } from '@conai/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookPlus, Trash2, X } from 'lucide-react'
+import { BookPlus, Trash2 } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -10,7 +10,9 @@ import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { Textarea } from '@/components/ui/textarea'
+import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { CHAT_STATUS_QUERY_KEY, getCodexChatStatus, loreEntryTitle, type ChatLoreEntry, type LoreSecondaryLogic } from '@/lib/api-codex-chat'
@@ -125,7 +127,7 @@ function KeywordChips({ keys, onChange, addLabel }: { keys: string[]; onChange: 
     setKeyword('')
   }
   return <div className="flex flex-wrap items-center gap-1.5">
-    {keys.map((key) => <Chip key={key}>{key}<IconButton size="icon-xs" variant="ghost" label={t({ ko: '키워드 삭제', en: 'Remove keyword' })} onClick={() => onChange(keys.filter((value) => value !== key))}><X /></IconButton></Chip>)}
+    {keys.map((key) => <Chip key={key} removeLabel={t({ ko: '키워드 삭제', en: 'Remove keyword' })} onRemove={() => onChange(keys.filter((value) => value !== key))}>{key}</Chip>)}
     <Input variant="settings" className="min-w-32 flex-1" maxLength={100} value={keyword} onChange={(event) => setKeyword(event.target.value)} onBlur={addKey} onKeyDown={(event) => {
       if (event.nativeEvent.isComposing) return
       if (event.key === 'Enter' || (event.key === ',' && !keyword.startsWith('/'))) { event.preventDefault(); addKey() }
@@ -141,7 +143,7 @@ function LanguageKeywordRows({ language, base, local, onBase, onLocal, addLabel 
   if (!language) return <KeywordChips keys={base} onChange={onBase} addLabel={addLabel} />
   const tag = loreKeyLanguageTag(language)
   const row = (label: string, chips: ReactNode) => <div className="flex min-w-0 items-start gap-2">
-    <span className="w-7 shrink-0 pt-2.5 text-2xs font-semibold tracking-overline text-muted-foreground">{label}</span>
+    <Text as="span" variant="overline" className="w-7 shrink-0 pt-2.5">{label}</Text>
     <div className="min-w-0 flex-1">{chips}</div>
   </div>
   return <div className="flex flex-col gap-2">
@@ -164,7 +166,6 @@ export function lacksLanguageKeys(entry: ChatLoreEntry, language: string | null 
 /** One entry's fields, shared by the settings editor and the chat's context tab. `keyLanguage`: see useLoreKeyLanguage. */
 export function ChatLoreEntryFields({ entry, onChange, filePlace, keyLanguage = null }: { entry: ChatLoreEntry; onChange: (patch: Partial<ChatLoreEntry>) => void; filePlace: LoreFilePlace; keyLanguage?: string | null }) {
   const { t } = useI18n()
-  const id = useId()
   const secondaryKeys = entry.secondaryKeys ?? []
   const localSecondaryKeys = entry.localSecondaryKeys ?? []
   return <>
@@ -192,7 +193,7 @@ export function ChatLoreEntryFields({ entry, onChange, filePlace, keyLanguage = 
     </Field>
     <LoreFileField place={filePlace} value={entry.file ?? null} onChange={(file) => onChange({ file, fileId: null })} />
     <div className="space-y-2">
-      <div className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '시간 조건', en: 'Timing' })}</div>
+      <Text as="div" variant="overline">{t({ ko: '시간 조건', en: 'Timing' })}</Text>
       <div className="grid grid-cols-4 gap-2">
         {([{ key: 'sticky', label: { ko: '유지', en: 'Sticky' } }, { key: 'cooldown', label: { ko: '쿨다운', en: 'Cooldown' } }, { key: 'delay', label: { ko: '지연', en: 'Delay' } }] as const).map(({ key, label }) => <Field key={key} label={t(label)} className="min-w-0">
           <NumberStepperInput variant="settings" min={0} max={Number.MAX_SAFE_INTEGER} precision={0} value={entry[key] ?? 0} className={`min-w-0 [&_button]:min-w-7 ${(entry[key] ?? 0) === 0 ? '[&_input]:text-muted-foreground' : ''}`} aria-label={t(label)} onValueCommit={(value) => onChange({ [key]: Number(value) || 0 })} />
@@ -201,13 +202,13 @@ export function ChatLoreEntryFields({ entry, onChange, filePlace, keyLanguage = 
       </div>
     </div>
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
-      <div className="flex items-center gap-2"><Switch id={`${id}-constant`} checked={entry.constant} onCheckedChange={(constant) => onChange({ constant })} /><label htmlFor={`${id}-constant`} className="cursor-pointer">{t({ ko: '항상 넣기', en: 'Always include' })}</label></div>
-      <div className="flex items-center gap-2"><Switch id={`${id}-case`} checked={entry.caseSensitive} onCheckedChange={(caseSensitive) => onChange({ caseSensitive })} /><label htmlFor={`${id}-case`} className="cursor-pointer">{t({ ko: '대소문자 구분', en: 'Case sensitive' })}</label></div>
+      <SwitchLine placement="start" label={t({ ko: '항상 넣기', en: 'Always include' })} checked={entry.constant} onCheckedChange={(constant) => onChange({ constant })} />
+      <SwitchLine placement="start" label={t({ ko: '대소문자 구분', en: 'Case sensitive' })} checked={entry.caseSensitive} onCheckedChange={(caseSensitive) => onChange({ caseSensitive })} />
       <Tip content={t({ ko: '다른 로어 내용으로는 안 걸리고, 대화에 키가 나와야만 들어가', en: 'Only the chat can bring it in, never another entry’s text' })}>
-        <div className="flex items-center gap-2"><Switch id={`${id}-exclude-recursion`} checked={entry.excludeRecursion === true} onCheckedChange={(excludeRecursion) => onChange({ excludeRecursion })} /><label htmlFor={`${id}-exclude-recursion`} className="cursor-pointer">{t({ ko: '재귀로 안 걸림', en: 'Not by recursion' })}</label></div>
+        <SwitchLine placement="start" label={t({ ko: '재귀로 안 걸림', en: 'Not by recursion' })} checked={entry.excludeRecursion === true} onCheckedChange={(excludeRecursion) => onChange({ excludeRecursion })} />
       </Tip>
       <Tip content={t({ ko: '재귀 스캔에서 이 내용 속 키워드로 다른 항목을 부를지', en: 'Whether this entry’s text brings in other entries in a recursive scan' })}>
-        <div className="flex items-center gap-2"><Switch id={`${id}-prevent-recursion`} checked={entry.preventRecursion !== true} onCheckedChange={(calls) => onChange({ preventRecursion: !calls })} /><label htmlFor={`${id}-prevent-recursion`} className="cursor-pointer">{t({ ko: '다른 항목 부르기', en: 'Brings in others' })}</label></div>
+        <SwitchLine placement="start" label={t({ ko: '다른 항목 부르기', en: 'Brings in others' })} checked={entry.preventRecursion !== true} onCheckedChange={(calls) => onChange({ preventRecursion: !calls })} />
       </Tip>
       <Field label={t({ ko: '순서', en: 'Order' })} className="w-28"><NumberStepperInput variant="settings" min={-10000} max={10000} value={entry.order} onValueCommit={(value) => onChange({ order: Number(value) || 0 })} /></Field>
     </div>

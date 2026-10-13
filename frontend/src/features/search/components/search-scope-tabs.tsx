@@ -116,7 +116,7 @@ export function SearchScopeTabs({ searchScope, onChange, scopes = DEFAULT_SCOPES
 
       <div
         ref={scrollRef}
-        className={cn('theme-nav-scroll overflow-x-auto', isDragging && 'cursor-grabbing select-none')}
+        className={cn('scroll-x theme-nav-scroll', isDragging && 'cursor-grabbing select-none')}
         onPointerDown={(event) => {
           if (event.button !== 0) {
             return

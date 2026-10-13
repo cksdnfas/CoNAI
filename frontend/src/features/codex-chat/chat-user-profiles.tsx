@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ImageOff, Plus, Star } from 'lucide-react'
+import { AvatarButton } from '@/components/ui/avatar-button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
@@ -123,10 +125,9 @@ export function ChatUserProfileEditorModal({ open, profile, onClose }: { open: b
     >
       <ModalBody className="space-y-4">
         <div className="flex items-end gap-3">
-          {/* eslint-disable-next-line no-restricted-syntax -- the avatar itself is the control */}
-          <button type="button" className="shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40" onClick={() => fileInputRef.current?.click()} aria-label={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
+          <AvatarButton onClick={() => fileInputRef.current?.click()} aria-label={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
             <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} engine="llm" size="xl" />
-          </button>
+          </AvatarButton>
           <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(event) => void handleAvatarFile(event)} />
           <Field label={t({ ko: '이름', en: 'Name' })} className="min-w-0 flex-1">
             <Input variant="settings" value={draft.name} maxLength={CHAT_USER_PROFILE_LIMITS.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
@@ -220,7 +221,7 @@ export function ChatUserProfileManagerModal({ open, onClose }: { open: boolean; 
       >
         <ModalBody>
           {profilesQuery.isSuccess && profiles.length === 0 ? (
-            <p className="py-4 text-center text-xs text-muted-foreground">{t({ ko: '아직 사용자 프로필이 없어.', en: 'No user profiles yet.' })}</p>
+            <EmptyState size="compact" className="justify-center px-0 py-4" title={t({ ko: '아직 사용자 프로필이 없어.', en: 'No user profiles yet.' })} />
           ) : (
             <ChatUserProfileRows profiles={profiles} onEdit={(profile) => setEditor({ profile })} />
           )}

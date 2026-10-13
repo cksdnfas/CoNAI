@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState, type FocusEvent, type ReactNode, type RefObject } from 'react'
+import { useMemo, useRef, useState, type FocusEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Globe, ImageDown, ImageOff, Maximize2, Plus, RefreshCw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -317,9 +318,9 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
             onError={() => markBroken(entry.link)}
           />
         )}
-        {state === 'web' ? <Badge className="text-info"><Globe />{t({ ko: '웹', en: 'Web' })}</Badge> : null}
-        {state === 'suspect' ? <Badge className="text-warning"><TriangleAlert />{info?.width}×{info?.height}</Badge> : null}
-        {entry.video ? <Badge className="left-auto right-1.5 text-foreground">{t({ ko: '영상', en: 'Video' })}</Badge> : entry.extension === 'gif' ? <Badge className="left-auto right-1.5 text-foreground">GIF</Badge> : null}
+        {state === 'web' ? <Badge variant="overlay" size="sm" className="absolute top-1.5 left-1.5 font-bold text-info"><Globe />{t({ ko: '웹', en: 'Web' })}</Badge> : null}
+        {state === 'suspect' ? <Badge variant="overlay" size="sm" className="absolute top-1.5 left-1.5 font-bold text-warning"><TriangleAlert />{info?.width}×{info?.height}</Badge> : null}
+        {entry.video || entry.extension === 'gif' ? <Badge variant="overlay" size="sm" className="absolute top-1.5 right-1.5 font-bold">{entry.video ? t({ ko: '영상', en: 'Video' }) : 'GIF'}</Badge> : null}
       </button>
     )
   }
@@ -415,10 +416,6 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
       ) : null}
     </>
   )
-}
-
-function Badge({ className, children }: { className?: string; children: ReactNode }) {
-  return <span className={cn('absolute left-1.5 top-1.5 inline-flex h-5 items-center gap-1 rounded-full bg-backdrop/70 px-1.5 text-2xs font-bold backdrop-blur-sm [&_svg]:size-3', className)}>{children}</span>
 }
 
 /** Remembers the prompt textarea last focused inside the panel, for inserting picked media at its caret. */

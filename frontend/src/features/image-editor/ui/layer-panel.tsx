@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react'
 import { Eye, EyeOff, ImagePlus, Lock, LockOpen, MoreHorizontal, Plus, Type } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
-import { Slider } from '@/components/ui/slider'
+import { Input } from '@/components/ui/input'
+import { SliderRow } from '@/components/ui/slider-row'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -81,11 +82,11 @@ function LayerRow({
     >
       <LayerThumb engine={engine} layer={layer} />
       {renaming ? (
-        <input
+        <Input
           autoFocus
           defaultValue={layer.name}
           aria-label={t({ ko: '레이어 이름', en: 'Layer name' })}
-          className="h-8 min-w-0 flex-1 rounded-xs bg-surface-container px-2 text-sm outline-none"
+          className="h-8 min-w-0 flex-1 px-2"
           onClick={(event) => event.stopPropagation()}
           onBlur={(event) => {
             engine.renameLayer(layer.id, event.target.value)
@@ -228,27 +229,24 @@ export function LayerPanel({ engine, snapshot }: { engine: EditorEngine; snapsho
       </div>
 
       {active && !maskActive ? (
-        <div className="flex shrink-0 items-center gap-3 border-t border-line px-4 py-3.5">
-          <span className="text-xs text-muted-foreground">{t({ ko: '불투명도', en: 'Opacity' })}</span>
-          <Slider
-            className="flex-1"
-            min={0}
-            max={100}
-            step={1}
-            value={[Math.round(active.opacity * 100)]}
-            aria-label={t({ ko: '레이어 불투명도', en: 'Layer opacity' })}
-            onValueChange={([value]) => {
-              if (opacityStartRef.current === null) opacityStartRef.current = active.opacity
-              engine.previewLayerOpacity(active.id, (value ?? 100) / 100)
-            }}
-            onValueCommit={() => {
-              const from = opacityStartRef.current
-              opacityStartRef.current = null
-              if (from !== null) engine.commitLayerOpacity(active.id, from)
-            }}
-          />
-          <span className="w-10 text-right text-sm tabular-nums">{Math.round(active.opacity * 100)}%</span>
-        </div>
+        <SliderRow
+          className="shrink-0 border-t border-line px-4 py-3.5"
+          label={t({ ko: '불투명도', en: 'Opacity' })}
+          ariaLabel={t({ ko: '레이어 불투명도', en: 'Layer opacity' })}
+          min={0}
+          max={100}
+          value={Math.round(active.opacity * 100)}
+          readout={`${Math.round(active.opacity * 100)}%`}
+          onChange={(value) => {
+            if (opacityStartRef.current === null) opacityStartRef.current = active.opacity
+            engine.previewLayerOpacity(active.id, value / 100)
+          }}
+          onCommit={() => {
+            const from = opacityStartRef.current
+            opacityStartRef.current = null
+            if (from !== null) engine.commitLayerOpacity(active.id, from)
+          }}
+        />
       ) : null}
     </div>
   )

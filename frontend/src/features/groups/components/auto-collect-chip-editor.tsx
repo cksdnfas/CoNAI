@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, X } from 'lucide-react'
+import { X } from 'lucide-react'
+import { SearchField } from '@/components/common/search-field'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Textarea } from '@/components/ui/textarea'
@@ -203,22 +204,13 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
       {mode === 'chip' ? (
         <div className="space-y-4">
           <section ref={searchSectionRef} className="space-y-3">
-            <div className="theme-settings-control theme-input-surface flex items-center rounded-sm border text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]">
-              <Search className="mr-2 h-4 w-4 text-muted-foreground" />
-              <input
-                value={searchInput}
-                onFocus={() => setIsSuggestionPanelOpen(true)}
-                onChange={(event) => setSearchInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    submitSearchInput()
-                  }
-                }}
-                placeholder={isTextInputScope ? getSearchScopePlaceholder(searchScope, t) : searchSectionTitle}
-                className="h-10 w-full bg-transparent outline-none placeholder:text-muted-foreground"
-              />
-            </div>
+            <SearchField
+              value={searchInput}
+              onChange={setSearchInput}
+              onSubmit={submitSearchInput}
+              onFocus={() => setIsSuggestionPanelOpen(true)}
+              placeholder={isTextInputScope ? getSearchScopePlaceholder(searchScope, t) : searchSectionTitle}
+            />
 
             {isSuggestionPanelOpen ? (
               <div className="theme-floating-panel overflow-hidden rounded-sm">

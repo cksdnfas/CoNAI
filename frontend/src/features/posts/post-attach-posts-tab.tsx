@@ -1,22 +1,23 @@
 import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import type { PostCategory, PostMediaRef, PostSummary } from '@conai/shared'
-import { BookOpen, FileText, Newspaper, Search } from 'lucide-react'
+import { BookOpen, FileText, Newspaper } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
+import { SearchField } from '@/components/common/search-field'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
 import { ListRow } from '@/components/ui/list-row'
 import { Spinner } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-url'
 import { POSTS_QUERY_KEY, listPostCategories, listPosts } from '@/lib/api-posts'
-import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { useRelativeTime } from './post-author'
 import { usePostPermissions } from './use-post-permissions'
-import { AttachPanes, AttachToolbar, Highlight, LoadMoreSentinel, attachKey, type AttachCover, type AttachItem, type PostInsertStyle } from './post-attach-shared'
+import { AttachPanes, AttachToolbar, Highlight, LoadMoreSentinel, PickOrderMark, attachKey, type AttachCover, type AttachItem, type PostInsertStyle } from './post-attach-shared'
 
 const PAGE = 30
 
@@ -47,7 +48,7 @@ function PostCover({ post, show }: { post: PostSummary; show: boolean }) {
     <span className="relative grid h-[66px] w-[88px] shrink-0 grid-cols-[repeat(auto-fit,minmax(0,1fr))] gap-0.5 overflow-hidden rounded-sm bg-surface-high">
       {covers.length === 0 ? <span className="flex items-center justify-center text-muted-foreground"><FileText className="size-5" /></span>
         : covers.slice(0, 2).map((cover) => <CoverImage key={`${cover.kind}:${cover.ref}`} cover={cover} className="size-full" />)}
-      {covers.length > 0 && extra > 0 ? <span className="absolute bottom-1 right-1 rounded-sm bg-backdrop px-1 text-2xs leading-4 text-white tabular-nums">+{extra}</span> : null}
+      {covers.length > 0 && extra > 0 ? <Badge variant="overlay" size="xs" className="absolute right-1 bottom-1 tabular-nums">+{extra}</Badge> : null}
     </span>
   )
 }
@@ -117,10 +118,7 @@ export function AttachPostsTab({ selected, setSelected, postStyle, onPostStyleCh
   return (
     <AttachPanes side={side}>
       <AttachToolbar>
-        <div className="relative min-w-40 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-9" value={input} onChange={(event) => setInput(event.target.value)} aria-label={t({ ko: '게시물 찾기', en: 'Find posts' })} placeholder={t({ ko: '제목·본문', en: 'Title or text' })} />
-        </div>
+        <SearchField className="min-w-40 flex-1" value={input} onChange={setInput} placeholder={t({ ko: '제목·본문', en: 'Title or text' })} />
         <SegmentedControl ariaLabel={t({ ko: '넣는 모양', en: 'Insert as' })} value={postStyle} onChange={(value) => onPostStyleChange(value as PostInsertStyle)} items={[
           { value: 'card', label: t({ ko: '카드', en: 'Card' }) },
           { value: 'link', label: t({ ko: '링크', en: 'Link' }) },
@@ -128,18 +126,15 @@ export function AttachPostsTab({ selected, setSelected, postStyle, onPostStyleCh
       </AttachToolbar>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {query.isPending ? <div className="flex justify-center py-8"><Spinner label={t({ ko: '불러오는 중', en: 'Loading' })} /></div>
-          : query.isError && !posts.length ? <div role="alert" className="flex flex-col items-center gap-2 py-8 text-sm text-destructive">
-            {getErrorMessage(query.error, t({ ko: '게시물을 불러오지 못했어.', en: 'Could not load posts.' }))}
-            <Button variant="ghost" onClick={() => void query.refetch()}>{t({ ko: '다시 시도', en: 'Retry' })}</Button>
-          </div>
-          : !posts.length ? <p className="py-8 text-center text-sm text-muted-foreground">{t({ ko: '찾은 글이 없어', en: 'No matching posts' })}</p>
+          : query.isError && !posts.length ? <ErrorState size="compact" className="mt-2" title={t({ ko: '게시물을 불러오지 못했어.', en: 'Could not load posts.' })} error={query.error} onRetry={() => void query.refetch()} />
+          : !posts.length ? <EmptyState title={t({ ko: '찾은 글이 없어', en: 'No matching posts' })} />
           : posts.map((post) => {
             const position = orderByKey.get(attachKey.post(post.id))
             const path = categoryPath(categories, post.categoryId)
             return (
               <ListRow key={post.id} asChild interactive size="lg" selected={Boolean(position)} className="gap-3.5"
                 leading={<PostCover post={post} show={canViewImages} />}
-                trailing={<span className={cn('flex size-5 items-center justify-center rounded-full text-2xs font-bold tabular-nums', position ? 'bg-primary text-primary-foreground' : 'border-2 border-outline-input')}>{position ?? null}</span>}>
+                trailing={<PickOrderMark position={position} />}>
                 <button type="button" aria-pressed={Boolean(position)} onClick={() => toggle(post)}>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold"><Highlight text={post.title} term={search} /></span>

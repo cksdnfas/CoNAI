@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Check, Plus, Search, X } from 'lucide-react'
+import { Check, Plus } from 'lucide-react'
+import { SearchField } from '@/components/common/search-field'
 import { Chip } from '@/components/ui/chip'
+import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tip } from '@/components/ui/tooltip'
@@ -47,12 +48,9 @@ function ToolChip({ name, byName, struck = false, onRemove }: { name: string; by
     </span>
   )
   return (
-    <Tip content={tip} side="bottom" align="start">
-      <Chip size="sm" tone={tone} className={cn(!entry && 'font-mono', struck && 'line-through')}>
-        {entry?.label ?? name}
-        {onRemove ? <IconButton size="icon-xs" variant="ghost" className="-mr-1 size-4" tooltip={false} onClick={onRemove} label={t({ ko: '빼기', en: 'Remove' })}><X /></IconButton> : null}
-      </Chip>
-    </Tip>
+    <Chip size="sm" tone={tone} className={cn(!entry && 'font-mono', struck && 'line-through')} onRemove={onRemove}>
+      <Tip content={tip} side="bottom" align="start"><span>{entry?.label ?? name}</span></Tip>
+    </Chip>
   )
 }
 
@@ -100,26 +98,26 @@ function ToolMenu({ groups, byName, tools, onToggle }: { groups: JudgeToolGroup[
 
   return (
     <>
-      <div className="relative border-b border-line">
-        <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input
+      {/* Arrows + Enter steer the list while the search box keeps focus (keydown bubbles up from the input). */}
+      <div
+        className="border-b border-line p-1.5"
+        onKeyDown={(event) => {
+          if (!(event.target instanceof HTMLInputElement) || event.nativeEvent.isComposing) return
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault()
+            if (options.length > 0) setActive((current + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length)
+          } else if (event.key === 'Enter') {
+            event.preventDefault()
+            if (options[current]) onToggle(options[current])
+          }
+        }}
+      >
+        <SearchField
           value={query}
-          className="h-10 rounded-none border-0 bg-transparent pl-9 text-xs focus-visible:ring-0"
           placeholder={t({ ko: '도구 찾기', en: 'Find a tool' })}
-          aria-label={t({ ko: '도구 찾기', en: 'Find a tool' })}
-          onChange={(event) => {
-            setQuery(event.target.value)
+          onChange={(value) => {
+            setQuery(value)
             setActive(0)
-          }}
-          onKeyDown={(event) => {
-            if (event.nativeEvent.isComposing) return
-            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-              event.preventDefault()
-              if (options.length > 0) setActive((current + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length)
-            } else if (event.key === 'Enter') {
-              event.preventDefault()
-              if (options[current]) onToggle(options[current])
-            }
           }}
         />
       </div>
@@ -138,7 +136,7 @@ function ToolMenu({ groups, byName, tools, onToggle }: { groups: JudgeToolGroup[
             ))}
           </div>
         ))}
-        {options.length === 0 ? <p className="px-2 py-3 text-xs text-muted-foreground">{t({ ko: '맞는 도구가 없어.', en: 'No matching tool.' })}</p> : null}
+        {options.length === 0 ? <EmptyState size="compact" title={t({ ko: '맞는 도구가 없어.', en: 'No matching tool.' })} /> : null}
       </div>
       {raw ? (
         <div className="border-t border-line p-1">

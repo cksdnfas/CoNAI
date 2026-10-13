@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Text } from '@/components/ui/text'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { formatDateTime } from '@/features/module-graph/module-graph-shared'
@@ -27,10 +28,23 @@ import {
   useWallpaperElementSize,
   useWallpaperRotatingIndex,
 } from './wallpaper-widget-utils'
-import { WallpaperWidgetErrorNote } from './wallpaper-widget-note'
+import { WallpaperWidgetErrorNote, WallpaperWidgetNote } from './wallpaper-widget-note'
 import { computeWallpaperPuzzleLayout } from './wallpaper-puzzle-layout'
 
 const WALLPAPER_PUZZLE_GAP = 8
+
+/** Workflow name over its kind and time, on a gradient at the bottom of a recent-result card. */
+function WallpaperHistoryCardCaption({ title, badge, meta }: { title: ReactNode; badge: ReactNode; meta: ReactNode }) {
+  return (
+    <div className="absolute inset-x-0 bottom-0 z-[1] bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
+      <div className="truncate text-xs font-medium text-white">{title}</div>
+      <Text as="div" variant="overline" className="mt-1 flex items-center justify-between gap-2 text-white/78">
+        <span>{badge}</span>
+        <span className="truncate">{meta}</span>
+      </Text>
+    </div>
+  )
+}
 
 function getWallpaperBaseStackCardFrame(
   offsetX: number,
@@ -178,7 +192,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
   )
 
   if (resultsQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t({ ko: '최근 결과 불러오는 중…', en: 'Loading recent results…' })}</div>
+    return <WallpaperWidgetNote>{t({ ko: '최근 결과 불러오는 중…', en: 'Loading recent results…' })}</WallpaperWidgetNote>
   }
 
   if (resultsQuery.isError) {
@@ -194,7 +208,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
     return (
       <div className="relative h-full overflow-hidden">
         {recentEntries.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">{t({ ko: '아직 최근 이미지 결과가 없어.', en: 'There are no recent image results yet.' })}</div>
+          <WallpaperWidgetNote>{t({ ko: '아직 최근 이미지 결과가 없어.', en: 'There are no recent image results yet.' })}</WallpaperWidgetNote>
         ) : null}
 
         {stackedEntries.map(({ entry, order }) => {
@@ -219,13 +233,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
                 loading="lazy"
                 draggable={false}
               />
-              <div className="absolute inset-x-0 bottom-0 z-[1] bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
-                <div className="truncate text-xs font-medium text-white">{entry.workflowName}</div>
-                <div className="mt-1 flex items-center justify-between gap-2 text-2xs uppercase tracking-overline text-white/78">
-                  <span>{entry.badge}</span>
-                  <span className="truncate">{isFront ? entry.createdLabel : `-${order}`}</span>
-                </div>
-              </div>
+              <WallpaperHistoryCardCaption title={entry.workflowName} badge={entry.badge} meta={isFront ? entry.createdLabel : `-${order}`} />
             </>
           )
 
@@ -278,9 +286,9 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
     return (
       <div ref={puzzleRef} className="relative h-full overflow-hidden">
         {recentEntries.length === 0 ? (
-          <div className="flex h-full items-center justify-center px-3 text-center text-sm opacity-60">
+          <WallpaperWidgetNote>
             {t({ ko: '아직 생성 결과가 없어.', en: 'No generations yet.' })}
-          </div>
+          </WallpaperWidgetNote>
         ) : null}
         {recentEntries.map((entry, index) => puzzleRects[index] ? (
           // The surface forces `relative`, so the tile position lives on a wrapper.
@@ -308,9 +316,9 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
   return (
     <div className={cn('grid h-full gap-2', visibleCount >= 4 ? 'grid-cols-2' : 'grid-cols-1')}>
       {recentEntries.length === 0 ? (
-        <div className="col-span-full flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">
+        <WallpaperWidgetNote tone="placeholder" className="col-span-full">
           {t({ ko: '아직 최근 이미지 결과가 없어.', en: 'There are no recent image results yet.' })}
-        </div>
+        </WallpaperWidgetNote>
       ) : null}
 
       {recentEntries.map((entry, index) => (
@@ -329,13 +337,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
           className="relative overflow-hidden rounded-xl border border-border/70 bg-surface-low"
           imageClassName="h-full w-full object-cover"
         >
-          <div className="absolute inset-x-0 bottom-0 z-[1] bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
-            <div className="truncate text-xs font-medium text-white">{entry.workflowName}</div>
-            <div className="mt-1 flex items-center justify-between gap-2 text-2xs uppercase tracking-overline text-white/78">
-              <span>{entry.badge}</span>
-              <span className="truncate">{entry.createdLabel}</span>
-            </div>
-          </div>
+          <WallpaperHistoryCardCaption title={entry.workflowName} badge={entry.badge} meta={entry.createdLabel} />
         </WallpaperPreviewImageSurface>
       ))}
     </div>
@@ -421,15 +423,15 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
   const rowCount = Math.max(1, Math.ceil(Math.max(visibleImages.length, 1) / columnCount))
 
   if (groupId === null) {
-    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">{t({ ko: '설정에서 그룹을 선택해.', en: 'Select a group in settings.' })}</div>
+    return <WallpaperWidgetNote tone="placeholder">{t({ ko: '설정에서 그룹을 선택해.', en: 'Select a group in settings.' })}</WallpaperWidgetNote>
   }
 
   if (previewQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t({ ko: '그룹 미리보기 불러오는 중…', en: 'Loading group previews…' })}</div>
+    return <WallpaperWidgetNote>{t({ ko: '그룹 미리보기 불러오는 중…', en: 'Loading group previews…' })}</WallpaperWidgetNote>
   }
 
   if (previewQuery.isError) {
-    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t({ ko: '그룹 미리보기를 불러오지 못했어.', en: 'Failed to load group previews.' })}</div>
+    return <WallpaperWidgetNote tone="error">{t({ ko: '그룹 미리보기를 불러오지 못했어.', en: 'Failed to load group previews.' })}</WallpaperWidgetNote>
   }
 
   return (
@@ -452,9 +454,9 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
       }}
     >
       {visibleImages.length === 0 ? (
-        <div className="col-span-full flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">
+        <WallpaperWidgetNote tone="placeholder" className="col-span-full">
           {t({ ko: '이 그룹에는 아직 미리보기 이미지가 없어.', en: 'There are no preview images in this group yet.' })}
-        </div>
+        </WallpaperWidgetNote>
       ) : null}
       {visibleImages.map((image, index) => {
         const imageUrl = getWallpaperImageUrl(image)
@@ -567,7 +569,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
     return (
       <div className="flex h-full items-end rounded-sm border border-border/70 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--secondary)_24%,transparent),transparent_55%),linear-gradient(180deg,transparent,color-mix(in_srgb,var(--primary)_10%,transparent)),var(--surface-low)] p-3">
         <div>
-          <div className="text-xs uppercase tracking-overline text-secondary-text">{t({ ko: '대표 이미지', en: 'Featured image' })}</div>
+          <Text as="div" variant="overline" className="text-xs text-secondary-text">{t({ ko: '대표 이미지', en: 'Featured image' })}</Text>
           <div className="text-sm font-medium text-foreground">{t({ ko: '설정에서 쇼케이스용 그룹을 골라.', en: 'Choose a showcase group in settings.' })}</div>
         </div>
       </div>
@@ -575,7 +577,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
   }
 
   if (previewQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t({ ko: '쇼케이스 불러오는 중…', en: 'Loading showcase…' })}</div>
+    return <WallpaperWidgetNote>{t({ ko: '쇼케이스 불러오는 중…', en: 'Loading showcase…' })}</WallpaperWidgetNote>
   }
 
   if (previewQuery.isError) {
@@ -583,7 +585,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
   }
 
   if (!imageUrl) {
-    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">{t({ ko: '표시할 쇼케이스 이미지가 없어.', en: 'There is no showcase image to display.' })}</div>
+    return <WallpaperWidgetNote tone="placeholder">{t({ ko: '표시할 쇼케이스 이미지가 없어.', en: 'There is no showcase image to display.' })}</WallpaperWidgetNote>
   }
 
   // Ken Burns pans in CSS (`.wallpaper-ken-burns`); the other modes hold a fixed transform.
@@ -631,9 +633,9 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
               />
             ))}
           </div>
-          <div className="rounded-full bg-background/70 px-2 py-0.5 text-2xs font-medium uppercase tracking-overline text-foreground/92 backdrop-blur-sm">
+          <Text as="div" variant="overline" className="rounded-full bg-background/70 px-2 py-0.5 text-foreground/92 backdrop-blur-sm">
             {kenBurnsEnabled ? t({ ko: '켄 번즈', en: 'Ken Burns' }) : t({ ko: '자동', en: 'Auto' })}
-          </div>
+          </Text>
         </div>
       ) : null}
     </WallpaperPreviewImageSurface>

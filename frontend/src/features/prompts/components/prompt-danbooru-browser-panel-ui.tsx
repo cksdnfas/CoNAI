@@ -4,6 +4,7 @@ import { useMediaHoverPreview } from '@/components/common/media-hover-preview'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupHeaderClassName, anchoredPopupLabelClassName } from '@/components/ui/anchored-popup'
 import { SettingsResourceTable } from '@/features/settings/components/settings-resource-shared'
 import { IconButton } from '@/components/ui/icon-button'
+import { Badge } from '@/components/ui/badge'
 import { ToggleChip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Inset } from '@/components/ui/inset'
@@ -371,9 +372,9 @@ export function CharacterImageCell({ item }: { item: DanbooruBrowserCharacterRec
         title={item.name}
       >
         <img src={activeImage.url} alt="" className="h-full w-full object-cover" loading="lazy" />
-        <span className="pointer-events-none absolute right-1 top-1 rounded-sm bg-backdrop px-1 text-2xs font-medium leading-4 text-white">
+        <Badge variant="overlay" size="xs" className="pointer-events-none absolute top-1 right-1">
           {activeIndex + 1}/{images.length}
-        </span>
+        </Badge>
       </button>
 
       {hoverPreview.preview}
@@ -390,11 +391,11 @@ export function RelatedTagsTranslationModal({ item, onClose }: { item: DanbooruB
     <Modal open onClose={onClose} title={item.displayName} widthClassName="max-w-xl">
       <ModalBody>
         <section className="space-y-1.5">
-          <Text as="div" variant="overline" className="font-semibold">{t({ ko: '원문', en: 'Original' })}</Text>
+          <Text as="div" variant="overline">{t({ ko: '원문', en: 'Original' })}</Text>
           <Inset className="whitespace-pre-wrap break-words px-3 text-sm text-foreground">{originalText || '—'}</Inset>
         </section>
         <section className="space-y-1.5">
-          <Text as="div" variant="overline" className="font-semibold">{t({ ko: '한국어', en: 'Korean' })}</Text>
+          <Text as="div" variant="overline">{t({ ko: '한국어', en: 'Korean' })}</Text>
           <Inset className="whitespace-pre-wrap break-words px-3 text-sm text-foreground">{translatedText || '—'}</Inset>
         </section>
       </ModalBody>

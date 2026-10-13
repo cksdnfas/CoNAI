@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ChevronDown, CircleQuestionMark } from 'lucide-react'
+import { CircleQuestionMark } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { DisclosureButton } from '@/components/ui/disclosure-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -19,8 +19,6 @@ export function formatWorkflowFieldLabel(field: Pick<WorkflowMarkedField, 'id' |
 
 /** Flat field block (DESIGN_PRESET "Flat"): a plain disclosure row over the field, no surface of its own. */
 export const WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS = 'min-w-0'
-/** Disclosure header: a plain row with a chevron whose hover wash bleeds a little past the field edges. */
-export const WORKFLOW_FIELD_DISCLOSURE_HEADER_CLASS = '-mx-2 h-auto w-[calc(100%+1rem)] gap-3 px-2 py-2.5 text-foreground'
 /** Body under the disclosure header, separated by spacing instead of a divider. */
 export const WORKFLOW_FIELD_DISCLOSURE_CONTENT_CLASS = 'pb-1'
 
@@ -74,14 +72,7 @@ export function WorkflowFieldDisclosureCard({ field, value, grouped = false, lor
       className={cn(WORKFLOW_FIELD_DISCLOSURE_SURFACE_CLASS, grouped && 'py-1')}
       data-workflow-field-invalid={isInvalid ? 'true' : undefined}
     >
-      <Button
-        type="button"
-        variant="nav"
-        className={cn(WORKFLOW_FIELD_DISCLOSURE_HEADER_CLASS, 'items-start')}
-        onClick={() => setIsExpanded((current) => !current)}
-        aria-expanded={isExpanded}
-      >
-        <ChevronDown className={cn('mt-0.5 text-muted-foreground transition-transform', !isExpanded && '-rotate-90')} aria-hidden />
+      <DisclosureButton align="start" open={isExpanded} onClick={() => setIsExpanded((current) => !current)}>
         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <span className={cn('min-w-0 truncate font-medium', isInvalid || hasNodeIssues ? 'text-destructive' : 'text-foreground')}>{fieldLabel}</span>
           {field.required ? (
@@ -105,7 +96,7 @@ export function WorkflowFieldDisclosureCard({ field, value, grouped = false, lor
             </Tip>
           ) : null}
         </span>
-      </Button>
+      </DisclosureButton>
       {issueMessage ? (
         <p id={errorMessageId} className="-mt-1 pb-2 pl-7 text-xs text-destructive">{issueMessage}</p>
       ) : null}

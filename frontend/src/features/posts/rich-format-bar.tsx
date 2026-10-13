@@ -46,7 +46,7 @@ export function RichFormatBar({ state, disabled, onFormat, stickyTop }: {
       aria-label={t({ ko: '서식', en: 'Formatting' })}
       style={stickyTop ? { top: stickyTop } : undefined}
       className={cn(
-        'flex min-w-0 items-center gap-0.5 overflow-x-auto border-b border-line px-2 py-1 [scrollbar-width:none]',
+        'flex min-w-0 items-center gap-0.5 scroll-x theme-nav-scroll border-b border-line px-2 py-1',
         stickyTop && 'sticky z-10 rounded-t-sm [background:linear-gradient(var(--field),var(--field)),var(--background)]',
       )}
     >

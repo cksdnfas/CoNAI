@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CountBadge } from '@/components/ui/count-badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IconButton } from '@/components/ui/icon-button'
 import { Panel } from '@/components/ui/panel'
@@ -91,7 +92,7 @@ export function ImageDetailAuxiliaryControls({
             tooltipSide="right"
           >
             <Grid2X2 className="h-4 w-4 stroke-[2.5]" />
-            {pixelPreviewMode !== 'off' ? <span className="absolute right-1 top-1 size-1.5 rounded-full bg-primary" aria-hidden /> : null}
+            {pixelPreviewMode !== 'off' ? <CountBadge corner="top-right" className="top-1 right-1 size-1.5" /> : null}
           </IconButton>
 
           {isPixelPreviewPanelOpen ? (

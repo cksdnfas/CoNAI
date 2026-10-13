@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, File, Folder, RotateCcw, Search } from 'lucide-react'
+import { ChevronDown, File, Folder, RotateCcw } from 'lucide-react'
 import { HierarchyNav, type HierarchyNavItemState } from '@/components/common/hierarchy-nav'
+import { SearchField } from '@/components/common/search-field'
 import { Button } from '@/components/ui/button'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
 import { Tip } from '@/components/ui/tooltip'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { buildComfyModelThumbnailUrl } from '@/lib/api-image-generation-workflows'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
-import { getFloatingDropdownStyle, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
+import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownStyle, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 
 const PATH_RANDOM_OPTION_VALUE = '__random__'
 const MODEL_PREVIEW_HOVER_DELAY_MS = 150
@@ -380,19 +381,15 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
             <div
               id={menuId}
               data-surface="high"
-              className="fixed z-popover overflow-auto rounded-md bg-surface-high p-2 shadow-elevation-2"
+              className={cn(FLOATING_DROPDOWN_MENU_CLASS, 'overflow-auto p-2')}
               style={getFloatingDropdownStyle(menuRect)}
             >
-              <div className="relative mb-2">
-                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder={t({ ko: '검색', en: 'Search' })}
-                  aria-label={t({ ko: '옵션 검색', en: 'Search options' })}
-                  className="h-8 pl-8 text-sm"
-                />
-              </div>
+              <SearchField
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder={t({ ko: '옵션 검색', en: 'Search options' })}
+                className="mb-2"
+              />
               <HierarchyNav
                 items={filteredTreeNodes}
                 selectedId={selectedNode?.id ?? null}
@@ -426,7 +423,7 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
       {isOpen && modelPreview && typeof document !== 'undefined'
         ? createPortal(
             <div
-              className="pointer-events-none fixed z-floating overflow-hidden rounded-md bg-surface-high shadow-elevation-2"
+              className={cn('pointer-events-none fixed z-floating overflow-hidden', floatingSurfaceClassName)}
               style={{ left: modelPreview.left, top: modelPreview.top, width: MODEL_PREVIEW_POPUP_WIDTH }}
             >
               <img

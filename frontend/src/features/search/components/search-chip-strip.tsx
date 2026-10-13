@@ -1,10 +1,8 @@
-import { X } from 'lucide-react'
 import { SEARCH_OPERATOR_CYCLE_HINT, SEARCH_OPERATOR_DESCRIPTIONS, SEARCH_OPERATOR_LABELS, SEARCH_SCOPE_LABEL_KEYS } from '@/features/search/search-constants'
 import type { SearchChip } from '@/features/search/search-types'
 import { isFixedOperatorChip } from '@/features/search/search-utils'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
-import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -35,7 +33,12 @@ export function SearchChipStrip({ chips, onCycleOperator, onRemove, className }:
 
         return (
           <li key={chip.id} className="min-w-0">
-            <Chip tone={chip.operator === 'NOT' ? 'destructive' : 'primary'} className="h-7 gap-0.5 py-0 pr-0.5 pl-0.5">
+            <Chip
+              tone={chip.operator === 'NOT' ? 'destructive' : 'primary'}
+              className="h-7 py-0 pl-0.5"
+              onRemove={() => onRemove(chip.id)}
+              removeLabel={t({ ko: '{label} 삭제', en: 'Delete {label}' }, { label: chip.label })}
+            >
               {isFixedOperatorChip(chip) ? (
                 <span className="px-1.5 text-xs font-bold">{t(SEARCH_OPERATOR_LABELS[chip.operator])}</span>
               ) : (
@@ -60,15 +63,6 @@ export function SearchChipStrip({ chips, onCycleOperator, onRemove, className }:
                 <span className="px-1 opacity-50">·</span>
                 <span className="text-foreground" style={chip.color ? { color: chip.color } : undefined}>{chip.label}</span>
               </span>
-              <IconButton
-                size="icon-xs"
-                variant="ghost"
-                className="text-current hover:text-current"
-                onClick={() => onRemove(chip.id)}
-                label={t({ ko: '{label} 삭제', en: 'Delete {label}' }, { label: chip.label })}
-              >
-                <X />
-              </IconButton>
             </Chip>
           </li>
         )

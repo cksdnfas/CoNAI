@@ -14,8 +14,8 @@ import {
   InspectorRow,
   InspectorSegments,
   InspectorSlider,
-  InspectorSwitch,
 } from './wallpaper-inspector-controls'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { normalizeWallpaperBackground, resolveWallpaperPresetOptions } from './wallpaper-layout-utils'
 import type { WallpaperInspectorGroupOption } from './wallpaper-widget-inspector-editors'
 import type { WallpaperBackground, WallpaperBackgroundFit, WallpaperBackgroundKind, WallpaperLayoutPreset, WallpaperParticleKind, WallpaperPresetOptions, WallpaperThemeMode, WallpaperWidgetFont } from './wallpaper-types'
@@ -152,7 +152,7 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
                 {groups.map((group) => <option key={group.id} value={group.id}>{`${'　'.repeat(group.depth ?? 0)}${group.name}`}</option>)}
               </Select>
             </InspectorRow>
-            <InspectorSwitch label={t({ ko: '하위 그룹 포함', en: 'Include child groups' })} checked={background.includeChildren} onChange={(checked) => patch({ includeChildren: checked } as Partial<WallpaperBackground>, 'includeChildren')} />
+            <SwitchLine label={t({ ko: '하위 그룹 포함', en: 'Include child groups' })} checked={background.includeChildren} onCheckedChange={(checked) => patch({ includeChildren: checked } as Partial<WallpaperBackground>, 'includeChildren')} />
             <InspectorRow label={t({ ko: '간격', en: 'Interval' })}>
               <Select value={String(background.intervalSec)} onChange={(event) => patch({ intervalSec: Number(event.target.value) } as Partial<WallpaperBackground>, 'intervalSec')}>
                 {[30, 60, 180, 300, 600, 1800, 3600].map((seconds) => (
@@ -174,7 +174,7 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
           </>
         ) : null}
         {hasStillImage ? (
-          <InspectorSwitch label={t({ ko: '천천히 확대·이동', en: 'Slow pan and zoom' })} checked={background.kenBurns === true} onChange={(checked) => patch({ kenBurns: checked }, 'kenBurns')} />
+          <SwitchLine label={t({ ko: '천천히 확대·이동', en: 'Slow pan and zoom' })} checked={background.kenBurns === true} onCheckedChange={(checked) => patch({ kenBurns: checked }, 'kenBurns')} />
         ) : null}
 
         {background.kind !== 'theme' ? (
@@ -193,7 +193,7 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
       <div className="space-y-3">
         <InspectorColor label={t({ ko: '강조색', en: 'Accent' })} value={options.accentColor} fallback="#7c5cff" themeVariable="--primary" nullable onChange={(value) => setOption('accentColor', value)} />
         {background.kind === 'image' || background.kind === 'video' || background.kind === 'group-slideshow' ? (
-          <InspectorSwitch label={t({ ko: '배경에서 강조색 뽑기', en: 'Accent from background' })} checked={options.autoAccent} onChange={(checked) => setOption('autoAccent', checked)} />
+          <SwitchLine label={t({ ko: '배경에서 강조색 뽑기', en: 'Accent from background' })} checked={options.autoAccent} onCheckedChange={(checked) => setOption('autoAccent', checked)} />
         ) : null}
         <InspectorColor label={t({ ko: '글자색', en: 'Text' })} value={options.textColor} fallback="#f2f2f2" themeVariable="--foreground" nullable onChange={(value) => setOption('textColor', value)} />
         <InspectorRow label={t({ ko: '글꼴', en: 'Font' })}>

@@ -1,8 +1,8 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { SearchField } from '@/components/common/search-field'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { resolveSettingsPagedListProgress } from './settings-searchable-paged-list-progress'
@@ -15,7 +15,6 @@ interface SettingsSearchablePagedListProps<T> {
   getItemKey: (item: T) => string | number
   matchesQuery: (item: T, normalizedQuery: string) => boolean
   renderItem: (item: T) => ReactNode
-  searchAriaLabel?: string
   listClassName?: string
   paginationClassName?: string
 }
@@ -29,7 +28,6 @@ export function SettingsSearchablePagedList<T>({
   getItemKey,
   matchesQuery,
   renderItem,
-  searchAriaLabel,
   listClassName,
   paginationClassName,
 }: SettingsSearchablePagedListProps<T>) {
@@ -85,17 +83,7 @@ export function SettingsSearchablePagedList<T>({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            variant="settings"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={searchPlaceholder}
-            aria-label={searchAriaLabel ?? searchPlaceholder}
-            className="pl-9"
-          />
-        </div>
+        <SearchField value={query} onChange={setQuery} placeholder={searchPlaceholder} className="min-w-[220px] flex-1" />
         {normalizedQuery ? <span className="shrink-0 text-xs text-muted-foreground">{countLabel}</span> : null}
       </div>
 

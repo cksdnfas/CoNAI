@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Check, Link2, Link2Off, Pencil, Trash2 } from 'lucide-react'
-import { TextTabs as CommonTextTabs } from '@/components/common/text-tabs'
+import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { EditorFooter } from '@/components/ui/editor-footer'
@@ -10,7 +10,6 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -247,7 +246,7 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
   return (
     <Modal open={open} title={t({ ko: '{name} 코멘트', en: '{name} comments' }, { name: group.name })} onClose={onClose} size="narrow" height="medium">
       <ModalBody className="space-y-3">
-        <CommonTextTabs value={status} items={tabs} onChange={setStatus} />
+        <TextTabs value={status} items={tabs} onChange={setStatus} />
         <ul className="divide-y divide-line">
           {items.map((comment) => (
             <li key={comment.id} className="flex items-start gap-3 py-3">
@@ -323,25 +322,6 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
   )
 }
 
-/** Underlined text tabs taking `[id, label, count]` tuples (the audio page's strip); dialogs use the common TextTabs. */
-export function TextTabs<T extends string>({ value, items, onChange, className }: { value: T; items: Array<[T, string, number?]>; onChange: (value: T) => void; className?: string }) {
-  return (
-    <Tabs value={value} onValueChange={(next) => onChange(next as T)}>
-      <TabsList className={cn(TEXT_TAB_LIST_CLASS, className)}>
-        {items.map(([id, label, count]) => (
-          <TabsTrigger key={id} value={id} className={cn(TEXT_TAB_TRIGGER_CLASS, 'shrink-0')}>
-            {label}
-            {count !== undefined ? <span className="ml-1 font-mono text-2xs font-normal text-muted-foreground">{count}</span> : null}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-    </Tabs>
-  )
-}
-
-const TEXT_TAB_LIST_CLASS = 'flex w-full flex-nowrap gap-5 rounded-none border-b border-line bg-transparent p-0'
-const TEXT_TAB_TRIGGER_CLASS = 'relative rounded-none px-0 pb-2 pt-0 text-sm font-semibold text-muted-foreground hover:bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary after:opacity-0 data-[state=active]:after:opacity-100'
-
 /* ------------------------------------------------------------------------------------------------ cleanup */
 
 export function AudioCleanupDialog({ open, group, onClose, onDone }: { open: boolean; group: AudioGroup; onClose: () => void; onDone: () => void }) {
@@ -378,7 +358,7 @@ export function AudioCleanupDialog({ open, group, onClose, onDone }: { open: boo
   return (
     <Modal open={open} title={t({ ko: '후보 정리', en: 'Clean up takes' })} onClose={() => { if (!busy) onClose() }} size="narrow">
       <ModalBody className="space-y-4">
-        <CommonTextTabs value={scope} items={[{ value: 'unselected', label: t({ ko: '미채택만', en: 'Unselected only' }) }, { value: 'all', label: t({ ko: '전체', en: 'Everything' }) }]} onChange={setScope} />
+        <TextTabs value={scope} items={[{ value: 'unselected', label: t({ ko: '미채택만', en: 'Unselected only' }) }, { value: 'all', label: t({ ko: '전체', en: 'Everything' }) }]} onChange={setScope} />
         <p className="text-sm">
           {plan.data
             ? t({ ko: '후보 {count}개가 휴지통으로 가.', en: '{count} takes go to the RecycleBin.' }, { count: plan.data.count })

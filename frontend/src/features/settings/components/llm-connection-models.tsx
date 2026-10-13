@@ -6,6 +6,7 @@ import { EditorGroup } from '@/components/ui/editor-group'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { ListRow } from '@/components/ui/list-row'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { ResourceRow, ResourceRowStat, ResourceRowStatus } from '@/components/ui/resource-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -259,25 +260,33 @@ export function ConnectionModelChecklist({ value, listed, saved, loading, canSta
         const checked = value.models.includes(model)
         const id = `connection-model-${model}`
         return (
-          <div key={model} className="flex h-9 items-center gap-2.5 border-b border-line px-1 text-sm last:border-b-0">
-            <Checkbox id={id} checked={checked} disabled={uses > 0} onCheckedChange={(next) => toggle(model, next === true)} />
+          <ListRow
+            key={model}
+            size="sm"
+            className="gap-2.5 px-1"
+            leading={<Checkbox id={id} checked={checked} disabled={uses > 0} onCheckedChange={(next) => toggle(model, next === true)} />}
+            trailing={(
+              <>
+                {uses > 0 ? (
+                  <Tip content={t({ ko: '쓰는 곳이 있어서 뺄 수 없어', en: 'In use, so it stays' })}>
+                    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums"><Lock className="size-3" aria-hidden />{uses}</span>
+                  </Tip>
+                ) : null}
+                {canStar && checked ? (
+                  <IconButton
+                    size="icon-sm"
+                    variant="ghost"
+                    onClick={() => onChange({ ...value, defaultModel: value.defaultModel === model ? '' : model })}
+                    label={value.defaultModel === model ? t({ ko: '기본 모델', en: 'Default model' }) : t({ ko: '기본으로', en: 'Make default' })}
+                  >
+                    <Star className={cn('h-3.5 w-3.5', value.defaultModel === model && 'fill-primary text-primary')} />
+                  </IconButton>
+                ) : null}
+              </>
+            )}
+          >
             <label htmlFor={id} className={cn('min-w-0 flex-1 cursor-pointer truncate font-mono text-xs', !checked && 'text-muted-foreground')}>{model}</label>
-            {uses > 0 ? (
-              <Tip content={t({ ko: '쓰는 곳이 있어서 뺄 수 없어', en: 'In use, so it stays' })}>
-                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums"><Lock className="size-3" aria-hidden />{uses}</span>
-              </Tip>
-            ) : null}
-            {canStar && checked ? (
-              <IconButton
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => onChange({ ...value, defaultModel: value.defaultModel === model ? '' : model })}
-                label={value.defaultModel === model ? t({ ko: '기본 모델', en: 'Default model' }) : t({ ko: '기본으로', en: 'Make default' })}
-              >
-                <Star className={cn('h-3.5 w-3.5', value.defaultModel === model && 'fill-primary text-primary')} />
-              </IconButton>
-            ) : null}
-          </div>
+          </ListRow>
         )
       })}
       <div className="flex items-center gap-2 pt-2">

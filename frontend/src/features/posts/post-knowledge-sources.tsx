@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import { postRoute } from './post-links'
+import { PostQuote } from './post-quote'
 
 export function knowledgeSource(kind: PostKnowledgeSource['kind'] = 'post'): PostKnowledgeSource {
   return { kind, postId: null, commentId: null, url: null, contentVersion: null, contentHash: null, revision: null, start: null, end: null, quote: '', observedAt: null }
@@ -16,7 +18,7 @@ export function knowledgeSource(kind: PostKnowledgeSource['kind'] = 'post'): Pos
 
 export function KnowledgeSources({ sources }: { sources: PostKnowledgeSource[] }) {
   const { t } = useI18n()
-  if (!sources.length) return <p className="text-sm text-muted-foreground">{t({ ko: '연결한 출처가 없어', en: 'No sources linked' })}</p>
+  if (!sources.length) return <EmptyState size="compact" title={t({ ko: '연결한 출처가 없어', en: 'No sources linked' })} />
   return <div>{sources.map((source, index) => (
     <div key={index} className="space-y-1 border-b border-line py-3 last:border-0">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
@@ -28,7 +30,7 @@ export function KnowledgeSources({ sources }: { sources: PostKnowledgeSource[] }
         {source.contentVersion ? <span className="text-xs text-muted-foreground">{t({ ko: '내용 {version}판', en: 'Content version {version}' }, { version: source.contentVersion })}</span> : source.revision ? <span className="text-xs text-muted-foreground">r{source.revision}</span> : null}
         {source.start !== null && source.end !== null ? <span className="text-xs text-muted-foreground">{source.start}–{source.end}</span> : null}
       </div>
-      {source.quote ? <blockquote className="whitespace-pre-wrap border-l-2 border-line pl-3 text-sm text-muted-foreground">{source.quote}</blockquote> : null}
+      {source.quote ? <PostQuote>{source.quote}</PostQuote> : null}
     </div>
   ))}</div>
 }

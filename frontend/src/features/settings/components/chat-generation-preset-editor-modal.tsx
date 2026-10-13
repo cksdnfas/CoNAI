@@ -32,6 +32,8 @@ import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { getErrorMessage } from '@/lib/error-message'
 import { EditorGroup } from '@/components/ui/editor-group'
+import { EmptyState } from '@/components/ui/empty-state'
+import { Text } from '@/components/ui/text'
 import { downloadChatGenerationPresetFile } from './chat-generation-preset-file'
 import { EMPTY_PROMPTING, PresetPromptingFields, promptingInputOf } from './chat-generation-preset-prompting'
 import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
@@ -184,9 +186,9 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
       {workflow ? (
         <EditorGroup label={t({ ko: '필드', en: 'Fields' })}>
           <div className="grid grid-cols-[auto_1fr_minmax(0,1.2fr)] items-center gap-x-3 gap-y-2 text-sm">
-            <span className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '모델이 작성', en: 'Model fills' })}</span>
-            <span className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '필드', en: 'Field' })}</span>
-            <span className="flex items-center gap-1 text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '고정 값', en: 'Fixed value' })}<FieldInfo>{t({ ko: '비우면 워크플로 기본값', en: 'Empty: the workflow default' })}</FieldInfo></span>
+            <Text as="span" variant="overline">{t({ ko: '모델이 작성', en: 'Model fills' })}</Text>
+            <Text as="span" variant="overline">{t({ ko: '필드', en: 'Field' })}</Text>
+            <Text as="span" variant="overline" className="flex items-center gap-1">{t({ ko: '고정 값', en: 'Fixed value' })}<FieldInfo>{t({ ko: '비우면 워크플로 기본값', en: 'Empty: the workflow default' })}</FieldInfo></Text>
             {fields.map((field) => {
               const exposed = config.exposedFieldIds.includes(field.id)
               const fixed = config.fixedInputs[field.id]
@@ -214,7 +216,7 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
               ]
             })}
           </div>
-          {fields.length === 0 ? <p className="text-xs text-muted-foreground">{t({ ko: '이 워크플로에는 표시된 필드가 없어.', en: 'This workflow has no marked fields.' })}</p> : null}
+          {fields.length === 0 ? <EmptyState size="compact" title={t({ ko: '이 워크플로에는 표시된 필드가 없어.', en: 'This workflow has no marked fields.' })} /> : null}
         </EditorGroup>
       ) : null}
       {workflow ? <ComfyAssetFieldPicks config={config} fields={fields} onChange={patch} /> : null}

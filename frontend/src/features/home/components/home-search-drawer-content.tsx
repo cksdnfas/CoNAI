@@ -1,7 +1,8 @@
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { RotateCcw, Search, Trash2, X } from 'lucide-react'
+import { RotateCcw, Trash2, X } from 'lucide-react'
+import { SearchField } from '@/components/common/search-field'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Heading } from '@/components/ui/heading'
@@ -23,16 +24,6 @@ import { getImageViewerSettings } from '@/lib/api-settings'
 import type { PromptCollectionItem } from '@/types/prompt'
 import { cn } from '@/lib/utils'
 
-interface HomeSearchInputBoxProps {
-  searchInput: string
-  setSearchInput: (value: string) => void
-  submitSearchFromInput: () => void
-  placeholder: string
-  ariaLabel: string
-  onFocus?: () => void
-  style?: CSSProperties
-}
-
 interface HomeSearchSuggestionPanelProps {
   searchScope: ReturnType<typeof useHomeSearch>['searchScope']
   setSearchScope: ReturnType<typeof useHomeSearch>['setSearchScope']
@@ -44,32 +35,6 @@ interface HomeSearchSuggestionPanelProps {
   onClose?: () => void
   className?: string
   style?: CSSProperties
-}
-
-/** Render the shared search input box used by the drawer search entry. */
-function HomeSearchInputBox({ searchInput, setSearchInput, submitSearchFromInput, placeholder, ariaLabel, onFocus, style }: HomeSearchInputBoxProps) {
-  return (
-    <div
-      className="theme-settings-control theme-input-surface flex items-center rounded-sm border text-sm text-foreground transition focus-within:border-primary focus-within:shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_35%,transparent)]"
-      style={style}
-    >
-      <Search className="mr-2 h-4 w-4 text-muted-foreground" />
-      <input
-        value={searchInput}
-        onFocus={onFocus}
-        onChange={(event) => setSearchInput(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault()
-            submitSearchFromInput()
-          }
-        }}
-        placeholder={placeholder}
-        className="h-full w-full bg-transparent outline-none placeholder:text-muted-foreground"
-        aria-label={ariaLabel}
-      />
-    </div>
-  )
 }
 
 /** Render the shared suggestion panel below the drawer search input. */
@@ -261,14 +226,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
 
         <div className="theme-drawer-body flex-1 space-y-4 overflow-y-auto">
           <section ref={searchSectionRef} className="space-y-3">
-            <HomeSearchInputBox
-              searchInput={searchInput}
-              setSearchInput={setSearchInput}
-              submitSearchFromInput={handleSubmitSearchFromInput}
-              placeholder={activeCountLabel}
-              ariaLabel={t('homeSearchDrawerContent.drawerSearchInput')}
-              onFocus={handleOpenSuggestionPanel}
-            />
+            <SearchField value={searchInput} onChange={setSearchInput} onSubmit={handleSubmitSearchFromInput} placeholder={activeCountLabel} onFocus={handleOpenSuggestionPanel} />
 
             {isSuggestionPanelOpen ? (
               <HomeSearchSuggestionPanel
@@ -301,7 +259,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
           {historyLoading || historyEntries.length > 0 ? (
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
-                <Text as="div" variant="overline" className="min-w-0 flex-1 font-semibold">{t({ ko: '최근 검색', en: 'Recent searches' })}</Text>
+                <Text as="div" variant="overline" className="min-w-0 flex-1">{t({ ko: '최근 검색', en: 'Recent searches' })}</Text>
                 <div className="flex shrink-0 items-center gap-2">
                   <IconButton
                     variant="ghost"

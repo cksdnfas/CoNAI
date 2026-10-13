@@ -1,7 +1,10 @@
 import type { ComponentProps } from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { Slot } from 'radix-ui'
+import { X } from 'lucide-react'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { IconButton } from './icon-button'
 
 /**
  * Small inline pieces of user content (tags, filters, tokens, search terms). Unlike Badge (an uppercase status
@@ -37,13 +40,45 @@ const chipVariants = cva(
 
 type ChipProps = ComponentProps<'span'> & VariantProps<typeof chipVariants> & {
   asChild?: boolean
+  /** Adds a trailing X key that calls this (tag lists, applied filters, keyword lists). Ignored with `asChild`. */
+  onRemove?: () => void
+  /** Aria-label + tooltip of the X key. Defaults to "빼기". */
+  removeLabel?: string
+  removeDisabled?: boolean
 }
 
-/** Render a static chip. For a pressable on/off chip use ToggleChip. */
-function Chip({ className, tone, size, asChild = false, ...props }: ChipProps) {
-  const Comp = asChild ? Slot.Root : 'span'
+/** The X key at the end of a removable chip; sized to the chip so the row height does not change. */
+function ChipRemoveKey({ size, label, disabled, onRemove }: { size: ChipProps['size']; label?: string; disabled?: boolean; onRemove: () => void }) {
+  const { t } = useI18n()
+  return (
+    <IconButton
+      size="icon-xs"
+      variant="ghost"
+      className={cn('text-current hover:text-current', size === 'sm' ? 'size-4' : 'size-5')}
+      label={label ?? t({ ko: '빼기', en: 'Remove' })}
+      disabled={disabled}
+      onClick={onRemove}
+    >
+      <X />
+    </IconButton>
+  )
+}
 
-  return <Comp data-slot="chip" className={cn(chipVariants({ tone, size }), className)} {...props} />
+/** Render a static chip; with `onRemove` it ends in an X key. For a pressable on/off chip use ToggleChip. */
+function Chip({ className, tone, size, asChild = false, onRemove, removeLabel, removeDisabled, children, ...props }: ChipProps) {
+  const Comp = asChild ? Slot.Root : 'span'
+  const removable = Boolean(onRemove) && !asChild
+
+  return (
+    <Comp
+      data-slot="chip"
+      className={cn(chipVariants({ tone, size }), removable && (size === 'sm' ? 'gap-1 pr-0.5' : 'gap-0.5 py-0.5 pr-0.5'), className)}
+      {...props}
+    >
+      {children}
+      {removable && onRemove ? <ChipRemoveKey size={size} label={removeLabel} disabled={removeDisabled} onRemove={onRemove} /> : null}
+    </Comp>
+  )
 }
 
 const toggleChipVariants = cva(

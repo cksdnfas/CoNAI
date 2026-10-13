@@ -167,6 +167,18 @@ function ChatBackground({ url, dim, blur, fit }: { url: string; dim: number; blu
   )
 }
 
+/** A picked choice over the composer: icon, label and an X; pressing it unpicks. */
+function ComposerPickChip({ icon, label, disabled, onRemove }: { icon: ReactNode; label: string; disabled: boolean; onRemove: () => void }) {
+  const { t } = useI18n()
+  return (
+    <Button variant="ghost" size="xs" disabled={disabled} onClick={onRemove} className="h-6 gap-1 rounded-full border border-line pl-2 pr-1.5 font-normal text-foreground/85" aria-label={t({ ko: '선택 해제: {label}', en: 'Unpick {label}' }, { label })}>
+      {icon}
+      <span className="max-w-48 truncate">{label}</span>
+      <X className="size-3 text-muted-foreground" />
+    </Button>
+  )
+}
+
 function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: CodexChatViewProps & { chat: CodexChatApi }) {
   const { t } = useI18n()
   const confirm = useConfirm()
@@ -1216,18 +1228,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       {picks.length > 0 || (choiceDraft && openChoice?.multiple) ? (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {picks.map((label) => (
-            <Button key={label} variant="ghost" size="xs" disabled={isBusy} onClick={() => removePick(label)} className="h-6 gap-1 rounded-full border border-line pl-2 pr-1.5 font-normal text-foreground/85" aria-label={t({ ko: '선택 해제: {label}', en: 'Unpick {label}' }, { label })}>
-              <Target className="size-3 text-primary" />
-              <span className="max-w-48 truncate">{label}</span>
-              <X className="size-3 text-muted-foreground" />
-            </Button>
+            <ComposerPickChip key={label} icon={<Target className="size-3 text-primary" />} label={label} disabled={isBusy} onRemove={() => removePick(label)} />
           ))}
           {openChoice?.multiple && activeThreadId !== null ? choiceDraft?.labels.map((label) => (
-            <Button key={`choice-${label}`} variant="ghost" size="xs" disabled={isBusy} onClick={() => chat.toggleChoice(activeThreadId, openChoice, label)} className="h-6 gap-1 rounded-full border border-line pl-2 pr-1.5 font-normal text-foreground/85" aria-label={t({ ko: '선택 해제: {label}', en: 'Unpick {label}' }, { label })}>
-              <ListChecks className="size-3 text-primary" />
-              <span className="max-w-48 truncate">{label}</span>
-              <X className="size-3 text-muted-foreground" />
-            </Button>
+            <ComposerPickChip key={`choice-${label}`} icon={<ListChecks className="size-3 text-primary" />} label={label} disabled={isBusy} onRemove={() => chat.toggleChoice(activeThreadId, openChoice, label)} />
           )) : null}
         </div>
       ) : null}

@@ -14,11 +14,11 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  Search,
   SlidersHorizontal,
   Sparkles,
   Trash2,
 } from 'lucide-react'
+import { SearchField } from '@/components/common/search-field'
 import { ActionContextMenu } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -273,10 +273,7 @@ export function AudioSidebar({
         </div>
       ) : null}
       <div className="flex items-center gap-1">
-        <div className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input className="pl-8" type="search" placeholder={t({ ko: '효과음 검색', en: 'Search effects' })} value={search} onChange={(event) => onSearchChange(event.target.value)} />
-        </div>
+        <SearchField className="flex-1" placeholder={t({ ko: '효과음 검색', en: 'Search effects' })} value={search} onChange={onSearchChange} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <IconButton variant="ghost" size="icon-sm" active={filter !== null} label={t({ ko: '필터', en: 'Filter' })}><Filter /></IconButton>

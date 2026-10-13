@@ -11,6 +11,7 @@ import { useRelativeTime } from './post-author'
 import { AssessmentModerationDialog, useAssessmentAudit } from './post-knowledge-assessments'
 import { KNOWLEDGE_REASONS, usePostKnowledgeState, usePostQuality } from './post-knowledge-panel'
 import { PostKnowledgeTaskFit, type KnowledgeSearchContext } from './post-knowledge-task-fit'
+import { PostQuote } from './post-quote'
 import { PostTopicDetails, type PostTopicEvaluationState } from './post-topic-relevance'
 
 const EVALUATORS: Record<PostAssessmentEvaluator, { label: { ko: string; en: string }; icon: typeof User }> = {
@@ -96,7 +97,7 @@ function FeedbackRow({ item, audit, onModerate }: {
           ) : null}
         </div>
         {item.reason ? <p className="whitespace-pre-wrap text-sm">{item.reason}</p> : null}
-        {item.evidenceQuote ? <blockquote className="whitespace-pre-wrap border-l-2 border-line pl-2.5 text-xs text-muted-foreground">{item.evidenceQuote}</blockquote> : null}
+        {item.evidenceQuote ? <PostQuote size="xs">{item.evidenceQuote}</PostQuote> : null}
         {audit?.moderationReason ? <p className="text-xs text-muted-foreground">{t({ ko: '변경 이유: {reason}', en: 'Change reason: {reason}' }, { reason: audit.moderationReason })}</p> : null}
       </div>
     </div>

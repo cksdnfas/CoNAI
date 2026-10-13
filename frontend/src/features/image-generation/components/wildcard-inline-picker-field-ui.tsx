@@ -2,6 +2,7 @@ import { createPortal } from 'react-dom'
 import { useEffect, useMemo, useState, type ReactNode, type RefObject } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { IconButton } from '@/components/ui/icon-button'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
@@ -244,7 +245,7 @@ export function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter
       ref={popupRef}
       data-surface="high"
       // A popup opened from inside the inline picker's anchored popover: one layer above z-popover.
-      className="z-popover-nested overflow-y-auto overscroll-contain rounded-md bg-surface-high px-3 py-2.5 shadow-elevation-2"
+      className={cn('z-popover-nested overflow-y-auto overscroll-contain px-3 py-2.5', floatingSurfaceClassName)}
       style={{
         position: 'fixed',
         top: position.top,
@@ -297,7 +298,7 @@ export function WildcardInlinePickerPopup({
     <div
       data-surface="high"
       // Above the token preview (z-popover-nested) and anchored popovers (z-popover).
-      className="fixed z-[calc(var(--z-index-popover-nested)+10)] overflow-hidden rounded-md bg-surface-high shadow-elevation-2"
+      className={cn('fixed z-[calc(var(--z-index-popover-nested)+10)] overflow-hidden', floatingSurfaceClassName)}
       style={getFloatingDropdownStyle(position)}
       onMouseDown={(event) => {
         event.preventDefault()

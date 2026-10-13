@@ -17,7 +17,7 @@ import { useI18n } from '@/i18n'
 import { useCanSeeServerDetails } from '../use-can-see-server-details'
 import { PromptPageToolbar, type PromptPageToolbarBaseProps } from './prompt-page-toolbar'
 import { SidebarTree } from './sidebar-tree'
-import { ToolbarSearchField } from './toolbar-search-field'
+import { ToolbarSearchField } from '@/components/common/search-field'
 import { PromptDanbooruInstallation } from './prompt-danbooru-installation'
 import {
   CHARACTER_PAGE_SIZE,

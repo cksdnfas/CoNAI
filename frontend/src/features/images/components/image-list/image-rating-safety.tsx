@@ -13,10 +13,10 @@ export interface ResolvedImageFeedSafety {
 
 const IMAGE_SAFETY_BADGE_COMPACT_RATIO = 0.2
 
-const IMAGE_SAFETY_BADGE_FULL_CLASS = 'border bg-background/92 px-1.5 py-0.5 text-[9px] font-semibold tracking-[0.08em] shadow-sm backdrop-blur-sm'
-const IMAGE_SAFETY_BADGE_COMPACT_CLASS = 'border bg-background/92 min-w-5 justify-center px-1 py-0.5 text-[9px] font-semibold tracking-normal shadow-sm backdrop-blur-sm'
-const IMAGE_SAFETY_BLUR_BADGE_FULL_CLASS = 'border-white/18 bg-black/68 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-white/88 backdrop-blur-sm'
-const IMAGE_SAFETY_BLUR_BADGE_COMPACT_CLASS = 'border-white/18 bg-black/68 min-w-5 justify-center px-1 py-0.5 text-[9px] uppercase tracking-normal text-white/88 backdrop-blur-sm'
+const IMAGE_SAFETY_BADGE_FULL_CLASS = 'border px-1.5 font-semibold uppercase'
+const IMAGE_SAFETY_BADGE_COMPACT_CLASS = 'min-w-5 border font-semibold uppercase'
+const IMAGE_SAFETY_BLUR_BADGE_FULL_CLASS = 'border border-white/18 px-1.5 uppercase text-white/88'
+const IMAGE_SAFETY_BLUR_BADGE_COMPACT_CLASS = 'min-w-5 border border-white/18 uppercase text-white/88'
 
 /** Build a one-character fallback label for very small feed badges. */
 function getCompactSafetyBadgeLabel(label: string) {
@@ -120,7 +120,8 @@ export function ImageRatingSafetyBadge({
     <div ref={containerRef} className="relative">
       <div ref={measureRef} aria-hidden className="pointer-events-none absolute left-0 top-0 flex w-max items-center gap-1 whitespace-nowrap opacity-0">
         <Badge
-          variant="secondary"
+          variant="overlay"
+          size="xs"
           className={IMAGE_SAFETY_BADGE_FULL_CLASS}
           style={tier.color
             ? {
@@ -133,14 +134,15 @@ export function ImageRatingSafetyBadge({
           {tier.tier_name}
         </Badge>
         {visibility === 'blur' ? (
-          <Badge variant="outline" className={IMAGE_SAFETY_BLUR_BADGE_FULL_CLASS}>
+          <Badge variant="overlay" size="xs" className={IMAGE_SAFETY_BLUR_BADGE_FULL_CLASS}>
             Blur
           </Badge>
         ) : null}
       </div>
       <div className="image-rating-safety-badges flex flex-wrap items-center gap-1">
         <Badge
-          variant="secondary"
+          variant="overlay"
+          size="xs"
           className={cn(
             'image-rating-safety-badge',
             isCompact ? IMAGE_SAFETY_BADGE_COMPACT_CLASS : IMAGE_SAFETY_BADGE_FULL_CLASS,
@@ -157,7 +159,7 @@ export function ImageRatingSafetyBadge({
         </Badge>
         {visibility === 'blur' ? (
           <Badge
-            variant="outline"
+            variant="overlay" size="xs"
             className={cn(
               'image-rating-safety-badge',
               isCompact ? IMAGE_SAFETY_BLUR_BADGE_COMPACT_CLASS : IMAGE_SAFETY_BLUR_BADGE_FULL_CLASS,

@@ -20,6 +20,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { DataCheckTd, DataCheckTh, DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { SendToAudioDialog, useCanSendToAudio } from '@/features/audio/send-to-audio-dialog'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
@@ -176,38 +177,35 @@ function ownerLabel(owner: StoredFileOwner, t: ReturnType<typeof useI18n>['t']) 
 function OwnerList({ owners, onOpen }: { owners: StoredFileOwner[]; onOpen: (owner: StoredFileOwner) => void }) {
   const { t } = useI18n()
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-line text-xs text-muted-foreground">
-          <tr>
-            <th className="py-3 font-normal">{t({ ko: '계정', en: 'Account' })}</th>
-            <th className="hidden px-3 font-normal sm:table-cell">{t({ ko: '상태', en: 'Status' })}</th>
-            <th className="px-3 text-right font-normal">{t({ ko: '파일', en: 'Files' })}</th>
-            <th className="px-3 text-right font-normal">{t({ ko: '용량', en: 'Size' })}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {owners.map((owner) => (
-            <tr key={owner.ownerKey} className="border-b border-line last:border-0 hover:bg-fill">
-              <td className="min-w-40">
-                <Button variant="ghost" className="max-w-full justify-start" onClick={() => onOpen(owner)}>
-                  <Folder className="shrink-0 text-warning" />
-                  <span className="max-w-80 truncate">{ownerLabel(owner, t)}</span>
-                  {owner.self ? <span className="text-xs text-muted-foreground">{t({ ko: '나', en: 'me' })}</span> : null}
-                </Button>
-              </td>
-              <td className="hidden whitespace-nowrap px-3 text-xs text-muted-foreground sm:table-cell">
-                {owner.status === 'active' ? (owner.accountType === 'admin' ? t({ ko: '관리자', en: 'Admin' }) : t({ ko: '게스트', en: 'Guest' }))
-                  : owner.status === 'disabled' ? t({ ko: '비활성', en: 'Disabled' })
-                    : owner.status === 'deleted' ? t({ ko: '삭제됨', en: 'Deleted' }) : ''}
-              </td>
-              <td className="whitespace-nowrap px-3 text-right text-xs text-muted-foreground">{owner.fileCount}</td>
-              <td className="whitespace-nowrap px-3 text-right text-xs text-muted-foreground">{formatFileSize(owner.totalSize)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      head={(
+        <>
+          <DataTh>{t({ ko: '계정', en: 'Account' })}</DataTh>
+          <DataTh className="hidden sm:table-cell">{t({ ko: '상태', en: 'Status' })}</DataTh>
+          <DataTh className="text-right">{t({ ko: '파일', en: 'Files' })}</DataTh>
+          <DataTh className="text-right">{t({ ko: '용량', en: 'Size' })}</DataTh>
+        </>
+      )}
+    >
+      {owners.map((owner) => (
+        <DataTr interactive key={owner.ownerKey}>
+          <DataTd flush className="min-w-40">
+            <Button variant="ghost" className="max-w-full justify-start" onClick={() => onOpen(owner)}>
+              <Folder className="shrink-0 text-warning" />
+              <span className="max-w-80 truncate">{ownerLabel(owner, t)}</span>
+              {owner.self ? <span className="text-xs text-muted-foreground">{t({ ko: '나', en: 'me' })}</span> : null}
+            </Button>
+          </DataTd>
+          <DataTd meta flush className="hidden sm:table-cell">
+            {owner.status === 'active' ? (owner.accountType === 'admin' ? t({ ko: '관리자', en: 'Admin' }) : t({ ko: '게스트', en: 'Guest' }))
+              : owner.status === 'disabled' ? t({ ko: '비활성', en: 'Disabled' })
+                : owner.status === 'deleted' ? t({ ko: '삭제됨', en: 'Deleted' }) : ''}
+          </DataTd>
+          <DataTd meta flush className="text-right">{owner.fileCount}</DataTd>
+          <DataTd meta flush className="text-right">{formatFileSize(owner.totalSize)}</DataTd>
+        </DataTr>
+      ))}
+    </DataTable>
   )
 }
 
@@ -594,69 +592,66 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   } else {
     const allSelected = selectable.length > 0 && selectable.every((entry) => selected.includes(entry.id))
     list = (
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-line text-xs text-muted-foreground">
-            <tr>
-              <th className="w-10 py-3 pr-3">
-                <Checkbox aria-label={t({ ko: '전체 선택', en: 'Select all' })} disabled={selectable.length === 0} checked={allSelected} onCheckedChange={(checked) => setSelected(checked ? selectable.map((entry) => entry.id) : [])} />
-              </th>
-              <th className="py-3 font-normal">{t({ ko: '이름', en: 'Name' })}</th>
-              <th className="hidden px-3 font-normal sm:table-cell">{t({ ko: '수정일', en: 'Modified' })}</th>
-              <th className="px-3 text-right font-normal">{t({ ko: '크기', en: 'Size' })}</th>
-              {isPicker ? null : <th className="w-10"><span className="sr-only">{t({ ko: '더 보기', en: 'More' })}</span></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry) => {
-              const isSelected = selected.includes(entry.id)
-              const canSelect = !isPicker || entry.kind === 'file'
-              const menu = isPicker ? [] : rowEntries(entry)
-              return (
-                <ActionContextMenu key={entry.id} entries={menu} onOpenChange={rowMenuOpenChange}>
-                  <tr
-                    className={cn('border-b border-line last:border-0 hover:bg-fill', isSelected && 'bg-fill')}
-                    draggable={canOrganize && !busy && !isPicker}
-                    onPointerDown={(event) => { pointerType.current = event.pointerType }}
-                    onDragStart={(event) => {
-                      event.dataTransfer.setData(FILE_DRAG_TYPE, JSON.stringify(isSelected ? selected : [entry.id]))
-                      event.dataTransfer.effectAllowed = 'move'
+      <DataTable
+        head={(
+          <>
+            <DataCheckTh>
+              <Checkbox aria-label={t({ ko: '전체 선택', en: 'Select all' })} disabled={selectable.length === 0} checked={allSelected} onCheckedChange={(checked) => setSelected(checked ? selectable.map((entry) => entry.id) : [])} />
+            </DataCheckTh>
+            <DataTh>{t({ ko: '이름', en: 'Name' })}</DataTh>
+            <DataTh className="hidden sm:table-cell">{t({ ko: '수정일', en: 'Modified' })}</DataTh>
+            <DataTh className="text-right">{t({ ko: '크기', en: 'Size' })}</DataTh>
+            {isPicker ? null : <DataTh className="w-10"><span className="sr-only">{t({ ko: '더 보기', en: 'More' })}</span></DataTh>}
+          </>
+        )}
+      >
+        {entries.map((entry) => {
+          const isSelected = selected.includes(entry.id)
+          const canSelect = !isPicker || entry.kind === 'file'
+          const menu = isPicker ? [] : rowEntries(entry)
+          return (
+            <ActionContextMenu key={entry.id} entries={menu} onOpenChange={rowMenuOpenChange}>
+              <DataTr interactive
+                selected={isSelected}
+                draggable={canOrganize && !busy && !isPicker}
+                onPointerDown={(event) => { pointerType.current = event.pointerType }}
+                onDragStart={(event) => {
+                  event.dataTransfer.setData(FILE_DRAG_TYPE, JSON.stringify(isSelected ? selected : [entry.id]))
+                  event.dataTransfer.effectAllowed = 'move'
+                }}
+                onDragOver={entry.kind === 'folder' ? dragOver : undefined}
+                onDrop={entry.kind === 'folder' ? (event) => drop(event, entry.id) : undefined}
+              >
+                <DataCheckTd>
+                  {canSelect ? <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: entry.name })} checked={isSelected} onCheckedChange={(checked) => toggle(entry.id, checked === true)} /> : null}
+                </DataCheckTd>
+                <DataTd flush className="min-w-40">
+                  <Button
+                    variant="ghost"
+                    className="max-w-full justify-start"
+                    onClick={() => {
+                      if (Date.now() - touchMenuAt.current < 800) return
+                      if (entry.kind === 'folder') navigate(entry.id)
+                      else if (isPicker) toggle(entry.id, !isSelected)
+                      else setPreview(entry)
                     }}
-                    onDragOver={entry.kind === 'folder' ? dragOver : undefined}
-                    onDrop={entry.kind === 'folder' ? (event) => drop(event, entry.id) : undefined}
                   >
-                    <td className="py-2 pr-3">
-                      {canSelect ? <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: entry.name })} checked={isSelected} onCheckedChange={(checked) => toggle(entry.id, checked === true)} /> : null}
-                    </td>
-                    <td className="min-w-40">
-                      <Button
-                        variant="ghost"
-                        className="max-w-full justify-start"
-                        onClick={() => {
-                          if (Date.now() - touchMenuAt.current < 800) return
-                          if (entry.kind === 'folder') navigate(entry.id)
-                          else if (isPicker) toggle(entry.id, !isSelected)
-                          else setPreview(entry)
-                        }}
-                      >
-                        <EntryIcon entry={entry} />
-                        <span className="max-w-80 truncate">{entry.name}</span>
-                      </Button>
-                    </td>
-                    <td className="hidden whitespace-nowrap px-3 text-xs text-muted-foreground sm:table-cell">{formatDateTime(entry.updatedAt)}</td>
-                    <td className="whitespace-nowrap px-3 text-right text-xs text-muted-foreground">{entry.kind === 'folder' ? '' : formatFileSize(entry.size)}</td>
-                    {isPicker ? null : (
-                      <td>
-                        <ActionMenuButton entries={menu} className="text-muted-foreground" label={t({ ko: '더 보기', en: 'More' })} />
-                      </td>
-                    )}
-                  </tr>
-                </ActionContextMenu>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
+                    <EntryIcon entry={entry} />
+                    <span className="max-w-80 truncate">{entry.name}</span>
+                  </Button>
+                </DataTd>
+                <DataTd meta flush className="hidden sm:table-cell">{formatDateTime(entry.updatedAt)}</DataTd>
+                <DataTd meta flush className="text-right">{entry.kind === 'folder' ? '' : formatFileSize(entry.size)}</DataTd>
+                {isPicker ? null : (
+                  <DataTd flush>
+                    <ActionMenuButton entries={menu} className="text-muted-foreground" label={t({ ko: '더 보기', en: 'More' })} />
+                  </DataTd>
+                )}
+              </DataTr>
+            </ActionContextMenu>
+          )
+        })}
+      </DataTable>
     )
   }
 

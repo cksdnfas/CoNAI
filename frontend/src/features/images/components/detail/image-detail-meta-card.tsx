@@ -1,7 +1,7 @@
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, Copy, Search, Settings2, SlidersHorizontal } from 'lucide-react'
+import { Copy, Search, Settings2, SlidersHorizontal } from 'lucide-react'
 import { ExtractedPromptSections } from '@/components/common/extracted-prompt-sections'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import {
@@ -11,6 +11,7 @@ import {
   RatingPromptSection,
 } from '@/components/common/prompt-result-sections'
 import { Badge } from '@/components/ui/badge'
+import { CollapsibleRow } from '@/components/ui/collapsible-row'
 import { IconButton } from '@/components/ui/icon-button'
 import { Chip } from '@/components/ui/chip'
 import { SettingRow } from '@/components/ui/setting-row'
@@ -486,12 +487,8 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
       ) : null}
 
       {technicalItems.length > 0 ? (
-        <details className="group/tech border-t border-line pt-3">
-          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-bold text-foreground select-none [&::-webkit-details-marker]:hidden">
-            <ChevronRight className="size-3.5 text-muted-foreground transition-transform group-open/tech:rotate-90" />
-            {t({ ko: '기술 정보', en: 'Technical details' })}
-          </summary>
-          <dl className="mt-2">
+        <CollapsibleRow title={t({ ko: '기술 정보', en: 'Technical details' })}>
+          <dl>
             {technicalItems.map((item) => (
               <div key={item.id} className="border-b border-line py-2 last:border-b-0">
                 <div className="flex items-center justify-between gap-3">
@@ -509,7 +506,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
               </div>
             ))}
           </dl>
-        </details>
+        </CollapsibleRow>
       ) : null}
 
       <ArtistPromptLinkSettingsModal

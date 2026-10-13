@@ -1,5 +1,6 @@
 import { CircleAlert, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CodeBlock } from '@/components/ui/code-block'
 import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -67,7 +68,7 @@ export function ChatErrorChip({ error }: { error: string | null }) {
             <Copy />
           </IconButton>
         </div>
-        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface-low p-2.5 font-mono text-xs leading-relaxed">{detail}</pre>
+        <CodeBlock maxHeight="md">{detail}</CodeBlock>
       </PopoverContent>
     </Popover>
   )

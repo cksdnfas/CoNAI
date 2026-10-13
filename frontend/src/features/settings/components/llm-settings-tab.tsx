@@ -1,13 +1,13 @@
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TextTabs } from '@/components/common/text-tabs'
+import { TabsContent } from '@/components/ui/tabs'
 import { useI18n } from '@/i18n'
 import { ChatDiagnosticsSettings } from './chat-options-settings'
 import { ChatSettingsJudge } from './chat-settings-judge'
 import { LlmConnectionsTab } from './llm-connections-tab'
 import { LlmPromptPresets } from './llm-prompt-presets'
 import { LlmUsageDashboard } from './llm-usage-dashboard'
-import { SETTINGS_TEXT_TAB_LIST_CLASS, SETTINGS_TEXT_TAB_TRIGGER_CLASS } from './settings-text-tabs'
 
 type LlmSettingsView = 'dashboard' | 'connections' | 'prompts' | 'log'
 
@@ -39,13 +39,17 @@ export function LlmSettingsTab() {
   }
 
   return (
-    <Tabs value={view} onValueChange={setView} className="gap-6">
-      <TabsList className={SETTINGS_TEXT_TAB_LIST_CLASS}>
-        <TabsTrigger value="dashboard" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '계기판', en: 'Dashboard' })}</TabsTrigger>
-        <TabsTrigger value="connections" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '연결', en: 'Connections' })}</TabsTrigger>
-        <TabsTrigger value="prompts" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '프롬프트', en: 'Prompts' })}</TabsTrigger>
-        <TabsTrigger value="log" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '기록', en: 'Log' })}</TabsTrigger>
-      </TabsList>
+    <TextTabs
+      value={view}
+      onChange={setView}
+      className="gap-6"
+      items={[
+        { value: 'dashboard', label: t({ ko: '계기판', en: 'Dashboard' }) },
+        { value: 'connections', label: t({ ko: '연결', en: 'Connections' }) },
+        { value: 'prompts', label: t({ ko: '프롬프트', en: 'Prompts' }) },
+        { value: 'log', label: t({ ko: '기록', en: 'Log' }) },
+      ]}
+    >
       <TabsContent value="dashboard"><LlmUsageDashboard onOpenJudge={() => setView('log')} /></TabsContent>
       <TabsContent value="connections"><LlmConnectionsTab /></TabsContent>
       <TabsContent value="prompts"><LlmPromptPresets /></TabsContent>
@@ -55,6 +59,6 @@ export function LlmSettingsTab() {
           <ChatSettingsJudge />
         </div>
       </TabsContent>
-    </Tabs>
+    </TextTabs>
   )
 }

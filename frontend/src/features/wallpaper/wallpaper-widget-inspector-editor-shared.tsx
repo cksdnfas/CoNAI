@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { ChevronDown } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { DisclosureButton } from '@/components/ui/disclosure-button'
 import { Text } from '@/components/ui/text'
 import { Select } from '@/components/ui/select'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -119,7 +118,8 @@ function getWallpaperTransitionStyleLabel(style: WallpaperImageTransitionStyle |
   }
 }
 
-function renderWallpaperAnimationEditorCard({
+/** One titled block of options inside an animation editor popover. */
+export function WallpaperAnimationEditorCard({
   title,
   children,
 }: {
@@ -128,7 +128,7 @@ function renderWallpaperAnimationEditorCard({
 }) {
   return (
     <div className="space-y-2 py-1">
-      <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{title}</div>
+      <Text as="div" variant="overline">{title}</Text>
       {children}
     </div>
   )
@@ -168,19 +168,9 @@ export function WallpaperInspectorDisclosure({
 
   return (
     <div>
-      <Button
-        type="button"
-        variant="nav"
-        size="sm"
-        aria-expanded={open}
-        className="-mx-2 w-[calc(100%+1rem)] justify-between px-2"
-        onClick={() => {
-          setOpen((current) => !current)
-        }}
-      >
-        <span className="text-2xs font-semibold uppercase tracking-overline text-foreground">{title}</span>
-        <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open ? 'rotate-180' : undefined)} />
-      </Button>
+      <DisclosureButton open={open} onClick={() => setOpen((current) => !current)}>
+        <Text as="span" variant="overline" className="text-foreground">{title}</Text>
+      </DisclosureButton>
 
       {open ? <div className="space-y-2 pb-2 pt-1">{children}</div> : null}
     </div>
@@ -216,42 +206,39 @@ export function WallpaperTransitionAnimationEditorField({
         }}
         editorContent={(
           <>
-            {renderWallpaperAnimationEditorCard({
-              title: t({ ko: '전환 옵션', en: 'Transition options' }),
-              children: (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label={t({ ko: '전환', en: 'Transition' })}>
-                    <Select
-                      value={transitionStyle ?? 'fade'}
-                      onChange={(event) => {
-                        onTransitionStyleChange(normalizeWallpaperTransitionStyle(event.target.value))
-                      }}
-                    >
-                      <option value="fade">{t({ ko: '페이드', en: 'Fade' })}</option>
-                      <option value="zoom">{t({ ko: '줌', en: 'Zoom' })}</option>
-                      <option value="slide">{t({ ko: '슬라이드', en: 'Slide' })}</option>
-                      <option value="blur">{t({ ko: '블러', en: 'Blur' })}</option>
-                      <option value="flip">{t({ ko: '플립', en: 'Flip' })}</option>
-                      <option value="shuffle">{t({ ko: '셔플', en: 'Shuffle' })}</option>
-                      <option value="none">{t({ ko: '없음', en: 'None' })}</option>
-                    </Select>
-                  </Field>
-                  <Field label={t({ ko: '전환 시간 (ms)', en: 'Transition duration (ms)' })}>
-                    <NumberStepperInput
-                      variant="settings"
-                      min={80}
-                      max={4000}
-                      step={10}
+            <WallpaperAnimationEditorCard title={t({ ko: '전환 옵션', en: 'Transition options' })}>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={t({ ko: '전환', en: 'Transition' })}>
+                  <Select
+                    value={transitionStyle ?? 'fade'}
+                    onChange={(event) => {
+                      onTransitionStyleChange(normalizeWallpaperTransitionStyle(event.target.value))
+                    }}
+                  >
+                    <option value="fade">{t({ ko: '페이드', en: 'Fade' })}</option>
+                    <option value="zoom">{t({ ko: '줌', en: 'Zoom' })}</option>
+                    <option value="slide">{t({ ko: '슬라이드', en: 'Slide' })}</option>
+                    <option value="blur">{t({ ko: '블러', en: 'Blur' })}</option>
+                    <option value="flip">{t({ ko: '플립', en: 'Flip' })}</option>
+                    <option value="shuffle">{t({ ko: '셔플', en: 'Shuffle' })}</option>
+                    <option value="none">{t({ ko: '없음', en: 'None' })}</option>
+                  </Select>
+                </Field>
+                <Field label={t({ ko: '전환 시간 (ms)', en: 'Transition duration (ms)' })}>
+                  <NumberStepperInput
+                    variant="settings"
+                    min={80}
+                    max={4000}
+                    step={10}
 
-                      value={durationMs}
-                      onValueCommit={(nextValue) => {
-                        onTransitionDurationChange(clampWallpaperInspectorNumber(nextValue, durationMs, 80, 4000, 0))
-                      }}
-                    />
-                  </Field>
-                </div>
-              ),
-            })}
+                    value={durationMs}
+                    onValueCommit={(nextValue) => {
+                      onTransitionDurationChange(clampWallpaperInspectorNumber(nextValue, durationMs, 80, 4000, 0))
+                    }}
+                  />
+                </Field>
+              </div>
+            </WallpaperAnimationEditorCard>
             {editorContent}
           </>
         )}
@@ -279,24 +266,21 @@ export function WallpaperHoverInteractionEditorFields({
         previewKind="hover"
         summary={t({ ko: `강도 ${hoverAmount.toFixed(1)}`, en: `Strength ${hoverAmount.toFixed(1)}` })}
         previewConfig={{ hoverMotion }}
-        editorContent={renderWallpaperAnimationEditorCard({
-          title: t({ ko: '호버 옵션', en: 'Hover options' }),
-          children: (
-            <Field label={t({ ko: '호버 반응', en: 'Hover response' })}>
-              <NumberStepperInput
-                variant="settings"
-                min={0}
-                max={2.5}
-                step={0.1}
+        editorContent={<WallpaperAnimationEditorCard title={t({ ko: '호버 옵션', en: 'Hover options' })}>
+          <Field label={t({ ko: '호버 반응', en: 'Hover response' })}>
+            <NumberStepperInput
+              variant="settings"
+              min={0}
+              max={2.5}
+              step={0.1}
 
-                value={hoverAmount}
-                onValueCommit={(nextValue) => {
-                  onHoverMotionChange(clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5))
-                }}
-              />
-            </Field>
-          ),
-        })}
+              value={hoverAmount}
+              onValueCommit={(nextValue) => {
+                onHoverMotionChange(clampWallpaperInspectorNumber(nextValue, 1, 0, 2.5))
+              }}
+            />
+          </Field>
+        </WallpaperAnimationEditorCard>}
         onChange={onHoverEasingChange}
       />
     </Field>
@@ -360,39 +344,36 @@ export function WallpaperPreviewOpenAnimationEditorField({
           transitionStyle: 'zoom',
           transitionDurationMs: resolvedDurationMs,
         }}
-        editorContent={renderWallpaperAnimationEditorCard({
-          title: t({ ko: '확대 미리보기 옵션', en: 'Zoom preview options' }),
-          children: (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t({ ko: '시작 크기 (%)', en: 'Start scale (%)' })}>
-                <NumberStepperInput
-                  variant="settings"
-                  min={60}
-                  max={100}
-                  step={1}
+        editorContent={<WallpaperAnimationEditorCard title={t({ ko: '확대 미리보기 옵션', en: 'Zoom preview options' })}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t({ ko: '시작 크기 (%)', en: 'Start scale (%)' })}>
+              <NumberStepperInput
+                variant="settings"
+                min={60}
+                max={100}
+                step={1}
 
-                  value={resolvedScalePercent}
-                  onValueCommit={(nextValue) => {
-                    onScalePercentChange(clampWallpaperInspectorNumber(nextValue, resolvedScalePercent, 60, 100, 0))
-                  }}
-                />
-              </Field>
-              <Field label={t({ ko: '열림 시간 (ms)', en: 'Open duration (ms)' })}>
-                <NumberStepperInput
-                  variant="settings"
-                  min={80}
-                  max={1200}
-                  step={10}
+                value={resolvedScalePercent}
+                onValueCommit={(nextValue) => {
+                  onScalePercentChange(clampWallpaperInspectorNumber(nextValue, resolvedScalePercent, 60, 100, 0))
+                }}
+              />
+            </Field>
+            <Field label={t({ ko: '열림 시간 (ms)', en: 'Open duration (ms)' })}>
+              <NumberStepperInput
+                variant="settings"
+                min={80}
+                max={1200}
+                step={10}
 
-                  value={resolvedDurationMs}
-                  onValueCommit={(nextValue) => {
-                    onDurationMsChange(clampWallpaperInspectorNumber(nextValue, resolvedDurationMs, 80, 1200, 0))
-                  }}
-                />
-              </Field>
-            </div>
-          ),
-        })}
+                value={resolvedDurationMs}
+                onValueCommit={(nextValue) => {
+                  onDurationMsChange(clampWallpaperInspectorNumber(nextValue, resolvedDurationMs, 80, 1200, 0))
+                }}
+              />
+            </Field>
+          </div>
+        </WallpaperAnimationEditorCard>}
         onChange={onEasingChange}
       />
     </Field>
@@ -423,39 +404,36 @@ export function WallpaperPreviewCloseAnimationEditorField({
           transitionStyle: 'zoom',
           transitionDurationMs: resolvedDurationMs,
         }}
-        editorContent={renderWallpaperAnimationEditorCard({
-          title: t({ ko: '닫힘 미리보기 옵션', en: 'Close preview options' }),
-          children: (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t({ ko: '끝 크기 (%)', en: 'End scale (%)' })}>
-                <NumberStepperInput
-                  variant="settings"
-                  min={60}
-                  max={100}
-                  step={1}
+        editorContent={<WallpaperAnimationEditorCard title={t({ ko: '닫힘 미리보기 옵션', en: 'Close preview options' })}>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t({ ko: '끝 크기 (%)', en: 'End scale (%)' })}>
+              <NumberStepperInput
+                variant="settings"
+                min={60}
+                max={100}
+                step={1}
 
-                  value={resolvedScalePercent}
-                  onValueCommit={(nextValue) => {
-                    onScalePercentChange(clampWallpaperInspectorNumber(nextValue, resolvedScalePercent, 60, 100, 0))
-                  }}
-                />
-              </Field>
-              <Field label={t({ ko: '닫힘 시간 (ms)', en: 'Close duration (ms)' })}>
-                <NumberStepperInput
-                  variant="settings"
-                  min={80}
-                  max={1200}
-                  step={10}
+                value={resolvedScalePercent}
+                onValueCommit={(nextValue) => {
+                  onScalePercentChange(clampWallpaperInspectorNumber(nextValue, resolvedScalePercent, 60, 100, 0))
+                }}
+              />
+            </Field>
+            <Field label={t({ ko: '닫힘 시간 (ms)', en: 'Close duration (ms)' })}>
+              <NumberStepperInput
+                variant="settings"
+                min={80}
+                max={1200}
+                step={10}
 
-                  value={resolvedDurationMs}
-                  onValueCommit={(nextValue) => {
-                    onDurationMsChange(clampWallpaperInspectorNumber(nextValue, resolvedDurationMs, 80, 1200, 0))
-                  }}
-                />
-              </Field>
-            </div>
-          ),
-        })}
+                value={resolvedDurationMs}
+                onValueCommit={(nextValue) => {
+                  onDurationMsChange(clampWallpaperInspectorNumber(nextValue, resolvedDurationMs, 80, 1200, 0))
+                }}
+              />
+            </Field>
+          </div>
+        </WallpaperAnimationEditorCard>}
         onChange={onEasingChange}
       />
     </Field>

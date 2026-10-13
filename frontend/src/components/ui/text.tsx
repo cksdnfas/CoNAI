@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils'
 const textVariants = cva('', {
   variants: {
     variant: {
-      /** Small uppercase kicker above a title or value. Weight is left to the caller. */
-      overline: 'text-2xs uppercase tracking-overline text-muted-foreground',
+      /** Small uppercase kicker above a title, value or field group. */
+      overline: 'text-2xs font-semibold uppercase tracking-overline text-muted-foreground',
       /** Field and row labels — the codebase's most repeated text style. */
       label: 'text-sm font-medium text-foreground',
       body: 'text-sm text-foreground',

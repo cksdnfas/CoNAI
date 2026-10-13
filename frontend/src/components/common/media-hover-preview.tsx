@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Maximize2 } from 'lucide-react'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
+import { cn } from '@/lib/utils'
 
 export interface MediaHoverPreviewSource {
   /** Shown right away; usually the thumbnail the trigger already loaded. */
@@ -124,7 +126,7 @@ function MediaHoverPreviewCard({ anchor, source }: { anchor: DOMRect; source: Me
     <div
       ref={cardRef}
       aria-hidden="true"
-      className="pointer-events-none fixed z-popover rounded-md bg-surface-high p-2 text-foreground shadow-elevation-2"
+      className={cn(floatingSurfaceClassName, 'pointer-events-none fixed z-popover p-2 text-foreground')}
       style={{ left: position?.left ?? 0, top: position?.top ?? 0, visibility: position && fittedSize ? 'visible' : 'hidden' }}
     >
       {videoSrc ? (

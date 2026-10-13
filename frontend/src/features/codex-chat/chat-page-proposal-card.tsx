@@ -3,6 +3,7 @@ import { chatPagePatch, type ChatProposal, type ChatPageValue } from '@conai/sha
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import { useChatPage } from './chat-page-context'
+import { ProposalChange, ProposalFrame } from './chat-proposal-parts'
 
 type PageProposal = Extract<ChatProposal, { kind: 'page_fields' }>
 function display(value: ChatPageValue) { return Array.isArray(value) ? value.join('\n\n') : String(value) }
@@ -29,21 +30,20 @@ export function ChatPageProposalCard({ proposal }: { proposal: PageProposal }) {
     catch (reason) { setError(reason instanceof Error ? reason.message : t({ ko: '입력을 적용하지 못했어.', en: 'Could not apply the inputs.' })) }
     finally { setBusy(false) }
   }
-  return <div className="space-y-2.5 border-y border-line py-2.5" aria-label={t({ ko: '페이지 입력 제안', en: 'Page input proposal' })}>
+  return <ProposalFrame aria-label={t({ ko: '페이지 입력 제안', en: 'Page input proposal' })}>
     <p className="text-xs font-semibold">{t({ ko: '{name} 입력 변경', en: 'Change inputs on {name}' }, { name: proposal.page.title })}</p>
     <dl className="space-y-2 text-xs">
-      {proposal.changes.map((change) => <div key={change.fieldId}>
-        <dt className="mb-1 font-medium">{change.label}</dt>
-        <dd className="grid grid-cols-2 gap-2">
-          <span className="max-h-28 overflow-auto whitespace-pre-wrap break-words text-muted-foreground" aria-label={t({ ko: '변경 전', en: 'Before' })}>{display(change.before) || t({ ko: '(비어 있음)', en: '(empty)' })}</span>
-          <span className="max-h-28 overflow-auto whitespace-pre-wrap break-words text-foreground" aria-label={t({ ko: '변경 후', en: 'After' })}>{display(change.value) || t({ ko: '(비어 있음)', en: '(empty)' })}</span>
-        </dd>
-      </div>)}
+      {proposal.changes.map((change) => <ProposalChange
+        key={change.fieldId}
+        label={change.label}
+        before={display(change.before) || t({ ko: '(비어 있음)', en: '(empty)' })}
+        after={display(change.value) || t({ ko: '(비어 있음)', en: '(empty)' })}
+      />)}
     </dl>
     {error || unavailable ? <p className="text-xs text-muted-foreground" role={error ? 'alert' : undefined}>{error || unavailable}</p> : null}
     <div className="flex items-center gap-2">
       {state === 'undone' ? <span className="text-xs text-muted-foreground">{t({ ko: '입력을 되돌렸어.', en: 'Inputs undone.' })}</span>
         : handled && !applied ? <span className="text-xs text-muted-foreground">{t(proposal.dismissed ? { ko: '무시한 제안이야.', en: 'Proposal dismissed.' } : { ko: '이전에 적용한 제안이야.', en: 'Previously applied.' })}</span>
           : <Button size="xs" variant={applied ? 'secondary' : 'default'} disabled={busy || !!unavailable} onClick={() => void run()}>{t(applied ? { ko: '입력 되돌리기', en: 'Undo inputs' } : { ko: '입력 적용', en: 'Apply inputs' })}</Button>}    </div>
-  </div>
+  </ProposalFrame>
 }

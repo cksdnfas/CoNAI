@@ -3,6 +3,7 @@ import { Clapperboard, Download, Loader2, Pause, Play, Save } from 'lucide-react
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SliderRow } from '@/components/ui/slider-row'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -18,7 +19,7 @@ import { useRuntimeJob } from '@/lib/use-runtime-job'
 import { detectSheetGrid } from './sprite-grid-detect'
 import { cellSize } from './sprite-options'
 import { LibraryMediaButtons, LibraryResults } from './sprite-library'
-import { MiniField, SliderLine, SpriteSection } from './sprite-ui'
+import { MiniField, SpriteActionBar, SpriteCheckerStage, SpriteSection } from './sprite-ui'
 import { useSpriteAnimationChatPage } from './use-sprite-chat-page'
 
 interface SheetSource { hash: string; name: string; width: number; height: number }
@@ -89,7 +90,7 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
         {sheet && invalid ? <div role="alert" className="text-xs text-warning">{t({ ko: '격자가 시트 크기와 맞지 않거나 프레임 수가 칸 수를 넘어.', en: 'The grid does not divide the sheet, or the frame count exceeds the cells.' })}</div> : null}
       </SpriteSection>
       <SpriteSection title={t({ ko: '출력', en: 'Output' })}>
-        <SliderLine label="FPS" value={options.fps} min={1} max={60} onChange={(fps) => setOptions({ ...options, fps })} />
+        <SliderRow label="FPS" value={options.fps} min={1} max={60} onChange={(fps) => setOptions({ ...options, fps })} />
         <div className="flex flex-wrap items-center gap-2">
           <SegmentedControl size="sm" value={options.outputFormat} onChange={(format) => setOptions({ ...options, outputFormat: format as SpriteAnimationOptions['outputFormat'] })} items={[{ value: 'gif', label: 'GIF' }, { value: 'webp', label: 'WebP' }, { value: 'mp4', label: 'MP4' }]} ariaLabel={t({ ko: '형식', en: 'Format' })} />
           {options.outputFormat === 'mp4' ? (
@@ -103,13 +104,13 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
           ) : null}
         </div>
       </SpriteSection>
-      <div className="sticky bottom-3 z-sticky mt-2 flex items-center gap-2 rounded-md bg-surface-container/95 p-1.5 pl-3 shadow-elevation-3 backdrop-blur-md">
+      <SpriteActionBar>
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{t({ ko: '{count}프레임', en: '{count} frames' }, { count: options.frameCount })} · {options.fps}fps · {options.outputFormat.toUpperCase()}</span>
         <IconButton variant="ghost" size="icon-sm" disabled={!canRun} label={t({ ko: '파일로 받기', en: 'Download file' })} onClick={() => void run(false)}><Download /></IconButton>
         <IconButton variant="default" disabled={!canRun || !has('images.upload')} onClick={() => void run(true)} aria-busy={running || undefined} label={running ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '라이브러리에 저장', en: 'Save to library' })}>
           {running ? <Loader2 className="animate-spin" /> : <Save />}
         </IconButton>
-      </div>
+      </SpriteActionBar>
     </div>
   )
 
@@ -117,7 +118,7 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
     <div className="flex min-w-0 flex-col gap-3">
       {jobId ? <RuntimeJobProgress job={job.job} cancel={job.cancel} isCancelling={job.isCancelling} /> : null}
       {sheet && cell?.exact ? <AnimationPreview sheet={sheet} options={options} cellWidth={cell.cellWidth} cellHeight={cell.cellHeight} /> : (
-        <div className="bg-checker flex h-[min(48vh,380px)] items-center justify-center rounded-sm"><Clapperboard className="size-10 text-muted-foreground opacity-30" /></div>
+        <SpriteCheckerStage><Clapperboard className="size-10 text-muted-foreground opacity-30" /></SpriteCheckerStage>
       )}
       <LibraryResults hashes={savedHashes} />
     </div>
@@ -169,9 +170,9 @@ function AnimationPreview({ sheet, options, cellWidth, cellHeight }: { sheet: Sh
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="bg-checker flex h-[min(48vh,380px)] items-center justify-center overflow-hidden rounded-sm">
+      <SpriteCheckerStage>
         <canvas ref={canvasRef} width={cellWidth} height={cellHeight} className="max-h-full max-w-full" style={{ height: Math.min(340, cellHeight * 4), imageRendering: 'pixelated', aspectRatio: `${cellWidth} / ${cellHeight}` }} />
-      </div>
+      </SpriteCheckerStage>
       <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
         <IconButton size="icon-xs" variant="ghost" label={playing ? t({ ko: '일시정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} onClick={() => setPlaying(!playing)}>
           {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}

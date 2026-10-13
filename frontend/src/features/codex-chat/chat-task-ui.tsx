@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, Circle, CircleCheck, CircleDot, CircleMinus, CircleStop, Pause, Play, Users } from 'lucide-react'
 import { CHAT_TASK_DEFAULT_BUDGET, CHAT_TASK_LIMITS, type ChatProposal, type ChatRoutineRouting, type ChatTask, type ChatTaskAssignee, type ChatTaskRouting, type ChatTaskStep, type ChatTaskSummary } from '@conai/shared'
 import { Button } from '@/components/ui/button'
+import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +13,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { approveChatTaskPlan, CHAT_PROFILES_QUERY_KEY, chatTaskQueryKey, dismissChatProposal, getChatTask, listChatProfiles, setChatTaskState } from '@/lib/api-codex-chat'
 import { ChatProfileAvatar } from './chat-profile-avatar'
+import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-chat-context'
 import { getErrorMessage } from '@/lib/error-message'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
@@ -75,8 +77,8 @@ function useWaitLabel() {
 
 function StateChip({ task }: { task: ChatTask }) {
   const label = useWaitLabel()(task)
-  const tone = task.status === 'running' ? 'bg-primary/15 text-primary' : task.status === 'waiting' || task.status === 'paused' ? 'bg-warning/15 text-warning' : 'bg-muted text-muted-foreground'
-  const chip = <span className={cn('shrink-0 rounded-full px-2 py-px text-2xs font-semibold', tone)}>{label}</span>
+  const tone = task.status === 'running' ? 'primary' : task.status === 'waiting' || task.status === 'paused' ? 'warning' : 'muted'
+  const chip = <Chip size="sm" tone={tone} className="font-semibold">{label}</Chip>
   return task.reason ? <Tip content={task.reason}>{chip}</Tip> : chip
 }
 
@@ -112,7 +114,7 @@ function StepList({ steps, current, task }: { steps: Array<{ title: string; stat
         <li key={index} className={cn('grid items-center gap-2 py-0.5 text-sm', assigned ? 'grid-cols-[1rem_minmax(0,1fr)_auto_auto]' : 'grid-cols-[1rem_minmax(0,1fr)_auto]', step.status === 'done' && 'text-muted-foreground', index === current && 'font-semibold')}>
           <StepIcon status={step.status} current={index === current} />
           <span className="min-w-0 truncate" title={step.note}>{step.title}</span>
-          {index === current && task && task.status !== 'running' ? <StateChip task={task} /> : step.approval && step.status === 'todo' ? <span className="rounded-full bg-warning/15 px-2 py-px text-2xs font-semibold text-warning">{t({ ko: '승인', en: 'Approval' })}</span> : <span />}
+          {index === current && task && task.status !== 'running' ? <StateChip task={task} /> : step.approval && step.status === 'todo' ? <Chip size="sm" tone="warning" className="font-semibold">{t({ ko: '승인', en: 'Approval' })}</Chip> : <span />}
           {assigned ? step.assignee !== undefined ? <Assignee assignee={step.assignee} /> : <span /> : null}
         </li>
       ))}
@@ -145,7 +147,7 @@ export function TaskPlanCard({ proposal, threadId }: { proposal: PlanProposal; t
     </Button>
   )
   return (
-    <div className="space-y-2.5 border-y border-line py-2.5">
+    <ProposalFrame>
       <div className="flex min-w-0 items-baseline gap-2">
         <span className="shrink-0 text-xs font-semibold text-muted-foreground">{t({ ko: '작업 플랜', en: 'Task plan' })}</span>
         <span className="min-w-0 truncate text-sm font-semibold">{proposal.goal}</span>
@@ -156,7 +158,7 @@ export function TaskPlanCard({ proposal, threadId }: { proposal: PlanProposal; t
         <span>{t({ ko: '이미지 ≤ {count}장', en: '≤ {count} images' }, { count: proposal.budget.images })}</span>
         {proposal.budget.tokens !== undefined ? <span>{t({ ko: '토큰 ≤ {count} · 턴 사이 확인', en: '≤ {count} tokens · checked between turns' }, { count: proposal.budget.tokens })}</span> : null}
       </div>
-      <div className="flex items-center justify-end gap-2 border-t border-line pt-2">
+      <ProposalFooter className="justify-end">
         {state === 'open' ? (
           <>
             <Button size="xs" variant="ghost" disabled={busy} onClick={() => dismiss.mutate()}>{t({ ko: '무시', en: 'Dismiss' })}</Button>
@@ -166,8 +168,8 @@ export function TaskPlanCard({ proposal, threadId }: { proposal: PlanProposal; t
           <span className="text-xs text-muted-foreground">{state === 'approved' ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '무시함', en: 'Dismissed' })}</span>
           <IconButton size="icon-xs" variant="ghost" label={t({ ko: '접기', en: 'Fold' })} onClick={() => setUnfolded(false)}><ChevronUp /></IconButton>
         </>}
-      </div>
-    </div>
+      </ProposalFooter>
+    </ProposalFrame>
   )
 }
 

@@ -1,3 +1,4 @@
+import { Badge } from '@/components/ui/badge'
 import { Text } from '@/components/ui/text'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useI18n } from '@/i18n'
@@ -264,12 +265,12 @@ export function WorkflowFinalResultsSection({
                 const overlayText = [entry.overlayLabel, entry.sourceNodeLabel, entry.sourcePortLabel, entry.artifact.artifact_type].filter(Boolean).join(' · ')
 
                 return (
-                  <div className="pointer-events-none flex min-w-0 flex-wrap items-center gap-1.5 rounded-sm bg-backdrop px-2 py-1 text-2xs text-white backdrop-blur-sm" title={overlayText} aria-label={overlayText}>
+                  <Badge variant="overlay" className="pointer-events-none min-w-0 flex-wrap justify-start gap-1.5 px-2 font-normal" title={overlayText} aria-label={overlayText}>
                     {entry.overlayLabel ? <span className="truncate font-medium">{entry.overlayLabel}</span> : null}
                     {entry.sourceNodeLabel ? <span className="truncate text-white/90">{entry.sourceNodeLabel}</span> : null}
                     {entry.sourcePortLabel ? <span className="truncate text-white/80">{entry.sourcePortLabel}</span> : null}
-                    {entry.artifact.artifact_type ? <span className="rounded-sm bg-white/15 px-1.5 py-0.5 font-semibold uppercase tracking-overline">{entry.artifact.artifact_type}</span> : null}
-                  </div>
+                    {entry.artifact.artifact_type ? <span className="truncate text-white/70">{entry.artifact.artifact_type}</span> : null}
+                  </Badge>
                 )
               }}
             />

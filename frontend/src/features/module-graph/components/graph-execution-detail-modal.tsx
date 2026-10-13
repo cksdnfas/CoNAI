@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { CodeBlock } from '@/components/ui/code-block'
 import { Inset } from '@/components/ui/inset'
 import { Text } from '@/components/ui/text'
 import { Modal } from '@/components/ui/modal'
@@ -25,7 +26,7 @@ import {
   type ParsedExecutionPlan,
 } from './graph-execution-panel-helpers'
 import { ExecutionComparisonContextBlock, ExecutionPathDiagnosticsBlock } from './graph-execution-panel-sections'
-import { CODE_BLOCK_CLASS_NAME, ExecutionHeaderBadges, ExecutionInputEntriesList, type GraphExecutionDetail } from './graph-execution-shared-ui'
+import { ExecutionHeaderBadges, ExecutionInputEntriesList, type GraphExecutionDetail } from './graph-execution-shared-ui'
 import { TechnicalReferenceHint } from './module-graph-field-shared'
 import { EmptyState } from '@/components/ui/empty-state'
 import { TextTabs } from '@/components/common/text-tabs'
@@ -168,7 +169,7 @@ export function GraphExecutionDetailModal({
                 {artifact.storage_path ? <div className="mt-2 rounded-sm bg-surface-lowest px-2 py-1.5 break-all text-2xs text-muted-foreground">{artifact.storage_path}</div> : null}
 
                 {parsedMetadata ? (
-                  <pre className={cn(CODE_BLOCK_CLASS_NAME, 'mt-2')}>{typeof parsedMetadata === 'string' ? parsedMetadata : JSON.stringify(parsedMetadata, null, 2)}</pre>
+                  <CodeBlock size="2xs" wrap={false} className="mt-2">{typeof parsedMetadata === 'string' ? parsedMetadata : JSON.stringify(parsedMetadata, null, 2)}</CodeBlock>
                 ) : null}
               </Inset>
             )
@@ -197,7 +198,7 @@ export function GraphExecutionDetailModal({
                   </div>
                   <div className="mt-1.5 text-sm text-foreground">{log.message}</div>
                   {parsedDetails ? (
-                    <pre className={cn(CODE_BLOCK_CLASS_NAME, 'mt-2')}>{typeof parsedDetails === 'string' ? parsedDetails : JSON.stringify(parsedDetails, null, 2)}</pre>
+                    <CodeBlock size="2xs" wrap={false} className="mt-2">{typeof parsedDetails === 'string' ? parsedDetails : JSON.stringify(parsedDetails, null, 2)}</CodeBlock>
                   ) : null}
                 </Inset>
               )

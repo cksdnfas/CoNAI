@@ -7,14 +7,14 @@ import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
-import { ToggleChip } from '@/components/ui/chip'
+import { Chip, ToggleChip } from '@/components/ui/chip'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
 import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TextTabs } from '@/components/common/text-tabs'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageFreeText, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
@@ -49,7 +49,6 @@ const TAB_PARAMS: Record<ListTab, Record<string, string | null>> = {
   trash: { kind: 'knowledge', section: 'trash', status: null, review: null },
   hidden: { kind: null, section: null, status: 'hidden', review: null },
 }
-const TAB_TRIGGER = 'relative flex-none rounded-none px-0 pt-1 pb-2 text-sm font-semibold text-muted-foreground hover:bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary after:opacity-0 data-[state=active]:after:opacity-100'
 
 /**
  * /posts — the posts board. Search params: `category` and `tag` narrow the list; the list tab is `kind=knowledge`
@@ -348,7 +347,7 @@ export function PostsPage() {
               label={(
                 <span className="flex min-w-0 items-center gap-1.5">
                   {parentIds.has(category.id) ? (
-                    <IconButton variant="ghost" size="icon-xs" tooltip={false} className="size-4 min-w-0 shrink-0 rounded-sm"
+                    <IconButton variant="ghost" size="icon-xs" tooltip={false} className="size-4 min-w-0 shrink-0"
                       label={folded ? t({ ko: '펼치기', en: 'Expand' }) : t({ ko: '접기', en: 'Collapse' })} aria-expanded={!folded}
                       onClick={(event) => { event.stopPropagation(); event.preventDefault(); toggleCategory(category.id) }}>
                       {folded ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
@@ -415,10 +414,7 @@ export function PostsPage() {
           </span>
         ))}
         {tag ? (
-          <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-primary/15 pl-2 pr-0.5 text-xs leading-6 text-primary">
-            #{tag}
-            <IconButton size="icon-xs" variant="ghost" className="size-5 rounded-full text-primary hover:bg-primary/20 hover:text-primary" label={t({ ko: '태그 필터 빼기', en: 'Clear tag filter' })} onClick={() => openList({ tag: null })}><X /></IconButton>
-          </span>
+          <Chip tone="primary" className="ml-1" removeLabel={t({ ko: '태그 필터 빼기', en: 'Clear tag filter' })} onRemove={() => openList({ tag: null })}>#{tag}</Chip>
         ) : null}
       </nav>
     )
@@ -456,11 +452,7 @@ export function PostsPage() {
   const listHeader = view === 'list' && (listTabs.length > 1 || tab === 'knowledge') ? (
     <div className="flex flex-col gap-2.5 pb-3">
       {listTabs.length > 1 ? (
-        <Tabs value={tab} onValueChange={(next) => openTab(next as ListTab)}>
-          <TabsList aria-label={t({ ko: '목록', en: 'List' })} className="h-auto w-full justify-start gap-5 overflow-x-auto rounded-none border-b border-line bg-transparent p-0">
-            {listTabs.map((item) => <TabsTrigger key={item} value={item} className={TAB_TRIGGER}>{tabLabels[item]}</TabsTrigger>)}
-          </TabsList>
-        </Tabs>
+        <TextTabs value={tab} onChange={openTab} ariaLabel={t({ ko: '목록', en: 'List' })} items={listTabs.map((item) => ({ value: item, label: tabLabels[item] }))} />
       ) : null}
       {tab === 'knowledge' ? (
         <div className="flex flex-wrap gap-1.5">

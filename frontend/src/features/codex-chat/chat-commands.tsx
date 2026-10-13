@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -16,11 +18,21 @@ export const CHAT_COMMANDS = [
 
 export type ChatCommand = typeof CHAT_COMMANDS[number]
 
+/** The autocomplete popup above the composer (slash commands, `@` mentions). Width and side with `className`. */
+export function ComposerSuggestList({ id, label, className, children }: { id: string; label: string; className?: string; children: ReactNode }) {
+  return <div id={id} role="listbox" aria-label={label} data-surface="high" className={cn(floatingSurfaceClassName, 'absolute bottom-full left-3 z-10 mb-1 max-h-72 overflow-y-auto p-1.5', className)}>{children}</div>
+}
+
+/** One option row of ComposerSuggestList; pressing it keeps the composer focused. */
+export function ComposerSuggestOption({ id, selected, onSelect, className, children }: { id: string; selected: boolean; onSelect: () => void; className?: string; children: ReactNode }) {
+  return <Button id={id} role="option" aria-selected={selected} variant="ghost" size="sm" className={cn('w-full justify-start', className, selected && 'bg-fill')} onMouseDown={(event) => event.preventDefault()} onClick={onSelect}>{children}</Button>
+}
+
 export function ChatCommandList({ commands, selected, onSelect, id }: { commands: readonly ChatCommand[]; selected: number; onSelect: (command: ChatCommand) => void; id: string }) {
   const { t } = useI18n()
-  return <div id={id} role="listbox" aria-label={t({ ko: '채팅 커맨드', en: 'Chat commands' })} className="absolute bottom-full left-3 right-3 z-10 mb-1 max-h-72 overflow-y-auto rounded-md bg-surface-high p-1.5 shadow-elevation-2">
-    {commands.map((command, index) => <Button key={command.name} id={`${id}-${index}`} role="option" aria-selected={selected === index} variant="ghost" size="sm" className={cn('w-full justify-start gap-4', selected === index && 'bg-fill')} onMouseDown={(event) => event.preventDefault()} onClick={() => onSelect(command)}>
+  return <ComposerSuggestList id={id} label={t({ ko: '채팅 커맨드', en: 'Chat commands' })} className="right-3">
+    {commands.map((command, index) => <ComposerSuggestOption key={command.name} id={`${id}-${index}`} selected={selected === index} className="gap-4" onSelect={() => onSelect(command)}>
       <span className="w-20 shrink-0 text-left font-mono text-xs">/{command.name}</span><span className="text-xs">{t(command.label)}</span>
-    </Button>)}
-  </div>
+    </ComposerSuggestOption>)}
+  </ComposerSuggestList>
 }

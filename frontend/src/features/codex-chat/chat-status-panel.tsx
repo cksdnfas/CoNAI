@@ -4,6 +4,7 @@ import type { ChatPortraitSignal } from '@conai/shared'
 import { ChatProfileImage } from './chat-profile-image'
 import { Chip } from '@/components/ui/chip'
 import { chatEmoticonUrl, chatProfileAssetUrl, type ChatProfileSummary } from '@/lib/api-codex-chat'
+import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
@@ -103,21 +104,13 @@ export type ChatStatusData = {
 function BlockTabs({ blocks, activeKey, onChange, className }: { blocks: ChatStatusBlock[]; activeKey: string; onChange: (key: string) => void; className?: string }) {
   if (blocks.length <= 1) return <span className={cn('truncate text-sm font-semibold', className)}>{blocks[0]?.label ?? blocks[0]?.key}</span>
   return (
-    <div role="tablist" className={cn('flex min-w-0 flex-wrap items-stretch gap-x-3', className)}>
-      {blocks.map((block) => (
-        <Button
-          key={block.id}
-          variant="ghost"
-          size="sm"
-          role="tab"
-          aria-selected={block.key === activeKey}
-          onClick={() => onChange(block.key)}
-          className={cn('h-8 shrink-0 rounded-none border-b-2 px-0.5 hover:bg-transparent', block.key === activeKey ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}
-        >
-          {block.label ?? block.key}
-        </Button>
-      ))}
-    </div>
+    <TextTabs
+      value={activeKey}
+      items={blocks.map((block) => ({ value: block.key, label: block.label ?? block.key }))}
+      onChange={onChange}
+      hairline={false}
+      className={className}
+    />
   )
 }
 

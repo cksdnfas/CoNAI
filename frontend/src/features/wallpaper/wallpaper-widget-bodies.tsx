@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { WallpaperFloatingCollageBody } from './wallpaper-floating-collage-widget-body'
@@ -14,7 +15,7 @@ import type { WallpaperWidgetPreviewImage } from './wallpaper-widget-preview-sur
 export type { WallpaperWidgetPreviewImage } from './wallpaper-widget-preview-surface'
 import { getWallpaperQueueAgeLabelFromAnchor } from './wallpaper-queue-status-utils'
 import { useWallpaperWorkflowActivityQuery } from './wallpaper-widget-data'
-import { WallpaperWidgetErrorNote } from './wallpaper-widget-note'
+import { WallpaperWidgetErrorNote, WallpaperWidgetNote } from './wallpaper-widget-note'
 import {
   getWallpaperMotionStrengthMultiplier,
   useWallpaperClockText,
@@ -65,7 +66,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   }, [queueQuery.data])
 
   if (queueQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.loading.workflow.status')}</div>
+    return <WallpaperWidgetNote>{t('wallpaper.wallpaper.widget.bodies.loading.workflow.status')}</WallpaperWidgetNote>
   }
 
   if (queueQuery.isError) {
@@ -89,12 +90,12 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
       <div className="flex h-full flex-col gap-[0.55em] overflow-hidden leading-tight [justify-content:safe_center]" style={{ fontSize: 'clamp(9px, min(6cqh, 4cqw), 22px)' }}>
         <div className="flex shrink-0 items-center justify-between gap-[0.5em] border-b border-border/50 pb-[0.5em]">
           <div>
-            <div className="text-[0.8em] uppercase tracking-overline text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.running')}</div>
+            <Text as="div" variant="overline" className="text-[0.8em]">{t('wallpaper.wallpaper.widget.bodies.running')}</Text>
             <div className="text-[1.15em] font-semibold text-foreground">{t('wallpaper.wallpaper.widget.bodies.totalactive.tolocalestring.en.us.active', { totalActive: formatNumber(totalActive) })}</div>
           </div>
-          <div className="text-[0.8em] uppercase tracking-overline text-muted-foreground">
+          <Text as="div" variant="overline" className="text-[0.8em]">
             {queueSummary.failed > 0 ? t('wallpaper.wallpaper.widget.bodies.needs.attention') : t('wallpaper.wallpaper.widget.bodies.stable')}
-          </div>
+          </Text>
         </div>
 
         {queueItems.map((item) => {
@@ -107,7 +108,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
                     {item.short}
                   </span>
                   <div>
-                    <div className="text-[0.8em] uppercase tracking-overline text-muted-foreground">{item.label}</div>
+                    <Text as="div" variant="overline" className="text-[0.8em]">{item.label}</Text>
                     {item.ageLabel ? <div className="text-[0.8em] text-muted-foreground/85">{item.ageLabel}</div> : null}
                   </div>
                 </div>
@@ -159,7 +160,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
                   {formatNumber(item.value)}
                 </div>
               </div>
-              <div className="relative mt-[0.4em] text-[0.8em] uppercase tracking-overline text-muted-foreground">{item.label}</div>
+              <Text as="div" variant="overline" className="relative mt-[0.4em] text-[0.8em]">{item.label}</Text>
               {item.ageLabel ? <div className="relative text-[0.8em] text-muted-foreground/85">{item.ageLabel}</div> : null}
             </div>
           )
@@ -172,7 +173,7 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
     <div className="grid h-full grid-cols-2 gap-x-[6cqw] gap-y-[6cqh] text-center text-xs sm:text-sm">
       {queueItems.map((item) => (
         <div key={item.label} className="flex min-h-0 flex-col justify-center border-t-2 pt-[2cqh]" style={{ borderColor: item.tone }}>
-          <div className="text-2xs uppercase tracking-overline text-muted-foreground">{item.label}</div>
+          <Text as="div" variant="overline">{item.label}</Text>
           <div className={cn('mt-1 text-[clamp(1.125rem,13cqh,4rem)] font-semibold leading-none tabular-nums text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
             {formatNumber(item.value)}
           </div>
@@ -213,7 +214,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
   }, [activityQuery.data])
 
   if (activityQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.loading.activity.flow')}</div>
+    return <WallpaperWidgetNote>{t('wallpaper.wallpaper.widget.bodies.loading.activity.flow')}</WallpaperWidgetNote>
   }
 
   if (activityQuery.isError) {
@@ -251,15 +252,15 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
     <div className="flex h-full flex-col justify-between gap-3 rounded-sm bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_18%,transparent),transparent_46%),linear-gradient(180deg,color-mix(in_srgb,var(--primary)_8%,transparent),transparent_60%)] px-3 py-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-2xs uppercase tracking-overline text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.activity')}</div>
+          <Text as="div" variant="overline">{t('wallpaper.wallpaper.widget.bodies.activity')}</Text>
           <div className="mt-1 flex items-end gap-2">
             <span className="text-2xl font-semibold tracking-[-0.08em] text-foreground sm:text-3xl">{summary.running + summary.queued}</span>
             <span className="pb-1 text-xs text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.active.load')}</span>
           </div>
         </div>
-        <div className="rounded-full border border-border/70 bg-background/50 px-2 py-1 text-2xs font-medium uppercase tracking-overline text-foreground/92 backdrop-blur-sm">
+        <Text as="div" variant="overline" className="rounded-full border border-border/70 bg-background/50 px-2 py-1 text-foreground/92 backdrop-blur-sm">
           {activityBadge}
-        </div>
+        </Text>
       </div>
 
       <div className="flex min-h-0 flex-1 items-end gap-1 rounded-sm border border-border/60 bg-background/35 px-2 py-2 backdrop-blur-sm">
@@ -288,7 +289,7 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
           { id: 'failed', label: t('wallpaper.wallpaper.widget.bodies.failed'), value: summary.failed },
         ].map((item) => (
           <div key={item.label} className="rounded-sm border border-border/60 bg-background/35 px-2 py-1.5 backdrop-blur-sm">
-            <div className="text-2xs uppercase tracking-overline text-muted-foreground">{item.label}</div>
+            <Text as="div" variant="overline">{item.label}</Text>
             <div className={cn('mt-1 font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
               {formatNumber(item.value)}
             </div>
@@ -296,10 +297,10 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
         ))}
       </div>
 
-      <div className="flex items-center justify-between gap-2 text-2xs uppercase tracking-overline text-muted-foreground">
+      <Text as="div" variant="overline" className="flex items-center justify-between gap-2">
         <span>{emphasis === 'queue' ? t('wallpaper.wallpaper.widget.bodies.queue.focus') : emphasis === 'results' ? t('wallpaper.wallpaper.widget.bodies.results.focus') : t('wallpaper.wallpaper.widget.bodies.mixed')}</span>
         <span>{summary.lastUpdated ? formatDateTime(summary.lastUpdated) : t('wallpaper.wallpaper.widget.bodies.not.updated.yet')}</span>
-      </div>
+      </Text>
     </div>
   )
 }

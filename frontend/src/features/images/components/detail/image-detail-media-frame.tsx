@@ -1,6 +1,7 @@
 import { LoaderCircle } from 'lucide-react'
 import type { CSSProperties, RefObject, SyntheticEvent as ReactSyntheticEvent } from 'react'
 import { cn } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 
 interface MediaSize {
   width: number
@@ -59,10 +60,10 @@ export function ImageDetailMediaFrame({
         />
       ) : null}
       {shouldRenderPixelPreview && !isPixelPreviewReady ? (
-        <div className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-backdrop/60 px-2 py-1 text-2xs font-medium text-white/82 backdrop-blur-sm">
-          <LoaderCircle className="h-3 w-3 animate-spin" />
+        <Badge variant="overlay" className="pointer-events-none absolute top-2 right-2 gap-1.5 px-2">
+          <LoaderCircle className="animate-spin" />
           {applyingLabel}
-        </div>
+        </Badge>
       ) : null}
     </div>
   )

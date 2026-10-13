@@ -4,6 +4,8 @@ import { ArrowDownWideNarrow, ArrowUpNarrowWide, Images, Plus, Search, SlidersHo
 import { SegmentedControl } from '@/components/common/segmented-control'
 import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -16,7 +18,6 @@ import { SEARCH_AI_TOOL_OPTIONS } from '@/features/search/search-constants'
 import { useI18n } from '@/i18n'
 import { getGroupImages, getGroupsHierarchyAll } from '@/lib/api-groups'
 import { getImages, searchImagesComplex } from '@/lib/api-images'
-import { getErrorMessage } from '@/lib/error-message'
 import type { ImageRecord } from '@/types/image'
 import type { GroupWithHierarchy } from '@/types/group'
 import { AttachPanes, AttachToolbar, attachKey, type AttachItem } from './post-attach-shared'
@@ -146,10 +147,7 @@ export function AttachMediaTab({ selected, setSelected }: { selected: AttachItem
       </AttachToolbar>
       <div className="flex min-h-0 flex-1 flex-col px-3 pb-2">
         {query.isPending ? <div className="flex flex-1 items-center justify-center"><Spinner label={t({ ko: '불러오는 중', en: 'Loading' })} /></div>
-          : query.isError && !items.length ? <div role="alert" className="flex flex-1 flex-col items-center justify-center gap-2 text-sm text-destructive">
-            {getErrorMessage(query.error, t({ ko: '미디어를 불러오지 못했어.', en: 'Could not load media.' }))}
-            <Button variant="ghost" onClick={() => void query.refetch()}>{t({ ko: '다시 시도', en: 'Retry' })}</Button>
-          </div>
+          : query.isError && !items.length ? <ErrorState size="compact" className="mt-2" title={t({ ko: '미디어를 불러오지 못했어.', en: 'Could not load media.' })} error={query.error} onRetry={() => void query.refetch()} />
           : safety.visibleItems.length ? <ImageList
             items={safety.visibleItems} resetKey={`${groupId}:${search}:${tool}:${order}:${kind}`} layout="masonry" activationMode="none"
             selectable forceSelectionMode selectedIds={selectedHashes} onSelectedIdsChange={changeSelection}
@@ -157,7 +155,7 @@ export function AttachMediaTab({ selected, setSelected }: { selected: AttachItem
             scrollMode="container" viewportHeight="100%" className="min-h-0 flex-1" minColumnWidth={150} columnGap={6} rowGap={6}
             showDefaultQuickActions={false} shouldBlurItemPreview={safety.shouldBlurItemPreview} renderItemPersistentOverlay={safety.renderItemPersistentOverlay} renderItemOverlay={renderOrder}
           />
-          : <p className="flex flex-1 items-center justify-center text-sm text-muted-foreground">{t({ ko: '맞는 미디어 없음', en: 'No matching media' })}</p>}
+          : <EmptyState className="flex-1" title={t({ ko: '맞는 미디어 없음', en: 'No matching media' })} />}
       </div>
     </AttachPanes>
   )

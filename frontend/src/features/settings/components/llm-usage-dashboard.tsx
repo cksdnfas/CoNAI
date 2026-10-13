@@ -8,6 +8,7 @@ import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { Tip } from '@/components/ui/tooltip'
+import { DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
@@ -297,20 +298,18 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_21rem]">
           <RowGroup heading={t({ ko: '모델별', en: 'By model' })} count={summary.models.length}>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[40rem] text-sm">
-                <thead>
-                  <tr className="border-b border-line text-left text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
-                    <th className="py-2 pr-3 font-semibold">{t({ ko: '연결 · 모델', en: 'Connection · model' })}</th>
-                    <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '요청', en: 'Requests' })}</th>
-                    <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '입력', en: 'Input' })}</th>
-                    <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '출력', en: 'Output' })}</th>
-                    <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '실패', en: 'Failed' })}</th>
-                    <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '평균 응답', en: 'Avg. response' })}</th>
-                    <th className="py-2 font-semibold">{t({ ko: '비중', en: 'Share' })}</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <DataTable
+              minWidthClassName="min-w-[40rem]"
+              head={<>
+                <DataTh>{t({ ko: '연결 · 모델', en: 'Connection · model' })}</DataTh>
+                <DataTh numeric>{t({ ko: '요청', en: 'Requests' })}</DataTh>
+                <DataTh numeric>{t({ ko: '입력', en: 'Input' })}</DataTh>
+                <DataTh numeric>{t({ ko: '출력', en: 'Output' })}</DataTh>
+                <DataTh numeric>{t({ ko: '실패', en: 'Failed' })}</DataTh>
+                <DataTh numeric>{t({ ko: '평균 응답', en: 'Avg. response' })}</DataTh>
+                <DataTh>{t({ ko: '비중', en: 'Share' })}</DataTh>
+              </>}
+            >
                   {summary.models.map((model, index) => {
                     const share = modelTokens > 0 ? (model.inputTokens + model.outputTokens) / modelTokens : 0
                     const estimated = model.estimatedRequests > 0
@@ -321,30 +320,28 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
                       </Tip>
                     )
                     return (
-                      <tr key={`${model.providerName}:${model.model}:${index}`} className="border-b border-line last:border-b-0">
-                        <td className="py-2 pr-3">
+                      <DataTr key={`${model.providerName}:${model.model}:${index}`}>
+                        <DataTd>
                           <span className="flex min-w-0 items-center gap-2">
                             <span className="truncate font-medium">{connectionName(model.providerName, names)} · {model.model || t({ ko: '기본 모델', en: 'default model' })}</span>
                             <Chip size="sm" tone="muted">{t(ENGINE_LABELS[model.engine] ?? ENGINE_LABELS.api)}</Chip>
                           </span>
-                        </td>
-                        <td className="py-2 pr-3 text-right tabular-nums">{formatNumber(model.requests)}</td>
-                        <td className="py-2 pr-3 text-right tabular-nums">{tokenCell(model.inputTokens)}</td>
-                        <td className="py-2 pr-3 text-right tabular-nums">{tokenCell(model.outputTokens)}</td>
-                        <td className={cn('py-2 pr-3 text-right tabular-nums', model.failed > 0 && 'text-destructive')}>{formatNumber(model.failed)}</td>
-                        <td className="py-2 pr-3 text-right tabular-nums">{seconds(model.averageLatencyMs)}</td>
-                        <td className="py-2">
+                        </DataTd>
+                        <DataTd numeric>{formatNumber(model.requests)}</DataTd>
+                        <DataTd numeric>{tokenCell(model.inputTokens)}</DataTd>
+                        <DataTd numeric>{tokenCell(model.outputTokens)}</DataTd>
+                        <DataTd numeric className={cn(model.failed > 0 && 'text-destructive')}>{formatNumber(model.failed)}</DataTd>
+                        <DataTd numeric>{seconds(model.averageLatencyMs)}</DataTd>
+                        <DataTd>
                           <span className="flex items-center gap-2">
                             <span className="h-1.5 w-20 overflow-hidden rounded-full bg-foreground/10"><span className="block h-full rounded-full" style={{ width: `${share * 100}%`, backgroundColor: color }} /></span>
                             <span className="tabular-nums text-xs text-muted-foreground">{Math.round(share * 100)}%</span>
                           </span>
-                        </td>
-                      </tr>
+                        </DataTd>
+                      </DataTr>
                     )
                   })}
-                </tbody>
-              </table>
-            </div>
+            </DataTable>
           </RowGroup>
 
           <div className="space-y-8">

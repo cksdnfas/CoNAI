@@ -1,8 +1,8 @@
 import { useState, type DragEvent } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
+import { SearchField } from '@/components/common/search-field'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePageSidebar } from '@/components/ui/sidebar'
@@ -125,17 +125,7 @@ export function GroupExplorerSidebarPanel({
           </IconButton>
         ) : null}
       </div>
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-        <Input
-          type="search"
-          value={filterText}
-          onChange={(event) => setFilterText(event.target.value)}
-          placeholder={t({ ko: '그룹 검색', en: 'Search groups' })}
-          aria-label={t({ ko: '그룹 이름으로 찾기', en: 'Filter groups by name' })}
-          className="h-8 pl-8 text-xs"
-        />
-      </div>
+      <SearchField value={filterText} onChange={setFilterText} placeholder={t({ ko: '그룹 검색', en: 'Search groups' })} />
     </div>
   )
 

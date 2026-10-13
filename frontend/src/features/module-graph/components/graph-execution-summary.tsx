@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { CodeBlock } from '@/components/ui/code-block'
 import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -8,7 +9,6 @@ import type {
   GraphExecutionFinalResultRecord,
   GraphWorkflowRecord,
 } from '@/lib/api-module-graph'
-import { cn } from '@/lib/utils'
 import {
   buildNodeDisplayLabelMap,
   getGraphExecutionLogEventLabel,
@@ -17,7 +17,7 @@ import {
   type ParsedExecutionPlan,
 } from './graph-execution-panel-helpers'
 import { ExecutionOutputGroupCard } from './graph-execution-panel-sections'
-import { CODE_BLOCK_CLASS_NAME, ExecutionHeaderBadges, type GraphExecutionDetail } from './graph-execution-shared-ui'
+import { ExecutionHeaderBadges, type GraphExecutionDetail } from './graph-execution-shared-ui'
 import { WorkflowFinalResultsSection } from './workflow-final-results-section'
 import { buildFinalResultLifecycleWarningSourceLabel, findLlmResponseDiagnostic, listFinalResultLifecycleWarnings } from './workflow-execution-log-alerts'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -79,9 +79,9 @@ export function SelectedExecutionSummary({
             </div>
           </div>
           {llmResponseDiagnostic.textPreview ? (
-            <pre className={cn(CODE_BLOCK_CLASS_NAME, 'max-h-44 whitespace-pre-wrap break-words')}>{llmResponseDiagnostic.textPreview}</pre>
+            <CodeBlock size="2xs" maxHeight="sm">{llmResponseDiagnostic.textPreview}</CodeBlock>
           ) : llmResponseDiagnostic.rawResponsePreview ? (
-            <pre className={cn(CODE_BLOCK_CLASS_NAME, 'max-h-44 whitespace-pre-wrap break-words')}>{llmResponseDiagnostic.rawResponsePreview}</pre>
+            <CodeBlock size="2xs" maxHeight="sm">{llmResponseDiagnostic.rawResponsePreview}</CodeBlock>
           ) : null}
         </div>
       ) : null}

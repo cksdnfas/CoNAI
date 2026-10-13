@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { CodeBlock } from '@/components/ui/code-block'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { FieldInfo } from '@/components/ui/field'
 import { LoadingState } from '@/components/ui/loading-state'
@@ -55,7 +56,7 @@ export function ChatProfilePreviewModal({ open, draft, onClose }: { open: boolea
             <div className="space-y-4 border-t border-line pt-4">
               {preview.messages.map((message, index) => (
                 <EditorGroup key={index} label={t(ROLE_LABELS[message.role] ?? { ko: message.role, en: message.role })}>
-                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed">{message.content}</pre>
+                  <CodeBlock fill={false} maxHeight="lg">{message.content}</CodeBlock>
                 </EditorGroup>
               ))}
               {preview.tools.length > 0 ? (

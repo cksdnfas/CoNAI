@@ -1,14 +1,15 @@
-import { Folder, FolderInput, FolderOpen, FolderPlus, PenSquare, Save, Trash2 } from 'lucide-react'
+import { FolderInput, FolderPlus, PenSquare, Save, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Heading } from '@/components/ui/heading'
 import { Inset } from '@/components/ui/inset'
 import { Input } from '@/components/ui/input'
+import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
+import { WorkflowFolderPicker } from './workflow-folder-picker'
 
 type WorkflowFolderSettingsPanelProps = {
   folders: GraphWorkflowFolderRecord[]
@@ -119,17 +120,12 @@ export function WorkflowFolderSettingsPanel({
           </div>
 
           <div className="space-y-2">
-            <div className="text-sm font-medium text-foreground">{t({ ko: '폴더 위치', en: 'Folder location' })}</div>
-            <HierarchyPicker
-              items={sortedFolders}
+            <Text as="div" variant="label">{t({ ko: '폴더 위치', en: 'Folder location' })}</Text>
+            <WorkflowFolderPicker
+              folders={sortedFolders}
               selectedId={workflowFolderId}
-              onSelectRoot={() => setWorkflowFolderId(null)}
-              onSelect={(folder) => setWorkflowFolderId(folder.id)}
-              getId={(folder) => folder.id}
-              getParentId={(folder) => folder.parent_id}
-              getLabel={(folder) => folder.name}
+              onChange={setWorkflowFolderId}
               sortItems={(left, right) => compareFolderNames(left.name, right.name, locale)}
-              renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
               rootLabel={t({ ko: '루트', en: 'Root' })}
             />
           </div>
@@ -152,7 +148,7 @@ export function WorkflowFolderSettingsPanel({
           </div>
 
           <Inset className="space-y-3 p-3">
-            <div className="text-sm font-medium text-foreground">{t({ ko: '폴더 생성', en: 'Create folder' })}</div>
+            <Text as="div" variant="label">{t({ ko: '폴더 생성', en: 'Create folder' })}</Text>
             <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
             <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
             <div className="flex flex-wrap gap-2">
@@ -180,17 +176,12 @@ export function WorkflowFolderSettingsPanel({
               <Textarea rows={3} value={folderDescription} onChange={(event) => setFolderDescription(event.target.value)} aria-label={t({ ko: '설명', en: 'Description' })} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
 
               <div className="space-y-2">
-                <div className="text-sm font-medium text-foreground">{t({ ko: '부모 폴더', en: 'Parent folder' })}</div>
-                <HierarchyPicker
-                  items={sortedParentCandidateFolders}
+                <Text as="div" variant="label">{t({ ko: '부모 폴더', en: 'Parent folder' })}</Text>
+                <WorkflowFolderPicker
+                  folders={sortedParentCandidateFolders}
                   selectedId={folderParentId}
-                  onSelectRoot={() => setFolderParentId(null)}
-                  onSelect={(folder) => setFolderParentId(folder.id)}
-                  getId={(folder) => folder.id}
-                  getParentId={(folder) => folder.parent_id}
-                  getLabel={(folder) => folder.name}
+                  onChange={setFolderParentId}
                   sortItems={(left, right) => compareFolderNames(left.name, right.name, locale)}
-                  renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
                   rootLabel={t({ ko: '루트', en: 'Root' })}
                 />
               </div>
@@ -208,7 +199,7 @@ export function WorkflowFolderSettingsPanel({
           ) : null}
 
           <Inset className="space-y-3 p-3">
-            <div className="text-sm font-medium text-foreground">{t({ ko: '폴더 생성', en: 'Create folder' })}</div>
+            <Text as="div" variant="label">{t({ ko: '폴더 생성', en: 'Create folder' })}</Text>
             <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
             <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
             <IconButton variant="secondary" onClick={() => void handleCreateChildFolder(false)} disabled={!childFolderName.trim()} label={t({ ko: '폴더 생성', en: 'Create folder' })}>

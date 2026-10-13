@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SliderRow } from '@/components/ui/slider-row'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -21,7 +22,7 @@ import { cn } from '@/lib/utils'
 import { detectSheetGrid } from './sprite-grid-detect'
 import { cellSize } from './sprite-options'
 import { LibraryMediaButtons, LibraryResults } from './sprite-library'
-import { MiniField, SliderLine, SpriteSection } from './sprite-ui'
+import { MiniField, SpriteActionBar, SpriteCheckerStage, SpriteSection } from './sprite-ui'
 import { useSpriteNormalizeChatPage } from './use-sprite-chat-page'
 
 interface SheetEntry {
@@ -184,10 +185,10 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
             <SegmentedControl size="xs" fullWidth value={options.outputFormat} onChange={(format) => setOptions({ ...options, outputFormat: format as SpriteNormalizeOptions['outputFormat'] })} items={[{ value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }]} ariaLabel={t({ ko: '형식', en: 'Format' })} />
           </MiniField>
         </div>
-        {options.outputFormat === 'webp' ? <SliderLine label={t({ ko: '품질', en: 'Quality' })} value={options.outputQuality} min={1} max={100} onChange={(quality) => setOptions({ ...options, outputQuality: quality })} /> : null}
+        {options.outputFormat === 'webp' ? <SliderRow label={t({ ko: '품질', en: 'Quality' })} value={options.outputQuality} min={1} max={100} onChange={(quality) => setOptions({ ...options, outputQuality: quality })} /> : null}
       </SpriteSection>
 
-      <div className="sticky bottom-3 z-sticky mt-2 flex items-center gap-2 rounded-md bg-surface-container/95 p-1.5 pl-3 shadow-elevation-3 backdrop-blur-md">
+      <SpriteActionBar>
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-warning">
           {problems ? t({ ko: '확인 필요 {count}개', en: '{count} need a check' }, { count: problems }) : null}
         </span>
@@ -195,16 +196,16 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
         <IconButton variant="default" disabled={!canRun || !has('images.upload')} onClick={() => void run(true)} aria-busy={running || undefined} label={running ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '라이브러리에 저장', en: 'Save to library' })}>
           {running ? <Loader2 className="animate-spin" /> : <Save />}
         </IconButton>
-      </div>
+      </SpriteActionBar>
     </div>
   )
 
   const right = (
     <div className="flex min-w-0 flex-col gap-3">
       {jobId ? <RuntimeJobProgress job={job.job} cancel={job.cancel} isCancelling={job.isCancelling} /> : null}
-      <div className="bg-checker flex h-[min(48vh,380px)] items-center justify-center overflow-hidden rounded-sm">
+      <SpriteCheckerStage>
         {current ? <GridPreview sheet={current} anchor={options.anchorPolicy} /> : <LayoutGrid className="size-10 text-muted-foreground opacity-30" />}
-      </div>
+      </SpriteCheckerStage>
       {current ? (
         <Tip content={t({ ko: '셀 크기 · 시트 {width}×{height}', en: 'Cell size · sheet {width}×{height}' }, { width: current.width, height: current.height })}>
           <span className="self-start font-mono text-xs text-muted-foreground" tabIndex={0}>

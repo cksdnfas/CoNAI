@@ -1,7 +1,9 @@
 import { createElement, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ban, Eye, EyeOff, Flag, GripVertical, Pencil, Plus, RotateCcw, Users } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
+import { CountBadge } from '@/components/ui/count-badge'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
@@ -10,6 +12,7 @@ import { ResourceRow } from '@/components/ui/resource-row'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { TextTabs } from '@/components/common/text-tabs'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
@@ -32,6 +35,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import type { ChatFlagStyle } from './chat-appearance'
 import { CHAT_FLAG_EMOJI, CHAT_FLAG_ICON_GROUPS, LUCIDE_PREFIX, chatFlagLucideIcon } from './chat-flag-icons'
+import { popChipAddClassName, popChipClassName } from './chat-pop-chip'
 
 const POP_STAGGER_MS = 45
 const DROP_STAGGER_MS = 18
@@ -84,9 +88,7 @@ export function ChatFlagButton({ buttonRef, count, open, disabled, onToggle }: {
     >
       <Flag className={cn('transition-transform duration-300 ease-[cubic-bezier(.2,.9,.3,1.3)]', open && '-rotate-12 scale-110')} />
       {count > 0 ? (
-        <span key={count} className="absolute -right-0.5 -top-0.5 min-w-3.5 animate-chat-flag-badge rounded-full bg-primary px-1 text-center text-2xs font-bold leading-3.5 text-primary-foreground tabular-nums motion-reduce:animate-none">
-          {count}
-        </span>
+        <CountBadge key={count} size="xs" corner="top-right" count={count} className="animate-chat-flag-badge font-bold motion-reduce:animate-none" />
       ) : null}
     </IconButton>
   )
@@ -155,7 +157,7 @@ export function ChatFlagTray({ flags, activeIds, open, flagStyle, buttonRef, onT
   const round = flagStyle === 'icon'
 
   return (
-    <div ref={trayRef} role="group" aria-label={t({ ko: '플래그', en: 'Flags' })} className={cn('absolute inset-x-0 bottom-full z-10 flex items-center gap-1.5 overflow-x-auto px-3 pb-1.5 pt-2 [scrollbar-width:none]', closing && 'pointer-events-none')}>
+    <div ref={trayRef} role="group" aria-label={t({ ko: '플래그', en: 'Flags' })} className={cn('absolute inset-x-0 bottom-full z-10 flex items-center gap-1.5 scroll-x theme-nav-scroll px-3 pb-1.5 pt-2', closing && 'pointer-events-none')}>
       {flags.map((flag, index) => {
         const pressed = activeIds.includes(flag.id)
         const { className, style } = motion(index)
@@ -168,12 +170,7 @@ export function ChatFlagTray({ flags, activeIds, open, flagStyle, buttonRef, onT
             aria-label={flag.name}
             style={style}
             onClick={() => { onToggle(flag.id); setTaps((current) => ({ ...current, [flag.id]: (current[flag.id] ?? 0) + 1 })) }}
-            className={cn(
-              'flex shrink-0 cursor-pointer items-center justify-center border bg-surface-container text-foreground shadow-elevation-1 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40',
-              round ? 'size-10 rounded-full' : 'h-9 rounded-full pl-2.5 pr-3.5',
-              pressed ? 'border-primary bg-primary/15 text-secondary-text' : 'border-line hover:bg-surface-high',
-              className,
-            )}
+            className={popChipClassName(pressed, cn('justify-center', round ? 'size-10' : 'h-9 pl-2.5 pr-3.5', className))}
           >
             <span key={taps[flag.id] ?? 0} className={cn('flex items-center gap-1.5', taps[flag.id] && 'animate-chat-flag-tap motion-reduce:animate-none')}>
               <ChatFlagIcon icon={flag.icon} name={flag.name} className={round ? 'size-[18px] text-[1.1rem]' : undefined} />
@@ -193,7 +190,7 @@ export function ChatFlagTray({ flags, activeIds, open, flagStyle, buttonRef, onT
               style={style}
               onClick={onManage}
               aria-label={t({ ko: '플래그 관리', en: 'Manage flags' })}
-              className={cn('flex shrink-0 cursor-pointer items-center justify-center rounded-full border border-dashed border-foreground/25 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40', round ? 'size-10' : 'size-9', className)}
+              className={popChipAddClassName(cn(round ? 'size-10' : 'size-9', className))}
             >
               <Pencil className="size-4" />
             </button>
@@ -241,15 +238,12 @@ function ChatFlagIconPicker({ value, name, onChange }: { value: string; name: st
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[22rem] max-w-[calc(100vw-2rem)] p-0">
-        <div role="tablist" className="flex gap-4 border-b border-line px-3 pt-2">
-          {(['icon', 'emoji'] as const).map((key) => (
-            // eslint-disable-next-line no-restricted-syntax -- text tabs inside the picker frame
-            <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
-              className={cn('-mb-px cursor-pointer border-b-2 pb-1.5 text-sm font-semibold outline-none transition-colors focus-visible:text-foreground', tab === key ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
-              {key === 'icon' ? t({ ko: '아이콘', en: 'Icons' }) : t({ ko: '이모지', en: 'Emoji' })}
-            </button>
-          ))}
-        </div>
+        <TextTabs<PickerTab>
+          value={tab}
+          items={[{ value: 'icon', label: t({ ko: '아이콘', en: 'Icons' }) }, { value: 'emoji', label: t({ ko: '이모지', en: 'Emoji' }) }]}
+          onChange={setTab}
+          stripClassName="px-3 pt-2"
+        />
         <div className="max-h-80 space-y-3 overflow-y-auto p-3">
           <div className="grid grid-cols-8 gap-0.5">
             <Tip content={t({ ko: '이름 첫 글자', en: 'First letter of the name' })}>
@@ -505,7 +499,7 @@ export function ChatFlagManagerModal({ open, onClose }: { open: boolean; onClose
       >
         <ModalBody>
           {flagsQuery.isSuccess && flags.length === 0 ? (
-            <p className="py-4 text-center text-xs text-muted-foreground">{t({ ko: '아직 플래그가 없어.', en: 'No flags yet.' })}</p>
+            <EmptyState size="compact" className="justify-center px-0 py-4" title={t({ ko: '아직 플래그가 없어.', en: 'No flags yet.' })} />
           ) : (
             <ChatFlagRows flags={flags} onEdit={(flag) => setEditor({ flag })} />
           )}

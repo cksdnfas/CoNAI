@@ -3,8 +3,6 @@ import { useRef } from 'react'
 import { AnchoredPopup, anchoredPopupBodyClassName, anchoredPopupHeaderClassName } from '@/components/ui/anchored-popup'
 import { IconButton } from '@/components/ui/icon-button'
 
-export const detailSettingsLabelClassName = 'text-xs font-semibold tracking-overline text-muted-foreground uppercase'
-
 interface DetailSettingsFlyoutProps {
   isOpen: boolean
   onToggle: () => void

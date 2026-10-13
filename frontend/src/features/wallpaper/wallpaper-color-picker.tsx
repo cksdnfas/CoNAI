@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type KeyboardEv
 import { Pipette } from 'lucide-react'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { IconButton } from '@/components/ui/icon-button'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -125,7 +126,7 @@ function Swatches({ label, colors, current, onPick }: { label: string; colors: s
   if (colors.length === 0) return null
   return (
     <div className="space-y-1.5">
-      <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{label}</div>
+      <Text as="div" variant="overline">{label}</Text>
       <div className="flex flex-wrap gap-1.5">
         {colors.map((color) => (
           // eslint-disable-next-line no-restricted-syntax -- color swatch: the button is the color itself

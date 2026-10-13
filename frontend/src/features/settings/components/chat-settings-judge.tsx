@@ -3,9 +3,11 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import type { ChatJudgeItemStats, ChatJudgeLogRun, ChatPageData } from '@conai/shared'
 import { ChevronRight, RefreshCw } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
+import { CodeBlock } from '@/components/ui/code-block'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import { DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
@@ -51,45 +53,41 @@ function StatsTable({ stats, presetNames }: { stats: ChatJudgeItemStats[]; prese
   const { t, formatNumber } = useI18n()
   const multiplePresets = new Set(stats.map((entry) => entry.presetId)).size > 1
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[48rem] text-sm">
-        <thead>
-          <tr className="border-b border-line text-left text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
-            <th className="py-2 pr-3 font-semibold">{t({ ko: '항목', en: 'Item' })}</th>
-            <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '판단', en: 'Runs' })}</th>
-            <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '예', en: 'Yes' })}</th>
-            <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '평균 확률', en: 'Avg. p' })}</th>
-            <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '애매', en: 'Unsure' })}</th>
-            <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '실패', en: 'Failed' })}</th>
-            <th className="py-2 pr-3 font-semibold">{t({ ko: '결과', en: 'Outcome' })}</th>
-            <th className="py-2 pr-3 text-right font-semibold">{t({ ko: '평균 토큰', en: 'Avg. tokens' })}</th>
-            <th className="py-2 text-right font-semibold">{t({ ko: '평균 지연', en: 'Avg. latency' })}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {stats.map((entry) => {
-            const unsure = entry.runs > 0 ? entry.uncertain / entry.runs : 0
-            return (
-              <tr key={`${entry.presetId}:${entry.stage}:${entry.itemId}`} className="border-b border-line last:border-b-0">
-                <td className="py-2 pr-3">
-                  <span className="font-medium">{entry.name}</span>
-                  {/* A turn item says when it is asked; the other kinds are named by what they judge already. */}
-                  <span className="ml-1.5 text-xs text-muted-foreground">{[entry.stage === 'before' || entry.stage === 'after' ? judgeStageLabel(entry.stage, t) : '', multiplePresets ? presetNames.get(entry.presetId) ?? `#${entry.presetId}` : ''].filter(Boolean).join(' · ')}</span>
-                </td>
-                <td className="py-2 pr-3 text-right tabular-nums">{formatNumber(entry.runs)}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">{percent(entry.runs > 0 ? entry.yes / entry.runs : null)}</td>
-                <td className="py-2 pr-3 text-right tabular-nums">{formatProbability(entry.averageProbability)}</td>
-                <td className={cn('py-2 pr-3 text-right tabular-nums', unsure > UNSURE_WARN && 'text-warning')}>{percent(entry.runs > 0 ? unsure : null)}</td>
-                <td className={cn('py-2 pr-3 text-right tabular-nums', entry.failed > 0 && 'text-destructive')}>{formatNumber(entry.failed)}</td>
-                <td className="py-2 pr-3 tabular-nums"><StatsOutcome stats={entry} /></td>
-                <td className="py-2 pr-3 text-right tabular-nums">{entry.averageTokens === null ? '—' : formatNumber(Math.round(entry.averageTokens))}</td>
-                <td className="py-2 text-right tabular-nums">{entry.averageLatencyMs === null ? '—' : `${formatNumber(entry.averageLatencyMs / 1000, { maximumFractionDigits: 2 })}s`}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      minWidthClassName="min-w-[48rem]"
+      head={<>
+        <DataTh>{t({ ko: '항목', en: 'Item' })}</DataTh>
+        <DataTh numeric>{t({ ko: '판단', en: 'Runs' })}</DataTh>
+        <DataTh numeric>{t({ ko: '예', en: 'Yes' })}</DataTh>
+        <DataTh numeric>{t({ ko: '평균 확률', en: 'Avg. p' })}</DataTh>
+        <DataTh numeric>{t({ ko: '애매', en: 'Unsure' })}</DataTh>
+        <DataTh numeric>{t({ ko: '실패', en: 'Failed' })}</DataTh>
+        <DataTh>{t({ ko: '결과', en: 'Outcome' })}</DataTh>
+        <DataTh numeric>{t({ ko: '평균 토큰', en: 'Avg. tokens' })}</DataTh>
+        <DataTh numeric>{t({ ko: '평균 지연', en: 'Avg. latency' })}</DataTh>
+      </>}
+    >
+      {stats.map((entry) => {
+        const unsure = entry.runs > 0 ? entry.uncertain / entry.runs : 0
+        return (
+          <DataTr key={`${entry.presetId}:${entry.stage}:${entry.itemId}`}>
+            <DataTd>
+              <span className="font-medium">{entry.name}</span>
+              {/* A turn item says when it is asked; the other kinds are named by what they judge already. */}
+              <span className="ml-1.5 text-xs text-muted-foreground">{[entry.stage === 'before' || entry.stage === 'after' ? judgeStageLabel(entry.stage, t) : '', multiplePresets ? presetNames.get(entry.presetId) ?? `#${entry.presetId}` : ''].filter(Boolean).join(' · ')}</span>
+            </DataTd>
+            <DataTd numeric>{formatNumber(entry.runs)}</DataTd>
+            <DataTd numeric>{percent(entry.runs > 0 ? entry.yes / entry.runs : null)}</DataTd>
+            <DataTd numeric>{formatProbability(entry.averageProbability)}</DataTd>
+            <DataTd numeric className={cn(unsure > UNSURE_WARN && 'text-warning')}>{percent(entry.runs > 0 ? unsure : null)}</DataTd>
+            <DataTd numeric className={cn(entry.failed > 0 && 'text-destructive')}>{formatNumber(entry.failed)}</DataTd>
+            <DataTd className="tabular-nums"><StatsOutcome stats={entry} /></DataTd>
+            <DataTd numeric>{entry.averageTokens === null ? '—' : formatNumber(Math.round(entry.averageTokens))}</DataTd>
+            <DataTd numeric>{entry.averageLatencyMs === null ? '—' : `${formatNumber(entry.averageLatencyMs / 1000, { maximumFractionDigits: 2 })}s`}</DataTd>
+          </DataTr>
+        )
+      })}
+    </DataTable>
   )
 }
 
@@ -122,7 +120,7 @@ function LogRow({ run }: { run: ChatJudgeLogRun }) {
         <div className="grid gap-4 pb-4 pl-7 md:grid-cols-2">
           <div className="min-w-0 space-y-1.5">
             <div className="text-xs font-medium">{t({ ko: '보낸 요청', en: 'Request sent' })} <span className="text-muted-foreground">{t({ ko: '원문', en: 'original text' })}</span></div>
-            <pre className="max-h-80 overflow-auto rounded-sm bg-foreground/5 p-3 font-mono text-2xs leading-relaxed whitespace-pre-wrap break-words">{JSON.stringify(run.request, null, 2)}</pre>
+            <CodeBlock size="2xs" maxHeight="lg">{JSON.stringify(run.request, null, 2)}</CodeBlock>
           </div>
           <div className="min-w-0 space-y-3 text-sm">
             <div className="divide-y divide-line">

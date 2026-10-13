@@ -23,7 +23,7 @@ export function GroupSubgroupStrip({ groups, countMaps, sourceKey, loadPreviewIm
   }
 
   return (
-    <nav aria-label={t({ ko: '하위 그룹', en: 'Subgroups' })} className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+    <nav aria-label={t({ ko: '하위 그룹', en: 'Subgroups' })} className="-mx-1 flex gap-2 scroll-x px-1 pb-1">
       {[...groups].sort((left, right) => left.name.localeCompare(right.name)).map((group) => {
         const totalCount = getGroupHierarchyTotalCount(group, countMaps)
         return (

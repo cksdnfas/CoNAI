@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { Headphones, Pause, Play, RotateCcw, Save, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { Slider } from '@/components/ui/slider'
+import { SliderRow } from '@/components/ui/slider-row'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -284,12 +285,12 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
       <p className="-mt-2 text-2xs text-muted-foreground">{selectRegion ? t({ ko: '양 끝을 드래그해 구간 조절 · 안쪽 드래그로 이동 · Shift+드래그로 새 구간', en: 'Drag edges to trim · Drag inside to move · Shift+drag for a new region' }) : t({ ko: '클릭·드래그로 해당 위치 재생 · 양 끝 손잡이로 구간 조절 · Shift+드래그로 구간 선택 · 파형에 포커스: Space 재생/정지, ← → 1초 이동 (Shift: 5초)', en: 'Click or drag to seek and play · Drag edge handles to trim · Shift+drag to select · Waveform focused: Space play/pause, ← → 1 s (Shift: 5 s)' })}</p>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '시작', en: 'Start' })}
+        <Field label={t({ ko: '시작', en: 'Start' })} className="min-w-0">
           <Input className="min-w-0 font-mono" type="number" step="0.001" min={0} value={number(params.start)} onChange={(event) => set({ start: Number(event.target.value) })} />
-        </label>
-        <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '끝', en: 'End' })}
+        </Field>
+        <Field label={t({ ko: '끝', en: 'End' })} className="min-w-0">
           <Input className="min-w-0 font-mono" type="number" step="0.001" min={0} value={number(params.end)} onChange={(event) => set({ end: Number(event.target.value) })} />
-        </label>
+        </Field>
       </div>
 
       <div className="space-y-2">
@@ -298,21 +299,17 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
           ['pitch_semitones', t({ ko: '피치', en: 'Pitch' }), -24, 24, 0.5, `${params.pitch_semitones > 0 ? '+' : ''}${params.pitch_semitones.toFixed(1)}`],
           ['speed', t({ ko: '속도', en: 'Speed' }), 0.25, 4, 0.05, `${params.speed.toFixed(2)}×`],
         ] as const).map(([key, label, min, max, step, readout]) => (
-          <div key={key} className="grid grid-cols-[3.5rem_minmax(0,1fr)_4rem] items-center gap-3 text-xs text-muted-foreground">
-            <span>{label}</span>
-            <Slider className="min-w-0" aria-label={label} min={min} max={max} step={step} value={[params[key]]} onValueChange={([value]) => set({ [key]: value } as Partial<AudioEditParams>)} />
-            <span className="text-right font-mono text-foreground">{readout}</span>
-          </div>
+          <SliderRow key={key} label={label} min={min} max={max} step={step} value={params[key]} readout={readout} onChange={(value) => set({ [key]: value } as Partial<AudioEditParams>)} />
         ))}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '페이드 인', en: 'Fade in' })}
+        <Field label={t({ ko: '페이드 인', en: 'Fade in' })} className="min-w-0">
           <Input className="min-w-0 font-mono" type="number" step="0.005" min={0} max={5} value={params.fade_in} onChange={(event) => set({ fade_in: Number(event.target.value) })} />
-        </label>
-        <label className="flex min-w-0 flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '페이드 아웃', en: 'Fade out' })}
+        </Field>
+        <Field label={t({ ko: '페이드 아웃', en: 'Fade out' })} className="min-w-0">
           <Input className="min-w-0 font-mono" type="number" step="0.005" min={0} max={5} value={params.fade_out} onChange={(event) => set({ fade_out: Number(event.target.value) })} />
-        </label>
+        </Field>
       </div>
       {problem ? <p className="text-xs text-destructive">{problem}</p> : null}
 
@@ -341,9 +338,9 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
         ))}
       </dl>
 
-      <label className="flex flex-col gap-1 text-xs text-muted-foreground">{t({ ko: '메모', en: 'Memo' })}
+      <Field label={t({ ko: '메모', en: 'Memo' })}>
         <Textarea className="min-w-0 max-w-full resize-y" rows={3} value={notes} disabled={!canEdit} onChange={(event) => setNotes(event.target.value)} onBlur={() => void saveNotes()} />
-      </label>
+      </Field>
     </div>
   )
 }

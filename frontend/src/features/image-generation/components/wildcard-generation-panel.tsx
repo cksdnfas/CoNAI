@@ -21,7 +21,7 @@ import {
   type WildcardTool,
 } from '@/lib/api-wildcards'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { ToolbarSearchField } from '@/features/prompts/components/toolbar-search-field'
+import { ToolbarSearchField } from '@/components/common/search-field'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { LoraAutoCollectModal } from './lora-auto-collect-modal'

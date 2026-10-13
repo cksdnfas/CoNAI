@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostAssessmentQuality, PostDetail, PostReviewIssue } from '@conai/shared'
 import { Check, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ToggleChip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -157,10 +158,9 @@ export function PostVoteBar({ post }: { post: PostDetail }) {
           <PopoverContent align="center" className="w-80 space-y-3 p-3" aria-label={t({ ko: '비추천 이유', en: 'Reason for not recommending' })}>
             <div className="flex flex-wrap gap-1.5">
               {DOWN_REASONS.map((item) => (
-                <Button key={item.value} variant="ghost" size="xs" aria-pressed={reasonCode === item.value} onClick={() => setReasonCode(reasonCode === item.value ? null : item.value)}
-                  className={cn('h-7 rounded-full px-3', reasonCode === item.value ? 'bg-info-soft text-info-soft-foreground hover:bg-info-soft hover:text-info-soft-foreground' : 'bg-surface-container')}>
+                <ToggleChip key={item.value} pressed={reasonCode === item.value} onClick={() => setReasonCode(reasonCode === item.value ? null : item.value)}>
                   {t(item)}
-                </Button>
+                </ToggleChip>
               ))}
             </div>
             <form className="flex items-center gap-1.5" onSubmit={(event) => { event.preventDefault(); if (!vote.isPending) vote.mutate({ quality: 'down', reasonCode: reasonCode ?? undefined, reason: reason.trim() }) }}>

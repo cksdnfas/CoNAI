@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Database, Download, Eye, Play, Shrink, Trash2, Eraser, RefreshCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
+import { ListRow } from '@/components/ui/list-row'
 import { Progress } from '@/components/ui/progress'
 import { RowGroup } from '@/components/ui/row-group'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -26,26 +27,9 @@ import {
   type DatabaseCompactionResult,
   type MediaOrphanCleanupResult,
 } from '@/lib/api-database-maintenance'
-import { cn } from '@/lib/utils'
 import { LegacyAudioImportRow } from './audio-legacy-import-row'
+import { MaintenanceJobProgress, MaintenanceRow, MaintenanceStat } from './maintenance-row'
 import type { RuntimeJobKind, RuntimeJobRecord } from '@/types/runtime-job'
-
-/** One row of the section, laid out like the 유지보수 tab's action rows: icon + title + meta, actions, body. */
-function DatabaseRow({ icon, title, meta, actions, children }: { icon: ReactNode; title: string; meta?: ReactNode; actions: ReactNode; children?: ReactNode }) {
-  return (
-    <div className="border-b border-line py-2.5 last:border-b-0">
-      <div className="flex min-h-8 items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="shrink-0 text-muted-foreground">{icon}</span>
-          <div className="shrink-0 text-sm text-foreground">{title}</div>
-          {meta ? <div className="hidden min-w-0 truncate text-xs text-muted-foreground sm:block">{meta}</div> : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-1">{actions}</div>
-      </div>
-      {children ? <div className="pt-2 pl-7">{children}</div> : null}
-    </div>
-  )
-}
 
 /**
  * The latest job of one kind (so a reload shows the last result and resumes a running job), switched to a job this
@@ -89,18 +73,6 @@ function formatDuration(seconds: number) {
 
 function toDate(value: string) {
   return /[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`
-}
-
-function Stat({ label, value, extra, done }: { label: string; value: string; extra?: string; done: boolean }) {
-  return (
-    <div className="min-w-0">
-      <div className="truncate text-xs text-muted-foreground">{label}</div>
-      <div className={cn('text-base font-semibold tabular-nums', done && 'text-success')}>
-        {value}
-        {extra ? <span className="ml-1 text-xs font-normal text-muted-foreground">{extra}</span> : null}
-      </div>
-    </div>
-  )
 }
 
 /** Admin database maintenance in the 유지보수 tab: online backups, orphan cleanup and compaction. */
@@ -225,7 +197,7 @@ export function DatabaseMaintenanceSection() {
 
   return (
     <RowGroup heading={t({ ko: '데이터베이스', en: 'Database' })}>
-      <DatabaseRow
+      <MaintenanceRow
         icon={<Database className="h-4 w-4" />}
         title={t({ ko: 'DB 백업', en: 'Database backup' })}
         meta={backupMeta}
@@ -236,17 +208,14 @@ export function DatabaseMaintenanceSection() {
         )}
       >
         {backupRunning && backupProgress ? (
-          <div className="mb-2 space-y-2">
-            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-              <span className="truncate">
-                {backupJob.job?.phase
-                  ? `${backupJob.job.phase} · ${formatFileSize(backupProgress.processed)} / ${formatFileSize(backupProgress.total)}`
-                  : t({ ko: '준비 중', en: 'Preparing' })}
-              </span>
-              <span className="tabular-nums">{formatNumber(backupProgress.percentage)}%</span>
-            </div>
-            <Progress size="lg" value={backupJob.job?.phase ? backupProgress.percentage : null} />
-          </div>
+          <MaintenanceJobProgress
+            className="mb-2"
+            label={backupJob.job?.phase
+              ? `${backupJob.job.phase} · ${formatFileSize(backupProgress.processed)} / ${formatFileSize(backupProgress.total)}`
+              : t({ ko: '준비 중', en: 'Preparing' })}
+            percentage={formatNumber(backupProgress.percentage)}
+            value={backupJob.job?.phase ? backupProgress.percentage : null}
+          />
         ) : null}
         {backupJob.job?.status === 'failed' && backupJob.job.failureMessage ? (
           <div className="mb-2 text-xs text-destructive">{backupJob.job.failureMessage}</div>
@@ -254,22 +223,29 @@ export function DatabaseMaintenanceSection() {
         {backups.length > 0 ? (
           <div>
             {backups.map((entry) => (
-              <div key={entry.name} className="flex h-8 items-center gap-3 border-t border-line text-sm first:border-t-0">
+              <ListRow
+                key={entry.name}
+                size="sm"
+                trailing={(
+                  <>
+                    <span className="text-xs tabular-nums">{formatFileSize(entry.totalBytes)}</span>
+                    <IconButton size="icon-sm" variant="ghost" label={t({ ko: '받기', en: 'Download' })} onClick={() => downloadBackup(entry)}>
+                      <Download className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton size="icon-sm" variant="ghost" label={t({ ko: '지우기', en: 'Delete' })} disabled={backupRunning || removeBackup.isPending} onClick={() => void confirmDeleteBackup(entry)}>
+                      <Trash2 className="h-4 w-4" />
+                    </IconButton>
+                  </>
+                )}
+              >
                 <span className="min-w-0 flex-1 truncate">{formatStamp(entry.createdAt)}</span>
-                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{formatFileSize(entry.totalBytes)}</span>
-                <IconButton size="icon-sm" variant="ghost" label={t({ ko: '받기', en: 'Download' })} onClick={() => downloadBackup(entry)}>
-                  <Download className="h-4 w-4" />
-                </IconButton>
-                <IconButton size="icon-sm" variant="ghost" label={t({ ko: '지우기', en: 'Delete' })} disabled={backupRunning || removeBackup.isPending} onClick={() => void confirmDeleteBackup(entry)}>
-                  <Trash2 className="h-4 w-4" />
-                </IconButton>
-              </div>
+              </ListRow>
             ))}
           </div>
         ) : null}
-      </DatabaseRow>
+      </MaintenanceRow>
 
-      <DatabaseRow
+      <MaintenanceRow
         icon={<Eraser className="h-4 w-4" />}
         title={t({ ko: '고아 정리', en: 'Orphan cleanup' })}
         meta={orphanMeta}
@@ -294,23 +270,23 @@ export function DatabaseMaintenanceSection() {
         {orphanRunning ? <Progress size="lg" value={null} /> : null}
         {!orphanRunning && orphanCounts ? (
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
-            <Stat done={!orphanResult?.dryRun} label={t({ ko: '사라진 파일 기록', en: 'Missing file records' })} value={formatNumber(orphanCounts.missing)} />
-            <Stat
+            <MaintenanceStat done={!orphanResult?.dryRun} label={t({ ko: '사라진 파일 기록', en: 'Missing file records' })} value={formatNumber(orphanCounts.missing)} />
+            <MaintenanceStat
               done={!orphanResult?.dryRun}
               label={t({ ko: '파일 없는 이미지', en: 'Images without files' })}
               value={formatNumber(orphanCounts.orphans)}
               extra={orphanCounts.kept > 0 ? t({ ko: '참조 중 {count}개 남김', en: '{count} kept (in use)' }, { count: formatNumber(orphanCounts.kept) }) : undefined}
             />
-            <Stat done={!orphanResult?.dryRun} label={t({ ko: '남은 썸네일', en: 'Stray thumbnails' })} value={formatNumber(orphanCounts.thumbnails)} extra={formatFileSize(orphanCounts.thumbnailBytes)} />
-            <Stat done={!orphanResult?.dryRun} label={t({ ko: '임시 찌꺼기', en: 'Temp leftovers' })} value={formatNumber(orphanCounts.temp)} extra={formatFileSize(orphanCounts.tempBytes)} />
+            <MaintenanceStat done={!orphanResult?.dryRun} label={t({ ko: '남은 썸네일', en: 'Stray thumbnails' })} value={formatNumber(orphanCounts.thumbnails)} extra={formatFileSize(orphanCounts.thumbnailBytes)} />
+            <MaintenanceStat done={!orphanResult?.dryRun} label={t({ ko: '임시 찌꺼기', en: 'Temp leftovers' })} value={formatNumber(orphanCounts.temp)} extra={formatFileSize(orphanCounts.tempBytes)} />
           </div>
         ) : null}
         {!orphanRunning && orphanJob.job?.status === 'failed' && orphanJob.job.failureMessage ? (
           <div className="text-xs text-destructive">{orphanJob.job.failureMessage}</div>
         ) : null}
-      </DatabaseRow>
+      </MaintenanceRow>
 
-      <DatabaseRow
+      <MaintenanceRow
         icon={<Shrink className="h-4 w-4" />}
         title={t({ ko: 'DB 압축', en: 'Compact database' })}
         meta={compactMeta}
@@ -341,7 +317,7 @@ export function DatabaseMaintenanceSection() {
         {!compactRunning && compactJob.job?.status === 'failed' && compactJob.job.failureMessage ? (
           <div className="text-xs text-destructive">{compactJob.job.failureMessage}</div>
         ) : null}
-      </DatabaseRow>
+      </MaintenanceRow>
 
       <LegacyAudioImportRow />
     </RowGroup>

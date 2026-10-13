@@ -6,6 +6,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEv
 import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight, ImageOff, Info, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
+import { Badge } from '@/components/ui/badge'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useChatDockedBesidePage } from '@/features/codex-chat/chat-reference'
 import { useI18n } from '@/i18n'
@@ -321,7 +322,7 @@ function MediaLightboxStage({ item, canViewPrevious, canViewNext, onViewPrevious
       )}
 
       {zoom ? (
-        <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 rounded-sm bg-backdrop px-2.5 py-1 text-xs tabular-nums text-white">100%</div>
+        <Badge variant="overlay" className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 text-xs font-normal tabular-nums">100%</Badge>
       ) : null}
 
       {canViewPrevious ? (
@@ -452,7 +453,7 @@ function MediaLightboxOverlay({ items, index, onIndexChange, onClose, renderActi
       />
 
       {count > 1 ? (
-        <div className="h-20 shrink-0 overflow-x-auto px-4 [scrollbar-width:none]">
+        <div className="h-20 shrink-0 scroll-x theme-nav-scroll px-4">
           <div className="mx-auto flex h-full w-max items-center gap-1.5 px-1">
             {items.map((candidate, candidateIndex) => (
               // eslint-disable-next-line no-restricted-syntax -- the thumbnail itself is the control; Button padding/height would crop it

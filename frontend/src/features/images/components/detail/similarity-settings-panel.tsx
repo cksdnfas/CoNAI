@@ -2,10 +2,11 @@ import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { Text } from '@/components/ui/text'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type SimilaritySettingsDraft } from './image-detail-utils'
-import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
+import { DetailSettingsFlyout } from './detail-settings-flyout'
 import { NumberInputWithSuffix, SectionTitle } from './similarity-settings-panel-shared'
 
 interface SimilaritySettingsPanelProps {
@@ -39,7 +40,7 @@ function SimilarityNumberField({
 }: SimilarityNumberFieldProps) {
   return (
     <div className="space-y-2">
-      <label className={detailSettingsLabelClassName}>{label}</label>
+      <Text as="label" variant="overline">{label}</Text>
       <NumberStepperInput
         min={min}
         max={max}
@@ -166,7 +167,7 @@ export function SimilaritySettingsPanel({
                 />
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>{t('images.components.detail.similarity.settings.panel.minimum.color.similarity')}</label>
+                  <Text as="label" variant="overline">{t('images.components.detail.similarity.settings.panel.minimum.color.similarity')}</Text>
                   <NumberInputWithSuffix
                     suffix="%"
                     min={0}

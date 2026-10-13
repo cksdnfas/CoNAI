@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import type { StoredFileEntry } from '@conai/shared'
-import { Folder, HardDrive, Search } from 'lucide-react'
+import { Folder, HardDrive } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
+import { SearchField } from '@/components/common/search-field'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
 import { ListRow } from '@/components/ui/list-row'
 import { Spinner } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
 import { FILES_QUERY_KEY, formatFileSize, listStoredFiles, listStoredFolders, searchStoredFiles, storedFileThumbnailUrl } from '@/lib/api-files'
-import { getErrorMessage } from '@/lib/error-message'
-import { cn } from '@/lib/utils'
-import { AttachPanes, AttachToolbar, ExtensionTile, Highlight, LoadMoreSentinel, attachKey, type AttachItem } from './post-attach-shared'
+import { AttachPanes, AttachToolbar, ExtensionTile, Highlight, LoadMoreSentinel, PickOrderMark, attachKey, type AttachItem } from './post-attach-shared'
 
 function FileThumb({ entry }: { entry: StoredFileEntry }) {
   const [failed, setFailed] = useState(false)
@@ -70,18 +70,12 @@ export function AttachFilesTab({ selected, setSelected }: { selected: AttachItem
   return (
     <AttachPanes side={side}>
       <AttachToolbar>
-        <div className="relative min-w-40 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-9" value={input} onChange={(event) => setInput(event.target.value)} aria-label={t({ ko: '파일 찾기', en: 'Find files' })} placeholder={t({ ko: '파일 이름·내용', en: 'File name or text' })} />
-        </div>
+        <SearchField className="min-w-40 flex-1" value={input} onChange={setInput} placeholder={t({ ko: '파일 이름·내용', en: 'File name or text' })} />
       </AttachToolbar>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {active.isPending ? <div className="flex justify-center py-8"><Spinner label={t({ ko: '불러오는 중', en: 'Loading' })} /></div>
-          : active.isError && !entries.length ? <div role="alert" className="flex flex-col items-center gap-2 py-8 text-sm text-destructive">
-            {getErrorMessage(active.error, t({ ko: '파일을 불러오지 못했어.', en: 'Could not load files.' }))}
-            <Button variant="ghost" onClick={() => void active.refetch()}>{t({ ko: '다시 시도', en: 'Retry' })}</Button>
-          </div>
-          : !entries.length ? <p className="py-8 text-center text-sm text-muted-foreground">{search ? t({ ko: '찾은 파일이 없어', en: 'No matching files' }) : t({ ko: '빈 폴더야', en: 'Empty folder' })}</p>
+          : active.isError && !entries.length ? <ErrorState size="compact" className="mt-2" title={t({ ko: '파일을 불러오지 못했어.', en: 'Could not load files.' })} error={active.error} onRetry={() => void active.refetch()} />
+          : !entries.length ? <EmptyState title={search ? t({ ko: '찾은 파일이 없어', en: 'No matching files' }) : t({ ko: '빈 폴더야', en: 'Empty folder' })} />
           : entries.map(({ entry, path }) => {
             const folder = entry.kind === 'folder'
             const position = orderByKey.get(attachKey.file(entry.id))
@@ -91,7 +85,7 @@ export function AttachFilesTab({ selected, setSelected }: { selected: AttachItem
                 trailing={folder ? null : <span className="flex items-center gap-3">
                   <span className="hidden w-20 text-right text-xs tabular-nums text-muted-foreground sm:block">{formatFileSize(entry.size)}</span>
                   <span className="hidden w-24 text-right text-xs tabular-nums text-muted-foreground sm:block">{formatDate(new Date(entry.updatedAt))}</span>
-                  <span className={cn('flex size-5 items-center justify-center rounded-full text-2xs font-bold tabular-nums', position ? 'bg-primary text-primary-foreground' : 'border-2 border-outline-input')}>{position ?? null}</span>
+                  <PickOrderMark position={position} />
                 </span>}>
                 <button type="button" aria-pressed={folder ? undefined : Boolean(position)} onClick={() => { if (folder) { setParentId(entry.id); setInput('') } else toggle(entry) }}>
                 <span className="min-w-0 flex-1">

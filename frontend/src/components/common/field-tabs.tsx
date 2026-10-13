@@ -1,4 +1,5 @@
-import { useId, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import { FieldGroup } from '@/components/ui/field'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { cn } from '@/lib/utils'
 
@@ -12,14 +13,10 @@ const FIELD_TAB_TRIGGER_CLASS = 'relative flex-none rounded-none px-0 pb-1.5 pt-
  * not a `<label>`: a click on the frame's empty space must not press the first button inside it.
  */
 export function FramedField({ label, children, className }: { label: ReactNode; children: ReactNode; className?: string }) {
-  const id = useId()
   return (
-    <div role="group" aria-labelledby={id} className={cn('theme-settings-field flex min-w-0 flex-col text-sm', className)}>
-      <span id={id} className="flex items-center gap-1 text-2xs font-semibold tracking-overline text-muted-foreground uppercase">
-        <span className="min-w-0 truncate">{label}</span>
-      </span>
+    <FieldGroup label={label} className={className}>
       <div className="theme-input-surface min-w-0 rounded-sm border">{children}</div>
-    </div>
+    </FieldGroup>
   )
 }
 

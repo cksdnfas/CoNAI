@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { FileText, Folder, FolderPlus, X } from 'lucide-react'
+import { FileText, Folder, FolderPlus } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
@@ -34,7 +34,7 @@ export function ChatProfileLinkedFiles({ value, onChange }: { value: LinkedFileL
         const view = views.get(link.id)
         const Icon = view?.kind === 'file' ? FileText : Folder
         return (
-          <Chip key={link.id} className={cn('gap-1.5 pr-1', view?.missing && 'opacity-60')}>
+          <Chip key={link.id} className={cn('gap-1.5 pr-1', view?.missing && 'opacity-60')} removeLabel={t({ ko: '연결 해제', en: 'Unlink' })} onRemove={() => onChange(value.filter((item) => item.id !== link.id))}>
             <Icon className={cn('size-3.5', link.write ? 'text-primary' : 'text-muted-foreground')} aria-hidden />
             <Tip content={view?.path ?? undefined}><span className={cn('max-w-48 truncate', view?.missing && 'line-through')}>{view?.name ?? '…'}</span></Tip>
             {/* eslint-disable-next-line no-restricted-syntax -- an inline mode switch inside the chip */}
@@ -46,7 +46,6 @@ export function ChatProfileLinkedFiles({ value, onChange }: { value: LinkedFileL
             >
               {link.write ? t({ ko: '쓰기', en: 'Write' }) : t({ ko: '읽기', en: 'Read' })}
             </button>
-            <IconButton variant="ghost" size="icon-xs" className="size-5" onClick={() => onChange(value.filter((item) => item.id !== link.id))} label={t({ ko: '연결 해제', en: 'Unlink' })}><X /></IconButton>
           </Chip>
         )
       })}

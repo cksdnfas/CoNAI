@@ -6,8 +6,10 @@ import { Link as LinkIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/ui/error-state'
+import { EmptyState } from '@/components/ui/empty-state'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TextTabs } from '@/components/common/text-tabs'
+import { TabsContent } from '@/components/ui/tabs'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, getPostKnowledgeLinks, listPostKnowledgeProposals, listPostKnowledgeReviewQueue } from '@/lib/api-posts'
 import { useRelativeTime } from './post-author'
@@ -19,15 +21,10 @@ import { PostKnowledgeProposals } from './post-knowledge-proposals'
 import { KnowledgeSources } from './post-knowledge-sources'
 import type { KnowledgeSearchContext } from './post-knowledge-task-fit'
 import { postRoute } from './post-links'
+import { PostQuote } from './post-quote'
 import type { PostTopicEvaluationState } from './post-topic-relevance'
 
 type ReactionTab = 'comments' | 'info'
-
-const TRIGGER = 'relative flex-none rounded-none px-0 pt-1 pb-2.5 text-sm font-semibold text-muted-foreground hover:bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary after:opacity-0 data-[state=active]:after:opacity-100'
-
-function TabLabel({ label, count }: { label: string; count?: number | null }) {
-  return <>{label}{count ? <span className="ml-1 font-normal text-muted-foreground/70 tabular-nums">{count}</span> : null}</>
-}
 
 /** One part of 문서 정보: a heading, then its content, or a single muted line when there is nothing. */
 function InfoSection({ title, empty, children }: { title: string; empty?: string | null; children?: ReactNode }) {
@@ -54,7 +51,7 @@ function ReviewIssues({ post, issues }: { post: PostDetail; issues: PostReviewIs
               <span>{t({ ko: '{version}판', en: 'v{version}' }, { version: issue.contentVersion })} · {relative(issue.createdAt)}</span>
             </div>
             <p className="whitespace-pre-wrap text-sm">{issue.reason}</p>
-            {issue.evidenceQuote ? <blockquote className="whitespace-pre-wrap border-l-2 border-line pl-2.5 text-xs text-muted-foreground">{issue.evidenceQuote}</blockquote> : null}
+            {issue.evidenceQuote ? <PostQuote size="xs">{issue.evidenceQuote}</PostQuote> : null}
             {issue.resolution ? <p className="whitespace-pre-wrap text-xs text-muted-foreground">{t({ ko: '해결: {reason}', en: 'Resolution: {reason}' }, { reason: issue.resolution })}</p> : null}
           </div>
           {post.knowledge?.canReview && !issue.resolvedAt ? <Button variant="ghost" size="xs" onClick={() => setResolving(issue)}>{t({ ko: '해결 확인', en: 'Resolve' })}</Button> : null}
@@ -110,11 +107,15 @@ export function PostReactions({ post, topic, searchContext, commentDraft, setCom
 
   if (!showInfo) return <PostComments post={post} draft={commentDraft} setDraft={setCommentDraft} />
   return (
-    <Tabs value={tab} onValueChange={(next) => setPicked(next as ReactionTab)} className="gap-0">
-      <TabsList aria-label={t({ ko: '반응', en: 'Responses' })} className="h-auto w-full justify-start gap-5 rounded-none border-b border-line bg-transparent p-0">
-        <TabsTrigger value="comments" className={TRIGGER}><TabLabel label={t({ ko: '댓글', en: 'Comments' })} count={post.commentCount} /></TabsTrigger>
-        <TabsTrigger value="info" className={TRIGGER}><TabLabel label={t({ ko: '문서 정보', en: 'Document' })} count={openIssues + pendingProposals} /></TabsTrigger>
-      </TabsList>
+    <TextTabs
+      value={tab}
+      onChange={setPicked}
+      ariaLabel={t({ ko: '반응', en: 'Responses' })}
+      items={[
+        { value: 'comments', label: t({ ko: '댓글', en: 'Comments' }), count: post.commentCount || null },
+        { value: 'info', label: t({ ko: '문서 정보', en: 'Document' }), count: openIssues + pendingProposals || null },
+      ]}
+    >
       <TabsContent value="comments" className="pt-2">
         <PostComments post={post} draft={commentDraft} setDraft={setCommentDraft} hideHeading />
       </TabsContent>
@@ -125,7 +126,7 @@ export function PostReactions({ post, topic, searchContext, commentDraft, setCom
         {active ? <>
           <InfoSection title={t({ ko: '검토', en: 'Review' })}>
             <ReviewIssues post={post} issues={issues} />
-            <PostKnowledgeEvaluations post={post} empty={!issues.length ? <p className="pt-1 text-sm text-muted-foreground">{t({ ko: '검토 기록이 없어', en: 'No reviews yet' })}</p> : null} />
+            <PostKnowledgeEvaluations post={post} empty={!issues.length ? <EmptyState size="compact" title={t({ ko: '검토 기록이 없어', en: 'No reviews yet' })} /> : null} />
           </InfoSection>
           <InfoSection title={t({ ko: '연결', en: 'Links' })} empty={linkCount === 0 ? t({ ko: '없어', en: 'None' }) : null}>
             {links.isPending ? <LoadingState /> : links.isError ? <ErrorState size="compact" error={links.error} onRetry={() => void links.refetch()} /> : <LinksList post={post} links={links.data} />}
@@ -135,6 +136,6 @@ export function PostReactions({ post, topic, searchContext, commentDraft, setCom
           </InfoSection>
         </> : null}
       </TabsContent>
-    </Tabs>
+    </TextTabs>
   )
 }

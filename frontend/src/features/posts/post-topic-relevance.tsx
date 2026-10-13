@@ -132,16 +132,16 @@ export function PostTopicChips({ topic, divider = true }: { topic: PostTopicEval
         <Tip content={tip}>
           <span className={cn('inline-flex flex-wrap items-center gap-1', stale && 'opacity-50')} aria-label={t({ ko: '주제 관련도', en: 'Topic relevance' })} tabIndex={0}>
             {items.map(item => (
-              <span key={item.topicId} className="relative inline-flex items-center gap-1 overflow-hidden rounded-sm bg-surface-low px-2 pt-0.5 pb-1 text-xs">
+              <Chip key={item.topicId} tone="muted" className="relative gap-1 overflow-hidden pt-0.5 pb-1 text-foreground">
                 <span className="truncate">{item.name}</span>
                 <span className="tabular-nums text-muted-foreground">{item.score}</span>
                 <span aria-hidden className="absolute bottom-0 left-0 h-0.5 bg-primary/70" style={{ width: `${item.score}%` }} />
-              </span>
+              </Chip>
             ))}
           </span>
         </Tip>
       ) : null}
-      {waiting ? <span className="inline-flex items-center rounded-sm bg-surface-low px-2 py-0.5 text-xs text-muted-foreground">{t({ ko: '평가 중', en: 'Evaluating' })}</span> : null}
+      {waiting ? <Chip tone="muted" className="py-0.5">{t({ ko: '평가 중', en: 'Evaluating' })}</Chip> : null}
     </>
   )
 }

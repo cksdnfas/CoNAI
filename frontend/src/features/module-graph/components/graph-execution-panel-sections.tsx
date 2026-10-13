@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { CodeBlock } from '@/components/ui/code-block'
 import { Text } from '@/components/ui/text'
 import { Modal } from '@/components/ui/modal'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
@@ -20,6 +21,7 @@ import {
   type ExecutionPathDiagnosticRow,
 } from './graph-execution-panel-helpers'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ArtifactPreviewHoverOverlay } from './artifact-preview-hover'
 
 export function ExecutionOutputGroupCard({
   group,
@@ -59,10 +61,7 @@ export function ExecutionOutputGroupCard({
               frameClassName="border-0 bg-transparent p-0"
               mediaClassName="h-[9.5rem] w-full object-contain"
             />
-            <div className="pointer-events-none absolute inset-0 transition-colors duration-200 group-hover:bg-backdrop/30 group-focus-visible:bg-backdrop/30" />
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-              <span className="rounded-sm bg-backdrop px-2.5 py-1 text-2xs font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
-            </div>
+            <ArtifactPreviewHoverOverlay />
           </Button>
         ) : (
           <Button
@@ -83,9 +82,9 @@ export function ExecutionOutputGroupCard({
         widthClassName="max-w-4xl"
         onClose={() => setModalType(null)}
       >
-        <pre className="max-h-[70vh] overflow-auto text-xs leading-5 text-foreground whitespace-pre-wrap break-words">
+        <CodeBlock fill={false} maxHeight="screen">
           {modalText}
-        </pre>
+        </CodeBlock>
       </Modal>
 
       <Modal

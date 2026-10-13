@@ -1,10 +1,10 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
 import { Heading } from '@/components/ui/heading'
-import { Panel } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { hasAuthPermission, resolveAccountDraftOwner } from './auth-permissions'
+import { AuthPanel, AuthScreen, AuthScreenPlaceholder } from './auth-screen'
 import { resolveRoutePermissionKey } from './auth-route-permissions'
 import { useAuthStatusQuery } from './use-auth-status-query'
 import { ImagePermissionsContext, resolveImagePermissions } from './use-image-permissions'
@@ -16,7 +16,7 @@ export function ProtectedAppShell() {
   const authStatusQuery = useAuthStatusQuery()
 
   if (authStatusQuery.isLoading) {
-    return <div className="min-h-screen bg-background" />
+    return <AuthScreenPlaceholder />
   }
 
   if (authStatusQuery.data?.hasCredentials === false && !authStatusQuery.data.authenticated) {
@@ -40,9 +40,9 @@ function SetupRequiredScreen() {
   const localUrl = `http://localhost:${window.location.port || '80'}`
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-6 px-4 py-10">
-      <Text variant="overline" className="font-semibold">CoNAI</Text>
-      <Panel tone="none" padding="lg" className="theme-floating-panel space-y-3 rounded-md">
+    <AuthScreen>
+      <Text variant="overline">CoNAI</Text>
+      <AuthPanel className="space-y-3">
         <Heading level={1}>{t({ ko: '초기 설정 필요', en: 'Setup required' })}</Heading>
         <Text>
           {t({
@@ -50,7 +50,7 @@ function SetupRequiredScreen() {
             en: `No admin account yet. Open ${localUrl} on the server PC and create one in Settings > Security.`,
           })}
         </Text>
-      </Panel>
-    </div>
+      </AuthPanel>
+    </AuthScreen>
   )
 }

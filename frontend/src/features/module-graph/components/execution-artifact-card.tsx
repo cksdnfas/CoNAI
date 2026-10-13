@@ -9,6 +9,7 @@ import { useI18n } from '@/i18n'
 import type { GraphExecutionArtifactRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getArtifactPreviewUrl, hasGraphArtifactVisualPreview, resolveGraphArtifactMimeType } from '../module-graph-shared'
+import { ArtifactPreviewHoverOverlay } from './artifact-preview-hover'
 import { buildArtifactDetailLines, buildArtifactSummaryText, getCompactExecutionArtifactLabel } from './graph-execution-panel-helpers'
 
 interface ExecutionArtifactCardProps {
@@ -21,7 +22,7 @@ interface ExecutionArtifactCardProps {
 
 /** Render one execution artifact card with either a compact clean preview or the full technical card. */
 export function ExecutionArtifactCard({ artifact, compact = false, title, hideTitle = false, overlayLabel }: ExecutionArtifactCardProps) {
-  const { t, formatDateTime } = useI18n()
+  const { formatDateTime } = useI18n()
   const [isImageModalOpen, setIsImageModalOpen] = useState(false)
   const previewUrl = getArtifactPreviewUrl(artifact)
   const mimeType = resolveGraphArtifactMimeType(artifact)
@@ -40,14 +41,11 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
         mediaClassName={cn(compact ? 'max-h-52 max-w-full w-auto object-contain' : 'max-h-52 w-full object-contain')}
         fitToMedia={compact}
       />
-      <div className="pointer-events-none absolute inset-0 transition-colors duration-200 group-hover:bg-backdrop/30 group-focus-visible:bg-backdrop/30" />
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
-        <span className="rounded-sm bg-backdrop px-2.5 py-1 text-2xs font-medium text-white">{t({ ko: '보기', en: 'View' })}</span>
-      </div>
+      <ArtifactPreviewHoverOverlay />
       {overlayLabel ? (
-        <div className="pointer-events-none absolute left-2 top-2 max-w-[calc(100%-1rem)] truncate rounded-sm bg-backdrop px-2 py-1 text-2xs font-medium text-white backdrop-blur-sm">
-          {overlayLabel}
-        </div>
+        <Badge variant="overlay" className="pointer-events-none absolute top-2 left-2 max-w-[calc(100%-1rem)] px-2">
+          <span className="truncate">{overlayLabel}</span>
+        </Badge>
       ) : null}
     </Button>
   ) : null

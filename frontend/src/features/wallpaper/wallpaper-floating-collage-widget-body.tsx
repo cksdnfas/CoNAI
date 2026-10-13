@@ -38,6 +38,7 @@ import {
   useWallpaperElementSize,
 } from './wallpaper-widget-utils'
 import { runWallpaperFrameLoop } from './wallpaper-playback'
+import { WallpaperWidgetNote } from './wallpaper-widget-note'
 
 const WALLPAPER_FLOATING_COLLAGE_SPAWN_HOLD_MS = 900
 const WALLPAPER_FLOATING_COLLAGE_SPAWN_BLEND_MS = 1100
@@ -301,21 +302,21 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
   }, [aspectMode, cardStates.length, containerSize.height, containerSize.width, imageScalePercent, imageSwapMode, images, motionStrength, swapBounceCount, swapIntervalSec, transitionDurationMs])
 
   if (groupId === null) {
-    return <div className="flex h-full items-center justify-center rounded-sm border border-dashed border-border/80 bg-surface-low px-3 text-center text-sm text-muted-foreground">{t({ ko: '설정에서 그룹을 선택해.', en: 'Select a group in settings.' })}</div>
+    return <WallpaperWidgetNote tone="placeholder">{t({ ko: '설정에서 그룹을 선택해.', en: 'Select a group in settings.' })}</WallpaperWidgetNote>
   }
 
   if (previewQuery.isLoading) {
-    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">{t({ ko: '콜라주 불러오는 중…', en: 'Loading collage…' })}</div>
+    return <WallpaperWidgetNote>{t({ ko: '콜라주 불러오는 중…', en: 'Loading collage…' })}</WallpaperWidgetNote>
   }
 
   if (previewQuery.isError) {
-    return <div className="flex h-full items-center justify-center text-center text-sm text-destructive">{t({ ko: '콜라주 이미지를 불러오지 못했어.', en: 'Failed to load collage images.' })}</div>
+    return <WallpaperWidgetNote tone="error">{t({ ko: '콜라주 이미지를 불러오지 못했어.', en: 'Failed to load collage images.' })}</WallpaperWidgetNote>
   }
 
   return (
     <div ref={containerRef} className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_14%,transparent),transparent_42%),var(--surface-low)]">
       {images.length === 0 ? (
-        <div className="flex h-full items-center justify-center px-3 text-center text-sm text-muted-foreground">{t({ ko: '표시할 콜라주 이미지가 없어.', en: 'There are no collage images to display.' })}</div>
+        <WallpaperWidgetNote>{t({ ko: '표시할 콜라주 이미지가 없어.', en: 'There are no collage images to display.' })}</WallpaperWidgetNote>
       ) : null}
 
       {cardStates.map((card, index) => {

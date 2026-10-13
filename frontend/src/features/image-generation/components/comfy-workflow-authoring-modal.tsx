@@ -272,7 +272,7 @@ export function ComfyWorkflowAuthoringModal({
           value={editorTab}
           onChange={setEditorTab}
           ariaLabel={t({ ko: '편집 화면', en: 'Editor view' })}
-          className="border-b-0"
+          hairline={false}
           items={[
             { value: 'graph', label: t({ ko: '그래프', en: 'Graph' }) },
             { value: 'json', label: 'JSON' },

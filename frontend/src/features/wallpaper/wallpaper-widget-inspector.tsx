@@ -12,8 +12,8 @@ import {
   InspectorRow,
   InspectorSegments,
   InspectorSlider,
-  InspectorSwitch,
 } from './wallpaper-inspector-controls'
+import { SwitchLine } from '@/components/ui/switch-line'
 import type { WallpaperAlignMode } from './wallpaper-layout-utils'
 import { WallpaperWidgetTypeEditorFields, type WallpaperInspectorGroupOption } from './wallpaper-widget-inspector-editors'
 import type { WallpaperWidgetFrame, WallpaperWidgetInstance, WallpaperWidgetStyle } from './wallpaper-types'
@@ -182,7 +182,7 @@ function StyleFields({ widgets, patchStyle }: { widgets: WallpaperWidgetInstance
         ]}
         onChange={(value) => patchStyle({ textAlign: value }, 'textAlign')}
       />
-      <InspectorSwitch label={t({ ko: '제목 표시', en: 'Show title' })} checked={widgets.every((widget) => widget.style.showTitle)} onChange={(checked) => patchStyle({ showTitle: checked }, 'showTitle')} />
+      <SwitchLine label={t({ ko: '제목 표시', en: 'Show title' })} checked={widgets.every((widget) => widget.style.showTitle)} onCheckedChange={(checked) => patchStyle({ showTitle: checked }, 'showTitle')} />
 
       <InspectorHeading>{t({ ko: '등장', en: 'Entrance' })}</InspectorHeading>
       <InspectorRow label={t({ ko: '애니메이션', en: 'Animation' })}>

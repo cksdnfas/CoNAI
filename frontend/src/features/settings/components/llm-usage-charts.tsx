@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
+import { cn } from '@/lib/utils'
 
 /** A trend line for a stat: faint area, the line in muted ink, the last value marked. No axes. */
 export function Sparkline({ values, className }: { values: number[]; className?: string }) {
@@ -120,7 +122,7 @@ export function StackedBars({ days, series, values, formatValue, tooltip, label 
         </svg>
       ) : null}
       {hovered ? (
-        <div className="pointer-events-none absolute z-floating min-w-44 rounded-md bg-surface-high p-2.5 text-xs shadow-elevation-2"
+        <div className={cn(floatingSurfaceClassName, 'pointer-events-none absolute z-floating min-w-44 p-2.5 text-xs')}
           style={{ left: hovered.x > width / 2 ? undefined : hovered.x + 14, right: hovered.x > width / 2 ? width - hovered.x + 14 : undefined, top: Math.max(0, Math.min(hovered.y - 24, height - 120)) }}>
           {tooltip(hovered.index)}
         </div>

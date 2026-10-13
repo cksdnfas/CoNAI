@@ -203,7 +203,7 @@ export function ChatSettingsProfiles() {
               <>
                 {profile.mcpEnabled ? (
                   <Tip content={profile.mcpScopes.map((scope) => getChatScopeCopy(scope, t).label).join(' · ')}>
-                    <span className="hidden max-w-32 shrink-0 truncate rounded-sm bg-fill px-2 py-0.5 text-xs text-muted-foreground sm:inline">{profileToolChip(profile, t)}</span>
+                    <Chip tone="muted" className="hidden max-w-32 sm:inline-flex"><span className="truncate">{profileToolChip(profile, t)}</span></Chip>
                   </Tip>
                 ) : null}
                 <IconButton size="icon-sm" variant="ghost" onClick={() => setEditor({ profile: null, draft: copyDraft(profile, profiles, t), copyOf: profile.id })} label={t({ ko: '복사', en: 'Copy' })}>

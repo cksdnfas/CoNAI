@@ -7,7 +7,7 @@ import { SettingRow } from '@/components/ui/setting-row'
 import { LoadingState } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
 import { ChatFilledLabel } from './settings-filled-label'
-import { SETTINGS_CONTROL_CLASS } from './settings-rows'
+import { SETTINGS_CONTROL_CLASS, SettingsValidationAlert } from './settings-rows'
 
 interface RatingWeightSettingsCardProps {
   heading: ReactNode
@@ -87,16 +87,7 @@ export function RatingWeightSettingsCard({
   return (
     <div className="space-y-8">
       <RowGroup heading={heading} actions={actions}>
-        {validationMessages.length > 0 ? (
-          <div className="mb-2 rounded-sm bg-destructive-soft px-3 py-2 text-sm text-destructive-soft-foreground">
-            <div className="font-medium">{t({ ko: '저장 전에 확인해줘', en: 'Check before saving' })}</div>
-            <ul className="mt-1 list-disc space-y-1 pl-5 text-xs">
-              {validationMessages.map((message) => (
-                <li key={message}>{message}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
+        <SettingsValidationAlert messages={validationMessages} />
 
         {ratingWeightsDraft ? (
           weightFields.map((field) => (

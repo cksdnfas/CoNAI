@@ -34,8 +34,7 @@ export function getLlmPresetTypeOptions(t: ReturnType<typeof useI18n>['t']): Arr
   ]
 }
 
-// Flat: inputs are hairline rows, edge / node blocks have no surface.
-export const NODE_INSPECTOR_INPUT_SURFACE_CLASS = 'space-y-2 border-b border-line py-3 last:border-b-0'
+// Flat: edge / node blocks have no surface (inputs use MODULE_INPUT_FIELD_ROW_CLASS hairline rows).
 export const NODE_INSPECTOR_EDGE_SURFACE_CLASS = 'space-y-3'
 export const NODE_INSPECTOR_NODE_SURFACE_CLASS = 'min-w-0'
 

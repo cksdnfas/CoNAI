@@ -2,6 +2,7 @@ import { useRef, useState, type DragEvent } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { Check, FolderOpen, Images, Loader2, Trash2, Upload, X } from 'lucide-react'
 import { ActionContextMenu } from '@/components/ui/action-menu'
+import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -175,10 +176,9 @@ export function SpriteQueue({ hashes, selected, statuses, locked, onSelect, onCh
 function QueueStatus({ status }: { status?: SpriteBatchItem }) {
   const { t } = useI18n()
   if (!status) return null
-  const base = 'inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-0.5 text-2xs font-medium'
-  if (status.status === 'done') return <span className={cn(base, 'bg-success/15 text-success')}><Check className="size-3" />{t({ ko: '완료', en: 'Done' })}</span>
-  if (status.status === 'failed') return <span className={cn(base, 'bg-destructive/15 text-destructive')}>{t({ ko: '실패', en: 'Failed' })}</span>
-  if (status.status === 'running') return <span className={cn(base, 'bg-primary/15 text-primary')}><Loader2 className="size-3 animate-spin" />{t({ ko: '진행', en: 'Running' })}</span>
-  if (status.status === 'skipped') return <span className={cn(base, 'bg-fill text-muted-foreground')}>{t({ ko: '건너뜀', en: 'Skipped' })}</span>
-  return <span className={cn(base, 'bg-fill text-muted-foreground')}>{t({ ko: '대기', en: 'Waiting' })}</span>
+  if (status.status === 'done') return <Chip size="sm" tone="success" className="gap-1 font-medium"><Check className="size-3" />{t({ ko: '완료', en: 'Done' })}</Chip>
+  if (status.status === 'failed') return <Chip size="sm" tone="destructive" className="gap-1 font-medium">{t({ ko: '실패', en: 'Failed' })}</Chip>
+  if (status.status === 'running') return <Chip size="sm" tone="primary" className="gap-1 font-medium"><Loader2 className="size-3 animate-spin" />{t({ ko: '진행', en: 'Running' })}</Chip>
+  if (status.status === 'skipped') return <Chip size="sm" tone="muted" className="gap-1 font-medium">{t({ ko: '건너뜀', en: 'Skipped' })}</Chip>
+  return <Chip size="sm" tone="muted" className="gap-1 font-medium">{t({ ko: '대기', en: 'Waiting' })}</Chip>
 }

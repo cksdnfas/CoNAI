@@ -58,7 +58,7 @@ export function PostAuthorChip({ author, source = null, avatarSize = 'md', showA
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="xs" className={cn('h-auto min-w-0 justify-start gap-1.5 rounded-sm p-0 text-sm font-normal hover:bg-transparent hover:underline', className)}>
+        <Button variant="link" size="xs" className={cn('h-auto min-w-0 justify-start gap-1.5 p-0 text-sm font-normal', className)}>
           {face}{name}{bot ? <BotBadge /> : null}
         </Button>
       </PopoverTrigger>

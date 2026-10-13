@@ -18,7 +18,6 @@ interface SecurityAccountManagementListProps {
   pageSize: number
   searchPlaceholder: string
   emptyMessage: ReactNode
-  searchAriaLabel?: string
   isUpdatingAccountGroup: boolean
   isUpdatingAccountPassword: boolean
   isDeletingAccount: boolean
@@ -45,7 +44,6 @@ export function SecurityAccountManagementList({
   pageSize,
   searchPlaceholder,
   emptyMessage,
-  searchAriaLabel,
   isUpdatingAccountGroup,
   isUpdatingAccountPassword,
   isDeletingAccount,
@@ -68,7 +66,6 @@ export function SecurityAccountManagementList({
         items={accounts}
         pageSize={pageSize}
         searchPlaceholder={searchPlaceholder}
-        searchAriaLabel={searchAriaLabel ?? searchPlaceholder}
         emptyMessage={emptyMessage}
         paginationClassName={paginationClassName}
         getItemKey={(account) => account.id}

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Folder, FolderInput, FolderOpen } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { Button } from '@/components/ui/button'
-import { FieldInfo } from '@/components/ui/field'
+import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -142,26 +142,23 @@ function GenerationTargetGroupModal({
       <form onSubmit={handleSubmit}>
         <ModalBody className="space-y-4">
           <div className="space-y-2">
-            <span className="flex items-center gap-1">
-              <label className="text-sm font-medium text-foreground" htmlFor="generation-target-group-path">
-                {t({ ko: '그룹 경로', en: 'Group path' })}
-              </label>
-              <FieldInfo>
-                {t({
-                  ko: '슬래시(/)로 하위 그룹을 적어. 없는 그룹은 생성할 때 자동으로 만들어지고, 같은 위치의 이름은 대소문자를 구분하지 않아.',
-                  en: 'Use a slash (/) for sub-groups. Missing groups are created on generation; names at the same level are case-insensitive.',
-                })}
-              </FieldInfo>
-            </span>
-            <Input
-              id="generation-target-group-path"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={t({ ko: '프로젝트/이펙트', en: 'Project/Effects' })}
-              list="generation-target-group-path-options"
-              autoComplete="off"
-              autoFocus
-            />
+            <Field
+              label={t({ ko: '그룹 경로', en: 'Group path' })}
+              info={t({
+                ko: '슬래시(/)로 하위 그룹을 적어. 없는 그룹은 생성할 때 자동으로 만들어지고, 같은 위치의 이름은 대소문자를 구분하지 않아.',
+                en: 'Use a slash (/) for sub-groups. Missing groups are created on generation; names at the same level are case-insensitive.',
+              })}
+            >
+              <Input
+                id="generation-target-group-path"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={t({ ko: '프로젝트/이펙트', en: 'Project/Effects' })}
+                list="generation-target-group-path-options"
+                autoComplete="off"
+                autoFocus
+              />
+            </Field>
             <datalist id="generation-target-group-path-options">
               {sortedPaths.map((groupPath) => <option key={groupPath} value={groupPath} />)}
             </datalist>

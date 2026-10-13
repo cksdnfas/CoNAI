@@ -171,7 +171,7 @@ function AppShellLayout() {
             <div className="relative min-w-0 flex-1">
               <div
                 ref={navScrollRef}
-                className={cn('theme-nav-scroll min-w-0 overflow-x-auto', isDraggingNav && 'cursor-grabbing select-none')}
+                className={cn('theme-nav-scroll scroll-x min-w-0', isDraggingNav && 'cursor-grabbing select-none')}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type P
 import { Film, ImageIcon, Music2, RefreshCw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { Tip } from '@/components/ui/tooltip'
 import { buildWorkflowInputAssetUrl, type WorkflowInputAssetRef } from '@/lib/api-workflow-input-assets'
 import { cn } from '@/lib/utils'
@@ -293,7 +294,7 @@ export function MiniMaxH3DirectorMediaCard({
       ) : null}
 
       {menuOpen && !disabled ? (
-        <div data-minimax-interactive="true" data-surface="high" role="menu" aria-label={menuLabel} className="absolute inset-x-2 top-11 z-20 overflow-hidden rounded-md bg-surface-high p-1 shadow-elevation-2">
+        <div data-minimax-interactive="true" data-surface="high" role="menu" aria-label={menuLabel} className={cn('absolute inset-x-2 top-11 z-20 overflow-hidden p-1', floatingSurfaceClassName)}>
           <Button type="button" variant="nav" size="sm" role="menuitem" className="text-xs text-foreground" onClick={(event) => { event.stopPropagation(); onRequestReplace() }}>
             <RefreshCw />{replaceLabel}
           </Button>

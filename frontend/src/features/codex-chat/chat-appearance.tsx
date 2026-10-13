@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ALargeSmall, Check, Layers, Pencil, Plus, RotateCcw, Star, Trash2 } from 'lucide-react'
+import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
@@ -25,6 +26,7 @@ import {
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { ChatMarkdown } from './chat-markdown'
+import { popChipAddClassName, popChipClassName } from './chat-pop-chip'
 
 export type ChatAvatarSize = 'none' | 'sm' | 'md' | 'lg'
 export type ChatSpacing = 'tight' | 'normal' | 'relaxed'
@@ -363,7 +365,7 @@ function AppearanceGroup({ title, children }: { title: string; children: ReactNo
   )
 }
 
-const CHIP_CLASS = 'flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border bg-surface-container px-3.5 text-sm font-semibold text-foreground shadow-elevation-1 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40 animate-chat-flag-pop motion-reduce:animate-chat-flag-fade'
+const SLOT_CHIP_CLASS = 'h-9 gap-1.5 px-3.5 text-sm font-semibold animate-chat-flag-pop motion-reduce:animate-chat-flag-fade'
 
 /**
  * Over the settings, blurred beneath: the slots as chips that spring in one after another. A chip applies that slot
@@ -399,19 +401,19 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
     >
       <div className="flex flex-wrap justify-center gap-2" onClick={(event) => { if (event.target === event.currentTarget) onClose() }}>
         {/* eslint-disable-next-line no-restricted-syntax -- chips that spring in, as the composer's flags do */}
-        <button type="button" style={delay(0)} onClick={() => onApply(null)} className={cn(CHIP_CLASS, 'pl-3', appearance.slotId === null ? 'border-primary bg-primary/15 text-secondary-text' : 'border-line hover:bg-surface-high')}>
+        <button type="button" style={delay(0)} onClick={() => onApply(null)} className={popChipClassName(appearance.slotId === null, cn(SLOT_CHIP_CLASS, 'pl-3'))}>
           <RotateCcw className="size-3.5" />{t({ ko: '기본값', en: 'Defaults' })}
         </button>
         {file.slots.map((slot, index) => (
           // eslint-disable-next-line no-restricted-syntax -- see above
-          <button key={slot.id} type="button" style={delay(index + 1)} onClick={() => onApply(slot)} className={cn(CHIP_CLASS, slot.id === appearance.slotId ? 'border-primary bg-primary/15 text-secondary-text' : 'border-line hover:bg-surface-high')}>
+          <button key={slot.id} type="button" style={delay(index + 1)} onClick={() => onApply(slot)} className={popChipClassName(slot.id === appearance.slotId, SLOT_CHIP_CLASS)}>
             {slot.name}
             {slot.id === file.defaultSlotId ? <Star aria-label={t({ ko: '새 채팅 기본', en: 'New-chat default' })} className="size-3 fill-primary text-primary" /> : null}
           </button>
         ))}
         {file.slots.length < CHAT_APPEARANCE_LIMITS.slots ? (
           // eslint-disable-next-line no-restricted-syntax -- see above
-          <button type="button" style={delay(file.slots.length + 1)} onClick={onNew} aria-label={t({ ko: '지금 모양을 새 슬롯으로', en: 'Save as a new slot' })} className={cn(CHIP_CLASS, 'w-9 justify-center border-dashed border-foreground/25 bg-transparent px-0 text-muted-foreground shadow-none hover:text-foreground')}>
+          <button type="button" style={delay(file.slots.length + 1)} onClick={onNew} aria-label={t({ ko: '지금 모양을 새 슬롯으로', en: 'Save as a new slot' })} className={popChipAddClassName('size-9 animate-chat-flag-pop motion-reduce:animate-chat-flag-fade')}>
             <Plus className="size-4" />
           </button>
         ) : null}
@@ -535,16 +537,6 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
     setSlotsOpen(false)
   }
 
-  const moveTab = (event: KeyboardEvent<HTMLDivElement>) => {
-    const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
-    if (!step) return
-    event.preventDefault()
-    const next = TABS[(TABS.indexOf(tab) + step + TABS.length) % TABS.length]
-    setTab(next)
-    const bar = event.currentTarget
-    window.requestAnimationFrame(() => bar.querySelector<HTMLButtonElement>(`[data-tab="${next}"]`)?.focus())
-  }
-
   const sample = t({
     ko: '*창밖을 보다가 고개를 돌린다.* "어, 왔어?" \'조금 늦었네…\'',
     en: '*She looks up from the window.* "Oh, you made it." \'A bit late…\'',
@@ -593,15 +585,13 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
           <div className="mx-3.5 overflow-hidden border-y border-line px-0.5 py-2.5" style={chatTranscriptStyle(appearance, style)} aria-hidden="true">
             <ChatMarkdown text={sample} roleplay={style?.roleplay} />
           </div>
-          <div role="tablist" aria-label={t({ ko: '채팅 모양 항목', en: 'Appearance sections' })} onKeyDown={moveTab} className="mx-3.5 flex shrink-0 gap-0.5 border-b border-line">
-            {TABS.map((key) => (
-              // eslint-disable-next-line no-restricted-syntax -- text tabs inside the panel's frame
-              <button key={key} type="button" role="tab" data-tab={key} aria-selected={tab === key} tabIndex={tab === key ? 0 : -1} onClick={() => setTab(key)}
-                className={cn('-mb-px h-8 cursor-pointer border-b-2 px-2 text-xs font-medium outline-none transition-colors focus-visible:text-foreground', tab === key ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
-                {tabLabel[key]}
-              </button>
-            ))}
-          </div>
+          <TextTabs
+            value={tab}
+            items={TABS.map((key) => ({ value: key, label: tabLabel[key] }))}
+            onChange={setTab}
+            ariaLabel={t({ ko: '채팅 모양 항목', en: 'Appearance sections' })}
+            className="mx-3.5 shrink-0"
+          />
           <div role="tabpanel" className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3.5 pb-2 pt-1">
             {tab === 'text' ? (
               <>

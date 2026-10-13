@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Pause, Play } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { Spinner } from '@/components/ui/loading-state'
@@ -57,7 +58,7 @@ export function AttachAudioTab({ selected, setSelected }: { selected: AttachItem
             </ListRow>
           )
         })}
-        {takes.data && takes.data.items.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">{t({ ko: '테이크가 없어', en: 'No takes' })}</p> : null}
+        {takes.data && takes.data.items.length === 0 ? <EmptyState title={t({ ko: '테이크가 없어', en: 'No takes' })} /> : null}
       </div>
     </div>
   )

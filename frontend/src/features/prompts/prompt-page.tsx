@@ -19,7 +19,7 @@ import { PromptPageToolbar, type PromptPageToolbarBaseProps } from './components
 import { PromptGroupActions, PromptSidebar } from './components/prompt-sidebar'
 import { PromptSummaryModal } from './components/prompt-summary-modal'
 import { PromptSortMenu } from './components/prompt-toolbar'
-import { ToolbarSearchField } from './components/toolbar-search-field'
+import { ToolbarSearchField } from '@/components/common/search-field'
 import { usePromptListSelection } from './components/use-prompt-list-selection'
 import { isPromptTypeView, parsePromptPageView, type PromptPageView } from './prompt-page-view'
 import { canDeletePromptItem, isDanbooruPromptGroup, isLockedPromptGroup, isLockedPromptItem, isProtectedLoRAPromptGroup } from './prompt-page-utils'

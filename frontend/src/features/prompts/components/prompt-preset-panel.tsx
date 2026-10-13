@@ -8,6 +8,7 @@ import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-tr
 import { Copy, Pencil, Plus, Trash2 } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
+import { CodeBlock } from '@/components/ui/code-block'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ListRow } from '@/components/ui/list-row'
 import { RowGroup } from '@/components/ui/row-group'
@@ -359,7 +360,7 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
         />
       ) : null}
       {!presetsQuery.isLoading && entries.length === 0 ? (
-        <p className="px-2.5 py-2 text-sm text-muted-foreground">{t('prompts.components.prompt.preset.panel.no.presets.yet')}</p>
+        <EmptyState size="compact" title={t('prompts.components.prompt.preset.panel.no.presets.yet')} />
       ) : null}
     </SidebarNav>
   )
@@ -413,7 +414,7 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
                 </IconButton>
               )}
             >
-              <pre className="max-h-64 overflow-auto rounded-sm bg-fill px-3 py-3 text-xs leading-5 whitespace-pre-wrap text-foreground/90">{insertionPreview || t('prompts.components.prompt.preset.panel.no.value.to.insert')}</pre>
+              <CodeBlock maxHeight="md" className="text-foreground/90">{insertionPreview || t('prompts.components.prompt.preset.panel.no.value.to.insert')}</CodeBlock>
             </RowGroup>
           </div>
         ) : (

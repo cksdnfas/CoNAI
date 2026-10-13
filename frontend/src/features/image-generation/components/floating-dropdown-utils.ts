@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { cn } from '@/lib/utils'
 
 export type FloatingDropdownRect = {
@@ -69,8 +70,8 @@ export function resolveFloatingDropdownRect(anchor: HTMLElement, options: Resolv
   return resolveFloatingDropdownRectFromRect(anchor.getBoundingClientRect(), options)
 }
 
-/** Floating menu surface, same tone and elevation as Popover / DropdownMenu (surface-high, elevation-2). Pair with data-surface="high". */
-export const FLOATING_DROPDOWN_MENU_CLASS = 'fixed z-popover rounded-md bg-surface-high shadow-elevation-2'
+/** A fixed menu on the popover layer, placed with getFloatingDropdownStyle. */
+export const FLOATING_DROPDOWN_MENU_CLASS = cn('fixed z-popover', floatingSurfaceClassName)
 
 export function getFloatingDropdownItemClassName({ selected, className }: { selected?: boolean; className?: string }) {
   return cn(

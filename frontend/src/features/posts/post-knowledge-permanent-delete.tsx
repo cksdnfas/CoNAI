@@ -4,6 +4,7 @@ import type { PostKnowledgePermanentDeleteDependency, PostKnowledgePermanentDele
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
@@ -72,7 +73,7 @@ export function PostKnowledgePermanentDeleteDialog({ post, onClose, onDeleted }:
       <p className="text-sm text-muted-foreground">{t({ ko: '아래 내용과 이력은 복원할 수 없게 삭제돼. 파일 보관함의 실제 파일은 남아.', en: 'The content and records below will be deleted permanently. Physical files in the file store will remain.' })}</p>
       {preview.isPending ? <LoadingState /> : preview.isError ? <ErrorState error={preview.error} onRetry={() => void preview.refetch()} /> : data ? <>
         <Section heading={t({ ko: '삭제되는 자료', en: 'Records to delete' })}>
-          <table className="w-full text-sm"><thead className="text-xs text-muted-foreground"><tr className="border-b border-line"><th scope="col" className="py-2 text-left">{t({ ko: '자료', en: 'Record' })}</th><th scope="col" className="py-2 text-right">{t({ ko: '개수', en: 'Count' })}</th></tr></thead><tbody>{Object.entries(data.counts).map(([key, count]) => <tr key={key} className="border-b border-line last:border-0"><th scope="row" className="py-2 text-left font-normal">{t(countLabels[key as keyof typeof countLabels])}</th><td className="py-2 text-right tabular-nums">{count}</td></tr>)}</tbody></table>
+          <DataTable head={<><DataTh scope="col">{t({ ko: '자료', en: 'Record' })}</DataTh><DataTh scope="col" numeric>{t({ ko: '개수', en: 'Count' })}</DataTh></>}>{Object.entries(data.counts).map(([key, count]) => <DataTr key={key}><DataTh scope="row" className="font-normal">{t(countLabels[key as keyof typeof countLabels])}</DataTh><DataTd numeric>{count}</DataTd></DataTr>)}</DataTable>
         </Section>
         <Section heading={t({ ko: '연결된 자료와 영향', en: 'Dependencies and impact' })}>
           {data.dependencies.length ? data.dependencies.map((dependency, index) => <div key={index} className="flex flex-wrap items-center gap-2 border-b border-line py-3 text-sm last:border-0">

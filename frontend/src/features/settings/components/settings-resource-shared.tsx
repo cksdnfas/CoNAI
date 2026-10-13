@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRowStatus } from '@/components/ui/resource-row'
+import { textVariants } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 
@@ -101,7 +102,7 @@ interface ResourceTableLayout {
 }
 
 /** Flat hairline table (settings only): header row and rows share the same small inline padding for the hover wash. */
-const STACK_HEADER_CLASS = 'gap-3 border-b border-line px-2 py-2 text-2xs font-semibold tracking-overline text-muted-foreground uppercase'
+const STACK_HEADER_CLASS = cn(textVariants({ variant: 'overline' }), 'gap-3 border-b border-line px-2 py-2')
 const STACK_ROW_CLASS = 'flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-2 py-2.5 last:border-b-0'
 
 const ResourceTableLayoutContext = createContext<ResourceTableLayout | null>(null)
@@ -163,13 +164,10 @@ export function SettingsResourceTable({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="scroll-x">
       <div className={cn(minWidthClassName, 'w-full')}>
         <div
-          className={cn(
-            'grid border-b border-outline-subtle px-4 py-2.5 text-2xs font-semibold uppercase tracking-overline text-muted-foreground',
-            gridClassName,
-          )}
+          className={cn(textVariants({ variant: 'overline' }), 'grid border-b border-outline-subtle px-4 py-2.5', gridClassName)}
         >
           {headers.map((header, index) => (
             <div key={index} className={cn(index >= headers.length - 3 ? 'text-center' : 'min-w-0')}>

@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TextTabs } from '@/components/common/text-tabs'
+import { TabsContent } from '@/components/ui/tabs'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { ChatSettingsMine } from './chat-settings-mine'
 import { ChatSettingsProfiles } from './chat-settings-profiles'
 import { ChatSettingsResources } from './chat-settings-resources'
-import { SETTINGS_TEXT_TAB_LIST_CLASS, SETTINGS_TEXT_TAB_TRIGGER_CLASS } from './settings-text-tabs'
 import { ChatSettingsRoutines } from '@/features/codex-chat/chat-routines'
 
 type ChatSettingsView = 'profiles' | 'resources' | 'mine' | 'routines'
@@ -45,17 +45,21 @@ export function ChatSettingsTab() {
   }
 
   return (
-    <Tabs value={view} onValueChange={setView} className="gap-6">
-      <TabsList className={SETTINGS_TEXT_TAB_LIST_CLASS}>
-        <TabsTrigger value="profiles" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '프로필', en: 'Profiles' })}</TabsTrigger>
-        <TabsTrigger value="resources" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '자원', en: 'Resources' })}</TabsTrigger>
-        <TabsTrigger value="mine" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '내 설정', en: 'Mine' })}</TabsTrigger>
-        {isAdmin ? <TabsTrigger value="routines" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '루틴', en: 'Routines' })}</TabsTrigger> : null}
-      </TabsList>
+    <TextTabs
+      value={view}
+      onChange={setView}
+      className="gap-6"
+      items={[
+        { value: 'profiles', label: t({ ko: '프로필', en: 'Profiles' }) },
+        { value: 'resources', label: t({ ko: '자원', en: 'Resources' }) },
+        { value: 'mine', label: t({ ko: '내 설정', en: 'Mine' }) },
+        ...(isAdmin ? [{ value: 'routines', label: t({ ko: '루틴', en: 'Routines' }) }] : []),
+      ]}
+    >
       <TabsContent value="profiles"><ChatSettingsProfiles /></TabsContent>
       <TabsContent value="resources"><ChatSettingsResources /></TabsContent>
       <TabsContent value="mine"><ChatSettingsMine /></TabsContent>
       {isAdmin ? <TabsContent value="routines"><ChatSettingsRoutines /></TabsContent> : null}
-    </Tabs>
+    </TextTabs>
   )
 }

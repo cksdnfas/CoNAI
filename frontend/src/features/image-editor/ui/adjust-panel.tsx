@@ -1,7 +1,7 @@
 import { Blend, Contrast, Eye, LockOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { Slider } from '@/components/ui/slider'
+import { SliderRow } from '@/components/ui/slider-row'
 import { useI18n } from '@/i18n'
 import { NEUTRAL_ADJUSTMENTS, type Adjustments } from '../engine/adjust'
 import type { EditorEngine, EditorSnapshot } from '../engine/editor-engine'
@@ -41,23 +41,17 @@ export function AdjustPanel({ engine, snapshot }: { engine: EditorEngine; snapsh
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4">
         {SLIDERS.map((item) => (
-          <div key={item.key} className="flex h-12 shrink-0 items-center gap-3">
-            <span className="w-13 shrink-0 text-xs text-muted-foreground">{t(item.label)}</span>
-            <Slider
-              className="flex-1"
-              min={-item.range}
-              max={item.range}
-              step={1}
-              disabled={blocked}
-              value={[value[item.key]]}
-              aria-label={t(item.label)}
-              onValueChange={([next]) => change({ [item.key]: next ?? 0 })}
-            />
-            <span className="w-10 shrink-0 text-right text-sm tabular-nums">
-              {value[item.key] > 0 ? '+' : ''}
-              {value[item.key]}
-            </span>
-          </div>
+          <SliderRow
+            key={item.key}
+            className="h-12 shrink-0"
+            label={t(item.label)}
+            min={-item.range}
+            max={item.range}
+            disabled={blocked}
+            value={value[item.key]}
+            readout={`${value[item.key] > 0 ? '+' : ''}${value[item.key]}`}
+            onChange={(next) => change({ [item.key]: next })}
+          />
         ))}
         <div className="flex shrink-0 items-center gap-0.5 pt-1.5">
           <IconButton size="icon-sm" variant="ghost" active={value.grayscale} disabled={blocked} label={t({ ko: '흑백', en: 'Grayscale' })} onClick={() => change({ grayscale: !value.grayscale })}>

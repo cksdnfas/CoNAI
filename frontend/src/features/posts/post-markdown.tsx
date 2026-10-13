@@ -2,6 +2,7 @@ import { memo, useMemo, type ComponentProps } from 'react'
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import { Link } from 'react-router-dom'
 import remarkGfm from 'remark-gfm'
+import { proseTableClassNames } from '@/components/ui/data-table'
 import { rehypeMentions } from '@/features/codex-chat/chat-mentions'
 import { cn } from '@/lib/utils'
 import { AudioEmbed, FileEmbed, GroupEmbed, LibraryMedia, MediaGallery, PostCardEmbed } from './post-media'
@@ -85,10 +86,10 @@ const COMPONENTS: Components = {
   h4: ({ children }) => <h5 className="mb-1.5 mt-4 font-semibold first:mt-0">{children}</h5>,
   blockquote: ({ children }) => <blockquote className="my-3 border-l-2 border-line pl-3 text-muted-foreground">{children}</blockquote>,
   hr: () => <hr className="my-5 border-line" />,
-  table: ({ children }) => <div className="my-3 overflow-x-auto"><table className="w-full border-collapse text-[0.92em]">{children}</table></div>,
-  th: ({ children }) => <th className="border-b border-line px-2 py-1 text-left font-semibold">{children}</th>,
-  td: ({ children }) => <td className="border-b border-line/60 px-2 py-1 align-top">{children}</td>,
-  pre: ({ children }) => <pre className="my-3 overflow-x-auto rounded-sm bg-surface-low p-3 font-mono text-[0.85em] leading-relaxed">{children}</pre>,
+  table: ({ children }) => <div className={cn('my-3', proseTableClassNames.wrapper)}><table className={proseTableClassNames.table}>{children}</table></div>,
+  th: ({ children }) => <th className={proseTableClassNames.th}>{children}</th>,
+  td: ({ children }) => <td className={proseTableClassNames.td}>{children}</td>,
+  pre: ({ children }) => <pre className="my-3 scroll-x rounded-sm bg-surface-low p-3 font-mono text-[0.85em] leading-relaxed">{children}</pre>,
   code: ({ children, className }: ComponentProps<'code'>) => <code className={cn(className ? '' : 'rounded-sm bg-surface-high px-1 py-0.5', 'font-mono text-[0.9em]', className)}>{children}</code>,
 }
 

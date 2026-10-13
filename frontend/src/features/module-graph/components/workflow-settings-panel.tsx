@@ -1,10 +1,9 @@
-import { Folder, FolderOpen } from 'lucide-react'
-import { HierarchyPicker } from '@/components/common/hierarchy-picker'
-import { Field } from '@/components/ui/field'
+import { Field, FieldGroup } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord } from '@/lib/api-module-graph'
+import { WorkflowFolderPicker } from './workflow-folder-picker'
 
 /** The workflow's own name, description and save folder (the editor bar keeps the name, so it can leave it out). */
 export function WorkflowSettingsPanel({
@@ -38,21 +37,9 @@ export function WorkflowSettingsPanel({
       <Field label={t({ ko: '설명', en: 'Description' })} className="gap-1.5">
         <Textarea value={workflowDescription} rows={3} onChange={(event) => onWorkflowDescriptionChange(event.target.value)} />
       </Field>
-      <div className="space-y-1.5">
-        <div className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '저장 폴더', en: 'Folder' })}</div>
-        <HierarchyPicker
-          items={folders}
-          selectedId={folderId}
-          onSelectRoot={() => onFolderChange(null)}
-          onSelect={(folder) => onFolderChange(folder.id)}
-          getId={(folder) => folder.id}
-          getParentId={(folder) => folder.parent_id}
-          getLabel={(folder) => folder.name}
-          sortItems={(left, right) => left.name.localeCompare(right.name, 'ko')}
-          renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="size-4 shrink-0" /> : <Folder className="size-4 shrink-0" />)}
-          rootLabel={t({ ko: '폴더 없음', en: 'No folder' })}
-        />
-      </div>
+      <FieldGroup label={t({ ko: '저장 폴더', en: 'Folder' })} className="gap-1.5">
+        <WorkflowFolderPicker folders={folders} selectedId={folderId} onChange={onFolderChange} />
+      </FieldGroup>
     </div>
   )
 }

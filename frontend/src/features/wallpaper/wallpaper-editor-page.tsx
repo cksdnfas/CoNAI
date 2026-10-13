@@ -248,9 +248,9 @@ function EditorMenuItems({ items, onDone }: { items: EditorMenuItem[]; onDone: (
           key={item.label}
           type="button"
           role="menuitem"
-          variant="nav"
+          variant={item.destructive ? 'destructive-ghost' : 'nav'}
           disabled={item.disabled}
-          className={cn('h-8 gap-3', item.destructive ? 'text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground' : 'text-foreground')}
+          className={cn('h-8 w-full justify-start gap-3 font-normal', !item.destructive && 'text-foreground')}
           onClick={() => {
             onDone()
             item.action()
@@ -1066,7 +1066,7 @@ export function WallpaperEditorPage() {
       <IconButton variant="ghost" size="icon-xs" label={t({ ko: '맨 앞으로 (Ctrl+Shift+])', en: 'Bring to front (Ctrl+Shift+])' })} onClick={() => setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, 'front'))}><BringToFront /></IconButton>
       <IconButton variant="ghost" size="icon-xs" label={t({ ko: '맨 뒤로 (Ctrl+Shift+[)', en: 'Send to back (Ctrl+Shift+[)' })} onClick={() => setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, 'back'))}><SendToBack /></IconButton>
       <IconButton variant="ghost" size="icon-xs" active={allSelectedLocked} label={allSelectedLocked ? t({ ko: '잠금 해제', en: 'Unlock' }) : t({ ko: '잠금', en: 'Lock' })} onClick={toggleLockSelection}>{allSelectedLocked ? <Lock /> : <LockOpen />}</IconButton>
-      <IconButton variant="ghost" size="icon-xs" className="text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground" label={t({ ko: '삭제 (Delete)', en: 'Delete (Delete)' })} onClick={removeSelection}><Trash2 /></IconButton>
+      <IconButton variant="destructive-ghost" size="icon-xs" label={t({ ko: '삭제 (Delete)', en: 'Delete (Delete)' })} onClick={removeSelection}><Trash2 /></IconButton>
     </>
   ) : null
 

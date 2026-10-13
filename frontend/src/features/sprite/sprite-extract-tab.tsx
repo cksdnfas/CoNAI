@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Download, Eye, Film, Locate, Settings2, Square } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { Progress } from '@/components/ui/progress'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -39,7 +40,7 @@ import { MAX_QUEUE_VIDEOS, SpriteQueue } from './sprite-queue'
 import { SpriteResultPanel } from './sprite-result-panel'
 import { SpriteSettingsPanel } from './sprite-settings-panel'
 import { readStoredSpriteSettings, writeStoredSpriteSettings } from './sprite-storage'
-import { MiniField } from './sprite-ui'
+import { MiniField, SpriteActionBar, SpriteCheckerStage } from './sprite-ui'
 import { SpriteVideoSource, type SpriteVideoHandle } from './sprite-video-source'
 import { useSpriteChatPage } from './use-sprite-chat-page'
 
@@ -302,9 +303,9 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
         <SpriteResultPanel build={build} output={output} onOutputChange={setOutput} crop={crop} onCropChange={setCrop} stale={stale} saving={saving} canSave={canUpload} onSave={() => void saveBuild()} />
       ) : selectedItem?.status === 'done' && selectedItem.compositeHash ? (
         <div className="flex flex-col gap-2">
-          <div className="bg-checker flex h-[min(60vh,560px)] items-center justify-center overflow-auto rounded-sm p-3">
+          <SpriteCheckerStage className="h-[min(60vh,560px)] overflow-auto p-3">
             <img src={libraryMediaFileUrl(selectedItem.compositeHash)} alt={t({ ko: '저장된 시트', en: 'Saved sheet' })} className="max-h-full max-w-full object-contain" />
-          </div>
+          </SpriteCheckerStage>
           <Tip content={[selectedItem.sheet ? `${selectedItem.sheet.width}×${selectedItem.sheet.height}` : null, save.groupPath ?? '스프라이트'].filter(Boolean).join(' · ')}>
             <span className="self-start font-mono text-xs text-muted-foreground" tabIndex={0}>
               {t({ ko: '{count}컷', en: '{count} frames' }, { count: selectedItem.frameCount ?? 0 })}
@@ -312,9 +313,9 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
           </Tip>
         </div>
       ) : (
-        <div className="bg-checker flex h-40 items-center justify-center rounded-sm">
+        <SpriteCheckerStage className="h-40">
           <Film className="size-8 text-muted-foreground opacity-30" />
-        </div>
+        </SpriteCheckerStage>
       )}
     </section>
   )
@@ -357,17 +358,15 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
         <div className="flex flex-col gap-6">{queue}{center}{right}</div>
       )}
 
-      <div className="sticky bottom-3 z-sticky mt-4 flex flex-wrap items-center gap-3 rounded-md bg-surface-container/95 p-1.5 pl-3 shadow-elevation-3 backdrop-blur-md">
+      <SpriteActionBar className="mt-4 flex-wrap gap-3">
         {batchRunning ? (
-          <span className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <span className="whitespace-nowrap font-mono text-xs">
               {t({ ko: '{done} / {total} 완료', en: '{done} / {total} done' }, { done: [...statuses.values()].filter((item) => item.status === 'done').length, total: videoHashes.length })}
               {[...statuses.values()].some((item) => item.status === 'failed') ? t({ ko: ' · {count} 실패', en: ' · {count} failed' }, { count: [...statuses.values()].filter((item) => item.status === 'failed').length }) : ''}
             </span>
-            <span className="relative h-1 min-w-16 max-w-80 flex-1 rounded-full bg-surface-highest">
-              <span className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]" style={{ width: `${progress?.total ? Math.round((progress.processed / progress.total) * 100) : 0}%` }} />
-            </span>
-          </span>
+            <Progress size="sm" className="min-w-16 max-w-80 flex-1" value={progress?.total ? Math.round((progress.processed / progress.total) * 100) : 0} />
+          </div>
         ) : (
           <span className="min-w-0 flex-1">
             <Tip content={summary}>
@@ -390,7 +389,7 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
             </IconButton>
           </>
         )}
-      </div>
+      </SpriteActionBar>
     </div>
   )
 }

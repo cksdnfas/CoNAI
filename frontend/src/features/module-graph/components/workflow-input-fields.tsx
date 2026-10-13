@@ -9,13 +9,11 @@ import { useI18n } from '@/i18n'
 import type { GraphWorkflowExposedInput } from '@/lib/api-module-graph'
 import { normalizeModulePortDescription } from '../module-graph-shared'
 import { formatWorkflowInputLabel } from '../module-graph-workflow-inputs'
-import { hasMeaningfulValue } from './module-graph-field-shared'
+import { MODULE_INPUT_FIELD_ROW_CLASS, hasMeaningfulValue } from './module-graph-field-shared'
 import { formatModuleGraphDefaultOptionLabel } from './module-graph-simple-value-input'
 import { NaiCharacterPromptsInput, isNaiCharacterPromptPort } from './nai-character-prompts-input'
 import { NaiReusableAssetInput, isNaiCharacterReferencePort, isNaiVibePort } from './nai-reusable-assets-input'
 
-// Flat: one hairline row per exposed input (no plinth).
-const WORKFLOW_INPUT_FIELD_SURFACE_CLASS = 'space-y-2 border-b border-line py-3 last:border-b-0'
 function hasDefaultValue(value: unknown) {
   return value !== undefined
 }
@@ -138,7 +136,7 @@ export function WorkflowInputFields({
       && !isNaiCharacterReferencePort(inputDefinition.port_key, inputDefinition.data_type)
 
     return (
-      <div key={inputDefinition.id} className={WORKFLOW_INPUT_FIELD_SURFACE_CLASS}>
+      <div key={inputDefinition.id} className={MODULE_INPUT_FIELD_ROW_CLASS}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <Tip content={normalizedDescription}>

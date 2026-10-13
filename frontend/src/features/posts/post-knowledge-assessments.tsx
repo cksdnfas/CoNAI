@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, listPostAssessmentAudit, moderatePostAssessment } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
+import { PostQuote } from './post-quote'
 import { usePostPermissions } from './use-post-permissions'
 
 const qualityLabels = {
@@ -35,7 +36,7 @@ export function AssessmentModerationDialog({ post, entry, action, onClose }: { p
     <ModalBody>
       <p className="text-sm text-muted-foreground">{t({ ko: '내용 {version}판 · {evaluator} · 기존 {quality}', en: 'Content version {version} · {evaluator} · previously {quality}' }, { version: entry.contentVersion, evaluator: t(evaluatorLabels[entry.evaluator]), quality: t(qualityLabels[entry.quality]) })}</p>
       {entry.reason ? <p className="whitespace-pre-wrap text-sm">{entry.reason}</p> : null}
-      {entry.evidenceQuote ? <blockquote className="whitespace-pre-wrap border-l-2 border-line pl-3 text-sm text-muted-foreground">{entry.evidenceQuote}</blockquote> : null}
+      {entry.evidenceQuote ? <PostQuote>{entry.evidenceQuote}</PostQuote> : null}
       {action === 'correct' ? <Field label={t({ ko: '변경할 품질 의견', en: 'Corrected quality feedback' })}><Select value={quality} onChange={(event) => setQuality(event.target.value as PostAssessmentQuality)}>{Object.entries(qualityLabels).map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}</Select></Field> : null}
       <Field label={t({ ko: '변경 이유', en: 'Reason for the change' })}><Textarea rows={3} maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
     </ModalBody>

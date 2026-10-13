@@ -2,10 +2,13 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ClipboardCopy, Download, ExternalLink, KeyRound, Monitor, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { ListRow } from '@/components/ui/list-row'
 import { Modal } from '@/components/ui/modal'
+import { RowGroup } from '@/components/ui/row-group'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -138,15 +141,35 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, initialIss
           </Button>
         </div>
 
-        <div>
-          <div className="pb-1 text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{t({ ko: '발급한 키', en: 'Issued keys' })}</div>
+        <RowGroup heading={t({ ko: '발급한 키', en: 'Issued keys' })}>
           {tokens.length === 0 ? (
-            <div className="py-3 text-sm text-muted-foreground">{t({ ko: '아직 발급한 키가 없어.', en: 'No keys yet.' })}</div>
+            <EmptyState size="compact" className="px-0" title={t({ ko: '아직 발급한 키가 없어.', en: 'No keys yet.' })} />
           ) : tokens.map((token) => {
             const preset = token.presetId ? presetById.get(token.presetId) : null
             return (
-              <div key={token.id} className="flex items-center gap-3 border-b border-line py-2.5 last:border-b-0">
-                <Monitor className="size-4 shrink-0 text-muted-foreground" />
+              <ListRow
+                key={token.id}
+                leading={<Monitor className="size-4 text-muted-foreground" />}
+                trailing={(
+                  <IconButton
+                    variant="destructive-ghost"
+                    size="icon-sm"
+                    label={t({ ko: '{name} 키 폐기', en: 'Revoke {name}' }, { name: token.name })}
+                    disabled={revokeMutation.isPending}
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: t({ ko: '키 폐기', en: 'Revoke key' }),
+                        description: t({ ko: "'{name}' 키를 폐기할까? 이 키로 연 월페이퍼는 더 이상 데이터를 못 받아.", en: "Revoke '{name}'? Wallpapers opened with it stop receiving data." }, { name: token.name }),
+                        confirmLabel: t({ ko: '폐기', en: 'Revoke' }),
+                        tone: 'destructive',
+                      })
+                      if (ok) revokeMutation.mutate(token.id)
+                    }}
+                  >
+                    <Trash2 />
+                  </IconButton>
+                )}
+              >
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm">{token.name}</div>
                   <div className="truncate text-xs text-muted-foreground">
@@ -157,28 +180,10 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, initialIss
                     ].join(' · ')}
                   </div>
                 </div>
-                <IconButton
-                  variant="ghost"
-                  size="icon-sm"
-                  className="text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground"
-                  label={t({ ko: '{name} 키 폐기', en: 'Revoke {name}' }, { name: token.name })}
-                  disabled={revokeMutation.isPending}
-                  onClick={async () => {
-                    const ok = await confirm({
-                      title: t({ ko: '키 폐기', en: 'Revoke key' }),
-                      description: t({ ko: "'{name}' 키를 폐기할까? 이 키로 연 월페이퍼는 더 이상 데이터를 못 받아.", en: "Revoke '{name}'? Wallpapers opened with it stop receiving data." }, { name: token.name }),
-                      confirmLabel: t({ ko: '폐기', en: 'Revoke' }),
-                      tone: 'destructive',
-                    })
-                    if (ok) revokeMutation.mutate(token.id)
-                  }}
-                >
-                  <Trash2 />
-                </IconButton>
-              </div>
+              </ListRow>
             )
           })}
-        </div>
+        </RowGroup>
 
         <div className="flex items-center gap-2 border-t border-line pt-3 text-xs text-muted-foreground">
           <KeyRound className="size-3.5 shrink-0" />

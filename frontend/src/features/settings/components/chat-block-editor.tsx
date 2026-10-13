@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus, Trash2, X } from 'lucide-react'
 import { chatBlockToneText } from '@conai/shared'
+import { CodeBlock } from '@/components/ui/code-block'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -237,7 +238,7 @@ function BlockPreview({ block }: { block: ChatDisplayBlock }) {
       <ChatDisplayBlockView block={block} data={data} />
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer select-none">{t({ ko: '모델에 가는 모양', en: 'Sent to the model' })}</summary>
-        <pre className="mt-1 whitespace-pre-wrap break-words font-mono">{`${block.key}: ${JSON.stringify(data)}\n말투: ${chatBlockToneText(block.fields, data) || '—'}`}</pre>
+        <CodeBlock fill={false} className="mt-1 text-muted-foreground">{`${block.key}: ${JSON.stringify(data)}\n말투: ${chatBlockToneText(block.fields, data) || '—'}`}</CodeBlock>
       </details>
     </EditorGroup>
   )

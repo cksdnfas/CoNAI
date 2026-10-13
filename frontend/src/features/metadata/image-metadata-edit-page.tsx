@@ -2,10 +2,11 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ChevronRight, Copy, Download, Save } from 'lucide-react'
+import { ArrowLeft, Copy, Download, Save } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { CollapsibleRow } from '@/components/ui/collapsible-row'
 import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -286,12 +287,9 @@ export function ImageMetadataEditPage() {
             ) : null}
 
             {image.composite_hash ? (
-              <details className="group/tech border-t border-line pt-3 text-sm text-muted-foreground">
-                <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-bold text-foreground select-none [&::-webkit-details-marker]:hidden">
-                  <ChevronRight className="size-3.5 text-muted-foreground transition-transform group-open/tech:rotate-90" />
-                  {t({ ko: '기술 정보', en: 'Technical details' })}
-                </summary>
-                <div className="mt-2 flex items-center justify-between gap-3">
+              <CollapsibleRow title={t({ ko: '기술 정보', en: 'Technical details' })}>
+                <div className="text-sm text-muted-foreground">
+                <div className="flex items-center justify-between gap-3">
                   <span>{t({ ko: '복합 해시', en: 'Composite hash' })}</span>
                   <IconButton
                     size="icon-xs"
@@ -303,7 +301,8 @@ export function ImageMetadataEditPage() {
                   </IconButton>
                 </div>
                 <p className="mt-0.5 font-mono text-xs break-all text-foreground/88">{image.composite_hash}</p>
-              </details>
+                </div>
+              </CollapsibleRow>
             ) : null}
           </div>
         </div>

@@ -38,7 +38,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
-import { Slider } from '@/components/ui/slider'
+import { SliderRow } from '@/components/ui/slider-row'
 import { Tip } from '@/components/ui/tooltip'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import {
@@ -164,12 +164,13 @@ function TextOptions({ engine, snapshot }: { engine: EditorEngine; snapshot: Edi
   return (
     <div className="flex items-center gap-4 max-md:gap-2">
       <FontPicker engine={engine} style={style} />
-      <LabeledSlider
+      <SliderRow
+        layout="inline"
         label={t({ ko: '크기', en: 'Size' })}
         value={sizeToSlider(style.fontSize, MAX_FONT)}
         min={1}
         max={1000}
-        display={String(style.fontSize)}
+        readout={String(style.fontSize)}
         onChange={(value) => engine.setTextStyle({ fontSize: Math.max(6, sliderToSize(value, MAX_FONT)) })}
       />
       <div className="flex shrink-0 items-center gap-0.5">
@@ -186,26 +187,17 @@ function TextOptions({ engine, snapshot }: { engine: EditorEngine; snapshot: Edi
         ))}
       </div>
       <div className="flex shrink-0 items-center gap-1 max-md:hidden">
-        <LabeledSlider
+        <SliderRow
+          layout="inline"
           label={t({ ko: '외곽선', en: 'Outline' })}
           value={style.strokeWidth}
           min={0}
           max={40}
-          display={String(style.strokeWidth)}
+          readout={String(style.strokeWidth)}
           onChange={(value) => engine.setTextStyle({ strokeWidth: value })}
         />
         <ColorSwatch small label={t({ ko: '외곽선 색', en: 'Outline color' })} color={style.stroke} onChange={(color) => engine.setTextStyle({ stroke: color })} />
       </div>
-    </div>
-  )
-}
-
-function LabeledSlider({ label, value, min, max, display, onChange, className }: { label: string; value: number; min: number; max: number; display: string; onChange: (value: number) => void; className?: string }) {
-  return (
-    <div className={cn('flex shrink-0 items-center gap-2.5', className)}>
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <Slider className="w-28 md:w-32" min={min} max={max} step={1} value={[value]} aria-label={label} onValueChange={([next]) => onChange(next ?? value)} />
-      <span className="w-10 text-right text-sm tabular-nums">{display}</span>
     </div>
   )
 }
@@ -225,12 +217,13 @@ function ToolOptions({ engine, snapshot, onCopy }: { engine: EditorEngine; snaps
   if (brushLike) {
     return (
       <div className="flex items-center gap-5">
-        <LabeledSlider
+        <SliderRow
+          layout="inline"
           label={t({ ko: '크기', en: 'Size' })}
           value={sizeToSlider(snapshot.brushSize)}
           min={1}
           max={1000}
-          display={String(snapshot.brushSize)}
+          readout={String(snapshot.brushSize)}
           onChange={(value) => engine.setBrushSize(sliderToSize(value))}
         />
         {tool !== 'ai-erase' ? (
@@ -246,12 +239,13 @@ function ToolOptions({ engine, snapshot, onCopy }: { engine: EditorEngine; snaps
           </IconButton>
         ) : null}
         {tool === 'ai-erase' ? null : !maskTool ? (
-          <LabeledSlider
+          <SliderRow
+          layout="inline"
             label={t({ ko: '불투명도', en: 'Opacity' })}
             value={Math.round(snapshot.brushOpacity * 100)}
             min={1}
             max={100}
-            display={`${Math.round(snapshot.brushOpacity * 100)}%`}
+            readout={`${Math.round(snapshot.brushOpacity * 100)}%`}
             onChange={(value) => engine.setBrushOpacity(value / 100)}
             className="max-md:hidden"
           />
@@ -583,8 +577,8 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
 
       {engine ? (
         <div className="shrink-0 border-t border-line bg-background md:hidden">
-          <div className="flex h-13 items-center gap-1 overflow-x-auto pr-1 pl-4">
-            <div className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none]">
+          <div className="scroll-x flex h-13 items-center gap-1 pr-1 pl-4">
+            <div className="scroll-x theme-nav-scroll flex min-w-0 flex-1 items-center">
               <ToolOptions engine={engine} snapshot={snapshot} onCopy={onCopy} />
             </div>
             {snapshot.tool === 'brush' || snapshot.tool === 'text' ? <ColorChip engine={engine} snapshot={snapshot} /> : null}
@@ -606,7 +600,7 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
               <Layers className="size-5" />
             </IconButton>
           </div>
-          <nav aria-label={t({ ko: '도구', en: 'Tools' })} className="flex h-16 items-center gap-0.5 overflow-x-auto border-t border-line px-2">
+          <nav aria-label={t({ ko: '도구', en: 'Tools' })} className="scroll-x flex h-16 items-center gap-0.5 border-t border-line px-2">
             {groups.flat().map((item) => <ToolButton key={item.tool} engine={engine} snapshot={snapshot} item={item} size="icon-lg" />)}
           </nav>
         </div>

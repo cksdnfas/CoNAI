@@ -94,7 +94,7 @@ function WildcardItemSection({
         >
           <span className="min-w-0 truncate" title={item.content}>{item.content}</span>
         </ListRow>
-      )) : <p className="py-4 text-sm text-muted-foreground">{t({ ko: '등록된 항목이 없어.', en: 'No registered items.' })}</p>}
+      )) : <EmptyState size="compact" className="px-0 py-4" title={t({ ko: '등록된 항목이 없어.', en: 'No registered items.' })} />}
     </RowGroup>
   )
 }

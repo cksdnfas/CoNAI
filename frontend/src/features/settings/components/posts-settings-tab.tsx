@@ -12,9 +12,9 @@ import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
 import { PostsKnowledgeSettingsRows } from './posts-knowledge-settings'
 import { PostsTopicSettings } from './posts-topic-settings'
 import { useSearchParams } from 'react-router-dom'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TextTabs } from '@/components/common/text-tabs'
+import { TabsContent } from '@/components/ui/tabs'
 import type { useContentEvaluationSettings } from '../use-content-evaluation-settings'
-import { SETTINGS_TEXT_TAB_LIST_CLASS, SETTINGS_TEXT_TAB_TRIGGER_CLASS } from './settings-text-tabs'
 
 type PostsSettingsView = 'general' | 'topics' | 'knowledge'
 
@@ -62,13 +62,17 @@ export function PostsSettingsTab({ draft, onPatch, dirty, contentEvaluation }: {
     { key: 'summonsPerAccountPerHour', label: t({ ko: '계정 하나의 시간당 호출', en: 'Calls per account per hour' }) },
   ]
   return (
-    <Tabs value={view} onValueChange={setView} className="gap-6">
-      <TabsList className={SETTINGS_TEXT_TAB_LIST_CLASS}>
-        <TabsTrigger value="general" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '일반', en: 'General' })}</TabsTrigger>
-        <TabsTrigger value="topics" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '주제 관련도', en: 'Topic relevance' })}</TabsTrigger>
-        <TabsTrigger value="knowledge" className={SETTINGS_TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '지식 품질', en: 'Knowledge quality' })}</TabsTrigger>
-        <span className="ml-auto self-start"><SectionDirtyBadge dirty={dirty || contentEvaluation.dirty} /></span>
-      </TabsList>
+    <TextTabs
+      value={view}
+      onChange={setView}
+      className="gap-6"
+      actions={<SectionDirtyBadge dirty={dirty || contentEvaluation.dirty} />}
+      items={[
+        { value: 'general', label: t({ ko: '일반', en: 'General' }) },
+        { value: 'topics', label: t({ ko: '주제 관련도', en: 'Topic relevance' }) },
+        { value: 'knowledge', label: t({ ko: '지식 품질', en: 'Knowledge quality' }) },
+      ]}
+    >
       <TabsContent value="general">
         <div className="space-y-8">
           <RowGroup heading={t({ ko: '게시판', en: 'Posts' })}>
@@ -121,6 +125,6 @@ export function PostsSettingsTab({ draft, onPatch, dirty, contentEvaluation }: {
       <TabsContent value="knowledge">
         <PostsKnowledgeSettingsRows draft={draft.knowledge} onPatch={(patch) => onPatch({ knowledge: { ...draft.knowledge, ...patch } })} />
       </TabsContent>
-    </Tabs>
+    </TextTabs>
   )
 }

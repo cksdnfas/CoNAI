@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
 import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
+import { floatingMotionClassName, floatingSurfaceClassName } from './floating-surface'
 
 function Popover(props: React.ComponentProps<typeof PopoverPrimitive.Root>) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />
@@ -29,8 +30,9 @@ function PopoverContent({ className, align = 'center', sideOffset = 6, onClick, 
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          'z-floating w-72 max-w-[calc(100vw-2rem)] origin-(--radix-popover-content-transform-origin) rounded-md bg-surface-high p-4 text-sm text-foreground shadow-elevation-2 outline-none',
-          'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 motion-reduce:animate-none',
+          floatingSurfaceClassName,
+          floatingMotionClassName,
+          'z-floating w-72 max-w-[calc(100vw-2rem)] origin-(--radix-popover-content-transform-origin) p-4 text-sm text-foreground outline-none',
           className,
         )}
         onClick={stopAtPortalEdge(onClick)}

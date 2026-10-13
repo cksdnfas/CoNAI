@@ -3,6 +3,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { EditorPaneHeader } from '@/components/ui/editor-split'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -69,7 +70,7 @@ function ChoiceOptions({ item, onChange }: { item: ChatJudgeItem; onChange: (pat
 function ItemTestRows({ item, turns }: { item: ChatJudgeItem; turns: ChatJudgeTestTurn[] }) {
   const { t } = useI18n()
   const rows = testRowsOf(item, turns)
-  if (rows.length === 0) return <p className="py-2 text-xs text-muted-foreground">{t({ ko: '이 항목이 판단할 턴이 없어.', en: 'No turns for this item.' })}</p>
+  if (rows.length === 0) return <EmptyState size="compact" title={t({ ko: '이 항목이 판단할 턴이 없어.', en: 'No turns for this item.' })} />
   return (
     <div className="divide-y divide-line">
       {rows.map(({ turn, result }) => {

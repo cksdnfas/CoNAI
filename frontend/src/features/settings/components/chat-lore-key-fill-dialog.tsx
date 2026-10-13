@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Sparkles, X } from 'lucide-react'
+import { Sparkles } from 'lucide-react'
 import { loreKeyLanguageLabel } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -84,7 +84,7 @@ export function ChatLoreKeyFillDialog({ open, language, entries, onApply, onClos
               <Checkbox checked={!skipped.has(entry.id)} onCheckedChange={(checked) => toggle(entry.id, checked === true)} aria-label={t({ ko: '{title}에 넣기', en: 'Add to {title}' }, { title: loreEntryTitle(entry) })} />
               <span className="min-w-0 truncate text-xs text-muted-foreground">{loreEntryTitle(entry)} · {entry.keys.join(', ')}</span>
               <span className="flex min-w-0 flex-wrap gap-1">
-                {result[entry.id].map((key) => <Chip key={key}>{key}<IconButton size="icon-xs" variant="ghost" label={t({ ko: '키워드 삭제', en: 'Remove keyword' })} onClick={() => removeKey(entry.id, key)}><X /></IconButton></Chip>)}
+                {result[entry.id].map((key) => <Chip key={key} removeLabel={t({ ko: '키워드 삭제', en: 'Remove keyword' })} onRemove={() => removeKey(entry.id, key)}>{key}</Chip>)}
               </span>
             </div>)}
             {failed.length > 0 ? <div className="py-2 text-xs text-muted-foreground">{t({ ko: '못 만든 항목 {count}개: {titles}', en: '{count} entries got none: {titles}' }, { count: failed.length, titles: entries.filter((entry) => failed.includes(entry.id)).map((entry) => loreEntryTitle(entry)).join(', ') })}</div> : null}

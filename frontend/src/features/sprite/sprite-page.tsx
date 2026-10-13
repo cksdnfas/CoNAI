@@ -1,11 +1,11 @@
 import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TextTabs } from '@/components/common/text-tabs'
+import { TabsContent } from '@/components/ui/tabs'
 import { useI18n } from '@/i18n'
 import { SpriteAnimationTab } from './sprite-animation-tab'
 import { SpriteExtractTab } from './sprite-extract-tab'
 import { SpriteNormalizeTab } from './sprite-normalize-tab'
-import { TEXT_TAB_LIST_CLASS, TEXT_TAB_TRIGGER_CLASS } from './sprite-ui'
 
 type SpriteTab = 'extract' | 'normalize' | 'animation'
 
@@ -40,15 +40,19 @@ export function SpritePage() {
 
   // All three stay mounted so switching tabs keeps each form and result.
   return (
-    <Tabs value={tab} onValueChange={setTab} className="gap-5">
-      <div data-slot="page-toolbar" className="flex min-h-14 items-end gap-3 border-b border-line pt-2">
-        <TabsList className={`${TEXT_TAB_LIST_CLASS} w-auto flex-1 border-b-0`} aria-label={t({ ko: '스프라이트 메뉴', en: 'Sprite sections' })}>
-          <TabsTrigger value="extract" className={TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '추출', en: 'Extract' })}</TabsTrigger>
-          <TabsTrigger value="normalize" className={TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '정규화', en: 'Normalize' })}</TabsTrigger>
-          <TabsTrigger value="animation" className={TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '애니메이션', en: 'Animation' })}</TabsTrigger>
-        </TabsList>
-        <div ref={setToolbarSlot} className={tab === 'extract' ? 'flex items-center gap-1 pb-1.5' : 'hidden'} />
-      </div>
+    <TextTabs
+      value={tab}
+      onChange={setTab}
+      ariaLabel={t({ ko: '스프라이트 메뉴', en: 'Sprite sections' })}
+      className="gap-5"
+      stripClassName="min-h-14 pt-2"
+      actions={<div ref={setToolbarSlot} className={tab === 'extract' ? 'flex items-center gap-1' : 'hidden'} />}
+      items={[
+        { value: 'extract', label: t({ ko: '추출', en: 'Extract' }) },
+        { value: 'normalize', label: t({ ko: '정규화', en: 'Normalize' }) },
+        { value: 'animation', label: t({ ko: '애니메이션', en: 'Animation' }) },
+      ]}
+    >
       <TabsContent value="extract" forceMount className="data-[state=inactive]:hidden">
         <SpriteExtractTab active={tab === 'extract'} initialVideoHash={videoHash} onVideoChange={onVideoChange} toolbarSlot={toolbarSlot} />
       </TabsContent>
@@ -58,6 +62,6 @@ export function SpritePage() {
       <TabsContent value="animation" forceMount className="data-[state=inactive]:hidden">
         <SpriteAnimationTab active={tab === 'animation'} />
       </TabsContent>
-    </Tabs>
+    </TextTabs>
   )
 }

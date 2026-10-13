@@ -300,7 +300,7 @@ export function PlainTextEditor({ value, onChange, autoFocus = false, fileName, 
 
   return (
     <div className={cn('flex min-w-0 flex-col', !bare && 'theme-input-surface overflow-hidden rounded-sm border focus-within:border-primary/55')}>
-      <div role="toolbar" aria-label={t({ ko: '텍스트 편집 도구', en: 'Text editing tools' })} className="flex items-center gap-0.5 overflow-x-auto border-b border-line px-2 py-1 [scrollbar-width:none]">
+      <div role="toolbar" aria-label={t({ ko: '텍스트 편집 도구', en: 'Text editing tools' })} className="theme-nav-scroll scroll-x flex items-center gap-0.5 border-b border-line px-2 py-1">
         <IconButton variant="ghost" size="icon-sm" label={withShortcut(t({ ko: '실행 취소', en: 'Undo' }), 'Mod+Z')} disabled={!status.canUndo} onClick={() => run(undo)}><Undo2 /></IconButton>
         <IconButton variant="ghost" size="icon-sm" label={withShortcut(t({ ko: '다시 실행', en: 'Redo' }), 'Mod+Y')} disabled={!status.canRedo} onClick={() => run(redo)}><Redo2 /></IconButton>
         <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-line" />

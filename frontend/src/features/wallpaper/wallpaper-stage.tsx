@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -762,7 +763,7 @@ export function WallpaperStage({
             <>
               {isDragging ? null : selectionToolbar ? (
                 <div
-                  className="pointer-events-auto absolute flex -translate-x-1/2 items-center gap-0.5 rounded-md bg-surface-high p-0.5 shadow-elevation-2"
+                  className={cn(floatingSurfaceClassName, 'pointer-events-auto absolute flex -translate-x-1/2 items-center gap-0.5 p-0.5')}
                   style={{
                     left: Math.min(stageWidth - 8, Math.max(8, (selectionBox.x + selectionBox.w / 2) * k)),
                     top: selectionBox.y * k > 44 ? selectionBox.y * k - 40 : (selectionBox.y + selectionBox.h) * k + 26,

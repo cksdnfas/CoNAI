@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Smile } from 'lucide-react'
 import { ToggleChip } from '@/components/ui/chip'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useI18n } from '@/i18n'
 import { getGroupsHierarchyAll } from '@/lib/api-groups'
 
@@ -13,7 +14,7 @@ export function ChatEmoticonGroupPicker({ selected, onChange }: { selected: numb
   const missing = selected.filter((id) => !groups.some((group) => group.id === id))
 
   if (groups.length === 0 && missing.length === 0) {
-    return <p className="text-xs text-muted-foreground">{t({ ko: '이모티콘 그룹이 없어', en: 'No emoticon groups' })}</p>
+    return <EmptyState size="compact" title={t({ ko: '이모티콘 그룹이 없어', en: 'No emoticon groups' })} />
   }
 
   return (

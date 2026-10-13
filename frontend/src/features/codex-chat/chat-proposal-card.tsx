@@ -44,6 +44,7 @@ import { ChatPageProposalCard } from './chat-page-proposal-card'
 import { ChatWorkflowProposalCard } from './chat-workflow-proposal-card'
 import { ChatPageActionCard } from './chat-page-action-card'
 import { ChatAssetProposalCard } from './chat-asset-proposal-card'
+import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
 
 type Proposal = NonNullable<CodexChatToolCall['proposal']>
 type BlockProposal = Extract<Proposal, { kind: 'display_block' }>
@@ -54,8 +55,6 @@ type ChatSettingsProposal = Extract<Proposal, { kind: 'chat_settings' }>
 
 import { TaskPlanCard } from './chat-task-ui'
 
-// Flat: hairlines above and below set a proposal off from the reply text; nothing inside it is boxed again.
-const CARD_CLASS = 'space-y-2.5 border-y border-line py-2.5'
 const DEFAULTS_QUERY_KEY = ['codex-chat-profile-defaults'] as const
 const LONG_TEXT = 160
 
@@ -122,14 +121,14 @@ function Footer({ saved, savedLink, admin, children }: { saved: boolean; savedLi
   const { t } = useI18n()
   if (saved) {
     return (
-      <div className="flex items-center gap-2 border-t border-line pt-2 text-xs text-muted-foreground">
+      <ProposalFooter status>
         <span>{t({ ko: '저장됨', en: 'Saved' })}</span>
         {admin ? <Link to={savedLink} className="text-primary hover:underline">{t({ ko: '설정에서 열기', en: 'Open in settings' })}</Link> : null}
-      </div>
+      </ProposalFooter>
     )
   }
   if (!admin) return null
-  return <div className="flex items-center gap-2 border-t border-line pt-2">{children}</div>
+  return <ProposalFooter>{children}</ProposalFooter>
 }
 
 function OpenEditorButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
@@ -200,12 +199,12 @@ function BlockProposalCard({ proposal, threadId }: { proposal: BlockProposal; th
   }
 
   return (
-    <div className={CARD_CLASS}>
+    <ProposalFrame>
       <Header label={t({ ko: '표시 블록 제안', en: 'Display block proposal' })} name={block.key} />
       <div className="py-1"><ChatDisplayBlockView block={block} data={data} /></div>
       {chips.length > 0 ? (
         <div className="flex flex-wrap gap-1">
-          {chips.map((chip) => <span key={chip} className="rounded-sm bg-fill px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">{chip}</span>)}
+          {chips.map((chip) => <Chip key={chip} size="sm" tone="muted" className="font-mono">{chip}</Chip>)}
         </div>
       ) : null}
       <Footer saved={saved} savedLink="/settings?section=chat&view=resources" admin={admin}>
@@ -220,7 +219,7 @@ function BlockProposalCard({ proposal, threadId }: { proposal: BlockProposal; th
         <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
       </Footer>
       {admin ? <ChatBlockEditorModal open={editorOpen} shared={null} initialName={proposal.name} initialBlock={initialBlock} onClose={() => setEditorOpen(false)} onSaved={handleEditorSaved} /> : null}
-    </div>
+    </ProposalFrame>
   )
 }
 
@@ -281,7 +280,7 @@ function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal
   ].join(' · ')
 
   return (
-    <div className={CARD_CLASS}>
+    <ProposalFrame>
       <Header label={t({ ko: '프로필 제안', en: 'Profile proposal' })} name={input.name} />
       <div className="flex items-center gap-3">
         <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-full border border-dashed border-line text-sm text-muted-foreground">?</span>
@@ -297,7 +296,7 @@ function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal
         <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
       </Footer>
       {admin ? <ChatProfileEditorModal open={editorOpen} profile={null} initialDraft={initialDraft} defaults={defaultsQuery.data} onClose={() => setEditorOpen(false)} /> : null}
-    </div>
+    </ProposalFrame>
   )
 }
 
@@ -417,7 +416,7 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
   }
 
   return (
-    <div className={CARD_CLASS}>
+    <ProposalFrame>
       <Header label={t({ ko: '프로필 수정 제안', en: 'Profile update proposal' })} name={proposal.profileName} />
       <div className="space-y-1.5">
         {keys.map((key) => (
@@ -435,7 +434,7 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
         <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
       </Footer>
       {admin && editorOpen && editorProfile ? <ChatProfileEditorModal open profile={editorProfile} defaults={defaultsQuery.data} onClose={handleEditorClose} /> : null}
-    </div>
+    </ProposalFrame>
   )
 }
 
@@ -459,7 +458,7 @@ function ChatSettingsCard({ proposal, threadId }: { proposal: ChatSettingsPropos
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
   return (
-    <div className={CARD_CLASS}>
+    <ProposalFrame>
       <Header label={t({ ko: '채팅 설정 제안', en: 'Chat settings proposal' })} />
       <div className="space-y-1.5">
         {Object.keys(proposal.patch).map((key) => (
@@ -467,14 +466,14 @@ function ChatSettingsCard({ proposal, threadId }: { proposal: ChatSettingsPropos
         ))}
       </div>
       {saved ? (
-        <div className="border-t border-line pt-2 text-xs text-muted-foreground">{t({ ko: '저장됨', en: 'Saved' })}</div>
+        <ProposalFooter status>{t({ ko: '저장됨', en: 'Saved' })}</ProposalFooter>
       ) : proposal.dismissed ? null : (
-        <div className="flex items-center gap-2 border-t border-line pt-2">
+        <ProposalFooter>
           <span className="flex-1" />
           <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
-        </div>
+        </ProposalFooter>
       )}
-    </div>
+    </ProposalFrame>
   )
 }
 
@@ -530,7 +529,7 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
   ].filter((change) => change.before !== change.after) : []
 
   return (
-    <div className={CARD_CLASS}>
+    <ProposalFrame>
       <Header label={saved && !undone && !proposal.undone ? t({ ko: '로어북에 남겼어', en: 'Kept in the lorebook' }) : t({ ko: '로어북에 남길까?', en: 'Keep this in the lorebook?' })} name={`save_lore · ${proposal.bookName ?? t({ ko: '이 채팅', en: 'this chat' })}`} />
       <div className="space-y-2 text-sm">
         <div className="font-semibold">{proposal.title}</div>
@@ -548,17 +547,17 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
         </div>
       ) : null}
       {saved || dismissed ? (
-        <div className="flex items-center justify-between border-t border-line pt-2 text-xs text-muted-foreground">
+        <ProposalFooter status className="justify-between">
           <span>{undone || proposal.undone ? t({ ko: '되돌렸어', en: 'Undone' }) : saved ? t({ ko: '저장됨', en: 'Saved' }) : t({ ko: '무시함', en: 'Dismissed' })}</span>
           {saved && (proposal.replaces || proposal.undoAfter) && !undone && !proposal.undone ? <IconButton size="icon-xs" variant="ghost" disabled={busy} label={t({ ko: '저장 되돌리기', en: 'Undo save' })} onClick={() => undoMutation.mutate()}><Undo2 /></IconButton> : null}
-        </div>
+        </ProposalFooter>
       ) : (
-        <div className="flex items-center gap-2 border-t border-line pt-2">
+        <ProposalFooter>
           <span className="flex-1" />
           <Button size="xs" variant="ghost" disabled={busy} onClick={() => dismissMutation.mutate()}>{t({ ko: '무시', en: 'Dismiss' })}</Button>
           <SaveButton pending={saveMutation.isPending} disabled={busy} onClick={() => saveMutation.mutate()} />
-        </div>
+        </ProposalFooter>
       )}
-    </div>
+    </ProposalFrame>
   )
 }

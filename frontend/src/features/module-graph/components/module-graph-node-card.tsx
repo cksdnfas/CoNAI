@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { getBuiltinNodeFamily, getBuiltinNodeVariant, listBuiltinNodeVariants } from '@conai/shared'
 import { NodeToolbar, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react'
 import { Copy, Ellipsis, Play, Power, RotateCcw, Trash2 } from 'lucide-react'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
@@ -172,7 +173,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
       } as CSSProperties}
     >
       <NodeToolbar isVisible={selected && !dragging ? undefined : false} position={Position.Top} offset={8}>
-        <div className="nodrag flex items-center gap-0.5 rounded-lg bg-surface-high p-0.5 shadow-elevation-2">
+        <div className={cn(floatingSurfaceClassName, 'nodrag flex items-center gap-0.5 rounded-lg p-0.5')}>
           <IconButton size="icon-xs" variant="ghost" className="text-primary" disabled={!canExecuteGeneration || executionLocked} onClick={() => actions.execute(id, false)} label={t({ ko: '이 노드까지 실행', en: 'Run up to this node' })}>
             <Play />
           </IconButton>

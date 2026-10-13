@@ -1,10 +1,12 @@
 import { useState, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Check, MoreHorizontal, Sparkles, Square, Trash2 } from 'lucide-react'
+import { AlertTriangle, MoreHorizontal, Sparkles, Square, Trash2 } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { Select } from '@/components/ui/select'
+import { textVariants } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
@@ -16,7 +18,7 @@ import { MODEL_SLOTS_QUERY_KEY, listModelSlots } from '@/lib/api-codex-chat'
 import { getGroupEmoticons, getGroupsHierarchyAll, groupEmoticonsQueryKey } from '@/lib/api-groups'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import { cn } from '@/lib/utils'
-import { ReviewChips, SlotVisionReview } from './chat-asset-batch-modal'
+import { ChosenCheckBadge, ReviewChips, SlotVisionReview } from './chat-asset-batch-modal'
 import type { ProfileAssetRuns } from './chat-profile-asset-runs'
 
 /** The library group name the server uses for a character (characterMediaGroupPath). */
@@ -148,7 +150,7 @@ export function AssetCandidateTray({ runs, slotKey, title, currentHash, referenc
         {actions}
       </div>
       {state.candidates.length || state.working ? (
-        <div className="flex gap-2 overflow-x-auto p-1">
+        <div className="scroll-x flex gap-2 p-1">
           {state.working ? <span className={cn('flex shrink-0 items-center justify-center rounded-md bg-fill', size)}><Spinner /></span> : null}
           {state.candidates.map((candidate) => {
             const chosen = candidate.hash === currentHash
@@ -165,7 +167,7 @@ export function AssetCandidateTray({ runs, slotKey, title, currentHash, referenc
                 className={cn('relative shrink-0 overflow-hidden rounded-md bg-fill outline-none focus-visible:ring-2 focus-visible:ring-ring', size, chosen && 'ring-2 ring-primary ring-offset-2 ring-offset-background')}
               >
                 {images.render(candidate.hash)}
-                {chosen ? <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground"><Check className="size-3" /></span> : null}
+                {chosen ? <ChosenCheckBadge /> : null}
               </button>
             )
           })}
@@ -208,7 +210,7 @@ export function ExpressionSlots({ runs, characterName, profileId, referenceHash,
   return (
     <section className="space-y-3">
       <div className="flex min-h-8 flex-wrap items-center gap-2">
-        <h3 className="text-2xs font-semibold tracking-overline text-muted-foreground uppercase">{t({ ko: '표정', en: 'Expressions' })}</h3>
+        <h3 className={textVariants({ variant: 'overline' })}>{t({ ko: '표정', en: 'Expressions' })}</h3>
         <span className="text-xs font-semibold tabular-nums">{names.filter((name) => filled.get(name)).length}/{names.length}</span>
         <span className="flex-1" />
         <AssetPresetPicker runs={runs} showExpressionMenu />
@@ -231,7 +233,7 @@ export function ExpressionSlots({ runs, characterName, profileId, referenceHash,
                 {hash ? <div className="pointer-events-none size-full">{images.render(hash)}</div> : null}
                 {working ? <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/50"><Spinner /></span> : null}
                 {!working && state.failed ? <span className="pointer-events-none absolute left-1 top-1 text-warning"><AlertTriangle className="size-4" /></span> : null}
-                {state.candidates.length > 1 ? <span className="pointer-events-none absolute right-1 top-1 rounded bg-backdrop px-1 text-2xs font-bold leading-4 text-white tabular-nums">{state.candidates.length}</span> : null}
+                {state.candidates.length > 1 ? <Badge variant="overlay" size="xs" className="pointer-events-none absolute top-1 right-1 font-bold tabular-nums">{state.candidates.length}</Badge> : null}
                 {!hash && !working ? (
                   <span className="pointer-events-none absolute inset-0 flex items-center justify-center [&>*]:pointer-events-auto">
                     <IconButton size="icon-sm" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(name)} label={generateLabel} onClick={() => void runs.start({ kind: 'expressions', names: [name] }, true)}><Sparkles /></IconButton>

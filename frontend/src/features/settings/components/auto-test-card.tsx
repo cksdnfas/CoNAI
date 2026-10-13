@@ -16,6 +16,7 @@ import { EnhancedVideoPlayer } from '@/features/images/components/detail/enhance
 import { SettingRow } from '@/components/ui/setting-row'
 import { SETTINGS_WIDE_CONTROL_CLASS } from './settings-rows'
 import { Section } from '@/components/ui/section'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 
 function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope): TextSearchScope {
@@ -144,7 +145,7 @@ export function AutoTestCard({
 
       {extractedPromptCards.length > 0 ? (
         <div>
-          <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</div>
+          <Text as="div" variant="overline">{t({ ko: '추출 프롬프트', en: 'Extracted prompt' })}</Text>
           <div className="mt-3">
             <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
           </div>

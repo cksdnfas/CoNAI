@@ -18,7 +18,8 @@ import { CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage, type ClaudeMo
 import { ClaudeEffortSelect, ClaudeModelSelect } from './claude-model-select'
 import { JudgeModelSelect, useDefaultJudgeLabel, useModelLabel } from './chat-judge-connection-select'
 import { applyRoleChoice, ModelRoleSelect, roleChoice, type SuggestWriters } from './chat-model-role-select'
-import { GROW_TEXTAREA, numberOrNull, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { GROW_TEXTAREA, numberOrNull, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { ContentRatingSelect, useCeilingLabel } from './content-rating-select'
 import { EditorGroup } from '@/components/ui/editor-group'
 

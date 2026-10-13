@@ -1,15 +1,16 @@
-import { useId, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CheckCheck, Search, X } from 'lucide-react'
+import { CheckCheck, X } from 'lucide-react'
+import { SearchField } from '@/components/common/search-field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
-import { Switch } from '@/components/ui/switch'
+import { LoadingState } from '@/components/ui/loading-state'
 import { Tip } from '@/components/ui/tooltip'
 import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { groupChatTools, matchesChatTool, type ChatToolGroup } from '@/features/codex-chat/chat-tool-catalog'
 import { useI18n } from '@/i18n'
 import { listChatTools, type ChatScope } from '@/lib/api-codex-chat'
+import { SwitchLine } from '@/components/ui/switch-line'
 
 /** The server's chat-grantable tools, grouped for the picker (cached: the catalog changes only with a deploy). */
 export function useChatToolGroups(enabled: boolean) {
@@ -32,7 +33,6 @@ export function ChatToolPicker({ groups, scopes, allowlist, onChange, loading = 
   loading?: boolean
 }) {
   const { t } = useI18n()
-  const allToolsId = useId()
   const [query, setQuery] = useState('')
   const visibleGroups = groups.filter((group) => scopes.includes(group.scope))
   const names = visibleGroups.flatMap((group) => group.tools.map((tool) => tool.name))
@@ -46,16 +46,10 @@ export function ChatToolPicker({ groups, scopes, allowlist, onChange, loading = 
 
   return (
     <div className="space-y-3">
-      <div className="flex min-h-10 items-center justify-between gap-3 text-sm">
-        <label htmlFor={allToolsId} className="flex-1 cursor-pointer">{t({ ko: '권한 안의 모든 도구 사용', en: 'Use every tool in the scopes' })}</label>
-        <Switch id={allToolsId} checked={allowlist === null} onCheckedChange={(all) => onChange(all ? null : names)} />
-      </div>
+      <SwitchLine label={t({ ko: '권한 안의 모든 도구 사용', en: 'Use every tool in the scopes' })} checked={allowlist === null} onCheckedChange={(all) => onChange(all ? null : names)} />
       {allowlist !== null ? (
         <div className="space-y-4">
-          <div className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input variant="settings" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t({ ko: '도구 찾기', en: 'Find a tool' })} className="pl-9" aria-label={t({ ko: '도구 찾기', en: 'Find a tool' })} />
-          </div>
+          <SearchField value={query} onChange={setQuery} placeholder={t({ ko: '도구 찾기', en: 'Find a tool' })} />
           {scopes.map((scope) => {
             const scopeGroups = visibleGroups.filter((group) => group.scope === scope)
             if (scopeGroups.length === 0) return null
@@ -108,7 +102,7 @@ export function ChatToolPicker({ groups, scopes, allowlist, onChange, loading = 
               </div>
             )
           })}
-          {loading ? <p className="text-xs text-muted-foreground">{t({ ko: '도구 목록을 불러오는 중…', en: 'Loading tools…' })}</p> : null}
+          {loading ? <LoadingState variant="inline" label={t({ ko: '도구 목록을 불러오는 중…', en: 'Loading tools…' })} /> : null}
         </div>
       ) : null}
     </div>

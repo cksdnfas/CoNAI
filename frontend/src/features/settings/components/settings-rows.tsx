@@ -1,5 +1,8 @@
 import { Fragment, type ReactNode } from 'react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 /**
@@ -62,7 +65,25 @@ export function SettingsStatLine({ items, className }: { items: SettingsStatItem
   )
 }
 
-/** Muted one-line message in place of an empty list (no box). */
+/** Muted one-line message in place of an empty list (no box), flush with the rows' text. */
 export function SettingsEmptyRow({ children }: { children: ReactNode }) {
-  return <p className="py-4 text-sm text-muted-foreground">{children}</p>
+  return <EmptyState size="compact" title={children} className="px-0 py-4" />
+}
+
+/** What blocks saving a settings group, listed above its rows. Nothing when the list is empty. */
+export function SettingsValidationAlert({ messages }: { messages: string[] }) {
+  const { t } = useI18n()
+  if (messages.length === 0) return null
+  return (
+    <Alert variant="destructive" className="mb-2">
+      <AlertTitle>{t({ ko: '저장 전에 확인해줘', en: 'Check before saving' })}</AlertTitle>
+      <AlertDescription>
+        <ul className="list-disc space-y-1 pl-5 text-xs">
+          {messages.map((message) => (
+            <li key={message}>{message}</li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
+  )
 }

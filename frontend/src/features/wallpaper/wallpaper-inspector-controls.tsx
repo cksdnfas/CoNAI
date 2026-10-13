@@ -1,12 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { Text } from '@/components/ui/text'
 import { RotateCcw } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { IconButton } from '@/components/ui/icon-button'
-import { Slider } from '@/components/ui/slider'
-import { Switch } from '@/components/ui/switch'
+import { SliderRow, type SliderRowProps } from '@/components/ui/slider-row'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { WallpaperColorWell } from './wallpaper-color-picker'
+
+/** Width of InspectorRow's 84px label column, for the sliders' label so the controls line up. */
+const INSPECTOR_LABEL_WIDTH = 'w-21'
 
 /** Label on the left, control on the right (one inspector line). */
 export function InspectorRow({ label, children, className }: { label: ReactNode; children: ReactNode; className?: string }) {
@@ -20,72 +23,12 @@ export function InspectorRow({ label, children, className }: { label: ReactNode;
 
 /** A small overline that starts a group of rows. */
 export function InspectorHeading({ children }: { children: ReactNode }) {
-  return <div className="pt-2 text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{children}</div>
+  return <Text as="div" variant="overline" className="pt-2">{children}</Text>
 }
 
-/** The slider's readout, typed into directly; commits on blur or Enter, clamped to the slider range. */
-function SliderValueInput({ value, min, max, unit, label, mixed = false, onCommit }: {
-  value: number
-  min: number
-  max: number
-  unit: string
-  label?: string
-  mixed?: boolean
-  onCommit: (value: number) => void
-}) {
-  const { t } = useI18n()
-  const shown = mixed ? '' : String(Math.round(value * 100) / 100)
-  const [draft, setDraft] = useState(shown)
-  useEffect(() => setDraft(shown), [shown])
-  const commit = () => {
-    const parsed = Number(draft.replace(unit, '').trim())
-    if (!draft.trim() || !Number.isFinite(parsed)) {
-      setDraft(shown)
-      return
-    }
-    const clamped = Math.min(max, Math.max(min, parsed))
-    setDraft(String(Math.round(clamped * 100) / 100))
-    if (mixed || clamped !== value) onCommit(clamped)
-  }
-  return (
-    <label className="flex h-7 w-14 shrink-0 items-center justify-end rounded-md px-1 font-mono text-xs tabular-nums text-muted-foreground hover:bg-field focus-within:bg-field focus-within:text-foreground">
-      <input
-        inputMode="decimal"
-        aria-label={label}
-        className="w-full min-w-0 bg-transparent text-right outline-none placeholder:font-sans placeholder:text-muted-foreground"
-        placeholder={mixed ? t({ ko: '혼합', en: 'Mixed' }) : undefined}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') commit()
-          if (event.key === 'Escape') setDraft(shown)
-        }}
-      />
-      {unit ? <span className="shrink-0">{unit}</span> : null}
-    </label>
-  )
-}
-
-export function InspectorSlider({ label, value, min, max, step = 1, unit = '', mixed = false, onChange }: {
-  label: ReactNode
-  value: number
-  min: number
-  max: number
-  step?: number
-  unit?: string
-  /** Several selected widgets disagree: the thumb is dimmed and the readout empty until a value is set. */
-  mixed?: boolean
-  onChange: (value: number) => void
-}) {
-  return (
-    <InspectorRow label={label}>
-      <div className="flex items-center gap-3">
-        <Slider className={mixed ? 'opacity-45' : undefined} value={[value]} min={min} max={max} step={step} onValueChange={([next]) => onChange(next)} aria-label={typeof label === 'string' ? label : undefined} />
-        <SliderValueInput value={value} min={min} max={max} unit={unit} mixed={mixed} label={typeof label === 'string' ? label : undefined} onCommit={onChange} />
-      </div>
-    </InspectorRow>
-  )
+/** The shared SliderRow with the inspector's label column and a typed readout. */
+export function InspectorSlider(props: Omit<SliderRowProps, 'editable' | 'labelClassName' | 'layout'>) {
+  return <SliderRow {...props} editable labelClassName={INSPECTOR_LABEL_WIDTH} />
 }
 
 export function InspectorSegments<T extends string>({ label, value, items, onChange, stacked = false }: {
@@ -107,15 +50,6 @@ export function InspectorSegments<T extends string>({ label, value, items, onCha
     )
   }
   return <InspectorRow label={label}>{control}</InspectorRow>
-}
-
-export function InspectorSwitch({ label, checked, onChange }: { label: ReactNode; checked: boolean; onChange: (checked: boolean) => void }) {
-  return (
-    <label className="flex cursor-pointer items-center justify-between gap-3 py-1 text-sm">
-      <span>{label}</span>
-      <Switch checked={checked} onCheckedChange={onChange} />
-    </label>
-  )
 }
 
 /** `#abc`, `abc`, `aabbcc` or `aabbccdd` → `#aabbcc(dd)` (a full-opacity `ff` drops); empty → null; else undefined. */

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Eye, ImageDown, Plus, Trash2 } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
+import { AvatarButton } from '@/components/ui/avatar-button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -61,10 +62,9 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
       <EditorGroup>
         <div className="flex items-center gap-4">
           <Tip content={t({ ko: '외형에서 바꾸기', en: 'Change under Appearance' })}>
-            {/* eslint-disable-next-line no-restricted-syntax -- the avatar itself is the control; Button padding would crop it */}
-            <button type="button" className="shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40" onClick={onOpenAppearance} aria-label={t({ ko: '외형에서 바꾸기', en: 'Change under Appearance' })}>
+            <AvatarButton onClick={onOpenAppearance} aria-label={t({ ko: '외형에서 바꾸기', en: 'Change under Appearance' })}>
               <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} imageUrl={draftProfileAssetUrl(draft, profile, 'avatar')} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine={draft.engine} size="xl" />
-            </button>
+            </AvatarButton>
           </Tip>
           <div className="min-w-0 flex-1 space-y-2">
             <Input variant="settings" className={cn(filled('name') && ASSIST_FILLED_CLASS)} value={draft.name} maxLength={60} placeholder={t({ ko: '이름', en: 'Name' })} aria-label={t({ ko: '이름', en: 'Name' })} onChange={(event) => patch({ name: event.target.value })} />

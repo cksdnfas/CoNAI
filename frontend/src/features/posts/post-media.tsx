@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import type { PostMediaRef } from '@conai/shared'
 import { Download, ExternalLink, File as FileIcon, FileText, ImageOff, Lock, Music, Pause, Play } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
+import { Badge } from '@/components/ui/badge'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { WaveformThumb } from '@/features/audio/audio-waveform'
 import { audioPlayer, useAudioPlayer } from '@/features/audio/audio-player'
@@ -126,9 +127,9 @@ export function LibraryMedia({ hash, caption, tile = false, autoPlay = true, cla
     <div ref={ref} className={cn('relative', !tile && 'post-media max-w-full', className)}>
       {body}
       {query.data && kind !== 'image' ? (
-        <span className="pointer-events-none absolute left-2 top-2 rounded-sm bg-backdrop px-1.5 text-2xs font-medium leading-5 text-white">
+        <Badge variant="overlay" size="sm" className="pointer-events-none absolute top-2 left-2">
           {kind === 'video' ? t({ ko: '영상', en: 'Video' }) : t({ ko: '움짤', en: 'GIF' })}
-        </span>
+        </Badge>
       ) : null}
       {caption && !tile ? <span className="mt-1 block text-xs text-muted-foreground">{caption}</span> : null}
     </div>

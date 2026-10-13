@@ -31,6 +31,11 @@ const terminal = (status: string) => ['completed', 'failed', 'cancelled'].includ
 const activeAttempt = (attempt: ChatAssetBatch['slots'][number]['attempts'][number]) => !terminal(attempt.status)
 const running = (batch?: ChatAssetBatch) => batch?.slots.some((slot) => slot.attempts.some(activeAttempt)) === true
 
+/** The check in the corner of the chosen candidate thumbnail (the thumbnail itself carries the ring). */
+export function ChosenCheckBadge() {
+  return <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground"><Check className="size-3" /></span>
+}
+
 export function ReviewChips({ review }: { review?: ChatAssetReview }) {
   const { t } = useI18n()
   if (!review) return null
@@ -267,7 +272,7 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
               {working ? <IconButton variant="ghost" size="icon-sm" disabled={busy || slot?.attempts.filter(activeAttempt).every((attempt) => attempt.cancelRequested)} label={t({ ko: '취소', en: 'Cancel' })} onClick={() => slotMutation.mutate({ slotKey: entry.slotKey, action: 'cancel' })}><Square /></IconButton> : null}
               <IconButton variant="ghost" size="icon-sm" disabled={!slot || busy || referenceBlocked} label={referenceBlocked ? t({ ko: '기준 이미지를 먼저 골라줘', en: 'Choose the reference first' }) : t({ ko: '다시 만들기', en: 'Regenerate' })} onClick={() => slotMutation.mutate({ slotKey: entry.slotKey, action: 'regenerate' })}><RefreshCw /></IconButton>
             </div>
-            <div className="flex gap-3 overflow-x-auto p-1">
+            <div className="scroll-x flex gap-3 p-1">
               {slotCandidates.map((candidate, index) => {
                 const image = visibleImages.get(candidate.compositeHash)
                 const imageQuery = images[hashes.indexOf(candidate.compositeHash)]
@@ -275,7 +280,7 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
                 const selected = slot?.chosenHash === candidate.compositeHash
                 return <Tip key={`${candidate.historyId}:${index}`} content={image ? t({ ko: '클릭해서 고르기 · 더블클릭해서 크게 보기', en: 'Click to choose · Double-click to view' }) : t({ ko: '이미지를 다시 불러오기', en: 'Reload image' })}><Panel asChild interactive tone="none" padding="none"><button type="button" disabled={create.isPending || apply.isPending || (!image && loading)} aria-pressed={selected} aria-label={t({ ko: '{name} 후보 {index} 고르기', en: 'Choose {name} candidate {index}' }, { name: entry.slotKey, index: index + 1 })} onClick={() => { if (!image) { void imageQuery?.refetch(); return } if (!busy) slotMutation.mutate({ slotKey: entry.slotKey, action: 'choose', hash: candidate.compositeHash }) }} onDoubleClick={() => { const index = safety.visibleItems.findIndex((image) => image.composite_hash === candidate.compositeHash); if (index >= 0) setLightboxIndex(index) }} className={cn('relative shrink-0 overflow-hidden rounded-md bg-foreground/5 outline-none focus-visible:ring-2 focus-visible:ring-ring', dimensions, selected && 'ring-2 ring-primary ring-offset-2 ring-offset-background')}>
                   {image ? <><ChatProfileImage src={buildApiUrl(`/api/images/${candidate.compositeHash}/file`)} className={safety.shouldBlurItemPreview(image) ? 'blur-lg' : undefined} />{safety.renderItemPersistentOverlay(image)}</> : <span className="flex h-full items-center justify-center text-muted-foreground">{loading ? <Spinner /> : <ImageOff />}</span>}
-                  {selected ? <span className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-primary text-primary-foreground"><Check className="size-3" /></span> : null}
+                  {selected ? <ChosenCheckBadge /> : null}
                 </button></Panel></Tip>
               })}
               {slot?.attempts.filter((attempt) => activeAttempt(attempt) || attempt.status === 'failed' || attempt.status === 'cancelled' || !attempt.candidates.length).map((attempt) => <div key={attempt.jobId} title={attempt.failureCode ?? attempt.status} className={cn('flex shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-line text-xs text-muted-foreground', dimensions)}>{activeAttempt(attempt) ? attempt.status === 'queued' ? null : <Spinner /> : <AlertTriangle className="size-5 text-warning" />}{activeAttempt(attempt) ? attempt.cancelRequested ? t({ ko: '취소 중', en: 'Cancelling' }) : attempt.status === 'queued' ? t({ ko: '대기', en: 'Waiting' }) : t({ ko: '만드는 중', en: 'Creating' }) : attempt.status === 'cancelled' ? t({ ko: '취소됨', en: 'Cancelled' }) : t({ ko: '실패', en: 'Failed' })}</div>)}

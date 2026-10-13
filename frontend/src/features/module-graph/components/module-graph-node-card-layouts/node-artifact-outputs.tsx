@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CodeBlock } from '@/components/ui/code-block'
 import { Modal } from '@/components/ui/modal'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -109,9 +110,9 @@ export function NodeArtifactOutputs({
         widthClassName="max-w-3xl"
         onClose={() => setArtifactTextModal(null)}
       >
-        <pre className="max-h-[70vh] overflow-auto rounded-sm bg-surface-low p-3 text-xs leading-5 text-foreground whitespace-pre-wrap break-words">
+        <CodeBlock maxHeight="screen">
           {artifactTextModal?.text ?? ''}
-        </pre>
+        </CodeBlock>
       </Modal>
     </>
   )

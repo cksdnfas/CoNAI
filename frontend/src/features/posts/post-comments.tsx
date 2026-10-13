@@ -5,6 +5,7 @@ import type { PostBotRun, PostComment, PostDetail, PostMentionableProfile } from
 import { Check, CornerDownRight, Eye, EyeOff, MessageSquareReply, Pencil, Send, Trash2, X } from 'lucide-react'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -121,7 +122,7 @@ function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, pla
   return (
     <div className="relative">
       {options.length ? (
-        <div role="listbox" className="absolute bottom-full left-0 z-20 mb-1 w-72 max-w-full rounded-md border border-line bg-surface-high p-1 shadow-lg">
+        <div role="listbox" data-surface="high" className={cn(floatingSurfaceClassName, 'absolute bottom-full left-0 z-20 mb-1 w-72 max-w-full p-1')}>
           {options.map((profile, index) => (
             <Button
               key={profile.id}

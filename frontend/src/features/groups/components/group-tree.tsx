@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { Check } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import type { ActionMenuEntry } from '@/components/ui/action-menu'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -104,7 +105,7 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
   }), [])
 
   if (visibleGroups.length === 0 && filterText.trim()) {
-    return <p className="px-2 py-3 text-sm text-muted-foreground">{t({ ko: '맞는 그룹 없음', en: 'No matching groups' })}</p>
+    return <EmptyState size="compact" title={t({ ko: '맞는 그룹 없음', en: 'No matching groups' })} />
   }
 
   return (

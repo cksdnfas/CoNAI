@@ -4,6 +4,8 @@ import { MessageSquare, Pause, Play, Plus, Rocket, SquarePen, Trash2 } from 'luc
 import { CHAT_ROUTINE_LIMITS, type ChatPageData } from '@conai/shared'
 import { FieldTabs, FramedField } from '@/components/common/field-tabs'
 import { ScheduleField, shortRunLabel, toDateTimeLocal, type ScheduleValue } from '@/components/common/schedule-field'
+import { ScheduleRow } from '@/components/common/schedule-row'
+import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -25,7 +27,6 @@ import {
 } from '@/lib/api-chat-routines'
 import { CHAT_PROFILES_QUERY_KEY, listChatProfiles, listCodexChatThreads } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
-import { cn } from '@/lib/utils'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProfilePicker, ChatRoomFace, ChatRoomPicker } from './chat-room-picker'
 import { CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
@@ -56,12 +57,6 @@ function statusLabel(routine: ChatRoutineView, t: Translate) {
   if (routine.status === 'error_stopped') return t({ ko: '오류로 중지', en: 'Stopped on errors' })
   if (routine.status === 'completed') return t({ ko: '완료', en: 'Done' })
   return t({ ko: '일시정지', en: 'Paused' })
-}
-
-/** The status as a dot before the name (its label is the dot's name). */
-function StatusDot({ routine, t }: { routine: ChatRoutineView; t: Translate }) {
-  const tone = routine.status === 'active' ? 'bg-success' : routine.status === 'error_stopped' ? 'bg-destructive' : 'bg-surface-highest ring-1 ring-inset ring-muted-foreground/60'
-  return <span role="img" aria-label={statusLabel(routine, t)} className={cn('size-1.5 shrink-0 rounded-full', tone)} />
 }
 
 function scheduleLabel(routine: ChatRoutineView, t: Translate, formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string) {
@@ -144,45 +139,37 @@ export function ChatRoutineRows({ routines, onEdit }: { routines: ChatRoutineVie
           ? t({ ko: '{count} / {max}회', en: '{count} / {max} runs' }, { count: routine.runCount, max: routine.maxRunCount })
           : t({ ko: '{count}회', en: '{count} runs' }, { count: routine.runCount })
         return (
-          <div key={routine.id} className="border-b border-line py-2.5 last:border-b-0">
-            <div className="flex items-start gap-3">
-              <span className="flex shrink-0 pt-0.5">{face}</span>
-              <div className="min-w-0 flex-1 space-y-0.5">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <StatusDot routine={routine} t={t} />
-                  <span className="truncate text-sm font-semibold text-foreground">{routine.name}</span>
-                  <span className="text-xs font-semibold tabular-nums text-secondary-text">{scheduleLabel(routine, t, formatDate)}</span>
-                </div>
-                <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                  <span className="truncate">{roomName}</span>
-                  {isGroup ? <span className="shrink-0 rounded-[3px] bg-surface-high px-1 text-2xs font-semibold">{t({ ko: '그룹 {count}', en: 'Group {count}' }, { count: thread?.member_profile_ids?.length ?? 0 })}</span> : null}
-                  {who ? <><span aria-hidden="true">·</span><span className="truncate">{who}</span></> : null}
-                  {isGroup && routine.chainLimit !== null ? <><span aria-hidden="true">·</span><span>{t({ ko: '이어 부르기 {count}', en: 'Chain {count}' }, { count: routine.chainLimit })}</span></> : null}
-                  {routine.accountName && routine.accountId !== myAccountId ? <><span aria-hidden="true">·</span><span>{routine.accountName}</span></> : null}
-                </div>
-                <div className="flex flex-wrap items-center gap-x-1.5 text-2xs tabular-nums text-muted-foreground">
-                  <span>{runs}</span>
-                  {lastResultLabel(routine, t) ? <><span aria-hidden="true">·</span>{lastResultLabel(routine, t)}</> : null}
-                </div>
-              </div>
-              <div className="hidden shrink-0 flex-col items-end pt-0.5 text-2xs tabular-nums text-muted-foreground sm:flex">
-                {routine.status === 'active' && routine.nextRunAt ? <>
-                  <span>{t({ ko: '다음', en: 'Next' })}</span>
-                  <span className="text-xs font-semibold text-foreground">{shortRunLabel(routine.nextRunAt, t, formatDate)}</span>
-                </> : <span className={cn(routine.status === 'error_stopped' && 'text-destructive')}>{statusLabel(routine, t)}</span>}
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <IconButton size="icon-sm" variant="ghost" disabled={routine.threadId === null || !chat} onClick={() => routine.threadId !== null && openRoom(routine.threadId)} label={t({ ko: '방 열기', en: 'Open room' })}><MessageSquare /></IconButton>
-                <IconButton size="icon-sm" variant="ghost" disabled={busy || routine.running} onClick={() => action.mutate({ kind: 'run', routine })} label={t({ ko: '지금 실행', en: 'Run now' })}><Rocket /></IconButton>
-                <IconButton size="icon-sm" variant="ghost" disabled={busy || routine.running} onClick={() => onEdit(routine)} label={t({ ko: '루틴 수정', en: 'Edit routine' })}><SquarePen /></IconButton>
-                {routine.status === 'active'
-                  ? <IconButton size="icon-sm" variant="ghost" disabled={busy} onClick={() => action.mutate({ kind: 'pause', routine })} label={t({ ko: '일시정지', en: 'Pause' })}><Pause /></IconButton>
-                  : <IconButton size="icon-sm" variant="ghost" disabled={busy} onClick={() => action.mutate({ kind: 'resume', routine })} label={t({ ko: '다시 켜기', en: 'Resume' })}><Play /></IconButton>}
-                <IconButton size="icon-sm" variant="ghost" disabled={busy || routine.running} onClick={() => void remove(routine)} label={t({ ko: '루틴 삭제', en: 'Delete routine' })}><Trash2 /></IconButton>
-              </div>
-            </div>
-            {reason ? <div role="status" className={cn('mt-2 ml-11 rounded-sm px-3 py-2 text-xs', routine.status === 'error_stopped' || routine.lastResult === 'failed' ? 'bg-destructive-soft/50 text-destructive-soft-foreground' : 'bg-warning-soft/45 text-muted-foreground')}>{reason}</div> : null}
-          </div>
+          <ScheduleRow
+            key={routine.id}
+            leading={<span className="flex shrink-0 pt-0.5">{face}</span>}
+            status={routine.status === 'active' ? 'active' : routine.status === 'error_stopped' ? 'stopped' : 'idle'}
+            statusLabel={statusLabel(routine, t)}
+            name={routine.name}
+            cadence={scheduleLabel(routine, t, formatDate)}
+            nextRunAt={routine.nextRunAt}
+            notice={reason}
+            noticeTone={routine.status === 'error_stopped' || routine.lastResult === 'failed' ? 'destructive' : 'warning'}
+            details={<>
+              <span className="truncate">{roomName}</span>
+              {isGroup ? <Chip size="sm" tone="muted" className="font-semibold">{t({ ko: '그룹 {count}', en: 'Group {count}' }, { count: thread?.member_profile_ids?.length ?? 0 })}</Chip> : null}
+              {who ? <><span aria-hidden="true">·</span><span className="truncate">{who}</span></> : null}
+              {isGroup && routine.chainLimit !== null ? <><span aria-hidden="true">·</span><span>{t({ ko: '이어 부르기 {count}', en: 'Chain {count}' }, { count: routine.chainLimit })}</span></> : null}
+              {routine.accountName && routine.accountId !== myAccountId ? <><span aria-hidden="true">·</span><span>{routine.accountName}</span></> : null}
+            </>}
+            stats={<>
+              <span>{runs}</span>
+              {lastResultLabel(routine, t) ? <><span aria-hidden="true">·</span>{lastResultLabel(routine, t)}</> : null}
+            </>}
+            actions={<>
+              <IconButton size="icon-sm" variant="ghost" disabled={routine.threadId === null || !chat} onClick={() => routine.threadId !== null && openRoom(routine.threadId)} label={t({ ko: '방 열기', en: 'Open room' })}><MessageSquare /></IconButton>
+              <IconButton size="icon-sm" variant="ghost" disabled={busy || routine.running} onClick={() => action.mutate({ kind: 'run', routine })} label={t({ ko: '지금 실행', en: 'Run now' })}><Rocket /></IconButton>
+              <IconButton size="icon-sm" variant="ghost" disabled={busy || routine.running} onClick={() => onEdit(routine)} label={t({ ko: '루틴 수정', en: 'Edit routine' })}><SquarePen /></IconButton>
+              {routine.status === 'active'
+                ? <IconButton size="icon-sm" variant="ghost" disabled={busy} onClick={() => action.mutate({ kind: 'pause', routine })} label={t({ ko: '일시정지', en: 'Pause' })}><Pause /></IconButton>
+                : <IconButton size="icon-sm" variant="ghost" disabled={busy} onClick={() => action.mutate({ kind: 'resume', routine })} label={t({ ko: '다시 켜기', en: 'Resume' })}><Play /></IconButton>}
+              <IconButton size="icon-sm" variant="ghost" disabled={busy || routine.running} onClick={() => void remove(routine)} label={t({ ko: '루틴 삭제', en: 'Delete routine' })}><Trash2 /></IconButton>
+            </>}
+          />
         )
       })}
     </div>

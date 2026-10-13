@@ -2,7 +2,7 @@ import { Languages } from 'lucide-react'
 import { useI18n, type AppLanguage } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { SegmentedControl } from '@/components/common/segmented-control'
-import { Button } from '@/components/ui/button'
+import { TextTabs } from '@/components/common/text-tabs'
 import { Tip } from '@/components/ui/tooltip'
 
 /** Native names so each option is recognisable whatever language is active. */
@@ -65,29 +65,20 @@ export function LanguageTabs({ className }: { className?: string }) {
   const optionText = useLanguageOptionText()
 
   return (
-    <div role="radiogroup" aria-label={t({ ko: '표시 언어', en: 'Display language' })} className={cn('flex items-center gap-4', className)}>
-      {LANGUAGE_OPTIONS.map((option) => {
-        const isSelected = languageOverride === option
-        return (
-          <Tip key={option ?? DEFAULT_OPTION_VALUE} content={optionText.tip(option)}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              role="radio"
-              aria-checked={isSelected}
-              lang={option ?? undefined}
-              onClick={() => setLanguageOverride(option)}
-              className={cn(
-                'h-7 shrink-0 rounded-none border-b-2 px-0.5 font-normal hover:bg-transparent',
-                isSelected ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {optionText.label(option)}
-            </Button>
+    <TextTabs
+      className={className}
+      hairline={false}
+      ariaLabel={t({ ko: '표시 언어', en: 'Display language' })}
+      value={languageOverride ?? DEFAULT_OPTION_VALUE}
+      onChange={(value) => setLanguageOverride(value === DEFAULT_OPTION_VALUE ? null : (value as AppLanguage))}
+      items={LANGUAGE_OPTIONS.map((option) => ({
+        value: option ?? DEFAULT_OPTION_VALUE,
+        label: (
+          <Tip content={optionText.tip(option)}>
+            <span lang={option ?? undefined}>{optionText.label(option)}</span>
           </Tip>
-        )
-      })}
-    </div>
+        ),
+      }))}
+    />
   )
 }

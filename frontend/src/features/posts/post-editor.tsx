@@ -2,11 +2,12 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEven
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostCategory, PostCommentMode, PostDetail, PostStatus } from '@conai/shared'
 import { CHAT_PAGE_LIMITS, POST_LIMITS } from '@conai/shared'
-import { AudioLines, FolderTree, Image as ImageIcon, Link as LinkIcon, Paperclip, X } from 'lucide-react'
+import { AudioLines, FolderTree, Image as ImageIcon, Link as LinkIcon, Paperclip } from 'lucide-react'
 import { FieldTabs } from '@/components/common/field-tabs'
 import type { PlainTextEditorHandle } from '@/components/common/plain-text-editor'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Select } from '@/components/ui/select'
@@ -98,10 +99,7 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[
   return (
     <div className="flex min-h-9 min-w-0 flex-1 flex-wrap items-center gap-1 rounded-sm bg-fill px-2 py-1">
       {tags.map((tag) => (
-        <span key={tag} className="inline-flex items-center gap-0.5 rounded-full bg-primary/15 pl-2 pr-0.5 text-xs leading-6 text-primary">
-          #{tag}
-          <IconButton size="icon-xs" variant="ghost" className="size-5 rounded-full text-primary hover:bg-primary/20 hover:text-primary" label={t({ ko: '{tag} 빼기', en: 'Remove {tag}' }, { tag })} onClick={() => onChange(tags.filter((item) => item !== tag))}><X /></IconButton>
-        </span>
+        <Chip key={tag} tone="primary" removeLabel={t({ ko: '{tag} 빼기', en: 'Remove {tag}' }, { tag })} onRemove={() => onChange(tags.filter((item) => item !== tag))}>#{tag}</Chip>
       ))}
       <input
         value={draft}

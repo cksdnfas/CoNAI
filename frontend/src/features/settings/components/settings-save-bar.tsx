@@ -2,6 +2,8 @@ import { Check, CircleDot, LoaderCircle, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
+import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import type { SettingsDraftSection } from '../settings-draft-sections'
 import type { SettingsTab } from '../settings-tabs'
@@ -41,7 +43,7 @@ export function SettingsSaveBar({ dirtySections, isSaving, onSave, onDiscard, on
 
   return (
     <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-30 mt-8" role="region" aria-label={t({ ko: '설정 저장', en: 'Save settings' })}>
-      <div className="theme-floating-panel flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-surface-high py-2 pr-2 pl-4 shadow-elevation-2">
+      <div className={cn('theme-floating-panel', floatingSurfaceClassName, 'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg py-2 pr-2 pl-4')}>
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5" aria-live="polite">
           <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-foreground">
             <CircleDot className="h-4 w-4 text-primary" aria-hidden />

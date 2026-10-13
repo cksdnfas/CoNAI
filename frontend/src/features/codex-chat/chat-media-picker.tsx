@@ -2,6 +2,7 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useEffect, useMemo, useState } from 'react'
 import { useInfiniteQuery, useQueries, useQuery } from '@tanstack/react-query'
 import { ImageOff, RotateCcw, Search, X } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { FieldInfo } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -129,7 +130,7 @@ export function ChatMediaPicker({ initial, maxCount, onPick, onClose, title, app
         selectable forceSelectionMode selectedIds={[...selected.keys()]} onSelectedIdsChange={select}
         scrollMode="container" viewportHeight="min(48vh, 480px)" minColumnWidth={130} gridItemHeight={145} columnGap={8} rowGap={8}
         showDefaultQuickActions={false} shouldBlurItemPreview={safety.shouldBlurItemPreview} renderItemPersistentOverlay={safety.renderItemPersistentOverlay}
-      /> : !query.isError ? <p className="py-3 text-center text-xs text-muted-foreground">{t({ ko: '맞는 미디어 없음', en: 'No matching media' })}</p> : null}
+      /> : !query.isError ? <EmptyState size="compact" className="justify-center px-0 py-3" title={t({ ko: '맞는 미디어 없음', en: 'No matching media' })} /> : null}
       {query.isError ? <div role="alert" className="flex items-center gap-2 text-sm text-destructive">
         {getErrorMessage(query.error, t({ ko: '미디어를 불러오지 못했어.', en: 'Could not load media.' }))}
         <Button variant="ghost" onClick={() => void (query.isFetchNextPageError ? query.fetchNextPage() : query.refetch())}>{t({ ko: '다시 시도', en: 'Retry' })}</Button>

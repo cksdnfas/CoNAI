@@ -12,6 +12,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { getPromptPresets } from '@/lib/api-prompt-presets'
 import { codexChatThreadQueryKey } from './codex-chat-context'
 import { ChatMediaAttachments } from './chat-media-picker'
+import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
 
 type AssetsProposal = Extract<NonNullable<CodexChatToolCall['proposal']>, { kind: 'profile_assets' }>
 
@@ -45,11 +46,11 @@ export function ChatAssetProposalCard({ proposal, threadId }: { proposal: Assets
     ...(proposal.input.expressionPresetId ? [expressionCount === undefined ? t({ ko: '표정', en: 'Expressions' }) : t({ ko: '표정 {count}', en: '{count} expressions' }, { count: expressionCount })] : []),
     ...(proposal.input.slots ?? []).map((slot) => slot.kind === 'background' ? t({ ko: '배경', en: 'Background' }) : slot.kind === 'full' ? t({ ko: '전신', en: 'Full body' }) : slot.kind === 'reference' ? t({ ko: '기준 이미지', en: 'Reference image' }) : t({ ko: '아바타', en: 'Avatar' })),
   ] : Object.keys(proposal.chosenHashes)
-  return <div className="space-y-2.5 border-y border-line py-2.5">
+  return <ProposalFrame>
     <div className="flex items-baseline gap-2"><span className="text-xs font-semibold text-muted-foreground">{proposal.action === 'create' ? t({ ko: '자산 만들기', en: 'Create assets' }) : t({ ko: '자산 적용', en: 'Apply assets' })}</span><span className="truncate text-xs text-muted-foreground">{proposal.profileName}</span></div>
     <div className="text-sm">{parts.join(' · ')}</div>
     {proposal.action === 'apply' ? <ChatMediaAttachments items={[...new Map(Object.entries(proposal.chosenHashes).map(([name, compositeHash]) => [compositeHash, { name, compositeHash, mimeType: null }])).values()]} /> : null}
-    {saved || dismissed ? <div className="flex items-center gap-2 border-t border-line pt-2 text-xs text-muted-foreground"><span>{saved ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '거절됨', en: 'Dismissed' })}</span>{admin && saved && (batchId ?? proposal.savedId) ? <Button variant="link" size="xs" onClick={() => setOpen(true)}>{t({ ko: '자산 창 열기', en: 'Open assets' })}</Button> : null}</div> : admin ? <div className="flex items-center justify-end gap-2 border-t border-line pt-2"><Button size="xs" variant="ghost" disabled={busy} onClick={() => dismiss.mutate()}>{t({ ko: '거절', en: 'Dismiss' })}</Button><Button size="xs" disabled={busy} onClick={() => approve.mutate()}>{approve.isPending ? <Spinner /> : proposal.action === 'create' ? <Sparkles /> : <Check />}{t({ ko: '승인', en: 'Approve' })}</Button></div> : null}
+    {saved || dismissed ? <ProposalFooter status><span>{saved ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '거절됨', en: 'Dismissed' })}</span>{admin && saved && (batchId ?? proposal.savedId) ? <Button variant="link" size="xs" onClick={() => setOpen(true)}>{t({ ko: '자산 창 열기', en: 'Open assets' })}</Button> : null}</ProposalFooter> : admin ? <ProposalFooter className="justify-end"><Button size="xs" variant="ghost" disabled={busy} onClick={() => dismiss.mutate()}>{t({ ko: '거절', en: 'Dismiss' })}</Button><Button size="xs" disabled={busy} onClick={() => approve.mutate()}>{approve.isPending ? <Spinner /> : proposal.action === 'create' ? <Sparkles /> : <Check />}{t({ ko: '승인', en: 'Approve' })}</Button></ProposalFooter> : null}
     {admin && open ? <ChatAssetBatchModal profile={{ id: proposal.profileId, name: proposal.profileName }} initialBatchId={batchId ?? proposal.savedId} onClose={() => setOpen(false)} /> : null}
-  </div>
+  </ProposalFrame>
 }

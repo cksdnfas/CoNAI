@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageSquare } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
+import { CountBadge } from '@/components/ui/count-badge'
 import { LoadingState } from '@/components/ui/loading-state'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
@@ -200,7 +201,7 @@ export function CodexChatHeaderButton() {
     >
       <MessageSquare />
       {/* Replies not read yet show as a dot on the key. */}
-      {unreadCount > 0 ? <span aria-hidden="true" className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary" /> : null}
+      {unreadCount > 0 ? <CountBadge corner="top-right" className="top-1.5 right-1.5" /> : null}
     </IconButton>
   )
 }

@@ -4,6 +4,7 @@ import type { PostDetail, PostRevision } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ListRow } from '@/components/ui/list-row'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
@@ -43,7 +44,7 @@ export function PostRevisionsDialog({ post, onClose }: { post: PostDetail; onClo
       <ModalBody className="grid min-h-0 gap-4 md:grid-cols-[14rem_1fr]">
         <div className="flex max-h-[60vh] min-w-0 flex-col overflow-y-auto">
           {revisionsQuery.isPending ? <div className="h-24 animate-pulse rounded-sm bg-surface-low" /> : null}
-          {revisionsQuery.isSuccess && revisions.length === 0 ? <p className="py-3 text-sm text-muted-foreground">{t({ ko: '남은 이전 판이 없어', en: 'No earlier versions' })}</p> : null}
+          {revisionsQuery.isSuccess && revisions.length === 0 ? <EmptyState size="compact" title={t({ ko: '남은 이전 판이 없어', en: 'No earlier versions' })} /> : null}
           {revisions.map((item) => (
             <ListRow key={item.revision} asChild interactive size="sm" selected={item.revision === picked?.revision}>
               <button type="button" className="w-full" onClick={() => setPickedRevision(item.revision)}>

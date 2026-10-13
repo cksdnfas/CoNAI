@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { shortRunLabel } from '@/components/common/schedule-field'
+import { ScheduleRow } from '@/components/common/schedule-row'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getReservationTypeLabel } from '@/features/image-generation/components/workflow-reservations-ui'
 import { useI18n } from '@/i18n'
@@ -52,30 +53,18 @@ export function WorkflowScheduleRow({ schedule, workflowName, cover, compact = f
   const stopReason = getGraphWorkflowStopReasonLabel(schedule.stop_reason_code, schedule.stop_reason_message, t)
 
   return (
-    <div className="border-b border-line py-2.5 last:border-b-0">
-      <div className="flex items-start gap-3">
-        <WorkflowCover hash={cover} className={cn(!active && 'opacity-60')} />
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-            <span role="img" aria-label={statusLabel} className={cn('size-1.5 shrink-0 rounded-full', active ? 'bg-success' : stopped ? 'bg-destructive' : 'bg-surface-highest ring-1 ring-inset ring-muted-foreground/60')} />
-            <span className="truncate text-sm font-semibold text-foreground">{schedule.name}</span>
-            <span className={cn('text-xs font-semibold tabular-nums', active ? 'text-secondary-text' : 'text-muted-foreground')}>{cadence}</span>
-          </div>
-          <div className="truncate text-xs text-muted-foreground">{details}</div>
-          {compact ? null : <div className="text-2xs tabular-nums text-muted-foreground">{stats}</div>}
-        </div>
-        <div className="hidden shrink-0 flex-col items-end pt-0.5 text-2xs tabular-nums text-muted-foreground sm:flex">
-          {active && schedule.next_run_at ? <>
-            <span>{t({ ko: '다음', en: 'Next' })}</span>
-            <span className="text-xs font-semibold text-foreground">{shortRunLabel(schedule.next_run_at, t, formatDate)}</span>
-          </> : <span className={cn(stopped && 'text-destructive')}>{statusLabel}</span>}
-        </div>
-        {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
-      </div>
-      {stopReason ? compact
-        ? <div role="status" className="mt-1 ml-12 truncate text-2xs text-warning">{stopReason}</div>
-        : <div role="status" className="mt-2 ml-12 rounded-sm bg-warning-soft/45 px-3 py-2 text-xs text-muted-foreground">{stopReason}</div>
-        : null}
-    </div>
+    <ScheduleRow
+      leading={<WorkflowCover hash={cover} className={cn(!active && 'opacity-60')} />}
+      status={active ? 'active' : stopped ? 'stopped' : 'idle'}
+      statusLabel={statusLabel}
+      name={schedule.name}
+      cadence={cadence}
+      details={<span className="truncate">{details}</span>}
+      stats={compact ? null : stats}
+      nextRunAt={schedule.next_run_at}
+      actions={actions}
+      notice={stopReason}
+      compact={compact}
+    />
   )
 }

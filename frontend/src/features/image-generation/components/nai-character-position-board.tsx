@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 import { snapNaiCharacterGridValue } from '../image-generation-shared'
 
@@ -127,12 +128,12 @@ export function NaiCharacterPositionBoard({
           }))}
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 top-2 grid grid-cols-5 text-center text-2xs font-medium uppercase tracking-overline text-muted-foreground">
+        <Text as="div" variant="overline" className="pointer-events-none absolute inset-x-0 top-2 grid grid-cols-5 text-center font-medium">
           {['A', 'B', 'C', 'D', 'E'].map((label) => <span key={label}>{label}</span>)}
-        </div>
-        <div className="pointer-events-none absolute inset-y-0 left-2 grid grid-rows-5 items-center text-2xs font-medium tracking-overline text-muted-foreground">
+        </Text>
+        <Text as="div" variant="overline" className="pointer-events-none absolute inset-y-0 left-2 grid grid-rows-5 items-center font-medium">
           {['1', '2', '3', '4', '5'].map((label) => <span key={label}>{label}</span>)}
-        </div>
+        </Text>
 
         {characters.map((character, index) => {
           const left = `${Number(character.centerX) * 100}%`

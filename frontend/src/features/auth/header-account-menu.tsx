@@ -4,6 +4,7 @@ import { CircleUserRound, Languages, LogIn, LogOut, MessageSquare, Search, type 
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AnchoredPopup, anchoredPopupBodyClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
+import { CountBadge } from '@/components/ui/count-badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Separator } from '@/components/ui/separator'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -113,7 +114,7 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
         className="relative"
       >
         <CircleUserRound className="h-4 w-4" />
-        {hasUnreadChat ? <span aria-hidden="true" className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary" /> : null}
+        {hasUnreadChat ? <CountBadge corner="top-right" className="top-1.5 right-1.5" /> : null}
       </IconButton>
 
       <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={closeMenu} align="end" side="bottom" closeOnBack>

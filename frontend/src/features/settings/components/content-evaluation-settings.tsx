@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Pencil, Plus } from 'lucide-react'
 import { TOPIC_EVALUATION_LIMITS, type ContentEvaluationSettings, type ContentEvaluationTopic } from '@conai/shared'
 import { Button } from '@/components/ui/button'
+import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -16,6 +17,7 @@ import { createRandomUuid } from '@/lib/random-uuid'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import { JudgeModelSelect, useDefaultJudge, useDefaultJudgeLabel } from './chat-judge-connection-select'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { SettingsRowsSkeleton } from './settings-rows'
 import { putContentEvaluationTopic } from './content-evaluation-chat'
 import { useContentEvaluationChatPage } from './use-content-evaluation-chat-page'
@@ -125,9 +127,9 @@ export function ContentEvaluationSettingsRows({ draft, onPatch, isSaving, dirty,
       {footer}
       <Modal open={editing !== null} title={t({ ko: '평가 주제 편집', en: 'Edit evaluation topic' })} onClose={() => setEditing(null)} size="narrow" sidePanelInset={CHAT_DOCK_INSET} dirty={Boolean(editing && JSON.stringify(editing) !== JSON.stringify(original))} onSave={valid ? apply : undefined}>
         {editing ? <div className="space-y-5">
-          <label className="block space-y-2 text-sm"><ChatFilledLabel fieldId="name">{t({ ko: '주제 이름', en: 'Topic name' })}</ChatFilledLabel><Input value={editing.name} maxLength={40} onChange={event => setEditing({ ...editing, name: event.target.value })} /></label>
-          <label className="block space-y-2 text-sm"><ChatFilledLabel fieldId="description">{t({ ko: '판단 기준', en: 'Criteria' })}</ChatFilledLabel><Textarea value={editing.description} maxLength={1000} rows={5} onChange={event => setEditing({ ...editing, description: event.target.value })} /></label>
-          <label className="flex items-center justify-between gap-3 text-sm"><ChatFilledLabel fieldId="enabled">{t({ ko: '평가 사용', en: 'Enable topic' })}</ChatFilledLabel><Switch checked={editing.enabled} disabled={!editing.enabled && active - (originalEnabled ? 1 : 0) >= 20} aria-label={t({ ko: '평가 사용', en: 'Enable topic' })} onCheckedChange={enabled => setEditing({ ...editing, enabled })} /></label>
+          <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '주제 이름', en: 'Topic name' })}</ChatFilledLabel>}><Input value={editing.name} maxLength={40} onChange={event => setEditing({ ...editing, name: event.target.value })} /></Field>
+          <Field label={<ChatFilledLabel fieldId="description">{t({ ko: '판단 기준', en: 'Criteria' })}</ChatFilledLabel>}><Textarea value={editing.description} maxLength={1000} rows={5} onChange={event => setEditing({ ...editing, description: event.target.value })} /></Field>
+          <SwitchLine label={<ChatFilledLabel fieldId="enabled">{t({ ko: '평가 사용', en: 'Enable topic' })}</ChatFilledLabel>} checked={editing.enabled} disabled={!editing.enabled && active - (originalEnabled ? 1 : 0) >= 20} onCheckedChange={enabled => setEditing({ ...editing, enabled })} />
           {duplicate ? <p role="alert" className="text-xs text-destructive">{t({ ko: '같은 이름의 주제가 있어.', en: 'A topic already uses this name.' })}</p> : null}
           <ModalFooter>{topics.some(topic => topic.id === editing.id) ? <Button variant="ghost" onClick={disable}>{t({ ko: '사용 중지', en: 'Disable' })}</Button> : null}<Button disabled={!valid || isSaving} onClick={apply}>{t({ ko: '변경 적용', en: 'Apply changes' })}</Button></ModalFooter>
         </div> : null}

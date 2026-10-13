@@ -2,6 +2,7 @@ import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Field } from '@/components/ui/field'
 import {
+  WallpaperAnimationEditorCard,
   WallpaperHoverInteractionEditorFields,
   WallpaperInspectorSectionCard,
   WallpaperMotionEasingEditorField,
@@ -189,8 +190,7 @@ export function WallpaperImageWidgetEditorFields({
                 fallbackPreset="easeOutCubic"
                 motionStrength={selectedWidget.settings.motionStrength}
                 editorContent={(
-                  <div className="space-y-2 py-1">
-                    <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{t({ ko: '모션 옵션', en: 'Motion options' })}</div>
+                  <WallpaperAnimationEditorCard title={t({ ko: '모션 옵션', en: 'Motion options' })}>
                     <Field label={t({ ko: '강도', en: 'Strength' })}>
                       <NumberStepperInput
                         variant="settings"
@@ -206,7 +206,7 @@ export function WallpaperImageWidgetEditorFields({
                         }}
                       />
                     </Field>
-                  </div>
+                  </WallpaperAnimationEditorCard>
                 )}
                 onEasingChange={(nextValue) => {
                   updateWidgetSettings({ motionEasing: nextValue })
@@ -319,8 +319,7 @@ export function WallpaperImageWidgetEditorFields({
               motionStrength={selectedWidget.settings.motionStrength}
               motionSpeed={selectedWidget.settings.motionSpeed}
               editorContent={(
-                <div className="space-y-2 py-1">
-                  <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{t({ ko: '모션 옵션', en: 'Motion options' })}</div>
+                <WallpaperAnimationEditorCard title={t({ ko: '모션 옵션', en: 'Motion options' })}>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field label={t({ ko: '움직임 강도', en: 'Motion strength' })}>
                       <NumberStepperInput
@@ -354,7 +353,7 @@ export function WallpaperImageWidgetEditorFields({
                       />
                     </Field>
                   </div>
-                </div>
+                </WallpaperAnimationEditorCard>
               )}
               onEasingChange={(nextValue) => {
                 updateWidgetSettings({ motionEasing: nextValue })
@@ -379,8 +378,7 @@ export function WallpaperImageWidgetEditorFields({
                 updateWidgetSettings({ imageTransitionEasing: nextValue })
               }}
               editorContent={(
-                <div className="space-y-2 py-1">
-                  <div className="text-2xs font-semibold uppercase tracking-overline text-muted-foreground">{t({ ko: '교체 옵션', en: 'Swap options' })}</div>
+                <WallpaperAnimationEditorCard title={t({ ko: '교체 옵션', en: 'Swap options' })}>
                   <div className="space-y-3">
                     <Field label={t({ ko: '이미지 교체 기준', en: 'Image swap trigger' })}>
                       <Select
@@ -432,7 +430,7 @@ export function WallpaperImageWidgetEditorFields({
                       </Field>
                     )}
                   </div>
-                </div>
+                </WallpaperAnimationEditorCard>
               )}
             />
           </WallpaperInspectorSectionCard>

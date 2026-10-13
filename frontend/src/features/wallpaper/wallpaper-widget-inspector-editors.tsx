@@ -13,8 +13,8 @@ import {
   InspectorRow,
   InspectorSegments,
   InspectorSlider,
-  InspectorSwitch,
 } from './wallpaper-inspector-controls'
+import { SwitchLine } from '@/components/ui/switch-line'
 import {
   WallpaperPreviewCloseAnimationEditorField,
   WallpaperPreviewOpenAnimationEditorField,
@@ -142,7 +142,7 @@ function GroupSourceFields({ widget, groups, updateWidgetSettings }: {
           ))}
         </Select>
       </Field>
-      <InspectorSwitch label={t({ ko: '하위 그룹 포함', en: 'Include child groups' })} checked={widget.settings.includeChildren !== false} onChange={(checked) => updateWidgetSettings({ includeChildren: checked })} />
+      <SwitchLine label={t({ ko: '하위 그룹 포함', en: 'Include child groups' })} checked={widget.settings.includeChildren !== false} onCheckedChange={(checked) => updateWidgetSettings({ includeChildren: checked })} />
       <InspectorRow label={t({ ko: '이미지 풀', en: 'Image pool' })}>
         <Select value={String(widget.settings.poolRefreshMinutes ?? 0)} onChange={(event) => updateWidgetSettings({ poolRefreshMinutes: Number(event.target.value) })}>
           <option value="0">{t({ ko: '처음 뽑은 그대로', en: 'Keep the first draw' })}</option>
@@ -171,7 +171,7 @@ function ImagePreviewFields({ widget, updateWidgetSettings }: { widget: Wallpape
         </Select>
       </Field>
       {widget.type === 'group-image-view' || widget.type === 'image-showcase' ? (
-        <InspectorSwitch label={t({ ko: '호버 시 일시정지', en: 'Pause on hover' })} checked={widget.settings.pauseOnHover !== false} onChange={(checked) => updateWidgetSettings({ pauseOnHover: checked })} />
+        <SwitchLine label={t({ ko: '호버 시 일시정지', en: 'Pause on hover' })} checked={widget.settings.pauseOnHover !== false} onCheckedChange={(checked) => updateWidgetSettings({ pauseOnHover: checked })} />
       ) : null}
       <WallpaperPreviewOpenAnimationEditorField
         scalePercent={widget.settings.imagePreviewOpenScalePercent}
@@ -214,15 +214,15 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
               </Select>
             </InspectorRow>
             <InspectorSegments label={t({ ko: '형식', en: 'Format' })} value={widget.settings.timeFormat} items={[{ value: '24h', label: '24h' }, { value: '12h', label: '12h' }]} onChange={(value) => updateWidgetSettings({ timeFormat: value })} />
-            <InspectorSwitch label={t({ ko: '초', en: 'Seconds' })} checked={widget.settings.showSeconds} onChange={(checked) => updateWidgetSettings({ showSeconds: checked })} />
-            <InspectorSwitch label={t({ ko: '날짜', en: 'Date' })} checked={widget.settings.showDate !== false} onChange={(checked) => updateWidgetSettings({ showDate: checked })} />
+            <SwitchLine label={t({ ko: '초', en: 'Seconds' })} checked={widget.settings.showSeconds} onCheckedChange={(checked) => updateWidgetSettings({ showSeconds: checked })} />
+            <SwitchLine label={t({ ko: '날짜', en: 'Date' })} checked={widget.settings.showDate !== false} onCheckedChange={(checked) => updateWidgetSettings({ showDate: checked })} />
           </>
         )
       case 'calendar':
         return (
           <>
             <InspectorSegments label={t({ ko: '주 시작', en: 'Week starts' })} value={widget.settings.weekStart} items={[{ value: 'sun', label: t({ ko: '일요일', en: 'Sunday' }) }, { value: 'mon', label: t({ ko: '월요일', en: 'Monday' }) }]} onChange={(value) => updateWidgetSettings({ weekStart: value })} />
-            <InspectorSwitch label={t({ ko: '앞뒤 달 날짜', en: 'Days of other months' })} checked={widget.settings.showOutsideDays} onChange={(checked) => updateWidgetSettings({ showOutsideDays: checked })} />
+            <SwitchLine label={t({ ko: '앞뒤 달 날짜', en: 'Days of other months' })} checked={widget.settings.showOutsideDays} onCheckedChange={(checked) => updateWidgetSettings({ showOutsideDays: checked })} />
           </>
         )
       case 'text-note':
@@ -237,8 +237,8 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
           <>
             <InspectorRow label={t({ ko: '서비스', en: 'Service' })}><ServiceSelect value={widget.settings.service} onChange={(value) => updateWidgetSettings({ service: value })} /></InspectorRow>
             <InspectorSlider label={t({ ko: '작업 수', en: 'Jobs' })} value={widget.settings.maxJobs} min={1} max={8} onChange={(value) => updateWidgetSettings({ maxJobs: value })} />
-            <InspectorSwitch label={t({ ko: '노드 이름', en: 'Node name' })} checked={widget.settings.showNodeLabel} onChange={(checked) => updateWidgetSettings({ showNodeLabel: checked })} />
-            <InspectorSwitch label={t({ ko: '실행 · 대기 수', en: 'Running · queued' })} checked={widget.settings.showQueueCounts} onChange={(checked) => updateWidgetSettings({ showQueueCounts: checked })} />
+            <SwitchLine label={t({ ko: '노드 이름', en: 'Node name' })} checked={widget.settings.showNodeLabel} onCheckedChange={(checked) => updateWidgetSettings({ showNodeLabel: checked })} />
+            <SwitchLine label={t({ ko: '실행 · 대기 수', en: 'Running · queued' })} checked={widget.settings.showQueueCounts} onCheckedChange={(checked) => updateWidgetSettings({ showQueueCounts: checked })} />
           </>
         )
       case 'generation-stats':
@@ -253,26 +253,26 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
           <>
             <InspectorRow label={t({ ko: '기간', en: 'Period' })}><DaysSelect value={widget.settings.days} onChange={(value) => updateWidgetSettings({ days: value })} /></InspectorRow>
             <InspectorSegments label={t({ ko: '기준', en: 'Measure' })} value={widget.settings.metric} items={[{ value: 'tokens', label: t({ ko: '토큰', en: 'Tokens' }) }, { value: 'requests', label: t({ ko: '요청', en: 'Requests' }) }]} onChange={(value) => updateWidgetSettings({ metric: value })} />
-            <InspectorSwitch label={t({ ko: '모델별', en: 'By model' })} checked={widget.settings.showModels} onChange={(checked) => updateWidgetSettings({ showModels: checked })} />
+            <SwitchLine label={t({ ko: '모델별', en: 'By model' })} checked={widget.settings.showModels} onCheckedChange={(checked) => updateWidgetSettings({ showModels: checked })} />
           </>
         )
       case 'library-stats':
         return (
           <>
-            <InspectorSwitch label={t({ ko: '상위 태그', en: 'Top tags' })} checked={widget.settings.showTopTags} onChange={(checked) => updateWidgetSettings({ showTopTags: checked })} />
+            <SwitchLine label={t({ ko: '상위 태그', en: 'Top tags' })} checked={widget.settings.showTopTags} onCheckedChange={(checked) => updateWidgetSettings({ showTopTags: checked })} />
             {widget.settings.showTopTags ? <InspectorSlider label={t({ ko: '태그 수', en: 'Tags' })} value={widget.settings.tagCount} min={1} max={20} onChange={(value) => updateWidgetSettings({ tagCount: value })} /> : null}
-            <InspectorSwitch label={t({ ko: '등급 분포', en: 'Ratings' })} checked={widget.settings.showRatings} onChange={(checked) => updateWidgetSettings({ showRatings: checked })} />
+            <SwitchLine label={t({ ko: '등급 분포', en: 'Ratings' })} checked={widget.settings.showRatings} onCheckedChange={(checked) => updateWidgetSettings({ showRatings: checked })} />
           </>
         )
       case 'character-card':
         return (
           <>
             <InspectorRow label={t({ ko: '캐릭터', en: 'Character' })}><CharacterSelect value={widget.settings.profileId} allowLatest={false} onChange={(value) => updateWidgetSettings({ profileId: value })} /></InspectorRow>
-            <InspectorSwitch label={t({ ko: '아바타', en: 'Avatar' })} checked={widget.settings.showAvatar} onChange={(checked) => updateWidgetSettings({ showAvatar: checked })} />
-            <InspectorSwitch label={t({ ko: '마지막 메시지', en: 'Last message' })} checked={widget.settings.showLastMessage} onChange={(checked) => updateWidgetSettings({ showLastMessage: checked })} />
-            <InspectorSwitch label={t({ ko: '입력 중 표시', en: 'Typing indicator' })} checked={widget.settings.showTyping} onChange={(checked) => updateWidgetSettings({ showTyping: checked })} />
-            <InspectorSwitch label={t({ ko: '안 읽은 수', en: 'Unread count' })} checked={widget.settings.showUnread} onChange={(checked) => updateWidgetSettings({ showUnread: checked })} />
-            <InspectorSwitch label={t({ ko: '캐릭터 배경', en: 'Character background' })} checked={widget.settings.showCharacterBackground} onChange={(checked) => updateWidgetSettings({ showCharacterBackground: checked })} />
+            <SwitchLine label={t({ ko: '아바타', en: 'Avatar' })} checked={widget.settings.showAvatar} onCheckedChange={(checked) => updateWidgetSettings({ showAvatar: checked })} />
+            <SwitchLine label={t({ ko: '마지막 메시지', en: 'Last message' })} checked={widget.settings.showLastMessage} onCheckedChange={(checked) => updateWidgetSettings({ showLastMessage: checked })} />
+            <SwitchLine label={t({ ko: '입력 중 표시', en: 'Typing indicator' })} checked={widget.settings.showTyping} onCheckedChange={(checked) => updateWidgetSettings({ showTyping: checked })} />
+            <SwitchLine label={t({ ko: '안 읽은 수', en: 'Unread count' })} checked={widget.settings.showUnread} onCheckedChange={(checked) => updateWidgetSettings({ showUnread: checked })} />
+            <SwitchLine label={t({ ko: '캐릭터 배경', en: 'Character background' })} checked={widget.settings.showCharacterBackground} onCheckedChange={(checked) => updateWidgetSettings({ showCharacterBackground: checked })} />
             {widget.settings.showLastMessage ? (
               <InspectorSegments
                 label={t({ ko: '메시지 길이', en: 'Message length' })}
@@ -293,8 +293,8 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
         return (
           <>
             <InspectorRow label={t({ ko: '그룹', en: 'Group' })}><AudioGroupSelect value={widget.settings.audioGroupId} onChange={(value) => updateWidgetSettings({ audioGroupId: value })} /></InspectorRow>
-            <InspectorSwitch label={t({ ko: '자동 재생', en: 'Autoplay' })} checked={widget.settings.autoplay} onChange={(checked) => updateWidgetSettings({ autoplay: checked })} />
-            <InspectorSwitch label={t({ ko: '섞기', en: 'Shuffle' })} checked={widget.settings.shuffle} onChange={(checked) => updateWidgetSettings({ shuffle: checked })} />
+            <SwitchLine label={t({ ko: '자동 재생', en: 'Autoplay' })} checked={widget.settings.autoplay} onCheckedChange={(checked) => updateWidgetSettings({ autoplay: checked })} />
+            <SwitchLine label={t({ ko: '섞기', en: 'Shuffle' })} checked={widget.settings.shuffle} onCheckedChange={(checked) => updateWidgetSettings({ shuffle: checked })} />
             <InspectorSlider label={t({ ko: '음량', en: 'Volume' })} value={widget.settings.volume} min={0} max={100} unit="%" onChange={(value) => updateWidgetSettings({ volume: value })} />
           </>
         )
@@ -302,7 +302,7 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
         return (
           <>
             <InspectorSlider label={t({ ko: '글 수', en: 'Posts' })} value={widget.settings.count} min={1} max={10} onChange={(value) => updateWidgetSettings({ count: value })} />
-            <InspectorSwitch label={t({ ko: '대표 이미지', en: 'Cover image' })} checked={widget.settings.showCover} onChange={(checked) => updateWidgetSettings({ showCover: checked })} />
+            <SwitchLine label={t({ ko: '대표 이미지', en: 'Cover image' })} checked={widget.settings.showCover} onCheckedChange={(checked) => updateWidgetSettings({ showCover: checked })} />
           </>
         )
       case 'prompt-of-day':
@@ -344,8 +344,8 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
         return (
           <>
             <InspectorSegments label={t({ ko: '배치', en: 'Layout' })} value={widget.settings.layout} items={[{ value: 'row', label: t({ ko: '가로', en: 'Row' }) }, { value: 'stack', label: t({ ko: '세로', en: 'Stack' }) }]} onChange={(value) => updateWidgetSettings({ layout: value })} />
-            <InspectorSwitch label={t({ ko: '앨범 아트', en: 'Album art' })} checked={widget.settings.showArt} onChange={(checked) => updateWidgetSettings({ showArt: checked })} />
-            <InspectorSwitch label={t({ ko: '재생 안 할 때 숨기기', en: 'Hide when idle' })} checked={widget.settings.hideWhenIdle} onChange={(checked) => updateWidgetSettings({ hideWhenIdle: checked })} />
+            <SwitchLine label={t({ ko: '앨범 아트', en: 'Album art' })} checked={widget.settings.showArt} onCheckedChange={(checked) => updateWidgetSettings({ showArt: checked })} />
+            <SwitchLine label={t({ ko: '재생 안 할 때 숨기기', en: 'Hide when idle' })} checked={widget.settings.hideWhenIdle} onCheckedChange={(checked) => updateWidgetSettings({ hideWhenIdle: checked })} />
           </>
         )
       case 'system-monitor':
@@ -354,7 +354,7 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
             <InspectorSegments label={t({ ko: '대상', en: 'Source' })} value={widget.settings.source} items={[{ value: 'comfyui', label: 'ComfyUI' }, { value: 'host', label: t({ ko: '이 PC', en: 'This PC' }) }]} onChange={(value) => updateWidgetSettings({ source: value })} />
             <InspectorSegments label={t({ ko: '표시', en: 'Display' })} value={widget.settings.display} items={[{ value: 'bars', label: t({ ko: '막대', en: 'Bars' }) }, { value: 'rings', label: t({ ko: '링', en: 'Rings' }) }]} onChange={(value) => updateWidgetSettings({ display: value })} />
             {widget.settings.source === 'host' ? (
-              <InspectorSwitch label={t({ ko: '네트워크', en: 'Network' })} checked={widget.settings.showNetwork} onChange={(checked) => updateWidgetSettings({ showNetwork: checked })} />
+              <SwitchLine label={t({ ko: '네트워크', en: 'Network' })} checked={widget.settings.showNetwork} onCheckedChange={(checked) => updateWidgetSettings({ showNetwork: checked })} />
             ) : null}
           </>
         )

@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import { buildPermissionSections, type PermissionSectionRow } from './security-permission-catalog'
 import { getPermissionGroupDisplayName } from './security-ui-text'
 import { CollapsibleRow } from '@/components/ui/collapsible-row'
+import { EmptyState } from '@/components/ui/empty-state'
 
 interface SecurityPermissionChecklistProps {
   permissionCatalog: PageAccessPermissionItem[]
@@ -39,7 +40,7 @@ export function SecurityPermissionChecklist({ permissionCatalog, groupKey, selec
   }
 
   if (sections.length === 0) {
-    return <div className="text-sm text-muted-foreground">{t({ ko: '표시할 권한이 아직 없어.', en: 'There are no permissions to show yet.' })}</div>
+    return <EmptyState size="compact" title={t({ ko: '표시할 권한이 아직 없어.', en: 'There are no permissions to show yet.' })} />
   }
 
   return (

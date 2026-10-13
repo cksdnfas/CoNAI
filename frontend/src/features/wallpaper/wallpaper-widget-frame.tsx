@@ -1,4 +1,5 @@
 import { useMemo, type CSSProperties } from 'react'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { WallpaperWidgetBody, type WallpaperWidgetPreviewImage } from './wallpaper-widget-bodies'
 import type { WallpaperWidgetInstance, WallpaperWidgetStyle } from './wallpaper-types'
@@ -94,9 +95,9 @@ export function WallpaperWidgetFrame({
   const content = (
     <>
       {style.showTitle ? (
-        <div className="mb-2 shrink-0 truncate text-xs font-semibold uppercase tracking-overline opacity-70">
+        <Text as="div" variant="overline" className="mb-2 shrink-0 truncate text-xs text-inherit opacity-70">
           {getWallpaperWidgetDisplayTitle(widget, t)}
-        </div>
+        </Text>
       ) : null}
       <div className="relative min-h-0 flex-1" style={{ containerType: 'size' }}>
         <WallpaperWidgetBody widget={widget} mode={mode} onOpenImage={handleOpenImage} />

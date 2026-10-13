@@ -4,6 +4,7 @@ import { ListTodo, RefreshCw } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
+import { CountBadge } from '@/components/ui/count-badge'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -349,7 +350,7 @@ export function GenerationQueueHeaderWidget() {
             {formatNumber(globalActiveCount)}
           </span>
         ) : null}
-        {hasUnreadQueueUpdate ? <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-destructive ring-2 ring-background" aria-hidden="true" /> : null}
+        {hasUnreadQueueUpdate ? <CountBadge tone="destructive" corner="top-right" ring /> : null}
       </IconButton>
 
       <div

@@ -1,6 +1,7 @@
 import { useCallback, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Tip } from '@/components/ui/tooltip'
+import { CountBadge } from '@/components/ui/count-badge'
 import { useI18n } from '@/i18n'
 import { CHAT_HEALTH_QUERY_KEY, getChatHealth, type ChatConnectionDownReason, type ChatProfileConnectionDown } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
@@ -73,7 +74,7 @@ export function ChatHealthDot({ down, children, className }: { down: ChatProfile
   return <span className={cn('relative inline-flex shrink-0', className)}>
     {children}
     <Tip content={<ChatHealthTip down={down} />}>
-      <span role="img" aria-label={chatHealthLine(down, t)} className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full bg-destructive ring-2 ring-background" />
+      <CountBadge tone="destructive" corner="bottom-right" ring label={chatHealthLine(down, t)} className="pointer-events-auto size-2.5" />
     </Tip>
   </span>
 }

@@ -138,12 +138,40 @@ buttons up one tone.
   `text-resource-*` (tool / generation / block / lorebook) and wrap a state that needs attention in `ResourceRowStatus`.
   Settings lists whose rows open an editor (folders, LLM models/connections/presets, accounts, permission groups) use
   it instead of a column table; flag only what is off or failing (inactive, watcher error, not used), never the normal
-  state. Keep a table only where values are compared down columns (scan logs).
+  state. Keep a table (`DataTable`) only where values are compared down columns (usage, stats, file lists).
 - `RowGroup` (`heading?`, `count?`, `headingClassName?`, `actions?`, `bodyClassName?`): group label over rows. The label
   is a muted overline over a hairline (`border-foreground/15`), one rank below the rows' names, so a long page reads by
   group; `count` adds the item count, `headingClassName` gives the label a kind colour that the rows' icons share.
   `Section variant="settings"` has the same heading.
 - Rows must be direct siblings: never put `space-y-*` / `gap-*` between them.
+
+### Form pieces (inside editors / panels)
+- `Field` (`label`, `info?`) is a `<label>` around one control; `FieldGroup` (same props, `components/ui/field`) is the
+  same overline label over content that holds several controls or buttons (`role="group"` + `aria-labelledby`).
+  `FramedField` (`components/common/field-tabs`) = FieldGroup + the field frame.
+- `SliderRow` (`components/ui/slider-row`): label · slider · value on one line. `readout?` (shown text, default the
+  value), `editable` + `unit` (typed value), `mixed`, `onCommit` (drag end), `ariaLabel?`, `labelClassName` (label
+  column width, default `w-18`), `layout="inline"` for toolbars (fixed-width slider). Never hand-build the grid.
+- `SwitchLine` (`components/ui/switch-line`): label + Switch with no hairline (`extra?` before the switch, `muted`,
+  `placement="start"` = switch then label for a wrapping line of flags). Hairline settings row = `SettingsSwitchRow`.
+- `DisclosureButton` (`components/ui/disclosure-button`, `open`, `align?` center|start): the `nav` header with a chevron
+  that folds a section open in place ("고급", workflow fields); the label is its children. Hairline list row that folds
+  = `CollapsibleRow`.
+
+### Shared blocks
+- Floating surface (`components/ui/floating-surface`): `floatingSurfaceClassName` (surface-high, elevation-2, md radius)
+  is the look of every hand-positioned menu, suggestion list, hover card and floating toolbar; Popover / DropdownMenu /
+  ActionMenu build on it (`floatingMenuClassName`, `floatingMenuItemClassName`, `floatingMotionClassName`). Never
+  re-type `bg-surface-high shadow-elevation-2`.
+- `CodeBlock` (`components/ui/code-block`, `size` xs|2xs, `maxHeight` none|xs|sm|md|lg|screen, `fill`, `wrap`): mono
+  `<pre>` for JSON / raw responses / logs / error details; field fill, scrolls inside itself. `fill={false}` when it
+  already sits in a modal or framed group.
+- `DataTable` / `DataTh` (`numeric`) / `DataTr` (`interactive`, `selected`) / `DataTd` (`numeric`, `meta`, `flush`) /
+  `DataCheckTh` / `DataCheckTd` (`components/ui/data-table`): the one column table (overline header, hairline rows,
+  `scroll-x`, `minWidthClassName?`). Markdown renderers use `proseTableClassNames` for their cells.
+- `ScheduleRow` (`components/common/schedule-row`, `leading`, `status` active|stopped|idle, `statusLabel`, `name`,
+  `cadence`, `details?`, `stats?`, `nextRunAt?`, `actions?`, `notice?` + `noticeTone`, `compact?`): one workflow autorun
+  / chat routine in a list (status dot, cadence, next run on the end, stop reason under the text).
 
 ### Component → look
 | Component | Default | Escape hatch |
@@ -189,11 +217,28 @@ Do not restyle buttons with `bg-*`, `border`, `rounded-*` or `shadow-*` override
 | `Badge` | short status / kind labels | `text-2xs` semibold, `tracking-overline`, uppercase (Latin); variants `default secondary outline ghost link` + status `success warning info destructive` (soft token fills) |
 | `Chip` | user content: tags, terms, tokens | keeps text case; `tone` `default muted primary success warning info destructive`, `size` `sm md` |
 | `ToggleChip` | multi-select filters / category toggles | `aria-pressed`; muted wash → primary/12 tint when pressed |
+| `Chip onRemove` | removable tag / keyword / applied filter | `onRemove`, `removeLabel?` (default 빼기), `removeDisabled?`; trailing ghost X key sized to the chip (sm 16px, md 20px). Never hand-place an IconButton X inside a Chip |
+| `Badge variant="overlay"` | counts / kind tags on a photo or thumbnail (`+3`, `1/4`, 영상, GIF) | `bg-backdrop` scrim + blur, white, own case, medium weight; `size` `default` (24px) `sm` (20px) `xs` (16px). Never re-create with `bg-backdrop … text-white text-2xs` |
+| `CountBadge` (`ui/count-badge`) | unread / pending counter or attention dot on a key, inline unread pill | `count?` (none = 8px dot), `max?` (`99+`), `label?` (role img), `tone` `primary destructive`, `size` `xs` 14 / `sm` 16 / `md` 18px, `corner` `top-right bottom-right` (absolute on a `relative` parent), `ring` |
+| `AvatarButton` (`ui/avatar-button`) | a round avatar that is itself the control | raw round button, focus ring only; avatar as children, action as `aria-label` |
 
 `Alert` has the same status set: `default destructive warning success info`.
 
+### Tabs / search / horizontal scroll
+- Tabs: `TextTabs` (`components/common/text-tabs`) is the one underlined tab strip (`items` with `count?`, `actions?`,
+  `hairline?`, `TabsContent` children); `FieldTabs` for tabs inside a field frame; `SegmentedControl` for tray toggles.
+  Features never compose `TabsList` / `TabsTrigger` themselves (`[ds/tabs]`).
+- Search: `SearchField` / `ToolbarSearchField` (`components/common/search-field`); never place a Search icon over an
+  `Input` by hand (`[ds/search]`).
+- Horizontal scroll: the `scroll-x` class (overflow-x auto, overflow-y hidden), plus `theme-nav-scroll` to hide the bar.
+  A bare `overflow-x-auto` also makes overflow-y auto, so a 1px underline or focus ring below the row grows a stray
+  vertical scrollbar (`[ds/scroll-x]`).
+- When a piece repeats in two places and no shared component fits, add one to `components/common` (or a feature-local
+  shared file) instead of copying the class string.
+
 ### Labels
-Overline-style labels (Field label, StatTile label, Badge, RowGroup heading, Section `drawer` / `settings` heading,
+Overline-style labels (use `<Text variant="overline">` or the structural component; hand-rolled `tracking-overline`
+is `[ds/overline]`) (Field label, StatTile label, Badge, RowGroup heading, Section `drawer` / `settings` heading,
 anchored-popup label, PageHeader eyebrow, ExplorerSidebar title) are `text-2xs` + `tracking-overline`. `--overline-tracking` is 0.16em for Latin and
 0.02em under `html:lang(ko)`, so never hard-code `tracking-[0.1Xem]` or `text-[11px]` on a label. The PageHeader eyebrow
 is a muted overline (no accent colour, no rule line); the RowGroup heading is the one overline with a rule under it.

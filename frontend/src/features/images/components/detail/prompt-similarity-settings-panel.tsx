@@ -2,9 +2,10 @@ import { Settings2 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { SIMILARITY_RESULT_ROW_MAX, SIMILARITY_RESULT_ROW_MIN, type PromptSimilaritySettingsDraft } from './image-detail-utils'
-import { DetailSettingsFlyout, detailSettingsLabelClassName } from './detail-settings-flyout'
+import { DetailSettingsFlyout } from './detail-settings-flyout'
 import { NumberInputWithSuffix, SectionTitle } from './similarity-settings-panel-shared'
 
 interface PromptSimilaritySettingsPanelProps {
@@ -42,12 +43,12 @@ export function PromptSimilaritySettingsPanel({
           <div className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <label className={detailSettingsLabelClassName}>{t('images.components.detail.prompt.similarity.settings.panel.rows.to.show')}</label>
+                <Text as="label" variant="overline">{t('images.components.detail.prompt.similarity.settings.panel.rows.to.show')}</Text>
                 <NumberStepperInput min={SIMILARITY_RESULT_ROW_MIN} max={SIMILARITY_RESULT_ROW_MAX} step={1} variant="detail" value={draft.resultLimit} onValueCommit={(value) => onPatchDraft({ resultLimit: Number(value) })} />
               </div>
 
               <div className="space-y-2">
-                <label className={detailSettingsLabelClassName}>{t('images.components.detail.prompt.similarity.settings.panel.combined.score.threshold')}</label>
+                <Text as="label" variant="overline">{t('images.components.detail.prompt.similarity.settings.panel.combined.score.threshold')}</Text>
                 <NumberInputWithSuffix suffix="%" min={0} max={100} step={1} variant="detail" value={draft.combinedThreshold} onValueCommit={(value) => onPatchDraft({ combinedThreshold: Number(value) })} />
               </div>
             </div>
@@ -57,17 +58,17 @@ export function PromptSimilaritySettingsPanel({
                 <SectionTitle title={t('images.components.detail.prompt.similarity.settings.panel.score.weights')} />
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>{t({ ko: '포지티브', en: 'Positive' })}</label>
+                  <Text as="label" variant="overline">{t({ ko: '포지티브', en: 'Positive' })}</Text>
                   <NumberStepperInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.positive} onValueCommit={(value) => onPatchDraft({ weights: { ...draft.weights, positive: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>{t({ ko: '네거티브', en: 'Negative' })}</label>
+                  <Text as="label" variant="overline">{t({ ko: '네거티브', en: 'Negative' })}</Text>
                   <NumberStepperInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.negative} onValueCommit={(value) => onPatchDraft({ weights: { ...draft.weights, negative: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>{t({ ko: '자동', en: 'Auto' })}</label>
+                  <Text as="label" variant="overline">{t({ ko: '자동', en: 'Auto' })}</Text>
                   <NumberStepperInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.auto} onValueCommit={(value) => onPatchDraft({ weights: { ...draft.weights, auto: Number(value) } })} />
                 </div>
               </div>
@@ -76,17 +77,17 @@ export function PromptSimilaritySettingsPanel({
                 <SectionTitle title={t('images.components.detail.prompt.similarity.settings.panel.minimum.field.thresholds')} />
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>{t({ ko: '포지티브', en: 'Positive' })}</label>
+                  <Text as="label" variant="overline">{t({ ko: '포지티브', en: 'Positive' })}</Text>
                   <NumberStepperInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.positive} onValueCommit={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, positive: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>{t({ ko: '네거티브', en: 'Negative' })}</label>
+                  <Text as="label" variant="overline">{t({ ko: '네거티브', en: 'Negative' })}</Text>
                   <NumberStepperInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.negative} onValueCommit={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, negative: Number(value) } })} />
                 </div>
 
                 <div className="space-y-2">
-                  <label className={detailSettingsLabelClassName}>{t({ ko: '자동', en: 'Auto' })}</label>
+                  <Text as="label" variant="overline">{t({ ko: '자동', en: 'Auto' })}</Text>
                   <NumberStepperInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.auto} onValueCommit={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, auto: Number(value) } })} />
                 </div>
               </div>

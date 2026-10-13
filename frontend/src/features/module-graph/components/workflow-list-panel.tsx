@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, Copy, Download, Folder, FolderInput, FolderPlus, MoreHorizontal, PenSquare, Plus, Search, Settings2, Trash2, Upload } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
+import { SearchField } from '@/components/common/search-field'
 import { Button } from '@/components/ui/button'
+import { Chip } from '@/components/ui/chip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowFolderRecord, GraphWorkflowSummaryRecord } from '@/lib/api-module-graph'
@@ -159,7 +160,7 @@ export function WorkflowListPanel({
           <span className="truncate text-sm font-semibold text-foreground">{graph.name}</span>
           {graph.description && !isPicker ? <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{graph.description}</span> : <span className="flex-1" />}
           {missingFinalResult ? (
-            <span className="shrink-0 rounded-sm bg-warning-soft px-1.5 py-0.5 text-2xs font-semibold text-warning-soft-foreground">{t({ ko: '결과 미지정', en: 'No result' })}</span>
+            <Chip size="sm" tone="warning" className="font-semibold">{t({ ko: '결과 미지정', en: 'No result' })}</Chip>
           ) : (
             <Tip content={t({ ko: '노드 {nodes} · 연결 {edges}', en: '{nodes} nodes · {edges} links' }, { nodes: formatNumber(graph.node_count), edges: formatNumber(graph.edge_count) })}>
               <span className="shrink-0 font-mono text-2xs text-muted-foreground">{formatNumber(graph.node_count)}</span>
@@ -300,18 +301,13 @@ export function WorkflowListPanel({
         </div>
       ) : null}
 
-      <div className="relative shrink-0">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t({ ko: '검색', en: 'Search' })}
-          aria-label={t({ ko: '워크플로 검색', en: 'Search workflows' })}
-          className="h-8 pl-8 text-sm"
-          autoFocus={isPicker}
-        />
-      </div>
+      <SearchField
+        value={query}
+        onChange={setQuery}
+        placeholder={t({ ko: '워크플로 검색', en: 'Search workflows' })}
+        autoFocus={isPicker}
+        className="shrink-0"
+      />
 
       <nav aria-label={t({ ko: '워크플로', en: 'Workflows' })} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {rootFolders.map((folder) => renderFolder(folder, 0))}

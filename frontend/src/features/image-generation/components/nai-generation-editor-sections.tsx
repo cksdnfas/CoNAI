@@ -1,7 +1,7 @@
 import { useId, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
-import { Brush, ChevronDown, Dices, Plus, Trash2 } from 'lucide-react'
+import { Brush, Dices, Plus, Trash2 } from 'lucide-react'
 import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
-import { Button } from '@/components/ui/button'
+import { DisclosureButton } from '@/components/ui/disclosure-button'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
@@ -10,7 +10,6 @@ import { Text } from '@/components/ui/text'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { cn } from '@/lib/utils'
 import {
   FormField,
   NAI_ACTION_OPTIONS,
@@ -575,18 +574,9 @@ function NaiSettingsSection({
 
         <div>
           <Tip content={isAdvancedOpen ? null : advancedSummary} side="top" align="start">
-            <Button
-              type="button"
-              variant="nav"
-              size="sm"
-              className="-mx-2 w-[calc(100%+1rem)] gap-2"
-              aria-expanded={isAdvancedOpen}
-              aria-controls={advancedRegionId}
-              onClick={toggleAdvancedOpen}
-            >
-              <ChevronDown className={cn('transition-transform', !isAdvancedOpen && '-rotate-90')} aria-hidden />
-              <span className="shrink-0 text-xs font-semibold uppercase tracking-overline">{t({ ko: '고급', en: 'Advanced' })}</span>
-            </Button>
+            <DisclosureButton open={isAdvancedOpen} aria-controls={advancedRegionId} onClick={toggleAdvancedOpen}>
+              <Text as="span" variant="overline" className="shrink-0 text-current">{t({ ko: '고급', en: 'Advanced' })}</Text>
+            </DisclosureButton>
           </Tip>
 
           {isAdvancedOpen ? (

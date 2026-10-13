@@ -30,6 +30,26 @@ const DESIGN_SYSTEM_GUARDS = [
     message: '[ds/button] Raw <button>: use Button or IconButton from components/ui (rich clickable cards / rows: <Panel asChild interactive><button/></Panel>, <ListRow asChild interactive><button/></ListRow>).',
   },
   ...classNameString('/fixed inset-0/', '[ds/overlay] Hand-rolled "fixed inset-0" overlay: use Modal or Popover from components/ui.'),
+  ...classNameString(
+    '/(^|\\s)overflow-x-(auto|scroll)(\\s|$)/',
+    '[ds/scroll-x] Bare overflow-x-auto also turns overflow-y to auto, so a 1px underline or focus ring grows a stray vertical scrollbar: use the scroll-x class (add theme-nav-scroll to hide the bar).',
+  ),
+  ...classNameString(
+    '/tracking-overline/',
+    '[ds/overline] Hand-rolled overline label: use <Text variant="overline">, Field, RowGroup or Section (settings / drawer) from components/ui.',
+  ),
+  {
+    selector: "JSXOpeningElement[name.name='Search'] > JSXAttribute[name.name='className'] Literal[value=/absolute/]",
+    message: '[ds/search] Search icon placed over an Input by hand: use SearchField / ToolbarSearchField from components/common/search-field.',
+  },
+]
+
+// Primitives that only components/common may compose; features use the shared composition.
+const FEATURE_GUARDS = [
+  {
+    selector: "JSXOpeningElement[name.name=/^Tabs(List|Trigger)$/]",
+    message: '[ds/tabs] Hand-rolled tab strip: use TextTabs (in-place underlined tabs), FieldTabs (tabs inside a field frame) or SegmentedControl. TextTabs takes TabsContent children.',
+  },
 ]
 
 // Token guards also apply inside components/ui, where the primitives themselves legitimately render <button> and overlays.
@@ -87,6 +107,12 @@ export default defineConfig([
     ],
     rules: {
       'no-restricted-syntax': ['error', ...DESIGN_SYSTEM_GUARDS, ...TOKEN_GUARDS],
+    },
+  },
+  {
+    files: ['src/features/**/*.{ts,tsx}', 'src/components/layout/**/*.{ts,tsx}', 'src/components/media/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': ['error', ...DESIGN_SYSTEM_GUARDS, ...TOKEN_GUARDS, ...FEATURE_GUARDS],
     },
   },
   {

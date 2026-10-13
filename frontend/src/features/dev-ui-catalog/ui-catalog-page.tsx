@@ -34,6 +34,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { Field } from '@/components/ui/field'
 import { Heading } from '@/components/ui/heading'
+import { CountBadge } from '@/components/ui/count-badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
@@ -54,7 +55,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { TabsContent } from '@/components/ui/tabs'
+import { TextTabs } from '@/components/common/text-tabs'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleRow } from '@/components/ui/toggle-row'
@@ -169,6 +171,7 @@ export function UiCatalogPage() {
   const [checked, setChecked] = useState<boolean | 'indeterminate'>('indeterminate')
   const [switchOn, setSwitchOn] = useState(true)
   const [slider, setSlider] = useState([40])
+  const [catalogTab, setCatalogTab] = useState<'one' | 'two'>('one')
   const [range, setRange] = useState([20, 70])
   const [segment, setSegment] = useState('grid')
   const [tabBar, setTabBar] = useState('general')
@@ -386,6 +389,17 @@ export function UiCatalogPage() {
             {CHIP_TONES.map((tone) => <Chip key={tone} tone={tone}>{tone}</Chip>)}
             <Chip size="sm" tone="muted">size=sm</Chip>
             <Chip><Folder />with icon</Chip>
+            <Chip tone="primary" onRemove={() => undefined}>#onRemove</Chip>
+            <Chip size="sm" tone="success" onRemove={() => undefined}>sm onRemove</Chip>
+          </Row>
+          <Row label="Badge overlay (on photos; size default / sm / xs) · CountBadge (count or dot on a key)">
+            <span className="relative inline-flex h-16 w-24 items-start justify-end gap-1 overflow-hidden rounded-sm bg-[linear-gradient(135deg,var(--primary),var(--surface-bright))] p-1">
+              <Badge variant="overlay" size="xs">1/4</Badge>
+              <Badge variant="overlay" size="sm">GIF</Badge>
+            </span>
+            <span className="relative inline-flex"><IconButton variant="ghost" label="CountBadge"><Inbox /></IconButton><CountBadge corner="top-right" count={3} /></span>
+            <span className="relative inline-flex"><IconButton variant="ghost" label="CountBadge dot"><Inbox /></IconButton><CountBadge corner="top-right" className="top-1.5 right-1.5" /></span>
+            <CountBadge size="md" count={1200} max={999} />
           </Row>
           <Row label="ToggleChip (aria-pressed; multi-select filters)">
             {CHIP_FILTERS.map((filter) => (
@@ -549,16 +563,11 @@ export function UiCatalogPage() {
           </Row>
         </CatalogSection>
 
-        <CatalogSection id="navigation" title="Tabs / SegmentedControl / SegmentedTabBar">
-          <Tabs defaultValue="one">
-            <TabsList>
-              <TabsTrigger value="one">First</TabsTrigger>
-              <TabsTrigger value="two">Second</TabsTrigger>
-              <TabsTrigger value="three" disabled>Disabled</TabsTrigger>
-            </TabsList>
+        <CatalogSection id="navigation" title="TextTabs / SegmentedControl / SegmentedTabBar">
+          <TextTabs value={catalogTab} onChange={setCatalogTab} items={[{ value: 'one', label: 'First' }, { value: 'two', label: 'Second', count: 3 }]}>
             <TabsContent value="one"><Inset>First panel</Inset></TabsContent>
             <TabsContent value="two"><Inset>Second panel</Inset></TabsContent>
-          </Tabs>
+          </TextTabs>
           {(['xs', 'sm', 'md'] as const).map((size) => (
             <Row key={size} label={`SegmentedControl size=${size}`}>
               <SegmentedControl
@@ -757,7 +766,7 @@ export function UiCatalogPage() {
               {TYPE_SCALE.map(([name, className]) => (
                 <div key={name} className={className}>{name} — 이미지 3장을 저장했어 / Saved 3 images</div>
               ))}
-              <div className="text-xs uppercase tracking-overline text-muted-foreground">tracking-overline</div>
+              <Text variant="overline">tracking-overline</Text>
             </div>
           </div>
         </CatalogSection>

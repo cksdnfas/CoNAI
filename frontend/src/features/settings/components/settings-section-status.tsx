@@ -1,4 +1,5 @@
 import { PencilLine, Zap } from 'lucide-react'
+import { Chip } from '@/components/ui/chip'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -29,9 +30,9 @@ export function SectionDirtyBadge({ dirty }: { dirty: boolean }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-sm bg-primary/14 px-2 py-0.5 text-2xs font-medium whitespace-nowrap text-primary">
-      <PencilLine className="h-3 w-3" />
+    <Chip size="sm" tone="primary" className="gap-1 font-medium">
+      <PencilLine />
       {t({ ko: '변경됨', en: 'Edited' })}
-    </span>
+    </Chip>
   )
 }

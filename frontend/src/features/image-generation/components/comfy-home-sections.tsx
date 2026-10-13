@@ -1,6 +1,7 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Copy, Ellipsis, Eye, ListFilter, ListTree, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, Trash2, Upload } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,8 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { Switch } from '@/components/ui/switch'
+import { Text } from '@/components/ui/text'
+import { TextTabs } from '@/components/common/text-tabs'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { DEFAULT_COMFY_MODEL_API_PATHS } from '@/lib/api-image-generation-workflows'
@@ -27,7 +30,7 @@ function SectionLabel({ icon, children }: { icon: ReactNode; children: ReactNode
 
 function EmptyListRow() {
   const { t } = useI18n()
-  return <p className="py-3 text-sm text-muted-foreground">{t({ ko: '없음', en: 'None' })}</p>
+  return <EmptyState size="compact" className="px-0 py-3" title={t({ ko: '없음', en: 'None' })} />
 }
 
 type WorkflowListSectionProps = {
@@ -394,28 +397,20 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
     <section>
       {/* RowGroup's heading row, with text tabs beside the label. */}
       <div className="mb-1 flex min-h-8 items-center justify-between gap-3 border-b border-foreground/15">
-        <div className="flex min-w-0 items-center gap-4">
-          <h3 className="flex shrink-0 items-center text-2xs font-semibold uppercase tracking-overline text-muted-foreground">
-            <SectionLabel icon={<ListFilter />}>{t({ ko: '드롭다운 목록', en: 'Dropdown lists' })}</SectionLabel>
+        <div className="flex min-w-0 items-center gap-4 self-stretch">
+          <h3 className="flex shrink-0 items-center">
+            <Text as="span" variant="overline">
+              <SectionLabel icon={<ListFilter />}>{t({ ko: '드롭다운 목록', en: 'Dropdown lists' })}</SectionLabel>
+            </Text>
           </h3>
-          <div role="tablist" className="flex min-w-0 items-center gap-3">
-            {tabs.map((tab) => (
-              // eslint-disable-next-line no-restricted-syntax -- text tabs inside the heading row
-              <button
-                key={tab.value}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.value}
-                onClick={() => setActiveTab(tab.value)}
-                className={cn(
-                  '-mb-px cursor-pointer border-b-2 py-1.5 text-xs font-medium whitespace-nowrap outline-none transition-colors focus-visible:text-foreground',
-                  activeTab === tab.value ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {tab.label} <span className="tabular-nums text-muted-foreground/60">{formatNumber(tab.count)}</span>
-              </button>
-            ))}
-          </div>
+          <TextTabs
+            value={activeTab}
+            items={tabs.map((tab) => ({ value: tab.value, label: tab.label, count: formatNumber(tab.count) }))}
+            onChange={setActiveTab}
+            ariaLabel={t({ ko: '드롭다운 목록', en: 'Dropdown lists' })}
+            hairline={false}
+            className="self-end"
+          />
         </div>
         {activeTab === 'custom' ? (
           <IconButton size="icon-sm" variant="ghost" onClick={() => setIsCustomModalOpen(true)} disabled={!canUpdateWorkflows} label={t({ ko: '목록 추가', en: 'Add list' })}>

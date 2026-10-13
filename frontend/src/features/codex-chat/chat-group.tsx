@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Crown, UserMinus, UserPlus, Users } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -28,6 +29,7 @@ import {
 import { CHAT_JUDGE_PRESET_NAMES_QUERY_KEY, listChatJudgePresetNames } from '@/lib/api-chat-judge'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
+import { ComposerSuggestList, ComposerSuggestOption } from './chat-commands'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatUserProfileSelect } from './chat-user-profiles'
 import { EVERYONE_MENTION } from './chat-mentions'
@@ -237,7 +239,7 @@ export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onC
               </label>
             )
           })}
-          {candidates.length === 0 ? <p className="py-3 text-sm text-muted-foreground">{t({ ko: '초대할 수 있는 프로필이 없어.', en: 'No profiles to invite.' })}</p> : null}
+          {candidates.length === 0 ? <EmptyState size="compact" className="px-0 py-3" title={t({ ko: '초대할 수 있는 프로필이 없어.', en: 'No profiles to invite.' })} /> : null}
         </div>
         {mode?.kind === 'create' ? (
           <Field label={t({ ko: '방 이름', en: 'Room name' })}>
@@ -275,17 +277,17 @@ export function mentionOptions(query: string, members: ChatProfileSummary[], rep
 export function MentionList({ id, options, selected, onSelect }: { id: string; options: MentionOption[]; selected: number; onSelect: (option: MentionOption) => void }) {
   const { t } = useI18n()
   return (
-    <div id={id} role="listbox" aria-label={t({ ko: '멘션할 참가자', en: 'Members to mention' })} className="absolute bottom-full left-3 z-10 mb-1 max-h-72 w-64 max-w-[calc(100%-1.5rem)] overflow-y-auto rounded-md bg-surface-high p-1.5 shadow-elevation-2">
+    <ComposerSuggestList id={id} label={t({ ko: '멘션할 참가자', en: 'Members to mention' })} className="w-64 max-w-[calc(100%-1.5rem)]">
       {options.map((option, index) => (
-        <Button key={option.key} id={`${id}-${index}`} role="option" aria-selected={selected === index} variant="ghost" size="sm" className={cn('w-full justify-start gap-2.5 font-semibold text-foreground', selected === index && 'bg-fill')} onMouseDown={(event) => event.preventDefault()} onClick={() => onSelect(option)}>
+        <ComposerSuggestOption key={option.key} id={`${id}-${index}`} selected={selected === index} className="gap-2.5 font-semibold text-foreground" onSelect={() => onSelect(option)}>
           {option.profile
             ? <ChatProfileAvatar name={option.profile.name} avatar={option.profile.avatar} profile={option.profile} engine={option.profile.engine} size="sm" />
             : <span className="inline-flex size-6 items-center justify-center rounded-full bg-surface-highest"><Users className="size-3.5" /></span>}
           <span className="truncate">{option.name}</span>
           {option.representative ? <Crown aria-label={t({ ko: '대표', en: 'Representative' })} className="size-3 text-secondary-text" /> : null}
-        </Button>
+        </ComposerSuggestOption>
       ))}
-    </div>
+    </ComposerSuggestList>
   )
 }
 

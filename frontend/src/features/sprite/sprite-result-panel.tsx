@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { AlertTriangle, Crop, Download, Expand, LayoutGrid, Loader2, Pause, Play, Save, Scan } from 'lucide-react'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SliderRow } from '@/components/ui/slider-row'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select } from '@/components/ui/select'
 import { Tip } from '@/components/ui/tooltip'
 import { SegmentedControl } from '@/components/common/segmented-control'
+import { TextTabs } from '@/components/common/text-tabs'
 import { useI18n } from '@/i18n'
 import { triggerBrowserDownload } from '@/lib/api-client'
 import { spriteFrameUrl, spriteFramesZipUrl, spriteSheetUrl, type SpriteExtractResult, type SpriteRect, type SpriteRender } from '@/lib/api-sprite'
 import { cn } from '@/lib/utils'
 import { MAX_SHEET_DIMENSION, sheetLayout, type OutputForm } from './sprite-options'
-import { MiniField, SliderLine, TEXT_TAB_LIST_CLASS, TEXT_TAB_TRIGGER_CLASS } from './sprite-ui'
+import { MiniField, SpriteCheckerStage } from './sprite-ui'
 
 const FPS_OPTIONS = [4, 8, 12, 16, 24, 30, 60]
 const FRAME_ZOOMS = [25, 50, 100, 200, 300, 400, 600, 800]
@@ -45,12 +46,16 @@ export function SpriteResultPanel({ build, output, onOutputChange, crop, onCropC
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Tabs value={view} onValueChange={(next) => setView(next as View)} className="shrink-0 grow gap-0">
-          <TabsList className={cn(TEXT_TAB_LIST_CLASS, 'border-b-0')}>
-            <TabsTrigger value="frames" className={TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '프레임 재생', en: 'Frames' })}</TabsTrigger>
-            <TabsTrigger value="sheet" className={TEXT_TAB_TRIGGER_CLASS}>{t({ ko: '시트', en: 'Sheet' })}</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <TextTabs
+          value={view}
+          onChange={setView}
+          hairline={false}
+          className="shrink-0 grow"
+          items={[
+            { value: 'frames', label: t({ ko: '프레임 재생', en: 'Frames' }) },
+            { value: 'sheet', label: t({ ko: '시트', en: 'Sheet' }) },
+          ]}
+        />
         <div className="ml-auto flex items-center gap-2">
           <IconButton variant="ghost" size="icon-sm" active={editingCrop} label={t({ ko: '생성 후 크롭', en: 'Crop frames' })} onClick={() => {
             if (!editingCrop) { setView('frames'); if (!crop) onCropChange({ x: 0, y: 0, width: build.frameWidth, height: build.frameHeight }) }
@@ -117,7 +122,7 @@ function FramePlayer({ build, crop, editingCrop, onCropChange }: { build: Sprite
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="bg-checker relative flex h-[min(56vh,420px)] items-center justify-center overflow-auto rounded-sm">
+      <SpriteCheckerStage className="relative h-[min(56vh,420px)] overflow-auto">
         <div className="relative shrink-0" style={{ width: (viewRect?.width ?? build.frameWidth) * scale, height: (viewRect?.height ?? build.frameHeight) * scale, overflow: 'hidden' }}>
           {urls[index] ? (
             <img
@@ -130,7 +135,7 @@ function FramePlayer({ build, crop, editingCrop, onCropChange }: { build: Sprite
           ) : null}
           {showCrop ? <CropBox rect={showCrop} scale={scale} frameWidth={build.frameWidth} frameHeight={build.frameHeight} onChange={onCropChange} /> : null}
         </div>
-      </div>
+      </SpriteCheckerStage>
       {editingCrop && showCrop ? (
         <div className="flex flex-wrap items-end gap-2">
           {(['x', 'y', 'width', 'height'] as const).map((key) => (
@@ -170,7 +175,7 @@ function FramePlayer({ build, crop, editingCrop, onCropChange }: { build: Sprite
           {FRAME_ZOOMS.map((value) => <option key={value} value={value}>{value}%</option>)}
         </Select>
       </div>
-      <div className="flex gap-1 overflow-x-auto pb-1">
+      <div className="scroll-x flex gap-1 pb-1">
         {urls.map((url, frame) => (
           <Button
             key={url}
@@ -269,7 +274,7 @@ function DownloadPopover({ buildId, output, onOutputChange, render, crop, disabl
           onChange={(format) => onOutputChange({ ...output, format: format as OutputForm['format'] })}
           ariaLabel={t({ ko: '형식', en: 'Format' })}
         />
-        {output.format === 'webp' ? <SliderLine label={t({ ko: '품질', en: 'Quality' })} value={output.quality} min={1} max={100} onChange={(quality) => onOutputChange({ ...output, quality })} /> : null}
+        {output.format === 'webp' ? <SliderRow label={t({ ko: '품질', en: 'Quality' })} value={output.quality} min={1} max={100} onChange={(quality) => onOutputChange({ ...output, quality })} /> : null}
         <div className="flex flex-col gap-1">
           <Button variant="ghost" className="justify-start" disabled={disabled} onClick={() => triggerBrowserDownload(spriteSheetUrl(buildId, render, true))}>
             <LayoutGrid />{t({ ko: '시트 받기', en: 'Download sheet' })}

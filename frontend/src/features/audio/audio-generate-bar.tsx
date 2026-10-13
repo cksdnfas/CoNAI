@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, Link2, Lock, Plus, RefreshCw, Server, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Chip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -333,9 +334,9 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
 
 function StatusChip({ tone = 'idle', icon, children }: { tone?: 'idle' | 'warn' | 'bad'; icon?: ReactNode; children: ReactNode }) {
   return (
-    <span className="inline-flex h-8 min-w-0 items-center gap-2 rounded-sm bg-fill px-2.5 text-xs text-muted-foreground">
+    <Chip tone="muted" className="h-8 shrink gap-2 px-2.5">
       {icon ?? <span className={cn('size-1.5 shrink-0 rounded-full', tone === 'bad' ? 'bg-destructive' : tone === 'warn' ? 'bg-warning' : 'bg-muted-foreground/50')} aria-hidden />}
       <span className="truncate">{children}</span>
-    </span>
+    </Chip>
   )
 }

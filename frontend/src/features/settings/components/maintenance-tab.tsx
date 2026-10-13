@@ -12,6 +12,7 @@ import { AutoTestCard } from './auto-test-card'
 import type { AutoTabProps } from './auto-tab-types'
 import { DataRematchSection } from './data-rematch-section'
 import { DatabaseMaintenanceSection } from './database-maintenance-section'
+import { MaintenanceRow } from './maintenance-row'
 
 interface MaintenanceActionRowProps {
   icon: ReactNode
@@ -30,16 +31,13 @@ function MaintenanceActionRow({ icon, title, actionLabel, busyLabel, isBusy, con
   const confirm = useConfirm()
 
   return (
-    <div className="border-b border-line py-2.5 last:border-b-0">
-      <div className="flex min-h-8 items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="shrink-0 text-muted-foreground">{icon}</span>
-          <div className="min-w-0 text-sm text-foreground">{title}</div>
-        </div>
+    <MaintenanceRow
+      icon={icon}
+      title={title}
+      actions={(
         <IconButton
           size="icon-sm"
           variant={confirmOptions.tone === 'destructive' ? 'destructive' : 'secondary'}
-          className="shrink-0"
           disabled={isBusy}
           label={isBusy ? busyLabel : actionLabel}
           onClick={async () => {
@@ -50,9 +48,10 @@ function MaintenanceActionRow({ icon, title, actionLabel, busyLabel, isBusy, con
         >
           {isBusy ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
         </IconButton>
-      </div>
-      {children ? <div className="pt-2 pl-7">{children}</div> : null}
-    </div>
+      )}
+    >
+      {children}
+    </MaintenanceRow>
   )
 }
 

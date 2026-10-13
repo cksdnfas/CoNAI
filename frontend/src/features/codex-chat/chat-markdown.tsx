@@ -1,3 +1,4 @@
+import { proseTableClassNames } from '@/components/ui/data-table'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { createContext, memo, useContext, useMemo, useState, type ComponentProps, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
@@ -158,12 +159,12 @@ const MARKDOWN_COMPONENTS: Components = {
   blockquote: ({ children }) => <blockquote className="my-2 border-l-2 border-line pl-3 text-muted-foreground">{children}</blockquote>,
   hr: () => <hr className="my-3 border-line" />,
   table: ({ children }) => (
-    <div className="my-2 overflow-x-auto">
-      <table className="w-full border-collapse text-[0.92em]">{children}</table>
+    <div className={cn('my-2', proseTableClassNames.wrapper)}>
+      <table className={proseTableClassNames.table}>{children}</table>
     </div>
   ),
-  th: ({ children }) => <th className="border-b border-line px-2 py-1 text-left font-semibold">{children}</th>,
-  td: ({ children }) => <td className="border-b border-line/60 px-2 py-1 align-top">{children}</td>,
+  th: ({ children }) => <th className={proseTableClassNames.th}>{children}</th>,
+  td: ({ children }) => <td className={proseTableClassNames.td}>{children}</td>,
   pre: ({ children }) => {
     const child = Array.isArray(children) ? children[0] : children
     const className = (child && typeof child === 'object' && 'props' in child ? (child as { props: { className?: string } }).props.className : undefined) ?? ''

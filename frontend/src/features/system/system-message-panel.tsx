@@ -22,7 +22,7 @@ export function SystemMessagePanel({ icon: Icon, iconTone = 'neutral', overline,
       <div className="w-full space-y-5">
         <Icon className={cn('size-8', iconTone === 'warning' ? 'text-warning' : 'text-muted-foreground')} aria-hidden />
         <div className="space-y-2">
-          {overline ? <Text variant="overline" className="font-semibold">{overline}</Text> : null}
+          {overline ? <Text variant="overline">{overline}</Text> : null}
           <Heading level={1}>{title}</Heading>
         </div>
         {children}
