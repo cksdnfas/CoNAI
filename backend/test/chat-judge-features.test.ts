@@ -264,7 +264,7 @@ test('judge beyond turn items: group rooms, status fields, lore and recall, expr
     assert.deepEqual(recalledSegments(profile, segments, later, { contextTokens: null }, new Set()), [], 'nothing kept: nothing recalled')
   })
 
-  await t.test('a turn asks about lore no keyword named and the entry the judge picks reaches the request', async (s) => {
+  await t.test('a turn merges identical judge states without losing questions or selected lore', async (s) => {
     const book = ChatLorebookStore.create({ name: '마을 설정', entries: [
       { keys: ['등대지기'], title: '등대 마을 축제', content: '등대 마을 축제는 매년 가을 바닷가 등대 앞에서 열린다.' },
       { keys: ['용광로'], title: '대장간', content: '대장간은 산 위에 있다.' },
@@ -277,10 +277,11 @@ test('judge beyond turn items: group rooms, status fields, lore and recall, expr
     const calls = route(s, (body) => Object.fromEntries(Object.keys(body.questions).map((id) => [id, { type: 'noul', noul: 0.9 }])))
     const thread = CodexChatStore.findThreadById(CodexChatStore.createThread(1, '로어', 'llm', guide.id))!
     const sent = await LlmChatService.sendMessage(requester, thread, '가을에 바닷가 등대 마을 축제 가볼까?', () => {})
-    assert.equal(judgeCalls(calls).length, 2, 'before/context share one call for the same window, other windows stay separate')
+    assert.equal(judgeCalls(calls).length, 1, 'different windows with identical conversation states share one request')
     const judge = judgeCalls(calls).find((call) => call.body.questions['lore-0'])!
     const asked = Object.values(judge.body.questions as Record<string, { instructions: string }>).map((entry) => entry.instructions)
-    assert.equal(asked.length, 2, 'one preset item and only the entry sharing words with the exchange are asked together')
+    assert.equal(asked.length, 3, 'both preset items and the relevant lore question survive merging')
+    assert.deepEqual(Object.keys(judge.body.questions).sort(), ['context:lore-0', 'lore-0', 'other-window'])
     assert.ok(asked.some((question) => question.includes('등대 마을 축제')))
     assert.ok(judge.body.questions['context:lore-0'], 'built-in question ids cannot overwrite a preset item')
     const chat = calls.find((call) => call.url.endsWith('/chat/completions'))!
@@ -290,7 +291,7 @@ test('judge beyond turn items: group rooms, status fields, lore and recall, expr
     assert.ok(meta.judge.items.some((item: { action: string }) => item.action === 'lore'))
     assert.ok(meta.judge.items.some((item: { itemId: string; action: string }) => item.itemId === 'lore-0' && item.action === 'offered'))
     const usage = dbModule.getUserSettingsDb().prepare("SELECT thread_id, profile_id FROM llm_usage_events WHERE purpose = 'judge' AND thread_id = ?").all(thread.id) as Array<{ thread_id: number; profile_id: number }>
-    assert.equal(usage.length, 2)
+    assert.equal(usage.length, 1)
     assert.ok(usage.every((entry) => entry.profile_id === guide.id))
   })
 

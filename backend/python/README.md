@@ -4,6 +4,12 @@
 embedding worker (EmbeddingGemma 2, always CPU), so a chat query never waits behind image tagging. The backend starts
 each on first use, queues requests by priority and unloads each model after its idle setting.
 
+Each worker admits at most 64 waiting requests. The normal ten-minute request deadline includes queue and startup
+time; download events extend an active request's deadline. Cancellation removes waiting work immediately. Active
+work keeps its slot until the worker replies or exits, so cancelled or timed-out requests never overlap the next
+request on the same process. Embedding queries share pending batches; a cold query timeout may leave its model
+warming for the next query, while disabling embeddings invalidates earlier requests.
+
 | File | Role |
 | --- | --- |
 | `conai_worker.py` | stdin/stdout JSON-lines protocol, model registry, device choice, download events |

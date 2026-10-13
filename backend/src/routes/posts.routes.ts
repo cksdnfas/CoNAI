@@ -8,6 +8,7 @@ import { PostError, actorFromRequest } from '../services/posts/postActor';
 import { PostBotRuns } from '../services/posts/postBotRuns';
 import { PostCategoryStore, PostCommentStore, PostStore, PostTagStore } from '../services/posts/postStore';
 import { loadPostsSettings, updatePostsSettings } from '../services/posts/postsSettings';
+import { readPageSettings, verifyNativePageSettingsRevision } from '../services/pageSettings';
 import { KnowledgeStore } from '../services/posts/knowledgeStore';
 import { KnowledgeAssessmentStore, getKnowledgeQuality } from '../services/posts/knowledgeAssessment';
 import { postSemanticStatus } from '../services/embeddings/postSemantic';
@@ -34,8 +35,12 @@ const id = (req: Request, name = 'id') => {
   return value;
 };
 
-router.get('/settings', (_req, res) => res.json({ success: true, data: loadPostsSettings() }));
-router.put('/settings', requireAdmin, (req, res) => res.json({ success: true, data: updatePostsSettings(req.body) }));
+router.get('/settings', (_req, res) => res.json({ success: true, data: { ...loadPostsSettings(), pageSettingsRevisions: { posts: readPageSettings('posts').revision } } }));
+router.put('/settings', requireAdmin, (req, res) => {
+  if (!verifyNativePageSettingsRevision(req, res, 'posts')) return;
+  const settings = updatePostsSettings(req.body);
+  res.json({ success: true, data: { ...settings, pageSettingsRevisions: { posts: readPageSettings('posts').revision } } });
+});
 
 router.get('/categories', (_req, res) => res.json({ success: true, data: PostCategoryStore.list() }));
 router.post('/categories', requireAdmin, (req, res) => res.status(201).json({ success: true, data: PostCategoryStore.create(actorFromRequest(req), req.body ?? {}) }));

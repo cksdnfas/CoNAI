@@ -1,3 +1,4 @@
+import { verifyPageSettingsWrite } from '../../services/pageSettings';
 import { Router, Request, Response } from 'express';
 import type { KaloscopeSettings } from '@conai/shared';
 import { DEFAULT_ARTIST_LINK_URL_TEMPLATE } from '../../constants/settings';
@@ -57,6 +58,7 @@ router.put(
       }
     }
 
+    if (!verifyPageSettingsWrite(res)) return;
     const updatedSettings = settingsService.updateKaloscopeSettings(kaloscopeSettings);
     await kaloscopeTaggerService.reloadConfig();
     autoTagScheduler.restart();

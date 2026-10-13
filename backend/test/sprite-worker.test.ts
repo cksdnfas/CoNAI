@@ -35,12 +35,20 @@ test('sprite worker: a 256-frame despill build keeps the event loop responsive',
   }, 10)
   const started = performance.now()
   let progressEvents = 0
-  const result = await runSpriteTask('extract', {
+  const workDir = path.join(dir, 'ws')
+  const extraction = runSpriteTask('extract', {
     buildId: 'nonblocking', workDir: path.join(dir, 'ws'), sourcePath: video, sourceHash: null, sourceName: null, requestedByAccountId: null,
     options: resolveExtractOptions({ sampleCount: 256 }),
     render: { columns: 0, spacing: 0, crop: null, format: 'png', quality: 90 },
   }, { onProgress: () => { progressEvents += 1 } }).finally(() => clearInterval(timer))
+  const controller = new AbortController()
+  const abandoned = runSpriteTask('preview', { workDir, index: 0, maxSide: 64 }, { signal: controller.signal })
+  const following = runSpriteTask('preview', { workDir, index: 0, maxSide: 64 })
+  controller.abort()
+  await assert.rejects(abandoned, /취소/)
+  const result = await extraction
   const elapsed = performance.now() - started
+  assert.deepEqual([...(await following).png.subarray(0, 4)], [137, 80, 78, 71], 'preview waits for extraction despite a cancelled waiter')
 
   assert.equal(result.meta.frameCount, 256)
   assert.ok(progressEvents > 256, `progress relayed (${progressEvents} events)`)

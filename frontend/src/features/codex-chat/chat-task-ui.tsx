@@ -154,6 +154,7 @@ export function TaskPlanCard({ proposal, threadId }: { proposal: PlanProposal; t
       <div className="flex flex-wrap gap-x-3.5 gap-y-1 font-mono text-2xs text-muted-foreground tabular-nums">
         <span>{t({ ko: '이어가기 ≤ {count}회', en: '≤ {count} turns' }, { count: proposal.budget.continuations })}</span>
         <span>{t({ ko: '이미지 ≤ {count}장', en: '≤ {count} images' }, { count: proposal.budget.images })}</span>
+        {proposal.budget.tokens !== undefined ? <span>{t({ ko: '토큰 ≤ {count} · 턴 사이 확인', en: '≤ {count} tokens · checked between turns' }, { count: proposal.budget.tokens })}</span> : null}
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-line pt-2">
         {state === 'open' ? (
@@ -173,21 +174,22 @@ export function TaskPlanCard({ proposal, threadId }: { proposal: PlanProposal; t
 /** Explicit approval of new total limits; cumulative usage is never reset by resuming. */
 function TaskBudgetResume({ task, busy, onResume }: { task: ChatTask; busy: boolean; onResume: (budget: ChatTask['budget']) => void }) {
   const { t } = useI18n()
-  const [budget, setBudget] = useState(() => ({
+  const [budget, setBudget] = useState<ChatTask['budget']>(() => ({
     continuations: Math.min(CHAT_TASK_LIMITS.continuations, task.used.continuations >= task.budget.continuations ? task.used.continuations + CHAT_TASK_DEFAULT_BUDGET.continuations : task.budget.continuations),
     images: Math.min(CHAT_TASK_LIMITS.images, task.used.images >= task.budget.images ? task.used.images + CHAT_TASK_DEFAULT_BUDGET.images : task.budget.images),
+    ...(task.budget.tokens === undefined ? {} : { tokens: Math.min(CHAT_TASK_LIMITS.tokens, Math.max(task.budget.tokens, (task.used.tokens ?? 0) + 1)) }),
   }))
-  const keys = ['continuations', 'images'] as const
-  const capped = keys.some((key) => task.used[key] >= CHAT_TASK_LIMITS[key])
-  const valid = keys.every((key) => Number.isSafeInteger(budget[key]) && budget[key] >= task.budget[key] && budget[key] > task.used[key] && budget[key] <= CHAT_TASK_LIMITS[key])
+  const keys: Array<keyof ChatTask['budget']> = task.budget.tokens === undefined ? ['continuations', 'images'] : ['continuations', 'images', 'tokens']
+  const capped = keys.some((key) => (task.used[key] ?? 0) >= CHAT_TASK_LIMITS[key])
+  const valid = keys.every((key) => Number.isSafeInteger(budget[key]) && (budget[key] ?? 0) >= (task.budget[key] ?? 0) && (budget[key] ?? 0) > (task.used[key] ?? 0) && (budget[key] ?? 0) <= CHAT_TASK_LIMITS[key])
   if (capped) return <p className="mb-2 text-xs text-muted-foreground">{t({ ko: '작업 최대 예산에 도달했어. 현재 작업을 중단한 뒤 새 플랜을 승인해줘.', en: 'This task reached its maximum budget. Stop it before approving a new plan.' })}</p>
   return (
     <form className="mb-2 flex flex-wrap items-end gap-2 border-b border-line pb-2" onSubmit={(event) => { event.preventDefault(); if (valid && !busy) onResume(budget) }}>
       <p className="w-full text-xs text-muted-foreground">{t({ ko: '예산을 다 썼어. 지금까지 사용한 양을 포함한 새 총한도를 승인하면 이어갈게.', en: 'Budget exhausted. Approve new total limits, including usage so far, to resume.' })}</p>
       {keys.map((key) => (
         <label key={key} className="flex flex-col gap-1 text-xs">
-          <span>{key === 'continuations' ? t({ ko: '이어가기 총한도', en: 'Total turns' }) : t({ ko: '이미지 총한도', en: 'Total images' })} · {t({ ko: '{count} 사용', en: '{count} used' }, { count: task.used[key] })}</span>
-          <Input className="h-7 w-32" type="number" min={Math.max(task.budget[key], task.used[key] + 1)} max={CHAT_TASK_LIMITS[key]} step={1} value={budget[key]} disabled={busy} onChange={(event) => setBudget((current) => ({ ...current, [key]: Number(event.target.value) }))} />
+          <span>{key === 'continuations' ? t({ ko: '이어가기 총한도', en: 'Total turns' }) : key === 'images' ? t({ ko: '이미지 총한도', en: 'Total images' }) : t({ ko: '토큰 총한도', en: 'Total tokens' })} · {t({ ko: '{count} 사용', en: '{count} used' }, { count: task.used[key] ?? 0 })}</span>
+          <Input className="h-7 w-32" type="number" min={Math.max(task.budget[key] ?? 0, (task.used[key] ?? 0) + 1)} max={CHAT_TASK_LIMITS[key]} step={1} value={budget[key]} disabled={busy} onChange={(event) => setBudget((current) => ({ ...current, [key]: Number(event.target.value) }))} />
         </label>
       ))}
       <Button size="xs" type="submit" disabled={busy || !valid}>{t({ ko: '예산 승인 후 재개', en: 'Approve budget and resume' })}</Button>
@@ -215,7 +217,7 @@ export function ChatTaskStrip({ threadId }: { threadId: number }) {
   const index = currentStep(task.steps)
   const done = task.steps.filter((step) => step.status === 'done' || step.status === 'skipped').length
   const canResume = task.status === 'paused' || (task.status === 'waiting' && (task.wait === 'user' || task.wait === 'page'))
-  const exhausted = task.used.continuations >= task.budget.continuations || task.used.images >= task.budget.images
+  const exhausted = task.used.continuations >= task.budget.continuations || task.used.images >= task.budget.images || (task.budget.tokens !== undefined && (task.used.tokens ?? 0) >= task.budget.tokens)
   return (
     <>
       {stepsOpen ? <div className="mb-2 border-b border-line pb-2"><StepList steps={task.steps} current={index} task={task} /></div> : null}
@@ -233,7 +235,8 @@ export function ChatTaskStrip({ threadId }: { threadId: number }) {
           if (await confirm({ title: t({ ko: '작업 중단', en: 'Stop task' }), description: t({ ko: '이 작업을 중단할까? 남은 단계는 진행하지 않아.', en: 'Stop this task? The remaining steps will not run.' }), confirmLabel: t({ ko: '중단', en: 'Stop' }), tone: 'destructive' })) change.mutate({ action: 'cancel' })
         })()}><CircleStop /></IconButton>
       </div>
-      {canResume && exhausted ? <TaskBudgetResume key={`${task.id}:${task.budget.continuations}:${task.budget.images}:${task.used.continuations}:${task.used.images}`} task={task} busy={change.isPending} onResume={(budget) => change.mutate({ action: 'resume', extension: { taskId: task.id, budget } })} /> : null}
+      {task.budget.tokens !== undefined ? <p className="text-2xs text-muted-foreground">{t({ ko: '토큰 {used} / {limit} · 턴 사이 확인', en: 'Tokens {used} / {limit} · checked between turns' }, { used: task.used.tokens ?? 0, limit: task.budget.tokens })}</p> : null}
+      {canResume && exhausted ? <TaskBudgetResume key={`${task.id}:${task.budget.continuations}:${task.budget.images}:${task.budget.tokens}:${task.used.continuations}:${task.used.images}:${task.used.tokens}`} task={task} busy={change.isPending} onResume={(budget) => change.mutate({ action: 'resume', extension: { taskId: task.id, budget } })} /> : null}
     </>
   )
 }

@@ -15,7 +15,7 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { pageAction, pageArray, pageFreeText, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, createStoredTextFile, readWholeStoredFileText, saveStoredFileText, type StoredFileOwnerKey } from '@/lib/api-files'
+import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, createStoredTextFile, readStoredFileForEdit, saveStoredFileText, type StoredFileOwnerKey } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 
 const ChatMarkdown = lazy(() => import('@/features/codex-chat/chat-markdown').then((module) => ({ default: module.ChatMarkdown })))
@@ -65,11 +65,12 @@ export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = fal
   const [format, setFormat] = useState<DocumentFormat>('md')
   const [text, setText] = useState(entry ? null as string | null : '')
   const [baseline, setBaseline] = useState(entry ? null as string | null : '')
+  const [revision, setRevision] = useState<string | null>(null)
   const [tab, setTab] = useState<MarkdownTab>('write')
   const tooLarge = entry !== null && entry.size > MAX_TEXT_DOCUMENT_BYTES
   const source = useQuery({
     queryKey: ['file-text-editor', owner ?? null, entry?.id],
-    queryFn: () => readWholeStoredFileText(entry!.id, owner),
+    queryFn: () => readStoredFileForEdit(entry!.id, owner),
     enabled: entry !== null && !tooLarge,
     gcTime: 0,
     staleTime: Infinity,
@@ -78,8 +79,9 @@ export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = fal
   })
   useEffect(() => {
     if (source.data !== undefined && text === null) {
-      setText(source.data)
-      setBaseline(source.data)
+      setText(source.data.text)
+      setBaseline(source.data.text)
+      setRevision(source.data.revision)
     }
   }, [source.data, text])
 
@@ -88,11 +90,12 @@ export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = fal
   const markdown = isMarkdownName(file?.name ?? fileName)
   const dirty = file ? text !== null && text !== baseline : true
   const save = useMutation({
-    mutationFn: (value: string) => (file ? saveStoredFileText(file.id, value, owner) : createStoredTextFile(parentId, fileName, value, owner)),
+    mutationFn: (value: string) => (file ? saveStoredFileText(file.id, value, owner, revision) : createStoredTextFile(parentId, fileName, value, owner)),
     onSuccess: async (result, value) => {
       setFile(result)
       setSaved(result)
       setBaseline(value)
+      setRevision(result.revision ?? null)
       await queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY })
     },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '문서를 저장하지 못했어.', en: 'Could not save the document.' })) }),

@@ -1,6 +1,6 @@
 import { publishRuntimeEvent } from './runtimeEventBus'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { audioCandidatesByQueueJob } from '../audio/audioJobCandidates'
+import { audioCandidatesByQueueJob, audioScopesByQueueJob } from '../audio/audioJobCandidates'
 import type {
   ChatGenerationFinishedEventPayload,
   ChatGenerationUpdatedEventPayload,
@@ -65,6 +65,7 @@ function buildQueueJobPayload(
     provider_submit_started_at: job.provider_submit_started_at ?? null,
     provider_cancel_state: job.provider_cancel_state ?? null,
     submit_attempt_count: job.submit_attempt_count ?? null,
+    audio_scopes: job.service_type === 'comfyui' ? audioScopesByQueueJob(job.id) : [],
   }
 }
 

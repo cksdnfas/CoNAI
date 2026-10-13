@@ -193,6 +193,7 @@ function keepAnswer(key: string, text: string) {
 // Searches per account over the last 24 hours, for the daily limit. In memory: a restart starts the count over.
 const DAY_MS = 24 * 60 * 60_000
 const searchTimes = new Map<string, number[]>()
+const reservedSearches = new Map<string, number>()
 
 function dailyCount(requester: McpRequester) {
   const key = String(requester.accountId ?? 'bootstrap')
@@ -216,20 +217,26 @@ export async function researchWeb(requester: McpRequester, request: { query: str
   const cached = cachedAnswer(key)
   if (cached !== null) return cached
   const limited = settings.dailyLimit !== null && !isRequesterAdmin(requester)
-  if (limited && dailyCount(requester).length >= settings.dailyLimit!) {
+  const accountKey = String(requester.accountId ?? 'bootstrap')
+  if (limited && dailyCount(requester).length + (reservedSearches.get(accountKey) ?? 0) >= settings.dailyLimit!) {
     throw new WebResearchError(`웹 검색은 하루에 ${settings.dailyLimit}번까지야. 이미 찾은 내용으로 답해줘.`)
   }
+  // Reserve before waiting: other chats and queued calls share the account's remaining allowance.
+  if (limited) reservedSearches.set(accountKey, (reservedSearches.get(accountKey) ?? 0) + 1)
   const question = researchQuestion(query, focus)
-  const release = await researchSlot(options.signal)
-  const startedAt = Date.now()
+  let release: (() => void) | undefined
+  let startedAt: number | null = null
   const engine = settings.engine === 'codex' ? 'codex' : 'claude-code'
   const meter = (ok: boolean, tokens: LlmTokenCounts | null, text = '') => recordLlmUsage({
     purpose: 'web_search', profileId: options.usage?.profileId, threadId: options.usage?.threadId,
     engine, providerName: settings.engine === 'codex' ? 'codex' : CLAUDE_CHAT_PROVIDER, model: settings.model ?? '',
     tokens: tokens ?? (ok ? { inputTokens: rawTokenEstimate(`${RESEARCH_INSTRUCTIONS}\n\n${question}`), cachedInputTokens: 0, outputTokens: rawTokenEstimate(text) } : null),
-    estimated: ok && !tokens, latencyMs: Date.now() - startedAt, ok,
+    estimated: ok && !tokens, latencyMs: startedAt === null ? 0 : Date.now() - startedAt, ok,
   })
   try {
+    release = await researchSlot(options.signal)
+    options.signal?.throwIfAborted()
+    startedAt = Date.now()
     const { text, tokens } = await researchRunners[settings.engine === 'codex' ? 'codex' : 'claude'](requester, question, settings.model, options.signal)
     meter(true, tokens, text)
     if (limited) dailyCount(requester).push(Date.now())
@@ -237,10 +244,15 @@ export async function researchWeb(requester: McpRequester, request: { query: str
     keepAnswer(key, answer)
     return answer
   } catch (error) {
-    if (!options.signal?.aborted) meter(false, null)
+    if (startedAt !== null && !options.signal?.aborted) meter(false, null)
     throw error
   } finally {
-    release()
+    release?.()
+    if (limited) {
+      const remaining = (reservedSearches.get(accountKey) ?? 1) - 1
+      if (remaining > 0) reservedSearches.set(accountKey, remaining)
+      else reservedSearches.delete(accountKey)
+    }
   }
 }
 

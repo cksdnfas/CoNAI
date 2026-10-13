@@ -79,6 +79,7 @@ export interface ChatMessageCreatedEventPayload {
 export type ChatMessageUpdatedEventPayload = ChatMessageCreatedEventPayload
 
 export interface QueueJobEventPayload {
+  audio_scopes?: Array<{ group_id: string; project_id: string }>
   job_id: number
   service_type: 'comfyui' | 'novelai' | 'codex'
   status: QueueJobEventStatus

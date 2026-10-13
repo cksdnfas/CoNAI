@@ -42,6 +42,14 @@ const DEFAULT_PERMISSION_CATALOG = PERMISSION_CATALOG.map((permission) => ({
  * keys behind it; page keys are not listed because pages are now derived from these features.
  */
 export const PERMISSIONS_V2_SOURCES: Record<PermissionKey, readonly string[]> = {
+  // Explicit delegation only: content edit rights never turn into shared-settings rights.
+  'settings.library.manage': [],
+  'settings.appearance.manage': [],
+  'settings.media.manage': [],
+  'settings.generation.manage': [],
+  'settings.analysis.manage': [],
+  'settings.posts.manage': [],
+  'settings.chat.manage': [],
   'images.view': ['images.view'],
   'images.edit': ['images.update', 'images.metadata.edit', 'groups.create', 'groups.update'],
   'images.delete': ['images.delete', 'groups.delete'],

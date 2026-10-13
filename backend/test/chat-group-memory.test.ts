@@ -46,6 +46,7 @@ test('group room memory: the room summary, what its members see, and recall', { 
   const FILLER = '가'.repeat(500)
   const requests: string[] = []
   t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    if (init.method !== 'POST') return new Response('', { status: 404 })
     const body = String(init.body)
     requests.push(body)
     const keyword = /키워드:(\S+?)[.\\"]/.exec(body)?.[1] ?? '없음'

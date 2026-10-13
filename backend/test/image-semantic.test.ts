@@ -45,15 +45,15 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
 
   const { settingsService } = await import('../src/services/settingsService')
   const embedding = await import('../src/services/aiWorker/textEmbeddingService')
-  const requests: Array<{ op: string; payload: any }> = []
+  const requests: Array<{ op: string; payload: any; signal?: AbortSignal }> = []
   let dependencyChecks = 0
   let embedGate: Promise<void> | undefined
   embedding.embeddingRuntime.checkDependencies = async () => {
     dependencyChecks++
     return { available: true, message: 'ok', missingPackages: [], python: 'fake' }
   }
-  t.mock.method(embedding.textWorker, 'request', async (op: string, payload: any) => {
-    requests.push({ op, payload })
+  t.mock.method(embedding.textWorker, 'request', async (op: string, payload: any, options?: { signal?: AbortSignal }) => {
+    requests.push({ op, payload, signal: options?.signal })
     // Text at the full dimension, images at its prefix; text searches over images cut the query down.
     if (op === 'embed') assert.equal(payload.dim, embedding.EMBEDDING_DIM)
     if (op === 'embed_images') assert.equal(payload.dim, embedding.IMAGE_EMBEDDING_DIM)
@@ -88,8 +88,17 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
   // Off: nothing is embedded and the worker keeps its text-only instance.
   assert.equal(await indexPendingImages(), 0)
   assert.equal(embedding.embeddingVariant(), 'text')
+
   settingsService.updateEmbeddingSettings({ enabled: true, imageSearch: true })
   assert.equal(embedding.embeddingVariant(), 'full')
+
+  await t.test('transient worker failure retains the image cursor for the next retry', async t => {
+    const before = imageIndexInternals.state()
+    t.mock.method(embedding.textWorker, 'request', () => Promise.reject(Object.assign(new Error('stopped'), { errorType: 'WorkerStopped' })))
+    await assert.rejects(indexPendingImages(), /stopped/)
+    assert.deepEqual(imageIndexInternals.state(), before)
+    t.mock.restoreAll()
+  })
 
   let looked = 0
   for (let pass = 0; pass < 10; pass += 1) {
@@ -121,13 +130,13 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
   assert.equal(requests.filter((request) => request.op === 'embed').at(-1)?.payload.variant, 'full')
 
   await t.test('warm searches skip runtime probes; cold workers still check dependencies', async (t) => {
-    assert.equal(dependencyChecks, 1, 'only the first image batch needs a runtime check')
+    assert.equal(dependencyChecks, 2, 'the failed batch and its successful retry check the cold runtime')
     const cold = t.mock.method(embedding.textWorker, 'loadedModels', () => new Map())
     await Promise.all([embedding.embedQuery('cold cat'), embedding.embedQuery('cold city')])
-    assert.equal(dependencyChecks, 2, 'concurrent cold requests share one dependency check')
+    assert.equal(dependencyChecks, 3, 'concurrent cold requests share one dependency check')
     cold.mock.restore()
     await embedding.embedQuery('warm cat')
-    assert.equal(dependencyChecks, 2)
+    assert.equal(dependencyChecks, 3)
   })
 
   await t.test('concurrent searches and retries share work, with independent deadlines and cached copies', async () => {
@@ -167,6 +176,50 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
     const before = requests.length
     await embedding.embedQuery('reset cat')
     assert.equal(requests.length - before, 1)
+  })
+
+  await t.test('single and multi-query waits share one batch and cancelling one preserves other consumers', async () => {
+    embedding.resetEmbeddingBackoff()
+    const before = requests.length
+    let release!: () => void
+    embedGate = new Promise<void>(resolve => { release = resolve })
+    try {
+      const multi = embedding.embedQueries(['batch cat', 'batch city', 'batch cat'])
+      const controller = new AbortController()
+      const cancelled = embedding.embedQuery('batch cat', { signal: controller.signal })
+      await new Promise<void>(resolve => setImmediate(resolve))
+      controller.abort()
+      assert.equal(await cancelled, null)
+      assert.equal(requests.length - before, 1)
+      assert.equal(requests.at(-1)!.payload.items.length, 2, 'duplicate texts join the same vector')
+      assert.equal(requests.at(-1)!.signal!.aborted, false, 'the multi-query caller still needs the work')
+      release()
+      const result = (await multi)!
+      assert.deepEqual(result[0], result[2])
+      result[0].fill(0)
+      assert.deepEqual(await embedding.embedQuery('batch cat'), result[2])
+      assert.equal(requests.length - before, 1)
+    } finally { release(); embedGate = undefined }
+  })
+
+  await t.test('a settings reset while checking dependencies cannot restart the disabled model', async t => {
+    let release!: () => void
+    let entered!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const started = new Promise<void>(resolve => { entered = resolve })
+    t.mock.method(embedding.textWorker, 'loadedModels', () => new Map())
+    t.mock.method(embedding.embeddingRuntime, 'checkDependencies', async () => { entered(); await gate; return { available: true, message: 'ok', missingPackages: [], python: 'fake' } })
+    embedding.resetEmbeddingBackoff()
+    const before = requests.length
+    const warm = embedding.warmEmbeddingModel()
+    await started
+    settingsService.updateEmbeddingSettings({ enabled: false })
+    embedding.resetEmbeddingBackoff()
+    release()
+    assert.equal(await warm, false)
+    assert.equal(requests.length, before)
+    assert.equal(embedding.embeddingFailure(), null)
+    settingsService.updateEmbeddingSettings({ enabled: true })
   })
 
   await t.test('failed query work is removed so a later search can recover', async (t) => {
@@ -278,7 +331,12 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
   // Media that is gone loses its vector.
   db.prepare('DELETE FROM image_files WHERE composite_hash = ?').run(hash(4))
   db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(hash(4))
-  assert.equal(pruneImageVectors(true), 1)
+  settingsService.updateEmbeddingSettings({ enabled: false })
+  assert.equal(pruneImageVectors(true), 2, 'content and style are both removed, even with embeddings off')
+  const { vectorStore } = await import('../src/services/vectors/vectorStore')
+  const { MEDIA_STYLE_SPACE, MEDIA_STYLE_MODEL_KEY } = await import('../src/services/aiWorker/aiVisionService')
+  assert.equal(vectorStore.get(MEDIA_STYLE_SPACE, hash(4), MEDIA_STYLE_MODEL_KEY).length, 0)
+  settingsService.updateEmbeddingSettings({ enabled: true })
   assert.equal(imageIndexCount(), 4)
 
   // Off again: search answers 409 and the walk stops.
@@ -288,4 +346,28 @@ test('image semantic: index walk, text search, similar images, safety, prune, ro
   assert.deepEqual((await get(`/api/images/${hash(1)}/vector-similarity`)).body.data, { content: false, style: true }, 'style vectors do not depend on image search')
   assert.equal(await searchImagesByText('cat', 3), null)
   assert.equal(embedding.embeddingVariant(), 'text')
+
+  await t.test('an image deleted while inference is pending is not indexed again', async t => {
+    settingsService.updateEmbeddingSettings({ imageSearch: true })
+    add(99, 'cat-race.png')
+    const request = embedding.textWorker.request.bind(embedding.textWorker)
+    let entered!: () => void
+    let release!: () => void
+    const started = new Promise<void>(resolve => { entered = resolve })
+    const gate = new Promise<void>(resolve => { release = resolve })
+    t.mock.method(embedding.textWorker, 'request', async (...args: Parameters<typeof request>) => {
+      if (args[0] === 'embed_images') { entered(); await gate }
+      return request(...args)
+    })
+    const pending = indexPendingImages()
+    try {
+      await started
+      db.prepare('DELETE FROM image_files WHERE composite_hash = ?').run(hash(99))
+      db.prepare('DELETE FROM media_metadata WHERE composite_hash = ?').run(hash(99))
+      release()
+      await pending
+      const { vectorStore } = await import('../src/services/vectors/vectorStore')
+      assert.equal(vectorStore.get('media-image', hash(99), embedding.IMAGE_EMBEDDING_MODEL_KEY).length, 0)
+    } finally { release(); await pending; settingsService.updateEmbeddingSettings({ imageSearch: false }) }
+  })
 })

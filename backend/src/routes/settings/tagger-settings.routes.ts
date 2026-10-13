@@ -1,3 +1,4 @@
+import { verifyPageSettingsWrite } from '../../services/pageSettings';
 import { Router, Request, Response } from 'express';
 import type { TaggerDevice, TaggerModel, TaggerSettings } from '@conai/shared';
 import { asyncHandler } from '../../middleware/asyncHandler';
@@ -63,6 +64,7 @@ router.put(
       }
     }
 
+    if (!verifyPageSettingsWrite(res)) return;
     const updatedSettings = settingsService.updateTaggerSettings(taggerSettings);
     await imageTaggerService.reloadConfig();
     autoTagScheduler.restart();

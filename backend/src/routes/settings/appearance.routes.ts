@@ -1,4 +1,5 @@
 import fs from 'fs'
+import { verifyPageSettingsWrite } from '../../services/pageSettings'
 import path from 'path'
 import multer from 'multer'
 import sharp from 'sharp'
@@ -556,6 +557,7 @@ router.put('/appearance', asyncHandler(async (req: Request, res: Response) => {
     return
   }
 
+  if (!verifyPageSettingsWrite(res)) return
   const updatedSettings = settingsService.updateAppearanceSettings(appearanceSettings)
 
   res.json({

@@ -13,6 +13,20 @@ export const SPRITE_WORKSPACE_TTL_MS = 60 * 60 * 1000
 export const SPRITE_WORKSPACE_CAP_BYTES = 4 * 1024 * 1024 * 1024
 const OWNER_FILE = 'owner.json'
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const retained = new Map<string, number>()
+
+/** Waiting and running tasks retain their input files until their slot is released. */
+export function retainSpriteWorkspace(workDir?: string): () => void {
+  if (!workDir) return () => {}
+  const dir = path.resolve(workDir)
+  if (path.dirname(dir) !== path.resolve(spriteWorkspaceRoot()) || !ID_PATTERN.test(path.basename(dir))) return () => {}
+  retained.set(dir, (retained.get(dir) ?? 0) + 1)
+  return () => {
+    const count = (retained.get(dir) ?? 1) - 1
+    if (count) retained.set(dir, count)
+    else retained.delete(dir)
+  }
+}
 
 export type SpriteWorkspaceKind = 'build' | 'normalize' | 'animation' | 'batch'
 
@@ -61,13 +75,14 @@ export function pruneSpriteWorkspaces(now = Date.now(), keep?: string): void {
     .map((entry) => ({ dir: path.join(root, entry.name), used: lastUsed(path.join(root, entry.name)) }))
   const live: typeof entries = []
   for (const entry of entries) {
-    if (now - entry.used > SPRITE_WORKSPACE_TTL_MS) fs.rmSync(entry.dir, { recursive: true, force: true })
+    if (!retained.has(path.resolve(entry.dir)) && now - entry.used > SPRITE_WORKSPACE_TTL_MS) fs.rmSync(entry.dir, { recursive: true, force: true })
     else live.push(entry)
   }
   let total = live.reduce((sum, entry) => sum + directorySize(entry.dir), 0)
   if (keep && fs.existsSync(path.join(root, keep))) total += directorySize(path.join(root, keep))
   for (const entry of live.sort((a, b) => a.used - b.used)) {
     if (total <= SPRITE_WORKSPACE_CAP_BYTES) break
+    if (retained.has(path.resolve(entry.dir))) continue
     const size = directorySize(entry.dir)
     fs.rmSync(entry.dir, { recursive: true, force: true })
     total -= size
@@ -92,7 +107,7 @@ export function getSpriteWorkspace(id: string): SpriteWorkspace | null {
   if (!fs.existsSync(ownerPath)) return null
   try {
     const owner = JSON.parse(fs.readFileSync(ownerPath, 'utf8')) as SpriteWorkspaceOwner
-    if (Date.now() - lastUsed(dir) > SPRITE_WORKSPACE_TTL_MS) {
+    if (!retained.has(path.resolve(dir)) && Date.now() - lastUsed(dir) > SPRITE_WORKSPACE_TTL_MS) {
       fs.rmSync(dir, { recursive: true, force: true })
       return null
     }

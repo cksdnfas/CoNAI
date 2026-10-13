@@ -1,4 +1,6 @@
 import { SpriteError } from './spriteErrors'
+import { MAX_SPRITE_FRAMES, planSpriteSampling } from '@conai/shared'
+export { MAX_SPRITE_FRAMES, sampleBounds, countModeIndices, intervalFrameCount, intervalModeIndices } from '@conai/shared'
 
 /**
  * Sprite extraction options, limits and validation.
@@ -8,7 +10,6 @@ import { SpriteError } from './spriteErrors'
  * (D3), and the web UI defaults for both web and MCP callers (D5).
  */
 
-export const MAX_SPRITE_FRAMES = 256
 export const MAX_SHEET_DIMENSION = 16384
 export const MAX_IMAGE_PIXELS = 64 * 1024 * 1024
 /** Raw RGBA bytes one build may hold on disk at once (256 frames of 2048x2048). */
@@ -160,74 +161,22 @@ export interface ValidatedExtractPlan {
   keyRgb: Array<[number, number, number]>
 }
 
-/** Evenly spread sample indices (count mode); identical to the original `_sample_frame_indices`. */
-export function sampleBounds(info: SpriteVideoInfo, startTime: number, endTime: number): [number, number] {
-  const lastIndex = Math.max(0, info.frameCount - 1)
-  const startIndex = Math.min(lastIndex, Math.max(0, Math.floor(startTime * info.fps + 0.5)))
-  const endIndex = Math.min(lastIndex, Math.max(startIndex, Math.floor(endTime * info.fps + 0.5)))
-  return [startIndex, endIndex]
-}
-
-export function countModeIndices(info: SpriteVideoInfo, startTime: number, endTime: number, count: number): number[] {
-  const [startIndex, endIndex] = sampleBounds(info, startTime, endTime)
-  const span = endIndex - startIndex
-  return Array.from({ length: count }, (_, index) => Math.floor(startIndex + span * index / (count - 1) + 0.5))
-}
-
-export function intervalFrameCount(startTime: number, endTime: number, interval: number): number {
-  return Math.floor((endTime - startTime + 1e-9) / interval) + 1
-}
-
-/**
- * D3: exact interval sampling. The original's `fps=…:round=near` filter picked the last source frame of each output
- * slot (one frame late); this picks the source frame nearest each sample time, deduplicated in order.
- */
-export function intervalModeIndices(info: SpriteVideoInfo, startTime: number, endTime: number, interval: number): number[] {
-  const count = intervalFrameCount(startTime, endTime, interval)
-  const lastIndex = Math.max(0, info.frameCount - 1)
-  const indices: number[] = []
-  for (let k = 0; k < count; k += 1) {
-    const index = Math.min(lastIndex, Math.max(0, Math.floor((startTime + k * interval) * info.fps + 0.5)))
-    if (indices[indices.length - 1] !== index) indices.push(index)
-  }
-  return indices
-}
-
 /** Port of `_validate_options` plus the D3/D4 rules. Throws SpriteError with the original Korean messages. */
 export function validateExtractOptions(info: SpriteVideoInfo, input: SpriteExtractOptions): ValidatedExtractPlan {
   const options = { ...input, keyColors: [...input.keyColors] }
   const endTime = options.endTime ?? info.lastFrameTime
-  if (!Number.isFinite(options.startTime) || !Number.isFinite(endTime) || options.startTime < 0 || endTime < options.startTime) {
-    throw new SpriteError('시작과 종료 시간을 확인하세요.')
+  const sampling = planSpriteSampling(info, options.startTime, endTime, options.sampleCount, options.intervalSeconds)
+  const samplingErrors = {
+    range: '시작과 종료 시간을 확인하세요.',
+    past_end: '종료 시간이 영상의 마지막 프레임을 벗어났습니다.',
+    count_range: `총 장수는 2~${MAX_SPRITE_FRAMES}장 사이여야 합니다.`,
+    empty_count_range: '총 장수 추출은 시작과 종료 시간이 달라야 합니다.',
+    unavailable_count: `선택 구간에서는 중복 없이 최대 ${sampling.available}장까지 추출할 수 있습니다.`,
+    interval: '프레임 간격은 0보다 커야 합니다.',
+    frame_limit: `한 번에 1~${MAX_SPRITE_FRAMES}프레임까지 추출할 수 있습니다.`,
   }
-  if (endTime > info.lastFrameTime + Math.max(0.001, 0.5 / info.fps)) {
-    throw new SpriteError('종료 시간이 영상의 마지막 프레임을 벗어났습니다.')
-  }
-
-  let frameIndices: number[]
-  if (options.sampleCount) {
-    if (options.sampleCount < 2 || options.sampleCount > MAX_SPRITE_FRAMES) {
-      throw new SpriteError(`총 장수는 2~${MAX_SPRITE_FRAMES}장 사이여야 합니다.`)
-    }
-    if (endTime <= options.startTime) {
-      throw new SpriteError('총 장수 추출은 시작과 종료 시간이 달라야 합니다.')
-    }
-    const [startIndex, endIndex] = sampleBounds(info, options.startTime, endTime)
-    const available = endIndex - startIndex + 1
-    if (options.sampleCount > available) {
-      throw new SpriteError(`선택 구간에서는 중복 없이 최대 ${available}장까지 추출할 수 있습니다.`)
-    }
-    frameIndices = countModeIndices(info, options.startTime, endTime, options.sampleCount)
-  } else {
-    if (!Number.isFinite(options.intervalSeconds) || options.intervalSeconds <= 0) {
-      throw new SpriteError('프레임 간격은 0보다 커야 합니다.')
-    }
-    const requested = intervalFrameCount(options.startTime, endTime, options.intervalSeconds)
-    if (requested < 1 || requested > MAX_SPRITE_FRAMES) {
-      throw new SpriteError(`한 번에 1~${MAX_SPRITE_FRAMES}프레임까지 추출할 수 있습니다.`)
-    }
-    frameIndices = intervalModeIndices(info, options.startTime, endTime, options.intervalSeconds)
-  }
+  if (sampling.problem) throw new SpriteError(samplingErrors[sampling.problem])
+  const frameIndices = sampling.indices
 
   if (options.backgroundMode !== 'none' && options.backgroundMode !== 'key') {
     throw new SpriteError('지원하지 않는 배경 제거 방식입니다.')

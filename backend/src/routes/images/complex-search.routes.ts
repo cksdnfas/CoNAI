@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { asyncHandler } from '../../middleware/asyncHandler';
+import { asyncHandler, cancellableAsyncHandler } from '../../middleware/asyncHandler';
 import { ComplexFilterService } from '../../services/complexFilterService';
 import {
   ComplexSearchRequest,
@@ -107,7 +107,7 @@ function resolveSearchFilter(requestBody: ComplexSearchRequest): { filter?: Comp
  *   sortOrder?: 'ASC' | 'DESC'
  * }
  */
-router.post('/', asyncHandler(async (req: Request, res: Response) => {
+router.post('/', cancellableAsyncHandler(async (req, res, signal) => {
   const requestBody = req.body as ComplexSearchRequest & {
     pagination?: 'offset' | 'cursor';
     cursorValue?: string | number | null;
@@ -136,7 +136,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       if (!embeddingFeatureOn('imageSearch')) {
         return res.status(409).json({ success: false, error: 'Image search is off (settings → embeddings)' } as ComplexSearchResponse);
       }
-      ranked = await rankImagesByText(meaning);
+      ranked = await rankImagesByText(meaning, { signal });
       if (!ranked) {
         return res.status(503).json({ success: false, error: 'The embedding model is not available right now' } as ComplexSearchResponse);
       }

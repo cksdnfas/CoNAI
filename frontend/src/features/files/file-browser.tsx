@@ -1,7 +1,7 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type DragEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AudioLines, ChevronRight, Download, File, FilePlus, FileText, Film, Folder, FolderInput, FolderPlus, Image as ImageIcon, LayoutGrid, List, Music, Pencil, RefreshCw, Search, Trash2, Upload, Users, X } from 'lucide-react'
+import { AudioLines, ChevronRight, Download, File, FilePlus, Folder, FolderInput, FolderPlus, LayoutGrid, List, Pencil, RefreshCw, Search, Trash2, Upload, Users, X } from 'lucide-react'
 import type { FileSearchStatus, StoredFileEntry, StoredFileOwner, StoredFileSearchHit } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -30,6 +30,7 @@ import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStor
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './file-preview'
+import { FileEntryIcon as EntryIcon, fileMediaKind as mediaKind } from './file-preview-shared'
 import { FileTextEditor } from './file-text-editor'
 import { useFileViewMode, type FileViewMode } from './file-view-mode'
 import { SystemFolderBrowser, SystemFolderSidebarGroup, type SystemFolderLocation } from './system-folder-browser'
@@ -42,7 +43,11 @@ type NameDialog = { id?: string; name: string } | null
 
 function folderTree(folders: StoredFileEntry[]) {
   const children = new Map<string | null, StoredFileEntry[]>()
-  for (const folder of folders) children.set(folder.parentId, [...(children.get(folder.parentId) ?? []), folder])
+  for (const folder of folders) {
+    const siblings = children.get(folder.parentId) ?? []
+    siblings.push(folder)
+    children.set(folder.parentId, siblings)
+  }
   const result: Array<{ folder: StoredFileEntry; depth: number; path: string }> = []
   const walk = (parentId: string | null, depth: number, parentPath: string) => {
     if (depth >= 64) return
@@ -54,21 +59,6 @@ function folderTree(folders: StoredFileEntry[]) {
   }
   walk(null, 0, '')
   return result
-}
-
-function mediaKind(entry: StoredFileEntry) {
-  const type = entry.mimeType ?? ''
-  if (type.startsWith('image/')) return 'image'
-  if (type.startsWith('video/')) return 'video'
-  if (type.startsWith('audio/')) return 'audio'
-  return 'other'
-}
-
-function EntryIcon({ entry, className = 'size-4' }: { entry: StoredFileEntry; className?: string }) {
-  if (entry.kind === 'folder') return <Folder className={cn('shrink-0 text-warning', className)} />
-  const kind = mediaKind(entry)
-  const Icon = kind === 'image' ? ImageIcon : kind === 'video' ? Film : kind === 'audio' ? Music : (entry.mimeType ?? '').startsWith('text/') ? FileText : File
-  return <Icon className={cn('shrink-0 text-muted-foreground', className)} />
 }
 
 /** Extension in capitals under the icon, so PDF / ZIP / TXT read at a glance. */
@@ -288,9 +278,9 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   }, [searchInput])
   const canSearch = !isPicker && !browsingAll
   const searching = canSearch && searchOpen && searchQuery !== ''
-  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'list', parentId, offset], queryFn: () => listStoredFiles(parentId, offset, storeOwner), enabled: canViewFiles && !browsingAll && !browsingSystem })
-  const foldersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'folders'], queryFn: () => listStoredFolders(storeOwner), enabled: canViewFiles && !browsingAll })
-  const searchResults = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'search', searchQuery], queryFn: () => searchStoredFiles(searchQuery, storeOwner), enabled: canViewFiles && searching })
+  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'list', parentId, offset], queryFn: ({ signal }) => listStoredFiles(parentId, offset, storeOwner, signal), enabled: canViewFiles && !browsingAll && !browsingSystem })
+  const foldersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'folders'], queryFn: ({ signal }) => listStoredFolders(storeOwner, signal), enabled: canViewFiles && !browsingAll })
+  const searchResults = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'search', searchQuery], queryFn: ({ signal }) => searchStoredFiles(searchQuery, storeOwner, signal), enabled: canViewFiles && searching })
   const retryExtraction = useMutation({
     mutationFn: (id: string) => retryStoredFileIndex(id, storeOwner),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY }) },

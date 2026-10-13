@@ -47,6 +47,7 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
   let hold: Promise<void> | null = null
   const requests: string[] = []
   t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    if (init.method !== 'POST') return new Response('', { status: 404 })
     const body = String(init.body)
     requests.push(body)
     if (hold) await hold

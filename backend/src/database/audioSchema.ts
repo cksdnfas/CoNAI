@@ -66,6 +66,8 @@ export function ensureAudioSchema(db: Database.Database): void {
       deleted_at TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_audio_candidates_group ON audio_candidates(group_id, deleted_at, created_at);
+    CREATE INDEX IF NOT EXISTS idx_audio_candidates_order_live ON audio_candidates(order_id, created_at, id) WHERE deleted_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_audio_candidates_job_live ON audio_candidates(job_id, group_id) WHERE deleted_at IS NULL;
     CREATE INDEX IF NOT EXISTS idx_audio_candidates_file ON audio_candidates(file_hash);
     CREATE INDEX IF NOT EXISTS idx_audio_candidates_parent ON audio_candidates(parent_id);
     CREATE INDEX IF NOT EXISTS idx_audio_candidates_deleted ON audio_candidates(deleted_at) WHERE deleted_at IS NOT NULL;

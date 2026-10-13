@@ -15,7 +15,7 @@ test('llm usage ledger: reported, estimated, failed and stopped requests; daily 
   const dbModule = await import('../src/database/userSettingsDb')
   dbModule.initializeUserSettingsDb()
   const db = dbModule.getUserSettingsDb()
-  const { readUsageCounts, recordLlmUsage, buildLlmUsageSummary } = await import('../src/services/llmUsage')
+  const { readUsageCounts, recordLlmUsage, buildLlmUsageSummary, withLlmUsageContext } = await import('../src/services/llmUsage')
   const { streamChatCompletion } = await import('../src/services/codex-chat/llmChatCompletion')
   const { ChatJudgeLogStore } = await import('../src/services/codex-chat/chatJudgeLogs')
 
@@ -71,6 +71,26 @@ test('llm usage ledger: reported, estimated, failed and stopped requests; daily 
     assert.equal(rows().length, before + 1, 'an already-stopped signal never dispatches or creates a usage event')
   })
 
+  await t.test('task usage is bound to its thread, survives stale progress writes and cannot resume past its token budget', async () => {
+    const { ChatTaskStore, ChatTaskRunner } = await import('../src/services/codex-chat/chatTasks')
+    const task = ChatTaskStore.create(101, 'usage', [{ title: 'work' }], { tokens: 100 })
+    const event = { purpose: 'chat' as const, engine: 'api' as const, providerName: 'local', model: 'gemma', tokens: { inputTokens: 80, cachedInputTokens: 0, outputTokens: 20 }, latencyMs: 30, queueMs: 5, firstTokenMs: 10, ok: true }
+    await withLlmUsageContext({ threadId: 101, taskId: task.id, replyId: 'reply-a' }, async () => {
+      recordLlmUsage({ ...event, threadId: 102 })
+      assert.equal(ChatTaskStore.find(task.id)!.used.tokens, undefined)
+      await Promise.resolve()
+      recordLlmUsage({ ...event, threadId: 101, round: 2 })
+    })
+    assert.equal(ChatTaskStore.find(task.id)!.used.tokens, 100)
+    const row = db.prepare('SELECT reply_id, task_id, round, queue_ms, first_token_ms FROM llm_usage_events ORDER BY id DESC LIMIT 1').get()
+    assert.deepEqual(row, { reply_id: 'reply-a', task_id: task.id, round: 2, queue_ms: 5, first_token_ms: 10 })
+    ChatTaskStore.update(task.id, { status: 'paused', used: task.used })
+    assert.equal(ChatTaskStore.find(task.id)!.used.tokens, 100)
+    assert.throws(() => ChatTaskRunner.resume(101), /예산/)
+    assert.throws(() => ChatTaskRunner.resume(101, { taskId: task.id, budget: { ...task.budget, tokens: 99 } }), /예산/)
+    assert.equal(ChatTaskStore.find(task.id)!.status, 'paused')
+  })
+
   await t.test('summary: local days by the viewer offset, totals, purposes and models', () => {
     db.prepare('DELETE FROM llm_usage_events').run()
     const insert = db.prepare('INSERT INTO llm_usage_events (created_at, purpose, engine, provider_name, model, input_tokens, output_tokens, latency_ms, ok, estimated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -83,7 +103,7 @@ test('llm usage ledger: reported, estimated, failed and stopped requests; daily 
     const summary = buildLlmUsageSummary(7, 540)
     assert.equal(summary.daily.length, 7)
     assert.equal(summary.daily.at(-1)!.date, (db.prepare(`SELECT date('now', '+540 minutes') AS d`).get() as { d: string }).d)
-    assert.deepEqual(summary.totals, { requests: 4, failed: 1, inputTokens: 1500, cachedInputTokens: 0, outputTokens: 405, estimatedRequests: 1, averageLatencyMs: Math.round((2000 + 400 + 1000) / 3) })
+    assert.deepEqual(summary.totals, { requests: 4, failed: 1, inputTokens: 1500, cachedInputTokens: 0, outputTokens: 405, estimatedRequests: 1, averageLatencyMs: Math.round((2000 + 400 + 1000) / 3), averageQueueMs: null, averageFirstTokenMs: null })
     assert.equal(summary.daily.reduce((sum, day) => sum + day.requests, 0), 4)
     const purposes = new Map<string, number>()
     for (const entry of summary.byPurpose) purposes.set(entry.purpose, (purposes.get(entry.purpose) ?? 0) + entry.tokens)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
-import { useInfiniteQuery, useQueries, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { Download, FolderInput, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -45,6 +45,7 @@ import {
   listAudioCandidates,
   listAudioFolders,
   listAudioGroups,
+  searchAudioGroups,
   listAudioOrders,
   listAudioProjects,
   moveAudioCandidates,
@@ -222,20 +223,19 @@ export function AudioPage() {
   const folder = group?.folder_id ? folders.find((entry) => entry.id === group.folder_id) ?? null : null
 
   // The tree shows the open project; a search or filter looks through every project.
-  const searchProjectIds = useMemo(() => (searching ? projects.map((entry) => entry.id) : []), [searching, projects])
-  const searchQueries = useQueries({
-    queries: searchProjectIds.map((id) => ({
-      queryKey: [AUDIO_QUERY_KEY, 'groups', id, debouncedSearch, filter],
-      queryFn: () => listAudioGroups(id, { search: debouncedSearch, filter }),
-      placeholderData: (previous: AudioGroup[] | undefined) => previous,
-    })),
+  const groupSearchQuery = useQuery<AudioGroup[]>({
+    queryKey: [AUDIO_QUERY_KEY, 'groups', 'search', debouncedSearch, filter],
+    queryFn: ({ signal }) => searchAudioGroups({ search: debouncedSearch, filter }, signal),
+    enabled: searching,
+    placeholderData: (previous: AudioGroup[] | undefined) => previous,
   })
   const searchResults = useMemo(() => {
     if (!searching) return null
     const map: Record<string, AudioGroup[] | undefined> = {}
-    searchProjectIds.forEach((id, index) => { map[id] = searchQueries[index]?.data })
+    for (const project of projects) map[project.id] = groupSearchQuery.data ? [] : undefined
+    for (const group of groupSearchQuery.data ?? []) (map[group.project_id] ??= []).push(group)
     return map
-  }, [searching, searchProjectIds, searchQueries])
+  }, [searching, projects, groupSearchQuery.data])
 
   // Without a group in the URL (or after it was deleted), open the first effect of the project. 받은 파일 opens only
   // when picked: a project without effects shows the "add an effect" state instead.
@@ -285,11 +285,12 @@ export function AudioPage() {
   useEffect(() => {
     if (runningJobs < previousRunning.current) {
       void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'candidates', groupId] })
-      void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'groups'] })
+      void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'groups', projectId] })
+      void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'groups', 'search'] })
       void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'group', groupId] })
     }
     previousRunning.current = runningJobs
-  }, [runningJobs, groupId, queryClient])
+  }, [runningJobs, groupId, projectId, queryClient])
 
   const refreshCounts = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'groups'] })

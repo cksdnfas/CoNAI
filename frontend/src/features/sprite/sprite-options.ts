@@ -1,7 +1,8 @@
 import type { SpriteExtractOptions, SpriteImageFormat, SpriteRect, SpriteVideoInfo } from '@/lib/api-sprite'
+import { planSpriteSampling } from '@conai/shared'
+export { MAX_SPRITE_FRAMES } from '@conai/shared'
 
 /** Mirrors backend/src/services/sprite/spriteOptions.ts limits and defaults (web defaults for web and MCP). */
-export const MAX_SPRITE_FRAMES = 256
 export const MAX_SHEET_DIMENSION = 16384
 export const MAX_KEY_COLORS = 8
 export const KEY_DEFAULTS = { tolerance: 0.1, softness: 0.05 }
@@ -108,27 +109,10 @@ export function resolvedEndTime(form: ExtractForm, info: SpriteVideoInfo | null 
 }
 
 /** Same selection as the server (exact interval sampling by frame index, D3). */
-export function estimateFrameIndices(form: ExtractForm, info: SpriteVideoInfo | null | undefined): number[] {
-  if (!info || info.frameCount < 1) return []
-  const last = info.frameCount - 1
-  const clamp = (value: number) => Math.min(last, Math.max(0, value))
-  const start = Math.max(0, resolvedStartTime(form))
-  const end = Math.max(start, resolvedEndTime(form, info))
-  if (form.samplingMode === 'count') {
-    const startIndex = clamp(Math.floor(start * info.fps + 0.5))
-    const endIndex = clamp(Math.floor(end * info.fps + 0.5))
-    const count = Math.max(2, Math.min(MAX_SPRITE_FRAMES, form.sampleCount))
-    return Array.from({ length: count }, (_, index) => Math.floor(startIndex + (endIndex - startIndex) * index / (count - 1) + 0.5))
-  }
-  const step = intervalSeconds(form, info.fps)
-  if (!(step > 0)) return []
-  const count = Math.floor((end - start + 1e-9) / step) + 1
-  const indices: number[] = []
-  for (let k = 0; k < count && indices.length <= MAX_SPRITE_FRAMES; k += 1) {
-    const index = clamp(Math.floor((start + k * step) * info.fps + 0.5))
-    if (indices[indices.length - 1] !== index) indices.push(index)
-  }
-  return indices
+export function estimateFrameSelection(form: ExtractForm, info: SpriteVideoInfo | null | undefined) {
+  if (!info || info.frameCount < 1) return null
+  return planSpriteSampling(info, resolvedStartTime(form), resolvedEndTime(form, info),
+    form.samplingMode === 'count' ? form.sampleCount : 0, Number(intervalSeconds(form, info.fps).toFixed(6)))
 }
 
 export function toExtractOptions(form: ExtractForm, info: SpriteVideoInfo | null | undefined, output: OutputForm): Partial<SpriteExtractOptions> {

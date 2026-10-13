@@ -30,6 +30,7 @@ import { REFERENCE_BLOCK_START, resolveChatCompletionTarget, streamChatCompletio
 import { inBackground } from '../llmRequestScheduler'
 import { rawMessagesEstimate as rawUsageEstimate, rawTokenEstimate } from '../llmUsage'
 import { ChatEstimateRatioStore } from './chatEstimateRatios'
+import { serverContextLimit } from './serverContextLimit'
 
 /** Tool output replayed to the model for turns still in the window. */
 const REPLAYED_TOOL_OUTPUT_LENGTH = 4000
@@ -712,6 +713,48 @@ const FIT_TOOL_OUTPUT_LENGTHS = [REPLAYED_TOOL_OUTPUT_LENGTH, 1000]
 
 /** A tool result cut to `length` characters, saying how much of it the model sees. */
 export function cutToolOutput(content: string, length: number) {
+  if (content.length <= length) return content
+  // Preserve valid JSON and mark omissions explicitly. Never hand a model a syntactically broken result.
+  try {
+    const value: unknown = JSON.parse(content)
+    const note = 'Partial result. Query a smaller page or selected fields for omitted data.'
+    for (let cap = Math.min(length, 1024); cap >= 1; cap = Math.floor(cap / 2)) {
+      let remaining = length
+      const compact = (item: unknown, depth: number): unknown => {
+        if (remaining <= 0 || depth > 8) return '(omitted)'
+        if (typeof item === 'string') {
+          const shown = item.length > cap ? `${item.slice(0, cap)}…(truncated)` : item
+          remaining -= shown.length
+          return shown
+        }
+        if (Array.isArray(item)) {
+          const shown: unknown[] = []
+          for (const entry of item.slice(0, Math.min(cap, 32))) {
+            if (remaining <= 0) break
+            remaining -= 4
+            shown.push(compact(entry, depth + 1))
+          }
+          return shown
+        }
+        if (item && typeof item === 'object') {
+          const shown: Record<string, unknown> = {}
+          for (const [key, entry] of Object.entries(item).slice(0, 32)) {
+            if (remaining <= 0) break
+            remaining -= key.length + 4
+            Object.defineProperty(shown, key, { value: compact(entry, depth + 1), enumerable: true })
+          }
+          return shown
+        }
+        remaining -= 8
+        return item
+      }
+      const result = JSON.stringify({ truncated: true, originalCharacters: content.length, data: compact(value, 0), note })
+      if (result.length <= length) return result
+    }
+    return JSON.stringify({ truncated: true, note: 'Result omitted. Query a smaller page or selected fields.' })
+  } catch {
+    // Plain text keeps the existing readable prefix and explicit cut marker.
+  }
   return `${content.slice(0, length)}\n…(잘림: 이 결과의 ${length}자까지만 보임)`
 }
 
@@ -984,11 +1027,11 @@ function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: L
 
 /** The oldest of `turns` whose transcript stays within one summary call (at least one turn). */
 function takeSummaryChunk(profile: ChatProfile, config: LlmChatContextConfig, turns: CodexChatMessageRecord[][], lineOf: TranscriptLineOf) {
-  const limit = config.contextTokens ? Math.max(2000, Math.floor(config.contextTokens / 2)) : DEFAULT_SUMMARY_CHUNK_TOKENS
+  const limit = config.contextTokens ? Math.floor(config.contextTokens / 2) : DEFAULT_SUMMARY_CHUNK_TOKENS
   let used = 0
   let count = 0
   for (const turn of turns) {
-    used += estimateTokens(profile.id, turn.map(lineOf).join('\n\n'))
+    used += rawTokenEstimate(turn.map(lineOf).join('\n\n'))
     if (count > 0 && used > limit) {
       break
     }
@@ -1035,7 +1078,11 @@ export async function completeSummary(profile: ChatProfile, system: string, cont
   const generation = summaryGenerationOptions(profileGenerationOptions(profile), connection.thinkingSwitch)
   // With reasoning left on, thinking shares the cap, so only a request that really runs without it gets one.
   const capped = thinkingIsOff(generation, connection.thinkingSwitch)
-  const target = { ...connection, generation: capped ? { ...generation, maxTokens } : generation }
+  const limit = await serverContextLimit(connection)
+  const promptTokens = rawUsageEstimate([{ role: 'system', content: system }, { role: 'user', content }])
+  const room = limit === null ? null : limit - Math.ceil(promptTokens * 1.05)
+  if (room !== null && room < 256) throw new Error('요약 모델의 컨텍스트 한도를 넘었어. 더 큰 요약 모델을 선택하거나 긴 메시지를 줄여줘.')
+  const target = { ...connection, generation: capped ? { ...generation, maxTokens: Math.min(maxTokens, room ?? maxTokens) } : generation }
   const timeout = AbortSignal.timeout(SUMMARY_TIMEOUT_MS)
   const result = await streamChatCompletion({
     target,
@@ -1064,7 +1111,7 @@ async function summarizeSegment(profile: ChatProfile, config: LlmChatContextConf
   const context: string[] = []
   let used = 0
   for (const text of [...active.slice(-KEEP_RECENT_SEGMENTS).reverse().map((segment) => segment.content), plot?.content ?? '']) {
-    const cost = estimateTokens(profile.id, text)
+    const cost = rawTokenEstimate(text)
     if (!text.trim() || used + cost > limit) break
     context.unshift(text.trim())
     used += cost
@@ -1087,11 +1134,11 @@ function summarizePlot(profile: ChatProfile, config: LlmChatContextConfig, plot:
 
 /** The oldest of `segments` that fit one plot call beside the plot itself (at least one), so a long backlog goes in passes. */
 function takePlotChunk(profile: ChatProfile, config: LlmChatContextConfig, plot: ChatSummarySegment | null, segments: ChatSummarySegment[]) {
-  const limit = (config.contextTokens ? Math.max(2000, Math.floor(config.contextTokens / 2)) : DEFAULT_SUMMARY_CHUNK_TOKENS) - estimateTokens(profile.id, plot?.content ?? '')
+  const limit = (config.contextTokens ? Math.floor(config.contextTokens / 2) : DEFAULT_SUMMARY_CHUNK_TOKENS) - rawTokenEstimate(plot?.content ?? '')
   let used = 0
   let count = 0
   for (const segment of segments) {
-    used += estimateTokens(profile.id, segment.content)
+    used += rawTokenEstimate(segment.content)
     if (count > 0 && used > limit) break
     count += 1
   }
@@ -1119,10 +1166,19 @@ type FoldPass = {
   lineOf: TranscriptLineOf
 }
 /** Null: nothing to do (the summary is off). May throw when no one can summarize; that is recorded like a failed call. */
-type FoldPlanner = (thread: CodexChatThreadRecord, segments: ChatSummarySegment[]) => FoldPass | null
+type FoldPlanner = (thread: CodexChatThreadRecord, segments: ChatSummarySegment[]) => Promise<FoldPass | null>
+
+/** Summary input is sized for its own model; chat-model calibration must not shrink another tokenizer's estimate. */
+async function summaryContextConfig(profile: ChatProfile, config: LlmChatContextConfig): Promise<LlmChatContextConfig> {
+  const resolved = resolveProfileModel(profile, 'summary')
+  if (!resolved) throw new Error('요약에 쓸 LLM 연결을 찾을 수 없어.')
+  const target = resolveChatCompletionTarget(resolved.providerName, { model: resolved.model })
+  const limit = await serverContextLimit(target)
+  return { ...config, contextTokens: Math.min(config.contextTokens ?? DEFAULT_SUMMARY_CHUNK_TOKENS * 2, limit ?? DEFAULT_SUMMARY_CHUNK_TOKENS * 2) }
+}
 
 function directPlanner(profile: ChatProfile, mode: FoldMode, options: { messages?: CodexChatMessageRecord[]; tools?: ChatCompletionTool[]; extras?: RequestExtras }): FoldPlanner {
-  return (thread, segments) => {
+  return async (thread, segments) => {
     if (profile.engine === 'claude' && !resolveChatAccess(thread.account_id).claude) throw new Error('Claude Code 요약 모델을 사용할 권한이 없어.')
     const config = resolveContextConfig(thread, profile)
     if (mode !== 'all' && !config.summaryEnabled) return null
@@ -1130,7 +1186,8 @@ function directPlanner(profile: ChatProfile, mode: FoldMode, options: { messages
     const turns = splitTurns(sendableMessages(unsummarizedMessages(messages, thread, { summaryEnabled: true })))
     const count = planFold(profile, thread, config, messages, turns, mode, options.tools ?? [], segments, options.extras)
     const lineOf = directTranscript(profile, userPersonaForThread(thread))
-    return { profile, config, lineOf, chunk: count === 0 ? [] : takeSummaryChunk(profile, config, turns.slice(0, count), lineOf) }
+    const summaryConfig = count > 0 || segments.length > KEEP_RECENT_SEGMENTS ? await summaryContextConfig(profile, config) : config
+    return { profile, config: summaryConfig, lineOf, chunk: count === 0 ? [] : takeSummaryChunk(profile, summaryConfig, turns.slice(0, count), lineOf) }
   }
 }
 
@@ -1150,7 +1207,7 @@ export function groupSummarizer(thread: Pick<CodexChatThreadRecord, 'profile_id'
  * newest `window` stay verbatim — or everything (`all`).
  */
 function groupPlanner(members: ChatProfile[], window: number, mode: 'ahead' | 'all'): FoldPlanner {
-  return (thread) => {
+  return async (thread) => {
     if (mode !== 'all' && thread.summary_enabled !== 1) return null
     const profile = groupSummarizer(thread, members)
     if (!profile) throw new Error('요약할 수 있는 LLM 참가자가 없어.')
@@ -1159,7 +1216,8 @@ function groupPlanner(members: ChatProfile[], window: number, mode: 'ahead' | 'a
     const pending = sendableMessages(unsummarizedMessages(CodexChatStore.listMessages(thread.id), thread, config))
     const count = mode === 'all' ? pending.length : turnsToFold(pending.length, window, groupFoldBatch(window))
     const lineOf = groupTranscript(members, userPersonaForThread(thread))
-    return { profile, config, lineOf, chunk: count === 0 ? [] : takeSummaryChunk(profile, config, pending.slice(0, count).map((message) => [message]), lineOf) }
+    const summaryConfig = await summaryContextConfig(profile, config)
+    return { profile, config: summaryConfig, lineOf, chunk: count === 0 ? [] : takeSummaryChunk(profile, summaryConfig, pending.slice(0, count).map((message) => [message]), lineOf) }
   }
 }
 
@@ -1208,7 +1266,7 @@ async function foldIntoSummary(threadId: number, plan: FoldPlanner, mode: FoldMo
       return folded
     }
     const segments = ChatSummaryStore.list(threadId)
-    const pending = plan(thread, segments)
+    const pending = await plan(thread, segments)
     if (!pending) {
       return folded
     }
@@ -1321,7 +1379,7 @@ export function summarizeGroupAhead(threadId: number, members: ChatProfile[], wi
   if (summaryRuns.has(threadId)) {
     return Promise.resolve(null)
   }
-  return startFold(threadId, groupPlanner(members, window, 'ahead'), 'ahead')
+  return inBackground(() => startFold(threadId, groupPlanner(members, window, 'ahead'), 'ahead'))
 }
 
 /** The room's summarize button: fold everything not summarized yet. Null when nothing is new or a summary is running. */
@@ -1353,6 +1411,14 @@ function withinWait<T>(promise: Promise<T>, deadline: number) {
 export async function fitThreadSummary(threadId: number, profile: ChatProfile, messages: CodexChatMessageRecord[], signal: AbortSignal, tools: ChatCompletionTool[], extras: RequestExtras = {}, waitMs = SUMMARY_WAIT_MS) {
   const deadline = Date.now() + waitMs
   const running = summaryRuns.get(threadId)
+  if (running) {
+    const thread = CodexChatStore.findThreadById(threadId)
+    if (!thread) return
+    const config = resolveContextConfig(thread, profile)
+    const turns = splitTurns(sendableMessages(unsummarizedMessages(messages, thread, config)))
+    // An ahead fold is optional when the current request still fits. Do not make the next reply wait for it.
+    if (!config.summaryEnabled || planFold(profile, thread, config, messages, turns, 'overflow', tools, ChatSummaryStore.list(threadId), extras) === 0) return
+  }
   if (running && await untilAborted(withinWait(running.catch(() => null), deadline), signal) === WAIT_OVER) {
     console.warn('[llm-chat] summary still running; the request goes on without it')
     return

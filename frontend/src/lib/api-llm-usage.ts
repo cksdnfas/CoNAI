@@ -12,6 +12,8 @@ export type LlmUsageTotals = {
   /** Requests whose counts are our estimate (the server reported none). */
   estimatedRequests: number
   averageLatencyMs: number | null
+  averageQueueMs: number | null
+  averageFirstTokenMs: number | null
 }
 
 export type LlmUsageSummary = {

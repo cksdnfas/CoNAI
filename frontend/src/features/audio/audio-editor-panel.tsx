@@ -13,7 +13,8 @@ import { getErrorMessage } from '@/lib/error-message'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { cn } from '@/lib/utils'
 import { audioPlayer, useAudioPlayer } from './audio-player'
-import { computePeaks, drawPeaks, loadAudioBuffer } from './audio-waveform'
+import { drawPeaks, loadAudioWaveform } from './audio-waveform'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 
 const DEFAULT_FADE_IN = 0.005
 const DEFAULT_FADE_OUT = 0.01
@@ -60,6 +61,8 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const player = useAudioPlayer()
+  const auth = useAuthStatusQuery()
+  const scope = JSON.stringify([auth.data?.accountId, auth.data?.hasCredentials, auth.data?.permissionKeys])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
   const [duration, setDuration] = useState<number>(candidate.file.duration ?? 0)
@@ -70,6 +73,7 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
   const [hoverTime, setHoverTime] = useState<number | null>(null)
   const [busy, setBusy] = useState<'preview' | 'save' | null>(null)
   const previewUrl = useRef<string | null>(null)
+  const previewRequest = useRef<AbortController | null>(null)
   const regionKey = `region:${candidate.id}`
   const previewKey = `preview:${candidate.id}`
 
@@ -79,18 +83,22 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
     const controller = new AbortController()
     setPeaks(null)
     setDuration(candidate.file.duration ?? 0)
-    setNotes(candidate.notes)
     setParams(defaultParams(candidate.file.duration ?? 0))
-    loadAudioBuffer(audioCandidateFileUrl(candidate.id), controller.signal).then((buffer) => {
+    loadAudioWaveform(candidate.id, candidate.file_hash, { scope, signal: controller.signal }).then((waveform) => {
       if (cancelled) return
-      setDuration(buffer.duration)
-      setPeaks(computePeaks(buffer, 1600))
-      setParams((current) => (current.end === 0 || current.end > buffer.duration ? { ...current, end: round3(buffer.duration) } : current))
+      setDuration(waveform.duration)
+      setPeaks(waveform.editorPeaks)
+      setParams((current) => (current.end === 0 || current.end > waveform.duration ? { ...current, end: round3(waveform.duration) } : current))
     }).catch(() => undefined)
     return () => { cancelled = true; controller.abort() }
-  }, [candidate.id, candidate.notes, candidate.file.duration])
+  }, [candidate.id, candidate.file_hash, candidate.file.duration, scope])
 
-  useEffect(() => () => { if (previewUrl.current) URL.revokeObjectURL(previewUrl.current) }, [])
+  useEffect(() => { setNotes(candidate.notes) }, [candidate.id, candidate.notes])
+
+  useEffect(() => () => {
+    previewRequest.current?.abort()
+    if (previewUrl.current) URL.revokeObjectURL(previewUrl.current)
+  }, [])
 
   const playing = player.playing && (player.key === regionKey || player.key === previewKey || player.key === candidate.id)
   const playhead = player.key === regionKey || player.key === candidate.id ? player.currentTime : null
@@ -176,16 +184,23 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
   }
   const playPreview = async () => {
     if (problem) return
+    previewRequest.current?.abort()
+    const controller = new AbortController()
+    previewRequest.current = controller
     setBusy('preview')
     try {
-      const blob = await previewAudioEdit(candidate.id, params)
+      const blob = await previewAudioEdit(candidate.id, params, controller.signal)
+      if (controller.signal.aborted) return
       if (previewUrl.current) URL.revokeObjectURL(previewUrl.current)
       previewUrl.current = URL.createObjectURL(blob)
       audioPlayer.play(previewKey, { src: previewUrl.current, start: 0 })
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '실패했어.', en: 'Failed.' })), tone: 'error' })
+      if (!controller.signal.aborted) showSnackbar({ message: getErrorMessage(error, t({ ko: '실패했어.', en: 'Failed.' })), tone: 'error' })
     } finally {
-      setBusy(null)
+      if (previewRequest.current === controller) {
+        previewRequest.current = null
+        if (!controller.signal.aborted) setBusy(null)
+      }
     }
   }
   const save = async () => {

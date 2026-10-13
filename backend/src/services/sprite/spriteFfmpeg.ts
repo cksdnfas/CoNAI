@@ -1,8 +1,8 @@
-import { spawn } from 'child_process'
 import fs from 'fs'
 import ffmpegStaticPath from 'ffmpeg-static'
 import { SpriteError } from './spriteErrors'
 import type { SpriteResizeMode, SpriteVideoInfo } from './spriteOptions'
+import { MediaProcessError, runMediaProcess, type MediaProcessResult } from '../../utils/mediaProcess'
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ffprobeStatic = require('ffprobe-static') as { path?: string }
@@ -16,54 +16,21 @@ export function ffprobeBinary(): string {
   return ffprobeStatic.path || 'ffprobe'
 }
 
-export interface ProcessRunResult {
-  stdout: Buffer
-  stderr: string
-}
+export type ProcessRunResult = MediaProcessResult
 
 /** Run a media tool to completion. Errors carry the last stderr line, like the original `_run`. */
-export function runTool(command: string, args: string[], options: { timeoutMs: number; signal?: AbortSignal; captureStdout?: boolean }): Promise<ProcessRunResult> {
-  return new Promise((resolve, reject) => {
-    if (options.signal?.aborted) {
-      reject(new SpriteError('작업이 취소되었습니다.'))
-      return
-    }
-    const child = spawn(command, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
-    const stdout: Buffer[] = []
-    const stderr: Buffer[] = []
-    let settled = false
-    const finish = (error: Error | null, result?: ProcessRunResult) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      options.signal?.removeEventListener('abort', onAbort)
-      if (error) reject(error)
-      else resolve(result!)
-    }
-    const onAbort = () => {
-      child.kill('SIGKILL')
-      finish(new SpriteError('작업이 취소되었습니다.'))
-    }
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL')
-      finish(new SpriteError(`${commandLabel(command)} 처리 시간이 제한을 초과했습니다.`))
-    }, options.timeoutMs)
-    options.signal?.addEventListener('abort', onAbort, { once: true })
-    child.stdout.on('data', (chunk: Buffer) => { if (options.captureStdout !== false) stdout.push(chunk) })
-    child.stderr.on('data', (chunk: Buffer) => { stderr.push(chunk) })
-    child.on('error', (error) => {
-      finish(new SpriteError(`필수 미디어 도구를 찾을 수 없습니다: ${commandLabel(command)} (${error.message})`))
-    })
-    child.on('close', (code) => {
-      const stderrText = Buffer.concat(stderr).toString('utf8')
-      if (code !== 0) {
-        const lines = stderrText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
-        finish(new SpriteError(`${commandLabel(command)} 처리 실패: ${lines[lines.length - 1] ?? `종료 코드 ${code}`}`))
-        return
-      }
-      finish(null, { stdout: Buffer.concat(stdout), stderr: stderrText })
-    })
-  })
+export async function runTool(command: string, args: string[], options: { timeoutMs: number; signal?: AbortSignal; captureStdout?: boolean }): Promise<ProcessRunResult> {
+  const label = commandLabel(command)
+  const candidates = ['ffmpeg', 'ffprobe'].includes(label) ? [command, label] : [command]
+  try { return await runMediaProcess(candidates, args, options) }
+  catch (error) {
+    if (!(error instanceof MediaProcessError)) throw error
+    if (error.reason === 'cancelled') throw new SpriteError('작업이 취소되었습니다.')
+    if (error.reason === 'timeout') throw new SpriteError(`${label} 처리 시간이 제한을 초과했습니다.`)
+    if (error.reason === 'spawn') throw new SpriteError(`필수 미디어 도구를 찾을 수 없습니다: ${label} (${error.message})`)
+    const lines = error.stderr.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+    throw new SpriteError(`${label} 처리 실패: ${lines[lines.length - 1] ?? `종료 코드 ${error.exitCode}`}`)
+  }
 }
 
 function commandLabel(command: string): string {
@@ -103,7 +70,7 @@ function rotation(stream: Record<string, unknown>): number {
 const round6 = (value: number) => Number(value.toFixed(6))
 
 /** Port of `probe_video`: rotation swaps width/height, avg then r_frame_rate, nb_frames then duration*fps. */
-export async function probeVideo(filePath: string, signal?: AbortSignal): Promise<SpriteVideoInfo> {
+async function probeVideoUncached(filePath: string, signal?: AbortSignal): Promise<SpriteVideoInfo> {
   const { stdout } = await runTool(ffprobeBinary(), ['-v', 'error', '-select_streams', 'v:0', '-show_streams', '-show_format', '-of', 'json', filePath], { timeoutMs: 45_000, signal })
   let stream: Record<string, unknown>
   let format: Record<string, unknown> = {}
@@ -135,6 +102,24 @@ export async function probeVideo(filePath: string, signal?: AbortSignal): Promis
     lastFrameTime: round6(lastFrameTime),
     formatName: String(format.format_name || 'unknown'),
   }
+}
+
+const probeCache = new Map<string, { signature: string; expires: number; info: SpriteVideoInfo }>()
+
+/** Reuse successful probes while the source's size and filesystem timestamps are unchanged. */
+export async function probeVideo(filePath: string, signal?: AbortSignal): Promise<SpriteVideoInfo> {
+  if (signal?.aborted) throw new SpriteError('작업이 취소되었습니다.')
+  let stat: fs.Stats
+  try { stat = await fs.promises.stat(filePath) }
+  catch { return probeVideoUncached(filePath, signal) }
+  const signature = `${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
+  const cached = probeCache.get(filePath)
+  if (cached?.signature === signature && cached.expires > Date.now()) return { ...cached.info }
+  const info = await probeVideoUncached(filePath, signal)
+  probeCache.delete(filePath)
+  probeCache.set(filePath, { signature, info, expires: Date.now() + 5 * 60_000 })
+  if (probeCache.size > 64) probeCache.delete(probeCache.keys().next().value as string)
+  return { ...info }
 }
 
 /** Resize filters as the original ordered them, minus contain's pad (added after keying, see padToSize / D2). */

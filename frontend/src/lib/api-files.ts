@@ -8,17 +8,17 @@ const headers = { 'Content-Type': 'application/json' }
 export type StoredFileOwnerKey = string | null | undefined
 const ownerQuery = (owner: StoredFileOwnerKey, first = false) => (owner ? `${first ? '?' : '&'}owner=${encodeURIComponent(owner)}` : '')
 
-export const listStoredFiles = (parentId: string | null, offset = 0, owner?: StoredFileOwnerKey) => requestApiData<FileStoreListing>(`/api/files?parentId=${parentId ?? ''}&offset=${offset}${ownerQuery(owner)}`)
+export const listStoredFiles = (parentId: string | null, offset = 0, owner?: StoredFileOwnerKey, signal?: AbortSignal) => requestApiData<FileStoreListing>(`/api/files?parentId=${parentId ?? ''}&offset=${offset}${ownerQuery(owner)}`, { signal })
 /** Files and folders whose name or text contains every word of `query` (a "quoted phrase" is one term). */
-export const searchStoredFiles = (query: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileSearchResult>(`/api/files/search?q=${encodeURIComponent(query)}${ownerQuery(owner)}`)
-export const listStoredFolders = (owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry[]>(`/api/files/folders${ownerQuery(owner, true)}`)
+export const searchStoredFiles = (query: string, owner?: StoredFileOwnerKey, signal?: AbortSignal) => requestApiData<StoredFileSearchResult>(`/api/files/search?q=${encodeURIComponent(query)}${ownerQuery(owner)}`, { signal })
+export const listStoredFolders = (owner?: StoredFileOwnerKey, signal?: AbortSignal) => requestApiData<StoredFileEntry[]>(`/api/files/folders${ownerQuery(owner, true)}`, { signal })
 export const listStoredFileOwners = () => requestApiData<StoredFileOwner[]>('/api/files/owners')
 export const storedFileDownloadUrl = (id: string, owner?: StoredFileOwnerKey) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/download${ownerQuery(owner, true)}`)
 export const storedFileViewUrl = (id: string, owner?: StoredFileOwnerKey) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/view${ownerQuery(owner, true)}`)
 export const getStoredFileNeighbors = (id: string, owner?: StoredFileOwnerKey) => requestApiData<{ previous: StoredFileEntry | null; next: StoredFileEntry | null }>(`/api/files/${encodeURIComponent(id)}/neighbors${ownerQuery(owner, true)}`)
 /** Small WebP preview of image and video files. */
 export const storedFileThumbnailUrl = (id: string, owner?: StoredFileOwnerKey) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/thumbnail${ownerQuery(owner, true)}`)
-export const readStoredFileText = (id: string, offset = 0, owner?: StoredFileOwnerKey) => requestApiData<StoredFileText>(`/api/files/${encodeURIComponent(id)}/text?offset=${offset}${ownerQuery(owner)}`)
+export const readStoredFileText = (id: string, offset = 0, owner?: StoredFileOwnerKey, revision?: string, signal?: AbortSignal) => requestApiData<StoredFileText>(`/api/files/${encodeURIComponent(id)}/text?offset=${offset}${ownerQuery(owner)}${revision ? `&revision=${encodeURIComponent(revision)}` : ''}`, { signal })
 export const createStoredFolder = (parentId: string | null, name: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/folders${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ parentId, name }) })
 export const renameStoredFile = (id: string, name: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}${ownerQuery(owner, true)}`, { method: 'PATCH', headers, body: JSON.stringify({ name }) })
 export const moveStoredFiles = (ids: string[], parentId: string | null, owner?: StoredFileOwnerKey) => requestApiData<void>(`/api/files/move${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ ids, parentId }) })
@@ -27,7 +27,8 @@ export const TEXT_FILE_PATTERN = /\.(txt|md|markdown|json|jsonl|csv|tsv|ya?ml|xm
 /** Mirrors the server's MAX_TEXT_DOCUMENT_BYTES. */
 export const MAX_TEXT_DOCUMENT_BYTES = 2 * 1024 * 1024
 export const createStoredTextFile = (parentId: string | null, name: string, text: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/text${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ parentId, name, text }) })
-export const saveStoredFileText = (id: string, text: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}/text${ownerQuery(owner, true)}`, { method: 'PUT', headers, body: JSON.stringify({ text }) })
+export const readStoredFileForEdit = (id: string, owner?: StoredFileOwnerKey) => requestApiData<{ text: string; revision: string }>(`/api/files/${encodeURIComponent(id)}/edit${ownerQuery(owner, true)}`)
+export const saveStoredFileText = (id: string, text: string, owner: StoredFileOwnerKey, expectedRevision: string | null) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}/text${ownerQuery(owner, true)}`, { method: 'PUT', headers, body: JSON.stringify({ text, expectedRevision }) })
 /** The whole file as text, for editing; refuses what is not UTF-8 text so a save cannot mangle it. */
 export async function readWholeStoredFileText(id: string, owner?: StoredFileOwnerKey) {
   const response = await fetch(storedFileViewUrl(id, owner), { credentials: 'include', cache: 'no-store' })

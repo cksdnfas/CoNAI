@@ -3,7 +3,7 @@ import path from 'path'
 import type { EmbeddingSettings } from '@conai/shared'
 import { settingsService } from '../settingsService'
 import { aiPythonDir } from '../aiRuntime/aiPythonDir'
-import { AiWorkerClient, type AiWorkerPriority } from './aiWorkerClient'
+import { AiWorkerClient, AiWorkerError, type AiWorkerPriority } from './aiWorkerClient'
 import { aiRuntimeProbe, aiThreads, checkAiDependencies, isHubModelCached, visionWorker } from './aiVisionService'
 
 export const EMBEDDING_MODEL = 'embeddinggemma-2'
@@ -139,6 +139,39 @@ function decodeVector(base64: string) {
 }
 
 let pendingDependencyCheck: Promise<void> | null = null
+let requestEpoch = new AbortController()
+
+type EmbeddingRequestOptions = { priority?: AiWorkerPriority; signal?: AbortSignal }
+
+/** Every operation that can load the model shares the same settings, cancellation and failure boundary. */
+async function requestEmbedding<T>(op: string, payload: Record<string, unknown>, options: EmbeddingRequestOptions = {}): Promise<T> {
+  const signal = options.signal ? AbortSignal.any([requestEpoch.signal, options.signal]) : requestEpoch.signal
+  const check = () => {
+    signal.throwIfAborted()
+    if (!embeddingSettings().enabled) throw new AiWorkerError('Embeddings are off', 'WorkerStopped')
+  }
+  check()
+  if (Date.now() < unavailableUntil) throw new Error(lastFailure ?? 'Embeddings are unavailable')
+  try {
+    await ensureEmbeddingDependencies()
+    check()
+    const reply = await textWorker.request<T>(op, payload, { priority: options.priority, signal })
+    check()
+    textWorker.touch('embedding', 'cpu')
+    return reply
+  } catch (error) {
+    if (!signal.aborted) noteFailure(error)
+    throw error
+  }
+}
+
+/** Tokenizer windows use the same worker boundary as inference, including model warm-up and backoff. */
+export function chunkTexts(texts: string[], options: EmbeddingRequestOptions & { chunkTokens: number; overlapTokens: number; maxChunks: number }) {
+  return requestEmbedding<{ items: Array<Array<{ start: number; end: number }>> }>('chunk', {
+    texts, chunkTokens: options.chunkTokens, overlapTokens: options.overlapTokens, maxChunks: options.maxChunks,
+    device: 'cpu', variant: embeddingVariant(), threads: requestThreads(options.priority ?? 'low'),
+  }, options)
+}
 
 /** A loaded model already proved its dependencies work. Recheck after unload/restart, not on each query. */
 async function ensureEmbeddingDependencies() {
@@ -160,36 +193,28 @@ async function ensureEmbeddingDependencies() {
 export async function embedTexts(
   items: EmbedItem[],
   kind: EmbedKind,
-  options: { priority?: AiWorkerPriority; chunkTokens?: number; overlapTokens?: number; maxChunks?: number } = {},
+  options: EmbeddingRequestOptions & { chunkTokens?: number; overlapTokens?: number; maxChunks?: number } = {},
 ): Promise<EmbeddedChunk[][]> {
   if (items.length === 0) return []
-  if (Date.now() < unavailableUntil) throw new Error(lastFailure ?? 'Embeddings are unavailable')
   const priority = options.priority ?? 'normal'
-  try {
-    await ensureEmbeddingDependencies()
-    const reply = await textWorker.request<{ device: string; items: Array<Array<{ start: number; end: number; vector: string }>> }>('embed', {
-      items: items.map((item) => ({ text: item.text, ...(item.title ? { title: item.title } : {}) })),
-      kind,
-      dim: EMBEDDING_DIM,
-      device: 'cpu',
-      variant: embeddingVariant(),
-      chunkTokens: options.chunkTokens ?? 0,
-      overlapTokens: options.overlapTokens ?? 0,
-      maxChunks: options.maxChunks ?? 64,
-      threads: requestThreads(priority),
-    }, { priority })
-    textWorker.touch('embedding', reply.device)
-    return reply.items.map((chunks) => chunks.map((chunk) => ({ start: chunk.start, end: chunk.end, vector: decodeVector(chunk.vector) })))
-  } catch (error) {
-    noteFailure(error)
-    throw error
-  }
+  const reply = await requestEmbedding<{ device: string; items: Array<Array<{ start: number; end: number; vector: string }>> }>('embed', {
+    items: items.map((item) => ({ text: item.text, ...(item.title ? { title: item.title } : {}) })),
+    kind,
+    dim: EMBEDDING_DIM,
+    device: 'cpu',
+    variant: embeddingVariant(),
+    chunkTokens: options.chunkTokens ?? 0,
+    overlapTokens: options.overlapTokens ?? 0,
+    maxChunks: options.maxChunks ?? 64,
+    threads: requestThreads(priority),
+  }, { priority, signal: options.signal })
+  return reply.items.map((chunks) => chunks.map((chunk) => ({ start: chunk.start, end: chunk.end, vector: decodeVector(chunk.vector) })))
 }
 
 function noteFailure(error: unknown) {
   const message = error instanceof Error ? error.message : String(error)
   // A stopped worker (settings change, shutdown) is not a fault of the model.
-  if ((error as { errorType?: string })?.errorType !== 'WorkerStopped') {
+  if (!['WorkerStopped', 'Aborted', 'QueueFull', 'QueueTimeout'].includes((error as { errorType?: string })?.errorType ?? '') && !['AbortError', 'TimeoutError'].includes((error as Error)?.name)) {
     unavailableUntil = Date.now() + embeddingRuntime.failureRestMs
     lastFailure = message
     console.warn('[TextEmbedding] unavailable for a while:', message)
@@ -200,21 +225,13 @@ function noteFailure(error: unknown) {
  * Image vectors for files on disk, in order: a vector, or the reason that file could not be read (the batch itself
  * throws when the runtime is missing or the worker fails).
  */
-export async function embedImages(paths: string[], options: { priority?: AiWorkerPriority } = {}): Promise<Array<Float32Array | { error: string }>> {
+export async function embedImages(paths: string[], options: EmbeddingRequestOptions = {}): Promise<Array<Float32Array | { error: string }>> {
   if (paths.length === 0) return []
-  if (Date.now() < unavailableUntil) throw new Error(lastFailure ?? 'Embeddings are unavailable')
   const priority = options.priority ?? 'low'
-  try {
-    await ensureEmbeddingDependencies()
-    const reply = await textWorker.request<{ device: string; items: Array<{ vector?: string; error?: string }> }>('embed_images', {
-      images: paths, dim: IMAGE_EMBEDDING_DIM, device: 'cpu', threads: requestThreads(priority),
-    }, { priority })
-    textWorker.touch('embedding', reply.device)
-    return reply.items.map((item) => (item.vector ? decodeVector(item.vector) : { error: item.error ?? 'Image could not be embedded' }))
-  } catch (error) {
-    noteFailure(error)
-    throw error
-  }
+  const reply = await requestEmbedding<{ device: string; items: Array<{ vector?: string; error?: string }> }>('embed_images', {
+    images: paths, dim: IMAGE_EMBEDDING_DIM, device: 'cpu', threads: requestThreads(priority),
+  }, { priority, signal: options.signal })
+  return reply.items.map((item) => (item.vector ? decodeVector(item.vector) : { error: item.error ?? 'Image could not be embedded' }))
 }
 
 /**
@@ -224,18 +241,17 @@ export async function embedImages(paths: string[], options: { priority?: AiWorke
 export async function warmEmbeddingModel(): Promise<boolean> {
   if (!embeddingSettings().enabled || Date.now() < unavailableUntil) return false
   try {
-    await ensureEmbeddingDependencies()
-    await textWorker.request('load', { model: 'embedding', options: { device: 'cpu', variant: embeddingVariant() } }, { priority: 'low' })
-    textWorker.touch('embedding', 'cpu')
+    await requestEmbedding('load', { model: 'embedding', options: { device: 'cpu', variant: embeddingVariant() } }, { priority: 'low' })
     return true
-  } catch (error) {
-    noteFailure(error)
+  } catch {
     return false
   }
 }
 
 /** Clear the failure backoff (the runtime was installed, settings changed). */
 export function resetEmbeddingBackoff() {
+  requestEpoch.abort(new AiWorkerError('Embedding settings/runtime changed', 'WorkerStopped'))
+  requestEpoch = new AbortController()
   unavailableUntil = 0
   lastFailure = null
   pendingDependencyCheck = null
@@ -244,73 +260,91 @@ export function resetEmbeddingBackoff() {
 }
 
 // Query vectors depend on the model and task, not the changing image index. Keep a bounded LRU separately
-// from search results, and share pending work even after an individual caller's wait deadline expires.
+// from search results. Callers share pending batches; cold timeouts leave the model warming in the background.
 const QUERY_CACHE_SIZE = 128
 const queryVectors = new Map<string, Float32Array>()
-const pendingQueries = new Map<string, Promise<Float32Array | null>>()
+type QueryBatch = { controller: AbortController; consumers: number; cold: boolean }
+type QueryWork = { promise: Promise<Float32Array | null>; batch: QueryBatch }
+const pendingQueries = new Map<string, QueryWork>()
 
-function queryVector(text: string, kind: EmbedKind): Promise<Float32Array | null> {
-  const key = JSON.stringify([EMBEDDING_MODEL_KEY, embeddingVariant(), kind, text])
-  const cached = queryVectors.get(key)
-  if (cached) {
-    queryVectors.delete(key)
-    queryVectors.set(key, cached)
-    return Promise.resolve(cached)
+/** Missing texts are batched once; single and multi-query callers share both cached and pending vectors. */
+function queryWork(texts: string[], kind: EmbedKind) {
+  const keys = texts.map(text => JSON.stringify([EMBEDDING_MODEL_KEY, embeddingVariant(), kind, text]))
+  const missing = new Map<string, string>()
+  for (let i = 0; i < keys.length; i++) if (!queryVectors.has(keys[i]) && !pendingQueries.has(keys[i])) missing.set(keys[i], texts[i])
+  if (pendingQueries.size + missing.size > QUERY_CACHE_SIZE) return null
+  if (missing.size) {
+    const batch: QueryBatch = { controller: new AbortController(), consumers: 0, cold: !embeddingModelWarm() }
+    const work = embedTexts([...missing.values()].map(text => ({ text })), kind, { priority: 'high', signal: batch.controller.signal })
+    let index = 0
+    for (const key of missing.keys()) {
+      const slot = index++
+      const entry: QueryWork = { batch, promise: work.then(items => {
+        const vector = items[slot]?.[0]?.vector ?? null
+        if (vector && pendingQueries.get(key) === entry) {
+          queryVectors.set(key, vector)
+          while (queryVectors.size > QUERY_CACHE_SIZE) queryVectors.delete(queryVectors.keys().next().value as string)
+        }
+        return vector
+      }).catch(() => null).finally(() => {
+        if (pendingQueries.get(key) === entry) pendingQueries.delete(key)
+      }) }
+      pendingQueries.set(key, entry)
+    }
   }
-  const pending = pendingQueries.get(key)
-  if (pending) return pending
-  const work = embedTexts([{ text }], kind, { priority: 'high' })
-    .then((items) => {
-      const vector = items[0]?.[0]?.vector ?? null
-      // A settings/runtime reset must not be undone by an old request finishing afterwards.
-      if (vector && pendingQueries.get(key) === work) {
-        queryVectors.set(key, vector)
-        while (queryVectors.size > QUERY_CACHE_SIZE) queryVectors.delete(queryVectors.keys().next().value as string)
-      }
-      return vector
-    })
-    .catch(() => null)
-    .finally(() => {
-      if (pendingQueries.get(key) === work) pendingQueries.delete(key)
-    })
-  pendingQueries.set(key, work)
-  return work
+  const batches = new Set<QueryBatch>()
+  const promises = keys.map(key => {
+    const cached = queryVectors.get(key)
+    if (cached) { queryVectors.delete(key); queryVectors.set(key, cached); return Promise.resolve(cached) }
+    const pending = pendingQueries.get(key)!
+    batches.add(pending.batch)
+    return pending.promise
+  })
+  for (const batch of batches) batch.consumers++
+  return { promises, batches }
+}
+
+async function queryTexts(texts: string[], kind: EmbedKind, options: { waitMs?: number; signal?: AbortSignal }): Promise<Float32Array[] | null> {
+  if (options.signal?.aborted || !embeddingSettings().enabled || Date.now() < unavailableUntil) return null
+  const work = queryWork(texts, kind)
+  if (!work) return null
+  let timer: NodeJS.Timeout | undefined
+  let left: 'timeout' | 'abort' | null = null
+  let onAbort: (() => void) | undefined
+  const deadline = new Promise<null>(resolve => {
+    if (options.waitMs) timer = setTimeout(() => { left = 'timeout'; resolve(null) }, options.waitMs)
+    onAbort = () => { left = 'abort'; resolve(null) }
+    options.signal?.addEventListener('abort', onAbort, { once: true })
+  })
+  try {
+    const vectors = await Promise.race([Promise.all(work.promises), deadline])
+    return vectors?.every(vector => vector !== null) ? vectors.map(vector => vector!.slice()) : null
+  } finally {
+    clearTimeout(timer)
+    if (onAbort) options.signal?.removeEventListener('abort', onAbort)
+    for (const batch of work.batches) {
+      batch.consumers--
+      // Leave a cold timeout warming the model; abandoned warm work and explicit cancellation are dropped.
+      if (left && batch.consumers === 0 && (left === 'abort' || !batch.cold)) batch.controller.abort(new AiWorkerError('Query wait ended', 'Aborted'))
+    }
+  }
 }
 
 /**
  * One search query's vector, or null when embeddings are off, failing, or slower than `waitMs`. A query that runs out
  * of time still finishes in the worker, so a cold model is warm for the next one.
  */
-export async function embedQuery(text: string, options: { waitMs?: number; kind?: EmbedKind } = {}): Promise<Float32Array | null> {
+export async function embedQuery(text: string, options: { waitMs?: number; kind?: EmbedKind; signal?: AbortSignal } = {}): Promise<Float32Array | null> {
   const trimmed = text.trim()
   if (!trimmed || !embeddingSettings().enabled || Date.now() < unavailableUntil) return null
-  // Return a copy so a consumer cannot change a vector cached for other searches.
-  const work = queryVector(trimmed, options.kind ?? 'query').then((vector) => vector?.slice() ?? null)
-  if (!options.waitMs) return work
-  let timer: NodeJS.Timeout | undefined
-  const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), options.waitMs) })
-  try {
-    return await Promise.race([work, timeout])
-  } finally {
-    clearTimeout(timer)
-  }
+  return (await queryTexts([trimmed], options.kind ?? 'query', options))?.[0] ?? null
 }
 
 /** Several queries in one request (null as for embedQuery). */
-export async function embedQueries(texts: string[], options: { waitMs?: number } = {}): Promise<Float32Array[] | null> {
+export async function embedQueries(texts: string[], options: { waitMs?: number; signal?: AbortSignal } = {}): Promise<Float32Array[] | null> {
   const trimmed = texts.map((text) => text.trim())
   if (trimmed.length === 0 || trimmed.some((text) => !text) || !embeddingSettings().enabled || Date.now() < unavailableUntil) return null
-  const work = embedTexts(trimmed.map((text) => ({ text })), 'query', { priority: 'high' })
-    .then((items) => (items.every((chunks) => chunks[0]) ? items.map((chunks) => chunks[0].vector) : null))
-    .catch(() => null)
-  if (!options.waitMs) return work
-  let timer: NodeJS.Timeout | undefined
-  const timeout = new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), options.waitMs) })
-  try {
-    return await Promise.race([work, timeout])
-  } finally {
-    clearTimeout(timer)
-  }
+  return queryTexts(trimmed, 'query', options)
 }
 
 /** Whether the model is loaded right now (a query then answers in well under a second). */

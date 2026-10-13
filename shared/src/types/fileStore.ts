@@ -8,6 +8,8 @@ export interface StoredFileEntry {
   size: number;
   createdAt: string;
   updatedAt: string;
+  /** Opaque current text revision, returned after text writes. */
+  revision?: string;
 }
 
 export interface FileStoreListing {

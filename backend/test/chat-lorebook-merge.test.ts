@@ -234,7 +234,12 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     assert.equal(deleted.json.data.lorebook.action, 'delete')
     assert.equal(threadExists(threadId), false)
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM chat_lorebooks WHERE id = ?').get(chatBook.id).count, 0)
-    assert.equal(FileStoreService.findChild(me, null, LOREBOOK_ROOT_FOLDER) && db.prepare('SELECT COUNT(*) AS count FROM stored_file_entries WHERE id = ?').get(chatBook.folderId).count, 0, 'the folder is gone')
+    assert.throws(() => FileStoreService.get(me, chatBook.folderId!), { status: 404 }, 'the folder is hidden immediately')
+    await assert.rejects(FileStoreService.readText(me, file.id), { status: 404 }, 'its attached file is hidden too')
+    // Drive the existing background cleanup without depending on when setImmediate runs.
+    while (FileStoreService.purgeDeleted() > 0) { /* drain the deleted tree */ }
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM stored_file_entries WHERE id = ?').get(chatBook.folderId).count, 0, 'cleanup removes the folder row')
+    assert.equal(fs.existsSync(storedFilePath(me, file.id)), false, 'cleanup removes the file blob')
     // The store hook covers every path, not only the route.
     const other = chatWithBook('다른 채팅', [{ id: 'x', content: '메모.' }])
     CodexChatStore.deleteThread(other.threadId)
@@ -272,7 +277,8 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
       { id: 'dog2', title: '바둑이', keys: ['개'], content: '짖는다.' },
     ])
     const bodies: string[] = []
-    t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    t.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      if (init?.method !== 'POST') return new Response('', { status: 404 })
       const body = String(init.body)
       bodies.push(body)
       if (body.includes('바둑이')) return new Response('boom', { status: 500 })
@@ -284,6 +290,7 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     assert.deepEqual(drafts[0], { entryId: 'cat2', content: '검은 고양이. 사흘째 안 보인다.' })
     assert.equal(drafts[1].entryId, 'dog2')
     assert.ok('error' in drafts[1] && drafts[1].error.length > 0)
+    assert.equal(bodies.length, 2, 'only model generation requests are captured')
     const first = JSON.parse(bodies[0]) as { messages: Array<{ role: string; content: string }> }
     assert.equal(first.messages[0].content, '짧게 써.', 'the rewritten instruction replaces the default')
     assert.match(first.messages[1].content, /^## A \(채팅 책\)\n제목: 먹물\n키워드: 고양이\n\n사흘째 안 보인다\.\n\n## B \(대상 책\)\n제목: 먹물\n키워드: 먹물\n\n검은 고양이\.$/)

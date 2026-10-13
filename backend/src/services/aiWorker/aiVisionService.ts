@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { db } from '../../database/init'
 import type { AiRuntimeProbe } from '@conai/shared'
 import { runtimePaths } from '../../config/runtimePaths'
 import { settingsService } from '../settingsService'
@@ -138,6 +139,7 @@ export async function analyzeMedia(
 
 export function saveMediaStyleVector(compositeHash: string, style: number[]) {
   try {
+    if (!db.prepare('SELECT 1 FROM media_metadata WHERE composite_hash = ?').get(compositeHash)) return
     vectorStore.replace(MEDIA_STYLE_SPACE, compositeHash, MEDIA_STYLE_MODEL_KEY, [{ vector: style }])
   } catch (error) {
     console.warn('[AiVision] Failed to store style vector:', error instanceof Error ? error.message : error)

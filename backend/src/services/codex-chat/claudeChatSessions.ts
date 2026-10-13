@@ -99,6 +99,7 @@ export async function buildClaudeSessionTurn(params: {
   withTools: boolean
   judged?: JudgedContext | null
   runtime?: SessionRuntime
+  signal?: AbortSignal
 }): Promise<{ messages: ChatCompletionMessage[]; session: EngineSession; contextMeta: ChatContextMeta }> {
   const { requester, threadId, profile, history } = params
   const runtime = params.runtime ?? 'claude'
@@ -113,7 +114,7 @@ export async function buildClaudeSessionTurn(params: {
   const latest = [...history].reverse().find((message) => message.role === 'user') ?? null
   const earlier = latest ? history.filter((message) => message.id < latest.id) : history
   const recap = resumeId ? '' : codexHistoryRecap(thread, earlier, profile, user)
-  const lore = await prepareSessionLore(thread, profile, history, sent, user, params.judged)
+  const lore = await prepareSessionLore(thread, profile, history, sent, user, params.judged, params.signal)
   const note = pendingAuthorNote(thread, profile, sent, user)
   const state = pendingBlockState(thread, profile, history, sent)
   const rejected = pendingRejectedLore(threadId, profile, sent)
@@ -185,6 +186,7 @@ export async function buildClaudeGroupSessionTurn(params: {
   attachedImages?: AttachedImages
   judged?: JudgedContext | null
   runtime?: SessionRuntime
+  signal?: AbortSignal
 }): Promise<{ messages: ChatCompletionMessage[]; session: EngineSession; contextMeta: ChatContextMeta }> {
   const { requester, thread, members, profile, messages } = params
   const runtime = params.runtime ?? 'claude'
@@ -197,7 +199,7 @@ export async function buildClaudeGroupSessionTurn(params: {
   const sent = resumeId ? readLoreSent(member?.codex_lore_sent ?? null) : new Set<string>()
   const lastSeen = resumeId ? member?.last_seen_message_id ?? null : null
 
-  const lore = await prepareSessionLore(thread, profile, messages, sent, user, params.judged)
+  const lore = await prepareSessionLore(thread, profile, messages, sent, user, params.judged, params.signal)
   const note = pendingAuthorNote(thread, profile, sent, user)
   const state = pendingBlockState(thread, profile, messages, sent, profile.id)
   const rejected = pendingRejectedLore(thread.id, profile, sent)

@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Clock, Download, File, FileText, Film, Folder, Image as ImageIcon, LayoutGrid, List, Lock, Music, RefreshCw, RotateCcw, Save, ScrollText, Trash2, Upload } from 'lucide-react'
+import { ChevronRight, Clock, Download, File, Folder, LayoutGrid, List, Lock, RefreshCw, RotateCcw, Save, ScrollText, Trash2, Upload } from 'lucide-react'
 import type { SystemFolderEntry, SystemFolderRootId } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -33,9 +33,9 @@ import {
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { useFileViewMode } from './file-view-mode'
+import { FileEntryIcon as EntryIcon, FileMediaPreview, FilePreviewNavigation, fileMediaKind as mediaKind, filePreviewKind, readFilePreviewMime } from './file-preview-shared'
 
 const FileCodePreview = lazy(() => import('./file-code-preview'))
-const FilePdfPreview = lazy(() => import('./file-pdf-preview'))
 
 /** A server folder (root) and a `/`-separated path inside it. */
 export type SystemFolderLocation = { root: SystemFolderRootId; path: string }
@@ -58,21 +58,6 @@ function sourceLabel(source: string | null, t: Translate) {
   if (source === 'audio') return t({ ko: '오디오', en: 'Audio' })
   if (source?.startsWith('workflow-')) return t({ ko: '워크플로 정리', en: 'Workflow cleanup' })
   return null
-}
-
-function mediaKind(entry: SystemFolderEntry) {
-  const type = entry.mimeType ?? ''
-  if (type.startsWith('image/')) return 'image'
-  if (type.startsWith('video/')) return 'video'
-  if (type.startsWith('audio/')) return 'audio'
-  return 'other'
-}
-
-function EntryIcon({ entry, className = 'size-4' }: { entry: SystemFolderEntry; className?: string }) {
-  if (entry.kind === 'folder') return <Folder className={cn('shrink-0 text-warning', className)} />
-  const kind = mediaKind(entry)
-  const Icon = kind === 'image' ? ImageIcon : kind === 'video' ? Film : kind === 'audio' ? Music : (entry.mimeType ?? '').startsWith('text/') ? FileText : File
-  return <Icon className={cn('shrink-0 text-muted-foreground', className)} />
 }
 
 /** Thumbnail for images and videos, the type icon otherwise (or when the preview fails). */
@@ -469,21 +454,10 @@ function SystemFilePreview({ root, entry, files, onClose, onNavigate }: {
   const index = files.findIndex((file) => file.path === entry.path)
   const previous = index > 0 ? files[index - 1] : null
   const next = index >= 0 && index < files.length - 1 ? files[index + 1] : null
-  useEffect(() => {
-    const move = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
-      if (event.target instanceof Element && event.target.closest('input, textarea, select, video, audio, [contenteditable=true]')) return
-      const target = event.key === 'ArrowLeft' ? previous : event.key === 'ArrowRight' ? next : null
-      if (target) { event.preventDefault(); onNavigate(target) }
-    }
-    document.addEventListener('keydown', move)
-    return () => document.removeEventListener('keydown', move)
-  }, [previous, next, onNavigate])
   return (
     <Modal open title={displayName(entry)} onClose={onClose} widthClassName="max-w-5xl" headerContent={(
       <div className="flex items-center gap-1">
-        <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이전 파일', en: 'Previous file' })} disabled={!previous} onClick={() => { if (previous) onNavigate(previous) }}><ChevronLeft /></IconButton>
-        <IconButton size="icon-sm" variant="ghost" label={t({ ko: '다음 파일', en: 'Next file' })} disabled={!next} onClick={() => { if (next) onNavigate(next) }}><ChevronRight /></IconButton>
+        <FilePreviewNavigation previous={previous} next={next} onNavigate={onNavigate} />
         <span className="flex-1 text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>
         <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}><a href={systemFolderDownloadUrl(root, entry.path)} download><Download /></a></IconButton>
       </div>
@@ -501,18 +475,10 @@ function SystemFilePreviewContent({ root, entry }: { root: SystemFolderRootId; e
   // The server decides the safe inline type; the extension is only a hint.
   const mime = useQuery({
     queryKey: [...SYSTEM_FOLDERS_QUERY_KEY, 'view-type', root, entry.path, entry.modifiedAt],
-    queryFn: async () => {
-      const response = await fetch(url, { method: 'HEAD', credentials: 'include' })
-      if (!response.ok) throw new Error('No preview')
-      return response.headers.get('Content-Type') ?? ''
-    },
+    queryFn: () => readFilePreviewMime(url),
     retry: false,
   })
-  const kind = mime.data?.startsWith('text/') || mime.data?.startsWith('application/json') ? 'text'
-    : mime.data?.startsWith('image/') ? 'image'
-      : mime.data?.startsWith('video/') ? 'video'
-        : mime.data?.startsWith('audio/') ? 'audio'
-          : mime.data === 'application/pdf' ? 'pdf' : null
+  const kind = filePreviewKind(mime.data)
   const text = useQuery({
     queryKey: [...SYSTEM_FOLDERS_QUERY_KEY, 'text', root, entry.path, entry.modifiedAt],
     queryFn: async () => {
@@ -527,10 +493,7 @@ function SystemFilePreviewContent({ root, entry }: { root: SystemFolderRootId; e
   let content
   if (mime.isPending) content = <LoadingState />
   else if (mime.isError || mediaFailed || kind === null) content = unavailable
-  else if (kind === 'image') content = <img src={url} alt={entry.name} onError={() => setMediaFailed(true)} className="mx-auto max-h-[65vh] max-w-full object-contain" />
-  else if (kind === 'video') content = <video src={url} controls preload="metadata" onError={() => setMediaFailed(true)} className="mx-auto max-h-[65vh] max-w-full" />
-  else if (kind === 'audio') content = <audio src={url} controls preload="metadata" onError={() => setMediaFailed(true)} className="w-full" />
-  else if (kind === 'pdf') content = <FilePdfPreview url={url} name={entry.name} />
+  else if (kind !== 'text') content = <FileMediaPreview kind={kind} url={url} name={entry.name} onError={() => setMediaFailed(true)} />
   else if (text.isPending) content = <LoadingState />
   else if (text.isError) content = unavailable
   else content = <FileCodePreview text={text.data} extension={extension} wrap firstLine={1} />

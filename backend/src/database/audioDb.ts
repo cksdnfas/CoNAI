@@ -16,6 +16,9 @@ export function initializeAudioDb(): Database.Database {
   const isNew = !fs.existsSync(AUDIO_DB_PATH);
   const db = new Database(AUDIO_DB_PATH);
   configureSqliteConnection(db, { label: 'audio.db', cacheSizeMb: 16 });
+  // Preserve the UI's Unicode case-insensitive substring semantics while filtering before group aggregates.
+  db.function('audio_search_match', { deterministic: true }, (name, label, description, query) =>
+    Number([name, label, description].some(value => String(value ?? '').toLowerCase().includes(String(query)))));
   ensureAudioSchema(db);
   audioDb = db;
   console.log(isNew ? '✅ New audio database created' : '✅ Connected to audio database');

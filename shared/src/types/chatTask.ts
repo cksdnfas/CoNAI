@@ -19,7 +19,8 @@ export type ChatTaskStep = {
 export type ChatTaskStatus = 'awaiting_plan' | 'running' | 'waiting' | 'paused' | 'done' | 'failed' | 'cancelled'
 /** What a waiting task waits for. */
 export type ChatTaskWait = 'approval' | 'job' | 'page' | 'user'
-export type ChatTaskBudget = { continuations: number; images: number }
+/** tokens is optional; checked between automatic turns, using reported usage (estimates when unavailable). */
+export type ChatTaskBudget = { continuations: number; images: number; tokens?: number }
 
 export type ChatTask = {
   id: number
@@ -37,7 +38,7 @@ export type ChatTask = {
 }
 
 export const CHAT_TASK_DEFAULT_BUDGET: ChatTaskBudget = { continuations: 30, images: 16 }
-export const CHAT_TASK_LIMITS = { steps: 12, stepTitle: 120, goal: 300, note: 300, continuations: 100, images: 64 } as const
+export const CHAT_TASK_LIMITS = { steps: 12, stepTitle: 120, goal: 300, note: 300, continuations: 100, images: 64, tokens: 1_000_000_000 } as const
 
 /** The plan card: approving it starts the task. */
 export type ChatTaskPlanProposal = {

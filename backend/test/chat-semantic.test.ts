@@ -75,7 +75,7 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
   const { ChatLorebookStore, selectLoreEntries } = await import('../src/services/codex-chat/chatLorebook')
   const { booksForRequest, keyedLoreEntries } = await import('../src/services/codex-chat/chatLoreContext')
   const { selectRecall } = await import('../src/services/codex-chat/chatMemory')
-  const { semanticIndexer, semanticIndexInternals } = await import('../src/services/embeddings/semanticIndex')
+  const { semanticIndexer, semanticIndexInternals, indexMessagesNow, indexSegmentsNow, indexLoreNow } = await import('../src/services/embeddings/semanticIndex')
   const { semanticContextFor } = await import('../src/services/embeddings/chatSemantic')
   const { standouts } = await import('../src/services/embeddings/rankFusion')
   const { searchChatHistory } = await import('../src/services/codex-chat/chatHistorySearch')
@@ -236,6 +236,13 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     assert.deepEqual(vectorStore.search(space, 'm', axis(1), { minScore: 0.5 }).map((hit) => hit.sourceKey).sort(), ['b'], 'compacted, still right')
     assert.equal(vectorStore.contentHash(space, 'b', 'm'), null)
     assert.equal(vectorStore.contentHash(space, 'gone', 'm'), undefined)
+    vectorStore.replace(space, 'ties', 'm', Array.from({ length: 12 }, () => ({ vector: axis(1), ownerKey: 'reader' })))
+    const options = { sourceKeys: ['ties', 'b', 'ties'], ownerKeys: ['reader', null] }
+    const all = vectorStore.search(space, 'm', axis(1), options)
+    assert.equal(all.length, 13, 'a repeated source filter does not duplicate hits')
+    for (const limit of [1, 5, 20]) {
+      assert.deepEqual(vectorStore.search(space, 'm', axis(1), { ...options, limit }), all.slice(0, limit), 'top K retains stable tie order and owner/source filtering')
+    }
   })
 
   await t.test('versions: an older library is below the pinned one', () => {
@@ -244,6 +251,88 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     assert.equal(embedding.versionBelow('5.19.0.dev0', '5.19.0'), false)
     assert.equal(embedding.versionBelow('5.20.1', '5.19.0'), false)
     assert.equal(embedding.versionBelow('6.0.0+cpu', '6.1.0'), true)
+  })
+
+  await t.test('another DB connection refreshes the cache and oversized spaces retain owner/source filtering', async () => {
+    const Database = (await import('better-sqlite3')).default
+    const { VECTOR_DB_PATH } = await import('../src/database/vectorDb')
+    const { vectorCachePolicy } = await import('../src/services/vectors/vectorStore')
+    const space = 'external-cache'
+    vectorStore.replace(space, 'a', 'm', [{ vector: [1, 0], ownerKey: 'reader' }])
+    assert.equal(vectorStore.search(space, 'm', [1, 0])[0].score, 1)
+    const other = new Database(VECTOR_DB_PATH)
+    try {
+      other.prepare('UPDATE vectors SET vector = ? WHERE space = ?').run(Buffer.from(new Float32Array([0, 1]).buffer), space)
+      assert.equal(vectorStore.search(space, 'm', [1, 0])[0].score, 0, 'external commits invalidate a loaded matrix')
+      other.prepare("INSERT INTO vectors SELECT space, 'b', chunk, model_key, dim, owner_key, content_hash, span_start, span_end, vector, updated_at FROM vectors WHERE space = ?").run(space)
+      assert.equal(vectorStore.search(space, 'm', [0, 1]).length, 2)
+      other.prepare("DELETE FROM vectors WHERE space = ? AND source_key = 'a'").run(space)
+      assert.deepEqual(vectorStore.search(space, 'm', [0, 1]).map(hit => hit.sourceKey), ['b'])
+    } finally { other.close() }
+    vectorStore.replace(space, 'private', 'm', [{ vector: [0, 1], ownerKey: 'other' }])
+    vectorStore.replace(space, 'public', 'm', [{ vector: [1, 0], ownerKey: null }])
+    const budget = vectorCachePolicy.maxMatrixBytes
+    const options = { sourceKeys: ['b', 'public', 'private'], ownerKeys: ['reader', null], limit: 2 }
+    const expected = vectorStore.search(space, 'm', [0, 1], options)
+    assert.ok(vectorCachePolicy.matrixBytes > 0)
+    try {
+      vectorCachePolicy.maxMatrixBytes = 1
+      assert.deepEqual(vectorStore.search(space, 'm', [0, 1], options), expected, 'streamed search preserves the same scores and boundaries')
+      assert.equal(vectorCachePolicy.matrixBytes, 0, 'oversized matrices are evicted rather than exempted from the budget')
+    } finally { vectorCachePolicy.maxMatrixBytes = budget; vectorStore.invalidateAll() }
+  })
+
+  await t.test('late indexing cannot resurrect deleted lore/recall or overwrite a newer message vector', async t => {
+    const id = CodexChatStore.createThread(null, 'race', 'llm', profile.id)
+    const message = say(id, 'assistant', 'old race message')
+    const segment = Number(db.prepare('INSERT INTO chat_summary_segments (thread_id, level, from_message_id, until_message_id, content) VALUES (?, 0, ?, ?, ?)').run(id, message.id, message.id, 'old race summary').lastInsertRowid)
+    const lore = ChatLorebookStore.create({ name: 'race', entries: [{ id: 'race', keys: ['race'], content: 'old race lore' }] })
+    const request = embedding.textWorker.request.bind(embedding.textWorker)
+    let release!: () => void
+    let entered!: () => void
+    let blocked = 0
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const started = new Promise<void>(resolve => { entered = resolve })
+    t.mock.method(embedding.textWorker, 'request', async (...args: Parameters<typeof request>) => {
+      const [op, payload] = args
+      if (op === 'embed' && (payload?.items as Array<{ text: string }>).some(item => item.text.includes('old race'))) {
+        if (++blocked === 3) entered()
+        await gate
+      }
+      return request(...args)
+    })
+    const old = Promise.all([indexMessagesNow([id], 32), indexSegmentsNow(id, 8), indexLoreNow(new Set([lore.id]), 16)])
+    try {
+      await started
+      db.prepare('DELETE FROM chat_summary_segments WHERE id = ?').run(segment)
+      ChatLorebookStore.delete(lore.id)
+      CodexChatStore.editAssistantMessage(id, message.id, 'new race message')
+      await indexMessagesNow([id], 32)
+      const current = vectorStore.contentHash('chat-message', String(message.id), embedding.EMBEDDING_MODEL_KEY)
+      release()
+      await old
+      assert.equal(vectorStore.get('chat-recall', String(segment), embedding.EMBEDDING_MODEL_KEY).length, 0)
+      assert.equal(vectorStore.get('chat-lore', `${lore.id}:race`, embedding.EMBEDDING_MODEL_KEY).length, 0)
+      assert.equal(vectorStore.contentHash('chat-message', String(message.id), embedding.EMBEDDING_MODEL_KEY), current)
+      assert.equal(current, dbModule.semanticTextHash('new race message'))
+    } finally { release(); await old; CodexChatStore.deleteThread(id) }
+  })
+
+  await t.test('history keyword results are not held behind a backfill request', async t => {
+    const id = CodexChatStore.createThread(null, 'history wait', 'llm', profile.id)
+    say(id, 'user', 'history wait keyword')
+    const request = embedding.textWorker.request.bind(embedding.textWorker)
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    t.mock.method(embedding.textWorker, 'request', async (...args: Parameters<typeof request>) => {
+      if (args[0] === 'embed' && args[1]?.kind === 'document') await gate
+      return request(...args)
+    })
+    let timer: NodeJS.Timeout | undefined
+    try {
+      const result = await Promise.race([searchChatHistory([id], 'keyword', 10), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('history waited for background indexing')), 1000) })])
+      assert.equal(result[0].excerpt, 'history wait keyword')
+    } finally { clearTimeout(timer); release(); await indexMessagesNow([id], 32); CodexChatStore.deleteThread(id) }
   })
 
   await t.test('knowledge semantics: optional, permissions before ranking, and current content only', async () => {

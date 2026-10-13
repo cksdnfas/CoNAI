@@ -50,8 +50,8 @@ test('maintenance routes are admin-only and search history is per account', { ti
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   t.after(() => new Promise<void>((resolve) => server.close(() => resolve())))
   const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`
-  const call = async (url: string, accountId: number, method = 'GET', body: unknown = {}) => {
-    const response = await fetch(origin + url, { method, headers: { 'x-test-account': String(accountId), 'Content-Type': 'application/json' }, ...(method === 'GET' ? {} : { body: JSON.stringify(body) }) })
+  const call = async (url: string, accountId: number, method = 'GET', body: unknown = {}, headers: Record<string, string> = {}) => {
+    const response = await fetch(origin + url, { method, headers: { 'x-test-account': String(accountId), 'Content-Type': 'application/json', ...headers }, ...(method === 'GET' ? {} : { body: JSON.stringify(body) }) })
     const text = await response.text()
     return { status: response.status, body: text ? JSON.parse(text) : null }
   }
@@ -65,6 +65,108 @@ test('maintenance routes are admin-only and search history is per account', { ti
   AuthPermissionGroup.addAccountMembership(group.id, guestId)
   AuthPermissionGroup.addAccountMembership(group.id, otherId)
   invalidateConfiguredAuthCache()
+
+  await t.test('all page-setting snapshots fit the public field contract without exposing extra values', async () => {
+    const { PAGE_SETTINGS_SCOPES, pageSettingsPatch } = await import('@conai/shared')
+    for (const [scope, definition] of Object.entries(PAGE_SETTINGS_SCOPES)) {
+      const response = await call(`/api/page-settings/${scope}`, adminId)
+      assert.equal(response.status, 200, scope)
+      const { values } = response.body.data
+      assert.deepEqual(Object.keys(values).sort(), definition.fields.map((field) => field.id).sort(), scope)
+      assert.doesNotThrow(() => pageSettingsPatch(scope as keyof typeof PAGE_SETTINGS_SCOPES, values), scope)
+    }
+  })
+
+  await t.test('page settings require explicit grants, bound fields, current revisions and live access', async () => {
+    const url = '/api/page-settings/image-save'
+    assert.equal((await call(url, 0)).status, 401)
+    assert.equal((await call(url, guestId)).status, 403)
+    const delegated = AuthPermissionGroup.createCustomGroup({ name: 'media-settings', permissionKeys: ['settings.media.manage'] })
+    AuthPermissionGroup.addAccountMembership(delegated.id, guestId)
+    const initial = await call(url, guestId)
+    assert.equal(initial.status, 200)
+    const { values, revision } = initial.body.data
+    assert.deepEqual(Object.keys(initial.body.data).sort(), ['revision', 'values'])
+    assert.equal(typeof values.quality, 'number')
+    assert.equal('llm' in values, false)
+    assert.equal((await call('/api/settings', guestId)).status, 403)
+    assert.equal((await call('/api/page-settings/chat', guestId)).status, 403)
+    assert.equal((await call('/api/page-settings/tagger/check-dependencies', guestId, 'POST')).status, 403)
+    assert.equal((await call(url, guestId, 'PUT', { quality: 80 })).status, 428)
+    assert.equal((await call(url, guestId, 'PUT', { quality: '80' }, { 'If-Match': revision })).status, 400)
+    assert.equal((await call(url, guestId, 'PUT', { pythonPath: 'forbidden' }, { 'If-Match': revision })).status, 400)
+    const quality = values.quality === 80 ? 81 : 80
+    const saved = await call(url, guestId, 'PUT', { quality }, { 'If-Match': revision })
+    assert.equal(saved.status, 200)
+    assert.equal(saved.body.data.values.quality, quality)
+    assert.notEqual(saved.body.data.revision, revision)
+    assert.equal((await call(url, guestId, 'PUT', { quality: 90 }, { 'If-Match': revision })).status, 409)
+    const native = await call('/api/settings', adminId)
+    assert.equal(native.body.data.imageSave.quality, quality)
+    assert.equal(native.body.data.imageSave.maxWidth, values.maxWidth)
+    assert.equal((await call('/api/settings/image-save', adminId, 'PUT', { quality: 90 }, { 'If-Match': revision })).status, 409, 'a stale native settings draft cannot overwrite a modal save')
+    // A change made through the existing settings tab also invalidates an open modal's version.
+    assert.equal((await call('/api/settings/image-save', adminId, 'PUT', { quality: 79 })).status, 200)
+    assert.equal((await call(url, guestId, 'PUT', { quality: 91 }, { 'If-Match': saved.body.data.revision })).status, 409)
+    const latest = (await call(url, guestId)).body.data
+    AuthPermissionGroup.removeAccountMembership(delegated.id, guestId)
+    assert.equal((await call(url, guestId)).status, 403)
+    assert.equal((await call(url, guestId, 'PUT', { quality: 92 }, { 'If-Match': latest.revision })).status, 403)
+    const { requireChatPageAccess, requireChatPageActionAccess } = await import('../src/services/codex-chat/chatPageContext')
+    const requester = { accountId: guestId, accountType: 'guest' as const }
+    const page = { path: '/', kind: 'page_settings' as const, resourceId: 'thumbnail' }
+    assert.throws(() => requireChatPageAccess(requester, page))
+    assert.throws(() => requireChatPageActionAccess(requester, page, 'page_settings.save'))
+    AuthPermissionGroup.addAccountMembership(delegated.id, guestId)
+    requireChatPageAccess(requester, page)
+    requireChatPageActionAccess(requester, page, 'page_settings.save')
+    assert.throws(() => requireChatPageAccess(requester, { ...page, resourceId: 'general' }))
+    AuthPermissionGroup.removeAccountMembership(delegated.id, guestId)
+  })
+
+  await t.test('contextual settings bind the resource to its host page and keep saves as review cards', async () => {
+    const { normalizeChatPageSnapshot, chatPageActionTier, chatPageActionAllowed } = await import('@conai/shared')
+    const admin = { accountId: adminId, accountType: 'admin' as const }
+    const page = { instanceId: 'inst-settings-1', connectionId: 'conn-settings-1', title: 'Settings', revision: 'rev-settings-1' }
+    const { requireChatPageAccess, requireChatPageActionAccess } = await import('../src/services/codex-chat/chatPageContext')
+    const snapshot = normalizeChatPageSnapshot({ ...page, path: '/upload', kind: 'page_settings', resourceId: 'image-save', fields: [{ id: 'quality', label: '품질', type: 'number', value: 80 }], actions: [{ id: 'page_settings.save', label: '저장', description: '', effect: 'save', schema: { type: 'object', properties: {} } }] })
+    requireChatPageAccess(admin, snapshot)
+    requireChatPageActionAccess(admin, snapshot, 'page_settings.save')
+    assert.equal(chatPageActionTier('page_settings.save'), 'commit')
+    assert.equal(chatPageActionTier('page.settings_open'), 'view')
+    assert.throws(() => normalizeChatPageSnapshot({ ...snapshot, resourceId: 'chat' }))
+    assert.throws(() => normalizeChatPageSnapshot({ ...snapshot, path: '/public/workflows/example' }))
+    assert.throws(() => requireChatPageActionAccess(admin, { ...snapshot, kind: 'upload' }, 'page_settings.save'))
+    assert.throws(() => requireChatPageActionAccess(admin, snapshot, 'page_settings.select', { scope: 'chat' }))
+    assert.ok(!chatPageActionAllowed('/upload', 'settings.mcp_http'), 'the old admin actions are not opened to other pages')
+  })
+
+  await t.test('revoking a grant during a worker dependency check prevents the deferred settings write', async () => {
+    const { settingsService } = await import('../src/services/settingsService')
+    const { imageTaggerService } = await import('../src/services/imageTaggerService')
+    settingsService.updateTaggerSettings({ enabled: false, model: 'vit' })
+    const analysis = AuthPermissionGroup.createCustomGroup({ name: 'analysis-settings', permissionKeys: ['settings.analysis.manage'] })
+    AuthPermissionGroup.addAccountMembership(analysis.id, guestId)
+    const initial = (await call('/api/page-settings/tagger', guestId)).body.data
+    let started!: () => void
+    let release!: () => void
+    const entered = new Promise<void>((resolve) => { started = resolve })
+    const released = new Promise<void>((resolve) => { release = resolve })
+    const check = t.mock.method(imageTaggerService, 'checkPythonDependencies', async () => { started(); await released; return { available: true, message: 'ready' } })
+    const pending = call('/api/page-settings/tagger', guestId, 'PUT', { enabled: true }, { 'If-Match': initial.revision })
+    try {
+      await Promise.race([entered, pending.then(() => { throw new Error('The request never reached the dependency check') })])
+      AuthPermissionGroup.removeAccountMembership(analysis.id, guestId)
+      release()
+      assert.equal((await pending).status, 403)
+      assert.equal(settingsService.loadSettings().tagger.enabled, false)
+    } finally {
+      release()
+      await pending
+      check.mock.restore()
+      AuthPermissionGroup.removeAccountMembership(analysis.id, guestId)
+    }
+  })
 
   await t.test('only admins can change the shared app mark and invalid images preserve the saved mark', async () => {
     const url = '/api/settings/appearance'

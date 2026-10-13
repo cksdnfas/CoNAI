@@ -41,7 +41,7 @@ import { hasTranslation } from './chatModelRoles'
 import { endJudgedTurn, judgeBeforeReply, judgeDirectiveText, type JudgedTurn } from './chatJudge'
 import { judgeStatusFields } from './chatJudgeFields'
 import { stripEchoedAddresses, withoutNarrationMarks } from '@conai/shared'
-import { recordLlmUsage, type LlmTokenCounts } from '../llmUsage'
+import { currentLlmUsageContext, recordLlmUsage, type LlmTokenCounts, type LlmUsageTag } from '../llmUsage'
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
 import { buildFlagDirective, ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
@@ -83,6 +83,7 @@ function developerInstructions(presetMode: boolean) {
 export type CodexChatStreamEvent = ChatStreamEvent<CodexChatMessageRecord>
 
 type TurnState = {
+  usage?: Pick<LlmUsageTag, 'threadId' | 'replyId' | 'taskId'>
   /** Direct chats with a judge preset: the judge's run for this turn (its directive went into the input). */
   judged?: JudgedTurn | null
   /** Direct chats: the profile answering (its judge settles the reply's status fields). */
@@ -144,7 +145,8 @@ export class CodexChatError extends Error {
 
 const sessions = new Map<string, Session>()
 const startingSessions = new Map<string, Promise<Session>>()
-const startingThreads = new Set<number>()
+// A preparation reservation holds its cancellation signal; compaction has no input translation.
+const startingThreads = new Map<number, AbortController | null>()
 
 /**
  * MCP grants are per process (token), so processes are keyed by account + its grants + scopes + tool allowlist and
@@ -384,7 +386,7 @@ const codexTotalsSeen = new Map<string, LlmTokenCounts>()
  * Into the usage ledger: what this report added to the thread's totals since the last one. Codex reports after each
  * model request; a total that went down (or a thread first seen) falls back to the last request's own counts.
  */
-function recordCodexUsage(codexThreadId: string, last: LlmTokenCounts, total: LlmTokenCounts) {
+function recordCodexUsage(session: Session, codexThreadId: string, last: LlmTokenCounts, total: LlmTokenCounts) {
   const chatThread = CodexChatStore.findThreadByCodexId(codexThreadId)
   const member = chatThread ? undefined : ChatGroupStore.findMemberByCodexId(codexThreadId)
   const kept = chatThread ?? member
@@ -399,13 +401,16 @@ function recordCodexUsage(codexThreadId: string, last: LlmTokenCounts, total: Ll
   // The same totals again (a repeated report) added nothing.
   if (tokens.inputTokens === 0 && tokens.outputTokens === 0) return
   const profileId = chatThread?.profile_id ?? member?.profile_id ?? null
+  const active = session.activeTurns.get(codexThreadId)
   recordLlmUsage({
+    ...active?.usage,
+    replyId: active?.delivery?.context.replyId ?? active?.usage?.replyId,
     purpose: 'chat', engine: 'codex', providerName: 'codex', model: (profileId ? ChatProfileStore.find(profileId)?.model : null) || '',
     profileId, threadId: chatThread?.id ?? member?.thread_id ?? null, tokens, latencyMs: 0, ok: true,
   })
 }
 
-function recordTokenUsage(codexThreadId: string, value: unknown) {
+function recordTokenUsage(session: Session, codexThreadId: string, value: unknown) {
   const usage = value as { last?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number }; total?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number }; modelContextWindow?: number | null } | undefined
   if (!usage?.total) return
   const count = (tokens: unknown) => (typeof tokens === 'number' && Number.isFinite(tokens) ? Math.max(0, Math.round(tokens)) : 0)
@@ -417,7 +422,7 @@ function recordTokenUsage(codexThreadId: string, value: unknown) {
     cachedInputTokens: count(usage.total.cachedInputTokens),
     outputTokens: count(usage.total.outputTokens),
   }
-  recordCodexUsage(codexThreadId,
+  recordCodexUsage(session, codexThreadId,
     { inputTokens: count(usage.last?.inputTokens), cachedInputTokens: count(usage.last?.cachedInputTokens), outputTokens: count(usage.last?.outputTokens) },
     { inputTokens: values.inputTokens, cachedInputTokens: values.cachedInputTokens, outputTokens: values.outputTokens })
   // A Codex thread belongs to a direct chat or to one member of a group room.
@@ -444,7 +449,7 @@ function handleNotification(session: Session, notification: CodexAppServerNotifi
   const { method, params } = notification
   const threadId = typeof params.threadId === 'string' ? params.threadId : null
   if (threadId && method === 'thread/tokenUsage/updated') {
-    recordTokenUsage(threadId, params.tokenUsage)
+    recordTokenUsage(session, threadId, params.tokenUsage)
     const active = session.activeTurns.get(threadId)
     const usage = params.tokenUsage as { last?: { inputTokens?: number }; total?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number } } | undefined
     if (active?.contextMeta?.version === 2 && usage?.total) {
@@ -719,6 +724,7 @@ export async function runCodexGroupReply(params: {
 
   let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
   const turn: TurnState = {
+    usage: { ...currentLlmUsageContext(), threadId, replyId: params.chatContext.replyId },
     chatThreadId: threadId,
     codexThreadId,
     turnId: null,
@@ -748,7 +754,7 @@ export async function runCodexGroupReply(params: {
         const room = CodexChatStore.findThreadById(threadId) ?? null
         const user = userPersonaForThread(room)
         const persona = pendingUserPersona(user, sent)
-        const lore = await prepareSessionLore(room, profile, params.messages, sent, user)
+        const lore = await prepareSessionLore(room, profile, params.messages, sent, user, undefined, params.signal)
         const note = pendingAuthorNote(room, profile, sent, user)
         const state = pendingBlockState(room, profile, params.messages, sent, profile.id)
         const rejected = pendingRejectedLore(threadId, profile, sent)
@@ -829,6 +835,7 @@ export async function runCodexOrderTurn(params: {
   let outcome: GroupReplyResult | null = null
   let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
   const turn: TurnState = {
+    usage: { ...currentLlmUsageContext(), threadId, replyId: params.chatContext.replyId },
     chatThreadId: threadId,
     codexThreadId,
     turnId: null,
@@ -861,7 +868,7 @@ export async function runCodexOrderTurn(params: {
         const user = userPersonaForThread(thread)
         // A fresh Codex thread holds nothing yet: persona, lore, note and state all go in.
         const none = new Set<string>()
-        const lore = await prepareSessionLore(thread, profile, params.window, none, user)
+        const lore = await prepareSessionLore(thread, profile, params.window, none, user, undefined, params.signal)
         const reference = referenceBlock([pendingUserPersona(user, none).text, lore.index.text, lore.keyed, pendingAuthorNote(thread, profile, none, user).text,
           pendingBlockState(thread, profile, params.window, none, thread?.kind === 'group' ? profile.id : undefined).text])
         assertChatAvailable(requester)
@@ -910,7 +917,7 @@ export const CodexChatService = {
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (!thread.codex_thread_id) throw new CodexChatError('아직 압축할 대화가 없어.', 409)
 
-    startingThreads.add(threadId)
+    startingThreads.set(threadId, null)
     let session: Session | null = null
     let codexThreadId: string | null = null
     try {
@@ -1135,7 +1142,9 @@ export const CodexChatService = {
       deleteClaudeSessions(threadId)
       return
     }
+    startingThreads.get(threadId)?.abort()
     const active = findActiveTurn(threadId)
+    if (!active && startingThreads.has(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
     if (active) {
       await CodexChatService.interrupt(requester, threadId).catch(() => undefined)
       void finishTurn(active.session, active.turn, 'interrupted', null)
@@ -1167,7 +1176,8 @@ export const CodexChatService = {
       throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     }
 
-    startingThreads.add(threadId)
+    const controller = new AbortController()
+    startingThreads.set(threadId, controller)
     try {
       const profile = requireCodexProfile(thread.profile_id, requester)
       if (pageContext != null && !profile.pageAssist) throw new CodexChatError('이 프로필은 페이지 어시스턴트가 꺼져 있어.', 400)
@@ -1178,9 +1188,10 @@ export const CodexChatService = {
       const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
       const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
       // The model reads the message in English; the reader keeps their own words. Translated while the session starts.
-      const translating = translateUserInput(profile, trimmed, undefined, { threadId })
+      const translating = translateUserInput(profile, trimmed, controller.signal, { threadId })
       translating.catch(() => undefined)
       const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page })
+      controller.signal.throwIfAborted()
       const run = resolveCodexRun(session, profile)
       const codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
       // A new Codex thread for a chat that already has a past (branched, imported, or its memory was reset).
@@ -1191,6 +1202,8 @@ export const CodexChatService = {
         resolveFinished = resolve
       })
       const turn: TurnState = {
+        controller,
+        usage: { ...currentLlmUsageContext(), threadId },
         chatThreadId: threadId,
         codexThreadId,
         turnId: null,
@@ -1206,11 +1219,12 @@ export const CodexChatService = {
       }
       if (routing.replyTo) requireReplyTarget(threadId, routing.replyTo.messageId)
       const modelText = await translating
+      controller.signal.throwIfAborted()
       if (session.activeTurns.has(codexThreadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       turn.userMessageId = userMessageId
-      if (hasTranslation(profile)) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal, userPersonaForThread(thread).name, { threadId })
+      if (hasTranslation(profile)) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal, userPersonaForThread(thread).name, { ...turn.usage, threadId, replyId: turn.delivery?.context.replyId })
       session.activeTurns.set(codexThreadId, turn)
       clearIdleTimer(session)
       if (!thread.title) {
@@ -1218,8 +1232,7 @@ export const CodexChatService = {
       }
       const userMessage = CodexChatStore.findMessage(threadId, userMessageId) as CodexChatMessageRecord
       emit(turn, { type: 'user', message: userMessage })
-      turn.controller = new AbortController()
-      turn.delivery = beginDirectReply(thread, profile.id, CodexChatStore.listMessages(threadId), userMessage, turn.controller.signal, (delivery) => emit(turn, { type: 'routing', routing: delivery }))
+      turn.delivery = beginDirectReply(thread, profile.id, CodexChatStore.listMessages(threadId), userMessage, controller.signal, (delivery) => emit(turn, { type: 'routing', routing: delivery }))
       turn.delivery.context.knowledgeProvider = 'codex'
       turn.delivery.context.knowledgeOutputLimit = profile.toolOutputLimit
       turn.delivery.context.knowledgeModel = run.model ?? session.catalog.models.find(item => item.isDefault)?.id ?? 'unspecified'
@@ -1236,7 +1249,7 @@ export const CodexChatService = {
         const user = userPersonaForThread(current)
         const history = CodexChatStore.listMessages(threadId)
         const persona = pendingUserPersona(user, sent)
-        const lore = await prepareSessionLore(current, profile, history, sent, user)
+        const lore = await prepareSessionLore(current, profile, history, sent, user, undefined, controller.signal)
         const note = pendingAuthorNote(current, profile, sent, user)
         const state = pendingBlockState(current, profile, history, sent)
         const rejected = pendingRejectedLore(threadId, profile, sent)
@@ -1245,7 +1258,7 @@ export const CodexChatService = {
         const pageReference = pendingPageReference(knowledgePage, requester, sent)
         const cards = pendingProposalOutcomes(threadId, sent)
         // The judge's yes items add their directives (Codex keeps its tools for the whole thread, so none are steered).
-        turn.judged = await judgeBeforeReply({ profile, threadId, replyId: turn.delivery.context.replyId ?? null, availableTools: null, signal: turn.controller.signal }).catch((error: unknown) => {
+        turn.judged = await judgeBeforeReply({ profile, threadId, replyId: turn.delivery.context.replyId ?? null, availableTools: null, messages: history, signal: controller.signal }).catch((error: unknown) => {
           turn.controller?.signal.throwIfAborted()
           console.warn('[codex-chat] judge failed:', error instanceof Error ? error.message : error)
           return null
@@ -1291,6 +1304,7 @@ export const CodexChatService = {
 
       return await turn.finished
     } finally {
+      controller.abort()
       startingThreads.delete(threadId)
     }
   },
@@ -1302,6 +1316,7 @@ export const CodexChatService = {
       return
     }
     void stopChatOrderRun(threadId, 0)
+    startingThreads.get(threadId)?.abort()
     const active = findActiveTurn(threadId)
     active?.turn.controller?.abort()
     if (!active?.turn.turnId) {
@@ -1312,6 +1327,7 @@ export const CodexChatService = {
 
   /** Close every chat process; resolves when they have exited (bounded so a stuck process cannot block updates). */
   async stopAllSessions(reason: string) {
+    for (const controller of startingThreads.values()) controller?.abort()
     const exits = [...sessions.values()].map((session) => {
       closeSession(session, reason)
       return session.client.whenExited

@@ -1,3 +1,4 @@
+import type { PageSettingsVersions } from '@conai/shared'
 import type {
   AppSettings,
   TaggerDependencyCheckResult,
@@ -22,10 +23,10 @@ export interface AutoTestTaggerResult {
   }
 }
 
-export async function updateTaggerSettings(settings: Partial<TaggerSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/tagger', {
+export async function updateTaggerSettings(settings: Partial<TaggerSettings>, revision?: string) {
+  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/tagger', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   })
   if (!response.success) {

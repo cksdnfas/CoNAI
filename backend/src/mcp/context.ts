@@ -40,6 +40,8 @@ export interface McpRequestContext {
   contentRatingLimit?: number | null;
   /** false: a chat source lists every tool directly instead of behind open_tools / run_tool (the admin tool picker). */
   toolCatalog?: boolean;
+  /** Internal API-chat callback; never accepted from HTTP input. */
+  toolCatalogBudget?: () => number;
 }
 
 /** The tool name of the n-th generation preset a chat profile links (generate_image, generate_image_2, …). */

@@ -1,3 +1,4 @@
+import { useSettingsRevision } from './use-settings-revision'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShieldAlert } from 'lucide-react'
@@ -252,8 +253,17 @@ export function SettingsPage() {
   const isPostsDraftDirty = Boolean(effectivePostsDraft && postsSettingsQuery.data && !areSettingsDraftsEqual(effectivePostsDraft, postsSettingsQuery.data))
   const isVideoOptimizationDraftDirty = Boolean(effectiveVideoOptimizationDraft && settingsQuery.data?.videoOptimization && !areSettingsDraftsEqual(effectiveVideoOptimizationDraft, settingsQuery.data.videoOptimization))
 
+  const generalRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.general, GENERAL_SECTIONS.some(isGeneralSectionDirty))
+  const metadataRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.['metadata'], isMetadataDraftDirty)
+  const imageSaveRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.['image-save'], isImageSaveDraftDirty)
+  const thumbnailRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.['thumbnail'], isThumbnailDraftDirty)
+  const generationThrottleRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.['generation-throttle'], isGenerationThrottleDraftDirty)
+  const videoOptimizationRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.['video-optimization'], isVideoOptimizationDraftDirty)
+  const postsRevision = useSettingsRevision(postsSettingsQuery.data?.pageSettingsRevisions?.posts, isPostsDraftDirty)
+
   const { tabProps: appearanceTabProps, draftSection: appearanceDraftSection } = useAppearanceSettingsTab({
     isActive: activeTab === 'general',
+    revision: settingsQuery.data?.pageSettingsRevisions?.appearance,
     currentAppearance: settingsQuery.data?.appearance,
     savedAppearance,
     syncSettingsCache,
@@ -263,6 +273,7 @@ export function SettingsPage() {
 
   const { tabProps: autoTabProps, draftSections: autoDraftSections } = useAutoSettingsTab({
     isActive: activeTab === 'auto',
+    revisions: settingsQuery.data?.pageSettingsRevisions,
     taggerSettings: settingsQuery.data?.tagger,
     kaloscopeSettings: settingsQuery.data?.kaloscope,
     aiRuntimeSettings: settingsQuery.data?.aiRuntime,
@@ -275,8 +286,9 @@ export function SettingsPage() {
 
   // Save mutations only sync caches and drafts; the save bar reports success and failures for all of them at once.
   const generalMutation = useMutation({
-    mutationFn: updateGeneralSettings,
+    mutationFn: (patch: Parameters<typeof updateGeneralSettings>[0]) => updateGeneralSettings(patch, generalRevision()),
     onSuccess: (settings, savedFields) => {
+      generalRevision(settings.pageSettingsRevisions?.general)
       syncSettingsCache(settings)
       // Only refresh the saved section's fields so unsaved edits in other sections stay in the draft.
       const savedKeys = Object.keys(savedFields) as Array<keyof GeneralSettings>
@@ -285,7 +297,7 @@ export function SettingsPage() {
   })
 
   const metadataMutation = useMutation({
-    mutationFn: updateMetadataSettings,
+    mutationFn: (patch: Parameters<typeof updateMetadataSettings>[0]) => updateMetadataSettings(patch, metadataRevision()),
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setMetadataDraft(settings.metadataExtraction)
@@ -309,7 +321,7 @@ export function SettingsPage() {
   })
 
   const imageSaveMutation = useMutation({
-    mutationFn: updateImageSaveSettings,
+    mutationFn: (patch: Parameters<typeof updateImageSaveSettings>[0]) => updateImageSaveSettings(patch, imageSaveRevision()),
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setImageSaveDraft(settings.imageSave)
@@ -317,7 +329,7 @@ export function SettingsPage() {
   })
 
   const thumbnailMutation = useMutation({
-    mutationFn: updateThumbnailSettings,
+    mutationFn: (patch: Parameters<typeof updateThumbnailSettings>[0]) => updateThumbnailSettings(patch, thumbnailRevision()),
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setThumbnailDraft(settings.thumbnail)
@@ -325,7 +337,7 @@ export function SettingsPage() {
   })
 
   const generationThrottleMutation = useMutation({
-    mutationFn: updateGenerationThrottleSettings,
+    mutationFn: (patch: Parameters<typeof updateGenerationThrottleSettings>[0]) => updateGenerationThrottleSettings(patch, generationThrottleRevision()),
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setGenerationThrottleDraft(settings.generationThrottle)
@@ -333,7 +345,7 @@ export function SettingsPage() {
   })
 
   const videoOptimizationMutation = useMutation({
-    mutationFn: updateVideoOptimizationSettings,
+    mutationFn: (patch: Parameters<typeof updateVideoOptimizationSettings>[0]) => updateVideoOptimizationSettings(patch, videoOptimizationRevision()),
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setVideoOptimizationDraft(settings.videoOptimization)
@@ -341,7 +353,7 @@ export function SettingsPage() {
   })
 
   const postsMutation = useMutation({
-    mutationFn: updatePostsSettings,
+    mutationFn: (patch: Parameters<typeof updatePostsSettings>[0]) => updatePostsSettings(patch, postsRevision()),
     onSuccess: (settings) => {
       queryClient.setQueryData(['post-settings'], settings)
       setPostsDraft(settings)

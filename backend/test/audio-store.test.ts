@@ -117,7 +117,10 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
 
   const snow = service.createAudioGroup(project.id, { name: '발자국 · 눈', label: 'footstep_snow_[00]', description: 'soft footstep on snow' })
   const stone = service.createAudioGroup(project.id, { name: '발자국 · 돌', label: 'footstep_stone_[00]' })
-  const otherGroup = service.createAudioGroup(other.id, { name: 'UI', label: 'ui_click_[00]' })
+  const otherGroup = service.createAudioGroup(other.id, { name: 'UI', label: 'ui_click_[00]', description: 'ÜBER Wind' })
+  assert.deepEqual(service.searchAudioGroups({ search: '발자국' }).map(group => group.id), service.listAudioGroups(project.id, { search: '발자국' }).map(group => group.id))
+  assert.ok(service.searchAudioGroups({ search: 'UI' }).some(group => group.id === otherGroup.id), 'workspace search includes another project')
+  assert.ok(service.searchAudioGroups({ search: 'über' }).some(group => group.id === otherGroup.id), 'Unicode case folding stays compatible with the original search')
 
   await t.test('group labels are validated and unique per project, case-insensitively', () => {
     assert.throws(() => service.createAudioGroup(project.id, { name: 'bad', label: 'bad.wav' }), AudioLabelError)

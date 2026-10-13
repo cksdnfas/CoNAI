@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
+import { PassThrough } from 'node:stream'
 import { test } from 'node:test'
 
 /**
@@ -155,6 +156,24 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
     assert.equal((await call('GET', '/api/sprite/builds/00000000-0000-4000-8000-000000000000', makerId)).status, 410)
   })
 
+  await t.test('cancelling a waiting job never lets the next job overtake the running sprite job', async () => {
+    const { startExtractJob } = await import('../src/services/sprite/spriteService')
+    const requester = { accountId: makerId, accountType: 'guest' }
+    const first = await startExtractJob({ videoHash, requester, options: {
+      sampleCount: 24, autoCrop: false, resizeMode: 'stretch', outputWidth: 1536, outputHeight: 1536,
+    } })
+    const middle = await startExtractJob({ videoHash, requester, options: { sampleCount: 2 } })
+    const last = await startExtractJob({ videoHash, requester, options: { sampleCount: 2 } })
+    assert.equal((await call('GET', `/api/jobs/${middle.jobId}`, makerId)).json.data.phase, 'waiting')
+    assert.equal((await call('POST', `/api/jobs/${middle.jobId}/cancel`, makerId)).status, 202)
+    assert.equal((await waitJob(middle.jobId, makerId)).status, 'cancelled')
+    const lastResult = await waitJob(last.jobId, makerId)
+    const firstResult = await waitJob(first.jobId, makerId)
+    assert.equal(firstResult.status, 'completed', firstResult.failureMessage ?? '')
+    assert.equal(lastResult.status, 'completed', lastResult.failureMessage ?? '')
+    assert.ok(firstResult.completedAt <= lastResult.completedAt, 'the last, small job must finish after the first job releases its lane')
+  })
+
   await t.test('normalise and animate library sheets', async () => {
     const normalized = await call('POST', '/api/sprite/normalize', makerId, { sheets: [{ imageHash: sheetHash, options: { columns: 3, rows: 3, frameCount: 8 } }], options: {}, save: true })
     assert.equal(normalized.status, 202, JSON.stringify(normalized.json))
@@ -165,6 +184,19 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
     const download = await call('GET', `/api/sprite/results/${normJob.result.workspaceId}/download`, makerId)
     assert.equal(download.headers.get('content-type'), 'application/zip')
     assert.equal((await call('GET', `/api/sprite/results/${normJob.result.workspaceId}/download`, otherMakerId)).status, 403)
+
+    const bulk = await call('POST', '/api/sprite/normalize', makerId, {
+      sheets: Array.from({ length: 17 }, () => ({ imageHash: sheetHash, options: { columns: 3, rows: 3, frameCount: 8 } })),
+      options: { mode: 'group' }, save: true,
+    })
+    assert.equal(bulk.status, 202)
+    const bulkJob = await waitJob(bulk.json.data.jobId, makerId)
+    assert.equal(bulkJob.status, 'completed', bulkJob.failureMessage ?? '')
+    assert.equal(bulkJob.result.sheets.length, 17, 'streamed files are all saved and returned')
+    assert.equal(bulkJob.result.failures.length, 0)
+    const bulkDownload = await call('GET', `/api/sprite/results/${bulkJob.result.workspaceId}/download`, makerId)
+    const BulkZip = (await import('adm-zip')).default
+    assert.equal(new BulkZip(bulkDownload.bytes!).getEntries().length, 36, '17 sheets, 17 metadata files and both manifests survive streaming')
 
     const animated = await call('POST', '/api/sprite/animation', makerId, { sheetHash, options: { columns: 3, rows: 3, frameCount: 8 }, save: true })
     const animJob = await waitJob(animated.json.data.jobId, makerId)
@@ -189,6 +221,55 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
     assert.equal((await call('DELETE', `/api/sprite/presets/${preset.id}`, readerId)).status, 403)
     assert.equal((await call('DELETE', `/api/sprite/presets/${preset.id}`, makerId)).status, 200)
     assert.equal((await call('DELETE', `/api/sprite/presets/${preset.id}`, makerId)).status, 404)
+  })
+
+  await t.test('normalization cancellation stops after the current library save', async (st) => {
+    const { BackgroundProcessorService } = await import('../src/services/backgroundProcessorService')
+    const original = BackgroundProcessorService.processSavedMediaFile
+    let entered!: () => void
+    let release!: () => void
+    const firstSave = new Promise<void>((resolve) => { entered = resolve })
+    const continueSave = new Promise<void>((resolve) => { release = resolve })
+    let saves = 0
+    const mocked = st.mock.method(BackgroundProcessorService, 'processSavedMediaFile', async (...args: Parameters<typeof original>) => {
+      const result = await original.apply(BackgroundProcessorService, args)
+      saves++
+      if (saves === 1) { entered(); await continueSave }
+      return result
+    })
+    try {
+      const started = await call('POST', '/api/sprite/normalize', makerId, {
+        sheets: Array.from({ length: 3 }, () => ({ imageHash: sheetHash, options: { columns: 3, rows: 3, frameCount: 8 } })),
+        options: {}, save: true,
+      })
+      assert.equal(started.status, 202)
+      const finished = waitJob(started.json.data.jobId, makerId)
+      await Promise.race([firstSave, finished.then((job) => { throw new Error(`job ended before saving: ${job.status}`) })])
+      assert.equal((await call('POST', `/api/jobs/${started.json.data.jobId}/cancel`, makerId)).status, 202)
+      release()
+      const job = await finished
+      assert.equal(job.status, 'cancelled')
+      assert.equal(saves, 1, 'the completed save remains, later sheets are not saved')
+      assert.equal(job.progress.succeeded, 1)
+    } finally { release(); mocked.mock.restore() }
+  })
+
+  await t.test('download stream failures do not escape the request', async (st) => {
+    const { createSpriteWorkspace } = await import('../src/services/sprite/spriteCache')
+    const workspace = createSpriteWorkspace('normalize', { accountId: makerId, accountType: 'guest' })
+    const file = path.join(workspace.dir, 'broken.zip')
+    fs.writeFileSync(file, 'PK')
+    const original = fs.createReadStream
+    const mocked = st.mock.method(fs, 'createReadStream', (...args: Parameters<typeof original>) => {
+      if (String(args[0]) !== file) return original(...args)
+      const stream = new PassThrough()
+      queueMicrotask(() => stream.destroy(Object.assign(new Error('test read failure'), { code: 'EIO', status: 500 })))
+      return stream as unknown as fs.ReadStream
+    })
+    try {
+      assert.equal((await call('GET', `/api/sprite/results/${workspace.id}/download?file=broken.zip`, makerId)).status, 500)
+      assert.equal((await call('GET', `/api/sprite/videos/${videoHash}/info`, makerId)).status, 200, 'the server still handles requests')
+    } finally { mocked.mock.restore() }
   })
 
   await t.test('batch: per-video states while running, ZIP of the saved sheets, stop after the current video', async () => {
@@ -274,6 +355,28 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
     const other = await connect(otherMakerId)
     try {
       const text = (result: any) => JSON.parse(result.content[0].text)
+      const { RuntimeJobStore } = await import('../src/services/runtimeJobs/runtimeJobStore')
+      const large = RuntimeJobStore.create({ kind: 'sprite-normalize', singletonKey: null, requestedByAccountId: makerId })
+      const largeResult = {
+        workspaceId: '00000000-0000-4000-8000-000000000000',
+        sheets: Array.from({ length: 500 }, (_, index) => ({ source: `sprite-${index}.png`, outputFilename: `sprite-${index}-normalized.png`, width: 1, height: 1, warnings: ['원본 셀 경계를 확인하세요.'.repeat(8)] })),
+        failures: [], common: null,
+      }
+      RuntimeJobStore.markCompleted(large.jobId, largeResult)
+      const stored = user.getUserSettingsDb().prepare('SELECT result FROM runtime_jobs WHERE job_id = ?').get(large.jobId) as { result: string }
+      assert.ok(Buffer.byteLength(stored.result) < 64 * 1024, 'the job table retains only a small reference')
+      assert.equal(JSON.parse(stored.result).runtime_job_result_file, 1)
+      assert.deepEqual((await call('GET', `/api/jobs/${large.jobId}`, makerId)).json.data.result, largeResult)
+      assert.equal((await call('GET', `/api/jobs/${large.jobId}`, otherMakerId)).status, 403)
+      const largeTool = text(await maker.client.callTool({ name: 'get_sprite_job', arguments: { job_id: large.jobId } }))
+      assert.deepEqual(largeTool.result, largeResult, 'MCP retrieves the complete result as well')
+      assert.equal((await other.client.callTool({ name: 'get_sprite_job', arguments: { job_id: large.jobId } })).isError, true)
+      const resultFile = path.join(root, 'artifacts', 'runtime-job-results', `${large.jobId}.json`)
+      assert.ok(fs.existsSync(resultFile), 'result survives independently of a sprite workspace')
+      user.getUserSettingsDb().prepare("UPDATE runtime_jobs SET completed_at = '2000-01-01 00:00:00' WHERE job_id = ?").run(large.jobId)
+      assert.equal(RuntimeJobStore.pruneExpired(), 1)
+      assert.equal(fs.existsSync(resultFile), false, 'job expiration removes its result file')
+
       const extracted = text(await maker.client.callTool({ name: 'extract_sprite_sheet', arguments: { composite_hash: videoHash, options: { sample_count: 4, key_colors: ['#FF00FF'] }, wait_seconds: 60 } }))
       assert.equal(extracted.status, 'completed', JSON.stringify(extracted))
       assert.equal(extracted.composite_hashes.length, 1)

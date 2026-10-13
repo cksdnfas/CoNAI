@@ -3,6 +3,15 @@ import { GraphExecutionLogLevel, GraphExecutionLogRecord } from '../types/module
 import { chunkSqliteValues, sqliteInPlaceholders } from '../utils/sqliteBatch'
 
 export class GraphExecutionLogModel {
+  /** Only the event flags used by node progress; log messages and payloads stay in the detail view. */
+  static findNodeProgress(executionId: number): Array<{ node_id: string; event_type: string }> {
+    return getUserSettingsDb().prepare(`
+      SELECT DISTINCT node_id, event_type FROM graph_execution_logs
+      WHERE execution_id = ? AND node_id IS NOT NULL
+        AND event_type IN ('node_engine_start', 'node_engine_complete', 'node_failure')
+    `).all(executionId) as Array<{ node_id: string; event_type: string }>
+  }
+
   /** Delete execution logs for a specific execution id set. */
   static deleteByExecutionIds(executionIds: number[]) {
     if (executionIds.length === 0) {

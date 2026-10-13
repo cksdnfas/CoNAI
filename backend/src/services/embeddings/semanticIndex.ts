@@ -1,16 +1,15 @@
 import { createHash } from 'crypto'
-import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { getUserSettingsDb, semanticTextHash } from '../../database/userSettingsDb'
 import { vectorStore } from '../vectors/vectorStore'
 import type { EmbeddingSettings } from '@conai/shared'
 import {
   EMBEDDING_MODEL_KEY,
+  chunkTexts,
   embedTexts,
   embeddingFailure,
   embeddingFeatureOn,
   embeddingRuntime,
   embeddingSettings,
-  embeddingVariant,
-  textWorker,
   warmEmbeddingModel,
   type EmbeddedChunk,
   type EmbeddingFeature,
@@ -90,9 +89,7 @@ export async function embedDocument(text: string, title: string | null, maxChunk
   if (text.length <= SINGLE_CHUNK_CHARS) {
     return (await embedTexts([{ text, title }], 'document', { priority }))[0] ?? []
   }
-  const reply = await textWorker.request<{ items: Array<Array<{ start: number; end: number }>> }>('chunk', {
-    texts: [text], chunkTokens: CHUNK_TOKENS, overlapTokens: OVERLAP_TOKENS, maxChunks, device: 'cpu', variant: embeddingVariant(),
-  }, { priority })
+  const reply = await chunkTexts([text], { chunkTokens: CHUNK_TOKENS, overlapTokens: OVERLAP_TOKENS, maxChunks, priority })
   const spans = jsSpans(text, reply.items[0] ?? [])
   const chunks: EmbeddedChunk[] = []
   for (let start = 0; start < spans.length; start += CHUNK_BATCH) {
@@ -110,17 +107,43 @@ type IndexItem = { space: string; sourceKey: string; ownerKey: string; hash: str
 
 /** Embed and store items: short ones several per request, long ones split. */
 async function indexItems(items: IndexItem[], priority: 'normal' | 'low' = 'low') {
+  const fresh: IndexItem[] = []
+  const keys: string[] = []
+  const waiting = new Set<Promise<void>>()
+  for (const item of items) {
+    const key = JSON.stringify([item.space, item.sourceKey, item.hash, EMBEDDING_MODEL_KEY])
+    const pending = indexingItems.get(key)
+    if (pending) waiting.add(pending)
+    else { fresh.push(item); keys.push(key) }
+  }
+  if (fresh.length) {
+    const work = indexFreshItems(fresh, priority).finally(() => {
+      for (const key of keys) if (indexingItems.get(key) === work) indexingItems.delete(key)
+    })
+    for (const key of keys) indexingItems.set(key, work)
+    waiting.add(work)
+  }
+  await Promise.all(waiting)
+  return items.length
+}
+
+const indexingItems = new Map<string, Promise<void>>()
+
+async function indexFreshItems(items: IndexItem[], priority: 'normal' | 'low') {
   for (const item of items.filter((candidate) => candidate.space === SEMANTIC_SPACES.file)) await indexFileBatch(item, priority)
   const short = items.filter((item) => item.space !== SEMANTIC_SPACES.file && item.text.length <= SINGLE_CHUNK_CHARS)
   for (let start = 0; start < short.length; start += BATCH_ITEMS) {
     const batch = short.slice(start, start + BATCH_ITEMS)
     const vectors = await embedTexts(batch.map((item) => ({ text: item.text, title: item.title })), 'document', { priority })
-    batch.forEach((item, index) => store(item, vectors[index] ?? []))
+    batch.forEach((item, index) => {
+      const chunks = vectors[index] ?? []
+      const spans = jsSpans(item.text, chunks)
+      store(item, chunks.map((chunk, i) => ({ ...chunk, ...spans[i] })))
+    })
   }
   for (const item of items.filter((candidate) => candidate.space !== SEMANTIC_SPACES.file && candidate.text.length > SINGLE_CHUNK_CHARS)) {
     store(item, await embedDocument(item.text, item.title, item.maxChunks, priority))
   }
-  return items.length
 }
 
 /** Python tokenizer offsets count Unicode code points; JavaScript strings count UTF-16 code units. */
@@ -147,10 +170,7 @@ async function indexFileBatch(item: IndexItem, priority: 'normal' | 'low') {
   }
   let text = buffer.subarray(0, validEnd).toString('utf8').slice(0, 16000)
   if (/[\uD800-\uDBFF]$/.test(text)) text = text.slice(0, -1)
-  const reply = await textWorker.request<{ items: Array<Array<{ start: number; end: number }>> }>('chunk', {
-    texts: [text], chunkTokens: CHUNK_TOKENS, overlapTokens: OVERLAP_TOKENS, maxChunks: CHUNK_BATCH + 1,
-    device: 'cpu', variant: embeddingVariant(),
-  }, { priority })
+  const reply = await chunkTexts([text], { chunkTokens: CHUNK_TOKENS, overlapTokens: OVERLAP_TOKENS, maxChunks: CHUNK_BATCH + 1, priority })
   const spans = jsSpans(text, reply.items[0] ?? [])
   const batch = spans.slice(0, CHUNK_BATCH)
   if (!batch.length || batch.some(span => !Number.isInteger(span.start) || !Number.isInteger(span.end) || span.end <= span.start || span.end > text.length)) throw new Error('Invalid file chunk boundaries')
@@ -166,23 +186,42 @@ async function indexFileBatch(item: IndexItem, priority: 'normal' | 'low') {
   // Recheck after awaiting the worker: a rename, write or deletion makes this batch obsolete.
   const current = db.prepare(`SELECT (t.revision || ':' || t.content_hash) AS revision FROM stored_file_entries e JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id
     WHERE e.id = ? AND e.owner_key = ? AND e.deleted_at IS NULL AND t.revision = ${FILE_REVISION}`).get(item.sourceKey, item.ownerKey) as { revision: string } | undefined
-  if (current?.revision !== item.hash) return
+  if (!embeddingFeatureOn('fileSearch') || current?.revision !== item.hash) return
   vectorStore.appendFileBatch(item.sourceKey, EMBEDDING_MODEL_KEY, item.ownerKey, item.hash,
     batch.map((span, index) => ({ vector: vectors[index][0].vector, chunk: chunk + index, start: byteAt(span.start), end: byteAt(span.end) })),
     { offset: next, chunk: chunk + batch.length, complete })
 }
 
 function store(item: IndexItem, chunks: EmbeddedChunk[]) {
-  if (chunks.length === 0) return
-  if (item.space === SEMANTIC_SPACES.post) {
-    const current = getUserSettingsDb().prepare('SELECT content_hash FROM post_knowledge WHERE post_id = ? AND enabled = 1 AND deleted_at IS NULL').get(Number(item.sourceKey)) as { content_hash: string } | undefined
-    if (!loadPostsSettings().knowledge.enabled || !embeddingFeatureOn('postSearch') || current?.content_hash !== item.hash) return
-  }
+  if (chunks.length === 0 || !itemCurrent(item)) return
   const whole = chunks.length === 1 && chunks[0].start === 0 && chunks[0].end >= item.text.length
   vectorStore.replace(item.space, item.sourceKey, EMBEDDING_MODEL_KEY, chunks.map((chunk, index) => ({
     vector: chunk.vector, chunk: index, ownerKey: item.ownerKey, contentHash: item.hash,
     ...(whole ? {} : { start: chunk.start, end: chunk.end }),
   })))
+}
+
+/** Awaited work may describe a deleted source or an older edit; never overwrite its current index. */
+function itemCurrent(item: IndexItem) {
+  const db = getUserSettingsDb()
+  if (item.space === SEMANTIC_SPACES.recall || item.space === SEMANTIC_SPACES.message) {
+    const recall = item.space === SEMANTIC_SPACES.recall
+    if (recall ? !embeddingFeatureOn('chatRecall') : !embeddingFeatureOn('chatHistory') && !embeddingFeatureOn('chatRecall')) return false
+    const row = db.prepare(`SELECT thread_id, content FROM ${recall ? 'chat_summary_segments' : 'codex_chat_messages'} WHERE id = ? ${recall ? 'AND level = 0' : "AND role IN ('user', 'assistant')"}`).get(item.sourceKey) as { thread_id: number; content: string } | undefined
+    return row && item.ownerKey === `thread:${row.thread_id}` && row.content.trim() && semanticTextHash(row.content) === item.hash
+  }
+  if (item.space === SEMANTIC_SPACES.lore) {
+    if (!embeddingFeatureOn('lorebook')) return false
+    const bookId = Number(item.ownerKey.slice('book:'.length))
+    const row = db.prepare('SELECT entries FROM chat_lorebooks WHERE id = ?').get(bookId) as { entries: string } | undefined
+    const entry = row && normalizeLorebook(row.entries).find(entry => loreEntryVectorKey(bookId, entry.id) === item.sourceKey)
+    return entry && loreEntryEmbeddable(entry) && loreEntryDocument(entry).hash === item.hash
+  }
+  if (item.space === SEMANTIC_SPACES.post) {
+    const current = getUserSettingsDb().prepare('SELECT content_hash FROM post_knowledge WHERE post_id = ? AND enabled = 1 AND deleted_at IS NULL').get(Number(item.sourceKey)) as { content_hash: string } | undefined
+    return loadPostsSettings().knowledge.enabled && embeddingFeatureOn('postSearch') && current?.content_hash === item.hash
+  }
+  return false
 }
 
 // ---- What is missing ------------------------------------------------------------------------------------------
@@ -435,14 +474,15 @@ class SemanticIndexer {
 
   private async runOnce(): Promise<number> {
     const settings = embeddingSettings()
-    if (!settings.enabled || embeddingFailure()) return 0
-    // Weights first (a fresh install, a new model): fetched on their own, so the status shows the download.
-    if (!embeddingRuntime.isModelCached() && !(await warmEmbeddingModel())) return 0
     if (Date.now() - this.lastPruneAt >= PRUNE_EVERY_MS) {
       this.lastPruneAt = Date.now()
       pruneVectors()
     }
     pruneImageVectors()
+    // Derived-data cleanup does not need a model and continues while embeddings are off or unavailable.
+    if (!settings.enabled || embeddingFailure()) return 0
+    // Weights first (a fresh install, a new model): fetched on their own, so the status shows the download.
+    if (!embeddingRuntime.isModelCached() && !(await warmEmbeddingModel())) return 0
 
     if (this.queue) {
       const { source, items } = this.queue

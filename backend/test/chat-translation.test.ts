@@ -140,6 +140,15 @@ test('a failed or empty translation falls back to the original without throwing'
   assert.equal(await translateReply(translating, 'Hello'), null)
 })
 
+test('translation retries a transient failure before any output', async (t) => {
+  let calls = 0
+  const requests = mockTranslator(t, () => ++calls === 1
+    ? new Response('temporarily unavailable', { status: 503 })
+    : Response.json({ choices: [{ message: { content: 'Hello' }, finish_reason: 'stop' }] }))
+  assert.equal(await translateUserInput(translating, '안녕'), 'Hello')
+  assert.equal(requests.length, 2)
+})
+
 test('group rooms translate the user with the first member that has a translation model', (t) => {
   mockTranslator(t, 'unused')
   const plain = { id: 1, name: 'A', engine: 'llm', modelSlotId: 3, translationSlotId: null } as unknown as ChatProfile

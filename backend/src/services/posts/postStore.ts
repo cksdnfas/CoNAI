@@ -26,7 +26,7 @@ import { isHumanPostActor } from './postActor';
 import { loadPostsSettings } from './postsSettings';
 import { commentMatches, removePostSearchDocument, postSearchFilter, trashPostSearchFilter, refreshPostSearchIndex, writePostSearchDocument, createPostRelevanceResolver } from './postSearch';
 import { findKnowledgeRow, getKnowledgeState, visibleKnowledgeSources, requireKnowledgeRevision, syncKnowledgeContent, normalizeKnowledgeSources, saveKnowledgeSources, KnowledgeStore } from './knowledgeStore';
-import { getKnowledgeQuality, knowledgeTaskFitMultiplier, knowledgeSearchTaskKey, issueKnowledgeSearchReceipts } from './knowledgeAssessment';
+import { cachedKnowledgeMultipliers, getKnowledgeQuality, knowledgeTaskFitMultiplier, knowledgeSearchTaskKey, issueKnowledgeSearchReceipts } from './knowledgeAssessment';
 import { semanticPostCandidates } from '../embeddings/postSemantic';
 import { notifySemanticChange } from '../embeddings/semanticSignal';
 
@@ -444,27 +444,38 @@ export const PostStore = {
         if (!found || found.expiresAt < Date.now() || found.key !== key) throw new PostError('검색 페이지가 만료됐어. 처음부터 다시 검색해줘.',409,'SEARCH_SNAPSHOT_EXPIRED');
         stored = found;
       } else {
-        const candidates = db().prepare(`SELECT p.* FROM posts p ${clause} ORDER BY ${order}`).all(...params) as PostRow[];
         const scores = new Map(semantic.map(item => [item.postId,item.score]));
-        const assessedIds=policy.enabled&&policy.rankingEnabled?new Set((db().prepare('SELECT DISTINCT e.post_id FROM post_assessment_heads h JOIN post_assessment_events e ON e.id=h.event_id').all() as Array<{post_id:number}>).map(row=>row.post_id)):new Set<number>();
-        const relevanceBand=createPostRelevanceResolver(terms,typeof query.q==='string'?query.q:'');
         const taskCondition=typeof query.q==='string'&&query.q.trim()?(typeof query.taskConditionKey==='string'?query.taskConditionKey:knowledgeSearchTaskKey(query.q)):null;
-        const ranked = candidates.map(row => {
-          const knowledge = assessedIds.has(row.id)?findKnowledgeRow(row.id):undefined;
-          let quality = 1,fit=1;
-          if (knowledge?.enabled) {
-            try { quality = getKnowledgeQuality(actor,row.id).qualityMultiplier; } catch { /* neutral score on aggregation failure */ }
-            if(taskCondition) {
-              try {fit=knowledgeTaskFitMultiplier(actor,row.id,taskCondition,typeof query.taskKey==='string'?query.taskKey:undefined);} catch { /* fit cache failure must not stop keyword search */ }
-            }
+        // Keep only rank metadata across batches; large post bodies never accumulate for the whole match set.
+        type Candidate = Pick<PostRow, 'id' | 'title' | 'body' | 'pinned'> & { rated: number };
+        const ranked: Array<{ id: number; pinned: number; band: number; score: number }> = [];
+        const rated = policy.enabled && policy.rankingEnabled ? `COALESCE((SELECT enabled FROM post_knowledge WHERE post_id=p.id),0)
+          AND EXISTS(SELECT 1 FROM post_assessment_heads h JOIN post_assessment_events e ON e.id=h.event_id WHERE e.post_id=p.id)` : '0';
+        const page = db().prepare(`SELECT p.id,p.title,${terms.length ? 'p.body' : "'' AS body"},p.pinned,(${rated}) AS rated
+          FROM posts p ${clause} ${clause ? 'AND' : 'WHERE'} p.id>? ORDER BY p.id LIMIT 200`);
+        let after = 0;
+        for (;;) {
+          const candidates = page.all(...params, after) as Candidate[];
+          if (!candidates.length) break;
+          const relevanceBand = createPostRelevanceResolver(terms, typeof query.q === 'string' ? query.q : '', candidates.map(row => row.id));
+            const qualityCache = cachedKnowledgeMultipliers(candidates.filter(row => row.rated).map(row => row.id), policy);
+            for (const row of candidates) {
+              let quality = 1,fit=1;
+              if (row.rated) {
+                try { quality = qualityCache.get(row.id) ?? getKnowledgeQuality(actor,row.id).qualityMultiplier; } catch { /* neutral score on aggregation failure */ }
+                if(taskCondition) {
+                  try {fit=knowledgeTaskFitMultiplier(actor,row.id,taskCondition,typeof query.taskKey==='string'?query.taskKey:undefined);} catch { /* fit cache failure must not stop keyword search */ }
+                }
+              }
+              // A keyword candidate always keeps baseline relevance; optional semantic proximity is a bounded bonus.
+              const relevance = 1+Math.max(0,Math.min(1,scores.get(row.id) ?? 0));
+              ranked.push({ id: row.id, pinned: row.pinned, band: relevanceBand(row),score: relevance*quality*fit });
           }
-          // A keyword candidate always keeps baseline relevance; optional semantic proximity is a bounded bonus.
-          const relevance = 1+Math.max(0,Math.min(1,scores.get(row.id) ?? 0));
-          return { row,band: relevanceBand(row),score: relevance*quality*fit };
-        });
-        ranked.sort((a,b) => a.band-b.band || b.score-a.score || b.row.pinned-a.row.pinned || b.row.id-a.row.id);
+          after = candidates[candidates.length - 1].id;
+        }
+        ranked.sort((a,b) => a.band-b.band || b.score-a.score || b.pinned-a.pinned || b.id-a.id);
         scoreVersion = `${policy.policyVersion}:r2:${createHash('sha256').update(JSON.stringify(policy)).digest('hex').slice(0,12)}`;
-        snapshot = randomUUID(); stored = { key,ids: ranked.map(item => item.row.id),scoreVersion,expiresAt: Date.now()+120_000 };
+        snapshot = randomUUID(); stored = { key,ids: ranked.map(item => item.id),scoreVersion,expiresAt: Date.now()+120_000 };
         for (const [token,value] of searchSnapshots) if (value.expiresAt<Date.now()) searchSnapshots.delete(token);
         while (searchSnapshots.size>=100) searchSnapshots.delete(searchSnapshots.keys().next().value!);
         searchSnapshots.set(snapshot,stored);

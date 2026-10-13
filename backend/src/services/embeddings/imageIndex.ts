@@ -48,6 +48,7 @@ const scan = {
   startedAt: 0,
 }
 let lastPruneAt = 0
+let indexing: Promise<number> | null = null
 
 function scanPage(): { rows: ScanRow[]; downward: boolean } {
   const select = `SELECT im.media_id, im.composite_hash,
@@ -113,19 +114,36 @@ function nextPendingImages(limit: number): { rows: ScanRow[]; scanned: number } 
  * One batch of the background pass: embed a few images without a vector; returns how many were looked at (zero once
  * the walk has nothing left).
  */
-export async function indexPendingImages(limit = BATCH_IMAGES): Promise<number> {
+export function indexPendingImages(limit = BATCH_IMAGES): Promise<number> {
+  if (indexing) return indexing
+  indexing = indexImages(limit).finally(() => { indexing = null })
+  return indexing
+}
+
+async function indexImages(limit: number): Promise<number> {
   if (!embeddingFeatureOn('imageSearch')) return 0
+  const before = { ...scan }
   const { rows, scanned } = nextPendingImages(limit)
   if (rows.length === 0) return scanned
-  const vectors = await embedImages(rows.map((row) => row.path), { priority: 'low' })
-  rows.forEach((row, index) => {
-    const vector = vectors[index]
-    if (vector instanceof Float32Array) {
-      vectorStore.replace(MEDIA_IMAGE_SPACE, row.composite_hash, IMAGE_EMBEDDING_MODEL_KEY, [{ vector }])
-    } else if (vector) {
-      console.warn(`[ImageIndex] skipped ${row.composite_hash.slice(0, 12)}: ${vector.error}`)
-    }
-  })
+  try {
+    const vectors = await embedImages(rows.map((row) => row.path), { priority: 'low' })
+    if (vectors.length !== rows.length) throw new Error('Incomplete image embedding batch')
+    if (!embeddingFeatureOn('imageSearch')) { Object.assign(scan, before); return 0 }
+    rows.forEach((row, index) => {
+      const vector = vectors[index]
+      if (vector instanceof Float32Array) {
+        if (!db.prepare(`SELECT 1 FROM media_metadata im JOIN image_files f ON f.composite_hash = im.composite_hash
+          WHERE im.composite_hash = ? AND f.original_file_path = ? AND ${IMAGE_FILE_MATCH}`).get(row.composite_hash, row.path)) return
+        vectorStore.replace(MEDIA_IMAGE_SPACE, row.composite_hash, IMAGE_EMBEDDING_MODEL_KEY, [{ vector }])
+      } else if (vector) {
+        console.warn(`[ImageIndex] skipped ${row.composite_hash.slice(0, 12)}: ${vector.error}`)
+      }
+    })
+  } catch (error) {
+    // A transient batch failure must retry the same page, rather than waiting for the six-hour rewalk.
+    Object.assign(scan, before)
+    throw error
+  }
   return rows.length
 }
 
@@ -133,14 +151,18 @@ export async function indexPendingImages(limit = BATCH_IMAGES): Promise<number> 
 export function pruneImageVectors(force = false) {
   if (!force && Date.now() - lastPruneAt < PRUNE_EVERY_MS) return 0
   lastPruneAt = Date.now()
-  let removed = vectorStore.pruneOtherModels(MEDIA_IMAGE_SPACE, IMAGE_EMBEDDING_MODEL_KEY)
-  const keys = [...vectorStore.contentHashes(MEDIA_IMAGE_SPACE, IMAGE_EMBEDDING_MODEL_KEY).keys()]
-  for (let start = 0; start < keys.length; start += IN_CHUNK) {
-    const part = keys.slice(start, start + IN_CHUNK)
-    const alive = new Set((db.prepare(`SELECT composite_hash FROM media_metadata WHERE composite_hash IN (${part.map(() => '?').join(', ')})`)
-      .all(...part) as Array<{ composite_hash: string }>).map((row) => row.composite_hash))
-    for (const key of part) if (!alive.has(key)) removed += vectorStore.remove(MEDIA_IMAGE_SPACE, key)
+  let removed = 0
+  for (const [space, model] of [[MEDIA_IMAGE_SPACE, IMAGE_EMBEDDING_MODEL_KEY], [MEDIA_STYLE_SPACE, MEDIA_STYLE_MODEL_KEY]]) {
+    removed += vectorStore.pruneOtherModels(space, model)
+    const keys = [...vectorStore.contentHashes(space, model).keys()]
+    for (let start = 0; start < keys.length; start += IN_CHUNK) {
+      const part = keys.slice(start, start + IN_CHUNK)
+      const alive = new Set((db.prepare(`SELECT composite_hash FROM media_metadata WHERE composite_hash IN (${part.map(() => '?').join(', ')})`)
+        .all(...part) as Array<{ composite_hash: string }>).map((row) => row.composite_hash))
+      for (const key of part) if (!alive.has(key)) removed += vectorStore.remove(space, key)
+    }
   }
+  if (removed) rankCache.clear()
   return removed
 }
 
@@ -184,8 +206,8 @@ const overfetch = (limit: number) => Math.max(limit * 4, 200)
  * A text query in the image space: queries come at the text dimension, images are stored at a Matryoshka prefix of
  * it. The prefix renormalized is what the worker returns when asked for that dimension.
  */
-async function imageSpaceQuery(text: string, waitMs: number) {
-  const query = await embedQuery(text, { waitMs })
+async function imageSpaceQuery(text: string, waitMs: number, signal?: AbortSignal) {
+  const query = await embedQuery(text, { waitMs, signal })
   return query ? normalizeVector(query.subarray(0, IMAGE_EMBEDDING_DIM)) : null
 }
 
@@ -193,9 +215,9 @@ async function imageSpaceQuery(text: string, waitMs: number) {
  * Images matching a text description, best first; null when image search is off or the model did not answer in
  * `waitMs` (a cold model loads in about 10 s).
  */
-export async function searchImagesByText(text: string, limit: number, options: { waitMs?: number; minScore?: number } = {}): Promise<ImageVectorHit[] | null> {
+export async function searchImagesByText(text: string, limit: number, options: { waitMs?: number; minScore?: number; signal?: AbortSignal } = {}): Promise<ImageVectorHit[] | null> {
   if (!embeddingFeatureOn('imageSearch')) return null
-  const query = await imageSpaceQuery(text, options.waitMs ?? 20_000)
+  const query = await imageSpaceQuery(text, options.waitMs ?? 20_000, options.signal)
   if (!query) return null
   const hits = vectorStore.search(MEDIA_IMAGE_SPACE, IMAGE_EMBEDDING_MODEL_KEY, query, { limit: overfetch(limit), minScore: options.minScore ?? TEXT_MATCH_MIN_SCORE })
   return visibleOnly(hits.map((hit) => ({ compositeHash: hit.sourceKey, score: hit.score })), limit)
@@ -215,12 +237,12 @@ const rankCache = new Map<string, { at: number; hits: ImageVectorHit[] }>()
  * its own). Kept for a minute per text so scrolling a result does not embed the text again. Null like
  * searchImagesByText.
  */
-export async function rankImagesByText(text: string, options: { waitMs?: number } = {}): Promise<ImageVectorHit[] | null> {
+export async function rankImagesByText(text: string, options: { waitMs?: number; signal?: AbortSignal } = {}): Promise<ImageVectorHit[] | null> {
   if (!embeddingFeatureOn('imageSearch')) return null
   const key = text.trim()
   const cached = rankCache.get(key)
   if (cached && Date.now() - cached.at < RANK_CACHE_MS) return cached.hits
-  const query = await imageSpaceQuery(text, options.waitMs ?? 20_000)
+  const query = await imageSpaceQuery(text, options.waitMs ?? 20_000, options.signal)
   if (!query) return null
   // Concurrent callers share query embedding; the first resumed caller also supplies the ranking.
   const completed = rankCache.get(key)

@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
+import { rawTokenEstimate } from '../services/llmUsage';
 import { CHAT_PAGE_KIND_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, isChatGenerationTool, type McpRequestContext } from './context';
 
 /**
@@ -98,7 +99,7 @@ function errorResult(text: string) {
  * Collects the catalogued tools while the server is built, then either lists them directly (few of them) or puts them
  * on a private server behind `open_tools` / `run_tool`.
  */
-export function createToolCatalog(server: McpServer, registerDirect: (args: unknown[]) => void) {
+export function createToolCatalog(server: McpServer, registerDirect: (args: unknown[]) => void, remainingTokens?: () => number) {
   const pending: PendingTool[] = [];
   return {
     add(name: string, category: ToolCategoryId, args: unknown[]) {
@@ -125,6 +126,8 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         await connected.connect(clientTransport);
         return connected;
       })();
+      let definitions: ReturnType<Client['listTools']> | null = null;
+      const listDefinitions = () => definitions ??= client().then((connected) => connected.listTools()).catch((error) => { definitions = null; throw error; });
       const close = server.close.bind(server);
       server.close = async () => {
         await close();
@@ -136,35 +139,52 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
       const contents = categories.map((category) => `- ${category}: ${TOOL_CATEGORIES[category]}\n  ${contentsLine(pending.filter((tool) => tool.category === category).map((tool) => tool.name))}`).join('\n');
       registerDirect([CATALOG_OPEN_TOOL, { description: [
         'The CoNAI app tools beyond this list, as a table of contents (category: what it covers, then its main tools; "+N more" are listed when you open the category).',
-        'Open a category (or name tools) to read their descriptions and input schemas, then call one with run_tool.',
+        'Search with query or browse a category using detail="summary"; open exact tool names for input schemas, then call one with run_tool.',
         'A tool named in your instructions or in earlier replies that is not in your tool list is one of these.',
         'Contents:',
         contents,
       ].join('\n'), inputSchema: z.object({
         category: z.string().optional().describe('A category id from the contents, e.g. "audio"'),
         tools: z.array(z.string()).max(20).optional().describe('Tool names to open instead of (or besides) a category'),
+        query: z.string().trim().max(200).optional().describe('Words to match in tool names and descriptions; filters the selection'),
+        detail: z.enum(['summary', 'schema']).optional().describe('summary: short discovery list; schema (default): complete input definitions'),
+        max_tokens: z.number().int().min(256).max(12000).optional().describe('Approximate response token budget, also limited by remaining chat context'),
         offset: z.number().int().min(0).optional().describe('Continue the same selection from next_offset in the previous result'),
-      }) }, async ({ category, tools, offset = 0 }: { category?: string; tools?: string[]; offset?: number }) => {
+      }) }, async ({ category, tools, query, detail = 'schema', max_tokens = 3000, offset = 0 }: { category?: string; tools?: string[]; query?: string; detail?: 'summary' | 'schema'; max_tokens?: number; offset?: number }) => {
+        const terms = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
         const wanted = new Set([
           ...(category ? pending.filter((tool) => tool.category === category).map((tool) => tool.name) : []),
           ...(tools ?? []).filter((name) => byName.has(name)),
+          ...(!category && !tools?.length && terms.length ? pending.map((tool) => tool.name) : []),
         ]);
+        for (const name of wanted) {
+          const tool = byName.get(name)!;
+          const text = `${name} ${(tool.args[1] as { description?: string })?.description ?? tool.summary}`.toLowerCase();
+          if (!terms.every((term) => text.includes(term))) wanted.delete(name);
+        }
         if (wanted.size === 0) return errorResult(`Nothing to open. Categories: ${categories.join(', ')}.`);
-        const { tools: listed } = await (await client()).listTools();
+        const { tools: listed } = await listDefinitions();
         const selected = listed.filter((tool) => wanted.has(tool.name));
-        const opened: Array<{ name: string; description?: string; input_schema: unknown }> = [];
+        const opened: Array<{ name: string; description?: string; input_schema?: unknown }> = [];
         let chars = 0;
+        let tokens = 0;
+        const budget = Math.max(0, Math.min(max_tokens, remainingTokens?.() ?? max_tokens) - 150);
         for (const tool of selected.slice(offset)) {
-          const definition = { name: tool.name, description: tool.description, input_schema: tool.inputSchema };
+          const definition = detail === 'summary' ? { name: tool.name, description: byName.get(tool.name)?.summary } : { name: tool.name, description: tool.description, input_schema: tool.inputSchema };
           const size = JSON.stringify(definition).length;
-          if (opened.length > 0 && chars + size > CATALOG_PAGE_CHARS) break;
+          const cost = rawTokenEstimate(JSON.stringify(definition));
+          if (tokens + cost > budget || (opened.length > 0 && chars + size > CATALOG_PAGE_CHARS)) {
+            if (opened.length === 0) return errorResult(`Definition of ${tool.name} needs about ${cost + 150} tokens. Use detail="summary" to browse, or open that tool alone with a larger max_tokens when context permits. The schema was not cut.`);
+            break;
+          }
           opened.push(definition);
           chars += size;
+          tokens += cost;
         }
         const nextOffset = offset + opened.length;
         return { content: [{ type: 'text' as const, text: JSON.stringify({
           tools: opened,
-          ...(nextOffset < selected.length ? { next_offset: nextOffset, remaining: selected.length - nextOffset, continue_with: { category, tools, offset: nextOffset } } : {}),
+          ...(nextOffset < selected.length ? { next_offset: nextOffset, remaining: selected.length - nextOffset, continue_with: { category, tools, query, detail, max_tokens, offset: nextOffset } } : {}),
           call_with: `${CATALOG_RUN_TOOL} {"tool": "<name>", "arguments": {…}}`,
         }) }] };
       }]);
@@ -180,7 +200,7 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
           const content = Array.isArray(result.content) ? result.content as Array<{ type?: string; text?: string }> : [];
           // Wrong arguments come back with the tool's schema, so the next call can be right without another lookup.
           if (result.isError && content.some((part) => part.type === 'text' && part.text?.includes('Input validation error'))) {
-            const schema = (await connected.listTools()).tools.find((listed) => listed.name === tool)?.inputSchema;
+            const schema = (await listDefinitions()).tools.find((listed) => listed.name === tool)?.inputSchema;
             return { ...result, content: [...content, { type: 'text' as const, text: `Input schema of ${tool} (from open_tools): ${JSON.stringify(schema ?? {})}` }] };
           }
           return result;

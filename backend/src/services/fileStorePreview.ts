@@ -75,16 +75,13 @@ export function getFileThumbnail(owner: string, entry: StoredFileEntry, filePath
     if (fs.existsSync(cached) && fs.statSync(cached).mtimeMs >= fs.statSync(filePath).mtimeMs) return cached
     fs.mkdirSync(directory, { recursive: true })
     const temporary = path.join(directory, `${entry.id}-${crypto.randomUUID()}.webp`)
-    const release = await acquireDecoder()
     try {
       FileStoreService.resolveFile(owner, entry.id)
-      if (mime.startsWith('video/')) await VideoFrameExtractor.extractPreviewFrame(filePath, temporary)
-      else await sharp(filePath, { animated: false, limitInputPixels: 50_000_000 }).rotate().resize(320, 320, { fit: 'inside', withoutEnlargement: true }).webp({ quality: 78 }).toFile(temporary)
+      await renderPreviewWebp(filePath, mime, temporary)
       FileStoreService.resolveFile(owner, entry.id)
       fs.renameSync(temporary, cached)
       return cached
     } finally {
-      release()
       await fs.promises.rm(temporary, { force: true }).catch(() => undefined)
     }
   })()

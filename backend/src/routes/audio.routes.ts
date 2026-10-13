@@ -4,7 +4,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer';
 import { runtimePaths } from '../config/runtimePaths';
 import { requirePermission } from '../middleware/authMiddleware';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler';
 import { createUploadStorage, wrapUploadMiddleware, MAX_MULTIPLE_UPLOAD_FILES } from '../middleware/upload';
 import { AudioLabelError } from '../services/audio/audioNaming';
 import {
@@ -34,6 +34,7 @@ import {
   listAudioFolders,
   listAudioGroupComments,
   listAudioGroups,
+  searchAudioGroups,
   listAudioProjects,
   moveAudioCandidates,
   restoreAudioCandidates,
@@ -127,6 +128,10 @@ router.patch('/folders/:folderId', edit, (req, res) => res.json({ success: true,
 router.delete('/folders/:folderId', edit, (req, res) => res.json({ success: true, data: deleteAudioFolder(param(req, 'folderId')) }));
 
 /* ------------------------------------------------------------------ groups */
+
+router.get('/groups', (req, res) => {
+  res.json({ success: true, data: searchAudioGroups({ search: req.query.search, filter: req.query.filter }) });
+});
 
 router.get('/projects/:projectId/groups', (req, res) => {
   res.json({ success: true, data: listAudioGroups(param(req, 'projectId'), { search: req.query.search, filter: req.query.filter }) });
@@ -279,15 +284,19 @@ router.post('/orders/:orderId/jobs/:idx/retry', edit, generate, (req, res) => {
 /* ------------------------------------------------------------------ editing */
 
 /** POST /api/audio/candidates/:id/preview — renders the edit to a temp WAV, streams it and removes it. */
-router.post('/candidates/:candidateId/preview', edit, asyncHandler(async (req, res, next) => {
-  const preview = await renderAudioEditPreview(param(req, 'candidateId'), req.body ?? {});
-  const cleanup = () => { void fs.promises.rm(preview.path, { force: true }).catch(() => undefined); };
-  res.setHeader('Content-Type', 'audio/wav');
-  res.setHeader('Content-Disposition', 'inline; filename="preview.wav"');
-  res.sendFile(preview.path, { dotfiles: 'allow' }, (error) => {
-    cleanup();
-    if (error && !res.headersSent) next(error);
-  });
+router.post('/candidates/:candidateId/preview', edit, cancellableAsyncHandler(async (req, res, signal) => {
+  const preview = await renderAudioEditPreview(param(req, 'candidateId'), req.body ?? {}, signal);
+  try {
+    if (signal.aborted) return;
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('Content-Disposition', 'inline; filename="preview.wav"');
+    await new Promise<void>((resolve, reject) => res.sendFile(preview.path, { dotfiles: 'allow' }, (error) => {
+      if (error && !res.destroyed) reject(error);
+      else resolve();
+    }));
+  } finally {
+    await fs.promises.rm(preview.path, { force: true }).catch(() => undefined);
+  }
 }));
 
 /** POST /api/audio/candidates/:id/edit { start, end, gain_db, pitch_semitones, speed, fade_in, fade_out, request_key? } */

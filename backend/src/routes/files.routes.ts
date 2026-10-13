@@ -4,7 +4,7 @@ import multer from 'multer';
 import { requireAdmin, requirePermission } from '../middleware/authMiddleware';
 import { requireImagesView } from '../middleware/imageAccess';
 import { createUploadStorage, wrapUploadMiddleware, MAX_UPLOAD_FILE_SIZE_BYTES, MAX_MULTIPLE_UPLOAD_FILES, MAX_MULTIPLE_UPLOAD_TOTAL_BYTES } from '../middleware/upload';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler';
 import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, assertFileTypeAllowed, fileOwnerKey, parseFileId, parseOwnerKey } from '../services/fileStoreService';
 import { ensureFileStoreDirectories, fileStoreIncoming } from '../services/fileStorePaths';
 import { filePreviewMime, getFileThumbnail } from '../services/fileStorePreview';
@@ -56,8 +56,8 @@ router.get('/', (req, res) => {
 router.get('/owners', requireAdmin, (req, res) => res.json({ success: true, data: FileStoreService.owners(selfOwner(req)) }));
 router.get('/folders', (req, res) => res.json({ success: true, data: FileStoreService.folders(owner(req)) }));
 /** GET /api/files/search?q= — files and folders whose name or text contains every word ("quoted phrase" = one term). */
-router.get('/search', asyncHandler(async (req, res) => {
-  res.json({ success: true, data: await searchStoredFiles(owner(req), req.query.q, Number(req.query.limit ?? 50), undefined, { semantic: true }) });
+router.get('/search', cancellableAsyncHandler(async (req, res, signal) => {
+  res.json({ success: true, data: await searchStoredFiles(owner(req), req.query.q, Number(req.query.limit ?? 50), undefined, { semantic: true, signal }) });
 }));
 router.post('/folders', requirePermission('files.edit'), (req, res) => {
   res.status(201).json({ success: true, data: FileStoreService.createFolder(owner(req), parseFileId(req.body?.parentId, true), req.body?.name) });
@@ -119,9 +119,16 @@ router.get('/:id/text', asyncHandler(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({ success: true, data: await FileStoreService.readText(owner(req), id(req), Number(req.query.offset ?? 0), Number(req.query.limit ?? 16000), { source: req.query.source === 'extracted' ? 'extracted' : 'original', revision: typeof req.query.revision === 'string' ? req.query.revision : undefined }) });
 }));
-/** PUT /api/files/:id/text — the editor's save: the whole text replaces the file in place (same id). */
+/** The editor opens text and its revision together. */
+router.get('/:id/edit', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ success: true, data: FileStoreService.readEditableText(owner(req), id(req)) });
+});
+/** PUT /api/files/:id/text — replace the revision the editor opened (same id). */
 router.put('/:id/text', requirePermission('files.edit'), (req, res) => {
-  res.json({ success: true, data: FileStoreService.updateText(owner(req), id(req), textBody(req), { source: editorSource(req) }) });
+  const revision = req.body?.expectedRevision;
+  if (typeof revision !== 'string' || !/^[a-f0-9]{64}$/.test(revision)) throw new FileStoreError('최신 파일을 다시 연 뒤 저장해줘.', 428);
+  res.json({ success: true, data: FileStoreService.updateText(owner(req), id(req), textBody(req), { source: editorSource(req), expectedRevision: revision }) });
 });
 /** GET /api/files/:id/revisions — the file's earlier texts, newest first, and who wrote the current one. */
 router.get('/:id/revisions', (req, res) => {

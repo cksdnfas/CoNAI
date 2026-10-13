@@ -1,6 +1,8 @@
 import fs from 'fs'
 import path from 'path'
+import { randomUUID } from 'crypto'
 import { ZipArchive } from 'archiver'
+import { finished, pipeline } from 'stream/promises'
 import { SpriteError } from './spriteErrors'
 import { colorKeyFilter, extractRawFrames, resizeFilters, scaleRawFrames } from './spriteFfmpeg'
 import { encodeStill } from './spriteEncode'
@@ -311,28 +313,55 @@ export function renderSheet(workDir: string, meta: SpriteBuildMeta, render: Rend
   return { sheet: { width: layout.width, height: layout.height, data }, layout, cellWidth, cellHeight }
 }
 
-export async function writeZip(output: string, entries: Array<{ name: string; data: Buffer }>): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const stream = fs.createWriteStream(output)
-    const archive = new ZipArchive({ zlib: { level: 6 } })
-    archive.once('error', reject)
-    stream.once('error', reject)
-    stream.once('close', () => resolve())
-    archive.pipe(stream)
-    for (const entry of entries) archive.append(entry.data, { name: entry.name })
-    void archive.finalize()
-  })
+export type SpriteZipEntry = { name: string; data: Buffer } | { name: string; file: string }
+
+/** File entries are opened lazily by archiver instead of retaining every image in memory. */
+export async function writeZip(output: string, entries: SpriteZipEntry[], signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
+  const stream = fs.createWriteStream(output)
+  const archive = new ZipArchive({ zlib: { level: 6 } })
+  archive.on('warning', (error) => archive.destroy(error))
+  const completion = pipeline(archive, stream, { signal })
+  try {
+    for (const entry of entries) {
+      if ('file' in entry) archive.file(entry.file, { name: entry.name })
+      else archive.append(entry.data, { name: entry.name })
+    }
+    await Promise.all([completion, archive.finalize()])
+  } finally {
+    archive.abort()
+    archive.destroy()
+    stream.destroy()
+    await Promise.allSettled([completion, finished(stream)])
+  }
+}
+
+export async function loadBuildFrameAsync(workDir: string, meta: SpriteBuildMeta, index: number): Promise<RgbaFrame> {
+  const data = await fs.promises.readFile(frameFile(workDir, index))
+  return { width: meta.frameWidth, height: meta.frameHeight, data: new Uint8Array(data.buffer, data.byteOffset, data.byteLength) }
 }
 
 /** `build_frame_archive`: every final frame as `<stem>-0001.<ext>`. */
-export async function writeFramesZip(workDir: string, meta: SpriteBuildMeta, options: { crop: Rect | null; format: SpriteImageFormat; quality: number; stem: string; output: string }): Promise<void> {
+export async function writeFramesZip(workDir: string, meta: SpriteBuildMeta, options: { crop: Rect | null; format: SpriteImageFormat; quality: number; stem: string; output: string }, signal?: AbortSignal): Promise<void> {
   const image = validateImageOutput(options.format, options.quality)
   const crop = validatePostCrop(meta, options.crop)
-  const entries: Array<{ name: string; data: Buffer }> = []
-  for (let index = 0; index < meta.frameCount; index += 1) {
-    let frame = loadBuildFrame(workDir, meta, index)
-    if (crop) frame = cropFrame(frame, crop)
-    entries.push({ name: `${options.stem}-${String(index + 1).padStart(4, '0')}.${image.format}`, data: await encodeStill(frame, image.format as SpriteImageFormat, image.quality) })
+  const entries: SpriteZipEntry[] = []
+  const staging = path.join(workDir, `frames-zip-${randomUUID()}`)
+  await fs.promises.mkdir(staging)
+  try {
+    for (let index = 0; index < meta.frameCount; index += 1) {
+      throwIfAborted(signal)
+      let frame = await loadBuildFrameAsync(workDir, meta, index)
+      if (crop) frame = cropFrame(frame, crop)
+      const name = `${options.stem}-${String(index + 1).padStart(4, '0')}.${image.format}`
+      const file = path.join(staging, `${index}.${image.format}`)
+      const bytes = await encodeStill(frame, image.format as SpriteImageFormat, image.quality)
+      throwIfAborted(signal)
+      await fs.promises.writeFile(file, bytes)
+      entries.push({ name, file })
+    }
+    await writeZip(options.output, entries, signal)
+  } finally {
+    await fs.promises.rm(staging, { recursive: true, force: true })
   }
-  await writeZip(options.output, entries)
 }

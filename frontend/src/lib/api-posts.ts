@@ -1,3 +1,4 @@
+import type { PageSettingsVersions } from '@conai/shared'
 import type {
   PostBotRun,
   PostCategory,
@@ -72,8 +73,8 @@ export type PostInput = {
 
 export type PostCategoryInput = { name?: string; parentId?: number | null; description?: string; sortOrder?: number }
 
-export const getPostsSettings = () => requestApiData<PostsSettings>('/api/posts/settings')
-export const updatePostsSettings = (settings: Partial<PostsSettings>) => requestApiData<PostsSettings>('/api/posts/settings', json('PUT', settings))
+export const getPostsSettings = () => requestApiData<PostsSettings & PageSettingsVersions>('/api/posts/settings')
+export const updatePostsSettings = (settings: Partial<PostsSettings>, revision?: string) => requestApiData<PostsSettings & PageSettingsVersions>('/api/posts/settings', { ...json('PUT', settings), headers: { 'Content-Type': 'application/json', ...(revision ? { 'If-Match': revision } : {}) } })
 
 export const listPostCategories = () => requestApiData<PostCategory[]>('/api/posts/categories')
 export const createPostCategory = (input: PostCategoryInput) => requestApiData<PostCategory>('/api/posts/categories', json('POST', input))

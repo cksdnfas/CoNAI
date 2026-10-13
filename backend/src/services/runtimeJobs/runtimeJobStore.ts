@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { readRuntimeJobResult, removeRuntimeJobResult, storeRuntimeJobResult } from './runtimeJobResults'
 import {
   RUNTIME_JOB_ERROR_LIMIT,
   RUNTIME_JOB_FAILURE_CODES,
@@ -92,8 +93,8 @@ function parseJsonColumn<T>(raw: string | null, fallback: T): T {
   }
 }
 
-/** 64KB 를 넘는 result 는 저장하지 않고 크기만 남긴다. 잡 하나가 user.db 를 부풀리지 않게 한다. */
-function serializeResult(result: unknown): string | null {
+/** Keep the job table bounded; large normalization results use private files with the job's retention. */
+function serializeResult(result: unknown, jobId: string, kind: RuntimeJobKind): string | null {
   if (result === undefined || result === null) {
     return null
   }
@@ -110,6 +111,7 @@ function serializeResult(result: unknown): string | null {
   }
 
   if (Buffer.byteLength(serialized, 'utf8') > RUNTIME_JOB_RESULT_MAX_BYTES) {
+    if (kind === 'sprite-normalize') return JSON.stringify(storeRuntimeJobResult(jobId, serialized))
     return JSON.stringify({ truncated: true, byte_length: Buffer.byteLength(serialized, 'utf8') })
   }
 
@@ -237,10 +239,13 @@ export class RuntimeJobStore {
     return created
   }
 
-  static get(jobId: string): RuntimeJobRecord | null {
+  static get(jobId: string, options: { includeResultFile?: boolean } = {}): RuntimeJobRecord | null {
     const db = getUserSettingsDb()
     const row = db.prepare('SELECT * FROM runtime_jobs WHERE job_id = ?').get(jobId) as RuntimeJobRow | undefined
-    return row ? mapRow(row) : null
+    if (!row) return null
+    const job = mapRow(row)
+    if (options.includeResultFile && job.kind === 'sprite-normalize') job.result = readRuntimeJobResult(jobId, job.result)
+    return job
   }
 
   /** Read only the ownership columns, so access checks never deserialize a 64KB result blob. */
@@ -403,8 +408,12 @@ export class RuntimeJobStore {
   static markCompleted(jobId: string, result: unknown, patch?: RuntimeJobProgressPatch): void {
     const db = getUserSettingsDb()
     const { clauses, values } = buildProgressAssignments(patch)
+    const current = db.prepare('SELECT kind, status FROM runtime_jobs WHERE job_id = ?').get(jobId) as { kind: RuntimeJobKind; status: RuntimeJobStatus } | undefined
+    if (!current || !['queued', 'running'].includes(current.status)) return
+    const serialized = serializeResult(result, jobId, current.kind)
 
-    db.prepare(`
+    try {
+      const updated = db.prepare(`
       UPDATE runtime_jobs
       SET status = 'completed',
           result = ?,
@@ -415,7 +424,12 @@ export class RuntimeJobStore {
           ${clauses.length > 0 ? `, ${clauses.join(', ')}` : ''}
       WHERE job_id = ?
         AND status IN ('queued', 'running')
-    `).run(serializeResult(result), ...values, jobId)
+      `).run(serialized, ...values, jobId)
+      if (!updated.changes && current.kind === 'sprite-normalize') removeRuntimeJobResult(jobId)
+    } catch (error) {
+      if (current.kind === 'sprite-normalize') removeRuntimeJobResult(jobId)
+      throw error
+    }
   }
 
   static markFailed(jobId: string, failureCode: string, failureMessage: string, patch?: RuntimeJobProgressPatch): void {
@@ -580,11 +594,17 @@ export class RuntimeJobStore {
     const db = getUserSettingsDb()
     const ttlSeconds = Math.max(0, Math.floor(ttlMs / 1000))
 
-    return db.prepare(`
+    const removed = db.prepare(`
       DELETE FROM runtime_jobs
       WHERE status IN ('completed', 'failed', 'cancelled')
         AND COALESCE(completed_at, updated_date) <= datetime('now', '-${ttlSeconds} seconds')
-    `).run().changes
+      RETURNING job_id
+    `).all() as Array<{ job_id: string }>
+    for (const row of removed) {
+      try { removeRuntimeJobResult(row.job_id) }
+      catch (error) { console.warn('Runtime job result cleanup failed:', error) }
+    }
+    return removed.length
   }
 
   /**

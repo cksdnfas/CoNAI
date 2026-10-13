@@ -236,22 +236,33 @@ const toGroup = (row: GroupRow): AudioGroup => ({ ...row, is_inbox: row.is_inbox
 
 export function listAudioGroups(projectId: string, options: { search?: unknown; filter?: unknown } = {}): AudioGroup[] {
   const project = getAudioProject(projectId);
+  return queryAudioGroups(project.id, options);
+}
+
+/** Same group search across the workspace; shared by the page and MCP. */
+export function searchAudioGroups(options: { search?: unknown; filter?: unknown } = {}): AudioGroup[] {
+  return queryAudioGroups(null, options);
+}
+
+function queryAudioGroups(projectId: string | null, options: { search?: unknown; filter?: unknown }): AudioGroup[] {
   const filter = options.filter === undefined || options.filter === null || options.filter === '' ? null : String(options.filter);
   if (filter !== null && !['unselected', 'has_comments', 'pending_comments', 'completed_comments'].includes(filter)) {
     throw new AudioServiceError('그룹 필터는 unselected, has_comments, pending_comments, completed_comments 중 하나야.');
   }
   const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
-  const rows = (db().prepare(`${GROUP_SELECT} WHERE g.project_id = ? ORDER BY g.is_inbox DESC, g.created_at, g.id`).all(project.id) as GroupRow[]).map(toGroup);
-  return rows.filter((group) => {
-    if (search && ![group.name, group.label ?? '', group.description].some((value) => value.toLowerCase().includes(search))) return false;
-    switch (filter as AudioGroupFilter | null) {
-      case 'unselected': return group.candidate_count > 0 && group.selected_count === 0;
-      case 'has_comments': return group.comment_count > 0;
-      case 'pending_comments': return group.pending_comment_count > 0;
-      case 'completed_comments': return group.completed_comment_count > 0;
-      default: return true;
-    }
-  });
+  const clauses: string[] = [];
+  const params: string[] = [];
+  if (projectId !== null) { clauses.push('g.project_id = ?'); params.push(projectId); }
+  if (search) { clauses.push('audio_search_match(g.name, g.label, g.description, ?) = 1'); params.push(search); }
+  const filters: Record<AudioGroupFilter, string> = {
+    unselected: 'candidate_count > 0 AND selected_count = 0',
+    has_comments: 'comment_count > 0',
+    pending_comments: 'pending_comment_count > 0',
+    completed_comments: 'completed_comment_count > 0',
+  };
+  if (filter) clauses.push(`(${filters[filter as AudioGroupFilter]})`);
+  return (db().prepare(`${GROUP_SELECT} ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
+    ORDER BY g.is_inbox DESC, g.created_at, g.id`).all(...params) as GroupRow[]).map(toGroup);
 }
 
 export function getAudioGroup(id: string): AudioGroup {
@@ -605,6 +616,14 @@ export function audioCandidateFile(id: string): { candidate: AudioCandidate; fil
 
 /* ---------------------------------------------------------------- edits */
 
+export function audioEditsMatch(stored: unknown, edit: unknown): boolean {
+  if (!stored || !edit || typeof stored !== 'object' || typeof edit !== 'object') return false;
+  const left = stored as Record<string, unknown>;
+  const right = edit as Record<string, unknown>;
+  const keys = Object.keys(right);
+  return Object.keys(left).length === keys.length && keys.every((key) => left[key] === right[key]);
+}
+
 export function findEditedAudioCandidate(sourceKey: string): AudioCandidate | null {
   const row = db().prepare('SELECT id FROM audio_candidates WHERE source_key = ?').get(sourceKey) as { id: string } | undefined;
   return row ? getAudioCandidate(row.id) : null;
@@ -642,7 +661,10 @@ export function registerEditedAudioCandidate(input: {
   } catch (error) {
     if (input.sourceKey && isUniqueViolation(error)) {
       const existing = findEditedAudioCandidate(input.sourceKey);
-      if (existing) return existing;
+      if (existing) {
+        if (!audioEditsMatch(existing.edit, input.edit)) throw new AudioServiceError('같은 request_key로 다른 편집을 저장할 수 없어.', 409);
+        return existing;
+      }
     }
     throw error;
   }

@@ -5,6 +5,7 @@ import { runtimePaths } from '../../config/runtimePaths';
 import { audioBlobPath, ingestAudioFile } from './audioStore';
 import {
   AudioServiceError,
+  audioEditsMatch,
   audioCandidateFile,
   findEditedAudioCandidate,
   registerEditedAudioCandidate,
@@ -110,24 +111,18 @@ function sourceOf(candidateId: string): { candidate: AudioCandidate; sourcePath:
 }
 
 /** Render a preview into a temp WAV. The caller streams it and must remove it (`path`). */
-export async function renderAudioEditPreview(candidateId: string, body: unknown): Promise<{ path: string; edit: AudioEditParams }> {
+export async function renderAudioEditPreview(candidateId: string, body: unknown, signal?: AbortSignal): Promise<{ path: string; edit: AudioEditParams }> {
   const edit = parseAudioEditParams(body);
   const { sourcePath, duration } = sourceOf(candidateId);
   buildAudioEditFilterChain(edit, duration);
   const target = path.join(scratchDir('audio-preview'), `${crypto.randomUUID()}.wav`);
   try {
-    await renderAudioEdit(sourcePath, target, edit, duration);
+    await renderAudioEdit(sourcePath, target, edit, duration, signal);
     return { path: target, edit };
   } catch (error) {
     await fs.promises.rm(target, { force: true }).catch(() => undefined);
     throw error;
   }
-}
-
-function sameEdit(stored: unknown, edit: AudioEditParams): boolean {
-  if (!stored || typeof stored !== 'object') return false;
-  const record = stored as Record<string, unknown>;
-  return (Object.keys(edit) as Array<keyof AudioEditParams>).every((key) => record[key] === edit[key]);
 }
 
 /**
@@ -149,7 +144,7 @@ export async function saveAudioEdit(
   if (sourceKey) {
     const existing = findEditedAudioCandidate(sourceKey);
     if (existing) {
-      if (!sameEdit(existing.edit, edit)) throw new AudioServiceError('같은 request_key로 다른 편집을 저장할 수 없어.', 409);
+      if (!audioEditsMatch(existing.edit, edit)) throw new AudioServiceError('같은 request_key로 다른 편집을 저장할 수 없어.', 409);
       return existing;
     }
   }

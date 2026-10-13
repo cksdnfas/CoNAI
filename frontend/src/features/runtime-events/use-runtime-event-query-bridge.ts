@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
-import type { ChatGenerationFinishedEventPayload, ChatGenerationUpdatedEventPayload, HistoryRecordEventPayload, QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
+import type { ChatGenerationFinishedEventPayload, ChatGenerationUpdatedEventPayload, GraphExecutionEventPayload, HistoryRecordEventPayload, QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
 import { refreshChatGenerationQueries } from './chat-generation-query-updates'
 import { AUDIO_QUERY_KEY } from '@/lib/api-audio'
 import { POSTS_QUERY_KEY } from '@/lib/api-posts'
@@ -175,6 +175,8 @@ export function useRuntimeEventQueryBridge() {
   const debounceTimersRef = useRef(new Map<string, PendingInvalidation>())
   const pendingProgressByJobIdRef = useRef(new Map<number, QueueJobProgressEventPayload>())
   const progressFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingPostChangesRef = useRef(new Map<number, string>())
+  const pendingAudioScopesRef = useRef(new Map<string, string>())
 
   const flushPendingProgress = useCallback(() => {
     progressFlushTimerRef.current = null
@@ -202,12 +204,45 @@ export function useRuntimeEventQueryBridge() {
       const remainingMaxWaitMs = Math.max(0, firstRequestedAt + INVALIDATE_MAX_WAIT_MS - now)
       const timer = setTimeout(() => {
         timers.delete(prefix)
-        void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active' })
+        const changes = prefix === POSTS_QUERY_KEY ? new Map(pendingPostChangesRef.current) : null
+        if (changes) pendingPostChangesRef.current.clear()
+        const audioScopes = prefix === AUDIO_QUERY_KEY ? new Map(pendingAudioScopesRef.current) : null
+        if (audioScopes) pendingAudioScopesRef.current.clear()
+        void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active', predicate: ({ queryKey }) => {
+          if (audioScopes?.size && !audioScopes.has('*')) {
+            const kind = queryKey[1]
+            if (kind === 'projects' || (kind === 'groups' && queryKey[2] === 'search')) return true
+            if (kind === 'groups' || kind === 'folders') return [...audioScopes.values()].includes(String(queryKey[2]))
+            if (['group', 'orders', 'candidates', 'chat-pending'].includes(String(kind))) return audioScopes.has(String(queryKey[2]))
+            return false
+          }
+          if (!changes?.size || changes.has(0)) return true
+          const kind = queryKey[1]
+          if (['comments', 'card', 'revisions', 'knowledge-versions', 'links', 'proposals-pending'].includes(String(kind))) {
+            return changes.has(Number(queryKey[2]))
+          }
+          if (kind === 'post') return changes.has(Number(queryKey.length > 3 ? queryKey[3] : queryKey[2]))
+          if (['quality', 'assessments', 'evaluations', 'task-fit', 'permanent-delete-preview', 'bot-runs'].includes(String(kind))) {
+            return changes.has(Number(queryKey[3]))
+          }
+          if (kind === 'proposals' && typeof queryKey[2] === 'number') return changes.has(queryKey[2])
+          if (kind === 'categories' || kind === 'tags') return [...changes.values()].includes('post')
+          // Shared lists/ranking/proposal searches can be affected by any changed post.
+          return true
+        } })
       }, Math.min(delayMs, remainingMaxWaitMs))
 
       timers.set(prefix, { timer, firstRequestedAt })
     })
   }, [queryClient])
+
+  const scheduleAudioInvalidate = useCallback((payload: QueueJobEventPayload) => {
+    // Old servers have no scope field: retain their broad refresh until reconnecting to a current server.
+    if (payload.audio_scopes?.length === 0) return
+    if (payload.audio_scopes === undefined) pendingAudioScopesRef.current.set('*', '*')
+    for (const scope of payload.audio_scopes ?? []) pendingAudioScopesRef.current.set(scope.group_id, scope.project_id)
+    scheduleInvalidate([AUDIO_QUERY_KEY], QUEUE_INVALIDATE_DEBOUNCE_MS)
+  }, [scheduleInvalidate])
 
   useEffect(() => {
     const timers = debounceTimersRef.current
@@ -233,7 +268,8 @@ export function useRuntimeEventQueryBridge() {
           pendingProgressByJobIdRef.current.delete(queuePayload.job_id)
         }
         applyQueueEventToCaches(queryClient, queuePayload)
-        scheduleInvalidate([QUEUE_QUERY_KEY_PREFIX, AUDIO_QUERY_KEY], QUEUE_INVALIDATE_DEBOUNCE_MS)
+        scheduleInvalidate([QUEUE_QUERY_KEY_PREFIX], QUEUE_INVALIDATE_DEBOUNCE_MS)
+        scheduleAudioInvalidate(queuePayload)
         if (affectsHistorySurface(queuePayload)) {
           scheduleInvalidate([HISTORY_QUERY_KEY_PREFIX], HISTORY_INVALIDATE_DEBOUNCE_MS)
         }
@@ -241,7 +277,8 @@ export function useRuntimeEventQueryBridge() {
       }
       case 'queue.job.created': {
         // 신규 행의 전체 필드(대기 순번/ETA)를 모르므로 패치 없이 무효화만 한다.
-        scheduleInvalidate([QUEUE_QUERY_KEY_PREFIX, AUDIO_QUERY_KEY], QUEUE_INVALIDATE_DEBOUNCE_MS)
+        scheduleInvalidate([QUEUE_QUERY_KEY_PREFIX], QUEUE_INVALIDATE_DEBOUNCE_MS)
+        scheduleAudioInvalidate(envelope.payload as QueueJobEventPayload)
         return
       }
       case 'queue.job.progress': {
@@ -279,6 +316,13 @@ export function useRuntimeEventQueryBridge() {
         return
       }
       case 'graph.execution.status': {
+        const execution = envelope.payload as GraphExecutionEventPayload
+        for (const queryKey of [
+          ['module-graph-executions', execution.graph_workflow_id],
+          ['module-graph-execution-detail', execution.execution_id],
+          ['module-graph-execution-status', execution.execution_id],
+          ['module-graph-execution-progress', execution.execution_id],
+        ]) void queryClient.invalidateQueries({ queryKey, refetchType: 'active' })
         scheduleInvalidate(
           [GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX, GRAPH_RESERVATION_QUERY_KEY_PREFIX],
           GRAPH_INVALIDATE_DEBOUNCE_MS,
@@ -286,7 +330,10 @@ export function useRuntimeEventQueryBridge() {
         return
       }
       case 'posts.changed': {
-        // A post, comment or bot call changed somewhere: the open list, post and comments refetch.
+        const { postId, kind } = envelope.payload as { postId: number; kind: string }
+        const changes = pendingPostChangesRef.current
+        const id = Number.isSafeInteger(postId) && postId > 0 ? postId : 0
+        if (changes.get(id) !== 'post') changes.set(id, kind)
         scheduleInvalidate([POSTS_QUERY_KEY], 400)
         return
       }
@@ -302,12 +349,13 @@ export function useRuntimeEventQueryBridge() {
       default:
         return
     }
-  }, [flushPendingProgress, queryClient, scheduleInvalidate])
+  }, [flushPendingProgress, queryClient, scheduleInvalidate, scheduleAudioInvalidate])
 
   /** 스트림 공백 구간(재연결/reset) 보정: 이 채널이 다루는 모든 표면을 1회 무효화한다. */
   const resyncAll = useCallback(() => {
     [
       QUEUE_QUERY_KEY_PREFIX,
+      AUDIO_QUERY_KEY,
       HISTORY_QUERY_KEY_PREFIX,
       'image-detail',
       'codex-chat-history',
@@ -317,6 +365,10 @@ export function useRuntimeEventQueryBridge() {
       GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX,
       GRAPH_RESERVATION_QUERY_KEY_PREFIX,
       RUNTIME_JOB_QUERY_KEY,
+      'module-graph-executions',
+      'module-graph-execution-detail',
+      'module-graph-execution-status',
+      'module-graph-execution-progress',
       POSTS_QUERY_KEY,
     ].forEach((prefix) => {
       void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active' })

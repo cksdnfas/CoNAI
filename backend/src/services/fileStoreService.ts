@@ -64,7 +64,11 @@ export type TextEdit = { old_text: string; new_text: string; replace_all?: boole
  * How a text write is recorded: `source` names who wrote it (see FileStoreRevisions); `history: false` replaces the
  * file without keeping its earlier text (files the app regenerates itself, such as a lorebook's JSON).
  */
-export type TextWriteRecord = { source?: FileWriteSource | null; history?: boolean };
+export type TextWriteRecord = { source?: FileWriteSource | null; history?: boolean; expectedRevision?: string };
+
+function textRevision(stat: fs.BigIntStats) {
+  return crypto.createHash('sha256').update(`${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`).digest('hex');
+}
 
 /** Apply exact-text replacements in order; each must match once (or replace_all). Throws, saving nothing, when one fails. */
 export function applyTextEdits(text: string, edits: TextEdit[]) {
@@ -173,9 +177,21 @@ function notifyChange(change: FileStoreChange) {
   }
 }
 
-function changedEntry(row: FileRow, previous?: FileRow): FileStoreChange['entries'][number] {
+function changedEntry(row: Pick<FileRow, 'id' | 'kind' | 'name' | 'parent_id'>, previous?: FileRow): FileStoreChange['entries'][number] {
   return { id: row.id, kind: row.kind, name: row.name, parentId: row.parent_id,
     ...(previous ? { previousParentId: previous.parent_id, previousName: previous.name } : {}) };
+}
+
+let purgeScheduled = false;
+function scheduleDeletedFilePurge() {
+  if (purgeScheduled) return;
+  const db = getUserSettingsDb();
+  purgeScheduled = true;
+  setImmediate(() => {
+    purgeScheduled = false;
+    if (!db.open) return;
+    FileStoreService.purgeDeleted(32);
+  }).unref();
 }
 
 function textMimeType(name: string) {
@@ -372,11 +388,15 @@ export const FileStoreService = {
     let row: FileRow;
     let kept: string | null = null;
     let created = false;
+    let revision: string;
     try {
       row = getUserSettingsDb().transaction(() => {
         const existing = this.findChild(owner, parentId, name);
         if (existing && (existing.kind !== 'file' || options.create)) throw new FileStoreError(`같은 이름의 항목이 있어: ${name}`, 409);
         if (options.replaceId !== undefined && existing?.id !== options.replaceId) throw new FileStoreError('파일이 옮겨졌거나 이름이 바뀌었어. 다시 열어줘.', 409);
+        if (options.expectedRevision !== undefined && (!existing || options.expectedRevision !== textRevision(fs.statSync(storedFilePath(owner, existing.id), { bigint: true })))) {
+          throw new FileStoreError('다른 곳에서 파일이 변경됐어. 초안을 보관하고 최신 파일을 다시 열어줘.', 409);
+        }
         const id = existing?.id ?? crypto.randomBytes(16).toString('hex');
         created = !existing;
         if (existing) {
@@ -388,6 +408,7 @@ export const FileStoreService = {
           insert(owner, parentId, name, 'file', id, data.length, textMimeType(name));
         }
         fs.renameSync(staged, storedFilePath(owner, id));
+        revision = textRevision(fs.statSync(storedFilePath(owner, id), { bigint: true }));
         return requireRow(owner, id);
       }).immediate();
     } catch (error) {
@@ -408,7 +429,7 @@ export const FileStoreService = {
         catch (error) { console.warn('[file-store] Text write hook failed:', error instanceof Error ? error.message : error); }
       }
     }
-    return toEntry(row);
+    return { ...toEntry(row), revision: revision! };
   },
 
   /** Listen to text writes whose writer is known (see TextWriteEvent). Returns the unsubscribe. */
@@ -430,6 +451,21 @@ export const FileStoreService = {
     const row = requireRow(owner, id);
     if (row.kind !== 'file') throw new FileStoreError('파일을 선택해줘.');
     return this.writeText(owner, row.parent_id, row.name, text, { replaceId: row.id, ...record });
+  },
+
+  /** One bounded editor snapshot: text and revision always come from the same open file. */
+  readEditableText(owner: string, id: string): { text: string; revision: string } {
+    const { entry, filePath } = this.resolveFile(owner, id);
+    if (!TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) throw new FileStoreError('텍스트 파일만 고칠 수 있어.', 415);
+    const fd = fs.openSync(filePath, 'r');
+    try {
+      const stat = fs.fstatSync(fd, { bigint: true });
+      if (stat.size > BigInt(MAX_TEXT_DOCUMENT_BYTES)) throw new FileStoreError('2MB가 넘는 파일은 고칠 수 없어.', 413);
+      const data = fs.readFileSync(fd);
+      if (data.includes(0)) throw new FileStoreError('바이너리 파일은 텍스트로 고칠 수 없어.', 415);
+      try { return { text: new TextDecoder('utf-8', { fatal: true }).decode(data), revision: textRevision(stat) }; }
+      catch { throw new FileStoreError('UTF-8 텍스트 파일만 고칠 수 있어.', 415); }
+    } finally { fs.closeSync(fd); }
   },
 
   /**
@@ -485,22 +521,18 @@ export const FileStoreService = {
       const rows = db.prepare(`WITH RECURSIVE tree(id, depth) AS (
         SELECT ?, 0 UNION ALL
         SELECT e.id, tree.depth + 1 FROM stored_file_entries e JOIN tree ON e.parent_id = tree.id WHERE e.deleted_at IS NULL AND tree.depth < ${MAX_DEPTH}
-      ) SELECT s.* FROM stored_file_entries s JOIN tree ON s.id = tree.id WHERE s.owner_key = ?`).all(folderId, owner) as FileRow[];
-      for (const row of rows) {
-        if (db.prepare('SELECT 1 FROM chat_file_attachments WHERE file_id = ?').get(row.id)) {
-          throw new FileStoreError(`채팅에서 참조 중인 파일은 삭제할 수 없어: ${row.name}`, 409);
-        }
-        if (db.prepare("SELECT 1 FROM post_media_refs WHERE kind = 'file' AND ref = ? UNION ALL SELECT 1 FROM post_knowledge_media_refs WHERE kind = 'file' AND ref = ? LIMIT 1").get(row.id, row.id)) {
-          throw new FileStoreError(`게시물에서 쓰는 파일은 삭제할 수 없어: ${row.name}`, 409);
-        }
-      }
-      const mark = db.prepare('UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?');
-      for (const row of rows) mark.run(row.id);
+      ) SELECT s.id,s.kind,s.name,s.parent_id FROM stored_file_entries s JOIN tree ON s.id = tree.id WHERE s.owner_key = ?`).all(folderId, owner) as Array<Pick<FileRow, 'id' | 'kind' | 'name' | 'parent_id'>>;
+      const ids = JSON.stringify(rows.map(row => row.id));
+      const attachment = db.prepare(`SELECT file_id AS id FROM chat_file_attachments WHERE file_id IN (SELECT value FROM json_each(?)) LIMIT 1`).get(ids) as { id: string } | undefined;
+      if (attachment) throw new FileStoreError(`채팅에서 참조 중인 파일은 삭제할 수 없어: ${rows.find(row => row.id === attachment.id)!.name}`, 409);
+      const reference = db.prepare(`SELECT ref AS id FROM post_media_refs WHERE kind='file' AND ref IN (SELECT value FROM json_each(?))
+        UNION ALL SELECT ref AS id FROM post_knowledge_media_refs WHERE kind='file' AND ref IN (SELECT value FROM json_each(?)) LIMIT 1`).get(ids, ids) as { id: string } | undefined;
+      if (reference) throw new FileStoreError(`게시물에서 쓰는 파일은 삭제할 수 없어: ${rows.find(row => row.id === reference.id)!.name}`, 409);
+      db.prepare('UPDATE stored_file_entries SET deleted_at = CURRENT_TIMESTAMP WHERE id IN (SELECT value FROM json_each(?))').run(ids);
       return rows;
     }).immediate();
-    // A folder row goes only once its children rows are gone, so purge level by level.
-    const exists = db.prepare('SELECT 1 FROM stored_file_entries WHERE id = ?');
-    for (let pass = 0; pass < MAX_DEPTH && exists.get(folderId); pass++) this.purgeDeleted();
+    // Tombstones hide the whole tree immediately; physical removal yields between small batches.
+    scheduleDeletedFilePurge();
     if (!options.silent) notifyChange({ owner, action: 'delete', entries: removed.map((row) => changedEntry(row)) });
   },
 
@@ -533,9 +565,11 @@ export const FileStoreService = {
   },
 
   /** Tombstones make interrupted filesystem deletion retryable without reviving a half-deleted file. */
-  purgeDeleted() {
+  purgeDeleted(limit = 200) {
     const db = getUserSettingsDb();
-    const rows = db.prepare(`SELECT id, kind, owner_key FROM stored_file_entries WHERE deleted_at IS NOT NULL LIMIT 200`).all() as Array<{ id: string; kind: string; owner_key: string }>;
+    const rows = db.prepare(`SELECT id, kind, owner_key FROM stored_file_entries e WHERE deleted_at IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM stored_file_entries child WHERE child.parent_id=e.id) LIMIT ?`).all(limit) as Array<{ id: string; kind: string; owner_key: string }>;
+    let removed = 0;
     for (const row of rows) {
       try {
         if (row.kind === 'file') {
@@ -543,12 +577,14 @@ export const FileStoreService = {
           fs.rmSync(fileStoreThumbnailPath(row.id), { force: true });
           FileStoreRevisions.purge(row.owner_key, row.id);
         }
-        db.prepare('DELETE FROM stored_file_entries WHERE id = ? AND NOT EXISTS (SELECT 1 FROM stored_file_entries WHERE parent_id = ?)').run(row.id, row.id);
+        removed += db.prepare('DELETE FROM stored_file_entries WHERE id = ? AND NOT EXISTS (SELECT 1 FROM stored_file_entries WHERE parent_id = ?)').run(row.id, row.id).changes;
         db.prepare("DELETE FROM search_db.search_documents WHERE source = 'file' AND source_id = ?").run(row.id);
       } catch (error) {
         console.warn('[file-store] Deletion will retry:', row.id, error instanceof Error ? error.message : error);
       }
     }
+    if (removed > 0) scheduleDeletedFilePurge();
+    return removed;
   },
 
   resolveFile(owner: string, id: string) {
@@ -586,7 +622,9 @@ export const FileStoreService = {
   /** One-time move from the flat blob layout into per-owner directories; safe to run on every boot. */
   migrateLayout() {
     const lookup = getUserSettingsDb().prepare('SELECT owner_key FROM stored_file_entries WHERE id = ?');
-    return migrateFileStoreLayout((id) => (lookup.get(id) as { owner_key: string } | undefined)?.owner_key ?? null);
+    const result = migrateFileStoreLayout((id) => (lookup.get(id) as { owner_key: string } | undefined)?.owner_key ?? null);
+    scheduleDeletedFilePurge();
+    return result;
   },
 
   async readText(owner: string, id: string, offset = 0, limit = 16000, options: { source?: 'original' | 'extracted'; revision?: string } = {}): Promise<StoredFileText> {
@@ -594,17 +632,23 @@ export const FileStoreService = {
     if (options.source === 'extracted' || DOCUMENT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) return (await import('./fileStoreSearch')).readExtractedDocument(owner, id, offset, limit, options.revision);
     if (!TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) throw new FileStoreError('텍스트 읽기는 UTF-8 텍스트 파일만 지원해. 음성·문서는 별도 변환이 필요해.', 415);
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > entry.size || !Number.isSafeInteger(limit) || limit < 4 || limit > 32000) throw new FileStoreError(`잘못된 읽기 범위야 (파일 크기 ${entry.size}바이트).`);
-    const handle = await fs.promises.open(filePath, 'r');
+    // A bounded (at most 32 KB) snapshot: do not hold this read handle across event-loop turns while writers swap it.
+    const handle = fs.openSync(filePath, 'r');
     try {
-      const buffer = Buffer.alloc(Math.min(limit, entry.size - offset));
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
+      const stat = fs.fstatSync(handle, { bigint: true });
+      const revision = textRevision(stat);
+      const size = Number(stat.size);
+      if (options.revision !== undefined && options.revision !== revision) throw new FileStoreError('파일이 변경됐어. 다시 읽어줘.', 409);
+      if (offset > size) throw new FileStoreError(`잘못된 읽기 범위야 (파일 크기 ${size}바이트).`);
+      const buffer = Buffer.alloc(Math.min(limit, size - offset));
+      const bytesRead = fs.readSync(handle, buffer, 0, buffer.length, offset);
       // Start on a character: an offset inside a UTF-8 codepoint moves forward past its continuation bytes.
       let skip = 0;
       while (skip < Math.min(bytesRead, 3) && (buffer[skip] & 0xc0) === 0x80) skip++;
       const start = offset + skip;
       // End only on a complete UTF-8 codepoint, so nextOffset can be used losslessly.
       let end = bytesRead;
-      if (offset + bytesRead < entry.size) {
+      if (offset + bytesRead < size) {
         let lead = bytesRead - 1;
         while (lead >= skip && (buffer[lead] & 0xc0) === 0x80) lead--;
         if (lead >= skip) {
@@ -619,8 +663,8 @@ export const FileStoreService = {
       try { text = new TextDecoder('utf-8', { fatal: true }).decode(data); }
       catch { throw new FileStoreError('UTF-8로 저장한 텍스트 파일만 읽을 수 있어.', 415); }
       const next = offset + end;
-      return { offset: start, nextOffset: next < entry.size ? next : null, size: entry.size, text };
-    } finally { await handle.close(); }
+      return { offset: start, nextOffset: next < size ? next : null, size, text, revision };
+    } finally { fs.closeSync(handle); }
   },
 
   validateAttachments(owner: string, value: unknown): StoredFileEntry[] {

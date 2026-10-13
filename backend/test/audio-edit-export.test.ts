@@ -223,6 +223,21 @@ test('audio workspace: edits, exports, deletion plan and MCP tools', { timeout: 
   })
 
   // ---------------------------------------------------------------- HTTP
+  await t.test('concurrent edits with one request key reject different parameters', async () => {
+    const outcomes = await Promise.allSettled([
+      editing.saveAudioEdit(source.id, { start: 0.1, end: 0.8, gain_db: 1 }, { accountId: null, requestKey: 'edit-race-0001' }),
+      editing.saveAudioEdit(source.id, { start: 0.2, end: 0.9, gain_db: 2 }, { accountId: null, requestKey: 'edit-race-0001' }),
+    ])
+    const accepted = outcomes.filter((outcome) => outcome.status === 'fulfilled')
+    const rejected = outcomes.filter((outcome) => outcome.status === 'rejected')
+    assert.equal(accepted.length, 1)
+    assert.equal(rejected.length, 1)
+    assert.equal(rejected[0].reason.status, 409)
+    const winner = accepted[0].value
+    const repeated = await editing.saveAudioEdit(source.id, winner.edit, { accountId: null, requestKey: 'edit-race-0001' })
+    assert.equal(repeated.id, winner.id)
+  })
+
   const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
   const adminId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('admin-audio', 'unused', 'admin')").run().lastInsertRowid)
@@ -380,6 +395,17 @@ test('audio workspace: edits, exports, deletion plan and MCP tools', { timeout: 
     assert.equal((await call(`/api/audio/projects/${project.id}/export`)).status, 401)
     await new Promise((resolve) => setTimeout(resolve, 100))
     assert.equal(fs.readdirSync(path.join(root, 'temp', 'audio-exports')).length, 0, 'inline exports leave no workspace')
+  })
+
+  await t.test('cancelling while ZIP output starts closes handles and removes the workspace', async () => {
+    const controller = new AbortController()
+    await assert.rejects(exporting.buildAudioExport(project.id, null,
+      { ...exporting.DEFAULT_AUDIO_EXPORT_OPTIONS, format: 'wav', normalize: false },
+      { accountId: null, accountType: 'admin' }, {
+        signal: controller.signal,
+        progress: (done, total) => { if (done === total) setImmediate(() => controller.abort()) },
+      }), { name: 'AbortError' })
+    assert.equal(fs.readdirSync(path.join(root, 'temp', 'audio-exports')).length, 0)
   })
 
   await t.test('export names follow the original collision vectors (409 never overwrites)', () => {

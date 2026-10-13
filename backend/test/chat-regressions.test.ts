@@ -145,6 +145,35 @@ test('SSE text is delivered once without JSON fallback duplication', async (t) =
   assert.equal(result.content, chunks.join(''))
 })
 
+test('an SSE provider error cancels its open body before releasing the connection slot', async (t) => {
+  let cancelled = false
+  let signal!: AbortSignal
+  t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    signal = init.signal as AbortSignal
+    const body = new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode('data: {"error":{"message":"broken","status":503}}\n\n')) },
+      cancel() { cancelled = true },
+    })
+    return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } })
+  })
+  await assert.rejects(streamChatCompletion({ target, messages: [], signal: new AbortController().signal, retry: false }), /broken/)
+  assert.equal(signal.aborted, true)
+  assert.equal(cancelled, true)
+  const release = await acquireLlmRequestSlot('test', 1, AbortSignal.timeout(1000))
+  release()
+})
+
+test('a transient stream error after displayed output never resends the request', async (t) => {
+  const fetch = t.mock.method(globalThis, 'fetch', async () => new Response(
+    'data: {"choices":[{"delta":{"content":"partial"}}]}\n\ndata: {"error":{"message":"unavailable","status":503}}\n\n',
+    { headers: { 'Content-Type': 'text/event-stream' } },
+  ))
+  const chunks: string[] = []
+  await assert.rejects(streamChatCompletion({ target, messages: [], signal: new AbortController().signal, onContent: (text) => chunks.push(text) }), /unavailable/)
+  assert.deepEqual(chunks, ['partial'])
+  assert.equal(fetch.mock.callCount(), 1)
+})
+
 test('cache fallback keeps one deadline and releases the connection slot on timeout', async (t) => {
   const signals: AbortSignal[] = []
   t.mock.method(console, 'warn', () => {})
@@ -297,6 +326,7 @@ const sse = (...chunks: unknown[]) => new Response(`${chunks.map((chunk) => `dat
 test('a streamed request asks for usage and reads the final usage chunk with empty choices', async (t) => {
   const bodies: Record<string, unknown>[] = []
   t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+    if (init.method !== 'POST') return new Response('', { status: 404 })
     bodies.push(JSON.parse(String(init.body)))
     return sse({ choices: [{ delta: { content: 'hi' }, finish_reason: null }] }, { choices: [{ delta: {}, finish_reason: 'stop' }] }, { choices: [], usage: { prompt_tokens: 77, completion_tokens: 1 } })
   })

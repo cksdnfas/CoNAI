@@ -240,7 +240,7 @@ test('the tool catalog pages complete schemas and retains a single oversized def
   try {
     await server.connect(serverTransport)
     await client.connect(clientTransport)
-    let args: Record<string, unknown> = { category: 'files' }
+    let args: Record<string, unknown> = { category: 'files', max_tokens: 12000 }
     const names: string[] = []
     let pages = 0
     for (;;) {

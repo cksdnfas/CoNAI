@@ -14,6 +14,7 @@ export interface PermissionSection {
 }
 
 const SECTION_LABELS: Record<CatalogSection, TranslationInput> = {
+  settings: { ko: '공용 페이지 설정', en: 'Shared page settings' },
   images: { ko: '이미지', en: 'Images' },
   prompts: { ko: '프롬프트', en: 'Prompts' },
   generation: { ko: '생성', en: 'Generation' },

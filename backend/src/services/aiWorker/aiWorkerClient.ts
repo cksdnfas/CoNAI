@@ -13,6 +13,7 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 10 * 60_000
 /** A download event pushes the deadline back by this much (big weights on a slow line). */
 const DOWNLOAD_GRACE_MS = 20 * 60_000
 const STOP_GRACE_MS = 3_000
+const MAX_QUEUED_REQUESTS = 64
 
 export type AiWorkerPriority = 'high' | 'normal' | 'low'
 export type AiWorkerModel = 'wd' | 'kaloscope' | 'embedding' | 'pixai' | 'lama'
@@ -29,11 +30,12 @@ type Pending = {
   id: string
   payload: Record<string, unknown>
   priority: AiWorkerPriority
-  timeoutMs: number
   resolve: (value: any) => void
   reject: (error: Error) => void
   timer: NodeJS.Timeout | null
   deadline: number
+  cleanup: () => void
+  timedOut: boolean
 }
 
 const PRIORITY_ORDER: Record<AiWorkerPriority, number> = { high: 0, normal: 1, low: 2 }
@@ -74,6 +76,7 @@ export class AiWorkerClient {
   /** The download running now (set by a "start" event, cleared when it is done or its request ends). */
   private activeDownload: AiWorkerDownload | null = null
   private startedAt: number | null = null
+  private stopping: Promise<void> | null = null
 
   constructor(private readonly options: AiWorkerOptions) {}
 
@@ -91,20 +94,44 @@ export class AiWorkerClient {
   }
 
   /** Queue a request; resolves with the worker's `result`, rejects with its error. */
-  request<T = any>(op: string, payload: Record<string, unknown> = {}, options?: { priority?: AiWorkerPriority; timeoutMs?: number }): Promise<T> {
+  request<T = any>(op: string, payload: Record<string, unknown> = {}, options?: { priority?: AiWorkerPriority; timeoutMs?: number; signal?: AbortSignal }): Promise<T> {
     return new Promise<T>((resolve, reject) => {
+      if (this.stopping) { reject(new AiWorkerError(`${this.options.label} stopped`, 'WorkerStopped')); return }
+      if (options?.signal?.aborted) { reject(options.signal.reason); return }
+      if (this.queue.length >= MAX_QUEUED_REQUESTS) {
+        // Model unload is a control request: retain the bound while making room for it.
+        if (op === 'unload') {
+          const displaced = this.queue.pop()!
+          displaced.cleanup()
+          displaced.reject(new AiWorkerError('AI worker queue is full', 'QueueFull'))
+        } else { reject(new AiWorkerError('AI worker queue is full', 'QueueFull')); return }
+      }
+      const signal = options?.signal
       const pending: Pending = {
         id: `${++this.seq}`,
         payload: { ...payload, op },
         priority: options?.priority ?? 'normal',
-        timeoutMs: options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
         resolve,
         reject,
         timer: null,
-        deadline: 0,
+        deadline: Date.now() + (options?.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS),
+        cleanup: () => { if (pending.timer) clearTimeout(pending.timer); signal?.removeEventListener('abort', abort) },
+        timedOut: false,
       }
+      const abort = () => {
+        signal?.removeEventListener('abort', abort)
+        const at = this.queue.indexOf(pending)
+        if (at >= 0) {
+          this.queue.splice(at, 1)
+          pending.cleanup()
+        }
+        // Keep an active request's slot until its reply/exit, even when its caller has left.
+        pending.reject(signal?.reason ?? new AiWorkerError('AI worker request cancelled', 'Aborted'))
+      }
+      signal?.addEventListener('abort', abort, { once: true })
       this.queue.push(pending)
       this.queue.sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] || Number(a.id) - Number(b.id))
+      this.armTimeout(pending)
       void this.pump()
     })
   }
@@ -132,16 +159,23 @@ export class AiWorkerClient {
     }
   }
 
-  async stop() {
+  stop(): Promise<void> {
+    if (this.stopping) return this.stopping
+    this.stopping = this.stopProcess().finally(() => { this.stopping = null })
+    return this.stopping
+  }
+
+  private async stopProcess() {
     for (const name of [...this.idleTimers.keys()]) {
       this.clearIdle(name)
     }
     const child = this.child
+    this.failQueued(new AiWorkerError(`${this.options.label} stopped`, 'WorkerStopped'))
     if (!child) {
+      this.reset(new AiWorkerError(`${this.options.label} stopped`, 'WorkerStopped'))
       return
     }
     // Ask politely after the current request; queued work is failed so callers don't hang.
-    this.failQueued(new AiWorkerError(`${this.options.label} stopped`, 'WorkerStopped'))
     try {
       child.stdin?.write(`${JSON.stringify({ id: 'stop', op: 'shutdown' })}\n`)
     } catch {
@@ -194,13 +228,14 @@ export class AiWorkerClient {
 
   private failQueued(error: Error) {
     for (const pending of this.queue.splice(0)) {
+      pending.cleanup()
       pending.reject(error)
     }
   }
 
   private reset(error: Error) {
     if (this.inFlight) {
-      if (this.inFlight.timer) clearTimeout(this.inFlight.timer)
+      this.inFlight.cleanup()
       this.inFlight.reject(error)
       this.inFlight = null
     }
@@ -220,6 +255,7 @@ export class AiWorkerClient {
     }
     const script = path.join(aiPythonDir(), 'conai_worker.py')
     const python = resolveAiPython().command
+    let startingChild: ChildProcess | null = null
     this.ready = new Promise<void>((resolve, reject) => {
       if (!fs.existsSync(script)) {
         reject(new AiWorkerError(`Worker script not found: ${script}`, 'ScriptMissing'))
@@ -240,6 +276,7 @@ export class AiWorkerClient {
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
       })
+      startingChild = child
       this.child = child
       let settled = false
       let stderrTail = ''
@@ -255,6 +292,7 @@ export class AiWorkerClient {
         stderrTail = (stderrTail + chunk.toString()).slice(-4000)
       })
       readline.createInterface({ input: child.stdout! }).on('line', (line) => {
+        if (this.child !== child) return
         let message: any
         try {
           message = JSON.parse(line)
@@ -276,20 +314,23 @@ export class AiWorkerClient {
             ? { repo: message.repo, file: message.file, state: message.state, bytes: message.bytes ?? null, at: new Date().toISOString() }
             : null
           console.log(`[${this.options.label}] download ${message.state}: ${message.repo}/${message.file}`)
-          if (this.inFlight && message.state === 'start') {
+          if (this.inFlight && !this.inFlight.timedOut && message.state === 'start') {
             this.extendDeadline(this.inFlight, DOWNLOAD_GRACE_MS)
           }
           return
         }
         const pending = this.inFlight
-        if (!pending || message.id !== pending.id) {
+        if (!pending || pending.timedOut || message.id !== pending.id) {
           return
         }
-        if (pending.timer) clearTimeout(pending.timer)
+        pending.cleanup()
         this.inFlight = null
         // A download the request caused has ended with it (a failed one never sends "done").
         this.activeDownload = null
         if (message.ok) {
+          // A cancelled caller cannot touch the model, but a completed embedding still loaded it.
+          if (['embed', 'embed_images', 'chunk'].includes(String(pending.payload.op))) this.touch('embedding', message.result?.device ?? 'cpu')
+          if (pending.payload.op === 'load' && pending.payload.model === 'embedding') this.touch('embedding', message.result?.models?.embedding?.device ?? 'cpu')
           pending.resolve(message.result)
         } else {
           pending.reject(new AiWorkerError(message.error || 'Worker error', message.errorType || 'WorkerError'))
@@ -319,8 +360,7 @@ export class AiWorkerClient {
         }
       })
     }).catch((error) => {
-      this.child = null
-      this.ready = null
+      if (this.child === startingChild) { this.child = null; this.ready = null }
       throw error
     })
     return this.ready
@@ -333,20 +373,29 @@ export class AiWorkerClient {
   }
 
   private armTimeout(pending: Pending) {
-    const child = this.child
+    if (pending.timer) clearTimeout(pending.timer)
     pending.timer = setTimeout(() => {
+      const at = this.queue.indexOf(pending)
+      if (at >= 0) {
+        this.queue.splice(at, 1)
+        pending.cleanup()
+        pending.reject(new AiWorkerError('AI worker queue wait timed out', 'QueueTimeout'))
+        return
+      }
       if (this.inFlight !== pending) return
       // The worker can't be interrupted mid-request; restart it so later requests aren't stuck behind this one.
       console.error(`[${this.options.label}] request ${pending.payload.op} timed out; restarting the worker`)
-      this.inFlight = null
+      pending.timedOut = true
+      pending.cleanup()
       pending.reject(new AiWorkerError('AI worker request timed out', 'Timeout'))
-      if (child) killCodexProcessTree(child, 'SIGKILL')
-    }, Math.max(1000, pending.deadline - Date.now()))
+      // Do not start another request until the timed-out process has exited.
+      if (this.child) killCodexProcessTree(this.child, 'SIGKILL')
+    }, Math.max(1, pending.deadline - Date.now()))
     pending.timer.unref?.()
   }
 
   private async pump() {
-    if (this.inFlight || this.queue.length === 0) {
+    if (this.stopping || this.inFlight || this.queue.length === 0) {
       return
     }
     const next = this.queue.shift()!
@@ -354,21 +403,22 @@ export class AiWorkerClient {
     try {
       await this.start()
     } catch (error) {
-      this.inFlight = null
+      next.cleanup()
       next.reject(error instanceof Error ? error : new Error(String(error)))
       // Everything queued would fail the same way.
-      this.failQueued(error instanceof Error ? error : new Error(String(error)))
+      if (this.inFlight === next || (!this.inFlight && !this.child)) {
+        this.inFlight = null
+        this.failQueued(error instanceof Error ? error : new Error(String(error)))
+      }
       return
     }
     if (this.inFlight !== next) {
       return
     }
-    next.deadline = Date.now() + next.timeoutMs
-    this.armTimeout(next)
     try {
       this.child!.stdin!.write(`${JSON.stringify({ ...next.payload, id: next.id })}\n`)
     } catch (error) {
-      if (next.timer) clearTimeout(next.timer)
+      next.cleanup()
       this.inFlight = null
       next.reject(error instanceof Error ? error : new Error(String(error)))
       void this.pump()

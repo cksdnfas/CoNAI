@@ -1,3 +1,4 @@
+import { isPageSettingsScope, pageSettingsPermission, pageSettingsScopes } from '@conai/shared'
 import { CHAT_PAGE_ACTION_PERMISSIONS, chatPageActionAllowed, chatPageActionTier, type ChatProposal, chatPagePermission, normalizeChatPageSnapshot, type ChatPageActionProposal, type ChatPageProposal, type ChatPageSnapshot, type ChatWorkflowProposal } from '@conai/shared'
 import { sanitizeChatWorkflowPage } from './chatWorkflowContext'
 import { CHAT_PAGE_KIND_TOOLS, type McpRequester } from '../../mcp/context'
@@ -23,6 +24,7 @@ export function requireChatPageAccess(requester: McpRequester, page: Pick<ChatPa
     ? !hasConfiguredAuth()
     : AuthAccount.findById(id)?.status === 'active' && permission !== null && (permission === '' || AuthAccessControlService.hasPermission(id, permission))
   if (permission === null || !permitted) throw new ChatPageContextError('이 페이지에 접근할 권한이 없어.', 403)
+  if (page.kind === 'page_settings') requirePageSettingsAccess(requester, page.path, page.resourceId)
   const slug = /^\/public\/workflows\/([\w-]+)$/.exec(page.path)?.[1]
   if (slug) {
     const workflow = WorkflowModel.findPublicBySlug(slug)
@@ -30,9 +32,18 @@ export function requireChatPageAccess(requester: McpRequester, page: Pick<ChatPa
   }
 }
 
-export function requireChatPageActionAccess(requester: McpRequester, page: Pick<ChatPageSnapshot, 'path'> & Partial<Pick<ChatPageSnapshot, 'resourceId' | 'data'>>, actionId: string, args?: Record<string, unknown>) {
+function requirePageSettingsAccess(requester: McpRequester, path: string, scope: unknown) {
+  if (typeof scope !== 'string' || !isPageSettingsScope(scope) || !pageSettingsScopes(path).includes(scope) || (requester.accountId !== null && !AuthAccessControlService.hasPermission(requester.accountId, pageSettingsPermission(scope)))) throw new ChatPageContextError('이 설정을 관리할 권한이 없어.', 403)
+}
+
+export function requireChatPageActionAccess(requester: McpRequester, page: Pick<ChatPageSnapshot, 'path'> & Partial<Pick<ChatPageSnapshot, 'resourceId' | 'data' | 'kind'>>, actionId: string, args?: Record<string, unknown>) {
   if (!chatPageActionAllowed(page.path, actionId)) throw new ChatPageContextError('이 페이지에 등록되지 않은 작업이야.', 403)
   requireKnowledgePageAction(page, actionId)
+  if (actionId.startsWith('page_settings.')) {
+    if (page.kind !== 'page_settings') throw new ChatPageContextError('설정 모달을 먼저 열어줘.', 403)
+    requirePageSettingsAccess(requester, page.path, page.resourceId)
+  }
+  if ((actionId === 'page.settings_open' || actionId === 'page_settings.select') && args) requirePageSettingsAccess(requester, page.path, args.scope)
   if (actionId === 'page.navigate' && args) {
     // The destination is `to`: MCP argument checks refuse any key named `path` as a server file path.
     const path = typeof args.to === 'string' ? args.to : ''

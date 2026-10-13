@@ -53,9 +53,33 @@ test('file store text documents: create refuses taken names, update keeps the id
     assert.equal(await read(note.id), '옮긴 뒤')
   })
 
+  await t.test('an old editor snapshot cannot replace a same-size newer write', async () => {
+    FileStoreService.updateText(me, note.id, '이전 내용')
+    const first = FileStoreService.readEditableText(me, note.id)
+    const newer = FileStoreService.updateText(me, note.id, '최신 내용', { expectedRevision: first.revision })
+    assert.notEqual(newer.revision, first.revision)
+    assert.throws(() => FileStoreService.updateText(me, note.id, '오래된값', { expectedRevision: first.revision }), /파일이 변경/)
+    assert.equal(await read(note.id), '최신 내용')
+    assert.equal((await FileStoreService.readText(me, note.id)).revision, newer.revision)
+  })
+
   await t.test('update refuses folders and other owners', () => {
     const folder = FileStoreService.ensureFolder(me, null, '보관')
     assert.throws(() => FileStoreService.updateText(me, folder.id, 'x'), /파일을 선택/)
     assert.throws(() => FileStoreService.updateText(fileOwnerKey(2), note.id, 'x'), /찾을 수 없어/)
+  })
+
+  await t.test('bounded continuation reads never mix document revisions', async () => {
+    const source = '처음 내용\n'.repeat(40)
+    const file = FileStoreService.writeText(me, null, '이어읽기.md', source, { create: true })
+    const first = await FileStoreService.readText(me, file.id, 0, 32)
+    assert.ok(first.nextOffset !== null)
+    const next = await FileStoreService.readText(me, file.id, first.nextOffset!, 32, { revision: first.revision })
+    assert.equal(next.revision, first.revision)
+    FileStoreService.updateText(me, file.id, source.replace('처음', '새로'))
+    await assert.rejects(FileStoreService.readText(me, file.id, first.nextOffset!, 32, { revision: first.revision }), (error: unknown) => (error as { status: number }).status === 409)
+    const refreshed = await FileStoreService.readText(me, file.id, 0, 32)
+    assert.notEqual(refreshed.revision, first.revision)
+    assert.ok(refreshed.text.startsWith('새로'))
   })
 })

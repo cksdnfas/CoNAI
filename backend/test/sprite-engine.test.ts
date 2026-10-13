@@ -3,8 +3,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
+import { planSpriteSampling } from '@conai/shared'
 import sharp from 'sharp'
-import { buildSpriteFrames, loadBuildFrame, renderSheet, type SpriteBuildMeta } from '../src/services/sprite/spriteBuild'
+import { buildSpriteFrames, loadBuildFrame, renderSheet, writeZip, type SpriteBuildMeta } from '../src/services/sprite/spriteBuild'
 import { decodeImage, encodeStill } from '../src/services/sprite/spriteEncode'
 import { ffmpegBinary, probeVideo } from '../src/services/sprite/spriteFfmpeg'
 import { ANIMATION_DEFAULTS, buildSpriteAnimation } from '../src/services/sprite/spriteAnimation'
@@ -158,6 +159,20 @@ test('sprite engine: normalisation matches pixels, metadata and manifests', asyn
       assert.deepEqual(sheet.metadata, JSON.parse(fs.readFileSync(path.join(dir, path.basename(sheet.metadataFilename)), 'utf8')), `${c.id} metadata`)
     }
     assert.deepEqual(result.manifest, JSON.parse(fs.readFileSync(path.join(dir, 'normalization-manifest.json'), 'utf8')), `${c.id} manifest`)
+    if (c.function?.includes('bulk')) {
+      let consumed = 0
+      const streamed = await normalizeSpriteSheetsBulk(c.sources.map((s: GoldenOptions) => async () => ({
+        image: await decodeImage(path.join(GOLDEN, s.input)), sourceName: s.source_name,
+        outputStem: s.output_stem, relativePath: s.relative_path, options: camel(s.options),
+      })), options(c.options), { onSheet: async (sheet) => {
+        const golden = await decodeImage(path.join(dir, path.basename(sheet.outputFilename)))
+        assert.ok(Buffer.from(sheet.sheet.data).equals(Buffer.from(golden.data)), `${c.id} streamed pixels`)
+        consumed += 1
+      } })
+      assert.equal(consumed, result.sheets.length)
+      assert.equal(streamed.sheets.length, 0, 'streamed normalization does not retain decoded or encoded images')
+      assert.deepEqual(streamed.manifest, result.manifest, `${c.id} streamed manifest and failures`)
+    }
   }
   for (const c of manifest.normalization_errors) {
     const sources = await sourcesOf(c)
@@ -234,6 +249,21 @@ test('D3: interval sampling takes the frame nearest each sample time', () => {
   assert.deepEqual(intervalModeIndices(info, 0, 1.75, 0.3), [0, 4, 7, 11, 14, 18])
   assert.deepEqual(intervalModeIndices(info, 0, 0.5, 0.05), [0, 1, 2, 3, 4, 5, 6], 'sub-frame intervals dedupe')
   assert.deepEqual(intervalModeIndices(info, 1.9, 1.95, 0.04), [23], 'clamped to the last frame')
+  const shortVideo = { fps: 30, frameCount: 30, lastFrameTime: 29 / 30 }
+  const tooDense = planSpriteSampling(shortVideo, 0, shortVideo.lastFrameTime, 0, 0.001)
+  assert.equal(tooDense.problem, 'frame_limit', 'the limit counts requested samples before duplicate source frames are removed')
+  assert.equal(tooDense.indices.length, 0, 'rejected intervals do not loop through unbounded sample counts')
+  assert.equal(planSpriteSampling(shortVideo, 0, 0.1, 16, 0.1).problem, 'unavailable_count', 'short ranges cannot supply the requested distinct frames')
+})
+
+test('sprite ZIP fails instead of publishing an archive with a missing file', async (t) => {
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'sprite-zip-'))
+  t.after(() => {
+    assert.equal(path.dirname(path.resolve(work)), path.resolve(os.tmpdir()))
+    assert.ok(path.basename(work).startsWith('sprite-zip-'))
+    fs.rmSync(work, { recursive: true, force: true })
+  })
+  await assert.rejects(writeZip(path.join(work, 'result.zip'), [{ name: 'sheet.png', file: path.join(work, 'missing.png') }]), { code: 'ENOENT' })
 })
 
 test('D4: one key colour with despill for any colour; frozen port fixtures', { timeout: 120000 }, async () => {

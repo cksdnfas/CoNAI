@@ -1,3 +1,4 @@
+import { verifyPageSettingsWrite } from '../../services/pageSettings';
 import { Router, Request, Response } from 'express';
 import {
   HEADER_NAVIGATION_ITEM_KEYS,
@@ -126,6 +127,7 @@ router.put(
       }
     }
 
+    if (!verifyPageSettingsWrite(res)) return;
     const updatedSettings = settingsService.updateGeneralSettings(generalSettings);
     if (generalSettings.generationHistoryMaxItems !== undefined) {
       requestGenerationResultRetentionPrune(updatedSettings.general.generationHistoryMaxItems);

@@ -95,7 +95,7 @@ const SEMANTIC_MIN_LEAD = 0.04
  */
 export type HistorySearchStatus = { mode: 'keyword' | 'hybrid'; semantic: 'disabled' | 'unavailable' | 'partial' | 'ready' | 'not_indexed'; indexedMessages: number; totalMessages: number; keywordTermsLimited?: boolean }
 
-export async function searchChatHistory(threadIds: number[], query: string, limit: number, report?: (status: HistorySearchStatus) => void): Promise<HistoryHit[]> {
+export async function searchChatHistory(threadIds: number[], query: string, limit: number, report?: (status: HistorySearchStatus) => void, signal?: AbortSignal): Promise<HistoryHit[]> {
   const capped = Math.min(Math.max(1, limit), HISTORY_SEARCH_LIMIT)
   const status: HistorySearchStatus = { mode: 'keyword', semantic: 'disabled', indexedMessages: 0, totalMessages: 0, keywordTermsLimited: parseSearchTerms(query, { allowLong: true }).length > 8 }
   report?.(status)
@@ -108,8 +108,10 @@ export async function searchChatHistory(threadIds: number[], query: string, limi
   } catch (error) {
     lexicalError = error
   }
-  await indexMessagesNow(threadIds, INDEX_BEFORE_SEARCH).catch(() => 0)
-  const vector = await embedQuery(query, { waitMs: SEARCH_QUERY_WAIT_MS })
+  const pending = embedQuery(query, { waitMs: SEARCH_QUERY_WAIT_MS, signal })
+  // Backfill is shared with the indexer; it must not hold the keyword fallback past the query deadline.
+  if (!signal?.aborted) void indexMessagesNow(threadIds, INDEX_BEFORE_SEARCH).catch(() => 0)
+  const vector = await pending
   if (!vector) {
     status.semantic = 'unavailable'
     if (lexicalError) throw lexicalError

@@ -19,6 +19,7 @@ import {
   listAudioFolders,
   listAudioGroupComments,
   listAudioGroups,
+  searchAudioGroups,
   listAudioProjects,
   moveAudioCandidates,
   setAudioGroupCommentStatus,
@@ -83,11 +84,11 @@ export function registerAudioTools(server: McpServer, context: McpRequestContext
   server.registerTool('list_audio_projects', { description: 'List sound-effect projects in the audio workspace with their group and candidate counts and the id of each project\'s 받은 파일 (inbox) group.', inputSchema: z.object({}) },
     () => run(() => listAudioProjects()));
 
-  server.registerTool('list_audio_groups', { description: 'List the sound groups of one audio project (the 오디오 tab calls a group a 효과음, "effect": one sound with one prompt and one file name). Each group has a description (what the sound is for, in a person\'s words), a prompt (its representative generation prompt), a folder_id (the folder it is sorted into, null = directly under the project) and a label (its export file-name rule, e.g. footstep_snow_[00]); counts include candidates, selected takes and pending/completed comments.', inputSchema: z.object({
-    project_id: id,
+  server.registerTool('list_audio_groups', { description: 'List sound groups in one project, or across all projects when project_id is omitted (the 오디오 tab calls a group a 효과음, "effect": one sound with one prompt and one file name). Each group has a description (what the sound is for, in a person\'s words), a prompt (its representative generation prompt), a folder_id (the folder it is sorted into, null = directly under the project) and a label (its export file-name rule, e.g. footstep_snow_[00]); counts include candidates, selected takes and pending/completed comments.', inputSchema: z.object({
+    project_id: id.optional().describe('Omit to search groups across all projects'),
     search: z.string().max(120).optional().describe('Match group name, label or description'),
     filter: z.enum(['unselected', 'has_comments', 'pending_comments', 'completed_comments']).optional(),
-  }) }, ({ project_id, search, filter }) => run(() => listAudioGroups(project_id, { search, filter })));
+  }) }, ({ project_id, search, filter }) => run(() => project_id ? listAudioGroups(project_id, { search, filter }) : searchAudioGroups({ search, filter })));
 
   server.registerTool('list_audio_candidates', { description: 'List sound candidates (generated takes, uploads, edits) in one audio group, newest first, with review state, duration and provenance.', inputSchema: z.object({
     group_id: id,

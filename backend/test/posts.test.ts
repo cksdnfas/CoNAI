@@ -148,15 +148,20 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
   })
 
   await t.test('file embeds: only the writer\'s own files, then protected from deletion', () => {
-    const own = FileStoreService.writeText(fileOwnerKey(2), null, '설정.md', '# 설정')
+    const folder = FileStoreService.createFolder(fileOwnerKey(2), null, '첨부 자료')
+    const own = FileStoreService.writeText(fileOwnerKey(2), folder.id, '설정.md', '# 설정')
     const others = FileStoreService.writeText(fileOwnerKey(3), null, '비밀.md', '비밀')
     assert.equal(status(() => PostStore.create(alice, { title: '남의 파일', body: `![](file:${others.id})` })), 404)
     const withFile = PostStore.create(alice, { title: '첨부', body: `자료 ![](file:${own.id})` })
     assert.equal(PostStore.embeddedFileOwner(bob, withFile.id, own.id), fileOwnerKey(2), 'readers reach it through the post')
     assert.equal(PostStore.embeddedFileOwner(bob, withFile.id, others.id), null)
     assert.throws(() => FileStoreService.delete(fileOwnerKey(2), [own.id]), /게시물/)
+    assert.throws(() => FileStoreService.deleteTree(fileOwnerKey(2), folder.id), /게시물/)
+    assert.equal(FileStoreService.get(fileOwnerKey(2), own.id).id, own.id, 'refusing a tree deletion leaves every entry live')
     PostStore.remove(alice, withFile.id)
     FileStoreService.delete(fileOwnerKey(2), [own.id])
+    FileStoreService.deleteTree(fileOwnerKey(2), folder.id)
+    assert.throws(() => FileStoreService.get(fileOwnerKey(2), folder.id), /찾을 수 없어/)
   })
 
   await t.test('comments: two levels, quotes, hidden and deleted, closed posts', () => {

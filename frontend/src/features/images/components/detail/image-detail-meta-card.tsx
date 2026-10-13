@@ -228,7 +228,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
   })
 
   const artistPromptLinkMutation = useMutation({
-    mutationFn: updateKaloscopeSettings,
+    mutationFn: (patch: Parameters<typeof updateKaloscopeSettings>[0]) => updateKaloscopeSettings(patch),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['image-viewer-settings'] })
       showSnackbar({ message: t('images.components.detail.image.detail.meta.card.artist.prompt.link.settings.saved'), tone: 'info' })

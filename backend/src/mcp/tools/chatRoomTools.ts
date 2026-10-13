@@ -115,14 +115,14 @@ function registerRoomTools(server: McpServer, context: McpRequestContext): void 
       chats: z.enum(['this', 'connected']).optional().describe('this (default): only this chat; connected: the chats sharing a lorebook or linked folder with it'),
       limit: z.number().int().min(1).max(HISTORY_SEARCH_LIMIT).optional().describe('Max results (default 10)'),
     }) },
-    async ({ room_id, query, chats, limit }) => {
+    async ({ room_id, query, chats, limit }, ctx) => {
       try {
         const thread = requireRoom(context, room_id ?? context.chatContext?.threadId ?? 0);
         const accountId = context.requester?.accountId ?? null;
         const connected = chats === 'connected' ? connectedThreadIds(thread.id, accountId) : [];
         if (chats === 'connected' && connected.length === 0) return textResult({ results: [], note: 'No other chat shares a lorebook or linked folder with this one.' });
         let searchStatus: HistorySearchStatus | undefined;
-        const hits = await searchChatHistory(chats === 'connected' ? connected : [thread.id], query, limit ?? 10, status => { searchStatus = status; });
+        const hits = await searchChatHistory(chats === 'connected' ? connected : [thread.id], query, limit ?? 10, status => { searchStatus = status; }, ctx?.mcpReq?.signal);
         const names = new Map<number, string>();
         const titles = new Map<number, { title: string; user: string }>();
         const chatOf = (id: number) => {

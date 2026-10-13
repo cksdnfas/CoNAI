@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto'
 import type { AgentSessionEvent, ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { runtimePaths } from '../../config/runtimePaths'
 import type { LlmTokenCounts } from '../llmUsage'
+import { buildOpenAiGenerationFields } from '../llmGenerationOptions'
 import type { ChatMcpToolResult } from './chatMcpBridge'
 import type { ClaudeChatSession } from './claudeChatCompletion'
 import type { ChatCompletionMessage, ChatCompletionResult, ChatCompletionTarget, ChatCompletionTool } from './llmChatCompletion'
@@ -114,7 +115,7 @@ export function piCompactionSettings(contextWindow: number) {
 export function piModelConfig(target: ChatCompletionTarget, contextWindow: number, vision: boolean) {
   const effort = target.generation.reasoningEffort
   const reasoning = effort === 'low' || effort === 'medium' || effort === 'high'
-  const sampling = { ...(target.generation.extraParams ?? {}), ...(target.generation.temperature != null ? { temperature: target.generation.temperature } : {}) }
+  const sampling = buildOpenAiGenerationFields({ ...target.generation, maxTokens: null }, target.thinkingSwitch)
   return {
     thinkingLevel: reasoning ? effort : 'off' as const,
     provider: {
@@ -127,6 +128,7 @@ export function piModelConfig(target: ChatCompletionTarget, contextWindow: numbe
         input: vision ? ['text' as const, 'image' as const] : ['text' as const],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         reasoning, contextWindow,
+        compat: { maxTokensField: 'max_tokens' as const },
         maxTokens: target.generation.maxTokens ?? Math.min(8192, Math.floor(contextWindow / 4)),
         ...(Object.keys(sampling).length ? { samplingParams: sampling } : {}),
       }],
@@ -154,6 +156,8 @@ export async function streamPiChatCompletion(params: {
   signal: AbortSignal
   onContent?: (text: string) => void
   onReasoning?: (text: string) => void
+  /** Cumulative provider usage, including compaction and requests completed before a failure. */
+  onUsage?: (usage: LlmTokenCounts) => void
   /** Any sign of life (a tool running, a compaction), so a quiet stretch is not taken for a stuck server. */
   onActivity?: () => void
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
@@ -232,6 +236,15 @@ export async function streamPiChatCompletion(params: {
   })
   // This run's model answers, in order (a compaction rebuilds the session's messages, so they are collected here).
   const produced: Array<Extract<AgentSessionEvent, { type: 'message_end' }>['message'] & { role: 'assistant' }> = []
+  const usage: LlmTokenCounts = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
+  let reportedUsage = false
+  const noteUsage = (counts: Parameters<typeof addUsage>[1]) => {
+    // pi initializes absent provider usage to zero; keep our fallback estimate available in that case.
+    if (!counts || ![counts.input, counts.output, counts.cacheRead, counts.cacheWrite].some((value) => (value ?? 0) > 0)) return
+    reportedUsage = true
+    addUsage(usage, counts)
+    params.onUsage?.({ ...usage })
+  }
   let content = ''
   let reasoning = ''
   let separate = false
@@ -258,8 +271,14 @@ export async function streamPiChatCompletion(params: {
         params.onReasoning?.(update.delta)
       }
     }
-    if (event.type === 'message_end' && event.message.role === 'assistant') produced.push(event.message)
-    if (event.type === 'compaction_end' && event.result && !event.aborted) compacted = true
+    if (event.type === 'message_end' && event.message.role === 'assistant') {
+      produced.push(event.message)
+      noteUsage(event.message.usage)
+    }
+    if (event.type === 'compaction_end' && event.result && !event.aborted) {
+      compacted = true
+      noteUsage(event.result.usage)
+    }
   })
   let succeeded = false
   try {
@@ -282,10 +301,8 @@ export async function streamPiChatCompletion(params: {
     succeeded = true
     // The fork holds everything the session it came from did.
     if (session.resumeId && session.resumeId !== sessionId) fs.rmSync(piSessionFile(dir, session.resumeId), { force: true })
-    const usage: LlmTokenCounts = { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }
-    for (const message of produced) addUsage(usage, message.usage)
     // The prompt pi sent is its whole session, not the request CoNAI estimated: no prompt tokens for calibration.
-    return { content, reasoning, toolCalls: [], finishReason: last.stopReason === 'length' ? 'length' : 'stop', promptTokens: null, usage }
+    return { content, reasoning, toolCalls: [], finishReason: last.stopReason === 'length' ? 'length' : 'stop', promptTokens: null, usage: reportedUsage ? usage : null }
   } finally {
     unsubscribe()
     params.signal.removeEventListener('abort', abort)

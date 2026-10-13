@@ -1,6 +1,6 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Code, Download, File, History, SquarePen, WrapText } from 'lucide-react'
+import { Code, Download, File, History, SquarePen, WrapText } from 'lucide-react'
 import type { StoredFileEntry } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -12,10 +12,11 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useI18n } from '@/i18n'
 import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, formatFileSize, getStoredFileNeighbors, readStoredFileText, storedFileDownloadUrl, storedFileViewUrl } from '@/lib/api-files'
+import { ApiRequestError } from '@/lib/api-request'
 import { FileRevisionsPanel } from './file-revisions'
+import { FileMediaPreview, FilePreviewNavigation, filePreviewKind, readFilePreviewMime } from './file-preview-shared'
 
 const FileCodePreview = lazy(() => import('./file-code-preview'))
-const FilePdfPreview = lazy(() => import('./file-pdf-preview'))
 const ChatMarkdown = lazy(() => import('@/features/codex-chat/chat-markdown').then((module) => ({ default: module.ChatMarkdown })))
 
 /** Bounded CSV/TSV prefix, including quoted delimiters/newlines and doubled quotes. */
@@ -52,19 +53,8 @@ export function FilePreview({ entry, owner = null, onClose, onNavigate, onEdit, 
   const canWrite = auth.data?.permissionKeys?.includes('files.edit') === true
   const accountKey = `${auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')}:${owner ?? ''}`
   const neighbors = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'neighbors', entry.id], queryFn: () => getStoredFileNeighbors(entry.id, owner) })
-  useEffect(() => {
-    const move = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
-      if (event.target instanceof Element && event.target.closest('input, textarea, select, video, audio, [contenteditable=true]')) return
-      const target = event.key === 'ArrowLeft' ? neighbors.data?.previous : event.key === 'ArrowRight' ? neighbors.data?.next : null
-      if (target) { event.preventDefault(); onNavigate(target) }
-    }
-    document.addEventListener('keydown', move)
-    return () => document.removeEventListener('keydown', move)
-  }, [neighbors.data, onNavigate])
   return <Modal open title={entry.name} onClose={onClose} widthClassName="max-w-5xl" headerContent={<div className="flex items-center gap-1">
-    <IconButton size="icon-sm" variant="ghost" label={t({ ko: '이전 파일', en: 'Previous file' })} disabled={!neighbors.data?.previous} onClick={() => { if (neighbors.data?.previous) onNavigate(neighbors.data.previous) }}><ChevronLeft /></IconButton>
-    <IconButton size="icon-sm" variant="ghost" label={t({ ko: '다음 파일', en: 'Next file' })} disabled={!neighbors.data?.next} onClick={() => { if (neighbors.data?.next) onNavigate(neighbors.data.next) }}><ChevronRight /></IconButton>
+    <FilePreviewNavigation previous={neighbors.data?.previous} next={neighbors.data?.next} onNavigate={onNavigate} />
     <span className="flex-1 text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>
     {versioned ? <IconButton variant="ghost" size="icon-sm" active={history} label={t({ ko: '버전 기록', en: 'Version history' })} onClick={() => setHistory(!history)}><History /></IconButton> : null}
     {onEdit && versioned ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '편집', en: 'Edit' })} onClick={() => onEdit(entry)}><SquarePen /></IconButton> : null}
@@ -79,21 +69,18 @@ function FilePreviewContent({ entry, owner, accountKey, onPermissionResult }: { 
   const { t } = useI18n()
   const [offset, setOffset] = useState(0)
   const [firstLine, setFirstLine] = useState(1)
+  const [revision, setRevision] = useState<string | undefined>()
+  const [readSession, setReadSession] = useState(0)
   const [wrap, setWrap] = useState(true)
   const [raw, setRaw] = useState(false)
   const extension = entry.name.split('.').at(-1)?.toLowerCase() ?? ''
   const url = storedFileViewUrl(entry.id, owner)
   const [mediaFailed, setMediaFailed] = useState(false)
   // The server determines the actual safe MIME; uploaded MIME and renames are not trusted.
-  const mime = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'view-type', entry.id, entry.updatedAt, canViewImages], queryFn: async () => {
-    const response = await fetch(url, { method: 'HEAD', credentials: 'include' })
-    if (response.status === 403) { onPermissionResult(true); throw new Error('Image permission required') }
-    if (!response.ok) throw new Error('No preview')
-    onPermissionResult(false)
-    return response.headers.get('Content-Type') ?? ''
-  }, retry: false })
-  const kind = mime.data?.startsWith('text/plain') ? 'text' : mime.data?.startsWith('image/') ? 'image' : mime.data?.startsWith('video/') ? 'video' : mime.data?.startsWith('audio/') ? 'audio' : mime.data === 'application/pdf' ? 'pdf' : null
-  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'text', entry.id, offset], queryFn: () => readStoredFileText(entry.id, offset, owner), retry: false, enabled: kind === 'text' })
+  const mime = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'view-type', entry.id, entry.updatedAt, canViewImages], queryFn: () => readFilePreviewMime(url, onPermissionResult), retry: false })
+  const kind = filePreviewKind(mime.data)
+  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'text', entry.id, entry.updatedAt, readSession, revision ?? null, offset], queryFn: ({ signal }) => readStoredFileText(entry.id, offset, owner, revision, signal), retry: false, enabled: kind === 'text' })
+  const restartRead = () => { setOffset(0); setFirstLine(1); setRevision(undefined); setReadSession((current) => current + 1) }
   const text = useMemo(() => {
     const source = query.data?.text ?? ''
     if (extension === 'json' && !raw && offset === 0 && query.data?.nextOffset === null) {
@@ -108,13 +95,12 @@ function FilePreviewContent({ entry, owner, accountKey, onPermissionResult }: { 
   let content
   if (mime.error?.message === 'Image permission required' || (!canViewImages && (kind === 'image' || kind === 'video'))) content = <ImagePermissionNotice />
   else if (mime.isPending) content = <LoadingState />
-  else if (mime.isError || mediaFailed) content = unavailable
-  else if (kind === 'image') content = <img src={url} alt={entry.name} onError={() => setMediaFailed(true)} className="mx-auto max-h-[65vh] max-w-full object-contain" />
-  else if (kind === 'video') content = <video src={url} controls preload="metadata" onError={() => setMediaFailed(true)} className="mx-auto max-h-[65vh] max-w-full" />
-  else if (kind === 'audio') content = <audio src={url} controls preload="metadata" onError={() => setMediaFailed(true)} className="w-full" />
-  else if (kind === 'pdf') content = <FilePdfPreview url={url} name={entry.name} />
+  else if (mime.isError || mediaFailed || kind === null) content = unavailable
+  else if (kind !== 'text') content = <FileMediaPreview kind={kind} url={url} name={entry.name} onError={() => setMediaFailed(true)} />
   else if (query.isPending) content = <LoadingState />
-  else if (query.isError) content = unavailable
+  else if (query.isError) content = query.error instanceof ApiRequestError && query.error.status === 409
+    ? <div className="space-y-3"><EmptyState icon={File} title={t({ ko: '읽는 동안 파일이 변경됐어', en: 'The file changed while you were reading' })} /><Button variant="secondary" size="sm" onClick={restartRead}>{t({ ko: '처음부터 다시 읽기', en: 'Read again from the beginning' })}</Button></div>
+    : unavailable
   else if (!raw && markdown) content = <div className="max-h-[60vh] overflow-auto"><ChatMarkdown text={text} /></div>
   else if (!raw && tabular && offset === 0) content = <div className="max-h-[60vh] overflow-auto"><table className="w-full border-collapse text-left text-xs"><tbody>{rows.map((row, index) => <tr key={index} className="border-b border-line">{row.map((cell, column) => index === 0 ? <th key={column} className="whitespace-pre-wrap px-3 py-2 font-semibold">{cell}</th> : <td key={column} className="whitespace-pre-wrap px-3 py-2 align-top">{cell}</td>)}</tr>)}</tbody></table></div>
   else content = <FileCodePreview text={text} extension={extension} wrap={wrap} firstLine={firstLine} />
@@ -124,9 +110,10 @@ function FilePreviewContent({ entry, owner, accountKey, onPermissionResult }: { 
       <IconButton size="icon-sm" variant="ghost" active={wrap} label={t({ ko: '자동 줄바꿈', en: 'Wrap lines' })} onClick={() => setWrap(!wrap)}><WrapText /></IconButton>
       {markdown || tabular || extension === 'json' ? <IconButton size="icon-sm" variant="ghost" active={raw} label={t({ ko: '원문 보기', en: 'Raw source' })} onClick={() => setRaw(!raw)}><Code /></IconButton> : null}
       <span className="flex-1" />
-      {offset > 0 ? <Button variant="ghost" size="sm" onClick={() => { setOffset(0); setFirstLine(1) }}>{t({ ko: '처음', en: 'Beginning' })}</Button> : null}
+      {offset > 0 ? <Button variant="ghost" size="sm" onClick={restartRead}>{t({ ko: '처음', en: 'Beginning' })}</Button> : null}
       {query.data.nextOffset !== null ? <Button variant="secondary" size="sm" onClick={() => {
         setFirstLine(firstLine + (query.data.text.match(/\n/g)?.length ?? 0))
+        setRevision(query.data.revision)
         setOffset(query.data.nextOffset ?? 0)
       }}>{t({ ko: '다음 부분', en: 'Next part' })}</Button> : null}
     </ModalFooter> : null}

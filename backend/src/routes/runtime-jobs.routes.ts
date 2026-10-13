@@ -81,7 +81,7 @@ router.get('/:jobId', asyncHandler(async (req: Request, res: Response) => {
     return res.status(403).json(errorResponse('Forbidden'));
   }
 
-  const job = RuntimeJobStore.get(jobId);
+  const job = RuntimeJobStore.get(jobId, { includeResultFile: true });
   if (!job) {
     return res.status(404).json(errorResponse('Job not found'));
   }

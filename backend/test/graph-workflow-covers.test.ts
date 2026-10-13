@@ -17,6 +17,7 @@ test('graph workflow covers: newest library image per workflow, refreshed when a
   user.initializeUserSettingsDb()
   t.after(async () => {
     user.closeUserSettingsDb()
+    ;(await import('../src/database/init')).closeDatabase()
     await new Promise<void>(async (resolve) => (await import('../src/utils/logger')).logger.close(resolve))
     await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   })
@@ -46,4 +47,25 @@ test('graph workflow covers: newest library image per workflow, refreshed when a
 
   result(textOnly, 'image', { compositeHash: 'first-image' })
   assert.deepEqual(GraphExecutionFinalResultModel.findLatestImageCovers(), { [sheet]: 'new-sheet', [upscale]: 'upscaled', [textOnly]: 'first-image' })
+
+  await t.test('scope cleanup pages technical artifacts without deleting reused final results or active runs', async () => {
+    const { deleteGraphWorkflowArtifactsInScope } = await import('../src/services/graphWorkflowOutputManagementService')
+    const sourceWorkflow = workflow('scope-source')
+    const finalWorkflow = workflow('scope-final')
+    const execution = (workflowId: number, status = 'completed') => Number(db.prepare('INSERT INTO graph_executions (graph_workflow_id, graph_version, status) VALUES (?, 1, ?)').run(workflowId, status).lastInsertRowid)
+    const sourceRun = execution(sourceWorkflow)
+    const finalRun = execution(finalWorkflow)
+    const activeRun = execution(sourceWorkflow, 'running')
+    const insert = db.prepare("INSERT INTO graph_execution_artifacts (execution_id, node_id, port_key, artifact_type, metadata) VALUES (?, 'n', 'out', ?, ?)")
+    // A text-typed source becomes a visual final result in a different workflow.
+    const reused = Number(insert.run(sourceRun, 'text', '{}').lastInsertRowid)
+    db.prepare("INSERT INTO graph_execution_final_results (execution_id, final_node_id, source_artifact_id, source_node_id, source_port_key, artifact_type) VALUES (?, 'final', ?, 'n', 'out', 'image')").run(finalRun, reused)
+    const active = Number(insert.run(activeRun, 'text', '{}').lastInsertRowid)
+    const fallback = Number(insert.run(sourceRun, 'image', '{}').lastInsertRowid)
+    const technical = db.transaction(() => Array.from({ length: 503 }, () => Number(insert.run(sourceRun, 'text', '{"note":"temporary"}').lastInsertRowid)))()
+    const deleted = await deleteGraphWorkflowArtifactsInScope({ folderId: null, kind: 'artifacts', searchTerm: 'scope-source' })
+    assert.deepEqual(new Set(deleted.deleted_artifact_ids), new Set(technical))
+    for (const id of [reused, active, fallback]) assert.ok(db.prepare('SELECT id FROM graph_execution_artifacts WHERE id=?').get(id))
+    assert.ok(deleted.skipped_files.some(item => item.artifact_id === active))
+  })
 })

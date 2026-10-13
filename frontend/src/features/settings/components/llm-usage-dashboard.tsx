@@ -188,7 +188,8 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
       tip: totals.cachedInputTokens > 0 ? t({ ko: '캐시 {value}', en: '{value} cached' }, { value: compact(totals.cachedInputTokens) }) : undefined },
     { label: t({ ko: '출력 토큰', en: 'Output tokens' }), value: compact(totals.outputTokens), trend: summary.daily.map((day) => day.outputTokens) },
     { label: t({ ko: '실패', en: 'Failed' }), value: formatNumber(totals.failed), extra: totals.requests > 0 ? `${formatNumber(totals.failed / totals.requests * 100, { maximumFractionDigits: 1 })}%` : undefined, trend: summary.daily.map((day) => day.failed), bad: totals.failed > 0 },
-    { label: t({ ko: '평균 응답', en: 'Avg. response' }), value: seconds(totals.averageLatencyMs), trend: summary.daily.map((day) => day.averageLatencyMs ?? 0) },
+    { label: t({ ko: '평균 응답', en: 'Avg. response' }), value: seconds(totals.averageLatencyMs), trend: summary.daily.map((day) => day.averageLatencyMs ?? 0),
+      tip: t({ ko: '평균 요청 대기 {queue} · 실행 후 첫 출력 {first}', en: 'Avg. queue {queue} · first output after start {first}' }, { queue: seconds(totals.averageQueueMs), first: seconds(totals.averageFirstTokenMs) }) },
   ] : []
   const modelTokens = (summary?.models ?? []).reduce((sum, model) => sum + model.inputTokens + model.outputTokens, 0)
   const useRequests = metric === 'requests'
@@ -202,7 +203,7 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
   // keyed "tok": page data refuses a key that names tokens.
   const chatData: Record<string, ChatPageData> = {
     days,
-    totals: totals ? { requests: totals.requests, failed: totals.failed, inputTok: totals.inputTokens, cachedInputTok: totals.cachedInputTokens, outputTok: totals.outputTokens, averageLatencyMs: totals.averageLatencyMs } : null,
+    totals: totals ? { requests: totals.requests, failed: totals.failed, inputTok: totals.inputTokens, cachedInputTok: totals.cachedInputTokens, outputTok: totals.outputTokens, averageLatencyMs: totals.averageLatencyMs, averageQueueMs: totals.averageQueueMs, averageFirstOutputMs: totals.averageFirstTokenMs } : null,
     byPurpose: summary ? PURPOSE_GROUPS.map((group) => {
       const entries = summary.byPurpose.filter((entry) => group.purposes.includes(entry.purpose))
       return { purpose: group.id, requests: entries.reduce((sum, entry) => sum + entry.requests, 0), tok: entries.reduce((sum, entry) => sum + entry.tokens, 0) }

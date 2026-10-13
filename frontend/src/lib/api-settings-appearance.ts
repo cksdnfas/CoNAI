@@ -1,3 +1,4 @@
+import type { PageSettingsVersions } from '@conai/shared'
 import type { AppearanceSettings, AppSettings } from '@conai/shared'
 import type { ApiResponse } from '@/types/image'
 import { fetchJson } from '@/lib/api-client'
@@ -35,10 +36,10 @@ export async function getWallpaperRuntimeSettings() {
   return response.data
 }
 
-export async function updateAppearanceSettings(settings: Partial<AppearanceSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/appearance', {
+export async function updateAppearanceSettings(settings: Partial<AppearanceSettings>, revision?: string) {
+  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/appearance', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   })
   if (!response.success) {

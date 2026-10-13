@@ -73,6 +73,7 @@ backend/test/*
 !frontend/test/
 frontend/test/*
 !frontend/test/post-rich-editor.test.ts
+!frontend/test/audio-waveform.test.ts
 
 # Uploaded images
 uploads/

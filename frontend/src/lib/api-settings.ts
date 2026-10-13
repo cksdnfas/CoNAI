@@ -1,3 +1,4 @@
+import type { PageSettingsVersions } from '@conai/shared'
 import { fetchJson } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import type { ApiResponse } from '@/types/image'
@@ -185,11 +186,11 @@ export async function runFileVerification() {
   return response.data
 }
 
-export async function updateMetadataSettings(settings: Partial<MetadataExtractionSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/metadata', {
+export async function updateMetadataSettings(settings: Partial<MetadataExtractionSettings>, revision?: string) {
+  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/metadata', {
     method: 'PUT',
     headers: {
-      'Content-Type': 'application/json',
+      ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',
     },
     body: JSON.stringify(settings),
   })
@@ -237,11 +238,11 @@ export async function startDataRematchJob(request: DataRematchStartRequest) {
   return response.data
 }
 
-export async function updateImageSaveSettings(settings: Partial<ImageSaveSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/image-save', {
+export async function updateImageSaveSettings(settings: Partial<ImageSaveSettings>, revision?: string) {
+  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/image-save', {
     method: 'PUT',
     headers: {
-      'Content-Type': 'application/json',
+      ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',
     },
     body: JSON.stringify(settings),
   })
@@ -253,11 +254,11 @@ export async function updateImageSaveSettings(settings: Partial<ImageSaveSetting
   return response.data
 }
 
-export async function updateThumbnailSettings(settings: Partial<ThumbnailSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/thumbnail', {
+export async function updateThumbnailSettings(settings: Partial<ThumbnailSettings>, revision?: string) {
+  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/thumbnail', {
     method: 'PUT',
     headers: {
-      'Content-Type': 'application/json',
+      ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',
     },
     body: JSON.stringify(settings),
   })
@@ -269,11 +270,11 @@ export async function updateThumbnailSettings(settings: Partial<ThumbnailSetting
   return response.data
 }
 
-export async function updateGenerationThrottleSettings(settings: Partial<GenerationThrottleSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/generation-throttle', {
+export async function updateGenerationThrottleSettings(settings: Partial<GenerationThrottleSettings>, revision?: string) {
+  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/generation-throttle', {
     method: 'PUT',
     headers: {
-      'Content-Type': 'application/json',
+      ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',
     },
     body: JSON.stringify(settings),
   })
@@ -285,11 +286,11 @@ export async function updateGenerationThrottleSettings(settings: Partial<Generat
   return response.data
 }
 
-export async function updateVideoOptimizationSettings(settings: Partial<VideoOptimizationSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/video-optimization', {
+export async function updateVideoOptimizationSettings(settings: Partial<VideoOptimizationSettings>, revision?: string) {
+  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/video-optimization', {
     method: 'PUT',
     headers: {
-      'Content-Type': 'application/json',
+      ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',
     },
     body: JSON.stringify(settings),
   })
@@ -362,7 +363,7 @@ type SimilaritySettingsUpdateInput = Partial<Omit<SimilaritySettings, 'promptSim
 }
 
 export async function updateSimilaritySettings(settings: SimilaritySettingsUpdateInput) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/similarity', {
+  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/similarity', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',

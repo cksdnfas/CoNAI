@@ -102,6 +102,7 @@ export async function semanticContextFor(params: {
   messages: CodexChatMessageRecord[]
   /** The profile's judge answers lore questions: meaning only proposes candidates. */
   judgeDecidesLore: boolean
+  signal?: AbortSignal
 }): Promise<SemanticContext | null> {
   const recallOn = embeddingFeatureOn('chatRecall')
   const session = params.profile.engine === 'codex' || params.profile.engine === 'claude' || params.profile.llmRuntime === 'pi'
@@ -113,8 +114,8 @@ export async function semanticContextFor(params: {
   const books = loreOn ? booksForRequest({ thread: params.thread, profile: params.profile }) : []
   const entries = keyedLoreEntries(books).filter((item) => item.bookId !== undefined && loreEntryEmbeddable(item.entry))
   const warm = embeddingModelWarm()
-  const pendingQueries = embedQueries(texts, { waitMs: warm ? WARM_WAIT_MS : COLD_WAIT_MS })
-  if (warm) {
+  const pendingQueries = embedQueries(texts, { waitMs: warm ? WARM_WAIT_MS : COLD_WAIT_MS, signal: params.signal })
+  if (warm && !params.signal?.aborted) {
     // Missing vectors are made at normal priority, queued after the query (an idle worker would otherwise start on
     // them first); they serve the next reply.
     if (loreOn && entries.length) void indexLoreNow(new Set(entries.map((item) => item.bookId!)), LORE_INDEX_NOW).catch(() => undefined)

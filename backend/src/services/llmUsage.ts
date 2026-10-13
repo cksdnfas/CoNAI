@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
+import { AsyncLocalStorage } from 'node:async_hooks'
 
 /** What a model request was for. The dashboard folds the small ones (translation, suggestions, asset work) together. */
 export type LlmUsagePurpose = 'chat' | 'summary' | 'judge' | 'translation' | 'suggestion' | 'asset_vision' | 'appearance' | 'image_prompt' | 'workflow' | 'web_search' | 'other'
@@ -6,7 +7,18 @@ export type LlmUsagePurpose = 'chat' | 'summary' | 'judge' | 'translation' | 'su
 export type LlmUsageEngine = 'api' | 'claude-code' | 'codex' | 'typesafe'
 
 /** Who asked, given by the caller of a completion. */
-export type LlmUsageTag = { purpose: LlmUsagePurpose; profileId?: number | null; threadId?: number | null }
+export type LlmUsageTag = { purpose: LlmUsagePurpose; profileId?: number | null; threadId?: number | null; replyId?: string | null; taskId?: number | null; round?: number | null }
+
+type UsageContext = Pick<LlmUsageTag, 'threadId' | 'replyId' | 'taskId'>
+const usageContext = new AsyncLocalStorage<UsageContext>()
+export function currentLlmUsageContext(): Readonly<UsageContext> {
+  return usageContext.getStore() ?? {}
+}
+/** Server-bound identity follows auxiliary requests and background work without storing prompt content. */
+export function withLlmUsageContext<T>(context: UsageContext, run: () => T): T {
+  const previous = usageContext.getStore()
+  return usageContext.run({ ...(previous?.threadId === context.threadId ? previous : {}), ...context }, run)
+}
 
 export type LlmTokenCounts = { inputTokens: number; cachedInputTokens: number; outputTokens: number }
 
@@ -18,6 +30,9 @@ export type LlmUsageEvent = LlmUsageTag & {
   /** The counts are our estimate: the server reported none. */
   estimated?: boolean
   latencyMs: number
+  queueMs?: number | null
+  /** Time from acquiring the connection slot to the first text/reasoning output. */
+  firstTokenMs?: number | null
   ok: boolean
 }
 
@@ -97,14 +112,23 @@ export function isCallerAbort(signal: AbortSignal) {
 export function recordLlmUsage(event: LlmUsageEvent) {
   try {
     const db = getUserSettingsDb()
-    db.prepare(`
-      INSERT INTO llm_usage_events (purpose, engine, provider_name, model, profile_id, thread_id, input_tokens, cached_input_tokens, output_tokens, estimated, latency_ms, ok)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      event.purpose, event.engine, event.providerName, event.model, event.profileId ?? null, event.threadId ?? null,
-      count(event.tokens?.inputTokens), count(event.tokens?.cachedInputTokens), count(event.tokens?.outputTokens),
-      event.estimated ? 1 : 0, count(event.latencyMs), event.ok ? 1 : 0,
-    )
+    const context = usageContext.getStore()
+    const bound = { ...(event.threadId != null && context?.threadId !== event.threadId ? {} : context), ...event }
+    db.transaction(() => {
+      db.prepare(`
+        INSERT INTO llm_usage_events (purpose, engine, provider_name, model, profile_id, thread_id, input_tokens, cached_input_tokens, output_tokens, estimated, latency_ms, ok, reply_id, task_id, round, queue_ms, first_token_ms)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        bound.purpose, bound.engine, bound.providerName, bound.model, bound.profileId ?? null, bound.threadId ?? null,
+        count(bound.tokens?.inputTokens), count(bound.tokens?.cachedInputTokens), count(bound.tokens?.outputTokens),
+        bound.estimated ? 1 : 0, count(bound.latencyMs), bound.ok ? 1 : 0,
+        bound.replyId ?? null, bound.taskId ?? null, bound.round ?? null, bound.queueMs == null ? null : count(bound.queueMs), bound.firstTokenMs == null ? null : count(bound.firstTokenMs),
+      )
+      // Keep cumulative task usage beyond the ledger's retention, atomically with the request record.
+      if (bound.taskId != null && bound.threadId != null) db.prepare(`UPDATE chat_tasks
+        SET used = json_set(used, '$.tokens', COALESCE(json_extract(used, '$.tokens'), 0) + ?)
+        WHERE id = ? AND thread_id = ?`).run(count(bound.tokens?.inputTokens) + count(bound.tokens?.outputTokens), bound.taskId, bound.threadId)
+    })()
     const now = Date.now()
     if (now - lastPrune >= PRUNE_INTERVAL_MS) {
       lastPrune = now
@@ -117,7 +141,7 @@ export function recordLlmUsage(event: LlmUsageEvent) {
   }
 }
 
-type Totals = { requests: number; failed: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; estimatedRequests: number; averageLatencyMs: number | null }
+type Totals = { requests: number; failed: number; inputTokens: number; cachedInputTokens: number; outputTokens: number; estimatedRequests: number; averageLatencyMs: number | null; averageQueueMs: number | null; averageFirstTokenMs: number | null }
 
 export type LlmUsageSummary = {
   days: number
@@ -130,13 +154,16 @@ export type LlmUsageSummary = {
 }
 
 const TOTAL_COLUMNS = `COUNT(*) AS requests, SUM(1 - ok) AS failed, SUM(input_tokens) AS inputTokens, SUM(cached_input_tokens) AS cachedInputTokens,
-  SUM(output_tokens) AS outputTokens, SUM(estimated) AS estimatedRequests, AVG(CASE WHEN latency_ms > 0 THEN latency_ms END) AS averageLatencyMs`
+  SUM(output_tokens) AS outputTokens, SUM(estimated) AS estimatedRequests, AVG(CASE WHEN latency_ms > 0 THEN latency_ms END) AS averageLatencyMs,
+  AVG(queue_ms) AS averageQueueMs, AVG(first_token_ms) AS averageFirstTokenMs`
 
 function totalsOf(row: Record<string, unknown> | undefined): Totals {
   const average = row?.averageLatencyMs
   return {
     requests: count(row?.requests), failed: count(row?.failed), inputTokens: count(row?.inputTokens), cachedInputTokens: count(row?.cachedInputTokens),
     outputTokens: count(row?.outputTokens), estimatedRequests: count(row?.estimatedRequests), averageLatencyMs: typeof average === 'number' ? Math.round(average) : null,
+    averageQueueMs: typeof row?.averageQueueMs === 'number' ? Math.round(row.averageQueueMs) : null,
+    averageFirstTokenMs: typeof row?.averageFirstTokenMs === 'number' ? Math.round(row.averageFirstTokenMs) : null,
   }
 }
 

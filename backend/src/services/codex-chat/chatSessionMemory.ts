@@ -124,10 +124,10 @@ export function pendingLore(thread: CodexChatThreadRecord | null, profile: ChatP
 }
 
 /** Shared input for Codex, Claude and pi. Provider session memory stays opaque; retrieved data is explicit. */
-export async function prepareSessionLore(thread: CodexChatThreadRecord | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, user: ChatUserPersona, context?: JudgedContext | null) {
+export async function prepareSessionLore(thread: CodexChatThreadRecord | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, user: ChatUserPersona, context?: JudgedContext | null, signal?: AbortSignal) {
   let selected = context
   if (selected === undefined && thread) {
-    const semantic = await semanticContextFor({ thread, profile, messages, judgeDecidesLore: false }).catch(() => null)
+    const semantic = await semanticContextFor({ thread, profile, messages, judgeDecidesLore: false, signal }).catch(() => null)
     selected = semantic ? { loreKeys: new Set<string>(), recallKeep: null, semantic } : null
   }
   const lore = pendingLore(thread, profile, messages, sent, user, selected)

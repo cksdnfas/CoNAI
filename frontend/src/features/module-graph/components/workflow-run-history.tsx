@@ -8,7 +8,7 @@ import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Progress } from '@/components/ui/progress'
 import { useI18n } from '@/i18n'
-import { getGraphExecution, type GraphExecutionArtifactRecord, type GraphExecutionListMeta, type GraphExecutionRecord, type GraphWorkflowRecord } from '@/lib/api-module-graph'
+import { getGraphExecutionProgress, type GraphExecutionProgress, type GraphExecutionArtifactRecord, type GraphExecutionListMeta, type GraphExecutionRecord, type GraphWorkflowRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getArtifactPreviewUrl, getGraphExecutionStatusLabel, hasGraphArtifactVisualPreview, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
 import { GraphExecutionDetailModal } from './graph-execution-detail-modal'
@@ -65,7 +65,7 @@ function useElapsedLabel(startIso: string | null | undefined, active: boolean) {
 type NodeProgress = { nodeId: string; label: string; state: 'done' | 'now' | 'failed' | 'pending' }
 
 /** Node-by-node progress from the run's plan order and its engine start/complete/failure log events. */
-function buildNodeProgress(detail: GraphExecutionDetail | undefined, graph: GraphWorkflowRecord | null, labelOverrides?: Record<string, string> | null): NodeProgress[] {
+function buildNodeProgress(detail: GraphExecutionProgress | undefined, graph: GraphWorkflowRecord | null, labelOverrides?: Record<string, string> | null): NodeProgress[] {
   if (!detail) return []
   const plan = parseExecutionPlan(detail.execution.execution_plan)
   const order = plan?.orderedNodeIds?.length ? plan.orderedNodeIds : graph?.graph.nodes.map((node) => node.id) ?? []
@@ -104,10 +104,10 @@ export function WorkflowActiveRunCard({
   const { canExecuteGeneration } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
   const isRunning = execution.status === 'running'
-  // Same key as the run detail query: the logs feed the node chips and refresh while the run works.
+  // Progress polling needs only node event flags, not artifacts, IO, or full logs.
   const detailQuery = useQuery({
-    queryKey: ['module-graph-execution-detail', execution.id],
-    queryFn: () => getGraphExecution(execution.id),
+    queryKey: ['module-graph-execution-progress', execution.id],
+    queryFn: ({ signal }) => getGraphExecutionProgress(execution.id, signal),
     enabled: isRunning,
     refetchInterval: isRunning ? 3_000 : false,
   })

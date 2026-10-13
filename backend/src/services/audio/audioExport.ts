@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { pipeline, finished } from 'stream/promises';
 import { ZipArchive } from 'archiver';
 import { runtimePaths } from '../../config/runtimePaths';
 import { getAudioDb } from '../../database/audioDb';
@@ -472,17 +473,28 @@ export async function buildAudioExport(
         hooks.progress?.(index + 1, plan.count);
       }
       fileName = archiveName(plan, groupId);
-      await new Promise<void>((resolve, reject) => {
-        const stream = fs.createWriteStream(path.join(workspace.dir, fileName));
-        const archive = new ZipArchive({ store: true });
-        archive.once('error', reject);
-        stream.once('error', reject);
-        stream.once('close', () => resolve());
-        archive.pipe(stream);
+      hooks.signal?.throwIfAborted();
+      const stream = fs.createWriteStream(path.join(workspace.dir, fileName));
+      const archive = new ZipArchive({ store: true });
+      const inputs: fs.ReadStream[] = [];
+      const completion = pipeline(archive, stream, { signal: hooks.signal });
+      try {
         // append() keeps plan order; file() stats in parallel and can reorder entries.
-        for (const part of rendered) archive.append(fs.createReadStream(part.path), { name: part.name });
-        void archive.finalize();
-      });
+        for (const part of rendered) {
+          const input = fs.createReadStream(part.path);
+          input.once('error', (error) => archive.destroy(error));
+          inputs.push(input);
+          archive.append(input, { name: part.name });
+        }
+        await Promise.all([completion, archive.finalize()]);
+      } finally {
+        archive.abort();
+        archive.destroy();
+        stream.destroy();
+        for (const input of inputs) input.destroy();
+        // Close Windows file handles before the workspace cleanup removes the files.
+        await Promise.allSettled([completion, finished(stream), ...inputs.map((input) => finished(input))]);
+      }
       fs.rmSync(parts, { recursive: true, force: true });
     }
     setWorkspaceFile(workspace, fileName);

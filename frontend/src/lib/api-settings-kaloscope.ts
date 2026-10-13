@@ -1,3 +1,4 @@
+import type { PageSettingsVersions } from '@conai/shared'
 import type { AppSettings, KaloscopeServerStatus, KaloscopeSettings } from '@conai/shared'
 import type { ApiResponse } from '@/types/image'
 import { fetchJson } from '@/lib/api-client'
@@ -11,10 +12,10 @@ export interface AutoTestKaloscopeResult {
   tagged_at?: string
 }
 
-export async function updateKaloscopeSettings(settings: Partial<KaloscopeSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/kaloscope', {
+export async function updateKaloscopeSettings(settings: Partial<KaloscopeSettings>, revision?: string) {
+  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/kaloscope', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   })
   if (!response.success) {

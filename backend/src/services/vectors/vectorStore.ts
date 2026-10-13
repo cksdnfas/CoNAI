@@ -38,6 +38,32 @@ type SpaceCache = {
  * place, so a backfill does not make every search reload the whole space.
  */
 const caches = new Map<string, SpaceCache>()
+/** Internal resource policy; changing it invalidates loaded matrices on the next search. */
+export const vectorCachePolicy = {
+  maxMatrixBytes: 256 * 1024 * 1024,
+  get matrixBytes() { return [...caches.values()].reduce((sum, cache) => sum + cache.matrix.byteLength, 0) },
+}
+let cacheDb: ReturnType<typeof getUserSettingsDb> | null = null
+let cacheVersion = -1
+
+/** SQLite changes this counter for commits by another connection (including a standalone MCP process). */
+function syncCaches() {
+  const db = getUserSettingsDb()
+  const version = db.pragma('vector_db.data_version', { simple: true }) as number
+  if (cacheDb !== db || cacheVersion !== version) caches.clear()
+  cacheDb = db
+  cacheVersion = version
+}
+
+/** Matrices have a hard total bound; oversized spaces are searched through the DB iterator. */
+function trimCaches() {
+  let bytes = [...caches.values()].reduce((sum, cache) => sum + cache.matrix.byteLength, 0)
+  for (const [key, cache] of caches) {
+    if (bytes <= vectorCachePolicy.maxMatrixBytes && caches.size <= 16) break
+    caches.delete(key)
+    bytes -= cache.matrix.byteLength
+  }
+}
 /** Removed slots tolerated before a matrix is rebuilt without them. */
 const COMPACT_MIN_DEAD = 1024
 
@@ -60,7 +86,9 @@ function dropSource(cache: SpaceCache, sourceKey: string) {
 function appendRow(cache: SpaceCache, row: VectorRow, vector: Float32Array) {
   const slot = cache.rows.length
   if ((slot + 1) * cache.dim > cache.matrix.length) {
-    const grown = new Float32Array(Math.max(cache.matrix.length * 2, (slot + 64) * cache.dim))
+    const length = Math.max(cache.matrix.length * 2, (slot + 64) * cache.dim)
+    if (length * 4 > vectorCachePolicy.maxMatrixBytes) return false
+    const grown = new Float32Array(length)
     grown.set(cache.matrix)
     cache.matrix = grown
   }
@@ -69,6 +97,7 @@ function appendRow(cache: SpaceCache, row: VectorRow, vector: Float32Array) {
   const slots = cache.bySource.get(row.sourceKey)
   if (slots) slots.push(slot)
   else cache.bySource.set(row.sourceKey, [slot])
+  return true
 }
 
 function compact(cache: SpaceCache) {
@@ -121,6 +150,7 @@ export const vectorStore = {
   /** Commit one resumable file batch and its cursor together. Old revisions never share chunks. */
   appendFileBatch(sourceKey: string, modelKey: string, ownerKey: string, revision: string,
     inputs: VectorInput[], progress: { offset: number; chunk: number; complete: boolean }) {
+    syncCaches()
     const db = getUserSettingsDb()
     let reset = false
     const written: Array<{ row: VectorRow; vector: Float32Array }> = []
@@ -151,13 +181,15 @@ export const vectorStore = {
           else keep.push(slot)
         }
         cache.bySource.set(sourceKey, keep)
-        for (const { row, vector } of written) appendRow(cache, row, vector)
+        for (const { row, vector } of written) if (!appendRow(cache, row, vector)) { caches.delete(key); break }
       }
       compact(cache)
     }
+    trimCaches()
   },
   /** Replace every chunk of one source with the given vectors (an empty list just deletes). */
   replace(space: string, sourceKey: string, modelKey: string, inputs: VectorInput[]) {
+    syncCaches()
     const db = getUserSettingsDb()
     const now = new Date().toISOString()
     const insert = db.prepare(`
@@ -182,13 +214,15 @@ export const vectorStore = {
           caches.delete(key)
           continue
         }
-        for (const { row, vector } of written) appendRow(cache, row, vector)
+        for (const { row, vector } of written) if (!appendRow(cache, row, vector)) { caches.delete(key); break }
       }
       compact(cache)
     }
+    trimCaches()
   },
 
   remove(space: string, sourceKey: string) {
+    syncCaches()
     const changes = getUserSettingsDb().prepare('DELETE FROM vector_db.vectors WHERE space = ? AND source_key = ?').run(space, sourceKey).changes
     if (changes > 0) {
       for (const [, cache] of spaceCaches(space)) {
@@ -201,6 +235,7 @@ export const vectorStore = {
 
   /** Delete rows of a space made by any other model (after a model change). */
   pruneOtherModels(space: string, modelKey: string) {
+    syncCaches()
     const changes = getUserSettingsDb().prepare('DELETE FROM vector_db.vectors WHERE space = ? AND model_key != ?').run(space, modelKey).changes
     if (changes > 0) {
       for (const [key, cache] of spaceCaches(space)) if (cache.modelKey !== modelKey) caches.delete(key)
@@ -250,29 +285,79 @@ export const vectorStore = {
    * chunks of one source each count (callers that want one hit per source take the first).
    */
   search(space: string, modelKey: string, query: ArrayLike<number>, options: { limit?: number; minScore?: number; ownerKeys?: Array<string | null>; sourceKeys?: string[] } = {}): VectorHit[] {
-    const cache = loadSpace(space, modelKey)
-    if (!cache || cache.rows.length === 0) return []
+    if (options.sourceKeys?.length === 0 || options.ownerKeys?.length === 0) return []
+    const loaded = loadSpace(space, modelKey)
+    if (!loaded) return []
+    const cache = 'matrix' in loaded ? loaded : null
     const normalized = normalizeVector(query)
-    if (normalized.length !== cache.dim) {
-      throw new Error(`vector size ${normalized.length} does not match ${space} (${cache.dim})`)
+    if (normalized.length !== loaded.dim) {
+      throw new Error(`vector size ${normalized.length} does not match ${space} (${loaded.dim})`)
     }
     const owners = options.ownerKeys ? new Set(options.ownerKeys) : null
     const sources = options.sourceKeys ? new Set(options.sourceKeys) : null
     const minScore = options.minScore ?? -Infinity
-    const hits: VectorHit[] = []
-    const { dim, matrix, rows } = cache
-    for (let r = 0; r < rows.length; r += 1) {
-      const row = rows[r]
-      if (!row) continue
-      if (owners && !owners.has(row.ownerKey)) continue
-      if (sources && !sources.has(row.sourceKey)) continue
-      let score = 0
-      const offset = r * dim
-      for (let i = 0; i < dim; i += 1) score += matrix[offset + i] * normalized[i]
-      if (score >= minScore) hits.push({ ...row, score })
+    const limit = Number.isSafeInteger(options.limit) && options.limit! > 0 ? options.limit! : Infinity
+    type Hit = { slot: number; score: number; row?: VectorRow }
+    const hits: Hit[] = []
+    const worse = (a: Hit, b: Hit) => {
+      if (a.score !== b.score) return a.score < b.score
+      const left = a.row ?? cache!.rows[a.slot]!
+      const right = b.row ?? cache!.rows[b.slot]!
+      return left.sourceKey > right.sourceKey || (left.sourceKey === right.sourceKey && left.chunk > right.chunk)
     }
-    hits.sort((a, b) => b.score - a.score)
-    return options.limit ? hits.slice(0, options.limit) : hits
+    const keep = (hit: Hit) => {
+      if (limit === Infinity) { hits.push(hit); return }
+      if (hits.length < limit) {
+        hits.push(hit)
+        let i = hits.length - 1
+        while (i > 0) {
+          const parent = (i - 1) >> 1
+          if (!worse(hits[i], hits[parent])) break
+          ;[hits[i], hits[parent]] = [hits[parent], hits[i]]
+          i = parent
+        }
+      } else if (worse(hits[0], hit)) {
+        hits[0] = hit
+        let i = 0
+        for (;;) {
+          const left = i * 2 + 1
+          if (left >= hits.length) break
+          const right = left + 1
+          const child = right < hits.length && worse(hits[right], hits[left]) ? right : left
+          if (!worse(hits[child], hits[i])) break
+          ;[hits[i], hits[child]] = [hits[child], hits[i]]
+          i = child
+        }
+      }
+    }
+    if (cache) {
+      const { dim, matrix, rows } = cache
+      const slots: Iterable<number> = sources ? [...sources].flatMap(source => cache.bySource.get(source) ?? []) : rows.keys()
+      for (const r of slots) {
+        const row = rows[r]
+        if (!row || (owners && !owners.has(row.ownerKey))) continue
+        let score = 0
+        const offset = r * dim
+        for (let i = 0; i < dim; i += 1) score += matrix[offset + i] * normalized[i]
+        if (score >= minScore) keep({ slot: r, score })
+      }
+    } else {
+      const rows = getUserSettingsDb().prepare(`SELECT source_key, chunk, owner_key, content_hash, span_start, span_end, vector
+        FROM vector_db.vectors WHERE space = ? AND model_key = ? AND dim = ?
+        ${sources ? 'AND source_key IN (SELECT value FROM json_each(@sources))' : ''}
+        ${owners ? 'AND EXISTS (SELECT 1 FROM json_each(@owners) WHERE value IS owner_key)' : ''}`)
+        .iterate({ ...(sources ? { sources: JSON.stringify([...sources]) } : {}), ...(owners ? { owners: JSON.stringify([...owners]) } : {}) }, space, modelKey, loaded.dim) as Iterable<StoredRow & { vector: Buffer }>
+      let slot = 0
+      for (const row of rows) {
+        const vector = fromBlob(row.vector)
+        let score = 0
+        for (let i = 0; i < loaded.dim; i++) score += vector[i] * normalized[i]
+        if (score >= minScore) keep({ slot, score, row: toRow(row) })
+        slot++
+      }
+    }
+    hits.sort((a, b) => worse(a, b) ? 1 : worse(b, a) ? -1 : 0)
+    return hits.map(hit => ({ ...(hit.row ?? cache!.rows[hit.slot]!), score: hit.score }))
   },
 }
 
@@ -282,18 +367,24 @@ function toRow(row: StoredRow): VectorRow {
   return { sourceKey: row.source_key, chunk: row.chunk, ownerKey: row.owner_key, contentHash: row.content_hash, spanStart: row.span_start, spanEnd: row.span_end }
 }
 
-function loadSpace(space: string, modelKey: string): SpaceCache | null {
+function loadSpace(space: string, modelKey: string): SpaceCache | { dim: number } | null {
+  syncCaches()
+  trimCaches()
   const key = cacheKey(space, modelKey)
   const cached = caches.get(key)
-  if (cached) return cached
-  const rows = getUserSettingsDb().prepare(`
+  if (cached) { caches.delete(key); caches.set(key, cached); return cached }
+  const db = getUserSettingsDb()
+  const first = db.prepare('SELECT dim FROM vector_db.vectors WHERE space=? AND model_key=? LIMIT 1').get(space, modelKey) as { dim: number } | undefined
+  if (!first) return null
+  const dim = first.dim
+  const { count } = db.prepare('SELECT COUNT(*) AS count FROM vector_db.vectors WHERE space=? AND model_key=? AND dim=?').get(space, modelKey, dim) as { count: number }
+  if ((count + 64) * dim * 4 > vectorCachePolicy.maxMatrixBytes) return { dim }
+  const rows = db.prepare(`
     SELECT source_key, chunk, owner_key, content_hash, span_start, span_end, dim, vector FROM vector_db.vectors WHERE space = ? AND model_key = ?
-  `).all(space, modelKey) as Array<StoredRow & { dim: number; vector: Buffer }>
-  if (rows.length === 0) return null
-  const dim = rows[0].dim
-  const usable = rows.filter((row) => row.dim === dim)
-  const cache: SpaceCache = { modelKey, dim, rows: [], matrix: new Float32Array((usable.length + 64) * dim), bySource: new Map(), dead: 0 }
-  for (const row of usable) appendRow(cache, toRow(row), fromBlob(row.vector))
+  `).iterate(space, modelKey) as Iterable<StoredRow & { dim: number; vector: Buffer }>
+  const cache: SpaceCache = { modelKey, dim, rows: [], matrix: new Float32Array((count + 64) * dim), bySource: new Map(), dead: 0 }
+  for (const row of rows) if (row.dim === dim && !appendRow(cache, toRow(row), fromBlob(row.vector))) return { dim }
   caches.set(key, cache)
+  trimCaches()
   return cache
 }

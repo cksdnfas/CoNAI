@@ -2,7 +2,7 @@ import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { acquireLlmRequestSlot } from '../llmRequestScheduler'
 import { buildOpenAiGenerationFields, readLlmConnectionConfig, type LlmGenerationOptions, type LlmThinkingSwitch } from '../llmGenerationOptions'
 import { normalizeOptionalString } from '../../utils/valueNormalization'
-import { LlmRequestError } from '../llmRequestRetry'
+import { LlmRequestError, retryLlmRequest } from '../llmRequestRetry'
 import { recordRequestOutcome } from './connectionHealthState'
 import { CLAUDE_CHAT_PROVIDER, streamClaudeChatCompletion, type ClaudeChatSession } from './claudeChatCompletion'
 import type { ChatMcpToolResult } from './chatMcpBridge'
@@ -114,6 +114,7 @@ export function noteLlmConnectFailure(target: Pick<ChatCompletionTarget, 'provid
 
 /** Servers that refused cache marks, by connection and model (marks are an optimization: remembered, not retried). */
 const marksRefused = new Map<string, number>()
+const streamUsageRefused = new Map<string, number>()
 
 /** A 400 that says the server or model cannot take tool definitions (not a broken call or schema of ours). */
 export function isToolsRefusal(errorText: string) {
@@ -343,7 +344,7 @@ function readJsonCompletion(json: unknown): ChatCompletionResult {
 }
 
 /** A request is metered only once transport starts; its latency includes waiting for a slot. */
-async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCounts | null; output: string }, params: {
+async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCounts | null; output: string; queueMs: number | null }, params: {
   target: ChatCompletionTarget
   messages: ChatCompletionMessage[]
   tools?: ChatCompletionTool[]
@@ -361,7 +362,9 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
   /** Hang up on a model that starts looping and cut the loop off (finishReason 'repetition', see repetitionGuard). */
   stopLoops?: boolean
 }): Promise<ChatCompletionResult> {
+  const queuedAt = Date.now()
   const release = await acquireLlmRequestSlot(params.target.providerName, params.target.maxConcurrentRequests ?? 1, params.signal)
+  meter.queueMs = Date.now() - queuedAt
   const controller = new AbortController()
   const signal = controller.signal
   const abort = () => controller.abort(params.signal.reason)
@@ -369,6 +372,7 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
   else params.signal.addEventListener('abort', abort, { once: true })
   let idleTimer: NodeJS.Timeout | null = null
   let requestTimer: NodeJS.Timeout | null = null
+  let reader: ReadableStreamDefaultReader<string> | null = null
   const touch = () => {
     if (idleTimer) clearTimeout(idleTimer)
     idleTimer = setTimeout(() => controller.abort(new Error('LLM 응답이 너무 오래 멈춰 있어.')), STREAM_IDLE_TIMEOUT_MS)
@@ -392,9 +396,9 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
       const piTools = params.toolChoice === 'none' ? [] : params.tools ?? []
       params.onRequestBody?.({ model: params.target.model, messages: params.messages, tools: piTools, transport: 'pi' }, params.target)
       meter.sent = true
-      return await streamPiChatCompletion({ ...params, tools: piTools, signal, onActivity: touch, onContent: (text) => { touch(); params.onContent?.(text) }, onReasoning: (text) => { touch(); params.onReasoning?.(text) } })
+      return await streamPiChatCompletion({ ...params, tools: piTools, signal, onUsage: (usage) => { meter.usage = usage }, onActivity: touch, onContent: (text) => { touch(); params.onContent?.(text) }, onReasoning: (text) => { touch(); params.onReasoning?.(text) } })
     }
-    let streamUsage = true
+    let streamUsage = (streamUsageRefused.get(toolsKey(params.target)) ?? 0) <= Date.now()
     let toolChoiceRefused = false
     const request = async (target: ChatCompletionTarget) => {
       assertLlmReachable(target)
@@ -430,7 +434,8 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
       signal.throwIfAborted()
       // Rate limited (OpenRouter free models and the like): wait as the server asks, once, when that is short.
       if (params.allowCompatibilityFallback !== false && response.status === 429 && !rateLimited) {
-        const seconds = Number(response.headers.get('retry-after'))
+        const retryAfter = response.headers.get('retry-after')
+        const seconds = retryAfter === null ? NaN : Number(retryAfter)
         const wait = Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : 2000
         if (wait <= 10_000) {
           rateLimited = true
@@ -440,7 +445,7 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
         }
       }
       // A server that does not know cache_control rejects the whole request; the marks are an optimization, so retry without them.
-      if (params.allowCompatibilityFallback !== false && response.status === 400 && target.promptCacheMarks) {
+      if (params.allowCompatibilityFallback !== false && response.status === 400 && target.promptCacheMarks && /cache_control|cache.control|cache marks|prompt.cache/i.test(errorText)) {
         console.warn(`[llm-chat] ${params.target.displayName}: request with cache marks rejected (${errorText.slice(0, 200)}); retrying without`)
         target = { ...target, promptCacheMarks: false }
         marksRefused.set(toolsKey(target), Date.now() + 60 * 60_000)
@@ -450,6 +455,7 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
       // Likewise the usage chunk: a server that names stream_options in its refusal gets the request without it.
       if (params.allowCompatibilityFallback !== false && response.status === 400 && streamUsage && errorText.includes('stream_options')) {
         streamUsage = false
+        streamUsageRefused.set(toolsKey(target), Date.now() + 60 * 60_000)
         touch()
         continue
       }
@@ -499,7 +505,7 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
     let promptTokens: number | null = null
     let usage: LlmTokenCounts | null = null
     const drafts = new Map<number, ToolCallDraft>()
-    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+    reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
     let buffer = ''
     const watch = createRepetitionWatch()
     let looping = false
@@ -580,12 +586,16 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
 
     return { content, reasoning, toolCalls: finalizeToolCalls(drafts), finishReason, promptTokens, usage }
   } catch (error) {
+    // Parsing/provider errors must close the transport before its slot can be reused.
+    controller.abort(error)
+    await reader?.cancel().catch(() => undefined)
     signal.throwIfAborted()
     throw error
   } finally {
     if (idleTimer) clearTimeout(idleTimer)
     if (requestTimer) clearTimeout(requestTimer)
     params.signal.removeEventListener('abort', abort)
+    reader?.releaseLock()
     release()
   }
 }
@@ -597,13 +607,18 @@ type ChatCompletionParams = Parameters<typeof requestChatCompletion>[1]
  * assembled from their deltas and returned once the model stops. Every request that got to the model goes into the
  * usage ledger under `usage` (what it was for), with estimated counts when the server reports none.
  */
-export async function streamChatCompletion(params: ChatCompletionParams & {
+async function meteredChatCompletion(params: ChatCompletionParams & {
   usage?: LlmUsageTag
   /** false: the outcome says nothing about the connection (a probe trying settings that may be refused). */
   recordHealth?: boolean
 }): Promise<ChatCompletionResult> {
   const startedAt = Date.now()
-  const meter = { sent: false, usage: null as LlmTokenCounts | null, output: '' }
+  const meter = { sent: false, usage: null as LlmTokenCounts | null, output: '', queueMs: null as number | null }
+  let firstTokenMs: number | null = null
+  const noteOutput = (text: string) => {
+    if (text && firstTokenMs === null) firstTokenMs = Math.max(0, Date.now() - startedAt - (meter.queueMs ?? 0))
+    meter.output += text
+  }
   const record = (result: ChatCompletionResult | null) => {
     const reported = result?.usage ?? meter.usage
     const estimate = !reported && (result !== null || meter.output.length > 0)
@@ -619,14 +634,16 @@ export async function streamChatCompletion(params: ChatCompletionParams & {
       } : null),
       estimated: Boolean(estimate),
       latencyMs: Date.now() - startedAt,
+      queueMs: meter.queueMs,
+      firstTokenMs,
       ok: result !== null,
     })
   }
   try {
     const result = await requestChatCompletion(meter, {
       ...params,
-      onContent: (text) => { meter.output += text; params.onContent?.(text) },
-      onReasoning: (text) => { meter.output += text; params.onReasoning?.(text) },
+      onContent: (text) => { noteOutput(text); params.onContent?.(text) },
+      onReasoning: (text) => { noteOutput(text); params.onReasoning?.(text) },
     })
     record(result)
     if (params.recordHealth !== false) recordRequestOutcome(params.target.providerName, params.target.model, null)
@@ -637,6 +654,21 @@ export async function streamChatCompletion(params: ChatCompletionParams & {
     if (params.recordHealth !== false && !params.signal.aborted) recordRequestOutcome(params.target.providerName, params.target.model, error)
     throw error
   }
+}
+
+/** Retry an API request before any text/reasoning output; session transports own their provider retries. */
+export async function streamChatCompletion(params: Parameters<typeof meteredChatCompletion>[0] & {
+  retry?: boolean
+  canRetry?: () => boolean
+}): Promise<ChatCompletionResult> {
+  let outputStarted = false
+  const request = () => meteredChatCompletion({
+    ...params,
+    onContent: (text) => { outputStarted ||= Boolean(text); params.onContent?.(text) },
+    onReasoning: (text) => { outputStarted ||= Boolean(text); params.onReasoning?.(text) },
+  })
+  if (params.target.transport || params.retry === false) return request()
+  return retryLlmRequest(request, { signal: params.signal, canRetry: () => !outputStarted && params.canRetry?.() !== false })
 }
 
 /** One non-streamed completion (summaries). */

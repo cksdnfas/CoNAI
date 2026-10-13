@@ -225,9 +225,9 @@ const SEMANTIC_MIN_LEAD = 0.04;
  * The lexical rows fused with files close in meaning to the query (text embeddings, see semanticIndex), best first;
  * null when embeddings are off or not answering. A file found by meaning shows the part of its text that matched.
  */
-async function withSemanticRows(owner: string, query: string, limit: number, scopeSql: string, params: Record<string, string | number>, lexical: SearchRow[], status: FileSearchStatus): Promise<SearchRow[] | null> {
+async function withSemanticRows(owner: string, query: string, limit: number, scopeSql: string, params: Record<string, string | number>, lexical: SearchRow[], status: FileSearchStatus, signal?: AbortSignal): Promise<SearchRow[] | null> {
   if (!embeddingFeatureOn('fileSearch')) { status.semantic = 'disabled'; return null; }
-  const vector = await embedQuery(query, { waitMs: SEMANTIC_QUERY_WAIT_MS });
+  const vector = await embedQuery(query, { waitMs: SEMANTIC_QUERY_WAIT_MS, signal });
   if (!vector) { status.semantic = 'unavailable'; return null; }
   status.mode = 'hybrid';
   status.semantic = status.indexedFiles === 0 && status.searchableFiles > 0 ? 'not_indexed' : status.indexedFiles < status.searchableFiles || status.pendingDocuments > 0 ? 'partial' : 'ready';
@@ -247,12 +247,19 @@ async function withSemanticRows(owner: string, query: string, limit: number, sco
   const rows = new Map(lexical.map((row) => [row.id, row]));
   const missing = close.filter((id) => !rows.has(id));
   if (missing.length > 0) {
-    const found = db.prepare(`SELECT e.*, t.body, t.extraction_state, t.extraction_note, t.sections, (t.revision || ':' || t.content_hash) AS read_revision, t.body_bytes AS read_size FROM stored_file_entries e LEFT JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id
-      WHERE e.owner_key = ? AND e.deleted_at IS NULL AND e.id IN (${missing.map(() => '?').join(', ')})`).all(owner, ...missing) as Array<FileRow & { body: string | null }>;
-    for (const { body, ...row } of found) {
-      const byteOffset = best.get(row.id)?.spanStart ?? 0;
-      const start = body ? Buffer.from(body, 'utf8').subarray(0, byteOffset).toString('utf8').length : 0;
-      rows.set(row.id, { ...row, semantic_start: start, read_offset: byteOffset, hit_at: body ? start + SNIPPET_BEFORE + 1 : 0, body_length: body?.length ?? null, excerpt: body ? body.slice(start, start + SNIPPET_LENGTH) : null });
+    const found = db.prepare(`SELECT e.*, t.extraction_state, t.extraction_note, t.sections,
+      length(t.body) AS body_length, length(CAST(substr(CAST(t.body AS BLOB), 1, json_extract(j.value, '$.offset')) AS TEXT)) AS semantic_start,
+      json_extract(j.value, '$.offset') AS read_offset, (t.revision || ':' || t.content_hash) AS read_revision, t.body_bytes AS read_size
+      FROM json_each(?) j JOIN stored_file_entries e ON e.id = json_extract(j.value, '$.id')
+      JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id
+      WHERE e.owner_key = ? AND e.deleted_at IS NULL`).all(JSON.stringify(missing.map(id => ({ id, offset: best.get(id)?.spanStart ?? 0 }))), owner) as SearchRow[];
+    for (const row of found) {
+      // Fetch only the UTF-8 window containing the preview, never every matching document's body.
+      const bytes = readCachedFileBytes(owner, row.id, row.read_offset ?? 0, SNIPPET_LENGTH * 4 + 3);
+      let end = Math.min(SNIPPET_LENGTH * 4, bytes.length);
+      while (end > 0 && end < bytes.length && (bytes[end] & 0xc0) === 0x80) end--;
+      const excerpt = bytes.toString('utf8', 0, end).slice(0, SNIPPET_LENGTH).replace(/[\uD800-\uDBFF]$/, '');
+      rows.set(row.id, { ...row, hit_at: (row.semantic_start ?? 0) + SNIPPET_BEFORE + 1, excerpt });
     }
   }
   const fused = fuseRanks([lexical.map((row) => row.id), close]);
@@ -265,7 +272,7 @@ async function withSemanticRows(owner: string, query: string, limit: number, sco
  * counts hits inside them, not in the whole store). `semantic`: files close in meaning come in too, ranked together
  * with the word matches (when text embeddings are on for file search).
  */
-export async function searchStoredFiles(owner: string, query: unknown, limit = 50, within?: readonly string[], options: { semantic?: boolean } = {}): Promise<StoredFileSearchResult> {
+export async function searchStoredFiles(owner: string, query: unknown, limit = 50, within?: readonly string[], options: { semantic?: boolean; signal?: AbortSignal } = {}): Promise<StoredFileSearchResult> {
   const allTerms = parseSearchTerms(query, { allowLong: options.semantic });
   const terms = allTerms.slice(0, MAX_TERMS);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new FileStoreError('잘못된 검색 개수야.');
@@ -307,7 +314,7 @@ export async function searchStoredFiles(owner: string, query: unknown, limit = 5
   const search: FileSearchStatus = { mode: 'keyword', semantic: 'not_requested', keywordTermsLimited: allTerms.length > MAX_TERMS, indexedFiles: totals.indexedFiles ?? 0,
     searchableFiles: totals.searchableFiles ?? 0, partialDocuments: totals.partialDocuments ?? 0,
     failedDocuments: totals.failedDocuments ?? 0, unsupportedFiles: totals.unsupportedFiles ?? 0, pendingDocuments: totals.pendingDocuments ?? 0 };
-  const ranked = (options.semantic ? await withSemanticRows(owner, String(query), limit, scope, params, rows, search) : null) ?? rows;
+  const ranked = (options.semantic ? await withSemanticRows(owner, String(query), limit, scope, params, rows, search, options.signal) : null) ?? rows;
 
   const folders = new Map((db.prepare(`SELECT id, parent_id, name FROM stored_file_entries WHERE owner_key = ? AND kind = 'folder' AND deleted_at IS NULL`)
     .all(owner) as Array<{ id: string; parent_id: string | null; name: string }>).map((folder) => [folder.id, folder]));
@@ -334,11 +341,9 @@ export async function searchStoredFiles(owner: string, query: unknown, limit = 5
       snippet = `${start > 1 ? '…' : ''}${row.excerpt.replace(/\s+/g, ' ').trim()}${start + SNIPPET_LENGTH <= (row.body_length ?? 0) ? '…' : ''}`;
     }
     const sections = JSON.parse(row.sections || '[]') as DocumentSection[];
-    // SQLite instr() counts code points, while stored embedding spans count UTF-16 code units.
+    // Both positions count Unicode code points; semantic byte offsets are converted inside SQLite.
     const position = row.semantic_start ?? Math.max(0, row.hit_at - 1);
-    const location = sections.find(section => row.semantic_start === undefined
-      ? section.textStart <= position && section.textEnd > position
-      : section.start <= position && section.end > position)?.label ?? null;
+    const location = sections.find(section => section.textStart <= position && section.textEnd > position)?.label ?? null;
     return { entry: toEntry(row), path: folderPath(row.parent_id), snippet, location, extractionState: row.extraction_state, extractionNote: row.extraction_note,
       ...(row.read_size && row.read_revision ? { read: { source: 'extracted' as const, offset: row.read_offset ?? 0, limit: 8000, revision: row.read_revision } } : {}) };
   });

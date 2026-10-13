@@ -253,6 +253,24 @@ test('document retrieval: PDF/XLSX extraction, permissions, resumable chunks and
     embedding.resetEmbeddingBackoff()
   })
 
+  await t.test('semantic previews retain Unicode and document locations when the match is deep in the body', async () => {
+    const localized = new AdmZip(workbook.toBuffer())
+    localized.addFile('xl/worksheets/sheet1.xml', Buffer.from(`<worksheet><sheetData>
+      <row r="1"><c r="A1" t="inlineStr"><is><t>${'😀'.repeat(2000)}</t></is></c></row>
+      <row r="2"><c r="A2" t="inlineStr"><is><t>${'quiet '.repeat(350)}deepneedle</t></is></c></row>
+    </sheetData></worksheet>`))
+    const entry = upload('semantic-location.xlsx', localized.toBuffer())
+    await refreshFileSearchIndex(owner)
+    while (await semanticIndexer.sweep() > 0) { /* finish the existing resumable batches */ }
+    const result = await searchStoredFiles(owner, 'archived reference deepneedle', 20, undefined, { semantic: true })
+    const hit = result.hits.find(hit => hit.entry.id === entry.id)!
+    assert.ok(hit.read!.offset > 8000)
+    assert.equal(hit.location, 'Sheet 예산 / Row 2')
+    assert.match(hit.snippet!, /deepneedle/)
+    assert.doesNotMatch(hit.snippet!, /�/)
+    assert.match((await FileStoreService.readText(owner, entry.id, hit.read!.offset, hit.read!.limit, hit.read)).text, /deepneedle/)
+  })
+
   await t.test('Claude and pi session builders consume semantic lore, and the common Codex path deduplicates recalled text', async () => {
     const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')

@@ -535,10 +535,65 @@ export class ImageSimilarityService {
     }
   }
 
-  /**
-   * 복합 해시 생성 (pHash + dHash + aHash) - 최적화 버전
-   * 단일 Sharp 파이프라인으로 모든 해시 생성 (3x I/O 절감)
-   */
+  /** Canonical composite hashes from the existing 32x32 and 9x8 grayscale buffers. */
+  private static buildCompositeHashes(grayBuffer: Buffer, dHashBuffer: Buffer) {
+    // 2. Perceptual Hash 계산 (버퍼 기반)
+    const matrix: number[][] = [];
+    for (let i = 0; i < 32; i++) {
+      matrix[i] = [];
+      for (let j = 0; j < 32; j++) {
+        matrix[i][j] = grayBuffer[i * 32 + j];
+      }
+    }
+
+    const dctMatrix = this.applyDCT(matrix);
+    const lowFreq: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      for (let j = 0; j < 8; j++) {
+        lowFreq.push(dctMatrix[i][j]);
+      }
+    }
+
+    const sorted = [...lowFreq].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+
+    let pHashBinary = '';
+    for (let i = 0; i < lowFreq.length; i++) {
+      pHashBinary += lowFreq[i] > median ? '1' : '0';
+    }
+    const perceptualHash = this.binaryToHex(pHashBinary);
+
+    // 3. dHash 계산 (canonical 9x8 리사이즈 버퍼)
+    const dHash = this.buildDHashFromBuffer(dHashBuffer);
+
+    // 4. aHash 계산 (32x32 버퍼 재사용, 8x8 다운샘플링)
+    const samples: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      for (let j = 0; j < 8; j++) {
+        // 32x32에서 8x8로 다운샘플링 (4픽셀 간격)
+        samples.push(grayBuffer[i * 4 * 32 + j * 4]);
+      }
+    }
+
+    const average = samples.reduce((sum, val) => sum + val, 0) / samples.length;
+    let aHashBinary = '';
+    for (let i = 0; i < samples.length; i++) {
+      aHashBinary += samples[i] > average ? '1' : '0';
+    }
+    const aHash = this.binaryToHex(aHashBinary);
+
+    // 5. 복합 해시 생성
+    const compositeHash = `${perceptualHash}${dHash}${aHash}`;
+
+    return {
+      compositeHash,
+      perceptualHash,
+      dHash,
+      aHash
+    };
+  }
+
+  /** Generate the canonical pHash + dHash + aHash without requesting color analysis. */
   static async generateCompositeHash(imagePath: string): Promise<{
     compositeHash: string;
     perceptualHash: string;
@@ -566,60 +621,7 @@ export class ImageSimilarityService {
         throw new Error(`Unexpected pixel data length for pHash: ${buffer32x32.length}`);
       }
 
-      // 2. Perceptual Hash 계산 (버퍼 기반)
-      const matrix: number[][] = [];
-      for (let i = 0; i < 32; i++) {
-        matrix[i] = [];
-        for (let j = 0; j < 32; j++) {
-          matrix[i][j] = buffer32x32[i * 32 + j];
-        }
-      }
-
-      const dctMatrix = this.applyDCT(matrix);
-      const lowFreq: number[] = [];
-      for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
-          lowFreq.push(dctMatrix[i][j]);
-        }
-      }
-
-      const sorted = [...lowFreq].sort((a, b) => a - b);
-      const median = sorted[Math.floor(sorted.length / 2)];
-
-      let pHashBinary = '';
-      for (let i = 0; i < lowFreq.length; i++) {
-        pHashBinary += lowFreq[i] > median ? '1' : '0';
-      }
-      const perceptualHash = this.binaryToHex(pHashBinary);
-
-      // 3. dHash 계산 (canonical 9x8 리사이즈 버퍼)
-      const dHash = this.buildDHashFromBuffer(dHashBuffer);
-
-      // 4. aHash 계산 (32x32 버퍼 재사용, 8x8 다운샘플링)
-      const samples: number[] = [];
-      for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
-          // 32x32에서 8x8로 다운샘플링 (4픽셀 간격)
-          samples.push(buffer32x32[i * 4 * 32 + j * 4]);
-        }
-      }
-
-      const average = samples.reduce((sum, val) => sum + val, 0) / samples.length;
-      let aHashBinary = '';
-      for (let i = 0; i < samples.length; i++) {
-        aHashBinary += samples[i] > average ? '1' : '0';
-      }
-      const aHash = this.binaryToHex(aHashBinary);
-
-      // 5. 복합 해시 생성
-      const compositeHash = `${perceptualHash}${dHash}${aHash}`;
-
-      return {
-        compositeHash,
-        perceptualHash,
-        dHash,
-        aHash
-      };
+      return this.buildCompositeHashes(buffer32x32, dHashBuffer);
     } catch (error) {
       console.error('Failed to generate composite hash:', error);
       throw new Error(`Composite hash generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -701,51 +703,7 @@ export class ImageSimilarityService {
         throw new Error(`Unexpected grayscale buffer length: ${grayBuffer.length}`);
       }
 
-      // Perceptual Hash
-      const matrix: number[][] = [];
-      for (let i = 0; i < 32; i++) {
-        matrix[i] = [];
-        for (let j = 0; j < 32; j++) {
-          matrix[i][j] = grayBuffer[i * 32 + j];
-        }
-      }
-
-      const dctMatrix = this.applyDCT(matrix);
-      const lowFreq: number[] = [];
-      for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
-          lowFreq.push(dctMatrix[i][j]);
-        }
-      }
-
-      const sorted = [...lowFreq].sort((a, b) => a - b);
-      const median = sorted[Math.floor(sorted.length / 2)];
-
-      let pHashBinary = '';
-      for (let i = 0; i < lowFreq.length; i++) {
-        pHashBinary += lowFreq[i] > median ? '1' : '0';
-      }
-      const perceptualHash = this.binaryToHex(pHashBinary);
-
-      // dHash
-      const dHash = this.buildDHashFromBuffer(dHashBuffer);
-
-      // aHash
-      const samples: number[] = [];
-      for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
-          samples.push(grayBuffer[i * 4 * 32 + j * 4]);
-        }
-      }
-
-      const average = samples.reduce((sum, val) => sum + val, 0) / samples.length;
-      let aHashBinary = '';
-      for (let i = 0; i < samples.length; i++) {
-        aHashBinary += samples[i] > average ? '1' : '0';
-      }
-      const aHash = this.binaryToHex(aHashBinary);
-
-      const compositeHash = `${perceptualHash}${dHash}${aHash}`;
+      const hashes = this.buildCompositeHashes(grayBuffer, dHashBuffer);
 
       // === 색상 히스토그램 계산 (RGB 버퍼 기반) ===
       if (rgbBuffer.length !== 3072) {
@@ -777,12 +735,7 @@ export class ImageSimilarityService {
       }
 
       return {
-        hashes: {
-          compositeHash,
-          perceptualHash,
-          dHash,
-          aHash
-        },
+        hashes,
         colorHistogram: this.withColorDescriptor(histogram),
         metadata: {
           width: imageMetadata.width ?? null,

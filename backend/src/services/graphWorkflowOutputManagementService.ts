@@ -8,13 +8,12 @@ import { GraphExecutionNodeIoModel } from '../models/GraphExecutionNodeIo'
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowFolderModel } from '../models/GraphWorkflowFolder'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
-import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphWorkflowRecord } from '../types/moduleGraph'
+import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord } from '../types/moduleGraph'
 import { deleteFile as recycleBinDeleteFile } from '../utils/recycleBin'
 import { settingsService } from './settingsService'
 import { WatchedFolderService } from './watchedFolderService'
 import { BackgroundProcessorService } from './backgroundProcessorService'
 import { FileDiscoveryService } from './folderScan/fileDiscoveryService'
-import { decorateGraphExecutionRecords } from './graphWorkflowViewService'
 
 function isPathInsideRoot(rootPath: string, candidatePath: string) {
   const relative = path.relative(rootPath, candidatePath)
@@ -103,20 +102,14 @@ function isVisualArtifact(artifact: GraphExecutionArtifactRecord | GraphExecutio
   return artifact.artifact_type === 'image' || artifact.artifact_type === 'video'
 }
 
-function getWorkflowNameByExecutionId(workflows: GraphWorkflowRecord[]) {
-  const workflowNameById = new Map(workflows.map((workflow) => [workflow.id, workflow.name]))
-  const executions = GraphExecutionModel.findAllByWorkflowIds(workflows.map((workflow) => workflow.id))
-  return new Map(executions.map((execution) => [execution.id, workflowNameById.get(execution.graph_workflow_id) ?? `Workflow #${execution.graph_workflow_id}`]))
-}
-
 function matchesTechnicalArtifactFilter({
   artifact,
-  workflowNameByExecutionId,
+  workflowName,
   artifactTypeFilter,
   searchTerm,
 }: {
   artifact: GraphExecutionArtifactRecord
-  workflowNameByExecutionId: Map<number, string>
+  workflowName: string
   artifactTypeFilter?: string | null
   searchTerm?: string | null
 }) {
@@ -130,7 +123,7 @@ function matchesTechnicalArtifactFilter({
   }
 
   const haystack = [
-    workflowNameByExecutionId.get(artifact.execution_id) ?? '',
+    workflowName,
     artifact.artifact_type,
     artifact.port_key,
     artifact.metadata ?? '',
@@ -141,10 +134,7 @@ function matchesTechnicalArtifactFilter({
 }
 
 function resolveWorkflowScope(folderId: number | null) {
-  const folderScopeIds = folderId !== null ? GraphWorkflowFolderModel.getSubtreeFolderIds(folderId) : []
-  return folderId !== null
-    ? GraphWorkflowModel.findByFolderIds(folderScopeIds, true)
-    : GraphWorkflowModel.findAll(true)
+  return GraphWorkflowModel.findNameEntries(true, folderId !== null ? GraphWorkflowFolderModel.getSubtreeFolderIds(folderId) : undefined)
 }
 
 /** Resolve a collision-safe target path inside one watched folder. */
@@ -169,26 +159,18 @@ async function resolveUniqueCopyTargetPath(targetFolderPath: string, fileName: s
 
 /** Delete finished output-less executions and keep non-empty or active ones. */
 export function cleanupEmptyGraphExecutions(executionIds: number[]) {
-  const executions = decorateGraphExecutionRecords(GraphExecutionModel.findByIds(executionIds))
+  const executions = GraphExecutionModel.findByIds(executionIds)
   const foundExecutionIds = new Set(executions.map((execution) => execution.id))
   const missing = executionIds.filter((executionId) => !foundExecutionIds.has(executionId))
   const existingExecutionIds = executions.map((execution) => execution.id)
-  const artifacts = GraphExecutionArtifactModel.findByExecutionIds(existingExecutionIds)
-  const finalResults = GraphExecutionFinalResultModel.findByExecutionIds(existingExecutionIds)
-  const artifactCountByExecution = artifacts.reduce<Record<number, number>>((acc, artifact) => {
-    acc[artifact.execution_id] = (acc[artifact.execution_id] ?? 0) + 1
-    return acc
-  }, {})
-  const finalResultCountByExecution = finalResults.reduce<Record<number, number>>((acc, result) => {
-    acc[result.execution_id] = (acc[result.execution_id] ?? 0) + 1
-    return acc
-  }, {})
+  const artifactCountByExecution = GraphExecutionArtifactModel.countByExecutionIds(existingExecutionIds)
+  const finalResultCountByExecution = GraphExecutionFinalResultModel.countByExecutionIds(existingExecutionIds)
 
   const deletableExecutionIds: number[] = []
   const skipped: Array<{ execution_id: number; reason: string }> = []
 
   for (const execution of executions) {
-    if ((artifactCountByExecution[execution.id] ?? 0) > 0 || (finalResultCountByExecution[execution.id] ?? 0) > 0) {
+    if ((artifactCountByExecution.get(execution.id) ?? 0) > 0 || (finalResultCountByExecution.get(execution.id) ?? 0) > 0) {
       skipped.push({ execution_id: execution.id, reason: 'Execution has outputs and is not empty' })
       continue
     }
@@ -324,33 +306,38 @@ export async function deleteGraphWorkflowArtifactsInScope({
   searchTerm?: string | null
 }) {
   const workflows = resolveWorkflowScope(folderId)
-  const workflowIds = workflows.map((workflow) => workflow.id)
-  const artifacts = GraphExecutionArtifactModel.findByWorkflowIds(workflowIds)
-  const finalResults = GraphExecutionFinalResultModel.findByWorkflowIds(workflowIds)
-  const visualFinalResults = finalResults.filter((result) => isVisualArtifact(result))
-  const executionIdsWithVisualFinalResults = new Set(visualFinalResults.map((result) => result.execution_id))
-  const fallbackVisualArtifacts = artifacts.filter((artifact) => (
-    isVisualArtifact(artifact) && !executionIdsWithVisualFinalResults.has(artifact.execution_id)
-  ))
-  const representedArtifactIds = new Set<number>([
-    ...visualFinalResults.map((result) => result.source_artifact_id),
-    ...fallbackVisualArtifacts.map((artifact) => artifact.id),
-  ])
-  const workflowNameByExecutionId = kind === 'artifacts'
-    ? getWorkflowNameByExecutionId(workflows)
-    : new Map<number, string>()
-
-  const targetArtifactIds = kind === 'outputs'
-    ? Array.from(representedArtifactIds)
-    : artifacts
-      .filter((artifact) => !representedArtifactIds.has(artifact.id))
-      .filter((artifact) => matchesTechnicalArtifactFilter({
-        artifact,
-        workflowNameByExecutionId,
-        artifactTypeFilter,
-        searchTerm,
-      }))
-      .map((artifact) => artifact.id)
+  const executionIdsWithVisualFinalResults = new Set<number>()
+  const representedArtifactIds = new Set<number>()
+  // Complete the final-result pass before classifying artifacts: a final result can reuse another workflow's source.
+  for (const workflow of workflows) {
+    let cursor: { created_date: string; id: number } | undefined
+    for (;;) {
+      const page = GraphExecutionFinalResultModel.findByWorkflowIdPage(workflow.id, DELETE_ARTIFACT_BATCH_SIZE, cursor)
+      if (!page.length) break
+      for (const result of page) if (isVisualArtifact(result)) {
+        representedArtifactIds.add(result.source_artifact_id)
+        executionIdsWithVisualFinalResults.add(result.execution_id)
+      }
+      cursor = page[page.length - 1]
+    }
+  }
+  const technicalIds: number[] = []
+  for (const workflow of workflows) {
+    let cursor: { created_date: string; id: number } | undefined
+    for (;;) {
+      const page = GraphExecutionArtifactModel.findByWorkflowIdPage(workflow.id, DELETE_ARTIFACT_BATCH_SIZE, cursor)
+      if (!page.length) break
+      for (const artifact of page) {
+        const fallbackVisual = isVisualArtifact(artifact) && !executionIdsWithVisualFinalResults.has(artifact.execution_id)
+        if (fallbackVisual) representedArtifactIds.add(artifact.id)
+        if (kind === 'artifacts' && !representedArtifactIds.has(artifact.id)
+          && matchesTechnicalArtifactFilter({ artifact, workflowName: workflow.name, artifactTypeFilter, searchTerm })) technicalIds.push(artifact.id)
+      }
+      cursor = page[page.length - 1]
+    }
+  }
+  // Freeze target IDs before the first asynchronous deletion; new output cannot enter an in-progress deletion.
+  const targetArtifactIds = kind === 'outputs' ? [...representedArtifactIds] : technicalIds
 
   const results = []
   for (const batch of chunkIds(targetArtifactIds)) {

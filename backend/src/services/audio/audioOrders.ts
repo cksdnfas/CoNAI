@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import path from 'path';
 import { getAudioDb, hasAudioDb } from '../../database/audioDb';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { GenerationQueueModel } from '../../models/GenerationQueue';
@@ -11,8 +10,8 @@ import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPol
 import { GenerationQueueService } from '../generationQueueService';
 import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers';
 import { linkChatGeneration } from '../codex-chat/chatReplyRegistry';
-import { ingestAudioFile } from './audioStore';
-import { AudioServiceError, getAudioGroup, registerGeneratedAudioCandidate, type AudioCandidate } from './audioService';
+import { ingestGeneratedAudioOutputs } from './audioGenerationOutputs';
+import { AudioServiceError, getAudioGroup } from './audioService';
 import { AUDIO_SEED_LIMIT, freshAudioWorkflowCompatibility, requireBoundAudioWorkflow } from './audioWorkflows';
 import type { ComfyCollectedOutputFile } from '../comfyGenerationExecutor';
 
@@ -292,23 +291,40 @@ export function reconcileAllAudioOrders(): number {
 function readQueueJobs(jobIds: number[]): Map<number, { status: GenerationQueueJobStatus; failure_message: string | null }> {
   const result = new Map<number, { status: GenerationQueueJobStatus; failure_message: string | null }>();
   if (jobIds.length === 0) return result;
-  const rows = getUserSettingsDb().prepare(`SELECT id, status, failure_message FROM generation_queue_jobs WHERE id IN (${jobIds.map(() => '?').join(',')})`)
-    .all(...jobIds) as Array<{ id: number; status: GenerationQueueJobStatus; failure_message: string | null }>;
+  const rows = getUserSettingsDb().prepare(`SELECT id, status, failure_message FROM generation_queue_jobs WHERE id IN (SELECT value FROM json_each(?))`)
+    .all(JSON.stringify(jobIds)) as Array<{ id: number; status: GenerationQueueJobStatus; failure_message: string | null }>;
   rows.forEach((row) => result.set(row.id, { status: row.status, failure_message: row.failure_message }));
   return result;
 }
 
-function candidatesOfOrder(orderId: string): Map<string, string[]> {
-  const byJob = new Map<string, string[]>();
-  const rows = db().prepare('SELECT id, job_id FROM audio_candidates WHERE order_id = ? AND deleted_at IS NULL ORDER BY created_at, id').all(orderId) as Array<{ id: string; job_id: string | null }>;
-  for (const row of rows) if (row.job_id) byJob.set(row.job_id, [...(byJob.get(row.job_id) ?? []), row.id]);
-  return byJob;
+function readOrderBatch(orderIds: string[]) {
+  const jobs = new Map<string, OrderJobRow[]>();
+  const candidates = new Map<string, Map<string, string[]>>();
+  if (!orderIds.length) return { jobs, candidates, queue: readQueueJobs([]) };
+  const ids = JSON.stringify(orderIds);
+  const jobRows = db().prepare('SELECT * FROM audio_order_jobs WHERE order_id IN (SELECT value FROM json_each(?)) ORDER BY order_id, idx').all(ids) as OrderJobRow[];
+  for (const row of jobRows) {
+    const items = jobs.get(row.order_id) ?? [];
+    items.push(row);
+    jobs.set(row.order_id, items);
+  }
+  const rows = db().prepare(`SELECT id, order_id, job_id FROM audio_candidates
+    WHERE order_id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL ORDER BY created_at, id`)
+    .all(ids) as Array<{ id: string; order_id: string; job_id: string | null }>;
+  for (const row of rows) if (row.job_id) {
+    const byJob = candidates.get(row.order_id) ?? new Map<string, string[]>();
+    const items = byJob.get(row.job_id) ?? [];
+    items.push(row.id);
+    byJob.set(row.job_id, items);
+    candidates.set(row.order_id, byJob);
+  }
+  return { jobs, candidates, queue: readQueueJobs(jobRows.flatMap(row => row.job_id === null ? [] : [row.job_id])) };
 }
 
-function buildOrder(row: OrderRow): AudioOrder {
-  const rows = orderJobRows(row.id);
-  const queue = readQueueJobs(rows.map((entry) => entry.job_id).filter((value): value is number => value !== null));
-  const candidates = candidatesOfOrder(row.id);
+function buildOrder(row: OrderRow, batch = readOrderBatch([row.id])): AudioOrder {
+  const rows = batch.jobs.get(row.id) ?? [];
+  const queue = batch.queue;
+  const candidates = batch.candidates.get(row.id);
   const jobs: AudioOrderJob[] = rows.map((entry) => {
     const queued = entry.job_id !== null ? queue.get(entry.job_id) : undefined;
     const status: AudioOrderJobStatus = entry.job_id === null
@@ -317,11 +333,13 @@ function buildOrder(row: OrderRow): AudioOrder {
     return {
       idx: entry.idx, seed: entry.seed, attempt: entry.attempt, job_id: entry.job_id, status,
       failure_message: queued?.failure_message ?? entry.error ?? null,
-      candidate_ids: entry.job_id !== null ? candidates.get(String(entry.job_id)) ?? [] : [],
+      candidate_ids: entry.job_id !== null ? candidates?.get(String(entry.job_id)) ?? [] : [],
     };
   });
   const updateCache = db().prepare('UPDATE audio_order_jobs SET status_cache = ?, updated_at = ? WHERE order_id = ? AND idx = ? AND status_cache <> ?');
-  for (const job of jobs) if (job.job_id !== null) updateCache.run(job.status, now(), row.id, job.idx, job.status);
+  for (const [index, job] of jobs.entries()) if (job.job_id !== null && rows[index].status_cache !== job.status) {
+    updateCache.run(job.status, now(), row.id, job.idx, job.status);
+  }
   const counts = { pending: 0, queued: 0, dispatching: 0, running: 0, completed: 0, failed: 0, cancelled: 0 } as Record<AudioOrderJobStatus, number>;
   jobs.forEach((job) => { counts[job.status] = (counts[job.status] ?? 0) + 1; });
   const active = counts.pending + counts.queued + counts.dispatching + counts.running;
@@ -355,7 +373,8 @@ export function listAudioOrders(options: { groupId?: unknown; limit?: unknown; o
   const params = groupId ? [groupId] : [];
   const rows = db().prepare(`SELECT * FROM audio_orders ${where} ORDER BY created_at DESC, id LIMIT ? OFFSET ?`).all(...params, limit, offset) as OrderRow[];
   const total = (db().prepare(`SELECT count(*) AS n FROM audio_orders ${where}`).get(...params) as { n: number }).n;
-  return { items: rows.map(buildOrder), total };
+  const batch = readOrderBatch(rows.map(row => row.id));
+  return { items: rows.map(row => buildOrder(row, batch)), total };
 }
 
 /** Owner of an order, for MCP ownership checks (shaped like a queue job). */
@@ -429,43 +448,14 @@ export interface AudioOrderSinkContext {
 export async function storeAudioOrderOutputs(binding: AudioOrderJobBinding, outputs: ComfyCollectedOutputFile[], context: AudioOrderSinkContext): Promise<{ order_id: string; candidate_ids: string[] }> {
   const { order, row } = binding;
   const group = getAudioGroup(order.group_id);
-  const candidates: AudioCandidate[] = [];
-  const failures: string[] = [];
-  for (const [index, output] of outputs.entries()) {
-    try {
-      const originalName = path.basename(output.filename || output.tempPath);
-      const { file } = await ingestAudioFile(output.tempPath, originalName);
-      candidates.push(registerGeneratedAudioCandidate({
-        groupId: group.id,
-        file,
-        name: outputs.length > 1 ? `${group.name} · ${row.seed} · ${index + 1}` : `${group.name} · ${row.seed}`,
-        accountId: order.created_by_account_id,
-        sourceKey: `gen:${context.queueJobId}:${output.nodeId}:${index}`,
-        orderId: order.id,
-        jobId: context.queueJobId,
-        provenance: {
-          source: 'generation',
-          prompt: order.text,
-          seconds: order.seconds,
-          seed: row.seed,
-          order_id: order.id,
-          order_idx: row.idx,
-          attempt: row.attempt,
-          queue_job_id: context.queueJobId,
-          prompt_id: context.promptId,
-          workflow_id: context.workflow.id,
-          workflow_name: context.workflow.name,
-          workflow_updated_date: context.workflow.updated_date,
-          server_id: context.serverId,
-          server_name: context.serverName,
-          output_node_id: output.nodeId,
-          output_filename: originalName,
-        },
-      }));
-    } catch (error) {
-      failures.push((error as Error).message);
-    }
-  }
+  const { candidates, failures } = await ingestGeneratedAudioOutputs(outputs, context, {
+    groupId: group.id, accountId: order.created_by_account_id, orderId: order.id,
+    name: (index) => outputs.length > 1 ? `${group.name} · ${row.seed} · ${index + 1}` : `${group.name} · ${row.seed}`,
+    provenance: {
+      source: 'generation', prompt: order.text, seconds: order.seconds, seed: row.seed,
+      order_id: order.id, order_idx: row.idx, attempt: row.attempt,
+    },
+  });
   if (candidates.length === 0) {
     throw new Error(`Audio order job produced no usable audio${failures.length ? `: ${failures.join('; ')}` : ''}`);
   }
@@ -475,4 +465,3 @@ export async function storeAudioOrderOutputs(binding: AudioOrderJobBinding, outp
 }
 
 export { audioCandidatesByQueueJob } from './audioJobCandidates';
-

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { errorResponse, successResponse } from '@conai/shared';
-import { asyncHandler } from '../../middleware/asyncHandler';
+import { asyncHandler, cancellableAsyncHandler } from '../../middleware/asyncHandler';
 import { db } from '../../database/init';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { ImageSafetyService } from '../../services/imageSafetyService';
@@ -53,7 +53,7 @@ function hydrate(hits: ImageVectorHit[]) {
   });
 }
 
-router.get('/semantic-search', asyncHandler(async (req: Request, res: Response) => {
+router.get('/semantic-search', cancellableAsyncHandler(async (req, res, signal) => {
   const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   if (!query) {
     sendRouteBadRequest(res, 'q is required');
@@ -64,7 +64,7 @@ router.get('/semantic-search', asyncHandler(async (req: Request, res: Response) 
     return;
   }
   const limit = parseLimit(req.query.limit);
-  const hits = await searchImagesByText(query.slice(0, MAX_QUERY_CHARS), limit);
+  const hits = await searchImagesByText(query.slice(0, MAX_QUERY_CHARS), limit, { signal });
   if (!hits) {
     res.status(503).json(errorResponse('The embedding model is not available right now'));
     return;

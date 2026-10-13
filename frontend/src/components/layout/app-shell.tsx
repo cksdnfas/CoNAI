@@ -1,3 +1,6 @@
+import { PageSettingsProvider } from '@/features/settings/page-settings-provider'
+import { UnsavedSettingsGuardProvider } from '@/features/settings/use-unsaved-settings-guard'
+import { PageSettingsButton } from '@/features/settings/page-settings-button'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Map as MapIcon, type LucideIcon } from 'lucide-react'
@@ -86,6 +89,7 @@ function DeferredGenerationQueueHeaderWidget() {
 export function AppShell() {
   return (
     <HomeSearchProvider>
+      <UnsavedSettingsGuardProvider><PageSettingsProvider>
       <ChatPageProvider>
         <CodexChatProvider>
           {/* Inside the chat: the viewer's "참조" button and its room for the docked panel read the chat state. */}
@@ -94,6 +98,7 @@ export function AppShell() {
           </ImageViewModalProvider>
         </CodexChatProvider>
       </ChatPageProvider>
+      </PageSettingsProvider></UnsavedSettingsGuardProvider>
     </HomeSearchProvider>
   )
 }
@@ -222,6 +227,7 @@ function AppShellLayout() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+            <PageSettingsButton />
             {shouldShowGenerationQueueWidget ? <DeferredGenerationQueueHeaderWidget /> : null}
             <HomeSearchHeaderBox active={shouldShowHeaderSearch && !shouldFoldKeysIntoAccountMenu} />
             {shouldFoldKeysIntoAccountMenu ? null : <CodexChatHeaderButton />}

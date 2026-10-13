@@ -160,6 +160,7 @@ async function jobDownloads(context: McpRequestContext, job: RuntimeJobRecord, r
 
 async function describeJob(context: McpRequestContext, job: RuntimeJobRecord) {
   const done = job.status === 'completed';
+  if (done && job.kind === 'sprite-normalize') job = RuntimeJobStore.get(job.jobId, { includeResultFile: true }) ?? job;
   const result = done ? job.result as Record<string, unknown> | null : null;
   return {
     job_id: job.jobId,

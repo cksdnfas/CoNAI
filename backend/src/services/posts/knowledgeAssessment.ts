@@ -166,6 +166,26 @@ export function aggregateKnowledgeAssessments(rows: AssessmentRow[], contentHash
     needsReview: current.independentCount>=3 && smoothedDown>=0.65, ownVote: null,reasons: [] };
 }
 
+/** Public aggregate only, for an already-authorized search batch. Stale entries fall back to the normal resolver. */
+export function cachedKnowledgeMultipliers(postIds: number[], policy: PostsKnowledgeSettings): Map<number, number> {
+  const result = new Map<number, number>();
+  if (!postIds.length) return result;
+  const hash = createHash('sha256').update(JSON.stringify(policy)).digest('hex');
+  const rows = db().prepare(`SELECT k.post_id, k.content_version, s.stats_json
+    FROM post_knowledge k JOIN post_quality_stats s ON s.post_id=k.post_id
+    WHERE k.post_id IN (SELECT value FROM json_each(?)) AND k.enabled=1
+      AND s.content_hash=k.content_hash AND s.settings_hash=?
+      AND s.last_event_id=COALESCE((SELECT MAX(e.id) FROM post_assessment_heads h JOIN post_assessment_events e ON e.id=h.event_id WHERE e.post_id=k.post_id),0)`)
+    .all(JSON.stringify(postIds), hash) as Array<{ post_id: number; content_version: number; stats_json: string }>;
+  for (const row of rows) {
+    try {
+      const stats = JSON.parse(row.stats_json) as PostQualityStats;
+      if (stats.contentVersion === row.content_version && Number.isFinite(stats.qualityMultiplier)) result.set(row.post_id, stats.qualityMultiplier);
+    } catch { /* Derived data can be rebuilt. */ }
+  }
+  return result;
+}
+
 export function getKnowledgeQuality(actor: PostActor, postId: number): PostQualityStats {
   const knowledge = requireKnowledgeRow(actor,postId,{ allowDeleted: true });
   const rows = db().prepare('SELECT e.* FROM post_assessment_heads h JOIN post_assessment_events e ON e.id=h.event_id WHERE e.post_id=? ORDER BY e.id').all(postId) as AssessmentRow[];

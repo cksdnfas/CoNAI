@@ -258,11 +258,11 @@ export function listLinked(places: LinkedPlace[], value?: string) {
 }
 
 /** Files and folders inside the linked places whose name or text holds every word (see searchStoredFiles). */
-export async function searchLinked(places: LinkedPlace[], query: string, limit = 20) {
+export async function searchLinked(places: LinkedPlace[], query: string, limit = 20, signal?: AbortSignal) {
   if (places.length === 0) return '(연결된 파일이 없어.)'
   const owner = places[0].owner
   // Searched inside the links only: a store-wide top list would push hits in the linked places out of it.
-  const result = await searchStoredFiles(owner, query, 200, places.map((place) => place.entry.id), { semantic: true })
+  const result = await searchStoredFiles(owner, query, 200, places.map((place) => place.entry.id), { semantic: true, signal })
   const hits = result.hits.flatMap((hit) => {
     for (const place of places) {
       const at = pathInPlace(place, hit.entry)

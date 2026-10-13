@@ -320,7 +320,10 @@ test('chat knowledge: linked search, file versions, connected history, group mem
     const { summarizeAll } = await import('../src/services/codex-chat/llmChatContext')
     const { ChatSummaryStore } = await import('../src/services/codex-chat/chatMemory')
     let stretch = 0
-    st.mock.method(globalThis, 'fetch', async () => Response.json({ choices: [{ message: { content: `${++stretch}차 정리: 일정은 열흘.` }, finish_reason: 'stop' }] }))
+    st.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      if (init?.method !== 'POST') return new Response('', { status: 404 })
+      return Response.json({ choices: [{ message: { content: `${++stretch}차 정리: 일정은 열흘.` }, finish_reason: 'stop' }] })
+    })
     const folder = FileStoreService.createFolder(me, null, '축제 기획')
     const readOnly = FileStoreService.createFolder(me, null, '참고')
     const threadId = CodexChatStore.createThread(null, '축제 회의', 'llm', rina.id)

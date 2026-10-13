@@ -152,6 +152,60 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     assert.equal((db().prepare('SELECT COUNT(*) AS n FROM chat_judge_runs').get() as { n: number }).n, 0)
   })
 
+  await t.test('interrupting input translation cancels preparation in direct edits and group sends', async (s) => {
+    const { mockModelRows } = await import('./modelRowMocks')
+    const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
+    mockModelRows(s, { 1: ['chat', 'chat-model'], 2: ['chat', 'translator-model'] }, 1)
+    const profile = ChatProfileStore.create({ name: '번역 중단', engine: 'llm', modelSlotId: 1, translationSlotId: 2, summaryEnabled: false, mcpEnabled: false })
+    let block = false
+    let started: () => void = () => {}
+    let translationSignal: AbortSignal | null = null
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      if (init?.method !== 'POST') return new Response('', { status: 404 })
+      const body = JSON.parse(String(init.body))
+      if (block && body.model === 'translator-model') {
+        translationSignal = init.signal as AbortSignal
+        return new Promise<Response>((_resolve, reject) => {
+          translationSignal!.addEventListener('abort', () => reject(translationSignal!.reason), { once: true })
+          started()
+        })
+      }
+      return reply(body.model === 'translator-model' ? 'Hello' : '응, 알았어.')
+    })
+    for (const mode of ['send', 'edit', 'group'] as const) {
+      const thread = mode === 'group'
+        ? GroupChatService.create(requester, { profileIds: [profile.id, plain.id], representativeId: profile.id })
+        : threadOf(profile.id)
+      let messageId = 0
+      if (mode === 'edit') {
+        block = false
+        await LlmChatService.sendMessage(requester, thread, '처음 메시지', () => {})
+        await waitFor(() => !LlmChatService.isRunning(thread.id), 'initial reply stored')
+        messageId = CodexChatStore.listMessages(thread.id).find((message) => message.role === 'user')!.id
+      }
+      const translating = new Promise<void>((resolve) => { started = resolve })
+      block = true
+      const pending = mode === 'group'
+        ? GroupChatService.sendMessage(requester, thread.id, '안녕', () => {})
+        : mode === 'edit'
+          ? LlmChatService.rewriteMessage(requester, thread, messageId, '수정 메시지', () => {})
+          : LlmChatService.sendMessage(requester, thread, '안녕', () => {})
+      await translating
+      if (mode === 'group') {
+        const stopped = assert.rejects(pending, { name: 'AbortError' })
+        await GroupChatService.stop(thread.id)
+        await stopped
+        assert.equal(CodexChatStore.listMessages(thread.id).length, 0)
+      } else {
+        LlmChatService.interrupt(thread.id)
+        assert.equal((await pending)!.status, 'interrupted')
+        await waitFor(() => !LlmChatService.isRunning(thread.id), 'interrupted reply stored')
+      }
+      assert.equal(translationSignal!.aborted, true)
+    }
+    ChatProfileStore.delete(profile.id)
+  })
+
   await t.test('the judge reads the original words, never the translation', () => {
     const thread = threadOf(judged.id)
     CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: 'I will visit on Sunday.', display_content: '일요일에 갈게.', tool_calls: [], status: 'completed', error: null })
@@ -240,7 +294,7 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     assert.equal(run.items[0].outcome.toolUsed, true)
   })
 
-  await t.test('a yes on tools the turn does not offer adds no directive and logs no action', async (s) => {
+  await t.test('tools the turn does not offer need no judge request or directive', async (s) => {
     const imageOnly = ChatJudgePresetStore.create({ name: '이미지', providerName: 'jev', items: [
       { id: 'image', name: '이미지', instructions: 'Show an image?', tools: ['generate_image*'], directive: '[판단] 이미지를 그려.' },
     ] })
@@ -250,9 +304,8 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     await LlmChatService.sendMessage(requester, thread, '바다 사진 보여줘', () => {})
     const chat = calls.find((call) => call.url.endsWith('/chat/completions'))!
     assert.ok(!lastUserText(chat.body).includes('[판단]'), 'no directive for a tool the profile cannot offer')
-    const [run] = ChatJudgeLogStore.list({ threadId: thread.id })
-    assert.equal(run.items[0].verdict, 'yes')
-    assert.equal(run.items[0].action, 'none')
+    assert.equal(ChatJudgeLogStore.list({ threadId: thread.id }).length, 0)
+    assert.equal(calls.filter((call) => !call.url.endsWith('/chat/completions')).length, 0)
   })
 
   await t.test('a failed judge leaves the turn exactly as without one and logs the error', async (s) => {

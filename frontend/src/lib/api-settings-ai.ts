@@ -1,4 +1,5 @@
 import type { AiRuntimeSettings, AiRuntimeStatus, AiTorchBackendPreference, EmbeddingServerStatus, EmbeddingSettings } from '@conai/shared'
+import type { PageSettingsVersions } from '@conai/shared'
 import type { ApiResponse } from '@/types/image'
 import { fetchJson } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
@@ -45,10 +46,10 @@ export async function getEmbeddingStatus() {
   return response.data
 }
 
-export async function updateEmbeddingSettings(settings: Partial<EmbeddingSettings>) {
-  const response = await fetchJson<ApiResponse<{ settings: EmbeddingSettings; status: EmbeddingServerStatus }>>('/api/settings/embedding', {
+export async function updateEmbeddingSettings(settings: Partial<EmbeddingSettings>, revision?: string) {
+  const response = await fetchJson<ApiResponse<{ settings: EmbeddingSettings; status: EmbeddingServerStatus } & PageSettingsVersions>>('/api/settings/embedding', {
     method: 'PUT',
-    headers: JSON_HEADERS,
+    headers: { ...JSON_HEADERS, ...(revision ? { 'If-Match': revision } : {}) },
     body: JSON.stringify(settings),
   })
   if (!response.success) throw createApiFallbackError(response.error, 'settings.embedding.update')

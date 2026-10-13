@@ -112,18 +112,27 @@ export function commentMatches(postIds: number[], terms: string[]): Map<number, 
 }
 
 /** Title/alias matches remain discoverable even with a low quality score. */
-export function createPostRelevanceResolver(terms:string[],query:string) {
+export function createPostRelevanceResolver(terms:string[],query:string, postIds?: number[]) {
   const aliasesOf=getUserSettingsDb().prepare('SELECT name_key FROM post_aliases WHERE post_id=?');
   const tagsOf=getUserSettingsDb().prepare('SELECT t.name_key FROM post_tag_links l JOIN post_tags t ON t.id=l.tag_id WHERE l.post_id=?');
+  const grouped = (sql: string) => {
+    const values = new Map<number, string[]>();
+    if (postIds?.length && terms.length) for (const row of getUserSettingsDb().prepare(sql).all(JSON.stringify(postIds)) as Array<{ post_id: number; name_key: string }>) {
+      const list = values.get(row.post_id) ?? []; list.push(row.name_key); values.set(row.post_id, list);
+    }
+    return values;
+  };
+  const aliasesById = grouped('SELECT post_id, name_key FROM post_aliases WHERE post_id IN (SELECT value FROM json_each(?))');
+  const tagsById = grouped('SELECT l.post_id, t.name_key FROM post_tag_links l JOIN post_tags t ON t.id=l.tag_id WHERE l.post_id IN (SELECT value FROM json_each(?))');
   const phrase=query.normalize('NFC').trim().toLowerCase();
   return (post:{id:number;title:string;body:string}):number=>{
     if(!terms.length) return 4;
     const title=post.title.toLowerCase();
     if(title===phrase) return 0;
-    const aliases=(aliasesOf.all(post.id) as Array<{name_key:string}>).map(row=>row.name_key);
+    const aliases=postIds ? aliasesById.get(post.id) ?? [] : (aliasesOf.all(post.id) as Array<{name_key:string}>).map(row=>row.name_key);
     if(aliases.includes(phrase)) return 0;
     if([title,...aliases].some(value=>terms.every(term=>value.includes(term)))) return 1;
-    const tags=(tagsOf.all(post.id) as Array<{name_key:string}>).map(row=>`#${row.name_key}`).join(' ');
+    const tags=(postIds ? tagsById.get(post.id) ?? [] : (tagsOf.all(post.id) as Array<{name_key:string}>).map(row=>row.name_key)).map(name=>`#${name}`).join(' ');
     if(terms.every(term=>tags.includes(term))) return 2;
     const body=markdownToPlainText(post.body).toLowerCase();
     return terms.every(term=>body.includes(term))?3:4;

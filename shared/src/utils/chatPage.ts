@@ -1,3 +1,4 @@
+import { isPageSettingsScope, pageSettingsScopes } from '../constants/pageSettings'
 import type { ChatPageField, ChatPageProposal, ChatPageSnapshot, ChatPageTarget, ChatPageValue } from '../types/chatPage'
 import { CHAT_WORKFLOW_LIMITS, normalizeChatWorkflowSnapshot } from './chatWorkflow'
 import { CHAT_PAGE_ACTION_LIMITS, copyChatPageData, normalizeChatPageActions } from './chatPageAction'
@@ -45,7 +46,8 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
   const path = text(raw.path, 240)
   if (chatPagePermission(path) === null) throw new Error('이 페이지는 채팅에 연결할 수 없어.')
   const kind = raw.kind
-  if (!['page', 'nai', 'codex', 'comfyui', 'comfy_author', 'library', 'prompt_search', 'presets', 'wildcards', 'metadata', 'workflow', 'workflow_runner', 'groups', 'files', 'upload', 'settings', 'wallpaper', 'image_detail', 'audio', 'sprite', 'posts'].includes(kind as string)) throw new Error('페이지 종류가 올바르지 않아.')
+  if (!['page', 'nai', 'codex', 'comfyui', 'comfy_author', 'library', 'prompt_search', 'presets', 'wildcards', 'metadata', 'workflow', 'workflow_runner', 'groups', 'files', 'upload', 'settings', 'page_settings', 'wallpaper', 'image_detail', 'audio', 'sprite', 'posts'].includes(kind as string)) throw new Error('페이지 종류가 올바르지 않아.')
+  if (kind === 'page_settings' && (typeof raw.resourceId !== 'string' || !isPageSettingsScope(raw.resourceId) || !pageSettingsScopes(path).includes(raw.resourceId))) throw new Error('이 페이지의 설정 항목이 아니야.')
   const metadataHash = /^\/images\/([\w.-]+)\/metadata$/.exec(path)?.[1]
   const publicComfy = /^\/public\/workflows\/[\w-]+$/.test(path)
   const routes: Partial<Record<ChatPageSnapshot['kind'], RegExp>> = { groups: /^\/groups(?:\/[\w-]+)?$/, files: /^\/files$/, upload: /^\/upload$/, settings: /^\/settings$/, wallpaper: /^\/wallpaper(?:\/runtime)?$/, audio: /^\/audio$/, sprite: /^\/sprite$/, posts: /^\/posts$/ }

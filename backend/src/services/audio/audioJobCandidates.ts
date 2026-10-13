@@ -32,6 +32,18 @@ export function audioOrderGroupsByQueueJob(jobIds: number[]): Map<number, string
   return result;
 }
 
+/** Includes sound outputs from ordinary ComfyUI jobs as well as explicit audio orders. */
+export function audioScopesByQueueJob(jobId: number): Array<{ group_id: string; project_id: string }> {
+  if (!hasAudioDb()) return [];
+  return getAudioDb().prepare(`
+    SELECT o.group_id, g.project_id FROM audio_order_jobs j JOIN audio_orders o ON o.id=j.order_id
+      JOIN audio_groups g ON g.id=o.group_id WHERE j.job_id=?
+    UNION
+    SELECT c.group_id, g.project_id FROM audio_candidates c JOIN audio_groups g ON g.id=c.group_id
+      WHERE c.job_id=? AND c.deleted_at IS NULL
+  `).all(jobId, String(jobId)) as Array<{ group_id: string; project_id: string }>;
+}
+
 /** One sound of a generation run, as a history row shows it. */
 export interface GenerationAudioResult {
   id: string;

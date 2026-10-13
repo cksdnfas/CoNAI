@@ -1,3 +1,4 @@
+import { verifyPageSettingsWrite } from '../../services/pageSettings';
 import { Router, Request, Response } from 'express';
 import fs from 'fs';
 import { asyncHandler } from '../../middleware/asyncHandler';
@@ -72,6 +73,7 @@ router.put(
       }
     }
 
+    if (!verifyPageSettingsWrite(res)) return;
     const updatedSettings = settingsService.updateSimilaritySettings(similaritySettings);
 
     res.json({
@@ -93,6 +95,7 @@ router.put(
     if (!validateNumberGreaterThanIfDefined(res, metadataSettings.stealthMaxFileSizeMB, 0, 'File size limit must be greater than 0')) return;
     if (!validateNumberGreaterThanIfDefined(res, metadataSettings.stealthMaxResolutionMP, 0, 'Resolution limit must be greater than 0')) return;
 
+    if (!verifyPageSettingsWrite(res)) return;
     const updatedSettings = settingsService.updateMetadataSettings(metadataSettings);
 
     res.json({
@@ -163,6 +166,7 @@ router.put(
     if (!validateStringEnumIfDefined(res, thumbnailSettings.size, validSizes, `Invalid size. Must be one of: ${validSizes.join(', ')}`)) return;
     if (!validateNumberInRangeIfDefined(res, thumbnailSettings.quality, 60, 100, 'Quality must be between 60 and 100')) return;
 
+    if (!verifyPageSettingsWrite(res)) return;
     const updatedSettings = settingsService.updateThumbnailSettings(thumbnailSettings);
 
     res.json({
@@ -193,6 +197,7 @@ router.put(
       if (!validateBooleanIfDefined(res, value, `${field} must be a boolean`)) return;
     }
 
+    if (!verifyPageSettingsWrite(res)) return;
     const updatedSettings = settingsService.updateImageSaveSettings(imageSaveSettings);
 
     res.json({
@@ -250,6 +255,7 @@ router.put(
     if (!validateServiceThrottle(generationThrottleSettings.codex, 'Codex')) return;
     if (!validateReservationThrottle(generationThrottleSettings.reservations)) return;
 
+    if (!verifyPageSettingsWrite(res)) return;
     const updatedSettings = settingsService.updateGenerationThrottleSettings(generationThrottleSettings);
 
     res.json({
@@ -276,6 +282,7 @@ router.put(
       if (!validateBooleanIfDefined(res, value, `${field} must be a boolean`)) return;
     }
 
+    if (!verifyPageSettingsWrite(res)) return;
     const updatedSettings = settingsService.updateVideoOptimizationSettings(videoOptimizationSettings);
 
     res.json({

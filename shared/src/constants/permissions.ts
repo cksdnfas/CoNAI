@@ -1,8 +1,13 @@
 /**
  * The one permission catalog. Each area has view / edit; only areas that destroy real files keep a separate delete.
- * Administration (settings, accounts, servers, chat setup) has no key: it belongs to administrators.
+ * Server administration stays admin-only. Explicit settings grants cover only the safe page-settings fields.
  */
 export const PERMISSION_CATALOG = [
+  ...(['appearance', 'library', 'media', 'generation', 'analysis', 'posts', 'chat'] as const).map((area) => ({
+    key: `settings.${area}.manage` as const, section: 'settings' as const,
+    label: { ko: `${({ appearance: '공용 화면', library: '라이브러리', media: '미디어 저장', generation: '생성 실행', analysis: '자동 분석·의미 검색', posts: '게시판·지식', chat: '채팅 공통' })[area]} 설정 관리 (전체 사용자 적용)`, en: `Manage ${area} settings (all users)` },
+    description: `Manage allowlisted shared ${area} settings from page dialogs. Does not grant server administration or credentials.`,
+  })),
   { key: 'images.view', section: 'images', anonymous: true, label: { ko: '이미지 보기', en: 'View images' }, description: 'List and view images, videos and animated images everywhere, including chat.' },
   { key: 'images.edit', section: 'images', label: { ko: '이미지 편집·그룹 정리', en: 'Edit images and groups' }, description: 'Edit tags and metadata, process images, create groups and assign images.' },
   { key: 'images.delete', section: 'images', label: { ko: '이미지·그룹 삭제', en: 'Delete images and groups' }, description: 'Delete library images and groups.' },
@@ -32,7 +37,7 @@ export const PERMISSION_CATALOG = [
   { key: 'auth.guest.create', section: 'account', anonymousOnly: true, anonymous: true, label: { ko: '게스트 가입', en: 'Guest signup' }, description: 'Create a guest account from the login page.' },
 ] as const satisfies ReadonlyArray<{
   key: string
-  section: 'images' | 'prompts' | 'generation' | 'files' | 'audio' | 'posts' | 'chat' | 'account'
+  section: 'images' | 'prompts' | 'generation' | 'files' | 'audio' | 'posts' | 'chat' | 'account' | 'settings'
   label: { ko: string; en: string }
   description: string
   /** Visitors who are not signed in can use it. */

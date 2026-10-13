@@ -70,7 +70,7 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
   server.registerTool('task_propose', { description: proposeDescription, inputSchema: z.object({
     goal: z.string().max(CHAT_TASK_LIMITS.goal),
     steps: z.array(stepInput).min(1).max(CHAT_TASK_LIMITS.steps),
-    budget: z.object({ continuations: z.number().int().positive().max(CHAT_TASK_LIMITS.continuations).optional(), images: z.number().int().positive().max(CHAT_TASK_LIMITS.images).optional() }).optional().describe('Turns and images the task may use; defaults 30 and 16.'),
+    budget: z.object({ continuations: z.number().int().positive().max(CHAT_TASK_LIMITS.continuations).optional(), images: z.number().int().positive().max(CHAT_TASK_LIMITS.images).optional(), tokens: z.number().int().positive().max(CHAT_TASK_LIMITS.tokens).optional() }).optional().describe('Turns and images default to 30 and 16. Optional tokens caps cumulative input + output (including auxiliary calls), checked between automatic turns, not a hard billing cap.'),
   }) }, async ({ goal, steps, budget }) => {
     try {
       if (!chat.replyId) throw new Error('Proposals need an active chat reply.')

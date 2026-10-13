@@ -80,6 +80,42 @@ test('chat web research: settings gate, isolated runs, page text', { timeout: 60
     updateChatSettings({ webResearch: { dailyLimit: null } })
   })
 
+  await t.test('queued searches reserve the daily allowance and cancellation releases it', async () => {
+    updateChatSettings({ webResearch: { engine: 'claude', model: null, dailyLimit: 1 } })
+    let releaseBlockers!: () => void
+    let started!: () => void
+    const blocked = new Promise<void>((resolve) => { releaseBlockers = resolve })
+    const bothStarted = new Promise<void>((resolve) => { started = resolve })
+    let calls = 0
+    const runner = t.mock.method(research.researchRunners, 'claude', async () => {
+      calls += 1
+      if (calls <= 2) { if (calls === 2) started(); await blocked }
+      return { text: 'answer', tokens: null }
+    })
+    const admin = { accountId: null, accountType: 'admin' as const }
+    const blockers = ['reserve-a', 'reserve-b'].map((query) => research.researchWeb(admin, { query }))
+    try {
+      await bothStarted
+      const requester = { accountId: 45, accountType: 'guest' as const }
+      const controller = new AbortController()
+      const queued = research.researchWeb(requester, { query: 'queued' }, { signal: controller.signal })
+      await assert.rejects(research.researchWeb(requester, { query: 'over limit' }), /하루에 1번/)
+      const stopped = assert.rejects(queued, { name: 'AbortError' })
+      controller.abort()
+      await stopped
+      const replacement = research.researchWeb(requester, { query: 'replacement' })
+      releaseBlockers()
+      assert.equal(await replacement, 'answer')
+      await assert.rejects(research.researchWeb(requester, { query: 'after success' }), /하루에 1번/)
+      assert.equal(calls, 3)
+    } finally {
+      releaseBlockers()
+      await Promise.allSettled(blockers)
+      runner.mock.restore()
+      updateChatSettings({ webResearch: { dailyLimit: null } })
+    }
+  })
+
   await t.test('web_search can file its answer in a writable linked folder, and needs chat.web.use', async () => {
     const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')

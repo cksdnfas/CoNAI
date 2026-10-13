@@ -902,6 +902,12 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ok INTEGER NOT NULL DEFAULT 1
   )`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_llm_usage_events_created ON llm_usage_events(created_at)');
+  const usageColumns = new Set((db.prepare('PRAGMA table_info(llm_usage_events)').all() as Array<{ name: string }>).map((column) => column.name));
+  for (const [name, type] of Object.entries({ reply_id: 'TEXT', task_id: 'INTEGER', round: 'INTEGER', queue_ms: 'INTEGER', first_token_ms: 'INTEGER' })) {
+    if (!usageColumns.has(name)) db.exec(`ALTER TABLE llm_usage_events ADD COLUMN ${name} ${type}`);
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_llm_usage_events_reply ON llm_usage_events(reply_id) WHERE reply_id IS NOT NULL');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_llm_usage_events_task ON llm_usage_events(task_id) WHERE task_id IS NOT NULL');
   // LLM chat summaries by stretch of conversation: level 0 summarizes messages from..until, level 1 (at most one per
   // thread) is the plot folded from the older level-0 rows, which stay for recall. `codex_chat_threads.summary` keeps
   // the rendered text the model gets.

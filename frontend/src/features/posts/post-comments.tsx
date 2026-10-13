@@ -326,7 +326,32 @@ export function PostComments({ post, draft, setDraft, hideHeading = false }: { p
   const mentionNames = useMemo(() => [...new Set([...mentionable.map((profile) => profile.name), ...comments.filter((comment) => comment.author.type === 'profile').map((comment) => comment.author.name)])], [mentionable, comments])
   const open = post.commentMode === 'open' || isAdmin
   const canReply = canComment && open
-  const tops = comments.filter((comment) => comment.parentId === null)
+  const { tops, children } = useMemo(() => {
+    const tops: PostComment[] = []
+    const children = new Map<number, PostComment[]>()
+    for (const comment of comments) {
+      if (comment.parentId === null) tops.push(comment)
+      else {
+        const siblings = children.get(comment.parentId) ?? []
+        siblings.push(comment)
+        children.set(comment.parentId, siblings)
+      }
+    }
+    return { tops, children }
+  }, [comments])
+  const [visibleCount, setVisibleCount] = useState(40)
+  const [visibleReplies, setVisibleReplies] = useState<Record<number, number>>({})
+  // Deep links and assistant-opened reply/edit targets remain reachable outside the visible prefix.
+  const requiredThreads = new Set([linkedId, replyTo, draft.edit?.id].flatMap((id) => {
+    const comment = id ? byId.get(id) : undefined
+    return comment ? [comment.parentId ?? comment.id] : []
+  }))
+  const visibleTops = tops.filter((top, index) => index >= tops.length - visibleCount || requiredThreads.has(top.id))
+  const childrenFor = (id: number) => {
+    const replies = children.get(id) ?? []
+    const count = visibleReplies[id] ?? 40
+    return replies.filter((child, index) => index >= replies.length - count || child.id === linkedId || child.id === replyTo || child.id === draft.edit?.id)
+  }
   // A bot call answers in the thread of the comment that called it; finished calls show as their reply instead.
   const pendingRuns = runs.filter((run) => run.status !== 'done')
   const runsFor = (threadId: number) => pendingRuns.filter((run) => {
@@ -350,12 +375,14 @@ export function PostComments({ post, draft, setDraft, hideHeading = false }: { p
     <section className="space-y-2" aria-label={t({ ko: '댓글', en: 'Comments' })}>
       {hideHeading ? null : <h2 className="text-sm font-semibold">{t({ ko: '댓글 {count}', en: 'Comments {count}' }, { count: post.commentCount })}</h2>}
       {commentsQuery.isPending ? <div className="h-16 animate-pulse rounded-sm bg-surface-low" /> : null}
+      {tops.length > visibleCount ? <Button variant="ghost" onClick={() => setVisibleCount((count) => count + 40)}>{t({ ko: '이전 댓글 더 보기', en: 'Load earlier comments' })}</Button> : null}
       <div className={cn('divide-y divide-line', hideHeading ? (tops.length ? 'border-b border-line' : '') : 'border-y border-line')}>
-        {tops.map((top) => (
+        {visibleTops.map((top) => (
           <div key={top.id}>
             <CommentRow comment={top} quoted={null} mentionNames={mentionNames} canReply={canReply} reply={false} focused={focusedId === top.id} onReply={() => setReplyTo(top.id)} {...mentionProps(top)} {...editProps(top.id)} />
             {replyTo === top.id ? replyComposer : null}
-            {comments.filter((comment) => comment.parentId === top.id).map((child) => (
+            {(children.get(top.id)?.length ?? 0) > (visibleReplies[top.id] ?? 40) ? <Button variant="ghost" className="ml-10" onClick={() => setVisibleReplies((current) => ({ ...current, [top.id]: (current[top.id] ?? 40) + 40 }))}>{t({ ko: '이전 답글 더 보기', en: 'Load earlier replies' })}</Button> : null}
+            {childrenFor(top.id).map((child) => (
               <Fragment key={child.id}>
                 <CommentRow comment={child} quoted={child.quoteCommentId ? byId.get(child.quoteCommentId) ?? null : null} mentionNames={mentionNames} canReply={canReply} reply focused={focusedId === child.id} onReply={() => setReplyTo(child.id)} {...mentionProps(child)} {...editProps(child.id)} />
                 {replyTo === child.id ? replyComposer : null}

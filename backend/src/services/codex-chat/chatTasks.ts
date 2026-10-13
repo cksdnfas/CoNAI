@@ -12,6 +12,7 @@ import { onChatUserSend } from './chatSendEvents'
 import { CodexChatStore } from './codexChatStore'
 import { ChatProfileStore } from './chatProfiles'
 import { ChatGroupStore } from './chatGroupStore'
+import { withLlmUsageContext } from '../llmUsage'
 
 /** Extra options of a send that the person did not type: a task continuation or an automation's wake is marked so it shows as one thin line. */
 /** `choice`: the request body's answer to the chat's question card, unchecked (see readChoiceAnswer). */
@@ -69,7 +70,8 @@ export const ChatTaskStore = {
     const cleanSteps = steps.slice(0, CHAT_TASK_LIMITS.steps).map((step) => ({ title: clip(step.title, CHAT_TASK_LIMITS.stepTitle), status: 'todo' as const, ...(step.approval ? { approval: true } : {}), ...(step.assignee !== undefined ? { assignee: step.assignee } : {}) })).filter((step) => step.title)
     if (!cleanGoal || !cleanSteps.length) throw new Error('목표와 단계가 필요해.')
     const limit = (value: unknown, max: number, fallback: number) => Number.isSafeInteger(value) && (value as number) > 0 ? Math.min(value as number, max) : fallback
-    const cleanBudget = { continuations: limit(budget?.continuations, CHAT_TASK_LIMITS.continuations, CHAT_TASK_DEFAULT_BUDGET.continuations), images: limit(budget?.images, CHAT_TASK_LIMITS.images, CHAT_TASK_DEFAULT_BUDGET.images) }
+    if (budget?.tokens !== undefined && (!Number.isSafeInteger(budget.tokens) || budget.tokens <= 0 || budget.tokens > CHAT_TASK_LIMITS.tokens)) throw new Error('토큰 예산은 작업 최대 한도 이내의 양의 정수여야 해.')
+    const cleanBudget = { continuations: limit(budget?.continuations, CHAT_TASK_LIMITS.continuations, CHAT_TASK_DEFAULT_BUDGET.continuations), images: limit(budget?.images, CHAT_TASK_LIMITS.images, CHAT_TASK_DEFAULT_BUDGET.images), ...(budget?.tokens === undefined ? {} : { tokens: budget.tokens }) }
     const id = Number(table().prepare('INSERT INTO chat_tasks (thread_id, goal, steps, status, budget, used) VALUES (?, ?, ?, ?, ?, ?)').run(threadId, cleanGoal, JSON.stringify(cleanSteps), 'awaiting_plan', JSON.stringify(cleanBudget), JSON.stringify({ continuations: 0, images: 0 })).lastInsertRowid)
     const task = ChatTaskStore.find(id)!
     announce(task)
@@ -104,6 +106,8 @@ export const ChatTaskStore = {
     const current = ChatTaskStore.find(id)
     if (!current) return null
     const next = { ...current, ...patch }
+    // A request can finish while a runner is awaiting a reply. Never overwrite its newly recorded tokens.
+    if (current.used.tokens !== undefined) next.used = { ...next.used, tokens: Math.max(current.used.tokens, next.used.tokens ?? 0) }
     table().prepare("UPDATE chat_tasks SET steps = ?, status = ?, wait = ?, reason = ?, used = ?, budget = ?, updated_at = datetime('now') WHERE id = ?")
       .run(JSON.stringify(next.steps), next.status, next.status === 'waiting' ? next.wait : null, next.reason, JSON.stringify(next.used), JSON.stringify(next.budget), id)
     const task = ChatTaskStore.find(id)
@@ -189,7 +193,7 @@ function continuationText(task: ChatTask, event: string, room?: { members: Membe
     `Goal: ${task.goal}`,
     `Steps:\n${stepsText(task, room?.members)}`,
     `What just happened: ${event}`,
-    `Budget used: continuations ${task.used.continuations}/${task.budget.continuations}, images ${task.used.images}/${task.budget.images}`,
+    `Budget used: continuations ${task.used.continuations}/${task.budget.continuations}, images ${task.used.images}/${task.budget.images}${task.budget.tokens === undefined ? '' : `, tokens ${task.used.tokens ?? 0}/${task.budget.tokens} (checked between turns)`}`,
     ...(room ? [groupTurnText(room.turn, room.step)] : []),
     room
       ? 'Do your part of the plan now. Mark progress with task_update. When the next step needs the person (a card to approve, a choice) or a running generation to finish, make that happen, call task_wait and end your reply. When every step is done call task_finish. Do not ask the person things the room can do or decide within the approved plan.'
@@ -284,8 +288,13 @@ export const ChatTaskRunner = {
         if (!Number.isSafeInteger(value) || value! < task.budget[key] || value! > CHAT_TASK_LIMITS[key]) throw new Error('예산은 기존 한도 이상, 작업 최대 한도 이내의 정수여야 해.')
       }
       budget = { continuations: proposed!.continuations!, images: proposed!.images! }
+      const tokens = proposed?.tokens ?? task.budget.tokens
+      if (tokens !== undefined) {
+        if (!Number.isSafeInteger(tokens) || tokens <= 0 || tokens < (task.budget.tokens ?? 0) || tokens > CHAT_TASK_LIMITS.tokens) throw new Error('토큰 예산은 기존 한도 이상, 작업 최대 한도 이내의 양의 정수여야 해.')
+        budget.tokens = tokens
+      }
     }
-    if (used.continuations >= budget.continuations || used.images >= budget.images) {
+    if (used.continuations >= budget.continuations || used.images >= budget.images || (budget.tokens !== undefined && (used.tokens ?? 0) >= budget.tokens)) {
       const reason = '작업 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.'
       ChatTaskStore.update(task.id, { status: 'paused', used, reason })
       throw new Error(reason)
@@ -336,9 +345,10 @@ export const ChatTaskRunner = {
       ChatTaskStore.update(task.id, { status: 'failed', reason: '채팅이나 프로필, 계정을 쓸 수 없어서 멈췄어.' })
       return
     }
-    const used = { continuations: task.used.continuations, images: imagesUsed(task) }
+    const used = { ...task.used, images: imagesUsed(task) }
     if (used.continuations >= task.budget.continuations) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '이어가기 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.' }); return }
     if (used.images >= task.budget.images) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '이미지 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.' }); return }
+    if (task.budget.tokens !== undefined && (used.tokens ?? 0) >= task.budget.tokens) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '토큰 예산을 다 썼어. 예산을 늘려 승인한 뒤 이어가거나 작업을 중단해줘.' }); return }
     if (ChatTaskStore.activeMs(task.id) > ACTIVE_LIMIT_MS) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '작업 시간이 길어져서 멈췄어. 이어가려면 재개해줘.' }); return }
     if (ChatTaskStore.markProgress(task.id) >= STALL_LIMIT) { ChatTaskStore.update(task.id, { status: 'paused', used, reason: '몇 번 이어가도 진전이 없어서 멈췄어.' }); return }
     const current = task.steps.findIndex((step) => step.status === 'doing' || step.status === 'todo')
@@ -352,8 +362,9 @@ export const ChatTaskRunner = {
     const routing: ChatTaskRouting = { id: task.id, step: current >= 0 ? current + 1 : null, total: task.steps.length, title: current >= 0 ? task.steps[current].title : null, event: clip(event, 160), ...(turn ? { assignee: turn.member.id } : {}) }
     running.add(threadId)
     try {
-      if (turn) await GroupChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, { task: routing, recipients: [turn.member.id] })
-      else await CodexChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, profile?.pageAssist ? lastChatPageForThread(requester, threadId) : undefined, { task: routing })
+      await withLlmUsageContext({ taskId: task.id, threadId }, () => turn
+        ? GroupChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, { task: routing, recipients: [turn.member.id] })
+        : CodexChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, profile?.pageAssist ? lastChatPageForThread(requester, threadId) : undefined, { task: routing }))
     } catch (error) {
       // A reply already running finishes first and its end schedules the next continuation; in case it ended just
       // before, this one is given back and tried again a little later.

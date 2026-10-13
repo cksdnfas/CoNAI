@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { Worker } from 'worker_threads'
 import { SpriteError } from './spriteErrors'
+import { retainSpriteWorkspace } from './spriteCache'
 import { SPRITE_TASKS, type SpriteTaskName, type SpriteTaskPayload, type SpriteTaskResult, type TaskProgress } from './spriteTasks'
 
 /**
@@ -21,6 +22,37 @@ let worker: Worker | null = null
 let workerFailures = 0
 let nextId = 1
 const pending = new Map<number, Pending>()
+let taskActive = false
+const waitingTasks: Array<{ resolve: (release: () => void) => void; reject: (error: Error) => void; detach: () => void }> = []
+
+function releaseTaskSlot(): void {
+  const next = waitingTasks.shift()
+  if (next) {
+    next.detach()
+    next.resolve(releaseTaskSlot)
+  } else taskActive = false
+}
+
+/** All consumers share one slot, including build follow-ups and image resize. */
+async function acquireTaskSlot(signal?: AbortSignal): Promise<() => void> {
+  if (signal?.aborted) throw new SpriteError('작업이 취소되었습니다.')
+  if (!taskActive) {
+    taskActive = true
+    return releaseTaskSlot
+  }
+  if (waitingTasks.length >= 200) throw new SpriteError('스프라이트 작업이 많습니다. 잠시 뒤 다시 시도하세요.', 503)
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      const index = waitingTasks.indexOf(entry)
+      if (index >= 0) waitingTasks.splice(index, 1)
+      entry.detach()
+      reject(new SpriteError('작업이 취소되었습니다.'))
+    }
+    const entry = { resolve, reject, detach: () => signal?.removeEventListener('abort', onAbort) }
+    waitingTasks.push(entry)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
 
 function workerScript(): string | null {
   const compiled = path.join(__dirname, 'spriteWorker.js')
@@ -68,11 +100,13 @@ function getWorker(): Worker | null {
     }
   })
   created.on('error', (error) => {
+    if (worker !== created) return
     workerFailures += 1
     if (worker === created) worker = null
     failAll(error instanceof Error ? error : new Error(String(error)))
   })
   created.on('exit', (code) => {
+    if (worker !== created) return
     if (worker === created) worker = null
     if (pending.size > 0) failAll(new Error(`Sprite worker exited (${code})`))
   })
@@ -88,7 +122,21 @@ export function spriteWorkerMode(): 'worker' | 'inline' {
 const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve))
 
 /** Run one sprite task off the main thread (or inline as a fallback). Cancels through `signal`. */
-export function runSpriteTask<T extends SpriteTaskName>(
+export async function runSpriteTask<T extends SpriteTaskName>(
+  task: T,
+  payload: SpriteTaskPayload<T>,
+  options: { signal?: AbortSignal; onProgress?: (progress: TaskProgress) => void; inline?: boolean } = {},
+): Promise<SpriteTaskResult<T>> {
+  const workDir = (payload as { workDir?: string }).workDir
+  const releaseWorkspace = retainSpriteWorkspace(workDir)
+  try {
+    const release = await acquireTaskSlot(options.signal)
+    try { return await dispatchSpriteTask(task, payload, options) }
+    finally { release() }
+  } finally { releaseWorkspace() }
+}
+
+function dispatchSpriteTask<T extends SpriteTaskName>(
   task: T,
   payload: SpriteTaskPayload<T>,
   options: { signal?: AbortSignal; onProgress?: (progress: TaskProgress) => void; inline?: boolean } = {},
@@ -122,6 +170,10 @@ export function runSpriteTask<T extends SpriteTaskName>(
 export async function shutdownSpriteWorker(): Promise<void> {
   const current = worker
   worker = null
+  for (const entry of waitingTasks.splice(0)) {
+    entry.detach()
+    entry.reject(new Error('Sprite worker stopped'))
+  }
   failAll(new Error('Sprite worker stopped'))
   if (current) await current.terminate()
 }

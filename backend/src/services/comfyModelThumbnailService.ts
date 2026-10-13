@@ -218,7 +218,28 @@ function encodeComfyFilenameForRoute(modelName: string) {
   return encodeURIComponent(normalizeComfyModelOptionPath(modelName));
 }
 
+const modelLists = new Map<string, { expires: number; promise: Promise<ComfyModelFileRecord[]> }>();
+
 async function fetchModelList(serverEndpoint: string, folder: string) {
+  const key = JSON.stringify([serverEndpoint, folder]);
+  const cached = modelLists.get(key);
+  if (cached && cached.expires > Date.now()) return cached.promise;
+  const promise = loadModelList(serverEndpoint, folder);
+  const entry = { expires: Infinity, promise };
+  modelLists.delete(key);
+  modelLists.set(key, entry);
+  while (modelLists.size > 32) modelLists.delete(modelLists.keys().next().value!);
+  try {
+    const models = await promise;
+    entry.expires = Date.now() + 30_000;
+    return models;
+  } catch (error) {
+    if (modelLists.get(key) === entry) modelLists.delete(key);
+    throw error;
+  }
+}
+
+async function loadModelList(serverEndpoint: string, folder: string) {
   const response = await axios.get(`/experiment/models/${encodeURIComponent(folder)}`, {
     baseURL: serverEndpoint,
     timeout: 120_000,

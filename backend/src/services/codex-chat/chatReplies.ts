@@ -12,10 +12,10 @@ export class ChatReplyError extends Error {
   constructor(message: string, readonly status = 400) { super(message) }
 }
 
-export function requireReplyTarget(threadId: number, value: unknown, messages: CodexChatMessageRecord[] = CodexChatStore.listMessages(threadId)) {
+export function requireReplyTarget(threadId: number, value: unknown, messages?: CodexChatMessageRecord[]) {
   if (value === undefined || value === null) return null
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) throw new ChatReplyError('답장할 메시지를 다시 선택해줘.')
-  const message = messages.find((entry) => entry.id === value && entry.thread_id === threadId)
+  const message = messages ? messages.find((entry) => entry.id === value && entry.thread_id === threadId) : CodexChatStore.findMessage(threadId, value)
   if (!message) throw new ChatReplyError('답장할 메시지가 없거나 다른 방의 메시지야. 답장 대상을 다시 선택해줘.', 409)
   return message
 }

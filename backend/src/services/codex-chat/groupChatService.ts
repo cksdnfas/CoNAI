@@ -56,6 +56,7 @@ type Delivery = { profileId: number; sourceMessageId: number }
  */
 type GroupRun = {
   threadId: number
+  controller: AbortController
   /** Set by stop(): no further member is woken. */
   stopped: boolean
   /** Members answering now, in the order they started. */
@@ -298,7 +299,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     let displayContent: string | null = null
     if (reply.status === 'completed' && content && hasTranslation(profile)) {
       emit(run, { type: 'translating', profileId: profile.id })
-      displayContent = await translateReply(profile, content, controller.signal, userPersonaForThread(thread).name, { threadId: thread.id })
+      displayContent = await translateReply(profile, content, controller.signal, userPersonaForThread(thread).name, { threadId: thread.id, replyId })
     }
     if (replacingMessageId) {
       // A connection failure must not replace a usable answer with an empty failed alternative.
@@ -361,7 +362,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         chatContext: context,
         buildMessages: async (tools, onMeta, judged, useSession) => {
           if (inSession) {
-            const turn = await buildClaudeGroupSessionTurn({ requester, thread, members, profile, messages, routing: active.routing, windowLimit: limits.window, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), attachmentTexts, attachedImages, runtime: sessionRuntime ?? 'claude', judged })
+            const turn = await buildClaudeGroupSessionTurn({ requester, thread, members, profile, messages, routing: active.routing, windowLimit: limits.window, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), attachmentTexts, attachedImages, runtime: sessionRuntime ?? 'claude', judged, signal: controller.signal })
             useSession(turn.session)
             onMeta(turn.contextMeta)
             return turn.messages
@@ -466,7 +467,7 @@ async function startRun(threadId: number, listener: (event: CodexChatStreamEvent
   if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: () => void = () => {}
   const run: GroupRun = {
-    threadId, stopped: false, active: new Map(), queue: [], chain: true,
+    threadId, controller: new AbortController(), stopped: false, active: new Map(), queue: [], chain: true,
     chainLimit: groupLimitsOf(CodexChatStore.findThreadById(threadId)!).chain, chainUsed: 0, reserved: new Map(), judging: null,
     judgeDecides: Boolean(roomJudgeSetup(CodexChatStore.findThreadById(threadId)!)?.preset.room.next.enabled),
     listeners: new Set([listener]), finished: new Promise((resolve) => { resolveFinished = resolve }),
@@ -594,13 +595,14 @@ export const GroupChatService = {
     const judgeRoutes = !options.recipients && unaddressed(thread, trimmed, routing)
     LlmChatService.skipReaction(threadId)
     skipThreadGenerationReactions(threadId)
-    // The members read the message in English; the reader keeps their own words. The app's own task text is English.
-    const modelText = options.task ? null : await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed, undefined, { threadId })
     if (!automatic) await GroupChatService.stop(threadId)
     // The person's own message answers a task waiting for them (see ChatTaskRunner).
     if (!automatic) notifyChatUserSend(threadId, false)
 
     await startRun(threadId, listener, async (run) => {
+      // Reserve the room before translation so stop() also cancels preparation.
+      const modelText = options.task ? null : await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed, run.controller.signal, { threadId })
+      run.controller.signal.throwIfAborted()
       if (typeof options.chainLimit === 'number' && options.chainLimit >= 0) run.chainLimit = Math.min(run.chainLimit, Math.floor(options.chainLimit))
       if (routing.replyTo) requireReplyTarget(threadId, routing.replyTo.messageId)
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
@@ -651,9 +653,9 @@ export const GroupChatService = {
     const routing = message.routing ?? { replyTo: null, recipients: [] }
     routing.recipients = userRecipients(requester, thread, trimmed, routing)
     const judgeRoutes = unaddressed(thread, trimmed, routing)
-    const modelText = await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed, undefined, { threadId })
-    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     await startRun(threadId, listener, async (run) => {
+      const modelText = await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed, run.controller.signal, { threadId })
+      run.controller.signal.throwIfAborted()
       CodexChatStore.editUserMessage(threadId, messageId, modelText ?? trimmed, modelText ? trimmed : null)
       CodexChatStore.setMessageRouting(threadId, messageId, routing)
       resetCodexMemory(requester, threadId)
@@ -695,6 +697,7 @@ export const GroupChatService = {
     const run = runs.get(threadId)
     if (!run) return
     run.stopped = true
+    run.controller.abort()
     run.queue = []
     run.reserved.clear()
     run.judging?.abort()

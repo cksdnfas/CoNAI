@@ -1,3 +1,4 @@
+import { readPageSettings, verifyPageSettingsWrite } from '../../services/pageSettings';
 import { Router, Request, Response } from 'express';
 import type { EmbeddingServerStatus, EmbeddingSettings } from '@conai/shared';
 import { asyncHandler } from '../../middleware/asyncHandler';
@@ -72,6 +73,7 @@ router.put(
     if (patch.autoUnloadMinutes !== undefined) next.autoUnloadMinutes = patch.autoUnloadMinutes;
 
     const previous = settingsService.loadSettings().embedding;
+    if (!verifyPageSettingsWrite(res)) return;
     const updated = settingsService.updateEmbeddingSettings(next).embedding;
     resetEmbeddingBackoff();
     if (previous.enabled && !updated.enabled) {
@@ -83,7 +85,7 @@ router.put(
       }
       semanticIndexer.poke();
     }
-    res.json({ success: true, data: { settings: updated, status: await embeddingStatus() } });
+    res.json({ success: true, data: { settings: updated, status: await embeddingStatus(), pageSettingsRevisions: { embedding: readPageSettings('embedding').revision } } });
   })
 );
 

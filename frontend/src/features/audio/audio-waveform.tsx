@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { audioCandidateFileUrl } from '@/lib/api-audio'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 
 /**
  * Waveforms are decoded in the browser from the take's own file (no server thumbnails): peaks are computed once per
  * file hash, cached for the session, and at most two files decode at a time.
  */
 const PEAK_COUNT = 800
-const peakCache = new Map<string, Promise<Float32Array>>()
+type AudioWaveform = { peaks: Float32Array; editorPeaks: Float32Array; duration: number }
+type WaveformLoad = { promise: Promise<AudioWaveform>; controller: AbortController; users: number; settled: boolean }
+const peakCache = new Map<string, WaveformLoad>()
 const MAX_CACHE = 400
 let active = 0
 const waiting: Array<() => void> = []
@@ -21,12 +24,13 @@ function context(): AudioContext {
 
 async function slot<T>(work: () => Promise<T>): Promise<T> {
   if (active >= 2) await new Promise<void>((resolve) => waiting.push(resolve))
-  active += 1
+  else active += 1
   try {
     return await work()
   } finally {
-    active -= 1
-    waiting.shift()?.()
+    const next = waiting.shift()
+    if (next) next()
+    else active -= 1
   }
 }
 
@@ -50,27 +54,51 @@ export function computePeaks(buffer: AudioBuffer, count = PEAK_COUNT): Float32Ar
   return peaks
 }
 
-/** Decode a take once per file hash. `src` overrides where the bytes come from (e.g. the owner-scoped history route). */
-export function loadPeaks(candidateId: string, fileHash: string, src?: string): Promise<Float32Array> {
-  const cached = peakCache.get(fileHash)
-  if (cached) return cached
-  const promise = slot(async () => {
-    const response = await fetch(src ?? audioCandidateFileUrl(candidateId), { credentials: 'include' })
-    if (!response.ok) throw new Error(`waveform ${response.status}`)
-    const buffer = await context().decodeAudioData(await response.arrayBuffer())
-    return computePeaks(buffer)
+/** Lists and the editor share one decode; only peaks and duration stay cached, scoped to the account and source URL. */
+export function loadAudioWaveform(candidateId: string, fileHash: string, options: { scope: string; src?: string; signal?: AbortSignal }): Promise<AudioWaveform> {
+  const signal = options.signal
+  if (signal?.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'))
+  const url = options.src ?? audioCandidateFileUrl(candidateId)
+  const key = JSON.stringify([options.scope, fileHash, url])
+  let entry = peakCache.get(key)
+  if (!entry) {
+    const controller = new AbortController()
+    const created: WaveformLoad = { controller, users: 0, settled: false, promise: null! }
+    created.promise = slot(async () => {
+      controller.signal.throwIfAborted()
+      const response = await fetch(url, { credentials: 'include', signal: controller.signal })
+      if (!response.ok) throw new Error(`waveform ${response.status}`)
+      const buffer = await context().decodeAudioData(await response.arrayBuffer())
+      controller.signal.throwIfAborted()
+      return { peaks: computePeaks(buffer), editorPeaks: computePeaks(buffer, 1600), duration: buffer.duration }
+    }).then((result) => { created.settled = true; return result }, (error: unknown) => {
+      created.settled = true
+      if (peakCache.get(key) === created) peakCache.delete(key)
+      throw error
+    })
+    peakCache.set(key, created)
+    if (peakCache.size > MAX_CACHE) peakCache.delete(peakCache.keys().next().value as string)
+    entry = created
+  }
+  const shared = entry
+  shared.users += 1
+  return new Promise((resolve, reject) => {
+    let released = false
+    const release = () => {
+      if (released) return false
+      released = true
+      signal?.removeEventListener('abort', onAbort)
+      shared.users -= 1
+      if (!shared.users && !shared.settled) {
+        shared.controller.abort()
+        if (peakCache.get(key) === shared) peakCache.delete(key)
+      }
+      return true
+    }
+    const onAbort = () => { if (release()) reject(new DOMException('Aborted', 'AbortError')) }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    shared.promise.then((result) => { if (release()) resolve(result) }, (error: unknown) => { if (release()) reject(error) })
   })
-  promise.catch(() => peakCache.delete(fileHash))
-  peakCache.set(fileHash, promise)
-  if (peakCache.size > MAX_CACHE) peakCache.delete(peakCache.keys().next().value as string)
-  return promise
-}
-
-/** Decode the full buffer (editor panel needs the duration and finer peaks). */
-export async function loadAudioBuffer(url: string, signal?: AbortSignal): Promise<AudioBuffer> {
-  const response = await fetch(url, { credentials: 'include', signal })
-  if (!response.ok) throw new Error(`audio ${response.status}`)
-  return await context().decodeAudioData(await response.arrayBuffer())
 }
 
 export function drawPeaks(canvas: HTMLCanvasElement, peaks: Float32Array | null, options: { progress?: number; ghost?: boolean; bar?: number; gap?: number }) {
@@ -112,6 +140,8 @@ export function drawPeaks(canvas: HTMLCanvasElement, peaks: Float32Array | null,
 /** Small waveform for list rows and chat cards; decodes when it scrolls into view. */
 export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = false, className, duration = 0, onSeek, onToggle }: { candidateId: string; fileHash: string; src?: string; progress?: number; ghost?: boolean; className?: string; duration?: number; onSeek?: (seconds: number) => void; onToggle?: () => void }) {
   const { t } = useI18n()
+  const auth = useAuthStatusQuery()
+  const scope = JSON.stringify([auth.data?.accountId, auth.data?.hasCredentials, auth.data?.permissionKeys])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
   const [visible, setVisible] = useState(false)
@@ -131,10 +161,11 @@ export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = fa
 
   useEffect(() => {
     if (!visible || ghost) return
-    let cancelled = false
-    loadPeaks(candidateId, fileHash, src).then((value) => { if (!cancelled) setPeaks(value) }).catch(() => undefined)
-    return () => { cancelled = true }
-  }, [visible, ghost, candidateId, fileHash, src])
+    const controller = new AbortController()
+    setPeaks(null)
+    loadAudioWaveform(candidateId, fileHash, { src, scope, signal: controller.signal }).then((value) => { if (!controller.signal.aborted) setPeaks(value.peaks) }).catch(() => undefined)
+    return () => controller.abort()
+  }, [visible, ghost, candidateId, fileHash, src, scope])
 
   useEffect(() => {
     const canvas = canvasRef.current

@@ -348,7 +348,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
 | --- | --- | --- | --- |
 | `list_audio_projects` | 프로젝트와 그룹·후보 수, 프로젝트별 받은 파일 그룹 ID | `read` | `audio.view` |
-| `list_audio_groups` | 프로젝트의 그룹, 설명·대표 프롬프트, 폴더, 파일명 규칙(`label`), 채택·코멘트 수 | `read` | `audio.view` |
+| `list_audio_groups` | 프로젝트의 그룹, 설명·대표 프롬프트, 폴더, 파일명 규칙(`label`), 채택·코멘트 수. `project_id`를 생략하면 모든 프로젝트를 같은 검색·필터로 조회 | `read` | `audio.view` |
 | `list_audio_folders` | 프로젝트의 폴더(화면의 그룹)와 폴더별 효과음 수 | `read` | `audio.view` |
 | `list_audio_candidates` | 그룹의 후보 목록(검수 상태, 길이, 출처) | `read` | `audio.view` |
 | `get_audio_candidate` | 후보 하나의 출처(프롬프트, seed, 워크플로, 서버)와 검수 메모 | `read` | `audio.view` |
@@ -380,6 +380,8 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 라이브러리 영상(또는 애니메이션 GIF/WebP)에서 프레임을 뽑아 스프라이트 시트를 만드는 도구입니다. 결과는 기본으로 라이브러리 "스프라이트" 그룹에 저장되고 `composite_hash`로 돌아옵니다. 입력 영상은 `composite_hash` 또는 `data_url`(video/*, 최대 50MB)입니다.
 
+정규화는 최대 500개 시트를 처리합니다. 큰 결과도 `get_sprite_job`에서 전체 결과를 조회할 수 있으며, 작업 결과 정보는 24시간 보존합니다. 시트·애니메이션·프레임 ZIP의 임시 다운로드 파일은 별도 작업 폴더 수명(마지막 사용 후 약 1시간)에 따릅니다. 라이브러리 저장 중 취소하면 완료한 저장은 유지하고 다음 시트부터 멈춥니다.
+
 | Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
 | --- | --- | --- | --- |
 | `get_video_info` | 영상 크기, fps, 길이, 프레임 수 | `read` | `images.view` |
@@ -392,6 +394,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `create_sprite_animation` | 시트를 WebP(기본)·GIF·MP4 애니메이션으로 | `generate` | `images.edit` + `images.upload` |
 
 - 지정색은 최대 8개입니다. 디스필은 색 1개일 때만 켤 수 있고, 마젠타 `#FF00FF`는 원래 도구와 같은 알고리즘입니다.
+- 한 영상의 추출은 최대 256장입니다. 간격으로 계산한 요청 장수를 중복 프레임 제거 전에 검사하며, 화면 미리보기도 같은 제한을 사용합니다. 개수 추출은 선택한 구간에 실제로 있는 프레임 수를 넘을 수 없습니다.
 - `extract_sprite_sheet`는 일정 시간 안에 끝나면 결과 해시를 바로 돌려주고, 길어지면 `job_id`를 돌려줍니다.
 - 끝난 작업에는 저장된 결과마다 다운로드 링크(`downloads`)가 붙습니다. 배치는 요청 순서대로 `items`에 원본 영상(`video_hash`, 라이브러리 파일명 `video_name`)과 시트(`sheet_hash`, `download`) 또는 실패 사유(`error`)를 짝지어 주고, `zip: true`로 요청했으면 `zip_download`로 시트 전부와 매니페스트를 한 번에 받을 수 있습니다.
 - 링크가 만료되면 `get_media_download`(시트·애니메이션) 또는 `refresh_artifact_download`로 새로 받습니다.

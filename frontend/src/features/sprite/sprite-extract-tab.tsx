@@ -33,7 +33,7 @@ import {
 } from '@/lib/api-sprite'
 import { cn } from '@/lib/utils'
 import { LibraryResults } from './sprite-library'
-import { MAX_SPRITE_FRAMES, estimateFrameIndices, extractSignature, formFromOptions, normalizeHex, resolvedEndTime, resolvedStartTime, toExtractOptions, type ExtractForm, type OutputForm, type SaveForm } from './sprite-options'
+import { MAX_SPRITE_FRAMES, estimateFrameSelection, extractSignature, formFromOptions, normalizeHex, resolvedEndTime, resolvedStartTime, toExtractOptions, type ExtractForm, type OutputForm, type SaveForm } from './sprite-options'
 import { SpritePresetMenu } from './sprite-presets'
 import { MAX_QUEUE_VIDEOS, SpriteQueue } from './sprite-queue'
 import { SpriteResultPanel } from './sprite-result-panel'
@@ -141,15 +141,16 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
     return new Map(items.map((item) => [item.videoHash, item]))
   }, [batchJobId, liveItems.data, batchResult, videoHashes])
 
-  const indices = useMemo(() => estimateFrameIndices(form, info), [form, info])
+  const sampling = useMemo(() => estimateFrameSelection(form, info), [form, info])
   const signature = extractSignature(selected, form)
   const stale = Boolean(build) && buildSignature !== signature
   const batchRunning = Boolean(batchJobId)
   const previewRunning = Boolean(previewJobId)
-  const tooMany = indices.length > MAX_SPRITE_FRAMES
+  const tooMany = sampling?.problem === 'frame_limit' || sampling?.problem === 'count_range'
+  const samplingError = sampling?.problem && !tooMany ? t({ ko: '추출 구간·간격·개수를 확인해. 구간에 있는 프레임 수보다 많이 뽑을 수 없어.', en: 'Check the range, interval and count. The count cannot exceed the frames available in the range.' }) : null
   const canEdit = has('images.edit')
   const canUpload = has('images.upload')
-  const canPreview = canEdit && Boolean(info) && !tooMany && !previewRunning && !batchRunning && !starting
+  const canPreview = canEdit && Boolean(info) && !sampling?.problem && !previewRunning && !batchRunning && !starting
   const canRunAll = canEdit && canUpload && videoHashes.length > 0 && !batchRunning && !starting
 
   const preview = async () => {
@@ -290,7 +291,7 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
               preCrop={form.preCrop}
               onPreCropChange={(rect) => setForm((current) => ({ ...current, preCrop: rect }))}
             />
-            <RangeControls form={form} setForm={(next) => { setForm(next); setPresetId(null) }} frameCount={indices.length} tooMany={tooMany} currentTime={() => Number((videoRef.current?.currentTime() ?? 0).toFixed(3))} maxTime={info.lastFrameTime} />
+            <RangeControls form={form} setForm={(next) => { setForm(next); setPresetId(null) }} frameCount={tooMany ? sampling?.requested ?? 0 : sampling?.indices.length ?? 0} tooMany={tooMany} samplingError={samplingError} currentTime={() => Number((videoRef.current?.currentTime() ?? 0).toFixed(3))} maxTime={info.lastFrameTime} />
           </>
         ) : (
           <div className="flex h-40 items-center justify-center rounded-sm bg-surface-low text-muted-foreground">
@@ -395,11 +396,12 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
 }
 
 /** Range under the player: the whole video, or the same start/end seconds for every video. */
-function RangeControls({ form, setForm, frameCount, tooMany, currentTime, maxTime }: {
+function RangeControls({ form, setForm, frameCount, tooMany, samplingError, currentTime, maxTime }: {
   form: ExtractForm
   setForm: (next: ExtractForm) => void
   frameCount: number
   tooMany: boolean
+  samplingError: string | null
   currentTime: () => number
   maxTime: number
 }) {
@@ -430,6 +432,7 @@ function RangeControls({ form, setForm, frameCount, tooMany, currentTime, maxTim
         </div>
       ) : null}
       {tooMany ? <div role="alert" className="text-xs text-destructive">{t({ ko: '프레임은 {max}개까지야. 간격을 늘리거나 구간을 줄여.', en: 'Up to {max} frames. Widen the interval or shorten the range.' }, { max: MAX_SPRITE_FRAMES })}</div> : null}
+      {samplingError ? <div role="alert" className="text-xs text-destructive">{samplingError}</div> : null}
     </div>
   )
 }

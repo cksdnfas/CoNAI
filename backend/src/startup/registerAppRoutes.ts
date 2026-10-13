@@ -11,6 +11,7 @@ import negativePromptGroupRoutes from '../routes/negativePromptGroups';
 import { groupRoutes } from '../routes/groups';
 import autoFolderGroupRoutes from '../routes/autoFolderGroups';
 import { settingsRoutes } from '../routes/settings';
+import { pageSettingsRoutes } from '../routes/page-settings.routes';
 import { workflowRoutes } from '../routes/workflows';
 import { comfyuiServerRoutes } from '../routes/comfyuiServers';
 import { customDropdownListRoutes } from '../routes/customDropdownLists';
@@ -255,6 +256,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   });
   app.use('/api/runtime-media-settings', options.readOnlyLimiter, allowReadAccess([IMAGE_VIEW_PERMISSION]), runtimeMediaSettingsRoutes);
   app.use('/api/settings', requireAdmin, settingsRoutes);
+  app.use('/api/page-settings', pageSettingsRoutes);
   app.use('/api/workflow-input-assets', options.uploadLimiter, requireAuth, workflowInputAssetRoutes);
   app.use('/api/workflows', options.readOnlyLimiter, requireReadAccess('workflows.view'), workflowRoutes);
   app.use('/api/public-workflows', requireAuth, publicWorkflowRoutes);

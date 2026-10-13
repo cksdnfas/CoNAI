@@ -210,6 +210,12 @@ export const listAudioGroups = (projectId: string, options: { search?: string; f
   return requestApiData<AudioGroup[]>(`/api/audio/projects/${enc(projectId)}/groups${query ? `?${query}` : ''}`)
 }
 export const getAudioGroup = (id: string) => requestApiData<AudioGroup>(`/api/audio/groups/${enc(id)}`)
+export const searchAudioGroups = (options: { search?: string; filter?: AudioGroupFilter | null }, signal?: AbortSignal) => {
+  const params = new URLSearchParams()
+  if (options.search?.trim()) params.set('search', options.search.trim())
+  if (options.filter) params.set('filter', options.filter)
+  return requestApiData<AudioGroup[]>(`/api/audio/groups?${params}`, { signal })
+}
 export const createAudioGroup = (projectId: string, input: { name: string; label: string; description?: string; prompt?: string; folder_id?: string | null }) => requestApiData<AudioGroup>(`/api/audio/projects/${enc(projectId)}/groups`, body(input))
 export const updateAudioGroup = (id: string, input: { name?: string; label?: string; description?: string; prompt?: string; folder_id?: string | null }) => requestApiData<AudioGroup>(`/api/audio/groups/${enc(id)}`, body(input, 'PATCH'))
 export const deleteAudioGroup = (id: string) => requestApiData<unknown>(`/api/audio/groups/${enc(id)}`, { method: 'DELETE' })

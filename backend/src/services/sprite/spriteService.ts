@@ -1,9 +1,10 @@
 import fs from 'fs'
 import path from 'path'
+import { randomUUID } from 'crypto'
 import { RuntimeJobRunner, type RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner'
 import { RuntimeJobStore } from '../runtimeJobs/runtimeJobStore'
 import { isRuntimeJobTerminalStatus, type RuntimeJobKind, type RuntimeJobRecord } from '../../types/runtimeJob'
-import { readBuildMeta, writeZip, type SpriteBuildMeta } from './spriteBuild'
+import { readBuildMeta, writeZip, type SpriteBuildMeta, type SpriteZipEntry } from './spriteBuild'
 import { canAccessSpriteWorkspace, createSpriteWorkspace, getSpriteWorkspace, removeSpriteWorkspace, workspaceFile, type SpriteWorkspace } from './spriteCache'
 import { spriteOptionsXmp } from './spriteEncode'
 import { SpriteError } from './spriteErrors'
@@ -14,7 +15,7 @@ import { resolveExtractOptions, validateExtractOptions, validateImageOutput, typ
 import type { Rect } from './spritePixels'
 import { findLibraryMedia, requireLibraryImage, requireLibraryVideo, saveSpriteOutputToLibrary, type SpriteGroupTarget } from './spriteLibrary'
 import { runSpriteTask } from './spriteWorkerClient'
-import type { RenderSpec } from './spriteTasks'
+import { spriteSheetSettings, type RenderSpec } from './spriteTasks'
 
 /**
  * Sprite operations shared by the REST routes and the MCP tools: start runtime jobs, look up build workspaces with
@@ -93,13 +94,20 @@ let lane: Promise<void> = Promise.resolve()
 async function inLane<T>(ctx: RuntimeJobContext<unknown>, run: () => Promise<T>): Promise<T> {
   const previous = lane
   let release!: () => void
-  lane = new Promise<void>((resolve) => { release = resolve })
+  const finished = new Promise<void>((resolve) => { release = resolve })
+  // A cancelled waiter releases its own turn, never the unfinished predecessor's turn.
+  lane = previous.then(() => finished)
+  let cancelWait!: () => void
+  const cancelled = new Promise<void>((resolve) => { cancelWait = resolve })
+  ctx.signal.addEventListener('abort', cancelWait, { once: true })
   try {
+    ctx.throwIfCancelled()
     ctx.flush({ phase: 'waiting', message: '앞선 스프라이트 작업을 기다리는 중' })
-    await Promise.race([previous, new Promise<void>((resolve) => ctx.signal.addEventListener('abort', () => resolve(), { once: true }))])
+    await Promise.race([previous, cancelled])
     ctx.throwIfCancelled()
     return await run()
   } finally {
+    ctx.signal.removeEventListener('abort', cancelWait)
     release()
   }
 }
@@ -137,24 +145,11 @@ export interface ExtractJobResult {
   saved: { compositeHash: string; groupId: number } | null
 }
 
-function settingsRecord(meta: SpriteBuildMeta, render: RenderSpec) {
-  return {
-    kind: 'sprite-sheet',
-    version: 1,
-    source: meta.source,
-    video: { width: meta.video.width, height: meta.video.height, fps: meta.video.fps, frameCount: meta.video.frameCount },
-    frameIndices: meta.keptFrameIndices,
-    options: meta.options,
-    render,
-    createdAt: new Date().toISOString(),
-  }
-}
-
 /** Render a build with the settings XMP and save it to the library. */
 export async function saveBuildSheet(workspace: SpriteWorkspace, meta: SpriteBuildMeta, render: RenderSpec, group: SpriteGroupTarget | undefined, signal?: AbortSignal) {
-  const output = workspaceFile(workspace, `save-${Date.now()}.${render.format}`)
+  const output = workspaceFile(workspace, `save-${randomUUID()}.${render.format}`)
   try {
-    await runSpriteTask('render', { workDir: workspace.dir, render, output, xmp: spriteOptionsXmp(settingsRecord(meta, render)) }, { signal })
+    await runSpriteTask('render', { workDir: workspace.dir, render, output, xmp: spriteOptionsXmp(spriteSheetSettings(meta, render)) }, { signal })
     return await saveSpriteOutputToLibrary({ bytes: fs.readFileSync(output), extension: render.format, mimeType: `image/${render.format}`, group })
   } finally {
     fs.rmSync(output, { force: true })
@@ -165,6 +160,7 @@ async function runExtract(params: ExtractJobParams, ctx: RuntimeJobContext<unkno
   const media = requireLibraryVideo(params.videoHash)
   const options = resolveExtractOptions(params.options)
   const render = resolveRender(params.render, { format: options.outputFormat, quality: options.outputQuality, columns: options.columns, spacing: options.spacing })
+  const video = await probeVideo(media.filePath, ctx.signal)
   const workspace = createSpriteWorkspace('build', params.requester)
   try {
     const { meta, sheet } = await runSpriteTask('extract', {
@@ -175,13 +171,15 @@ async function runExtract(params: ExtractJobParams, ctx: RuntimeJobContext<unkno
       sourceName: media.name,
       requestedByAccountId: params.requester.accountId,
       options,
+      video,
       frameIndicesOverride: params.frameIndices,
       render,
     }, { signal: ctx.signal, onProgress })
     let saved: ExtractJobResult['saved'] = null
     if (params.save) {
       ctx.flush({ phase: 'save' })
-      saved = await saveBuildSheet(workspace, meta, render, params.save, ctx.signal)
+      ctx.throwIfCancelled()
+      saved = await saveSpriteOutputToLibrary({ bytes: fs.readFileSync(sheet.file), extension: sheet.format, mimeType: `image/${sheet.format}`, group: params.save })
     }
     return {
       buildId: workspace.id,
@@ -278,7 +276,7 @@ async function writeBatchZip(params: ExtractBatchJobParams, items: ExtractBatchI
   if (saved.length === 0) return null
   const workspace = createSpriteWorkspace('batch', params.requester)
   const used = new Map<string, number>()
-  const entries: Array<{ name: string; data: Buffer }> = []
+  const entries: SpriteZipEntry[] = []
   const manifest: Array<Record<string, unknown>> = []
   for (const item of items) {
     const video = findLibraryMedia(item.videoHash)
@@ -291,7 +289,7 @@ async function writeBatchZip(params: ExtractBatchJobParams, items: ExtractBatchI
     const count = (used.get(stem.toLowerCase()) ?? 0) + 1
     used.set(stem.toLowerCase(), count)
     const name = `${stem}${count > 1 ? `-${count}` : ''}${path.extname(sheet.filePath).toLowerCase()}`
-    entries.push({ name, data: await fs.promises.readFile(sheet.filePath) })
+    entries.push({ name, file: sheet.filePath })
     manifest.push({ video: video?.name ?? item.videoHash, status: item.status, file: name, compositeHash: item.compositeHash, frameCount: item.frameCount, sheet: item.sheet })
   }
   entries.push({ name: 'batch-manifest.json', data: Buffer.from(JSON.stringify({ createdAt: new Date().toISOString(), options: resolveExtractOptions(params.options), render: params.render ?? null, items: manifest }, null, 2)) })
@@ -395,14 +393,19 @@ async function runNormalize(params: NormalizeJobParams, ctx: RuntimeJobContext<u
     const settings = params.save ? { kind: 'sprite-normalized', version: 1, options, createdAt: new Date().toISOString() } : undefined
     const result = await runSpriteTask('normalize', { workDir: workspace.dir, sources, options, bulk, settings }, { signal: ctx.signal, onProgress: progressReporter(ctx) })
     const sheets: NormalizeJobResult['sheets'] = []
+    ctx.throwIfCancelled()
+    if (params.save) ctx.flush({ phase: 'save', total: params.sheets.length, processed: result.failures.length, succeeded: 0, failed: result.failures.length })
     for (const sheet of result.sheets) {
+      ctx.throwIfCancelled()
       let compositeHash: string | undefined
       if (params.save) {
         const extension = path.extname(sheet.outputFilename).slice(1)
         compositeHash = (await saveSpriteOutputToLibrary({ bytes: fs.readFileSync(sheet.file), extension, mimeType: `image/${extension}`, group: params.save })).compositeHash
       }
       sheets.push({ source: String(sheet.metadata.source), outputFilename: sheet.outputFilename, width: sheet.width, height: sheet.height, compositeHash, warnings: sheet.metadata.warnings })
+      if (params.save) ctx.report({ processed: sheets.length + result.failures.length, succeeded: sheets.length })
     }
+    ctx.throwIfCancelled()
     return {
       workspaceId: workspace.id,
       sheets,
@@ -442,11 +445,13 @@ async function runAnimation(params: AnimationJobParams, ctx: RuntimeJobContext<u
     const xmp = spriteOptionsXmp({ kind: 'sprite-animation', version: 1, source: { compositeHash: media.compositeHash, name: media.name }, options, createdAt: new Date().toISOString() })
     ctx.flush({ phase: 'animation' })
     const result = await runSpriteTask('animation', { sheetPath: media.filePath, options, output, xmp }, { signal: ctx.signal })
+    ctx.throwIfCancelled()
     let saved: AnimationJobResult['saved'] = null
     if (params.save) {
       ctx.flush({ phase: 'save' })
       saved = await saveSpriteOutputToLibrary({ bytes: fs.readFileSync(output), extension: result.extension, mimeType: ANIMATION_MIME[options.outputFormat], group: params.save })
     }
+    ctx.throwIfCancelled()
     return { workspaceId: workspace.id, fileName, mimeType: result.mimeType, frameCount: result.frameCount, frameWidth: result.frameWidth, frameHeight: result.frameHeight, saved }
   } catch (error) {
     removeSpriteWorkspace(workspace.id)
@@ -554,12 +559,17 @@ export function buildSummary(meta: SpriteBuildMeta) {
   }
 }
 
-export async function renderBuildSheet(buildId: string, input: RenderInput, requester: SpriteRequester) {
+export async function renderBuildSheet(buildId: string, input: RenderInput, requester: SpriteRequester, signal?: AbortSignal) {
   const { workspace, meta } = requireBuild(buildId, requester)
   const render = resolveRender(input, { format: meta.options.outputFormat, quality: meta.options.outputQuality, columns: meta.options.columns, spacing: meta.options.spacing })
   const output = workspaceFile(workspace, `render-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${render.format}`)
-  const rendered = await runSpriteTask('render', { workDir: workspace.dir, render, output })
-  return { ...rendered, mimeType: `image/${render.format}` }
+  try {
+    const rendered = await runSpriteTask('render', { workDir: workspace.dir, render, output }, { signal })
+    return { ...rendered, mimeType: `image/${render.format}` }
+  } catch (error) {
+    await fs.promises.rm(output, { force: true }).catch(() => undefined)
+    throw error
+  }
 }
 
 export async function saveBuild(buildId: string, input: RenderInput, group: SpriteGroupTarget | undefined, requester: SpriteRequester) {
@@ -568,19 +578,24 @@ export async function saveBuild(buildId: string, input: RenderInput, group: Spri
   return saveBuildSheet(workspace, meta, render, group)
 }
 
-export async function buildFramesZip(buildId: string, input: { crop?: Rect | null; format?: SpriteImageFormat; quality?: number; stem?: string }, requester: SpriteRequester) {
+export async function buildFramesZip(buildId: string, input: { crop?: Rect | null; format?: SpriteImageFormat; quality?: number; stem?: string }, requester: SpriteRequester, signal?: AbortSignal) {
   const { workspace, meta } = requireBuild(buildId, requester)
   const image = validateImageOutput(input.format ?? 'png', input.quality ?? 90)
   const stem = (input.stem || path.parse(meta.source.name ?? 'sprite').name || 'sprite').replace(/[^\p{L}\p{N}._-]+/gu, '_').slice(0, 80) || 'sprite'
   // A unique name per request: the REST route deletes its copy after streaming, the MCP artifact keeps its own.
   const output = workspaceFile(workspace, `${stem}-frames-${Math.random().toString(36).slice(2, 8)}.zip`)
-  const { frameCount } = await runSpriteTask('framesZip', { workDir: workspace.dir, crop: input.crop ?? null, format: image.format as SpriteImageFormat, quality: image.quality, stem, output })
-  return { file: output, fileName: `${stem}.zip`, workspaceId: workspace.id, frameCount }
+  try {
+    const { frameCount } = await runSpriteTask('framesZip', { workDir: workspace.dir, crop: input.crop ?? null, format: image.format as SpriteImageFormat, quality: image.quality, stem, output }, { signal })
+    return { file: output, fileName: `${stem}.zip`, workspaceId: workspace.id, frameCount }
+  } catch (error) {
+    await fs.promises.rm(output, { force: true }).catch(() => undefined)
+    throw error
+  }
 }
 
-export async function buildFramePreview(buildId: string, index: number, maxSide: number, requester: SpriteRequester) {
+export async function buildFramePreview(buildId: string, index: number, maxSide: number, requester: SpriteRequester, signal?: AbortSignal) {
   const { workspace } = requireBuild(buildId, requester)
-  const { png } = await runSpriteTask('preview', { workDir: workspace.dir, index, maxSide: Math.min(1024, Math.max(16, maxSide)) }, { inline: true })
+  const { png } = await runSpriteTask('preview', { workDir: workspace.dir, index, maxSide: Math.min(1024, Math.max(16, maxSide)) }, { signal })
   return Buffer.from(png.buffer, png.byteOffset, png.byteLength)
 }
 

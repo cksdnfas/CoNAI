@@ -1,3 +1,4 @@
+import type { PageSettingsVersions } from '@conai/shared'
 import type {
   AppSettings,
   GeneralSettings,
@@ -8,7 +9,7 @@ import { fetchJson } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 
 export async function getAppSettings() {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings')
+  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings')
   if (!response.success) {
     throw createApiFallbackError(response.error, 'settings.app.load')
   }
@@ -23,10 +24,10 @@ export async function getPublicHeaderNavigationSettings() {
   return response.data
 }
 
-export async function updateGeneralSettings(settings: Partial<GeneralSettings>) {
-  const response = await fetchJson<ApiResponse<AppSettings>>('/api/settings/general', {
+export async function updateGeneralSettings(settings: Partial<GeneralSettings>, revision?: string) {
+  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/general', {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   })
   if (!response.success) {

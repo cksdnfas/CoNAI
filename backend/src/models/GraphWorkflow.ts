@@ -223,15 +223,17 @@ export class GraphWorkflowModel {
   }
 
   /** List `{ id, name }` entries only, for reservation/header label maps (WF-2). */
-  static findNameEntries(activeOnly = false): GraphWorkflowNameRecord[] {
+  static findNameEntries(activeOnly = false, folderIds?: number[]): GraphWorkflowNameRecord[] {
+    if (folderIds?.length === 0) return []
     const db = getUserSettingsDb()
     let query = 'SELECT id, name FROM graph_workflows'
-    if (activeOnly) {
-      query += ' WHERE is_active = 1'
-    }
+    const filters: string[] = []
+    if (activeOnly) filters.push('is_active = 1')
+    if (folderIds) filters.push('folder_id IN (SELECT value FROM json_each(?))')
+    if (filters.length) query += ` WHERE ${filters.join(' AND ')}`
     query += ' ORDER BY updated_date DESC, id DESC'
 
-    return db.prepare(query).all() as GraphWorkflowNameRecord[]
+    return db.prepare(query).all(...(folderIds ? [JSON.stringify(folderIds)] : [])) as GraphWorkflowNameRecord[]
   }
 
   /**

@@ -16,6 +16,7 @@ const RUNTIME_EVENT_ACCESS_REVALIDATE_MS = 30_000
 /** 재연결(Last-Event-ID) 재생 버퍼 상한. */
 const RUNTIME_EVENT_REPLAY_BUFFER_LIMIT = 500
 const RUNTIME_EVENT_REPLAY_BUFFER_MAX_AGE_MS = 10 * 60 * 1000
+const MAX_SUBSCRIBER_BUFFER_BYTES = 256 * 1024
 
 export type RuntimeEventAccessRevalidation =
   | { ok: true }
@@ -173,11 +174,18 @@ export class RuntimeEventBroadcaster {
 
   private static write(subscriber: RuntimeEventSubscriber, chunk: string) {
     try {
-      if (subscriber.res.writableEnded) {
+      if (subscriber.res.writableEnded || subscriber.res.destroyed || !this.subscribers.has(subscriber.id)) {
         this.unregister(subscriber.id)
         return
       }
 
+      // Disconnect a stalled consumer; its reconnect cursor uses replay/reset to recover.
+      // Never queue unbounded frames behind a slow socket.
+      if ((subscriber.res.writableLength ?? 0) + Buffer.byteLength(chunk) > MAX_SUBSCRIBER_BUFFER_BYTES) {
+        subscriber.res.destroy()
+        this.unregister(subscriber.id)
+        return
+      }
       subscriber.res.write(chunk)
     } catch (error) {
       console.warn('⚠️ Failed to write runtime event frame, dropping subscriber:', error instanceof Error ? error.message : error)

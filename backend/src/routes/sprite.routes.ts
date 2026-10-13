@@ -1,7 +1,7 @@
 import fs from 'fs'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { errorResponse, successResponse } from '@conai/shared'
-import { asyncHandler } from '../middleware/asyncHandler'
+import { cancellableAsyncHandler } from '../middleware/asyncHandler'
 import { requirePermission } from '../middleware/authMiddleware'
 import { getRequesterAccountId, getRequesterAccountType, isAdminRequest } from './requester-session-helpers'
 import { isSpriteError } from '../services/sprite/spriteErrors'
@@ -52,11 +52,12 @@ function requireUploadWhenSaving(req: Request, res: Response, next: NextFunction
   next()
 }
 
-function handle(run: (req: Request, res: Response) => Promise<unknown>) {
-  return asyncHandler(async (req: Request, res: Response) => {
+function handle(run: (req: Request, res: Response, signal: AbortSignal) => Promise<unknown>) {
+  return cancellableAsyncHandler(async (req, res, signal) => {
     try {
-      await run(req, res)
+      await run(req, res, signal)
     } catch (error) {
+      if (signal.aborted) return
       if (isSpriteError(error)) {
         res.status(error.statusCode).json(errorResponse(error.message))
         return
@@ -102,11 +103,14 @@ function renderFrom(source: Record<string, unknown>) {
   }
 }
 
-function sendFile(res: Response, file: string, fileName: string, mimeType: string, inline = false) {
+async function sendFile(res: Response, file: string, fileName: string, mimeType: string, inline = false): Promise<void> {
   res.setHeader('Content-Type', mimeType)
   res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(fileName)}`)
   res.setHeader('Cache-Control', 'no-store')
-  fs.createReadStream(file).pipe(res)
+  await new Promise<void>((resolve, reject) => res.sendFile(file, { dotfiles: 'allow' }, (error) => {
+    if (error && !res.destroyed) reject(error)
+    else resolve()
+  }))
 }
 
 router.get('/videos/:hash/info', requirePermission(VIEW), handle(async (req, res) => {
@@ -180,21 +184,24 @@ router.get('/builds/:buildId', requirePermission(VIEW), handle(async (req, res) 
   res.json(successResponse(buildSummary(requireBuild(String(req.params.buildId), requester(req)).meta)))
 }))
 
-router.get('/builds/:buildId/frames/:index', requirePermission(VIEW), handle(async (req, res) => {
-  const png = await buildFramePreview(String(req.params.buildId), Number(req.params.index), numberQuery(req.query.size) ?? 256, requester(req))
+router.get('/builds/:buildId/frames/:index', requirePermission(VIEW), handle(async (req, res, signal) => {
+  const png = await buildFramePreview(String(req.params.buildId), Number(req.params.index), numberQuery(req.query.size) ?? 256, requester(req), signal)
   res.setHeader('Content-Type', 'image/png')
   res.setHeader('Cache-Control', 'private, max-age=300')
   res.end(png)
 }))
 
-router.get('/builds/:buildId/sheet', requirePermission(VIEW), handle(async (req, res) => {
-  const rendered = await renderBuildSheet(String(req.params.buildId), renderFrom(req.query as Record<string, unknown>), requester(req))
+router.get('/builds/:buildId/sheet', requirePermission(VIEW), handle(async (req, res, signal) => {
+  const rendered = await renderBuildSheet(String(req.params.buildId), renderFrom(req.query as Record<string, unknown>), requester(req), signal)
   res.setHeader('X-Sheet-Width', String(rendered.width))
   res.setHeader('X-Sheet-Height', String(rendered.height))
   res.setHeader('X-Sheet-Columns', String(rendered.layout.columns))
   res.setHeader('X-Sheet-Rows', String(rendered.layout.rows))
-  res.on('close', () => fs.rmSync(rendered.file, { force: true }))
-  sendFile(res, rendered.file, `sprite-sheet.${rendered.format}`, rendered.mimeType, req.query.download !== '1')
+  try {
+    await sendFile(res, rendered.file, `sprite-sheet.${rendered.format}`, rendered.mimeType, req.query.download !== '1')
+  } finally {
+    await fs.promises.rm(rendered.file, { force: true }).catch(() => undefined)
+  }
 }))
 
 router.post('/builds/:buildId/save', requirePermission(EDIT), requirePermission(UPLOAD), handle(async (req, res) => {
@@ -203,15 +210,18 @@ router.post('/builds/:buildId/save', requirePermission(EDIT), requirePermission(
   res.json(successResponse(saved))
 }))
 
-router.get('/builds/:buildId/frames.zip', requirePermission(VIEW), handle(async (req, res) => {
+router.get('/builds/:buildId/frames.zip', requirePermission(VIEW), handle(async (req, res, signal) => {
   const zip = await buildFramesZip(String(req.params.buildId), {
     crop: parseCrop(req.query.crop),
     format: req.query.format === 'webp' ? 'webp' : 'png',
     quality: numberQuery(req.query.quality),
     stem: typeof req.query.stem === 'string' ? req.query.stem : undefined,
-  }, requester(req))
-  res.on('close', () => fs.rmSync(zip.file, { force: true }))
-  sendFile(res, zip.file, zip.fileName, 'application/zip')
+  }, requester(req), signal)
+  try {
+    await sendFile(res, zip.file, zip.fileName, 'application/zip')
+  } finally {
+    await fs.promises.rm(zip.file, { force: true }).catch(() => undefined)
+  }
 }))
 
 router.post('/normalize', requirePermission(EDIT), requireUploadWhenSaving, handle(async (req, res) => {
@@ -229,7 +239,7 @@ router.post('/animation', requirePermission(EDIT), requireUploadWhenSaving, hand
 router.get('/results/:workspaceId/download', requirePermission(VIEW), handle(async (req, res) => {
   const download = workspaceDownload(String(req.params.workspaceId), requester(req), typeof req.query.file === 'string' ? req.query.file : undefined)
   const mimeType = download.fileName.endsWith('.zip') ? 'application/zip' : download.fileName.endsWith('.gif') ? 'image/gif' : download.fileName.endsWith('.mp4') ? 'video/mp4' : 'image/webp'
-  sendFile(res, download.file, download.fileName, mimeType)
+  await sendFile(res, download.file, download.fileName, mimeType)
 }))
 
 router.get('/settings/:hash', requirePermission(VIEW), handle(async (req, res) => {

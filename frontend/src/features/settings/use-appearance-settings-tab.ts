@@ -1,3 +1,4 @@
+import { useSettingsRevision } from './use-settings-revision'
 import { useEffect, useRef, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { updateAppearanceSettings, uploadAppearanceFont } from '@/lib/api-settings-appearance'
@@ -11,6 +12,7 @@ import { useI18n } from '@/i18n'
 import { areSettingsDraftsEqual, type SettingsDraftSection } from './settings-draft-sections'
 
 interface UseAppearanceSettingsTabOptions {
+  revision?: string
   /** Whether the appearance tab is currently active. */
   isActive: boolean
   /** Current saved-or-loaded appearance settings. */
@@ -35,6 +37,7 @@ function normalizeAppearancePresetSlots(presetSlots: AppearancePresetSlot[]) {
 
 /** Collect appearance-tab draft state, preview behavior, and save flows. */
 export function useAppearanceSettingsTab({
+  revision,
   isActive,
   currentAppearance,
   savedAppearance,
@@ -83,8 +86,10 @@ export function useAppearanceSettingsTab({
     applyAppearanceTheme(savedAppearance)
   }, [effectiveAppearanceDraft, importPreview, isActive, savedAppearance])
 
+  const draftRevision = useSettingsRevision(revision, Boolean(effectiveAppearanceDraft && currentAppearance && !areSettingsDraftsEqual(effectiveAppearanceDraft, currentAppearance)))
+
   const appearanceMutation = useMutation({
-    mutationFn: updateAppearanceSettings,
+    mutationFn: (patch: Partial<AppearanceSettings>) => updateAppearanceSettings(patch, draftRevision()),
     onSuccess: (settings) => {
       syncSettingsCache(settings)
       setAppearanceDraft(settings.appearance)

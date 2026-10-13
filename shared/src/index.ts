@@ -39,4 +39,6 @@ export * from './types/contentEvaluation';
 export { TOPIC_EVALUATION_LIMITS } from './types/contentEvaluation';
 export * from './types/chatAssets'
 export * from './utils/chatPortrait'
+export * from './constants/pageSettings'
 export * from './types/agentCli'
+export * from './utils/spriteSampling'

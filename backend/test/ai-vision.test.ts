@@ -138,3 +138,84 @@ test('ai vision: PixAI is listed as GPU-only, refused without a usable GPU, and 
   const plain = JSON.parse(buildMergedAutoTags(null, { success: true, model: 'vit', general: { a: 0.9 }, character: {}, artist: {} }))
   assert.equal('artist' in plain.tagger, false)
 })
+
+test('AI worker queue is bounded, cancelled waits leave the queue, and deadlines include queue time', async t => {
+  const { AiWorkerClient } = await import('../src/services/aiWorker/aiWorkerClient')
+  const worker = new AiWorkerClient({ label: 'queue-test', idleMinutes: () => 1 })
+  // Hold dispatch without starting Python; exercise the real queue admission, cleanup and timers.
+  t.mock.method(worker as any, 'pump', async () => undefined)
+  const controller = new AbortController()
+  const first = worker.request('embed', {}, { signal: controller.signal }).catch(error => error)
+  const waiting = Array.from({ length: 63 }, () => worker.request('embed').catch(error => error))
+  assert.equal(worker.status().queued, 64)
+  await assert.rejects(worker.request('embed'), error => (error as { errorType: string }).errorType === 'QueueFull')
+  const unload = worker.request('unload').catch(error => error)
+  assert.equal(worker.status().queued, 64, 'unload can displace work without growing the queue')
+  controller.abort()
+  assert.equal((await first).name, 'AbortError')
+  assert.equal(worker.status().queued, 63)
+  await worker.stop()
+  const results = await Promise.all(waiting)
+  assert.equal(results.filter(error => error.errorType === 'QueueFull').length, 1)
+  assert.ok(results.slice(0, -1).every(error => error.errorType === 'WorkerStopped'))
+  assert.equal((await unload).errorType, 'WorkerStopped')
+  assert.equal(worker.status().queued, 0)
+  const keepAlive = setTimeout(() => undefined, 1000)
+  try {
+    await assert.rejects(worker.request('embed', {}, { timeoutMs: 5 }), error => (error as { errorType: string }).errorType === 'QueueTimeout')
+    assert.equal(worker.status().queued, 0)
+  } finally { clearTimeout(keepAlive); await worker.stop() }
+})
+
+test('AI worker retains active slots after cancellation and ignores late replies after timeout until restart', async t => {
+  const childProcess = (await import('node:child_process')).default
+  const { EventEmitter } = await import('node:events')
+  const { PassThrough } = await import('node:stream')
+  const { AiWorkerClient } = await import('../src/services/aiWorker/aiWorkerClient')
+  const children: Array<any> = []
+  t.mock.method(childProcess, 'spawn', () => {
+    const child = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), exitCode: null as number | null, commands: [] as Array<{ id: string; op: string }> })
+    child.stdin.on('data', bytes => {
+      const command = JSON.parse(bytes.toString())
+      child.commands.push(command)
+      if (command.op === 'shutdown') queueMicrotask(() => { child.exitCode = 0; child.emit('exit', 0, null); child.stdout.end() })
+    })
+    children.push(child)
+    queueMicrotask(() => child.stdout.write(JSON.stringify({ event: 'ready', pid: 'fake', torch: 'fake', cudaAvailable: false }) + '\n'))
+    return child as any
+  })
+  const worker = new AiWorkerClient({ label: 'lifecycle-test', idleMinutes: () => 1 })
+  const keepAlive = setTimeout(() => undefined, 2000)
+  t.after(async () => { clearTimeout(keepAlive); await worker.stop() })
+  const controller = new AbortController()
+  const first = worker.request('embed', {}, { signal: controller.signal })
+  first.catch(() => undefined)
+  const second = worker.request('embed')
+  second.catch(() => undefined)
+  await new Promise<void>(resolve => setImmediate(resolve))
+  const child = children[0]
+  assert.equal(child.commands.length, 1)
+  controller.abort()
+  await assert.rejects(first)
+  assert.equal(child.commands.length, 1, 'cancellation does not send the next request over an active one')
+  child.stdout.write(JSON.stringify({ id: child.commands[0].id, ok: true, result: { device: 'cpu' } }) + '\n')
+  await new Promise<void>(resolve => setImmediate(resolve))
+  assert.equal(child.commands.length, 2)
+  child.stdout.write(JSON.stringify({ id: child.commands[1].id, ok: true, result: { device: 'cpu' } }) + '\n')
+  await second
+
+  const timedOut = worker.request('embed', {}, { timeoutMs: 30 })
+  const afterRestart = worker.request('embed')
+  afterRestart.catch(() => undefined)
+  await assert.rejects(timedOut, error => (error as { errorType: string }).errorType === 'Timeout')
+  child.stdout.write(JSON.stringify({ id: child.commands[2].id, ok: true, result: { device: 'cpu' } }) + '\n')
+  assert.equal(child.commands.length, 3, 'a late success cannot free a timed-out process for another request')
+  child.exitCode = 1
+  child.emit('exit', 1, null)
+  await new Promise<void>(resolve => setImmediate(resolve))
+  assert.equal(children.length, 2)
+  const replacement = children[1]
+  assert.equal(replacement.commands.length, 1)
+  replacement.stdout.write(JSON.stringify({ id: replacement.commands[0].id, ok: true, result: { device: 'cpu' } }) + '\n')
+  await afterRestart
+})

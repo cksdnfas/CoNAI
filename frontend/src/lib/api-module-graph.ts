@@ -583,6 +583,16 @@ export async function getGraphExecutionPreviews(executionIds: number[]) {
   return requestApiData<GraphExecutionPreviewBatchRecord>(`/api/graph-workflows/executions/previews?${searchParams.toString()}`)
 }
 
+/** The node progress card excludes log bodies, artifacts and node IO. */
+export interface GraphExecutionProgress {
+  execution: Pick<GraphExecutionRecord, 'execution_plan'>
+  logs: Array<{ node_id: string; event_type: string }>
+}
+
+export function getGraphExecutionProgress(executionId: number, signal?: AbortSignal) {
+  return requestApiData<GraphExecutionProgress>(`/api/graph-workflows/executions/${executionId}/progress`, { signal })
+}
+
 /** Load a graph execution with its stored artifacts. */
 export async function getGraphExecution(executionId: number) {
   return requestApiData<{

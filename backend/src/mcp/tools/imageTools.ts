@@ -358,10 +358,10 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
       text: z.string().trim().min(1).max(MEANING_QUERY_MAX_CHARS).describe('What the image shows, in plain words (English matches best)'),
       limit: z.number().int().min(1).max(VECTOR_TOOL_MAX_LIMIT).default(20).describe('Results to return'),
     }) },
-    async ({ text, limit }) => {
+    async ({ text, limit }, ctx) => {
       try {
         if (!embeddingFeatureOn('imageSearch')) return vectorToolError(IMAGE_SEARCH_OFF);
-        const hits = await searchImagesByText(text, limit);
+        const hits = await searchImagesByText(text, limit, { signal: ctx?.mcpReq?.signal });
         if (!hits) return vectorToolError('The embedding model did not answer (the AI runtime may not be installed or is still loading). Try again in a moment.');
         const images = vectorHitSummaries(hits);
         return { content: [{ type: 'text' as const, text: JSON.stringify({ images, total: images.length, query: text }) }] };

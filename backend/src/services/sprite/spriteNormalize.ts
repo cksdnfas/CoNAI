@@ -330,7 +330,12 @@ function batchNames(source: NormalizationSource, extension: string): [string, st
 export async function normalizeSpriteSheetsBulk(
   sources: Array<NormalizationSource | (() => Promise<NormalizationSource>)>,
   options: NormalizationOptions,
-  hooks: { onProgress?: (progress: BulkNormalizationProgress) => void; throwIfCancelled?: () => void } = {},
+  hooks: {
+    onProgress?: (progress: BulkNormalizationProgress) => void
+    throwIfCancelled?: () => void
+    /** Persist each result immediately; streamed results retain only metadata in the manifest. */
+    onSheet?: (sheet: NormalizedSheet) => Promise<void>
+  } = {},
 ): Promise<BulkNormalizationResult> {
   if (sources.length < 1 || sources.length > MAX_BULK_NORMALIZATION_SHEETS) {
     throw new SpriteError(`한 번에 1개에서 ${MAX_BULK_NORMALIZATION_SHEETS}개의 시트를 처리할 수 있습니다.`)
@@ -340,6 +345,7 @@ export async function normalizeSpriteSheetsBulk(
   const load = async (entry: NormalizationSource | (() => Promise<NormalizationSource>)) => (typeof entry === 'function' ? entry() : entry)
   const failures: BulkNormalizationResult['failures'] = []
   const sheets: NormalizedSheet[] = []
+  const metadata: Record<string, unknown>[] = []
   let common: Bounds | null = null
   let renderList = sources
 
@@ -352,7 +358,8 @@ export async function normalizeSpriteSheetsBulk(
         source = await load(sources[index])
         const bounds = unionRelativeBounds([prepareSheet(source, options)], 0)
         common = common ? [Math.min(common[0], bounds[0]), Math.min(common[1], bounds[1]), Math.max(common[2], bounds[2]), Math.max(common[3], bounds[3])] : bounds
-        scanned.push(source)
+        // Keep the loader, not its decoded RGBA image, for the render pass.
+        scanned.push(sources[index])
       } catch (error) {
         failures.push(source ? failure(source, error) : { source: `#${index + 1}`, relative_path: `#${index + 1}`, error: error instanceof Error ? error.message : String(error) })
       }
@@ -372,20 +379,23 @@ export async function normalizeSpriteSheetsBulk(
       const [outputFilename, metadataFilename] = batchNames(source, image.format)
       const rendered = await renderSheet(prepared, options, image, union, outputFilename)
       rendered.metadata.metadata_file = metadataFilename
-      sheets.push({ outputFilename, metadataFilename, image: rendered.bytes, sheet: rendered.sheet, metadata: rendered.metadata })
+      const normalized = { outputFilename, metadataFilename, image: rendered.bytes, sheet: rendered.sheet, metadata: rendered.metadata }
+      if (hooks.onSheet) await hooks.onSheet(normalized)
+      else sheets.push(normalized)
+      metadata.push(rendered.metadata)
     } catch (error) {
       if (hooks.throwIfCancelled) hooks.throwIfCancelled()
       failures.push(source ? failure(source, error) : { source: `#${index + 1}`, relative_path: `#${index + 1}`, error: error instanceof Error ? error.message : String(error) })
     }
     const percent = options.mode === 'group' ? 50 + (index + 1) / Math.max(1, renderList.length) * 50 : (index + 1) / total * 100
-    hooks.onProgress?.({ percent, processed: sheets.length + failures.length, total, phase: 'render', current: source?.relativePath || source?.sourceName || '' })
+    hooks.onProgress?.({ percent, processed: metadata.length + failures.length, total, phase: 'render', current: source?.relativePath || source?.sourceName || '' })
   }
 
   const manifest: Record<string, unknown> = {
     kind: 'sprite_normalization_batch',
     mode: options.mode,
     requested_sheet_count: total,
-    succeeded: sheets.length,
+    succeeded: metadata.length,
     failed: failures.length,
     anchor_policy: options.anchorPolicy,
     alpha_threshold: options.alphaThreshold,
@@ -393,7 +403,7 @@ export async function normalizeSpriteSheetsBulk(
     output_spacing: options.outputSpacing,
     output_format: image.format,
     output_quality: image.quality,
-    sheets: sheets.map((sheet) => sheet.metadata),
+    sheets: metadata,
     failures,
   }
   if (common) {

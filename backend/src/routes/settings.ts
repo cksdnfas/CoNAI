@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { settingsService } from '../services/settingsService';
+import { pageSettingsRevisions, verifyNativePageSettingsRevision } from '../services/pageSettings';
+import { isPageSettingsScope } from '@conai/shared';
 import {
   buildConaiHelperCustomNodeArchive,
   CONAI_HELPER_CUSTOM_NODE_PACKAGE_FILENAME,
@@ -22,6 +24,16 @@ import { mcpHttpSettingsRoutes } from './settings/mcp-http.routes';
 import { contentEvaluationRoutes } from './settings/content-evaluation.routes';
 
 const router = Router();
+router.use((req, res, next) => {
+  const scope = req.path.slice(1);
+  if (req.method === 'PUT' && isPageSettingsScope(scope)) {
+    res.locals.verifyPageSettingsWrite = () => verifyNativePageSettingsRevision(req, res, scope);
+  }
+  const json = res.json.bind(res);
+  res.json = (body) => json(body?.success && body.data?.general && body.data?.imageSave
+    ? { ...body, data: { ...body.data, pageSettingsRevisions: pageSettingsRevisions() } } : body);
+  next();
+});
 
 router.get(
   '/',

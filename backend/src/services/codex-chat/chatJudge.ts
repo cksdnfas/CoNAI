@@ -182,9 +182,16 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
   const connection = items.length > 0 || extra?.questions.length ? connectionOf(setup, errors) : null
   if (connection) {
     const windows = [...new Set([...items.map((item) => item.window), ...(extra?.questions.length ? [extra.window] : [])])]
-    await Promise.all(windows.map(async (window) => {
-      const group: JudgeQuestion[] = [...items.filter((item) => item.window === window), ...(extra?.window === window ? extra.questions : [])]
+    const groups = new Map<string, { state: unknown; questions: JudgeQuestion[] }>()
+    for (const window of windows) {
       const state = stateFor(window)
+      const key = JSON.stringify(state)
+      const group = groups.get(key) ?? { state, questions: [] }
+      group.questions.push(...items.filter((item) => item.window === window), ...(extra?.window === window ? extra.questions : []))
+      groups.set(key, group)
+    }
+    // Short histories can produce identical states for different configured windows; ask those questions together.
+    await Promise.all([...groups.values()].map(async ({ state, questions: group }) => {
       try {
         const result = await askJudge(connection, state, group, signal, usage)
         requests.push(result.request)
@@ -321,12 +328,13 @@ export function judgeDirectiveText(judged: JudgedTurn | null | undefined, withhe
  * `availableTools`: the tools this turn offers; null when they cannot be steered per turn (Codex), where an item that
  * steers tools does nothing and only the directives of tool-less yes items go through.
  */
-export async function judgeBeforeReply(params: { profile: ChatProfile; threadId: number; replyId: string | null; availableTools: string[] | null; excludeMessageId?: number; context?: boolean; signal?: AbortSignal; semantic?: SemanticContext | null }): Promise<JudgedTurn | null> {
+export async function judgeBeforeReply(params: { profile: ChatProfile; threadId: number; replyId: string | null; availableTools: string[] | null; excludeMessageId?: number; messages?: CodexChatMessageRecord[]; context?: boolean; signal?: AbortSignal; semantic?: SemanticContext | null }): Promise<JudgedTurn | null> {
   const setup = judgeSetupOf(params.profile)
   if (!setup) return null
-  const items = askableJudgeItems(setup.preset.items).filter((item) => item.stage === 'before')
+  const items = askableJudgeItems(setup.preset.items).filter((item) => item.stage === 'before'
+    && (item.tools.length === 0 || (params.availableTools !== null && item.tools.some((pattern) => params.availableTools!.some((name) => judgeToolMatches(pattern, name))))))
   const thread = CodexChatStore.findThreadById(params.threadId)
-  const messages = CodexChatStore.listMessages(params.threadId).filter((message) => message.id !== params.excludeMessageId)
+  const messages = (params.messages ?? CodexChatStore.listMessages(params.threadId)).filter((message) => message.id !== params.excludeMessageId)
   const extra = params.context && thread ? contextQuestions(setup.preset.context, params.profile, thread, messages, params.semantic) : null
   if (items.length === 0 && !extra?.questions.length) return null
 

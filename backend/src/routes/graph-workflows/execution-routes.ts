@@ -159,6 +159,19 @@ export function createGraphWorkflowExecutionRoutes() {
     }
   }))
 
+  router.get('/executions/:executionId/progress', asyncHandler(async (req: Request, res: Response) => {
+    const executionId = parseGraphRouteInteger(req.params.executionId)
+    if (isNaN(executionId)) return sendRouteBadRequest(res, 'Invalid execution ID')
+    const execution = GraphExecutionModel.findById(executionId)
+    if (!execution) return res.status(404).json({ success: false, error: 'Execution not found' })
+    let plan: { orderedNodeIds?: string[]; reusedNodeIds?: string[] } | null = null
+    try { plan = execution.execution_plan ? JSON.parse(execution.execution_plan) : null } catch { /* Match the detail view's empty-plan fallback. */ }
+    return res.json({ success: true, data: {
+      execution: { execution_plan: plan ? JSON.stringify({ orderedNodeIds: plan.orderedNodeIds, reusedNodeIds: plan.reusedNodeIds }) : null },
+      logs: GraphExecutionLogModel.findNodeProgress(executionId),
+    } })
+  }))
+
   router.get('/executions/:executionId', asyncHandler(async (req: Request, res: Response) => {
     const executionId = parseGraphRouteInteger(req.params.executionId)
     if (isNaN(executionId)) {

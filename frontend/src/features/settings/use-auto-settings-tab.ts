@@ -1,3 +1,5 @@
+import { useSettingsRevision } from './use-settings-revision'
+import type { PageSettingsVersions } from '@conai/shared'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getImage } from '@/lib/api-images'
@@ -30,6 +32,7 @@ import { areSettingsDraftsEqual, type SettingsDraftSection } from './settings-dr
 import { useI18n } from '@/i18n'
 
 interface UseAutoSettingsTabOptions {
+  revisions?: PageSettingsVersions['pageSettingsRevisions']
   /** Whether the auto tab is currently active. */
   isActive: boolean
   /** Current saved-or-loaded tagger settings. */
@@ -134,6 +137,7 @@ function normalizeRatingTierDrafts(tiers: RatingTierRecord[]) {
 
 /** Collect auto-tab queries, drafts, validation, and auto-test flows. */
 export function useAutoSettingsTab({
+  revisions,
   isActive,
   taggerSettings,
   kaloscopeSettings,
@@ -235,8 +239,12 @@ export function useAutoSettingsTab({
     setKaloscopeTestResult(null)
   }
 
+  const taggerRevision = useSettingsRevision(revisions?.tagger, hasTaggerChanges)
+  const kaloscopeRevision = useSettingsRevision(revisions?.kaloscope, hasKaloscopeChanges)
+  const embeddingRevision = useSettingsRevision(revisions?.embedding, hasEmbeddingChanges)
+
   const taggerMutation = useMutation({
-    mutationFn: updateTaggerSettings,
+    mutationFn: (patch: Partial<TaggerSettings>) => updateTaggerSettings(patch, taggerRevision()),
     onSuccess: async (settings) => {
       syncSettingsCache(settings)
       setTaggerDraft(settings.tagger)
@@ -247,7 +255,7 @@ export function useAutoSettingsTab({
   })
 
   const kaloscopeMutation = useMutation({
-    mutationFn: updateKaloscopeSettings,
+    mutationFn: (patch: Partial<KaloscopeSettings>) => updateKaloscopeSettings(patch, kaloscopeRevision()),
     onSuccess: async (settings) => {
       syncSettingsCache(settings)
       setKaloscopeDraft(settings.kaloscope)
@@ -256,8 +264,8 @@ export function useAutoSettingsTab({
   })
 
   /** These endpoints answer with their status, not the whole settings: patch the cached settings in place. */
-  const patchSettingsCache = (patch: Partial<AppSettings>) => {
-    queryClient.setQueryData<AppSettings>(['app-settings'], (current) => (current ? { ...current, ...patch } : current))
+  const patchSettingsCache = (patch: Partial<AppSettings & PageSettingsVersions>) => {
+    queryClient.setQueryData<AppSettings & PageSettingsVersions>(['app-settings'], (current) => (current ? { ...current, ...patch, pageSettingsRevisions: { ...current.pageSettingsRevisions, ...patch.pageSettingsRevisions } } : current))
   }
   const setAiRuntimeStatus = (status: AiRuntimeStatus) => queryClient.setQueryData(['ai-runtime-status'], status)
 
@@ -272,9 +280,10 @@ export function useAutoSettingsTab({
   })
 
   const embeddingMutation = useMutation({
-    mutationFn: updateEmbeddingSettings,
-    onSuccess: ({ settings, status }) => {
-      patchSettingsCache({ embedding: settings })
+    mutationFn: (patch: Partial<EmbeddingSettings>) => updateEmbeddingSettings(patch, embeddingRevision()),
+    onSuccess: ({ settings, status, pageSettingsRevisions }) => {
+      embeddingRevision(pageSettingsRevisions?.embedding)
+      patchSettingsCache({ embedding: settings, pageSettingsRevisions })
       setEmbeddingDraft(settings)
       queryClient.setQueryData(['embedding-status'], status)
     },

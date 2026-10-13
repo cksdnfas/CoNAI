@@ -28,7 +28,6 @@ import {
   parseRequestedJson,
   type LlmResponseMode,
 } from '../llmProviderService'
-import { retryLlmRequest } from '../llmRequestRetry'
 import { normalizeOptionalString } from '../../utils/valueNormalization'
 
 /**
@@ -344,14 +343,14 @@ export async function runWorkflowLlmText(request: WorkflowLlmRequest): Promise<W
   }
 
   const signal = request.signal ?? new AbortController().signal
-  const result = await retryLlmRequest(() => streamChatCompletion({
+  const result = await streamChatCompletion({
     target,
     messages,
     signal,
     // A stuck loop is cut like in chat; JSON answers are left whole (a list may legitimately repeat an item).
     stopLoops: responseMode === 'text',
     usage: { purpose: 'workflow', profileId: usageProfileId },
-  }), { signal })
+  })
   const text = stripThinking(result.content).trim()
   if (!text) throw new Error(`LLM이 빈 답을 보냈어: ${resolved.label}`)
   const parsed = parseRequestedJson(text, responseMode)

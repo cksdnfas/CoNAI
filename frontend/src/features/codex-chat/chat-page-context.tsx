@@ -1,3 +1,5 @@
+import { usePageSettings } from '@/components/common/page-settings-context'
+import { type PageSettingsScopeId } from '@conai/shared'
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Monitor } from 'lucide-react'
@@ -89,16 +91,16 @@ const NESTED_VIEWS: Record<string, string[]> = {
 }
 
 function withNavigation(editor: Editor | null, navigation: Editor | undefined): Editor | null {
-  const navigate = navigation?.actions?.find((action) => action.id === 'page.navigate')
-  if (!editor || !navigation || !navigate || editor === navigation) return editor
+  const additions = (navigation?.actions ?? []).filter((action) => !(editor?.actions ?? []).some((own) => own.id === action.id))
+  if (!editor || !navigation || !additions.length || editor === navigation) return editor
   const actions = editor.actions ?? []
-  if (actions.some((action) => action.id === 'page.navigate') || actions.length >= CHAT_PAGE_ACTION_LIMITS.actions) return editor
+  if (actions.length + additions.length > CHAT_PAGE_ACTION_LIMITS.actions) return editor
   const own = editor.applyAction
   return {
     ...editor,
-    actions: [...actions, navigate],
+    actions: [...actions, ...additions],
     applyAction: (id, args, assertCurrent, nativeRevision) => {
-      if (id === 'page.navigate') return navigation.applyAction?.(id, args, assertCurrent)
+      if (additions.some((action) => action.id === id)) return navigation.applyAction?.(id, args, assertCurrent)
       if (!own) throw new Error('페이지 작업 편집기가 닫혔어.')
       return own(id, args, assertCurrent, nativeRevision)
     },
@@ -341,6 +343,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
 }
 
 function PageNavigationRegistration({ title }: { title: string }) {
+  const settings = usePageSettings()
   const auth = useAuthStatusQuery().data
   const navigate = useNavigate()
   const { t } = useI18n()
@@ -349,7 +352,8 @@ function PageNavigationRegistration({ title }: { title: string }) {
     return [item.path, ...(views ? views.values.map((value) => `${item.path}?${views.param}=${value}`) : []), ...(NESTED_VIEWS[item.path] ?? [])]
   })
   const actions = destinations.length ? [pageAction('page.navigate', t({ ko: '내부 페이지 이동', en: 'Navigate within CoNAI' }), t({ ko: '접근 가능한 CoNAI 페이지나 그 탭으로 이동해. 설정은 ?section=, 다른 페이지는 ?tab= 이 탭이야.', en: 'Open an accessible CoNAI page or one of its tabs. Settings sections use ?section=, other pages ?tab=.' }), pageObject({ to: pageChoice(destinations) }, ['to']))] : []
-  useChatPageRegistration({ kind: 'page', title, resourceId: null, priority: NAVIGATION_PRIORITY, fields: [], actions, apply: () => {}, applyAction: (_id, args, assertCurrent) => { assertCurrent(); void navigate(String(args.to)) } })
+  if (settings.scopes.length && !settings.scope) actions.push(pageAction('page.settings_open', t({ ko: '현재 페이지 설정 열기', en: 'Open current page settings' }), '', pageObject({ scope: pageChoice(settings.scopes) }, ['scope'])))
+  useChatPageRegistration({ kind: 'page', title, resourceId: null, priority: NAVIGATION_PRIORITY, fields: [], actions, apply: () => {}, applyAction: (id, args, assertCurrent) => { assertCurrent(); if (id === 'page.settings_open') settings.open(args.scope as PageSettingsScopeId); else void navigate(String(args.to)) } })
   return null
 }
 
