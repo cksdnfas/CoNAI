@@ -85,6 +85,8 @@ const REQUEST_BODY_LIMIT_TIER_BY_MOUNT: ReadonlyArray<readonly [string, RequestB
 
 /** Resolve the body limit tier for one request path. Unknown paths stay on the default tier. */
 export function resolveRequestBodyLimitTier(pathname: string): RequestBodyLimitTier {
+  // Workspace text batches are capped at 8 MiB by the service; only apply needs the bulk parser.
+  if (/^\/api\/workspaces\/[a-f0-9]{32}\/apply\/?$/.test(pathname.split('?')[0])) return 'bulk';
   // Express mount matching is case-insensitive by default; mirror that so a differently cased
   // path cannot be routed to a media endpoint while being parsed with the default limit.
   const normalizedPath = pathname.toLowerCase();

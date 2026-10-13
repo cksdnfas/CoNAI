@@ -15,6 +15,7 @@ type StoredMcpHttpSettings = McpHttpSettings & {
 };
 
 export interface McpHttpAuthentication {
+  workspace?: import('@conai/shared').WorkspaceBinding | null;
   chatContext?: ChatExecutionContext;
   keyId: string;
   keyName: string;

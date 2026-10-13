@@ -22,6 +22,7 @@ import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { createMcpServer } from './server';
 import { initializeDatabase } from '../database/init';
 import { initializeUserSettingsDb } from '../database/userSettingsDb';
+import { migrateFileStoreLayout } from '../services/fileStorePaths';
 import { initializeApiGenerationDb } from '../database/apiGenerationDb';
 import { ensureRuntimeDirectories } from '../config/runtimePaths';
 import { configureSharpRuntime } from '../config/sharpRuntime';
@@ -36,6 +37,7 @@ async function main() {
   // 데이터베이스 초기화 (동기)
   await initializeDatabase();
   initializeUserSettingsDb();
+  migrateFileStoreLayout();
   initializeApiGenerationDb();
 
   // MCP 서버를 stdio로 제공 (첫 교환으로 2025/2026-07-28 프로토콜을 정하고 연결 동안 인스턴스 하나를 유지)

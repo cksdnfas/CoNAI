@@ -764,7 +764,7 @@ export function cutToolOutput(content: string, length: number) {
  */
 function cutToolResults(messages: ChatCompletionMessage[], length: number, from = 0, until = messages.length, catalog = false): ChatCompletionMessage[] {
   const catalogCalls = catalog ? new Set<string>() : new Set(messages.flatMap((message) => message.role === 'assistant'
-    ? (message.tool_calls ?? []).filter((call) => call.function.name === CATALOG_OPEN_TOOL).map((call) => call.id) : []))
+    ? (message.tool_calls ?? []).filter((call) => call.function.name === CATALOG_OPEN_TOOL || call.function.name.startsWith('workspace_')).map((call) => call.id) : []))
   const cut = messages.map((message, index) => (index >= from && index < until && message.role === 'tool' && !catalogCalls.has(message.tool_call_id) && message.content.length > length
     ? { ...message, content: cutToolOutput(message.content, length) } : message))
   return cut.every((message, index) => message === messages[index]) ? messages : cut

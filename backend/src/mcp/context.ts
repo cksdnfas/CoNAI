@@ -16,6 +16,8 @@ export function fileWriteSource(context: McpRequestContext): FileWriteSource {
 }
 
 export interface McpRequestContext {
+  /** Server-resolved project; never accepted from model arguments. */
+  workspace?: import('@conai/shared').WorkspaceBinding | null;
   chatContext?: ChatExecutionContext;
   scopes: McpHttpScope[];
   keyId?: string;

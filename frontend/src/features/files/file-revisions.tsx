@@ -86,19 +86,19 @@ function useWriterLabel() {
  * A text file's versions beside a comparison: the list (the current text first), and for the chosen version what
  * changed from it to the current text. `canRestore`: the viewer may write the file.
  */
-export function FileRevisionsPanel({ entry, owner, canRestore, onRestored }: { entry: StoredFileEntry; owner: string | null; canRestore: boolean; onRestored: (entry: StoredFileEntry) => void }) {
+export function FileRevisionsPanel({ entry, canRestore, onRestored }: { entry: StoredFileEntry; canRestore: boolean; onRestored: (entry: StoredFileEntry) => void }) {
   const { t, formatDateTime } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const writer = useWriterLabel()
   const [selected, setSelected] = useState<string | null>(null)
-  const list = useQuery({ queryKey: [...FILES_QUERY_KEY, owner ?? '', 'revisions', entry.id, entry.updatedAt], queryFn: () => listStoredFileRevisions(entry.id, owner) })
+  const list = useQuery({ queryKey: [...FILES_QUERY_KEY, 'revisions', entry.id, entry.updatedAt], queryFn: () => listStoredFileRevisions(entry.id) })
   const chosen = selected ?? list.data?.revisions[0]?.id ?? null
-  const current = useQuery({ queryKey: [...FILES_QUERY_KEY, owner ?? '', 'whole-text', entry.id, entry.updatedAt], queryFn: () => readWholeStoredFileText(entry.id, owner), enabled: chosen !== null })
-  const version = useQuery({ queryKey: [...FILES_QUERY_KEY, owner ?? '', 'revision', entry.id, chosen], queryFn: () => readStoredFileRevision(entry.id, chosen as string, owner), enabled: chosen !== null })
+  const current = useQuery({ queryKey: [...FILES_QUERY_KEY, 'whole-text', entry.id, entry.updatedAt], queryFn: () => readWholeStoredFileText(entry.id), enabled: chosen !== null })
+  const version = useQuery({ queryKey: [...FILES_QUERY_KEY, 'revision', entry.id, chosen], queryFn: () => readStoredFileRevision(entry.id, chosen as string), enabled: chosen !== null })
   const rows = useMemo(() => version.data && current.data !== undefined ? foldUnchanged(diffLines(version.data.text, current.data)) : null, [version.data, current.data])
   const restore = useMutation({
-    mutationFn: () => restoreStoredFileRevision(entry.id, chosen as string, owner),
+    mutationFn: () => restoreStoredFileRevision(entry.id, chosen as string),
     onSuccess: async (saved) => {
       setSelected(null)
       await queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY })

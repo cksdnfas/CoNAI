@@ -4,7 +4,7 @@ import path from 'path';
 import type Database from 'better-sqlite3';
 import type { FileWriteSource, StoredFileRevision } from '@conai/shared';
 import { getUserSettingsDb } from '../database/userSettingsDb';
-import { fileOwnerDirectoryName, fileStoreRoot } from './fileStorePaths';
+import { fileStoreRoot } from './fileStorePaths';
 
 /**
  * Earlier versions of text files. Each time a text file is replaced in place, the text it had is kept here before the
@@ -46,9 +46,9 @@ function db() {
   return database;
 }
 
-function revisionPath(owner: string, id: string) {
+function revisionPath(_actor: string, id: string) {
   if (!/^[a-f0-9]{32}$/.test(id)) throw new Error('Invalid revision ID');
-  return path.join(revisionRoot, fileOwnerDirectoryName(owner), `${id}.bin`);
+  return path.join(revisionRoot, `${id}.bin`);
 }
 
 function parseSource(value: string | null): FileWriteSource | null {
@@ -105,11 +105,11 @@ export const FileStoreRevisions = {
 
   /** The file's versions, newest first. */
   list(owner: string, fileId: string): StoredFileRevision[] {
-    return (db().prepare('SELECT * FROM stored_file_revisions WHERE file_id = ? AND owner_key = ? ORDER BY replaced_at DESC, rowid DESC').all(fileId, owner) as RevisionRow[]).map(toRevision);
+    return (db().prepare('SELECT * FROM stored_file_revisions WHERE file_id = ? ORDER BY replaced_at DESC, rowid DESC').all(fileId) as RevisionRow[]).map(toRevision);
   },
 
   find(owner: string, fileId: string, revisionId: string): StoredFileRevision | null {
-    const row = db().prepare('SELECT * FROM stored_file_revisions WHERE id = ? AND file_id = ? AND owner_key = ?').get(revisionId, fileId, owner) as RevisionRow | undefined;
+    const row = db().prepare('SELECT * FROM stored_file_revisions WHERE id = ? AND file_id = ?').get(revisionId, fileId) as RevisionRow | undefined;
     return row ? toRevision(row) : null;
   },
 
@@ -123,9 +123,9 @@ export const FileStoreRevisions = {
 
   /** The version a reply's first change replaced: what the file was before that reply touched it. */
   beforeReply(owner: string, fileId: string, threadId: number, replyId: string): StoredFileRevision | null {
-    const rows = db().prepare(`SELECT * FROM stored_file_revisions WHERE file_id = ? AND owner_key = ?
+    const rows = db().prepare(`SELECT * FROM stored_file_revisions WHERE file_id = ?
       AND json_extract(replaced_by, '$.threadId') = ? AND json_extract(replaced_by, '$.replyId') = ? ORDER BY replaced_at ASC, rowid ASC LIMIT 1`)
-      .all(fileId, owner, threadId, replyId) as RevisionRow[];
+      .all(fileId, threadId, replyId) as RevisionRow[];
     return rows[0] ? toRevision(rows[0]) : null;
   },
 

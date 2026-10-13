@@ -7,7 +7,7 @@ import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, TEXT_EXTENSI
 import { LOREBOOK_ROOT_FOLDER } from './chatLorebookFiles'
 
 /**
- * Linked files: folders and text files of the chat owner's file store that a chat (`codex_chat_threads.linked_files`)
+ * Linked files: shared folders and text files that a chat (`codex_chat_threads.linked_files`)
  * or a profile (`llm_chat_profiles.linked_files`) hands its characters. A request carries only a short index of them
  * (names and counts, never contents) beside the lore index; the characters search, open and — where the link allows
  * writing — write and edit them with the linked_* tools, which never leave the linked places. Lorebook folders cannot
@@ -67,13 +67,17 @@ function isTextName(name: string) {
 /** Whether the entry is the owner's lorebook folder or inside it. */
 export function isInsideLorebooks(owner: string, id: string) {
   const root = FileStoreService.findChild(owner, null, LOREBOOK_ROOT_FOLDER)
-  if (!root || root.kind !== 'folder') return false
-  return id === root.id || FileStoreService.relativePath(owner, root.id, id) !== null
+  if (root?.kind === 'folder' && (id === root.id || FileStoreService.relativePath(owner, root.id, id) !== null)) return true
+  // Legacy roots may have been renamed on shared-store migration. Registered book IDs remain authoritative.
+  return Boolean(getUserSettingsDb().prepare(`WITH RECURSIVE parents(id,parent_id,depth) AS (
+    SELECT id,parent_id,0 FROM stored_file_entries WHERE id=? AND deleted_at IS NULL
+    UNION ALL SELECT e.id,e.parent_id,p.depth+1 FROM stored_file_entries e JOIN parents p ON e.id=p.parent_id WHERE p.depth<64
+  ) SELECT 1 FROM parents JOIN chat_lorebooks b ON b.folder_id=parents.id LIMIT 1`).get(id))
 }
 
 /**
- * Links the owner may save: their own live folders and text files, none in the lorebooks. `kept` (the links saved
- * before) pass as they are, so a shared profile keeps another account's links while its owner edits the rest.
+ * Links the owner may save: live shared folders and text files, none in the lorebooks. `kept` (the links saved
+ * before) pass as they are, so editing other profile settings preserves saved links.
  */
 export function assertLinkedFiles(owner: string, links: LinkedFileLink[], kept: LinkedFileLink[] = []) {
   for (const link of links) {
@@ -114,8 +118,8 @@ function fold(value: string) {
 
 /**
  * The places one request may use, in index order: the chat's links, then the profile's (a room: the room's, then the
- * speaking member's). Every place must be the chat owner's: a profile is shared, so another account's link is skipped
- * silently, as is a link that is gone or has moved into the lorebooks. Names that collide get a ` (2)` suffix.
+ * speaking member's). Shared files are available through explicit links; a link that is gone or has moved into
+ * the lorebooks is skipped. Names that collide get a ` (2)` suffix.
  */
 export function placesForRequest({ thread, profile }: { thread: ThreadRef | null; profile: { linkedFiles?: LinkedFileLink[] } | null }): LinkedPlace[] {
   if (!thread) return []
@@ -289,7 +293,7 @@ export async function readLinked(places: LinkedPlace[], value: string, offset = 
     // The file cannot end the data block early.
     read.text.replace(/^﻿/, '').replace(/\[\/파일\]/g, '[/ 파일]'),
     '[/파일]',
-    ...(read.nextOffset !== null ? [`(${read.size}바이트 중 ${read.nextOffset}바이트까지 읽음. 이어 읽으려면 ${LINKED_TOOLS.read}(target=${JSON.stringify(resolved.display)}, offset=${read.nextOffset}${read.revision ? `, source=extracted, revision=${JSON.stringify(read.revision)}` : ''}))`] : []),
+    ...(read.nextOffset !== null ? [`(${read.size}바이트 중 ${read.nextOffset}바이트까지 읽음. 이어 읽으려면 ${LINKED_TOOLS.read}(target=${JSON.stringify(resolved.display)}, offset=${read.nextOffset}, source=${read.extracted ? 'extracted' : 'original'}${read.revision ? `, revision=${JSON.stringify(read.revision)}` : ''}))`] : []),
   ].join('\n')
 }
 
@@ -352,7 +356,7 @@ export type LinkedFileView = {
   size: number | null
   /** The profiles (a room: its members) whose links bring it; empty for one linked to the chat only. */
   profiles: Array<{ id: number; name: string }>
-  /** Gone from the store, in the lorebooks, or not this owner's: the request skips it. */
+  /** Gone from the store, in the lorebooks, or unavailable: the request skips it. */
   missing: boolean
 }
 
@@ -389,7 +393,7 @@ export function threadLinkedFiles(thread: ThreadRef, profiles: Array<{ id: numbe
   const fromProfiles = new Map<string, LinkedFileView>()
   for (const profile of profiles) {
     for (const view of describeLinkedFiles(owner, profile.linkedFiles ?? [], 'profile')) {
-      // Another account's link on a shared profile is not this chat's business.
+      // Shared profile links remain usable; omit missing and duplicate links.
       if (view.missing || own.some((item) => item.id === view.id)) continue
       const seen = fromProfiles.get(view.id) ?? view
       seen.profiles.push({ id: profile.id, name: profile.name })

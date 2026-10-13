@@ -25,6 +25,8 @@ import codexChatRoutes from '../routes/codex-chat.routes';
 import chatProposalRoutes from '../routes/chat-proposals.routes';
 import chatRoutineRoutes from '../routes/chat-routines.routes';
 import filesRoutes from '../routes/files.routes';
+import pluginsRoutes from '../routes/plugins.routes';
+import workspacesRoutes from '../routes/workspaces.routes';
 import postsRoutes from '../routes/posts.routes';
 import audioRoutes from '../routes/audio.routes';
 import audioLegacyImportRoutes from '../routes/audio-legacy-import.routes';
@@ -284,6 +286,8 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     limiter(req, res, next);
   }, filesRoutes);
   app.use('/api/posts', requireAuth, options.readOnlyLimiter, postsRoutes);
+  app.use('/api/workspaces', requireAuth, options.readOnlyLimiter, workspacesRoutes);
+  app.use('/api/plugins', requireAuth, options.readOnlyLimiter, pluginsRoutes);
   // Admin only; mounted ahead of /api/audio so the import does not also need the workspace keys.
   app.use('/api/audio/legacy-import', requireAuth, options.uploadLimiter, audioLegacyImportRoutes);
   app.use('/api/audio', requireAuth, (req, res, next) => {

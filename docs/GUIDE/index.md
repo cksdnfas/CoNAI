@@ -38,6 +38,7 @@ CoNAI는 이미지·영상·생성물 관리를 기반으로 지식을 축적하
 ## 설정과 운영
 
 - [파일 보관함](./FILES.md)
+- [선택 설치 확장](./PLUGINS.md)
 - [게시판과 지식](./POSTS.md)
 
 - [설정 전체 지도](./SETTINGS_OVERVIEW.md)

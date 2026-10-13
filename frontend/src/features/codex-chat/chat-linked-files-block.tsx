@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ChatWorkspaceBlock } from './chat-workspace-block'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronRight, Ellipsis, FileText, Folder, FolderOpen, FolderPlus } from 'lucide-react'
@@ -21,7 +22,7 @@ const MAX_LINKS = 20
  * where a link allows it), then those the profile (a room: the members) brings. Requests carry only their names; the
  * characters open them with their own tools. New links start read-only; ⋯ allows writing.
  */
-export function LinkedFilesBlock({ threadId }: { threadId: number }) {
+export function LinkedFilesBlock({ threadId, workspaceEnabled = false }: { threadId: number; workspaceEnabled?: boolean }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -56,6 +57,7 @@ export function LinkedFilesBlock({ threadId }: { threadId: number }) {
 
   return (
     <div className="flex flex-col gap-1.5 border-b border-line py-2.5">
+      {workspaceEnabled ? <ChatWorkspaceBlock threadId={threadId} /> : null}
       <div className="flex min-h-8 items-center justify-between gap-2">
         <span className="text-sm">{t({ ko: '연결 파일', en: 'Linked files' })}</span>
         <div className="flex items-center gap-0.5">

@@ -1,11 +1,11 @@
 import fs from 'fs';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import multer from 'multer';
-import { requireAdmin, requirePermission } from '../middleware/authMiddleware';
+import { requirePermission } from '../middleware/authMiddleware';
 import { requireImagesView } from '../middleware/imageAccess';
 import { createUploadStorage, wrapUploadMiddleware, MAX_UPLOAD_FILE_SIZE_BYTES, MAX_MULTIPLE_UPLOAD_FILES, MAX_MULTIPLE_UPLOAD_TOTAL_BYTES } from '../middleware/upload';
 import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler';
-import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, assertFileTypeAllowed, fileOwnerKey, parseFileId, parseOwnerKey } from '../services/fileStoreService';
+import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, assertFileTypeAllowed, fileOwnerKey, parseFileId } from '../services/fileStoreService';
 import { ensureFileStoreDirectories, fileStoreIncoming } from '../services/fileStorePaths';
 import { filePreviewMime, getFileThumbnail } from '../services/fileStorePreview';
 import { retryFileSearchIndex, searchStoredFiles } from '../services/fileStoreSearch';
@@ -20,19 +20,8 @@ router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-st
 
 /** `requirePermission` refreshed the session's keys just before this, so they are current for the whole request. */
 const has = (req: Request, permissionKey: string) => req.session?.permissionKeys?.includes(permissionKey) === true;
-const selfOwner = (req: Request) => fileOwnerKey(getRequesterAccountId(req));
-/**
- * The store being browsed. Every route defaults to the requester's own store; `?owner=` switches to
- * another account's store and is honored only for administrators, who may then act on it.
- */
-const owner = (req: Request) => {
-  const self = selfOwner(req);
-  const requested = req.query.owner;
-  if (requested === undefined || requested === '' || requested === self) return self;
-  const key = parseOwnerKey(requested);
-  if (!isAdminRequest(req)) throw new FileStoreError('다른 계정의 파일을 볼 권한이 없어.', 403);
-  return key;
-};
+// The account identifies the writer; it does not select a private file store.
+const owner = (req: Request) => fileOwnerKey(getRequesterAccountId(req));
 const id = (req: Request) => parseFileId(req.params.id) as string;
 const editorSource = (req: Request): FileWriteSource => ({ via: 'editor', accountId: getRequesterAccountId(req) });
 /** A listed writer with the chat character's name, when it was one. */
@@ -53,7 +42,6 @@ const textBody = (req: Request) => {
 router.get('/', (req, res) => {
   res.json({ success: true, data: FileStoreService.list(owner(req), parseFileId(req.query.parentId, true), Number(req.query.offset ?? 0), Number(req.query.limit ?? 100)) });
 });
-router.get('/owners', requireAdmin, (req, res) => res.json({ success: true, data: FileStoreService.owners(selfOwner(req)) }));
 router.get('/folders', (req, res) => res.json({ success: true, data: FileStoreService.folders(owner(req)) }));
 /** GET /api/files/search?q= — files and folders whose name or text contains every word ("quoted phrase" = one term). */
 router.get('/search', cancellableAsyncHandler(async (req, res, signal) => {

@@ -76,4 +76,12 @@ live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `e
   build only to investigate a demonstrated compatibility issue, not as the default optimization strategy.
 
 ## Checks
+
+Optional extensions live in `features/plugins/`: `/extensions` manages packages and `/ext/:pluginId/:pageId`
+hosts an opaque `sandbox="allow-scripts"` iframe. Use the private MessageChannel SDK, never inject plugin code
+into the app bundle. The host registers `kind: 'extension'` with manifest actions and owns all save review cards.
+File selection is explicit and bounded. `useUnsavedSettingsGuard(..., true)` also guards query changes that replace
+the selected files. Keep the parent's `frame-src 'self'` policy and the dedicated asset proxy in Vite.
+See [plugin contracts](../plugins/README.md).
+
 `npm run typecheck`, `npx eslint .`, `npm run build` (run in `frontend/`).

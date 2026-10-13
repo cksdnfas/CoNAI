@@ -280,9 +280,8 @@ function pendingLore(limit: number, bookIds?: ReadonlySet<number>): IndexItem[] 
 
 async function pendingFiles(limit: number): Promise<IndexItem[]> {
   const db = getUserSettingsDb()
-  const owners = (db.prepare("SELECT DISTINCT owner_key FROM stored_file_entries WHERE kind = 'file' AND deleted_at IS NULL").all() as Array<{ owner_key: string }>).map((row) => row.owner_key)
-  // Extraction progresses independently. Already extracted documents need not wait for the backlog.
-  for (const owner of owners) queueFileSearchRefresh(owner)
+  // One shared extraction queue, independent of creator accounts.
+  queueFileSearchRefresh('shared')
   const rows = db.prepare(`SELECT e.id, e.owner_key, e.name, t.body_bytes, (t.revision || ':' || t.content_hash) AS revision
     FROM stored_file_entries e
     JOIN search_db.search_documents t ON t.source = 'file' AND t.source_id = e.id

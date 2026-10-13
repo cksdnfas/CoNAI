@@ -46,6 +46,7 @@ export default {
           { text: 'ComfyUI 생성', link: '/GUIDE/COMFYUI_GENERATION' },
           { text: '워크플로우 편집', link: '/GUIDE/WORKFLOW_EDITOR' },
           { text: '파일 보관함', link: '/GUIDE/FILES' },
+          { text: '선택 설치 확장', link: '/GUIDE/PLUGINS' },
           { text: '게시판', link: '/GUIDE/POSTS' },
           { text: '설정 전체 지도', link: '/GUIDE/SETTINGS_OVERVIEW' },
           { text: '보안과 권한', link: '/GUIDE/SECURITY_AND_PERMISSIONS' },

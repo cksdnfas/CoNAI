@@ -13,6 +13,7 @@ import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { CodexChatStore } from './codexChatStore'
 import { ChatGroupStore } from './chatGroupStore'
 import { requireChatPageAccess } from './chatPageContext'
+import { chatWorkspace } from './chatWorkspace'
 
 const CHAT_MCP_TOKEN_PREFIX = 'conai_chat_'
 
@@ -113,7 +114,7 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   if (context.source === 'codex-chat' ? !access.codex : profileEngine === 'claude' ? !access.claude : !access.llm) throw new Error('채팅 권한이 변경됐어.')
   const scope = isChatGenerationTool(toolName) ? 'generate' : getMcpToolScope(toolName)
   const pageTool = isConnectedChatPageTool(context, toolName)
-  const builtin = CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || CHAT_SETTINGS_TOOLS.has(toolName)
+  const builtin = CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || CHAT_SETTINGS_TOOLS.has(toolName) || (!!context.workspace && toolName.startsWith('workspace_'))
   if (!pageTool && !builtin && (!scope || !access.scopes.includes(scope as ChatScope))) throw new Error('이 도구를 사용할 권한이 변경됐어.')
   const chat = context.chatContext
   const profile = chat ? ChatProfileStore.find(chat.profileId) : null
@@ -142,7 +143,7 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   }
 }
 
-const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; generationPresetIds: number[]; generationPresetSnapshot: string; chatContext?: ChatExecutionContext }>()
+const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; generationPresetIds: number[]; generationPresetSnapshot: string; chatContext?: ChatExecutionContext; workspace: ReturnType<typeof chatWorkspace> }>()
 
 /**
  * One token per chat app-server process; it lets that process reach `/mcp` as the chatting account with the
@@ -150,7 +151,7 @@ const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; t
  */
 export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext) {
   const token = `${CHAT_MCP_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`
-  tokens.set(token, { requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext })
+  tokens.set(token, { requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext, workspace: chatWorkspace(requester, chatContext?.threadId, chatContext?.profileId) })
   return token
 }
 
@@ -193,6 +194,7 @@ export function authenticateCodexChatMcpRequest(req: Request, candidate: string 
     scopes,
     requester,
     source: 'codex-chat',
+    workspace: grant.workspace,
     toolAllowlist: grant.toolAllowlist,
     generationPresetIds: grant.generationPresetIds,
     generationPresetSnapshot: grant.generationPresetSnapshot,

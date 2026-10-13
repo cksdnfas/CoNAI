@@ -40,10 +40,10 @@ function tableRows(text: string, delimiter: string, complete: boolean) {
 }
 
 /**
- * `owner`: another account's store key when an admin browses it; null for the viewer's own store. `onEdit`: offered
+ * `onEdit`: offered
  * for text files small enough for the editor. Text files also show their earlier versions; `history` opens on them.
  */
-export function FilePreview({ entry, owner = null, onClose, onNavigate, onEdit, history: openHistory = false }: { entry: StoredFileEntry; owner?: string | null; onClose: () => void; onNavigate: (entry: StoredFileEntry) => void; onEdit?: (entry: StoredFileEntry) => void; history?: boolean }) {
+export function FilePreview({ entry, onClose, onNavigate, onEdit, history: openHistory = false }: { entry: StoredFileEntry; onClose: () => void; onNavigate: (entry: StoredFileEntry) => void; onEdit?: (entry: StoredFileEntry) => void; history?: boolean }) {
   const { t } = useI18n()
   const auth = useAuthStatusQuery()
   const { canViewImages } = useImagePermissions()
@@ -51,20 +51,20 @@ export function FilePreview({ entry, owner = null, onClose, onNavigate, onEdit, 
   const [history, setHistory] = useState(openHistory)
   const versioned = TEXT_FILE_PATTERN.test(entry.name) && entry.size <= MAX_TEXT_DOCUMENT_BYTES
   const canWrite = auth.data?.permissionKeys?.includes('files.edit') === true
-  const accountKey = `${auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')}:${owner ?? ''}`
-  const neighbors = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'neighbors', entry.id], queryFn: () => getStoredFileNeighbors(entry.id, owner) })
+  const accountKey = `${auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')}`
+  const neighbors = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'neighbors', entry.id], queryFn: () => getStoredFileNeighbors(entry.id) })
   return <Modal open title={entry.name} onClose={onClose} widthClassName="max-w-5xl" headerContent={<div className="flex items-center gap-1">
     <FilePreviewNavigation previous={neighbors.data?.previous} next={neighbors.data?.next} onNavigate={onNavigate} />
     <span className="flex-1 text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>
     {versioned ? <IconButton variant="ghost" size="icon-sm" active={history} label={t({ ko: '버전 기록', en: 'Version history' })} onClick={() => setHistory(!history)}><History /></IconButton> : null}
     {onEdit && versioned ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '편집', en: 'Edit' })} onClick={() => onEdit(entry)}><SquarePen /></IconButton> : null}
-    {deniedEntryId !== entry.id && (canViewImages || (!entry.mimeType?.startsWith('image/') && !entry.mimeType?.startsWith('video/'))) ? <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}><a href={storedFileDownloadUrl(entry.id, owner)} download><Download /></a></IconButton> : null}
+    {deniedEntryId !== entry.id && (canViewImages || (!entry.mimeType?.startsWith('image/') && !entry.mimeType?.startsWith('video/'))) ? <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}><a href={storedFileDownloadUrl(entry.id)} download><Download /></a></IconButton> : null}
   </div>}>{history && versioned
-    ? <ModalBody><FileRevisionsPanel key={entry.id} entry={entry} owner={owner} canRestore={canWrite} onRestored={(saved) => { setHistory(false); onNavigate(saved) }} /></ModalBody>
-    : <FilePreviewContent key={`${entry.id}:${entry.updatedAt}`} entry={entry} owner={owner} accountKey={accountKey} onPermissionResult={(denied) => setDeniedEntryId(denied ? entry.id : null)} />}</Modal>
+    ? <ModalBody><FileRevisionsPanel key={entry.id} entry={entry} canRestore={canWrite} onRestored={(saved) => { setHistory(false); onNavigate(saved) }} /></ModalBody>
+    : <FilePreviewContent key={`${entry.id}:${entry.updatedAt}`} entry={entry} accountKey={accountKey} onPermissionResult={(denied) => setDeniedEntryId(denied ? entry.id : null)} />}</Modal>
 }
 
-function FilePreviewContent({ entry, owner, accountKey, onPermissionResult }: { entry: StoredFileEntry; owner: string | null; accountKey: string; onPermissionResult: (denied: boolean) => void }) {
+function FilePreviewContent({ entry, accountKey, onPermissionResult }: { entry: StoredFileEntry; accountKey: string; onPermissionResult: (denied: boolean) => void }) {
   const { canViewImages } = useImagePermissions()
   const { t } = useI18n()
   const [offset, setOffset] = useState(0)
@@ -74,12 +74,12 @@ function FilePreviewContent({ entry, owner, accountKey, onPermissionResult }: { 
   const [wrap, setWrap] = useState(true)
   const [raw, setRaw] = useState(false)
   const extension = entry.name.split('.').at(-1)?.toLowerCase() ?? ''
-  const url = storedFileViewUrl(entry.id, owner)
+  const url = storedFileViewUrl(entry.id)
   const [mediaFailed, setMediaFailed] = useState(false)
   // The server determines the actual safe MIME; uploaded MIME and renames are not trusted.
   const mime = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'view-type', entry.id, entry.updatedAt, canViewImages], queryFn: () => readFilePreviewMime(url, onPermissionResult), retry: false })
   const kind = filePreviewKind(mime.data)
-  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'text', entry.id, entry.updatedAt, readSession, revision ?? null, offset], queryFn: ({ signal }) => readStoredFileText(entry.id, offset, owner, revision, signal), retry: false, enabled: kind === 'text' })
+  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'text', entry.id, entry.updatedAt, readSession, revision ?? null, offset], queryFn: ({ signal }) => readStoredFileText(entry.id, offset, revision, signal), retry: false, enabled: kind === 'text' })
   const restartRead = () => { setOffset(0); setFirstLine(1); setRevision(undefined); setReadSession((current) => current + 1) }
   const text = useMemo(() => {
     const source = query.data?.text ?? ''

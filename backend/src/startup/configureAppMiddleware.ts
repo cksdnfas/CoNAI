@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit';
 import { createTieredBodyParsers, resolveRequestBodyLimitsMb } from '../middleware/requestBodyLimits';
 import { logger } from '../utils/logger';
 import { requireMcpHttpAccess } from '../mcp/httpAccess';
+import { pluginAssetRoutes, pluginMediaRoutes } from '../routes/plugin-assets.routes';
 
 type CorsMiddlewareOptions = Parameters<typeof cors<Request>>[0];
 
@@ -197,12 +198,17 @@ export function configureAppMiddleware(
           (_req, res) => `'nonce-${(res as ExpressResponse).locals.cspNonce as string}'`,
         ],
         'upgrade-insecure-requests': null,
+        'frame-src': ["'self'"],
         'connect-src': ["'self'", 'http://localhost:*', 'ws:', 'wss:'],
         'img-src': ["'self'", 'data:', 'blob:', 'http:', 'https:'],
         'media-src': ["'self'", 'blob:', 'http:', 'https:'],
       },
     },
   }));
+
+  // Credential-free, terminal routes for sandboxed extensions. Never inherit the Wallpaper Engine exception.
+  app.use('/api/plugin-assets', readOnlyLimiter, pluginAssetRoutes);
+  app.use('/api/plugin-media', readOnlyLimiter, pluginMediaRoutes);
 
   app.use(dependencies.createCors((req, callback) => {
     const origin = req.get('Origin');

@@ -337,6 +337,16 @@ export function useRuntimeEventQueryBridge() {
         scheduleInvalidate([POSTS_QUERY_KEY], 400)
         return
       }
+      case 'files.changed': {
+        void queryClient.invalidateQueries({ queryKey: ['file-store'], refetchType: 'active' })
+        break
+      }
+      case 'workspace.changed': {
+        const { projectId } = envelope.payload as { projectId: string }
+        if (/^[a-f0-9]{32}$/.test(projectId)) void queryClient.invalidateQueries({ queryKey: ['workspaces', projectId], refetchType: 'active' })
+        void queryClient.invalidateQueries({ queryKey: ['workspaces', 'list'], refetchType: 'active' })
+        return
+      }
       case 'job.status': {
         // 힌트에는 진행률 수치가 없다(정본은 `GET /api/jobs/:jobId`). 해당 잡 쿼리만 무효화한다.
         const payload = envelope.payload as RuntimeJobHintPayload
@@ -370,6 +380,9 @@ export function useRuntimeEventQueryBridge() {
       'module-graph-execution-status',
       'module-graph-execution-progress',
       POSTS_QUERY_KEY,
+      'workspaces',
+      'file-store',
+      'workspace-binding',
     ].forEach((prefix) => {
       void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active' })
     })

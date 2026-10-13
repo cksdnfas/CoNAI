@@ -11,6 +11,8 @@ import { registerChatGenerationTools } from './tools/chatGenerationTools';
 import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
 import { registerFileStoreTools } from './tools/fileStoreTools';
+import { registerWorkspaceTools } from './tools/workspaceTools';
+import { chatWorkspace } from '../services/codex-chat/chatWorkspace';
 import { registerChatLinkedFileTools } from './tools/chatLinkedFileTools';
 import { registerChatSettingsTools } from './tools/chatSettingsTools';
 import { registerPostTools } from './tools/postTools';
@@ -42,6 +44,7 @@ import { registerAppGuideTools } from './tools/appGuideTools';
  * Stateless 방식에서는 요청마다 새 인스턴스를 생성한다.
  */
 export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_HTTP_SCOPES }): McpServer {
+  context = { ...context, workspace: isChatMcpSource(context.source) ? context.workspace !== undefined ? context.workspace : chatWorkspace(context.requester, context.chatContext?.threadId, context.chatContext?.profileId) : undefined };
   const server = new McpServer({
     name: 'conai',
     version: '2.1.0',
@@ -93,6 +96,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
     registerImageResizeTools(server, context);
   });
   inCategory('files', () => registerFileStoreTools(server, context));
+  inCategory('files', () => registerWorkspaceTools(server, context));
   inCategory('posts', () => registerPostTools(server, context));
   inCategory('image_groups', () => registerImageGroupTools(server, context));
   inCategory('emoticons', () => registerEmoticonTools(server, context));

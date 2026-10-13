@@ -19,7 +19,8 @@ const ACTION_DENIED: Record<FileStoreAction, string> = {
   delete: '파일을 삭제할 권한이 없어.',
 };
 
-/** Shared by chat attachments and MCP. An unbound external key never means the bootstrap owner. */
+/** Validate shared-file access and return the actor key for history and private chat bindings.
+ * An unbound external key never means the local bootstrap actor. */
 export function requireFileStoreOwner(requester: McpRequester | undefined): string {
   if (!requester) throw new FileStoreError('파일 접근에는 사용자 계정이 연결된 요청이 필요해.', 403);
   const id = requester.accountId;
@@ -33,7 +34,7 @@ export function requireFileStoreOwner(requester: McpRequester | undefined): stri
   return fileOwnerKey(id);
 }
 
-/** Owner key for one kind of change; each action has its own permission so groups can upload without deleting. */
+/** Authorize a shared-file change; edit permission does not imply delete permission. */
 export function requireFileStoreAction(requester: McpRequester | undefined, action: FileStoreAction): string {
   const owner = requireFileStoreOwner(requester);
   const id = requester?.accountId ?? null;

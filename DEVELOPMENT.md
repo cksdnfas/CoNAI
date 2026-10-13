@@ -79,6 +79,12 @@ HTTP MCP는 설정에서 활성화하고 키로 인증한다. 외부 노출·계
 
 ## 미디어 기반을 수정할 때
 
+프로젝트 작업 공간의 첫 단계는 셸 없는 서버 파일 도구다. `workspaceService.ts`의 공용 실제 폴더·리비전·프로젝트 쓰기 직렬화·요청별 결과를 HTTP `workspaces.routes.ts`와 MCP `workspaceTools.ts`가 공유한다. `chatWorkspace.ts`가 명시적인 1:1 채팅 연결과 지침을 해석하며 게시판 호출은 제외한다. 도구는 프로젝트를 연결한 채팅에만 직접 제공하고, `workspace.changed` 파일 조회 권한 구독자 이벤트로 해당 프로젝트 화면을 갱신한다.
+
+파일함·작업 공간은 인스턴스 공용이며 `files.view/edit/delete` 기능 권한은 유지한다. `fileStoreAccess.ts`의 계정 키는 실행 주체·개인 채팅 연결용이고 파일 조회 범위가 아니다. DB의 기존 `owner_key`는 생성 출처 기록으로 보존한다. 파일·검색·버전 조회는 안정된 ID로 접근하고 이름 유일성은 공용 부모 폴더 단위로 검사한다. `fileStoreSchema.ts`는 기존 이름 충돌을 ID 접미사로 해소하며, 시작 시 `fileStorePaths.ts`가 계정별 원본·버전·프로젝트 경로를 공용 경로로 이전한다. 충돌이나 링크 발견 시 시작을 중단하며 기존 자료를 덮어쓰지 않는다. `files.changed`와 `workspace.changed`는 해당 기능 권한이 있는 구독자의 캐시를 갱신한다. 계정별 파일함 선택 UI와 `/api/files/owners`는 제거했다. 이전 URL의 `owner`는 저장소 선택에 사용하지 않는다.
+
+Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅 상태와 분리한다. 지침 버전이나 연결이 바뀌면 이전 도구 호출을 거부하고 다음 실행 문맥을 갱신한다. 중단 작업은 동일 호스트의 종료된 PID와 현재 PID에 남은 이전 실행을 구분한다. 다른 호스트의 잠금이나 다른 살아 있는 프로세스로 재사용된 PID는 자동 회수하지 않으며 아직 운영 복구 API가 없다. 로어북 시작 시 대조는 공용 파일의 ID로 존재를 확인하고, 로어북 관리 소유자는 별도로 유지한다. 프로젝트 도구 결과는 일반 출력 길이 축약으로 파일 내용·리비전을 잘라내지 않으며, 요청 문맥이 부족하면 기존 중단 안내 흐름을 따른다. 현재 검색은 관리 항목 100개씩·본문 앞 128KB의 제한된 조회이며 외부 디스크 변경 감시·재색인과 프로젝트 체크포인트 재개는 아직 없다. 미디어 원본은 기존 라이브러리에 남고 프로젝트 생성 연결은 후속 구현이다.
+
 | 영역 | 코드 진입점 | 사용 흐름 |
 | --- | --- | --- |
 | 라이브러리·목록 | [ImageModel.ts](backend/src/models/ImageModel.ts), [image-list](frontend/src/features/images/components/image-list/image-list.tsx) | [라이브러리](docs/GUIDE/MEDIA_LIBRARY_BASICS.md) |
@@ -125,6 +131,14 @@ HTTP MCP는 설정에서 활성화하고 키로 인증한다. 외부 노출·계
 `/api/page-settings/:scope`는 명시적 설정 권한과 `If-Match`를 요구한다. 일반·미디어·분석·외형은 기존 설정 라우터를 재사용하되 허용된 필드만 입력·응답에 통과시킨다. 비동기 의존성 검사 뒤에도 실제 저장 직전에 권한과 버전을 재확인한다. 네이티브 설정 응답의 `pageSettingsRevisions`는 전송용 정보이며 저장 파일에 쓰지 않는다. 중앙 설정 편집기도 초안 시작 시 버전을 유지해 같은 공용 항목의 오래된 저장을 막는다.
 
 어시스턴트의 `page.settings_open`은 조회 작업, `page_settings.save`는 검토 카드 작업이다. `page_settings` 스냅샷은 원래 페이지 경로와 허용된 설정 범위에 결합되며, 기존 관리자용 `settings.*` 작업을 다른 경로에 개방하지 않는다. 미저장 변경은 `UnsavedSettingsGuardProvider`가 페이지·모달을 합쳐 하나의 라우터 차단기로 보호한다.
+
+## 선택 설치 확장
+
+`shared/src/types/plugin.ts`, `backend/src/services/plugins/`, `frontend/src/features/plugins/`가 manifest, 설치·권한·승인, 격리 화면을 담당한다. `/extensions`에서 관리하고 `/ext/<pluginId>/<pageId>`는 `kind: 'extension'` 페이지 계약으로 기존 어시스턴트에 연결한다. 서버는 설치 manifest와 작업 스키마를 대조한다. 플러그인 콜백의 등급은 view/draft만 허용하고, 실제 파일 쓰기는 호스트 검토 카드와 서버 승인·리비전 검사로 수행한다.
+
+자산·미디어 라우트는 전역 CORS 이전의 credential-free 종단 라우트다. 일반 호스트 API의 null origin 거부와 Wallpaper Engine 예외를 합치지 않는다. 공용 파일함에서 명시적으로 선택한 자료만 기존 FileStoreService를 통해 제공하며 연결·승인은 요청 계정과 세션에 묶는다. 프로젝트 자료·서버 실행은 현재 SDK 범위에 없다. 설치하지 않은 개별 도구는 기본 번들에 포함하지 않는다. [개발 계약과 SDK](plugins/README.md), [사용자 가이드](docs/GUIDE/PLUGINS.md)를 참고한다.
+
+`npx tsx --test backend/test/plugins.test.ts`로 계정·세션·선택 범위, 승인 재사용·권한 회수·저장 충돌, ZIP과 opaque-origin 경계를 검증한다.
 
 ## 검증 선택
 

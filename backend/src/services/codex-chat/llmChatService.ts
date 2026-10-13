@@ -11,6 +11,7 @@ import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { readChoiceAnswer } from './chatChoices'
 import { profileContentLimit } from './chatContentRating'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
+import { chatWorkspace, workspaceInstructions } from './chatWorkspace'
 import { CATALOG_OPEN_TOOL, unwrapCatalogCall } from '../../mcp/toolCatalog'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, isVisionTool, sessionRuntimeOf, type ChatProfile } from './chatProfiles'
@@ -255,7 +256,8 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   record.output = pageRead ? '(Page/editor snapshot omitted; use the screen in the current request, or the page tools for what it does not show.)' : catalogRead ? '(Tool schemas omitted; open them again with open_tools when needed.)' : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; use the screen in the current request.)` : cutToolOutput(output, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
   // The catalog pages at whole-schema boundaries; cutting JSON here makes the opened tools unusable.
-  const text = (!catalogRead && output.length > outputLimit ? cutToolOutput(output, outputLimit) : output) || '(no output)'
+  const workspaceResult = record.tool.startsWith('workspace_')
+  const text = (!catalogRead && !workspaceResult && output.length > outputLimit ? cutToolOutput(output, outputLimit) : output) || '(no output)'
   return { text, nativeResult: nativeResult ? { ...nativeResult, content: [{ type: 'text', text }, ...(nativeResult.content ?? []).filter((part) => (part as { type?: unknown })?.type === 'image')] } : { isError: true, content: [{ type: 'text', text }] } }
 }
 
@@ -470,6 +472,10 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     const offeredTools = visible
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools, withSemanticContext(judged?.context ?? null, semantic))
+    if (!turn.engineSession && offeredTools.some(tool => tool.function.name === 'workspace_read')) {
+      const instruction = workspaceInstructions(chatWorkspace(requester, turn.threadId, profile.id))
+      if (instruction) built.unshift({ role: 'system', content: instruction })
+    }
     // Record the completed session without capturing its private history or filesystem path.
     const engineSession = turn.engineSession ? {
       ...turn.engineSession,

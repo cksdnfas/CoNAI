@@ -15,7 +15,7 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { pageAction, pageArray, pageFreeText, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, createStoredTextFile, readStoredFileForEdit, saveStoredFileText, type StoredFileOwnerKey } from '@/lib/api-files'
+import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, createStoredTextFile, readStoredFileForEdit, saveStoredFileText } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 
 const ChatMarkdown = lazy(() => import('@/features/codex-chat/chat-markdown').then((module) => ({ default: module.ChatMarkdown })))
@@ -49,10 +49,9 @@ const isMarkdownName = (name: string) => /\.(md|markdown)$/i.test(name)
  * editor open (a new document becomes that file); `onClose` gets the file as last saved, or null when nothing was.
  * `chatPage`: the file store page is connected to a chat, so the open document joins that connection (see below).
  */
-export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = false }: {
+export function FileTextEditor({ entry, parentId, onClose, chatPage = false }: {
   entry: StoredFileEntry | null
   parentId: string | null
-  owner?: StoredFileOwnerKey
   onClose: (saved: StoredFileEntry | null) => void
   chatPage?: boolean
 }) {
@@ -69,8 +68,8 @@ export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = fal
   const [tab, setTab] = useState<MarkdownTab>('write')
   const tooLarge = entry !== null && entry.size > MAX_TEXT_DOCUMENT_BYTES
   const source = useQuery({
-    queryKey: ['file-text-editor', owner ?? null, entry?.id],
-    queryFn: () => readStoredFileForEdit(entry!.id, owner),
+    queryKey: ['file-text-editor', entry?.id],
+    queryFn: () => readStoredFileForEdit(entry!.id),
     enabled: entry !== null && !tooLarge,
     gcTime: 0,
     staleTime: Infinity,
@@ -90,7 +89,7 @@ export function FileTextEditor({ entry, parentId, owner, onClose, chatPage = fal
   const markdown = isMarkdownName(file?.name ?? fileName)
   const dirty = file ? text !== null && text !== baseline : true
   const save = useMutation({
-    mutationFn: (value: string) => (file ? saveStoredFileText(file.id, value, owner, revision) : createStoredTextFile(parentId, fileName, value, owner)),
+    mutationFn: (value: string) => (file ? saveStoredFileText(file.id, value, revision) : createStoredTextFile(parentId, fileName, value)),
     onSuccess: async (result, value) => {
       setFile(result)
       setSaved(result)

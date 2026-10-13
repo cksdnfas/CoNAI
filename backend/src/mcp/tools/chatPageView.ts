@@ -20,7 +20,7 @@ export function chatPageView(requester: McpRequester, page: ChatPageSnapshot) {
   const { data, workflow, ...summary } = page
   const allowedData = Object.entries(data ?? {}).filter(([key]) => { try { requireChatPageDataAccess(requester, key); return true } catch { return false } })
   const actions = (page.actions ?? []).filter((action) => { try { requireChatPageActionAccess(requester, page, action.id); return true } catch { return false } })
-    .map((action) => ({ ...action, tier: chatPageActionTier(action.id) }))
+    .map((action) => ({ ...action, tier: chatPageActionTier(action.id, action) }))
   return {
     ...summary,
     ...(page.actions ? { actions } : {}),

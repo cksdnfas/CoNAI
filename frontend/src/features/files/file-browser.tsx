@@ -1,8 +1,9 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { useNavigate } from 'react-router-dom'
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type DragEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AudioLines, ChevronRight, Download, File, FilePlus, Folder, FolderInput, FolderPlus, LayoutGrid, List, Pencil, RefreshCw, Search, Trash2, Upload, Users, X } from 'lucide-react'
-import type { FileSearchStatus, StoredFileEntry, StoredFileOwner, StoredFileSearchHit } from '@conai/shared'
+import { AudioLines, ChevronRight, Download, File, FilePlus, Folder, FolderInput, FolderPlus, LayoutGrid, List, Pencil, RefreshCw, Search, Trash2, Upload, X } from 'lucide-react'
+import type { FileSearchStatus, StoredFileEntry, StoredFileSearchHit } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -27,7 +28,7 @@ import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/featu
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFileOwners, listStoredFileRevisions, listStoredFiles, listStoredFolders, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, retryStoredFileIndex, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
+import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFileRevisions, listStoredFiles, listStoredFolders, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, retryStoredFileIndex, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { FilePreview } from './file-preview'
@@ -38,8 +39,6 @@ import { SystemFolderBrowser, SystemFolderSidebarGroup, type SystemFolderLocatio
 
 const FILE_DRAG_TYPE = 'application/x-conai-file-ids'
 const PAGE_SIZE = 100
-/** `owner` value that shows the account list instead of a store. */
-export const ALL_OWNERS = 'all'
 type NameDialog = { id?: string; name: string } | null
 
 function folderTree(folders: StoredFileEntry[]) {
@@ -70,9 +69,8 @@ function extensionOf(name: string) {
 
 /** One file or folder as a tile: image files show a thumbnail, everything else a type icon. */
 /** Extra div props (ref, pointer and context-menu handlers) come from the row menu wrapping the tile. */
-function FileTile({ entry, owner, selected, showCheckbox, canSelect, draggable, onOpen, onToggle, onDragStart, onDragOver, onDrop, className, ...rest }: Omit<ComponentProps<'div'>, 'onDragStart' | 'onDragOver' | 'onDrop' | 'onToggle' | 'draggable'> & {
+function FileTile({ entry, selected, showCheckbox, canSelect, draggable, onOpen, onToggle, onDragStart, onDragOver, onDrop, className, ...rest }: Omit<ComponentProps<'div'>, 'onDragStart' | 'onDragOver' | 'onDrop' | 'onToggle' | 'draggable'> & {
   entry: StoredFileEntry
-  owner: string | null
   selected: boolean
   /** Checkboxes stay visible once anything is selected (and on hover otherwise). */
   showCheckbox: boolean
@@ -100,7 +98,7 @@ function FileTile({ entry, owner, selected, showCheckbox, canSelect, draggable, 
       >
         <span className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-sm bg-surface-low">
           {showThumb ? (
-            <img src={storedFileThumbnailUrl(entry.id, owner)} alt="" loading="lazy" draggable={false} onError={() => setThumbFailed(true)} className="size-full object-cover" />
+            <img src={storedFileThumbnailUrl(entry.id)} alt="" loading="lazy" draggable={false} onError={() => setThumbFailed(true)} className="size-full object-cover" />
           ) : (
             <span className="flex flex-col items-center gap-1">
               <EntryIcon entry={entry} className="size-9" />
@@ -166,55 +164,9 @@ function SearchHits({ hits, terms, truncated, search, onOpen, onRetry, retrying 
   )
 }
 
-/** Display name of one account's store; deleted accounts and the pre-auth bootstrap store have no username. */
-function ownerLabel(owner: StoredFileOwner, t: ReturnType<typeof useI18n>['t']) {
-  if (owner.username) return owner.username
-  if (owner.status === 'bootstrap') return t({ ko: '초기 설정 전 파일', en: 'Pre-setup files' })
-  return t({ ko: '삭제된 계정 {key}', en: 'Deleted account {key}' }, { key: owner.ownerKey })
-}
-
-/** Every account's store at a glance (administrators); choosing one opens it. */
-function OwnerList({ owners, onOpen }: { owners: StoredFileOwner[]; onOpen: (owner: StoredFileOwner) => void }) {
-  const { t } = useI18n()
-  return (
-    <DataTable
-      head={(
-        <>
-          <DataTh>{t({ ko: '계정', en: 'Account' })}</DataTh>
-          <DataTh className="hidden sm:table-cell">{t({ ko: '상태', en: 'Status' })}</DataTh>
-          <DataTh className="text-right">{t({ ko: '파일', en: 'Files' })}</DataTh>
-          <DataTh className="text-right">{t({ ko: '용량', en: 'Size' })}</DataTh>
-        </>
-      )}
-    >
-      {owners.map((owner) => (
-        <DataTr interactive key={owner.ownerKey}>
-          <DataTd flush className="min-w-40">
-            <Button variant="ghost" className="max-w-full justify-start" onClick={() => onOpen(owner)}>
-              <Folder className="shrink-0 text-warning" />
-              <span className="max-w-80 truncate">{ownerLabel(owner, t)}</span>
-              {owner.self ? <span className="text-xs text-muted-foreground">{t({ ko: '나', en: 'me' })}</span> : null}
-            </Button>
-          </DataTd>
-          <DataTd meta flush className="hidden sm:table-cell">
-            {owner.status === 'active' ? (owner.accountType === 'admin' ? t({ ko: '관리자', en: 'Admin' }) : t({ ko: '게스트', en: 'Guest' }))
-              : owner.status === 'disabled' ? t({ ko: '비활성', en: 'Disabled' })
-                : owner.status === 'deleted' ? t({ ko: '삭제됨', en: 'Deleted' }) : ''}
-          </DataTd>
-          <DataTd meta flush className="text-right">{owner.fileCount}</DataTd>
-          <DataTd meta flush className="text-right">{formatFileSize(owner.totalSize)}</DataTd>
-        </DataTr>
-      ))}
-    </DataTable>
-  )
-}
-
-/**
- * The account's private file store: folder tree, list, upload / drag-in, move, rename, delete.
- * With `onPick` it becomes a picker (inside a modal): only files can be chosen and nothing is changed but uploads.
- * With `owner` + `onOwnerChange`, administrators can switch to any account's store (`ALL_OWNERS` lists them).
- */
-export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFolder, pickFolderLabel, accept, owner = null, onOwnerChange, system = null, onSystemNavigate }: {
+/** Shared file store, also used as a file/folder picker. */
+export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFolder, pickFolderLabel, accept, system = null, onSystemNavigate, onWorkspacesOpen }: {
+  onWorkspacesOpen?: () => void
   parentId: string | null
   onNavigate: (id: string | null) => void
   onPick?: (files: StoredFileEntry[]) => void
@@ -225,14 +177,13 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   pickLabel?: (count: number) => string
   /** Picker: only files with these extensions (lowercase, with the dot) can be chosen. */
   accept?: readonly string[]
-  owner?: string | null
-  onOwnerChange?: (owner: string | null) => void
   /** Server folder shown instead of the store (administrators); null shows the store. */
   system?: SystemFolderLocation | null
   /** With it, administrators get the "서버 폴더" sidebar group. */
   onSystemNavigate?: (location: SystemFolderLocation) => void
 }) {
   const { t, formatDateTime } = useI18n()
+  const navigateToExtension = useNavigate()
   const { showSnackbar } = useSnackbar()
   const confirm = useConfirm()
   const queryClient = useQueryClient()
@@ -244,14 +195,10 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   const canUpload = canViewFiles && permissions.includes('files.edit')
   const canOrganize = permissions.includes('files.edit')
   const canDelete = permissions.includes('files.delete')
-  // Restricted file types and other accounts' stores are for administrators (the local owner before accounts exist).
+  // Restricted file types require administrator access.
   const canUploadAny = auth.data?.isAdmin === true || auth.data?.hasCredentials === false
-  const canBrowseAll = !isPicker && onOwnerChange !== undefined && auth.data?.isAdmin === true
   const canBrowseSystem = !isPicker && onSystemNavigate !== undefined && auth.data?.isAdmin === true
   const browsingSystem = canBrowseSystem && system !== null
-  const browsingAll = canBrowseAll && owner === ALL_OWNERS && !browsingSystem
-  /** Store sent to the API: null for the requester's own store. */
-  const storeOwner = canBrowseAll && owner && owner !== ALL_OWNERS ? owner : null
   const accountKey = auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')
   const [offset, setOffset] = useState(0)
   const [selected, setSelected] = useState<string[]>([])
@@ -263,7 +210,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   const [editor, setEditor] = useState<{ entry: StoredFileEntry | null } | null>(null)
   const [audioSend, setAudioSend] = useState<StoredFileEntry[] | null>(null)
   // Only your own store: the audio import copies from the requester's files.
-  const canSendAudio = useCanSendToAudio() && storeOwner === null
+  const canSendAudio = useCanSendToAudio()
   const [viewMode, changeViewMode] = useFileViewMode()
   const uploadInput = useRef<HTMLInputElement>(null)
   // Search replaces the folder list while open; the request waits for typing to pause.
@@ -274,21 +221,19 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     const timer = window.setTimeout(() => setSearchQuery(searchInput.trim()), 300)
     return () => window.clearTimeout(timer)
   }, [searchInput])
-  const canSearch = !isPicker && !browsingAll
+  const canSearch = !isPicker
   const searching = canSearch && searchOpen && searchQuery !== ''
-  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'list', parentId, offset], queryFn: ({ signal }) => listStoredFiles(parentId, offset, storeOwner, signal), enabled: canViewFiles && !browsingAll && !browsingSystem })
-  const foldersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'folders'], queryFn: ({ signal }) => listStoredFolders(storeOwner, signal), enabled: canViewFiles && !browsingAll })
-  const searchResults = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'search', searchQuery], queryFn: ({ signal }) => searchStoredFiles(searchQuery, storeOwner, signal), enabled: canViewFiles && searching })
+  const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'list', parentId, offset], queryFn: ({ signal }) => listStoredFiles(parentId, offset, signal), enabled: canViewFiles && !browsingSystem })
+  const foldersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'folders'], queryFn: ({ signal }) => listStoredFolders(signal), enabled: canViewFiles })
+  const searchResults = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'search', searchQuery], queryFn: ({ signal }) => searchStoredFiles(searchQuery, signal), enabled: canViewFiles && searching })
   const retryExtraction = useMutation({
-    mutationFn: (id: string) => retryStoredFileIndex(id, storeOwner),
+    mutationFn: (id: string) => retryStoredFileIndex(id),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY }) },
     onError: (error: unknown) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '본문을 다시 추출하지 못했어.', en: 'Could not retry extraction.' })) }),
   })
-  const ownersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'owners'], queryFn: listStoredFileOwners, enabled: canBrowseAll })
   const folders = useMemo(() => folderTree(foldersQuery.data ?? []), [foldersQuery.data])
   const entries = query.data?.entries ?? []
-  const currentOwner = storeOwner ? ownersQuery.data?.find((item) => item.ownerKey === storeOwner) : undefined
-  const rootLabel = storeOwner ? (currentOwner ? ownerLabel(currentOwner, t) : storeOwner) : t({ ko: '내 파일', en: 'My files' })
+  const rootLabel = t({ ko: '공용 파일', en: 'Shared files' })
   // The picker attaches files only; folders are for navigating.
   const selectable = isPicker ? entries.filter((entry) => entry.kind === 'file') : entries
   const selection = entries.filter((entry) => selected.includes(entry.id))
@@ -305,17 +250,17 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '파일 작업에 실패했어.', en: 'File operation failed.' })) }),
   })
   const busy = mutation.isPending
-  const chatPage = !isPicker && chatCanReadFiles && !browsingAll && !browsingSystem
+  const chatPage = !isPicker && chatCanReadFiles && !browsingSystem
   // The previewed text file's earlier versions, so the connected chat can put one back (a review card).
   const previewVersioned = chatPage && preview !== null && preview.kind === 'file' && TEXT_FILE_PATTERN.test(preview.name)
-  const versionsQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, storeOwner, 'revisions', preview?.id, preview?.updatedAt], queryFn: () => listStoredFileRevisions(preview!.id, storeOwner), enabled: previewVersioned })
+  const versionsQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'revisions', preview?.id, preview?.updatedAt], queryFn: () => listStoredFileRevisions(preview!.id), enabled: previewVersioned })
   const versions = previewVersioned ? versionsQuery.data?.revisions ?? [] : []
   const editableDocuments = entries.filter((entry) => entry.kind === 'file' && TEXT_FILE_PATTERN.test(entry.name) && entry.size <= MAX_TEXT_DOCUMENT_BYTES)
-  const saveName = (dialog: NonNullable<NameDialog>) => mutation.mutateAsync(() => (dialog.id ? renameStoredFile(dialog.id, dialog.name, storeOwner) : createStoredFolder(parentId, dialog.name, storeOwner)))
+  const saveName = (dialog: NonNullable<NameDialog>) => mutation.mutateAsync(() => (dialog.id ? renameStoredFile(dialog.id, dialog.name) : createStoredFolder(parentId, dialog.name)))
   const writerName = (source: { via?: string; profileName?: string } | null) => (source ? [source.via, source.profileName].filter(Boolean).join(' · ') : null)
 
   useChatPageRegistration(chatPage ? {
-    kind: 'files', title: t({ ko: '파일 보관함', en: 'File store' }), resourceId: `${storeOwner ?? 'self'}:${parentId ?? 'root'}`, localRevision: JSON.stringify([selected, preview?.id, nameDialog, moveOpen, searchOpen, searchInput]),
+    kind: 'files', title: t({ ko: '파일 보관함', en: 'File store' }), resourceId: `shared:${parentId ?? 'root'}`, localRevision: JSON.stringify([selected, preview?.id, nameDialog, moveOpen, searchOpen, searchInput]),
     fields: [
       { id: 'viewMode', label: t({ ko: '목록 표시', en: 'List view' }), type: 'select', value: viewMode, options: ['grid', 'list'] },
       { id: 'search', label: t({ ko: '파일 검색어 (이름·내용, 빈 값은 검색 닫기)', en: 'File search (name or text; empty closes search)' }), type: 'text', value: searchOpen ? searchInput : '' },
@@ -352,12 +297,12 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
       if (id === 'files.new_folder') { setNameDialog({ name: '' }); return }
       if (id === 'files.name_save' && nameDialog) { await saveName(nameDialog); return }
       if (id === 'files.move') { setMoveTarget(parentId ?? ''); setMoveOpen(true); return }
-      if (id === 'files.move_save') { await mutation.mutateAsync(() => moveStoredFiles(selected, moveTarget || null, storeOwner)); return }
-      if (id === 'files.delete') { await mutation.mutateAsync(() => deleteStoredFiles(selected, storeOwner)); return }
+      if (id === 'files.move_save') { await mutation.mutateAsync(() => moveStoredFiles(selected, moveTarget || null)); return }
+      if (id === 'files.delete') { await mutation.mutateAsync(() => deleteStoredFiles(selected)); return }
       if (id === 'files.new_document') { setEditor({ entry: null }); return }
       if (id === 'files.restore_version' && preview) {
         if (!versions.some((version) => version.id === args.versionId)) throw new Error('그 버전을 찾을 수 없어.')
-        const saved = await restoreStoredFileRevision(preview.id, String(args.versionId), storeOwner)
+        const saved = await restoreStoredFileRevision(preview.id, String(args.versionId))
         await refresh()
         setPreview(saved)
         return
@@ -381,14 +326,9 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     setOffset(0)
     onNavigate(id)
   }
-  const openOwner = (next: StoredFileOwner | null) => {
-    setSelected([])
-    setOffset(0)
-    onOwnerChange?.(next === null ? ALL_OWNERS : next.self ? null : next.ownerKey)
-  }
   const toggle = (id: string, checked: boolean) => setSelected((current) => (checked ? [...current, id] : current.filter((entry) => entry !== id)))
   const upload = (files: File[], target: string | null = parentId) => {
-    if (canUpload && !busy && files.length) mutation.mutate(() => uploadStoredFiles(target, files, { owner: storeOwner, allowAnyType: canUploadAny }))
+    if (canUpload && !busy && files.length) mutation.mutate(() => uploadStoredFiles(target, files, { allowAnyType: canUploadAny }))
   }
   const drop = (event: DragEvent, target: string | null) => {
     event.preventDefault()
@@ -399,7 +339,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
       if (!canOrganize) return
       try {
         const ids: unknown = JSON.parse(dragged)
-        if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) mutation.mutate(() => moveStoredFiles(ids, target, storeOwner))
+        if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) mutation.mutate(() => moveStoredFiles(ids, target))
       } catch {
         // Ignore unrelated drag payloads.
       }
@@ -420,11 +360,11 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
       description: t({ ko: '원본 파일이 삭제돼. 빈 폴더만 삭제할 수 있고, 채팅에서 참조 중인 파일은 보호돼.', en: 'Original files will be deleted. Folders must be empty; files attached to chats are protected.' }),
       tone: 'destructive',
     })
-    if (confirmed) mutation.mutate(() => deleteStoredFiles(ids, storeOwner))
+    if (confirmed) mutation.mutate(() => deleteStoredFiles(ids))
   }
   const download = (entry: StoredFileEntry) => {
     const link = document.createElement('a')
-    link.href = storedFileDownloadUrl(entry.id, storeOwner)
+    link.href = storedFileDownloadUrl(entry.id)
     link.download = ''
     link.click()
   }
@@ -445,6 +385,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
 
   const actions = (
     <>
+      {!isPicker && !browsingSystem ? <Button variant="ghost" disabled={busy || selected.length > 20 || selection.some((entry) => entry.kind !== 'file')} onClick={() => navigateToExtension(`/extensions${selected.length ? `?files=${encodeURIComponent(selected.join(','))}` : ''}`)}>{t({ ko: '확장으로 열기', en: 'Open with extension' })}</Button> : null}
       <SegmentedControl
         size="xs"
         value={viewMode}
@@ -460,12 +401,12 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
           <Search />
         </IconButton>
       ) : null}
-      {canOrganize && !browsingAll ? (
+      {canOrganize ? (
         <IconButton variant="ghost" label={t({ ko: '새 폴더', en: 'New folder' })} disabled={busy} onClick={() => setNameDialog({ name: '' })}>
           <FolderPlus />
         </IconButton>
       ) : null}
-      {canUpload && !browsingAll ? (
+      {canUpload ? (
         <IconButton variant="ghost" label={t({ ko: '파일 업로드', en: 'Upload files' })} disabled={busy} onClick={() => uploadInput.current?.click()}>
           <Upload />
         </IconButton>
@@ -474,7 +415,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
         size="icon"
         label={t({ ko: '더 보기', en: 'More' })}
         entries={[
-          canUpload && !browsingAll && !isPicker && { key: 'new-document', label: t({ ko: '새 문서', en: 'New document' }), icon: FilePlus, disabled: busy, onSelect: () => setEditor({ entry: null }) },
+          canUpload && !isPicker && { key: 'new-document', label: t({ ko: '새 문서', en: 'New document' }), icon: FilePlus, disabled: busy, onSelect: () => setEditor({ entry: null }) },
           { key: 'refresh', label: t({ ko: '새로고침', en: 'Refresh' }), icon: RefreshCw, disabled: busy, onSelect: () => void refresh() },
         ]}
       />
@@ -491,9 +432,8 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   )
   const breadcrumbs = (
     <nav aria-label={t({ ko: '현재 경로', en: 'Current path' })} className="flex min-w-0 flex-wrap items-center gap-0.5 text-sm">
-      {canBrowseAll ? crumb(t({ ko: '전체 계정', en: 'All accounts' }), browsingAll, () => openOwner(null), true) : null}
-      {browsingAll ? null : crumb(rootLabel, parentId === null, () => navigate(null), !canBrowseAll)}
-      {browsingAll ? null : query.data?.breadcrumbs.map((folder, index, all) => (
+      {crumb(rootLabel, parentId === null, () => navigate(null), true)}
+      {query.data?.breadcrumbs.map((folder, index, all) => (
         <span key={folder.id} className="contents">{crumb(folder.name, index === all.length - 1, () => navigate(folder.id))}</span>
       ))}
     </nav>
@@ -519,8 +459,8 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
 
   const sidebar = (
     <SidebarNav aria-label={t({ ko: '폴더', en: 'Folders' })}>
-      {canBrowseAll ? <SidebarItem icon={Users} label={t({ ko: '전체 계정', en: 'All accounts' })} active={browsingAll} onClick={() => openOwner(null)} /> : null}
-      {browsingAll ? null : (
+      {onWorkspacesOpen ? <SidebarItem icon={FolderInput} label={t({ ko: '작업 공간', en: 'Workspaces' })} onClick={onWorkspacesOpen} /> : null}
+      {(
         <>
           <SidebarItem icon={Folder} label={rootLabel} active={!browsingSystem && parentId === null} onClick={() => navigate(null)} onDragOver={dragOver} onDrop={(event) => drop(event, null)} />
           {folders.map(({ folder, depth }) => (
@@ -542,10 +482,6 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     else if (searchResults.isError) list = <ErrorState title={t({ ko: '검색하지 못했어.', en: 'Search failed.' })} error={searchResults.error} onRetry={() => void searchResults.refetch()} />
     else if (searchResults.data.hits.length === 0) list = <EmptyState icon={Search} title={t({ ko: '찾은 파일이 없어', en: 'No matching files' })} />
     else list = <SearchHits hits={searchResults.data.hits} terms={searchResults.data.terms} truncated={searchResults.data.truncated} search={searchResults.data.search} onRetry={(id) => retryExtraction.mutate(id)} retrying={retryExtraction.isPending} onOpen={(entry) => (entry.kind === 'folder' ? navigate(entry.id) : setPreview(entry))} />
-  } else if (browsingAll) {
-    if (ownersQuery.isPending) list = <LoadingState />
-    else if (ownersQuery.isError) list = <ErrorState title={t({ ko: '계정 목록을 불러오지 못했어.', en: 'Could not load accounts.' })} error={ownersQuery.error} onRetry={() => void ownersQuery.refetch()} />
-    else list = <OwnerList owners={ownersQuery.data} onOpen={openOwner} />
   } else if (query.isPending) {
     list = <LoadingState />
   } else if (query.isError) {
@@ -564,7 +500,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
             <ActionContextMenu key={entry.id} entries={isPicker ? [] : rowEntries(entry)} onOpenChange={rowMenuOpenChange}>
               <FileTile
                 entry={entry}
-                owner={storeOwner}
+
                 selected={isSelected}
                 showCheckbox={selected.length > 0}
                 canSelect={canSelect}
@@ -655,7 +591,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     )
   }
 
-  const pager = !browsingAll && !searching && query.data && query.data.total > query.data.limit ? (
+  const pager = !searching && query.data && query.data.total > query.data.limit ? (
     <div className="flex justify-end gap-2">
       <Button variant="ghost" size="sm" disabled={offset === 0} onClick={() => { setOffset((value) => Math.max(0, value - PAGE_SIZE)); setSelected([]) }}>{t({ ko: '이전', en: 'Previous' })}</Button>
       <Button variant="ghost" size="sm" disabled={offset + query.data.limit >= query.data.total} onClick={() => { setOffset((value) => value + PAGE_SIZE); setSelected([]) }}>{t({ ko: '다음', en: 'Next' })}</Button>
@@ -663,7 +599,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   ) : null
 
   const body = (
-    <div className="min-h-72 space-y-3" onDragOver={browsingAll ? undefined : dragOver} onDrop={browsingAll ? undefined : (event) => drop(event, parentId)}>
+    <div className="min-h-72 space-y-3" onDragOver={dragOver} onDrop={(event) => drop(event, parentId)}>
       <input ref={uploadInput} type="file" multiple className="hidden" onChange={(event) => { upload(Array.from(event.target.files ?? [])); event.target.value = '' }} />
       {list}
       {pager}
@@ -751,19 +687,19 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
         </ModalBody>
         <ModalFooter>
           <span className="flex-1" />
-          <Button disabled={busy} onClick={() => mutation.mutate(() => moveStoredFiles(selected, moveTarget || null, storeOwner))}>{t({ ko: '이동', en: 'Move' })}</Button>
+          <Button disabled={busy} onClick={() => mutation.mutate(() => moveStoredFiles(selected, moveTarget || null))}>{t({ ko: '이동', en: 'Move' })}</Button>
         </ModalFooter>
       </Modal>
 
       <SendToAudioDialog files={audioSend} onClose={() => setAudioSend(null)} />
-      {preview ? <FilePreview entry={preview} owner={storeOwner} onClose={() => setPreview(null)} onNavigate={setPreview} onEdit={canUpload ? (entry) => { setPreview(null); setEditor({ entry }) } : undefined} /> : null}
+      {preview ? <FilePreview entry={preview} onClose={() => setPreview(null)} onNavigate={setPreview} onEdit={canUpload ? (entry) => { setPreview(null); setEditor({ entry }) } : undefined} /> : null}
       {editor ? (
         <FileTextEditor
           key={editor.entry?.id ?? 'new'}
           chatPage={chatPage}
           entry={editor.entry}
           parentId={parentId}
-          owner={storeOwner}
+
           // An edit opened from the preview returns to it, showing the saved text.
           onClose={(saved) => { const { entry } = editor; setEditor(null); if (entry) setPreview(saved ?? entry) }}
         />

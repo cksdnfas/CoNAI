@@ -32,7 +32,7 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
   const { KnowledgeAssessmentStore, getKnowledgeQuality, insertKnowledgeAssessment, knowledgeTaskFitMultiplier, knowledgeSearchTaskKey } = await import('../src/services/posts/knowledgeAssessment')
   type Actor = import('../src/services/posts/postActor').PostActor
 
-  const ALL = ['posts.view', 'posts.comment', 'posts.write', 'posts.summon', 'images.view']
+  const ALL = ['posts.view', 'posts.comment', 'posts.write', 'posts.summon', 'images.view', 'files.view']
   const admin: Actor = { accountId: 1, isAdmin: true, keys: new Set(ALL), profileId: null }
   const alice: Actor = { accountId: 2, isAdmin: false, keys: new Set(ALL), profileId: null }
   const bob: Actor = { accountId: 3, isAdmin: false, keys: new Set(ALL), profileId: null }
@@ -147,11 +147,12 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     updatePostsSettings({ botPostStatus: 'published' })
   })
 
-  await t.test('file embeds: only the writer\'s own files, then protected from deletion', () => {
+  await t.test('file embeds: shared files with file permission, then protected from deletion', () => {
     const folder = FileStoreService.createFolder(fileOwnerKey(2), null, '첨부 자료')
     const own = FileStoreService.writeText(fileOwnerKey(2), folder.id, '설정.md', '# 설정')
     const others = FileStoreService.writeText(fileOwnerKey(3), null, '비밀.md', '비밀')
-    assert.equal(status(() => PostStore.create(alice, { title: '남의 파일', body: `![](file:${others.id})` })), 404)
+    assert.equal(status(() => PostStore.create(alice, { title: '공용 파일', body: `![](file:${others.id})` })), 200)
+    assert.equal(status(() => PostStore.create({ ...alice, keys: new Set(['posts.view', 'posts.write']) }, { title: '권한 없음', body: `![](file:${others.id})` })), 403)
     const withFile = PostStore.create(alice, { title: '첨부', body: `자료 ![](file:${own.id})` })
     assert.equal(PostStore.embeddedFileOwner(bob, withFile.id, own.id), fileOwnerKey(2), 'readers reach it through the post')
     assert.equal(PostStore.embeddedFileOwner(bob, withFile.id, others.id), null)

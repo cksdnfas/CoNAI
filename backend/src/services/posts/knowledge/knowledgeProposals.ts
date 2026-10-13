@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { POST_LIMITS, type PostKnowledgeProposal, type PostKnowledgeProposalInput, type PostKnowledgeProposalList, type PostKnowledgeSource } from '@conai/shared';
 import { getUserSettingsDb } from '../../../database/userSettingsDb';
 import { ChatProfileStore } from '../../codex-chat/chatProfiles';
-import { fileOwnerKey } from '../../fileStoreService';
 import { assertKnowledgeSourceVisibility, getKnowledgeState, knowledgeSources, KnowledgeStore, normalizeKnowledgeSources, requireKnowledgeRow } from '../knowledgeStore';
 import { PostError, requireKey, type PostActor } from '../postActor';
 import { extractMediaRefs } from '../postMedia';
@@ -48,18 +47,19 @@ function toProposal(actor:PostActor,row:ProposalRow):PostKnowledgeProposal {
     appliedPostId:row.applied_post_id,appliedRevision:row.applied_revision,appliedContentVersion:row.applied_content_version,canApply:allowed,canReject:allowed };
 }
 
-/** Every file must retain the existing post's provenance or belong to the writer's actual store. */
+/** Existing embeds retain provenance; new shared-file refs require file view permission. */
 function validateFiles(actor:PostActor,body:string,targetPostId:number|null,sources:PostKnowledgeSource[]) {
   const refs=extractMediaRefs(body);
   for (const ref of refs) {
     if (ref.kind !== 'file') continue;
-    const own = db().prepare("SELECT 1 FROM stored_file_entries WHERE id = ? AND owner_key = ? AND kind = 'file' AND deleted_at IS NULL").get(ref.ref,fileOwnerKey(actor.accountId));
+    const own = db().prepare("SELECT 1 FROM stored_file_entries WHERE id = ? AND kind = 'file' AND deleted_at IS NULL").get(ref.ref);
     const previous = targetPostId ? db().prepare("SELECT 1 FROM post_media_refs WHERE post_id = ? AND owner_type = 'post' AND owner_id = ? AND kind = 'file' AND ref = ?").get(targetPostId,targetPostId,ref.ref) : null;
-    if (own || previous) continue;
-    // A source proves where it came from but does not grant a cross-account copy of a private file.
+    if (previous) continue;
+    if (own) { requireKey(actor, 'files.view'); continue; }
+    // A source cannot revive a missing file or grant file permission.
     const source = sources.find((item) => item.postId && db().prepare("SELECT 1 FROM post_media_refs WHERE post_id = ? AND owner_type = ? AND owner_id = ? AND kind = 'file' AND ref = ?")
       .get(item.postId,item.kind === 'comment' ? 'comment' : 'post',item.commentId ?? item.postId,ref.ref));
-    if (source) throw new PostError('출처의 첨부파일을 먼저 승인 계정 보관함에 복사한 뒤 제안해줘.',403);
+    if (source) throw new PostError('출처의 첨부파일을 공용 파일함에서 확인한 뒤 제안해줘.',403);
     throw new PostError('본문 첨부파일의 출처나 보관함 권한을 확인할 수 없어.',403);
   }
 }

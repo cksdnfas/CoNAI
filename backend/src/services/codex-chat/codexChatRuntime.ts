@@ -40,8 +40,10 @@ function isWithin(candidate: string, root: string) {
  * Account-private state and bounded auth reuse, outside every served runtime media directory. `research`: a separate
  * home for web research runs (chatWebResearch), the one place web search is on.
  */
-export function prepareChatRuntime(requester: McpRequester, purpose: 'chat' | 'research' = 'chat') {
-  const root = path.join(runtimePaths.basePath, purpose === 'research' ? 'private-codex-research' : 'private-codex-chat', requester.accountId === null ? 'bootstrap' : `account-${requester.accountId}`)
+export function prepareChatRuntime(requester: McpRequester, purpose: 'chat' | 'research' = 'chat', projectId?: string) {
+  if (projectId !== undefined && !/^[a-f0-9]{32}$/.test(projectId)) throw new Error('Invalid project identity')
+  const accountRoot = path.join(runtimePaths.basePath, purpose === 'research' ? 'private-codex-research' : 'private-codex-chat', requester.accountId === null ? 'bootstrap' : `account-${requester.accountId}`)
+  const root = projectId ? path.join(accountRoot, 'projects', projectId) : accountRoot
   for (const served of [runtimePaths.uploadsDir, runtimePaths.tempDir, runtimePaths.saveDir, runtimePaths.artifactsDir]) {
     if (isWithin(path.resolve(root), path.resolve(served))) throw new Error('Codex chat state must be outside served media directories.')
   }

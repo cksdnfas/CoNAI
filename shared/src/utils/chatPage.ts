@@ -29,6 +29,7 @@ export function chatPagePermission(path: string): string | null {
   if (path === '/groups' || /^\/groups\/[\w-]+$/.test(path)) return 'page.groups.view'
   if (path === '/wildcards') return 'page.wildcards.view'
   if (path === '/files') return 'page.files.view'
+  if (path === '/extensions' || /^\/ext\/[a-z][a-z0-9-]{1,47}\/[a-z][a-z0-9-]{1,47}$/.test(path)) return 'page.files.view'
   if (path === '/audio') return 'page.audio.view'
   if (path === '/posts') return 'page.posts.view'
   if (path === '/upload') return 'page.upload.view'
@@ -46,7 +47,9 @@ export function normalizeChatPageSnapshot(value: unknown): ChatPageSnapshot {
   const path = text(raw.path, 240)
   if (chatPagePermission(path) === null) throw new Error('이 페이지는 채팅에 연결할 수 없어.')
   const kind = raw.kind
-  if (!['page', 'nai', 'codex', 'comfyui', 'comfy_author', 'library', 'prompt_search', 'presets', 'wildcards', 'metadata', 'workflow', 'workflow_runner', 'groups', 'files', 'upload', 'settings', 'page_settings', 'wallpaper', 'image_detail', 'audio', 'sprite', 'posts'].includes(kind as string)) throw new Error('페이지 종류가 올바르지 않아.')
+  if (!['page', 'nai', 'codex', 'comfyui', 'comfy_author', 'library', 'prompt_search', 'presets', 'wildcards', 'metadata', 'workflow', 'workflow_runner', 'groups', 'files', 'upload', 'settings', 'page_settings', 'wallpaper', 'image_detail', 'audio', 'sprite', 'posts', 'extension'].includes(kind as string)) throw new Error('페이지 종류가 올바르지 않아.')
+  if ((kind === 'extension') !== path.startsWith('/ext/')) throw new Error('확장 페이지 종류와 경로가 맞지 않아.')
+  if (kind === 'extension' && (!Array.isArray(raw.fields) || raw.fields.length !== 0)) throw new Error('확장은 등록된 작업으로 초안을 변경해줘.')
   if (kind === 'page_settings' && (typeof raw.resourceId !== 'string' || !isPageSettingsScope(raw.resourceId) || !pageSettingsScopes(path).includes(raw.resourceId))) throw new Error('이 페이지의 설정 항목이 아니야.')
   const metadataHash = /^\/images\/([\w.-]+)\/metadata$/.exec(path)?.[1]
   const publicComfy = /^\/public\/workflows\/[\w-]+$/.test(path)

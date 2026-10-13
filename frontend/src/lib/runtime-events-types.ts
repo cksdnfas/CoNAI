@@ -11,6 +11,8 @@ export type RuntimeEventTopic =
   | 'graph-execution'
   | 'runtime-job'
   | 'posts'
+  | 'workspaces'
+  | 'files'
 
 export type RuntimeEventName =
   | 'queue.job.created'
@@ -30,6 +32,8 @@ export type RuntimeEventName =
   | 'graph.execution.status'
   | 'job.status'
   | 'posts.changed'
+  | 'workspace.changed'
+  | 'files.changed'
 
 export const RUNTIME_EVENT_TOPICS: readonly RuntimeEventTopic[] = [
   'generation-queue',
@@ -38,6 +42,8 @@ export const RUNTIME_EVENT_TOPICS: readonly RuntimeEventTopic[] = [
   'graph-execution',
   'runtime-job',
   'posts',
+  'workspaces',
+  'files',
 ]
 
 /** Topic rights match the corresponding REST surface; null means an owner-filtered authenticated session. */
@@ -48,6 +54,8 @@ export const RUNTIME_EVENT_TOPIC_PERMISSIONS: Record<RuntimeEventTopic, string |
   'graph-schedule': 'workflows.view',
   'graph-execution': 'workflows.view',
   posts: 'posts.view',
+  workspaces: 'files.view',
+  files: 'files.view',
 }
 
 

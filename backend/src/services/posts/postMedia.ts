@@ -1,7 +1,7 @@
 import { POST_LIMITS, POST_MEDIA_EMBED_PATTERN, type PostMediaKind, type PostMediaRef } from '@conai/shared';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { fileOwnerKey } from '../fileStoreService';
-import { PostError } from './postActor';
+import { PostError, requireKey, type PostActor } from './postActor';
 
 const REF_PATTERNS: Record<PostMediaKind, RegExp> = {
   // Library ids: 48 hex (still images, pixel hash) or 32 hex (videos, animated images). An extension may follow.
@@ -30,13 +30,13 @@ export function extractMediaRefs(body: string): PostMediaRef[] {
 }
 
 /**
- * Record what a post or comment embeds. File refs must be in the writer's own file store (the account that writes or
- * runs the bot); readers then see them through the post.
+ * Record what a post or comment embeds. File refs resolve against the shared store;
+ * readers still see them through the post permission boundary.
  */
-export function saveMediaRefs(postId: number, ownerType: 'post' | 'comment', ownerId: number, refs: PostMediaRef[], writerAccountId: number | null) {
+export function saveMediaRefs(postId: number, ownerType: 'post' | 'comment', ownerId: number, refs: PostMediaRef[], actor: PostActor) {
   const db = getUserSettingsDb();
-  const ownerKey = fileOwnerKey(writerAccountId);
-  const fileExists = db.prepare(`SELECT 1 FROM stored_file_entries WHERE id = ? AND owner_key = ? AND kind = 'file' AND deleted_at IS NULL`);
+  const ownerKey = fileOwnerKey(actor.accountId);
+  const fileExists = db.prepare(`SELECT 1 FROM stored_file_entries WHERE id = ? AND kind = 'file' AND deleted_at IS NULL`);
   // A file already embedded by this post or comment keeps its store (an administrator may edit someone else's post).
   const previous = new Map((db.prepare(`SELECT ref, file_owner_key FROM post_media_refs WHERE owner_type = ? AND owner_id = ? AND kind = 'file'`)
     .all(ownerType, ownerId) as Array<{ ref: string; file_owner_key: string }>).map((row) => [row.ref, row.file_owner_key]));
@@ -45,8 +45,9 @@ export function saveMediaRefs(postId: number, ownerType: 'post' | 'comment', own
   refs.forEach((item, position) => {
     let fileOwner: string | null = null;
     if (item.kind === 'file') {
+      if (!previous.has(item.ref)) requireKey(actor, 'files.view');
       fileOwner = previous.get(item.ref) ?? ownerKey;
-      if (!fileExists.get(item.ref, fileOwner)) throw new PostError(`보관함에 없는 파일이야: ${item.ref}`, 404);
+      if (!fileExists.get(item.ref)) throw new PostError(`보관함에 없는 파일이야: ${item.ref}`, 404);
     }
     insert.run(postId, ownerType, ownerId, item.kind, item.ref, position, fileOwner);
   });

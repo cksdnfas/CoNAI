@@ -1,10 +1,10 @@
 import crypto from 'crypto';
+import { publishRuntimeEvent } from './runtime-events/runtimeEventBus';
 import fs from 'fs';
 import { DOCUMENT_EXTENSIONS } from './fileDocumentExtraction';
 import path from 'path';
-import type { FileStoreListing, FileWriteSource, StoredFileEntry, StoredFileOwner, StoredFileText } from '@conai/shared';
+import type { FileStoreListing, FileWriteSource, StoredFileEntry, StoredFileText } from '@conai/shared';
 import { getUserSettingsDb } from '../database/userSettingsDb';
-import { AuthAccount } from '../models/AuthAccount';
 import { ensureFileOwnerDirectory, ensureFileStoreDirectories, fileStoreIncoming, migrateFileStoreLayout, storedFilePath, fileStoreThumbnailPath } from './fileStorePaths';
 import { FileStoreRevisions } from './fileStoreRevisions';
 
@@ -33,12 +33,6 @@ export const MAX_CHAT_ATTACHMENTS = 20;
 
 export function fileOwnerKey(accountId: number | null): string {
   return accountId === null ? 'bootstrap' : `account:${accountId}`;
-}
-
-/** Owner keys travel in query strings for cross-account browsing; only the two canonical shapes are accepted. */
-export function parseOwnerKey(value: unknown): string {
-  if (typeof value !== 'string' || !/^(bootstrap|account:[1-9]\d{0,9})$/.test(value)) throw new FileStoreError('잘못된 계정 키야.');
-  return value;
 }
 
 /** Judged by extension only; the uploader's MIME is never trusted. A missing extension counts as restricted. */
@@ -114,7 +108,7 @@ export function parseFileId(value: unknown, nullable = false): string | null {
 
 function requireRow(owner: string, id: string): FileRow {
   parseFileId(id);
-  const row = getUserSettingsDb().prepare('SELECT * FROM stored_file_entries WHERE id = ? AND owner_key = ? AND deleted_at IS NULL').get(id, owner) as FileRow | undefined;
+  const row = getUserSettingsDb().prepare('SELECT * FROM stored_file_entries WHERE id = ? AND deleted_at IS NULL').get(id) as FileRow | undefined;
   if (!row) throw new FileStoreError('파일 또는 폴더를 찾을 수 없어.', 404);
   return row;
 }
@@ -126,7 +120,7 @@ function requireFolder(owner: string, id: string | null) {
 
 function assertUnique(owner: string, parentId: string | null, name: string, exceptId = '') {
   if (getUserSettingsDb().prepare(`SELECT 1 FROM stored_file_entries
-    WHERE owner_key = ? AND parent_id IS ? AND name_key = ? AND id <> ? AND deleted_at IS NULL`).get(owner, parentId, name.toLowerCase(), exceptId)) {
+    WHERE parent_id IS ? AND name_key = ? AND id <> ? AND deleted_at IS NULL`).get(parentId, name.toLowerCase(), exceptId)) {
     throw new FileStoreError(`같은 이름의 항목이 있어: ${name}`, 409);
   }
 }
@@ -154,7 +148,7 @@ function insert(owner: string, parentId: string | null, name: string, kind: File
 }
 
 /**
- * What changed in one owner's store, told after the change committed. `previousParentId` / `previousName`: where a
+ * What changed in the shared store; owner identifies the initiating account, told after the change committed. `previousParentId` / `previousName`: where a
  * moved or renamed entry was. Deleted entries are already gone when this is told.
  */
 export type FileStoreChange = {
@@ -171,6 +165,7 @@ const textWriteListeners = new Set<(event: TextWriteEvent) => void>();
 /** A failing listener never fails the change itself; it is logged. */
 function notifyChange(change: FileStoreChange) {
   if (change.entries.length === 0) return;
+  publishRuntimeEvent({ name: 'files.changed', topic: 'files', visibility: 'all', payload: { action: change.action, ids: change.entries.map(entry => entry.id) } });
   for (const listener of changeListeners) {
     try { listener(change); }
     catch (error) { console.warn('[file-store] Change hook failed:', error instanceof Error ? error.message : error); }
@@ -226,9 +221,9 @@ export const FileStoreService = {
       const operator = previous ? '<' : '>';
       const direction = previous ? 'DESC' : 'ASC';
       const found = getUserSettingsDb().prepare(`SELECT * FROM stored_file_entries
-        WHERE owner_key = ? AND parent_id IS ? AND kind = 'file' AND deleted_at IS NULL
+        WHERE parent_id IS ? AND kind = 'file' AND deleted_at IS NULL
         AND (name_key, id) ${operator} (?, ?) ORDER BY name_key ${direction}, id ${direction} LIMIT 1`)
-        .get(owner, row.parent_id, row.name_key, row.id) as FileRow | undefined;
+        .get(row.parent_id, row.name_key, row.id) as FileRow | undefined;
       return found ? toEntry(found) : null;
     };
     return { previous: find(true), next: find(false) };
@@ -238,19 +233,21 @@ export const FileStoreService = {
     requireFolder(owner, parentId);
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new FileStoreError('잘못된 목록 범위야.');
     const db = getUserSettingsDb();
-    const rows = db.prepare(`SELECT * FROM stored_file_entries WHERE owner_key = ? AND parent_id IS ? AND deleted_at IS NULL
-      ORDER BY kind DESC, name_key, id LIMIT ? OFFSET ?`).all(owner, parentId, limit, offset) as FileRow[];
-    const { total } = db.prepare('SELECT COUNT(*) AS total FROM stored_file_entries WHERE owner_key = ? AND parent_id IS ? AND deleted_at IS NULL').get(owner, parentId) as { total: number };
+    const rows = db.prepare(`SELECT * FROM stored_file_entries WHERE parent_id IS ? AND deleted_at IS NULL
+      ORDER BY kind DESC, name_key, id LIMIT ? OFFSET ?`).all(parentId, limit, offset) as FileRow[];
+    const { total } = db.prepare('SELECT COUNT(*) AS total FROM stored_file_entries WHERE parent_id IS ? AND deleted_at IS NULL').get(parentId) as { total: number };
     return { entries: rows.map(toEntry), breadcrumbs: ancestors(owner, parentId), total, offset, limit };
   },
 
   folders(owner: string) {
-    return (getUserSettingsDb().prepare(`SELECT * FROM stored_file_entries WHERE owner_key = ? AND kind = 'folder' AND deleted_at IS NULL ORDER BY name_key, id`).all(owner) as FileRow[]).map(toEntry);
+    return (getUserSettingsDb().prepare(`SELECT * FROM stored_file_entries WHERE kind = 'folder' AND deleted_at IS NULL ORDER BY name_key, id`).all() as FileRow[]).map(toEntry);
   },
 
   createFolder(owner: string, parentId: string | null, value: unknown) {
     const name = normalizeName(value);
-    return getUserSettingsDb().transaction(() => insert(owner, parentId, name, 'folder', crypto.randomBytes(16).toString('hex'))).immediate();
+    const entry = getUserSettingsDb().transaction(() => insert(owner, parentId, name, 'folder', crypto.randomBytes(16).toString('hex'))).immediate();
+    notifyChange({ owner, action: 'write', entries: [entry] });
+    return entry;
   },
 
   /** The caller owns staged files; failed transactions remove all newly allocated blobs. */
@@ -356,8 +353,8 @@ export const FileStoreService = {
 
   /** The live entry named `name` directly under `parentId`, or null. */
   findChild(owner: string, parentId: string | null, name: string): StoredFileEntry | null {
-    const row = getUserSettingsDb().prepare('SELECT * FROM stored_file_entries WHERE owner_key = ? AND parent_id IS ? AND name_key = ? AND deleted_at IS NULL')
-      .get(owner, parentId, name.normalize('NFC').toLowerCase()) as FileRow | undefined;
+    const row = getUserSettingsDb().prepare('SELECT * FROM stored_file_entries WHERE parent_id IS ? AND name_key = ? AND deleted_at IS NULL')
+      .get(parentId, name.normalize('NFC').toLowerCase()) as FileRow | undefined;
     return row ? toEntry(row) : null;
   },
 
@@ -521,7 +518,7 @@ export const FileStoreService = {
       const rows = db.prepare(`WITH RECURSIVE tree(id, depth) AS (
         SELECT ?, 0 UNION ALL
         SELECT e.id, tree.depth + 1 FROM stored_file_entries e JOIN tree ON e.parent_id = tree.id WHERE e.deleted_at IS NULL AND tree.depth < ${MAX_DEPTH}
-      ) SELECT s.id,s.kind,s.name,s.parent_id FROM stored_file_entries s JOIN tree ON s.id = tree.id WHERE s.owner_key = ?`).all(folderId, owner) as Array<Pick<FileRow, 'id' | 'kind' | 'name' | 'parent_id'>>;
+      ) SELECT s.id,s.kind,s.name,s.parent_id FROM stored_file_entries s JOIN tree ON s.id = tree.id WHERE 1 = 1`).all(folderId) as Array<Pick<FileRow, 'id' | 'kind' | 'name' | 'parent_id'>>;
       const ids = JSON.stringify(rows.map(row => row.id));
       const attachment = db.prepare(`SELECT file_id AS id FROM chat_file_attachments WHERE file_id IN (SELECT value FROM json_each(?)) LIMIT 1`).get(ids) as { id: string } | undefined;
       if (attachment) throw new FileStoreError(`채팅에서 참조 중인 파일은 삭제할 수 없어: ${rows.find(row => row.id === attachment.id)!.name}`, 409);
@@ -538,12 +535,12 @@ export const FileStoreService = {
 
   /** `a/b/c`: the names from below `ancestorId` down to `id`, or null when `id` is not (live) inside that folder. */
   relativePath(owner: string, ancestorId: string, id: string): string | null {
-    const lookup = getUserSettingsDb().prepare('SELECT parent_id, name FROM stored_file_entries WHERE id = ? AND owner_key = ? AND deleted_at IS NULL');
+    const lookup = getUserSettingsDb().prepare('SELECT parent_id, name FROM stored_file_entries WHERE id = ? AND deleted_at IS NULL');
     const names: string[] = [];
     let current: string | null = id;
     while (current !== null && current !== ancestorId) {
       if (names.length >= MAX_DEPTH) return null;
-      const row = lookup.get(current, owner) as { parent_id: string | null; name: string } | undefined;
+      const row = lookup.get(current) as { parent_id: string | null; name: string } | undefined;
       if (!row) return null;
       names.unshift(row.name);
       current = row.parent_id;
@@ -596,33 +593,9 @@ export const FileStoreService = {
     return { entry, filePath };
   },
 
-  /** Every account plus any owner key that still holds files (deleted accounts, bootstrap), for cross-account browsing. */
-  owners(selfOwner: string): StoredFileOwner[] {
-    const usage = new Map((getUserSettingsDb().prepare(`SELECT owner_key, SUM(kind = 'file') AS files, COALESCE(SUM(size), 0) AS bytes
-      FROM stored_file_entries WHERE deleted_at IS NULL GROUP BY owner_key`).all() as Array<{ owner_key: string; files: number; bytes: number }>)
-      .map((row) => [row.owner_key, row]));
-    const result: StoredFileOwner[] = [];
-    const seen = new Set<string>();
-    const push = (ownerKey: string, account: { id: number; username: string; account_type: 'admin' | 'guest'; status: 'active' | 'disabled' } | null) => {
-      if (seen.has(ownerKey)) return;
-      seen.add(ownerKey);
-      const used = usage.get(ownerKey);
-      result.push({
-        ownerKey, accountId: account?.id ?? null, username: account?.username ?? null, accountType: account?.account_type ?? null,
-        status: account ? account.status : ownerKey === 'bootstrap' ? 'bootstrap' : 'deleted',
-        fileCount: used?.files ?? 0, totalSize: used?.bytes ?? 0, self: ownerKey === selfOwner,
-      });
-    };
-    for (const account of AuthAccount.listAll()) push(fileOwnerKey(account.id), account);
-    for (const ownerKey of usage.keys()) push(ownerKey, null);
-    if (selfOwner === 'bootstrap') push('bootstrap', null);
-    return result.sort((left, right) => Number(right.self) - Number(left.self) || (left.username ?? '').localeCompare(right.username ?? '') || left.ownerKey.localeCompare(right.ownerKey));
-  },
-
-  /** One-time move from the flat blob layout into per-owner directories; safe to run on every boot. */
+  /** Move legacy account folders to the instance-wide store before serving requests. */
   migrateLayout() {
-    const lookup = getUserSettingsDb().prepare('SELECT owner_key FROM stored_file_entries WHERE id = ?');
-    const result = migrateFileStoreLayout((id) => (lookup.get(id) as { owner_key: string } | undefined)?.owner_key ?? null);
+    const result = migrateFileStoreLayout();
     scheduleDeletedFilePurge();
     return result;
   },

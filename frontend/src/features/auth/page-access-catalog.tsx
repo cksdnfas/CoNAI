@@ -11,6 +11,7 @@ export interface PageAccessCatalogItem {
 
 // Same order as the header's default: library, making, chat then posts, the rest.
 export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
+  { path: '/extensions', labelKey: 'pageAccessCatalog.extensions', permissionKey: 'page.files.view', icon: LayoutGrid, category: 'derived' },
   {
     path: '/',
     labelKey: 'pageAccessCatalog.home',

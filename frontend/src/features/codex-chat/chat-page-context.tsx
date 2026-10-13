@@ -291,8 +291,8 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       const assertCurrent = () => { if (connectionRef.current !== event.connectionId) throw new Error('페이지 연결이 해제됐어.') }
       if (event.type === 'action') {
         const action = live.snapshot.actions?.find((item) => item.id === event.actionId)
-        if (!action || chatPageActionTier(action.id) !== event.tier) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
-        if (chatPageActionLeavesScreen(action.id) && live.snapshot.dirty) throw new Error('저장하지 않은 변경이 있어. 사용자가 저장하거나 버린 뒤에 다시 해.')
+        if (!action || chatPageActionTier(action.id, action) !== event.tier) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
+        if (chatPageActionLeavesScreen(action.id, action) && live.snapshot.dirty) throw new Error('저장하지 않은 변경이 있어. 사용자가 저장하거나 버린 뒤에 다시 해.')
         const args = validateChatPageArguments(action.schema, event.arguments) as Record<string, ChatPageData>
         if (!live.editor.applyAction) throw new Error('페이지 작업 편집기가 닫혔어.')
         const undo = await live.editor.applyAction(action.id, args, assertCurrent)

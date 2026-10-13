@@ -16,7 +16,7 @@ export type ChatPageSchema = {
   required?: string[]
   items?: ChatPageSchema
 }
-export type ChatPageAction = { id: string; label: string; description: string; effect: 'draft' | 'save'; schema: ChatPageSchema }
+export type ChatPageAction = { id: string; label: string; description: string; effect: 'draft' | 'save'; schema: ChatPageSchema; /** Extension-only; checked against the server manifest. */ tier?: 'view' | 'draft' }
 export type ChatPageActionProposal = {
   kind: 'page_action'; page: ChatPageTarget; revision: string; action: ChatPageAction
   arguments: Record<string, ChatPageData>; before: ChatPageData; expiresAt: number; saved?: boolean

@@ -64,6 +64,7 @@ export function validateChatPageArguments(schema: ChatPageSchema, input: unknown
 
 /** IDs and route bindings are maintained by the app; snapshots cannot grant arbitrary native actions. */
 export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
+  'workspace.open': 'files.view', 'workspace.search': 'files.view', 'workspace.new': 'files.edit', 'workspace.create': 'files.edit', 'workspace.mkdir': 'files.edit', 'workspace.save': 'files.edit',
   'page.navigate': null, 'page.refresh': null, 'page.settings_open': null, 'page_settings.save': null, 'page_settings.select': null, 'page_settings.close': null,
   'prompt.create': 'prompts.edit', 'prompt.update': 'prompts.edit', 'prompt.select': 'prompts.view',
   'preset.create': 'prompts.edit', 'preset.update': 'prompts.edit', 'preset.select': 'prompts.view', 'preset.draft': 'prompts.view', 'preset.insert': 'prompts.view',
@@ -130,14 +131,24 @@ const COMMIT_ACTIONS = new Set(['page_settings.save', 'prompt.create', 'prompt.u
 const VIEW_ACTIONS = new Set(['page.settings_open', 'page_settings.select', 'page_settings.close', 'page.navigate', 'page.refresh', 'prompt.select', 'preset.select', 'wildcard.select', 'comfy.select', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'workflow.select', 'group.select', 'profile.open_create', 'profile.open_edit', 'profile.section', 'library.search', 'library.history', 'library.open', 'library.select', 'files.open', 'files.preview', 'comfy.check', 'profile.copy', 'resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset', 'posts.open', 'posts.category', 'posts.tag', 'posts.back', 'posts.new', 'posts.edit', 'audio.project', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.filter', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.new_document', 'files.edit_document', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
 /** View operations that stay inside the open editor, so unsaved changes there do not block them. */
 const IN_PLACE_VIEW_ACTIONS = new Set(['page.settings_open', 'comfy.check', 'profile.section', 'library.select', 'resource.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
-export function chatPageActionTier(id: string): ChatPageActionTier {
+for (const id of ['workspace.create', 'workspace.mkdir', 'workspace.save']) COMMIT_ACTIONS.add(id)
+for (const id of ['workspace.open', 'workspace.new', 'workspace.search']) VIEW_ACTIONS.add(id)
+export function chatPageActionTier(id: string, action?: { tier?: ChatPageActionTier }): ChatPageActionTier {
+  if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) {
+    if (action?.tier === 'view' || action?.tier === 'draft') return action.tier
+    throw new Error('등록된 작업 등급이 필요해.')
+  }
   return COMMIT_ACTIONS.has(id) ? 'commit' : VIEW_ACTIONS.has(id) ? 'view' : 'draft'
 }
 /** A view operation that would leave the screen (and lose its unsaved changes). */
-export function chatPageActionLeavesScreen(id: string) {
-  return chatPageActionTier(id) === 'view' && !IN_PLACE_VIEW_ACTIONS.has(id)
+export function chatPageActionLeavesScreen(id: string, action?: Pick<ChatPageAction, 'tier'>) {
+  return chatPageActionTier(id, action) === 'view' && !IN_PLACE_VIEW_ACTIONS.has(id)
 }
 export function chatPageActionAllowed(path: string, id: string): boolean {
+  const extension = /^\/ext\/([a-z][a-z0-9-]{1,47})\/([a-z][a-z0-9-]{1,47})$/.exec(path)
+  // Structural validation only. The server additionally checks the installed manifest on every use.
+  if (extension && !own(CHAT_PAGE_ACTION_PERMISSIONS, id)) return id.startsWith(`${extension[1]}.`) && /^[a-z][a-z0-9-]*\.[a-z][a-z0-9_]{0,47}$/.test(id)
+  if (id.startsWith('workspace.')) return path === '/files' && own(CHAT_PAGE_ACTION_PERMISSIONS, id)
   if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) return false
   if (id.startsWith('page_settings.') || id === 'page.settings_open') return pageSettingsScopes(path).length > 0
   if (id.startsWith('page.')) return true
@@ -168,6 +179,10 @@ export function normalizeChatPageActions(path: string, input: unknown): ChatPage
     if ((raw.effect === 'save') !== COMMIT_ACTIONS.has(raw.id)) throw new Error('작업의 저장 범위가 올바르지 않아.')
     const schema = normalizeChatPageSchema(raw.schema)
     if (schema.type !== 'object') throw new Error('작업 인수는 객체여야 해.')
+    if (path.startsWith('/ext/') && !own(CHAT_PAGE_ACTION_PERMISSIONS, raw.id)) {
+      if (raw.effect !== 'draft' || (raw.tier !== 'view' && raw.tier !== 'draft')) throw new Error('확장에는 조회와 초안 작업만 등록할 수 있어.')
+      return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema, tier: raw.tier }
+    }
     return { id: raw.id, label: raw.label, description: raw.description, effect: raw.effect, schema }
   })
 }

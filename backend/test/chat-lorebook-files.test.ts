@@ -216,4 +216,25 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     assert.deepEqual([tail.offset, tail.text, tail.nextOffset], [18, '', null])
     await assert.rejects(FileStoreService.readText(me, file.id, 19, 100), /잘못된 읽기 범위야 \(파일 크기 18바이트\)/)
   })
+  await t.test('a shared folder adopted by another writer survives startup reconciliation', () => {
+    const root = FileStoreService.ensureFolder(me, null, LOREBOOK_ROOT_FOLDER)
+    const folder = FileStoreService.createFolder(me, root.id, '공용 폴더 등록')
+    FileStoreService.writeText(other, folder.id, 'lorebook.json', JSON.stringify({ name: '공용 폴더 등록', entries: [{ keys: ['공유'], content: '유지할 내용' }] }))
+    const book = OwnedLorebookStore.list(other).find(item => item.folderId === folder.id)
+    assert.ok(book, 'the account that writes the lorebook manages its registration')
+    reconcileLorebookFolders()
+    assert.ok(OwnedLorebookStore.find(book.id, other), 'an existing shared folder must not be mistaken for a deleted one')
+    assert.equal(OwnedLorebookStore.find(book.id, me), null, 'book management remains private')
+  })
+
+  await t.test('startup discovers another creator under the shared lorebook root', () => {
+    const root = FileStoreService.ensureFolder(me, null, LOREBOOK_ROOT_FOLDER)
+    const folder = FileStoreService.createFolder(other, root.id, '재시작 때 등록')
+    FileStoreService.writeText(other, folder.id, 'lorebook.json', JSON.stringify({ entries: [] }), { silent: true })
+    assert.equal(OwnedLorebookStore.list(other).some(item => item.folderId === folder.id), false)
+    reconcileLorebookFolders()
+    assert.ok(OwnedLorebookStore.list(other).some(item => item.folderId === folder.id))
+    assert.equal(OwnedLorebookStore.list(me).some(item => item.folderId === folder.id), false)
+  })
+
 })

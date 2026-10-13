@@ -140,11 +140,11 @@ test('mcp file text tools: write, replace, append and edit text documents', { ti
     assert.equal(await read(crlf.id), '첫 줄\r\n새 줄\r\n둘째 줄\r\n')
   })
 
-  await t.test('edits refuse folders and files of other accounts', async () => {
+  await t.test('edits refuse folders and allow shared files', async () => {
     assert.ok((await call(writer, 'edit_file_text', { file_id: folder.id, edits: [{ old_text: 'a', new_text: 'b' }] })).isError)
     const other = FileStoreService.writeText(fileOwnerKey(readerId), null, '남의 것.md', '비밀', { create: true })
     const stolen = await call(writer, 'update_file_text', { file_id: other.id, text: 'x', mode: 'append' })
-    assert.ok(stolen.isError && /찾을 수 없어/.test(stolen.text), stolen.text)
-    assert.equal((await FileStoreService.readText(fileOwnerKey(readerId), other.id)).text, '비밀')
+    assert.equal(stolen.isError, false, stolen.text)
+    assert.equal((await FileStoreService.readText(fileOwnerKey(readerId), other.id)).text, '비밀x')
   })
 })

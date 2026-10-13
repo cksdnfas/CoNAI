@@ -288,12 +288,12 @@ function adoptFolder(owner: string, folder: { id: string; name: string }) {
 
 /** The book whose folder is `folderId` or holds it, if any. */
 function enclosingBook(owner: string, folderId: string | null, byFolder: Map<string, LorebookRow>) {
-  const parentOf = getUserSettingsDb().prepare('SELECT parent_id FROM stored_file_entries WHERE id = ? AND owner_key = ?')
+  const parentOf = getUserSettingsDb().prepare('SELECT parent_id FROM stored_file_entries WHERE id = ?')
   let current = folderId
   for (let depth = 0; current !== null && depth < 64; depth++) {
     const book = byFolder.get(current)
     if (book) return book
-    current = ((parentOf.get(current, owner) as { parent_id: string | null } | undefined)?.parent_id) ?? null
+    current = ((parentOf.get(current) as { parent_id: string | null } | undefined)?.parent_id) ?? null
   }
   return null
 }
@@ -307,7 +307,7 @@ function enclosingBook(owner: string, folderId: string | null, byFolder: Map<str
  */
 export function handleFileStoreChange(change: FileStoreChange) {
   const db = getUserSettingsDb()
-  const books = db.prepare('SELECT * FROM chat_lorebooks WHERE owner_key = ? AND folder_id IS NOT NULL').all(change.owner) as LorebookRow[]
+  const books = db.prepare('SELECT * FROM chat_lorebooks WHERE folder_id IS NOT NULL').all() as LorebookRow[]
   const byFolder = new Map(books.map((book) => [book.folder_id as string, book]))
   const touched = new Map<number, LorebookRow>()
   let roots: ReturnType<typeof existingRoots> | null = null
@@ -361,7 +361,7 @@ export function registerLorebookFileHooks() {
 registerLorebookFileHooks()
 
 /**
- * Startup pass: every account's 로어북/ folder once. A folder directly under it with a lorebook.json and no row
+ * Startup pass: shared 로어북/ roots once. A folder directly under it with a lorebook.json and no row
  * becomes an account book; every book re-reads its lorebook.json (the file wins); a book whose folder is gone ends.
  */
 export function reconcileLorebookFolders() {
@@ -371,20 +371,20 @@ export function reconcileLorebookFolders() {
   const roots = db.prepare("SELECT id, owner_key FROM stored_file_entries WHERE parent_id IS NULL AND kind = 'folder' AND name_key = ? AND deleted_at IS NULL")
     .all(LOREBOOK_ROOT_FOLDER.toLowerCase()) as Array<{ id: string; owner_key: string }>
   for (const root of roots) {
-    const folders = db.prepare("SELECT id, name, name_key FROM stored_file_entries WHERE owner_key = ? AND parent_id = ? AND kind = 'folder' AND deleted_at IS NULL")
-      .all(root.owner_key, root.id) as Array<{ id: string; name: string; name_key: string }>
+    const folders = db.prepare("SELECT id, name, name_key, owner_key FROM stored_file_entries WHERE parent_id = ? AND kind = 'folder' AND deleted_at IS NULL")
+      .all(root.id) as Array<{ id: string; name: string; name_key: string; owner_key: string }>
     for (const folder of folders) {
       if (known.has(folder.id) || folder.name_key === CHAT_LOREBOOK_FOLDER.toLowerCase()) continue
       if (FileStoreService.findChild(root.owner_key, folder.id, LOREBOOK_JSON)?.kind !== 'file') continue
-      adoptFolder(root.owner_key, folder)
+      adoptFolder(folder.owner_key, folder)
       result.created++
     }
   }
   const books = db.prepare("SELECT * FROM chat_lorebooks WHERE kind IN ('account', 'chat') AND folder_id IS NOT NULL").all() as LorebookRow[]
-  const live = db.prepare("SELECT 1 FROM stored_file_entries WHERE id = ? AND owner_key = ? AND kind = 'folder' AND deleted_at IS NULL")
+  const live = db.prepare("SELECT 1 FROM stored_file_entries WHERE id = ? AND kind = 'folder' AND deleted_at IS NULL")
   for (const book of books) {
     try {
-      if (!live.get(book.folder_id, book.owner_key)) {
+      if (!live.get(book.folder_id)) {
         console.warn(`[lorebook] Book ${book.id} "${book.name}": its folder is gone; the book ends`)
         removeBookRow(book.id)
         result.removed++

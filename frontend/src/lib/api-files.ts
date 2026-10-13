@@ -1,37 +1,33 @@
-import type { FileStoreListing, FileWriteSource, StoredFileEntry, StoredFileOwner, StoredFileRevision, StoredFileSearchResult, StoredFileText } from '@conai/shared'
+import type { FileStoreListing, FileWriteSource, StoredFileEntry, StoredFileRevision, StoredFileSearchResult, StoredFileText } from '@conai/shared'
 import { requestApiData } from './api-request'
 import { buildApiUrl } from './api-url'
 
 export const FILES_QUERY_KEY = ['file-store'] as const
 const headers = { 'Content-Type': 'application/json' }
-/** `owner` is another account's store key (administrators); null/undefined means the caller's own store. */
-export type StoredFileOwnerKey = string | null | undefined
-const ownerQuery = (owner: StoredFileOwnerKey, first = false) => (owner ? `${first ? '?' : '&'}owner=${encodeURIComponent(owner)}` : '')
 
-export const listStoredFiles = (parentId: string | null, offset = 0, owner?: StoredFileOwnerKey, signal?: AbortSignal) => requestApiData<FileStoreListing>(`/api/files?parentId=${parentId ?? ''}&offset=${offset}${ownerQuery(owner)}`, { signal })
+export const listStoredFiles = (parentId: string | null, offset = 0, signal?: AbortSignal) => requestApiData<FileStoreListing>(`/api/files?parentId=${parentId ?? ''}&offset=${offset}`, { signal })
 /** Files and folders whose name or text contains every word of `query` (a "quoted phrase" is one term). */
-export const searchStoredFiles = (query: string, owner?: StoredFileOwnerKey, signal?: AbortSignal) => requestApiData<StoredFileSearchResult>(`/api/files/search?q=${encodeURIComponent(query)}${ownerQuery(owner)}`, { signal })
-export const listStoredFolders = (owner?: StoredFileOwnerKey, signal?: AbortSignal) => requestApiData<StoredFileEntry[]>(`/api/files/folders${ownerQuery(owner, true)}`, { signal })
-export const listStoredFileOwners = () => requestApiData<StoredFileOwner[]>('/api/files/owners')
-export const storedFileDownloadUrl = (id: string, owner?: StoredFileOwnerKey) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/download${ownerQuery(owner, true)}`)
-export const storedFileViewUrl = (id: string, owner?: StoredFileOwnerKey) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/view${ownerQuery(owner, true)}`)
-export const getStoredFileNeighbors = (id: string, owner?: StoredFileOwnerKey) => requestApiData<{ previous: StoredFileEntry | null; next: StoredFileEntry | null }>(`/api/files/${encodeURIComponent(id)}/neighbors${ownerQuery(owner, true)}`)
+export const searchStoredFiles = (query: string, signal?: AbortSignal) => requestApiData<StoredFileSearchResult>(`/api/files/search?q=${encodeURIComponent(query)}`, { signal })
+export const listStoredFolders = (signal?: AbortSignal) => requestApiData<StoredFileEntry[]>(`/api/files/folders`, { signal })
+export const storedFileDownloadUrl = (id: string) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/download`)
+export const storedFileViewUrl = (id: string) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/view`)
+export const getStoredFileNeighbors = (id: string) => requestApiData<{ previous: StoredFileEntry | null; next: StoredFileEntry | null }>(`/api/files/${encodeURIComponent(id)}/neighbors`)
 /** Small WebP preview of image and video files. */
-export const storedFileThumbnailUrl = (id: string, owner?: StoredFileOwnerKey) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/thumbnail${ownerQuery(owner, true)}`)
-export const readStoredFileText = (id: string, offset = 0, owner?: StoredFileOwnerKey, revision?: string, signal?: AbortSignal) => requestApiData<StoredFileText>(`/api/files/${encodeURIComponent(id)}/text?offset=${offset}${ownerQuery(owner)}${revision ? `&revision=${encodeURIComponent(revision)}` : ''}`, { signal })
-export const createStoredFolder = (parentId: string | null, name: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/folders${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ parentId, name }) })
-export const renameStoredFile = (id: string, name: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}${ownerQuery(owner, true)}`, { method: 'PATCH', headers, body: JSON.stringify({ name }) })
-export const moveStoredFiles = (ids: string[], parentId: string | null, owner?: StoredFileOwnerKey) => requestApiData<void>(`/api/files/move${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ ids, parentId }) })
+export const storedFileThumbnailUrl = (id: string) => buildApiUrl(`/api/files/${encodeURIComponent(id)}/thumbnail`)
+export const readStoredFileText = (id: string, offset = 0, revision?: string, signal?: AbortSignal) => requestApiData<StoredFileText>(`/api/files/${encodeURIComponent(id)}/text?offset=${offset}${revision ? `&revision=${encodeURIComponent(revision)}` : ''}`, { signal })
+export const createStoredFolder = (parentId: string | null, name: string) => requestApiData<StoredFileEntry>(`/api/files/folders`, { method: 'POST', headers, body: JSON.stringify({ parentId, name }) })
+export const renameStoredFile = (id: string, name: string) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}`, { method: 'PATCH', headers, body: JSON.stringify({ name }) })
+export const moveStoredFiles = (ids: string[], parentId: string | null) => requestApiData<void>(`/api/files/move`, { method: 'POST', headers, body: JSON.stringify({ ids, parentId }) })
 /** Files the server stores and serves as UTF-8 text (fileStoreService TEXT_EXTENSIONS); the editor opens these. */
 export const TEXT_FILE_PATTERN = /\.(txt|md|markdown|json|jsonl|csv|tsv|ya?ml|xml|html?|svg|css|m?js|cjs|jsx|tsx?|py|sh|sql|log|ini|toml|srt|vtt)$/i
 /** Mirrors the server's MAX_TEXT_DOCUMENT_BYTES. */
 export const MAX_TEXT_DOCUMENT_BYTES = 2 * 1024 * 1024
-export const createStoredTextFile = (parentId: string | null, name: string, text: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/text${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ parentId, name, text }) })
-export const readStoredFileForEdit = (id: string, owner?: StoredFileOwnerKey) => requestApiData<{ text: string; revision: string }>(`/api/files/${encodeURIComponent(id)}/edit${ownerQuery(owner, true)}`)
-export const saveStoredFileText = (id: string, text: string, owner: StoredFileOwnerKey, expectedRevision: string | null) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}/text${ownerQuery(owner, true)}`, { method: 'PUT', headers, body: JSON.stringify({ text, expectedRevision }) })
+export const createStoredTextFile = (parentId: string | null, name: string, text: string) => requestApiData<StoredFileEntry>(`/api/files/text`, { method: 'POST', headers, body: JSON.stringify({ parentId, name, text }) })
+export const readStoredFileForEdit = (id: string) => requestApiData<{ text: string; revision: string }>(`/api/files/${encodeURIComponent(id)}/edit`)
+export const saveStoredFileText = (id: string, text: string, expectedRevision: string | null) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}/text`, { method: 'PUT', headers, body: JSON.stringify({ text, expectedRevision }) })
 /** The whole file as text, for editing; refuses what is not UTF-8 text so a save cannot mangle it. */
-export async function readWholeStoredFileText(id: string, owner?: StoredFileOwnerKey) {
-  const response = await fetch(storedFileViewUrl(id, owner), { credentials: 'include', cache: 'no-store' })
+export async function readWholeStoredFileText(id: string) {
+  const response = await fetch(storedFileViewUrl(id), { credentials: 'include', cache: 'no-store' })
   if (!response.ok) throw new Error('파일을 열지 못했어. / Could not open the file.')
   const bytes = new Uint8Array(await response.arrayBuffer())
   if (bytes.includes(0)) throw new Error('바이너리 파일은 편집할 수 없어. / Binary files cannot be edited.')
@@ -43,12 +39,12 @@ export async function readWholeStoredFileText(id: string, owner?: StoredFileOwne
 }
 /** A text file's earlier versions (newest first) and who wrote its current text. */
 export type StoredFileRevisions = { current: { writtenAt: string; writtenBy: FileWriteSource | null }; revisions: StoredFileRevision[] }
-export const listStoredFileRevisions = (id: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileRevisions>(`/api/files/${encodeURIComponent(id)}/revisions${ownerQuery(owner, true)}`)
-export const readStoredFileRevision = (id: string, revisionId: string, owner?: StoredFileOwnerKey) => requestApiData<{ revision: StoredFileRevision; text: string }>(`/api/files/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}${ownerQuery(owner, true)}`)
+export const listStoredFileRevisions = (id: string) => requestApiData<StoredFileRevisions>(`/api/files/${encodeURIComponent(id)}/revisions`)
+export const readStoredFileRevision = (id: string, revisionId: string) => requestApiData<{ revision: StoredFileRevision; text: string }>(`/api/files/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}`)
 /** Put an earlier version back; the current text is kept as a version too. */
-export const restoreStoredFileRevision = (id: string, revisionId: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}/restore${ownerQuery(owner, true)}`, { method: 'POST', headers, body: '{}' })
-export const getStoredFile = (id: string, owner?: StoredFileOwnerKey) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}${ownerQuery(owner, true)}`)
-export const deleteStoredFiles =(ids: string[], owner?: StoredFileOwnerKey) => requestApiData<void>(`/api/files/delete${ownerQuery(owner, true)}`, { method: 'POST', headers, body: JSON.stringify({ ids }) })
+export const restoreStoredFileRevision = (id: string, revisionId: string) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}/restore`, { method: 'POST', headers, body: '{}' })
+export const getStoredFile = (id: string) => requestApiData<StoredFileEntry>(`/api/files/${encodeURIComponent(id)}`)
+export const deleteStoredFiles =(ids: string[]) => requestApiData<void>(`/api/files/delete`, { method: 'POST', headers, body: JSON.stringify({ ids }) })
 
 /** Mirrors the server's default upload policy so a restricted pick fails before the bytes leave the browser. */
 export const DEFAULT_UPLOAD_EXTENSIONS = new Set([
@@ -63,7 +59,7 @@ export function isRestrictedFileName(name: string) {
   return !extension || !DEFAULT_UPLOAD_EXTENSIONS.has(extension)
 }
 
-export async function uploadStoredFiles(parentId: string | null, files: File[], options: { owner?: StoredFileOwnerKey; allowAnyType?: boolean } = {}) {
+export async function uploadStoredFiles(parentId: string | null, files: File[], options: { allowAnyType?: boolean } = {}) {
   if (files.length === 0 || files.length > 20) throw new Error('한 번에 1~20개 파일을 업로드할 수 있어. / Upload 1–20 files at a time.')
   if (files.some((file) => file.size > 500 * 1024 * 1024) || files.reduce((sum, file) => sum + file.size, 0) > 1024 ** 3) {
     throw new Error('파일당 500MB, 한 번에 총 1GB까지 가능해. / Limit: 500 MB per file, 1 GB total.')
@@ -73,7 +69,7 @@ export async function uploadStoredFiles(parentId: string | null, files: File[], 
   if (restricted) throw new Error(`이 형식은 올릴 수 없어: ${restricted.name}. 텍스트·이미지·영상·오디오·문서만 가능해. / Restricted file type: ${restricted.name}.`)
   const body = new FormData()
   for (const file of files) body.append('files', file)
-  return requestApiData<StoredFileEntry[]>(`/api/files/upload?parentId=${parentId ?? ''}${ownerQuery(options.owner)}`, { method: 'POST', body })
+  return requestApiData<StoredFileEntry[]>(`/api/files/upload?parentId=${parentId ?? ''}`, { method: 'POST', body })
 }
 
 export function formatFileSize(bytes: number) {
@@ -84,4 +80,4 @@ export function formatFileSize(bytes: number) {
 }
 
 /** Retry derived content extraction without modifying the original file. */
-export const retryStoredFileIndex = (id: string, owner?: StoredFileOwnerKey) => requestApiData<{ fileId: string }>(`/api/files/${id}/reindex${ownerQuery(owner)}`, { method: 'POST' })
+export const retryStoredFileIndex = (id: string) => requestApiData<{ fileId: string }>(`/api/files/${id}/reindex`, { method: 'POST' })

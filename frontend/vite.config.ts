@@ -91,9 +91,15 @@ export default defineConfig(({ command, mode }) => {
     },
     server: {
       host: '0.0.0.0',
+      headers: { 'Content-Security-Policy': "frame-src 'self'" },
       port: frontendPort,
       strictPort: true,
       proxy: {
+        // Preserve the browser host used by the extension document's path-scoped CSP.
+        '/api/plugin-assets': {
+          target: backendTarget,
+          changeOrigin: false,
+        },
         '/api': {
           target: backendTarget,
           changeOrigin: true,
@@ -112,5 +118,6 @@ export default defineConfig(({ command, mode }) => {
         },
       },
     },
+    preview: { headers: { 'Content-Security-Policy': "frame-src 'self'" } },
   }
 })

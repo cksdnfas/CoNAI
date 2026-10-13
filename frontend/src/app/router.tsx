@@ -76,6 +76,20 @@ export const appRouter = createHashRouter([
     errorElement: <RouteErrorBoundary />,
     children: [
       {
+        path: 'extensions',
+        lazy: async () => {
+          const { PluginsPage } = await import('@/features/plugins/plugins-page')
+          return { Component: () => <RequireAuthPermission permissionKey="page.files.view"><PluginsPage /></RequireAuthPermission> }
+        },
+      },
+      {
+        path: 'ext/:pluginId/:pageId',
+        lazy: async () => {
+          const { PluginPage } = await import('@/features/plugins/plugin-page')
+          return { Component: () => <RequireAuthPermission permissionKey="page.files.view"><PluginPage /></RequireAuthPermission> }
+        },
+      },
+      {
         path: 'access',
         element: <AccessOverviewRoute />,
       },

@@ -173,7 +173,7 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     const part = ok(await call(writer, 'read_file_version', { file_id: doc.id, version_id: oldest.id, limit: 4 }))
     assert.equal(part.text, '첫째')
     assert.equal(part.nextOffset, null)
-    assert.equal((await call(other, 'list_file_versions', { file_id: doc.id })).isError, true, 'another store')
+    assert.equal((await call(other, 'list_file_versions', { file_id: doc.id })).isError, false, 'shared file versions')
     ok(await call(writer, 'restore_file_version', { file_id: doc.id, version_id: oldest.id }))
     assert.equal((await FileStoreService.readText(fileOwnerKey(writerId), doc.id, 0, 100)).text, '첫째')
     assert.equal(ok(await call(writer, 'list_file_versions', { file_id: doc.id })).versions.length, 3, 'the replaced text is kept')
@@ -342,4 +342,21 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
       assert.equal(continued.comments[0].body,comment.body.slice(part.next_offset,continued.comments[0].next_offset))
     } finally {closeReply();await client.close();await mcp.close()}
   })
+  await t.test('shared files still require view, edit and delete permissions for guests and MCP', async () => {
+    const { requireFileStoreOwner, requireFileStoreAction } = await import('../src/services/fileStoreAccess')
+    const viewerId = addAccount('file-viewer', ['files.view'])
+    const deniedId = addAccount('no-files', ['posts.view'])
+    const viewer = { accountId: viewerId, accountType: 'guest' as const }
+    const denied = { accountId: deniedId, accountType: 'guest' as const }
+    const file = FileStoreService.writeText(fileOwnerKey(writerId), null, 'shared-permissions.md', 'shared')
+    assert.equal(FileStoreService.get(requireFileStoreOwner(viewer), file.id).id, file.id)
+    assert.throws(() => requireFileStoreOwner(denied), /권한/)
+    assert.throws(() => requireFileStoreOwner(undefined), /계정/)
+    assert.throws(() => requireFileStoreOwner({ accountId: null, accountType: null }), /로그인/)
+    assert.throws(() => requireFileStoreAction(viewer, 'organize'), /권한/)
+    assert.throws(() => requireFileStoreAction(viewer, 'delete'), /권한/)
+    const noFiles = await connect(denied)
+    await assert.rejects(call(noFiles, 'read_file_text', { file_id: file.id }), /not found/)
+  })
+
 })

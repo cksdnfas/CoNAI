@@ -288,12 +288,12 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `set_emoticon_keywords` | 이미지별 키워드 지정 (`null`은 파일명으로 되돌림, `[]`은 키워드 없음). 겹치는 키워드는 건너뛰고 `conflicts`로 알림 | `organize` |
 | `set_emoticon_group` | 커스텀 그룹을 이모티콘 그룹으로 켜고 끄기 | `organize` |
 
-- `view_media_frames`는 채팅 자체 도구라서 **이미지를 볼 수 있는 모델**(Codex, 또는 비전을 켠 API LLM·Claude)이면 프로필의 도구 사용 설정·도구 목록과 상관없이 항상 제공됩니다. 라이브러리 미디어를 열 때는 계정의 이미지 보기 권한, 보관함 파일은 본인 파일인지만 확인합니다.
+- `view_media_frames`는 채팅 자체 도구라서 **이미지를 볼 수 있는 모델**(Codex, 또는 비전을 켠 API LLM·Claude)이면 프로필의 도구 사용 설정·도구 목록과 상관없이 항상 제공됩니다. 라이브러리 미디어를 열 때는 계정의 이미지 보기 권한, 보관함 파일은 파일 조회 권한을 확인합니다.
 - 채팅에서 `view_images`는 프로필에 **이미지를 볼 수 있는 모델**이 켜져 있을 때만 API LLM에 제공됩니다. 꺼져 있으면 모델은 파일명과 태그로 판단합니다.
 
 ### 파일 보관함
 
-계정별 개인 파일 보관함입니다. 이미지 라이브러리와 따로 저장됩니다. 계정과 연결되지 않은 HTTP 키에는 제공되지 않습니다.
+인스턴스 공용 파일 보관함입니다. 조회·편집·삭제 기능 권한은 유지합니다. 이미지 라이브러리와 따로 저장됩니다. 계정과 연결되지 않은 HTTP 키에는 제공되지 않습니다.
 
 | Tool | 용도 | HTTP MCP 키 권한 |
 | --- | --- | --- |
@@ -315,7 +315,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 - 문서 쓰기 도구는 텍스트 확장자(.md, .html, .txt, .json, .csv, .yaml 등)만, 2MB까지 씁니다. 고쳐도 파일 ID가 그대로라 채팅 첨부와 링크가 유지됩니다.
 - 게시판 호출에 답하는 턴에서는 보관함 도구(버전 도구 포함)가 모두 빠지고, 페이지가 연결된 턴에서는 쓰기·정리 도구와 파일 내용·버전을 읽는 도구가 빠집니다.
 - 쓰기·정리 도구는 계정에 권한이 추가로 필요합니다: 문서 쓰기·고치기와 `create_file_folder`·`rename_file`·`move_files`·`restore_file_version`은 `files.edit`, `delete_files`는 `files.delete`. 이름 변경으로 실행파일 등 제한 확장자를 붙이는 건 관리자만 됩니다.
-- MCP 도구는 항상 요청 계정 본인의 보관함만 다룹니다. 관리자의 다른 계정 보관함 탐색(`files.browse.all`)은 웹 UI·HTTP API(`?owner=`)에서만 됩니다.
+- MCP·웹 UI·HTTP API 모두 같은 공용 보관함을 다룹니다. 계정별 보관함 선택과 소유권 제한은 없으며 요청 계정의 기능 권한은 매 호출 검사합니다.
 
 ### 게시판
 
@@ -361,7 +361,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `create_audio_folder` / `update_audio_folder` | 폴더 만들기·이름 바꾸기 | `organize` | `audio.edit` |
 | `delete_audio_group` / `delete_audio_folder` / `delete_audio_project` | 효과음(후보·코멘트·주문 포함)·폴더(안의 효과음은 프로젝트 바로 아래로 남음)·프로젝트 전체 삭제. 웹의 삭제 버튼과 같고, `confirm_name`에 지금 이름을 정확히 적어야 함(다르면 거부). 받은 파일 그룹은 못 지움 | `organize` | `audio.edit` |
 | `move_audio_candidates` | 후보를 같은 프로젝트의 다른 그룹으로 이동 | `organize` | `audio.edit` |
-| `import_audio` | `data_url`(audio/*, 최대 50MB) 또는 내 파일 `file_id`(복사)를 후보로 추가 | `organize` | `audio.edit` (+`files.view`) |
+| `import_audio` | `data_url`(audio/*, 최대 50MB) 또는 공용 파일 `file_id`(복사)를 후보로 추가 | `organize` | `audio.edit` (+`files.view`) |
 | `set_audio_group_comment_status` | 작업 요청 완료 처리·되돌리기(읽은 `revision` 필요) | `organize` | `audio.edit` |
 | `edit_audio_candidate` | 구간·음량·피치·속도·페이드 편집본을 새 후보로 저장(원본 보존) | `organize` | `audio.edit` |
 | `delete_unselected_audio_candidates` | 미채택 후보를 휴지통으로(채택 후보가 섞이면 전체 거부) | `organize` | `audio.edit` |
@@ -629,6 +629,19 @@ claude mcp list
 ### 프롬프트 그룹 정리 실수
 
 `list_backups`로 백업을 찾고 `restore_prompt_data`를 사용합니다. 복원은 실제 데이터를 바꾸므로 대상 백업 파일명을 먼저 확인합니다.
+
+## 채팅 프로젝트 파일 도구
+
+1:1 채팅에 작업 공간을 명시적으로 연결하면 Codex·Claude Code·Pi·직접 API LLM에 다음 도구가 직접 제공됩니다. 일반 채팅, 게시판 봇 호출과 외부 HTTP 키에는 자동으로 노출하지 않습니다. 대상은 서버가 확인한 현재 프로젝트이며 모델이 계정이나 프로젝트 ID를 바꿔 접근 범위를 넓힐 수 없습니다.
+
+| 도구 | 역할 |
+| --- | --- |
+| `workspace_list` | 상대 경로 `target`의 관리 파일·폴더 목록, 페이지당 100개 |
+| `workspace_read` | 최대 32개 텍스트 파일 읽기, 기본 파일당 128KB·합계 1MB, 리비전과 이어 읽기 위치 반환 |
+| `workspace_search` | 이름·본문 검색, 페이지당 100개 항목의 앞 128KB. `nextOffset`·`partialFiles` 확인 |
+| `workspace_apply` | 명시적 쓰기 연결에서 폴더 만들기·문서 작성·정확한 문장 교체·파일 이동. 최대 100개·요청 합계 8MB |
+
+파일 인자는 `path` 대신 `target`을 사용합니다. 새 문서의 `expectedRevision`은 `null`, 기존 문서 변경은 읽기 결과의 리비전을 전달합니다. `requestId`는 동일 요청 재시도에 재사용하며 다른 작업에는 새 ID를 사용합니다. 배치는 첫 실패에서 멈추고 완료 항목을 반환합니다. 셸·명령·재귀 삭제는 제공하지 않습니다. 자세한 화면 사용법은 [파일 가이드](FILES.md#프로젝트-작업-공간)를 참고하세요.
 
 ## 다음 문서
 

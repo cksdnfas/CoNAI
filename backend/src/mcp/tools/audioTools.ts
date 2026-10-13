@@ -189,7 +189,7 @@ export function registerAudioTools(server: McpServer, context: McpRequestContext
     group_id: id,
   }) }, ({ candidate_ids, group_id }) => run(() => moveAudioCandidates(candidate_ids, group_id)));
 
-  server.registerTool('import_audio', { description: 'Add a sound file to the audio workspace as a new candidate. Give exactly one of data_url (data:audio/...;base64,...) or file_id (from your private file store; the file is copied). Target a group_id, or a project_id to use its 받은 파일 inbox.', inputSchema: z.object({
+  server.registerTool('import_audio', { description: 'Add a sound file to the audio workspace as a new candidate. Give exactly one of data_url (data:audio/...;base64,...) or file_id (from the shared file store; the file is copied). Target a group_id, or a project_id to use its 받은 파일 inbox.', inputSchema: z.object({
     group_id: id.optional(),
     project_id: id.optional(),
     data_url: z.string().optional(),

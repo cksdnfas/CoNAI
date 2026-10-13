@@ -34,6 +34,7 @@ export const VERSION = '26.10.10';
 
 export * from './utils/minimaxDirectorResolution';
 export * from './types/fileStore';
+export * from './types/workspace';
 export * from './types/posts';
 export * from './types/contentEvaluation';
 export { TOPIC_EVALUATION_LIMITS } from './types/contentEvaluation';
@@ -42,3 +43,4 @@ export * from './utils/chatPortrait'
 export * from './constants/pageSettings'
 export * from './types/agentCli'
 export * from './utils/spriteSampling'
+export * from './types/plugin'

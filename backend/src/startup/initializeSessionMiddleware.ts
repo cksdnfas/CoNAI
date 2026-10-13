@@ -50,12 +50,8 @@ export async function initializeSessionMiddleware(
   initializeAuthDb();
   initializeUserSettingsDb();
   initializeAudioDb();
-  try {
-    const { moved, orphaned } = FileStoreService.migrateLayout();
-    if (moved || orphaned) console.log(`[file-store] Moved ${moved} blob(s) into per-account directories; ${orphaned} orphan(s) set aside.`);
-  } catch (error) {
-    console.warn('[file-store] Layout migration will retry on next start:', error instanceof Error ? error.message : error);
-  }
+  const { moved } = FileStoreService.migrateLayout();
+  if (moved) console.log(`[file-store] Moved ${moved} legacy item(s) into shared storage.`);
   // Lorebook folders may have been edited while the app was down: the files win over the cached entries.
   try {
     const { created, refreshed, removed } = reconcileLorebookFolders();

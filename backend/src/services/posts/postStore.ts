@@ -531,7 +531,7 @@ export const PostStore = {
         .run(categoryId, title, body, excerptOf(body), status, author.type, author.profileId, author.name, actor.accountId, source, commentMode, pinned, status, origin?.threadId ?? null, origin?.replyId ?? null);
       const id = Number(result.lastInsertRowid);
       saveTags(id, tags);
-      saveMediaRefs(id, 'post', id, refs, actor.accountId);
+      saveMediaRefs(id, 'post', id, refs, actor);
       writePostSearchDocument(id);
       onPostTopicWrite(actor, { id, title, body, status, owner_account_id: actor.accountId, author_profile_id: actor.profileId });
       return id;
@@ -576,7 +576,7 @@ export const PostStore = {
           published_at = CASE WHEN ? = 'published' AND published_at IS NULL THEN CURRENT_TIMESTAMP ELSE published_at END
         WHERE id = ?`).run(title, body, excerptOf(body), categoryId, status, commentMode, pinned, status, postId);
       if (input.tags !== undefined) saveTags(postId, normalizeTags(input.tags));
-      if (body !== row.body) saveMediaRefs(postId, 'post', postId, extractMediaRefs(body), row.owner_account_id);
+      if (body !== row.body) saveMediaRefs(postId, 'post', postId, extractMediaRefs(body), actor);
       syncKnowledgeContent(actor,postId);
       writePostSearchDocument(postId);
       onPostTopicWrite(actor,{ ...row,title,body,status },row);
@@ -710,7 +710,7 @@ export const PostCommentStore = {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(postId, parentId, quoteId, author.type, author.profileId, author.name, actor.accountId, body, JSON.stringify(mentions), options.botRunId ?? null,
         options.origin?.threadId ?? null, options.origin?.replyId ?? null);
       const id = Number(result.lastInsertRowid);
-      saveMediaRefs(postId, 'comment', id, refs, actor.accountId);
+      saveMediaRefs(postId, 'comment', id, refs, actor);
       refreshCommentCount(postId);
       return { row: db().prepare('SELECT * FROM post_comments WHERE id = ?').get(id) as CommentRow, post };
     }).immediate();
@@ -732,7 +732,7 @@ export const PostCommentStore = {
       const body = postBody(input.body, POST_LIMITS.comment).trim();
       if (!body) throw new PostError('댓글 내용을 입력해줘.');
       db().prepare('UPDATE post_comments SET body = ?, revision = revision + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(body, commentId);
-      saveMediaRefs(current.post_id, 'comment', commentId, extractMediaRefs(body), current.owner_account_id);
+      saveMediaRefs(current.post_id, 'comment', commentId, extractMediaRefs(body), actor);
       return db().prepare('SELECT * FROM post_comments WHERE id = ?').get(commentId) as CommentRow;
     }).immediate();
     announce(row.post_id, 'comment');

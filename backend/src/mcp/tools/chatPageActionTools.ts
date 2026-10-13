@@ -23,7 +23,7 @@ function resolveAction(requester: McpRequester, page: ChatPageSnapshot, actionId
     if (!node || typeof node !== 'object' || Array.isArray(node) || !node.schema) throw new Error('현재 페이지에 등록된 복합 노드가 아니야.')
     validateChatPageArguments(node.schema as ChatPageSchema, validated.patch)
   }
-  return { action, validated, tier: chatPageActionTier(actionId) }
+  return { action, validated, tier: chatPageActionTier(actionId, action) }
 }
 
 /** A navigation chip names where it went; other operations keep their registered label. */

@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
-test('file store search: names and text, phrases, HTML text, cache refresh, owner isolation', { timeout: 60000 }, async (t) => {
+test('file store search: names and text, phrases, HTML text, cache refresh, shared access', { timeout: 60000 }, async (t) => {
   // Load runtime modules only after isolating every data path. Never open the user's databases.
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-file-search-test-'))
   process.env.RUNTIME_BASE_PATH = root
@@ -48,7 +48,7 @@ test('file store search: names and text, phrases, HTML text, cache refresh, owne
   })
 
   await t.test('finds documents by words in their text, with path and excerpt', async () => {
-    assert.deepEqual(await names('캐릭터 설정'), ['notes.html', '세계관.md'])
+    assert.deepEqual(await names('캐릭터 설정'), ['notes.html', '남의 파일.md', '세계관.md'])
     const result = await searchStoredFiles(me, '항구')
     assert.equal(result.hits.length, 1)
     assert.equal(result.hits[0].path, '/설정 문서')
@@ -59,7 +59,7 @@ test('file store search: names and text, phrases, HTML text, cache refresh, owne
   await t.test('a quoted phrase must appear as written; scripts, styles and comments are not text', async () => {
     assert.deepEqual(await names('"설정 & 초안"'), ['notes.html'])
     assert.deepEqual(await names('"초안 & 설정"'), [])
-    assert.deepEqual(await names('비밀'), [])
+    assert.deepEqual(await names('비밀'), ['남의 파일.md'])
     assert.deepEqual(await names('숨김'), [])
   })
 
@@ -71,8 +71,8 @@ test('file store search: names and text, phrases, HTML text, cache refresh, owne
     assert.equal(hit?.snippet, null)
   })
 
-  await t.test("another account's files never show up", async () => {
-    assert.deepEqual(await names('남의'), [])
+  await t.test("accounts search the same shared store", async () => {
+    assert.deepEqual(await names('남의'), ['남의 파일.md'])
     assert.deepEqual(await names('비밀', other), ['남의 파일.md'])
   })
 

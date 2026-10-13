@@ -317,7 +317,7 @@ export function ensurePostsSchema(db: Database.Database): void {
   if (versions.length) {
     const provenance = db.prepare("SELECT file_owner_key FROM post_media_refs WHERE post_id=? AND owner_type='post' AND kind='file' AND ref=?");
     const ownerFile = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='stored_file_entries'").get()
-      ? db.prepare("SELECT owner_key FROM stored_file_entries WHERE id=? AND owner_key=? AND kind='file' AND deleted_at IS NULL") : null;
+      ? db.prepare("SELECT owner_key FROM stored_file_entries WHERE id=? AND kind='file' AND deleted_at IS NULL") : null;
     const insert = db.prepare('INSERT OR IGNORE INTO post_knowledge_media_refs(post_id,content_version,kind,ref,position,file_owner_key) VALUES(?,?,?,?,?,?)');
     db.transaction(() => {
       for (const version of versions) {
@@ -331,7 +331,7 @@ export function ensurePostsSchema(db: Database.Database): void {
           let ownerKey: string | null = null;
           if (kind === 'file') {
             const known = provenance.get(version.post_id,ref) as { file_owner_key: string } | undefined;
-            const own = ownerFile?.get(ref,version.owner_account_id===null ? 'bootstrap' : `account:${version.owner_account_id}`) as { owner_key: string } | undefined;
+            const own = ownerFile?.get(ref) as { owner_key: string } | undefined;
             ownerKey = known?.file_owner_key ?? own?.owner_key ?? null;
             if (!ownerKey) continue;
           }

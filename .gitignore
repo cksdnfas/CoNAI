@@ -47,6 +47,8 @@ frontend/.playwright-dev.log
 # Keep the permanent chat cancellation, context and protocol regressions.
 !backend/test/
 backend/test/*
+!backend/test/workspaces.test.ts
+!backend/test/plugins.test.ts
 !backend/test/chat-regressions.test.ts
 !backend/test/chat-diagnostics.test.ts
 !backend/test/chat-generation-results.test.ts
@@ -72,6 +74,7 @@ backend/test/*
 !backend/test/posts-knowledge-runtime.test.ts
 !frontend/test/
 frontend/test/*
+!frontend/test/plugin-text-editor.test.ts
 !frontend/test/post-rich-editor.test.ts
 !frontend/test/audio-waveform.test.ts
 

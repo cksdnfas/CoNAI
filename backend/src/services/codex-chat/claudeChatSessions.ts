@@ -1,4 +1,5 @@
 import type { JudgedContext } from './chatJudgeContext'
+import { chatWorkspace, workspaceInstructions } from './chatWorkspace'
 import fs from 'fs'
 import path from 'path'
 import { createHash } from 'crypto'
@@ -105,9 +106,11 @@ export async function buildClaudeSessionTurn(params: {
   const runtime = params.runtime ?? 'claude'
   const thread = CodexChatStore.findThreadById(threadId) ?? null
   const user = userPersonaForThread(thread)
-  const system = claudeSessionSystem(profile, params.withTools, user)
+  const workspace = chatWorkspace(requester, threadId, profile.id)
+  const system = [claudeSessionSystem(profile, params.withTools, user), workspaceInstructions(workspace)].filter(Boolean).join('\n\n')
   const systemHash = systemHashOf(system)
-  const dir = claudeSessionDir(threadId, runtime)
+  const baseDir = claudeSessionDir(threadId, runtime)
+  const dir = workspace ? path.join(baseDir, 'projects', workspace.project.id) : baseDir
   const resumeId = resumableSession(thread?.codex_thread_id, systemHash, dir, runtime)
   const sent = resumeId ? readLoreSent(thread?.codex_lore_sent ?? null) : new Set<string>()
 

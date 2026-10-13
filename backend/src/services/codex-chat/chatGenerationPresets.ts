@@ -303,14 +303,14 @@ function linkedProfiles() {
 const DEFAULT_PROMPTING: ChatPresetPrompting = { timing: 'inline', guide: '', guideFile: null, previousImages: 0 }
 
 /** Where a linked guide file is now (`a/b/c.md` from the store root) and when it last changed; nulls once it is gone. */
-function guideFileAt(owner: string, fileId: string): { path: string | null; updatedAt: string | null } {
-  const lookup = getUserSettingsDb().prepare('SELECT parent_id, name, updated_at FROM stored_file_entries WHERE id = ? AND owner_key = ? AND deleted_at IS NULL')
-  const file = lookup.get(fileId, owner) as { parent_id: string | null; name: string; updated_at: string } | undefined
+function guideFileAt(_actor: string, fileId: string): { path: string | null; updatedAt: string | null } {
+  const lookup = getUserSettingsDb().prepare('SELECT parent_id, name, updated_at FROM stored_file_entries WHERE id = ? AND deleted_at IS NULL')
+  const file = lookup.get(fileId) as { parent_id: string | null; name: string; updated_at: string } | undefined
   if (!file) return { path: null, updatedAt: null }
   const names = [file.name]
   let parentId = file.parent_id
   while (parentId !== null && names.length < 64) {
-    const folder = lookup.get(parentId, owner) as { parent_id: string | null; name: string } | undefined
+    const folder = lookup.get(parentId) as { parent_id: string | null; name: string } | undefined
     if (!folder) return { path: null, updatedAt: null }
     names.unshift(folder.name)
     parentId = folder.parent_id

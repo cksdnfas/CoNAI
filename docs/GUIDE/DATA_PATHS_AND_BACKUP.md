@@ -8,6 +8,8 @@ CoNAI의 런타임 데이터는 기본적으로 `user/` 아래에 모입니다. 
 user/
 ├─ uploads/      # 등록/저장된 미디어
 ├─ database/     # SQLite DB
+├─ files/        # 공용 파일 보관함 원본과 텍스트 버전
+├─ workspaces/   # 공용 프로젝트 문서와 작업본
 ├─ logs/         # 로그
 ├─ temp/         # 임시 파일
 ├─ models/       # 자동 태그/추출 모델
@@ -31,6 +33,8 @@ RUNTIME_RECYCLE_BIN_DIR=E:/CoNAI/RecycleBin
 | --- | --- | --- |
 | `user/database` | 매우 높음 | 이미지/프롬프트/그룹/설정 DB |
 | `user/uploads` | 매우 높음 | CoNAI가 관리하는 미디어 파일 |
+| `user/files` | 매우 높음 | 공용 파일함 원본과 텍스트 버전 |
+| `user/workspaces` | 매우 높음 | 프로젝트 지침·문서·작업본. 프로젝트와 변경 기록은 DB에도 저장 |
 | `user/RecycleBin` | 높음 | 삭제 보호 흐름에서 보관되는 파일 |
 | `user/models` | 중간 | 자동 태그/추출 모델 |
 | `user/logs` | 중간 | 문제 해결용 로그 |
@@ -39,18 +43,20 @@ RUNTIME_RECYCLE_BIN_DIR=E:/CoNAI/RecycleBin
 ## 백업 기본 원칙
 
 1. 앱을 종료하거나 쓰기 작업이 없는 상태로 만듭니다.
-2. `database`와 `uploads`를 같은 시점으로 백업합니다.
+2. `database`, `uploads`, `files`, `workspaces`를 같은 시점으로 백업합니다.
 3. 삭제 보호를 쓴다면 `RecycleBin`도 함께 백업합니다.
 4. `.env`를 별도로 보관합니다.
 5. 자동 태그/추출 모델 재다운로드가 번거롭다면 `models`도 백업합니다.
 
 DB와 파일의 시점이 다르면 상세 화면은 존재하지만 원본이 없거나, 파일은 있는데 CoNAI 목록에 안 보이는 상태가 생길 수 있습니다.
 
+설정의 **DB 백업**은 SQLite DB만 복사하며 `files/`·`workspaces/`·미디어 원본은 포함하지 않습니다. 전체 파일 백업은 별도로 수행해야 합니다. 프로젝트의 라이브러리 참조를 복구하려면 원본 미디어도 함께 필요합니다. 에이전트의 비공개 세션·인증 정보는 일반 작업 폴더에 넣지 말고 별도 보존 정책을 적용합니다.
+
 ## 백업 권장 순서
 
 1. 앱 종료
 2. `user/database` 백업
-3. `user/uploads` 백업
+3. `user/uploads`, `user/files`, `user/workspaces` 백업
 4. `user/RecycleBin` 백업
 5. `.env` 백업
 6. 필요하면 `user/models`와 `user/logs` 백업
@@ -65,7 +71,7 @@ DB와 파일의 시점이 다르면 상세 화면은 존재하지만 원본이 �
 1. 앱을 종료합니다.
 2. 기존 데이터를 별도 위치에 원본 백업합니다.
 3. 새 `RUNTIME_BASE_PATH` 또는 개별 `RUNTIME_*_DIR`를 정합니다.
-4. `database`, `uploads`, `RecycleBin`을 새 위치로 복사합니다.
+4. `database`, `uploads`, `files`, `workspaces`, `RecycleBin`을 새 위치로 복사합니다.
 5. `.env` 경로를 새 위치에 맞춥니다.
 6. 앱을 실행합니다.
 7. 홈 이미지 수, 상세 원본 경로, 다운로드, 스캔 로그를 확인합니다.

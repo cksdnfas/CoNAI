@@ -63,10 +63,10 @@ test('file store text documents: create refuses taken names, update keeps the id
     assert.equal((await FileStoreService.readText(me, note.id)).revision, newer.revision)
   })
 
-  await t.test('update refuses folders and other owners', () => {
+  await t.test('update refuses folders and permits other file editors', () => {
     const folder = FileStoreService.ensureFolder(me, null, '보관')
     assert.throws(() => FileStoreService.updateText(me, folder.id, 'x'), /파일을 선택/)
-    assert.throws(() => FileStoreService.updateText(fileOwnerKey(2), note.id, 'x'), /찾을 수 없어/)
+    assert.equal(FileStoreService.updateText(fileOwnerKey(2), note.id, 'shared').id, note.id)
   })
 
   await t.test('bounded continuation reads never mix document revisions', async () => {
