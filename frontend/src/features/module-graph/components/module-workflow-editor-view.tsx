@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { ArrowLeft, Bug, Ellipsis, LayoutGrid, Loader2, Maximize, PanelRight, Play, Plus, Redo2, Save, Undo2, X } from 'lucide-react'
+import { ArrowLeft, Bug, FolderCog, LayoutGrid, Loader2, Maximize, PanelRight, Play, Plus, Redo2, Save, Undo2, X } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { TextTabs } from '@/components/common/text-tabs'
+import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { IconButton } from '@/components/ui/icon-button'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -48,7 +49,7 @@ interface ModuleWorkflowEditorViewProps {
   nodePanel: ReactNode
   inputsPanel: ReactNode
   runsPanel: ReactNode
-  /** Description and save folder, under the ⋯ next to the name. */
+  /** Description and save folder, opened from the ⋯ menu. */
   settingsPanel: ReactNode
   workflowSaveModal?: ReactNode
   workflowDebugMode: boolean
@@ -69,7 +70,7 @@ interface ModuleWorkflowEditorViewProps {
 
 /**
  * The node editor fills the screen under the app header (like the ComfyUI workflow editor): one bar (back, name,
- * add node, layout, undo/redo, debug, checks, test run, save), the canvas, and a dock on the right (a bottom sheet on
+ * add node, undo/redo, checks, test run, ⋯ for layout / debug / settings, save), the canvas, and a dock on the right (a bottom sheet on
  * narrow screens) with node / inputs / runs tabs.
  */
 export function ModuleWorkflowEditorView({
@@ -109,6 +110,7 @@ export function ModuleWorkflowEditorView({
   const { t } = useI18n()
   const [dockTab, setDockTab] = useState<WorkflowEditorDockTab>(selectionKey ? 'node' : 'inputs')
   const [isDockOpen, setIsDockOpen] = useState(() => (isWideLayout ? readDockOpen() : false))
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
 
   // Picking a node or edge shows its properties (the node a workflow opens with does not pop the phone sheet open);
   // clearing the selection falls back to the run inputs.
@@ -165,6 +167,18 @@ export function ModuleWorkflowEditorView({
   )
 
   const separator = <span className="mx-1 h-4 w-px shrink-0 bg-line" aria-hidden />
+  const moreEntries: ActionMenuEntry[] = [
+    { key: 'auto-layout', label: t({ ko: '자동 정렬', en: 'Auto layout' }), icon: LayoutGrid, onSelect: onAutoLayout, disabled: nodesCount === 0 },
+    { key: 'fit-view', label: t({ ko: '화면에 맞추기', en: 'Fit to view' }), icon: Maximize, onSelect: onFitView, disabled: nodesCount === 0 },
+    '-',
+    {
+      key: 'debug',
+      label: workflowDebugMode ? t({ ko: '디버그 모드 끄기', en: 'Turn off debug mode' }) : t({ ko: '디버그 모드 켜기', en: 'Turn on debug mode' }),
+      icon: Bug,
+      onSelect: onWorkflowDebugModeToggle,
+    },
+    { key: 'settings', label: t({ ko: '설명 · 저장 폴더', en: 'Description · folder' }), icon: FolderCog, onSelect: () => setIsSettingsOpen(true) },
+  ]
   const bar = (
     <div className="flex h-11 shrink-0 items-center gap-0.5 border-b border-line px-2">
       <IconButton size="icon-sm" variant="ghost" onClick={onBack} label={t({ ko: '편집 끝내기', en: 'Leave editor' })}>
@@ -183,46 +197,17 @@ export function ModuleWorkflowEditorView({
             <span role="img" aria-label={t({ ko: '저장 안 한 변경 있음', en: 'Unsaved changes' })} className="size-1.5 shrink-0 rounded-full bg-warning" />
           </Tip>
         ) : null}
-        <Popover>
-          <PopoverTrigger asChild>
-            <IconButton size="icon-xs" variant="ghost" label={t({ ko: '설명 · 저장 폴더', en: 'Description · folder' })}>
-              <Ellipsis />
-            </IconButton>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-80 p-3">
-            {settingsPanel}
-          </PopoverContent>
-        </Popover>
       </div>
       {separator}
       <IconButton size="icon-sm" variant="ghost" onClick={onAddNode} disabled={!canUpdateWorkflows} label={t({ ko: '노드 추가 (더블클릭)', en: 'Add node (double-click)' })}>
         <Plus />
       </IconButton>
-      <IconButton size="icon-sm" variant="ghost" onClick={onAutoLayout} disabled={nodesCount === 0} label={t({ ko: '자동 정렬', en: 'Auto layout' })}>
-        <LayoutGrid />
-      </IconButton>
-      <IconButton size="icon-sm" variant="ghost" onClick={onFitView} disabled={nodesCount === 0} label={t({ ko: '화면에 맞추기', en: 'Fit to view' })}>
-        <Maximize />
-      </IconButton>
-      {separator}
       <IconButton size="icon-sm" variant="ghost" onClick={onUndo} disabled={!canUndo} label={t({ ko: '되돌리기 (Ctrl+Z)', en: 'Undo (Ctrl+Z)' })}>
         <Undo2 />
       </IconButton>
       <IconButton size="icon-sm" variant="ghost" onClick={onRedo} disabled={!canRedo} label={t({ ko: '다시 하기 (Ctrl+Shift+Z)', en: 'Redo (Ctrl+Shift+Z)' })}>
         <Redo2 />
       </IconButton>
-      <span className={cn('contents', !isWideLayout && 'max-sm:hidden')}>
-        {separator}
-        <IconButton
-          size="icon-sm"
-          variant="ghost"
-          onClick={onWorkflowDebugModeToggle}
-          active={workflowDebugMode}
-          label={workflowDebugMode ? t({ ko: '디버그 모드 끄기', en: 'Turn off debug mode' }) : t({ ko: '디버그 모드 켜기', en: 'Turn on debug mode' })}
-        >
-          <Bug />
-        </IconButton>
-      </span>
       <WorkflowValidationIndicator issues={validationIssues} onIssueSelect={onValidationIssueSelect} />
       <span className="min-w-2 flex-1" />
       <IconButton size="icon-sm" variant="ghost" onClick={onTestRun} disabled={!canExecuteGeneration || isExecuting || nodesCount === 0} label={t({ ko: '시험 실행', en: 'Test run' })}>
@@ -233,6 +218,18 @@ export function ModuleWorkflowEditorView({
           <PanelRight />
         </IconButton>
       ) : null}
+      <Popover open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+        <PopoverAnchor asChild>
+          <span className="inline-flex">
+            <ActionMenuButton entries={moreEntries} label={t({ ko: '더 보기', en: 'More' })} />
+          </span>
+        </PopoverAnchor>
+        <PopoverContent align="end" className="w-80 p-3"
+          // Focus returning to the menu button as the menu closes must not dismiss it; a click outside or Esc does.
+          onFocusOutside={(event) => event.preventDefault()}>
+          {settingsPanel}
+        </PopoverContent>
+      </Popover>
       <IconButton size="icon-sm" variant="default" onClick={onSave} disabled={!canUpdateWorkflows || isSavingGraph || nodesCount === 0} aria-busy={isSavingGraph || undefined} label={isSavingGraph ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장 (Ctrl+S)', en: 'Save (Ctrl+S)' })}>
         {isSavingGraph ? <Loader2 className="animate-spin" /> : <Save />}
       </IconButton>

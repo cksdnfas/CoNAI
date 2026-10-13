@@ -23,6 +23,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { formatProbability, judgeActionLabel, judgeDecidedByLabel, judgeOutcomeLabel, judgeStageLabel, JudgeVerdictChip } from './chat-judge-parts'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
+import { useChatOptionsPageParts } from './chat-options-page'
 
 const PAGE_SIZE = 50
 /** An uncertain share above this marks the item's thresholds as worth a look. */
@@ -191,15 +192,19 @@ export function ChatSettingsJudge() {
       verdicts: run.items.map((item) => `${item.name}: ${item.verdict}`).join(', '),
     })),
   }
+  // The answer diagnostics shown above the log on the same view.
+  const diagnosticsParts = useChatOptionsPageParts('diagnostics')
   useChatPageRegistration({
-    kind: 'settings', title: t({ ko: '설정 · 판단 기록', en: 'Settings · Judge log' }), resourceId: 'llm', priority: 5, fields: [], data: chatData,
-    actions: [pageAction('settings.judge_filter', t({ ko: '판단 기록 거르기', en: 'Filter the judge log' }), t({
+    kind: 'settings', title: t({ ko: '설정 · LLM 기록', en: 'Settings · LLM log' }), resourceId: 'llm', priority: 5, fields: [], data: { ...chatData, ...diagnosticsParts.data },
+    actions: [...diagnosticsParts.actions, pageAction('settings.judge_filter', t({ ko: '판단 기록 거르기', en: 'Filter the judge log' }), t({
       ko: 'data.filter를 바꿔(넘긴 것만, 0이나 빈 값 = 전체).',
       en: 'Change data.filter (only what you pass; 0 or empty = all).',
     }), pageObject({ profileId: pageNumber(0, undefined, true), presetId: pageNumber(0, undefined, true), itemId: pageText(120), verdict: pageChoice(['', 'yes', 'no', 'uncertain', 'failed']), days: pageChoice([1, 7, 30]) }))],
     apply: () => {},
     applyAction: (id, args, assertCurrent) => {
       assertCurrent()
+      const saved = diagnosticsParts.apply(id, args)
+      if (saved) return saved
       if (id !== 'settings.judge_filter') throw new Error('이 화면에 없는 작업이야.')
       const next: Partial<ChatJudgeLogFilter> = {}
       if (typeof args.profileId === 'number') next.profileId = args.profileId || undefined

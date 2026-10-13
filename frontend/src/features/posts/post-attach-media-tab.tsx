@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, Check, Images, Plus, Search, SlidersHorizontal } from 'lucide-react'
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Images, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
+import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -24,7 +25,7 @@ type Kind = 'all' | 'image' | 'video'
 
 const matchesKind = (item: ImageRecord, kind: Kind) => kind === 'all' || (kind === 'video' ? item.mime_type?.startsWith('video/') : !item.mime_type?.startsWith('video/'))
 
-/** Library media: the group tree on the left (＋ inserts a whole group), the masonry on the right. */
+/** Library media: the group tree on the left (its row menu inserts a whole group), the masonry on the right. */
 export function AttachMediaTab({ selected, setSelected }: { selected: AttachItem[]; setSelected: Dispatch<SetStateAction<AttachItem[]>> }) {
   const { t, formatNumber } = useI18n()
   const groupsQuery = useQuery({ queryKey: ['groups-hierarchy-all', 'post-attach'], queryFn: getGroupsHierarchyAll, staleTime: 30_000 })
@@ -95,13 +96,10 @@ export function AttachMediaTab({ selected, setSelected }: { selected: AttachItem
   const toggleGroup = (group: GroupWithHierarchy) => setSelected((current) => current.some((item) => item.key === attachKey.group(group.id))
     ? current.filter((item) => item.key !== attachKey.group(group.id))
     : [...current, { kind: 'group', key: attachKey.group(group.id), id: group.id, name: group.name }])
-  const renderGroupAction = (group: GroupWithHierarchy) => {
+  const pickedGroupIds = new Set(selected.flatMap((item) => item.kind === 'group' ? [item.id] : []))
+  const getGroupMenu = (group: GroupWithHierarchy): ActionMenuEntry[] => {
     const picked = orderByKey.has(attachKey.group(group.id))
-    return (
-      <IconButton size="icon-xs" variant="ghost" active={picked} label={picked ? t({ ko: '그룹 빼기', en: 'Remove group' }) : t({ ko: '그룹째 넣기', en: 'Insert whole group' })} onClick={() => toggleGroup(group)}>
-        {picked ? <Check /> : <Plus />}
-      </IconButton>
-    )
+    return [{ key: 'insert-group', icon: picked ? X : Plus, label: picked ? t({ ko: '그룹 빼기', en: 'Remove group' }) : t({ ko: '그룹째 넣기', en: 'Insert whole group' }), onSelect: () => toggleGroup(group) }]
   }
   const side = (
     <div className="space-y-1">
@@ -110,7 +108,7 @@ export function AttachMediaTab({ selected, setSelected }: { selected: AttachItem
         <span className="min-w-0 flex-1 truncate text-left">{t({ ko: '전체 미디어', en: 'All media' })}</span>
       </Button>
       {groups.length ? <div className="border-t border-line pt-1">
-        <GroupTree groups={groups} countMaps={countMaps} selectedGroupId={groupId ?? undefined} onSelectGroup={(id) => { setGroupId(id); setSearch(''); setInput(''); setTool('') }} renderGroupAction={renderGroupAction} />
+        <GroupTree groups={groups} countMaps={countMaps} selectedGroupId={groupId ?? undefined} onSelectGroup={(id) => { setGroupId(id); setSearch(''); setInput(''); setTool('') }} getGroupMenu={getGroupMenu} pickedGroupIds={pickedGroupIds} />
       </div> : null}
     </div>
   )

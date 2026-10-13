@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link2, LoaderCircle, Lock, Plus, RefreshCw, Save, Star, Trash2 } from 'lucide-react'
+import { Link2, LoaderCircle, Lock, Plus, RefreshCw, Save, Scale, Star, Trash2 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { Field } from '@/components/ui/field'
@@ -52,7 +52,7 @@ function useRoleLabels(): Record<ModelUseRole, string> {
 
 /** How many things use a row (workflow nodes included). */
 export function slotUseCount(slot: ModelSlot, workflowNodes = 0) {
-  return slot.profiles.length + slot.judgePresets.length + slot.userProfiles + slot.chats + (slot.contentEvaluations ?? 0) + workflowNodes
+  return (slot.isDefaultJudge ? 1 : 0) + slot.profiles.length + slot.judgePresets.length + slot.userProfiles + slot.chats + (slot.contentEvaluations ?? 0) + workflowNodes
 }
 
 /** "세라 (대화, 요약)\n판단 프리셋: 기본\n워크플로 노드 2" — who uses a row, one kind per line. */
@@ -60,6 +60,7 @@ function useUsageLines(slot: ModelSlot, workflowNodes: number) {
   const { t } = useI18n()
   const roles = useRoleLabels()
   return [
+    slot.isDefaultJudge ? t({ ko: '기본 판단 모델', en: 'Default judge' }) : null,
     slot.profiles.length > 0 ? slot.profiles.map((profile) => `${profile.name} (${profile.roles.map((role) => roles[role]).join(', ')})`).join(' · ') : null,
     slot.judgePresets.length > 0 ? `${t({ ko: '판단 프리셋', en: 'Judge presets' })}: ${slot.judgePresets.map((preset) => preset.name).join(', ')}` : null,
     slot.userProfiles > 0 ? t({ ko: '사용자 프로필 {count}', en: '{count} user profiles' }, { count: slot.userProfiles }) : null,
@@ -69,12 +70,13 @@ function useUsageLines(slot: ModelSlot, workflowNodes: number) {
   ].filter((line): line is string => line !== null)
 }
 
-/** One model under its connection: the model id, who uses it, and the ★ default (LLM models only). */
-export function ConnectionModelRow({ slot, workflowNodes, settingDefault, onSetDefault, onOpen }: {
+/** One model under its connection: the model id, who uses it, the default judge and the ★ default (LLM models only). */
+export function ConnectionModelRow({ slot, workflowNodes, settingDefault, onSetDefault, onToggleDefaultJudge, onOpen }: {
   slot: ModelSlot
   workflowNodes: number
   settingDefault: boolean
   onSetDefault: (slot: ModelSlot) => void
+  onToggleDefaultJudge: (slot: ModelSlot) => void
   onOpen: (slot: ModelSlot) => void
 }) {
   const { t } = useI18n()
@@ -88,16 +90,29 @@ export function ConnectionModelRow({ slot, workflowNodes, settingDefault, onSetD
       name={<span className="font-mono text-xs font-normal">{slot.model}</span>}
       extra={uses === 0 ? <ResourceRowStatus>{t({ ko: '사용처 없음', en: 'Not used' })}</ResourceRowStatus> : null}
       aside={uses > 0 ? <ResourceRowStat icon={Link2} tip={<span className="whitespace-pre-line">{lines.join('\n')}</span>}>{uses}</ResourceRowStat> : null}
-      trailing={canBeDefault ? (
-        <IconButton
-          size="icon-sm"
-          variant="ghost"
-          disabled={slot.isDefault || settingDefault}
-          onClick={() => onSetDefault(slot)}
-          label={slot.isDefault ? t({ ko: '기본 모델', en: 'Default model' }) : t({ ko: '기본으로', en: 'Make default' })}
-        >
-          <Star className={cn('h-4 w-4', slot.isDefault && 'fill-primary text-primary')} />
-        </IconButton>
+      trailing={slot.providerType !== null ? (
+        <>
+          <IconButton
+            size="icon-sm"
+            variant="ghost"
+            disabled={settingDefault}
+            onClick={() => onToggleDefaultJudge(slot)}
+            label={slot.isDefaultJudge ? t({ ko: '기본 판단 모델 · 누르면 해제', en: 'Default judge · click to clear' }) : t({ ko: '기본 판단 모델로', en: 'Make default judge' })}
+          >
+            <Scale className={cn('h-4 w-4', slot.isDefaultJudge ? 'text-resource-judge' : 'text-muted-foreground/60')} />
+          </IconButton>
+          {canBeDefault ? (
+            <IconButton
+              size="icon-sm"
+              variant="ghost"
+              disabled={slot.isDefault || settingDefault}
+              onClick={() => onSetDefault(slot)}
+              label={slot.isDefault ? t({ ko: '기본 모델', en: 'Default model' }) : t({ ko: '기본으로', en: 'Make default' })}
+            >
+              <Star className={cn('h-4 w-4', slot.isDefault && 'fill-primary text-primary')} />
+            </IconButton>
+          ) : <span className="size-8 shrink-0" aria-hidden />}
+        </>
       ) : null}
       onOpen={() => onOpen(slot)}
     />

@@ -6,6 +6,7 @@ import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useI18n } from '@/i18n'
 import type { useContentEvaluationSettings } from '../use-content-evaluation-settings'
 import { ContentEvaluationSettingsRows } from './content-evaluation-settings'
+import { useSettingsAdvanced } from './settings-advanced'
 
 type Props = {
   draft: PostsTopicEvaluationSettings
@@ -16,6 +17,7 @@ type Props = {
 /** Settings › 게시판 › 주제 관련도: posts automation and display (posts draft) around the shared judge and topics. */
 export function PostsTopicSettings({ draft, onPatch, criteria }: Props) {
   const { t } = useI18n()
+  const advanced = useSettingsAdvanced()
   const limits = [
     { key: 'dailyCallLimit', ko: '계정당 하루 호출', en: 'Daily calls per account', min: 0, max: 10000 },
     { key: 'dailyTokenLimit', ko: '계정당 하루 토큰', en: 'Daily tokens per account', min: 0, max: 100000000 },
@@ -37,15 +39,15 @@ export function PostsTopicSettings({ draft, onPatch, criteria }: Props) {
           <span>{t({ ko: '개', en: 'topics' })}</span>
         </SettingRow>
       )}
-      footer={(
-        <Section variant="settings" heading={t({ ko: '고급', en: 'Advanced' })} collapsible defaultOpen={false} bodyClassName="grid gap-x-10 sm:grid-cols-2">
+      footer={advanced ? (
+        <Section variant="settings" heading={t({ ko: '한도', en: 'Limits' })} bodyClassName="grid gap-x-10 sm:grid-cols-2">
           {limits.map(({ key, ko, en, min, max }) => (
             <SettingRow key={key} label={t({ ko, en })} controlClassName="w-36">
               <NumberStepperInput aria-label={t({ ko: '주제 관련도 · ' + ko, en: 'Topic relevance · ' + en })} min={min} max={max} value={draft[key]} variant="settings" onValueCommit={value => onPatch({ [key]: Number(value) })} />
             </SettingRow>
           ))}
         </Section>
-      )}
+      ) : null}
     />
   )
 }

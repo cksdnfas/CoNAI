@@ -11,6 +11,7 @@ import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
  * serves, listed under it in Settings → LLM. Chat profiles (per role, and their judge), judge presets, user profiles
  * and chats reference rows by id and resolve them at request time, so changing a row's model reaches everything that
  * uses it. One row is the default (★): new profiles start on it and a chat role with no model of its own uses it.
+ * At most one row is the default judge: judges, board evaluations and topic relevance with no model of their own ask it.
  * The table and the code keep the older "slot" name.
  */
 export type ModelRole = 'chat' | 'summary' | 'translation' | 'suggest'
@@ -36,6 +37,8 @@ export type ModelSlot = {
   /** `connection · model`, how pickers name the row. */
   label: string
   isDefault: boolean
+  /** The default judge (see the header). */
+  isDefaultJudge: boolean
   sortOrder: number
   /**
    * The highest rating tier (rating_tiers.id) of media this model may be shown; null: no ceiling. Profiles
@@ -73,6 +76,7 @@ type SlotRow = {
   provider_name: string
   model: string
   is_default: number
+  is_default_judge: number
   sort_order: number
   content_rating_tier_id: number | null
   created_date: string
@@ -145,6 +149,7 @@ function toSlot(row: SlotRow, usage: Usage, connections: Map<string, { label: st
     model: row.model,
     label: `${connection.label} · ${row.model}`,
     isDefault: row.is_default === 1,
+    isDefaultJudge: row.is_default_judge === 1,
     sortOrder: row.sort_order,
     contentRatingTierId: row.content_rating_tier_id ?? null,
     profiles: usage.profiles.get(row.id) ?? [],
@@ -157,13 +162,14 @@ function toSlot(row: SlotRow, usage: Usage, connections: Map<string, { label: st
   }
 }
 
-export function isSlotUsed(slot: Pick<ModelSlot, 'profiles' | 'judgePresets' | 'userProfiles' | 'chats' | 'contentEvaluations'>) {
-  return slot.profiles.length > 0 || slot.judgePresets.length > 0 || slot.userProfiles > 0 || slot.chats > 0 || (slot.contentEvaluations ?? 0) > 0
+export function isSlotUsed(slot: Pick<ModelSlot, 'isDefaultJudge' | 'profiles' | 'judgePresets' | 'userProfiles' | 'chats' | 'contentEvaluations'>) {
+  return slot.isDefaultJudge || slot.profiles.length > 0 || slot.judgePresets.length > 0 || slot.userProfiles > 0 || slot.chats > 0 || (slot.contentEvaluations ?? 0) > 0
 }
 
 /** "세라, 미나 · 판단 프리셋 기본 · 사용자 프로필 2" — who holds a row, for refusals. */
 function describeUse(slot: ModelSlot) {
   return [
+    slot.isDefaultJudge ? '기본 판단 모델' : null,
     slot.profiles.length > 0 ? slot.profiles.map((profile) => profile.name).join(', ') : null,
     slot.judgePresets.length > 0 ? `판단 프리셋 ${slot.judgePresets.map((preset) => preset.name).join(', ')}` : null,
     slot.userProfiles > 0 ? `사용자 프로필 ${slot.userProfiles}` : null,
@@ -253,6 +259,12 @@ export const ModelSlotStore = {
 
   defaultTarget(): ModelTarget | null {
     const row = getUserSettingsDb().prepare('SELECT id FROM llm_model_slots WHERE is_default = 1 ORDER BY id ASC LIMIT 1').get() as { id: number } | undefined
+    return row ? ModelSlotStore.target(row.id) : null
+  },
+
+  /** The default judge row (see the header), or null when none is set. */
+  defaultJudgeTarget(): ModelTarget | null {
+    const row = getUserSettingsDb().prepare('SELECT id FROM llm_model_slots WHERE is_default_judge = 1 ORDER BY id ASC LIMIT 1').get() as { id: number } | undefined
     return row ? ModelSlotStore.target(row.id) : null
   },
 
@@ -362,6 +374,19 @@ export const ModelSlotStore = {
     const type = ExternalApiProvider.findByName(target.providerName)?.provider_type
     if (!type || !LLM_CONNECTION_TYPES.includes(type)) throw new ChatProfileError('기본 모델은 LLM 연결의 모델만 될 수 있어.')
     settleDefault(slotId)
+    return ModelSlotStore.find(slotId)
+  },
+
+  /** Makes a row the default judge (any model connection, TypeSafe too), or with `on` false clears it. Null when the row does not exist. */
+  setDefaultJudge(slotId: number, on: boolean) {
+    const target = ModelSlotStore.target(slotId)
+    if (!target) return null
+    const type = ExternalApiProvider.findByName(target.providerName)?.provider_type
+    if (on && (!type || !MODEL_CONNECTION_TYPES.includes(type))) throw new ChatProfileError('판단에 쓸 수 없는 모델이야.')
+    const db = getUserSettingsDb()
+    if (on) db.prepare('UPDATE llm_model_slots SET is_default_judge = CASE WHEN id = ? THEN 1 ELSE 0 END').run(slotId)
+    else db.prepare('UPDATE llm_model_slots SET is_default_judge = 0 WHERE id = ?').run(slotId)
+    publishRuntimeEvent({ name: 'posts.changed', topic: 'posts', visibility: 'all', payload: { postId: null, kind: 'post' } })
     return ModelSlotStore.find(slotId)
   },
 

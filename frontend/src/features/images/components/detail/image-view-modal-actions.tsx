@@ -1,17 +1,18 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ExternalLink, RefreshCcw, X } from 'lucide-react'
+import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import { formatCountDisplay } from '@/lib/count-display'
 import { type ImageDetailViewHeaderControls } from '@/features/images/image-detail-view'
 import { prepareImageSourceState } from '@/features/images/image-source-navigation'
-import { GenerationHistoryReuseActions } from '@/features/image-generation/components/generation-history-reuse-actions'
+import { useGenerationHistoryReuseMenuActions } from '@/features/image-generation/components/generation-history-reuse-actions'
 import { ChatDockReferenceButton } from '@/features/codex-chat/chat-reference'
-import { ImageDeleteAction } from './image-delete-action'
+import { useImageDeleteMenuAction } from './image-delete-action'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
-import { ImageMetadataEditAction } from './image-metadata-edit-action'
+import { useImageMetadataEditMenuAction } from './image-metadata-edit-action'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
 import { useImageViewModal, type ImageViewModalAccessOptions, type ImageViewSequenceTotal } from './image-view-modal-context'
 
@@ -93,18 +94,24 @@ export function ImageViewModalActions({
     </>
   )
 
-  const historyReuseButtons = historyReuseId !== null ? <GenerationHistoryReuseActions key={historyReuseId} historyId={historyReuseId} /> : null
+  const historyReuse = useGenerationHistoryReuseMenuActions(historyReuseId)
+  const metadataEditAction = useImageMetadataEditMenuAction(controls.image)
+  const deleteAction = useImageDeleteMenuAction(
+    controls.image,
+    (deletedCompositeHash) => (imageViewModal ? imageViewModal.removeImageFromView(deletedCompositeHash) : onClose()),
+  )
+
   const groupAssignButton = allowGroupAssignAction ? <ImageGroupAssignAction image={controls.image} variant="overlay" /> : null
-  const metadataEditButton = allowEditAction && permissions.canEditMetadata ? <ImageMetadataEditAction image={controls.image} variant="overlay" /> : null
   const editButton = allowEditAction && permissions.canEditImages ? <ImageEditAction image={controls.image} variant="overlay" /> : null
   const downloadButton = controls.downloadUrl ? <ImageDownloadTriggerButton image={controls.image} variant="overlay" /> : null
-  const deleteButton = allowDeleteAction ? (
-    <ImageDeleteAction
-      image={controls.image}
-      variant="overlay"
-      onDeleted={(deletedCompositeHash) => (imageViewModal ? imageViewModal.removeImageFromView(deletedCompositeHash) : onClose())}
-    />
-  ) : null
+  // Secondary actions share one ⋯ menu so the toolbar over the photo stays short.
+  const moreEntries: ActionMenuEntry[] = [
+    allowEditAction && permissions.canEditMetadata ? metadataEditAction : null,
+    historyReuse.copy,
+    historyReuse.load,
+    '-',
+    allowDeleteAction ? deleteAction : null,
+  ]
 
   return (
     <div className="image-detail-modal-toolbar-actions flex w-full min-w-0 flex-nowrap items-center justify-between gap-2 overflow-x-auto" onMouseDown={(event) => event.stopPropagation()}>
@@ -113,12 +120,10 @@ export function ImageViewModalActions({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <ChatDockReferenceButton compositeHash={compositeHash} mimeType={controls.image?.mime_type ?? null} />
-        {historyReuseButtons}
         {groupAssignButton}
-        {metadataEditButton}
         {editButton}
         {downloadButton}
-        {deleteButton}
+        <ActionMenuButton entries={moreEntries} label={t({ ko: '더 보기', en: 'More' })} variant="overlay" size="icon-sm" />
       </div>
     </div>
   )

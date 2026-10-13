@@ -1,4 +1,5 @@
 import { choiceQuestion } from '../judge/judgeEngine'
+import { ModelSlotStore } from './modelSlots'
 import { askBuiltQuestions, judgeConversationOf, judgeSetupFor, logJudgeRun, type JudgeSetup } from './chatJudge'
 import { DEFAULT_NEXT_INSTRUCTIONS, DEFAULT_ROUTE_INSTRUCTIONS } from './chatJudgeDefaults'
 import type { JudgeLogItem } from './chatJudgeLogs'
@@ -16,14 +17,14 @@ import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatS
  * Both are one choice question over the members (plus "wait"), so the probability of every member comes back at once.
  */
 
-/** The judge a room asks: its preset with the preset's connection, else the representative's own judge connection. */
+/** The judge a room asks: its preset with the preset's connection, else the representative's own judge connection, else the default judge. */
 export function roomJudgeSetup(thread: Pick<CodexChatThreadRecord, 'kind' | 'judge_preset_id' | 'profile_id'>): JudgeSetup | null {
   if (thread.kind !== 'group' || !thread.judge_preset_id) return null
   const preset = ChatJudgePresetStore.find(thread.judge_preset_id)
   if (!preset) return null
   if (preset.modelSlotId) return judgeSetupFor(preset, preset.modelSlotId)
   const representative = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
-  return representative?.judgeSlotId ? judgeSetupFor(preset, representative.judgeSlotId) : null
+  return judgeSetupFor(preset, representative?.judgeSlotId ?? ModelSlotStore.defaultJudgeTarget()?.id)
 }
 
 const WAIT = 'wait'

@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostAssessmentQuality, PostDetail, PostReviewIssue } from '@conai/shared'
-import { BookOpen, BookX, Check, Download, FilePlus2, Flag, Link as LinkIcon, MoreHorizontal, Pencil, RefreshCw, RotateCcw, ShieldCheck, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { Check, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useConfirm } from '@/components/ui/confirm-dialog'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -14,12 +12,10 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, cancelPostVote, exportPostKnowledge, getPostQuality, getPostsSettings, reviewPost, updatePostKnowledge, votePost } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, cancelPostVote, getPostQuality, getPostsSettings, reviewPost, updatePostKnowledge, votePost } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { KnowledgeSourcesEditor } from './post-knowledge-sources'
-import { KnowledgeProposalEditor } from './post-knowledge-proposals'
-import type { PostTopicEvaluationState } from './post-topic-relevance'
 import { usePostPermissions } from './use-post-permissions'
 
 export const KNOWLEDGE_REASONS = [
@@ -48,7 +44,7 @@ export function usePostQuality(post: PostDetail, enabled: boolean) {
   return useQuery({ queryKey: [POSTS_QUERY_KEY, 'quality', permissions.viewerKey, post.id, post.knowledge?.contentVersion], queryFn: () => getPostQuality(post.id), enabled })
 }
 
-function KnowledgeMetadataEditor({ post, onClose }: { post: PostDetail; onClose: () => void }) {
+export function KnowledgeMetadataEditor({ post, onClose }: { post: PostDetail; onClose: () => void }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -98,21 +94,16 @@ function voteCount(value: number) {
 
 const PILL = 'h-9 gap-2 rounded-full px-4 text-sm tabular-nums'
 
-/** 👍 / 👎 at the end of the body, and the ⋯ menu with every document action. */
-export function PostVoteBar({ post, topic }: { post: PostDetail; topic: PostTopicEvaluationState }) {
+/** 👍 / 👎 at the end of a knowledge document's body; every other document action is in the post's ⋯ menu. */
+export function PostVoteBar({ post }: { post: PostDetail }) {
   const { t } = useI18n()
-  const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const permissions = usePostPermissions()
-  const { featureEnabled, enabled, active } = usePostKnowledgeState(post)
+  const { active } = usePostKnowledgeState(post)
   const quality = usePostQuality(post, active)
   const [downOpen, setDownOpen] = useState(false)
   const [reasonCode, setReasonCode] = useState<string | null>(null)
   const [reason, setReason] = useState('')
-  const [metadataOpen, setMetadataOpen] = useState(false)
-  const [review, setReview] = useState<KnowledgeReviewAction | null>(null)
-  const [proposalMode, setProposalMode] = useState<'create' | 'update' | null>(null)
   const refresh = () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
   const vote = useMutation({
     mutationFn: (input: { quality: PostAssessmentQuality; reasonCode?: string; reason?: string }) => votePost(post.id, {
@@ -127,49 +118,9 @@ export function PostVoteBar({ post, topic }: { post: PostDetail; topic: PostTopi
     onSuccess: refresh,
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '평가를 취소하지 못했어.', en: 'Could not cancel the vote.' })) }),
   })
-  const change = useMutation({
-    mutationFn: (nextEnabled: boolean) => updatePostKnowledge(post.id, { expectedRevision: post.revision, enabled: nextEnabled }),
-    onSuccess: refresh,
-    onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '지식 지정을 바꾸지 못했어.', en: 'Could not change knowledge status.' })) }),
-  })
-  const download = useMutation({
-    mutationFn: () => exportPostKnowledge(post.id),
-    onSuccess: (manifest) => {
-      const url = URL.createObjectURL(new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' }))
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = `knowledge-${post.id}-v${manifest.contentVersion}.json`
-      anchor.click()
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
-    },
-    onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '문서를 내보내지 못했어.', en: 'Could not export the document.' })) }),
-  })
-  if (post.knowledge?.deletedAt) return null
+  if (!active) return null
 
   const knowledge = post.knowledge
-  const proposalItems = featureEnabled && permissions.canWrite ? [
-    ...(enabled ? [<DropdownMenuItem key="update" onSelect={() => setProposalMode('update')}><Pencil />{t({ ko: '수정 제안', en: 'Suggest a change' })}</DropdownMenuItem>] : []),
-    <DropdownMenuItem key="create" onSelect={() => setProposalMode('create')}><FilePlus2 />{t({ ko: '이 글로 문서 초안', en: 'Draft a document from this post' })}</DropdownMenuItem>,
-  ] : []
-  const reviewItems = [
-    ...(active && knowledge?.canReview ? [<DropdownMenuItem key="verify" onSelect={() => setReview('verify')}><ShieldCheck />{t({ ko: '현재 판 검증', en: 'Verify current version' })}</DropdownMenuItem>] : []),
-    ...(active && knowledge?.canEvaluate ? [
-      <DropdownMenuItem key="request" onSelect={() => setReview('request_review')}><RotateCcw />{t({ ko: '재검토 요청', en: 'Request review' })}</DropdownMenuItem>,
-      <DropdownMenuItem key="report" onSelect={() => setReview('report_error')}><Flag />{t({ ko: '오류 제보', en: 'Report an error' })}</DropdownMenuItem>,
-    ] : []),
-    ...(topic.value?.canRequest ? [<DropdownMenuItem key="topic" disabled={!topic.canRequest} onSelect={topic.request}>{topic.value.evaluatedAt ? <RefreshCw /> : <Sparkles />}{topic.waiting ? t({ ko: '주제 관련도 평가 중', en: 'Evaluating topics' }) : topic.value.evaluatedAt ? t({ ko: '주제 관련도 다시 평가', en: 'Re-evaluate topics' }) : t({ ko: '주제 관련도 평가 요청', en: 'Evaluate topics' })}</DropdownMenuItem>] : []),
-  ]
-  const documentItems = active ? [
-    ...(post.canEdit ? [<DropdownMenuItem key="sources" onSelect={() => setMetadataOpen(true)}><LinkIcon />{t({ ko: '출처 고치기', en: 'Edit sources' })}</DropdownMenuItem>] : []),
-    <DropdownMenuItem key="export" disabled={download.isPending} onSelect={() => download.mutate()}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>,
-  ] : []
-  const designateItems = featureEnabled && post.canEdit ? [
-    <DropdownMenuItem key="designate" variant={enabled ? 'destructive' : 'default'} disabled={change.isPending} onSelect={async () => {
-      if (!enabled || await confirm({ title: t({ ko: '지식 문서 지정을 해제할까?', en: 'Remove knowledge designation?' }), description: t({ ko: '저장한 판과 평가 이력은 남아.', en: 'Saved versions and feedback remain.' }) })) change.mutate(!enabled)
-    }}>{enabled ? <BookX /> : <BookOpen />}{enabled ? t({ ko: '지식 지정 해제', en: 'Remove designation' }) : t({ ko: '지식으로 지정', en: 'Designate as knowledge' })}</DropdownMenuItem>,
-  ] : []
-  const groups = [proposalItems, reviewItems, documentItems, designateItems].filter((group) => group.length)
-
   const stats = quality.data
   const own = stats?.ownVote?.quality
   const canVote = knowledge?.canEvaluate === true && Boolean(stats) && !vote.isPending && !cancelVote.isPending
@@ -177,10 +128,9 @@ export function PostVoteBar({ post, topic }: { post: PostDetail; topic: PostTopi
   const pressUp = () => own === 'up' ? cancelVote.mutate() : vote.mutate({ quality: 'up' })
   const pressDown = () => { if (own === 'down') cancelVote.mutate(); else setDownOpen(true) }
 
-  if (!active && !groups.length) return null
   return (
-    <div className="relative flex min-h-9 items-center justify-center gap-2 py-6" aria-label={t({ ko: '게시물 평가', en: 'Post feedback' })}>
-      {active ? quality.isError ? (
+    <div className="flex min-h-9 items-center justify-center gap-2 py-6" aria-label={t({ ko: '게시물 평가', en: 'Post feedback' })}>
+      {quality.isError ? (
         <Button variant="ghost" size="sm" onClick={() => void quality.refetch()}><RefreshCw />{t({ ko: '평가 다시 불러오기', en: 'Retry feedback' })}</Button>
       ) : <>
         <Tip content={noPermission}>
@@ -219,22 +169,7 @@ export function PostVoteBar({ post, topic }: { post: PostDetail; topic: PostTopi
             </form>
           </PopoverContent>
         </Popover>
-      </> : null}
-      {groups.length ? (
-        <div className="absolute right-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <IconButton variant="ghost" size="icon-sm" label={t({ ko: '더 보기', en: 'More' })}><MoreHorizontal /></IconButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-52">
-              {groups.map((group, index) => <span key={index} className="contents">{index > 0 ? <DropdownMenuSeparator /> : null}{group}</span>)}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      ) : null}
-      {metadataOpen ? <KnowledgeMetadataEditor key={post.revision} post={post} onClose={() => setMetadataOpen(false)} /> : null}
-      {review ? <KnowledgeReviewDialog post={post} action={review} onClose={() => setReview(null)} /> : null}
-      {proposalMode ? <KnowledgeProposalEditor post={post} mode={proposalMode} onClose={() => setProposalMode(null)} /> : null}
+      </>}
     </div>
   )
 }

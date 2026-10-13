@@ -4,8 +4,8 @@ import { EyeOff, FileClock, Lock, Pin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToggleChip } from '@/components/ui/chip'
 import { useI18n } from '@/i18n'
-import { PostAuthorAvatar, PostAuthorName, useRelativeTime } from './post-author'
-import { PostReferenceButton, SourceChatLink } from './post-chat-links'
+import { useRelativeTime } from './post-author'
+import { PostAuthorChip } from './post-chat-links'
 import type { PostCommentDraft } from './post-comments'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
 import { PostMediaContext } from './post-media'
@@ -52,20 +52,15 @@ export function PostView({ post, categories, onTag, onCategory, commentDraft, se
             ))}
           </nav>
         ) : null}
-        <div className="flex items-start gap-2">
-          <h1 className="flex flex-1 items-start gap-2 text-2xl font-bold leading-snug [text-wrap:balance]">
-            {post.pinned ? <Pin className="mt-1.5 size-4 shrink-0 text-primary" aria-label={t({ ko: '고정', en: 'Pinned' })} /> : null}
-            <span>{post.title}</span>
-          </h1>
-          <PostReferenceButton postId={post.id} label={post.title} />
-        </div>
+        <h1 className="flex items-start gap-2 text-2xl font-bold leading-snug [text-wrap:balance]">
+          {post.pinned ? <Pin className="mt-1.5 size-4 shrink-0 text-primary" aria-label={t({ ko: '고정', en: 'Pinned' })} /> : null}
+          <span>{post.title}</span>
+        </h1>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-          <PostAuthorAvatar author={post.author} size="md" />
-          <PostAuthorName author={post.author} />
+          <PostAuthorChip author={post.author} source={post.sourceChat} />
           <span aria-hidden>·</span>
           <span title={formatDateTime(when)}>{relative(when)}</span>
           {post.revision > 1 ? <span className="text-xs">· {t({ ko: '고침', en: 'edited' })}</span> : null}
-          <SourceChatLink source={post.sourceChat} />
           {post.status === 'draft' ? <span className="inline-flex items-center gap-1 text-xs"><FileClock className="size-3.5" />{t({ ko: '초안', en: 'Draft' })}</span> : null}
           {post.status === 'hidden' ? <span className="inline-flex items-center gap-1 text-xs text-destructive"><EyeOff className="size-3.5" />{t({ ko: '숨김', en: 'Hidden' })}</span> : null}
           {post.commentMode === 'closed' ? <span className="inline-flex items-center gap-1 text-xs"><Lock className="size-3.5" />{t({ ko: '댓글 닫힘', en: 'Comments closed' })}</span> : null}
@@ -84,7 +79,7 @@ export function PostView({ post, categories, onTag, onCategory, commentDraft, se
         <PostMediaContext.Provider value={mediaContext}>
           <PostMarkdown text={post.body} className="text-[0.95rem]" />
         </PostMediaContext.Provider>
-        <PostVoteBar key={post.id} post={post} topic={topic} />
+        <PostVoteBar key={post.id} post={post} />
       </div>
       {!post.knowledge?.deletedAt ? (
         <PostMediaContext.Provider value={mediaContext}>

@@ -17,9 +17,13 @@ export function loadContentEvaluationSettings(): ContentEvaluationSettings {
   return { revision: row.revision, definitionVersion: row.definition_version, modelSlotId: row.model_slot_id,
     topics: JSON.parse(row.topics_json) as ContentEvaluationTopic[], modelReady: false };
 }
+/** The model topic relevance asks: its own, else the default judge. */
+export function contentEvaluationModel(settings: Pick<ContentEvaluationSettings, 'modelSlotId'>): ModelTarget | null {
+  return ModelSlotStore.target(settings.modelSlotId) ?? ModelSlotStore.defaultJudgeTarget();
+}
 export function contentEvaluationStatus(): ContentEvaluationSettings {
   const settings = loadContentEvaluationSettings();
-  const model = ModelSlotStore.target(settings.modelSlotId);
+  const model = contentEvaluationModel(settings);
   return { ...settings, modelReady: Boolean(model && isJudgeConnectionReady(model.providerName, model.model)) };
 }
 

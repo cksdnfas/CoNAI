@@ -82,6 +82,8 @@ export const TYPESAFE_ENDPOINTS = [
 export const LLM_PRESET_SECTIONS: Array<{
   key: LlmPresetCollectionKey
   heading: TranslationDictionary
+  /** The kind chip of a row in the one merged list. */
+  shortLabel: TranslationDictionary
   addLabel: TranslationDictionary
   fieldLabel: TranslationDictionary
   placeholder: TranslationDictionary
@@ -93,6 +95,7 @@ export const LLM_PRESET_SECTIONS: Array<{
   {
     key: 'systemPromptPresets',
     heading: { ko: '시스템 프롬프트 프리셋', en: 'System prompt presets' },
+    shortLabel: { ko: '시스템', en: 'System' },
     addLabel: { ko: '시스템 프롬프트 추가', en: 'Add system prompt' },
     fieldLabel: { ko: '시스템 프롬프트', en: 'System prompt' },
     placeholder: { ko: '역할 · 규칙 · 말투', en: 'Role · rules · tone' },
@@ -101,6 +104,7 @@ export const LLM_PRESET_SECTIONS: Array<{
   {
     key: 'promptPresets',
     heading: { ko: '프롬프트 프리셋', en: 'Prompt presets' },
+    shortLabel: { ko: '프롬프트', en: 'Prompt' },
     addLabel: { ko: '프롬프트 추가', en: 'Add prompt' },
     fieldLabel: { ko: '프롬프트', en: 'Prompt' },
     placeholder: { ko: '요청 본문', en: 'Request body' },
@@ -109,6 +113,7 @@ export const LLM_PRESET_SECTIONS: Array<{
   {
     key: 'structuredOutputJsonPresets',
     heading: { ko: '구조화 출력 JSON 프리셋', en: 'Structured output JSON presets' },
+    shortLabel: { ko: 'JSON', en: 'JSON' },
     addLabel: { ko: 'JSON 프리셋 추가', en: 'Add JSON preset' },
     fieldLabel: { ko: '구조화 출력 JSON 양식', en: 'Structured output JSON template' },
     placeholder: { ko: '{\n  "title": "",\n  "summary": "",\n  "tags": []\n}', en: '{\n  "title": "",\n  "summary": "",\n  "tags": []\n}' },

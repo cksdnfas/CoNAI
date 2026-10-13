@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { PostCategory, PostSummary } from '@conai/shared'
 import { EyeOff, FileClock, Images, MessageCircle, MessageSquare, Pin } from 'lucide-react'
+import { ActionContextMenu, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { ToggleChip } from '@/components/ui/chip'
 import { useI18n } from '@/i18n'
@@ -19,6 +20,10 @@ type ListProps = {
   categories: PostCategory[]
   onOpen: (post: PostSummary) => void
   onTag: (tag: string) => void
+  /** Right-click / long-press actions on one item (e.g. restore from the trash). */
+  menu?: (post: PostSummary) => ActionMenuEntry[]
+  /** A click opens `menu` instead of the post (trashed documents cannot be opened). */
+  menuOnClick?: boolean
 }
 
 /** In search results: the comment a post was found through. */
@@ -33,15 +38,17 @@ function MatchedComment({ post }: { post: PostSummary }) {
   )
 }
 
-function StatusMarks({ post }: { post: PostSummary }) {
+/** Title with the pin before it and the post's state after it (draft, hidden, knowledge badge). */
+function PostTitle({ post, className }: { post: PostSummary; className?: string }) {
   const { t } = useI18n()
   return (
-    <>
+    <div className="flex min-w-0 items-center gap-1.5">
       {post.pinned ? <Pin className="size-3.5 shrink-0 text-primary" aria-label={t({ ko: '고정', en: 'Pinned' })} /> : null}
+      <span className={cn('min-w-0 font-semibold', className)}>{post.title}</span>
       {post.status === 'draft' ? <FileClock className="size-3.5 shrink-0 text-muted-foreground" aria-label={t({ ko: '초안', en: 'Draft' })} /> : null}
       {post.status === 'hidden' ? <EyeOff className="size-3.5 shrink-0 text-destructive" aria-label={t({ ko: '숨김', en: 'Hidden' })} /> : null}
       <PostKnowledgeStatus knowledge={post.knowledge} />
-    </>
+    </div>
   )
 }
 
@@ -71,28 +78,27 @@ function TagRow({ tags, onTag }: { tags: string[]; onTag: (tag: string) => void 
 }
 
 /** Rows: cover, title, meta, two lines of text and tags. */
-export function PostFeed({ posts, categories, onOpen, onTag }: ListProps) {
+export function PostFeed({ posts, categories, onOpen, onTag, menu, menuOnClick = false }: ListProps) {
   const { canViewImages } = usePostPermissions()
   return (
     <div className="flex flex-col">
       {posts.map((post) => {
         const cover = canViewImages ? coverUrl(post.media) : null
         return (
-          <div key={post.id} role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }}
-            className={cn('grid cursor-pointer gap-4 border-b border-line py-4 outline-none first:pt-1 focus-visible:bg-fill', cover && 'sm:grid-cols-[9rem_1fr]')}>
-            {cover ? <img src={cover} alt="" loading="lazy" className="aspect-[4/3] w-full rounded-sm bg-surface-low object-cover sm:w-36" /> : null}
-            <div className="flex min-w-0 flex-col gap-1.5">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <StatusMarks post={post} />
-                <span className="truncate text-base font-semibold">{post.title}</span>
+          <ActionContextMenu key={post.id} entries={menu?.(post) ?? []} openOnClick={menuOnClick}>
+            <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }}
+              className={cn('grid cursor-pointer gap-4 border-b border-line py-4 outline-none first:pt-1 focus-visible:bg-fill', cover && 'sm:grid-cols-[9rem_1fr]')}>
+              {cover ? <img src={cover} alt="" loading="lazy" className="aspect-[4/3] w-full rounded-sm bg-surface-low object-cover sm:w-36" /> : null}
+              <div className="flex min-w-0 flex-col gap-1.5">
+                <PostTitle post={post} className="truncate text-base" />
+                <PostMeta post={post} categories={categories} />
+                {post.excerpt ? <p className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</p> : null}
+                <MatchedComment post={post} />
+                <TagRow tags={post.tags} onTag={onTag} />
+                <PostTopicSummary value={post.topicEvaluation} />
               </div>
-              <PostMeta post={post} categories={categories} />
-              {post.excerpt ? <p className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</p> : null}
-              <MatchedComment post={post} />
-              <TagRow tags={post.tags} onTag={onTag} />
-              <PostTopicSummary value={post.topicEvaluation} />
             </div>
-          </div>
+          </ActionContextMenu>
         )
       })}
     </div>
@@ -100,27 +106,26 @@ export function PostFeed({ posts, categories, onOpen, onTag }: ListProps) {
 }
 
 /** Masonry cards: the cover at its own height, then title and meta. */
-export function PostCards({ posts, categories, onOpen, onTag }: ListProps) {
+export function PostCards({ posts, categories, onOpen, onTag, menu, menuOnClick = false }: ListProps) {
   const { canViewImages } = usePostPermissions()
   return (
     <div className="columns-1 gap-4 sm:columns-2 xl:columns-3">
       {posts.map((post) => {
         const cover = canViewImages ? coverUrl(post.media) : null
         return (
-          <div key={post.id} role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }}
-            className="mb-5 flex cursor-pointer break-inside-avoid flex-col gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-            {cover ? <img src={cover} alt="" loading="lazy" className="block h-auto w-full rounded-sm bg-surface-low" /> : (
-              <p className="line-clamp-6 border-l-2 border-line pl-3 text-sm text-muted-foreground">{post.excerpt}</p>
-            )}
-            <div className="flex min-w-0 items-center gap-1.5">
-              <StatusMarks post={post} />
-              <span className="line-clamp-2 font-semibold">{post.title}</span>
+          <ActionContextMenu key={post.id} entries={menu?.(post) ?? []} openOnClick={menuOnClick}>
+            <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }}
+              className="mb-5 flex cursor-pointer break-inside-avoid flex-col gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+              {cover ? <img src={cover} alt="" loading="lazy" className="block h-auto w-full rounded-sm bg-surface-low" /> : (
+                <p className="line-clamp-6 border-l-2 border-line pl-3 text-sm text-muted-foreground">{post.excerpt}</p>
+              )}
+              <PostTitle post={post} className="line-clamp-2" />
+              <PostMeta post={post} categories={categories} />
+              <MatchedComment post={post} />
+              <TagRow tags={post.tags} onTag={onTag} />
+              <PostTopicSummary value={post.topicEvaluation} />
             </div>
-            <PostMeta post={post} categories={categories} />
-            <MatchedComment post={post} />
-            <TagRow tags={post.tags} onTag={onTag} />
-            <PostTopicSummary value={post.topicEvaluation} />
-          </div>
+          </ActionContextMenu>
         )
       })}
     </div>
@@ -203,9 +208,8 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible }: Omit<ListProps
           </div>
         )}
         <div className="flex flex-col gap-1">
-          <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }} className="flex min-w-0 cursor-pointer items-center gap-1.5">
-            <StatusMarks post={post} />
-            <span className="truncate font-semibold">{post.title}</span>
+          <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }} className="cursor-pointer">
+            <PostTitle post={post} className="truncate" />
           </div>
           {media.length > 0 && post.excerpt ? <p className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</p> : null}
           <div className="flex items-center gap-3">

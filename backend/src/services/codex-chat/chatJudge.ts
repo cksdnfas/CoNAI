@@ -37,12 +37,12 @@ export function judgeSetupFor(preset: ChatJudgePreset, slotId: number | null | u
   return target ? { preset, providerName: target.providerName, model: target.model } : null
 }
 
-/** The preset and model that judge this profile's turns, or null (no preset, or no model): the profile's own, else the preset's. */
+/** The preset and model that judge this profile's turns, or null (no preset, or no model): the profile's own, else the preset's, else the default judge. */
 export function judgeSetupOf(profile: ChatProfile): JudgeSetup | null {
   if (!profile.judgePresetId) return null
   const preset = ChatJudgePresetStore.find(profile.judgePresetId)
   if (!preset) return null
-  return judgeSetupFor(preset, profile.judgeSlotId ?? preset.modelSlotId)
+  return judgeSetupFor(preset, profile.judgeSlotId ?? preset.modelSlotId ?? ModelSlotStore.defaultJudgeTarget()?.id)
 }
 
 /** What the judge reads of a message: the user's own words, or the reply as the model wrote it. */

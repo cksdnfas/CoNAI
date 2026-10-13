@@ -1,5 +1,7 @@
-import { useCallback, useMemo, type ReactNode } from 'react'
+import { useCallback, useMemo } from 'react'
+import { Check } from 'lucide-react'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
+import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -16,8 +18,10 @@ interface GroupTreeProps {
   /** Group row currently hovered by an image drag. */
   dropTargetId?: number | null
   onSelectGroup: (groupId: number) => void
-  /** A trailing control per row (e.g. "insert this group"), shown on hover / focus and on the selected row. */
-  renderGroupAction?: (group: GroupWithHierarchy) => ReactNode
+  /** A row's actions (e.g. "insert this group"), opened by right-click / long-press on the row. */
+  getGroupMenu?: (group: GroupWithHierarchy) => ActionMenuEntry[]
+  /** Groups already picked by the caller (e.g. inserted into a post), marked with a check. */
+  pickedGroupIds?: ReadonlySet<number>
 }
 
 /** Attribute the sidebar's delegated drag-and-drop reads to find the hovered group row. */
@@ -69,7 +73,7 @@ function filterGroupsByName(groups: GroupWithHierarchy[], filterText: string) {
   }
 }
 
-export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '', dropTargetId = null, onSelectGroup, renderGroupAction }: GroupTreeProps) {
+export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '', dropTargetId = null, onSelectGroup, getGroupMenu, pickedGroupIds }: GroupTreeProps) {
   const { formatNumber, t } = useI18n()
   const { visibleGroups, expandedIds } = useMemo(() => filterGroupsByName(groups, filterText), [filterText, groups])
 
@@ -80,6 +84,7 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
     return (
       <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="truncate">{group.name}</span>
+        {pickedGroupIds?.has(group.id) ? <Check className="ml-auto size-3.5 shrink-0 text-primary" aria-label={t({ ko: '넣음', en: 'Inserted' })} /> : null}
         <Tip content={countDescription}>
           <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
             <span aria-hidden="true">{countLabel}</span>
@@ -88,7 +93,7 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
         </Tip>
       </div>
     )
-  }, [countMaps, formatNumber, t])
+  }, [countMaps, formatNumber, pickedGroupIds, t])
 
   const getItemClassName = useCallback((group: GroupWithHierarchy) => (
     dropTargetId === group.id ? cn('bg-primary/20 text-foreground ring-2 ring-primary/60') : undefined
@@ -116,7 +121,7 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
       renderIcon={renderGroupIcon}
       getItemClassName={getItemClassName}
       getItemDataAttributes={getItemDataAttributes}
-      renderItemAction={renderGroupAction}
+      getItemMenu={getGroupMenu}
     />
   )
 }

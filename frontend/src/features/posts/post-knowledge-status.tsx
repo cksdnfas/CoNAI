@@ -1,18 +1,15 @@
 import type { PostKnowledge } from '@conai/shared'
+import { AlertTriangle, BookOpen, Check, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
 
-export function PostKnowledgeStatus({ knowledge, showVersion = false }: { knowledge?: PostKnowledge | null; showVersion?: boolean }) {
+/** One badge for a knowledge document: 지식, 지식 · 검증됨, 지식 · 재검토 필요, or 휴지통. */
+export function PostKnowledgeStatus({ knowledge }: { knowledge?: PostKnowledge | null }) {
   const { t } = useI18n()
   if (!knowledge?.enabled) return null
   const verified = knowledge.reviewStatus === 'verified' && knowledge.verifiedContentVersion === knowledge.contentVersion
-  return (
-    <span className="inline-flex flex-wrap items-center gap-1.5">
-      <Badge variant="ghost">{t({ ko: '지식', en: 'Knowledge' })}</Badge>
-      <Badge variant={knowledge.deletedAt ? 'destructive' : verified ? 'success' : knowledge.reviewStatus === 'needs_review' ? 'warning' : 'secondary'}>
-        {knowledge.deletedAt ? t({ ko: '휴지통', en: 'Trash' }) : verified ? t({ ko: '검증됨', en: 'Verified' }) : knowledge.reviewStatus === 'needs_review' ? t({ ko: '재검토 필요', en: 'Needs review' }) : t({ ko: '미검토', en: 'Unreviewed' })}
-      </Badge>
-      {showVersion ? <span className="text-xs text-muted-foreground">{t({ ko: '내용 {version}판', en: 'Content version {version}' }, { version: knowledge.contentVersion })}</span> : null}
-    </span>
-  )
+  if (knowledge.deletedAt) return <Badge variant="destructive" className="shrink-0 gap-1"><Trash2 className="size-3" />{t({ ko: '휴지통', en: 'Trash' })}</Badge>
+  if (verified) return <Badge variant="success" className="shrink-0 gap-1"><Check className="size-3" />{t({ ko: '지식 · 검증됨', en: 'Knowledge · Verified' })}</Badge>
+  if (knowledge.reviewStatus === 'needs_review') return <Badge variant="warning" className="shrink-0 gap-1"><AlertTriangle className="size-3" />{t({ ko: '지식 · 재검토 필요', en: 'Knowledge · Needs review' })}</Badge>
+  return <Badge variant="ghost" className="shrink-0 gap-1"><BookOpen className="size-3" />{t({ ko: '지식', en: 'Knowledge' })}</Badge>
 }

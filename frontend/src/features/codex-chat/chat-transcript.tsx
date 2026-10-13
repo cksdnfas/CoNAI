@@ -1,4 +1,4 @@
-import { Component, Fragment, memo, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
+import { Component, Fragment, memo, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { Bookmark, Check, ChevronLeft, ChevronRight, Ellipsis, GitBranch, Image as ImageIcon, Languages, ListChecks, LoaderCircle, type LucideIcon, Mic, Paintbrush, Pencil, RefreshCw, Reply, StepForward, X } from 'lucide-react'
 import type { ChatMessageRouting } from '@conai/shared'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -127,12 +127,18 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
   const alternatives = message.alternatives ?? []
   const contextMeta = look.appearance.showDiagnostics ? parseContextMeta(message.context_meta) : null
   const editableReply = !isUser && actions.canEditReply(message)
-  // Rarer actions (orders, branching) live in a named ⋯ menu; the bar stays up while it is open.
+  // Rarer actions (original / translation, hand edits, continuing, orders, branching) live in a named ⋯ menu; the bar
+  // stays up while it is open.
   const [menuOpen, setMenuOpen] = useState(false)
+  // Starting an edit from the menu: the editor takes focus, so the menu must not hand it back to its button.
+  const keepMenuFocusRef = useRef(false)
   const showRewriteTools = actions.canRewrite && (isUser || lastReply || editableReply || alternatives.length > 1) && actions.editingId !== message.id
+  const canEditHere = showRewriteTools && (isUser || editableReply)
+  const canContinueHere = showRewriteTools && lastReply && actions.canContinue && message.finish_reason === 'length'
+  const hasTextItems = translated || canEditHere || canContinueHere
   const orders = isUser ? [] : actions.ordersFor(message)
   const ordering = actions.ordering?.messageId === message.id ? actions.ordering.kind : null
-  const hasMenu = actions.canBranch || orders.length > 0
+  const hasMenu = hasTextItems || actions.canBranch || orders.length > 0
   // 1:1 chats show only a quote the user picked; addressing and the reply's automatic quote are room-only.
   const routing = speakerOf ? message.routing : isUser && message.routing?.replyTo ? { ...message.routing, recipients: [] } : null
   // A reply to the user is the default in a room; only another addressee is named.
@@ -159,29 +165,26 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEditReply} onCancel={() => actions.onEditingChange(null)} reply />
         : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} fileChanges={message.fileChanges} replyId={message.routing?.replyId} onRetry={lastReply && actions.canRewrite && !actions.busy ? () => actions.onRegenerate(message.id) : undefined} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
     {/* A folded bar takes no room but stays in the tab order, and shows while a key lands on one of its buttons.
-        Reply, regenerate and edit stay on the bar; the rarer actions sit under ⋯ with their names. */}
+        Reply, regenerate and the answer switch stay on the bar; edits and the rarer actions sit under ⋯ with their names. */}
     <div data-message-bar className={cn('mt-1 flex flex-wrap items-center gap-x-1', isUser && 'justify-end', !showBar && 'sr-only focus-within:not-sr-only')}>
       <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답장', en: 'Reply' })} onClick={() => actions.onReply(message)}><Reply /></IconButton>
-      {translated ? <IconButton size="icon-xs" variant="ghost" aria-pressed={showOriginal} className={cn(showOriginal && 'text-primary')} label={showOriginal ? t({ ko: '번역 보기', en: 'Show translation' }) : t({ ko: '원문 보기', en: 'Show original' })} onClick={() => setShowOriginal((current) => !current)}><Languages /></IconButton> : null}
-      {showRewriteTools ? <>
-        {isUser
-          ? <IconButton size="icon-xs" variant="ghost" disabled={actions.busy} label={t({ ko: '메시지 수정', en: 'Edit message' })} onClick={() => actions.onEditingChange(message.id)}><Pencil /></IconButton>
-          : <>
-            {lastReply ? <IconButton size="icon-xs" variant="ghost" disabled={actions.busy} label={t({ ko: '다시 생성', en: 'Regenerate' })} onClick={() => actions.onRegenerate(message.id)}><RefreshCw /></IconButton> : null}
-            {editableReply ? <IconButton size="icon-xs" variant="ghost" disabled={actions.busy} label={t({ ko: '답변 수정', en: 'Edit reply' })} onClick={() => actions.onEditingChange(message.id)}><Pencil /></IconButton> : null}
-            {lastReply && actions.canContinue && message.finish_reason === 'length' ? <IconButton size="icon-xs" variant="ghost" disabled={actions.busy} label={t({ ko: '이어서 쓰기', en: 'Continue' })} onClick={() => actions.onContinue(message.id)}><StepForward /></IconButton> : null}
-            {alternatives.length > 1 ? <>
-              <IconButton size="icon-xs" variant="ghost" disabled={actions.busy || message.active_alternative <= 0} label={t({ ko: '이전 답변', en: 'Previous answer' })} onClick={() => actions.onAlternative(message.id, message.active_alternative - 1)}><ChevronLeft /></IconButton>
-              <span className="text-xs tabular-nums text-muted-foreground">{message.active_alternative + 1}/{alternatives.length}</span>
-              <IconButton size="icon-xs" variant="ghost" disabled={actions.busy || message.active_alternative >= alternatives.length - 1} label={t({ ko: '다음 답변', en: 'Next answer' })} onClick={() => actions.onAlternative(message.id, message.active_alternative + 1)}><ChevronRight /></IconButton>
-            </> : null}
-          </>}
+      {showRewriteTools && !isUser ? <>
+        {lastReply ? <IconButton size="icon-xs" variant="ghost" disabled={actions.busy} label={t({ ko: '다시 생성', en: 'Regenerate' })} onClick={() => actions.onRegenerate(message.id)}><RefreshCw /></IconButton> : null}
+        {alternatives.length > 1 ? <>
+          <IconButton size="icon-xs" variant="ghost" disabled={actions.busy || message.active_alternative <= 0} label={t({ ko: '이전 답변', en: 'Previous answer' })} onClick={() => actions.onAlternative(message.id, message.active_alternative - 1)}><ChevronLeft /></IconButton>
+          <span className="text-xs tabular-nums text-muted-foreground">{message.active_alternative + 1}/{alternatives.length}</span>
+          <IconButton size="icon-xs" variant="ghost" disabled={actions.busy || message.active_alternative >= alternatives.length - 1} label={t({ ko: '다음 답변', en: 'Next answer' })} onClick={() => actions.onAlternative(message.id, message.active_alternative + 1)}><ChevronRight /></IconButton>
+        </> : null}
       </> : null}
       {hasMenu ? <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <Tip content={t({ ko: '더 보기', en: 'More' })}><DropdownMenuTrigger asChild>
           <IconButton size="icon-xs" variant="ghost" tooltip={false} className={cn(menuOpen && 'text-primary')} label={t({ ko: '더 보기', en: 'More' })}><Ellipsis /></IconButton>
         </DropdownMenuTrigger></Tip>
-        <DropdownMenuContent align={isUser ? 'end' : 'start'} className="min-w-44">
+        <DropdownMenuContent align={isUser ? 'end' : 'start'} className="min-w-44" onCloseAutoFocus={(event) => { if (keepMenuFocusRef.current) { event.preventDefault(); keepMenuFocusRef.current = false } }}>
+          {translated ? <DropdownMenuItem onSelect={() => setShowOriginal((current) => !current)}><Languages />{showOriginal ? t({ ko: '번역 보기', en: 'Show translation' }) : t({ ko: '원문 보기', en: 'Show original' })}</DropdownMenuItem> : null}
+          {canEditHere ? <DropdownMenuItem disabled={actions.busy} onSelect={() => { keepMenuFocusRef.current = true; actions.onEditingChange(message.id) }}><Pencil />{isUser ? t({ ko: '메시지 수정', en: 'Edit message' }) : t({ ko: '답변 수정', en: 'Edit reply' })}</DropdownMenuItem> : null}
+          {canContinueHere ? <DropdownMenuItem disabled={actions.busy} onSelect={() => actions.onContinue(message.id)}><StepForward />{t({ ko: '이어서 쓰기', en: 'Continue' })}</DropdownMenuItem> : null}
+          {hasTextItems && (orders.length > 0 || actions.canBranch) ? <DropdownMenuSeparator /> : null}
           {CHAT_ORDERS.filter((entry) => orders.includes(entry.kind)).map((entry) => {
             const Icon = ORDER_ICONS[entry.kind]
             return <DropdownMenuItem key={entry.kind} disabled={actions.busy || ordering !== null} onSelect={() => actions.onOrder(message, entry.kind)}><Icon />{t(entry.label)}</DropdownMenuItem>

@@ -1078,6 +1078,8 @@ export interface ModelSlot {
   /** `connection · model` */
   label: string
   isDefault: boolean
+  /** What a judge, board evaluation or topic relevance with no model of its own asks (at most one row). */
+  isDefaultJudge: boolean
   sortOrder: number
   /** The highest rating tier (id) of media this model is shown; null: no ceiling. */
   contentRatingTierId: number | null
@@ -1115,6 +1117,11 @@ export function updateModelSlot(slotId: number, patch: { model?: string; isDefau
 
 export function setDefaultModelSlot(slotId: number) {
   return requestApiData<ModelSlot>(`/api/codex-chat/admin/model-slots/${slotId}/default`, { method: 'POST' })
+}
+
+/** Makes a row the default judge, or with `on` false clears it. */
+export function setDefaultJudgeModelSlot(slotId: number, on: boolean) {
+  return requestApiData<ModelSlot>(`/api/codex-chat/admin/model-slots/${slotId}/default-judge`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ on }) })
 }
 
 export function deleteModelSlot(slotId: number) {

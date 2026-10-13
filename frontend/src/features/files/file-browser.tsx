@@ -1,5 +1,5 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type DragEvent, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AudioLines, ChevronRight, Download, File, FilePlus, FileText, Film, Folder, FolderInput, FolderPlus, Image as ImageIcon, LayoutGrid, List, Music, Pencil, RefreshCw, Search, Trash2, Upload, Users, X } from 'lucide-react'
 import type { FileSearchStatus, StoredFileEntry, StoredFileOwner, StoredFileSearchHit } from '@conai/shared'
@@ -7,6 +7,7 @@ import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
+import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -77,7 +78,8 @@ function extensionOf(name: string) {
 }
 
 /** One file or folder as a tile: image files show a thumbnail, everything else a type icon. */
-function FileTile({ entry, owner, selected, showCheckbox, canSelect, draggable, onOpen, onToggle, onDragStart, onDragOver, onDrop }: {
+/** Extra div props (ref, pointer and context-menu handlers) come from the row menu wrapping the tile. */
+function FileTile({ entry, owner, selected, showCheckbox, canSelect, draggable, onOpen, onToggle, onDragStart, onDragOver, onDrop, className, ...rest }: Omit<ComponentProps<'div'>, 'onDragStart' | 'onDragOver' | 'onDrop' | 'onToggle' | 'draggable'> & {
   entry: StoredFileEntry
   owner: string | null
   selected: boolean
@@ -98,7 +100,7 @@ function FileTile({ entry, owner, selected, showCheckbox, canSelect, draggable, 
   const extension = entry.kind === 'file' ? extensionOf(entry.name) : null
 
   return (
-    <div className="group relative min-w-0" draggable={draggable} onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}>
+    <div {...rest} className={cn('group relative min-w-0 [-webkit-touch-callout:none]', className)} draggable={draggable} onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}>
       <Button
         variant="ghost"
         onClick={onOpen}
@@ -424,14 +426,34 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     event.preventDefault()
     event.dataTransfer.dropEffect = moving ? 'move' : 'copy'
   }
-  const remove = async () => {
+  const remove = async (ids: string[] = selected) => {
     const confirmed = await confirm({
       title: t({ ko: '선택한 항목을 삭제할까?', en: 'Delete selected items?' }),
       description: t({ ko: '원본 파일이 삭제돼. 빈 폴더만 삭제할 수 있고, 채팅에서 참조 중인 파일은 보호돼.', en: 'Original files will be deleted. Folders must be empty; files attached to chats are protected.' }),
       tone: 'destructive',
     })
-    if (confirmed) mutation.mutate(() => deleteStoredFiles(selected, storeOwner))
+    if (confirmed) mutation.mutate(() => deleteStoredFiles(ids, storeOwner))
   }
+  const download = (entry: StoredFileEntry) => {
+    const link = document.createElement('a')
+    link.href = storedFileDownloadUrl(entry.id, storeOwner)
+    link.download = ''
+    link.click()
+  }
+  // A long-press opens the row menu; the click that may follow it should not also open the file.
+  const touchMenuAt = useRef(0)
+  const pointerType = useRef('mouse')
+  const rowMenuOpenChange = (open: boolean) => { if (open && pointerType.current !== 'mouse') touchMenuAt.current = Date.now() }
+  /** One row's actions, for its ⋯ button and its right-click / long-press menu. */
+  const rowEntries = (entry: StoredFileEntry): ActionMenuEntry[] => [
+    entry.kind === 'file' && canSendAudio && mediaKind(entry) === 'audio' && { key: 'audio', label: t({ ko: '오디오로 보내기', en: 'Send to Audio' }), icon: AudioLines, onSelect: () => setAudioSend([entry]) },
+    entry.kind === 'file' && { key: 'download', label: t({ ko: '다운로드', en: 'Download' }), icon: Download, onSelect: () => download(entry) },
+    '-',
+    canOrganize && { key: 'rename', label: t({ ko: '이름 변경', en: 'Rename' }), icon: Pencil, disabled: busy, onSelect: () => setNameDialog({ id: entry.id, name: entry.name }) },
+    canOrganize && { key: 'move', label: t({ ko: '이동', en: 'Move' }), icon: FolderInput, disabled: busy, onSelect: () => { setSelected([entry.id]); setMoveTarget(parentId ?? ''); setMoveOpen(true) } },
+    '-',
+    canDelete && { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: busy, onSelect: () => void remove([entry.id]) },
+  ]
 
   const actions = (
     <>
@@ -445,9 +467,6 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
           { value: 'list', label: <List className="size-3.5" />, ariaLabel: t({ ko: '자세히 보기', en: 'Details' }) },
         ]}
       />
-      <IconButton variant="ghost" label={t({ ko: '새로고침', en: 'Refresh' })} onClick={() => void refresh()} disabled={busy}>
-        <RefreshCw />
-      </IconButton>
       {canSearch && !searchOpen ? (
         <IconButton variant="ghost" label={t({ ko: '검색', en: 'Search' })} onClick={() => setSearchOpen(true)}>
           <Search />
@@ -458,16 +477,19 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
           <FolderPlus />
         </IconButton>
       ) : null}
-      {canUpload && !browsingAll && !isPicker ? (
-        <IconButton variant="ghost" label={t({ ko: '새 문서', en: 'New document' })} disabled={busy} onClick={() => setEditor({ entry: null })}>
-          <FilePlus />
-        </IconButton>
-      ) : null}
       {canUpload && !browsingAll ? (
         <IconButton variant="ghost" label={t({ ko: '파일 업로드', en: 'Upload files' })} disabled={busy} onClick={() => uploadInput.current?.click()}>
           <Upload />
         </IconButton>
       ) : null}
+      <ActionMenuButton
+        size="icon"
+        label={t({ ko: '더 보기', en: 'More' })}
+        entries={[
+          canUpload && !browsingAll && !isPicker && { key: 'new-document', label: t({ ko: '새 문서', en: 'New document' }), icon: FilePlus, disabled: busy, onSelect: () => setEditor({ entry: null }) },
+          { key: 'refresh', label: t({ ko: '새로고침', en: 'Refresh' }), icon: RefreshCw, disabled: busy, onSelect: () => void refresh() },
+        ]}
+      />
     </>
   )
 
@@ -551,27 +573,30 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
           const isSelected = selected.includes(entry.id)
           const canSelect = !isPicker || entry.kind === 'file'
           return (
-            <FileTile
-              key={entry.id}
-              entry={entry}
-              owner={storeOwner}
-              selected={isSelected}
-              showCheckbox={selected.length > 0}
-              canSelect={canSelect}
-              draggable={canOrganize && !busy && !isPicker}
-              onOpen={() => {
-                if (entry.kind === 'folder') navigate(entry.id)
-                else if (isPicker || selected.length > 0) toggle(entry.id, !isSelected)
-                else setPreview(entry)
-              }}
-              onToggle={(checked) => toggle(entry.id, checked)}
-              onDragStart={(event) => {
-                event.dataTransfer.setData(FILE_DRAG_TYPE, JSON.stringify(isSelected ? selected : [entry.id]))
-                event.dataTransfer.effectAllowed = 'move'
-              }}
-              onDragOver={entry.kind === 'folder' ? dragOver : undefined}
-              onDrop={entry.kind === 'folder' ? (event) => drop(event, entry.id) : undefined}
-            />
+            <ActionContextMenu key={entry.id} entries={isPicker ? [] : rowEntries(entry)} onOpenChange={rowMenuOpenChange}>
+              <FileTile
+                entry={entry}
+                owner={storeOwner}
+                selected={isSelected}
+                showCheckbox={selected.length > 0}
+                canSelect={canSelect}
+                draggable={canOrganize && !busy && !isPicker}
+                onPointerDown={(event) => { pointerType.current = event.pointerType }}
+                onOpen={() => {
+                  if (Date.now() - touchMenuAt.current < 800) return
+                  if (entry.kind === 'folder') navigate(entry.id)
+                  else if (isPicker || selected.length > 0) toggle(entry.id, !isSelected)
+                  else setPreview(entry)
+                }}
+                onToggle={(checked) => toggle(entry.id, checked)}
+                onDragStart={(event) => {
+                  event.dataTransfer.setData(FILE_DRAG_TYPE, JSON.stringify(isSelected ? selected : [entry.id]))
+                  event.dataTransfer.effectAllowed = 'move'
+                }}
+                onDragOver={entry.kind === 'folder' ? dragOver : undefined}
+                onDrop={entry.kind === 'folder' ? (event) => drop(event, entry.id) : undefined}
+              />
+            </ActionContextMenu>
           )
         })}
       </div>
@@ -589,57 +614,54 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
               <th className="py-3 font-normal">{t({ ko: '이름', en: 'Name' })}</th>
               <th className="hidden px-3 font-normal sm:table-cell">{t({ ko: '수정일', en: 'Modified' })}</th>
               <th className="px-3 text-right font-normal">{t({ ko: '크기', en: 'Size' })}</th>
-              {isPicker ? null : <th className="w-10"><span className="sr-only">{t({ ko: '다운로드', en: 'Download' })}</span></th>}
+              {isPicker ? null : <th className="w-10"><span className="sr-only">{t({ ko: '더 보기', en: 'More' })}</span></th>}
             </tr>
           </thead>
           <tbody>
             {entries.map((entry) => {
               const isSelected = selected.includes(entry.id)
               const canSelect = !isPicker || entry.kind === 'file'
+              const menu = isPicker ? [] : rowEntries(entry)
               return (
-                <tr
-                  key={entry.id}
-                  className={cn('border-b border-line last:border-0 hover:bg-fill', isSelected && 'bg-fill')}
-                  draggable={canOrganize && !busy && !isPicker}
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData(FILE_DRAG_TYPE, JSON.stringify(isSelected ? selected : [entry.id]))
-                    event.dataTransfer.effectAllowed = 'move'
-                  }}
-                  onDragOver={entry.kind === 'folder' ? dragOver : undefined}
-                  onDrop={entry.kind === 'folder' ? (event) => drop(event, entry.id) : undefined}
-                >
-                  <td className="py-2 pr-3">
-                    {canSelect ? <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: entry.name })} checked={isSelected} onCheckedChange={(checked) => toggle(entry.id, checked === true)} /> : null}
-                  </td>
-                  <td className="min-w-40">
-                    <Button
-                      variant="ghost"
-                      className="max-w-full justify-start"
-                      onClick={() => {
-                        if (entry.kind === 'folder') navigate(entry.id)
-                        else if (isPicker) toggle(entry.id, !isSelected)
-                        else setPreview(entry)
-                      }}
-                    >
-                      <EntryIcon entry={entry} />
-                      <span className="max-w-80 truncate">{entry.name}</span>
-                    </Button>
-                  </td>
-                  <td className="hidden whitespace-nowrap px-3 text-xs text-muted-foreground sm:table-cell">{formatDateTime(entry.updatedAt)}</td>
-                  <td className="whitespace-nowrap px-3 text-right text-xs text-muted-foreground">{entry.kind === 'folder' ? '' : formatFileSize(entry.size)}</td>
-                  {isPicker ? null : (
-                    <td>
-                      {entry.kind === 'file' && canSendAudio && mediaKind(entry) === 'audio' ? (
-                        <IconButton variant="ghost" size="icon-sm" label={t({ ko: '오디오로 보내기', en: 'Send to Audio' })} onClick={() => setAudioSend([entry])}><AudioLines /></IconButton>
-                      ) : null}
-                      {entry.kind === 'file' ? (
-                        <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '다운로드', en: 'Download' })}>
-                          <a href={storedFileDownloadUrl(entry.id, storeOwner)} download><Download /></a>
-                        </IconButton>
-                      ) : null}
+                <ActionContextMenu key={entry.id} entries={menu} onOpenChange={rowMenuOpenChange}>
+                  <tr
+                    className={cn('border-b border-line last:border-0 hover:bg-fill', isSelected && 'bg-fill')}
+                    draggable={canOrganize && !busy && !isPicker}
+                    onPointerDown={(event) => { pointerType.current = event.pointerType }}
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData(FILE_DRAG_TYPE, JSON.stringify(isSelected ? selected : [entry.id]))
+                      event.dataTransfer.effectAllowed = 'move'
+                    }}
+                    onDragOver={entry.kind === 'folder' ? dragOver : undefined}
+                    onDrop={entry.kind === 'folder' ? (event) => drop(event, entry.id) : undefined}
+                  >
+                    <td className="py-2 pr-3">
+                      {canSelect ? <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: entry.name })} checked={isSelected} onCheckedChange={(checked) => toggle(entry.id, checked === true)} /> : null}
                     </td>
-                  )}
-                </tr>
+                    <td className="min-w-40">
+                      <Button
+                        variant="ghost"
+                        className="max-w-full justify-start"
+                        onClick={() => {
+                          if (Date.now() - touchMenuAt.current < 800) return
+                          if (entry.kind === 'folder') navigate(entry.id)
+                          else if (isPicker) toggle(entry.id, !isSelected)
+                          else setPreview(entry)
+                        }}
+                      >
+                        <EntryIcon entry={entry} />
+                        <span className="max-w-80 truncate">{entry.name}</span>
+                      </Button>
+                    </td>
+                    <td className="hidden whitespace-nowrap px-3 text-xs text-muted-foreground sm:table-cell">{formatDateTime(entry.updatedAt)}</td>
+                    <td className="whitespace-nowrap px-3 text-right text-xs text-muted-foreground">{entry.kind === 'folder' ? '' : formatFileSize(entry.size)}</td>
+                    {isPicker ? null : (
+                      <td>
+                        <ActionMenuButton entries={menu} className="text-muted-foreground" label={t({ ko: '더 보기', en: 'More' })} />
+                      </td>
+                    )}
+                  </tr>
+                </ActionContextMenu>
               )
             })}
           </tbody>

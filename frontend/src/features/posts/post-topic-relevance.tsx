@@ -1,10 +1,8 @@
 import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostDetail, PostTopicEvaluationView, TopicRelevanceItem, TopicRelevanceLevel } from '@conai/shared'
-import { RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
-import { IconButton } from '@/components/ui/icon-button'
 import { Progress } from '@/components/ui/progress'
 import { ErrorState } from '@/components/ui/error-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -179,7 +177,6 @@ export function PostTopicDetails({ topic }: { topic: PostTopicEvaluationState })
       <div className="flex items-center gap-2 pb-2">
         <h3 className="text-sm font-semibold">{t({ ko: '주제', en: 'Topics' })}</h3>
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" aria-live="polite">{meta}</span>
-        {value.canRequest ? <IconButton size="icon-sm" variant="ghost" disabled={!topic.canRequest} label={value.evaluatedAt ? t({ ko: '주제 다시 평가', en: 'Re-evaluate topics' }) : t({ ko: '주제 평가 요청', en: 'Evaluate topics' })} onClick={topic.request}><RefreshCw /></IconButton> : null}
       </div>
       <div className={cn(value.staleReason && !value.isCurrent && 'opacity-60')}>{items.map(item => <TopicRow key={item.topicId} item={item} />)}</div>
       {sorted.length > high.length ? <Button variant="ghost" size="xs" className="mt-1" onClick={() => setShowAll(!showAll)}>{t(showAll ? { ko: '높은 관련도만', en: 'Higher scores only' } : { ko: '낮은 관련도 {count}개 더', en: '{count} lower scores' }, { count: sorted.length - high.length })}</Button> : null}

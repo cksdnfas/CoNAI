@@ -1065,32 +1065,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         : <ChatThreadList threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} drafts={chat.drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />}
     </div>
   </>
-  const chatMenu = <ChatAppearancePopover threadId={activeThreadId} style={profile?.style} layout={layout} open={appearanceOpen} onOpenChange={setAppearanceOpen}><span className="inline-flex"><DropdownMenu>
-    <Tip content={t({ ko: '채팅 메뉴', en: 'Chat menu' })}><DropdownMenuTrigger asChild>
-      <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
-    </DropdownMenuTrigger></Tip>
-    <DropdownMenuContent align="end" className="min-w-48" onCloseAutoFocus={(event) => { if (appearanceOpenRef.current) { event.preventDefault(); appearanceOpenRef.current = false } }}>
-      {/* This chat's own items first, then the account-wide managers it also opens, each group named. */}
-      <DropdownMenuLabel>{t({ ko: '이 채팅', en: 'This chat' })}</DropdownMenuLabel>
-      <DropdownMenuItem onSelect={() => { appearanceOpenRef.current = true; setAppearanceOpen(true) }}><AppearanceIcon />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem>
-      {isGroup ? null : <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{isCodexThread ? t({ ko: '압축', en: 'Compact' }) : t({ ko: '지금 요약', en: 'Summarize now' })}</DropdownMenuItem>}
-      <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
-      <DropdownMenuSeparator />
-      <DropdownMenuLabel>{t({ ko: '내 설정', en: 'My settings' })}</DropdownMenuLabel>
-      <DropdownMenuItem onSelect={() => setFlagManagerOpen(true)}><Flag />{t({ ko: '플래그 관리', en: 'Manage flags' })}</DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => setUserProfileManagerOpen(true)}><UserRound />{t({ ko: '사용자 프로필', en: 'User profiles' })}</DropdownMenuItem>
-      {canManageRoutines ? <DropdownMenuItem onSelect={() => setRoutinesOpen(true)}><AlarmClock />{t({ ko: '루틴', en: 'Routines' })}</DropdownMenuItem> : null}
-      <DropdownMenuSeparator />
-      <DropdownMenuItem disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()} className="text-destructive"><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
-    </DropdownMenuContent>
-  </DropdownMenu></span></ChatAppearancePopover>
-  // The menu items used most sit in the header; a second press on a view returns to the chat.
+  // Context stays in the header, the rest of the chat's actions sit under ⋯; a second press on a view returns to the chat.
   const toggleView = (next: 'context' | 'gallery') => setView(activeView === next ? 'chat' : next)
-  const headerActions = thread ? <>
-    <IconButton variant="ghost" size="icon-sm" active={activeView === 'gallery'} onClick={() => toggleView('gallery')} label={t({ ko: '이미지 모아보기', en: 'Image gallery' })}><LayoutGrid /></IconButton>
-    <IconButton variant="ghost" size="icon-sm" disabled={isBusy} onClick={() => void runCommand('/clear')} label={t({ ko: '대화 비우기', en: 'Clear chat' })}><Eraser /></IconButton>
+  const headerActions = thread ? (
     <IconButton variant="ghost" size="icon-sm" active={activeView === 'context'} onClick={() => toggleView('context')} label={t({ ko: '컨텍스트', en: 'Context' })}><SlidersHorizontal /></IconButton>
-  </> : null
+  ) : null
   const headerAvatar = isGroup
     ? group && activeThreadId !== null
       ? (
@@ -1100,11 +1079,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       )
       : <GroupAvatarStack profiles={memberProfiles} />
     : speaker ? <ChatProfileAvatar name={speaker.name} avatar={speaker.avatar} profile={speaker} engine={speaker.engine} size="sm" /> : null
-  const inviteButton = activeThreadId === null || !thread || profileMissing
+  const inviteItem = activeThreadId === null || !thread || profileMissing
     ? null
     : isGroup
-      ? group ? <IconButton variant="ghost" size="icon-sm" disabled={isBusy || group.memberIds.length >= GROUP_MEMBER_MAX} onClick={() => setInvite({ kind: 'add', threadId: activeThreadId, memberIds: group.memberIds })} label={t({ ko: '참가자 초대', en: 'Invite members' })}><UserPlus /></IconButton> : null
-      : profile?.usable ? <IconButton variant="ghost" size="icon-sm" onClick={() => setInvite({ kind: 'create', baseProfileId: profile.id })} label={t({ ko: '그룹방으로 만들기', en: 'Make a group room' })}><UserPlus /></IconButton> : null
+      ? group ? <DropdownMenuItem disabled={isBusy || group.memberIds.length >= GROUP_MEMBER_MAX} onSelect={() => setInvite({ kind: 'add', threadId: activeThreadId, memberIds: group.memberIds })}><UserPlus />{t({ ko: '참가자 초대', en: 'Invite members' })}</DropdownMenuItem> : null
+      : profile?.usable ? <DropdownMenuItem onSelect={() => setInvite({ kind: 'create', baseProfileId: profile.id })}><UserPlus />{t({ ko: '그룹방으로 만들기', en: 'Make a group room' })}</DropdownMenuItem> : null
   const liveGroupTurn = isGroup && liveTurn?.threadId === activeThreadId ? liveTurn : null
   const turnStatus = isCompacting ? (
     <div role="status" className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
@@ -1158,9 +1137,33 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     setStripOpen(open)
   }
   const setStripPanelOpen = (open: boolean) => { setStripOpen(open); if (hasPortrait) updateAppearance({ portrait: open }) }
-  const statusButton = hasPanel && (wideStatus || hasPortrait) ? (
-    <IconButton variant="ghost" size="icon-sm" active={wideStatus ? panelOpen : stripOpen} onClick={togglePanel} label={t({ ko: '상태창', en: 'Status panel' })}><Activity /></IconButton>
+  // Page only: the panel's status strip folds out on its own.
+  const statusItem = layout === 'page' && hasPanel && (wideStatus || hasPortrait) ? (
+    <DropdownMenuItem onSelect={togglePanel}><Activity />{(wideStatus ? panelOpen : stripOpen) ? t({ ko: '상태창 닫기', en: 'Hide status panel' }) : t({ ko: '상태창 열기', en: 'Show status panel' })}</DropdownMenuItem>
   ) : null
+  const chatMenu = <ChatAppearancePopover threadId={activeThreadId} style={profile?.style} layout={layout} open={appearanceOpen} onOpenChange={setAppearanceOpen}><span className="inline-flex"><DropdownMenu>
+    <Tip content={t({ ko: '채팅 메뉴', en: 'Chat menu' })}><DropdownMenuTrigger asChild>
+      <IconButton variant="ghost" size="icon-sm" disabled={activeThreadId === null} label={t({ ko: '채팅 메뉴', en: 'Chat menu' })} tooltip={false}><MoreHorizontal /></IconButton>
+    </DropdownMenuTrigger></Tip>
+    <DropdownMenuContent align="end" className="min-w-48" onCloseAutoFocus={(event) => { if (appearanceOpenRef.current) { event.preventDefault(); appearanceOpenRef.current = false } }}>
+      {/* This chat's own items first, then the account-wide managers it also opens, each group named. */}
+      <DropdownMenuLabel>{t({ ko: '이 채팅', en: 'This chat' })}</DropdownMenuLabel>
+      {thread ? <DropdownMenuItem onSelect={() => toggleView('gallery')}><LayoutGrid />{activeView === 'gallery' ? t({ ko: '이미지 모아보기 닫기', en: 'Close image gallery' }) : t({ ko: '이미지 모아보기', en: 'Image gallery' })}</DropdownMenuItem> : null}
+      {statusItem}
+      {inviteItem}
+      <DropdownMenuItem onSelect={() => { appearanceOpenRef.current = true; setAppearanceOpen(true) }}><AppearanceIcon />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem>
+      {isGroup ? null : <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{isCodexThread ? t({ ko: '압축', en: 'Compact' }) : t({ ko: '지금 요약', en: 'Summarize now' })}</DropdownMenuItem>}
+      <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel>{t({ ko: '내 설정', en: 'My settings' })}</DropdownMenuLabel>
+      <DropdownMenuItem onSelect={() => setFlagManagerOpen(true)}><Flag />{t({ ko: '플래그 관리', en: 'Manage flags' })}</DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => setUserProfileManagerOpen(true)}><UserRound />{t({ ko: '사용자 프로필', en: 'User profiles' })}</DropdownMenuItem>
+      {canManageRoutines ? <DropdownMenuItem onSelect={() => setRoutinesOpen(true)}><AlarmClock />{t({ ko: '루틴', en: 'Routines' })}</DropdownMenuItem> : null}
+      <DropdownMenuSeparator />
+      {thread ? <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem> : null}
+      <DropdownMenuItem disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()} className="text-destructive"><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu></span></ChatAppearancePopover>
   const statusStrip = hasPanel && statusData && !wideStatus ? <ChatStatusStrip data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} open={stripOpen} onOpenChange={setStripPanelOpen} /> : null
   const statusAside = hasPanel && statusData && wideStatus && panelOpen && statusLayout.mode === 'docked'
     ? <ChatStatusAside data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} onFloat={() => setStatusLayout({ mode: 'floating' })} onHide={hidePanel} />
@@ -1367,9 +1370,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
               {backButton}
               {headerAvatar}
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">{viewTitle}</span>
-              {statusButton}
               {headerActions}
-              {inviteButton}
               {chatMenu}
             </>}
             {onCollapse ? (
@@ -1414,7 +1415,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           {headerAvatar}
           <span className="min-w-0 flex-1 truncate px-1.5 text-sm font-semibold">{thread ? thread.title || untitled : pendingProfile?.name ?? untitled}</span>
           {expandButton}
-          {inviteButton}
           {headerActions}
           {thread ? chatMenu : null}
         </>}

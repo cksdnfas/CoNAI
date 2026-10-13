@@ -137,8 +137,18 @@ export function PostKnowledgeProposals({ postId, standalone = false, bare = fals
       {picked ? <KnowledgeProposalReview proposalId={picked} onClose={() => setPicked(null)} /> : null}
   </>
   if (bare) return <div>{body}</div>
+  if (standalone) {
+    return (
+      <div>
+        <div className="flex justify-end pb-1">
+          <Select className="w-32" value={status} aria-label={t({ ko: '제안 상태', en: 'Proposal status' })} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="pending">{t({ ko: '검토 대기', en: 'Pending' })}</option><option value="applied">{t({ ko: '반영됨', en: 'Applied' })}</option><option value="rejected">{t({ ko: '거절됨', en: 'Rejected' })}</option></Select>
+        </div>
+        {body}
+      </div>
+    )
+  }
   return (
-    <Section heading={standalone ? t({ ko: '변경 제안', en: 'Change proposals' }) : t({ ko: '검토할 변경 제안', en: 'Pending change proposals' })} bodyClassName="space-y-0" actions={standalone ? <Select value={status} aria-label={t({ ko: '제안 상태', en: 'Proposal status' })} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="pending">{t({ ko: '검토 대기', en: 'Pending' })}</option><option value="applied">{t({ ko: '반영됨', en: 'Applied' })}</option><option value="rejected">{t({ ko: '거절됨', en: 'Rejected' })}</option></Select> : undefined}>
+    <Section heading={t({ ko: '검토할 변경 제안', en: 'Pending change proposals' })} bodyClassName="space-y-0">
       {body}
     </Section>
   )

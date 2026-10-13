@@ -15,7 +15,9 @@ import { MODEL_SLOTS_QUERY_KEY, listModelSlots } from '@/lib/api-codex-chat'
 import { POSTS_QUERY_KEY, getPostKnowledgeEvaluationStatus, getPostKnowledgeSearchStatus } from '@/lib/api-posts'
 import { cn } from '@/lib/utils'
 import { ModelRowOptions } from './chat-model-role-select'
+import { useDefaultJudgeLabel } from './chat-judge-connection-select'
 import { SETTINGS_CONTROL_CLASS, SettingsStatLine } from './settings-rows'
+import { useSettingsAdvanced } from './settings-advanced'
 
 type NumberSettingKey = { [Key in keyof PostsKnowledgeSettings]: PostsKnowledgeSettings[Key] extends number ? Key : never }[keyof PostsKnowledgeSettings]
 type NumberRow = { key: NumberSettingKey; ko: string; en: string; min: number; max: number; step?: number }
@@ -49,15 +51,18 @@ const WEIGHT_ROWS: NumberRow[] = [
   { key: 'judgeWeight', ko: '판단모델', en: 'Judge', min: 0, max: 10, step: 0.05 },
 ]
 
-/** Settings › 게시판 › 지식 품질: knowledge features, the judge, feedback weights; limits and caps fold under 고급. */
+/** Settings › 게시판 › 지식 품질: knowledge features and the judge; feedback weights, limits and caps show with the 고급 switch. */
 export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKnowledgeSettings; onPatch: (patch: Partial<PostsKnowledgeSettings>) => void }) {
   const { t } = useI18n()
+  const advanced = useSettingsAdvanced()
   const models = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots })
   const status = useQuery({ queryKey: [POSTS_QUERY_KEY, 'evaluation-status'], queryFn: getPostKnowledgeEvaluationStatus, refetchInterval: (query) => query.state.data?.queued || query.state.data?.running ? 10000 : false })
   const search = useQuery({ queryKey: [POSTS_QUERY_KEY, 'knowledge-search-status'], queryFn: getPostKnowledgeSearchStatus, staleTime: 30_000 })
   const slot = models.data?.find((item) => item.providerName === draft.judgeProvider && item.model === draft.judgeModel)
   const modelValue = slot ? `slot:${slot.id}` : draft.judgeProvider && draft.judgeModel ? 'saved' : ''
-  const ready = status.data && modelValue ? status.data.providerReady : null
+  const defaultJudge = models.data?.find((item) => item.isDefaultJudge)
+  const defaultJudgeLabel = useDefaultJudgeLabel()
+  const ready = status.data && (modelValue || defaultJudge) ? status.data.providerReady : null
   const readyLabel = ready ? t({ ko: '준비됨', en: 'Ready' }) : t({ ko: '준비 안 됨', en: 'Unavailable' })
   const searchLabel = search.data?.state === 'ready' ? t({ ko: '키워드 + 의미', en: 'Keyword + semantic' })
     : search.data?.state === 'partial' || search.data?.state === 'indexing' ? t({ ko: '키워드 · 의미 색인 {indexed} / {total}', en: 'Keyword · semantic index {indexed} / {total}' }, { indexed: search.data.indexed, total: search.data.total })
@@ -84,26 +89,24 @@ export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKno
             const selected = models.data?.find((item) => `slot:${item.id}` === event.target.value)
             onPatch({ judgeProvider: selected?.providerName ?? null, judgeModel: selected?.model ?? null })
           }}>
-            <option value="">{t({ ko: '사용 안 함', en: 'Off' })}</option>
+            <option value="">{defaultJudgeLabel}</option>
             <ModelRowOptions slots={models.data ?? []} />
             {modelValue === 'saved' ? <option value="saved" disabled>{draft.judgeProvider} · {draft.judgeModel}</option> : null}
           </Select>
         </SettingRow>
         <SettingRow label={t({ ko: '검색', en: 'Search' })}><span className="text-sm tabular-nums text-muted-foreground">{searchLabel}</span></SettingRow>
-        <SettingRow label={t({ ko: '평가 비중', en: 'Feedback weights' })} controlClassName="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {advanced ? <SettingRow label={t({ ko: '평가 비중', en: 'Feedback weights' })} controlClassName="flex flex-wrap items-center gap-x-4 gap-y-2">
           {WEIGHT_ROWS.map((row) => (
             <label key={row.key} className="inline-flex items-center gap-2 text-sm text-muted-foreground">
               {t(row)}
               <NumberStepperInput className="w-32" min={row.min} max={row.max} step={row.step} variant="settings" aria-label={t({ ko: '{name} 평가 비중', en: '{name} weight' }, { name: t(row) })} value={draft[row.key]} onValueCommit={(value) => onPatch({ [row.key]: Number(value) })} />
             </label>
           ))}
-        </SettingRow>
+        </SettingRow> : null}
       </RowGroup>
-      <Section
+      {advanced ? <Section
         variant="settings"
-        heading={t({ ko: '고급', en: 'Advanced' })}
-        collapsible
-        defaultOpen={false}
+        heading={t({ ko: '한도', en: 'Limits' })}
         actions={<IconButton size="icon-sm" variant="ghost" label={t({ ko: '기본값으로 (정책 {version})', en: 'Restore defaults (policy {version})' }, { version: draft.policyVersion })} onClick={() => onPatch(DEFAULT_POSTS_KNOWLEDGE_SETTINGS)}><RefreshCw /></IconButton>}
         bodyClassName="grid gap-x-10 sm:grid-cols-2"
       >
@@ -117,7 +120,7 @@ export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKno
             ))}
           </Fragment>
         ))}
-      </Section>
+      </Section> : null}
     </div>
   )
 }

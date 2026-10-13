@@ -1,6 +1,7 @@
 import { useRef, useState, type DragEvent } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { Check, FolderOpen, Images, Loader2, Trash2, Upload, X } from 'lucide-react'
+import { ActionContextMenu } from '@/components/ui/action-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -127,32 +128,31 @@ export function SpriteQueue({ hashes, selected, statuses, locked, onSelect, onCh
           const info = infos[index]?.data
           const status = statuses.get(hash)
           return (
-            <li key={hash} className="group relative">
-              <ListRow
-                asChild
-                interactive
-                selected={hash === selected}
-                className="gap-2.5 rounded-sm"
-                leading={<img src={libraryThumbnailUrl(hash)} alt="" loading="lazy" className="size-11 rounded-sm object-cover" />}
-                trailing={<QueueStatus status={status} />}
-              >
-                <button type="button" onClick={() => onSelect(hash)} aria-current={hash === selected}>
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate text-sm">{info?.name ?? hash.slice(0, 12)}</span>
-                  {status?.status === 'failed' ? (
-                    <span className="truncate text-xs text-destructive">{status.error}</span>
-                  ) : (
-                    <span className="truncate font-mono text-xs text-muted-foreground">
-                      {status?.status === 'done' && status.frameCount ? t({ ko: '{count}컷', en: '{count} frames' }, { count: status.frameCount }) : info ? `${info.duration.toFixed(1)}s · ${info.width}×${info.height}` : infos[index]?.isError ? t({ ko: '읽지 못함', en: 'Unreadable' }) : ''}
-                    </span>
-                  )}
-                </span>
-                </button>
-              </ListRow>
-              {!locked ? (
-                <IconButton size="icon-xs" variant="secondary" className="absolute right-1.5 top-1.5 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" label={t({ ko: '목록에서 빼기', en: 'Remove from the list' })} onClick={() => onChange(hashes.filter((item) => item !== hash))}><X /></IconButton>
-              ) : null}
-            </li>
+            <ActionContextMenu key={hash} disabled={locked} entries={[{ key: 'remove', icon: X, label: t({ ko: '목록에서 빼기', en: 'Remove from the list' }), onSelect: () => onChange(hashes.filter((item) => item !== hash)) }]}>
+              <li className="[-webkit-touch-callout:none]">
+                <ListRow
+                  asChild
+                  interactive
+                  selected={hash === selected}
+                  className="gap-2.5 rounded-sm"
+                  leading={<img src={libraryThumbnailUrl(hash)} alt="" loading="lazy" className="size-11 rounded-sm object-cover" />}
+                  trailing={<QueueStatus status={status} />}
+                >
+                  <button type="button" onClick={() => onSelect(hash)} aria-current={hash === selected}>
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate text-sm">{info?.name ?? hash.slice(0, 12)}</span>
+                    {status?.status === 'failed' ? (
+                      <span className="truncate text-xs text-destructive">{status.error}</span>
+                    ) : (
+                      <span className="truncate font-mono text-xs text-muted-foreground">
+                        {status?.status === 'done' && status.frameCount ? t({ ko: '{count}컷', en: '{count} frames' }, { count: status.frameCount }) : info ? `${info.duration.toFixed(1)}s · ${info.width}×${info.height}` : infos[index]?.isError ? t({ ko: '읽지 못함', en: 'Unreadable' }) : ''}
+                      </span>
+                    )}
+                  </span>
+                  </button>
+                </ListRow>
+              </li>
+            </ActionContextMenu>
           )
         })}
       </ul>

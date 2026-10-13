@@ -16,7 +16,7 @@ import type { CodexModelOption } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
 import { CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage, type ClaudeModelOption } from '@conai/shared'
 import { ClaudeEffortSelect, ClaudeModelSelect } from './claude-model-select'
-import { JudgeModelSelect, useModelLabel } from './chat-judge-connection-select'
+import { JudgeModelSelect, useDefaultJudgeLabel, useModelLabel } from './chat-judge-connection-select'
 import { applyRoleChoice, ModelRoleSelect, roleChoice, type SuggestWriters } from './chat-model-role-select'
 import { GROW_TEXTAREA, numberOrNull, SwitchLine, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { ContentRatingSelect, useCeilingLabel } from './content-rating-select'
@@ -55,6 +55,7 @@ function JudgeRole({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
   const presets = presetsQuery.data ?? []
   const preset = presets.find((item) => item.id === draft.judgePresetId)
   const presetModel = useModelLabel(true, preset?.modelSlotId ?? null)
+  const defaultJudge = useDefaultJudgeLabel()
   const label = t({ ko: '판단', en: 'Judge' })
   const select = (
     <Select
@@ -76,7 +77,7 @@ function JudgeRole({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
             enabled
             ariaLabel={t({ ko: '판단 모델', en: 'Judge model' })}
             slotId={draft.judgeSlotId}
-            emptyLabel={presetModel ? t({ ko: '프리셋 따름 · {name}', en: 'Preset’s · {name}' }, { name: presetModel }) : t({ ko: '프리셋 따름', en: 'Preset’s' })}
+            emptyLabel={presetModel ? t({ ko: '프리셋 따름 · {name}', en: 'Preset’s · {name}' }, { name: presetModel }) : preset && preset.modelSlotId === null ? defaultJudge : t({ ko: '프리셋 따름', en: 'Preset’s' })}
             onChange={(judgeSlotId) => patch({ judgeSlotId })}
           />
         </Field>
@@ -278,7 +279,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
         <div>
           {!selfCompacting ? (
             <RoleRow label={t({ ko: '요약', en: 'Summary' })} select={roleSelect('summary', t({ ko: '요약 모델', en: 'Summary model' }))}>
-              {summaryOn ? (
+              {summaryOn && advanced ? (
                 <>
                   <Field label={t({ ko: '한 번에 요약할 턴 수', en: 'Turns per summary' })} className="md:w-1/2">
                     <NumberStepperInput variant="settings" step={1} min={1} max={200} value={draft.summaryTriggerTurns} onValueCommit={(value) => patch({ summaryTriggerTurns: numberOrNull(value) ?? draft.summaryTriggerTurns })} />

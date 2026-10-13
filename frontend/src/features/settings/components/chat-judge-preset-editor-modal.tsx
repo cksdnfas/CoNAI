@@ -30,7 +30,8 @@ import {
 import { CHAT_ADMIN_PROFILES_QUERY_KEY, listCodexChatThreads } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { GROW_TEXTAREA } from './chat-profile-editor-fields'
-import { JudgeModelSelect } from './chat-judge-connection-select'
+import { JudgeModelSelect, useDefaultJudgeLabel } from './chat-judge-connection-select'
+import { SettingsAdvancedSwitch, useSettingsAdvanced } from './settings-advanced'
 import { ChatJudgeItemPane, itemTestSummary } from './chat-judge-item-editor'
 import { JudgeAssetsPane, JudgeContextPane, JudgeFieldsPane, JudgeRoomPane, judgeScopesOn, type JudgeScopes } from './chat-judge-scope-sections'
 import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
@@ -74,6 +75,8 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
 }) {
   const { t } = useI18n()
   const confirm = useConfirm()
+  const advanced = useSettingsAdvanced()
+  const defaultJudgeLabel = useDefaultJudgeLabel(open)
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const [draft, setDraft] = useState<PresetDraft>(EMPTY)
@@ -176,6 +179,8 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   const afterItems = draft.items.filter((item) => item.stage === 'after')
   // The server asks only the enabled conditions (askableJudgeItems), so off ones don't turn follow-ups on.
   const followUpOn = draft.followUp.maxConsecutive > 0 && afterItems.some((item) => item.enabled)
+  // The re-judge LLM only matters to items that ask an LLM when unsure.
+  const asksLlmWhenUnsure = draft.items.some((item) => item.uncertain === 'llm') || draft.escalationSlotId !== null
   const testControls = (
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <Select variant="settings" className="h-8 w-56 min-w-0 flex-1 text-xs" aria-label={t({ ko: '테스트할 대화', en: 'Chat to test on' })} value={testThreadId ?? ''} onChange={(event) => setTestThreadId(event.target.value ? Number(event.target.value) : null)}>
@@ -265,9 +270,12 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
       dirty={dirty}
       onSave={canSave ? () => saveMutation.mutate() : undefined}
       headerActions={(
-        <IconButton size="icon-sm" variant="ghost" active={testOpen} onClick={() => setTestOpen(!testOpen)} label={t({ ko: '테스트', en: 'Test' })}>
-          {testMutation.isPending ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}
-        </IconButton>
+        <div className="flex shrink-0 items-center gap-1">
+          <SettingsAdvancedSwitch />
+          <IconButton size="icon-sm" variant="ghost" active={testOpen} onClick={() => setTestOpen(!testOpen)} label={t({ ko: '테스트', en: 'Test' })}>
+            {testMutation.isPending ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}
+          </IconButton>
+        </div>
       )}
       headerContent={testOpen ? testControls : undefined}
     >
@@ -292,12 +300,12 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
                     enabled={open}
                     ariaLabel={t({ ko: '판단 모델', en: 'Judge model' })}
                     slotId={draft.modelSlotId}
-                    emptyLabel={t({ ko: '프로필에서 정함', en: 'Set per profile' })}
+                    emptyLabel={defaultJudgeLabel}
                     onChange={(modelSlotId) => setDraft({ ...draft, modelSlotId })}
                   />
                 </Field>
               </div>
-              <Field label={t({ ko: '애매할 때 다시 물을 LLM', en: 'LLM asked again when unsure' })}>
+              {asksLlmWhenUnsure ? <Field label={t({ ko: '애매할 때 다시 물을 LLM', en: 'LLM asked again when unsure' })}>
                 <JudgeModelSelect
                   enabled={open}
                   llmOnly
@@ -306,7 +314,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
                   emptyLabel={t({ ko: '대화 모델 그대로', en: 'Same as chat' })}
                   onChange={(escalationSlotId) => setDraft({ ...draft, escalationSlotId })}
                 />
-              </Field>
+              </Field> : null}
               {users.length > 0 ? (
                 <div className="border-t border-line">
                   <SettingRow label={t({ ko: '쓰는 곳', en: 'Used by' })} controlClassName="max-w-[60%]">
@@ -342,13 +350,13 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
                 <SettingRow label={t({ ko: '연속 최대', en: 'At most in a row' })}>
                   <NumberStepperInput variant="settings" className="w-32" min={0} max={3} step={1} value={draft.followUp.maxConsecutive} onValueCommit={(value) => patchFollowUp({ maxConsecutive: Number(value) || 0 })} aria-label={t({ ko: '연속 최대', en: 'At most in a row' })} />
                 </SettingRow>
-                <SettingRow label={t({ ko: '보내기 전 대기 (초)', en: 'Wait before sending (s)' })}>
+                {advanced ? <SettingRow label={t({ ko: '보내기 전 대기 (초)', en: 'Wait before sending (s)' })}>
                   <NumberStepperInput variant="settings" className="w-32" min={0} max={600} step={1} value={draft.followUp.delaySeconds} onValueCommit={(value) => patchFollowUp({ delaySeconds: Number(value) || 0 })} aria-label={t({ ko: '보내기 전 대기 (초)', en: 'Wait before sending (s)' })} />
-                </SettingRow>
+                </SettingRow> : null}
               </div>
-              <Field label={t({ ko: '후속 지시문', en: 'Follow-up directive' })}>
+              {advanced ? <Field label={t({ ko: '후속 지시문', en: 'Follow-up directive' })}>
                 <Textarea variant="settings" className={GROW_TEXTAREA} value={draft.followUp.directive} maxLength={2000} placeholder={t({ ko: '비우면 기본', en: 'Empty: default' })} onChange={(event) => patchFollowUp({ directive: event.target.value })} />
-              </Field>
+              </Field> : null}
             </div>
           </div>
         ) : null}

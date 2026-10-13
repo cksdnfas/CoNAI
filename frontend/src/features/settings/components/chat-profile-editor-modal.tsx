@@ -50,11 +50,10 @@ import { ChatProfileMemoryPanel } from './chat-profile-editor-memory'
 import { ChatProfileModelPanel } from './chat-profile-editor-model'
 import { ChatProfileToolsPanel } from './chat-profile-editor-tools'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
+import { SettingsAdvancedSwitch, useSettingsAdvanced } from './settings-advanced'
 import { ProfileAssistContext, useProfileEditorChatPage } from './use-profile-editor-chat-page'
 
 type EditorSection = 'character' | 'appearance' | 'model' | 'memory' | 'tools' | 'look'
-
-const ADVANCED_KEY = 'conai:chat-profile-editor:advanced'
 
 /** Shown until the server's defaults load (new profiles only). */
 const FALLBACK_STYLE: ChatStyle = { typeface: 'sans', roleplay: false, colors: { dialogue: '', narration: '', thought: '' }, backgroundDim: 55, backgroundBlur: 0, blocks: [], cast: [], emoticonGroupIds: [] }
@@ -184,7 +183,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
   const [section, setSection] = useState<EditorSection>('character')
   /** Phone layout: the section list until one is picked. */
   const [showingList, setShowingList] = useState(true)
-  const [advanced, setAdvanced] = useState(() => { try { return localStorage.getItem(ADVANCED_KEY) === '1' } catch { return false } })
+  const advanced = useSettingsAdvanced()
   const [assetImports, setAssetImports] = useState(0)
   const assetBusy = assetImports > 0
   const onAssetBusyChange = (busy: boolean) => setAssetImports((count) => Math.max(0, count + (busy ? 1 : -1)))
@@ -201,10 +200,6 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
   }, [defaults, initialDraft, open, initialProfile])
 
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }))
-  const toggleAdvanced = (next: boolean) => {
-    setAdvanced(next)
-    try { localStorage.setItem(ADVANCED_KEY, next ? '1' : '0') } catch { /* Storage can be unavailable. */ }
-  }
   const refreshProfiles = () => Promise.all([queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }), queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY })])
   /** Saves what generation reads (name, appearance, reference); a new profile is created whole first. */
   const ensureProfile = async () => {
@@ -328,10 +323,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
       headerActions={(
         <div className="flex shrink-0 items-center gap-1">
           <AudienceMenu draft={draft} patch={patch} />
-          <label className="flex h-8 cursor-pointer items-center gap-1.5 px-1.5 text-sm text-muted-foreground">
-            {t({ ko: '고급', en: 'Advanced' })}
-            <Switch size="sm" checked={advanced} onCheckedChange={toggleAdvanced} />
-          </label>
+          <SettingsAdvancedSwitch />
           <Tip content={draft.isEnabled ? t({ ko: '사용 중', en: 'On' }) : t({ ko: '꺼짐', en: 'Off' })}>
             <span className="inline-flex px-1.5"><Switch checked={draft.isEnabled} onCheckedChange={(isEnabled) => patch({ isEnabled })} aria-label={t({ ko: '사용', en: 'On' })} /></span>
           </Tip>

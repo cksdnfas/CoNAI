@@ -1018,6 +1018,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (!hasColumn('llm_model_slots', 'content_rating_tier_id')) {
     db.exec('ALTER TABLE llm_model_slots ADD COLUMN content_rating_tier_id INTEGER');
   }
+  // The default judge (at most one row): what a judge with no model of its own asks.
+  if (!hasColumn('llm_model_slots', 'is_default_judge')) {
+    db.exec('ALTER TABLE llm_model_slots ADD COLUMN is_default_judge INTEGER NOT NULL DEFAULT 0');
+  }
   // The model a user profile writes reply suggestions with (llm_model_slots; no foreign key, like the profile slots).
   if (!hasColumn('chat_user_profiles', 'model_slot_id')) {
     db.exec('ALTER TABLE chat_user_profiles ADD COLUMN model_slot_id INTEGER');

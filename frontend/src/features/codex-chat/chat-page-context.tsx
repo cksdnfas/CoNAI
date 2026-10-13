@@ -83,7 +83,7 @@ const PAGE_VIEWS: Record<string, { param: string; values: readonly string[] }> =
 const NESTED_VIEWS: Record<string, string[]> = {
   '/settings': [
     ...['resources', 'mine'].map((view) => `/settings?section=chat&view=${view}`),
-    ...['connections', 'judge'].map((view) => `/settings?section=llm&view=${view}`),
+    ...['connections', 'prompts', 'log'].map((view) => `/settings?section=llm&view=${view}`),
     ...['topics', 'knowledge'].map((view) => `/settings?section=posts&view=${view}`),
   ],
 }

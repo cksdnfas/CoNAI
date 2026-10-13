@@ -19,6 +19,7 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react'
+import { ActionContextMenu } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -319,9 +320,17 @@ export function AudioSidebar({
               if (draft?.kind === 'rename' && draft.folderId === folder.id) return <div key={folder.id}>{draftInput(0, t({ ko: '그룹 이름', en: 'Group name' }))}</div>
               return (
                 <div key={folder.id} className="flex flex-col gap-0.5">
-                  <div className="group/folder flex items-center gap-0.5">
+                  <ActionContextMenu
+                    disabled={!canEdit}
+                    entries={[
+                      { key: 'add', icon: Plus, label: t({ ko: '효과음 추가', en: 'Add effect' }), onSelect: () => startDraft({ kind: 'effect', folderId: folder.id }) },
+                      { key: 'rename', icon: Pencil, label: t({ ko: '이름 바꾸기', en: 'Rename' }), onSelect: () => startDraft({ kind: 'rename', folderId: folder.id }, folder.name) },
+                      '-',
+                      { key: 'delete', icon: Trash2, label: t({ ko: '그룹 삭제', en: 'Delete group' }), destructive: true, onSelect: () => onDeleteFolder(folder) },
+                    ]}
+                  >
                     <SidebarItem
-                      className={cn('min-w-0 flex-1 font-semibold text-foreground', dropTarget === `folder:${folder.id}` && 'bg-primary/10')}
+                      className={cn('font-semibold text-foreground', dropTarget === `folder:${folder.id}` && 'bg-primary/10')}
                       icon={<ChevronRight className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-90')} />}
                       aria-expanded={open}
                       label={(
@@ -337,20 +346,7 @@ export function AudioSidebar({
                         onToggleFolder(folder.id, true)
                       })}
                     />
-                    {canEdit ? (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <IconButton variant="ghost" size="icon-xs" className="opacity-0 group-hover/folder:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100" label={t({ ko: '그룹 메뉴', en: 'Group menu' })}><MoreHorizontal /></IconButton>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onSelect={() => startDraft({ kind: 'effect', folderId: folder.id })}><Plus />{t({ ko: '효과음 추가', en: 'Add effect' })}</DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => startDraft({ kind: 'rename', folderId: folder.id }, folder.name)}><Pencil />{t({ ko: '이름 바꾸기', en: 'Rename' })}</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem variant="destructive" onSelect={() => onDeleteFolder(folder)}><Trash2 />{t({ ko: '그룹 삭제', en: 'Delete group' })}</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    ) : null}
-                  </div>
+                  </ActionContextMenu>
                   {open ? (
                     <>
                       {inside.map((group) => effectRow(group, 1, true))}

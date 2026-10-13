@@ -1,4 +1,5 @@
 import { BarChart3, ChevronDown, ChevronUp, Download, Ellipsis, Inbox, Layers, Pencil, Plus, Tags, Trash2, Upload, Wrench } from 'lucide-react'
+import { ActionMenuButton } from '@/components/ui/action-menu'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -142,19 +143,17 @@ export function PromptGroupActions({ onEditGroup, onDeleteGroup, onMoveGroupUp, 
   }
 
   return (
-    <div className="flex items-center gap-0.5">
-      <IconButton size="icon-xs" variant="ghost" onClick={() => onMoveGroupUp?.()} disabled={!onMoveGroupUp} label={t('prompts.components.prompt.sidebar.move.up')}>
-        <ChevronUp />
-      </IconButton>
-      <IconButton size="icon-xs" variant="ghost" onClick={() => onMoveGroupDown?.()} disabled={!onMoveGroupDown} label={t('prompts.components.prompt.sidebar.move.down')}>
-        <ChevronDown />
-      </IconButton>
-      <IconButton size="icon-xs" variant="ghost" onClick={() => onEditGroup?.()} disabled={!onEditGroup} label={t('prompts.components.prompt.sidebar.edit')}>
-        <Pencil />
-      </IconButton>
-      <IconButton size="icon-xs" variant="ghost" onClick={() => onDeleteGroup?.()} disabled={!onDeleteGroup} label={t('prompts.components.prompt.sidebar.delete')}>
-        <Trash2 />
-      </IconButton>
-    </div>
+    <ActionMenuButton
+      size="icon-xs"
+      className="text-muted-foreground"
+      label={t({ ko: '그룹 메뉴', en: 'Group menu' })}
+      entries={[
+        { key: 'up', label: t('prompts.components.prompt.sidebar.move.up'), icon: ChevronUp, disabled: !onMoveGroupUp, onSelect: () => onMoveGroupUp?.() },
+        { key: 'down', label: t('prompts.components.prompt.sidebar.move.down'), icon: ChevronDown, disabled: !onMoveGroupDown, onSelect: () => onMoveGroupDown?.() },
+        '-',
+        { key: 'edit', label: t('prompts.components.prompt.sidebar.edit'), icon: Pencil, disabled: !onEditGroup, onSelect: () => onEditGroup?.() },
+        { key: 'delete', label: t('prompts.components.prompt.sidebar.delete'), icon: Trash2, destructive: true, disabled: !onDeleteGroup, onSelect: () => onDeleteGroup?.() },
+      ]}
+    />
   )
 }

@@ -47,6 +47,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { Button } from '@/components/ui/button'
+import { ActionMenuButton } from '@/components/ui/action-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
@@ -950,6 +951,7 @@ export function WallpaperEditorPage() {
 
   const unsavedLabel = t({ ko: '저장 안 된 변경', en: 'Unsaved changes' })
   const allSelectedLocked = selectedWidgets.length > 0 && selectedWidgets.every((widget) => widget.locked)
+  const isLivePreset = Boolean(activePreset) && effectiveActivePresetId === effectiveLivePresetId
   const toolbar = (
     <PageToolbar
       start={(<>
@@ -966,33 +968,17 @@ export function WallpaperEditorPage() {
             <option key={preset.id} value={preset.id}>{preset.name}</option>
           ))}
         </Select>
-        {activePreset && effectiveActivePresetId === effectiveLivePresetId ? (
+        {isLivePreset ? (
           <Badge role="status" title={t({ ko: '지금 월페이퍼에 나오는 프리셋', en: 'Shown on the live wallpaper' })}>{t({ ko: '라이브', en: 'Live' })}</Badge>
-        ) : activePreset ? (
-          <IconButton
-            variant="ghost"
-            size="icon-sm"
-            disabled={!isAdmin || hasUnsavedPresetChanges || wallpaperPresetMutation.isPending}
-            onClick={handleMakeLive}
-            label={hasUnsavedPresetChanges ? t({ ko: '저장한 뒤에 라이브로 지정할 수 있어', en: 'Save first to make it live' }) : t({ ko: '라이브로 지정', en: 'Make live' })}
-          >
-            <Radio />
-          </IconButton>
         ) : null}
       </>)}
       actions={(
         <>
-          <IconButton variant="ghost" size="icon-sm" onClick={() => setIsTemplateModalOpen(true)} label={t({ ko: '템플릿', en: 'Templates' })}>
-            <LayoutTemplate />
-          </IconButton>
           <IconButton variant="ghost" size="icon-sm" disabled={!canUndo} onClick={undoLayoutEdit} label={t({ ko: '실행 취소 (Ctrl+Z)', en: 'Undo (Ctrl+Z)' })}>
             <Undo2 />
           </IconButton>
           <IconButton variant="ghost" size="icon-sm" disabled={!canRedo} onClick={redoLayoutEdit} label={t({ ko: '다시 실행 (Ctrl+Shift+Z)', en: 'Redo (Ctrl+Shift+Z)' })}>
             <Redo2 />
-          </IconButton>
-          <IconButton variant="ghost" size="icon-sm" active={snap} aria-pressed={snap} onClick={() => setSnap((current) => !current)} label={snap ? t({ ko: '스냅 켜짐 (Alt 누르면 잠시 끔)', en: 'Snap on (hold Alt to bypass)' }) : t({ ko: '스냅 꺼짐', en: 'Snap off' })}>
-            <Magnet />
           </IconButton>
           <div className="flex items-center">
             <IconButton variant="ghost" size="icon-sm" onClick={() => stepZoom(-1)} label={t({ ko: '축소', en: 'Zoom out' })}>
@@ -1015,14 +1001,6 @@ export function WallpaperEditorPage() {
               <ZoomIn />
             </IconButton>
           </div>
-          <IconButton asChild variant="ghost" size="icon-sm" label={t({ ko: '실행 미리보기', en: 'Live preview' })}>
-            <a href={draftRuntimePath} target="_blank" rel="noreferrer">
-              <Eye />
-            </a>
-          </IconButton>
-          <IconButton variant="ghost" size="icon-sm" disabled={!isAdmin} onClick={() => setIsLivelyOpen(true)} label={t({ ko: 'Lively 연결', en: 'Connect Lively' })}>
-            <MonitorPlay />
-          </IconButton>
           <IconButton
             ref={workspaceMenuAnchorRef}
             variant="ghost"
@@ -1073,9 +1051,17 @@ export function WallpaperEditorPage() {
   const selectionToolbar = selectedWidgets.length > 0 ? (
     <>
       <IconButton variant="ghost" size="icon-xs" label={t({ ko: '복제 (Ctrl+D)', en: 'Duplicate (Ctrl+D)' })} onClick={duplicateSelection}><CopyPlus /></IconButton>
-      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '왼쪽 정렬', en: 'Align left' })} onClick={() => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, 'left'))}><AlignStartVertical /></IconButton>
-      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '가운데 정렬', en: 'Center' })} onClick={() => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, 'hcenter'))}><AlignCenterVertical /></IconButton>
-      <IconButton variant="ghost" size="icon-xs" label={t({ ko: '위 정렬', en: 'Align top' })} onClick={() => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, 'top'))}><AlignStartHorizontal /></IconButton>
+      <ActionMenuButton
+        size="icon-xs"
+        icon={AlignStartVertical}
+        align="center"
+        label={t({ ko: '정렬', en: 'Align' })}
+        entries={[
+          { key: 'left', label: t({ ko: '왼쪽 정렬', en: 'Align left' }), icon: AlignStartVertical, onSelect: () => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, 'left')) },
+          { key: 'hcenter', label: t({ ko: '가운데 정렬', en: 'Center' }), icon: AlignCenterVertical, onSelect: () => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, 'hcenter')) },
+          { key: 'top', label: t({ ko: '위 정렬', en: 'Align top' }), icon: AlignStartHorizontal, onSelect: () => setLayoutPreset((current) => alignWallpaperWidgets(current, effectiveSelectedIds, 'top')) },
+        ]}
+      />
       <span className="mx-0.5 h-4 w-px bg-line" />
       <IconButton variant="ghost" size="icon-xs" label={t({ ko: '맨 앞으로 (Ctrl+Shift+])', en: 'Bring to front (Ctrl+Shift+])' })} onClick={() => setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, 'front'))}><BringToFront /></IconButton>
       <IconButton variant="ghost" size="icon-xs" label={t({ ko: '맨 뒤로 (Ctrl+Shift+[)', en: 'Send to back (Ctrl+Shift+[)' })} onClick={() => setLayoutPreset((current) => stackWallpaperWidgets(current, effectiveSelectedIds, 'back'))}><SendToBack /></IconButton>
@@ -1108,31 +1094,33 @@ export function WallpaperEditorPage() {
           onClose={() => setIsWorkspaceMenuOpen(false)}
           className="w-64 p-2"
         >
-          {[
-            { icon: Plus, label: t({ ko: '새 캔버스', en: 'New canvas' }), disabled: false, action: () => void handleCreateBlankCanvas() },
-            { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: !isAdmin || wallpaperPresetMutation.isPending, action: () => handleSavePreset({ saveAsNew: true }) },
-            { icon: Download, label: t({ ko: '파일로 내보내기', en: 'Export to file' }), disabled: false, action: handleExportFile },
-            { icon: Upload, label: t({ ko: '파일에서 가져오기', en: 'Import from file' }), disabled: false, action: () => importInputRef.current?.click() },
-            { icon: CalendarClock, label: t({ ko: '시간대별 월페이퍼', en: 'Wallpaper schedule' }), disabled: !isAdmin || savedPresets.length === 0 || !wallpaperSettingsQuery.data, action: () => setIsScheduleOpen(true) },
-            { icon: ClipboardCopy, label: t({ ko: '월페이퍼 URL 복사', en: 'Copy wallpaper URL' }), disabled: !activePresetRuntimePath, action: () => void handleCopyRuntimeUrl() },
-            { icon: ExternalLink, label: t({ ko: '저장 월페이퍼 열기', en: 'Open saved wallpaper' }), disabled: !activePresetRuntimePath, action: () => activePresetRuntimePath && window.open(activePresetRuntimePath, '_blank', 'noopener,noreferrer') },
-            { icon: Trash2, label: t({ ko: '프리셋 삭제', en: 'Delete preset' }), disabled: !isAdmin || !activePreset || wallpaperPresetMutation.isPending, action: handleDeletePreset, destructive: true },
-          ].map(({ icon: Icon, label, disabled, action, destructive }) => (
-            <Button
-              key={label}
-              type="button"
-              variant="nav"
-              disabled={disabled}
-              className={destructive ? 'gap-3 text-destructive hover:bg-destructive-soft hover:text-destructive-soft-foreground' : 'gap-3 text-foreground'}
-              onClick={() => {
-                setIsWorkspaceMenuOpen(false)
-                action()
-              }}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </Button>
-          ))}
+          <EditorMenuItems
+            items={[
+              { icon: Plus, label: t({ ko: '새 캔버스', en: 'New canvas' }), action: () => void handleCreateBlankCanvas() },
+              { icon: LayoutTemplate, label: t({ ko: '템플릿', en: 'Templates' }), action: () => setIsTemplateModalOpen(true) },
+              'separator',
+              { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: !isAdmin || wallpaperPresetMutation.isPending, action: () => handleSavePreset({ saveAsNew: true }) },
+              { icon: Download, label: t({ ko: '파일로 내보내기', en: 'Export to file' }), action: handleExportFile },
+              { icon: Upload, label: t({ ko: '파일에서 가져오기', en: 'Import from file' }), action: () => importInputRef.current?.click() },
+              'separator',
+              ...(activePreset && !isLivePreset ? [{
+                icon: Radio,
+                label: hasUnsavedPresetChanges ? t({ ko: '저장 후 라이브로 지정', en: 'Save first to make live' }) : t({ ko: '라이브로 지정', en: 'Make live' }),
+                disabled: !isAdmin || hasUnsavedPresetChanges || wallpaperPresetMutation.isPending,
+                action: handleMakeLive,
+              }] : []),
+              { icon: Eye, label: t({ ko: '실행 미리보기', en: 'Live preview' }), action: () => window.open(draftRuntimePath, '_blank', 'noopener,noreferrer') },
+              { icon: MonitorPlay, label: t({ ko: 'Lively 연결', en: 'Connect Lively' }), disabled: !isAdmin, action: () => setIsLivelyOpen(true) },
+              { icon: CalendarClock, label: t({ ko: '시간대별 월페이퍼', en: 'Wallpaper schedule' }), disabled: !isAdmin || savedPresets.length === 0 || !wallpaperSettingsQuery.data, action: () => setIsScheduleOpen(true) },
+              { icon: ClipboardCopy, label: t({ ko: '월페이퍼 URL 복사', en: 'Copy wallpaper URL' }), disabled: !activePresetRuntimePath, action: () => void handleCopyRuntimeUrl() },
+              { icon: ExternalLink, label: t({ ko: '저장 월페이퍼 열기', en: 'Open saved wallpaper' }), disabled: !activePresetRuntimePath, action: () => activePresetRuntimePath && window.open(activePresetRuntimePath, '_blank', 'noopener,noreferrer') },
+              'separator',
+              { icon: Magnet, label: snap ? t({ ko: '스냅 끄기', en: 'Turn off snap' }) : t({ ko: '스냅 켜기', en: 'Turn on snap' }), action: () => setSnap((current) => !current) },
+              'separator',
+              { icon: Trash2, label: t({ ko: '프리셋 삭제', en: 'Delete preset' }), disabled: !isAdmin || !activePreset || wallpaperPresetMutation.isPending, action: handleDeletePreset, destructive: true },
+            ]}
+            onDone={() => setIsWorkspaceMenuOpen(false)}
+          />
         </AnchoredPopup>
         <AnchoredPopup
           open={isZoomMenuOpen}

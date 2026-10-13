@@ -14,12 +14,10 @@ import { CHAT_ADMIN_SETTINGS_QUERY_KEY, CHAT_STATUS_QUERY_KEY, getChatAdminSetti
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 import { SettingsRowsSkeleton } from './settings-rows'
+import { useSettingsAdvanced } from './settings-advanced'
 
-/**
- * Settings › LLM › 연결: whether save_lore saves right away and the lorebooks' second key language (기억), who answers
- * the chats' web search (웹), and what each chat answer keeps of what it was sent (진단, shown from a reply's 문맥 button).
- */
-export function ChatDiagnosticsSettings() {
+/** The chat-wide options and their save, shared by the groups below. */
+function useChatOptions() {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -34,9 +32,14 @@ export function ChatDiagnosticsSettings() {
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
-  const diagnostics = settingsQuery.data?.diagnostics
+  return { settingsQuery, settingsMutation }
+}
 
-  return <>
+/** Settings › 채팅 › 자원, by the lorebooks: whether save_lore saves right away and the lorebooks' second key language. */
+export function ChatMemorySettings() {
+  const { t } = useI18n()
+  const { settingsQuery, settingsMutation } = useChatOptions()
+  return (
     <RowGroup heading={t({ ko: '기억', en: 'Memory' })}>
       {settingsQuery.data ? (
         <SettingsSwitchRow label={t({ ko: '로어 자동 저장', en: 'Save lore automatically' })} checked={settingsQuery.data.loreAutoSave} disabled={settingsMutation.isPending}
@@ -47,27 +50,50 @@ export function ChatDiagnosticsSettings() {
           onChange={(loreKeyLanguage) => settingsMutation.mutate({ loreKeyLanguage })} />
       ) : null}
     </RowGroup>
-    <RowGroup heading={t({ ko: '웹', en: 'Web' })}>
+  )
+}
+
+/** Settings › 채팅 › 자원, by the tool presets: who answers the chats' web search. */
+export function ChatWebSettings() {
+  const { t } = useI18n()
+  const { settingsQuery, settingsMutation } = useChatOptions()
+  return (
+    <RowGroup heading={t({ ko: '웹 검색', en: 'Web search' })}>
       {settingsQuery.data ? (
         <WebResearchRows value={settingsQuery.data.webResearch} disabled={settingsMutation.isPending} onChange={(webResearch) => settingsMutation.mutate({ webResearch })} />
       ) : settingsQuery.isError ? null : <SettingsRowsSkeleton rows={1} />}
     </RowGroup>
+  )
+}
+
+/**
+ * Settings › LLM › 기록: what each chat answer keeps of what it was sent (shown from a reply's 문맥 button). Raw capture
+ * and how much of it is kept are advanced.
+ */
+export function ChatDiagnosticsSettings() {
+  const { t } = useI18n()
+  const advanced = useSettingsAdvanced()
+  const { settingsQuery, settingsMutation } = useChatOptions()
+  const diagnostics = settingsQuery.data?.diagnostics
+  return (
     <RowGroup heading={t({ ko: '진단', en: 'Diagnostics' })}>
       {diagnostics ? <>
         <SettingsSwitchRow label={t({ ko: '답변 진단', en: 'Answer diagnostics' })} checked={diagnostics.enabled} disabled={settingsMutation.isPending}
           onCheckedChange={(enabled) => settingsMutation.mutate({ diagnostics: { enabled } })} />
-        <SettingsSwitchRow label={t({ ko: '원문 기록', en: 'Capture raw requests' })} checked={diagnostics.captureRaw} disabled={settingsMutation.isPending}
-          onCheckedChange={(captureRaw) => settingsMutation.mutate({ diagnostics: { captureRaw } })} />
-        <SettingRow label={t({ ko: '채팅당 보관', en: 'Keep per chat' })} className={!diagnostics.captureRaw ? 'opacity-60' : undefined}>
-          <NumberStepperInput variant="settings" className="w-24" min={1} max={200} precision={0} value={diagnostics.captureLimit}
-            aria-label={t({ ko: '채팅당 보관', en: 'Keep per chat' })} disabled={settingsMutation.isPending || !diagnostics.captureRaw}
-            onValueCommit={(value) => { const captureLimit = Number(value); if (captureLimit !== diagnostics.captureLimit) settingsMutation.mutate({ diagnostics: { captureLimit } }) }} />
-        </SettingRow>
+        {advanced ? <>
+          <SettingsSwitchRow label={t({ ko: '원문 기록', en: 'Capture raw requests' })} checked={diagnostics.captureRaw} disabled={settingsMutation.isPending}
+            onCheckedChange={(captureRaw) => settingsMutation.mutate({ diagnostics: { captureRaw } })} />
+          <SettingRow label={t({ ko: '채팅당 보관', en: 'Keep per chat' })} className={!diagnostics.captureRaw ? 'opacity-60' : undefined}>
+            <NumberStepperInput variant="settings" className="w-24" min={1} max={200} precision={0} value={diagnostics.captureLimit}
+              aria-label={t({ ko: '채팅당 보관', en: 'Keep per chat' })} disabled={settingsMutation.isPending || !diagnostics.captureRaw}
+              onValueCommit={(value) => { const captureLimit = Number(value); if (captureLimit !== diagnostics.captureLimit) settingsMutation.mutate({ diagnostics: { captureLimit } }) }} />
+          </SettingRow>
+        </> : null}
       </> : settingsQuery.isError ? (
         <p className="py-3 text-sm text-destructive">{getErrorMessage(settingsQuery.error, t({ ko: '설정을 불러오지 못했어.', en: 'Could not load settings.' }))}</p>
-      ) : <SettingsRowsSkeleton rows={3} />}
+      ) : <SettingsRowsSkeleton rows={1} />}
     </RowGroup>
-  </>
+  )
 }
 
 /**

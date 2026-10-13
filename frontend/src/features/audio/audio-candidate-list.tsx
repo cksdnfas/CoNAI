@@ -1,5 +1,6 @@
 import { useEffect, useRef, type DragEvent } from 'react'
 import { Check, CirclePause, Download, FolderInput, LoaderCircle, Pause, Play, RotateCcw, TriangleAlert, X } from 'lucide-react'
+import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -135,69 +136,78 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
   useEffect(() => {
     if (selected) ref.current?.scrollIntoView({ block: 'nearest' })
   }, [selected])
+  const entries: ActionMenuEntry[] = [
+    canEdit && !onMove && {
+      key: 'reject',
+      icon: CirclePause,
+      label: `${t({ ko: '보류', en: 'Reject' })} (${shortcutLabel(shortcuts.reject)})`,
+      onSelect: () => onReview(candidate.review === 'rejected' ? 'pending' : 'rejected'),
+    },
+    { key: 'export', icon: Download, label: t({ ko: '내보내기', en: 'Export' }), onSelect: onDownload },
+  ]
 
   return (
-    <div
-      ref={ref}
-      role="option"
-      aria-selected={selected}
-      data-candidate-id={candidate.id}
-      onClick={onSelect}
-      draggable={canEdit && Boolean(dragIds)}
-      onDragStart={(event) => {
-        if (!dragIds) return
-        event.dataTransfer.setData(audioDragType(candidate.project_id), JSON.stringify(dragIds()))
-        event.dataTransfer.effectAllowed = 'move'
-      }}
-      className={cn(
-        onCheck ? CHECK_ROW_GRID : ROW_GRID,
-        'group min-h-14 cursor-pointer border-b border-line py-2 pr-1 transition-colors hover:bg-fill/60',
-        selected && 'bg-fill shadow-[inset_2px_0_0_var(--primary)] hover:bg-fill',
-      )}
-      style={depth > 0 ? { paddingLeft: `${depth * 1.5}rem` } : undefined}
-    >
-      {onCheck ? (
-        <Checkbox
-          aria-label={t({ ko: '고르기', en: 'Pick' })}
-          checked={checked === true}
-          onClick={(event) => event.stopPropagation()}
-          onCheckedChange={(value) => onCheck(value === true)}
-        />
-      ) : null}
-      <IconButton
-        variant={playing ? 'secondary' : 'ghost'}
-        size="icon-sm"
-        className="rounded-full"
-        label={`${playing ? t({ ko: '정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} (${shortcutLabel(shortcuts.play)})`}
-        onClick={(event) => { event.stopPropagation(); onPlay() }}
+    <ActionContextMenu entries={entries}>
+      <div
+        ref={ref}
+        role="option"
+        aria-selected={selected}
+        data-candidate-id={candidate.id}
+        onClick={onSelect}
+        draggable={canEdit && Boolean(dragIds)}
+        onDragStart={(event) => {
+          if (!dragIds) return
+          event.dataTransfer.setData(audioDragType(candidate.project_id), JSON.stringify(dragIds()))
+          event.dataTransfer.effectAllowed = 'move'
+        }}
+        className={cn(
+          onCheck ? CHECK_ROW_GRID : ROW_GRID,
+          'group min-h-14 cursor-pointer border-b border-line py-2 pr-1 transition-colors [-webkit-touch-callout:none] hover:bg-fill/60',
+          selected && 'bg-fill shadow-[inset_2px_0_0_var(--primary)] hover:bg-fill',
+        )}
+        style={depth > 0 ? { paddingLeft: `${depth * 1.5}rem` } : undefined}
       >
-        {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}
-      </IconButton>
-      <WaveformThumb candidateId={candidate.id} fileHash={candidate.file_hash} progress={progress} duration={player.key === candidate.id && player.duration > 0 ? player.duration : candidate.file.duration ?? 0} onToggle={onPlay} onSeek={(seconds) => {
-        if (audioPlayer.state.key === candidate.id && audioPlayer.state.playing) audioPlayer.seek(seconds)
-        else audioPlayer.play(candidate.id, { start: seconds })
-      }} className="hidden @3xl:block" />
-      <div className="min-w-0">
-        <p className={cn('truncate text-sm', depth > 0 && 'text-muted-foreground', selected && 'font-semibold text-foreground')}>{candidate.name}</p>
-        <p className="truncate font-mono text-2xs text-muted-foreground">{detail(candidate)}<span className="@xl:hidden"> · {formatSeconds(candidate.file.duration)}</span></p>
-      </div>
-      <span className="hidden text-right font-mono text-xs text-muted-foreground tabular-nums @xl:block">{formatSeconds(candidate.file.duration)}</span>
-      <span className="hidden @xl:block"><ReviewPill review={candidate.review} /></span>
-      <div className="flex items-center gap-0.5">
-        <span className="@xl:hidden"><ReviewPill review={candidate.review} /></span>
-        {canEdit && onMove ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <IconButton variant="ghost" size="icon-sm" label={t({ ko: '효과음으로 옮기기', en: 'Move to an effect' })} onClick={(event) => event.stopPropagation()}><FolderInput /></IconButton>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
-              <DropdownMenuLabel>{t({ ko: '옮길 효과음', en: 'Move to' })}</DropdownMenuLabel>
-              {(moveTargets ?? []).length === 0 ? <DropdownMenuItem disabled>{t({ ko: '효과음 없음', en: 'No effects' })}</DropdownMenuItem> : null}
-              {(moveTargets ?? []).map((group) => <DropdownMenuItem key={group.id} onSelect={() => onMove(group)}>{group.name}</DropdownMenuItem>)}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : canEdit ? (
-          <>
+        {onCheck ? (
+          <Checkbox
+            aria-label={t({ ko: '고르기', en: 'Pick' })}
+            checked={checked === true}
+            onClick={(event) => event.stopPropagation()}
+            onCheckedChange={(value) => onCheck(value === true)}
+          />
+        ) : null}
+        <IconButton
+          variant={playing ? 'secondary' : 'ghost'}
+          size="icon-sm"
+          className="rounded-full"
+          label={`${playing ? t({ ko: '정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} (${shortcutLabel(shortcuts.play)})`}
+          onClick={(event) => { event.stopPropagation(); onPlay() }}
+        >
+          {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}
+        </IconButton>
+        <WaveformThumb candidateId={candidate.id} fileHash={candidate.file_hash} progress={progress} duration={player.key === candidate.id && player.duration > 0 ? player.duration : candidate.file.duration ?? 0} onToggle={onPlay} onSeek={(seconds) => {
+          if (audioPlayer.state.key === candidate.id && audioPlayer.state.playing) audioPlayer.seek(seconds)
+          else audioPlayer.play(candidate.id, { start: seconds })
+        }} className="hidden @3xl:block" />
+        <div className="min-w-0">
+          <p className={cn('truncate text-sm', depth > 0 && 'text-muted-foreground', selected && 'font-semibold text-foreground')}>{candidate.name}</p>
+          <p className="truncate font-mono text-2xs text-muted-foreground">{detail(candidate)}<span className="@xl:hidden"> · {formatSeconds(candidate.file.duration)}</span></p>
+        </div>
+        <span className="hidden text-right font-mono text-xs text-muted-foreground tabular-nums @xl:block">{formatSeconds(candidate.file.duration)}</span>
+        <span className="hidden @xl:block"><ReviewPill review={candidate.review} /></span>
+        <div className="flex items-center gap-0.5">
+          <span className="@xl:hidden"><ReviewPill review={candidate.review} /></span>
+          {canEdit && onMove ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton variant="ghost" size="icon-sm" label={t({ ko: '효과음으로 옮기기', en: 'Move to an effect' })} onClick={(event) => event.stopPropagation()}><FolderInput /></IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+                <DropdownMenuLabel>{t({ ko: '옮길 효과음', en: 'Move to' })}</DropdownMenuLabel>
+                {(moveTargets ?? []).length === 0 ? <DropdownMenuItem disabled>{t({ ko: '효과음 없음', en: 'No effects' })}</DropdownMenuItem> : null}
+                {(moveTargets ?? []).map((group) => <DropdownMenuItem key={group.id} onSelect={() => onMove(group)}>{group.name}</DropdownMenuItem>)}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : canEdit ? (
             <IconButton
               variant="ghost"
               size="icon-sm"
@@ -205,18 +215,13 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
               label={`${t({ ko: '채택', en: 'Adopt' })} (${shortcutLabel(shortcuts.select)})`}
               onClick={(event) => { event.stopPropagation(); onReview(candidate.review === 'selected' ? 'pending' : 'selected') }}
             ><Check /></IconButton>
-            <IconButton
-              variant="ghost"
-              size="icon-sm"
-              className={cn('hidden @xl:inline-flex', candidate.review === 'rejected' && 'text-foreground')}
-              label={`${t({ ko: '보류', en: 'Reject' })} (${shortcutLabel(shortcuts.reject)})`}
-              onClick={(event) => { event.stopPropagation(); onReview(candidate.review === 'rejected' ? 'pending' : 'rejected') }}
-            ><CirclePause /></IconButton>
-          </>
-        ) : null}
-        <IconButton variant="ghost" size="icon-sm" className="hidden @xl:inline-flex" label={t({ ko: '내보내기', en: 'Export' })} onClick={(event) => { event.stopPropagation(); onDownload() }}><Download /></IconButton>
+          ) : null}
+          <span className="contents" onClick={(event) => event.stopPropagation()}>
+            <ActionMenuButton entries={entries} label={t({ ko: '더 보기', en: 'More' })} />
+          </span>
+        </div>
       </div>
-    </div>
+    </ActionContextMenu>
   )
 }
 

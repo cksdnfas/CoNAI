@@ -1296,6 +1296,17 @@ router.post('/admin/model-slots/:slotId/default', requireAdmin, (req: Request, r
   res.json({ success: true, data: slot })
 })
 
+/** `{ on }`: makes the row the default judge, or clears it. */
+router.post('/admin/model-slots/:slotId/default-judge', requireAdmin, (req: Request, res: Response) => {
+  const slotId = parseId(req.params.slotId)
+  if (slotId === null) { sendRouteBadRequest(res, 'Invalid model slot id'); return }
+  try {
+    const slot = ModelSlotStore.setDefaultJudge(slotId, (req.body ?? {}).on !== false)
+    if (!slot) { res.status(404).json({ success: false, error: '모델을 찾을 수 없어.' }); return }
+    res.json({ success: true, data: slot })
+  } catch (error) { sendChatError(res, error) }
+})
+
 router.delete('/admin/model-slots/:slotId', requireAdmin, (req: Request, res: Response) => {
   const slotId = parseId(req.params.slotId)
   if (slotId === null) { sendRouteBadRequest(res, 'Invalid model slot id'); return }
@@ -1401,8 +1412,8 @@ router.post('/admin/judge-presets/test', requireAdmin, asyncHandler(async (req: 
     const presetId = parseId(body.presetId)
     const preset = body.preset ? ChatJudgePresetStore.draft(body.preset) : presetId === null ? null : ChatJudgePresetStore.find(presetId)
     if (!preset) { res.status(404).json({ success: false, error: '판단 프리셋을 찾을 수 없어.' }); return }
-    // The model picked for the test, else the preset's, else the profile's own.
-    const target = ModelSlotStore.target(parseId(body.slotId) ?? preset.modelSlotId ?? profile.judgeSlotId)
+    // The model picked for the test, else the preset's, else the profile's own, else the default judge.
+    const target = ModelSlotStore.target(parseId(body.slotId) ?? preset.modelSlotId ?? profile.judgeSlotId) ?? ModelSlotStore.defaultJudgeTarget()
     if (!target) { res.status(400).json({ success: false, error: '판단 모델을 골라줘.' }); return }
     const { providerName, model } = target
     const turns = Math.min(20, Math.max(1, Number(body.turns) || 6))

@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { GROW_TEXTAREA } from './chat-profile-editor-fields'
+import { useSettingsAdvanced } from './settings-advanced'
 
 export type JudgeScopes = { room: ChatJudgeRoomSettings; context: ChatJudgeContextSettings; fields: ChatJudgeFieldSettings; assets: ChatJudgeAssetSettings }
 type ScopePaneProps = { value: JudgeScopes; onChange: (patch: Partial<JudgeScopes>) => void }
@@ -35,8 +36,10 @@ function ThresholdField({ label, value, onChange }: { label: string; value: numb
   )
 }
 
+/** How many messages a scope reads (advanced). */
 function WindowRow({ value, onChange }: { value: number; onChange: (value: number) => void }) {
   const { t } = useI18n()
+  if (!useSettingsAdvanced()) return null
   return (
     <SettingRow label={t({ ko: '읽을 메시지', en: 'Messages read' })}>
       <NumberStepperInput variant="settings" className="w-32" min={1} max={30} step={1} value={value} onValueCommit={(next) => onChange(Number(next) || 1)} aria-label={t({ ko: '읽을 메시지', en: 'Messages read' })} />
@@ -44,12 +47,13 @@ function WindowRow({ value, onChange }: { value: number; onChange: (value: numbe
   )
 }
 
-/** A switch row; its settings show under it while it is on. */
+/** A switch row; its settings (advanced) show under it while it is on. */
 function ScopeSwitch({ label, checked, onChange, children }: { label: string; checked: boolean; onChange: (checked: boolean) => void; children?: ReactNode }) {
+  const advanced = useSettingsAdvanced()
   return (
     <div className="border-b border-line last:border-b-0">
       <SettingsSwitchRow className="border-b-0" label={label} checked={checked} onCheckedChange={onChange} />
-      {checked && children ? <div className="space-y-3 pb-4">{children}</div> : null}
+      {checked && advanced && children ? <div className="space-y-3 pb-4">{children}</div> : null}
     </div>
   )
 }
@@ -113,6 +117,7 @@ export function JudgeContextPane({ value, onChange }: ScopePaneProps) {
 /** Status fields with a fixed value list (emotion, place…) the reply left alone, settled after it. */
 export function JudgeFieldsPane({ value, onChange }: ScopePaneProps) {
   const { t } = useI18n()
+  const advanced = useSettingsAdvanced()
   const { fields } = value
   return (
     <div>
@@ -121,7 +126,7 @@ export function JudgeFieldsPane({ value, onChange }: ScopePaneProps) {
         info={t({ ko: '답변이 안 건드린 선택형 상태 필드(감정, 장소 같은)를 답변 뒤에 판단해서 바꿔. 스프라이트도 같이 바뀌어.', en: 'After a reply, settles the status fields with a fixed value list (emotion, place…) the reply left alone. Sprites follow.' })}
         actions={<Switch checked={fields.enabled} onCheckedChange={(enabled) => onChange({ fields: { ...fields, enabled } })} aria-label={t({ ko: '상태 필드', en: 'Status fields' })} />}
       />
-      {fields.enabled ? (
+      {fields.enabled && advanced ? (
         <div className="space-y-3 border-t border-line">
           <WindowRow value={fields.window} onChange={(window) => onChange({ fields: { ...fields, window } })} />
           <ThresholdField label={t({ ko: '바꿀 확률', en: 'Change at' })} value={fields.threshold} onChange={(threshold) => onChange({ fields: { ...fields, threshold } })} />

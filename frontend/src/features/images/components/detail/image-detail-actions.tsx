@@ -1,14 +1,15 @@
 import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCcw, ScanSearch } from 'lucide-react'
+import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { ImageRecord } from '@/types/image'
 import type { ImageDetailSequence } from '../../use-image-detail-sequence'
 import { ImageDownloadTriggerButton } from '../image-download-trigger-button'
-import { ImageDeleteAction } from './image-delete-action'
+import { useImageDeleteMenuAction } from './image-delete-action'
 import { ImageEditAction } from './image-edit-action'
 import { ImageGroupAssignAction } from './image-group-assign-action'
-import { ImageMetadataEditAction } from './image-metadata-edit-action'
-import { ImageSpriteAction } from './image-sprite-action'
+import { useImageMetadataEditMenuAction } from './image-metadata-edit-action'
+import { useImageSpriteMenuAction } from './image-sprite-action'
 
 interface ImageDetailActionsProps {
   downloadUrl?: string | null
@@ -27,13 +28,23 @@ interface ImageDetailActionsProps {
 
 /**
  * Top bar of the image page, same arrangement as the viewer: back · ‹ N / total › on the left, icon actions on the
- * right (similar scan, group, metadata, editor, download, delete). Flat row with a hairline below.
+ * right (group, editor, download, then ⋯ with metadata, similar scan, sprites and delete). Flat row with a hairline below.
  */
 export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, onRefresh, onDeleted, sequence, similarity }: ImageDetailActionsProps) {
   const { t, formatNumber } = useI18n()
   const positionLabel = sequence
     ? `${formatNumber(sequence.index + 1)} / ${formatNumber(Math.max(sequence.total ?? 0, sequence.loadedCount))}${sequence.total === null && sequence.hasMore ? '+' : ''}`
     : null
+  const metadataAction = useImageMetadataEditMenuAction(image)
+  const spriteAction = useImageSpriteMenuAction(image)
+  const deleteAction = useImageDeleteMenuAction(image, onDeleted)
+  const moreEntries: ActionMenuEntry[] = [
+    metadataAction,
+    similarity?.available ? { key: 'similarity', icon: ScanSearch, label: t({ ko: '유사/중복 검사', en: 'Check similar/duplicates' }), onSelect: similarity.onRequest } : null,
+    spriteAction,
+    '-',
+    deleteAction,
+  ]
 
   return (
     <div className="flex min-h-14 flex-wrap items-center gap-x-1 gap-y-2 border-b border-line py-2">
@@ -59,23 +70,10 @@ export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, o
             <RefreshCcw className={isRefreshing ? 'size-4 animate-spin' : 'size-4'} />
           </IconButton>
         ) : null}
-        {similarity?.available ? (
-          <IconButton
-            size="icon-sm"
-            variant="ghost"
-            active={similarity.active}
-            onClick={similarity.onRequest}
-            label={t({ ko: '유사/중복 검사', en: 'Check similar/duplicates' })}
-          >
-            <ScanSearch className="size-4" />
-          </IconButton>
-        ) : null}
         <ImageGroupAssignAction image={image} variant="ghost" />
-        <ImageMetadataEditAction image={image} />
         <ImageEditAction image={image} variant="ghost" />
-        <ImageSpriteAction image={image} />
         {downloadUrl ? <ImageDownloadTriggerButton image={image} variant="ghost" size="icon-sm" /> : null}
-        <ImageDeleteAction image={image} variant="ghost" onDeleted={onDeleted} />
+        <ActionMenuButton entries={moreEntries} label={t({ ko: '더 보기', en: 'More' })} variant="ghost" size="icon-sm" />
       </div>
     </div>
   )

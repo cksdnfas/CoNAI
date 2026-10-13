@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Trash2 } from 'lucide-react'
+import type { ActionMenuAction } from '@/components/ui/action-menu'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -28,6 +29,28 @@ export function useCanDeleteImages() {
 
 /** Move one image to the Recycle Bin after a destructive confirm. Renders nothing without the permission. */
 export function ImageDeleteAction({ image, className, variant = 'secondary', onDeleted }: ImageDeleteActionProps) {
+  const action = useImageDeleteMenuAction(image, onDeleted)
+
+  if (!action) {
+    return null
+  }
+
+  return (
+    <IconButton
+      label={action.label}
+      size="icon-sm"
+      variant={variant}
+      className={cn(variant !== 'overlay' && 'text-destructive hover:text-destructive', className)}
+      onClick={action.onSelect}
+      disabled={action.disabled}
+    >
+      <Trash2 className="h-4 w-4" />
+    </IconButton>
+  )
+}
+
+/** The same deletion as a ⋯ menu entry (destructive, confirm first); null without the permission. */
+export function useImageDeleteMenuAction(image: ImageRecord | undefined, onDeleted?: (compositeHash: string) => void): (ActionMenuAction & { label: string }) | null {
   const queryClient = useQueryClient()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
@@ -79,18 +102,12 @@ export function ImageDeleteAction({ image, className, variant = 'secondary', onD
     }
   }
 
-  const label = isDeleting ? t({ ko: '삭제 중', en: 'Deleting' }) : t({ ko: '휴지통으로 보내기', en: 'Move to Recycle Bin' })
-
-  return (
-    <IconButton
-      label={label}
-      size="icon-sm"
-      variant={variant}
-      className={cn(variant !== 'overlay' && 'text-destructive hover:text-destructive', className)}
-      onClick={() => void handleDelete()}
-      disabled={isDeleting}
-    >
-      <Trash2 className="h-4 w-4" />
-    </IconButton>
-  )
+  return {
+    key: 'delete',
+    icon: Trash2,
+    label: isDeleting ? t({ ko: '삭제 중', en: 'Deleting' }) : t({ ko: '휴지통으로 보내기', en: 'Move to Recycle Bin' }),
+    destructive: true,
+    disabled: isDeleting,
+    onSelect: () => void handleDelete(),
+  }
 }

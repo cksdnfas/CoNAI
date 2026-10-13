@@ -29,6 +29,7 @@ import type {
 import type { GeneralPreferenceSection } from './components/general-preferences-sections'
 import { SettingsSaveBar } from './components/settings-save-bar'
 import { SettingsTabNav } from './components/settings-tab-nav'
+import { SettingsAdvancedSwitch } from './components/settings-advanced'
 import { areSettingsDraftsEqual, saveSettingsDraftSections, type SettingsDraftSection } from './settings-draft-sections'
 import { parseSettingsTab, SETTINGS_TAB_LABELS, type SettingsTab } from './settings-tabs'
 import { useFolderSettingsTab } from './use-folder-settings-tab'
@@ -125,6 +126,8 @@ const GENERAL_SECTION_TABS: Record<GeneralPreferenceSection, SettingsTab> = {
 }
 
 const GENERAL_SECTIONS = Object.keys(GENERAL_SECTION_FIELDS) as GeneralPreferenceSection[]
+/** Sections with fields behind the shared 고급 switch. */
+const ADVANCED_TABS = new Set<SettingsTab>(['llm', 'chat', 'posts'])
 
 function pickGeneralFields(settings: GeneralSettings, fields: ReadonlyArray<keyof GeneralSettings>): Partial<GeneralSettings> {
   return Object.fromEntries(fields.map((field) => [field, settings[field]])) as Partial<GeneralSettings>
@@ -677,7 +680,7 @@ export function SettingsPage() {
       sidebarLabel={t({ ko: '설정 항목', en: 'Settings sections' })}
       sidebar={<SettingsTabNav activeTab={activeTab} onChange={setActiveTab} />}
       sidebarFooter={<span className="tabular-nums" title={APP_BRAND_TOOLTIP}>{APP_VERSION_LABEL}</span>}
-      toolbar={<PageToolbar title={t(SETTINGS_TAB_LABELS[activeTab])} />}
+      toolbar={<PageToolbar title={t(SETTINGS_TAB_LABELS[activeTab])} actions={ADVANCED_TABS.has(activeTab) ? <SettingsAdvancedSwitch /> : undefined} />}
     >
       <div>
         <Suspense fallback={<SettingsSectionFallback />}>

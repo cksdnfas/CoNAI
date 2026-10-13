@@ -11,11 +11,13 @@ import { CHAT_JUDGE_PRESETS_QUERY_KEY, createChatJudgePreset, importChatJudgePre
 import { CHAT_ADMIN_PROFILES_QUERY_KEY } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatJudgePresetEditorModal } from './chat-judge-preset-editor-modal'
+import { useDefaultJudge } from './chat-judge-connection-select'
 import { readChatToolPresetFile } from './chat-tool-preset-file'
 
 /** Settings › Chat › 자원: the judge presets (questions a decision model answers about chat turns, group rooms, status fields and assets). */
 export function ChatJudgePresetGroup({ editor, setEditor }: { editor: { preset: ChatJudgePreset | null } | null; setEditor: (editor: { preset: ChatJudgePreset | null } | null) => void }) {
   const { t } = useI18n()
+  const defaultJudge = useDefaultJudge()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const importRef = useRef<HTMLInputElement>(null)
@@ -74,7 +76,7 @@ export function ChatJudgePresetGroup({ editor, setEditor }: { editor: { preset: 
             name={preset.name}
             extra={(() => {
               const missing = [
-                preset.modelSlotId ? null : t({ ko: '판단 모델 없음', en: 'No judge model' }),
+                preset.modelSlotId || defaultJudge !== null ? null : t({ ko: '판단 모델 없음', en: 'No judge model' }),
                 preset.profiles.length === 0 && preset.rooms.length === 0 ? t({ ko: '쓰는 프로필·방 없음', en: 'No profile or room uses it' }) : null,
               ].filter(Boolean)
               return missing.length > 0 ? <ResourceRowStatus tip={missing.join(' · ')}>{t({ ko: '미연결', en: 'Not linked' })}</ResourceRowStatus> : null

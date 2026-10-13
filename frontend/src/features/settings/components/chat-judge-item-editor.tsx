@@ -13,6 +13,7 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
+import { useSettingsAdvanced } from './settings-advanced'
 import { cn } from '@/lib/utils'
 import { GROW_TEXTAREA } from './chat-profile-editor-fields'
 import { EditorGroup } from '@/components/ui/editor-group'
@@ -98,6 +99,7 @@ export function ChatJudgeItemPane({ item, onChange, onRemove, testTurns }: {
   testTurns: ChatJudgeTestTurn[] | null
 }) {
   const { t } = useI18n()
+  const advanced = useSettingsAdvanced()
   const before = item.stage === 'before'
   const summary = testTurns ? itemTestSummary(item, testTurns) : null
   const uncertainOptions: Array<{ value: ChatJudgeUncertain; label: string }> = [
@@ -123,19 +125,19 @@ export function ChatJudgeItemPane({ item, onChange, onRemove, testTurns }: {
           <Field label={t({ ko: '이름', en: 'Name' })}>
             <Input variant="settings" value={item.name} maxLength={40} onChange={(event) => onChange({ name: event.target.value })} />
           </Field>
-          <Field label={t({ ko: '종류', en: 'Kind' })}>
+          {advanced ? <Field label={t({ ko: '종류', en: 'Kind' })}>
             <SegmentedControl
               value={item.kind}
               onChange={(kind) => onChange({ kind: kind as ChatJudgeItem['kind'], ...(kind === 'choice' && item.options.length === 0 ? { options: [{ label: 'yes', description: '', yes: true }, { label: 'no', description: '', yes: false }] } : {}) })}
               items={[{ value: 'noul', label: t({ ko: '예/아니오', en: 'Yes/no' }) }, { value: 'choice', label: t({ ko: '선택', en: 'Choice' }) }]}
               size="sm"
             />
-          </Field>
+          </Field> : null}
         </div>
         <Field label={t({ ko: '질문', en: 'Question' })}>
           <Textarea variant="settings" className={cn(GROW_TEXTAREA, 'font-mono text-xs')} value={item.instructions} maxLength={2000} placeholder="Did the user …?" onChange={(event) => onChange({ instructions: event.target.value })} />
         </Field>
-        {item.kind === 'noul' ? (
+        {item.kind === 'noul' ? (advanced ? (
           <div className="grid gap-3 md:grid-cols-2">
             <Field label={t({ ko: '예 기준', en: 'Yes looks like' })}>
               <Textarea variant="settings" className={GROW_TEXTAREA} value={item.criteria.yes} maxLength={600} onChange={(event) => onChange({ criteria: { ...item.criteria, yes: event.target.value } })} />
@@ -144,13 +146,14 @@ export function ChatJudgeItemPane({ item, onChange, onRemove, testTurns }: {
               <Textarea variant="settings" className={GROW_TEXTAREA} value={item.criteria.no} maxLength={600} onChange={(event) => onChange({ criteria: { ...item.criteria, no: event.target.value } })} />
             </Field>
           </div>
-        ) : (
+        ) : null) : (
           <Field label={t({ ko: '선택지', en: 'Options' })}>
             <ChoiceOptions item={item} onChange={onChange} />
           </Field>
         )}
 
         <div className="border-t border-line">
+          {advanced ? <>
           <SettingRow label={t({ ko: '읽을 메시지', en: 'Messages read' })}>
             <NumberStepperInput variant="settings" className="w-32" min={1} max={30} step={1} value={item.window} onValueCommit={(value) => onChange({ window: Number(value) || 1 })} aria-label={t({ ko: '읽을 메시지', en: 'Messages read' })} />
           </SettingRow>
@@ -177,6 +180,7 @@ export function ChatJudgeItemPane({ item, onChange, onRemove, testTurns }: {
               {uncertainOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </Select>
           </SettingRow>
+          </> : null}
           {before ? (
             <>
               <SettingRow label={t({ ko: '예일 때', en: 'On yes' })} align="start" controlClassName="w-full sm:w-80 flex-col items-stretch">

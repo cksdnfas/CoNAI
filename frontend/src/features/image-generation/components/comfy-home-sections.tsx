@@ -1,6 +1,7 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Copy, Ellipsis, Eye, ListFilter, ListTree, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, Trash2, Upload } from 'lucide-react'
+import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -65,41 +66,38 @@ export function ComfyWorkflowListSection({
     >
       {workflows.length > 0 ? workflows.map((workflow) => {
         const isSelected = String(workflow.id) === selectedWorkflowId
+        const entries: ActionMenuEntry[] = [
+          { key: 'save-module', icon: Save, label: t({ ko: '모듈 저장', en: 'Save module' }), onSelect: () => onSaveModule(workflow.id) },
+          { key: 'copy', icon: Copy, label: t({ ko: '복사', en: 'Copy' }), onSelect: () => onCopyWorkflow(workflow.id) },
+          { key: 'delete', icon: Trash2, label: t({ ko: '삭제', en: 'Delete' }), destructive: true, disabled: !canUpdateWorkflows, onSelect: () => onDeleteWorkflow(workflow.id) },
+        ]
         return (
-          <div
-            key={workflow.id}
-            data-selected={isSelected || undefined}
-            className="relative -mx-2 flex min-h-11 items-center gap-1 rounded-sm px-2 before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:border-t before:border-line first:before:hidden data-[selected=true]:bg-primary/8"
-            // The workflow's own colour marks the selected row as a left accent (tone, not an outline).
-            style={isSelected ? { boxShadow: `inset 3px 0 0 ${workflow.color || 'var(--color-primary)'}` } : undefined}
-          >
-            <Button
-              type="button"
-              variant="nav"
-              onClick={() => onSelectWorkflow(workflow.id)}
-              aria-current={isSelected || undefined}
-              className="-mx-2 h-auto min-w-0 flex-1 justify-start gap-2.5 px-2 py-2"
+          <ActionContextMenu key={workflow.id} entries={entries}>
+            <div
+              data-selected={isSelected || undefined}
+              className="relative -mx-2 flex min-h-11 items-center gap-1 rounded-sm px-2 before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:border-t before:border-line first:before:hidden data-[selected=true]:bg-primary/8"
+              // The workflow's own colour marks the selected row as a left accent (tone, not an outline).
+              style={isSelected ? { boxShadow: `inset 3px 0 0 ${workflow.color || 'var(--color-primary)'}` } : undefined}
             >
-              <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: workflow.color || 'var(--color-primary)' }} />
-              <Tip content={workflow.description || null} align="start">
-                <span className="truncate text-sm font-medium text-foreground">{workflow.name}</span>
-              </Tip>
-              {workflow.kind === 'audio' ? <Badge variant="secondary">{t({ ko: '오디오', en: 'Audio' })}</Badge> : null}
-            </Button>
-            <IconButton size="icon-sm" variant="ghost" onClick={() => onEditWorkflow(workflow.id)} disabled={!canUpdateWorkflows} label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: workflow.name })}>
-              <Pencil />
-            </IconButton>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton size="icon-sm" variant="ghost" label={t({ ko: '더 보기', en: 'More' })}><Ellipsis /></IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => onSaveModule(workflow.id)}><Save />{t({ ko: '모듈 저장', en: 'Save module' })}</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onCopyWorkflow(workflow.id)}><Copy />{t({ ko: '복사', en: 'Copy' })}</DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" disabled={!canUpdateWorkflows} onSelect={() => onDeleteWorkflow(workflow.id)}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+              <Button
+                type="button"
+                variant="nav"
+                onClick={() => onSelectWorkflow(workflow.id)}
+                aria-current={isSelected || undefined}
+                className="-mx-2 h-auto min-w-0 flex-1 justify-start gap-2.5 px-2 py-2"
+              >
+                <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: workflow.color || 'var(--color-primary)' }} />
+                <Tip content={workflow.description || null} align="start">
+                  <span className="truncate text-sm font-medium text-foreground">{workflow.name}</span>
+                </Tip>
+                {workflow.kind === 'audio' ? <Badge variant="secondary">{t({ ko: '오디오', en: 'Audio' })}</Badge> : null}
+              </Button>
+              <IconButton size="icon-sm" variant="ghost" onClick={() => onEditWorkflow(workflow.id)} disabled={!canUpdateWorkflows} label={t({ ko: '{name} 수정', en: 'Edit {name}' }, { name: workflow.name })}>
+                <Pencil />
+              </IconButton>
+              <ActionMenuButton entries={entries} icon={Ellipsis} label={t({ ko: '더 보기', en: 'More' })} />
+            </div>
+          </ActionContextMenu>
         )
       }) : <EmptyListRow />}
     </RowGroup>
@@ -436,22 +434,27 @@ export function ComfyDropdownListsSection({ dropdownLists, isSubmitting = false,
           list.source_path ? t({ ko: '소스 {path}', en: 'Source {path}' }, { path: list.source_path }) : null,
           list.items.slice(0, 6).join(', ') || null,
         ].filter(Boolean)
+        const entries: ActionMenuEntry[] = [
+          !list.is_auto_collected && { key: 'delete', icon: Trash2, label: t({ ko: '삭제', en: 'Delete' }), destructive: true, disabled: !canUpdateWorkflows || isSubmitting, onSelect: () => void onDeleteList(list.id) },
+        ]
         return (
-          <div key={list.id} className="flex min-h-11 items-center gap-2 border-b border-line last:border-b-0">
-            <Tip content={details.length > 0 ? <span className="whitespace-pre-line">{details.join('\n')}</span> : null} align="start">
-              <span className="min-w-0 truncate text-sm font-medium text-foreground">{list.name}</span>
-            </Tip>
-            <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{formatNumber(list.items.length)}</span>
-            <span className="flex-1" />
-            {list.is_auto_collected ? (
-              <IconButton size="icon-sm" variant="ghost" onClick={() => setViewingAutoList(list)} label={t({ ko: '보기', en: 'View' })}><Eye /></IconButton>
-            ) : (
-              <>
-                <IconButton size="icon-sm" variant="ghost" onClick={() => setEditingCustomList(list)} disabled={!canUpdateWorkflows || isSubmitting} label={t({ ko: '수정', en: 'Edit' })}><Pencil /></IconButton>
-                <IconButton size="icon-sm" variant="ghost" onClick={() => void onDeleteList(list.id)} disabled={!canUpdateWorkflows || isSubmitting} label={t({ ko: '삭제', en: 'Delete' })}><Trash2 /></IconButton>
-              </>
-            )}
-          </div>
+          <ActionContextMenu key={list.id} entries={entries}>
+            <div className="flex min-h-11 items-center gap-2 border-b border-line last:border-b-0">
+              <Tip content={details.length > 0 ? <span className="whitespace-pre-line">{details.join('\n')}</span> : null} align="start">
+                <span className="min-w-0 truncate text-sm font-medium text-foreground">{list.name}</span>
+              </Tip>
+              <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{formatNumber(list.items.length)}</span>
+              <span className="flex-1" />
+              {list.is_auto_collected ? (
+                <IconButton size="icon-sm" variant="ghost" onClick={() => setViewingAutoList(list)} label={t({ ko: '보기', en: 'View' })}><Eye /></IconButton>
+              ) : (
+                <>
+                  <IconButton size="icon-sm" variant="ghost" onClick={() => setEditingCustomList(list)} disabled={!canUpdateWorkflows || isSubmitting} label={t({ ko: '수정', en: 'Edit' })}><Pencil /></IconButton>
+                  <ActionMenuButton entries={entries} icon={Ellipsis} label={t({ ko: '더 보기', en: 'More' })} />
+                </>
+              )}
+            </div>
+          </ActionContextMenu>
         )
       }) : <EmptyListRow />}
 

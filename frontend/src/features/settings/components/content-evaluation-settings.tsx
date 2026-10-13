@@ -15,7 +15,7 @@ import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-a
 import { createRandomUuid } from '@/lib/random-uuid'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
-import { JudgeModelSelect } from './chat-judge-connection-select'
+import { JudgeModelSelect, useDefaultJudge, useDefaultJudgeLabel } from './chat-judge-connection-select'
 import { SettingsRowsSkeleton } from './settings-rows'
 import { putContentEvaluationTopic } from './content-evaluation-chat'
 import { useContentEvaluationChatPage } from './use-content-evaluation-chat-page'
@@ -39,6 +39,8 @@ type Props = {
 /** Topic relevance criteria (shared content-evaluation draft): judge model and topics, with the caller's rows around them. */
 export function ContentEvaluationSettingsRows({ draft, onPatch, isSaving, dirty, onSave, error, onReload, leadingRows, trailingRows, footer }: Props) {
   const { t } = useI18n()
+  const defaultJudge = useDefaultJudge()
+  const defaultJudgeLabel = useDefaultJudgeLabel()
   const [editing, setEditing] = useState<ContentEvaluationTopic | null>(null)
   const [original, setOriginal] = useState<ContentEvaluationTopic | null>(null)
   const openTopic = (topic: ContentEvaluationTopic) => { setOriginal(topic); setEditing({ ...topic }) }
@@ -91,7 +93,7 @@ export function ContentEvaluationSettingsRows({ draft, onPatch, isSaving, dirty,
     { id: 'ai', name: 'AI', description: t({ ko: '인공지능 기술, 활용, 연구를 중심적으로 다루는 정도.', en: 'How centrally the content discusses artificial intelligence technology, applications, or research.' }), enabled: true },
     { id: 'llm', name: 'LLM', description: t({ ko: '대규모 언어 모델의 원리, 학습, 추론, 활용을 직접 다루는 정도.', en: 'Substantive discussion of large language models, training, inference, principles, or applications.' }), enabled: true },
   ] })
-  const modelState = draft.modelSlotId === null ? null : draft.modelReady
+  const modelState = draft.modelSlotId === null && !defaultJudge ? null : draft.modelReady
     ? t({ ko: '준비됨', en: 'Ready' })
     : t({ ko: '저장 후 연결을 확인해줘', en: 'Save, then check the connection' })
   return (
@@ -100,7 +102,7 @@ export function ContentEvaluationSettingsRows({ draft, onPatch, isSaving, dirty,
         {leadingRows}
         <SettingRow label={<ChatFilledLabel fieldId="modelSlotId">{t({ ko: '판단 모델', en: 'Judge model' })}</ChatFilledLabel>} controlClassName="flex items-center gap-2">
           {modelState ? <span role="img" aria-label={modelState} title={modelState} className={cn('size-2 shrink-0 rounded-full', draft.modelReady ? 'bg-success' : 'bg-warning')} /> : null}
-          <JudgeModelSelect enabled slotId={draft.modelSlotId} emptyLabel={t({ ko: '사용 안 함', en: 'Off' })} ariaLabel={t({ ko: '주제 관련도 판단 모델', en: 'Topic relevance judge model' })} onChange={modelSlotId => onPatch({ modelSlotId })} />
+          <JudgeModelSelect enabled slotId={draft.modelSlotId} emptyLabel={defaultJudgeLabel} ariaLabel={t({ ko: '주제 관련도 판단 모델', en: 'Topic relevance judge model' })} onChange={modelSlotId => onPatch({ modelSlotId })} />
         </SettingRow>
         {trailingRows}
       </RowGroup>

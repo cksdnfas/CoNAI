@@ -2,12 +2,12 @@ import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, typ
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostBotRun, PostComment, PostDetail, PostMentionableProfile } from '@conai/shared'
-import { CornerDownRight, Eye, EyeOff, MessageSquareReply, Pencil, Send, Trash2, X } from 'lucide-react'
+import { Check, CornerDownRight, Eye, EyeOff, MessageSquareReply, Pencil, Send, Trash2, X } from 'lucide-react'
+import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Textarea } from '@/components/ui/textarea'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { mentionQueryAt } from '@/features/codex-chat/chat-mentions'
 import { useI18n } from '@/i18n'
@@ -15,8 +15,8 @@ import { POSTS_QUERY_KEY, cancelPostBotRun, createPostComment, deletePostComment
 import { buildApiUrl } from '@/lib/api-url'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
-import { PostAuthorAvatar, PostAuthorName, useRelativeTime } from './post-author'
-import { PostReferenceButton, SourceChatLink } from './post-chat-links'
+import { PostAuthorAvatar, useRelativeTime } from './post-author'
+import { PostAuthorChip, usePostReferenceEntry } from './post-chat-links'
 import { PostMarkdown } from './post-markdown'
 import { usePostPermissions } from './use-post-permissions'
 
@@ -32,6 +32,10 @@ function mentionedIds(text: string, picked: Map<number, string>) {
 /** The open post's comment boxes: the box under the post, the reply box and the edit box of one comment. */
 export type PostCommentDraft = { top: string; reply: { to: number; text: string } | null; edit: { id: number; text: string } | null }
 export const EMPTY_COMMENT_DRAFT: PostCommentDraft = { top: '', reply: null, edit: null }
+
+/** A one-line box that grows with its text, with its buttons inside (comment, reply and edit boxes). */
+const BOX = 'theme-input-surface flex items-end gap-0.5 rounded-sm border py-1 pr-1 pl-3 transition-[border-color,box-shadow] focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15'
+const BOX_INPUT = 'max-h-60 min-h-7 flex-1 resize-none bg-transparent py-1 text-sm text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground'
 
 /** A comment box; `@` opens the list of bots the viewer may call. Its text is held by the caller. */
 function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, placeholder, text, setText }: {
@@ -137,23 +141,21 @@ function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, pla
           ))}
         </div>
       ) : null}
-      <Textarea
-        ref={inputRef}
-        rows={parentId ? 2 : 3}
-        value={text}
-        autoFocus={autoFocus}
-        placeholder={placeholder}
-        aria-label={t({ ko: '댓글', en: 'Comment' })}
-        onChange={(event) => { setText(event.target.value); setCaret(event.target.selectionStart ?? event.target.value.length); setDismissed(null) }}
-        onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? 0)}
-        onKeyDown={onKeyDown}
-        className="resize-y"
-      />
-      <div className="flex justify-end gap-1 pt-1.5">
-        {onDone && parentId ? <Button variant="ghost" size="sm" onClick={onDone}>{t({ ko: '취소', en: 'Cancel' })}</Button> : null}
-        <Button size="sm" disabled={!text.trim() || mutation.isPending} onClick={() => mutation.mutate()}>
-          <Send />{t({ ko: '등록', en: 'Post' })}
-        </Button>
+      <div className={BOX}>
+        <textarea
+          ref={inputRef}
+          rows={1}
+          value={text}
+          autoFocus={autoFocus}
+          placeholder={placeholder}
+          aria-label={t({ ko: '댓글', en: 'Comment' })}
+          onChange={(event) => { setText(event.target.value); setCaret(event.target.selectionStart ?? event.target.value.length); setDismissed(null) }}
+          onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? 0)}
+          onKeyDown={onKeyDown}
+          className={BOX_INPUT}
+        />
+        {onDone && parentId ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '답글 닫기', en: 'Close reply' })} onClick={onDone}><X /></IconButton> : null}
+        <IconButton size="icon-sm" variant="ghost" className="text-primary hover:text-primary" label={t({ ko: '등록', en: 'Post' })} disabled={!text.trim() || mutation.isPending} onClick={() => mutation.mutate()}><Send /></IconButton>
       </div>
     </div>
   )
@@ -198,7 +200,7 @@ function isReplyClick(event: MouseEvent<HTMLElement>) {
   return !window.getSelection()?.toString()
 }
 
-function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, editing, setEditing, focused = false }: {
+function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMention, reply, editing, setEditing, focused = false }: {
   comment: PostComment
   /** This comment's edit box text (null: closed); held by the page so the connected chat can draft it. */
   editing: string | null
@@ -209,6 +211,8 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, e
   mentionNames: string[]
   canReply: boolean
   onReply: () => void
+  /** Reply calling this comment's bot (from the bot's name card). */
+  onMention?: () => void
   reply: boolean
 }) {
   const { t } = useI18n()
@@ -217,67 +221,74 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, reply, e
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const { isAdmin } = usePostPermissions()
+  // A long press opens the menu; the click that ends it must not also open the reply box.
+  const touchMenuAt = useRef(0)
+  const pointerType = useRef('mouse')
   const refresh = () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
   const onError = (error: unknown) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '댓글 작업에 실패했어.', en: 'Comment action failed.' })) })
   const save = useMutation({ mutationFn: (body: string) => updatePostComment(comment.id, { body, expectedRevision: comment.revision }), onSuccess: async () => { setEditing(null); await refresh() }, onError })
   const remove = useMutation({ mutationFn: () => deletePostComment(comment.id), onSuccess: refresh, onError })
   const hide = useMutation({ mutationFn: (hidden: boolean) => setPostCommentHidden(comment.id, hidden), onSuccess: refresh, onError })
+  const reference = usePostReferenceEntry({ postId: comment.postId, commentId: comment.id, label: `${comment.author.name}: ${comment.body.replace(/\s+/g, ' ').slice(0, 40)}` })
 
   if (comment.status === 'deleted') {
     return <div className={cn('py-2.5 text-sm text-muted-foreground', reply && 'pl-10')}>{t({ ko: '지운 댓글이야', en: 'Deleted comment' })}</div>
   }
-  // Clicking the comment itself opens the reply box under it; the reply key on the name line stays for keyboards.
+  const entries: ActionMenuEntry[] = [
+    canReply ? { key: 'reply', icon: MessageSquareReply, label: t({ ko: '답글', en: 'Reply' }), onSelect: onReply } : null,
+    reference,
+    comment.canEdit && editing === null ? { key: 'edit', icon: Pencil, label: t({ ko: '고치기', en: 'Edit' }), onSelect: () => setEditing(comment.body) } : null,
+    '-',
+    isAdmin ? { key: 'hide', icon: comment.status === 'hidden' ? Eye : EyeOff, disabled: hide.isPending, label: comment.status === 'hidden' ? t({ ko: '다시 보이기', en: 'Show' }) : t({ ko: '숨기기', en: 'Hide' }), onSelect: () => hide.mutate(comment.status !== 'hidden') } : null,
+    comment.canEdit ? {
+      key: 'delete', icon: Trash2, destructive: true, disabled: remove.isPending, label: t({ ko: '지우기', en: 'Delete' }),
+      onSelect: async () => { if (await confirm({ title: t({ ko: '댓글을 지울까?', en: 'Delete this comment?' }), tone: 'destructive' })) remove.mutate() },
+    } : null,
+  ]
+  // Clicking the comment itself opens the reply box under it.
   const replyOnClick = canReply && editing === null
+  const saveEdit = () => { if (editing?.trim() && !save.isPending) save.mutate(editing) }
   return (
-    <div
-      id={`comment-${comment.id}`}
-      onClick={replyOnClick ? (event) => { if (isReplyClick(event)) onReply() } : undefined}
-      className={cn('group/comment grid scroll-mt-20 grid-cols-[2rem_1fr] gap-2.5 rounded-sm py-2.5 transition-[background-color] duration-700', reply && 'pl-10', replyOnClick && 'cursor-pointer', comment.status === 'hidden' && 'opacity-60', focused && 'bg-primary/10')}
-    >
-      <PostAuthorAvatar author={comment.author} size="md" />
-      <div className="flex min-w-0 flex-col gap-1">
-        <div className="flex min-h-5 flex-wrap items-center gap-x-2 text-sm">
-          <PostAuthorName author={comment.author} />
-          <span className="text-xs text-muted-foreground">{relative(comment.createdAt)}{comment.revision > 1 ? ` · ${t({ ko: '고침', en: 'edited' })}` : ''}</span>
-          <SourceChatLink source={comment.sourceChat} compact />
-          {comment.status === 'hidden' ? <span className="inline-flex items-center gap-1 text-xs text-destructive"><EyeOff className="size-3" />{t({ ko: '숨김', en: 'Hidden' })}</span> : null}
-          {/* Row actions sit on the name line, out of the way until the row is hovered or focused (always shown on touch screens). */}
-          <div className="ml-auto flex h-5 items-center gap-0.5 text-muted-foreground transition-opacity focus-within:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/comment:opacity-100">
-            {canReply ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답글', en: 'Reply' })} onClick={onReply}><MessageSquareReply /></IconButton> : null}
-            <PostReferenceButton postId={comment.postId} commentId={comment.id} size="icon-xs" label={`${comment.author.name}: ${comment.body.replace(/\s+/g, ' ').slice(0, 40)}`} />
-            {comment.canEdit && editing === null ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '고치기', en: 'Edit' })} onClick={() => setEditing(comment.body)}><Pencil /></IconButton> : null}
-            {comment.canEdit ? (
-              <IconButton size="icon-xs" variant="ghost" label={t({ ko: '지우기', en: 'Delete' })} disabled={remove.isPending} onClick={async () => {
-                if (await confirm({ title: t({ ko: '댓글을 지울까?', en: 'Delete this comment?' }), tone: 'destructive' })) remove.mutate()
-              }}><Trash2 /></IconButton>
-            ) : null}
-            {isAdmin ? (
-              <IconButton size="icon-xs" variant="ghost" label={comment.status === 'hidden' ? t({ ko: '다시 보이기', en: 'Show' }) : t({ ko: '숨기기', en: 'Hide' })} disabled={hide.isPending} onClick={() => hide.mutate(comment.status !== 'hidden')}>
-                {comment.status === 'hidden' ? <Eye /> : <EyeOff />}
-              </IconButton>
-            ) : null}
+    <ActionContextMenu entries={entries} onOpenChange={(open) => { if (open && pointerType.current !== 'mouse') touchMenuAt.current = Date.now() }}>
+      <div
+        id={`comment-${comment.id}`}
+        onPointerDown={(event) => { pointerType.current = event.pointerType }}
+        onClick={replyOnClick ? (event) => { if (isReplyClick(event) && Date.now() - touchMenuAt.current > 800) onReply() } : undefined}
+        className={cn('grid scroll-mt-20 grid-cols-[2rem_1fr_auto] gap-x-2.5 rounded-sm py-2.5 transition-[background-color] duration-700 [-webkit-touch-callout:none]', reply && 'pl-10', replyOnClick && 'cursor-pointer', comment.status === 'hidden' && 'opacity-60', focused && 'bg-primary/10')}
+      >
+        <PostAuthorAvatar author={comment.author} size="md" />
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex min-h-5 flex-wrap items-center gap-x-2 text-sm">
+            <PostAuthorChip author={comment.author} source={comment.sourceChat} showAvatar={false} onMention={onMention} />
+            <span className="text-xs text-muted-foreground">{relative(comment.createdAt)}{comment.revision > 1 ? ` · ${t({ ko: '고침', en: 'edited' })}` : ''}</span>
+            {comment.status === 'hidden' ? <span className="inline-flex items-center gap-1 text-xs text-destructive"><EyeOff className="size-3" />{t({ ko: '숨김', en: 'Hidden' })}</span> : null}
           </div>
-        </div>
-        {quoted ? (
-          <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-            <CornerDownRight className="size-3 shrink-0" />
-            <span className="shrink-0 font-medium">@{quoted.author.name}</span>
-            <span className="truncate">{quoted.status === 'deleted' ? t({ ko: '지운 댓글', en: 'deleted comment' }) : quoted.body}</span>
-          </div>
-        ) : null}
-        {editing !== null ? (
-          <div className="space-y-1.5">
-            <Textarea rows={3} value={editing} onChange={(event) => setEditing(event.target.value)} aria-label={t({ ko: '댓글 고치기', en: 'Edit comment' })} autoFocus />
-            <div className="flex justify-end gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-              <Button size="sm" disabled={!editing.trim() || save.isPending} onClick={() => save.mutate(editing)}>{t({ ko: '저장', en: 'Save' })}</Button>
+          {quoted ? (
+            <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+              <CornerDownRight className="size-3 shrink-0" />
+              <span className="shrink-0 font-medium">@{quoted.author.name}</span>
+              <span className="truncate">{quoted.status === 'deleted' ? t({ ko: '지운 댓글', en: 'deleted comment' }) : quoted.body}</span>
             </div>
-          </div>
-        ) : (
-          <PostMarkdown text={comment.body} mentions={mentionNames} className="text-sm [&_.post-media]:max-w-xs" />
-        )}
+          ) : null}
+          {editing !== null ? (
+            <div className={BOX}>
+              <textarea rows={1} value={editing} autoFocus className={BOX_INPUT} aria-label={t({ ko: '댓글 고치기', en: 'Edit comment' })}
+                onChange={(event) => setEditing(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.nativeEvent.isComposing) return
+                  if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); saveEdit() }
+                  if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setEditing(null) }
+                }} />
+              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '취소', en: 'Cancel' })} onClick={() => setEditing(null)}><X /></IconButton>
+              <IconButton size="icon-sm" variant="ghost" className="text-primary hover:text-primary" label={t({ ko: '저장', en: 'Save' })} disabled={!editing.trim() || save.isPending} onClick={saveEdit}><Check /></IconButton>
+            </div>
+          ) : (
+            <PostMarkdown text={comment.body} mentions={mentionNames} className="text-sm [&_.post-media]:max-w-xs" />
+          )}
+        </div>
+        <ActionMenuButton entries={entries} size="icon-xs" className="text-muted-foreground/60" label={t({ ko: '댓글 메뉴', en: 'Comment menu' })} />
       </div>
-    </div>
+    </ActionContextMenu>
   )
 }
 
@@ -290,6 +301,9 @@ export function PostComments({ post, draft, setDraft, hideHeading = false }: { p
   const editProps = (id: number) => ({ editing: draft.edit?.id === id ? draft.edit.text : null, setEditing: (text: string | null) => setDraft((current) => ({ ...current, edit: text === null ? null : { id, text } })) })
   const { canComment, canSummon, isAdmin } = usePostPermissions()
   const replyTo = draft.reply?.to ?? null
+  // From a bot's name card: the reply box under its comment, starting with @name (replying to a bot calls it anyway).
+  const mentionProps = (comment: PostComment) => (comment.author.type === 'profile' && canSummon && canComment && (post.commentMode === 'open' || isAdmin)
+    ? { onMention: () => setDraft((current) => ({ ...current, reply: { to: comment.id, text: `@${comment.author.name} ` } })) } : {})
   const setReplyTo = (id: number | null) => setDraft((current) => ({ ...current, reply: id === null ? null : { to: id, text: current.reply?.to === id ? current.reply.text : '' } }))
   const commentsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'comments', post.id], queryFn: () => listPostComments(post.id) })
   const mentionableQuery = useQuery({ queryKey: ['post-mentionable'], queryFn: listMentionableProfiles, enabled: canSummon && canComment, staleTime: 60_000 })
@@ -339,11 +353,11 @@ export function PostComments({ post, draft, setDraft, hideHeading = false }: { p
       <div className={cn('divide-y divide-line', hideHeading ? (tops.length ? 'border-b border-line' : '') : 'border-y border-line')}>
         {tops.map((top) => (
           <div key={top.id}>
-            <CommentRow comment={top} quoted={null} mentionNames={mentionNames} canReply={canReply} reply={false} focused={focusedId === top.id} onReply={() => setReplyTo(top.id)} {...editProps(top.id)} />
+            <CommentRow comment={top} quoted={null} mentionNames={mentionNames} canReply={canReply} reply={false} focused={focusedId === top.id} onReply={() => setReplyTo(top.id)} {...mentionProps(top)} {...editProps(top.id)} />
             {replyTo === top.id ? replyComposer : null}
             {comments.filter((comment) => comment.parentId === top.id).map((child) => (
               <Fragment key={child.id}>
-                <CommentRow comment={child} quoted={child.quoteCommentId ? byId.get(child.quoteCommentId) ?? null : null} mentionNames={mentionNames} canReply={canReply} reply focused={focusedId === child.id} onReply={() => setReplyTo(child.id)} {...editProps(child.id)} />
+                <CommentRow comment={child} quoted={child.quoteCommentId ? byId.get(child.quoteCommentId) ?? null : null} mentionNames={mentionNames} canReply={canReply} reply focused={focusedId === child.id} onReply={() => setReplyTo(child.id)} {...mentionProps(child)} {...editProps(child.id)} />
                 {replyTo === child.id ? replyComposer : null}
               </Fragment>
             ))}

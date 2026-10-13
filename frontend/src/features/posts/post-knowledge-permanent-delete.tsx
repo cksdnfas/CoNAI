@@ -31,7 +31,7 @@ const scopeLabels: Record<PostKnowledgePermanentDeleteDependency['scope'], { ko:
 }
 
 /** A human-only trash action: approval is bound to the server preview and its revision. */
-export function PostKnowledgePermanentDeleteDialog({ post, onClose }: { post: PostSummary; onClose: () => void }) {
+export function PostKnowledgePermanentDeleteDialog({ post, onClose, onDeleted }: { post: PostSummary; onClose: () => void; onDeleted?: () => void }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -58,7 +58,7 @@ export function PostKnowledgePermanentDeleteDialog({ post, onClose }: { post: Po
   })
   const remove = useMutation({
     mutationFn: (data: PostKnowledgePermanentDeletePreview) => permanentlyDeletePostKnowledge(post.id, { expectedRevision: data.expectedRevision, previewToken: data.previewToken, confirm: true }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }); onClose(); showSnackbar({ message: t({ ko: '지식 문서를 영구 삭제했어. 파일은 보존했어.', en: 'The knowledge document was permanently deleted. Files were retained.' }) }) },
+    onSuccess: async () => { onDeleted?.(); await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }); onClose(); showSnackbar({ message: t({ ko: '지식 문서를 영구 삭제했어. 파일은 보존했어.', en: 'The knowledge document was permanently deleted. Files were retained.' }) }) },
     onError: (error) => { setConfirmedToken(null); showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '영구 삭제하지 못했어.', en: 'Could not permanently delete the document.' })) }); void preview.refetch() },
   })
   const data = preview.data

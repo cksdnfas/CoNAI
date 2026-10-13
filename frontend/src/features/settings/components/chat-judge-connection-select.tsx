@@ -34,6 +34,20 @@ export function JudgeModelSelect({ enabled, slotId, emptyLabel, llmOnly = false,
   )
 }
 
+/** The default judge row (Settings › LLM › 연결, ⚖), or null when none is set; undefined until the list loads. */
+export function useDefaultJudge(enabled = true) {
+  const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled })
+  return slotsQuery.isSuccess ? slotsQuery.data.find((slot) => slot.isDefaultJudge) ?? null : undefined
+}
+
+/** What an empty judge model means wherever one may be left empty: the default judge, named. */
+export function useDefaultJudgeLabel(enabled = true) {
+  const { t } = useI18n()
+  const judge = useDefaultJudge(enabled)
+  if (judge === undefined) return t({ ko: '기본 판단 모델', en: 'Default judge' })
+  return judge ? t({ ko: '기본 판단 모델 · {name}', en: 'Default judge · {name}' }, { name: judge.label }) : t({ ko: '기본 판단 모델 (없음)', en: 'Default judge (none set)' })
+}
+
 /** `connection · model` of a row, for a line that names the model in use (undefined until the list loads). */
 export function useModelLabel(enabled: boolean, slotId: number | null) {
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: enabled && slotId !== null })

@@ -31,6 +31,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { ConnectionModelChecklist, type ConnectionModelsDraft } from './llm-connection-models'
+import { SettingsAdvancedSwitch, useSettingsAdvanced } from './settings-advanced'
 import {
   LLM_PRESET_SECTIONS,
   LLM_PROVIDER_OPTIONS,
@@ -50,6 +51,7 @@ import {
   LLM_THINKING_SWITCHES,
 } from './llm-connections-tab-utils'
 import { cn } from '@/lib/utils'
+import { SegmentedControl } from '@/components/common/segmented-control'
 
 /** A connection (server) row; its models are listed under it. */
 export function LlmConnectionListItem({
@@ -137,8 +139,14 @@ function LlmConnectionFormFields({
   thinkingChanged?: LlmThinkingSwitch | null
 }) {
   const { t } = useI18n()
+  const advanced = useSettingsAdvanced()
   // One slot shared by the reply and its judge or translation: each pushes the other's prompt out of the cache.
   const sharedSlot = (Number(draft.concurrentRequests) || 1) === 1 && sharedServer.length > 0
+  // Request options are advanced; a warning or a change from the connection test still shows its row.
+  const isTypesafe = draft.providerType === 'decision_typesafe'
+  const showConcurrent = !isTypesafe && (advanced || sharedSlot)
+  const showThinking = !isTypesafe && (advanced || thinkingChanged !== null)
+  const showCacheMarks = advanced && draft.providerType === 'llm_openai_compatible'
 
   return (
     <div className="space-y-4">
@@ -211,23 +219,25 @@ function LlmConnectionFormFields({
         />
       </Field>
 
-      <EditorGroup label={t({ ko: '요청', en: 'Requests' })}>
-        <div>
-          <SettingRow label={t({ ko: '제한 시간 (초)', en: 'Time limit (s)' })}>
-            <NumberStepperInput
-              variant="settings"
-              className="w-36"
-              allowEmpty
-              step={30}
-              min={5}
-              value={draft.timeoutSeconds}
-              onValueCommit={(value) => onChange({ timeoutSeconds: value })}
-              aria-label={t({ ko: '제한 시간 (초)', en: 'Time limit (s)' })}
-              placeholder={draft.providerType === 'decision_typesafe' ? '20' : '600'}
-            />
-          </SettingRow>
-          {draft.providerType === 'decision_typesafe' ? null : (
-            <>
+      {advanced || showConcurrent || showThinking ? (
+        <EditorGroup label={t({ ko: '요청', en: 'Requests' })}>
+          <div>
+            {advanced ? (
+              <SettingRow label={t({ ko: '제한 시간 (초)', en: 'Time limit (s)' })}>
+                <NumberStepperInput
+                  variant="settings"
+                  className="w-36"
+                  allowEmpty
+                  step={30}
+                  min={5}
+                  value={draft.timeoutSeconds}
+                  onValueCommit={(value) => onChange({ timeoutSeconds: value })}
+                  aria-label={t({ ko: '제한 시간 (초)', en: 'Time limit (s)' })}
+                  placeholder={draft.providerType === 'decision_typesafe' ? '20' : '600'}
+                />
+              </SettingRow>
+            ) : null}
+            {showConcurrent ? (
               <SettingRow label={t({ ko: '동시 요청', en: 'Concurrent requests' })}>
                 <div className="flex items-center gap-2">
                 {sharedSlot ? (
@@ -247,6 +257,8 @@ function LlmConnectionFormFields({
                 />
                 </div>
               </SettingRow>
+            ) : null}
+            {showThinking ? (
               <SettingRow label={thinkingChanged ? (
                 <span className="flex items-center gap-2">
                   {t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })}
@@ -265,18 +277,18 @@ function LlmConnectionFormFields({
                   {LLM_THINKING_SWITCHES.map((option) => <option key={option} value={option}>{thinkingSwitchLabel(option, t)}</option>)}
                 </Select>
               </SettingRow>
-            </>
-          )}
-          {draft.providerType === 'llm_openai_compatible' ? (
-            <SettingsSwitchRow
-              checked={draft.promptCacheMarks}
-              onCheckedChange={(checked) => onChange({ promptCacheMarks: checked })}
-              label={t({ ko: '프롬프트 캐시 표시', en: 'Prompt cache marks' })}
-              info={t({ ko: 'Anthropic 모델을 거치는 프록시일 때 켜.', en: 'Turn on for a proxy in front of Anthropic models.' })}
-            />
-          ) : null}
-        </div>
-      </EditorGroup>
+            ) : null}
+            {showCacheMarks ? (
+              <SettingsSwitchRow
+                checked={draft.promptCacheMarks}
+                onCheckedChange={(checked) => onChange({ promptCacheMarks: checked })}
+                label={t({ ko: '프롬프트 캐시 표시', en: 'Prompt cache marks' })}
+                info={t({ ko: 'Anthropic 모델을 거치는 프록시일 때 켜.', en: 'Turn on for a proxy in front of Anthropic models.' })}
+              />
+            ) : null}
+          </div>
+        </EditorGroup>
+      ) : null}
     </div>
   )
 }
@@ -526,11 +538,14 @@ export function LlmConnectionEditorModal({
       dirty={dirty}
       onSave={canSave ? save : undefined}
       headerActions={(
-        <Tip content={draft.isEnabled ? t({ ko: '사용 중', en: 'On' }) : t({ ko: '꺼짐', en: 'Off' })}>
-          <span className="inline-flex px-1.5">
-            <Switch checked={draft.isEnabled} onCheckedChange={(isEnabled) => setDraft((current) => ({ ...current, isEnabled }))} aria-label={t({ ko: '연결 사용', en: 'Connection on' })} />
-          </span>
-        </Tip>
+        <div className="flex shrink-0 items-center gap-1">
+          <SettingsAdvancedSwitch />
+          <Tip content={draft.isEnabled ? t({ ko: '사용 중', en: 'On' }) : t({ ko: '꺼짐', en: 'Off' })}>
+            <span className="inline-flex px-1.5">
+              <Switch checked={draft.isEnabled} onCheckedChange={(isEnabled) => setDraft((current) => ({ ...current, isEnabled }))} aria-label={t({ ko: '연결 사용', en: 'Connection on' })} />
+            </span>
+          </Tip>
+        </div>
       )}
     >
       <ModalBody>
@@ -597,6 +612,7 @@ export function LlmPresetEditorModal({
   isSaving,
   isDeleting,
   onClose,
+  onTypeChange,
   onSave,
   onDelete,
 }: {
@@ -604,6 +620,8 @@ export function LlmPresetEditorModal({
   isSaving: boolean
   isDeleting: boolean
   onClose: () => void
+  /** A new preset's kind was changed (the kind of a saved one stays). */
+  onTypeChange: (presetType: (typeof LLM_PRESET_SECTIONS)[number]['key']) => void
   onSave: (draft: LlmPresetDraft) => Promise<void>
   onDelete: (preset: LlmPresetRecord) => Promise<void>
 }) {
@@ -632,12 +650,22 @@ export function LlmPresetEditorModal({
     <Modal
       open={isOpen}
       onClose={onClose}
-      title={isEditMode ? t({ ko: '{heading} 수정', en: 'Edit {heading}' }, { heading: t(section.heading) }) : t({ ko: '{heading} 추가', en: 'Add {heading}' }, { heading: t(section.heading) })}
+      title={isEditMode ? t({ ko: '{heading} 수정', en: 'Edit {heading}' }, { heading: t(section.heading) }) : t({ ko: '프롬프트 프리셋 추가', en: 'Add prompt preset' })}
       size="narrow"
       dirty={dirty}
       onSave={canSave ? () => void onSave(draft) : undefined}
     >
       <ModalBody>
+        {isEditMode ? null : (
+          <SegmentedControl
+            className="mb-4"
+            size="sm"
+            value={section.key}
+            onChange={(key) => onTypeChange(key as typeof section.key)}
+            items={LLM_PRESET_SECTIONS.map((entry) => ({ value: entry.key, label: t(entry.shortLabel) }))}
+            ariaLabel={t({ ko: '종류', en: 'Kind' })}
+          />
+        )}
         <LlmPresetFormFields
           draft={draft}
           section={section}

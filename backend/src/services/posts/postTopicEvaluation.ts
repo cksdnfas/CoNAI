@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { TOPIC_EVALUATION_LIMITS, type ContentEvaluationSettings, type PostTopicEvaluationStatus, type PostTopicEvaluationView, type TopicRelevanceItem } from '@conai/shared';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { isRequesterAdmin, requesterPermissionKeys } from '../../middleware/featureAccess';
-import { ModelSlotStore } from '../codex-chat/modelSlots';
-import { evaluationHash, evaluationModelKey, loadContentEvaluationSettings } from '../contentEvaluation/definitionStore';
+import { contentEvaluationModel, evaluationHash, evaluationModelKey, loadContentEvaluationSettings } from '../contentEvaluation/definitionStore';
 import { topicQuestion, topicScore } from '../contentEvaluation/topicScore';
 import { askJudge, JudgeError, resolveJudgeConnection } from '../judge/judgeEngine';
 import { TypesafeError } from '../judge/typesafeClient';
@@ -36,7 +35,7 @@ const hint = (postId: number) => publishRuntimeEvent({ name: 'posts.changed', to
 /** Batch the latest request and latest completed result; no per-post HTTP or SQL requests. */
 export function createPostTopicResolver(ids: number[]) {
   const definition = loadContentEvaluationSettings();
-  const modelKey = evaluationModelKey(ModelSlotStore.target(definition.modelSlotId));
+  const modelKey = evaluationModelKey(contentEvaluationModel(definition));
   const display = loadPostsSettings().topicEvaluation;
   const latest = new Map<number,RequestRow>(), results = new Map<number,RequestRow>();
   if (ids.length) {
@@ -59,7 +58,7 @@ export function createPostTopicResolver(ids: number[]) {
       coverage: canSeeResult ? result!.coverage : 'full', inputCharacters: canSeeResult ? result!.input_characters : null,
       totalCharacters: canSeeResult ? result!.total_characters : null, evaluatedAt: canSeeResult ? result!.finished_at : null,
       modelLabel: canSeeResult ? result!.model_label : null, definitionVersion: canSeeResult ? result!.definition_version : null,
-      canRequest: canManage && post.status !== 'hidden' && definition.modelSlotId !== null && definition.topics.some(topic => topic.enabled),
+      canRequest: canManage && post.status !== 'hidden' && contentEvaluationModel(definition) !== null && definition.topics.some(topic => topic.enabled),
       minimumScore: display.minimumScore, maximumTopics: display.maximumTopics };
   };
 }
@@ -67,7 +66,7 @@ export function createPostTopicResolver(ids: number[]) {
 /** Called only inside the post write transaction or the authorized manual-request transaction. */
 function insertRequest(actor: PostActor, post: TopicPost, source: RequestRow['source'], force: boolean): number {
   const settings = loadContentEvaluationSettings();
-  const model = ModelSlotStore.target(settings.modelSlotId);
+  const model = contentEvaluationModel(settings);
   const hash = postTopicContentHash(post), modelKey = evaluationModelKey(model);
   const fingerprint = evaluationHash([post.id, hash, settings.definitionVersion, 'centrality-v1', modelKey]);
   const active = db().prepare("SELECT id FROM post_topic_evaluation_requests WHERE fingerprint=? AND status IN ('queued','running') ORDER BY id DESC LIMIT 1").get(fingerprint) as { id: number } | undefined;
@@ -120,7 +119,7 @@ export function requestPostTopicEvaluation(actor: PostActor, post: TopicPost, va
       return prior.request_id;
     }
     const settings = loadContentEvaluationSettings();
-    if (!ModelSlotStore.target(settings.modelSlotId) || !settings.topics.some(topic => topic.enabled)) throw new PostError('설정 → LLM → 콘텐츠 평가에서 모델과 주제를 먼저 골라줘.',409);
+    if (!contentEvaluationModel(settings) || !settings.topics.some(topic => topic.enabled)) throw new PostError('설정 → 게시판 → 주제 관련도에서 판단 모델과 주제를 먼저 골라줘.',409);
     const requestId = insertRequest(actor,post,'manual',input.force === true);
     db().prepare('INSERT INTO post_topic_evaluation_commands(account_key,idempotency_key,request_id,command_json) VALUES(?,?,?,?)').run(accountKey,key,requestId,command);
     return requestId;
@@ -142,7 +141,7 @@ async function postAuthorizer(row: RequestRow) {
   if (row.source === 'manual' && !canEditPost(actor,post)) throw new PostError('평가 요청 권한이 없어.',403);
   if (postTopicContentHash(post) !== row.content_hash) throw new PostError('평가 대상 내용이 바뀌었어.',409,'content_changed');
   const current = loadContentEvaluationSettings();
-  if (current.definitionVersion !== row.definition_version || evaluationModelKey(ModelSlotStore.target(current.modelSlotId)) !== row.model_key) throw new PostError('평가 기준이 바뀌었어.',409,'definition_changed');
+  if (current.definitionVersion !== row.definition_version || evaluationModelKey(contentEvaluationModel(current)) !== row.model_key) throw new PostError('평가 기준이 바뀌었어.',409,'definition_changed');
   if (row.source === 'automatic' && !loadPostsSettings().topicEvaluation.autoEnabled) throw new PostError('자동 평가가 꺼져 있어.',409,'evaluation_disabled');
   return post;
   };

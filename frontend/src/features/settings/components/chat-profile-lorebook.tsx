@@ -150,7 +150,7 @@ function LanguageKeywordRows({ language, base, local, onBase, onLocal, addLabel 
   </div>
 }
 
-/** The lore key language every book keeps its second keyword rows in (Settings › LLM › 연결 › 기억); null: English only. */
+/** The lore key language every book keeps its second keyword rows in (Settings › 채팅 › 자원 › 기억); null: English only. */
 export function useLoreKeyLanguage() {
   const statusQuery = useQuery({ queryKey: CHAT_STATUS_QUERY_KEY, queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
   return statusQuery.data?.loreKeyLanguage ?? null

@@ -1,6 +1,7 @@
 import { ChevronRight } from 'lucide-react'
 import { useEffect, useMemo, useState, type FocusEvent, type PointerEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { ActionContextMenu, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 
@@ -37,8 +38,8 @@ interface HierarchyNavProps<T> {
   expandOnSelect?: boolean | ((item: T, state: HierarchyNavItemState) => boolean)
   defaultExpandedIds?: HierarchyNodeId[]
   className?: string
-  /** A trailing control beside an expandable row (not inside its button), shown on hover / focus. */
-  renderItemAction?: (item: T, state: HierarchyNavItemState) => ReactNode
+  /** A row's actions, opened by right-click / long-press on the row. */
+  getItemMenu?: (item: T, state: HierarchyNavItemState) => ActionMenuEntry[]
 }
 
 /** Build a parent-to-children map for hierarchy navigation rendering. */
@@ -106,7 +107,7 @@ export function HierarchyNav<T>({
   expandOnSelect,
   defaultExpandedIds = EMPTY_EXPANDED_IDS,
   className,
-  renderItemAction,
+  getItemMenu,
 }: HierarchyNavProps<T>) {
   const { t } = useI18n()
   const itemsByParentId = useMemo(() => buildHierarchyMap(items, getId, getParentId, sortItems), [items, getId, getParentId, sortItems])
@@ -198,71 +199,68 @@ export function HierarchyNav<T>({
 
           return (
             <div key={String(itemId)}>
-              {expandable ? (
-                <div className="group/hierarchy-row flex items-center gap-1" style={{ paddingLeft: `${depth * 14}px` }}>
-                  {hasChildren ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => toggleExpanded(itemId)}
-                      aria-expanded={isExpanded}
-                      aria-label={isExpanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}
-                    >
-                      <ChevronRight className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-90')} />
-                    </Button>
-                  ) : (
-                    <span className="inline-flex h-8 w-8 shrink-0" aria-hidden="true" />
-                  )}
+              <ActionContextMenu entries={getItemMenu?.(item, state) ?? []}>
+                {expandable ? (
+                  <div className="flex items-center gap-1 [-webkit-touch-callout:none]" style={{ paddingLeft: `${depth * 14}px` }}>
+                    {hasChildren ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => toggleExpanded(itemId)}
+                        aria-expanded={isExpanded}
+                        aria-label={isExpanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}
+                      >
+                        <ChevronRight className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-90')} />
+                      </Button>
+                    ) : (
+                      <span className="inline-flex h-8 w-8 shrink-0" aria-hidden="true" />
+                    )}
 
-                  {selectable || hasChildren ? (
-                    <Button
-                      type="button"
-                      variant="nav"
-                      size="sm"
-                      {...itemEventHandlers}
-                      onClick={() => {
-                        if (hasChildren && shouldExpandOnSelect) {
-                          expandItem(itemId)
-                        }
-                        if (selectable) {
-                          onSelect(item)
-                        }
-                      }}
-                      data-active={isSelected ? 'true' : undefined}
-                      aria-current={isSelected ? 'true' : undefined}
-                      className={cn('min-w-0 flex-1 px-2 has-[>svg]:px-2', itemClassName)}
-                    >
-                      {content}
-                    </Button>
-                  ) : (
-                    <div
-                      {...itemEventHandlers}
-                      className={cn('inline-flex max-w-full flex-1 items-center gap-2 rounded-sm px-2 py-2 text-sm text-muted-foreground/45', itemClassName)}
-                    >
-                      {content}
-                    </div>
-                  )}
-                  {renderItemAction ? (
-                    <span className={cn('flex shrink-0 opacity-0 transition-opacity group-hover/hierarchy-row:opacity-100 group-focus-within/hierarchy-row:opacity-100', isSelected && 'opacity-100')}>
-                      {renderItemAction(item, state)}
-                    </span>
-                  ) : null}
-                </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="nav"
-                  {...itemEventHandlers}
-                  onClick={() => onSelect(item)}
-                  data-active={isSelected ? 'true' : undefined}
-                  aria-current={isSelected ? 'true' : undefined}
-                  className={cn('min-w-0', itemClassName)}
-                  style={{ paddingLeft: `${12 + depth * 14}px` }}
-                >
-                  {content}
-                </Button>
-              )}
+                    {selectable || hasChildren ? (
+                      <Button
+                        type="button"
+                        variant="nav"
+                        size="sm"
+                        {...itemEventHandlers}
+                        onClick={() => {
+                          if (hasChildren && shouldExpandOnSelect) {
+                            expandItem(itemId)
+                          }
+                          if (selectable) {
+                            onSelect(item)
+                          }
+                        }}
+                        data-active={isSelected ? 'true' : undefined}
+                        aria-current={isSelected ? 'true' : undefined}
+                        className={cn('min-w-0 flex-1 px-2 has-[>svg]:px-2', itemClassName)}
+                      >
+                        {content}
+                      </Button>
+                    ) : (
+                      <div
+                        {...itemEventHandlers}
+                        className={cn('inline-flex max-w-full flex-1 items-center gap-2 rounded-sm px-2 py-2 text-sm text-muted-foreground/45', itemClassName)}
+                      >
+                        {content}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="nav"
+                    {...itemEventHandlers}
+                    onClick={() => onSelect(item)}
+                    data-active={isSelected ? 'true' : undefined}
+                    aria-current={isSelected ? 'true' : undefined}
+                    className={cn('min-w-0', itemClassName)}
+                    style={{ paddingLeft: `${12 + depth * 14}px` }}
+                  >
+                    {content}
+                  </Button>
+                )}
+              </ActionContextMenu>
 
               {hasChildren && isExpanded ? renderNodes(itemId, depth + 1) : null}
             </div>

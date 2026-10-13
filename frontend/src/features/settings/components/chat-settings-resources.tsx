@@ -46,6 +46,8 @@ import { ChatLorebookEditorModal } from './chat-lorebook-editor-modal'
 import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
 import { readChatToolPresetFile } from './chat-tool-preset-file'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
+import { useChatOptionsPageParts } from './chat-options-page'
+import { ChatMemorySettings, ChatWebSettings } from './chat-options-settings'
 
 /** Label + icon colour of each kind: the group label and the rows' icons share the hue so a long list reads by colour. */
 const KIND_CLASS = {
@@ -105,13 +107,17 @@ export function ChatSettingsResources() {
     block: (blocksQuery.data ?? []).map((shared) => ({ id: shared.id, name: shared.name })),
     tool_preset: (presetsQuery.data ?? []).map((preset) => ({ id: preset.id, name: preset.name })),
   }
+  // Memory and web search sit among the resources (by the lorebooks and the tool presets).
+  const optionParts = useChatOptionsPageParts('memory-web')
   useChatPageRegistration({
     kind: 'settings', title: t({ ko: '설정 · 채팅 자원', en: 'Settings · Chat resources' }), resourceId: 'chat-resources', priority: 5, fields: [],
-    data: { section: 'chat', view: 'resources', ...listed },
-    actions: [pageAction('resource.open', t({ ko: '자원 편집기 열기', en: 'Open resource editor' }), t({ ko: '로어북(lorebook)·생성 프리셋(generation_preset)·판단 프리셋(judge_preset)·표시 블록(block)·도구 프리셋(tool_preset) 편집기를 열어. id를 빼면 새로 만들기, 있으면 data의 목록 id. 새 로어북은 kind=account면 내 계정 로어북이야.', en: 'Open an editor for a lorebook, generation preset, judge preset, display block or tool preset. Without id: a new one; with id: one from the lists in data. A new lorebook with kind=account is your own.' }), pageObject({ kind: pageChoice(['lorebook', 'generation_preset', 'judge_preset', 'block', 'tool_preset']), id: pageNumber(1, undefined, true), lorebookKind: pageChoice(['global', 'account']) }, ['kind']))],
+    data: { section: 'chat', view: 'resources', ...listed, ...optionParts.data },
+    actions: [...optionParts.actions, pageAction('resource.open', t({ ko: '자원 편집기 열기', en: 'Open resource editor' }), t({ ko: '로어북(lorebook)·생성 프리셋(generation_preset)·판단 프리셋(judge_preset)·표시 블록(block)·도구 프리셋(tool_preset) 편집기를 열어. id를 빼면 새로 만들기, 있으면 data의 목록 id. 새 로어북은 kind=account면 내 계정 로어북이야.', en: 'Open an editor for a lorebook, generation preset, judge preset, display block or tool preset. Without id: a new one; with id: one from the lists in data. A new lorebook with kind=account is your own.' }), pageObject({ kind: pageChoice(['lorebook', 'generation_preset', 'judge_preset', 'block', 'tool_preset']), id: pageNumber(1, undefined, true), lorebookKind: pageChoice(['global', 'account']) }, ['kind']))],
     apply: () => {},
     applyAction: (id, args, assertCurrent) => {
       assertCurrent()
+      const saved = optionParts.apply(id, args)
+      if (saved) return saved
       if (id !== 'resource.open') throw new Error('자원 목록에 없는 작업이야.')
       const kind = String(args.kind) as keyof typeof listed
       const target = args.id === undefined ? null : Number(args.id)
@@ -266,6 +272,8 @@ export function ChatSettingsResources() {
         {presetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(presetsQuery.error, t({ ko: '도구 프리셋을 불러오지 못했어.', en: 'Could not load tool presets.' }))}</p> : null}
       </RowGroup>
 
+      <ChatWebSettings />
+
       <RowGroup
         headingClassName={KIND_CLASS.generation}
         heading={generationPresetsLabel}
@@ -391,6 +399,8 @@ export function ChatSettingsResources() {
         ))}
         {lorebooksQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(lorebooksQuery.error, t({ ko: '로어북을 불러오지 못했어.', en: 'Could not load lorebooks.' }))}</p> : null}
       </RowGroup>
+
+      <ChatMemorySettings />
 
       <ChatLorebookEditorModal
         open={lorebookEditor !== null}
