@@ -8,6 +8,8 @@ export default {
   base,
   lastUpdated: true,
   cleanUrls: true,
+  // Local implementation plans are not part of the public documentation, even in local builds.
+  srcExclude: ['Work_Plan/**'],
   ignoreDeadLinks: true,
   themeConfig: {
     nav: [
