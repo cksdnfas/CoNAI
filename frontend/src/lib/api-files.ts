@@ -72,12 +72,5 @@ export async function uploadStoredFiles(parentId: string | null, files: File[], 
   return requestApiData<StoredFileEntry[]>(`/api/files/upload?parentId=${parentId ?? ''}`, { method: 'POST', body })
 }
 
-export function formatFileSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
-  return `${(bytes / 1024 ** 3).toFixed(1)} GB`
-}
-
 /** Retry derived content extraction without modifying the original file. */
 export const retryStoredFileIndex = (id: string) => requestApiData<{ fileId: string }>(`/api/files/${id}/reindex`, { method: 'POST' })

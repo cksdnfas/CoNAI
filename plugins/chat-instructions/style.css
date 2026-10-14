@@ -1,0 +1,8 @@
+main { padding: 16px; display: grid; gap: 12px; max-width: 760px }
+.grow { flex: 1 }
+textarea { width: 100%; resize: vertical }
+#rules li { display: flex; align-items: flex-start; gap: 10px }
+#rules li .body { flex: 1; min-width: 0; display: grid; gap: 2px }
+#rules li .text { white-space: pre-wrap; word-break: break-word }
+#rules li.off .text { opacity: .5 }
+#rules li .target { font-size: 12px; color: var(--conai-muted-foreground) }

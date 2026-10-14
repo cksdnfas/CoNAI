@@ -1,3 +1,4 @@
+import { formatFileSize } from '@/lib/format-size'
 import { useMemo, useRef, useState, type FocusEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Globe, ImageDown, ImageOff, Maximize2, Plus, RefreshCw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
@@ -132,11 +133,6 @@ function suspectReason(info: ChatMediaInfo | undefined, t: Translate) {
   if (info.width === 161 && info.height === 81) return t({ ko: 'imgur 삭제 안내 그림이랑 크기가 같아', en: 'Same size as imgur’s “removed” placeholder' })
   if (info.width !== null && info.height !== null && Math.min(info.width, info.height) <= 64) return t({ ko: '너무 작아', en: 'Very small' })
   return null
-}
-
-function formatBytes(bytes: number | null) {
-  if (!bytes) return null
-  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)}MB` : `${Math.max(1, Math.round(bytes / 1024))}KB`
 }
 
 type MediaState = 'ok' | 'web' | 'suspect' | 'fail' | 'broken'
@@ -334,7 +330,7 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
       info?.width && info.height ? `${info.width}×${info.height}` : null,
       current.extension?.toUpperCase() ?? null,
       info?.duration ? `${info.duration.toFixed(1)}s` : null,
-      formatBytes(info?.fileSize ?? null),
+      info?.fileSize ? formatFileSize(info.fileSize) : null,
     ].filter(Boolean).join(' · ')
     const status = state === 'fail' ? <span className="font-semibold text-destructive">{reasonLabel(localize.failures.get(current.link) ?? '', t).long}</span>
       : state === 'broken' ? <span className="font-semibold text-destructive">{t({ ko: '라이브러리에서 지워졌어', en: 'Removed from the library' })}</span>

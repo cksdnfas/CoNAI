@@ -5,7 +5,7 @@ import { cancellableAsyncHandler, asyncHandler } from '../middleware/asyncHandle
 import { getRequesterAccountId } from './requester-session-helpers'
 import { requireFileStoreOwner, requireFileStoreAction } from '../services/fileStoreAccess'
 import { WorkspaceService, WorkspaceError } from '../services/workspaceService'
-import { workspaceIdSchema, workspaceListSchema, workspaceReadSchema, workspaceApplySchema, workspaceSearchSchema } from '../services/workspaceSchemas'
+import { workspaceIdSchema, workspaceListSchema, workspaceReadSchema, workspaceApplySchema, workspaceDeleteSchema, workspaceSearchSchema, workspaceUpdateSchema } from '../services/workspaceSchemas'
 import { CodexChatService } from '../services/codex-chat/codexChatService'
 
 const router = Router()
@@ -29,9 +29,19 @@ router.put('/threads/:threadId', asyncHandler(async (req, res) => {
   res.json({ success: true, data: WorkspaceService.bind(owner(req), thread, input.projectId, input.write) })
 }))
 router.get('/:id', (req, res) => res.json({ success: true, data: WorkspaceService.get(owner(req), projectId(req)) }))
+router.patch('/:id', requirePermission('files.edit'), asyncHandler(async (req, res) => {
+  const input = workspaceUpdateSchema.parse(req.body)
+  const account = requester(req)
+  res.json({ success: true, data: await WorkspaceService.update(requireFileStoreAction(account, 'organize'), projectId(req), input, () => { requireFileStoreAction(account, 'organize') }) })
+}))
+router.get('/:id/folders', (req, res) => res.json({ success: true, data: WorkspaceService.folders(owner(req), projectId(req)) }))
+router.get('/:id/stat', asyncHandler(async (req, res) => {
+  const target = z.string().min(1).max(1000).parse(req.query.target)
+  res.json({ success: true, data: await WorkspaceService.stat(owner(req), projectId(req), target) })
+}))
 router.get('/:id/entries', asyncHandler(async (req, res) => {
   const input = workspaceListSchema.parse({ target: req.query.target ?? '', offset: Number(req.query.offset ?? 0) })
-  res.json({ success: true, data: await WorkspaceService.entries(owner(req), projectId(req), input.target, input.offset) })
+  res.json({ success: true, data: await WorkspaceService.entries(owner(req), projectId(req), input.target, input.offset, { revisions: true }) })
 }))
 router.post('/:id/read', cancellableAsyncHandler(async (req, res, signal) => {
   const input = workspaceReadSchema.parse(req.body)
@@ -45,7 +55,14 @@ router.get('/:id/changes', (req, res) => res.json({ success: true, data: Workspa
 router.post('/:id/apply', requirePermission('files.edit'), cancellableAsyncHandler(async (req, res, signal) => {
   const input = workspaceApplySchema.parse(req.body)
   const account = requester(req)
-  res.json({ success: true, data: await WorkspaceService.apply(requireFileStoreAction(account, 'organize'), projectId(req), input.requestId, input.operations, () => { requireFileStoreAction(account, 'organize') }, signal) })
+  // The screen is the one place the project guidelines file may be written (chats and plugins may not).
+  res.json({ success: true, data: await WorkspaceService.apply(requireFileStoreAction(account, 'organize'), projectId(req), input.requestId, input.operations, () => { requireFileStoreAction(account, 'organize') }, signal, { guidelines: true }) })
+}))
+router.post('/:id/delete', requirePermission('files.edit'), requirePermission('files.delete'), cancellableAsyncHandler(async (req, res, signal) => {
+  const input = workspaceDeleteSchema.parse(req.body)
+  const account = requester(req)
+  const operations = input.targets.map(item => ({ kind: 'delete' as const, target: item.target, expectedRevision: item.expectedRevision }))
+  res.json({ success: true, data: await WorkspaceService.apply(requireFileStoreAction(account, 'organize'), projectId(req), input.requestId, operations, () => { requireFileStoreAction(account, 'organize') }, signal) })
 }))
 router.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (error instanceof z.ZodError) { res.status(400).json({ error: '잘못된 작업 공간 입력이야.', details: error.issues }); return }

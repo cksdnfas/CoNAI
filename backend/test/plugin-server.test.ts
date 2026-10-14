@@ -1,0 +1,290 @@
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import os from 'node:os'
+import { test } from 'node:test'
+import AdmZip from 'adm-zip'
+
+const SDK = path.resolve(__dirname, '../../plugins/sdk/conai-plugin.js')
+
+function packageOf(folder: string, edit: (manifest: Record<string, unknown>) => void = () => {}, extra: Record<string, string> = {}) {
+  const zip = new AdmZip()
+  zip.addLocalFolder(folder, '', entry => !/\.md$/i.test(entry))
+  zip.addLocalFile(SDK)
+  const manifest = JSON.parse(zip.readAsText('plugin.json'))
+  edit(manifest)
+  zip.updateFile('plugin.json', Buffer.from(JSON.stringify(manifest)))
+  for (const [name, text] of Object.entries(extra)) zip.addFile(name, Buffer.from(text))
+  return zip.toBuffer()
+}
+
+async function until(check: () => boolean, label: string, timeoutMs = 15_000) {
+  const started = Date.now()
+  while (!check()) {
+    if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for ${label}`)
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+}
+
+test('trusted plugins run a server module with their own data, hooks and tools', { timeout: 120_000 }, async (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-plugin-server-test-'))
+  process.env.RUNTIME_BASE_PATH = path.join(root, '.private')
+  for (const part of ['DATABASE', 'UPLOADS', 'LOGS', 'TEMP', 'SAVE', 'CANVAS', 'ARTIFACTS', 'MODELS', 'CUSTOM_NODES', 'RECYCLE_BIN']) process.env[`RUNTIME_${part}_DIR`] = path.join(root, part.toLowerCase())
+  const authModule = await import('../src/database/authDb')
+  authModule.initializeAuthDb()
+  const auth = authModule.getAuthDb()
+  const main = await import('../src/database/init')
+  await main.initializeDatabase()
+  const user = await import('../src/database/userSettingsDb')
+  user.initializeUserSettingsDb()
+  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const registry = await import('../src/services/plugins/pluginRegistry')
+  const runtime = await import('../src/services/plugins/pluginServerRuntime')
+  const serverTools = await import('../src/services/plugins/pluginServerTools')
+  const app = await import('../src/services/plugins/pluginAppActions')
+  const { getMcpToolScope } = await import('../src/mcp/context')
+  t.after(async () => {
+    await runtime.closePluginServers()
+    auth.close(); user.closeUserSettingsDb(); main.closeDatabase()
+    await new Promise<void>(async (resolve) => (await import('../src/utils/logger')).logger.close(resolve))
+    assert.ok(path.basename(root).startsWith('conai-plugin-server-test-'))
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  })
+  const adminId = Number(auth.prepare("INSERT INTO auth_accounts(username, password_hash, account_type) VALUES ('server-admin', 'unused', 'admin')").run().lastInsertRowid)
+  const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
+  const adminGroup = AuthPermissionGroup.createCustomGroup({ name: 'plugin-server-admins', permissionKeys: ['files.view', 'files.edit', 'images.view', 'images.edit', 'chat.use'] })
+  AuthPermissionGroup.addAccountMembership(adminGroup.id, adminId)
+  invalidateConfiguredAuthCache()
+  const admin = { accountId: adminId, accountType: 'admin' as const }
+  const folder = path.resolve(__dirname, '../../plugins/chat-instructions')
+  const status = () => runtime.pluginServerStatus('chat-instructions')
+  runtime.startPluginServers()
+
+  await t.test('the manifest ties server code to the server capability', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.join(folder, 'plugin.json'), 'utf8'))
+    assert.throws(() => registry.parsePluginManifest({ ...manifest, capabilities: [] }), /server/)
+    assert.throws(() => registry.parsePluginManifest({ ...manifest, server: undefined }), /server/)
+    assert.throws(() => registry.parsePluginManifest({ ...manifest, server: { entry: 'server.py' } }), /mjs/)
+    assert.throws(() => registry.unpackPlugin(packageOf(folder, m => { m.server = { entry: 'missing.mjs' } })), /서버 모듈 파일/)
+  })
+
+  await t.test('enabling starts the module: hook, tool and page requests work against its own database', async () => {
+    const installed = await registry.installPlugin(packageOf(folder))
+    assert.equal(installed.updated, false)
+    assert.equal(installed.plugin.enabled, false)
+    assert.equal(status().state, 'off')
+    await registry.setPluginEnabled('chat-instructions', true, adminId)
+    await until(() => status().state === 'ready', 'module ready')
+    assert.deepEqual(status().hooks, ['chat.instructions'])
+    assert.deepEqual(status().tools.map(tool => tool.name), ['p_chat_instructions_list_rules'])
+    assert.equal(getMcpToolScope('p_chat_instructions_list_rules'), 'read')
+
+    const saved = await runtime.requestPluginServer('chat-instructions', { op: 'save', text: '대답은 세 문장 이하로.', profileId: null }, admin, {}) as { rules: unknown[] }
+    assert.equal(saved.rules.length, 1)
+    await runtime.requestPluginServer('chat-instructions', { op: 'save', text: '다른 캐릭터 전용', profileId: 99 }, admin, {})
+    const instructions = await runtime.applyChatInstructionHooks('BASE', { engine: 'llm', threadId: 1, group: false, profile: { id: 5, name: '루나' } }, admin)
+    assert.match(instructions, /^BASE\n\n## 추가 규칙\n- 대답은 세 문장 이하로\.$/)
+    assert.ok(fs.existsSync(path.join(process.env.RUNTIME_BASE_PATH!, 'plugins', 'data', 'chat-instructions', 'data.db')))
+
+    const listed = await serverTools.callPluginServerTool('p_chat_instructions_list_rules', { profile_id: 5 }, admin)
+    assert.notEqual(listed.isError, true)
+    assert.match(JSON.stringify(listed.content), /세 문장/)
+    assert.doesNotMatch(JSON.stringify(listed.content), /다른 캐릭터/)
+
+    // conai.tools.call runs an app tool as the person behind the request.
+    const profiles = await runtime.requestPluginServer('chat-instructions', { op: 'profiles' }, admin, {}) as { profiles: unknown[] }
+    assert.ok(Array.isArray(profiles.profiles))
+    await assert.rejects(runtime.requestPluginServer('chat-instructions', { op: 'nope' }, admin, {}), /알 수 없는 요청/)
+  })
+
+  await t.test('the MCP layer lists and runs registered tools', async () => {
+    const { createMcpServer } = await import('../src/mcp/server')
+    const { ALL_MCP_HTTP_SCOPES } = await import('../src/mcp/context')
+    const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
+    const server = createMcpServer({ requester: admin, scopes: [...ALL_MCP_HTTP_SCOPES], source: 'plugin', toolCatalog: false })
+    const client = new Client({ name: 'test', version: '1' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+    try {
+      assert.ok((await client.listTools()).tools.some(tool => tool.name === 'p_chat_instructions_list_rules'))
+      const result = await client.callTool({ name: 'p_chat_instructions_list_rules', arguments: {} })
+      assert.notEqual(result.isError, true)
+      assert.match(JSON.stringify(result.content), /세 문장/)
+    } finally { await client.close(); await server.close() }
+  })
+
+  await t.test('trusted pages call any app tool without declaring it or waiting for approval', async () => {
+    const context = app.pluginBrowserContext({ requester: admin, sessionId: 'server-admin-session' }, 'http://localhost:1666')
+    const read = await app.runPluginAppTool('chat-instructions', { tool: 'list_image_groups', arguments: {} }, context)
+    assert.equal(read.status, 'completed')
+    // An administrator tool from a trusted page starts at once too.
+    const configure = await app.runPluginAppTool('chat-instructions', { tool: 'list_chat_profiles', arguments: {}, requestId: 'trusted-profiles' }, context)
+    assert.ok('id' in configure && configure.status !== 'pending')
+    const tools = await app.listPluginAppTools('chat-instructions', context, { query: 'list_chat_profiles' })
+    assert.equal(tools.tools[0]?.requiresApproval, false)
+    const started = await app.runPluginAppTool('chat-instructions', { tool: 'create_image_group', arguments: { name: 'plugin-server-group' }, requestId: 'trusted-create-group' }, context)
+    assert.ok('id' in started && started.status !== 'pending', 'a trusted change starts at once')
+  })
+
+  await t.test('profile replies preserve identity, bound work, return text and cancel native requests', async (st) => {
+    const llm = await import('../src/services/plugins/pluginLlm')
+    const { RuntimeJobStore } = await import('../src/services/runtimeJobs/runtimeJobStore')
+    const { RuntimeJobRunner } = await import('../src/services/runtimeJobs/runtimeJobRunner')
+    st.after(async () => {
+      for (const job of RuntimeJobStore.list({ kind: 'plugin-llm', status: ['queued', 'running'] })) RuntimeJobRunner.cancel(job.jobId)
+      await until(() => RuntimeJobStore.list({ kind: 'plugin-llm', status: ['queued', 'running'] }).length === 0, 'LLM test cleanup')
+    })
+    const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+    updateChatSettings({ enabled: true })
+    ExternalApiProvider.create({ provider_name: 'plugin-test', display_name: 'test', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: {} })
+    const model = ModelSlotStore.ensure('plugin-test', 'test-model')!
+    const profile = ChatProfileStore.create({ name: '주민', engine: 'llm', modelSlotId: model, systemPrompt: 'You are a village resident.', maxTokens: 100 })
+    const off = ChatProfileStore.create({ name: '비활성', engine: 'llm', modelSlotId: model, isEnabled: false })
+    const guestId = Number(auth.prepare("INSERT INTO auth_accounts(username,password_hash,account_type) VALUES ('llm-guest','unused','guest')").run().lastInsertRowid)
+    const guestGroup = AuthPermissionGroup.createCustomGroup({ name: 'llm-users', permissionKeys: ['chat.use'] })
+    AuthPermissionGroup.addAccountMembership(guestGroup.id, guestId)
+    const guest = { accountId: guestId, accountType: 'guest' as const }
+    const nobody = { accountId: 999999, accountType: 'admin' as const }
+    let calls = 0, aborted = 0, hold = false
+    let lastBody = ''
+    st.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      calls++; lastBody = String(init?.body)
+      if (hold) await new Promise<void>((_resolve, reject) => {
+        const cancel = () => { aborted++; reject(init?.signal?.reason) }
+        if (init?.signal?.aborted) cancel()
+        else init?.signal?.addEventListener('abort', cancel, { once: true })
+      })
+      return Response.json({ choices: [{ message: { content: '안녕, 이웃!' }, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 4 } })
+    })
+    await registry.installPlugin(packageOf(folder, m => { m.id = 'llm-bridge' }, { 'server.mjs': `export function activate(conai) {
+      let late = null;
+      conai.onRequest(({ body }) => {
+        if (body.op === 'late') return late;
+        if (body.op === 'delay') {
+          setTimeout(() => conai.llm.profiles().then(() => { late = 'unexpected success' }, e => { late = e.message }), 50);
+          return true;
+        }
+        return conai.llm[body.op](body.input);
+      });
+    }` }))
+    await registry.setPluginEnabled('llm-bridge', true, adminId)
+    await until(() => runtime.pluginServerStatus('llm-bridge').state === 'ready', 'LLM bridge ready')
+    const bridge = (op: string, input?: unknown) => runtime.requestPluginServer('llm-bridge', { op, input }, guest, {})
+    const listed = await bridge('profiles') as Array<{ id: number }>
+    assert.ok(listed.some(item => item.id === profile.id), 'ordinary chat users can select their profiles')
+    assert.ok(!listed.some(item => item.id === off.id))
+    assert.doesNotMatch(JSON.stringify(listed), /systemPrompt|village resident|apiKey/)
+    assert.throws(() => llm.listPluginLlmProfiles('llm-bridge', nobody), /권한/)
+    assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { requestId: 'off', profileId: off.id, message: 'hi' }), /프로필/)
+    const input = { requestId: 'turn-1', profileId: profile.id, message: 'PRIVATE_INPUT', history: '사용자: 반가워', maxTokens: 512 }
+    const first = await bridge('start', input) as { jobId: string }
+    const again = await bridge('start', input) as { jobId: string }
+    assert.equal(first.jobId, again.jobId)
+    await until(() => llm.getPluginLlmJob('llm-bridge', guest, first.jobId).status === 'completed', 'reply completed')
+    const completed = await bridge('get', first.jobId) as { result: { text: string } }
+    assert.equal(completed.result.text, '안녕, 이웃!')
+    assert.equal(calls, 1)
+    assert.match(lastBody, /village resident/)
+    assert.match(lastBody, /PRIVATE_INPUT/)
+    assert.match(lastBody, /"max_tokens":100/)
+    assert.doesNotMatch(RuntimeJobStore.getParamsJson(first.jobId)!, /PRIVATE_INPUT|반가워/)
+    const usage = user.getUserSettingsDb().prepare('SELECT purpose, profile_id, reply_id FROM llm_usage_events ORDER BY id DESC LIMIT 1').get() as { purpose: string; profile_id: number; reply_id: string }
+    assert.equal(usage.purpose, 'plugin'); assert.equal(usage.profile_id, profile.id); assert.ok(usage.reply_id.includes(first.jobId))
+    assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...input, message: 'changed' }), /같은 요청 ID/)
+    assert.throws(() => llm.getPluginLlmJob('llm-bridge', admin, first.jobId), /찾을 수 없어/)
+    assert.throws(() => llm.getPluginLlmJob('chat-instructions', guest, first.jobId), /찾을 수 없어/)
+
+    // The same token means another account's independent turn, never its private result.
+    const other = llm.startPluginLlmJob('llm-bridge', admin, input)
+    assert.notEqual(other.jobId, first.jobId)
+    await until(() => llm.getPluginLlmJob('llm-bridge', admin, other.jobId).status === 'completed', 'admin reply')
+    hold = true
+    const active = [0, 1, 2, 3].map(i => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: `active-${i}` }))
+    await until(() => calls === 3, 'first call starts while the others wait for the shared connection slot')
+    assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'overflow' }), /4개/)
+    await bridge('cancel', active[0].jobId)
+    await until(() => RuntimeJobStore.get(active[0].jobId)?.status === 'cancelled', 'cancel reaches provider')
+    assert.equal(aborted, 1)
+    assert.equal(llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'active-0' }).status, 'cancelled', 'cancelled turns are not replayed')
+    await until(() => calls === 4, 'next call acquires the released connection slot')
+    await registry.setPluginEnabled('llm-bridge', false, adminId)
+    await until(() => active.every(job => RuntimeJobStore.get(job.jobId)?.status === 'cancelled'), 'disable cancels all outstanding replies')
+    assert.equal(aborted, 2, 'queued requests were cancelled without reaching the provider')
+    await registry.setPluginEnabled('llm-bridge', true, adminId)
+    await until(() => runtime.pluginServerStatus('llm-bridge').state === 'ready', 're-enabled bridge')
+    const revoked = llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'revoked' })
+    await until(() => calls === 5, 'revoked call started')
+    ChatProfileStore.update(profile.id, { isEnabled: false })
+    await until(() => RuntimeJobStore.get(revoked.jobId)?.status === 'failed', 'profile revocation aborts provider')
+    assert.equal(aborted, 3)
+    ChatProfileStore.update(profile.id, { isEnabled: true })
+
+    const timed = llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'timeout', timeoutMs: 1000 })
+    await until(() => RuntimeJobStore.get(timed.jobId)?.status === 'failed', 'timeout releases the provider slot')
+    assert.match(llm.getPluginLlmJob('llm-bridge', guest, timed.jobId).error!, /제한 시간/)
+    assert.equal(aborted, 4)
+
+    await bridge('delay')
+    await new Promise(resolve => setTimeout(resolve, 150))
+    assert.match(String(await bridge('late')), /문맥이 만료/, 'late work cannot silently become administrator work')
+    await registry.removePlugin('llm-bridge')
+  })
+
+  await t.test('an update keeps the data, restarts the module and turns it off when it asks for more', async () => {
+    const same = await registry.installPlugin(packageOf(folder, m => { m.version = '1.0.1' }))
+    assert.equal(same.updated, true)
+    assert.equal(same.reenable, false)
+    assert.equal(same.plugin.enabled, true)
+    assert.ok(!fs.existsSync(path.join(registry.pluginPackagesRoot, 'chat-instructions', '1.0.0')), 'the old version folder goes')
+    await until(() => status().state === 'ready', 'restarted module')
+    const kept = await runtime.requestPluginServer('chat-instructions', { op: 'list' }, admin, {}) as { rules: unknown[] }
+    assert.equal(kept.rules.length, 2)
+    await assert.rejects(registry.installPlugin(packageOf(folder, m => { m.version = '1.0.1' })), /같은 패키지/)
+
+    const wider = await registry.installPlugin(packageOf(folder, m => { m.version = '1.0.2'; m.capabilities = ['server', 'files.read'] }))
+    assert.equal(wider.reenable, true)
+    assert.equal(wider.plugin.enabled, false)
+    await until(() => status().state === 'off', 'module stopped')
+    assert.equal(serverTools.findPluginServerTool('p_chat_instructions_list_rules'), null)
+    assert.equal(await runtime.applyChatInstructionHooks('BASE', { engine: 'llm', threadId: 1, group: false, profile: { id: 5, name: '루나' } }, admin), 'BASE')
+  })
+
+  await t.test('slow hooks are skipped, failures stay inside the call and a crashed module comes back', async () => {
+    const lab = path.join(root, 'lab-plugin')
+    fs.mkdirSync(lab)
+    fs.writeFileSync(path.join(lab, 'plugin.json'), JSON.stringify({ apiVersion: 1, id: 'lab', name: 'lab', version: '1.0.0', description: '', capabilities: ['server'], server: { entry: 'server.mjs' }, pages: [{ id: 'main', title: 'lab', entry: 'index.html', accepts: [], actions: [] }] }))
+    fs.writeFileSync(path.join(lab, 'index.html'), '<!doctype html><title>lab</title>')
+    fs.writeFileSync(path.join(lab, 'server.mjs'), `export function activate(conai) {
+      conai.hooks.on('chat.instructions', () => new Promise(resolve => setTimeout(() => resolve('SLOW'), 5000)))
+      conai.tools.register({ name: 'fail', scope: 'read', inputSchema: { type: 'object' }, handler: () => { throw new Error('boom') } })
+      conai.tools.register({ name: 'crash', scope: 'read', inputSchema: { type: 'object' }, handler: () => process.exit(3) })
+      conai.tools.register({ name: 'bad name!', scope: 'read', handler: () => 1 })
+    }`)
+    await registry.installPlugin(packageOf(lab))
+    await registry.setPluginEnabled('lab', true, adminId)
+    const lab_ = () => runtime.pluginServerStatus('lab')
+    await until(() => lab_().state === 'ready' && lab_().tools.length === 2, 'lab ready')
+    const started = Date.now()
+    assert.equal(await runtime.applyChatInstructionHooks('BASE', { engine: 'codex', threadId: null, group: false, profile: { id: 1, name: 'x' } }, admin), 'BASE')
+    assert.ok(Date.now() - started < 4_500, 'the hook gives up after three seconds')
+    const failed = await serverTools.callPluginServerTool('p_lab_fail', {}, admin)
+    assert.equal(failed.isError, true)
+    assert.match(JSON.stringify(failed.content), /boom/)
+    const crashed = await serverTools.callPluginServerTool('p_lab_crash', {}, admin)
+    assert.equal(crashed.isError, true)
+    await until(() => lab_().state === 'ready' && lab_().tools.length === 2, 'lab restarted after a crash')
+    await registry.removePlugin('lab')
+  })
+
+  await t.test('removing the plugin stops it and deletes its data', async () => {
+    await registry.setPluginEnabled('chat-instructions', true, adminId)
+    await until(() => status().state === 'ready', 'module ready again')
+    await registry.removePlugin('chat-instructions')
+    assert.equal(status().state, 'off')
+    assert.equal(serverTools.pluginServerTools().length, 0)
+    assert.ok(!fs.existsSync(path.join(process.env.RUNTIME_BASE_PATH!, 'plugins', 'data', 'chat-instructions')))
+  })
+})

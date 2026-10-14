@@ -1,3 +1,4 @@
+import { isPathInside } from '../../utils/pathResolver'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
@@ -31,11 +32,6 @@ export function chatFeatureOverrides(features: Set<string>): Record<string, bool
   return Object.fromEntries([...features].map((feature) => [feature, KEPT_FEATURES.has(feature) || INERT_FEATURES.has(feature)]))
 }
 
-function isWithin(candidate: string, root: string) {
-  const relative = path.relative(root, candidate)
-  return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`))
-}
-
 /**
  * Account-private state and bounded auth reuse, outside every served runtime media directory. `research`: a separate
  * home for web research runs (chatWebResearch), the one place web search is on.
@@ -45,20 +41,20 @@ export function prepareChatRuntime(requester: McpRequester, purpose: 'chat' | 'r
   const accountRoot = path.join(runtimePaths.basePath, purpose === 'research' ? 'private-codex-research' : 'private-codex-chat', requester.accountId === null ? 'bootstrap' : `account-${requester.accountId}`)
   const root = projectId ? path.join(accountRoot, 'projects', projectId) : accountRoot
   for (const served of [runtimePaths.uploadsDir, runtimePaths.tempDir, runtimePaths.saveDir, runtimePaths.artifactsDir]) {
-    if (isWithin(path.resolve(root), path.resolve(served))) throw new Error('Codex chat state must be outside served media directories.')
+    if (isPathInside(path.resolve(served), path.resolve(root))) throw new Error('Codex chat state must be outside served media directories.')
   }
   fs.mkdirSync(root, { recursive: true, mode: 0o700 })
   const actualRoot = fs.realpathSync(root)
   for (const served of [runtimePaths.uploadsDir, runtimePaths.tempDir, runtimePaths.saveDir, runtimePaths.artifactsDir]) {
     const actualServed = fs.existsSync(served) ? fs.realpathSync(served) : path.resolve(served)
-    if (isWithin(actualRoot, actualServed)) throw new Error('Codex chat state must be outside served media directories.')
+    if (isPathInside(actualServed, actualRoot)) throw new Error('Codex chat state must be outside served media directories.')
   }
   const home = path.join(actualRoot, 'home')
   const cwd = path.join(actualRoot, 'work')
   const temp = path.join(actualRoot, 'tmp')
   for (const directory of [home, cwd, temp]) {
     fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
-    if (!isWithin(fs.realpathSync(directory), actualRoot)) throw new Error('Codex chat runtime directory escaped its private root.')
+    if (!isPathInside(actualRoot, fs.realpathSync(directory))) throw new Error('Codex chat runtime directory escaped its private root.')
   }
   const authSource = path.join(process.env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'auth.json')
   if (!fs.existsSync(authSource) || !fs.statSync(authSource).isFile()) throw new Error('Codex chat needs file-backed authentication; unrestricted host-home fallback is disabled.')

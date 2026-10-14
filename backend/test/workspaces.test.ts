@@ -121,6 +121,44 @@ test('project files share files while preserving revisions, execution boundaries
     assert.equal(joined, text)
     assert.equal((await read('long.md')).nextOffset, null)
   })
+  await t.test('folder moves protect child revisions and preserve indexed identities', async () => {
+    assert.equal((await apply('folder-move-setup', [{ kind: 'mkdir', target: 'stage' }, { kind: 'mkdir', target: 'stage/hero' }, { kind: 'write', target: 'stage/hero/info.json', text: '{}', expectedRevision: null }])).status, 'completed')
+    const entry = (await service.entries('bootstrap', project.id, 'stage/hero')).entries[0]
+    const stale = await service.stat('bootstrap', project.id, 'stage/hero')
+    await apply('folder-child-edit', [{ kind: 'write', target: entry.target, text: '{"changed":true}', expectedRevision: (await read(entry.target)).revision }])
+    assert.equal((await apply('folder-stale-move', [{ kind: 'move', target: 'stage/hero', destination: 'moved', expectedRevision: stale.revision }])).status, 'failed')
+    const current = await service.stat('bootstrap', project.id, 'stage/hero')
+    const operations: WorkspaceOperation[] = [{ kind: 'move', target: 'stage/hero', destination: 'moved', expectedRevision: current.revision }]
+    const moved = await apply('folder-valid-move', operations)
+    assert.equal(moved.status, 'completed')
+    assert.deepEqual(await apply('folder-valid-move', operations), moved)
+    assert.equal((await service.entries('bootstrap', project.id, 'moved')).entries[0].id, entry.id)
+    assert.equal((await read('moved/info.json')).text, '{"changed":true}')
+    await assert.rejects(service.stat('bootstrap', project.id, 'stage/hero'))
+  })
+  await t.test('text search keeps ordered partial results and revisions prevent stale excerpt edits', async () => {
+    const searchProject = await service.create('bootstrap', 'Search revisions')
+    const operations: WorkspaceOperation[] = [
+      { kind: 'mkdir', target: 'needle-folder' },
+      ...['a.md', 'b.md', 'c.md', 'd.md', 'e.md'].map(target => ({ kind: 'write' as const, target, text: `앞부분 needle ${target}\n` + (target === 'e.md' ? '한'.repeat(50000) : ''), expectedRevision: null })),
+    ]
+    assert.equal((await service.apply('bootstrap', searchProject.id, 'search-create', operations)).status, 'completed')
+    const result = await service.search('bootstrap', searchProject.id, 'needle')
+    assert.deepEqual(result.hits.map(hit => hit.target), ['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'needle-folder'])
+    assert.equal(result.partialFiles, 1)
+    assert.equal(result.nextOffset, null)
+    assert.equal(result.hits.at(-1)!.revision, undefined, 'name-only matches must not invent a content revision')
+    const hit = result.hits[0]
+    assert.match(hit.excerpt!, /앞부분 needle a.md/)
+    assert.match(hit.revision!, /^[a-f0-9]{64}$/)
+    const edit: WorkspaceOperation = { kind: 'edit', target: hit.target, edits: [{ old_text: 'needle', new_text: 'changed' }], expectedRevision: hit.revision! }
+    assert.equal((await service.apply('bootstrap', searchProject.id, 'search-edit', [edit])).status, 'completed')
+    assert.equal((await service.apply('bootstrap', searchProject.id, 'stale-search-edit', [edit])).status, 'failed')
+    assert.match((await service.read('bootstrap', searchProject.id, [{ target: hit.target }])).files[0].text, /앞부분 changed a.md/)
+    const cancelled = new AbortController()
+    cancelled.abort()
+    await assert.rejects(service.search('bootstrap', searchProject.id, 'needle', 0, cancelled.signal), /abort/i)
+  })
   await t.test('project tools require explicit binding, remain available beside a page, and revoke old grants', async () => {
     const before = await openChatMcpBridge(requester, [], null, { chatContext: context })
     const beforeSize = JSON.stringify(before.tools)
@@ -131,6 +169,9 @@ test('project files share files while preserving revisions, execution boundaries
     assert.equal(readonly.tools.filter(tool => tool.function.name.startsWith('workspace_')).length, 3)
     await readonly.close()
     service.bind('bootstrap', threadId, project.id, true)
+    const projectOnly = await openChatMcpBridge(requester, [], null, { chatContext: context })
+    const projectSize = JSON.stringify(projectOnly.tools)
+    await projectOnly.close()
     const bridge = await openChatMcpBridge(requester, [], null, { chatContext: { ...context, page: { path: '/files', kind: 'files', title: 'Files', fields: [], actions: [] } as never } })
     try {
       assert.equal(bridge.tools.filter(tool => tool.function.name.startsWith('workspace_')).length, 4)
@@ -140,7 +181,7 @@ test('project files share files while preserving revisions, execution boundaries
       assert.equal(payload.files.length, 2)
       assert.equal(payload.files[0].nextOffset, null)
       const afterSize = JSON.stringify(bridge.tools)
-      t.diagnostic(`Tool definitions before=${Buffer.byteLength(beforeSize)} bytes/${rawTokenEstimate(beforeSize)} estimated tokens; connected=${Buffer.byteLength(afterSize)} bytes/${rawTokenEstimate(afterSize)} estimated tokens. Two files (including 90KB UTF-8) read in one call.`)
+      t.diagnostic(`Tool definitions before=${Buffer.byteLength(beforeSize)} bytes/${rawTokenEstimate(beforeSize)} estimated tokens; project only=${Buffer.byteLength(projectSize)} bytes/${rawTokenEstimate(projectSize)} estimated tokens; project + page=${Buffer.byteLength(afterSize)} bytes/${rawTokenEstimate(afterSize)} estimated tokens. Two files (including 90KB UTF-8) read in one call.`)
       service.bind('bootstrap', threadId, null, false)
       assert.equal((await bridge.call('workspace_read', { targets: [{ target: 'long.md' }] })).isError, true)
     } finally { await bridge.close() }
@@ -162,7 +203,11 @@ test('project files share files while preserving revisions, execution boundaries
     const bridge = await openChatMcpBridge(requester, [], null, { chatContext: context })
     try {
       const old = await read('AI_GUIDELINES.md')
-      const update = await apply('update-guideline', [{ kind: 'write', target: old.target, text: 'New instructions', expectedRevision: old.revision }])
+      // Only the screen may write the guidelines: they become every connected chat's "selected by the user" instructions.
+      const refused = await bridge.call('workspace_apply', { requestId: 'chat-guideline', operations: [{ kind: 'write', target: old.target, text: 'Injected', expectedRevision: old.revision }] })
+      assert.match(JSON.stringify(refused.content), /화면에서만/)
+      assert.equal((await apply('assistant-guideline', [{ kind: 'edit', target: old.target, expectedRevision: old.revision, edits: [{ old_text: old.text.slice(0, 5) || 'x', new_text: 'y' }] }])).status, 'failed')
+      const update = await service.apply('bootstrap', project.id, 'update-guideline', [{ kind: 'write', target: old.target, text: 'New instructions', expectedRevision: old.revision }], undefined, undefined, { guidelines: true })
       assert.equal(update.status, 'completed')
       assert.equal(service.get('bootstrap', project.id).revision, project.revision + 1)
       assert.equal((await bridge.call('workspace_apply', { requestId: 'old-guideline', operations: [{ kind: 'mkdir', target: 'refused' }] })).isError, true)
@@ -238,6 +283,84 @@ test('project files share files while preserving revisions, execution boundaries
     assert.throws(() => files.migrateLayout(), /collision/)
     assert.equal(fs.readFileSync(moves[0][0], 'utf8'), 'after')
     assert.equal(fs.readFileSync(moves[0][1], 'utf8'), 'conflict')
+  })
+  await t.test('screen deletes check revisions, keep the guidelines file and are not open to assistants', async () => {
+    const { workspaceApplySchema, workspaceDeleteSchema } = await import('../src/services/workspaceSchemas')
+    const rev = 'a'.repeat(64)
+    assert.throws(() => workspaceApplySchema.parse({ requestId: 'delete-mcp-1', operations: [{ kind: 'delete', target: 'x.md', expectedRevision: rev }] }))
+    assert.doesNotThrow(() => workspaceDeleteSchema.parse({ requestId: 'delete-ui-1', targets: [{ target: 'x.md', expectedRevision: rev }] }))
+    assert.equal((await apply('delete-setup', [{ kind: 'mkdir', target: 'trash' }, { kind: 'write', target: 'trash/a.md', text: 'a', expectedRevision: null }, { kind: 'write', target: 'trash/b.md', text: 'b', expectedRevision: null }])).status, 'completed')
+    const stale = await apply('delete-stale', [{ kind: 'delete', target: 'trash', expectedRevision: rev }])
+    assert.equal(stale.status, 'failed')
+    assert.ok(fs.existsSync(path.join(directory, 'workspaces', project.id, 'trash', 'a.md')))
+    const folder = await service.stat('bootstrap', project.id, 'trash')
+    const done = await apply('delete-folder', [{ kind: 'delete', target: 'trash', expectedRevision: folder.revision }])
+    assert.deepEqual(done.results, [{ target: 'trash', deleted: true }])
+    assert.equal(fs.existsSync(path.join(directory, 'workspaces', project.id, 'trash')), false)
+    assert.equal((await service.entries('bootstrap', project.id, '')).entries.some(entry => entry.target.startsWith('trash')), false)
+    const guide = await service.stat('bootstrap', project.id, 'AI_GUIDELINES.md')
+    assert.match((await apply('delete-guide', [{ kind: 'delete', target: 'AI_GUIDELINES.md', expectedRevision: guide.revision }])).error ?? '', /지침/)
+  })
+  await t.test('project settings rename and rewrite the guidelines through a logged write', async () => {
+    const before = service.get('bootstrap', project.id)
+    await assert.rejects(service.update('bootstrap', project.id, { name: 'x', revision: before.revision + 5 }), /다시 열어/)
+    const after = await service.update('bootstrap', project.id, { name: '리소스 2', guidelines: 'New guide', revision: before.revision })
+    assert.equal(after.name, '리소스 2')
+    assert.equal(after.guidelines, 'New guide')
+    assert.equal(after.revision, before.revision + 1)
+    assert.equal((await read('AI_GUIDELINES.md')).text, 'New guide')
+    assert.equal(JSON.parse(service.changes('bootstrap', project.id)[0].result).results[0].target, 'AI_GUIDELINES.md')
+    await service.update('bootstrap', project.id, { name: '리소스', revision: after.revision })
+  })
+  await t.test('a lock left by a container that is gone is reclaimed; one from a live same-host writer is not', async () => {
+    const { getUserSettingsDb } = await import('../src/database/userSettingsDb')
+    const insert = getUserSettingsDb().prepare("INSERT INTO workspace_operations(project_id,request_id,input_hash,status,process_id,hostname,result,created_at) VALUES(?,?,?,'running',?,?,?,?)")
+    const running = JSON.stringify({ requestId: 'x', status: 'running', results: [] })
+    insert.run(project.id, 'old-container', 'h', 1, 'container-gone', running, '2020-01-01 00:00:00')
+    assert.equal((await apply('after-old-container', [{ kind: 'mkdir', target: 'lock-a' }])).status, 'completed')
+    assert.equal(service.changes('bootstrap', project.id).find(row => row.requestId === 'old-container')?.status, 'interrupted')
+    // A different host that started a minute ago may still be writing: wait for it.
+    insert.run(project.id, 'other-container', 'h', 1, 'container-busy', running, new Date(Date.now() - 60_000).toISOString().slice(0, 19).replace('T', ' '))
+    await assert.rejects(apply('during-other', [{ kind: 'mkdir', target: 'lock-b' }]), /진행 중/)
+    getUserSettingsDb().prepare("UPDATE workspace_operations SET status='interrupted' WHERE request_id='other-container'").run()
+  })
+  await t.test('index and disk drift heal instead of locking a folder', async () => {
+    assert.equal((await apply('drift-setup', [{ kind: 'mkdir', target: 'drift' }, { kind: 'write', target: 'drift/a.md', text: 'a', expectedRevision: null }, { kind: 'write', target: 'drift/b.md', text: 'b', expectedRevision: null }])).status, 'completed')
+    fs.rmSync(path.join(directory, 'workspaces', project.id, 'drift', 'a.md'))
+    // A child the disk lost no longer makes the folder unreadable, and the listing drops it from the index.
+    const folder = await service.stat('bootstrap', project.id, 'drift')
+    assert.deepEqual((await service.entries('bootstrap', project.id, 'drift')).entries.map(entry => entry.target), ['drift/b.md'])
+    assert.notEqual((await service.stat('bootstrap', project.id, 'drift')).revision, folder.revision)
+    assert.equal((await apply('drift-delete', [{ kind: 'delete', target: 'drift', expectedRevision: (await service.stat('bootstrap', project.id, 'drift')).revision }])).status, 'completed')
+  })
+  await t.test('search skips an unreadable file, case-only renames work and fs errors hide server paths', async () => {
+    assert.equal((await apply('search-setup', [{ kind: 'write', target: 'needle-ok.md', text: 'find the needle here', expectedRevision: null }, { kind: 'write', target: 'broken.txt', text: 'x', expectedRevision: null }])).status, 'completed')
+    fs.writeFileSync(path.join(directory, 'workspaces', project.id, 'broken.txt'), Buffer.from([0xc3, 0x28, 0x6e, 0x65, 0x65, 0x64, 0x6c, 0x65]))
+    const found = await service.search('bootstrap', project.id, 'needle')
+    assert.ok(found.hits.some(hit => hit.target === 'needle-ok.md'))
+    assert.equal(found.skippedFiles, 1)
+    const note = await service.stat('bootstrap', project.id, 'needle-ok.md')
+    assert.equal((await apply('case-rename', [{ kind: 'move', target: 'needle-ok.md', destination: 'Needle-OK.md', expectedRevision: note.revision }])).status, 'completed')
+    assert.ok(fs.readdirSync(path.join(directory, 'workspaces', project.id)).includes('Needle-OK.md'))
+    assert.equal((await read('Needle-OK.md')).text, 'find the needle here')
+    const clash = await apply('mkdir-clash', [{ kind: 'mkdir', target: 'clash' }, { kind: 'mkdir', target: 'clash' }])
+    assert.equal(clash.status, 'failed')
+    assert.ok(!clash.error?.includes(directory), clash.error)
+  })
+  await t.test('a long read is shortened for a chat at a resumable offset, never as a whole-looking file', async () => {
+    const { fitWorkspaceRead } = await import('../src/services/codex-chat/llmChatContext')
+    const text = `﻿${'가나다라마바사'.repeat(3000)}`
+    const written = await apply('long-read', [{ kind: 'write', target: 'chat-cut.md', text, expectedRevision: null }, { kind: 'write', target: 'chat-next.md', text: 'next', expectedRevision: null }])
+    assert.equal(written.status, 'completed', written.error)
+    const full = await service.read('bootstrap', project.id, [{ target: 'chat-cut.md', limit: 1048576 }, { target: 'chat-next.md' }])
+    const fitted = JSON.parse(fitWorkspaceRead(JSON.stringify(full), 6000)!) as typeof full
+    assert.ok(JSON.stringify(fitted).length <= 6000)
+    const [cut] = fitted.files
+    assert.ok(cut.text.length < full.files[0].text.length && cut.nextOffset !== null)
+    // Reading on from the cut gives exactly the rest of the file.
+    const rest = (await service.read('bootstrap', project.id, [{ target: 'chat-cut.md', offset: cut.nextOffset!, revision: cut.revision, limit: 1048576 }])).files[0]
+    assert.equal(cut.text + rest.text, full.files[0].text)
+    assert.deepEqual((fitted.remaining as Array<{ target: string }>).map(item => item.target), ['chat-next.md'])
   })
   await t.test('legacy duplicate names migrate once while IDs and descendants stay intact', async () => {
     const { default: Database } = await import('better-sqlite3')

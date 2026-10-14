@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { McpHttpScope } from '@conai/shared'
 import { Copy, Eye, EyeOff, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingRow } from '@/components/ui/setting-row'
@@ -19,46 +19,28 @@ import {
   updateMcpHttpApiKey,
   updateMcpHttpEnabled,
 } from '@/lib/api-settings-mcp'
-import { ToggleChip } from '@/components/ui/chip'
+import { listAuthPermissionGroups } from '@/lib/api-auth'
 import { IconButton } from '@/components/ui/icon-button'
-import { Tip } from '@/components/ui/tooltip'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { InstantApplyHint } from './settings-section-status'
 import { SETTINGS_WIDE_CONTROL_CLASS, SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 
 const QUERY_KEY = ['mcp-http-settings'] as const
-const SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore']
-
-type TranslateFn = ReturnType<typeof useI18n>['t']
-
-/** User-facing name and one-line explanation for each MCP key permission. */
-function getScopeCopy(scope: McpHttpScope, t: TranslateFn): { label: string; description: string } {
-  switch (scope) {
-    case 'read':
-      return { label: t({ ko: '조회', en: 'Read' }), description: t({ ko: '이미지·프롬프트·워크플로·생성 기록을 검색하고 읽어.', en: 'Search and read images, prompts, workflows and generation history.' }) }
-    case 'generate':
-      return { label: t({ ko: '생성', en: 'Generate' }), description: t({ ko: 'NAI·ComfyUI 생성과 워크플로 실행을 시작하거나 취소해.', en: 'Start or cancel NAI/ComfyUI generations and workflow runs.' }) }
-    case 'organize':
-      return { label: t({ ko: '정리', en: 'Organize' }), description: t({ ko: '그룹을 만들고 이미지·프롬프트를 그룹에 넣거나 옮겨.', en: 'Create groups and add or move images and prompts into them.' }) }
-    case 'backup':
-      return { label: t({ ko: '백업', en: 'Back up' }), description: t({ ko: '프롬프트 데이터와 워크플로 정의를 내보내.', en: 'Export prompt data and workflow definitions.' }) }
-    case 'restore':
-      return { label: t({ ko: '복원', en: 'Restore' }), description: t({ ko: '백업을 가져와 기존 데이터를 덮어쓸 수 있어.', en: 'Import backups, which can overwrite existing data.' }) }
-    case 'configure':
-      // Chat-only: HTTP keys never list it (SCOPES above), the chat profile picks it.
-      return { label: t({ ko: '설정', en: 'Configure' }), description: t({ ko: '채팅에서 프로필·표시 블록을 제안해.', en: 'Propose chat profiles and display blocks from a chat.' }) }
-  }
-}
 
 export function McpHttpSettingsCard() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const confirm = useConfirm()
-  // Draft name for a new key; null while the name dialog is closed.
+  // Draft name and permission group for a new key; null while the dialog is closed.
   const [newKeyName, setNewKeyName] = useState<string | null>(null)
+  const [newKeyGroup, setNewKeyGroup] = useState('')
   const [visibleKeys, setVisibleKeys] = useState<Set<string>>(new Set())
   const query = useQuery({ queryKey: QUERY_KEY, queryFn: getMcpHttpSettings })
+  // A key holds the permissions of one permission group, like an account does.
+  const groupsQuery = useQuery({ queryKey: ['auth-permission-groups', 'all'], queryFn: listAuthPermissionGroups, staleTime: 60_000, retry: false })
+  const groups = groupsQuery.data ?? []
+  const groupLabel = t({ ko: '권한 그룹', en: 'Permission group' })
   const commit = (settings: NonNullable<typeof query.data>) => queryClient.setQueryData(QUERY_KEY, settings)
   const enabled = useMutation({ mutationFn: updateMcpHttpEnabled, onSuccess: commit })
   const createKey = useMutation({ mutationFn: createMcpHttpApiKey, onSuccess: commit })
@@ -107,7 +89,10 @@ export function McpHttpSettingsCard() {
         <RowGroup
           heading={t({ ko: 'API 키', en: 'API keys' })}
           actions={(
-            <IconButton size="icon-sm" variant="ghost" disabled={busy} onClick={() => setNewKeyName(t({ ko: '에이전트 키', en: 'Agent key' }))} label={t({ ko: '키 추가', en: 'Add key' })}><Plus /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" disabled={busy} onClick={() => {
+              setNewKeyGroup('')
+              setNewKeyName(t({ ko: '에이전트 키', en: 'Agent key' }))
+            }} label={t({ ko: '키 추가', en: 'Add key' })}><Plus /></IconButton>
           )}
         >
           {query.data.keys.length === 0 ? <SettingsEmptyRow>{t({ ko: '발급한 키가 없어.', en: 'No keys yet.' })}</SettingsEmptyRow> : null}
@@ -146,26 +131,18 @@ export function McpHttpSettingsCard() {
                     }} label={t({ ko: '키 폐기', en: 'Revoke key' })}><Trash2 /></IconButton>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5 sm:pl-42">
-                  {SCOPES.map((scope) => {
-                    const scopeCopy = getScopeCopy(scope, t)
-                    const pressed = key.scopes.includes(scope)
-                    return (
-                      <Tip key={scope} content={scopeCopy.description} side="bottom" align="start">
-                        <ToggleChip
-                          size="sm"
-                          pressed={pressed}
-                          disabled={busy || (key.scopes.length === 1 && key.scopes[0] === scope)}
-                          onClick={() => {
-                            const scopes = pressed ? key.scopes.filter((item) => item !== scope) : [...key.scopes, scope]
-                            updateKey.mutate({ keyId: key.id, name: key.name, scopes })
-                          }}
-                        >
-                          {scopeCopy.label}
-                        </ToggleChip>
-                      </Tip>
-                    )
-                  })}
+                <div className="flex sm:pl-42">
+                  <Select
+                    variant="settings"
+                    className="w-56"
+                    aria-label={groupLabel}
+                    value={key.groupKey ?? ''}
+                    disabled={busy || groups.length === 0}
+                    onChange={(event) => { if (event.target.value) updateKey.mutate({ keyId: key.id, name: key.name, groupKey: event.target.value }) }}
+                  >
+                    {key.groupKey === null ? <option value="" disabled>{t({ ko: '그룹 없음 (권한 없음)', en: 'No group (no access)' })}</option> : null}
+                    {groups.map((group) => <option key={group.groupKey} value={group.groupKey}>{group.name}</option>)}
+                  </Select>
                 </div>
               </div>
             )
@@ -178,11 +155,11 @@ export function McpHttpSettingsCard() {
           onSubmit={(event) => {
             event.preventDefault()
             const name = newKeyName?.trim()
-            if (!name) {
+            if (!name || !newKeyGroup) {
               return
             }
 
-            createKey.mutate({ name, scopes: ['read'] })
+            createKey.mutate({ name, groupKey: newKeyGroup })
             setNewKeyName(null)
           }}
         >
@@ -191,9 +168,16 @@ export function McpHttpSettingsCard() {
               <span className="text-sm text-muted-foreground">{t({ ko: '키 이름', en: 'Key name' })}</span>
               <Input variant="settings" autoFocus value={newKeyName ?? ''} onChange={(event) => setNewKeyName(event.target.value)} />
             </label>
+            <label className="block space-y-2">
+              <span className="text-sm text-muted-foreground">{groupLabel}</span>
+              <Select variant="settings" className="w-full" value={newKeyGroup} onChange={(event) => setNewKeyGroup(event.target.value)}>
+                <option value="" disabled>{t({ ko: '그룹 선택', en: 'Pick a group' })}</option>
+                {groups.map((group) => <option key={group.groupKey} value={group.groupKey}>{group.name}</option>)}
+              </Select>
+            </label>
             <ModalFooter>
               <Button type="button" variant="secondary" onClick={() => setNewKeyName(null)}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-              <Button type="submit" disabled={!newKeyName?.trim() || busy}>{t({ ko: '추가', en: 'Add' })}</Button>
+              <Button type="submit" disabled={!newKeyName?.trim() || !newKeyGroup || busy}>{t({ ko: '추가', en: 'Add' })}</Button>
             </ModalFooter>
           </ModalBody>
         </form>

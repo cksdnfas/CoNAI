@@ -52,11 +52,19 @@ export function pageOperationView(requester: McpRequester, before: ChatPageSnaps
   const earlier = new Map(previous.fields.map((field) => [field.id, JSON.stringify(field)]))
   const changed = view.fields.filter((field) => earlier.get(field.id) !== JSON.stringify(field)).map((field) => ({ ...field, value: clipValue(field.value) }))
   const sameActions = JSON.stringify(previous.actions ?? null) === JSON.stringify(view.actions ?? null)
+  // Extension actions often only request a review card. Do not resend the same
+  // document excerpt on each step; changed/deleted keys remain explicit.
+  const unchangedData = next.kind === 'extension' ? Object.keys(view.data ?? {}).filter(key =>
+    Object.prototype.hasOwnProperty.call(previous.data ?? {}, key)
+    && JSON.stringify(before.data?.[key]) === JSON.stringify(next.data?.[key])) : []
+  const removedData = next.kind === 'extension' ? Object.keys(previous.data ?? {}).filter(key => !Object.prototype.hasOwnProperty.call(view.data ?? {}, key)) : []
   const compact = {
     ...view,
     fields: changed,
     ...(changed.length < view.fields.length ? { otherFields: 'unchanged from the screen you had' } : {}),
     ...(view.actions && sameActions ? { actions: 'unchanged: the same operations as the screen you had' } : {}),
+    ...(unchangedData.length ? { data: Object.fromEntries(Object.entries(view.data ?? {}).filter(([key]) => !unchangedData.includes(key))), unchangedData } : {}),
+    ...(removedData.length ? { removedData } : {}),
   }
   return JSON.stringify(compact).length <= PAGE_VIEW_BUDGET ? compact : JSON.parse(boundedPageView(view))
 }

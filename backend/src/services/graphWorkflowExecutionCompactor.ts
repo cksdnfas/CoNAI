@@ -1,3 +1,4 @@
+import { isPathInside } from '../utils/pathResolver'
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
@@ -8,11 +9,6 @@ import { GraphExecutionNodeIoModel } from '../models/GraphExecutionNodeIo'
 import { deleteFile as recycleBinDeleteFile } from '../utils/recycleBin'
 import { settingsService } from './settingsService'
 import type { ExecutionContext, RuntimeArtifact } from './graph-workflow-executor/shared'
-
-function isPathInsideRoot(rootPath: string, candidatePath: string) {
-  const relative = path.relative(rootPath, candidatePath)
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
-}
 
 function compactString(value: string, maxLength = 300) {
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
@@ -189,7 +185,7 @@ export async function compactCompletedGraphExecutionArtifacts(context: Execution
     }
 
     const resolvedPath = path.resolve(artifact.storage_path)
-    if (!isPathInsideRoot(graphExecutionTempRoot, resolvedPath)) {
+    if (!isPathInside(graphExecutionTempRoot, resolvedPath)) {
       continue
     }
 

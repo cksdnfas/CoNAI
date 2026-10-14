@@ -1,3 +1,5 @@
+import { parseServerDate } from '@/lib/server-time'
+
 export function parseJsonArray(raw: string | null) {
   if (!raw) return [] as string[]
 
@@ -39,26 +41,11 @@ export function buildBackupTargetPreviewPath(raw: string) {
   return normalized ? `Upload/${normalized}` : 'Upload'
 }
 
-export function normalizeUtcLikeTimestamp(value?: string | null) {
-  if (!value) return value ?? null
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
-    ? `${value.replace(' ', 'T')}Z`
-    : value
-}
-
 export function formatDateTime(value?: string | null, locale?: string) {
   if (!value) return '—'
-  const date = new Date(normalizeUtcLikeTimestamp(value) ?? value)
+  const date = parseServerDate(value)
   if (Number.isNaN(date.getTime())) return value
   return date.toLocaleString(locale)
-}
-
-export function formatFileSize(value?: number | null) {
-  if (value == null || Number.isNaN(value)) return '—'
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
-  if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`
-  return `${(value / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
 export interface NewWatchedFolderDraft {

@@ -207,15 +207,16 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     assert.ok(back.notes.includes('라이브러리에 없거나 볼 수 없는 이미지·영상 2개는 뺐어.'), back.notes.join(' / '))
 
     // Another account: same names match, missing ones are reported; the plain id never reaches someone else's.
+    // Account lorebooks are shared, so the same book links again.
     const theirs = ChatFlagStore.create(privateTo(2), { icon: '', name: '반말', content: '반말.' })
     const theirMe = ChatUserProfileStore.create(2, { name: '민준', persona: '' })
     const there = importChatThread(stranger, Buffer.from(JSON.stringify(file)), target(stranger))
     const copy = CodexChatStore.findThreadById(there.threadId)!
     assert.deepEqual(JSON.parse(copy.flag_ids ?? '[]'), [theirs.id])
     assert.equal(copy.user_profile_id, theirMe.id)
-    assert.deepEqual(OwnedLorebookStore.threadLinks(there.threadId), [])
+    assert.deepEqual(OwnedLorebookStore.threadLinks(there.threadId), [book.id])
     assert.ok(there.notes.includes('이 계정에 없는 플래그 1개는 켜지 않았어.'), there.notes.join(' / '))
-    assert.ok(there.notes.includes('이 계정에 없는 로어북 1개는 연결하지 않았어.'), there.notes.join(' / '))
+    assert.ok(!there.notes.some((note) => note.includes('로어북')), there.notes.join(' / '))
 
     const { links: _links, ...older } = file
     const oldThere = importChatThread(stranger, Buffer.from(JSON.stringify(older)), target(stranger))

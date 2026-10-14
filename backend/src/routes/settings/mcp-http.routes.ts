@@ -1,6 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { requireAdmin } from '../../middleware/authMiddleware';
-import { MCP_HTTP_SCOPES, mcpHttpSettingsService } from '../../services/mcpHttpSettingsService';
+import { mcpHttpSettingsService } from '../../services/mcpHttpSettingsService';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { sendRouteBadRequest } from '../routeValidation';
 
@@ -47,21 +47,28 @@ router.post(
 );
 
 router.post('/mcp-http/keys', asyncHandler(async (req: Request, res: Response) => {
-  if (typeof req.body?.name !== 'string') {
-    sendRouteBadRequest(res, 'name is required');
+  if (typeof req.body?.name !== 'string' || typeof req.body?.groupKey !== 'string') {
+    sendRouteBadRequest(res, 'name and groupKey are required');
     return;
   }
-  res.status(201).json({ success: true, data: mcpHttpSettingsService.createApiKey(req.body.name, req.body.scopes) });
+  try {
+    res.status(201).json({ success: true, data: mcpHttpSettingsService.createApiKey(req.body.name, req.body.groupKey) });
+  } catch (error) {
+    sendRouteBadRequest(res, error instanceof Error ? error.message : 'Invalid MCP key');
+  }
 }));
 
 router.put('/mcp-http/keys/:keyId', asyncHandler(async (req: Request, res: Response) => {
-  if (typeof req.body?.name !== 'string' || !Array.isArray(req.body?.scopes)
-      || req.body.scopes.some((scope: unknown) => !MCP_HTTP_SCOPES.includes(scope as never))) {
-    sendRouteBadRequest(res, 'name and valid scopes are required');
+  if (typeof req.body?.name !== 'string' || typeof req.body?.groupKey !== 'string') {
+    sendRouteBadRequest(res, 'name and groupKey are required');
     return;
   }
   const keyId = Array.isArray(req.params.keyId) ? req.params.keyId[0] : req.params.keyId;
-  res.json({ success: true, data: mcpHttpSettingsService.updateApiKey(keyId, req.body.name, req.body.scopes) });
+  try {
+    res.json({ success: true, data: mcpHttpSettingsService.updateApiKey(keyId, req.body.name, req.body.groupKey) });
+  } catch (error) {
+    sendRouteBadRequest(res, error instanceof Error ? error.message : 'Invalid MCP key');
+  }
 }));
 
 router.post('/mcp-http/keys/:keyId/rotate', asyncHandler(async (req: Request, res: Response) => {

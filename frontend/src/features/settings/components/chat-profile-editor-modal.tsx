@@ -243,7 +243,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
     users: userProfilesQuery.data?.map((entry) => ({ id: entry.id, name: entry.name, ready: entry.modelReady === true })),
   }), [profilesQuery.data, userProfilesQuery.data, profile?.id, t])
   const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks, enabled: open })
-  // The editor's own account books can be linked too (another account's book on the profile stays as it is).
+  // Account books (shared by every account) can be linked too.
   const ownLorebooksQuery = useQuery({ queryKey: OWN_LOREBOOKS_QUERY_KEY, queryFn: listOwnLorebooks, enabled: open })
   const linkableLorebooks = useMemo(() => lorebooksQuery.data ? [...lorebooksQuery.data, ...(ownLorebooksQuery.data ?? []).filter((book) => book.kind === 'account')] : undefined, [lorebooksQuery.data, ownLorebooksQuery.data])
   const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks, enabled: open })

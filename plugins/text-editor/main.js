@@ -6,7 +6,7 @@ let api, current, original = '', serial = 0, selection = 0
 const pendingProposals = new Map()
 const dirty = () => current && editor.value !== original
 function publish() {
-  api.publish({ revision: String(++serial), dirty: !!dirty(), data: { files: api.files.map(({ id, name }) => ({ id, name })), selected: current ? { id: current.id, name: current.name, excerpt: editor.value.slice(0, 8000), truncated: editor.value.length > 8000, ...(!comparison.hidden ? { latestExcerpt: original.slice(0, 8000), latestTruncated: original.length > 8000 } : {}) } : null } })
+  api.publish(() => ({ revision: String(++serial), dirty: !!dirty(), data: { files: api.files.map(({ id, name }) => ({ id, name })), selected: current ? { id: current.id, name: current.name, excerpt: editor.value.slice(0, 8000), truncated: editor.value.length > 8000, ...(!comparison.hidden ? { latestExcerpt: original.slice(0, 8000), latestTruncated: original.length > 8000 } : {}) } : null } }))
 }
 async function select(id) {
   if (dirty()) throw new Error('미저장 초안이 있어. 저장하거나 초안을 버려줘.')

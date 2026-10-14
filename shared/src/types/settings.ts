@@ -476,7 +476,8 @@ export interface McpHttpApiKey {
   id: string;
   name: string;
   apiKey: string;
-  scopes: McpHttpScope[];
+  /** The permission group whose permissions this key holds; null: none until an administrator picks one. */
+  groupKey: string | null;
   createdAt: string;
   updatedAt: string;
 }

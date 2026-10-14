@@ -160,6 +160,28 @@ services:
 
 ## 업데이트와 백업
 
+### 별도 테스트 인스턴스
+
+파일함·작업 공간·확장과 채팅 엔진 검증에는 운영 Compose와 분리된 설정을 사용합니다.
+
+```bash
+docker compose -f compose.qa.yaml up -d --build
+docker compose -f compose.qa.yaml ps
+```
+
+- 주소는 `http://localhost:17666`이며 호스트의 루프백에만 공개합니다. 운영 서버의 포트와 데이터는 사용하지 않습니다.
+- `conai-qa-data` 볼륨에 테스트 DB·파일·프로젝트·확장과 Codex/Claude 인증을 보존합니다. Codex는 `/app/data/user/codex`, Claude는 `/app/data/user/claude`입니다.
+- 처음 관리자 계정은 위의 초기 설정 절차에서 `docker compose -f compose.qa.yaml exec conai`를 사용해 만듭니다. 로그인 후 **설정 → LLM**에서 Codex와 Claude Code 인증을 진행합니다. 로그인 진행 중에는 컨테이너를 교체하지 않습니다.
+- 코드 수정 후 같은 `up -d --build` 명령으로 업데이트합니다. 볼륨을 유지하면 인증과 테스트 자료도 남습니다. `down -v` 또는 볼륨 삭제는 사용하지 않습니다. 인증 취소·토큰 갱신 실패 시에는 다시 로그인해야 합니다.
+- 컨테이너에서 Windows 호스트의 API에 연결할 때는 `host.docker.internal`을 사용합니다. 다른 PC의 API는 해당 PC의 주소를 사용합니다. Pi와 직접 API 방식은 테스트 앱의 LLM 연결·모델을 별도로 지정합니다.
+- 문서 편집 확장은 호스트에서 `node scripts/build-plugin.mjs text-editor`로 만든 ZIP을 테스트 앱에 설치합니다. 개별 확장은 Docker 이미지에 자동 설치하지 않습니다.
+
+테스트 컨테이너는 고정 호스트 이름 `conai-qa`를 사용합니다. 이는 컨테이너 교체 시 이름 변경으로 인한 중단 작업 판정 문제를 줄이기 위한 설정이며, 다른 호스트의 실행 종료를 자동으로 증명하거나 임의 잠금을 해제하는 기능은 아닙니다. 실제 모델 호출, 브라우저의 저장 승인·충돌 처리, 컨테이너 재생성 후 자료·인증 유지 여부는 각각 확인해야 합니다.
+
+로컬 접속 정보와 테스트 보조 자료를 둔 `local-docs/`는 Git과 Docker 빌드 문맥에서 제외합니다. 실제 인증 파일은 프로젝트 문서나 이미지에 복사하지 않습니다.
+
+### 운영 인스턴스 업데이트
+
 ```bash
 git pull
 docker compose up -d --build        # GPU는 -f compose.yaml -f compose.gpu.yaml 추가

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState, type ChangeEvent } from 'react'
 import { useI18n } from '@/i18n'
-import { formatBytes } from '@/features/images/components/detail/image-detail-utils'
+import { formatFileSize } from '@/lib/format-size'
 import {
   UploadRequestError,
   uploadMultipleImages,
@@ -118,8 +118,8 @@ export function useUploadPageUploadFlow({
         },
         {
           files: formatNumber(UPLOAD_LIMITS.maxFilesPerRequest),
-          total: formatBytes(UPLOAD_LIMITS.maxRequestBytes),
-          file: formatBytes(UPLOAD_LIMITS.maxFileBytes),
+          total: formatFileSize(UPLOAD_LIMITS.maxRequestBytes),
+          file: formatFileSize(UPLOAD_LIMITS.maxFileBytes),
         },
       )
     }
@@ -155,7 +155,7 @@ export function useUploadPageUploadFlow({
       filename: file.name,
       error: t(
         { ko: '파일이 너무 커. 파일당 최대 {limit}까지 올릴 수 있어.', en: 'File is too large. The per-file limit is {limit}.' },
-        { limit: formatBytes(UPLOAD_LIMITS.maxFileBytes) },
+        { limit: formatFileSize(UPLOAD_LIMITS.maxFileBytes) },
       ),
     }))
     const sendableFileCount = batches.reduce((sum, batch) => sum + batch.length, 0)

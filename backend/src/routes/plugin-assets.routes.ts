@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { getPlugin, packageFile, PluginError } from '../services/plugins/pluginRegistry'
 import { resolvePluginMedia } from '../services/plugins/pluginHost'
+import { resolvePluginWorkspaceMedia } from '../services/plugins/pluginWorkspace'
 import { filePreviewMime } from '../services/fileStorePreview'
 import { AuthAccessControlService } from '../services/authAccessControlService'
 import { pluginRouteError } from './plugins.routes'
@@ -34,19 +35,20 @@ pluginAssetRoutes.get('/:pluginId/:version/*asset', (req, res, next) => {
     if (!/^[a-zA-Z0-9.:[\]-]+$/.test(host)) throw new PluginError('잘못된 호스트야.')
     const origin = `${req.protocol}://${host}`
     const base = `${origin}/api/plugin-assets/${id}/${version}/`
-    res.setHeader('Content-Security-Policy', `sandbox allow-scripts; default-src 'none'; script-src ${base}; style-src ${base}; font-src ${base}; img-src ${base} ${origin}/api/plugin-media/ blob:; media-src ${origin}/api/plugin-media/ blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; frame-ancestors 'self'`)
+    res.setHeader('Content-Security-Policy', `sandbox allow-scripts; default-src 'none'; script-src ${base} 'wasm-unsafe-eval'; style-src ${base}; font-src ${base}; img-src ${base} ${origin}/api/plugin-media/ blob:; media-src ${base} ${origin}/api/plugin-media/ blob:; connect-src ${base}; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; frame-ancestors 'self'`)
     // The verified private root itself may be a dot-directory (portable/dev instances).
     res.sendFile(file, { dotfiles: 'allow' }, (error) => { if (error) next(error) })
   } catch (error) { next(error) }
 })
-pluginMediaRoutes.get('/:token', async (req, res, next) => {
+pluginMediaRoutes.get(['/workspace/:token', '/:token'], async (req, res, next) => {
   try {
-    const { entry, filePath, requester } = resolvePluginMedia(String(req.params.token))
+    const resolve = req.path.startsWith('/workspace/') ? resolvePluginWorkspaceMedia : resolvePluginMedia
+    const { entry, filePath, requester } = await resolve(String(req.params.token))
     const mime = await filePreviewMime(entry, filePath)
     if (!mime || !/^(image|video|audio)\//.test(mime)) throw new PluginError('표시할 수 없는 미디어야.', 415)
     if (/^(image|video)\//.test(mime) && requester.accountId !== null && !AuthAccessControlService.hasPermission(requester.accountId, 'images.view')) throw new PluginError('미디어 접근 권한이 없어.', 403)
     // The async MIME probe must not let revocation or file replacement race the final send.
-    resolvePluginMedia(String(req.params.token))
+    await resolve(String(req.params.token))
     res.setHeader('Content-Type', mime)
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox")
     res.sendFile(filePath, { dotfiles: 'allow' }, (error) => { if (error) next(error) })

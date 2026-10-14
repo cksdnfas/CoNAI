@@ -47,6 +47,7 @@ router.post('/mcp', async (req: Request, res: Response) => {
       scopes: auth?.scopes ?? [],
       keyId: auth?.keyId,
       keyName: auth?.keyName,
+      keyGroup: auth?.keyGroup,
       baseUrl,
       requester: auth?.requester,
       source: auth?.source ?? 'http',

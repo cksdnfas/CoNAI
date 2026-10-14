@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
+import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 
 export const MCP_DECODED_MEDIA_LIMIT_BYTES = 50 * 1024 * 1024;
 export const MCP_HTTP_JSON_LIMIT_MB = 70;
@@ -136,7 +137,7 @@ export function validateMcpRequestBody(req: Request, res: Response, next: NextFu
 
   try {
     const call = req.body?.method === 'tools/call' ? req.body.params?.name : undefined;
-    inspectValue(req.body, { decodedBytes: 0, outside: typeof call === 'string' && findExternalMcpTool(call) !== null });
+    inspectValue(req.body, { decodedBytes: 0, outside: typeof call === 'string' && (findExternalMcpTool(call) !== null || findPluginServerTool(call) !== null) });
     next();
   } catch (error) {
     const validationError = error instanceof McpRequestValidationError

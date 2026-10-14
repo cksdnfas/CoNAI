@@ -1,3 +1,4 @@
+import { formatFileSize } from '@/lib/format-size'
 import { useState, type ReactNode } from 'react'
 import { Download, RefreshCw, ScrollText, X } from 'lucide-react'
 import type { AiRuntimeInstallStep, AiRuntimeSettings, AiRuntimeStatus, AiTorchBackend, AiTorchBackendPreference } from '@conai/shared'
@@ -49,12 +50,6 @@ function stepLabel(step: AiRuntimeInstallStep, t: (input: TranslationInput) => s
     case 'verify': return t({ ko: '검증', en: 'Check' })
     case 'activate': return t({ ko: '교체', en: 'Switch' })
   }
-}
-
-function formatBytes(bytes: number) {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`
-  if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`
-  return `${Math.round(bytes / 1024)} KB`
 }
 
 export function AiRuntimeSettingsCard({
@@ -172,7 +167,7 @@ export function AiRuntimeSettingsCard({
                     {STEPS.map((step, index) => (
                       <span key={step} className={cn(index < stepIndex && 'text-success', index === stepIndex && 'font-semibold text-foreground')}>
                         {stepLabel(step, t)}{index < stepIndex ? ' ✓' : ''}
-                        {index === stepIndex && step === 'packages' && install && install.downloadedBytes > 0 ? ` ${formatBytes(install.downloadedBytes)}` : ''}
+                        {index === stepIndex && step === 'packages' && install && install.downloadedBytes > 0 ? ` ${formatFileSize(install.downloadedBytes)}` : ''}
                       </span>
                     ))}
                   </div>

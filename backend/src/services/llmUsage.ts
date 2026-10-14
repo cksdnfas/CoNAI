@@ -2,7 +2,7 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { AsyncLocalStorage } from 'node:async_hooks'
 
 /** What a model request was for. The dashboard folds the small ones (translation, suggestions, asset work) together. */
-export type LlmUsagePurpose = 'chat' | 'summary' | 'judge' | 'translation' | 'suggestion' | 'asset_vision' | 'appearance' | 'image_prompt' | 'workflow' | 'web_search' | 'other'
+export type LlmUsagePurpose = 'chat' | 'summary' | 'judge' | 'translation' | 'suggestion' | 'asset_vision' | 'appearance' | 'image_prompt' | 'workflow' | 'plugin' | 'web_search' | 'other'
 /** How the request reached the model: an API connection, a subscription CLI, or the TypeSafe judge API. */
 export type LlmUsageEngine = 'api' | 'claude-code' | 'codex' | 'typesafe'
 

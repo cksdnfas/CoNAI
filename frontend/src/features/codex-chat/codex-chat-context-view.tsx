@@ -22,6 +22,7 @@ import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatUserProfileRow } from './chat-user-profiles'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatCompactMutationKey, codexChatThreadQueryKey } from './codex-chat-context'
 import { CHAT_MODEL_OPTIONS_QUERY_KEY, listChatModelOptions } from '@/lib/api-codex-chat'
+import { parseServerDate } from '@/lib/server-time'
 
 /** Per-chat opt-in, using the same public model slots as reply suggestions. */
 function GenerationReactionSettings({ thread }: { thread: CodexChatThread }) {
@@ -54,11 +55,6 @@ function GenerationReactionSettings({ thread }: { thread: CodexChatThread }) {
 }
 
 type SummaryMode = 'profile' | 'on' | 'off'
-
-/** SQLite `CURRENT_TIMESTAMP` is UTC without a zone marker. */
-function parseServerDate(value: string) {
-  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`)
-}
 
 const NOTE_SAVE_DELAY_MS = 600
 

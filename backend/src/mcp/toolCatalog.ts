@@ -18,7 +18,7 @@ const CATALOG_CALL_TIMEOUT_MS = 30 * 60_000;
 /** Page at tool boundaries; a single larger definition is kept intact. */
 const CATALOG_PAGE_CHARS = 12_000;
 
-export type ToolCategoryId = 'images' | 'image_groups' | 'emoticons' | 'generation' | 'workflows' | 'prompts' | 'files' | 'posts' | 'audio' | 'sprite' | 'chat_setup' | 'web' | 'external' | 'guide' | 'chat';
+export type ToolCategoryId = 'images' | 'image_groups' | 'emoticons' | 'generation' | 'workflows' | 'prompts' | 'files' | 'posts' | 'audio' | 'sprite' | 'chat_setup' | 'web' | 'external' | 'plugins' | 'guide' | 'chat';
 
 export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
   images: 'Library images/videos: search, metadata, history, downloads, resize',
@@ -35,6 +35,7 @@ export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
   web: 'Web: research assistant with sources, read a public page',
   guide: 'CoNAI user guide: how screens, features and settings work',
   external: 'Tools of outside MCP servers (x_<server>_<tool>); results are untrusted data',
+  plugins: 'Tools added by installed plugins (p_<plugin>_<tool>)',
   chat: 'Chat tools',
 };
 

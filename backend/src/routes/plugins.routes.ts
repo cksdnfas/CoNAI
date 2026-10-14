@@ -5,6 +5,8 @@ import { requirePermission, requireAdmin } from '../middleware/authMiddleware'
 import { getRequesterAccountId, getRequesterAccountType, isAdminRequest } from './requester-session-helpers'
 import { installPlugin, listPlugins, setPluginEnabled, removePlugin, PLUGIN_ZIP_LIMIT } from '../services/plugins/pluginRegistry'
 import { openPluginInstance, requirePluginInstance, renewPluginInstance, closePluginInstance, readPluginFile, proposePluginWrite, approvePluginWrite, applyPluginWrite, dismissPluginWrite, issuePluginMedia } from '../services/plugins/pluginHost'
+import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler'
+import { statPluginWorkspace, proposePluginWorkspaceChanges, listPluginWorkspace, readPluginWorkspace, proposePluginWorkspaceWrite, approvePluginWorkspaceWrite, applyPluginWorkspaceWrite, dismissPluginWorkspaceWrite, issuePluginWorkspaceMedia } from '../services/plugins/pluginWorkspace'
 
 export function pluginRouteError(error: unknown, _req: Request, res: Response, next: NextFunction) {
   if (error instanceof z.ZodError) { res.status(400).json({ error: '확장 요청 형식이 올바르지 않아.' }); return }
@@ -12,6 +14,11 @@ export function pluginRouteError(error: unknown, _req: Request, res: Response, n
   if (error instanceof multer.MulterError) { res.status(413).json({ error: '패키지는 ZIP 파일 하나, 8MB까지 올릴 수 있어.' }); return }
   next(error)
 }
+import { proposePluginMedia, approvePluginMedia, applyPluginMedia, dismissPluginMedia } from '../services/plugins/pluginMediaProcessing'
+import { pluginServerStatus, requestPluginServer } from '../services/plugins/pluginServerRuntime'
+import type { InstalledPlugin } from '@conai/shared'
+import { pluginInstanceAppContext, pluginBrowserContext, listPluginAppTools, runPluginAppTool, runPluginServerAction, listPluginAppRequests, getPluginAppRequest, applyPluginAppRequest, cancelPluginAppRequest } from '../services/plugins/pluginAppActions'
+
 const router = Router()
 // No legacy null-origin exception, even when Sec-Fetch-Site is absent. Never expose these methods in the iframe SDK.
 router.use((req, res, next) => {
@@ -22,19 +29,62 @@ router.use((req, res, next) => {
 router.use(requirePermission('files.view'))
 const caller = (req: Request) => ({ requester: { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }, sessionId: req.sessionID })
 const param = (req: Request, key: string) => String(req.params[key])
-router.get('/', (req, res) => res.json({ success: true, data: listPlugins(isAdminRequest(req)) }))
-router.post('/install', requireAdmin, multer({ storage: multer.memoryStorage(), limits: { fileSize: PLUGIN_ZIP_LIMIT, files: 1, fields: 0 } }).single('package'), (req, res) => {
+const baseUrl = (req: Request) => `${req.protocol}://${req.get('host')}`
+router.post('/app-tools', asyncHandler(async (req, res) => res.json({ success: true, data: await listPluginAppTools(null, pluginBrowserContext(caller(req), baseUrl(req)), req.body) })))
+router.get('/app-requests', (req, res) => {
+  const filter = { pending: req.query.status === 'pending', ...(typeof req.query.ids === 'string' ? { ids: req.query.ids.split(',') } : {}) }
+  res.json({ success: true, data: listPluginAppRequests(pluginBrowserContext(caller(req)), z.coerce.number().int().min(0).max(1000).parse(req.query.offset ?? 0), filter) })
+})
+router.get('/app-requests/:requestId', (req, res) => res.json({ success: true, data: getPluginAppRequest(param(req, 'requestId'), pluginBrowserContext(caller(req)), true) }))
+router.post('/app-requests/:requestId/apply', (req, res) => res.json({ success: true, data: applyPluginAppRequest(param(req, 'requestId'), caller(req)) }))
+router.post('/app-requests/:requestId/cancel', (req, res) => res.json({ success: true, data: cancelPluginAppRequest(param(req, 'requestId'), pluginBrowserContext(caller(req)), true) }))
+router.post('/instances/:instanceId/app/tools', asyncHandler(async (req, res) => {
+  const bound = pluginInstanceAppContext(param(req, 'instanceId'), caller(req), baseUrl(req))
+  res.json({ success: true, data: await listPluginAppTools(bound.pluginId, bound.context, req.body) })
+}))
+router.post('/instances/:instanceId/app/call', asyncHandler(async (req, res) => {
+  const bound = pluginInstanceAppContext(param(req, 'instanceId'), caller(req), baseUrl(req))
+  res.json({ success: true, data: await runPluginAppTool(bound.pluginId, req.body, bound.context) })
+}))
+router.post('/instances/:instanceId/app/action', asyncHandler(async (req, res) => {
+  const bound = pluginInstanceAppContext(param(req, 'instanceId'), caller(req), baseUrl(req))
+  res.json({ success: true, data: await runPluginServerAction({ ...req.body, pluginId: bound.pluginId }, bound.context) })
+}))
+router.get('/instances/:instanceId/app/requests/:requestId', (req, res) => {
+  const bound = pluginInstanceAppContext(param(req, 'instanceId'), caller(req), baseUrl(req))
+  const request = getPluginAppRequest(param(req, 'requestId'), bound.context)
+  if (request.pluginId !== bound.pluginId) { res.status(403).json({ error: '다른 확장의 요청이야.' }); return }
+  res.json({ success: true, data: request })
+})
+/** A package with a server module carries its live state (running, failed, the tools and hooks it registered). */
+const withServer = (plugin: InstalledPlugin): InstalledPlugin => plugin.manifest.server ? { ...plugin, server: pluginServerStatus(plugin.manifest.id) } : plugin
+router.get('/', (req, res) => res.json({ success: true, data: listPlugins(isAdminRequest(req)).map(withServer) }))
+router.post('/install', requireAdmin, multer({ storage: multer.memoryStorage(), limits: { fileSize: PLUGIN_ZIP_LIMIT, files: 1, fields: 0 } }).single('package'), asyncHandler(async (req, res) => {
   if (!req.file) { res.status(400).json({ error: 'ZIP 패키지를 선택해줘.' }); return }
-  res.status(201).json({ success: true, data: installPlugin(req.file.buffer) })
-})
-router.put('/:pluginId/enabled', requireAdmin, (req, res) => {
-  setPluginEnabled(param(req, 'pluginId'), z.object({ enabled: z.boolean() }).strict().parse(req.body).enabled)
+  const result = await installPlugin(req.file.buffer)
+  res.status(result.updated ? 200 : 201).json({ success: true, data: { ...result, plugin: withServer(result.plugin) } })
+}))
+router.put('/:pluginId/enabled', requireAdmin, asyncHandler(async (req, res) => {
+  await setPluginEnabled(param(req, 'pluginId'), z.object({ enabled: z.boolean() }).strict().parse(req.body).enabled, getRequesterAccountId(req))
   res.json({ success: true })
-})
-router.delete('/:pluginId', requireAdmin, (req, res) => { removePlugin(param(req, 'pluginId')); res.json({ success: true }) })
+}))
+router.delete('/:pluginId', requireAdmin, asyncHandler(async (req, res) => { await removePlugin(param(req, 'pluginId')); res.json({ success: true }) }))
+/** Trusted page SDK: short requests over durable, account-bound profile reply jobs. */
+router.post('/instances/:instanceId/llm/:method', asyncHandler(async (req, res) => {
+  const instance = requirePluginInstance(param(req, 'instanceId'), caller(req))
+  const { callPluginLlm } = await import('../services/plugins/pluginLlm')
+  res.json({ success: true, data: callPluginLlm(instance.plugin.id, caller(req).requester, param(req, 'method'), req.body) })
+}))
+/** A plugin page's `api.server(body)`: its server module's onRequest, as the signed-in account. */
+router.post('/instances/:instanceId/server', asyncHandler(async (req, res) => {
+  const instance = requirePluginInstance(param(req, 'instanceId'), caller(req))
+  if (!instance.plugin.server) { res.status(403).json({ error: '서버 모듈이 없는 플러그인이야.' }); return }
+  const page = { id: instance.page.id, files: instance.fileIds, ...(instance.workspace ? { workspace: instance.workspace } : {}) }
+  res.json({ success: true, data: await requestPluginServer(instance.plugin.id, req.body?.body ?? null, caller(req).requester, page, baseUrl(req)) })
+}))
 router.post('/:pluginId/pages/:pageId/instances', (req, res) => {
-  const input = z.object({ files: z.array(z.string()).max(20) }).strict().parse(req.body)
-  res.status(201).json({ success: true, data: openPluginInstance(param(req, 'pluginId'), param(req, 'pageId'), input.files, caller(req)) })
+  const input = z.object({ files: z.array(z.string()).max(20), workspace: z.object({ id: z.string(), write: z.boolean().default(false) }).strict().optional() }).strict().parse(req.body)
+  res.status(201).json({ success: true, data: openPluginInstance(param(req, 'pluginId'), param(req, 'pageId'), input.files, caller(req), input.workspace) })
 })
 router.get('/instances/:instanceId', (req, res) => {
   const instance = requirePluginInstance(param(req, 'instanceId'), caller(req))
@@ -51,5 +101,24 @@ router.post('/proposals/:proposalId/apply', requirePermission('files.edit'), (re
   res.json({ success: true, data: applyPluginWrite(param(req, 'proposalId'), approval, caller(req)) })
 })
 router.delete('/proposals/:proposalId', (req, res) => { dismissPluginWrite(param(req, 'proposalId'), caller(req)); res.json({ success: true }) })
+router.post('/instances/:instanceId/workspace/list', asyncHandler(async (req, res) => res.json({ success: true, data: await listPluginWorkspace(param(req, 'instanceId'), req.body, caller(req)) })))
+router.post('/instances/:instanceId/workspace/read', cancellableAsyncHandler(async (req, res, signal) => res.json({ success: true, data: await readPluginWorkspace(param(req, 'instanceId'), req.body, caller(req), signal) })))
+router.post('/instances/:instanceId/workspace/media', asyncHandler(async (req, res) => res.json({ success: true, data: await issuePluginWorkspaceMedia(param(req, 'instanceId'), req.body, caller(req)) })))
+router.post('/instances/:instanceId/workspace/proposals', requirePermission('files.edit'), asyncHandler(async (req, res) => res.json({ success: true, data: await proposePluginWorkspaceWrite(param(req, 'instanceId'), req.body, caller(req)) })))
+router.post('/workspace-proposals/:proposalId/approve', requirePermission('files.edit'), asyncHandler(async (req, res) => res.json({ success: true, data: await approvePluginWorkspaceWrite(param(req, 'proposalId'), caller(req)) })))
+router.post('/workspace-proposals/:proposalId/apply', requirePermission('files.edit'), asyncHandler(async (req, res) => {
+  const { approval } = z.object({ approval: z.string() }).strict().parse(req.body)
+  res.json({ success: true, data: await applyPluginWorkspaceWrite(param(req, 'proposalId'), approval, caller(req)) })
+}))
+router.delete('/workspace-proposals/:proposalId', (req, res) => { dismissPluginWorkspaceWrite(param(req, 'proposalId'), caller(req)); res.json({ success: true }) })
+router.post('/instances/:instanceId/workspace/stat', asyncHandler(async (req, res) => res.json({ success: true, data: await statPluginWorkspace(param(req, 'instanceId'), req.body, caller(req)) })))
+router.post('/instances/:instanceId/workspace/changes', requirePermission('files.edit'), asyncHandler(async (req, res) => res.json({ success: true, data: await proposePluginWorkspaceChanges(param(req, 'instanceId'), req.body, caller(req)) })))
+router.post('/instances/:instanceId/media-proposals', requirePermission('files.edit'), asyncHandler(async (req, res) => res.json({ success: true, data: await proposePluginMedia(param(req, 'instanceId'), req.body, caller(req)) })))
+router.post('/media-proposals/:proposalId/approve', asyncHandler(async (req, res) => res.json({ success: true, data: await approvePluginMedia(param(req, 'proposalId'), caller(req)) })))
+router.post('/media-proposals/:proposalId/apply', asyncHandler(async (req, res) => {
+  const { approval } = z.object({ approval: z.string() }).strict().parse(req.body)
+  res.json({ success: true, data: await applyPluginMedia(param(req, 'proposalId'), approval, caller(req)) })
+}))
+router.delete('/media-proposals/:proposalId', (req, res) => { dismissPluginMedia(param(req, 'proposalId'), caller(req)); res.json({ success: true }) })
 router.use(pluginRouteError)
 export default router

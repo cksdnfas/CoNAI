@@ -356,26 +356,12 @@ export function registerSpriteTools(server: McpServer, context: McpRequestContex
 
   server.registerTool(
     'get_sprite_job',
-    { description: 'Get the status of a sprite job (extract, batch, normalise, animation). A completed job lists its saved composite_hashes. With wait_seconds it waits for the job to finish first (up to 30 in chat), so one call replaces repeated checks.', inputSchema: z.object({ job_id: z.string().uuid(), wait_seconds: z.number().min(0).max(120).optional().describe('Seconds to wait for the job to finish before answering (default 0; chat max 30)') }) },
+    { description: 'Get the status of a sprite job (extract, batch, normalise, animation). A completed job lists its saved composite_hashes. With wait_seconds it waits for the job to finish first (up to 30 in chat), so one call replaces repeated checks.', inputSchema: z.object({ job_id: z.string().uuid(), wait_seconds: z.number().min(0).max(600).optional().describe('Seconds to wait for the job to finish before answering (default 0; external max 600, chat max 30)') }) },
     async ({ job_id, wait_seconds }) => {
       try {
         const job = requireSpriteJob(job_id, requesterOf(context));
         if (!wait_seconds) return textResult(await describeJob(context, job));
-        return textResult(await describeJob(context, (await waitForRuntimeJob(job_id, waitBudgetMs(context, wait_seconds))) ?? job));
-      } catch (error) {
-        return errorResult(error);
-      }
-    },
-  );
-
-  server.registerTool(
-    'wait_sprite_job',
-    { description: 'Wait up to timeout_seconds for a sprite job to finish, then return its status.', inputSchema: z.object({ job_id: z.string().uuid(), timeout_seconds: z.number().min(1).max(600).optional().describe('Default 120') }) },
-    async ({ job_id, timeout_seconds }) => {
-      try {
-        requireSpriteJob(job_id, requesterOf(context));
-        const job = await waitForRuntimeJob(job_id, (timeout_seconds ?? 120) * 1000);
-        return job ? textResult(await describeJob(context, job)) : errorResult(`Sprite job not found: ${job_id}`);
+        return textResult(await describeJob(context, (await waitForRuntimeJob(job_id, Math.min(wait_seconds, isChatMcpSource(context.source) ? 30 : 600) * 1000)) ?? job));
       } catch (error) {
         return errorResult(error);
       }

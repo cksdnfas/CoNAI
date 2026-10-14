@@ -1,4 +1,4 @@
-import { Bot, BrainCircuit, Image, Library, MessageSquare, Newspaper, Server, SlidersHorizontal, Users, WandSparkles, Wrench, type LucideIcon } from 'lucide-react'
+import { Bot, BrainCircuit, Image, Library, MessageSquare, Newspaper, Puzzle, Server, SlidersHorizontal, Users, WandSparkles, Wrench, type LucideIcon } from 'lucide-react'
 import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { type TranslationDictionary, useI18n } from '@/i18n'
 import { SETTINGS_TAB_ITEMS, SETTINGS_TAB_LABELS, type SettingsTab, type SettingsTabGroup } from '../settings-tabs'
@@ -18,6 +18,7 @@ const SETTINGS_TAB_ICONS: Record<SettingsTab, LucideIcon> = {
   posts: Newspaper,
   llm: BrainCircuit,
   accounts: Users,
+  plugins: Puzzle,
   system: Server,
   maintenance: Wrench,
 }

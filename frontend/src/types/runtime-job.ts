@@ -31,6 +31,9 @@ export type RuntimeJobKind =
   | 'audio-export'
   | 'audio-legacy-import'
   | 'image-batch-resize'
+  | 'plugin-media'
+  | 'plugin-action'
+  | 'plugin-llm'
   | 'post-knowledge-evaluation'
   | 'post-topic-evaluation'
 

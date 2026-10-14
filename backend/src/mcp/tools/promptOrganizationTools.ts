@@ -61,38 +61,6 @@ export function registerPromptOrganizationTools(server: McpServer): void {
   );
 
   server.registerTool(
-    'get_unclassified_prompts',
-    { description: 'Get prompts not assigned to any group (Unclassified). Returns a paginated batch for AI-assisted classification. Maximum 50 per request. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
-      type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
-      page: z.number().int().min(1).default(1).describe('Page number'),
-      limit: z.number().int().min(1).max(50).default(50).describe('Results per page (max 50)'),
-    }) },
-    async ({ type, page, limit }) => {
-      try {
-        const result = await PromptGroupService.getPromptsInGroup(0, type, page, limit);
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              prompts: result.prompts,
-              total: result.total,
-              page,
-              limit,
-              type,
-            }),
-          }],
-        };
-      } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
-      }
-    }
-  );
-
-  server.registerTool(
     'get_prompts_in_group',
     { description: 'Get all prompts currently assigned to a specific group. Use group_id=0 for unclassified prompts. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
       group_id: z.number().int().min(0).describe('Group ID (0 for Unclassified)'),
@@ -134,45 +102,8 @@ export function registerPromptOrganizationTools(server: McpServer): void {
   // ─── 분류 도구 ───
 
   server.registerTool(
-    'create_prompt_group',
-    { description: 'Create a new prompt group. If a group with the same name already exists, returns the existing group ID. Use parent_id to create sub-groups in a hierarchy. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
-      group_name: z.string().min(1).describe('Name for the new group'),
-      type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
-      display_order: z.number().int().optional().describe('Display order (auto-assigned if omitted)'),
-      is_visible: z.boolean().default(true).describe('Whether the group is visible'),
-      parent_id: z.number().int().optional().describe('Parent group ID for hierarchy'),
-    }) },
-    async ({ group_name, type, display_order, is_visible, parent_id }) => {
-      try {
-        const existing = PromptGroupModel.findByName(group_name, type);
-        const groupId = PromptGroupModel.create(
-          { group_name, display_order, is_visible, parent_id: parent_id ?? null },
-          type
-        );
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              group_id: groupId,
-              group_name,
-              is_new: !existing,
-              type,
-            }),
-          }],
-        };
-      } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
-      }
-    }
-  );
-
-  server.registerTool(
     'batch_create_groups',
-    { description: 'Create multiple prompt groups at once. Each group name must be unique. Returns created/existing group IDs. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
+    { description: 'Create one or more prompt groups (use a one-item groups array for a single group). Each group name must be unique. Returns created/existing group IDs. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
       groups: z.array(z.object({
         group_name: z.string().min(1).describe('Group name'),
         display_order: z.number().int().optional().describe('Display order'),
@@ -222,52 +153,9 @@ export function registerPromptOrganizationTools(server: McpServer): void {
   );
 
   server.registerTool(
-    'assign_prompts_to_group',
-    { description: 'Assign one or more prompts to a group by their prompt IDs. Use target_group_id=0 to move back to Unclassified. This is the primary tool for AI-assisted prompt classification. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
-      prompt_ids: z.array(z.number().int()).min(1).max(100).describe('Prompt IDs to assign'),
-      target_group_id: z.number().int().min(0).describe('Target group ID (0 for Unclassified)'),
-      type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
-    }) },
-    async ({ prompt_ids, target_group_id, type }) => {
-      try {
-        const actualGroupId = target_group_id === 0 ? null : target_group_id;
-        let successCount = 0;
-        let failCount = 0;
-
-        for (const promptId of prompt_ids) {
-          const result = PromptCollectionModel.setGroupId(promptId, actualGroupId, type);
-          if (result) {
-            successCount++;
-          } else {
-            failCount++;
-          }
-        }
-
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              success_count: successCount,
-              fail_count: failCount,
-              total: prompt_ids.length,
-              target_group_id,
-              type,
-            }),
-          }],
-        };
-      } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
-      }
-    }
-  );
-
-  server.registerTool(
     'move_prompts_between_groups',
-    { description: 'Move prompts from one group to another. Provide specific prompt_ids OR source_group_id to move all prompts from that group. Use target_group_id=0 for Unclassified. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
-      prompt_ids: z.array(z.number().int()).optional().describe('Specific prompt IDs to move'),
+    { description: 'Assign or move prompts to a group. Provide specific prompt_ids OR source_group_id to move all prompts from that group. Use target_group_id=0 for Unclassified. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
+      prompt_ids: z.array(z.number().int()).min(1).max(100).optional().describe('Specific prompt IDs to assign or move (1-100)'),
       source_group_id: z.number().int().min(0).optional().describe('Source group ID to move ALL prompts from (0 for Unclassified)'),
       target_group_id: z.number().int().min(0).describe('Target group ID (0 for Unclassified)'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
@@ -283,11 +171,13 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
         const actualTargetId = target_group_id === 0 ? null : target_group_id;
         let movedCount = 0;
+        let failCount = 0;
 
         if (prompt_ids && prompt_ids.length > 0) {
           for (const promptId of prompt_ids) {
             const result = PromptCollectionModel.setGroupId(promptId, actualTargetId, type);
             if (result) movedCount++;
+            else failCount++;
           }
         } else if (source_group_id !== undefined) {
           // source 그룹의 모든 프롬프트 조회 후 이동
@@ -297,6 +187,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
           for (const prompt of prompts) {
             const result = PromptCollectionModel.setGroupId(prompt.id, actualTargetId, type);
             if (result) movedCount++;
+            else failCount++;
           }
         }
 
@@ -305,6 +196,8 @@ export function registerPromptOrganizationTools(server: McpServer): void {
             type: 'text' as const,
             text: JSON.stringify({
               moved_count: movedCount,
+              fail_count: failCount,
+              total: movedCount + failCount,
               source_group_id: source_group_id ?? null,
               target_group_id,
               type,

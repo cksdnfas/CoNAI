@@ -116,7 +116,7 @@ export function settingsChatData(ctx: SettingsChatActionContext): Record<string,
   }
   if (ctx.tab === 'system' && ctx.mcpHttp) {
     // Key values never leave the card; the chat reads names and permissions only.
-    return { mcpHttpEnabled: ctx.mcpHttp.enabled, mcpHttpKeys: ctx.mcpHttp.keys.map((key) => ({ name: key.name, scopes: key.scopes })) }
+    return { mcpHttpEnabled: ctx.mcpHttp.enabled, mcpHttpKeys: ctx.mcpHttp.keys.map((key) => ({ name: key.name, group: key.groupKey })) }
   }
   if (ctx.tab === 'maintenance') {
     const { maintenance } = ctx

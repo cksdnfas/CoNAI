@@ -1,5 +1,4 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { fileOwnerKey } from '../fileStoreService'
 import { parseSearchTerms } from '../fileStoreSearch'
 import { normalizeLinkedFiles } from './chatLinkedFiles'
 import { normalizeLorebookIds } from './chatLorebook'
@@ -42,8 +41,7 @@ function keysOf(lorebookIds: string | null, linkedFiles: string | null, accountB
  */
 export function connectedThreadIds(threadId: number, accountId: number | null): number[] {
   const db = getUserSettingsDb()
-  const owner = fileOwnerKey(accountId)
-  const accountBooks = new Set((db.prepare("SELECT id FROM chat_lorebooks WHERE kind = 'account' AND owner_key = ?").all(owner) as Array<{ id: number }>).map((row) => row.id))
+  const accountBooks = new Set((db.prepare("SELECT id FROM chat_lorebooks WHERE kind = 'account'").all() as Array<{ id: number }>).map((row) => row.id))
   const profiles = profileKeys(accountBooks)
   const threads = db.prepare('SELECT id, kind, profile_id, lorebook_ids, linked_files FROM codex_chat_threads WHERE account_id IS ? ORDER BY updated_date DESC, id DESC').all(accountId) as ThreadLinkRow[]
   const members = new Map<number, number[]>()
@@ -77,7 +75,7 @@ export function sharesKnowledge(thread: { id: number; account_id: number | null;
   if (normalizeLinkedFiles(profile?.linked_files ?? null).length > 0) return true
   const books = [...normalizeLorebookIds(row?.lorebook_ids ?? null), ...normalizeLorebookIds(profile?.lorebook_ids ?? null)]
   if (books.length === 0) return false
-  return Boolean(db.prepare(`SELECT 1 FROM chat_lorebooks WHERE kind = 'account' AND owner_key = ? AND id IN (${books.map(() => '?').join(', ')})`).get(fileOwnerKey(thread.account_id), ...books))
+  return Boolean(db.prepare(`SELECT 1 FROM chat_lorebooks WHERE kind = 'account' AND id IN (${books.map(() => '?').join(', ')})`).get(...books))
 }
 
 export type HistoryHit = { chat_id: number; message_id: number; role: 'user' | 'assistant'; speaker_profile_id: number | null; at: string; excerpt: string; routing: string | null }

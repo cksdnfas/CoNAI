@@ -49,6 +49,7 @@ frontend/.playwright-dev.log
 backend/test/*
 !backend/test/workspaces.test.ts
 !backend/test/plugins.test.ts
+!backend/test/plugin-server.test.ts
 !backend/test/chat-regressions.test.ts
 !backend/test/chat-diagnostics.test.ts
 !backend/test/chat-generation-results.test.ts
@@ -75,6 +76,7 @@ backend/test/*
 !frontend/test/
 frontend/test/*
 !frontend/test/plugin-text-editor.test.ts
+!frontend/test/resource-review.test.ts
 !frontend/test/post-rich-editor.test.ts
 !frontend/test/audio-waveform.test.ts
 
@@ -196,3 +198,6 @@ worker-results/
 
 # Internal docs kept off the repo and the Pages site
 /local-docs/
+
+# Personal plugin sources and their dedicated tests (not public examples)
+/local-plugins/

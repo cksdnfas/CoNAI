@@ -44,6 +44,9 @@ export async function startRuntimeSideEffectServices(
     // Chats (served by the API) reach the external MCP servers' tools once connected.
     const { startExternalMcpServers } = await import('../services/externalMcp/externalMcpServers')
     startExternalMcpServers()
+    // Plugin server modules hook into chats and add tools, so they run where the API runs.
+    const { startPluginServers } = await import('../services/plugins/pluginServerRuntime')
+    startPluginServers()
   }
   if (runtimeRole === 'api') {
     console.log('🧩 CONAI_RUNTIME_ROLE=api, skipping worker daemons, watchers, queues, and schedulers')

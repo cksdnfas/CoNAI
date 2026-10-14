@@ -54,6 +54,7 @@ function fillsWidth(size: ThumbSize) {
 }
 
 import { buildChatImageRecord } from './chat-image-record'
+import { parseServerDate } from '@/lib/server-time'
 export { buildChatImageRecord } from './chat-image-record'
 
 /**
@@ -525,11 +526,6 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
       <MediaLightbox items={lightboxItems} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} renderActions={referenceAction} />
     </>
   )
-}
-
-/** SQLite `CURRENT_TIMESTAMP` is UTC without a zone marker. */
-export function parseServerDate(value: string) {
-  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`)
 }
 
 /** When a message was sent, by the reader's choice: never, on hover (the row is `group/message`), or always. */

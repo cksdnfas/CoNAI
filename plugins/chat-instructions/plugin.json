@@ -1,0 +1,7 @@
+{
+  "apiVersion": 1, "id": "chat-instructions", "name": "채팅 지시문", "version": "1.0.0",
+  "description": "채팅 모델이 받는 지시문 끝에 내가 쓴 규칙을 붙여. 캐릭터마다 따로 정할 수 있어.",
+  "capabilities": ["server"],
+  "server": { "entry": "server.mjs" },
+  "pages": [{ "id": "rules", "title": "지시문 규칙", "entry": "index.html", "accepts": [], "actions": [] }]
+}

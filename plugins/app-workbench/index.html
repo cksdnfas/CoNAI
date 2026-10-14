@@ -1,0 +1,7 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>앱 작업 도구</title><link rel="stylesheet" href="conai-plugin.css"><link rel="stylesheet" href="style.css"></head><body>
+<p id="status" role="status">연결 중…</p>
+<section><h2>앱 자료</h2><div class="toolbar"><button id="groups">라이브러리 그룹</button><button id="workflows">생성 워크플로</button><button id="audio">오디오 프로젝트</button><button id="tools">사용 가능한 앱 기능</button></div></section>
+<section><h2>새 라이브러리 그룹</h2><label>그룹 이름<input id="group-name" maxlength="100"></label><button id="create-group">그룹 생성 검토</button></section>
+<section><h2>게시판 작업 기록</h2><label>제목<input id="post-title" maxlength="200"></label><label>내용<textarea id="post-body" rows="5" maxlength="8000"></textarea></label><button id="write-note">게시글 초안 저장 검토</button></section>
+<section><h2>연결한 프로젝트</h2><p class="muted">앱 위쪽에서 프로젝트를 연결해줘. 문서 작성에는 쓰기 제안 허용이 필요해.</p><button id="project-files">프로젝트 파일 목록</button><label>새 문서 이름<input id="document-target" value="작업 기록.md" maxlength="1000"></label><button id="project-note">위 내용을 프로젝트 문서로 저장 검토</button></section>
+<section><h2>결과</h2><pre id="result"></pre></section><script type="module" src="main.js"></script></body></html>

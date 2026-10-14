@@ -5,6 +5,14 @@ import { promisify } from 'util';
 const stat = promisify(fs.stat);
 
 /**
+ * A file's revision without reading it: any write changes the size, mtime or ctime, a replace changes the inode.
+ * Used as the compare-and-swap token for text edits (file store, project workspaces).
+ */
+export function statRevision(info: fs.BigIntStats): string {
+  return crypto.createHash('sha256').update(`${info.dev}:${info.ino}:${info.size}:${info.mtimeNs}:${info.ctimeNs}`).digest('hex');
+}
+
+/**
  * MD5 파일 해시 생성
  * 스트리밍 방식으로 대용량 파일 지원
  *

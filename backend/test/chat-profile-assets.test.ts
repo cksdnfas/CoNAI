@@ -224,7 +224,7 @@ test('chat profile assets: library migration, access, imports and generation ref
     await assert.rejects(assets.downloadProfileAsset('https://8.8.8.8/large.png', first.name), /50MB/)
   })
 
-  await t.test('file-store import only copies own images and retains the private original', async (sub) => {
+  await t.test('file-store import copies images from the shared store and retains the original', async (sub) => {
     const { FileStoreService } = await import('../src/services/fileStoreService')
     const { storedFilePath } = await import('../src/services/fileStorePaths')
     sub.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'admin' }) as any)
@@ -235,7 +235,9 @@ test('chat profile assets: library migration, access, imports and generation ref
     const requester = { accountId: 1, accountType: 'admin' as const }
     assert.equal((await assets.importFileStoreProfileAsset(requester, file.id, '파일 캐릭터')).compositeHash, hash)
     assert.deepEqual(fs.readFileSync(storedFilePath('account:1', file.id)), png)
-    await assert.rejects(assets.importFileStoreProfileAsset({ ...requester, accountId: 2 }, file.id, first.name), /찾을 수 없어/)
+    // The file store is shared: another account imports the same file; only a missing file is refused.
+    assert.equal((await assets.importFileStoreProfileAsset({ ...requester, accountId: 2 }, file.id, first.name)).compositeHash, hash)
+    await assert.rejects(assets.importFileStoreProfileAsset(requester, 'f'.repeat(32), first.name), /찾을 수 없어/)
     const text = FileStoreService.writeText('account:1', null, 'memo.txt', 'text only')
     await assert.rejects(assets.importFileStoreProfileAsset(requester, text.id, first.name), /이미지 파일만/)
   })

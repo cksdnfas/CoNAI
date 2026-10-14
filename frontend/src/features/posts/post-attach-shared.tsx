@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { postLink } from '@conai/shared'
 import { cn } from '@/lib/utils'
+import { fileExtension } from '@/lib/file-extension'
 
 export type AttachTab = 'media' | 'audio' | 'post' | 'file'
 /** How a picked post goes into the body: a small card (`![t](post:1)`) or an inline link (`[t](post:1)`). */
@@ -80,20 +81,6 @@ export function PickOrderMark({ position }: { position: number | undefined }) {
   )
 }
 
-/** Wraps every case-insensitive occurrence of `term` in a highlight. */
-export function Highlight({ text, term }: { text: string; term: string }) {
-  const needle = term.trim()
-  if (!needle) return <>{text}</>
-  const parts = text.split(new RegExp(`(${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'))
-  return <>{parts.map((part, index) => index % 2 === 1 ? <mark key={index} className="bg-transparent font-semibold text-primary">{part}</mark> : part)}</>
-}
-
-/** A file's extension in capitals (PDF, ZIP…), or null. */
-export function extensionOf(name: string) {
-  const match = /\.([a-z0-9]{1,5})$/i.exec(name)
-  return match ? match[1].toUpperCase() : null
-}
-
 const TONE = {
   red: 'bg-destructive-soft text-destructive-soft-foreground',
   blue: 'bg-info-soft text-info-soft-foreground',
@@ -111,7 +98,7 @@ const EXTENSION_TONES: Record<string, string> = {
 
 /** A colored extension tile: PDF / MD / ZIP read at a glance. */
 export function ExtensionTile({ name, className }: { name: string; className?: string }) {
-  const extension = extensionOf(name)
+  const extension = fileExtension(name)
   return (
     <span className={cn('flex shrink-0 items-end justify-center rounded-sm pb-1 text-2xs font-bold', extension ? EXTENSION_TONES[extension] ?? 'bg-surface-highest text-muted-foreground' : 'bg-surface-highest text-muted-foreground', className)}>
       {extension ?? 'FILE'}

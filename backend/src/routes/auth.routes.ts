@@ -6,6 +6,7 @@ import { AuthCredentials } from '../models/AuthCredentials';
 import { AuthAccount, type AssignableSystemGroupKey } from '../models/AuthAccount';
 import { AuthPermissionGroup } from '../models/AuthPermissionGroup';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { closePluginSession } from '../services/plugins/pluginHost';
 import { allowAnonymousPermission, requireAdmin, requireAuth } from '../middleware/authMiddleware';
 import { getAuthDbPath, syncLegacyAuthCredentialToAccessControl } from '../database/authDb';
 import {
@@ -173,6 +174,8 @@ const handleLogin: RequestHandler = async (req, res) => {
 
 /** Handle logout by destroying the current session. */
 const handleLogout: RequestHandler = (req, res) => {
+  // Plugin windows and their media links belong to this session; they end with it.
+  closePluginSession(req.sessionID);
   req.session.destroy((err) => {
     if (err) {
       console.error('Error destroying session:', err);

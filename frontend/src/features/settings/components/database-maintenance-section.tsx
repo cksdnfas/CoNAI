@@ -9,7 +9,7 @@ import { RowGroup } from '@/components/ui/row-group'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { formatFileSize } from '@/lib/api-files'
+import { formatFileSize } from '@/lib/format-size'
 import { listRuntimeJobs } from '@/lib/api-runtime-jobs'
 import { runtimeJobQueryKey, useRuntimeJob } from '@/lib/use-runtime-job'
 import {
@@ -30,6 +30,7 @@ import {
 import { LegacyAudioImportRow } from './audio-legacy-import-row'
 import { MaintenanceJobProgress, MaintenanceRow, MaintenanceStat } from './maintenance-row'
 import type { RuntimeJobKind, RuntimeJobRecord } from '@/types/runtime-job'
+import { parseServerDate } from '@/lib/server-time'
 
 /**
  * The latest job of one kind (so a reload shows the last result and resumes a running job), switched to a job this
@@ -60,8 +61,7 @@ function useElapsedSeconds(since: string | null | undefined, running: boolean) {
     return () => window.clearInterval(timer)
   }, [running])
   if (!since) return 0
-  // Job timestamps are SQLite UTC without a zone.
-  const started = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(since) ? since : `${since.replace(' ', 'T')}Z`)
+  const started = parseServerDate(since).getTime()
   return Number.isFinite(started) ? Math.max(0, Math.round((now - started) / 1000)) : 0
 }
 
@@ -69,10 +69,6 @@ function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60)
   const rest = seconds % 60
   return minutes > 0 ? `${minutes}:${String(rest).padStart(2, '0')}` : `0:${String(rest).padStart(2, '0')}`
-}
-
-function toDate(value: string) {
-  return /[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`
 }
 
 /** Admin database maintenance in the 유지보수 tab: online backups, orphan cleanup and compaction. */
@@ -105,7 +101,7 @@ export function DatabaseMaintenanceSection() {
 
   const backups = backupsQuery.data?.backups ?? []
   const images = statsQuery.data?.databases.find((entry) => entry.fileName === 'images.db')
-  const formatStamp = (value: string) => formatDateTime(toDate(value), { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  const formatStamp = (value: string) => formatDateTime(parseServerDate(value), { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 
   // ---- backup ----
   const backupRunning = backupJob.isRunning || startBackup.isPending

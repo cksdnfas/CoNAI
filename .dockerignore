@@ -5,6 +5,9 @@
 _shots
 build-output
 graphify-out
+local-docs
+local-plugins
+docs/Work_Plan
 node_modules
 **/node_modules
 **/dist

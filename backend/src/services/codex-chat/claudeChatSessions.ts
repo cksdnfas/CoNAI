@@ -1,5 +1,6 @@
 import type { JudgedContext } from './chatJudgeContext'
 import { chatWorkspace, workspaceInstructions } from './chatWorkspace'
+import { applyChatInstructionHooks } from '../plugins/pluginServerRuntime'
 import fs from 'fs'
 import path from 'path'
 import { createHash } from 'crypto'
@@ -107,7 +108,8 @@ export async function buildClaudeSessionTurn(params: {
   const thread = CodexChatStore.findThreadById(threadId) ?? null
   const user = userPersonaForThread(thread)
   const workspace = chatWorkspace(requester, threadId, profile.id)
-  const system = [claudeSessionSystem(profile, params.withTools, user), workspaceInstructions(workspace)].filter(Boolean).join('\n\n')
+  // Plugins may rewrite it; a changed system prompt starts a new session (systemHash).
+  const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), workspaceInstructions(workspace)].filter(Boolean).join('\n\n'), { engine: runtime, threadId, group: false, profile: { id: profile.id, name: profile.name } }, requester)
   const systemHash = systemHashOf(system)
   const baseDir = claudeSessionDir(threadId, runtime)
   const dir = workspace ? path.join(baseDir, 'projects', workspace.project.id) : baseDir
@@ -194,7 +196,7 @@ export async function buildClaudeGroupSessionTurn(params: {
   const { requester, thread, members, profile, messages } = params
   const runtime = params.runtime ?? 'claude'
   const user = userPersonaForThread(thread)
-  const system = [claudeSessionSystem(profile, params.withTools, user), buildGroupHeader({ thread, members, self: profile, user })].join('\n\n')
+  const system = await applyChatInstructionHooks([claudeSessionSystem(profile, params.withTools, user), buildGroupHeader({ thread, members, self: profile, user })].join('\n\n'), { engine: runtime, threadId: thread.id, group: true, profile: { id: profile.id, name: profile.name } }, requester)
   const systemHash = systemHashOf(system)
   const dir = claudeMemberSessionDir(thread.id, profile.id, runtime)
   const member = ChatGroupStore.member(thread.id, profile.id)

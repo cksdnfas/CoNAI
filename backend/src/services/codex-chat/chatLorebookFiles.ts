@@ -1,3 +1,4 @@
+import { WINDOWS_RESERVED_NAME } from '../../utils/pathResolver'
 import fs from 'fs'
 import path from 'path'
 import type Database from 'better-sqlite3'
@@ -61,7 +62,7 @@ function folderName(value: unknown, maxLength = LOREBOOK_NAME_MAX_LENGTH) {
   const cleaned = (typeof value === 'string' ? value : '').normalize('NFC')
     .replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim()
     .slice(0, maxLength).replace(/[. ]+$/, '')
-  return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(cleaned) ? '' : cleaned
+  return WINDOWS_RESERVED_NAME.test(cleaned) ? '' : cleaned
 }
 
 export function isTextPath(file: string) {
@@ -401,9 +402,10 @@ export function reconcileLorebookFolders() {
 
 // ---- Store ----------------------------------------------------------------------------------------------------
 
+/** Account books live in the shared file store, so every account may use them; a chat book stays with its chat's owner. */
 function requireOwn(bookId: number, owner: string): LorebookRow {
   const row = rowById(bookId)
-  if (!row || row.kind === 'global' || row.owner_key !== owner || !row.folder_id) throw new LorebookError('로어북을 찾을 수 없어.', 404)
+  if (!row || row.kind === 'global' || (row.kind === 'chat' && row.owner_key !== owner) || !row.folder_id) throw new LorebookError('로어북을 찾을 수 없어.', 404)
   return refreshIfStale(row)
 }
 
@@ -466,10 +468,10 @@ function isDisposable(row: LorebookRow) {
 }
 
 export const OwnedLorebookStore = {
-  /** The owner's books of these kinds, by name; caches refreshed first where lorebook.json changed. */
+  /** Books of these kinds, by name (every account book, the owner's chat books); caches refreshed first where lorebook.json changed. */
   list(owner: string, kinds: OwnedKind[] = ['account']): OwnedLorebook[] {
     if (kinds.length === 0) return []
-    const rows = getUserSettingsDb().prepare(`SELECT * FROM chat_lorebooks WHERE owner_key = ? AND kind IN (${kinds.map(() => '?').join(', ')}) AND folder_id IS NOT NULL ORDER BY name COLLATE NOCASE ASC, id ASC`)
+    const rows = getUserSettingsDb().prepare(`SELECT * FROM chat_lorebooks WHERE (kind = 'account' OR owner_key = ?) AND kind IN (${kinds.map(() => '?').join(', ')}) AND folder_id IS NOT NULL ORDER BY name COLLATE NOCASE ASC, id ASC`)
       .all(owner, ...kinds) as LorebookRow[]
     return rows.map((row) => toOwned(refreshIfStale(row)))
   },
@@ -536,7 +538,7 @@ export const OwnedLorebookStore = {
     return true
   },
 
-  /** Link an account book to a profile. A profile is shared, so only the book's owner can link it. */
+  /** Link an account book to a profile; account books are shared like the file store they live in. */
   linkProfile(profileId: number, bookId: number, owner: string) {
     const row = requireOwn(bookId, owner)
     if (row.kind !== 'account') throw new LorebookError('계정 로어북만 프로필에 연결할 수 있어.')
@@ -567,15 +569,14 @@ export const OwnedLorebookStore = {
     return normalizeLorebookIds(row?.lorebook_ids ?? null)
   },
 
-  /** Replace the chat's linked account books; each must be an account book of the chat's own owner. */
+  /** Replace the chat's linked account books (any account's: they are shared). */
   setThreadLinks(threadId: number, value: unknown) {
     const db = getUserSettingsDb()
-    const thread = db.prepare('SELECT account_id FROM codex_chat_threads WHERE id = ?').get(threadId) as { account_id: number | null } | undefined
-    if (!thread) throw new LorebookError('채팅을 찾을 수 없어.', 404)
+    if (!db.prepare('SELECT 1 FROM codex_chat_threads WHERE id = ?').get(threadId)) throw new LorebookError('채팅을 찾을 수 없어.', 404)
     const ids = normalizeLorebookIds(value)
     if (ids.length > 0) {
-      const found = db.prepare(`SELECT id FROM chat_lorebooks WHERE kind = 'account' AND owner_key = ? AND id IN (${ids.map(() => '?').join(', ')})`).all(fileOwnerKey(thread.account_id), ...ids)
-      if (found.length !== ids.length) throw new LorebookError('이 채팅에는 내 계정 로어북만 연결할 수 있어.')
+      const found = db.prepare(`SELECT id FROM chat_lorebooks WHERE kind = 'account' AND id IN (${ids.map(() => '?').join(', ')})`).all(...ids)
+      if (found.length !== ids.length) throw new LorebookError('이 채팅에는 계정 로어북만 연결할 수 있어.')
     }
     // An unlinked record book stops being one: save_lore goes back to the chat's own book.
     db.prepare('UPDATE codex_chat_threads SET lorebook_ids = ?, lore_record_book_id = CASE WHEN lore_record_book_id IN (SELECT value FROM json_each(?)) THEN lore_record_book_id END WHERE id = ?')

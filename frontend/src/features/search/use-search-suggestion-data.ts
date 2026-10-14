@@ -1,25 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { searchPromptCollection } from '@/lib/api-prompts'
 import { getRatingTiers, getSearchLoraSuggestions, getSearchModelSuggestions } from '@/lib/api-search'
 import { isPromptSuggestionScope, shouldEnableSearchSuggestionQuery } from './search-suggestion-query-policy'
 import type { SearchScope } from './search-types'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 const SEARCH_SUGGESTION_INPUT_DEBOUNCE_MS = 180
-
-function useDebouncedSearchInput(value: string) {
-  const [debouncedValue, setDebouncedValue] = useState(value)
-
-  useEffect(() => {
-    const timerId = window.setTimeout(() => {
-      setDebouncedValue(value)
-    }, SEARCH_SUGGESTION_INPUT_DEBOUNCE_MS)
-
-    return () => window.clearTimeout(timerId)
-  }, [value])
-
-  return debouncedValue
-}
 
 function matchesRatingTierSearch(tierName: string, minScore: number, maxScore: number | null, normalizedInput: string) {
   if (normalizedInput.length === 0) {
@@ -35,7 +22,7 @@ function matchesRatingTierSearch(tierName: string, minScore: number, maxScore: n
 /** Load shared prompt, rating, model, and LoRA suggestions for the reusable search UI. */
 export function useSearchSuggestionData(searchScope: SearchScope, searchInput: string) {
   const normalizedInput = searchInput.trim()
-  const debouncedInput = useDebouncedSearchInput(normalizedInput)
+  const debouncedInput = useDebouncedValue(normalizedInput, SEARCH_SUGGESTION_INPUT_DEBOUNCE_MS)
   const isInputSettling = normalizedInput !== debouncedInput
 
   const ratingTiersQuery = useQuery({

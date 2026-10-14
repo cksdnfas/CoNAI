@@ -20,6 +20,8 @@ npm run dev
 
 HTTP 방식은 설정 → 계정 및 시스템 → MCP에서 활성화합니다. 같은 화면에서 MCP URL과 API 키를 확인·복사·교체할 수 있으며 재시작은 필요 없습니다.
 
+API 키마다 **권한 그룹**을 하나 고릅니다. 키는 계정처럼 그 그룹의 기능 권한만큼만 도구를 보고 실행하며, 키에 권한을 따로 주는 방법은 없습니다. 그룹의 권한을 바꾸면 키에도 바로 반영됩니다. 그룹이 없는 예전 키는 그룹을 고르기 전까지 어떤 도구도 쓰지 못합니다.
+
 클라이언트는 모든 `/mcp` 요청에 다음 헤더 중 하나를 전송해야 합니다.
 
 ```http
@@ -145,6 +147,8 @@ stdio:
 
 ## 제공 도구
 
+표의 **도구 범위**는 채팅 프로필·도구 프리셋에서 고르는 범위입니다. HTTP 키는 범위가 아니라 권한 그룹의 기능 권한(웹에서 같은 기능에 필요한 권한, 표의 **계정 권한**)으로 정해집니다. `configure` 도구는 HTTP 키에 제공되지 않습니다.
+
 ### 프롬프트 탐색
 
 | Tool | 용도 |
@@ -158,12 +162,9 @@ stdio:
 | Tool | 용도 |
 | --- | --- |
 | `get_prompt_group_structure` | 그룹 계층, 프롬프트 수, 미분류 수 조회 |
-| `get_unclassified_prompts` | 미분류 프롬프트 배치 조회 |
 | `get_prompts_in_group` | 특정 그룹 프롬프트 조회 (`group_id=0`은 미분류) |
-| `create_prompt_group` | 그룹 생성 |
-| `batch_create_groups` | 여러 그룹 생성 |
-| `assign_prompts_to_group` | 프롬프트를 그룹에 배정 |
-| `move_prompts_between_groups` | 프롬프트를 그룹 간 이동 |
+| `batch_create_groups` | 하나 또는 여러 그룹 생성 (`groups` 배열) |
+| `move_prompts_between_groups` | 프롬프트 그룹 배정·이동 (지정 ID 1–100개 또는 원본 그룹 지정, 대상 0은 미분류) |
 | `backup_prompt_data` | 프롬프트/그룹/설정 JSON 백업 생성 |
 | `restore_prompt_data` | 백업에서 프롬프트 데이터 복원 |
 | `list_backups` | 백업 파일 목록 조회 |
@@ -202,7 +203,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 프롬프트 그룹과 별개인 **커스텀 이미지 그룹**을 관리합니다. 감시폴더나 실제 파일 경로를 이동하는 기능은 아닙니다.
 
-| Tool | 용도 | HTTP MCP 키 권한 |
+| Tool | 용도 | 도구 범위 |
 | --- | --- | --- |
 | `list_image_groups` | 그룹 ID, 전체 경로, 이미지 수 조회 | `read` |
 | `get_image_groups` | 이미지의 직접 소속 그룹과 수동/자동수집 구분 조회 | `read` |
@@ -279,7 +280,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 채팅 이모티콘으로 쓰는 그룹(커스텀 그룹에서 **LLM 이모티콘 그룹**을 켠 것)의 키워드를 관리합니다.
 
-| Tool | 용도 | HTTP MCP 키 권한 |
+| Tool | 용도 | 도구 범위 |
 | --- | --- | --- |
 | `list_emoticon_groups` | 이모티콘 그룹과 이미지·키워드 수 조회 | `read` |
 | `list_emoticons` | 그룹의 이미지별 키워드, 파일명, 상위 태그 조회 (`explicit: false`는 파일명 키워드) | `read` |
@@ -295,7 +296,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 인스턴스 공용 파일 보관함입니다. 조회·편집·삭제 기능 권한은 유지합니다. 이미지 라이브러리와 따로 저장됩니다. 계정과 연결되지 않은 HTTP 키에는 제공되지 않습니다.
 
-| Tool | 용도 | HTTP MCP 키 권한 |
+| Tool | 용도 | 도구 범위 |
 | --- | --- | --- |
 | `list_files` | 폴더 내용 조회 | `read` |
 | `get_file_info` | 파일·폴더 정보 조회 | `read` |
@@ -321,7 +322,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 카테고리·태그·댓글이 있는 게시판입니다. 채팅 봇이 쓰면 봇 프로필 이름으로, 계정에 묶인 HTTP 키가 쓰면 그 계정 이름으로 올라갑니다. 글과 댓글은 남이 쓴 내용이라 지시가 아닌 데이터로 다룹니다. 자세한 동작은 [게시판](./POSTS.md)을 참고합니다.
 
-| Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
+| Tool | 용도 | 도구 범위 | 계정 권한 |
 | --- | --- | --- | --- |
 | `posts_categories` | 카테고리 트리와 글 수 | `read` | `posts.view` |
 | `posts_search` | 글 찾기 (단어·`"문장"`, 카테고리·태그·작성 봇으로 좁히기) | `read` | `posts.view` |
@@ -345,7 +346,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 효과음 작업실(음향 탭)입니다. 프로젝트 → 그룹 → 후보(생성 테이크·업로드·편집본) 구조이고, 이미지 라이브러리와 따로 `audio.db`에 저장됩니다. 후보 식별자는 `candidate_id`이며 이미지의 `composite_hash`가 아닙니다. 도구의 "그룹"(audio group)은 화면의 효과음 하나이고, 화면에서 "그룹"이라 부르는 분류(UI, BGM 등)는 도구에서 폴더(`folder_id`)입니다. 효과음의 `description`은 사람이 읽는 설명이고, 생성 프롬프트는 `prompt`(대표 프롬프트)입니다.
 
-| Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
+| Tool | 용도 | 도구 범위 | 계정 권한 |
 | --- | --- | --- | --- |
 | `list_audio_projects` | 프로젝트와 그룹·후보 수, 프로젝트별 받은 파일 그룹 ID | `read` | `audio.view` |
 | `list_audio_groups` | 프로젝트의 그룹, 설명·대표 프롬프트, 폴더, 파일명 규칙(`label`), 채택·코멘트 수. `project_id`를 생략하면 모든 프로젝트를 같은 검색·필터로 조회 | `read` | `audio.view` |
@@ -382,11 +383,10 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 정규화는 최대 500개 시트를 처리합니다. 큰 결과도 `get_sprite_job`에서 전체 결과를 조회할 수 있으며, 작업 결과 정보는 24시간 보존합니다. 시트·애니메이션·프레임 ZIP의 임시 다운로드 파일은 별도 작업 폴더 수명(마지막 사용 후 약 1시간)에 따릅니다. 라이브러리 저장 중 취소하면 완료한 저장은 유지하고 다음 시트부터 멈춥니다.
 
-| Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
+| Tool | 용도 | 도구 범위 | 계정 권한 |
 | --- | --- | --- | --- |
 | `get_video_info` | 영상 크기, fps, 길이, 프레임 수 | `read` | `images.view` |
 | `get_sprite_job` | 스프라이트 작업 상태와 저장된 `composite_hashes`, 결과 파일 다운로드 링크 | `read` | `images.view` |
-| `wait_sprite_job` | 작업이 끝날 때까지 대기(채팅에서는 제공되지 않음) | `read` | `images.view` |
 | `download_sprite_frames` | 끝난 추출의 프레임 ZIP 다운로드 링크(약 1시간 보관) | `read` | `images.view` |
 | `extract_sprite_sheet` | 구간·간격/개수로 프레임 추출, 지정색 제거(디스필 선택), 자동 크롭·리사이즈·배치 | `generate` | `images.edit` + `images.upload` |
 | `extract_sprite_sheets_batch` | 같은 옵션으로 영상 여러 개를 각각 시트로(작업 ID 반환, `zip: true`면 ZIP도) | `generate` | `images.edit` + `images.upload` |
@@ -401,7 +401,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 ### 사용자 가이드
 
-| Tool | 용도 | HTTP MCP 키 권한 | 계정 권한 |
+| Tool | 용도 | 도구 범위 | 계정 권한 |
 | --- | --- | --- | --- |
 | `get_app_guide` | 이 가이드(docs/GUIDE)를 읽음. 인자 없이 목차, `topic`이면 그 문서의 소개와 섹션 제목, `topic`+`section`이면 그 섹션, `offset`이면 문서 전체를 나눠서 | `read` | 없음(로그인만) |
 
@@ -467,9 +467,9 @@ positive 프롬프트에서 "1girl"을 10개 찾아줘.
 
 1. `backup_prompt_data`
 2. `get_prompt_group_structure`
-3. `get_unclassified_prompts`
-4. `create_prompt_group` 또는 `batch_create_groups`
-5. `assign_prompts_to_group`
+3. `get_prompts_in_group` (`group_id: 0`)
+4. `batch_create_groups` (그룹 하나도 배열로 전달)
+5. `move_prompts_between_groups` (`prompt_ids`, `target_group_id`)
 
 ### ComfyUI 생성
 
@@ -649,3 +649,16 @@ claude mcp list
 - [이미지 생성 개요](./GENERATION_OVERVIEW.md)
 - [ComfyUI 생성](./COMFYUI_GENERATION.md)
 - [문제 해결](./TROUBLESHOOTING.md)
+
+### 통합된 도구 이름 (2026-10-14)
+
+중복 도구 4개를 아래 경로로 통합했습니다. 외부 MCP 호출과 개별 도구 허용 목록은 새 도구로 변경해야 합니다. 기존 허용 목록을 더 넓은 도구로 자동 치환하지 않으며, 통합 대상의 조회·편집 권한 검사는 그대로 유지합니다.
+
+| 이전 도구 | 현재 호출 |
+| --- | --- |
+| `get_unclassified_prompts` | `get_prompts_in_group`에 `group_id: 0` |
+| `create_prompt_group` | `batch_create_groups`에 `groups: [{ group_name, ... }]` |
+| `assign_prompts_to_group` | `move_prompts_between_groups`에 `prompt_ids`, `target_group_id` (결과: `moved_count`, `fail_count`, `total`) |
+| `wait_sprite_job` | `get_sprite_job`에 `wait_seconds` (기존 기본 대기는 120초이므로 명시적으로 전달) |
+
+`get_sprite_job`은 대기를 생략하면 즉시 상태를 반환합니다. 대기는 외부 MCP 최대 600초, 채팅 최대 30초입니다. 단건 그룹 생성 결과는 `results[0]`에서 확인합니다.

@@ -4,18 +4,7 @@ import type { SimilaritySettings } from '@conai/shared'
 import { formatPromptTagCopyText, parseTaglistTokens } from '@/components/common/tag-result-utils'
 import { buildImageDownloadUrl } from '@/lib/api-images'
 import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
-
-export function formatBytes(value?: number | null) {
-  if (!value) return '—'
-  const units = ['B', 'KB', 'MB', 'GB']
-  let size = value
-  let unitIndex = 0
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
-  }
-  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
-}
+import { parseServerDate } from '@/lib/server-time'
 
 export function getDownloadName(path?: string | null, compositeHash?: string | null) {
   if (path) {
@@ -30,8 +19,7 @@ export function getDownloadName(path?: string | null, compositeHash?: string | n
 /** Parse a server timestamp; SQLite `YYYY-MM-DD HH:MM:SS` values are UTC without a zone suffix. */
 export function parseImageTimestamp(value?: string | null) {
   if (!value) return null
-  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? `${value.replace(' ', 'T')}Z` : value
-  const date = new Date(normalized)
+  const date = parseServerDate(value)
   return Number.isNaN(date.getTime()) ? null : date
 }
 

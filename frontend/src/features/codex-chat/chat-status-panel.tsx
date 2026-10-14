@@ -13,7 +13,7 @@ import { useI18n } from '@/i18n'
 import type { ChatBlockChange, ChatBlocksState, ChatDisplayBlock, CodexChatMessage } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { blockSummaryLine, ChatDisplayBlockView, blockFieldLabel, describeBlockChange, type BlockAction } from './chat-display-block'
-import { parseServerDate } from './codex-chat-message'
+import { parseServerDate } from '@/lib/server-time'
 
 /*
  * The status panel: the profile's display blocks filled with the chat's current state. On a wide chat page it is a

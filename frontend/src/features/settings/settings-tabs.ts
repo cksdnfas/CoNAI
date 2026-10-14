@@ -1,6 +1,6 @@
 import type { TranslationDictionary } from '@/i18n'
 
-export type SettingsTab = 'general' | 'library' | 'media' | 'auto' | 'generation' | 'chat' | 'posts' | 'llm' | 'accounts' | 'system' | 'maintenance'
+export type SettingsTab = 'general' | 'library' | 'media' | 'auto' | 'generation' | 'chat' | 'posts' | 'llm' | 'plugins' | 'accounts' | 'system' | 'maintenance'
 
 export type SettingsTabGroup = 'personalization' | 'library' | 'services' | 'administration'
 
@@ -19,6 +19,7 @@ export const SETTINGS_TAB_ITEMS: SettingsTabItem[] = [
   { value: 'chat', group: 'services' },
   { value: 'posts', group: 'services' },
   { value: 'accounts', group: 'administration' },
+  { value: 'plugins', group: 'administration' },
   { value: 'system', group: 'administration' },
   { value: 'maintenance', group: 'administration' },
 ]
@@ -34,6 +35,7 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, TranslationDictionary> = {
   chat: { ko: '채팅', en: 'Chat' },
   posts: { ko: '게시판', en: 'Posts' },
   accounts: { ko: '계정·권한', en: 'Accounts and access' },
+  plugins: { ko: '플러그인 관리', en: 'Plugin management' },
   system: { ko: '시스템', en: 'System' },
   maintenance: { ko: '유지보수', en: 'Maintenance' },
 }

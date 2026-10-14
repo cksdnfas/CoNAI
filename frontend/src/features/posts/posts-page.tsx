@@ -34,6 +34,7 @@ import { useKnowledgeSearchHint } from './post-knowledge-list'
 import { PostKnowledgeProposals } from './post-knowledge-proposals'
 import { parseKnowledgeSearchContext, type KnowledgeSearchContext } from './post-knowledge-task-fit'
 import { PostKnowledgePermanentDeleteDialog } from './post-knowledge-permanent-delete'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 const PAGE_SIZE = 20
 /** How much of a long post body the connected chat reads at a time (posts.body_at moves through it). */
@@ -82,11 +83,7 @@ export function PostsPage() {
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchInput, setSearchInput] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearchQuery(searchInput.trim()), 300)
-    return () => window.clearTimeout(timer)
-  }, [searchInput])
+  const searchQuery = useDebouncedValue(searchInput.trim())
   const [categoryDialog, setCategoryDialog] = useState<CategoryDialog>(null)
   const [permanentDeletePost, setPermanentDeletePost] = useState<PostSummary | null>(null)
 

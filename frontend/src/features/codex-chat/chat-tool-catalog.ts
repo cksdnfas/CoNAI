@@ -18,6 +18,7 @@ export type ChatToolGroupId =
   | 'sprites' | 'sprite-ops'
   | 'web'
   | 'external'
+  | 'plugins'
   | 'other'
 
 const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
@@ -76,7 +77,6 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   get_most_used_prompts: { group: 'prompts', label: { ko: '자주 쓴 프롬프트', en: 'Most used prompts' }, ko: '사용 횟수가 많은 프롬프트를 순서대로 읽어.' },
   list_prompt_groups: { group: 'prompts', label: { ko: '프롬프트 그룹 목록', en: 'List prompt groups' }, ko: '프롬프트 그룹과 각 그룹의 개수를 나열해.' },
   get_prompt_group_structure: { group: 'prompts', label: { ko: '프롬프트 그룹 구조', en: 'Prompt group tree' }, ko: '프롬프트 그룹의 전체 계층과 미분류 개수를 읽어.' },
-  get_unclassified_prompts: { group: 'prompts', label: { ko: '미분류 프롬프트', en: 'Unclassified prompts' }, ko: '아직 그룹에 안 들어간 프롬프트를 묶음으로 읽어.' },
   get_prompts_in_group: { group: 'prompts', label: { ko: '그룹의 프롬프트', en: 'Prompts in a group' }, ko: '특정 그룹에 든 프롬프트를 모두 읽어.' },
   list_prompt_presets: { group: 'prompts', label: { ko: '프롬프트 프리셋', en: 'Prompt presets' }, ko: '저장된 프롬프트 프리셋과 전체 글을 읽어.' },
   search_wildcards: { group: 'prompts', label: { ko: '와일드카드 검색', en: 'Search wildcards' }, ko: '와일드카드를 이름으로 찾거나 계층을 둘러봐.' },
@@ -118,7 +118,6 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   web_read: { group: 'web', label: { ko: '웹 페이지 읽기', en: 'Read web page' }, ko: '공개 웹 페이지를 글자로 나눠 읽어. 내부 주소는 못 읽어.' },
   get_video_info: { group: 'sprites', label: { ko: '영상 정보', en: 'Video info' }, ko: '라이브러리 영상의 크기·fps·길이·프레임 수를 읽어.' },
   get_sprite_job: { group: 'sprites', label: { ko: '스프라이트 작업 상태', en: 'Sprite job status' }, ko: '스프라이트 작업의 진행 상태와 저장된 결과를 읽어.' },
-  wait_sprite_job: { group: 'sprites', label: { ko: '스프라이트 작업 대기', en: 'Wait for sprite job' }, ko: '스프라이트 작업이 끝날 때까지 기다려. 채팅에선 안 쓰여.' },
   download_sprite_frames: { group: 'sprites', label: { ko: '프레임 ZIP 받기', en: 'Download frames ZIP' }, ko: '추출한 프레임을 낱장 이미지 ZIP으로 묶어 다운로드 링크를 줘.' },
   list_backups: { group: 'backups', label: { ko: '백업 목록', en: 'List backups' }, ko: '프롬프트 백업 파일을 나열해.' },
   submit_generation_job: { group: 'image-gen', label: { ko: '생성 작업 접수', en: 'Submit generation job' }, ko: 'NovelAI·ComfyUI·Codex 생성을 백그라운드 작업으로 접수해. 생성의 기본 도구야.' },
@@ -139,11 +138,9 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   update_image_group: { group: 'image-groups', label: { ko: '그룹 설정 바꾸기', en: 'Update group' }, ko: '그룹 이름·설명·색과 자동수집 조건을 바꿔.' },
   run_group_auto_collect: { group: 'image-groups', label: { ko: '자동수집 다시 실행', en: 'Run auto-collect' }, ko: '자동수집이 켜진 그룹을 한 번 더 모아.' },
   remove_images_from_group: { group: 'image-groups', label: { ko: '그룹에서 이미지 빼기', en: 'Remove images from group' }, ko: '그룹 소속만 풀어. 파일은 지우지 않아.' },
-  create_prompt_group: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 만들기', en: 'Create prompt group' }, ko: '프롬프트 그룹을 하나 만들어. 하위 그룹도 돼.' },
-  batch_create_groups: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 여러 개 만들기', en: 'Create prompt groups' }, ko: '프롬프트 그룹을 한 번에 여러 개 만들어.' },
+  batch_create_groups: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 만들기', en: 'Create prompt groups' }, ko: '프롬프트 그룹을 하나 또는 여러 개 만들어.' },
   create_prompt_preset: { group: 'prompt-groups', label: { ko: '프롬프트 프리셋 저장', en: 'Save prompt preset' }, ko: '프롬프트를 이름 붙여 프리셋으로 저장해. 같은 이름은 덮어쓰지 않아.' },
-  assign_prompts_to_group: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 지정', en: 'Assign prompts to group' }, ko: '프롬프트를 그룹에 넣거나 미분류로 되돌려.' },
-  move_prompts_between_groups: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 이동', en: 'Move prompts between groups' }, ko: '프롬프트를 한 그룹에서 다른 그룹으로 옮겨.' },
+  move_prompts_between_groups: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 이동', en: 'Move prompts between groups' }, ko: '프롬프트를 그룹에 넣거나 옮겨. 대상 그룹 0은 미분류야.' },
   write_text_file: { group: 'file-ops', label: { ko: '문서 쓰기', en: 'Write document' }, ko: '보관함에 md·html·txt 같은 텍스트 문서를 새로 써. 덮어쓰기를 켜면 같은 이름 파일을 통째로 바꿔.' },
   update_file_text: { group: 'file-ops', label: { ko: '문서 바꾸기·이어쓰기', en: 'Replace or append text' }, ko: '보관함 텍스트 파일의 내용을 통째로 바꾸거나 끝에 이어 써.' },
   edit_file_text: { group: 'file-ops', label: { ko: '문서 부분 고치기', en: 'Edit document' }, ko: '보관함 텍스트 파일에서 찾은 문장만 바꿔. 전체를 다시 보내지 않아도 돼.' },
@@ -206,15 +203,18 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
   const groups = new Map<string, ChatToolGroup>()
   for (const group of GROUPS) groups.set(group.id, { id: group.id, scope: group.scope, label: t(group.label), tools: [] })
   const other = new Map<ChatScope, ChatToolGroup>()
-  // Outside MCP servers' tools (x_<server>_<tool>) under each scope their server was given.
+  // Outside MCP servers' tools (x_<server>_<tool>) and plugin tools (p_<plugin>_<tool>) under the scope each was given.
   const external = new Map<ChatScope, ChatToolGroup>()
+  const plugins = new Map<ChatScope, ChatToolGroup>()
   for (const tool of tools) {
     if (tool.scope === null) continue
-    if (tool.name.startsWith('x_') && !TOOLS[tool.name]) {
-      let group = external.get(tool.scope)
+    const kind = TOOLS[tool.name] ? null : tool.name.startsWith('x_') ? 'external' : tool.name.startsWith('p_') ? 'plugins' : null
+    if (kind) {
+      const groups = kind === 'external' ? external : plugins
+      let group = groups.get(tool.scope)
       if (!group) {
-        group = { id: 'external', scope: tool.scope, label: t({ ko: '외부 MCP', en: 'External MCP' }), tools: [] }
-        external.set(tool.scope, group)
+        group = { id: kind, scope: tool.scope, label: kind === 'external' ? t({ ko: '외부 MCP', en: 'External MCP' }) : t({ ko: '플러그인', en: 'Plugins' }), tools: [] }
+        groups.set(tool.scope, group)
       }
       group.tools.push({ name: tool.name, scope: tool.scope, label: tool.name.slice(2), description: tool.description, search: { keys: [tool.name], prose: [tool.description] } })
       continue
@@ -240,6 +240,8 @@ export function groupChatTools(tools: ChatToolInfo[], t: TranslateFn): ChatToolG
     for (const group of groups.values()) if (group.scope === scope && group.tools.length > 0) ordered.push(group)
     const outside = external.get(scope)
     if (outside) ordered.push(outside)
+    const added = plugins.get(scope)
+    if (added) ordered.push(added)
     const fallback = other.get(scope)
     if (fallback) ordered.push(fallback)
   }

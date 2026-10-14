@@ -1,3 +1,4 @@
+import { isPathInside } from '../utils/pathResolver'
 import fs from 'fs'
 import path from 'path'
 import { runtimePaths } from '../config/runtimePaths'
@@ -14,11 +15,6 @@ import { settingsService } from './settingsService'
 import { WatchedFolderService } from './watchedFolderService'
 import { BackgroundProcessorService } from './backgroundProcessorService'
 import { FileDiscoveryService } from './folderScan/fileDiscoveryService'
-
-function isPathInsideRoot(rootPath: string, candidatePath: string) {
-  const relative = path.relative(rootPath, candidatePath)
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
-}
 
 const DELETE_ARTIFACT_BATCH_SIZE = 500
 
@@ -227,7 +223,7 @@ export async function deleteGraphExecutionArtifacts(artifactIds: number[]) {
     }
 
     const resolvedPath = path.resolve(artifact.storage_path)
-    if (!isPathInsideRoot(graphExecutionTempRoot, resolvedPath)) {
+    if (!isPathInside(graphExecutionTempRoot, resolvedPath)) {
       skippedFiles.push({ artifact_id: artifact.id, path: artifact.storage_path, reason: 'Artifact file is outside the graph execution temp root' })
       continue
     }
@@ -364,7 +360,7 @@ export async function copyGraphWorkflowArtifactsToWatchedFolder(folderId: number
   for (const sourcePath of sourcePaths) {
     const resolvedSourcePath = path.resolve(sourcePath)
 
-    if (!isPathInsideRoot(graphExecutionTempRoot, resolvedSourcePath)) {
+    if (!isPathInside(graphExecutionTempRoot, resolvedSourcePath)) {
       skipped.push({ source_path: sourcePath, reason: 'Source path is outside the graph execution temp root' })
       continue
     }

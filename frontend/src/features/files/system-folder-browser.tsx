@@ -18,7 +18,7 @@ import { SidebarGroupLabel, SidebarItem } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { DataCheckTd, DataCheckTh, DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { useI18n } from '@/i18n'
-import { formatFileSize } from '@/lib/api-files'
+import { formatFileSize } from '@/lib/format-size'
 import {
   SYSTEM_FOLDERS_QUERY_KEY,
   SYSTEM_FOLDER_PAGE_SIZE,
@@ -35,6 +35,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { useFileViewMode } from './file-view-mode'
 import { FileEntryIcon as EntryIcon, FileMediaPreview, FilePreviewNavigation, fileMediaKind as mediaKind, filePreviewKind, readFilePreviewMime } from './file-preview-shared'
+import { ListPager } from '@/components/common/list-pager'
 
 const FileCodePreview = lazy(() => import('./file-code-preview'))
 
@@ -370,11 +371,13 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
     )
   }
 
-  const pager = query.data && query.data.total > query.data.limit ? (
-    <div className="flex justify-end gap-2">
-      <Button variant="ghost" size="sm" disabled={offset === 0} onClick={() => { setOffset((value) => Math.max(0, value - SYSTEM_FOLDER_PAGE_SIZE)); setSelected([]) }}>{t({ ko: '이전', en: 'Previous' })}</Button>
-      <Button variant="ghost" size="sm" disabled={offset + query.data.limit >= query.data.total} onClick={() => { setOffset((value) => value + SYSTEM_FOLDER_PAGE_SIZE); setSelected([]) }}>{t({ ko: '다음', en: 'Next' })}</Button>
-    </div>
+  const pager = query.data ? (
+    <ListPager
+      hasPrevious={offset > 0}
+      hasNext={offset + query.data.limit < query.data.total}
+      onPrevious={() => { setOffset((value) => Math.max(0, value - SYSTEM_FOLDER_PAGE_SIZE)); setSelected([]) }}
+      onNext={() => { setOffset((value) => value + SYSTEM_FOLDER_PAGE_SIZE); setSelected([]) }}
+    />
   ) : null
 
   const restorable = selection.filter((entry) => entry.recycle?.restorable)

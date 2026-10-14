@@ -1,153 +1,414 @@
-import { lazy, Suspense, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Folder, FileText, ArrowLeft, Plus, RefreshCw } from 'lucide-react'
-import type { WorkspaceEntry, WorkspaceOperation, WorkspaceText, WorkspaceBatchResult } from '@conai/shared'
+import { useMemo, useRef, useState, type DragEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { BookOpen, FilePlus, FileText, Folder, FolderInput, FolderKanban, FolderPlus, History, LayoutGrid, List, Pencil, Puzzle, RefreshCw, Search, Trash2, Upload, X } from 'lucide-react'
+import type { WorkspaceEntry, WorkspaceOperation, WorkspaceProject } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
-import { SidebarItem, SidebarNav } from '@/components/ui/sidebar'
+import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
+import { SegmentedControl } from '@/components/common/segmented-control'
+import { SearchField } from '@/components/common/search-field'
+import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
+import { ListPager } from '@/components/common/list-pager'
+import { MoveDialog, NameDialog } from '@/components/common/entry-dialogs'
+import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Field } from '@/components/ui/field'
-import { ErrorState } from '@/components/ui/error-state'
-import { LoadingState } from '@/components/ui/loading-state'
-import { Checkbox } from '@/components/ui/checkbox'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { IconButton } from '@/components/ui/icon-button'
+import { ListRow } from '@/components/ui/list-row'
+import { LoadingState } from '@/components/ui/loading-state'
+import { SidebarNav } from '@/components/ui/sidebar'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
+import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useI18n } from '@/i18n'
-import { applyWorkspace, createWorkspace, getWorkspace, listWorkspaceEntries, listWorkspaces, readWorkspace, searchWorkspace, workspaceChanges } from '@/lib/api-workspaces'
+import { formatFileSize } from '@/lib/format-size'
+import { applyWorkspace, deleteWorkspaceEntries, getWorkspace, listWorkspaceEntries, listWorkspaceFolders, readWorkspace, searchWorkspace, statWorkspace } from '@/lib/api-workspaces'
+import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
-const PlainTextEditor = lazy(() => import('@/components/common/plain-text-editor').then(module => ({ default: module.PlainTextEditor })))
+import { FileEntryView, type EntryItem } from './file-entry-views'
+import { useFileViewMode } from './file-view-mode'
+import { StoreFolderSidebarGroup } from './store-folders'
+import { SystemFolderSidebarGroup, type SystemFolderLocation } from './system-folder-browser'
+import { TextDocumentEditor, type TextDocumentStore } from './text-document-editor'
+import { WorkspaceChangesDialog, WorkspaceProjectDialog } from './workspace-dialogs'
+import { WorkspaceSidebarGroup } from './workspace-projects'
+import { HighlightText } from '@/components/common/highlight-text'
+import { fileExtension } from '@/lib/file-extension'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { droppedIds, isMoveDrag, startMoveDrag } from './file-drag'
 
-export function WorkspaceBrowser({ projectId, onProject, onBack }: { projectId: string | null; onProject: (id: string | null) => void; onBack: () => void }) {
+const DRAG_TYPE = 'application/x-conai-workspace-targets'
+/** A document read in one go; larger ones are edited from chat in parts. */
+const EDITOR_LIMIT = 1024 * 1024
+const IMPORT_LIMIT = { files: 100, bytes: 8 * 1024 * 1024 }
+const PAGE_SIZE = 100
+type WorkspaceDocument = { id: string; name: string; size: number }
+
+const join = (...parts: string[]) => parts.filter(Boolean).join('/')
+const baseName = (target: string) => target.split('/').at(-1) ?? target
+const parentOf = (target: string) => (target.includes('/') ? target.slice(0, target.lastIndexOf('/')) : '')
+
+/**
+ * A project workspace in the files page: the same toolbar, list, selection bar, dialogs and document editor as the
+ * file store, on the project's own folders. Guidelines open from the toolbar; deletes need files.delete.
+ */
+export function WorkspaceBrowser({ projectId, dir, onNavigate, onProject, onCreateProject, onStore, onSystem }: {
+  projectId: string
+  dir: string
+  onNavigate: (dir: string) => void
+  onProject: (id: string) => void
+  onCreateProject?: () => void
+  onStore: (folderId: string | null) => void
+  onSystem: (location: SystemFolderLocation) => void
+}) {
   const { t } = useI18n()
-  const failureMessage = (failure: unknown) => getErrorMessage(failure, t({ ko: '작업을 완료하지 못했어.', en: 'Could not complete the operation.' }))
-  const auth = useAuthStatusQuery()
-  const canWrite = auth.data?.permissionKeys?.includes('files.edit') === true
-  const account = auth.data?.accountId ?? 'bootstrap'
-  const client = useQueryClient()
+  const navigateTo = useNavigate()
+  const { showSnackbar } = useSnackbar()
   const confirm = useConfirm()
-  const [projectOffset, setProjectOffset] = useState(0)
-  const [folder, setFolder] = useState('')
+  const queryClient = useQueryClient()
+  const auth = useAuthStatusQuery()
+  const permissions = auth.data?.permissionKeys ?? []
+  const canWrite = permissions.includes('files.edit')
+  const canDelete = canWrite && permissions.includes('files.delete')
+  const chatPage = useChatPageDataPermissions().canReadFiles
+  const [viewMode, changeViewMode] = useFileViewMode('workspace')
   const [offset, setOffset] = useState(0)
-  const [name, setName] = useState('')
-  const [guidelines, setGuidelines] = useState('')
-  const [search, setSearch] = useState('')
-  const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<string[]>([])
-  const [destination, setDestination] = useState('')
-  const [editor, setEditor] = useState<WorkspaceText | null>(null)
-  const [draft, setDraft] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const projects = useQuery({ queryKey: ['workspaces', 'list', account, projectOffset], queryFn: () => listWorkspaces(projectOffset) })
-  const project = useQuery({ queryKey: ['workspaces', projectId, account, 'info'], queryFn: () => getWorkspace(projectId!), enabled: !!projectId })
-  const entries = useQuery({ queryKey: ['workspaces', projectId, account, 'entries', folder, offset], queryFn: () => listWorkspaceEntries(projectId!, folder, offset), enabled: !!projectId && !query })
-  const results = useQuery({ queryKey: ['workspaces', projectId, account, 'search', query, offset], queryFn: () => searchWorkspace(projectId!, query, offset), enabled: !!projectId && !!query })
-  const changes = useQuery({ queryKey: ['workspaces', projectId, account, 'changes'], queryFn: () => workspaceChanges(projectId!), enabled: !!projectId })
-  const shown = query ? results.data?.hits ?? [] : entries.data?.entries ?? []
-  const next = query ? results.data?.nextOffset : entries.data?.nextOffset
-  const dirty = !!editor && draft !== editor.text
-  const refresh = () => client.invalidateQueries({ queryKey: ['workspaces', projectId] })
-  const mutation = useMutation({ mutationFn: async (operations: WorkspaceOperation[]) => {
-    const result = await applyWorkspace(projectId!, operations)
-    await refresh()
-    if (result.status !== 'completed') throw new Error(`${result.error ?? result.status} (${result.results.length}/${operations.length})`)
-    return result
-  }, onError: failure => setError(failureMessage(failure)) })
-  const creation = useMutation({ mutationFn: () => createWorkspace(name, guidelines), onSuccess: async value => {
-    await client.invalidateQueries({ queryKey: ['workspaces', 'list'] })
-    onProject(value.id)
-  }, onError: failure => setError(failureMessage(failure)) })
-  const discard = async () => !dirty || await confirm({ title: t({ ko: '저장하지 않은 변경을 버릴까?', en: 'Discard unsaved changes?' }) })
-  const open = async (entry: WorkspaceEntry) => {
-    if (!await discard()) return
-    setError(null)
-    try {
-      if (entry.kind === 'folder') { setFolder(entry.target); setOffset(0); setQuery(''); setSelected([]); setEditor(null); return }
-      const result = await readWorkspace(projectId!, [{ target: entry.target, limit: 1048576 }])
-      setEditor(result.files[0]); setDraft(result.files[0].text)
-    } catch (failure) { setError(failureMessage(failure)) }
-  }
-  const newDocument = () => { setEditor({ target: folder ? `${folder}/${name}` : name, text: '', revision: '', size: 0, offset: 0, nextOffset: null }); setDraft('') }
-  const save = async () => {
-    if (!editor || editor.nextOffset !== null || editor.offset !== 0) throw new Error(t({ ko: '전체를 연 문서만 저장할 수 있어. 긴 문서는 채팅의 부분 편집을 사용해줘.', en: 'Only a complete document can be saved. Use chat partial edits for large files.' }))
-    const result = await mutation.mutateAsync([{ kind: 'write', target: editor.target, text: draft, expectedRevision: editor.revision || null }])
-    setEditor({ ...editor, text: draft, revision: result.results[0].revision!, size: new TextEncoder().encode(draft).length })
-  }
-  const move = async () => {
-    const targets = shown.filter(entry => selected.includes(entry.target) && entry.kind === 'file')
-    const read = await readWorkspace(projectId!, targets.map(entry => ({ target: entry.target, limit: 4 })))
-    await mutation.mutateAsync(read.files.map(file => ({ kind: 'move', target: file.target, destination: [destination, file.target.split('/').at(-1)].filter(Boolean).join('/'), expectedRevision: file.revision })))
+  const [nameDialog, setNameDialog] = useState<{ target?: string; name: string } | null>(null)
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [moveTarget, setMoveTarget] = useState('')
+  const [editor, setEditor] = useState<{ entry: WorkspaceDocument | null } | null>(null)
+  const [projectOpen, setProjectOpen] = useState(false)
+  const [changesOpen, setChangesOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchInput, setSearchInput] = useState('')
+  const searchQuery = useDebouncedValue(searchInput.trim())
+  const uploadInput = useRef<HTMLInputElement>(null)
+  const searching = searchOpen && searchQuery !== ''
+  // Another folder (a breadcrumb, the browser's Back) starts unselected on its first page: a selection the person
+  // can no longer see must never reach a delete or move.
+  const [shownDir, setShownDir] = useState(dir)
+  if (shownDir !== dir) {
+    setShownDir(dir)
     setSelected([])
+    setOffset(0)
   }
-  const act = async (fn: () => Promise<unknown>) => { setError(null); try { await fn() } catch (failure) { setError(failureMessage(failure)) } }
-  useChatPageRegistration({ kind: 'files', title: project.data?.name ?? t({ ko: '작업 공간', en: 'Workspaces' }), resourceId: projectId ? `workspace:${projectId}` : 'workspaces', localRevision: JSON.stringify([folder, offset, selected, editor?.target, editor?.revision, draft, name, guidelines, query]), dirty,
-    fields: [{ id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: name }, { id: 'search', label: t({ ko: '검색어', en: 'Search' }), type: 'text', value: search }, ...(!projectId && guidelines.length <= 2000 ? [{ id: 'guidelines', label: t({ ko: '프로젝트 지침', en: 'Guidelines' }), type: 'text' as const, value: guidelines }] : []), ...(editor && draft.length <= 2000 ? [{ id: 'draft', label: t({ ko: '문서 내용', en: 'Document text' }), type: 'text' as const, value: draft }] : [])],
-    data: { projects: (projects.data ?? []).slice(0, 50).map(item => ({ id: item.id, name: item.name })), entries: shown.map(entry => ({ id: entry.id, target: entry.target, kind: entry.kind })), folder, offset, ...(editor ? { editor: { target: editor.target, characters: draft.length, complete: editor.offset === 0 && editor.nextOffset === null } } : {}) },
-    actions: [pageAction('workspace.open', t({ ko: '항목 열기', en: 'Open item' }), '', pageObject({ target: pageText(1000) }, ['target'])), ...(projectId ? [pageAction('workspace.search', t({ ko: '검색', en: 'Search' }), '')] : []), ...(canWrite ? [...(projectId ? [pageAction('workspace.new', t({ ko: '새 문서 편집', en: 'New document' }), ''), pageAction('workspace.mkdir', t({ ko: '폴더 만들기', en: 'Create folder' }), '', undefined, 'save')] : [pageAction('workspace.create', t({ ko: '프로젝트 만들기', en: 'Create project' }), '', undefined, 'save')]), ...(editor && editor.offset === 0 && editor.nextOffset === null ? [pageAction('workspace.save', t({ ko: '문서 저장', en: 'Save document' }), '', undefined, 'save')] : [])] : [])],
-    apply: patch => { if (patch.name !== undefined) setName(String(patch.name)); if (patch.search !== undefined) setSearch(String(patch.search)); if (patch.draft !== undefined) setDraft(String(patch.draft)); if (patch.guidelines !== undefined) setGuidelines(String(patch.guidelines)) },
+
+  const project = useQuery({ queryKey: ['workspaces', projectId, 'info'], queryFn: () => getWorkspace(projectId) })
+  const entries = useQuery({ queryKey: ['workspaces', projectId, 'entries', dir, offset], queryFn: () => listWorkspaceEntries(projectId, dir, offset), enabled: !searching })
+  // Each page checks 100 entries; "더 찾기" adds the next page's hits below the ones found so far.
+  const results = useInfiniteQuery({
+    queryKey: ['workspaces', projectId, 'search', searchQuery],
+    queryFn: ({ pageParam, signal }) => searchWorkspace(projectId, searchQuery, pageParam, signal),
+    initialPageParam: 0,
+    getNextPageParam: (page) => page.nextOffset ?? undefined,
+    enabled: searching,
+  })
+  const hits = results.data?.pages.flatMap((page) => page.hits) ?? []
+  const folders = useQuery({ queryKey: ['workspaces', projectId, 'folders'], queryFn: () => listWorkspaceFolders(projectId), enabled: moveOpen })
+  const shown = useMemo(() => entries.data?.entries ?? [], [entries.data])
+  const selection = shown.filter((entry) => selected.includes(entry.target))
+  const projectName = project.data?.name ?? t({ ko: '프로젝트', en: 'Project' })
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['workspaces', projectId] })
+
+  /** Applies and reports a partial failure as an error (the change history keeps what did go through). */
+  const mutation = useMutation({
+    mutationFn: async (run: () => Promise<{ status: string; error?: string; results: unknown[] } | void>) => {
+      const result = await run()
+      await refresh()
+      if (result && result.status !== 'completed') throw new Error(result.error ?? result.status)
+    },
+    onSuccess: () => { setSelected([]); setNameDialog(null); setMoveOpen(false) },
+    onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '작업을 완료하지 못했어.', en: 'Could not complete the operation.' })) }),
+  })
+  const busy = mutation.isPending
+  const apply = (operations: WorkspaceOperation[]) => applyWorkspace(projectId, operations)
+  // A listed file is checked against the revision the person saw; a folder's is read when they act.
+  const revision = async (target: string) => byTarget.get(target)?.revision ?? (await statWorkspace(projectId, target)).revision
+  const moveTo = (targets: string[], destination: string) => mutation.mutate(async () => {
+    const moving = targets.filter((target) => join(destination, baseName(target)) !== target)
+    if (!moving.length) return
+    return apply(await Promise.all(moving.map(async (target) => ({ kind: 'move' as const, target, destination: join(destination, baseName(target)), expectedRevision: await revision(target) }))))
+  })
+  const rename = (target: string, name: string) => mutation.mutate(async () => apply([{ kind: 'move', target, destination: join(parentOf(target), name.trim()), expectedRevision: await revision(target) }]))
+  const createFolder = (name: string) => mutation.mutate(() => apply([{ kind: 'mkdir', target: join(dir, name.trim()) }]))
+  const remove = async (targets: string[]) => {
+    const folderCount = shown.filter((entry) => targets.includes(entry.target) && entry.kind === 'folder').length
+    const ok = await confirm({
+      title: t({ ko: '선택한 {count}개를 삭제할까?', en: 'Delete {count} selected items?' }, { count: targets.length }),
+      description: folderCount ? t({ ko: '폴더는 안에 든 문서까지 모두 지워져. 되돌릴 수 없어.', en: 'Folders are deleted with everything in them. This cannot be undone.' }) : t({ ko: '되돌릴 수 없어.', en: 'This cannot be undone.' }),
+      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
+      tone: 'destructive',
+    })
+    if (ok) mutation.mutate(async () => deleteWorkspaceEntries(projectId, await Promise.all(targets.map(async (target) => ({ target, expectedRevision: await revision(target) })))))
+  }
+  const importFiles = (files: File[], folder = dir) => {
+    if (!canWrite || busy || !files.length) return
+    mutation.mutate(async () => {
+      if (files.length > IMPORT_LIMIT.files || files.reduce((sum, file) => sum + file.size, 0) > IMPORT_LIMIT.bytes) throw new Error(t({ ko: '한 번에 100개, 8MB까지 가져올 수 있어.', en: 'Up to 100 files and 8 MB at a time.' }))
+      const operations = await Promise.all(files.map(async (file) => {
+        let text: string
+        try { text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()) } catch { throw new Error(t({ ko: 'UTF-8 텍스트만 가져올 수 있어: {name}', en: 'Only UTF-8 text can be imported: {name}' }, { name: file.name })) }
+        return { kind: 'write' as const, target: join(folder, file.name), text, expectedRevision: null }
+      }))
+      return apply(operations)
+    })
+  }
+  const closeSearch = () => { setSearchOpen(false); setSearchInput('') }
+  const openFolder = (target: string) => { closeSearch(); setSelected([]); setOffset(0); onNavigate(target) }
+  const openDocument = (entry: Pick<WorkspaceEntry, 'target' | 'size'>) => setEditor({ entry: { id: entry.target, name: baseName(entry.target), size: entry.size } })
+  const toggle = (target: string, checked: boolean) => setSelected((current) => (checked ? [...current, target] : current.filter((value) => value !== target)))
+
+  // Drag rows onto folders to move them; drop files from the computer to import them.
+  const dragOver = (event: DragEvent) => {
+    if (busy || !canWrite) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = isMoveDrag(event, DRAG_TYPE) ? 'move' : 'copy'
+  }
+  const drop = (event: DragEvent, folder: string) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (busy || !canWrite) return
+    const targets = droppedIds(event, DRAG_TYPE)
+    if (targets) moveTo(targets.filter((target) => target !== folder && !folder.startsWith(`${target}/`)), folder)
+    else if (event.dataTransfer.files.length) importFiles(Array.from(event.dataTransfer.files), folder)
+  }
+
+  const store = useMemo((): TextDocumentStore<WorkspaceDocument> => ({
+    key: `workspace:${projectId}`,
+    load: async (document) => {
+      const { files: [file] } = await readWorkspace(projectId, [{ target: document.id, limit: EDITOR_LIMIT }])
+      // The list's size can be stale: a document that grew past one read must not open (saving it would drop the rest).
+      if (file.nextOffset !== null) return { tooLarge: true as const }
+      return { text: file.text, revision: file.revision }
+    },
+    save: async (document, text, revisionValue, fileName) => {
+      const target = document?.id ?? join(dir, fileName)
+      const result = await applyWorkspace(projectId, [{ kind: 'write', target, text, expectedRevision: document ? revisionValue : null }])
+      if (result.status !== 'completed') throw new ApiRequestError(result.error ?? result.status, result.conflict ? 409 : 400)
+      return { document: { id: target, name: baseName(target), size: new TextEncoder().encode(text).length }, revision: result.results[0]?.revision ?? null }
+    },
+    refresh,
+    tooLarge: (document) => document.size > EDITOR_LIMIT,
+    tooLargeTitle: t({ ko: '1MB가 넘는 문서는 채팅에서 부분 편집으로 고쳐줘', en: 'Edit documents over 1 MB in parts from chat' }),
+    location: [projectName, dir].filter(Boolean).join(' / '),
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh only closes over projectId
+  }), [projectId, dir, projectName, t])
+
+  useChatPageRegistration(chatPage ? {
+    kind: 'files', title: projectName, resourceId: `workspace:${projectId}`, localRevision: JSON.stringify([dir, offset, selected, nameDialog, searchInput, editor?.entry?.id]),
+    fields: [
+      { id: 'search', label: t({ ko: '검색어 (빈 값은 검색 닫기)', en: 'Search (empty closes search)' }), type: 'text', value: searchOpen ? searchInput : '' },
+      ...(nameDialog ? [{ id: 'name', label: t({ ko: '폴더 이름 입력', en: 'Folder name draft' }), type: 'text' as const, value: nameDialog.name }] : []),
+    ],
+    data: { project: { id: projectId, name: projectName }, folder: dir, offset, entries: shown.map((entry) => ({ target: entry.target, kind: entry.kind, bytes: entry.size })), selected },
+    actions: [
+      pageAction('workspace.open', t({ ko: '항목 열기', en: 'Open item' }), t({ ko: '목록의 폴더나 문서, 빈 값은 프로젝트 최상위', en: 'a listed folder or document; empty opens the top' }), pageObject({ target: pageText(1000) }, ['target'])),
+      pageAction('workspace.search', t({ ko: '검색', en: 'Search' }), t({ ko: 'search를 채운 뒤', en: 'after filling search' })),
+      ...(canWrite ? [
+        pageAction('workspace.new', t({ ko: '새 문서 쓰기', en: 'New document' }), ''),
+        pageAction('workspace.mkdir', t({ ko: '새 폴더 창 열기', en: 'Open new folder dialog' }), t({ ko: 'name을 채우고 workspace.create', en: 'fill name, then workspace.create' })),
+        ...(nameDialog && !nameDialog.target && nameDialog.name.trim() ? [pageAction('workspace.create', t({ ko: '폴더 만들기', en: 'Create folder' }), '', undefined, 'save')] : []),
+      ] : []),
+    ],
+    apply: (patch) => {
+      if (patch.search !== undefined) { setSearchInput(String(patch.search)); setSearchOpen(String(patch.search).trim() !== '') }
+      if (patch.name !== undefined) setNameDialog((current) => (current ? { ...current, name: String(patch.name) } : current))
+    },
     applyAction: async (action, args, assertCurrent) => {
       assertCurrent()
-      if (action === 'workspace.search') { setQuery(search); setOffset(0); return }
-      if (action === 'workspace.create') { await creation.mutateAsync(); return }
-      if (action === 'workspace.new' && projectId && name.trim()) { newDocument(); return }
-      if (action === 'workspace.mkdir' && projectId) { await mutation.mutateAsync([{ kind: 'mkdir', target: [folder, name].filter(Boolean).join('/') }]); return }
-      if (action === 'workspace.save') { await save(); return }
+      if (action === 'workspace.search') { setSearchOpen(true); return }
+      if (action === 'workspace.new') { setEditor({ entry: null }); return }
+      if (action === 'workspace.mkdir') { setNameDialog({ name: '' }); return }
+      if (action === 'workspace.create' && nameDialog) { await mutation.mutateAsync(() => apply([{ kind: 'mkdir', target: join(dir, nameDialog.name.trim()) }])); return }
       if (action === 'workspace.open') {
-        const item = shown.find(entry => entry.target === args.target)
-        if (item) { await open(item); return }
-        const found = projects.data?.find(item => item.id === args.target)
-        if (found && !dirty) { onProject(found.id); return }
+        const target = String(args.target ?? '')
+        if (!target) { openFolder(''); return }
+        const entry = shown.find((item) => item.target === target)
+        if (entry?.kind === 'folder') { openFolder(entry.target); return }
+        if (entry) { openDocument(entry); return }
       }
       throw new Error('현재 화면에서 사용할 수 없는 작업이야.')
     },
-  })
-  return <PageWithSidebar storageKey="workspaces" sidebarLabel={t({ ko: '작업 공간', en: 'Workspaces' })} sidebar={<SidebarNav>
-    <SidebarItem icon={ArrowLeft} label={t({ ko: '공용 파일', en: 'Shared files' })} onClick={() => void act(async () => { if (await discard()) onBack() })} />
-    <SidebarItem icon={Plus} label={t({ ko: '새 프로젝트', en: 'New project' })} active={!projectId} onClick={() => void act(async () => { if (await discard()) onProject(null) })} />
-    {projects.data?.slice(0, 50).map(item => <SidebarItem key={item.id} icon={Folder} label={item.name} active={projectId === item.id} onClick={() => void act(async () => { if (await discard()) onProject(item.id) })} />)}
-    <div className="flex gap-2 p-2"><Button size="sm" variant="ghost" disabled={!projectOffset} onClick={() => setProjectOffset(Math.max(0, projectOffset - 50))}>{t({ ko: '이전', en: 'Previous' })}</Button><Button size="sm" variant="ghost" disabled={(projects.data?.length ?? 0) <= 50} onClick={() => setProjectOffset(projectOffset + 50)}>{t({ ko: '다음', en: 'Next' })}</Button></div>
-  </SidebarNav>} toolbar={<PageToolbar><span className="text-sm font-medium">{project.data?.name ?? t({ ko: '작업 공간', en: 'Workspaces' })}</span><Button variant="ghost" size="sm" onClick={() => void refresh()}><RefreshCw />{t({ ko: '새로고침', en: 'Refresh' })}</Button></PageToolbar>}>
-    <div className="flex flex-col gap-4 p-4">
-      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-      {projects.isError || project.isError ? <ErrorState title={t({ ko: '프로젝트를 열지 못했어.', en: 'Could not open project.' })} error={projects.error ?? project.error} /> : null}
-      {!projectId ? <div className="flex max-w-2xl flex-col gap-4">
-        <Field label={t({ ko: '프로젝트 이름', en: 'Project name' })}><Input value={name} onChange={event => setName(event.target.value)} maxLength={100} /></Field>
-        <Field label={t({ ko: '프로젝트 가이드라인', en: 'Project guidelines' })}><Textarea rows={12} value={guidelines} onChange={event => setGuidelines(event.target.value)} /></Field>
-        <Button disabled={!canWrite || !name.trim() || creation.isPending} onClick={() => creation.mutate()}>{t({ ko: '프로젝트 만들기', en: 'Create project' })}</Button>
-        <p className="text-sm text-muted-foreground">{t({ ko: '채팅의 컨텍스트에서 이 프로젝트를 연결하면 가이드라인과 파일을 함께 사용할 수 있어.', en: 'Connect this project in chat context to use its guidelines and files.' })}</p>
-      </div> : <>
-        <div className="flex flex-wrap items-end gap-2"><Button variant="ghost" onClick={() => void act(async () => { if (await discard()) { setFolder(folder.includes('/') ? folder.slice(0, folder.lastIndexOf('/')) : ''); setOffset(0); setEditor(null); setQuery('') } })}><ArrowLeft />{folder || '/'}</Button><Input aria-label={t({ ko: '파일 검색', en: 'Search files' })} value={search} onChange={event => setSearch(event.target.value)} className="max-w-xs" /><Button variant="secondary" onClick={() => { setQuery(search); setOffset(0) }}>{t({ ko: '검색', en: 'Search' })}</Button></div>
-        {query ? <p className="text-xs text-muted-foreground">{t({ ko: '페이지별로 100개 파일의 앞 128KB를 검색해. 다음 페이지도 확인해줘.', en: 'Search checks 100 entries per page and the first 128KB of each file. Continue to the next page for more.' })}</p> : null}
-        {(query ? results.isPending : entries.isPending) ? <LoadingState /> : null}
-        {entries.error || results.error ? <ErrorState title={t({ ko: '파일을 불러오지 못했어.', en: 'Could not load files.' })} error={entries.error ?? results.error} /> : null}
-        <div className="divide-y divide-line">{shown.map(entry => <div key={entry.id} className="flex items-center gap-2 py-1">
-          {entry.kind === 'file' ? <Checkbox aria-label={entry.target} checked={selected.includes(entry.target)} onCheckedChange={checked => setSelected(current => checked ? [...current, entry.target].slice(0, 32) : current.filter(target => target !== entry.target))} /> : <Folder className="size-4" />}
-          <Button variant="ghost" className="min-w-0 flex-1 justify-start" onClick={() => void open(entry)}>{entry.kind === 'file' ? <FileText /> : null}<span className="truncate">{entry.target}</span></Button><span className="text-xs text-muted-foreground">{entry.size.toLocaleString()} B</span>
-        </div>)}</div>
-        <div className="flex gap-2"><Button variant="ghost" disabled={!offset} onClick={() => { setOffset(Math.max(0, offset - 100)); setSelected([]) }}>{t({ ko: '이전', en: 'Previous' })}</Button><Button variant="ghost" disabled={next == null} onClick={() => { setOffset(next!); setSelected([]) }}>{t({ ko: '다음', en: 'Next' })}</Button></div>
-        {canWrite ? <div className="flex flex-wrap gap-2"><Input aria-label={t({ ko: '새 파일 또는 폴더 이름', en: 'New file or folder name' })} value={name} onChange={event => setName(event.target.value)} className="max-w-xs" /><Button variant="secondary" disabled={!name.trim() || mutation.isPending} onClick={() => void act(async () => { await mutation.mutateAsync([{ kind: 'mkdir', target: [folder, name].filter(Boolean).join('/') }]) })}>{t({ ko: '폴더 만들기', en: 'Create folder' })}</Button><Button variant="secondary" disabled={!name.trim()} onClick={() => void act(async () => { if (await discard()) newDocument() })}>{t({ ko: '새 문서', en: 'New document' })}</Button><Input type="file" aria-label={t({ ko: '텍스트 문서 가져오기', en: 'Import text documents' })} multiple className="max-w-xs" onChange={event => {
-          const files = Array.from(event.target.files ?? [])
-          event.target.value = ''
-          void act(async () => {
-            if (files.length > 100 || files.reduce((sum, file) => sum + file.size, 0) > 8 * 1024 * 1024) throw new Error('한 번에 100개, 8MB까지 가져올 수 있어.')
-            const operations = await Promise.all(files.map(async file => ({ kind: 'write' as const, target: [folder, file.name].filter(Boolean).join('/'), text: new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer()), expectedRevision: null })))
-            await mutation.mutateAsync(operations)
-          })
-        }} /></div> : null}
-        {selected.length && canWrite ? <div className="flex gap-2"><Input aria-label={t({ ko: '이동 대상 폴더', en: 'Destination folder' })} value={destination} onChange={event => setDestination(event.target.value)} placeholder={t({ ko: '대상 폴더 · 빈 값은 최상위', en: 'Destination · empty means root' })} /><Button disabled={mutation.isPending} onClick={() => void act(move)}>{t({ ko: '선택 파일 이동', en: 'Move selected files' })} ({selected.length})</Button></div> : null}
-        {editor ? <section className="flex flex-col gap-2 border-t border-line pt-4"><div className="flex items-center justify-between gap-2"><span className="text-sm font-medium">{editor.target}</span><Button disabled={!canWrite || mutation.isPending || editor.offset !== 0 || editor.nextOffset !== null} onClick={() => void act(save)}>{t({ ko: '저장', en: 'Save' })}</Button></div>
-          {canWrite ? <Suspense fallback={<LoadingState />}><PlainTextEditor value={draft} onChange={setDraft} fileName={editor.target} /></Suspense> : <Textarea readOnly rows={16} value={draft} aria-label={editor.target} />}
-          {editor.nextOffset !== null ? <Button variant="secondary" onClick={() => void act(async () => { if (!await discard()) return; const value = await readWorkspace(projectId, [{ target: editor.target, offset: editor.nextOffset!, revision: editor.revision, limit: 1048576 }]); setEditor(value.files[0]); setDraft(value.files[0].text) })}>{t({ ko: '다음 부분 읽기', en: 'Read next part' })}</Button> : null}
-        </section> : null}
-        <details className="border-t border-line pt-3"><summary className="cursor-pointer text-sm">{t({ ko: '최근 변경 내역', en: 'Recent changes' })}</summary>{changes.data?.map(change => {
-          const result = JSON.parse(change.result) as WorkspaceBatchResult
-          const status = change.status === 'completed' ? t({ ko: '완료', en: 'Completed' }) : change.status === 'running' ? t({ ko: '진행 중', en: 'Running' }) : t({ ko: '중단 또는 실패', en: 'Interrupted or failed' })
-          return <div key={change.requestId} className="border-b border-line py-2 text-xs"><span>{change.createdAt} · {status} · {change.completed}{t({ ko: '개 반영', en: ' changes' })}</span><p className="break-all text-muted-foreground">{result.results.map(item => item.target).join(', ')}{change.completed > 10 ? ' …' : ''}</p>{result.error ? <p className="text-destructive">{result.error}</p> : null}</div>
-        })}</details>
-      </>}
+  } : null)
+
+  const rowMenu = (entry: WorkspaceEntry): ActionMenuEntry[] => [
+    entry.kind === 'file' && { key: 'open', label: t({ ko: '편집', en: 'Edit' }), icon: FileText, onSelect: () => openDocument(entry) },
+    '-',
+    canWrite && { key: 'rename', label: t({ ko: '이름 변경', en: 'Rename' }), icon: Pencil, disabled: busy, onSelect: () => setNameDialog({ target: entry.target, name: baseName(entry.target) }) },
+    canWrite && { key: 'move', label: t({ ko: '이동', en: 'Move' }), icon: FolderInput, disabled: busy, onSelect: () => { setSelected([entry.target]); setMoveTarget(dir); setMoveOpen(true) } },
+    '-',
+    canDelete && { key: 'delete', label: t({ ko: '삭제', en: 'Delete' }), icon: Trash2, destructive: true, disabled: busy, onSelect: () => void remove([entry.target]) },
+  ]
+  const toItem = (entry: WorkspaceEntry): EntryItem => {
+    const name = baseName(entry.target)
+    const folder = entry.kind === 'folder'
+    const Icon = folder ? Folder : FileText
+    const extension = folder ? null : fileExtension(name)
+    return {
+      id: entry.target, name, folder, size: entry.size,
+      icon: <Icon className={folder ? 'size-4 shrink-0 text-warning' : 'size-4 shrink-0 text-muted-foreground'} />,
+      face: <span className="flex flex-col items-center gap-1"><Icon className={folder ? 'size-9 text-warning' : 'size-9 text-muted-foreground'} />{extension ? <span className="text-2xs font-semibold tracking-wide text-muted-foreground">{extension}</span> : null}</span>,
+    }
+  }
+  const byTarget = new Map(shown.map((entry) => [entry.target, entry]))
+
+  const actions = (
+    <>
+      <IconButton variant="ghost" label={t({ ko: '프로젝트 지침', en: 'Project guidelines' })} disabled={!project.data} onClick={() => setProjectOpen(true)}><BookOpen /></IconButton>
+      <IconButton variant="ghost" label={t({ ko: '플러그인으로 열기', en: 'Open with plugin' })} onClick={() => navigateTo(`/extensions?project=${projectId}`)}><Puzzle /></IconButton>
+      <SegmentedControl
+        size="xs"
+        value={viewMode}
+        onChange={(value) => changeViewMode(value === 'grid' ? 'grid' : 'list')}
+        ariaLabel={t({ ko: '보기', en: 'View' })}
+        items={[
+          { value: 'grid', label: <LayoutGrid className="size-3.5" />, ariaLabel: t({ ko: '아이콘 보기', en: 'Icons' }) },
+          { value: 'list', label: <List className="size-3.5" />, ariaLabel: t({ ko: '자세히 보기', en: 'Details' }) },
+        ]}
+      />
+      {searchOpen ? null : <IconButton variant="ghost" label={t({ ko: '검색', en: 'Search' })} onClick={() => setSearchOpen(true)}><Search /></IconButton>}
+      {canWrite ? <IconButton variant="ghost" label={t({ ko: '새 폴더', en: 'New folder' })} disabled={busy} onClick={() => setNameDialog({ name: '' })}><FolderPlus /></IconButton> : null}
+      {canWrite ? <IconButton variant="ghost" label={t({ ko: '텍스트 문서 가져오기', en: 'Import text documents' })} disabled={busy} onClick={() => uploadInput.current?.click()}><Upload /></IconButton> : null}
+      <ActionMenuButton
+        size="icon"
+        label={t({ ko: '더 보기', en: 'More' })}
+        entries={[
+          canWrite && { key: 'new-document', label: t({ ko: '새 문서', en: 'New document' }), icon: FilePlus, disabled: busy, onSelect: () => setEditor({ entry: null }) },
+          { key: 'changes', label: t({ ko: '변경 내역', en: 'Change history' }), icon: History, onSelect: () => setChangesOpen(true) },
+          { key: 'refresh', label: t({ ko: '새로고침', en: 'Refresh' }), icon: RefreshCw, disabled: busy, onSelect: () => void refresh() },
+        ]}
+      />
+    </>
+  )
+  const segments = dir ? dir.split('/') : []
+  const breadcrumbs = (
+    <PathBreadcrumbs
+      ariaLabel={t({ ko: '현재 경로', en: 'Current path' })}
+      items={[{ key: '', label: projectName, onClick: () => openFolder('') }, ...segments.map((segment, index) => ({ key: segments.slice(0, index + 1).join('/'), label: segment, onClick: () => openFolder(segments.slice(0, index + 1).join('/')) }))]}
+    />
+  )
+  const searchField = (
+    <div className="flex min-w-0 flex-1 items-center gap-1">
+      <SearchField autoFocus value={searchInput} onChange={setSearchInput} placeholder={t({ ko: '문서 이름이나 내용 검색', en: 'Search document names and text' })} onKeyDown={(event) => { if (event.key === 'Escape') closeSearch() }} />
+      <IconButton variant="ghost" size="icon-sm" label={t({ ko: '검색 닫기', en: 'Close search' })} onClick={closeSearch}><X /></IconButton>
     </div>
-  </PageWithSidebar>
+  )
+  const sidebar = (
+    <SidebarNav aria-label={t({ ko: '폴더', en: 'Folders' })}>
+      <WorkspaceSidebarGroup activeId={projectId} onOpen={onProject} onCreate={canWrite ? onCreateProject : undefined} />
+      <StoreFolderSidebarGroup activeId={undefined} onOpen={onStore} />
+      {auth.data?.isAdmin ? <SystemFolderSidebarGroup active={null} onOpen={(root) => onSystem({ root, path: '' })} /> : null}
+    </SidebarNav>
+  )
+
+  let list
+  if (project.isError) list = <ErrorState title={t({ ko: '프로젝트를 열지 못했어.', en: 'Could not open the project.' })} error={project.error} onRetry={() => void project.refetch()} />
+  else if (searching) {
+    if (results.isPending) list = <LoadingState />
+    else if (results.isError) list = <ErrorState title={t({ ko: '검색하지 못했어.', en: 'Search failed.' })} error={results.error} onRetry={() => void results.refetch()} />
+    else list = (
+      <div>
+        {hits.length === 0 && !results.hasNextPage ? <EmptyState icon={Search} title={t({ ko: '찾은 문서가 없어', en: 'No matching documents' })} /> : null}
+        {hits.map((hit) => (
+          <ListRow key={hit.target} asChild interactive size="lg" leading={hit.kind === 'folder' ? <Folder className="size-4 text-warning" /> : <FileText className="size-4 text-muted-foreground" />}>
+            <button type="button" onClick={() => (hit.kind === 'folder' ? openFolder(hit.target) : openDocument(hit))}>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-sm font-semibold"><HighlightText text={baseName(hit.target)} terms={searchQuery} /></span>
+                  {parentOf(hit.target) ? <span className="truncate text-xs text-muted-foreground">{parentOf(hit.target)}</span> : null}
+                </span>
+                {hit.excerpt ? <span className="line-clamp-2 break-all text-xs leading-relaxed text-muted-foreground"><HighlightText text={hit.excerpt.replace(/\s+/g, ' ')} terms={searchQuery} /></span> : null}
+              </span>
+            </button>
+          </ListRow>
+        ))}
+        {results.hasNextPage ? <Button variant="ghost" size="sm" className="mt-2 w-full" disabled={results.isFetchingNextPage} onClick={() => void results.fetchNextPage()}>{t({ ko: '더 찾기', en: 'Search further' })}</Button> : null}
+      </div>
+    )
+  } else if (entries.isPending) list = <LoadingState />
+  else if (entries.isError) list = <ErrorState title={t({ ko: '파일을 불러오지 못했어.', en: 'Could not load files.' })} error={entries.error} onRetry={() => void entries.refetch()} />
+  else if (shown.length === 0) list = <EmptyState icon={FolderKanban} title={t({ ko: '빈 폴더야', en: 'This folder is empty' })} />
+  else list = (
+    <FileEntryView
+      items={shown.map(toItem)}
+      mode={viewMode}
+      selected={selected}
+      onToggle={toggle}
+      onSelectAll={(checked) => setSelected(checked ? shown.map((entry) => entry.target) : [])}
+      menu={(item) => rowMenu(byTarget.get(item.id)!)}
+      formatSize={formatFileSize}
+      draggable={canWrite && !busy}
+      onDragStart={(item, event) => {
+        startMoveDrag(event, DRAG_TYPE, selected.includes(item.id) ? selection.map((entry) => entry.target) : [item.id])
+      }}
+      onFolderDragOver={dragOver}
+      onFolderDrop={(item, event) => drop(event, item.id)}
+      onOpen={(item) => {
+        if (item.folder) openFolder(item.id)
+        else if (viewMode === 'grid' && selected.length > 0) toggle(item.id, !selected.includes(item.id))
+        else openDocument(byTarget.get(item.id)!)
+      }}
+    />
+  )
+
+  return (
+    <>
+      <PageWithSidebar storageKey="files" sidebarLabel={t({ ko: '파일 보관함', en: 'Files' })} sidebar={sidebar} toolbar={<PageToolbar sticky start={searchOpen ? searchField : breadcrumbs} actions={actions} />}>
+        <div className="min-h-72 space-y-3" onDragOver={dragOver} onDrop={(event) => drop(event, dir)}>
+          <input ref={uploadInput} type="file" multiple accept=".md,.markdown,.txt,.json,.csv,.yaml,.yml,.xml,.html,.css,.js,.ts" className="hidden" aria-label={t({ ko: '텍스트 문서 가져오기', en: 'Import text documents' })} onChange={(event) => { const files = Array.from(event.target.files ?? []); event.target.value = ''; importFiles(files) }} />
+          {list}
+          {searching ? null : (
+            <ListPager
+              hasPrevious={offset > 0}
+              hasNext={entries.data?.nextOffset != null}
+              onPrevious={() => { setOffset(Math.max(0, offset - PAGE_SIZE)); setSelected([]) }}
+              onNext={() => { setOffset(entries.data!.nextOffset!); setSelected([]) }}
+            />
+          )}
+        </div>
+      </PageWithSidebar>
+
+      <SelectionActionBar
+        selectedCount={selection.length}
+        onClear={() => setSelected([])}
+        responsiveActions
+        actions={canWrite ? (
+          <>
+            <SelectionBarAction icon={Pencil} label={t({ ko: '이름 변경', en: 'Rename' })} disabled={selection.length !== 1 || busy} onClick={() => setNameDialog({ target: selection[0].target, name: baseName(selection[0].target) })} />
+            <SelectionBarAction icon={FolderInput} label={t({ ko: '이동', en: 'Move' })} disabled={busy} onClick={() => { setMoveTarget(dir); setMoveOpen(true) }} />
+            {canDelete ? <SelectionBarAction icon={Trash2} label={t({ ko: '삭제', en: 'Delete' })} variant="destructive" disabled={busy} onClick={() => void remove(selection.map((entry) => entry.target))} /> : null}
+          </>
+        ) : null}
+      />
+
+      <NameDialog
+        open={nameDialog !== null}
+        title={nameDialog?.target ? t({ ko: '이름 변경', en: 'Rename' }) : t({ ko: '새 폴더', en: 'New folder' })}
+        value={nameDialog?.name ?? ''}
+        onChange={(name) => setNameDialog((current) => (current ? { ...current, name } : null))}
+        onSubmit={() => { if (nameDialog) { if (nameDialog.target) rename(nameDialog.target, nameDialog.name); else createFolder(nameDialog.name) } }}
+        onClose={() => setNameDialog(null)}
+        busy={busy}
+      />
+      <MoveDialog
+        open={moveOpen}
+        value={moveTarget}
+        onChange={setMoveTarget}
+        folders={(folders.data ?? []).map((target) => ({ value: target, label: `/${target}`, disabled: selected.some((source) => target === source || target.startsWith(`${source}/`)) }))}
+        rootLabel={projectName}
+        onSubmit={() => moveTo(selection.map((entry) => entry.target), moveTarget)}
+        onClose={() => setMoveOpen(false)}
+        busy={busy}
+      />
+      <WorkspaceProjectDialog open={projectOpen} project={project.data ?? null} canEdit={canWrite} onClose={() => setProjectOpen(false)} onSaved={(saved: WorkspaceProject) => { setProjectOpen(false); queryClient.setQueryData(['workspaces', projectId, 'info'], saved) }} />
+      <WorkspaceChangesDialog open={changesOpen} projectId={projectId} onClose={() => setChangesOpen(false)} />
+      {editor ? <TextDocumentEditor key={editor.entry?.id ?? 'new'} entry={editor.entry} store={store} chatPage={chatPage} onClose={() => setEditor(null)} /> : null}
+    </>
+  )
 }

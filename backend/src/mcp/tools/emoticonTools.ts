@@ -1,7 +1,7 @@
 import fs from 'fs';
 import type { McpServer } from '@modelcontextprotocol/server';
 import { previewImage } from '../../services/imagePreview';
-import { requireRequesterPermission } from '../../middleware/featureAccess';
+import { requireContextPermission } from '../../middleware/featureAccess';
 import { z } from 'zod';
 import { db } from '../../database/init';
 import { GroupModel } from '../../models/Group';
@@ -189,7 +189,7 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
         let label: string;
         if (composite_hash) {
           // The tool itself needs no permission in a chat; library media still needs what viewing it on the web needs.
-          if (context.requester) requireRequesterPermission(context.requester, 'images.view');
+          requireContextPermission(context, 'images.view');
           const metadata = MediaMetadataModel.findByHash(composite_hash);
           const file = metadata && MediaPostprocessVisibilityService.isReadyRecord(metadata) && !ImageSafetyService.isHidden(metadata.rating_score) ? EmoticonService.activeFile(composite_hash) : null;
           if (!file || !fs.existsSync(file.path)) throw new Error('not an available media item');

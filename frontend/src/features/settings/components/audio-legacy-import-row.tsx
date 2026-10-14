@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { formatFileSize } from '@/lib/api-files'
+import { formatFileSize } from '@/lib/format-size'
 import { listRuntimeJobs } from '@/lib/api-runtime-jobs'
 import { runtimeJobQueryKey, useRuntimeJob } from '@/lib/use-runtime-job'
 import {

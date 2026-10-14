@@ -66,6 +66,8 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
       await ChatGenerationPromptingService.stop();
       const { closeExternalMcpServers } = await import('../services/externalMcp/externalMcpServers');
       await closeExternalMcpServers();
+      const { closePluginServers } = await import('../services/plugins/pluginServerRuntime');
+      await closePluginServers();
       const { GenerationQueueService } = await import('../services/generationQueueService');
       await GenerationQueueService.stopAndDrain();
     },

@@ -1,0 +1,180 @@
+{
+  "apiVersion": 1,
+  "id": "app-workbench",
+  "name": "앱 작업 도구",
+  "version": "1.0.0",
+  "description": "라이브러리·게시판·워크플로·오디오를 연결하는 선택 설치 도구이자 커스텀 플러그인 제작 예제야.",
+  "capabilities": [
+    "workspace.read",
+    "workspace.write"
+  ],
+  "appTools": [
+    "list_image_groups",
+    "create_image_group",
+    "posts_create",
+    "posts_search",
+    "list_workflows",
+    "list_audio_projects",
+    "workspace_list",
+    "workspace_read",
+    "workspace_search",
+    "workspace_apply"
+  ],
+  "serverActions": [
+    {
+      "id": "app-workbench.groups",
+      "label": "라이브러리 그룹 조회",
+      "description": "앱의 라이브러리 그룹을 조회한다. 화면 없이도 실행할 수 있다.",
+      "tool": "list_image_groups",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 100
+          }
+        }
+      }
+    },
+    {
+      "id": "app-workbench.create_group",
+      "label": "라이브러리 그룹 만들기",
+      "description": "새 라이브러리 그룹 생성을 호스트 검토에 올린다. 사람이 적용해야 생성된다.",
+      "tool": "create_image_group",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "id": "app-workbench.write_note",
+      "label": "게시판 작업 기록",
+      "description": "작업 기록을 게시판 초안으로 작성하는 검토를 요청한다. 사람이 적용하면 저장한다.",
+      "tool": "posts_create",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 8000
+          }
+        },
+        "required": [
+          "title",
+          "body"
+        ]
+      },
+      "arguments": {
+        "title": {
+          "$input": "title"
+        },
+        "body": {
+          "$input": "body"
+        },
+        "status": "draft"
+      }
+    },
+    {
+      "id": "app-workbench.workflows",
+      "label": "앱 워크플로 조회",
+      "description": "등록된 생성 워크플로를 조회한다.",
+      "tool": "list_workflows",
+      "schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "app-workbench.audio",
+      "label": "오디오 프로젝트 조회",
+      "description": "오디오 보관함의 프로젝트를 조회한다.",
+      "tool": "list_audio_projects",
+      "schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "app-workbench.project_files",
+      "label": "프로젝트 파일 조회",
+      "description": "명시적으로 연결한 프로젝트의 한 폴더를 조회한다. 채팅의 프로젝트 연결 또는 확장 페이지의 프로젝트 연결이 필요하다.",
+      "tool": "workspace_list",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        }
+      }
+    },
+    {
+      "id": "app-workbench.project_note",
+      "label": "프로젝트 문서 만들기",
+      "description": "연결한 프로젝트에 새 문서 작성을 검토 요청한다. 기존 문서는 덮어쓰지 않는다. 사람이 적용해야 저장된다.",
+      "tool": "workspace_apply",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 8000
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ]
+      },
+      "arguments": {
+        "operations": [
+          {
+            "kind": "write",
+            "target": {
+              "$input": "target"
+            },
+            "text": {
+              "$input": "text"
+            },
+            "expectedRevision": null
+          }
+        ]
+      }
+    }
+  ],
+  "pages": [
+    {
+      "id": "tools",
+      "title": "자료 조회·작업 기록",
+      "entry": "index.html",
+      "accepts": [],
+      "actions": [],
+      "serverActions": [
+        "app-workbench.groups",
+        "app-workbench.create_group",
+        "app-workbench.write_note",
+        "app-workbench.workflows",
+        "app-workbench.audio",
+        "app-workbench.project_files",
+        "app-workbench.project_note"
+      ]
+    }
+  ]
+}

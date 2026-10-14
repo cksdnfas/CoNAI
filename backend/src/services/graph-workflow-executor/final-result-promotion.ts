@@ -1,3 +1,4 @@
+import { isPathInside } from '../../utils/pathResolver'
 import fs from 'fs'
 import path from 'path'
 import { resolveUploadsPath, runtimePaths } from '../../config/runtimePaths'
@@ -54,11 +55,6 @@ function parseMetadata(value: unknown): ArtifactMetadata {
   }
 
   return value as ArtifactMetadata
-}
-
-function isPathInsideRoot(rootPath: string, candidatePath: string) {
-  const relative = path.relative(rootPath, candidatePath)
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
 function optionalString(value: unknown) {
@@ -506,7 +502,7 @@ export async function replacePromotedFinalResultSourceWithCanonicalMedia(
   if (previousStoragePath) {
     const graphExecutionTempRoot = path.resolve(runtimePaths.tempDir, 'graph-executions')
     const resolvedPreviousPath = path.resolve(previousStoragePath)
-    if (resolvedPreviousPath !== path.resolve(canonicalPath) && isPathInsideRoot(graphExecutionTempRoot, resolvedPreviousPath)) {
+    if (resolvedPreviousPath !== path.resolve(canonicalPath) && isPathInside(graphExecutionTempRoot, resolvedPreviousPath)) {
       try {
         await fs.promises.unlink(resolvedPreviousPath)
       } catch (error) {

@@ -1,0 +1,105 @@
+/*
+ * CoNAI plugin base styles (SDK v1). Link it before your own stylesheet:
+ *   <link rel="stylesheet" href="conai-plugin.css">
+ * The host sends its current theme when it connects (see conai-plugin.js), so these variables follow the app's
+ * appearance settings; the values below are the app's dark defaults for an older host or before connecting.
+ * Flat look: one page tone, hairline rows, one field fill, solid colour only on the single main action.
+ */
+:root {
+  --conai-background: #131313;
+  --conai-foreground: #e5e2e1;
+  --conai-muted-foreground: #b9a49b;
+  --conai-primary: #f95e14;
+  --conai-primary-foreground: #fff;
+  --conai-line: rgba(229, 226, 225, .07);
+  --conai-field: rgba(229, 226, 225, .045);
+  --conai-fill: rgba(229, 226, 225, .06);
+  --conai-surface-high: #2a2a2a;
+  --conai-destructive: #ffb4ab;
+  --conai-success: #8fd6a4;
+  --conai-warning: #f5c26b;
+  --conai-font-sans: "Manrope", "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+  --conai-font-mono: ui-monospace, Consolas, monospace;
+  --conai-radius: 4px;
+  color-scheme: dark;
+  background: var(--conai-background);
+  color: var(--conai-foreground);
+  font: 14px/1.55 var(--conai-font-sans);
+  scrollbar-color: color-mix(in srgb, var(--conai-foreground) 18%, transparent) transparent;
+  scrollbar-width: thin;
+}
+*, *::before, *::after { box-sizing: border-box }
+body { margin: 0; background: var(--conai-background); color: var(--conai-foreground) }
+[hidden] { display: none !important }
+
+h1, h2, h3 { margin: 0 0 .5em; line-height: 1.3; color: var(--conai-foreground) }
+h1 { font-size: 18px; font-weight: 700; letter-spacing: -.01em }
+h2 { font-size: 15px; font-weight: 700 }
+h3 { font-size: 13px; font-weight: 600 }
+p { margin: 0 0 .6em }
+a { color: var(--conai-foreground); text-underline-offset: 2px }
+hr { border: 0; border-top: 1px solid var(--conai-line); margin: 16px 0 }
+.muted { color: var(--conai-muted-foreground) }
+
+/* Overline label above a field; the control sits inside the label. */
+label { display: block; margin: 10px 0; font-size: 11px; font-weight: 600; color: var(--conai-muted-foreground) }
+label > input:not([type=checkbox]):not([type=radio]):not([type=range]), label > select, label > textarea { display: block; width: 100%; margin-top: 5px; color: var(--conai-foreground) }
+
+input, select, textarea, button { font: inherit; font-size: 13px; color: inherit; border-radius: var(--conai-radius) }
+input, select, textarea { font-weight: 400 }
+input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea {
+  background: var(--conai-field); border: 1px solid transparent; padding: 7px 10px; min-height: 34px; outline: none;
+}
+textarea { resize: vertical; line-height: 1.6 }
+input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--conai-muted-foreground) 70%, transparent) }
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  border-color: color-mix(in srgb, var(--conai-primary) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--conai-primary) 14%, transparent);
+}
+input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(--conai-primary) }
+select option { background: var(--conai-surface-high); color: var(--conai-foreground) }
+
+/* Buttons: neutral by default, .primary for the one main action, .ghost for inline/icon actions. */
+button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 12px;
+  background: var(--conai-surface-high); border: 0; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+button:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-surface-high) 80%, var(--conai-foreground) 20%) }
+button.primary { background: var(--conai-primary); color: var(--conai-primary-foreground) }
+button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-primary) 88%, #fff 12%) }
+button.ghost { background: transparent }
+button.ghost:hover:not(:disabled), button.ghost.active { background: var(--conai-fill) }
+button.destructive { background: color-mix(in srgb, var(--conai-destructive) 16%, transparent); color: var(--conai-destructive) }
+button.active { background: var(--conai-fill); box-shadow: inset 2px 0 0 var(--conai-primary) }
+button:disabled { opacity: .45; cursor: default }
+button:focus-visible { outline: 2px solid color-mix(in srgb, var(--conai-primary) 55%, transparent); outline-offset: 2px }
+
+/* Layout helpers. */
+.toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap }
+.stack { display: flex; flex-direction: column; gap: 12px }
+.row { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 4px 0; border-bottom: 1px solid var(--conai-line) }
+.row:last-child { border-bottom: 0 }
+.list > * + * { border-top: 1px solid var(--conai-line) }
+section + section { margin-top: 24px }
+
+/* Status chips. */
+.badge { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 3px; font-size: 11px; font-weight: 600; background: var(--conai-fill); color: var(--conai-muted-foreground) }
+.badge.ok { background: color-mix(in srgb, var(--conai-success) 16%, transparent); color: var(--conai-success) }
+.badge.warn { background: color-mix(in srgb, var(--conai-warning) 16%, transparent); color: var(--conai-warning) }
+.badge.destructive { background: color-mix(in srgb, var(--conai-destructive) 16%, transparent); color: var(--conai-destructive) }
+
+/* Tables: overline header, hairline rows. */
+table { border-collapse: collapse; width: 100% }
+th { text-align: left; font-size: 11px; font-weight: 600; color: var(--conai-muted-foreground); padding: 6px 8px; border-bottom: 1px solid var(--conai-line) }
+td { padding: 8px; border-bottom: 1px solid var(--conai-line) }
+tr:last-child td { border-bottom: 0 }
+
+code, pre, kbd { font-family: var(--conai-font-mono); font-size: 12px }
+pre { margin: 0; padding: 10px 12px; background: var(--conai-field); border-radius: var(--conai-radius); white-space: pre-wrap; overflow: auto }
+
+details { border-top: 1px solid var(--conai-line); padding: 10px 0 }
+summary { cursor: pointer; font-weight: 600; font-size: 13px }
+details[open] > summary { margin-bottom: 8px }
+
+video, audio { max-width: 100%; border-radius: var(--conai-radius) }
+[role=status]:empty { display: none }

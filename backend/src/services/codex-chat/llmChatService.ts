@@ -12,6 +12,7 @@ import { readChoiceAnswer } from './chatChoices'
 import { profileContentLimit } from './chatContentRating'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { chatWorkspace, workspaceInstructions } from './chatWorkspace'
+import { applyChatInstructionHooks, hasPluginServerHook } from '../plugins/pluginServerRuntime'
 import { CATALOG_OPEN_TOOL, unwrapCatalogCall } from '../../mcp/toolCatalog'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, isVisionTool, sessionRuntimeOf, type ChatProfile } from './chatProfiles'
@@ -29,7 +30,7 @@ import type { EngineSession } from './claudeChatSessions'
 import type { CodexChatStreamEvent } from './codexChatService'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool } from './llmChatCompletion'
 import { ChatSummaryStore } from './chatMemory'
-import { appendUserDirective, buildChatMessages, cutToolOutput, directContextTurns, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, latestWindow, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, sendableMessages, stripThinking, summarizeAhead, summarizeAll, unsummarizedMessages, wrapUpRequest } from './llmChatContext'
+import { appendUserDirective, buildChatMessages, cutToolOutput, directContextTurns, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, fitWorkspaceRead, latestWindow, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, sendableMessages, stripThinking, summarizeAhead, summarizeAll, unsummarizedMessages, wrapUpRequest } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
 import { chatPageReference, NO_PAGE_NOTE, parseChatPageContext, proposalOutcomeNote } from './chatPageContext'
 import { knowledgePageForExecution, recordQuotedBoardKnowledge } from '../posts/knowledge/knowledgePage'
@@ -256,8 +257,9 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
   record.output = pageRead ? '(Page/editor snapshot omitted; use the screen in the current request, or the page tools for what it does not show.)' : catalogRead ? '(Tool schemas omitted; open them again with open_tools when needed.)' : record.pageOperation ? `(Page operation done: ${record.pageOperation.label}. Screen snapshot omitted; use the screen in the current request.)` : cutToolOutput(output, STORED_TOOL_OUTPUT_LENGTH)
   emit(turn, { type: 'tool', call: { ...record } })
   // The catalog pages at whole-schema boundaries; cutting JSON here makes the opened tools unusable.
-  const workspaceResult = record.tool.startsWith('workspace_')
-  const text = (!catalogRead && !workspaceResult && output.length > outputLimit ? cutToolOutput(output, outputLimit) : output) || '(no output)'
+  // A workspace read is shortened at a resumable offset instead, so a cut file never looks whole.
+  const fitted = record.tool === 'workspace_read' && output.length > outputLimit ? fitWorkspaceRead(output, outputLimit) : null
+  const text = (fitted ?? (!catalogRead && output.length > outputLimit ? cutToolOutput(output, outputLimit) : output)) || '(no output)'
   return { text, nativeResult: nativeResult ? { ...nativeResult, content: [{ type: 'text', text }, ...(nativeResult.content ?? []).filter((part) => (part as { type?: unknown })?.type === 'image')] } : { isError: true, content: [{ type: 'text', text }] } }
 }
 
@@ -472,6 +474,16 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     const offeredTools = visible
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools, withSemanticContext(judged?.context ?? null, semantic))
+    // Plugins listening to chat.instructions rewrite the system message (session engines do it where they build theirs).
+    if (!turn.engineSession && hasPluginServerHook('chat.instructions')) {
+      const at = built.findIndex((message) => message.role === 'system')
+      const current = at >= 0 && typeof built[at].content === 'string' ? built[at].content as string : ''
+      const next = await applyChatInstructionHooks(current, { engine: 'llm', threadId: turn.threadId, group: CodexChatStore.findThreadById(turn.threadId)?.kind === 'group', profile: { id: profile.id, name: profile.name } }, requester)
+      if (next !== current) {
+        if (at >= 0) built[at] = { ...built[at], content: next } as typeof built[number]
+        else built.unshift({ role: 'system', content: next })
+      }
+    }
     if (!turn.engineSession && offeredTools.some(tool => tool.function.name === 'workspace_read')) {
       const instruction = workspaceInstructions(chatWorkspace(requester, turn.threadId, profile.id))
       if (instruction) built.unshift({ role: 'system', content: instruction })

@@ -29,6 +29,7 @@ import {
   type LlmResponseMode,
 } from '../llmProviderService'
 import { normalizeOptionalString } from '../../utils/valueNormalization'
+import type { LlmUsageTag } from '../llmUsage'
 
 /**
  * How workflow nodes talk to a model, the same way chat does. A node names a model row (★ default when empty), a chat
@@ -188,6 +189,8 @@ export function resolveWorkflowLlm(target: WorkflowLlmTarget): ResolvedWorkflowL
 }
 
 export type WorkflowLlmRequest = {
+  /** Shared callers can attribute requests without creating a workflow or chat thread. */
+  usage?: Pick<LlmUsageTag, 'purpose' | 'replyId'>
   target: WorkflowLlmTarget
   systemPrompt?: string | null
   prompt?: string | null
@@ -301,7 +304,7 @@ export async function runWorkflowLlmText(request: WorkflowLlmRequest): Promise<W
       responseMode,
       structuredOutputJson,
       shouldCancel: () => request.signal?.aborted === true,
-      usage: { purpose: 'workflow', profileId: usageProfileId },
+      usage: { purpose: 'workflow', ...request.usage, profileId: usageProfileId },
     })
     request.signal?.throwIfAborted()
     return {
@@ -349,7 +352,7 @@ export async function runWorkflowLlmText(request: WorkflowLlmRequest): Promise<W
     signal,
     // A stuck loop is cut like in chat; JSON answers are left whole (a list may legitimately repeat an item).
     stopLoops: responseMode === 'text',
-    usage: { purpose: 'workflow', profileId: usageProfileId },
+    usage: { purpose: 'workflow', ...request.usage, profileId: usageProfileId },
   })
   const text = stripThinking(result.content).trim()
   if (!text) throw new Error(`LLM이 빈 답을 보냈어: ${resolved.label}`)

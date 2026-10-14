@@ -1,6 +1,7 @@
 import type { McpHttpScope, ChatExecutionContext, FileWriteSource } from '@conai/shared';
 import type { AuthAccountType } from '../types/authAccount';
 import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
+import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 
 /** Account that owns the jobs and history a request creates (set for Codex chat sessions). */
 export interface McpRequester {
@@ -16,16 +17,23 @@ export function fileWriteSource(context: McpRequestContext): FileWriteSource {
 }
 
 export interface McpRequestContext {
+  /** Internal native-tool bridge; prevents recursive plugin registration. */
+  omitPluginTools?: boolean;
   /** Server-resolved project; never accepted from model arguments. */
   workspace?: import('@conai/shared').WorkspaceBinding | null;
   chatContext?: ChatExecutionContext;
   scopes: McpHttpScope[];
   keyId?: string;
   keyName?: string;
+  /**
+   * HTTP MCP keys (no requester): the key's permission group, whose feature keys decide its tools as an account's
+   * groups do (null: no group, so no tools). Undefined for every other caller.
+   */
+  keyGroup?: string | null;
   baseUrl?: string;
   requester?: McpRequester;
   /** `codex-chat` / `llm-chat`: an agent acting inside the app on a user's behalf. */
-  source?: 'http' | 'codex-chat' | 'llm-chat';
+  source?: 'http' | 'codex-chat' | 'llm-chat' | 'plugin';
   /** Chat profiles can narrow the tools further than the scopes (null/undefined: every tool the scopes allow). */
   toolAllowlist?: string[] | null;
   /**
@@ -70,7 +78,7 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
  * Withheld from chat agents: a chat reply must not block on a generation job (Codex jobs can run for minutes).
  * The job is linked to the reply at submission and the app attaches the result when it lands.
  */
-export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'wait_audio_order', 'execute_graph_workflow', 'import_workflow_definition', 'wait_sprite_job']);
+export const CHAT_BLOCKED_TOOLS = new Set(['wait_generation_job', 'wait_audio_order', 'execute_graph_workflow', 'import_workflow_definition']);
 /** A page grants a bounded input task; explicitly linked generation presets keep their independent grant. */
 export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'page_fill', 'page_act', 'get_workflow_editor', 'list_workflow_modules', 'workflow_edit', 'read_page_data', 'propose_page_action']);
 
@@ -81,6 +89,7 @@ export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'page_fill', 'page_a
  * keys still apply to each call.
  */
 export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> = {
+  extension: new Set(['list_plugin_pages', 'run_plugin_action', 'get_plugin_action', 'cancel_plugin_action']),
   sprite: new Set(['get_video_info', 'get_sprite_job', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'normalize_sprite_sheets', 'create_sprite_animation', 'download_sprite_frames']),
   audio: new Set([
     'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'get_audio_candidate', 'list_audio_group_comments',
@@ -100,7 +109,7 @@ export function isConnectedChatPageTool(context: McpRequestContext, toolName: st
 
 /** Chat agents must not spend paid NovelAI multi-sample generations on their own; one image per request is free. */
 export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: unknown) {
-  if (isChatMcpSource(context.source) && typeof nSamples === 'number' && nSamples > 1) {
+  if ((isChatMcpSource(context.source) || context.source === 'plugin') && typeof nSamples === 'number' && nSamples > 1) {
     throw new Error('n_samples must be 1 in chat (2+ samples cost Anlas). Submit separate requests for more images.');
   }
 }
@@ -108,6 +117,10 @@ export function assertChatNaiSampleCount(context: McpRequestContext, nSamples: u
 export const ALL_MCP_HTTP_SCOPES: McpHttpScope[] = ['read', 'generate', 'organize', 'backup', 'restore'];
 
 const TOOL_SCOPES: Record<string, McpHttpScope> = {
+  list_plugin_pages: 'read',
+  run_plugin_action: 'read',
+  get_plugin_action: 'read',
+  cancel_plugin_action: 'read',
   web_search: 'read',
   web_read: 'read',
   get_app_guide: 'read',
@@ -179,7 +192,6 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   get_image_groups: 'read',
   get_image_group: 'read',
   get_prompt_group_structure: 'read',
-  get_unclassified_prompts: 'read',
   get_prompts_in_group: 'read',
   list_backups: 'read',
   search_prompts: 'read',
@@ -195,7 +207,6 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   get_media_download: 'read',
   get_video_info: 'read',
   get_sprite_job: 'read',
-  wait_sprite_job: 'read',
   download_sprite_frames: 'read',
   extract_sprite_sheet: 'generate',
   extract_sprite_sheets_batch: 'generate',
@@ -208,7 +219,6 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   execute_graph_workflow: 'generate',
   submit_generation_job: 'generate',
   cancel_generation_job: 'generate',
-  create_prompt_group: 'organize',
   create_prompt_preset: 'organize',
   batch_create_groups: 'organize',
   resolve_image_group_path: 'organize',
@@ -218,7 +228,6 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   update_image_group: 'organize',
   run_group_auto_collect: 'organize',
   remove_images_from_group: 'organize',
-  assign_prompts_to_group: 'organize',
   move_prompts_between_groups: 'organize',
   backup_prompt_data: 'backup',
   export_workflow_definition: 'backup',
@@ -302,11 +311,11 @@ export function isChatOwnTool(toolName: string) {
 
 export function getMcpToolScope(toolName: string): McpHttpScope | null {
   if (isChatGenerationTool(toolName)) return 'generate';
-  // An external MCP server's tools take the scope its administrator gave it.
-  return TOOL_SCOPES[toolName] ?? findExternalMcpTool(toolName)?.scope ?? null;
+  // An external MCP server's tools take the scope its administrator gave it, a plugin's the scope its module gave.
+  return TOOL_SCOPES[toolName] ?? findExternalMcpTool(toolName)?.scope ?? findPluginServerTool(toolName)?.scope ?? null;
 }
 
 export function isMcpToolAllowed(toolName: string, scopes: readonly McpHttpScope[]): boolean {
-  const requiredScope = TOOL_SCOPES[toolName] ?? findExternalMcpTool(toolName)?.scope;
+  const requiredScope = TOOL_SCOPES[toolName] ?? findExternalMcpTool(toolName)?.scope ?? findPluginServerTool(toolName)?.scope;
   return requiredScope !== undefined && scopes.includes(requiredScope);
 }

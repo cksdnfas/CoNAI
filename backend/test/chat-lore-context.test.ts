@@ -54,8 +54,8 @@ test('lore context: books per request, the index, always-on entries, linked file
   const kai = ChatProfileStore.create({ name: '카이', engine: 'llm', providerName: 'conn' })
   const luna = ChatProfileStore.create({ name: '루나', engine: 'llm', providerName: 'conn' })
 
-  // Books: a global one, my account books (one for the profile, one for this chat), and another account's book that
-  // someone linked to the same shared profile.
+  // Books: a global one, my account books (one for the profile, one for this chat), and another account's book (shared
+  // like the file store it lives in), linked to the profile only in the first test.
   const harbor = ChatLorebookStore.create({ name: '항구 도시 설정', entries: [{ keys: ['항구'], content: '항구 도시는 늘 안개가 낀다.' }] })
   const kaiBook = OwnedLorebookStore.create(me, { name: '카이', entries: [
     { title: '왼손잡이', keys: ['왼손'], content: '{{char}}는 왼손잡이다.', constant: true },
@@ -63,7 +63,7 @@ test('lore context: books per request, the index, always-on entries, linked file
   ] })
   const taste = OwnedLorebookStore.create(me, { name: '내 취향', entries: [{ title: '단 음식', content: '{{user}}는 단 음식을 좋아한다.', constant: true }, { title: '커피', keys: ['커피'], content: '커피는 블랙.' }] })
   const theirs = OwnedLorebookStore.create(other, { name: '남의 책', entries: [{ title: '비밀', content: '다른 계정의 비밀.', constant: true }] })
-  setProfileBooks(kai.id, [harbor.id, kaiBook.id, theirs.id])
+  setProfileBooks(kai.id, [harbor.id, kaiBook.id])
 
   const threadId = CodexChatStore.createThread(1, '바다 약속', 'llm', kai.id)
   OwnedLorebookStore.setThreadLinks(threadId, [taste.id])
@@ -84,13 +84,16 @@ test('lore context: books per request, the index, always-on entries, linked file
   const request = (tools: Array<{ type: 'function'; function: { name: string } }> = []) => buildChatMessages({ profile: profile(), thread: thread(), messages: CodexChatStore.listMessages(threadId), config: resolveContextConfig(thread(), profile()), tools: tools as never })
   const LORE_TOOL = [{ type: 'function' as const, function: { name: 'read_lore_file' } }]
 
-  await t.test('books: the chat book, chat links, the profile account books, then global ones; other owners skipped', () => {
+  await t.test('books: the chat book, chat links, the profile account books (any account\'s), then global ones', () => {
     const books = booksForRequest({ thread: thread(), profile: profile() })
     assert.deepEqual(books.map((book) => [book.label, book.via]), [['이 채팅', 'chat'], ['내 취향', 'thread'], ['카이', 'profile'], ['항구 도시 설정', 'profile']])
-    assert.ok(!books.some((book) => book.id === theirs.id), "another account's book on the shared profile is skipped")
-    // The owner of that book sees it in their own chat with the same profile, and not mine.
+    // Account books are shared: another account's book on the profile goes along in every account's chat, while
+    // chat books and chat links stay with their chat.
+    setProfileBooks(kai.id, [harbor.id, kaiBook.id, theirs.id])
+    assert.deepEqual(booksForRequest({ thread: thread(), profile: profile() }).map((book) => book.label), ['이 채팅', '내 취향', '카이', '남의 책', '항구 도시 설정'])
     const theirThread = CodexChatStore.createThread(2, '남의 채팅', 'llm', kai.id)
-    assert.deepEqual(booksForRequest({ thread: CodexChatStore.findThreadById(theirThread)!, profile: profile() }).map((book) => book.label), ['남의 책', '항구 도시 설정'])
+    assert.deepEqual(booksForRequest({ thread: CodexChatStore.findThreadById(theirThread)!, profile: profile() }).map((book) => book.label), ['카이', '남의 책', '항구 도시 설정'])
+    setProfileBooks(kai.id, [harbor.id, kaiBook.id])
     // A profile preview has no chat: global books only.
     assert.deepEqual(booksForRequest({ thread: null, profile: profile() }).map((book) => book.label), ['항구 도시 설정'])
   })

@@ -17,6 +17,7 @@ import { ChatHealthDot, useChatHealth } from './chat-health'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { UnreadCount } from './chat-unread-count'
 import { ChatTaskRing } from './chat-task-ui'
+import { parseServerDate } from '@/lib/server-time'
 
 export type ChatListPatch = { title?: string; pinned?: boolean; archived?: boolean }
 export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
@@ -114,7 +115,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
 
   const row = (entry: CodexChatThread, nested = false) => {
     const entryProfile = entry.profile_id ? profilesById.get(entry.profile_id) : undefined
-    const movedAt = new Date(`${entry.updated_date.replace(' ', 'T')}Z`)
+    const movedAt = parseServerDate(entry.updated_date)
     const time = Number.isNaN(movedAt.getTime()) ? null : <time className="text-2xs tabular-nums text-muted-foreground" dateTime={movedAt.toISOString()}>{whenLabel(movedAt)}</time>
     const preview = dense ? null : previewOf(entry)
     const checked = picked.has(entry.id)

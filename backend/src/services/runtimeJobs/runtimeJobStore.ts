@@ -111,7 +111,7 @@ function serializeResult(result: unknown, jobId: string, kind: RuntimeJobKind): 
   }
 
   if (Buffer.byteLength(serialized, 'utf8') > RUNTIME_JOB_RESULT_MAX_BYTES) {
-    if (kind === 'sprite-normalize') return JSON.stringify(storeRuntimeJobResult(jobId, serialized))
+    if ((kind === 'sprite-normalize' || kind === 'plugin-action')) return JSON.stringify(storeRuntimeJobResult(jobId, serialized))
     return JSON.stringify({ truncated: true, byte_length: Buffer.byteLength(serialized, 'utf8') })
   }
 
@@ -244,7 +244,7 @@ export class RuntimeJobStore {
     const row = db.prepare('SELECT * FROM runtime_jobs WHERE job_id = ?').get(jobId) as RuntimeJobRow | undefined
     if (!row) return null
     const job = mapRow(row)
-    if (options.includeResultFile && job.kind === 'sprite-normalize') job.result = readRuntimeJobResult(jobId, job.result)
+    if (options.includeResultFile && (job.kind === 'sprite-normalize' || job.kind === 'plugin-action')) job.result = readRuntimeJobResult(jobId, job.result)
     return job
   }
 
@@ -425,9 +425,9 @@ export class RuntimeJobStore {
       WHERE job_id = ?
         AND status IN ('queued', 'running')
       `).run(serialized, ...values, jobId)
-      if (!updated.changes && current.kind === 'sprite-normalize') removeRuntimeJobResult(jobId)
+      if (!updated.changes && (current.kind === 'sprite-normalize' || current.kind === 'plugin-action')) removeRuntimeJobResult(jobId)
     } catch (error) {
-      if (current.kind === 'sprite-normalize') removeRuntimeJobResult(jobId)
+      if ((current.kind === 'sprite-normalize' || current.kind === 'plugin-action')) removeRuntimeJobResult(jobId)
       throw error
     }
   }

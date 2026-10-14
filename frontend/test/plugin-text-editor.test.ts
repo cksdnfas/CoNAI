@@ -24,7 +24,7 @@ test('extension conflict recovery preserves drafts, including edits made during 
         proposals.push(structuredClone(args))
         return { proposalId: 'proposal', status: 'pending' }
       },
-      publish: (value: typeof snapshot) => { snapshot = value },
+      publish: (value: typeof snapshot | (() => typeof snapshot)) => { snapshot = typeof value === 'function' ? value() : value },
       onSaved: () => {},
     }
   }

@@ -20,15 +20,11 @@ import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { ChatReferenceButton, ChatThumbOverlay } from './chat-reference'
 import { codexChatMediaQueryKey, useCodexChat } from './codex-chat-context'
+import { parseServerDate } from '@/lib/server-time'
 
 type GalleryFilter = 'all' | 'generated' | 'found'
 
 type GalleryEntry = { media: CodexChatMediaItem; image: ImageRecord }
-
-/** SQLite `CURRENT_TIMESTAMP` is UTC without a zone marker. */
-function parseServerDate(value: string) {
-  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`)
-}
 
 function toImageRecord(media: CodexChatMediaItem): ImageRecord {
   return buildChatImageRecord(media.compositeHash, undefined, media)

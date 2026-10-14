@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostDetail, PostKnowledgeSource } from '@conai/shared'
@@ -14,15 +14,15 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Section } from '@/components/ui/section'
 import { Select } from '@/components/ui/select'
 import { EmptyState } from '@/components/ui/empty-state'
+import { TextDiff } from '@/components/common/text-diff'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
-import { diffLines } from '@/features/files/file-revisions'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, applyPostKnowledgeProposal, createPostKnowledgeProposal, getPost, getPostKnowledgeProposal, listPostComments, listPostKnowledgeProposals, listPosts, rejectPostKnowledgeProposal } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
-import { cn } from '@/lib/utils'
 import { KnowledgeSources, KnowledgeSourcesEditor, knowledgeSource } from './post-knowledge-sources'
 import { postRoute } from './post-links'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 /** The proposed Markdown and citations stay pending until a person applies them. */
 export function KnowledgeProposalEditor({ post, mode, onClose }: { post: PostDetail; mode: 'create' | 'update'; onClose: () => void }) {
@@ -35,11 +35,7 @@ export function KnowledgeProposalEditor({ post, mode, onClose }: { post: PostDet
   const [status, setStatus] = useState<'draft' | 'published'>('draft')
   const [sources, setSources] = useState<PostKnowledgeSource[]>(mode === 'update' ? post.knowledgeSources ?? [] : [{ ...knowledgeSource(), postId: post.id, revision: post.revision, contentVersion: post.knowledge?.contentVersion ?? null, contentHash: post.knowledge?.contentHash ?? null }])
   const [selectedComments, setSelectedComments] = useState<number[]>([])
-  const [searchTitle, setSearchTitle] = useState(title)
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearchTitle(title.trim()), 300)
-    return () => window.clearTimeout(timer)
-  }, [title])
+  const searchTitle = useDebouncedValue(title.trim())
   const comments = useQuery({ queryKey: [POSTS_QUERY_KEY, 'comments', post.id], queryFn: () => listPostComments(post.id), enabled: mode === 'create' })
   const similar = useQuery({ queryKey: [POSTS_QUERY_KEY, 'proposal-similar', searchTitle], queryFn: () => listPosts({ kind: 'knowledge', q: searchTitle, limit: 5, sort: 'relevance' }), enabled: searchTitle.length > 0 })
   const save = useMutation({
@@ -65,11 +61,6 @@ export function KnowledgeProposalEditor({ post, mode, onClose }: { post: PostDet
       <ModalFooter><Button variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button><Button disabled={!title.trim() || save.isPending} onClick={() => save.mutate(crypto.randomUUID())}>{t({ ko: '검토할 제안 저장', en: 'Save proposal for review' })}</Button></ModalFooter>
     </Modal>
   )
-}
-
-function ProposalDiff({ before, after }: { before: string; after: string }) {
-  const lines = useMemo(() => diffLines(before, after), [before, after])
-  return <div className="max-h-96 overflow-auto rounded-sm bg-field py-2 font-mono text-xs"><pre className="whitespace-pre-wrap break-words">{lines.map((line, index) => <span key={index} className={cn('block px-3', line.kind === 'del' && 'bg-destructive-soft text-destructive-soft-foreground', line.kind === 'ins' && 'bg-success-soft text-success-soft-foreground')}><span aria-hidden className="mr-2 select-none">{line.kind === 'del' ? '−' : line.kind === 'ins' ? '+' : ' '}</span>{line.text || ' '}</span>)}</pre></div>
 }
 
 export function KnowledgeProposalReview({ proposalId, onClose }: { proposalId: string; onClose: () => void }) {
@@ -102,8 +93,8 @@ export function KnowledgeProposalReview({ proposalId, onClose }: { proposalId: s
           {data.reason ? <p className="whitespace-pre-wrap text-sm">{data.reason}</p> : null}
           {conflict ? <ErrorState size="compact" title={t({ ko: '제안 이후 문서가 바뀌었어', en: 'The document changed after this proposal' })} description={t({ ko: '현재 판을 기준으로 새 제안을 만들어줘.', en: 'Create a new proposal based on the current version.' })} /> : null}
           {current.isError ? <ErrorState size="compact" error={current.error} onRetry={() => void current.refetch()} /> : null}
-          <Section heading={t({ ko: '제목 차이', en: 'Title changes' })}><ProposalDiff before={data.baseTitle ?? ''} after={data.title} /></Section>
-          <Section heading={t({ ko: '본문 차이', en: 'Text changes' })}><ProposalDiff before={data.baseBody ?? ''} after={data.body} /></Section>
+          <Section heading={t({ ko: '제목 차이', en: 'Title changes' })}><TextDiff className="max-h-96" before={data.baseTitle ?? ''} after={data.title} /></Section>
+          <Section heading={t({ ko: '본문 차이', en: 'Text changes' })}><TextDiff className="max-h-96" before={data.baseBody ?? ''} after={data.body} /></Section>
           {data.kind === 'update' ? <Section heading={t({ ko: '기존 출처', en: 'Previous sources' })}><KnowledgeSources sources={data.baseSources} /></Section> : null}
           <Section heading={t({ ko: '반영할 출처와 공개 인용', en: 'Sources and public quotations to apply' })}><KnowledgeSources sources={data.sources} /></Section>
           {data.attachments.length ? <Section heading={t({ ko: '본문에 연결할 첨부', en: 'Attachments linked from the text' })}><div>{data.attachments.map((attachment, index) => <p key={index} className="break-all border-b border-line py-2 text-xs text-muted-foreground last:border-0">{attachment.kind === 'file' ? t({ ko: '파일', en: 'File' }) : attachment.kind === 'audio' ? t({ ko: '오디오', en: 'Audio' }) : attachment.kind === 'group' ? t({ ko: '이미지 그룹', en: 'Image group' }) : t({ ko: '이미지·영상', en: 'Image or video' })} · {attachment.ref}</p>)}</div></Section> : null}

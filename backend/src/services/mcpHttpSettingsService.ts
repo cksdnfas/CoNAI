@@ -4,6 +4,7 @@ import path from 'path';
 import type { McpHttpApiKey, McpHttpScope, McpHttpSettings, ChatExecutionContext } from '@conai/shared';
 import { runtimePaths } from '../config/runtimePaths';
 import type { McpRequester } from '../mcp/context';
+import { AuthPermissionGroup } from '../models/AuthPermissionGroup';
 
 const MCP_HTTP_SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'mcp-http.json');
 const MCP_API_KEY_PREFIX = 'conai_mcp_';
@@ -21,6 +22,8 @@ export interface McpHttpAuthentication {
   keyName: string;
   scopes: McpHttpScope[];
   requester?: McpRequester;
+  /** HTTP MCP keys: the key's permission group (null: none), which decides its tools like an account's groups. */
+  keyGroup?: string | null;
   source?: 'http' | 'codex-chat';
   toolAllowlist?: string[] | null;
   /** Codex chat sessions: the profile's generation presets (each a generate_image tool; free-form generation withheld). */
@@ -54,16 +57,18 @@ function normalizeUpdatedAt(value: unknown): string {
   return new Date().toISOString();
 }
 
-function normalizeScopes(value: unknown, fallback: readonly McpHttpScope[] = MCP_HTTP_SCOPES): McpHttpScope[] {
-  if (!Array.isArray(value)) {
-    return [...fallback];
-  }
+/** A stored group key, or null. Keys from before groups (per-key scopes) start with none. */
+function normalizeGroupKey(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
 
-  const allowed = new Set<McpHttpScope>(MCP_HTTP_SCOPES);
-  const normalized = Array.from(new Set(value.filter((scope): scope is McpHttpScope => (
-    typeof scope === 'string' && allowed.has(scope as McpHttpScope)
-  ))));
-  return normalized.length > 0 ? normalized : [...fallback];
+/** The group a key is given must exist; permissions only ever come from a permission group. */
+function requireGroupKey(value: unknown): string {
+  const groupKey = normalizeGroupKey(value);
+  if (!groupKey || !AuthPermissionGroup.listAllGroups().some((group) => group.group_key === groupKey)) {
+    throw new Error('A valid permission group is required');
+  }
+  return groupKey;
 }
 
 function normalizeKey(value: unknown, index: number): McpHttpApiKey | null {
@@ -81,7 +86,7 @@ function normalizeKey(value: unknown, index: number): McpHttpApiKey | null {
     id: typeof record.id === 'string' && record.id.trim() ? record.id.trim() : generateKeyId(),
     name: typeof record.name === 'string' && record.name.trim() ? record.name.trim().slice(0, 80) : `MCP 키 ${index + 1}`,
     apiKey: record.apiKey,
-    scopes: normalizeScopes(record.scopes),
+    groupKey: normalizeGroupKey(record.groupKey),
     createdAt: normalizeUpdatedAt(record.createdAt ?? now),
     updatedAt: normalizeUpdatedAt(record.updatedAt ?? now),
   };
@@ -93,7 +98,7 @@ function createDefaultKey(): McpHttpApiKey {
     id: generateKeyId(),
     name: '기본 키',
     apiKey: generateApiKey(),
-    scopes: [...MCP_HTTP_SCOPES],
+    groupKey: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -119,7 +124,7 @@ function normalizeSettings(value: unknown): StoredMcpHttpSettings {
         id: generateKeyId(),
         name: '기본 키',
         apiKey: record.apiKey,
-        scopes: [...MCP_HTTP_SCOPES],
+        groupKey: null,
         createdAt: normalizeUpdatedAt(record.updatedAt),
         updatedAt: normalizeUpdatedAt(record.updatedAt),
       } satisfies McpHttpApiKey]
@@ -141,7 +146,7 @@ function normalizeSettings(value: unknown): StoredMcpHttpSettings {
 function publicSettings(settings: StoredMcpHttpSettings): McpHttpSettings {
   return {
     enabled: settings.enabled,
-    keys: settings.keys.map((key) => ({ ...key, scopes: [...key.scopes] })),
+    keys: settings.keys.map((key) => ({ ...key })),
     updatedAt: settings.updatedAt,
   };
 }
@@ -205,11 +210,12 @@ class McpHttpSettingsService {
     });
   }
 
-  createApiKey(name: string, scopes: unknown): McpHttpSettings {
+  createApiKey(name: string, groupKey: unknown): McpHttpSettings {
     const normalizedName = name.trim().slice(0, 80);
     if (!normalizedName) {
       throw new Error('name is required');
     }
+    const group = requireGroupKey(groupKey);
 
     const current = this.loadStoredSettings();
     const now = new Date().toISOString();
@@ -219,7 +225,7 @@ class McpHttpSettingsService {
         id: generateKeyId(),
         name: normalizedName,
         apiKey: generateApiKey(),
-        scopes: normalizeScopes(scopes, ['read']),
+        groupKey: group,
         createdAt: now,
         updatedAt: now,
       }],
@@ -242,18 +248,19 @@ class McpHttpSettingsService {
     });
   }
 
-  updateApiKey(keyId: string, name: string, scopes: unknown): McpHttpSettings {
+  updateApiKey(keyId: string, name: string, groupKey: unknown): McpHttpSettings {
     const current = this.loadStoredSettings();
     if (!current.keys.some((key) => key.id === keyId)) {
       throw new Error('MCP key not found');
     }
     const normalizedName = name.trim().slice(0, 80);
     if (!normalizedName) throw new Error('name is required');
+    const group = requireGroupKey(groupKey);
     const now = new Date().toISOString();
     return this.saveSettings({
       ...current,
       keys: current.keys.map((key) => key.id === keyId
-        ? { ...key, name: normalizedName, scopes: normalizeScopes(scopes, ['read']), updatedAt: now }
+        ? { ...key, name: normalizedName, groupKey: group, updatedAt: now }
         : key),
       updatedAt: now,
     });
@@ -284,7 +291,8 @@ class McpHttpSettingsService {
     for (const key of this.loadStoredSettings().keys) {
       const expectedDigest = crypto.createHash('sha256').update(key.apiKey).digest();
       if (crypto.timingSafeEqual(expectedDigest, candidateDigest)) {
-        return { keyId: key.id, keyName: key.name, scopes: [...key.scopes] };
+        // Every scope: the key's permission group decides its tools (see isContextToolAllowed).
+        return { keyId: key.id, keyName: key.name, scopes: [...MCP_HTTP_SCOPES], keyGroup: key.groupKey };
       }
     }
     return null;

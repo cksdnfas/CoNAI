@@ -134,6 +134,11 @@ function pickGeneralFields(settings: GeneralSettings, fields: ReadonlyArray<keyo
   return Object.fromEntries(fields.map((field) => [field, settings[field]])) as Partial<GeneralSettings>
 }
 
+const PluginsTabLazy = lazy(async () => {
+  const module = await import('@/features/plugins/plugin-management')
+  return { default: module.PluginManagement }
+})
+
 function SettingsSectionFallback() {
   return <div className="min-h-[16rem] animate-pulse rounded-sm bg-fill" />
 }
@@ -744,6 +749,7 @@ export function SettingsPage() {
           {activeTab === 'llm' ? <LlmSettingsTabLazy /> : null}
 
           {activeTab === 'accounts' ? <SecurityTabLazy /> : null}
+          {activeTab === 'plugins' ? <PluginsTabLazy /> : null}
 
           {activeTab === 'system' ? (
             <div className="space-y-8">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import type { StoredFileEntry } from '@conai/shared'
 import { Folder, HardDrive } from 'lucide-react'
@@ -10,8 +10,11 @@ import { ErrorState } from '@/components/ui/error-state'
 import { ListRow } from '@/components/ui/list-row'
 import { Spinner } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, formatFileSize, listStoredFiles, listStoredFolders, searchStoredFiles, storedFileThumbnailUrl } from '@/lib/api-files'
-import { AttachPanes, AttachToolbar, ExtensionTile, Highlight, LoadMoreSentinel, PickOrderMark, attachKey, type AttachItem } from './post-attach-shared'
+import { FILES_QUERY_KEY, listStoredFiles, listStoredFolders, searchStoredFiles, storedFileThumbnailUrl } from '@/lib/api-files'
+import { formatFileSize } from '@/lib/format-size'
+import { AttachPanes, AttachToolbar, ExtensionTile, LoadMoreSentinel, PickOrderMark, attachKey, type AttachItem } from './post-attach-shared'
+import { HighlightText } from '@/components/common/highlight-text'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 function FileThumb({ entry }: { entry: StoredFileEntry }) {
   const [failed, setFailed] = useState(false)
@@ -27,11 +30,7 @@ export function AttachFilesTab({ selected, setSelected }: { selected: AttachItem
   const folders = useMemo(() => foldersQuery.data ?? [], [foldersQuery.data])
   const [parentId, setParentId] = useState<string | null>(null)
   const [input, setInput] = useState('')
-  const [search, setSearch] = useState('')
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearch(input.trim()), 300)
-    return () => window.clearTimeout(timer)
-  }, [input])
+  const search = useDebouncedValue(input.trim())
   const listing = useInfiniteQuery({
     queryKey: [...FILES_QUERY_KEY, 'attach', parentId],
     initialPageParam: 0,
@@ -89,7 +88,7 @@ export function AttachFilesTab({ selected, setSelected }: { selected: AttachItem
                 </span>}>
                 <button type="button" aria-pressed={folder ? undefined : Boolean(position)} onClick={() => { if (folder) { setParentId(entry.id); setInput('') } else toggle(entry) }}>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm"><Highlight text={entry.name} term={search} /></span>
+                  <span className="block truncate text-sm"><HighlightText text={entry.name} terms={search} /></span>
                   {path ? <span className="block truncate text-2xs text-muted-foreground">{path}</span> : null}
                 </span>
                 </button>

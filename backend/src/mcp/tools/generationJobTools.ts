@@ -19,7 +19,7 @@ import { assertChatNaiSampleCount, isChatMcpSource, type McpRequestContext } fro
 import { normalizeMcpWorkflowInputs, parseMcpMarkedFields, requireChatWorkflowInputs } from './mcpComfyWorkflowService';
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
 import { requireMcpResourceOwner, requireMcpToolAccess } from '../toolAccess';
-import { requireRequesterPermission } from '../../middleware/featureAccess';
+import { requireContextPermission, requireRequesterPermission } from '../../middleware/featureAccess';
 import { validateMcpToolArguments } from '../requestSecurity';
 import { canRequesterViewImages } from '../../middleware/imageAccess';
 import { requireChatAssetGeneration } from '../../services/codex-chat/chatAssetAccess';
@@ -124,7 +124,7 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
   const { service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, group_path, priority = 100, idempotency_key, request_summary } = input;
   let usesImages = false;
   const requireManagedMedia = () => { usesImages = true; requireRequesterPermission(context.requester, 'images.view'); };
-  if (context.requester && service_type === 'comfyui') requireRequesterPermission(context.requester, 'workflows.view');
+  if (service_type === 'comfyui') requireContextPermission(context, 'workflows.view');
   if (isChatMcpSource(context.source)) validateMcpToolArguments(input, requireManagedMedia);
   const normalizedServerTag = parseGenerationQueueRoutingTag(server_tag, 'server_tag');
   if (server_id != null && normalizedServerTag !== undefined) {

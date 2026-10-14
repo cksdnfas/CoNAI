@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils'
 import type { ChatProfileSummary, CodexChatThread } from '@/lib/api-codex-chat'
 import { GroupAvatarStack } from './chat-group'
 import { ChatProfileAvatar } from './chat-profile-avatar'
+import { parseServerDate } from '@/lib/server-time'
 
 /** A room's name as the chat list gives it: its title, else the character it talks to. */
 export function chatRoomName(thread: Pick<CodexChatThread, 'id' | 'title' | 'profile_id'>, profilesById: ReadonlyMap<number, ChatProfileSummary>, untitled: string) {
@@ -61,7 +62,7 @@ export function ChatRoomPicker({ threads, profilesById, value, onChange, disable
         ? (thread.member_profile_ids ?? []).flatMap((id) => profilesById.get(id)?.name ?? []).join(', ')
         : thread.profile_id !== null ? profilesById.get(thread.profile_id)?.name ?? '' : ''
       const preview = thread.preview ? thread.preview.text || (thread.preview.media ? t({ ko: '이미지', en: 'Image' }) : thread.preview.files ? t({ ko: '파일', en: 'File' }) : '') : ''
-      const movedAt = new Date(`${thread.updated_date.replace(' ', 'T')}Z`)
+      const movedAt = parseServerDate(thread.updated_date)
       return {
         id: String(thread.id),
         media: <ChatRoomFace thread={thread} profilesById={profilesById} />,

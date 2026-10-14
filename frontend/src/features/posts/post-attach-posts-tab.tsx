@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
+import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import type { PostCategory, PostMediaRef, PostSummary } from '@conai/shared'
 import { BookOpen, FileText, Newspaper } from 'lucide-react'
@@ -17,7 +17,9 @@ import { POSTS_QUERY_KEY, listPostCategories, listPosts } from '@/lib/api-posts'
 import { cn } from '@/lib/utils'
 import { useRelativeTime } from './post-author'
 import { usePostPermissions } from './use-post-permissions'
-import { AttachPanes, AttachToolbar, Highlight, LoadMoreSentinel, PickOrderMark, attachKey, type AttachCover, type AttachItem, type PostInsertStyle } from './post-attach-shared'
+import { AttachPanes, AttachToolbar, LoadMoreSentinel, PickOrderMark, attachKey, type AttachCover, type AttachItem, type PostInsertStyle } from './post-attach-shared'
+import { HighlightText } from '@/components/common/highlight-text'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 const PAGE = 30
 
@@ -74,11 +76,7 @@ export function AttachPostsTab({ selected, setSelected, postStyle, onPostStyleCh
   const categories = useMemo(() => categoriesQuery.data ?? [], [categoriesQuery.data])
   const [scope, setScope] = useState<Scope>({ kind: 'all' })
   const [input, setInput] = useState('')
-  const [search, setSearch] = useState('')
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearch(input.trim()), 250)
-    return () => window.clearTimeout(timer)
-  }, [input])
+  const search = useDebouncedValue(input.trim(), 250)
   const query = useInfiniteQuery({
     queryKey: [POSTS_QUERY_KEY, 'attach-picker', scope, search],
     initialPageParam: { offset: 0, snapshot: undefined as string | undefined },
@@ -137,8 +135,8 @@ export function AttachPostsTab({ selected, setSelected, postStyle, onPostStyleCh
                 trailing={<PickOrderMark position={position} />}>
                 <button type="button" aria-pressed={Boolean(position)} onClick={() => toggle(post)}>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold"><Highlight text={post.title} term={search} /></span>
-                  {post.excerpt ? <span className="mt-0.5 block truncate text-xs text-muted-foreground"><Highlight text={post.excerpt} term={search} /></span> : null}
+                  <span className="block truncate text-sm font-semibold"><HighlightText text={post.title} terms={search} /></span>
+                  {post.excerpt ? <span className="mt-0.5 block truncate text-xs text-muted-foreground"><HighlightText text={post.excerpt} terms={search} /></span> : null}
                   <span className="mt-1 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
                     <span className="min-w-0 truncate">{[path, post.author.name, relative(post.publishedAt ?? post.updatedAt), post.commentCount ? t({ ko: '댓글 {count}', en: '{count} comments' }, { count: post.commentCount }) : ''].filter(Boolean).join(' · ')}</span>
                     <KnowledgeBadge post={post} />

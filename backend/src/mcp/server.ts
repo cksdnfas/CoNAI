@@ -11,6 +11,7 @@ import { registerChatGenerationTools } from './tools/chatGenerationTools';
 import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
 import { registerFileStoreTools } from './tools/fileStoreTools';
+import { registerPluginTools } from './tools/pluginTools';
 import { registerWorkspaceTools } from './tools/workspaceTools';
 import { chatWorkspace } from '../services/codex-chat/chatWorkspace';
 import { registerChatLinkedFileTools } from './tools/chatLinkedFileTools';
@@ -31,6 +32,7 @@ import { registerAudioGenerationTools } from './tools/audioGenerationTools';
 import { registerAudioEditExportTools } from './tools/audioEditExportTools';
 import { registerWebTools } from './tools/webTools';
 import { registerExternalMcpTools } from './tools/externalMcpTools';
+import { registerPluginServerTools } from './tools/pluginServerTools';
 import { isContextToolAllowed, requireMcpToolAccess } from './toolAccess';
 import { ChatGenerationPresetStore } from '../services/codex-chat/chatGenerationPresets';
 import { createToolCatalog, isDirectChatTool, type ToolCategoryId } from './toolCatalog';
@@ -44,7 +46,7 @@ import { registerAppGuideTools } from './tools/appGuideTools';
  * Stateless 방식에서는 요청마다 새 인스턴스를 생성한다.
  */
 export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_HTTP_SCOPES }): McpServer {
-  context = { ...context, workspace: isChatMcpSource(context.source) ? context.workspace !== undefined ? context.workspace : chatWorkspace(context.requester, context.chatContext?.threadId, context.chatContext?.profileId) : undefined };
+  context = { ...context, workspace: context.source === 'plugin' ? context.workspace : isChatMcpSource(context.source) ? context.workspace !== undefined ? context.workspace : chatWorkspace(context.requester, context.chatContext?.threadId, context.chatContext?.profileId) : undefined };
   const server = new McpServer({
     name: 'conai',
     version: '2.1.0',
@@ -61,7 +63,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
     const toolName = typeof args[0] === 'string' ? args[0] : '';
     if (!isContextToolAllowed(context, toolName)) return undefined;
     const handler = args[args.length - 1];
-    if (typeof handler === 'function' && (isChatMcpSource(context.source) || context.requester)) {
+    if (typeof handler === 'function' && (isChatMcpSource(context.source) || context.requester || context.keyGroup !== undefined)) {
       args[args.length - 1] = async (...input: unknown[]) => {
         try {
           requireMcpToolAccess(context, toolName, input[0] as Record<string, unknown> | undefined);
@@ -97,6 +99,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   });
   inCategory('files', () => registerFileStoreTools(server, context));
   inCategory('files', () => registerWorkspaceTools(server, context));
+  if (!context.omitPluginTools) inCategory('files', () => registerPluginTools(server, context));
   inCategory('posts', () => registerPostTools(server, context));
   inCategory('image_groups', () => registerImageGroupTools(server, context));
   inCategory('emoticons', () => registerEmoticonTools(server, context));
@@ -117,6 +120,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   inCategory('sprite', () => registerSpriteTools(server, context));
   inCategory('web', () => registerWebTools(server, context));
   inCategory('external', () => registerExternalMcpTools(server, context));
+  inCategory('plugins', () => registerPluginServerTools(server, context));
   inCategory('guide', () => registerAppGuideTools(server));
   catalog?.install();
 

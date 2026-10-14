@@ -1,3 +1,4 @@
+import { WINDOWS_RESERVED_NAME } from '../utils/pathResolver';
 import fs from 'fs';
 import path from 'path';
 import { db } from '../database/init';
@@ -30,7 +31,6 @@ function normalizeSourcePath(sourcePath: string): string {
 }
 
 const windowsInvalidFolderNameChars = /[<>:"/\\|?*\u0000-\u001F]/;
-const windowsReservedFolderNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
 
 function normalizeTargetFolderSegment(segment: string): string {
   const normalizedSegment = normalizeUnicode(segment).trim();
@@ -51,7 +51,7 @@ function normalizeTargetFolderSegment(segment: string): string {
     throw createServiceError('대상 경로의 폴더명은 공백이나 . 으로 끝날 수 없습니다', 400);
   }
 
-  if (windowsReservedFolderNames.test(normalizedSegment)) {
+  if (WINDOWS_RESERVED_NAME.test(normalizedSegment)) {
     throw createServiceError('대상 경로의 폴더명으로 Windows 예약어는 사용할 수 없습니다', 400);
   }
 

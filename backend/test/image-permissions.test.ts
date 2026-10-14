@@ -363,7 +363,8 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     const { FileStoreService, fileOwnerKey } = await import('../src/services/fileStoreService')
     const folder = FileStoreService.createFolder(fileOwnerKey(accountId), null, 'own')
     assert.equal(await status(`/api/files/${folder.id}`, accountId), 200)
-    assert.equal(await status(`/api/files/${folder.id}?owner=${fileOwnerKey(adminId)}`, accountId), 403)
+    // The file store is shared: there is no other account's store to pick, so an owner parameter changes nothing.
+    assert.equal(await status(`/api/files/${folder.id}?owner=${fileOwnerKey(adminId)}`, accountId), 200)
     AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
     assert.equal(await status('/api/generation-history/clear?service_type=novelai', accountId, 'POST'), 200)
     assert.ok(db.prepare('SELECT 1 FROM api_generation_history WHERE id = ?').get(other))

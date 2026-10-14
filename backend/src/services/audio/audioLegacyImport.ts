@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
+import { zipEntryBytes, zipEntryKind } from '../../utils/zipEntries';
 import Database from 'better-sqlite3';
 import { runtimePaths } from '../../config/runtimePaths';
 import { getAudioDb } from '../../database/audioDb';
@@ -153,22 +154,31 @@ export function isUnsafeZipEntry(root: string, name: string): boolean {
   return relative.startsWith('..') || path.isAbsolute(relative);
 }
 
-/** Unpack a zip into `dir`, refusing the whole archive when any entry points outside it (zip-slip). */
+/** What an unpacked legacy archive may hold in all (its zip is at most 1 GiB; audio barely compresses). */
+const LEGACY_UNPACKED_MAX_BYTES = 4 * 1024 * 1024 * 1024;
+
+/**
+ * Unpack a zip into `dir`, refusing the whole archive when any entry points outside it (zip-slip), is a link or
+ * encrypted, or declares more than the unpack budget; each entry inflates only up to the size it declares.
+ */
 export async function extractLegacyZip(zipPath: string, dir: string, hooks: LegacyImportHooks = {}): Promise<void> {
   const zip = new AdmZip(zipPath);
   const entries = zip.getEntries();
-  const unsafe = entries.find((entry) => isUnsafeZipEntry(dir, entry.entryName));
-  if (unsafe) throw new LegacyImportError(`압축 파일에 폴더 밖을 가리키는 경로가 있어: ${unsafe.entryName}`);
+  const unsafe = entries.find((entry) => isUnsafeZipEntry(dir, entry.entryName) || !zipEntryKind(entry));
+  if (unsafe) throw new LegacyImportError(`압축 파일에 폴더 밖을 가리키거나 링크·암호화된 항목이 있어: ${unsafe.entryName}`);
+  if (entries.reduce((total, entry) => total + entry.header.size, 0) > LEGACY_UNPACKED_MAX_BYTES) throw new LegacyImportError('압축을 풀면 4GB를 넘어서 가져올 수 없어.');
   fs.mkdirSync(dir, { recursive: true });
   let count = 0;
   for (const entry of entries) {
     hooks.throwIfCancelled?.();
     const target = path.resolve(dir, entry.entryName.replace(/\\/g, '/'));
-    if (entry.isDirectory) {
+    if (zipEntryKind(entry) === 'folder') {
       fs.mkdirSync(target, { recursive: true });
     } else {
+      const bytes = zipEntryBytes(entry, LEGACY_IMPORT_ZIP_MAX_BYTES);
+      if (!bytes) throw new LegacyImportError(`압축 정보가 올바르지 않은 항목이 있어: ${entry.entryName}`);
       fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, entry.getData(), { flag: 'wx' });
+      fs.writeFileSync(target, bytes, { flag: 'wx' });
     }
     if (++count % 50 === 0) await (hooks.yield ?? yieldToEventLoop)();
   }

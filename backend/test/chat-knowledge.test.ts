@@ -83,17 +83,19 @@ test('chat knowledge: linked search, file versions, connected history, group mem
     const before = FileStoreRevisions.beforeReply(me, file.id, 7, 'r-a')
     assert.equal(before?.id, versions[1].id)
     FileStoreService.restoreRevision(me, file.id, before!.id, { via: 'restore', accountId: null })
-    assert.equal(fs.readFileSync(path.join(root, 'files', 'bootstrap', `${file.id}.bin`), 'utf8'), '첫 판\n')
+    assert.equal(fs.readFileSync(path.join(root, 'files', `${file.id}.bin`), 'utf8'), '첫 판\n')
     assert.equal(FileStoreRevisions.list(me, file.id).length, 3, 'the restore kept the text it replaced')
 
     for (let index = 0; index < REVISIONS_PER_FILE + 5; index++) FileStoreService.updateText(me, file.id, `판 ${index}\n`)
     assert.equal(FileStoreRevisions.list(me, file.id).length, REVISIONS_PER_FILE, 'only the newest are kept')
-    const kept = fs.readdirSync(path.join(root, 'files', '.revisions', 'bootstrap'))
+    // The shared store keeps every file and version flat (no per-account folders).
+    const revisionCopies = () => fs.readdirSync(path.join(root, 'files', '.revisions')).filter((name) => name.endsWith('.bin'))
+    const kept = revisionCopies()
     assert.equal(kept.length, REVISIONS_PER_FILE + 0, 'trimmed versions take their copies with them')
 
     FileStoreService.delete(me, [file.id])
     assert.equal(FileStoreRevisions.list(me, file.id).length, 0, 'a deleted file takes its versions')
-    assert.equal(fs.readdirSync(path.join(root, 'files', '.revisions', 'bootstrap')).length, 0)
+    assert.equal(revisionCopies().length, 0)
   })
 
   await t.test('a reply that wrote files shows them and undoes them: a replaced file goes back, a made one goes away', async () => {

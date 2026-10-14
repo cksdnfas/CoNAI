@@ -872,7 +872,6 @@ router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, r
       res.status(404).json({ success: false, error: '복사할 프로필을 찾을 수 없어.' })
       return
     }
-    ChatLorebookStore.assertProfileLinks(normalizeLorebookIds(input.lorebookIds), fileOwnerKey(getRequesterAccountId(req)), source?.lorebookIds)
     assertLinkedFiles(fileOwnerKey(getRequesterAccountId(req)), normalizeLinkedFiles(input.linkedFiles), source?.linkedFiles)
     const created = ChatProfileStore.create(input)
     res.status(201).json({ success: true, data: toAdminProfile(source ? copyProfileExpressions(source, created) : created) })
@@ -895,7 +894,6 @@ router.put('/admin/profiles/:profileId', requireAdmin, asyncHandler(async (req: 
     }
     const patch = (req.body ?? {}) as ChatProfileInput
     await assertCodexEffortSupported({ ...current, ...patch })
-    if (patch.lorebookIds !== undefined) ChatLorebookStore.assertProfileLinks(normalizeLorebookIds(patch.lorebookIds), fileOwnerKey(getRequesterAccountId(req)), current.lorebookIds)
     if (patch.linkedFiles !== undefined) assertLinkedFiles(fileOwnerKey(getRequesterAccountId(req)), normalizeLinkedFiles(patch.linkedFiles), current.linkedFiles)
     res.json({ success: true, data: toAdminProfile(ChatProfileStore.update(profileId, patch)) })
   } catch (error) {
@@ -912,13 +910,13 @@ router.delete('/admin/profiles/:profileId', requireAdmin, (req: Request, res: Re
   res.json({ success: true, data: { deleted: ChatProfileStore.delete(profileId) } })
 })
 
-/** The requester's file store key: account and chat lorebooks live there. */
+/** The requester's file store key (account books are shared; chat books stay with their chat's owner). */
 function lorebookOwner(req: Request) {
   return fileOwnerKey(getRequesterAccountId(req))
 }
 
 /**
- * GET /api/codex-chat/lorebooks — the requester's account books (with entries) and the global books (name and
+ * GET /api/codex-chat/lorebooks — the shared account books (with entries) and the global books (name and
  * entry count only; the admin edits those). `kind` tells them apart.
  */
 router.get('/lorebooks', requireChatAccess, (req: Request, res: Response) => {

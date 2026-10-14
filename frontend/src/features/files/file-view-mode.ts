@@ -4,6 +4,8 @@ export type FileViewMode = 'grid' | 'list'
 const FILES_VIEW_MODE_KEY = 'conai.files.view'
 /** The RecycleBin is read through its details (original location, deleted by, date), so it opens as a list. */
 const RECYCLE_BIN_VIEW_MODE_KEY = 'conai.files.recycle-bin.view'
+/** Project workspaces hold text documents, read by name, so they open as a list too. */
+const WORKSPACE_VIEW_MODE_KEY = 'conai.files.workspace.view'
 
 function readViewMode(key: string, fallback: FileViewMode): FileViewMode {
   try {
@@ -15,9 +17,9 @@ function readViewMode(key: string, fallback: FileViewMode): FileViewMode {
 }
 
 /** Icons / details choice, remembered per browser: one for the file store and server folders, one for the bin. */
-export function useFileViewMode(scope: 'files' | 'recycle-bin' = 'files') {
-  const key = scope === 'recycle-bin' ? RECYCLE_BIN_VIEW_MODE_KEY : FILES_VIEW_MODE_KEY
-  const fallback: FileViewMode = scope === 'recycle-bin' ? 'list' : 'grid'
+export function useFileViewMode(scope: 'files' | 'recycle-bin' | 'workspace' = 'files') {
+  const key = scope === 'recycle-bin' ? RECYCLE_BIN_VIEW_MODE_KEY : scope === 'workspace' ? WORKSPACE_VIEW_MODE_KEY : FILES_VIEW_MODE_KEY
+  const fallback: FileViewMode = scope === 'files' ? 'grid' : 'list'
   const [viewMode, setViewMode] = useState<FileViewMode>(() => readViewMode(key, fallback))
   const changeViewMode = (mode: FileViewMode) => {
     setViewMode(mode)

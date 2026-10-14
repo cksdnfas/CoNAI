@@ -1,6 +1,15 @@
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
 
+/** Device names Windows refuses as a file or folder name, with or without an extension (CON, nul.txt, COM1…). */
+export const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+
+/** True when `candidate` is `root` itself or below it (both already resolved; a sibling named "..x" counts as inside). */
+export function isPathInside(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
+}
+
 /**
  * 유니코드 문자열을 NFC(Canonical Composition) 형식으로 정규화
  *

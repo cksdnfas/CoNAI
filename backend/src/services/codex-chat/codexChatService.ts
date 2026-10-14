@@ -58,6 +58,8 @@ import { deleteClaudeMemberSession, deleteClaudeSessions, isClaudeSessionValue }
 import { codexHistoryRecap, codexInputMeta, nextLoreSent, pendingAuthorNote, pendingBlockState, prepareSessionLore, pendingRejectedLore, pendingReplyGuidance, pendingUserPersona, readLoreSent } from './chatSessionMemory'
 import { logger } from '../../utils/logger'
 import { externalMcpToolsSignature } from '../externalMcp/externalMcpServers'
+import { pluginServerToolsSignature } from '../plugins/pluginServerTools'
+import { applyChatInstructionHooks } from '../plugins/pluginServerRuntime'
 import type { ChatStreamEvent } from '@conai/shared'
 
 const SESSION_IDLE_MS = 15 * 60 * 1000
@@ -165,7 +167,8 @@ function sessionKey(requester: McpRequester, scopes: ChatScope[], toolAllowlist:
   // The web tools come and go with the admin's web research setting, the external ones with their servers.
   const web = loadChatSettings().webResearch.engine === 'off' ? '' : '|web'
   const external = externalMcpToolsSignature()
-  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}${presets ? `|gen:${presets}` : ''}${chatContext ? `|chat:${chatContext.threadId}:${chatContext.profileId}` : ''}${pageTools}${web}${external ? `|ext:${external}` : ''}|grants:${grants}|workspace:${workspace}`
+  const plugins = pluginServerToolsSignature()
+  return `${requester.accountId === null ? 'bootstrap' : `account:${requester.accountId}`}|${[...scopes].sort().join(',')}|${tools}${presets ? `|gen:${presets}` : ''}${chatContext ? `|chat:${chatContext.threadId}:${chatContext.profileId}` : ''}${pageTools}${web}${external ? `|ext:${external}` : ''}${plugins ? `|plg:${plugins}` : ''}|grants:${grants}|workspace:${workspace}`
 }
 
 /** The profile's model and reasoning effort, falling back to the CLI config and then the model's default effort. */
@@ -262,8 +265,10 @@ export function buildCodexInstructions(profile: ChatProfile) {
   return [developerInstructions(profile.generationPresetIds.length > 0), buildChatStyleGuidance(profile.style, profile.name), buildEmoticonGuidance(profile.style), buildPersonaPrompt(profile, { dialogueAsText: true })].filter(Boolean).join('\n\n')
 }
 
-function threadOverrides(session: Session, profile: ChatProfile) {
+/** Developer instructions are fixed when a Codex thread starts or resumes, so plugin hooks apply then. */
+async function threadOverrides(session: Session, profile: ChatProfile) {
   const { model, effort } = resolveCodexRun(session, profile)
+  const instructions = [buildCodexInstructions(profile), workspaceInstructions(session.workspace)].filter(Boolean).join('\n\n')
   return {
     model,
     config: effort ? { model_reasoning_effort: effort } : {},
@@ -271,7 +276,7 @@ function threadOverrides(session: Session, profile: ChatProfile) {
     cwd: session.runtime.cwd,
     approvalPolicy: 'never',
     sandbox: 'read-only',
-    developerInstructions: [buildCodexInstructions(profile), workspaceInstructions(session.workspace)].filter(Boolean).join('\n\n'),
+    developerInstructions: await applyChatInstructionHooks(instructions, { engine: 'codex', threadId: null, group: false, profile: { id: profile.id, name: profile.name } }, session.requester),
   }
 }
 
@@ -642,7 +647,7 @@ async function ensureCodexThread(session: Session, codexThreadId: string | null,
 
   if (codexThreadId) {
     try {
-      await session.client.request('thread/resume', { threadId: codexThreadId, ...threadOverrides(session, profile) }, THREAD_REQUEST_TIMEOUT_MS)
+      await session.client.request('thread/resume', { threadId: codexThreadId, ...(await threadOverrides(session, profile)) }, THREAD_REQUEST_TIMEOUT_MS)
       session.loadedThreads.add(codexThreadId)
       return codexThreadId
     } catch {
@@ -651,7 +656,7 @@ async function ensureCodexThread(session: Session, codexThreadId: string | null,
   }
 
   const started = await session.client.request<{ thread: { id: string } }>('thread/start', {
-    ...threadOverrides(session, profile),
+    ...(await threadOverrides(session, profile)),
     serviceName: 'conai',
   }, THREAD_REQUEST_TIMEOUT_MS)
   saveNew(started.thread.id)

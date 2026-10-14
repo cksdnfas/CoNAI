@@ -26,15 +26,11 @@ import { cn } from '@/lib/utils'
 import { formatProbability, judgeActionLabel, judgeDecidedByLabel, judgeOutcomeLabel, judgeStageLabel, JudgeVerdictChip } from './chat-judge-parts'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { useChatOptionsPageParts } from './chat-options-page'
+import { parseServerDate } from '@/lib/server-time'
 
 const PAGE_SIZE = 50
 /** An uncertain share above this marks the item's thresholds as worth a look. */
 const UNSURE_WARN = 0.3
-
-/** SQLite's UTC `YYYY-MM-DD HH:MM:SS`. */
-function parseUtc(value: string) {
-  return new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`)
-}
 
 function percent(value: number | null) {
   return value === null ? '—' : `${Math.round(value * 100)}%`
@@ -99,7 +95,7 @@ function LogRow({ run }: { run: ChatJudgeLogRun }) {
       {/* eslint-disable-next-line no-restricted-syntax -- a full-width disclosure row; Button would pad and centre it */}
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="grid w-full cursor-pointer grid-cols-[1rem_7.5rem_minmax(8rem,12rem)_minmax(0,1fr)_auto] items-center gap-3 rounded-sm py-2.5 text-left text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
         <ChevronRight className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-90')} />
-        <span className="tabular-nums text-xs text-muted-foreground">{formatDateTime(parseUtc(run.createdAt), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+        <span className="tabular-nums text-xs text-muted-foreground">{formatDateTime(parseServerDate(run.createdAt), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
         <span className="min-w-0">
           <span className="block truncate font-medium">{run.profileName || (run.profileId === null ? t({ ko: '그룹 방', en: 'Group room' }) : `#${run.profileId}`)}</span>
           <span className="block truncate text-xs text-muted-foreground">{run.threadTitle || (run.threadId === null ? t({ ko: '자산 묶음', en: 'Asset batch' }) : `#${run.threadId}`)} · {judgeStageLabel(run.stage, t)}</span>

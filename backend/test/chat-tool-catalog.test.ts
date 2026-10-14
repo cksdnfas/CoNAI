@@ -152,6 +152,35 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
       }
     })
 
+    await t.test('consolidated prompt moves preserve explicit targets and report missing IDs', async () => {
+      const call = (tool: string, args: Record<string, unknown>) => client.callTool({ name: CATALOG_RUN_TOOL, arguments: { tool, arguments: args } })
+      const created = await call('batch_create_groups', { groups: [{ group_name: 'Catalog move target' }] })
+      assert.notEqual(created.isError, true, text(created))
+      const target = JSON.parse(text(created)).results[0].group_id
+      const promptId = Number(main.db.prepare('INSERT INTO prompt_collection (prompt, usage_count) VALUES (?, 0)').run('catalog_move_target').lastInsertRowid)
+      const otherId = Number(main.db.prepare('INSERT INTO prompt_collection (prompt, usage_count) VALUES (?, 0)').run('catalog_do_not_move').lastInsertRowid)
+      const groupOf = (id: number) => (main.db.prepare('SELECT group_id FROM prompt_collection WHERE id = ?').get(id) as { group_id: number | null }).group_id
+      const empty = await call('move_prompts_between_groups', { prompt_ids: [], source_group_id: 0, target_group_id: target })
+      assert.equal(empty.isError, true, 'an empty selection must never fall through to moving the whole group')
+      assert.equal(groupOf(otherId), null)
+      const moved = await call('move_prompts_between_groups', { prompt_ids: [promptId, 2147483647], target_group_id: target })
+      assert.notEqual(moved.isError, true, text(moved))
+      const result = JSON.parse(text(moved))
+      assert.equal(result.moved_count, 1)
+      assert.equal(result.fail_count, 1)
+      assert.equal(result.total, 2)
+      assert.equal(groupOf(promptId), target)
+      assert.equal(groupOf(otherId), null)
+      const unassigned = await call('move_prompts_between_groups', { prompt_ids: [promptId], target_group_id: 0 })
+      assert.notEqual(unassigned.isError, true, text(unassigned))
+      assert.equal(groupOf(promptId), null)
+      const unclassified = await call('get_prompts_in_group', { group_id: 0 })
+      assert.notEqual(unclassified.isError, true, text(unclassified))
+      assert.ok(JSON.parse(text(unclassified)).prompts.some((prompt: { id: number }) => prompt.id === promptId))
+      const { normalizePresetAllowlist } = await import('../src/services/codex-chat/chatToolPresets')
+      assert.deepEqual(normalizePresetAllowlist(['assign_prompts_to_group'], ['organize']), [], 'retired grants must not automatically grant the broader group move operation')
+    })
+
     // Open a category: descriptions and input schemas.
     const opened = JSON.parse(text(await client.callTool({ name: CATALOG_OPEN_TOOL, arguments: { category: 'audio' } }))) as { tools: Array<{ name: string; input_schema: { properties?: Record<string, unknown> } }> }
     const folder = opened.tools.find((tool) => tool.name === 'create_audio_folder')

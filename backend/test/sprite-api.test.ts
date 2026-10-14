@@ -346,9 +346,9 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
         await session.close()
       }
     }
-    assert.deepEqual(await names(readerId), ['download_sprite_frames', 'get_sprite_job', 'get_video_info', 'wait_sprite_job'])
-    assert.deepEqual(await names(editorId), ['download_sprite_frames', 'get_sprite_job', 'get_video_info', 'wait_sprite_job'], 'builders need images.upload too')
-    assert.deepEqual(await names(makerId), ['create_sprite_animation', 'download_sprite_frames', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'get_sprite_job', 'get_video_info', 'normalize_sprite_sheets', 'wait_sprite_job'])
+    assert.deepEqual(await names(readerId), ['download_sprite_frames', 'get_sprite_job', 'get_video_info'])
+    assert.deepEqual(await names(editorId), ['download_sprite_frames', 'get_sprite_job', 'get_video_info'], 'builders need images.upload too')
+    assert.deepEqual(await names(makerId), ['create_sprite_animation', 'download_sprite_frames', 'extract_sprite_sheet', 'extract_sprite_sheets_batch', 'get_sprite_job', 'get_video_info', 'normalize_sprite_sheets'])
     assert.ok(!(await names(makerId, 'codex-chat')).includes('wait_sprite_job'), 'chat replies never block on a job')
 
     const maker = await connect(makerId)
@@ -368,7 +368,7 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
       assert.equal(JSON.parse(stored.result).runtime_job_result_file, 1)
       assert.deepEqual((await call('GET', `/api/jobs/${large.jobId}`, makerId)).json.data.result, largeResult)
       assert.equal((await call('GET', `/api/jobs/${large.jobId}`, otherMakerId)).status, 403)
-      const largeTool = text(await maker.client.callTool({ name: 'get_sprite_job', arguments: { job_id: large.jobId } }))
+      const largeTool = text(await maker.client.callTool({ name: 'get_sprite_job', arguments: { job_id: large.jobId, wait_seconds: 600 } }))
       assert.deepEqual(largeTool.result, largeResult, 'MCP retrieves the complete result as well')
       assert.equal((await other.client.callTool({ name: 'get_sprite_job', arguments: { job_id: large.jobId } })).isError, true)
       const resultFile = path.join(root, 'artifacts', 'runtime-job-results', `${large.jobId}.json`)

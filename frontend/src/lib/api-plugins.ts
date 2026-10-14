@@ -13,5 +13,5 @@ export function pluginRequest<T>(suffix: string, method = 'GET', body?: unknown,
 }
 export const PLUGINS_QUERY_KEY = ['plugins'] as const
 export const listPlugins = () => pluginRequest<InstalledPlugin[]>('')
-export const openPlugin = (id: string, page: string, files: string[]) => pluginRequest<PluginInstance>(`/${encodeURIComponent(id)}/pages/${encodeURIComponent(page)}/instances`, 'POST', { files })
+export const openPlugin = (id: string, page: string, files: string[], workspace?: { id: string; write: boolean }) => pluginRequest<PluginInstance>(`/${encodeURIComponent(id)}/pages/${encodeURIComponent(page)}/instances`, 'POST', { files, ...(workspace ? { workspace } : {}) })
 export const proposePluginWrite = (instance: string, value: unknown) => pluginRequest<PluginWriteProposal>(`/instances/${instance}/proposals`, 'POST', value)

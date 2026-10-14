@@ -1,3 +1,5 @@
+import { statRevision } from '../utils/fileHash';
+import { WINDOWS_RESERVED_NAME } from '../utils/pathResolver';
 import crypto from 'crypto';
 import { publishRuntimeEvent } from './runtime-events/runtimeEventBus';
 import fs from 'fs';
@@ -60,10 +62,6 @@ export type TextEdit = { old_text: string; new_text: string; replace_all?: boole
  */
 export type TextWriteRecord = { source?: FileWriteSource | null; history?: boolean; expectedRevision?: string };
 
-function textRevision(stat: fs.BigIntStats) {
-  return crypto.createHash('sha256').update(`${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`).digest('hex');
-}
-
 /** Apply exact-text replacements in order; each must match once (or replace_all). Throws, saving nothing, when one fails. */
 export function applyTextEdits(text: string, edits: TextEdit[]) {
   let replaced = 0;
@@ -85,7 +83,7 @@ function normalizeName(value: unknown): string {
   if (typeof value !== 'string') throw new FileStoreError('이름을 입력해줘.');
   const name = value.normalize('NFC').trim();
   if (!name || Buffer.byteLength(name, 'utf8') > 240 || /[<>:"/\\|?*\u0000-\u001f\u007f]/.test(name)
-    || /[. ]$/.test(name) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) {
+    || /[. ]$/.test(name) || WINDOWS_RESERVED_NAME.test(name)) {
     throw new FileStoreError('사용할 수 없는 이름이야. 경로 문자 없이 240바이트 이내로 입력해줘.');
   }
   return name;
@@ -391,7 +389,7 @@ export const FileStoreService = {
         const existing = this.findChild(owner, parentId, name);
         if (existing && (existing.kind !== 'file' || options.create)) throw new FileStoreError(`같은 이름의 항목이 있어: ${name}`, 409);
         if (options.replaceId !== undefined && existing?.id !== options.replaceId) throw new FileStoreError('파일이 옮겨졌거나 이름이 바뀌었어. 다시 열어줘.', 409);
-        if (options.expectedRevision !== undefined && (!existing || options.expectedRevision !== textRevision(fs.statSync(storedFilePath(owner, existing.id), { bigint: true })))) {
+        if (options.expectedRevision !== undefined && (!existing || options.expectedRevision !== statRevision(fs.statSync(storedFilePath(owner, existing.id), { bigint: true })))) {
           throw new FileStoreError('다른 곳에서 파일이 변경됐어. 초안을 보관하고 최신 파일을 다시 열어줘.', 409);
         }
         const id = existing?.id ?? crypto.randomBytes(16).toString('hex');
@@ -405,7 +403,7 @@ export const FileStoreService = {
           insert(owner, parentId, name, 'file', id, data.length, textMimeType(name));
         }
         fs.renameSync(staged, storedFilePath(owner, id));
-        revision = textRevision(fs.statSync(storedFilePath(owner, id), { bigint: true }));
+        revision = statRevision(fs.statSync(storedFilePath(owner, id), { bigint: true }));
         return requireRow(owner, id);
       }).immediate();
     } catch (error) {
@@ -460,7 +458,7 @@ export const FileStoreService = {
       if (stat.size > BigInt(MAX_TEXT_DOCUMENT_BYTES)) throw new FileStoreError('2MB가 넘는 파일은 고칠 수 없어.', 413);
       const data = fs.readFileSync(fd);
       if (data.includes(0)) throw new FileStoreError('바이너리 파일은 텍스트로 고칠 수 없어.', 415);
-      try { return { text: new TextDecoder('utf-8', { fatal: true }).decode(data), revision: textRevision(stat) }; }
+      try { return { text: new TextDecoder('utf-8', { fatal: true }).decode(data), revision: statRevision(stat) }; }
       catch { throw new FileStoreError('UTF-8 텍스트 파일만 고칠 수 있어.', 415); }
     } finally { fs.closeSync(fd); }
   },
@@ -609,7 +607,7 @@ export const FileStoreService = {
     const handle = fs.openSync(filePath, 'r');
     try {
       const stat = fs.fstatSync(handle, { bigint: true });
-      const revision = textRevision(stat);
+      const revision = statRevision(stat);
       const size = Number(stat.size);
       if (options.revision !== undefined && options.revision !== revision) throw new FileStoreError('파일이 변경됐어. 다시 읽어줘.', 409);
       if (offset > size) throw new FileStoreError(`잘못된 읽기 범위야 (파일 크기 ${size}바이트).`);

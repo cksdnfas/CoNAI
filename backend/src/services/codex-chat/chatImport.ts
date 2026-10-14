@@ -261,7 +261,7 @@ export function importChatThread(requester: McpRequester, raw: Buffer, target: C
     const wantedRecord = links.loreRecordBook ?? (sameAccount && typeof thread.lore_record_book_id === 'number' ? { id: thread.lore_record_book_id } : null)
     const record = wantedRecord ? matchOwn(books.found, [wantedRecord]).found[0] : undefined
     if (record) OwnedLorebookStore.setRecordBook(created.id, record.id)
-    if (books.missing) notes.push(`이 계정에 없는 로어북 ${books.missing}개는 연결하지 않았어.`)
+    if (books.missing) notes.push(`찾을 수 없는 로어북 ${books.missing}개는 연결하지 않았어.`)
     // Linked files by id, kept only while they are in this owner's store.
     const wantedFiles = normalizeLinkedFiles(Array.isArray(links.linkedFiles) ? links.linkedFiles : sameAccount ? thread.linked_files : [])
     const keptFiles = wantedFiles.filter((link) => !describeLinkedFiles(owner, [link])[0].missing)

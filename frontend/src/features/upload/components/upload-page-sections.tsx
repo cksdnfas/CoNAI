@@ -19,7 +19,7 @@ import { InlineMediaPreview } from '@/features/images/components/inline-media-pr
 import { buildImageSourceState } from '@/features/images/image-source-navigation'
 import type { RewriteMetadataDraft } from '@/features/metadata/use-metadata-rewrite-draft'
 import { useI18n } from '@/i18n'
-import { formatBytes } from '@/features/images/components/detail/image-detail-utils'
+import { formatFileSize } from '@/lib/format-size'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { cn } from '@/lib/utils'
 import { getUploadResultDetailPath } from '../upload-result-links'
@@ -243,7 +243,7 @@ export function UploadQueueList({
                 <span className="min-w-0">
                   <span className="block truncate" title={file.name}>{file.name}</span>
                   <span className={cn('block truncate text-xs', state.error ? 'text-destructive' : 'text-muted-foreground')} title={state.error}>
-                    {state.error ?? formatBytes(file.size)}
+                    {state.error ?? formatFileSize(file.size || null)}
                   </span>
                   <RowProgress percent={state.percent} tone={state.status === 'failed' ? 'destructive' : 'primary'} className="mt-1.5 w-full sm:hidden" />
                 </span>
@@ -283,7 +283,7 @@ export function UploadQueueList({
               >
                 <span className="min-w-0">
                   <span className="block truncate" title={file.original_name}>{file.original_name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{formatDimensions(file.width, file.height)} · {formatBytes(file.file_size)}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{formatDimensions(file.width, file.height)} · {formatFileSize(file.file_size || null)}</span>
                 </span>
               </ListRow>
             )

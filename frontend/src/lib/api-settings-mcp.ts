@@ -1,4 +1,4 @@
-import type { McpHttpScope, McpHttpSettings } from '@conai/shared'
+import type { McpHttpSettings } from '@conai/shared'
 import type { ApiResponse } from '@/types/image'
 import { fetchJson } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
@@ -23,7 +23,7 @@ export async function updateMcpHttpEnabled(enabled: boolean) {
   return response.data
 }
 
-export async function createMcpHttpApiKey(input: { name: string; scopes: McpHttpScope[] }) {
+export async function createMcpHttpApiKey(input: { name: string; groupKey: string }) {
   const response = await fetchJson<ApiResponse<McpHttpSettings>>('/api/settings/mcp-http/keys', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   })
@@ -31,9 +31,9 @@ export async function createMcpHttpApiKey(input: { name: string; scopes: McpHttp
   return response.data
 }
 
-export async function updateMcpHttpApiKey(input: { keyId: string; name: string; scopes: McpHttpScope[] }) {
+export async function updateMcpHttpApiKey(input: { keyId: string; name: string; groupKey: string }) {
   const response = await fetchJson<ApiResponse<McpHttpSettings>>(`/api/settings/mcp-http/keys/${input.keyId}`, {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: input.name, scopes: input.scopes }),
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: input.name, groupKey: input.groupKey }),
   })
   if (!response.success) throw createApiFallbackError(response.error, 'settings.mcp.update')
   return response.data

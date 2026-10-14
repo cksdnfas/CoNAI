@@ -15,8 +15,22 @@ export function isRequesterAdmin(requester: McpRequester): boolean {
   return requester.accountId === null ? !hasConfiguredAuth() : isActiveAdminAccount(requester.accountId);
 }
 
-/** Account-bound tools recheck the account; external unbound keys retain their own scope contract. */
+/** Account-bound tools recheck the account; HTTP MCP keys are checked through requireContextPermission. */
 export function requireRequesterPermission(requester: McpRequester | undefined, permission: string): void {
   if (!requester) return;
   if (!requesterPermissionKeys(requester).includes(permission)) throw new Error(`Permission required: ${permission}`);
+}
+
+/** An HTTP MCP key's keys: those of the permission group it was given (none without one). */
+export function keyGroupPermissionKeys(groupKey: string | null): string[] {
+  return groupKey ? AuthAccessControlService.resolveForGroupKey(groupKey).permissionKeys : [];
+}
+
+/** The account's keys, or an HTTP MCP key's group's; internal calls with neither are not checked here. */
+export function requireContextPermission(context: { requester?: McpRequester; keyGroup?: string | null }, permission: string): void {
+  if (context.requester) {
+    requireRequesterPermission(context.requester, permission);
+    return;
+  }
+  if (context.keyGroup !== undefined && !keyGroupPermissionKeys(context.keyGroup).includes(permission)) throw new Error(`Permission required: ${permission}`);
 }

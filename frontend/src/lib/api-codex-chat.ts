@@ -1562,7 +1562,7 @@ export function describeLinkedFiles(links: LinkedFileLink[]) {
   return requestApiData<LinkedFileView[]>('/api/codex-chat/linked-files/describe', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ links }) })
 }
 
-/** The requester's account books (with entries) and the global books (count only). */
+/** The shared account books (with entries) and the global books (count only). */
 export function listOwnLorebooks() {
   return requestApiData<OwnedChatLorebook[]>('/api/codex-chat/lorebooks')
 }

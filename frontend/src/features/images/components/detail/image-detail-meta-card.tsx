@@ -30,7 +30,8 @@ import { buildGroupedPromptSections, formatGroupedPromptText, getImageExtractedP
 import type { ImageRecord } from '@/types/image'
 import { ArtistPromptLinkSettingsModal } from './artist-prompt-link-settings-modal'
 import { DetailSettingsFlyout } from './detail-settings-flyout'
-import { formatBytes, getDownloadName, getImageArtistPromptSection, getImageAutoPromptContent, getImageAutoPromptCopyText, getImageGenerationParamItems, parseImageTimestamp } from './image-detail-utils'
+import { getDownloadName, getImageArtistPromptSection, getImageAutoPromptContent, getImageAutoPromptCopyText, getImageGenerationParamItems, parseImageTimestamp } from './image-detail-utils'
+import { formatFileSize } from '@/lib/format-size'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 
 interface ImageDetailMetaCardProps {
@@ -342,7 +343,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
     addScopedTextChip('model', modelName, { apply: true })
   }
 
-  const sizeLabel = [image.width && image.height ? `${image.width} × ${image.height}` : null, image.file_size ? formatBytes(image.file_size) : null]
+  const sizeLabel = [image.width && image.height ? `${image.width} × ${image.height}` : null, image.file_size ? formatFileSize(image.file_size) : null]
     .filter(Boolean)
     .join(' · ')
 

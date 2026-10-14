@@ -112,6 +112,8 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 파일 편집은 내용과 리비전을 함께 읽고 `expectedRevision`으로 저장 충돌을 검사한다. 폴더 트리 삭제는 참조 검사·삭제 표시를 한 트랜잭션에서 처리한 뒤 물리 삭제를 32개씩 나누며, 남은 삭제 표시는 재시작 후 정리한다. 오디오 내보내기는 렌더링뿐 아니라 ZIP 기록 단계에도 취소 신호를 전달하고 핸들을 닫은 뒤 임시 파일을 정리한다.
 
+프로젝트 본문 검색은 `(project_id, target)` 색인으로 후보를 정렬하고 최대 4개 파일씩 읽으며 원래 결과 순서와 페이지 경계를 유지한다. 실패·취소 시 시작한 읽기 묶음의 종료를 기다린다. 본문 일치 결과의 발췌문과 실제 리비전은 전체 재읽기 없이 정확한 부분 편집에 사용할 수 있으며, 이름 일치만으로 리비전을 만들지 않는다.
+
 오디오 생성 탭과 주문 결과는 `audioGenerationOutputs.ts`의 공용 저장 루프를 사용하며 대상·이름·출처와 실패 정책은 호출부가 정한다. 목록과 편집기는 계정·권한·파일 해시·조회 URL별 파형 로딩을 공유하고, 최대 두 파일만 디코딩한다. 캐시에는 원본 버퍼 대신 파형과 길이만 최대 400개 보관하며, 모든 소비자가 취소하면 남은 로딩도 취소한다. 오디오와 스프라이트의 미디어 프로세스는 `utils/mediaProcess.ts`를 공유한다. 실행 파일을 시작하지 못할 때만 시스템 바이너리로 재시도하며 취소·시간 제한·처리 오류는 다시 실행하지 않는다.
 
 스프라이트의 프레임 선택과 256장 제한은 `shared/src/utils/spriteSampling.ts`가 화면과 서버에 같은 계산을 제공한다. 제한은 중복 프레임 제거 전에 적용한다. 대기 작업을 취소해도 앞 작업이 끝나기 전에는 다음 작업이 진입하지 않는다. 영상 정보는 파일 상태가 같을 때 5분·최대 64개까지 재사용하고 워커에 전달한다. 추출 시 메타데이터를 포함한 시트를 한 번 만들며, 같은 출력 설정의 저장·미리보기는 그 파일을 재사용한다.
@@ -134,9 +136,13 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 ## 선택 설치 확장
 
-`shared/src/types/plugin.ts`, `backend/src/services/plugins/`, `frontend/src/features/plugins/`가 manifest, 설치·권한·승인, 격리 화면을 담당한다. `/extensions`에서 관리하고 `/ext/<pluginId>/<pageId>`는 `kind: 'extension'` 페이지 계약으로 기존 어시스턴트에 연결한다. 서버는 설치 manifest와 작업 스키마를 대조한다. 플러그인 콜백의 등급은 view/draft만 허용하고, 실제 파일 쓰기는 호스트 검토 카드와 서버 승인·리비전 검사로 수행한다.
+`shared/src/types/plugin.ts`, `backend/src/services/plugins/`, `frontend/src/features/plugins/`가 manifest, 설치·권한·승인, 격리 화면을 담당한다. `/settings?section=plugins`에서 앱 전체 플러그인을 관리한다. `/extensions`는 별도 실행·작업 화면이며 `/ext/<pluginId>/<pageId>`는 `kind: 'extension'` 페이지 계약으로 기존 어시스턴트에 연결한다. 서버는 설치 manifest와 작업 스키마를 대조한다. 플러그인 콜백의 등급은 view/draft만 허용하고, 실제 파일 쓰기는 호스트 검토 카드와 서버 승인·리비전 검사로 수행한다.
 
-자산·미디어 라우트는 전역 CORS 이전의 credential-free 종단 라우트다. 일반 호스트 API의 null origin 거부와 Wallpaper Engine 예외를 합치지 않는다. 공용 파일함에서 명시적으로 선택한 자료만 기존 FileStoreService를 통해 제공하며 연결·승인은 요청 계정과 세션에 묶는다. 프로젝트 자료·서버 실행은 현재 SDK 범위에 없다. 설치하지 않은 개별 도구는 기본 번들에 포함하지 않는다. [개발 계약과 SDK](plugins/README.md), [사용자 가이드](docs/GUIDE/PLUGINS.md)를 참고한다.
+자산·미디어 라우트는 전역 CORS 이전의 credential-free 종단 라우트다. 일반 호스트 API의 null origin 거부와 Wallpaper Engine 예외를 합치지 않는다. 공용 파일함에서 명시적으로 선택한 자료는 FileStoreService로 제공한다. `pluginWorkspace.ts`는 호스트에서 연결한 프로젝트의 목록·읽기·검토 저장과 미디어 참조를 제공하며 WorkspaceService의 쓰기 잠금·리비전·멱등 처리를 재사용한다. 연결·승인은 요청 계정과 세션에 묶고 미디어 원본을 프로젝트에 자동 복제하지 않는다. `pluginMediaProcessing.ts`는 호스트 승인 후 제한된 crop/audio 처리만 기존 런타임 작업·라이브러리/오디오 저장으로 연결한다. 서버 모듈 없는 플러그인은 임의 서버 코드를 실행하지 않는다. `workspace.proposeChanges`는 공통 쓰기 잠금과 리비전으로 파일·폴더 이동을 처리하며 부분 실패 내역을 보존한다. `pluginAppActions.ts`와 `pluginAppBridge.ts`는 manifest의 appTools/serverActions를 기존 MCP 네이티브 서비스로 연결한다. 기능 권한·프로젝트 연결·키 범위를 교차 검사하며 변경은 호스트 검토와 plugin-action 작업으로 실행한다. MCP list_plugin_pages/run_plugin_action/get_plugin_action/cancel_plugin_action과 페이지 serverActions는 같은 계약을 공유한다. 명시적으로 server 기능을 선언하고 관리자가 활성화한 신뢰된 패키지는 pluginServerRuntime.ts의 Node worker와 전용 저장소를 사용한다. 설치하지 않은 개별 도구는 기본 번들에 포함하지 않는다. [개발 계약과 SDK](plugins/README.md), [사용자 가이드](docs/GUIDE/PLUGINS.md)를 참고한다.
+
+신뢰된 서버 플러그인의 `conai.llm`과 페이지의 `api.llm`은 `pluginLlm.ts`에서 사용 가능한 프로필 조회·단일 답변 시작·상태/본문 조회·취소를 제공한다. `chatProfileReply.ts`의 프롬프트 구성과 기존 모델 실행 경로를 워크플로와 공유하고, `plugin-llm` 런타임 작업으로 동시 실행·취소·재시작 실패 처리를 재사용한다. 요청 ID는 플러그인·계정에 묶으며 원본 입력은 영구 작업 인자에 저장하지 않는다. 어항 같은 개별 기능의 화면·기억·행동 규칙은 플러그인에 둔다. 실행 권한·멱등·취소 회귀는 `backend/test/plugin-server.test.ts`, 기존 프롬프트 호환성은 `backend/test/workflow-llm-nodes.test.ts`로 확인한다.
+
+공개 `plugins/`에는 SDK와 `text-editor`·`app-workbench`·`chat-instructions` 개발 예제를 둔다. 개인 플러그인과 전용 테스트·문서는 Git/Docker에서 제외한 `local-plugins/`에 보관한다. `node scripts/build-plugin.mjs --local <이름>`으로 `build-output/local-plugins/`에 개인 ZIP을 만들며, 공용 테스트는 개인 소스에 의존하지 않는다.
 
 `npx tsx --test backend/test/plugins.test.ts`로 계정·세션·선택 범위, 승인 재사용·권한 회수·저장 충돌, ZIP과 opaque-origin 경계를 검증한다.
 

@@ -93,7 +93,7 @@ export function booksForRequest({ thread, profile }: { thread: RequestThread | n
       if (!row) continue
       if ((row.kind ?? 'global') === 'global') {
         global.push({ id, name: row.name, label: row.name, kind: 'global', via: 'profile', owner: null, folderId: null, entries: normalizeLorebook(row.entries) })
-      } else if (row.kind === 'account' && owner && row.owner_key === owner) {
+      } else if (row.kind === 'account' && owner) {
         const book = OwnedLorebookStore.find(id, owner)
         if (book) add(ownedBook(book, owner, 'profile'))
       }

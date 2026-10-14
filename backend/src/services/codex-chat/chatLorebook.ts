@@ -2,7 +2,6 @@ import { createHash } from 'crypto'
 import { sortLoreKeysByLanguage } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { notifySemanticChange } from '../embeddings/semanticSignal'
-import { ChatProfileError } from './chatProfileError'
 import { loadChatSettings } from './chatSettings'
 
 /**
@@ -237,7 +236,7 @@ export function toLorebook(row: LorebookRow, profiles: ReturnType<typeof linkedP
 }
 
 /**
- * Global books (the admin's shared ones). Account and chat books live in the owner's file store; see
+ * Global books (the admin's shared ones). Account and chat books live in the shared file store; see
  * chatLorebookFiles.ts for those.
  */
 export const ChatLorebookStore = {
@@ -260,19 +259,8 @@ export const ChatLorebookStore = {
   },
 
   /**
-   * A profile is shared, but an account book is private: whoever saves a profile may add their own account books
-   * only. Links already on the profile (another account's) stay as they are.
-   */
-  assertProfileLinks(ids: number[], owner: string, previousIds: readonly number[] = []) {
-    const added = ids.filter((id) => !previousIds.includes(id))
-    if (added.length === 0) return
-    const foreign = getUserSettingsDb().prepare(`SELECT id FROM chat_lorebooks WHERE kind = 'account' AND owner_key IS NOT ? AND id IN (${added.map(() => '?').join(', ')})`).all(owner, ...added)
-    if (foreign.length > 0) throw new ChatProfileError('다른 계정의 로어북은 연결할 수 없어.')
-  },
-
-  /**
    * The entries of these books in book order (missing books are skipped), keyed `book:entry:content hash`. Global
-   * books only for now: account books are private, and a shared profile's links can name several accounts' books.
+   * books only: account books are read through their files (see chatLoreContext).
    */
   keyedEntriesOf(ids: number[]): KeyedLoreEntry[] {
     if (ids.length === 0) return []

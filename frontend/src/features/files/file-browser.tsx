@@ -1,16 +1,18 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useNavigate } from 'react-router-dom'
-import { useEffect, useMemo, useRef, useState, type ComponentProps, type DragEvent, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AudioLines, ChevronRight, Download, File, FilePlus, Folder, FolderInput, FolderPlus, LayoutGrid, List, Pencil, RefreshCw, Search, Trash2, Upload, X } from 'lucide-react'
+import { AudioLines, Download, FilePlus, Folder, FolderInput, FolderPlus, LayoutGrid, List, Pencil, Puzzle, RefreshCw, Search, Trash2, Upload, X } from 'lucide-react'
 import type { FileSearchStatus, StoredFileEntry, StoredFileSearchHit } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
-import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
+import { ListPager } from '@/components/common/list-pager'
+import { PathBreadcrumbs } from '@/components/common/path-breadcrumbs'
+import { MoveDialog, NameDialog } from '@/components/common/entry-dialogs'
+import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
@@ -18,111 +20,47 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { Select } from '@/components/ui/select'
-import { SidebarItem, SidebarNav } from '@/components/ui/sidebar'
+import { SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { DataCheckTd, DataCheckTh, DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { SendToAudioDialog, useCanSendToAudio } from '@/features/audio/send-to-audio-dialog'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, formatFileSize, listStoredFileRevisions, listStoredFiles, listStoredFolders, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, retryStoredFileIndex, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
+import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, listStoredFileRevisions, listStoredFiles, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, retryStoredFileIndex, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
+import { formatFileSize } from '@/lib/format-size'
 import { getErrorMessage } from '@/lib/error-message'
-import { cn } from '@/lib/utils'
 import { FilePreview } from './file-preview'
 import { FileEntryIcon as EntryIcon, fileMediaKind as mediaKind } from './file-preview-shared'
 import { FileTextEditor } from './file-text-editor'
+import { FileEntryView, type EntryItem } from './file-entry-views'
+import { WorkspaceSidebarGroup } from './workspace-projects'
+import { StoreFolderSidebarGroup, useStoreFolders } from './store-folders'
 import { useFileViewMode, type FileViewMode } from './file-view-mode'
 import { SystemFolderBrowser, SystemFolderSidebarGroup, type SystemFolderLocation } from './system-folder-browser'
+import { HighlightText } from '@/components/common/highlight-text'
+import { fileExtension } from '@/lib/file-extension'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { droppedIds, isMoveDrag, startMoveDrag } from './file-drag'
 
 const FILE_DRAG_TYPE = 'application/x-conai-file-ids'
 const PAGE_SIZE = 100
 type NameDialog = { id?: string; name: string } | null
 
-function folderTree(folders: StoredFileEntry[]) {
-  const children = new Map<string | null, StoredFileEntry[]>()
-  for (const folder of folders) {
-    const siblings = children.get(folder.parentId) ?? []
-    siblings.push(folder)
-    children.set(folder.parentId, siblings)
-  }
-  const result: Array<{ folder: StoredFileEntry; depth: number; path: string }> = []
-  const walk = (parentId: string | null, depth: number, parentPath: string) => {
-    if (depth >= 64) return
-    for (const folder of children.get(parentId) ?? []) {
-      const path = `${parentPath}/${folder.name}`
-      result.push({ folder, depth, path })
-      walk(folder.id, depth + 1, path)
-    }
-  }
-  walk(null, 0, '')
-  return result
-}
-
-/** Extension in capitals under the icon, so PDF / ZIP / TXT read at a glance. */
-function extensionOf(name: string) {
-  const match = /\.([a-z0-9]{1,6})$/i.exec(name)
-  return match ? match[1].toUpperCase() : null
-}
-
-/** One file or folder as a tile: image files show a thumbnail, everything else a type icon. */
-/** Extra div props (ref, pointer and context-menu handlers) come from the row menu wrapping the tile. */
-function FileTile({ entry, selected, showCheckbox, canSelect, draggable, onOpen, onToggle, onDragStart, onDragOver, onDrop, className, ...rest }: Omit<ComponentProps<'div'>, 'onDragStart' | 'onDragOver' | 'onDrop' | 'onToggle' | 'draggable'> & {
-  entry: StoredFileEntry
-  selected: boolean
-  /** Checkboxes stay visible once anything is selected (and on hover otherwise). */
-  showCheckbox: boolean
-  canSelect: boolean
-  draggable: boolean
-  onOpen: () => void
-  onToggle: (checked: boolean) => void
-  onDragStart: (event: DragEvent) => void
-  onDragOver?: (event: DragEvent) => void
-  onDrop?: (event: DragEvent) => void
-}) {
-  const { t } = useI18n()
+/** A stored item's grid face: image and video files show a thumbnail, everything else a type icon with its extension. */
+function StoredFileFace({ entry }: { entry: StoredFileEntry }) {
   const [thumbFailed, setThumbFailed] = useState(false)
   const { canViewImages } = useImagePermissions()
   const showThumb = canViewImages && entry.kind === 'file' && ['image', 'video'].includes(mediaKind(entry)) && entry.mimeType !== 'image/svg+xml' && !thumbFailed
-  const extension = entry.kind === 'file' ? extensionOf(entry.name) : null
-
+  const extension = entry.kind === 'file' ? fileExtension(entry.name) : null
+  if (showThumb) return <img src={storedFileThumbnailUrl(entry.id)} alt="" loading="lazy" draggable={false} onError={() => setThumbFailed(true)} className="size-full object-cover" />
   return (
-    <div {...rest} className={cn('group relative min-w-0 [-webkit-touch-callout:none]', className)} draggable={draggable} onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}>
-      <Button
-        variant="ghost"
-        onClick={onOpen}
-        title={entry.name}
-        className={cn('flex h-auto w-full flex-col items-stretch gap-1.5 whitespace-normal p-1.5 text-left font-normal', selected && 'bg-primary/10 hover:bg-primary/15')}
-      >
-        <span className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-sm bg-surface-low">
-          {showThumb ? (
-            <img src={storedFileThumbnailUrl(entry.id)} alt="" loading="lazy" draggable={false} onError={() => setThumbFailed(true)} className="size-full object-cover" />
-          ) : (
-            <span className="flex flex-col items-center gap-1">
-              <EntryIcon entry={entry} className="size-9" />
-              {extension ? <span className="text-2xs font-semibold tracking-wide text-muted-foreground">{extension}</span> : null}
-            </span>
-          )}
-        </span>
-        <span className="line-clamp-2 break-all px-0.5 text-xs leading-snug text-foreground">{entry.name}</span>
-        {entry.kind === 'file' ? <span className="px-0.5 text-2xs text-muted-foreground">{formatFileSize(entry.size)}</span> : null}
-      </Button>
-      {canSelect ? (
-        <span className={cn('absolute left-2.5 top-2.5 rounded-sm bg-background/80 p-0.5 transition-opacity', selected || showCheckbox ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
-          <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: entry.name })} checked={selected} onCheckedChange={(checked) => onToggle(checked === true)} />
-        </span>
-      ) : null}
-    </div>
+    <span className="flex flex-col items-center gap-1">
+      <EntryIcon entry={entry} className="size-9" />
+      {extension ? <span className="text-2xs font-semibold tracking-wide text-muted-foreground">{extension}</span> : null}
+    </span>
   )
-}
-
-/** `text` with every search term marked (terms are matched case-insensitively, as the server does for Latin letters). */
-function highlightTerms(text: string, terms: string[]): ReactNode {
-  if (terms.length === 0) return text
-  const pattern = new RegExp(`(${terms.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi')
-  return text.split(pattern).map((part, index) => (index % 2 === 1 ? <mark key={index} className="rounded-sm bg-primary/20 px-0.5 text-foreground">{part}</mark> : part))
 }
 
 /** Search results in place of the folder list: name, folder path and the text around the match. */
@@ -149,12 +87,12 @@ function SearchHits({ hits, terms, truncated, search, onOpen, onRetry, retrying 
             <Button variant="ghost" className="h-auto w-full flex-col items-stretch gap-1 whitespace-normal py-2 text-left font-normal" onClick={() => onOpen(entry)}>
               <span className="flex min-w-0 items-center gap-2">
                 <EntryIcon entry={entry} />
-                <span className="min-w-0 truncate text-sm text-foreground">{highlightTerms(entry.name, terms)}</span>
+                <span className="min-w-0 truncate text-sm text-foreground"><HighlightText text={entry.name} terms={terms} /></span>
                 <span className="min-w-0 shrink truncate text-xs text-muted-foreground">{path}</span>
               </span>
               {location ? <span className="pl-6 text-xs text-muted-foreground">{location}</span> : null}
               {extractionState && ['partial', 'empty', 'error', 'unsupported'].includes(extractionState) ? <span className="pl-6 text-xs text-muted-foreground">{t({ ko: '본문 전체를 검색하지 못한 파일', en: 'Full content was not searched' })}</span> : null}
-              {snippet ? <span className="line-clamp-2 break-all pl-6 text-xs leading-relaxed text-muted-foreground">{highlightTerms(snippet, terms)}</span> : null}
+              {snippet ? <span className="line-clamp-2 break-all pl-6 text-xs leading-relaxed text-muted-foreground"><HighlightText text={snippet} terms={terms} /></span> : null}
             </Button>
             {extractionState && ['partial', 'empty', 'error'].includes(extractionState) ? <Button size="sm" variant="ghost" disabled={retrying} onClick={() => onRetry(entry.id)}>{t({ ko: '다시 추출', en: 'Retry extraction' })}</Button> : null}
           </li>
@@ -165,8 +103,9 @@ function SearchHits({ hits, terms, truncated, search, onOpen, onRetry, retrying 
 }
 
 /** Shared file store, also used as a file/folder picker. */
-export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFolder, pickFolderLabel, accept, system = null, onSystemNavigate, onWorkspacesOpen }: {
-  onWorkspacesOpen?: () => void
+export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFolder, pickFolderLabel, accept, system = null, onSystemNavigate, workspaces }: {
+  /** The files page: project workspaces as the first sidebar group. */
+  workspaces?: { onOpen: (id: string) => void; onCreate?: () => void }
   parentId: string | null
   onNavigate: (id: string | null) => void
   onPick?: (files: StoredFileEntry[]) => void
@@ -216,22 +155,17 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   // Search replaces the folder list while open; the request waits for typing to pause.
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchInput, setSearchInput] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSearchQuery(searchInput.trim()), 300)
-    return () => window.clearTimeout(timer)
-  }, [searchInput])
+  const searchQuery = useDebouncedValue(searchInput.trim())
   const canSearch = !isPicker
   const searching = canSearch && searchOpen && searchQuery !== ''
   const query = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'list', parentId, offset], queryFn: ({ signal }) => listStoredFiles(parentId, offset, signal), enabled: canViewFiles && !browsingSystem })
-  const foldersQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'folders'], queryFn: ({ signal }) => listStoredFolders(signal), enabled: canViewFiles })
+  const { folders } = useStoreFolders(canViewFiles)
   const searchResults = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'search', searchQuery], queryFn: ({ signal }) => searchStoredFiles(searchQuery, signal), enabled: canViewFiles && searching })
   const retryExtraction = useMutation({
     mutationFn: (id: string) => retryStoredFileIndex(id),
     onSuccess: () => { void queryClient.invalidateQueries({ queryKey: FILES_QUERY_KEY }) },
     onError: (error: unknown) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '본문을 다시 추출하지 못했어.', en: 'Could not retry extraction.' })) }),
   })
-  const folders = useMemo(() => folderTree(foldersQuery.data ?? []), [foldersQuery.data])
   const entries = query.data?.entries ?? []
   const rootLabel = t({ ko: '공용 파일', en: 'Shared files' })
   // The picker attaches files only; folders are for navigating.
@@ -334,22 +268,18 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     event.preventDefault()
     event.stopPropagation()
     if (busy) return
-    const dragged = event.dataTransfer.getData(FILE_DRAG_TYPE)
+    const dragged = droppedIds(event, FILE_DRAG_TYPE)
     if (dragged) {
-      if (!canOrganize) return
-      try {
-        const ids: unknown = JSON.parse(dragged)
-        if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) mutation.mutate(() => moveStoredFiles(ids, target))
-      } catch {
-        // Ignore unrelated drag payloads.
-      }
+      // A folder dropped onto itself stays put; the server refuses moves into its own subfolders.
+      const ids = dragged.filter((id) => id !== target)
+      if (canOrganize && ids.length) mutation.mutate(() => moveStoredFiles(ids, target))
     } else if (event.dataTransfer.files.length) {
       upload(Array.from(event.dataTransfer.files), target)
     }
   }
   const dragOver = (event: DragEvent) => {
     if (busy) return
-    const moving = event.dataTransfer.types.includes(FILE_DRAG_TYPE)
+    const moving = isMoveDrag(event, FILE_DRAG_TYPE)
     if (moving ? !canOrganize : !canUpload) return
     event.preventDefault()
     event.dataTransfer.dropEffect = moving ? 'move' : 'copy'
@@ -368,10 +298,6 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     link.download = ''
     link.click()
   }
-  // A long-press opens the row menu; the click that may follow it should not also open the file.
-  const touchMenuAt = useRef(0)
-  const pointerType = useRef('mouse')
-  const rowMenuOpenChange = (open: boolean) => { if (open && pointerType.current !== 'mouse') touchMenuAt.current = Date.now() }
   /** One row's actions, for its ⋯ button and its right-click / long-press menu. */
   const rowEntries = (entry: StoredFileEntry): ActionMenuEntry[] => [
     entry.kind === 'file' && canSendAudio && mediaKind(entry) === 'audio' && { key: 'audio', label: t({ ko: '오디오로 보내기', en: 'Send to Audio' }), icon: AudioLines, onSelect: () => setAudioSend([entry]) },
@@ -385,7 +311,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
 
   const actions = (
     <>
-      {!isPicker && !browsingSystem ? <Button variant="ghost" disabled={busy || selected.length > 20 || selection.some((entry) => entry.kind !== 'file')} onClick={() => navigateToExtension(`/extensions${selected.length ? `?files=${encodeURIComponent(selected.join(','))}` : ''}`)}>{t({ ko: '확장으로 열기', en: 'Open with extension' })}</Button> : null}
+      {!isPicker && !browsingSystem ? <IconButton variant="ghost" label={t({ ko: '플러그인으로 열기', en: 'Open with plugin' })} disabled={busy || selected.length > 20 || selection.some((entry) => entry.kind !== 'file')} onClick={() => navigateToExtension(`/extensions${selected.length ? `?files=${encodeURIComponent(selected.join(','))}` : ''}`)}><Puzzle /></IconButton> : null}
       <SegmentedControl
         size="xs"
         value={viewMode}
@@ -422,21 +348,11 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     </>
   )
 
-  const crumb = (label: string, active: boolean, onClick: () => void, first = false) => (
-    <span className="inline-flex min-w-0 items-center">
-      {first ? null : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
-      <Button variant="ghost" size="sm" className={cn('max-w-48 px-2', active && 'font-semibold')} onClick={onClick}>
-        <span className="truncate">{label}</span>
-      </Button>
-    </span>
-  )
   const breadcrumbs = (
-    <nav aria-label={t({ ko: '현재 경로', en: 'Current path' })} className="flex min-w-0 flex-wrap items-center gap-0.5 text-sm">
-      {crumb(rootLabel, parentId === null, () => navigate(null), true)}
-      {query.data?.breadcrumbs.map((folder, index, all) => (
-        <span key={folder.id} className="contents">{crumb(folder.name, index === all.length - 1, () => navigate(folder.id))}</span>
-      ))}
-    </nav>
+    <PathBreadcrumbs
+      ariaLabel={t({ ko: '현재 경로', en: 'Current path' })}
+      items={[{ key: 'root', label: rootLabel, onClick: () => navigate(null) }, ...(query.data?.breadcrumbs ?? []).map((folder) => ({ key: folder.id, label: folder.name, onClick: () => navigate(folder.id) }))]}
+    />
   )
 
   const searchField = (
@@ -459,15 +375,8 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
 
   const sidebar = (
     <SidebarNav aria-label={t({ ko: '폴더', en: 'Folders' })}>
-      {onWorkspacesOpen ? <SidebarItem icon={FolderInput} label={t({ ko: '작업 공간', en: 'Workspaces' })} onClick={onWorkspacesOpen} /> : null}
-      {(
-        <>
-          <SidebarItem icon={Folder} label={rootLabel} active={!browsingSystem && parentId === null} onClick={() => navigate(null)} onDragOver={dragOver} onDrop={(event) => drop(event, null)} />
-          {folders.map(({ folder, depth }) => (
-            <SidebarItem key={folder.id} icon={Folder} depth={depth + 1} label={folder.name} active={!browsingSystem && folder.id === parentId} onClick={() => navigate(folder.id)} onDragOver={dragOver} onDrop={(event) => drop(event, folder.id)} />
-          ))}
-        </>
-      )}
+      {workspaces && canViewFiles ? <WorkspaceSidebarGroup activeId={null} onOpen={workspaces.onOpen} onCreate={workspaces.onCreate} /> : null}
+      <StoreFolderSidebarGroup labelled={workspaces !== undefined} activeId={browsingSystem ? undefined : parentId} onOpen={navigate} onDragOver={dragOver} onDrop={drop} />
       {canBrowseSystem ? <SystemFolderSidebarGroup active={browsingSystem ? system.root : null} onOpen={(root) => onSystemNavigate({ root, path: '' })} /> : null}
     </SidebarNav>
   )
@@ -476,6 +385,11 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     return <SystemFolderBrowser key={`${system.root}:${system.path}`} location={system} onNavigate={onSystemNavigate} sidebar={sidebar} />
   }
 
+  const byId = new Map(entries.map((entry) => [entry.id, entry]))
+  const toItem = (entry: StoredFileEntry): EntryItem => ({
+    id: entry.id, name: entry.name, folder: entry.kind === 'folder', size: entry.size, modified: formatDateTime(entry.updatedAt),
+    icon: <EntryIcon entry={entry} />, face: <StoredFileFace entry={entry} />,
+  })
   let list
   if (searching) {
     if (searchResults.isPending) list = <LoadingState />
@@ -488,114 +402,41 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     list = <ErrorState title={t({ ko: '파일을 불러오지 못했어.', en: 'Could not load files.' })} error={query.error} onRetry={() => void query.refetch()} />
   } else if (entries.length === 0) {
     list = <EmptyState icon={Folder} title={t({ ko: '빈 폴더야', en: 'This folder is empty' })} />
-  } else if (viewMode === 'grid') {
-    // Folders first, as in a file manager; images show their thumbnail.
-    const ordered = [...entries].sort((left, right) => (left.kind === right.kind ? 0 : left.kind === 'folder' ? -1 : 1))
-    list = (
-      <div className={cn('grid gap-1.5', isPicker ? 'grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))]' : 'grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))]')}>
-        {ordered.map((entry) => {
-          const isSelected = selected.includes(entry.id)
-          const canSelect = !isPicker || entry.kind === 'file'
-          return (
-            <ActionContextMenu key={entry.id} entries={isPicker ? [] : rowEntries(entry)} onOpenChange={rowMenuOpenChange}>
-              <FileTile
-                entry={entry}
-
-                selected={isSelected}
-                showCheckbox={selected.length > 0}
-                canSelect={canSelect}
-                draggable={canOrganize && !busy && !isPicker}
-                onPointerDown={(event) => { pointerType.current = event.pointerType }}
-                onOpen={() => {
-                  if (Date.now() - touchMenuAt.current < 800) return
-                  if (entry.kind === 'folder') navigate(entry.id)
-                  else if (isPicker || selected.length > 0) toggle(entry.id, !isSelected)
-                  else setPreview(entry)
-                }}
-                onToggle={(checked) => toggle(entry.id, checked)}
-                onDragStart={(event) => {
-                  event.dataTransfer.setData(FILE_DRAG_TYPE, JSON.stringify(isSelected ? selected : [entry.id]))
-                  event.dataTransfer.effectAllowed = 'move'
-                }}
-                onDragOver={entry.kind === 'folder' ? dragOver : undefined}
-                onDrop={entry.kind === 'folder' ? (event) => drop(event, entry.id) : undefined}
-              />
-            </ActionContextMenu>
-          )
-        })}
-      </div>
-    )
   } else {
-    const allSelected = selectable.length > 0 && selectable.every((entry) => selected.includes(entry.id))
     list = (
-      <DataTable
-        head={(
-          <>
-            <DataCheckTh>
-              <Checkbox aria-label={t({ ko: '전체 선택', en: 'Select all' })} disabled={selectable.length === 0} checked={allSelected} onCheckedChange={(checked) => setSelected(checked ? selectable.map((entry) => entry.id) : [])} />
-            </DataCheckTh>
-            <DataTh>{t({ ko: '이름', en: 'Name' })}</DataTh>
-            <DataTh className="hidden sm:table-cell">{t({ ko: '수정일', en: 'Modified' })}</DataTh>
-            <DataTh className="text-right">{t({ ko: '크기', en: 'Size' })}</DataTh>
-            {isPicker ? null : <DataTh className="w-10"><span className="sr-only">{t({ ko: '더 보기', en: 'More' })}</span></DataTh>}
-          </>
-        )}
-      >
-        {entries.map((entry) => {
-          const isSelected = selected.includes(entry.id)
-          const canSelect = !isPicker || entry.kind === 'file'
-          const menu = isPicker ? [] : rowEntries(entry)
-          return (
-            <ActionContextMenu key={entry.id} entries={menu} onOpenChange={rowMenuOpenChange}>
-              <DataTr interactive
-                selected={isSelected}
-                draggable={canOrganize && !busy && !isPicker}
-                onPointerDown={(event) => { pointerType.current = event.pointerType }}
-                onDragStart={(event) => {
-                  event.dataTransfer.setData(FILE_DRAG_TYPE, JSON.stringify(isSelected ? selected : [entry.id]))
-                  event.dataTransfer.effectAllowed = 'move'
-                }}
-                onDragOver={entry.kind === 'folder' ? dragOver : undefined}
-                onDrop={entry.kind === 'folder' ? (event) => drop(event, entry.id) : undefined}
-              >
-                <DataCheckTd>
-                  {canSelect ? <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: entry.name })} checked={isSelected} onCheckedChange={(checked) => toggle(entry.id, checked === true)} /> : null}
-                </DataCheckTd>
-                <DataTd flush className="min-w-40">
-                  <Button
-                    variant="ghost"
-                    className="max-w-full justify-start"
-                    onClick={() => {
-                      if (Date.now() - touchMenuAt.current < 800) return
-                      if (entry.kind === 'folder') navigate(entry.id)
-                      else if (isPicker) toggle(entry.id, !isSelected)
-                      else setPreview(entry)
-                    }}
-                  >
-                    <EntryIcon entry={entry} />
-                    <span className="max-w-80 truncate">{entry.name}</span>
-                  </Button>
-                </DataTd>
-                <DataTd meta flush className="hidden sm:table-cell">{formatDateTime(entry.updatedAt)}</DataTd>
-                <DataTd meta flush className="text-right">{entry.kind === 'folder' ? '' : formatFileSize(entry.size)}</DataTd>
-                {isPicker ? null : (
-                  <DataTd flush>
-                    <ActionMenuButton entries={menu} className="text-muted-foreground" label={t({ ko: '더 보기', en: 'More' })} />
-                  </DataTd>
-                )}
-              </DataTr>
-            </ActionContextMenu>
-          )
-        })}
-      </DataTable>
+      <FileEntryView
+        items={entries.map(toItem)}
+        mode={viewMode}
+        compact={isPicker}
+        selected={selected}
+        onToggle={toggle}
+        onSelectAll={(checked) => setSelected(checked ? selectable.map((entry) => entry.id) : [])}
+        canSelect={(item) => !isPicker || !item.folder}
+        menu={isPicker ? undefined : (item) => rowEntries(byId.get(item.id)!)}
+        formatSize={formatFileSize}
+        draggable={canOrganize && !busy && !isPicker}
+        onDragStart={(item, event) => {
+          startMoveDrag(event, FILE_DRAG_TYPE, selected.includes(item.id) ? selected : [item.id])
+        }}
+        onFolderDragOver={dragOver}
+        onFolderDrop={(item, event) => drop(event, item.id)}
+        onOpen={(item) => {
+          const entry = byId.get(item.id)!
+          if (entry.kind === 'folder') navigate(entry.id)
+          else if (isPicker || (viewMode === 'grid' && selected.length > 0)) toggle(entry.id, !selected.includes(entry.id))
+          else setPreview(entry)
+        }}
+      />
     )
   }
 
-  const pager = !searching && query.data && query.data.total > query.data.limit ? (
-    <div className="flex justify-end gap-2">
-      <Button variant="ghost" size="sm" disabled={offset === 0} onClick={() => { setOffset((value) => Math.max(0, value - PAGE_SIZE)); setSelected([]) }}>{t({ ko: '이전', en: 'Previous' })}</Button>
-      <Button variant="ghost" size="sm" disabled={offset + query.data.limit >= query.data.total} onClick={() => { setOffset((value) => value + PAGE_SIZE); setSelected([]) }}>{t({ ko: '다음', en: 'Next' })}</Button>
-    </div>
+  const pager = !searching && query.data ? (
+    <ListPager
+      hasPrevious={offset > 0}
+      hasNext={offset + query.data.limit < query.data.total}
+      onPrevious={() => { setOffset((value) => Math.max(0, value - PAGE_SIZE)); setSelected([]) }}
+      onNext={() => { setOffset((value) => value + PAGE_SIZE); setSelected([]) }}
+    />
   ) : null
 
   const body = (
@@ -660,36 +501,26 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
         />
       )}
 
-      <Modal open={nameDialog !== null} title={nameDialog?.id ? t({ ko: '이름 변경', en: 'Rename' }) : t({ ko: '새 폴더', en: 'New folder' })} onClose={() => { if (!busy) setNameDialog(null) }} widthClassName="max-w-md">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (!nameDialog || busy) return
-            void saveName(nameDialog).catch(() => undefined)
-          }}
-        >
-          <ModalBody>
-            <Input variant="settings" autoFocus aria-label={t({ ko: '이름', en: 'Name' })} value={nameDialog?.name ?? ''} onChange={(event) => setNameDialog((current) => (current ? { ...current, name: event.target.value } : null))} />
-          </ModalBody>
-          <ModalFooter>
-            <span className="flex-1" />
-            <Button type="submit" disabled={busy || !nameDialog?.name.trim()}>{t({ ko: '저장', en: 'Save' })}</Button>
-          </ModalFooter>
-        </form>
-      </Modal>
+      <NameDialog
+        open={nameDialog !== null}
+        title={nameDialog?.id ? t({ ko: '이름 변경', en: 'Rename' }) : t({ ko: '새 폴더', en: 'New folder' })}
+        value={nameDialog?.name ?? ''}
+        onChange={(name) => setNameDialog((current) => (current ? { ...current, name } : null))}
+        onSubmit={() => { if (nameDialog) void saveName(nameDialog).catch(() => undefined) }}
+        onClose={() => setNameDialog(null)}
+        busy={busy}
+      />
 
-      <Modal open={moveOpen} title={t({ ko: '폴더로 이동', en: 'Move to folder' })} onClose={() => { if (!busy) setMoveOpen(false) }} widthClassName="max-w-md">
-        <ModalBody>
-          <Select variant="settings" aria-label={t({ ko: '대상 폴더', en: 'Destination folder' })} value={moveTarget} onChange={(event) => setMoveTarget(event.target.value)}>
-            <option value="">{rootLabel}</option>
-            {folders.map(({ folder, path }) => <option key={folder.id} value={folder.id} disabled={selected.includes(folder.id)}>{path}</option>)}
-          </Select>
-        </ModalBody>
-        <ModalFooter>
-          <span className="flex-1" />
-          <Button disabled={busy} onClick={() => mutation.mutate(() => moveStoredFiles(selected, moveTarget || null))}>{t({ ko: '이동', en: 'Move' })}</Button>
-        </ModalFooter>
-      </Modal>
+      <MoveDialog
+        open={moveOpen}
+        value={moveTarget}
+        onChange={setMoveTarget}
+        folders={folders.map(({ folder, path }) => ({ value: folder.id, label: path, disabled: selected.includes(folder.id) }))}
+        rootLabel={rootLabel}
+        onSubmit={() => mutation.mutate(() => moveStoredFiles(selected, moveTarget || null))}
+        onClose={() => setMoveOpen(false)}
+        busy={busy}
+      />
 
       <SendToAudioDialog files={audioSend} onClose={() => setAudioSend(null)} />
       {preview ? <FilePreview entry={preview} onClose={() => setPreview(null)} onNavigate={setPreview} onEdit={canUpload ? (entry) => { setPreview(null); setEditor({ entry }) } : undefined} /> : null}

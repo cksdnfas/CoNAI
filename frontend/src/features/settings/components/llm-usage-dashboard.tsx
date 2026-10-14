@@ -42,6 +42,7 @@ const PURPOSE_GROUPS: Array<{ id: string; label: { ko: string; en: string }; pur
   { id: 'judge', label: { ko: '판단', en: 'Judge' }, purposes: ['judge'] },
   { id: 'assist', label: { ko: '보조 (번역·제안·자산·그림 프롬프트)', en: 'Assist (translation, suggestions, assets, picture prompts)' }, purposes: ['translation', 'suggestion', 'asset_vision', 'appearance', 'image_prompt'] },
   { id: 'workflow', label: { ko: '워크플로', en: 'Workflows' }, purposes: ['workflow'] },
+  { id: 'plugin', label: { ko: '플러그인', en: 'Plugins' }, purposes: ['plugin'] },
   { id: 'web_search', label: { ko: '웹 검색', en: 'Web search' }, purposes: ['web_search'] },
   { id: 'other', label: { ko: '기타', en: 'Other' }, purposes: ['other'] },
 ]

@@ -1,3 +1,4 @@
+import { isPathInside } from '../utils/pathResolver'
 import path from 'path'
 import { runtimePaths } from '../config/runtimePaths'
 import { GraphExecutionArtifactModel } from '../models/GraphExecutionArtifact'
@@ -12,11 +13,6 @@ const RETENTION_FILE_DELETE_YIELD_INTERVAL = 50
 
 function yieldToEventLoop() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0))
-}
-
-function isPathInsideRoot(rootPath: string, candidatePath: string) {
-  const relative = path.relative(rootPath, candidatePath)
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
 function cleanupEmptyRetiredExecutions(executionIds: number[]) {
@@ -65,7 +61,7 @@ export async function deleteRetiredGraphWorkflowArtifacts(artifactIds: number[])
     }
 
     const resolvedPath = path.resolve(artifact.storage_path)
-    if (!isPathInsideRoot(graphExecutionTempRoot, resolvedPath)) {
+    if (!isPathInside(graphExecutionTempRoot, resolvedPath)) {
       continue
     }
 

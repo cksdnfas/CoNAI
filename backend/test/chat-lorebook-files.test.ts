@@ -76,9 +76,10 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     assert.ok(!ChatLorebookStore.list().some((entry) => entry.id === book.id))
     assert.equal(ChatLorebookStore.update(book.id, { name: 'x' }), null)
     assert.equal(ChatLorebookStore.delete(book.id), false)
+    // Account books live in the shared file store: every account sees and uses them.
     assert.deepEqual(OwnedLorebookStore.list(me).map((entry) => entry.id), [book.id])
-    assert.deepEqual(OwnedLorebookStore.list(other), [])
-    assert.equal(OwnedLorebookStore.find(book.id, other), null, 'another account cannot see it')
+    assert.deepEqual(OwnedLorebookStore.list(other).map((entry) => entry.id), [book.id])
+    assert.equal(OwnedLorebookStore.find(book.id, other)?.id, book.id)
   })
 
   await t.test('lorebook.json edited outside the app: the hook and the startup pass bring the cache along', () => {
@@ -178,29 +179,32 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     assert.equal(memoriesOf(threadId), null)
   })
 
-  await t.test('links: a profile or a chat takes only its owner\'s account books', () => {
+  await t.test('links: a profile or a chat takes any account\'s account books, never a chat book', () => {
     const mine = OwnedLorebookStore.find(bookId, me)!
     const theirs = OwnedLorebookStore.create(other, { name: '남의 책' })
-    assert.throws(() => OwnedLorebookStore.linkProfile(profile.id, theirs.id, me), /찾을 수 없어/)
     assert.deepEqual(OwnedLorebookStore.linkProfile(profile.id, mine.id, me), [mine.id])
-    assert.deepEqual(ChatProfileStore.find(profile.id)!.lorebookIds, [mine.id])
-    // Saving a profile (admin REST): a new account book must be the saver's own; links already there stay.
-    assert.throws(() => ChatLorebookStore.assertProfileLinks([mine.id, theirs.id], me, [mine.id]), /다른 계정의 로어북/)
-    assert.doesNotThrow(() => ChatLorebookStore.assertProfileLinks([mine.id, theirs.id], other, [mine.id]))
+    assert.deepEqual(OwnedLorebookStore.linkProfile(profile.id, theirs.id, me), [mine.id, theirs.id])
+    assert.deepEqual(ChatProfileStore.find(profile.id)!.lorebookIds, [mine.id, theirs.id])
     assert.deepEqual(ChatLorebookStore.existing([mine.id, theirs.id, 9999]), [mine.id, theirs.id])
-    // Request building still reads global books only: a shared profile must not carry one account's book to another.
+    // Without a chat (a prompt preview), request building reads global books only.
     assert.deepEqual(ChatLorebookStore.keyedEntriesOf([mine.id]), [])
     const threadId = CodexChatStore.createThread(1, '연결', 'llm', profile.id)
-    assert.deepEqual(OwnedLorebookStore.setThreadLinks(threadId, [mine.id]), [mine.id])
-    assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [mine.id])
-    assert.throws(() => OwnedLorebookStore.setThreadLinks(threadId, [theirs.id]), /내 계정 로어북만/)
-    assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [mine.id])
-    // Deleting the book takes its folder and every link with it.
+    assert.deepEqual(OwnedLorebookStore.setThreadLinks(threadId, [mine.id, theirs.id]), [mine.id, theirs.id])
+    assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [mine.id, theirs.id])
+    // Another account's chat book is not shared: not found, not listed, not linkable.
+    const theirChat = CodexChatStore.createThread(2, '남의 채팅', 'llm', profile.id)
+    const theirChatBook = OwnedLorebookStore.saveChatBook(theirChat, [{ keys: ['비밀'], content: '남의 채팅 기록' }])!
+    assert.equal(OwnedLorebookStore.find(theirChatBook.id, me), null)
+    assert.equal(OwnedLorebookStore.list(me, ['chat']).some((book) => book.id === theirChatBook.id), false)
+    assert.throws(() => OwnedLorebookStore.setThreadLinks(threadId, [theirChatBook.id]), /계정 로어북만/)
+    assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [mine.id, theirs.id])
+    // Deleting the book takes its folder and every link with it; any account may delete a shared book.
     assert.equal(OwnedLorebookStore.delete(mine.id, me), true)
     assert.equal(child(me, child(me, null, LOREBOOK_ROOT_FOLDER)!.id, '카이'), null)
-    assert.deepEqual(ChatProfileStore.find(profile.id)!.lorebookIds, [])
+    assert.deepEqual(ChatProfileStore.find(profile.id)!.lorebookIds, [theirs.id])
+    assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [theirs.id])
+    assert.equal(OwnedLorebookStore.delete(theirs.id, me), true)
     assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [])
-    assert.throws(() => OwnedLorebookStore.delete(theirs.id, me), /찾을 수 없어/)
   })
 
   await t.test('reading text from an offset inside a character starts on the next one and ends on a whole one', async () => {
@@ -224,7 +228,7 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     assert.ok(book, 'the account that writes the lorebook manages its registration')
     reconcileLorebookFolders()
     assert.ok(OwnedLorebookStore.find(book.id, other), 'an existing shared folder must not be mistaken for a deleted one')
-    assert.equal(OwnedLorebookStore.find(book.id, me), null, 'book management remains private')
+    assert.ok(OwnedLorebookStore.find(book.id, me), 'account books are shared like the folder they live in')
   })
 
   await t.test('startup discovers another creator under the shared lorebook root', () => {
@@ -234,7 +238,7 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     assert.equal(OwnedLorebookStore.list(other).some(item => item.folderId === folder.id), false)
     reconcileLorebookFolders()
     assert.ok(OwnedLorebookStore.list(other).some(item => item.folderId === folder.id))
-    assert.equal(OwnedLorebookStore.list(me).some(item => item.folderId === folder.id), false)
+    assert.ok(OwnedLorebookStore.list(me).some(item => item.folderId === folder.id))
   })
 
 })

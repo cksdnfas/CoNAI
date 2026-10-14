@@ -4,7 +4,7 @@ import { resolveChatAccess } from './codexChatAccess'
 import { modelLanguageGuidance, replyTranslationPrompt, userTranslationPrompt } from './chatTranslation'
 import { contextContentText, contextHash, contextSections, contextSource, limitContextMeta, loreDiagnostics, markContextMessage, markContextParts, contextKindOf, contextPartsOf, type ChatDiagnosticsFields, type ChatContextSectionKind, type ContextSource } from './chatContextDiagnostics'
 import { buildReplyContext } from './chatReplyContext'
-import { isCodexChatCreationTool, stripEchoedAddresses } from '@conai/shared'
+import { isCodexChatCreationTool, stripEchoedAddresses, type WorkspaceText } from '@conai/shared'
 import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
 import { CHAT_ROOM_TOOLS, isChatOwnTool } from '../../mcp/context'
 import { CATALOG_OPEN_TOOL } from '../../mcp/toolCatalog'
@@ -711,6 +711,43 @@ export function replyCapFor(profile: ChatProfile, messages: ChatCompletionMessag
 /** Tool output lengths tried, in order, when a request with tool results does not fit (see fitChatContext). */
 const FIT_TOOL_OUTPUT_LENGTHS = [REPLAYED_TOOL_OUTPUT_LENGTH, 1000]
 
+type WorkspaceReadOutput = { files: WorkspaceText[]; remaining?: unknown[]; truncated?: boolean }
+/**
+ * A workspace_read result over `length` characters, shortened so it still says where each text stops: a cut text gets
+ * its nextOffset at the cut (same revision), files that no longer fit go back to `remaining`. A plain cut would hand
+ * the model part of a file that looks whole, and writing it back would drop the rest. null when it is not a read result.
+ */
+export function fitWorkspaceRead(content: string, length: number) {
+  if (content.length <= length) return content
+  let value: WorkspaceReadOutput
+  try { value = JSON.parse(content) as WorkspaceReadOutput } catch { return null }
+  if (!Array.isArray(value?.files)) return null
+  const files: WorkspaceText[] = []
+  const remaining: unknown[] = []
+  let room = length - 400 - JSON.stringify(value.remaining ?? []).length
+  for (const [index, file] of value.files.entries()) {
+    const frame = JSON.stringify({ ...file, text: '' }).length + 16
+    if (room - frame < 200) {
+      remaining.push(...value.files.slice(index).map(rest => ({ target: rest.target, offset: rest.offset, revision: rest.revision })))
+      break
+    }
+    let text = file.text
+    if (JSON.stringify(text).length > room - frame) {
+      // Escaping can grow the text, so measure the encoded length; never split a surrogate pair.
+      let low = 0
+      let high = text.length
+      while (low < high) { const mid = Math.ceil((low + high) / 2); if (JSON.stringify(text.slice(0, mid)).length <= room - frame) low = mid; else high = mid - 1 }
+      if (low > 0 && /[\uD800-\uDBFF]/.test(text[low - 1])) low--
+      // A BOM the decoder dropped still counts in the byte offsets.
+      const dropped = (file.nextOffset ?? file.size) - file.offset - Buffer.byteLength(file.text)
+      text = text.slice(0, low)
+      files.push({ ...file, text, nextOffset: file.offset + dropped + Buffer.byteLength(text) })
+    } else files.push(file)
+    room -= frame + JSON.stringify(text).length
+  }
+  return JSON.stringify({ ...value, files, remaining: [...remaining, ...(value.remaining ?? [])], truncated: true, note: 'Shortened to fit the chat: continue cut files from nextOffset with the same revision.' })
+}
+
 /** A tool result cut to `length` characters, saying how much of it the model sees. */
 export function cutToolOutput(content: string, length: number) {
   if (content.length <= length) return content
@@ -763,10 +800,12 @@ export function cutToolOutput(content: string, length: number) {
  * `catalog`: they are the schemas the model calls the catalog's tools by.
  */
 function cutToolResults(messages: ChatCompletionMessage[], length: number, from = 0, until = messages.length, catalog = false): ChatCompletionMessage[] {
-  const catalogCalls = catalog ? new Set<string>() : new Set(messages.flatMap((message) => message.role === 'assistant'
-    ? (message.tool_calls ?? []).filter((call) => call.function.name === CATALOG_OPEN_TOOL || call.function.name.startsWith('workspace_')).map((call) => call.id) : []))
+  const callsNamed = (name: string) => new Set(messages.flatMap((message) => message.role === 'assistant'
+    ? (message.tool_calls ?? []).filter((call) => call.function.name === name).map((call) => call.id) : []))
+  const catalogCalls = catalog ? new Set<string>() : callsNamed(CATALOG_OPEN_TOOL)
+  const workspaceReads = callsNamed('workspace_read')
   const cut = messages.map((message, index) => (index >= from && index < until && message.role === 'tool' && !catalogCalls.has(message.tool_call_id) && message.content.length > length
-    ? { ...message, content: cutToolOutput(message.content, length) } : message))
+    ? { ...message, content: (workspaceReads.has(message.tool_call_id) ? fitWorkspaceRead(message.content, length) : null) ?? cutToolOutput(message.content, length) } : message))
   return cut.every((message, index) => message === messages[index]) ? messages : cut
 }
 

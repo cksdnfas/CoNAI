@@ -1,21 +1,23 @@
 import { AuthAccount } from '../models/AuthAccount';
 import { hasConfiguredAuth } from '../routes/auth-route-helpers';
-import { isRequesterAdmin, requesterPermissionKeys, requireRequesterPermission } from '../middleware/featureAccess';
+import { isRequesterAdmin, keyGroupPermissionKeys, requesterPermissionKeys, requireContextPermission, requireRequesterPermission } from '../middleware/featureAccess';
 import { ChatProfileStore, isVisionTool, profileSeesImages } from '../services/codex-chat/chatProfiles';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
 import { BoardCallRooms } from '../services/posts/boardCallRooms';
 import { validateMcpToolArguments } from './requestSecurity';
 import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
+import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
+  list_plugin_pages: 'files.view', run_plugin_action: 'files.view', get_plugin_action: 'files.view', cancel_plugin_action: 'files.view',
   workspace_list: 'files.view', workspace_read: 'files.view', workspace_search: 'files.view', workspace_apply: ['files.view', 'files.edit'],
   search_prompts: 'prompts.view', get_most_used_prompts: 'prompts.view', list_prompt_groups: 'prompts.view',
-  list_prompt_presets: 'prompts.view', get_prompt_group_structure: 'prompts.view', get_unclassified_prompts: 'prompts.view',
+  list_prompt_presets: 'prompts.view', get_prompt_group_structure: 'prompts.view',
   get_prompts_in_group: 'prompts.view', backup_prompt_data: 'prompts.view', list_backups: 'prompts.view',
-  create_prompt_preset: 'prompts.edit', create_prompt_group: 'prompts.edit', batch_create_groups: 'prompts.edit',
-  assign_prompts_to_group: 'prompts.edit', move_prompts_between_groups: 'prompts.edit',
+  create_prompt_preset: 'prompts.edit', batch_create_groups: 'prompts.edit',
+  move_prompts_between_groups: 'prompts.edit',
   restore_prompt_data: 'prompts.edit', search_wildcards: 'wildcards.view',
   list_workflows: 'workflows.view', get_workflow_details: 'workflows.view', list_comfyui_servers: 'workflows.view', check_comfy_workflow: 'workflows.edit',
   list_custom_dropdown_lists: 'workflows.view', search_custom_dropdown_items: 'workflows.view',
@@ -34,7 +36,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   create_image_group: 'images.edit', update_image_group: 'images.edit', run_group_auto_collect: 'images.edit',
   set_emoticon_keywords: 'images.edit', set_emoticon_group: 'images.edit',
   get_generation_artifacts: 'images.view', get_generation_job: [], wait_generation_job: [],
-  get_video_info: 'images.view', get_sprite_job: 'images.view', wait_sprite_job: 'images.view', download_sprite_frames: 'images.view',
+  get_video_info: 'images.view', get_sprite_job: 'images.view', download_sprite_frames: 'images.view',
   extract_sprite_sheet: ['images.edit', 'images.upload'], extract_sprite_sheets_batch: ['images.edit', 'images.upload'],
   normalize_sprite_sheets: ['images.edit', 'images.upload'], create_sprite_animation: ['images.edit', 'images.upload'],
   resize_images: ['images.edit', 'images.upload'],
@@ -82,7 +84,7 @@ const PAGE_SAFE_SCOPES = new Set(['read', 'configure']);
  * A turn answering a posts board call reads posts and comments other people wrote: whatever they ask, it must not
  * reach the caller's private file store.
  */
-const BOARD_CALL_BLOCKED_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit', 'room_history_search', 'room_history_read', 'list_file_versions', 'read_file_version', 'restore_file_version']);
+const BOARD_CALL_BLOCKED_TOOLS = new Set(['run_plugin_action', 'get_plugin_action', 'cancel_plugin_action', 'list_plugin_pages', 'list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit', 'room_history_search', 'room_history_read', 'list_file_versions', 'read_file_version', 'restore_file_version']);
 const PAGE_PRIVATE_FILE_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files', 'list_file_versions', 'read_file_version']);
 /** Posts tools a board-call turn never gets: comments it answers are other people's text, and these cannot be taken back easily. */
 const BOARD_CALL_BLOCKED_POST_TOOLS = new Set(['posts_delete', 'posts_restore_revision', 'post_comment_delete']);
@@ -102,7 +104,7 @@ function pageKeepsTool(path: string, toolName: string) {
 /** A tool's feature keys; external MCP tools need none (their server's scope and the profile decide). Undefined: unclassified. */
 function featurePermissionOf(toolName: string): string | readonly string[] | undefined {
   if (isChatGenerationTool(toolName)) return 'generation.execute';
-  return TOOL_FEATURE_PERMISSIONS[toolName] ?? (findExternalMcpTool(toolName) ? [] : undefined);
+  return TOOL_FEATURE_PERMISSIONS[toolName] ?? (findExternalMcpTool(toolName) || findPluginServerTool(toolName) ? [] : undefined);
 }
 
 function requiredToolKeys(toolName: string): readonly string[] {
@@ -139,6 +141,23 @@ function accountHoldsTool(context: McpRequestContext, toolName: string): boolean
   return true;
 }
 
+/** An HTTP MCP key's request: no account, a permission group instead (see McpRequestContext.keyGroup). */
+function isKeyContext(context: McpRequestContext) {
+  return !context.requester && context.keyGroup !== undefined;
+}
+
+/** What the key's permission group must hold: the same keys an account of that group would need. */
+const keyListingFacts = new WeakMap<McpRequestContext, { at: number; keys: Set<string> }>();
+function keyHoldsTool(context: McpRequestContext, toolName: string): boolean {
+  let facts = keyListingFacts.get(context);
+  if (!facts || Date.now() - facts.at >= 1000) {
+    facts = { at: Date.now(), keys: new Set(keyGroupPermissionKeys(context.keyGroup ?? null)) };
+    keyListingFacts.set(context, facts);
+  }
+  const keys = facts.keys;
+  return requiredToolKeys(toolName).every((key) => keys.has(key));
+}
+
 /**
  * The one decision on whether a tool is offered and may run: the account holds what the web would require, the chat's
  * own tools are always there, and everything else follows the profile's scopes and tool list. A connected page narrows
@@ -148,6 +167,7 @@ function accountHoldsTool(context: McpRequestContext, toolName: string): boolean
  */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
   if (toolName.startsWith('workspace_')) {
+    if (context.source === 'plugin') return !!context.workspace && !!context.requester && context.scopes.includes(toolName === 'workspace_apply' ? 'organize' : 'read') && (!context.toolAllowlist || context.toolAllowlist.includes(toolName)) && (toolName !== 'workspace_apply' || context.workspace.write) && featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
     if (!context.workspace || !context.chatContext || context.chatContext.kind !== 'direct' || !isChatMcpSource(context.source)) return false;
     if (BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
     if (toolName === 'workspace_apply' && !context.workspace.write) return false;
@@ -155,6 +175,7 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
   }
   if ((BOARD_CALL_BLOCKED_TOOLS.has(toolName) || BOARD_CALL_BLOCKED_POST_TOOLS.has(toolName)) && context.chatContext && BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
   if (context.requester && featurePermissionOf(toolName) === undefined) return false;
+  if (isKeyContext(context) && (featurePermissionOf(toolName) === undefined || (accountChecks && !keyHoldsTool(context, toolName)))) return false;
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
   // Page text may steer the reply: lore files are not rewritten from it (save_lore still leaves an undoable entry), and
@@ -205,16 +226,17 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
     requireChatMcpAccountAccess(context, toolName);
     if (execution !== 'queued') {
       if (execution === 'reply') requireActiveChatReply(context.chatContext);
-      validateMcpToolArguments(params, () => requireRequesterPermission(context.requester, 'images.view'), findExternalMcpTool(toolName) !== null);
+      validateMcpToolArguments(params, () => requireRequesterPermission(context.requester, 'images.view'), findExternalMcpTool(toolName) !== null || findPluginServerTool(toolName) !== null);
     }
   }
-  if (context.requester) {
+  // An account's groups, or an HTTP MCP key's group: permissions only ever come from permission groups.
+  if (context.requester || isKeyContext(context)) {
     if (featurePermissionOf(toolName) === undefined) throw new Error('Unclassified account-bound tool.');
-    for (const permission of requiredToolKeys(toolName)) requireRequesterPermission(context.requester, permission);
-    if (getMcpToolScope(toolName) === 'configure' && context.requester.accountType !== 'admin') throw new Error('Administrator access required.');
-    if (toolName === 'resolve_image_group_path') requireRequesterPermission(context.requester, params.create === false ? 'images.view' : 'images.edit');
+    for (const permission of requiredToolKeys(toolName)) requireContextPermission(context, permission);
+    if (getMcpToolScope(toolName) === 'configure' && context.requester?.accountType !== 'admin') throw new Error('Administrator access required.');
+    if (toolName === 'resolve_image_group_path') requireContextPermission(context, params.create === false ? 'images.view' : 'images.edit');
     if (toolName === 'add_images_to_group' || getMcpToolScope(toolName) === 'generate' || isChatGenerationTool(toolName)) {
-      if (params.group_id || params.group_path) requireRequesterPermission(context.requester, 'images.edit');
+      if (params.group_id || params.group_path) requireContextPermission(context, 'images.edit');
     }
   }
 }

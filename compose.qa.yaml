@@ -1,0 +1,24 @@
+# Isolated, persistent Docker test instance. Never uses the production data volume.
+# Start/update: docker compose -f compose.qa.yaml up -d --build
+name: conai-qa
+services:
+  conai:
+    image: conai:qa
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: conai-qa
+    ports:
+      - "127.0.0.1:17666:1666"
+    environment:
+      FRONTEND_URL: http://localhost:17666
+      TRUST_PROXY: "0"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - conai-qa-data:/app/data/user
+    restart: unless-stopped
+
+volumes:
+  conai-qa-data:
+    name: conai-qa-data

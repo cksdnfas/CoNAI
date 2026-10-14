@@ -9,19 +9,9 @@ import {
   profileReferenceImageDataUrl,
 } from '../codex-chat/chatAppearanceDraft'
 import { textTranslationPrompt } from '../codex-chat/chatTranslation'
-import { PLAIN_USER, type ChatUserPersona } from '../codex-chat/chatUserProfiles'
-import type { ChatCompletionMessage, ChatContentPart } from '../codex-chat/llmChatCompletion'
-import {
-  appendUserDirective,
-  buildLeadingMessages,
-  depthBlocks,
-  insertDepthBlocks,
-  parseExampleDialogue,
-  postHistoryText,
-  referenceBlock,
-  resolveAuthorNote,
-  selectChatLore,
-} from '../codex-chat/llmChatContext'
+import type { ChatContentPart } from '../codex-chat/llmChatCompletion'
+import { buildChatProfileReplyMessages } from '../codex-chat/chatProfileReply'
+export { buildChatProfileReplyMessages } from '../codex-chat/chatProfileReply'
 import { ModelSlotStore } from '../codex-chat/modelSlots'
 import { askJudge, choiceQuestion, resolveJudgeConnection, yesNoQuestion } from '../judge/judgeEngine'
 import { parseImageDataUrl } from '../llmProviderService'
@@ -146,31 +136,6 @@ export async function executeJudgeTextNode(
     probability: buildRuntimeArtifact(context.executionId, node.id, 'probability', 'number', probability, meta),
     json: buildRuntimeArtifact(context.executionId, node.id, 'json', 'json', json, meta),
   })
-}
-
-/**
- * One character turn the way a chat builds it, without a chat: the profile's leading messages (persona, guidance,
- * lore index and "always on" entries), the earlier conversation, keyword lore and the author's note at their depths,
- * then the message with the profile's after-history instructions. `history` written as `사용자:` / `{{char}}:` lines
- * becomes turns; any other text goes in as reference.
- */
-export function buildChatProfileReplyMessages(params: {
-  profile: ReturnType<typeof requireWorkflowProfile>
-  message: string
-  history: string | null
-  userName: string | null
-  useLorebooks: boolean
-}): ChatCompletionMessage[] {
-  const { profile, message, history } = params
-  const user: ChatUserPersona = { ...PLAIN_USER, name: params.userName ?? PLAIN_USER.name }
-  const scanned = [...(history ? [{ role: 'user', content: history }] : []), { role: 'user', content: message }]
-  const lore = selectChatLore(profile, scanned, user, params.useLorebooks ? {} : { books: [] })
-  // The node returns the reply as written (no chat translation), so the model is not told to write in its chat language.
-  const leading = buildLeadingMessages({ ...profile, translationSlotId: null }, null, { summaryEnabled: false }, false, lore, user)
-  const turns = history ? parseExampleDialogue(history, profile, user) : null
-  const latest = history && !turns ? `${referenceBlock([`## 앞 대화\n${history}`])}\n\n${message}` : message
-  const conversation = insertDepthBlocks([...(turns ?? []), { role: 'user', content: latest }], depthBlocks(lore, profile.loreDepth, resolveAuthorNote(null, profile, user)))
-  return appendUserDirective([...leading, ...conversation], postHistoryText(profile, user))
 }
 
 export async function executeChatProfileReplyNode(
