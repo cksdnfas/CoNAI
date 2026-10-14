@@ -11,7 +11,7 @@ export interface PageAccessCatalogItem {
 
 // Same order as the header's default: library, making, chat then posts, the rest.
 export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
-  { path: '/extensions', labelKey: 'pageAccessCatalog.extensions', permissionKey: 'page.files.view', icon: LayoutGrid, category: 'derived' },
+  { path: '/extensions', labelKey: 'pageAccessCatalog.extensions', permissionKey: '', icon: LayoutGrid, category: 'derived' },
   {
     path: '/',
     labelKey: 'pageAccessCatalog.home',
@@ -108,5 +108,5 @@ export const PAGE_ACCESS_CATALOG: PageAccessCatalogItem[] = [
 
 /** Return only the major destinations that the current account can open now. */
 export function listAccessiblePageAccessItems(permissionKeys: string[]) {
-  return PAGE_ACCESS_CATALOG.filter((item) => hasAuthPermission(permissionKeys, item.permissionKey))
+  return PAGE_ACCESS_CATALOG.filter((item) => !item.permissionKey || hasAuthPermission(permissionKeys, item.permissionKey))
 }

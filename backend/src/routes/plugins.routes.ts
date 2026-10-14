@@ -1,15 +1,20 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import multer from 'multer'
 import { z } from 'zod'
-import { requirePermission, requireAdmin } from '../middleware/authMiddleware'
+import { requireAdmin, requirePermission } from '../middleware/authMiddleware'
 import { getRequesterAccountId, getRequesterAccountType, isAdminRequest } from './requester-session-helpers'
 import { installPlugin, listPlugins, setPluginEnabled, removePlugin, PLUGIN_ZIP_LIMIT } from '../services/plugins/pluginRegistry'
 import { openPluginInstance, requirePluginInstance, renewPluginInstance, closePluginInstance, readPluginFile, proposePluginWrite, approvePluginWrite, applyPluginWrite, dismissPluginWrite, issuePluginMedia } from '../services/plugins/pluginHost'
 import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler'
+import { pluginStorage } from '../services/plugins/pluginStorage'
+import { issuePluginArtifactMedia } from '../services/plugins/pluginArtifactMedia'
 import { statPluginWorkspace, proposePluginWorkspaceChanges, listPluginWorkspace, readPluginWorkspace, proposePluginWorkspaceWrite, approvePluginWorkspaceWrite, applyPluginWorkspaceWrite, dismissPluginWorkspaceWrite, issuePluginWorkspaceMedia } from '../services/plugins/pluginWorkspace'
 
 export function pluginRouteError(error: unknown, _req: Request, res: Response, next: NextFunction) {
-  if (error instanceof z.ZodError) { res.status(400).json({ error: '확장 요청 형식이 올바르지 않아.' }); return }
+  if (error instanceof z.ZodError) {
+    const issues = error.issues.slice(0, 10).map(issue => ({ path: issue.path.join('.'), message: issue.message }))
+    res.status(400).json({ code: 'INVALID_INPUT', error: issues.map(issue => `${issue.path || 'input'}: ${issue.message}`).join('; ').slice(0, 1500), issues }); return
+  }
   if (error instanceof Error && 'status' in error) { res.status(Number(error.status) || 400).json({ error: error.message }); return }
   if (error instanceof multer.MulterError) { res.status(413).json({ error: '패키지는 ZIP 파일 하나, 8MB까지 올릴 수 있어.' }); return }
   next(error)
@@ -26,7 +31,6 @@ router.use((req, res, next) => {
   if (req.get('Origin') === 'null' || req.get('Sec-Fetch-Site') === 'cross-site' || req.get('X-CoNAI-Plugin-Host') !== '1') { res.status(403).json({ error: '앱의 확장 호스트에서만 호출할 수 있어.' }); return }
   next()
 })
-router.use(requirePermission('files.view'))
 const caller = (req: Request) => ({ requester: { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }, sessionId: req.sessionID })
 const param = (req: Request, key: string) => String(req.params[key])
 const baseUrl = (req: Request) => `${req.protocol}://${req.get('host')}`
@@ -42,19 +46,32 @@ router.post('/instances/:instanceId/app/tools', asyncHandler(async (req, res) =>
   const bound = pluginInstanceAppContext(param(req, 'instanceId'), caller(req), baseUrl(req))
   res.json({ success: true, data: await listPluginAppTools(bound.pluginId, bound.context, req.body) })
 }))
-router.post('/instances/:instanceId/app/call', asyncHandler(async (req, res) => {
-  const bound = pluginInstanceAppContext(param(req, 'instanceId'), caller(req), baseUrl(req))
-  res.json({ success: true, data: await runPluginAppTool(bound.pluginId, req.body, bound.context) })
+router.post('/instances/:instanceId/app/call', cancellableAsyncHandler(async (req, res, signal) => {
+  const bound = pluginInstanceAppContext(param(req, 'instanceId'), caller(req), baseUrl(req), req.query.review === '1')
+  res.json({ success: true, data: await runPluginAppTool(bound.pluginId, req.body, bound.context, undefined, signal) })
 }))
-router.post('/instances/:instanceId/app/action', asyncHandler(async (req, res) => {
-  const bound = pluginInstanceAppContext(param(req, 'instanceId'), caller(req), baseUrl(req))
-  res.json({ success: true, data: await runPluginServerAction({ ...req.body, pluginId: bound.pluginId }, bound.context) })
+router.post('/instances/:instanceId/app/action', cancellableAsyncHandler(async (req, res, signal) => {
+  const bound = pluginInstanceAppContext(param(req, 'instanceId'), caller(req), baseUrl(req), req.query.review === '1')
+  res.json({ success: true, data: await runPluginServerAction({ ...req.body, pluginId: bound.pluginId }, bound.context, signal) })
 }))
 router.get('/instances/:instanceId/app/requests/:requestId', (req, res) => {
   const bound = pluginInstanceAppContext(param(req, 'instanceId'), caller(req), baseUrl(req))
   const request = getPluginAppRequest(param(req, 'requestId'), bound.context)
   if (request.pluginId !== bound.pluginId) { res.status(403).json({ error: '다른 확장의 요청이야.' }); return }
   res.json({ success: true, data: request })
+})
+router.post('/instances/:instanceId/app/requests/:requestId/cancel', (req, res) => {
+  const bound = pluginInstanceAppContext(param(req, 'instanceId'), caller(req), baseUrl(req))
+  const request = getPluginAppRequest(param(req, 'requestId'), bound.context)
+  if (request.pluginId !== bound.pluginId) { res.status(403).json({ error: '다른 플러그인의 작업이야.' }); return }
+  res.json({ success: true, data: cancelPluginAppRequest(request.id, bound.context) })
+})
+router.post('/instances/:instanceId/storage/:operation', (req, res) => {
+  const operation = z.enum(['get', 'set', 'delete']).parse(req.params.operation)
+  res.json({ success: true, data: pluginStorage(param(req, 'instanceId'), caller(req), operation, req.body) })
+})
+router.post('/instances/:instanceId/artifact-media', (req, res) => {
+  res.json({ success: true, data: issuePluginArtifactMedia(param(req, 'instanceId'), req.body, caller(req)) })
 })
 /** A package with a server module carries its live state (running, failed, the tools and hooks it registered). */
 const withServer = (plugin: InstalledPlugin): InstalledPlugin => plugin.manifest.server ? { ...plugin, server: pluginServerStatus(plugin.manifest.id) } : plugin
@@ -73,14 +90,15 @@ router.delete('/:pluginId', requireAdmin, asyncHandler(async (req, res) => { awa
 router.post('/instances/:instanceId/llm/:method', asyncHandler(async (req, res) => {
   const instance = requirePluginInstance(param(req, 'instanceId'), caller(req))
   const { callPluginLlm } = await import('../services/plugins/pluginLlm')
-  res.json({ success: true, data: callPluginLlm(instance.plugin.id, caller(req).requester, param(req, 'method'), req.body) })
+  res.json({ success: true, data: await callPluginLlm(instance.plugin.id, caller(req).requester, param(req, 'method'), req.body) })
 }))
 /** A plugin page's `api.server(body)`: its server module's onRequest, as the signed-in account. */
-router.post('/instances/:instanceId/server', asyncHandler(async (req, res) => {
+router.post('/instances/:instanceId/server', cancellableAsyncHandler(async (req, res, signal) => {
   const instance = requirePluginInstance(param(req, 'instanceId'), caller(req))
   if (!instance.plugin.server) { res.status(403).json({ error: '서버 모듈이 없는 플러그인이야.' }); return }
   const page = { id: instance.page.id, files: instance.fileIds, ...(instance.workspace ? { workspace: instance.workspace } : {}) }
-  res.json({ success: true, data: await requestPluginServer(instance.plugin.id, req.body?.body ?? null, caller(req).requester, page, baseUrl(req)) })
+  const bound = pluginInstanceAppContext(instance.row.id, caller(req), baseUrl(req))
+  res.json({ success: true, data: await requestPluginServer(instance.plugin.id, req.body?.body ?? null, caller(req).requester, page, baseUrl(req), bound.context.workspace, signal) })
 }))
 router.post('/:pluginId/pages/:pageId/instances', (req, res) => {
   const input = z.object({ files: z.array(z.string()).max(20), workspace: z.object({ id: z.string(), write: z.boolean().default(false) }).strict().optional() }).strict().parse(req.body)

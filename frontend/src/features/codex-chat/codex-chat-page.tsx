@@ -51,7 +51,7 @@ export function CodexChatPage() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col">
+    <div className="flex h-[calc(100dvh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col">
       <CodexChatView
         layout="page"
         onCollapse={() => {

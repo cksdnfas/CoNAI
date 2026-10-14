@@ -315,6 +315,10 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
 
   await t.test('new page operations: the registry decides tier, route and whether they leave the screen', async () => {
     const { chatPageActionTier, chatPageActionLeavesScreen, chatPageActionAllowed, normalizeChatPageActions } = await import('@conai/shared')
+    for (const id of ['files.name_save', 'files.move_save', 'sprite.stop', 'workflow.run_cancel', 'posts.bot_cancel']) {
+      assert.equal(chatPageActionTier(id), 'direct', id)
+      assert.equal(chatPageActionLeavesScreen(id), false, id)
+    }
     for (const id of ['resource.save', 'wallpaper.save', 'metadata.save']) assert.equal(chatPageActionTier(id), 'commit', id)
     for (const id of ['lorebook.entries', 'wallpaper.add_widget']) assert.equal(chatPageActionTier(id), 'draft', id)
     for (const id of ['resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset', 'library.select']) assert.equal(chatPageActionTier(id), 'view', id)

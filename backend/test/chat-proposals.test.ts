@@ -41,8 +41,8 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
   // A connected page also keeps library/catalog reads and setup proposals; these checks look at everything else.
   // Task tools and question cards are the chat's own bookkeeping in every 1:1 chat (see assistant-agent.test.ts,
   // chat-choices.test.ts), so they are left out here too.
-  const pageOnly = (names: string[]) => names.filter((name) => !name.startsWith('task_') && name !== 'get_proposal_status' && name !== 'offer_choices' && name !== 'chat_reply_to' && (CHAT_PAGE_TOOLS.has(name) || !['read', 'configure'].includes(getMcpToolScope(name) ?? ''))).sort()
-  const PRIVATE_FILE_TOOLS = ['list_files', 'get_file_info', 'read_file_text']
+  const pageOnly = (names: string[]) => names.filter((name) => CHAT_PAGE_TOOLS.has(name) || name === 'save_lore').sort()
+  const SHARED_FILE_TOOLS = ['list_files', 'get_file_info', 'read_file_text']
   /** What a bridge offers: its listed tools and those behind its tool catalog (not the open_tools / run_tool pair itself). */
   const offered = (bridge: { tools: Array<{ function: { name: string } }>; catalogTools: Set<string> }) => [...bridge.tools.map((tool) => tool.function.name).filter((name) => name !== 'open_tools' && name !== 'run_tool'), ...bridge.catalogTools]
   const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
@@ -142,7 +142,7 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     try {
       assert.deepEqual(pageOnly(offered(bridge)), ['get_current_page', 'page_act', 'page_fill', 'propose_page_action', 'read_page_data', 'get_workflow_editor', 'list_workflow_modules', 'workflow_edit', 'save_lore'].sort(), 'page tools plus the chat own tools')
       assert.ok(offered(bridge).some((tool) => tool === 'propose_chat_profile'), 'setup proposals stay offered on a connected page')
-      assert.ok(!offered(bridge).some((tool) => PRIVATE_FILE_TOOLS.includes(tool)), 'private files stay out of page mode')
+      assert.ok(SHARED_FILE_TOOLS.every((tool) => offered(bridge).includes(tool)), 'ordinary pages retain authorized shared file reads')
       const read = await bridge.call('get_workflow_editor', {})
       assert.ok(!read.isError)
       const catalog = await bridge.call('list_workflow_modules', { moduleIds: [textModule.id] })
@@ -477,6 +477,38 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     } finally { unregister(); await bridge.close() }
   })
 
+  await t.test('direct page actions carry the current revision and never create a review card', async () => {
+    const admin = { accountId: null, accountType: 'admin' as const }
+    const directPage = normalizeChatPageSnapshot({ instanceId: 'direct-files', connectionId: 'direct-files-connection', revision: 'direct-files-revision', path: '/files', kind: 'files', title: 'Files', resourceId: 'root', fields: [],
+      actions: ['files.name_save', 'files.move_save', 'files.delete'].map((id) => ({ id, label: id, description: '', effect: 'save', schema: { type: 'object', properties: {} } })) })
+    const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'direct-page-tools', page: directPage }
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge(admin, [], [], { chatContext: context })
+    const before = ChatProposalStore.listForThread(pageThreadId).length
+    const commands: string[] = []
+    const stop = subscribeToRuntimeEvents((record) => {
+      if (record.name !== 'chat.page.command') return
+      const event = record.payload as import('@conai/shared').ChatPageCommandEvent
+      if (event.type !== 'action') return
+      commands.push(event.actionId)
+      assert.equal(event.tier, 'direct')
+      assert.equal(event.revision, directPage.revision, 'the browser checks this revision before applying a direct change')
+      setImmediate(() => resolveChatPageCommand(admin, event.commandId, { ok: true, page: directPage }))
+    })
+    try {
+      for (const action of ['files.name_save', 'files.move_save']) {
+        const result = await bridge.call('page_act', { action, arguments: {} })
+        assert.equal(result.isError, undefined, JSON.stringify(result))
+        const { readMcpToolResult } = await import('../src/services/codex-chat/chatToolReferences')
+        assert.equal(readMcpToolResult(result).pageOperation?.tier, 'direct', 'history retains the operation result')
+        assert.equal((await bridge.call('propose_page_action', { actionId: action, arguments: {} })).isError, true)
+      }
+      assert.equal((await bridge.call('page_act', { action: 'files.delete', arguments: {} })).isError, true, 'destructive page saves still require review')
+      assert.deepEqual(commands, ['files.name_save', 'files.move_save'])
+      assert.equal(ChatProposalStore.listForThread(pageThreadId).length, before)
+    } finally { stop(); unregister(); await bridge.close() }
+  })
+
   await t.test('page tools: explicit binding, filled fields only, and reply expiry', async () => {
     const context: ChatExecutionContext = { threadId: pageThreadId, profileId: pageProfile.id, kind: 'direct', replyId: 'page-tools', page }
     const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
@@ -485,9 +517,9 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     const broad = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context })
     try {
       assert.ok(!offered(unbound).some((tool) => tool === 'get_current_page'))
-      assert.ok(!offered(broad).some((tool) => ['submit_generation_job', 'generate_nai', 'delete_files', 'move_files'].includes(tool)), 'page mode withholds side-effect tools even for broad profiles')
-      assert.ok(pageOnly(offered(broad)).every((name) => ['get_current_page', 'page_act', 'page_fill', 'propose_page_action', 'read_page_data', 'save_lore'].includes(name)), 'page mode adds nothing that changes data by itself')
-      assert.ok(!offered(broad).some((tool) => PRIVATE_FILE_TOOLS.includes(tool)), 'page text cannot request private files')
+      assert.ok(['submit_generation_job', 'generate_nai', 'delete_files', 'move_files'].every((tool) => offered(broad).includes(tool)), 'ordinary pages retain general grants')
+      assert.ok((await broad.call('move_files', { ids: [], parent_id: null })).isError, 'execution still rechecks the actual restrictive profile')
+      assert.ok(SHARED_FILE_TOOLS.every((tool) => offered(broad).includes(tool)), 'ordinary pages retain authorized file tools')
       const shared = await openChatMcpBridge({ accountId: null, accountType: 'admin' }, ['read', 'generate', 'organize', 'configure'], null, { chatContext: { ...context, replyId: 'page-tools', page: normalizeChatPageSnapshot({ ...page, path: '/public/workflows/example' }) } })
       try { assert.ok(offered(shared).every((tool) => CHAT_PAGE_TOOLS.has(tool) || tool === 'save_lore' || tool === 'chat_reply_to' || tool === 'get_proposal_status' || tool === 'offer_choices' || tool.startsWith('task_')), 'a public workflow page written by someone else keeps only its page tools') } finally { await shared.close() }
       assert.ok(!(await bridge.call('get_current_page', {})).isError)

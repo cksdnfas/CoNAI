@@ -84,7 +84,7 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
   // Chat profile editor (settings › chat). Saving goes through the editor's own admin-only API.
   'profile.open_create': null, 'profile.open_edit': null, 'profile.copy': null, 'profile.section': null, 'profile.draft': null, 'profile.save': null, 'profile.assets': 'generation.execute',
   'library.search': 'images.view', 'library.history': 'images.view', 'library.open': 'images.view', 'library.select': 'images.view', 'files.open': 'files.view', 'files.preview': 'files.view',
-  // File store: dialogs and the document editor open on screen; names, moves, deletes, restores and document saves are review cards.
+  // File store: names and moves run directly; deletes, restores and document saves use review cards.
   'files.select': 'files.view', 'files.new_folder': 'files.edit', 'files.rename': 'files.edit', 'files.move': 'files.edit', 'files.new_document': 'files.edit', 'files.edit_document': 'files.edit',
   'files.name_save': 'files.edit', 'files.move_save': 'files.edit', 'files.delete': 'files.delete', 'files.restore_version': 'files.edit',
   'files.doc_at': 'files.view', 'files.doc_edit': 'files.edit', 'files.doc_append': 'files.edit', 'files.doc_save': 'files.edit',
@@ -124,10 +124,13 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
  * What running an action does, decided here and never by the page that registers it:
  * - view: moves or opens something (navigation, tabs, selection, opening an editor). Runs right away.
  * - draft: changes inputs on screen without saving. Runs right away; the person can undo it.
+ * - direct: native rename/move and cancellation, checked against the current screen; no review card or draft undo.
  * - commit: saves, registers or otherwise decides. Always a review card the person applies.
  */
-export type ChatPageActionTier = 'view' | 'draft' | 'commit'
-const COMMIT_ACTIONS = new Set(['page_settings.save', 'prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect', 'profile.save', 'profile.assets', 'resource.save', 'wallpaper.save', 'metadata.save', 'posts.save', 'posts.comment', 'workflow.run', 'workflow.schedule_save', 'workflow.schedule_pause', 'workflow.schedule_resume', 'workflow.schedule_run_now', 'workflow.schedule_delete', 'workflow.run_cancel', 'workflow.runs_cleanup', 'sprite.run', 'sprite.stop', 'upload.library', 'posts.delete', 'posts.restore_revision', 'posts.comment_update', 'posts.comment_delete', 'posts.comment_hide', 'posts.bot_cancel', 'posts.category_create', 'posts.category_update', 'posts.category_delete', 'files.name_save', 'files.move_save', 'files.delete', 'files.restore_version', 'files.doc_save', 'settings.save', 'settings.ai_runtime', 'settings.kaloscope_requeue', 'settings.mcp_http', 'settings.maintenance', 'settings.chat_options', 'settings.default_model', 'settings.default_judge', 'settings.llm_preset', 'settings.mcp_server', 'settings.user_profile', 'settings.flag', 'settings.routine', 'settings.automation_switch', 'wallpaper.delete_preset', 'wallpaper.save_schedule', 'wallpaper.issue_key', 'wallpaper.revoke_key'])
+export type ChatPageActionTier = 'view' | 'draft' | 'direct' | 'commit'
+/** Native operations with bounded effects; extensions cannot declare this tier. */
+const DIRECT_ACTIONS = new Set(['files.name_save', 'files.move_save', 'sprite.stop', 'workflow.run_cancel', 'posts.bot_cancel'])
+const COMMIT_ACTIONS = new Set(['page_settings.save', 'prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect', 'profile.save', 'profile.assets', 'resource.save', 'wallpaper.save', 'metadata.save', 'posts.save', 'posts.comment', 'workflow.run', 'workflow.schedule_save', 'workflow.schedule_pause', 'workflow.schedule_resume', 'workflow.schedule_run_now', 'workflow.schedule_delete', 'workflow.runs_cleanup', 'sprite.run', 'upload.library', 'posts.delete', 'posts.restore_revision', 'posts.comment_update', 'posts.comment_delete', 'posts.comment_hide', 'posts.category_create', 'posts.category_update', 'posts.category_delete', 'files.delete', 'files.restore_version', 'files.doc_save', 'settings.save', 'settings.ai_runtime', 'settings.kaloscope_requeue', 'settings.mcp_http', 'settings.maintenance', 'settings.chat_options', 'settings.default_model', 'settings.default_judge', 'settings.llm_preset', 'settings.mcp_server', 'settings.user_profile', 'settings.flag', 'settings.routine', 'settings.automation_switch', 'wallpaper.delete_preset', 'wallpaper.save_schedule', 'wallpaper.issue_key', 'wallpaper.revoke_key'])
 const VIEW_ACTIONS = new Set(['page.settings_open', 'page_settings.select', 'page_settings.close', 'page.navigate', 'page.refresh', 'prompt.select', 'preset.select', 'wildcard.select', 'comfy.select', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'workflow.select', 'group.select', 'profile.open_create', 'profile.open_edit', 'profile.section', 'library.search', 'library.history', 'library.open', 'library.select', 'files.open', 'files.preview', 'comfy.check', 'profile.copy', 'resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset', 'posts.open', 'posts.category', 'posts.tag', 'posts.back', 'posts.new', 'posts.edit', 'audio.project', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.filter', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.new_document', 'files.edit_document', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
 /** View operations that stay inside the open editor, so unsaved changes there do not block them. */
 const IN_PLACE_VIEW_ACTIONS = new Set(['page.settings_open', 'comfy.check', 'profile.section', 'library.select', 'resource.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
@@ -138,7 +141,7 @@ export function chatPageActionTier(id: string, action?: { tier?: ChatPageActionT
     if (action?.tier === 'view' || action?.tier === 'draft') return action.tier
     throw new Error('등록된 작업 등급이 필요해.')
   }
-  return COMMIT_ACTIONS.has(id) ? 'commit' : VIEW_ACTIONS.has(id) ? 'view' : 'draft'
+  return DIRECT_ACTIONS.has(id) ? 'direct' : COMMIT_ACTIONS.has(id) ? 'commit' : VIEW_ACTIONS.has(id) ? 'view' : 'draft'
 }
 /** A view operation that would leave the screen (and lose its unsaved changes). */
 export function chatPageActionLeavesScreen(id: string, action?: Pick<ChatPageAction, 'tier'>) {
@@ -176,7 +179,7 @@ export function normalizeChatPageActions(path: string, input: unknown): ChatPage
   return input.map((raw: ChatPageAction) => {
     if (!chatPageActionAllowed(path, raw?.id) || ids.has(raw.id) || typeof raw.label !== 'string' || !raw.label || raw.label.length > 160 || typeof raw.description !== 'string' || raw.description.length > 1000 || !['draft', 'save'].includes(raw.effect)) throw new Error('등록되지 않았거나 잘못된 페이지 작업이야.')
     ids.add(raw.id)
-    if ((raw.effect === 'save') !== COMMIT_ACTIONS.has(raw.id)) throw new Error('작업의 저장 범위가 올바르지 않아.')
+    if ((raw.effect === 'save') !== (COMMIT_ACTIONS.has(raw.id) || DIRECT_ACTIONS.has(raw.id))) throw new Error('작업의 저장 범위가 올바르지 않아.')
     const schema = normalizeChatPageSchema(raw.schema)
     if (schema.type !== 'object') throw new Error('작업 인수는 객체여야 해.')
     if (path.startsWith('/ext/') && !own(CHAT_PAGE_ACTION_PERMISSIONS, raw.id)) {

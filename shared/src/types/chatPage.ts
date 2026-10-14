@@ -54,10 +54,10 @@ export type ChatPageProposal = {
   saved?: boolean
 }
 
-/** One page operation the chat runs in the connected browser tab (see backend chatPageBridge). Saves never travel this way. */
+/** One page operation the chat runs in the connected browser tab (see backend chatPageBridge). Review-required saves never travel this way. */
 export type ChatPageCommand =
   | { type: 'capture' }
-  | { type: 'action'; actionId: string; label: string; tier: 'view' | 'draft'; arguments: Record<string, ChatPageData> }
+  | { type: 'action'; actionId: string; label: string; tier: 'view' | 'draft' | 'direct'; revision?: string; arguments: Record<string, ChatPageData> }
   | { type: 'fields'; changes: ChatPageChange[] }
   /** A node-graph transaction already checked against the editor's revision; the editor re-checks it before writing. */
   | { type: 'workflow'; revision: string; operations: ChatWorkflowOperation[]; modules: ChatWorkflowModule[]; label: string }

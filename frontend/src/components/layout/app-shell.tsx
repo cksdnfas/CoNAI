@@ -3,7 +3,7 @@ import { UnsavedSettingsGuardProvider } from '@/features/settings/use-unsaved-se
 import { PageSettingsButton } from '@/features/settings/page-settings-button'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Map as MapIcon, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Map as MapIcon, Puzzle, type LucideIcon } from 'lucide-react'
 import { matchPath, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
@@ -11,6 +11,7 @@ import { HomeSearchDrawer, HomeSearchHeaderBox } from '@/features/home/component
 import { HeaderAccountMenu } from '@/features/auth/header-account-menu'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
+import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatGenerationNotifications } from '@/features/runtime-events/use-chat-generation-notifications'
 import { CodexChatProvider } from '@/features/codex-chat/codex-chat-provider'
@@ -56,7 +57,7 @@ const HEADER_PAGE_PATHS: Record<Exclude<HeaderNavigationPageKey, 'access'>, stri
   settings: '/settings',
 }
 
-type NavItem = { id: HeaderNavigationPageKey; to: string; labelKey: string; icon: LucideIcon; permissionKey: string | null }
+type NavItem = { id: HeaderNavigationPageKey; to: string; labelKey?: string; label?: string; icon: LucideIcon; permissionKey: string | null }
 
 // "이용 가능 페이지" is the hub people use to reach every page they may open; it leads unless the order moves it.
 const navItemsById = new Map<HeaderNavigationPageKey, NavItem>([
@@ -116,10 +117,15 @@ function AppShellLayout() {
     staleTime: 60_000,
   })
   const headerNavigation = headerNavigationQuery.data?.items ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
-  const headerNavigationOrder = normalizeHeaderNavigationOrder(headerNavigationQuery.data?.order)
+  const pluginPages = usePluginPages()
+  const headerNavigationOrder = normalizeHeaderNavigationOrder(headerNavigationQuery.data?.order, pluginPages.map((page) => page.id))
+  const allNavItems = new Map(navItemsById)
+  for (const page of pluginPages) {
+    allNavItems.set(page.id, { id: page.id, to: page.to, label: page.title, icon: Puzzle, permissionKey: null })
+  }
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
-  const visibleNavItems = headerNavigationOrder.flatMap((id) => navItemsById.get(id) ?? []).filter((item) => headerNavigation[item.id] !== false
+  const visibleNavItems = headerNavigationOrder.flatMap((id) => allNavItems.get(id) ?? []).filter((item) => headerNavigation[item.id] !== false
     && (item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey)))
   const logoTarget = '/access'
   const shouldShowGenerationQueueWidget = headerNavigation.queue !== false && (authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true)
@@ -180,8 +186,8 @@ function AppShellLayout() {
                 style={{ touchAction: 'pan-y pinch-zoom' }}
               >
                 <nav className="flex min-w-max items-center gap-0.5 pr-10 sm:pr-2" aria-label={t('appShell.mainPageNavigation')}>
-                  {visibleNavItems.map(({ to, labelKey, icon: Icon }) => {
-                    const label = t(labelKey)
+                  {visibleNavItems.map(({ to, labelKey, label: pageLabel, icon: Icon }) => {
+                    const label = pageLabel ?? t(labelKey!)
                     // Resolved here (not via NavLink's render props) so the Tip trigger can merge a plain className.
                     const isActive = matchPath({ path: to, end: to === '/' }, location.pathname) !== null
 

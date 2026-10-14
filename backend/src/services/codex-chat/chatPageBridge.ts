@@ -7,8 +7,8 @@ import { RuntimeEventBroadcaster } from '../runtime-events/runtimeEventBroadcast
 
 /**
  * Same-turn round trip to the person's connected page: a tool asks, the browser tab that holds the connection runs one
- * registered operation (or only reports its screen), and answers with the new screen. Only view and draft operations
- * travel this way; saves stay review cards. The browser is told what to run, never how: it looks the operation up in
+ * registered operation (or only reports its screen), and answers with the new screen. View, draft and bounded native direct operations
+ * travel this way; other saves stay review cards. The browser is told what to run, never how: it looks the operation up in
  * its own registry, so nothing here can make a page run code it did not register.
  */
 

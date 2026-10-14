@@ -462,7 +462,7 @@ export function PublicComfyWorkflowPage() {
     <div
       className={cn(
         isWideLayout ? 'space-y-6' : 'space-y-6 pb-24',
-        useWideSplitPaneScroll && 'flex h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
+        useWideSplitPaneScroll && 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
       )}
     >
       {workflowQuery.isError ? (

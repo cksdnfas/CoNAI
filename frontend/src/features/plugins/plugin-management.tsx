@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { ExternalLink, FileText, Puzzle, ServerCog, ShieldCheck, Trash2, Upload, Webhook, Wrench } from 'lucide-react'
+import { ExternalLink, FileText, Puzzle, ServerCog, Trash2, Upload, Webhook, Wrench } from 'lucide-react'
 import type { InstalledPlugin, PluginInstallResult, PluginServerStatus } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -19,7 +19,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { listPlugins, pluginRequest, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { getErrorMessage } from '@/lib/error-message'
-import { PLUGIN_CAPABILITIES, PluginCapabilityList } from './plugin-capabilities'
+import { PluginRuntimeSummary } from './plugin-capabilities'
 
 /** Settings › 플러그인 관리: install a package, switch plugins on and off, see what each may do, remove one. */
 export function PluginManagement() {
@@ -44,11 +44,6 @@ export function PluginManagement() {
   }
   const setEnabled = (plugin: InstalledPlugin, enabled: boolean) => run(async () => {
     const { manifest } = plugin
-    if (enabled && !await confirm({
-      title: t({ ko: '{name} 켜기', en: 'Enable {name}' }, { name: manifest.name }),
-      description: <PluginCapabilityList capabilities={manifest.capabilities} appTools={manifest.appTools} />,
-      confirmLabel: t({ ko: '켜기', en: 'Enable' }),
-    })) return
     await pluginRequest(`/${manifest.id}/enabled`, 'PUT', { enabled })
   })
   const install = (file: File) => run(async () => {
@@ -58,7 +53,7 @@ export function PluginManagement() {
     showSnackbar({
       tone: result.reenable ? 'error' : 'info',
       message: result.reenable
-        ? t({ ko: '{name} {version}로 업데이트했어. 권한이 늘어서 꺼뒀어.', en: 'Updated {name} to {version}. It asks for more, so it is off.' }, { name, version })
+        ? t({ ko: '{name} {version}로 복구했어. 다시 켜줘.', en: 'Recovered {name} to {version}. Enable it again.' }, { name, version })
         : result.updated ? t({ ko: '{name} {version}로 업데이트했어.', en: 'Updated {name} to {version}.' }, { name, version }) : t({ ko: '{name}을 설치했어.', en: 'Installed {name}.' }, { name }),
     })
   })
@@ -106,7 +101,6 @@ export function PluginManagement() {
               aside={(
                 <>
                   <ResourceRowStat icon={FileText} tip={manifest.pages.map((page) => page.title).join(', ')}>{manifest.pages.length}</ResourceRowStat>
-                  <ResourceRowStat icon={ShieldCheck} tip={manifest.capabilities.map((capability) => t(PLUGIN_CAPABILITIES[capability]?.label ?? { ko: capability, en: capability })).join(', ')}>{manifest.capabilities.length}</ResourceRowStat>
                   {plugin.server ? <ResourceRowStat icon={ServerCog} tip={serverStateLabel(plugin.server, t)}>{plugin.server.tools.length}</ResourceRowStat> : null}
                 </>
               )}
@@ -123,9 +117,7 @@ export function PluginManagement() {
           <>
             <ModalBody className="space-y-5">
               {opened.manifest.description ? <p className="text-sm">{opened.manifest.description}</p> : null}
-              <RowGroup heading={t({ ko: '권한', en: 'Permissions' })}>
-                <PluginCapabilityList capabilities={opened.manifest.capabilities} appTools={opened.manifest.appTools} />
-              </RowGroup>
+              <PluginRuntimeSummary server={Boolean(opened.manifest.server)} />
               {opened.server ? (
                 <RowGroup heading={t({ ko: '서버', en: 'Server' })} actions={<span className={opened.server.state === 'error' ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>{serverStateLabel(opened.server, t)}</span>}>
                   {opened.server.error ? <p className="py-1.5 font-mono text-xs break-all text-destructive">{opened.server.error}</p> : null}

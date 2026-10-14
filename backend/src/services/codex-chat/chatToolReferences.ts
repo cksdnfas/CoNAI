@@ -140,6 +140,6 @@ function readPageOperation(value: unknown): ChatPageOperation | undefined {
   const operation = value && typeof value === 'object' ? (value as { pageOperation?: unknown }).pageOperation : undefined
   if (!operation || typeof operation !== 'object') return undefined
   const { commandId, tier, label } = operation as Record<string, unknown>
-  if (typeof commandId !== 'string' || (tier !== 'view' && tier !== 'draft') || typeof label !== 'string') return undefined
+  if (typeof commandId !== 'string' || (tier !== 'view' && tier !== 'draft' && tier !== 'direct') || typeof label !== 'string') return undefined
   return { commandId: commandId.slice(0, 80), tier, label: label.slice(0, 200) }
 }

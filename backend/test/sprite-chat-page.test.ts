@@ -8,7 +8,7 @@ import { test } from 'node:test'
  * A chat connected to the sprite tab keeps the sprite engine tools: the connected-page rule hides every non-page tool,
  * so /sprite adds its own tools to the page tools. Any other connected page still hides them.
  */
-test('sprite page connection: sprite tools stay listed on /sprite, hidden on other pages', { timeout: 60000 }, async (t) => {
+test('sprite page connection: sprite tools stay listed on /sprite and retain grants on other pages', { timeout: 60000 }, async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-sprite-chat-page-'))
   process.env.RUNTIME_BASE_PATH = root
   for (const part of ['DATABASE', 'UPLOADS', 'LOGS', 'TEMP', 'SAVE', 'CANVAS', 'ARTIFACTS', 'MODELS', 'CUSTOM_NODES', 'RECYCLE_BIN']) {
@@ -74,12 +74,12 @@ test('sprite page connection: sprite tools stay listed on /sprite, hidden on oth
   const onSprite = await list(spritePage)
   for (const tool of CHAT_PAGE_KIND_TOOLS.sprite!) assert.ok(onSprite.has(tool), `${tool} is offered on the connected sprite page`)
   assert.ok(onSprite.has('get_current_page'), 'the ordinary page tools stay')
-  assert.ok(!onSprite.has('move_files') && !onSprite.has('generate_comfyui'), 'unrelated tools that change things stay hidden')
+  assert.ok(onSprite.has('move_files') && onSprite.has('generate_comfyui'), 'existing general grants stay offered')
   assert.ok(onSprite.has('list_workflows') && onSprite.has('get_chat_setup_guide'), 'reads and setup proposals stay offered')
   assert.ok(!onSprite.has('wait_sprite_job'), 'blocking waits stay out of chat')
 
   const onPrompts = await list(promptsPage)
-  assert.ok(!onPrompts.has('extract_sprite_sheet'), 'another connected page hides the sprite tools')
+  assert.ok(onPrompts.has('extract_sprite_sheet'), 'another connected page preserves the general sprite grant')
   assert.ok(onPrompts.has('get_current_page'))
   assert.ok((await list()).has('extract_sprite_sheet'), 'without a page the sprite tools are offered (through the catalog)')
 

@@ -38,6 +38,9 @@ export function pluginDb(): Database.Database {
         job_id TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL,
         PRIMARY KEY(plugin_id, owner_key, request_key));
       CREATE INDEX IF NOT EXISTS plugin_llm_requests_expiry ON plugin_llm_requests(expires_at);
+      CREATE TABLE IF NOT EXISTS plugin_storage (
+        plugin_id TEXT NOT NULL, owner_key TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, revision TEXT NOT NULL,
+        PRIMARY KEY(plugin_id,owner_key,key));
     `)
     if (!(db.prepare('PRAGMA table_info(plugin_instances)').all() as Array<{ name: string }>).some(column => column.name === 'workspace')) db.exec('ALTER TABLE plugin_instances ADD COLUMN workspace TEXT')
     // The administrator who turned a plugin on: its server module's own calls (timers, startup) run as them.

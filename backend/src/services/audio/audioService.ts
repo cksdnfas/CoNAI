@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import path from 'path';
 import { getAudioDb } from '../../database/audioDb';
 import { FileStoreService } from '../fileStoreService';
+import { nativeEditRevision } from '../nativeEditRevision';
 import { validateAudioLabel } from './audioNaming';
 import {
   AUDIO_MIME_BY_EXTENSION,
@@ -18,7 +19,7 @@ import { releaseUnreferencedAudioBlobs } from './audioMaintenance';
  * The sound-effect workspace: projects → groups → candidates (generated takes, uploads, edits), group comments.
  * Business rules live here; the REST routes and MCP tools are thin callers.
  *
- * Review (selected / rejected) is a human decision: only the `/api/audio` route calls `setReview`, and no MCP tool does.
+ * Both the web and authorized assistant tools can record review decisions and comments.
  */
 
 export const AUDIO_INBOX_GROUP_NAME = '받은 파일';
@@ -516,15 +517,34 @@ export function restoreAudioCandidates(ids: unknown): { restored: number } {
   return { restored: info.changes };
 }
 
-/** Human-only: called from the `/api/audio` review route, never from an MCP tool. */
-export function setAudioCandidateReview(id: string, input: { review?: unknown; notes?: unknown }): AudioCandidate {
-  const candidate = getAudioCandidate(id);
-  if (candidate.deleted_at) throw new AudioServiceError('지운 후보는 검수할 수 없어.', 409);
-  const review = input.review === undefined ? candidate.review : String(input.review);
-  if (!(AUDIO_REVIEW_STATES as readonly string[]).includes(review)) throw new AudioServiceError('검수 상태는 pending, selected, rejected 중 하나야.');
-  const notes = input.notes === undefined ? candidate.notes : text(input.notes, '메모', 4000, false);
-  db().prepare('UPDATE audio_candidates SET review = ?, notes = ?, updated_at = ? WHERE id = ?').run(review, notes, now(), candidate.id);
-  return getAudioCandidate(candidate.id);
+/** A revision covers the candidate's identity, location, review, memo and deletion state. */
+export function audioCandidateRevision(candidate: AudioCandidate): string {
+  return nativeEditRevision({ id: candidate.id, group_id: candidate.group_id, name: candidate.name, review: candidate.review, notes: candidate.notes, deleted_at: candidate.deleted_at, updated_at: candidate.updated_at });
+}
+
+function requireCandidateRevision(candidate: AudioCandidate, expected: unknown) {
+  if (expected !== undefined && expected !== audioCandidateRevision(candidate)) throw new AudioServiceError('후보가 변경됐어. 다시 읽고 요청해줘.', 409);
+}
+
+/** Soft-delete one explicitly selected candidate, rejecting a changed review or location. */
+export function deleteAudioCandidate(id: string, expectedRevision: string): { deleted: number } {
+  return db().transaction(() => {
+    requireCandidateRevision(getAudioCandidate(id), expectedRevision);
+    return deleteAudioCandidates([id]);
+  }).immediate();
+}
+
+export function setAudioCandidateReview(id: string, input: { review?: unknown; notes?: unknown; expected_revision?: unknown }): AudioCandidate {
+  return db().transaction(() => {
+    const candidate = getAudioCandidate(id);
+    requireCandidateRevision(candidate, input.expected_revision);
+    if (candidate.deleted_at) throw new AudioServiceError('지운 후보는 검수할 수 없어.', 409);
+    const review = input.review === undefined ? candidate.review : String(input.review);
+    if (!(AUDIO_REVIEW_STATES as readonly string[]).includes(review)) throw new AudioServiceError('검수 상태는 pending, selected, rejected 중 하나야.');
+    const notes = input.notes === undefined ? candidate.notes : text(input.notes, '메모', 4000, false);
+    db().prepare('UPDATE audio_candidates SET review = ?, notes = ?, updated_at = ? WHERE id = ?').run(review, notes, now(), candidate.id);
+    return getAudioCandidate(candidate.id);
+  }).immediate();
 }
 
 /* ---------------------------------------------------------------- imports */
@@ -742,10 +762,11 @@ export function createAudioGroupComment(groupId: string, input: { text?: unknown
 }
 
 /** Editing the text reopens the comment and bumps its revision, as in the original app. */
-export function updateAudioGroupComment(groupId: string, commentId: string, input: { text?: unknown }): AudioComment {
+export function updateAudioGroupComment(groupId: string, commentId: string, input: { text?: unknown; expected_revision?: unknown }): AudioComment {
   const body = text(input.text, '코멘트', 4000);
   return db().transaction(() => {
     const current = getComment(groupId, commentId);
+    if (input.expected_revision !== undefined && input.expected_revision !== current.revision) throw new AudioServiceError('코멘트가 변경됐어. 다시 읽고 요청해줘.', 409);
     if (current.text !== body) {
       db().prepare(`UPDATE audio_group_comments SET text = ?, status = 'pending', revision = revision + 1, updated_at = ? WHERE id = ?`)
         .run(body, now(), current.id);
@@ -754,10 +775,13 @@ export function updateAudioGroupComment(groupId: string, commentId: string, inpu
   }).immediate();
 }
 
-export function deleteAudioGroupComment(groupId: string, commentId: string): { deleted: true } {
-  const current = getComment(groupId, commentId);
-  db().prepare('DELETE FROM audio_group_comments WHERE id = ?').run(current.id);
-  return { deleted: true };
+export function deleteAudioGroupComment(groupId: string, commentId: string, expectedRevision?: number): { deleted: true } {
+  return db().transaction(() => {
+    const current = getComment(groupId, commentId);
+    if (expectedRevision !== undefined && expectedRevision !== current.revision) throw new AudioServiceError('코멘트가 변경됐어. 다시 읽고 요청해줘.', 409);
+    db().prepare('DELETE FROM audio_group_comments WHERE id = ?').run(current.id);
+    return { deleted: true as const };
+  }).immediate();
 }
 
 /** Optimistic lock: a comment changed since the caller read it (revision differs) is not completed blindly. */

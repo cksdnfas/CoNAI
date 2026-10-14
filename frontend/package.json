@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test:posts-editor": "tsx --test test/post-rich-editor.test.ts",
     "test:audio-waveform": "tsx --tsconfig tsconfig.app.json --test test/audio-waveform.test.ts",
+    "test:plugins": "tsx --tsconfig tsconfig.app.json --test test/plugin-sdk.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

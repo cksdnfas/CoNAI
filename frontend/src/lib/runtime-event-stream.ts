@@ -41,6 +41,9 @@ const RUNTIME_EVENT_NAMES: readonly RuntimeEventName[] = [
   'graph.schedule.changed',
   'graph.execution.status',
   'posts.changed',
+  'audio.changed',
+  'workspace.changed',
+  'files.changed',
 ]
 
 export interface RuntimeEventStreamHandlers {

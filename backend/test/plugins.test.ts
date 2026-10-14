@@ -25,6 +25,14 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
   const host = await import('../src/services/plugins/pluginHost')
   const { pluginDb } = await import('../src/services/plugins/pluginStore')
   const shared = await import('@conai/shared')
+  await t.test('native API paths cannot leave feature routes or reach credentials', () => {
+    const origins = ['http://localhost:1677', 'http://localhost:1666']
+    assert.equal(shared.pluginNativeApiPath('http://localhost:1666/api/files?limit=20', origins), '/api/files?limit=20')
+    assert.equal(shared.pluginNativeApiPath('/api/codex-chat/admin/profiles/1', origins), '/api/codex-chat/admin/profiles/1')
+    for (const value of ['https://outside.invalid/api/files', '//outside.invalid/api/files', '/api/auth/status', '/api/settings/llm', '/api/codex-chat/admin/external-mcp', '/api/plugins/x/enabled', '/api/files/../auth', '/api/files/%2e%2e/auth', '/api/files/%252e%252e/auth', '/api/files/..%2fauth']) {
+      assert.throws(() => shared.pluginNativeApiPath(value, origins), value)
+    }
+  })
   t.after(async () => {
     auth.close(); user.closeUserSettingsDb(); main.closeDatabase()
     await new Promise<void>(async (resolve) => (await import('../src/utils/logger')).logger.close(resolve))
@@ -82,15 +90,21 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     const replacement = host.openPluginInstance('text-editor', 'editor', [file.id], caller)
     for (const slot of [...slots, replacement]) host.closePluginInstance(slot.id, caller)
   })
-  await t.test('instances are bound to a session, account and explicit selection', () => {
-    // File storage is shared across accounts; connection selection and approvals remain caller-bound.
+  await t.test('instances are account/session bound while file access follows native permissions', () => {
+    // Selected files are opening context; the app's shared file access remains available.
     const sharedSelection = host.openPluginInstance('text-editor', 'editor', [foreign.id], alice)
     assert.equal(host.readPluginFile(sharedSelection.id, foreign.id, alice).text, '{"private":true}')
     host.closePluginInstance(sharedSelection.id, alice)
     assert.throws(() => host.readPluginFile(instance.id, file.id, bob))
     assert.throws(() => host.readPluginFile(instance.id, file.id, { ...alice, sessionId: 'other-tab-session' }))
-    assert.throws(() => host.readPluginFile(instance.id, foreign.id, alice))
+    assert.equal(host.readPluginFile(instance.id, foreign.id, alice).text, '{"private":true}')
     assert.equal(host.readPluginFile(instance.id, file.id, alice).text, '{"frame":1}')
+    const pageOnly = { requester: { accountId: addAccount('plugin-no-files'), accountType: 'guest' as const }, sessionId: 'page-only-session' }
+    const empty = host.openPluginInstance('text-editor', 'editor', [], pageOnly)
+    assert.equal(host.requirePluginInstance(empty.id, pageOnly).page.id, 'editor', 'opening a plugin needs no unrelated file permission')
+    assert.throws(() => host.readPluginFile(empty.id, file.id, pageOnly), /권한/)
+    assert.throws(() => host.openPluginInstance('text-editor', 'editor', [file.id], pageOnly), /권한/)
+    host.closePluginInstance(empty.id, pageOnly)
   })
   await t.test('only host approval applies the immutable proposal; retries do not write twice', () => {
     const before = host.readPluginFile(instance.id, file.id, alice)
@@ -108,6 +122,21 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     assert.equal(FileStoreService.readEditableText(`account:${aliceId}`, file.id).revision, saved.revision)
     const next = host.proposePluginWrite(instance.id, { fileId: file.id, revision: saved.revision, text: 'another' }, alice)
     assert.throws(() => host.applyPluginWrite(next.id, approval.approval, alice), /승인/)
+  })
+  await t.test('web plugin settings are account/session scoped with CAS and bounded storage', async () => {
+    const { pluginStorage } = await import('../src/services/plugins/pluginStorage')
+    const other = host.openPluginInstance('text-editor', 'editor', [], bob)
+    try {
+      const first = pluginStorage(instance.id, alice, 'set', { key: 'preferences', value: { zoom: 2 } })
+      assert.equal(pluginStorage(other.id, bob, 'get', { key: 'preferences' }).value, null)
+      assert.throws(() => pluginStorage(instance.id, bob, 'get', { key: 'preferences' }))
+      assert.throws(() => pluginStorage(instance.id, alice, 'set', { key: 'preferences', value: 3 }), /바뀌었어/)
+      const next = pluginStorage(instance.id, alice, 'set', { key: 'preferences', revision: first.revision, value: { zoom: 3 } })
+      assert.deepEqual(pluginStorage(instance.id, alice, 'get', { key: 'preferences' }).value, { zoom: 3 })
+      assert.throws(() => pluginStorage(instance.id, alice, 'set', { key: 'large', value: 'x'.repeat(70_000) }), /64KB/)
+      pluginStorage(instance.id, alice, 'delete', { key: 'preferences', revision: next.revision })
+      assert.equal(pluginStorage(instance.id, alice, 'get', { key: 'preferences' }).revision, null)
+    } finally { host.closePluginInstance(other.id, bob) }
   })
   await t.test('stale writes and disabled instances cannot consume approvals', async () => {
     const original = host.readPluginFile(instance.id, file.id, alice)
@@ -205,9 +234,10 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     const project = await WorkspaceService.create(owner, 'Review project')
     const sessions: string[] = []
     try {
-      assert.throws(() => host.openPluginInstance('text-editor', 'editor', [], alice, { id: project.id, write: true }), /프로젝트 연결/)
+      const legacy = host.openPluginInstance('text-editor', 'editor', [], alice, { id: project.id, write: true }); sessions.push(legacy.id)
+      assert.equal(legacy.workspace?.id, project.id, 'project access does not require manifest grants')
       const unbound = host.openPluginInstance('workspace-test', 'review', [], alice); sessions.push(unbound.id)
-      assert.throws(() => projectHost.listPluginWorkspace(unbound.id, {}, alice), /연결된 프로젝트/)
+      assert.throws(() => projectHost.listPluginWorkspace(unbound.id, {}, alice), /프로젝트를 연결/)
       const readonly = host.openPluginInstance('workspace-test', 'review', [], alice, { id: project.id }); sessions.push(readonly.id)
       await assert.rejects(projectHost.proposePluginWorkspaceWrite(readonly.id, { target: '검수.json', revision: null, text: '{}' }, alice), /읽기 전용/)
       const connected = host.openPluginInstance('workspace-test', 'review', [], alice, { id: project.id, write: true }); sessions.push(connected.id)
@@ -265,7 +295,15 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
       await WorkspaceService.apply(owner, project.id, 'library-media-ref', [{ kind: 'write', target: 'library.json', expectedRevision: null, text: JSON.stringify({ source: 'library', groupId, compositeHash: libraryHash }) }])
       const libraryGrant = await projectHost.issuePluginWorkspaceMedia(connected.id, { target: 'library.json' }, alice)
       assert.equal((await projectHost.resolvePluginWorkspaceMedia(libraryGrant.token)).filePath, libraryFile)
+      const { McpArtifactService } = await import('../src/services/mcpArtifactService')
+      const artifactMedia = await import('../src/services/plugins/pluginArtifactMedia')
+      const artifact = await McpArtifactService.createMediaDescriptor(libraryHash, 'http://localhost:1666', alice.requester)
+      assert.ok(artifact)
+      const preview = artifactMedia.issuePluginArtifactMedia(connected.id, { artifactId: artifact.artifact_id }, alice)
+      assert.equal(artifactMedia.resolvePluginArtifactMedia(preview.token).absolutePath, libraryFile)
+      assert.throws(() => artifactMedia.issuePluginArtifactMedia(connected.id, { artifactId: artifact.artifact_id }, bob))
       main.db.prepare("UPDATE media_metadata SET postprocess_status='pending' WHERE composite_hash=?").run(libraryHash)
+      assert.throws(() => artifactMedia.resolvePluginArtifactMedia(preview.token), /없거나/)
       await assert.rejects(projectHost.resolvePluginWorkspaceMedia(libraryGrant.token), /사용할 수 없는/)
       main.db.prepare("UPDATE media_metadata SET postprocess_status='ready' WHERE composite_hash=?").run(libraryHash)
       const { RatingScoreModel } = await import('../src/models/RatingScore')
@@ -277,6 +315,7 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
       main.db.prepare('DELETE FROM image_groups WHERE group_id=? AND composite_hash=?').run(groupId, libraryHash)
       await assert.rejects(projectHost.resolvePluginWorkspaceMedia(libraryGrant.token), /그룹/)
       AuthPermissionGroup.removeAccountMembership(group.id, aliceId)
+      assert.throws(() => artifactMedia.resolvePluginArtifactMedia(preview.token))
       await assert.rejects(projectHost.resolvePluginWorkspaceMedia(freshGrant.token))
       AuthPermissionGroup.addAccountMembership(group.id, aliceId)
       await registry.setPluginEnabled('workspace-test', false)
@@ -294,7 +333,7 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     const admin = { requester: { accountId: adminId, accountType: 'admin' as const }, sessionId: 'app-host-session' }
     const appPermissions = AuthPermissionGroup.createCustomGroup({ name: 'plugin-native-tools', permissionKeys: ['files.view', 'images.view', 'images.edit', 'posts.view', 'posts.write', 'workflows.view', 'audio.view'] })
     AuthPermissionGroup.addAccountMembership(appPermissions.id, adminId)
-    const context = app.pluginBrowserContext(admin, 'http://localhost:1666')
+    const context = app.pluginBrowserContext(admin, 'http://localhost:1666', true)
     const largeJob = RuntimeJobStore.create({ kind: 'plugin-action', params: {}, singletonKey: null, requestedByAccountId: adminId })
     const largeResult = { content: [{ type: 'text', text: 'large plugin result '.repeat(6000) }] }
     RuntimeJobStore.markRunning(largeJob.jobId, 'all'); RuntimeJobStore.markCompleted(largeJob.jobId, largeResult)
@@ -306,18 +345,16 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     const parsed = (await registry.installPlugin(packageZip.toBuffer())).plugin; await registry.setPluginEnabled('app-workbench', true)
     sub.after(async () => { if (registry.listPlugins(true).some(plugin => plugin.manifest.id === 'app-workbench')) await registry.removePlugin('app-workbench') })
     assert.equal(parsed.manifest.pages[0].actions.length, 7, 'server actions supply browser schemas automatically')
-    assert.throws(() => registry.parsePluginManifest({ ...parsed.manifest, appTools: ['get_chat_profile'] }), /지원하지 않는/)
-    // files.read means the picked files only: a file-store tool would reach the whole store behind it.
-    assert.throws(() => registry.parsePluginManifest({ ...parsed.manifest, appTools: [...parsed.manifest.appTools!, 'read_file_text'] }), /지원하지 않는/)
-    assert.throws(() => registry.parsePluginManifest({ ...parsed.manifest, capabilities: ['workspace.read'] }), /capabilities/)
-    // An app update that retires a listed tool leaves the installed package readable, minus that tool.
+    assert.doesNotThrow(() => registry.parsePluginManifest({ ...parsed.manifest, appTools: undefined, capabilities: undefined }), 'native actions need no duplicate permission declarations')
+    assert.doesNotThrow(() => registry.parsePluginManifest({ ...parsed.manifest, appTools: ['read_file_text'] }))
+    // A retired native handler drops its action, while legacy declaration metadata stays readable.
     const { pluginDb } = await import('../src/services/plugins/pluginStore')
     const stored = pluginDb().prepare("SELECT manifest,digest FROM plugins WHERE id='app-workbench'").get() as { manifest: string; digest: string }
     const retired = JSON.parse(stored.manifest) as typeof parsed.manifest
-    retired.appTools = [...retired.appTools!, 'get_chat_profile']
-    retired.serverActions = [...retired.serverActions!, { id: 'app-workbench.retired', label: 'retired', description: '', schema: { type: 'object', properties: {} }, tool: 'get_chat_profile' }]
+    retired.appTools = [...retired.appTools!, 'retired_native_tool']
+    retired.serverActions = [...retired.serverActions!, { id: 'app-workbench.retired', label: 'retired', description: '', schema: { type: 'object', properties: {} }, tool: 'retired_native_tool' }]
     pluginDb().prepare("UPDATE plugins SET manifest=?, digest='retired-tool-test' WHERE id='app-workbench'").run(JSON.stringify(retired))
-    assert.equal(registry.getPlugin('app-workbench').definition.appTools!.includes('get_chat_profile'), false)
+    assert.equal(registry.getPlugin('app-workbench').definition.appTools!.includes('retired_native_tool'), true)
     assert.equal(registry.getPlugin('app-workbench').definition.serverActions!.some(action => action.id === 'app-workbench.retired'), false)
     assert.ok(registry.listPlugins(false).some(plugin => plugin.manifest.id === 'app-workbench'))
     pluginDb().prepare("UPDATE plugins SET manifest=?, digest=? WHERE id='app-workbench'").run(stored.manifest, stored.digest)
@@ -325,7 +362,14 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     assert.equal(tools.tools[0].requiresApproval, true)
     const read = await app.runPluginServerAction({ pluginId: 'app-workbench', action: 'app-workbench.groups', arguments: {} }, context)
     assert.equal(read.status, 'completed')
-    await assert.rejects(app.runPluginAppTool('app-workbench', { tool: 'delete_files', arguments: {}, requestId: 'undeclared-write' }, context), /선언하지 않은/)
+    await assert.rejects(app.runPluginAppTool('app-workbench', { tool: 'delete_files', arguments: {}, requestId: 'account-write-denied' }, app.pluginBrowserContext(alice)), /권한|permission|Permission/)
+    assert.deepEqual((await app.listPluginAppTools('app-workbench', context, { tool: 'propose_profile_update' })).tools, [], 'chat-only handlers must not be advertised as usable app APIs')
+    const directContext = app.pluginBrowserContext(admin, 'http://localhost:1666')
+    assert.equal((await app.listPluginAppTools('app-workbench', directContext, { tool: 'create_image_group' })).tools[0].requiresApproval, false)
+    const direct = await app.runPluginAppTool('app-workbench', { tool: 'create_image_group', arguments: { name: 'direct-plugin-group' }, requestId: 'direct-app-request' }, directContext)
+    assert.ok('id' in direct && direct.jobId && direct.status !== 'pending', 'browser actions start without a server module or an extra approval')
+    for (let attempt = 0; attempt < 100 && ['queued', 'running'].includes(RuntimeJobStore.get(direct.jobId!)!.status); attempt++) await new Promise(resolve => setTimeout(resolve, 10))
+    assert.equal(app.getPluginAppRequest(direct.id, directContext).status, 'completed')
     await assert.rejects(app.runPluginServerAction({ pluginId: 'app-workbench', action: 'app-workbench.create_group', arguments: { name: 'denied' }, requestId: 'guest-write-denied' }, app.pluginBrowserContext(alice)), /권한|permission|Permission/)
     const input = { pluginId: 'app-workbench', action: 'app-workbench.create_group', arguments: { name: 'plugin-app-test-group' }, requestId: 'stable-app-request' }
     const pending = await app.runPluginServerAction(input, context)
@@ -364,7 +408,7 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     const projectInput = { pluginId: 'app-workbench', action: 'app-workbench.project_note', arguments: { target: 'report.md', text: 'shared native workspace' }, requestId: 'native-project-write' }
     await assert.rejects(app.runPluginServerAction(projectInput, readContext))
     const writer = host.openPluginInstance('app-workbench', 'tools', [], admin, { id: project.id, write: true })
-    const writeContext = app.pluginInstanceAppContext(writer.id, admin, 'http://localhost:1666').context
+    const writeContext = app.pluginInstanceAppContext(writer.id, admin, 'http://localhost:1666', true).context
     const projectRequest = await app.runPluginServerAction(projectInput, writeContext)
     assert.ok('id' in projectRequest)
     assert.equal(projectRequest.project?.id, project.id)

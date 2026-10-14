@@ -1,7 +1,7 @@
 import type { ChatPageAction, ChatPageData, ChatPageSchema } from './chatPageAction'
 import type { WorkspaceOperation } from './workspace'
 
-/** `server`: the package brings a server module (trusted code with the app's full reach, see plugins/README.md). */
+/** Legacy manifest metadata; installed plugins use native account permissions instead of capability grants. */
 export type PluginCapability = 'files.read' | 'files.write' | 'files.media' | 'workspace.read' | 'workspace.write' | 'workspace.media' | 'media.process' | 'server'
 export type PluginPage = {
   id: string; title: string; entry: string; accepts: string[]
@@ -17,7 +17,7 @@ export type PluginManifest = {
   apiVersion: 1; id: string; name: string; version: string; description: string
   capabilities: PluginCapability[]; pages: PluginPage[]
   appTools?: string[]; serverActions?: PluginServerAction[]
-  /** The server module (`capabilities` must list `server`). */
+  /** Optional server module; independent of legacy capability declarations. */
   server?: { entry: string }
 }
 export type PluginAppRequest = {
@@ -34,19 +34,40 @@ export type PluginServerStatus = {
   tools: Array<{ name: string; description: string }>; hooks: string[]
 }
 export type InstalledPlugin = { manifest: PluginManifest; enabled: boolean; installedAt: string; server?: PluginServerStatus }
-/** `updated`: replaced an installed version in place (its data kept). `reenable`: it asks for more than before, so it was turned off. */
+/** `updated`: replaced an installed version in place, keeping data. `reenable`: an unreadable prior installation was recovered disabled. */
 export type PluginInstallResult = { plugin: InstalledPlugin; updated: boolean; reenable: boolean }
 /** One stateless character turn. History and world state belong to the plugin, not a native chat thread. */
 export type PluginLlmInput = {
   requestId: string; profileId: number; message: string; history?: string; userName?: string
+  /** profile: native chat execution with the profile's tools and its own plugin/account room. text: stateless compatibility mode. */
+  mode?: 'text' | 'profile'
   useLorebooks?: boolean; maxTokens?: number; timeoutMs?: number
+  /** JSON example/schema passed through the native workflow LLM JSON mode. */
+  structuredOutput?: string | Record<string, unknown>
 }
-export type PluginLlmProfile = { id: number; name: string; tagline: string; engine: string }
+export type PluginLlmProfile = {
+  id: number; name: string; tagline: string; engine: string
+  assetVersion: string | null; avatarCrop: { x: number; y: number; scale: number } | null
+  assets: { avatar: boolean; background: boolean; reference: boolean }
+}
+/** Bounded native profile image; convert data to a Blob URL in sandboxed pages. */
+export type PluginProfileAsset = {
+  profileId: number; kind: 'avatar' | 'background' | 'reference'; state: 'ready' | 'missing' | 'hidden'
+  version: string; crop: { x: number; y: number; scale: number } | null
+  mimeType?: 'image/webp'; data?: string; width?: number; height?: number
+}
 export type PluginLlmJob = {
   jobId: string; requestId: string; profileId: number
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'; cancelRequested: boolean
-  result: { text: string; truncated: boolean; model: string; engine: string } | null
+  result: { text: string; truncated: boolean; model: string; engine: string; json?: unknown; profileRun?: PluginProfileRun } | null
   error: string | null; expiresAt: number
+}
+export type PluginProfileRun = {
+  threadId: number; messageIds: number[]
+  tools: Array<{ id: string; name: string; status: 'running' | 'completed' | 'failed'; summary: string; output: string;
+    historyIds: number[]; compositeHashes: string[]; audioCandidateIds: string[]; pendingJobIds: number[];
+    proposalId: number | null; failedJobs: Array<{ jobId: number; message: string }>; deferred?: { state: 'writing' | 'failed'; error: string | null } }>
+  toolsTruncated: boolean
 }
 export type PluginInstance = {
   id: string; plugin: PluginManifest; page: PluginPage; expiresAt: number

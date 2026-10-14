@@ -180,7 +180,7 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     assert.equal((await call(writer, 'read_file_version', { file_id: doc.id, version_id: 'f'.repeat(32) })).isError, true)
 
     const page = { instanceId: 'page-files-test', connectionId: 'connection-files', path: '/files', title: '파일 보관함', kind: 'files' as const, resourceId: 'self:root', fields: [] }
-    for (const name of ['list_file_versions', 'read_file_version', 'restore_file_version']) assert.equal(isContextToolAllowed(chatContext(page), name), false, name)
+    for (const name of ['list_file_versions', 'read_file_version', 'restore_file_version']) assert.equal(isContextToolAllowed(chatContext(page), name), true, name)
   })
 
   await t.test('posts and files screens stay small in every request', async () => {

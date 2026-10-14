@@ -1,7 +1,7 @@
 import { Worker } from 'worker_threads'
 import type { PluginServerStatus } from '@conai/shared'
 import { AuthAccount } from '../../models/AuthAccount'
-import type { McpRequester } from '../../mcp/context'
+import type { McpRequester, McpRequestContext } from '../../mcp/context'
 import { getPlugin, listPlugins, packageFile } from './pluginRegistry'
 import { onPluginChanged, pluginDb, pluginToken, PluginError } from './pluginStore'
 import { pluginDataDir } from './pluginData'
@@ -13,7 +13,7 @@ import { callTrustedAppTool, trustedAppToolDefinitions } from './pluginAppBridge
 import { callPluginLlm } from './pluginLlm'
 
 /**
- * Server modules of trusted plugins (`capabilities: ["server"]`, `server.entry`): one worker thread per enabled plugin,
+ * Optional server modules (`server.entry`): one worker thread per enabled plugin,
  * started with the app and on enable/update, stopped on disable/remove. The module's `activate(conai)` gets its own
  * SQLite database, hooks, app tool calls and tool registration (plugins/README.md). It is trusted code: the worker can
  * use every Node API, so only administrators install and enable it.
@@ -23,14 +23,14 @@ import { callPluginLlm } from './pluginLlm'
 export const PLUGIN_SERVER_HOOKS = ['chat.instructions'] as const
 export type PluginServerHook = typeof PLUGIN_SERVER_HOOKS[number]
 const HOOK_TIMEOUT_MS = 3_000
-const REQUEST_TIMEOUT_MS = 30_000
+const REQUEST_TIMEOUT_MS = 10 * 60_000
 const TOOL_TIMEOUT_MS = 10 * 60_000
 const RESULT_LIMIT = 512 * 1024
 const CRASH_WINDOW_MS = 5 * 60_000
 const CRASH_LIMIT = 3
 
-type Invocation = { requester: McpRequester | undefined; baseUrl?: string }
-type Waiting = { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout; invocation: string }
+type Invocation = { requester: McpRequester | undefined; baseUrl?: string; workspace?: McpRequestContext['workspace']; signal?: AbortSignal }
+type Waiting = { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout; invocation: string; controller: AbortController; cleanup: () => void }
 type Server = {
   pluginId: string; digest: string; worker: Worker | null
   state: PluginServerStatus['state']; error: string | null
@@ -52,6 +52,7 @@ const scope = new AsyncLocalStorage();
 const pending = new Map();
 const hooks = new Map();
 const tools = new Map();
+const controllers = new Map();
 let seq = 0;
 let onRequest = null;
 let db = null;
@@ -62,6 +63,7 @@ const text = (value) => {
   try { return JSON.stringify(value); } catch { return String(value); }
 };
 const call = (method, params) => new Promise((resolve, reject) => {
+  if (pending.size >= 64) { reject(new Error('Too many pending app calls')); return; }
   const id = ++seq;
   pending.set(id, { resolve, reject });
   const store = scope.getStore();
@@ -103,14 +105,19 @@ const conai = Object.freeze({
   },
   llm: Object.freeze({
     profiles: () => call('llm.profiles', {}),
+    asset: (input) => call('llm.asset', input),
     start: (input) => call('llm.start', input),
     get: (jobId) => call('llm.get', { jobId }),
     cancel: (jobId) => call('llm.cancel', { jobId }),
+  }),
+  background: Object.freeze({
+    account: () => call('background.account', {}),
   }),
   log: (...values) => send({ type: 'log', level: 'info', text: values.map(text).join(' ') }),
   warn: (...values) => send({ type: 'log', level: 'warn', text: values.map(text).join(' ') }),
 });
 parentPort.on('message', async (message) => {
+  if (message.type === 'cancel') { controllers.get(message.invocation)?.abort(new Error('Plugin request cancelled')); return; }
   if (message.type === 'result') {
     const entry = pending.get(message.id);
     if (!entry) return;
@@ -120,15 +127,17 @@ parentPort.on('message', async (message) => {
     return;
   }
   if (message.type !== 'invoke') return;
+  const controller = new AbortController();
+  controllers.set(message.invocation, controller);
   const tool = message.kind === 'tool' ? tools.get(message.name) : null;
   const handler = message.kind === 'hook' ? hooks.get(message.name) : message.kind === 'tool' ? (tool && tool.handler) : onRequest;
   try {
     if (!handler) throw new Error('No ' + message.kind + ' handler' + (message.name ? ': ' + message.name : ''));
-    const value = await scope.run({ invocation: message.invocation }, () => handler(message.input, message.context));
+    const value = await scope.run({ invocation: message.invocation }, () => handler(message.input, { ...message.context, signal: controller.signal }));
     send({ type: 'reply', id: message.id, value: value === undefined ? null : value });
   } catch (error) {
     send({ type: 'reply', id: message.id, error: text(error) });
-  }
+  } finally { controllers.delete(message.invocation); }
 });
 (async () => {
   const loaded = await import(pathToFileURL(workerData.entry).href);
@@ -157,6 +166,11 @@ function finish(server: Server, id: number, outcome: { value?: unknown; error?: 
   if (!waiting) return
   server.waiting.delete(id)
   clearTimeout(waiting.timer)
+  waiting.cleanup()
+  if (outcome.error !== undefined) {
+    waiting.controller.abort(new Error(outcome.error))
+    server.worker?.postMessage({ type: 'cancel', invocation: waiting.invocation })
+  }
   server.invocations.delete(waiting.invocation)
   if (outcome.error !== undefined) waiting.reject(new PluginError(outcome.error.split('\n')[0].slice(0, 1000), 502))
   else waiting.resolve(outcome.value)
@@ -173,14 +187,17 @@ async function answerCall(server: Server, message: { id: number; method: string;
     // A delayed handler must never inherit the enabling administrator after its caller's lease ended.
     if (message.invocation && !invocation) throw new PluginError('호출 문맥이 만료됐어. 새 요청에서 다시 호출해줘.', 410)
     const requester = invocation ? invocation.requester : backgroundRequester(server.pluginId)
-    if (message.method.startsWith('llm.')) {
-      reply({ value: callPluginLlm(server.pluginId, requester, message.method.slice(4), message.params) })
+    if (message.method === 'background.account') {
+      // Which account the module's own calls run as, so it can keep per-account data apart from them.
+      reply({ value: accountOf(backgroundRequester(server.pluginId)) })
+    } else if (message.method.startsWith('llm.')) {
+      reply({ value: await callPluginLlm(server.pluginId, requester, message.method.slice(4), message.params) })
     } else if (message.method === 'tool') {
       const name = String(message.params.name ?? '')
       const args = message.params.arguments && typeof message.params.arguments === 'object' && !Array.isArray(message.params.arguments) ? message.params.arguments as Record<string, unknown> : {}
-      reply({ value: await callTrustedAppTool(requester, name, args, invocation?.baseUrl) })
+      reply({ value: await callTrustedAppTool(requester, name, args, invocation?.baseUrl, invocation?.workspace, invocation?.signal) })
     } else if (message.method === 'tools') {
-      const tools = await trustedAppToolDefinitions(requester, invocation?.baseUrl)
+      const tools = await trustedAppToolDefinitions(requester, invocation?.baseUrl, invocation?.workspace)
       reply({ value: tools.map(tool => ({ name: tool.name, description: tool.description ?? '', inputSchema: tool.inputSchema })) })
     } else reply({ error: `Unknown call: ${message.method}` })
   } catch (error) {
@@ -330,16 +347,21 @@ export function pluginServerStatus(pluginId: string): PluginServerStatus {
   return { state: server.state, error: server.error, tools: [...server.tools.values()].map(tool => ({ name: tool.name, description: tool.description })), hooks: [...server.hooks].sort() }
 }
 
-function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request', name: string, input: unknown, context: Record<string, unknown>, invocation: Invocation, timeoutMs: number) {
+function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request', name: string, input: unknown, context: Record<string, unknown>, invocation: Invocation, timeoutMs: number, signal?: AbortSignal) {
   const server = servers.get(pluginId)
   const worker = server?.worker
   if (!server || !worker || server.state !== 'ready') return Promise.reject(new PluginError('플러그인 서버가 실행 중이 아니야.', 503))
+  if (signal?.aborted) return Promise.reject(signal.reason)
+  if (server.waiting.size >= 32) return Promise.reject(new PluginError('실행 중인 플러그인 요청이 너무 많아.', 429))
   const id = ++server.seq
   const token = pluginToken()
-  server.invocations.set(token, invocation)
+  const controller = new AbortController()
+  server.invocations.set(token, { ...invocation, signal: controller.signal })
   return new Promise<unknown>((resolve, reject) => {
     const timer = setTimeout(() => finish(server, id, { error: '플러그인 서버가 제때 답하지 않았어.' }), timeoutMs)
-    server.waiting.set(id, { resolve, reject, timer, invocation: token })
+    const abort = () => finish(server, id, { error: '플러그인 요청을 취소했어.' })
+    server.waiting.set(id, { resolve, reject, timer, invocation: token, controller, cleanup: () => signal?.removeEventListener('abort', abort) })
+    signal?.addEventListener('abort', abort, { once: true })
     try { worker.postMessage({ type: 'invoke', id, kind, name, input, context, invocation: token }) } catch (error) {
       finish(server, id, { error: error instanceof Error ? error.message : String(error) })
     }
@@ -349,8 +371,8 @@ function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request', name: strin
 const accountOf = (requester: McpRequester | undefined) => requester ? { id: requester.accountId, type: requester.accountType } : null
 
 /** A plugin page's `api.server(body)`: the module's `onRequest({ body, account, page })`. */
-export async function requestPluginServer(pluginId: string, body: unknown, requester: McpRequester | undefined, page: Record<string, unknown>, baseUrl?: string) {
-  const value = await invoke(pluginId, 'request', '', { body, account: accountOf(requester), page }, { account: accountOf(requester) }, { requester, baseUrl }, REQUEST_TIMEOUT_MS)
+export async function requestPluginServer(pluginId: string, body: unknown, requester: McpRequester | undefined, page: Record<string, unknown>, baseUrl?: string, workspace?: McpRequestContext['workspace'], signal?: AbortSignal) {
+  const value = await invoke(pluginId, 'request', '', { body, account: accountOf(requester), page }, { account: accountOf(requester) }, { requester, baseUrl, workspace }, REQUEST_TIMEOUT_MS, signal)
   if (Buffer.byteLength(JSON.stringify(value ?? null)) > 2 * 1024 * 1024) throw new PluginError('플러그인 서버 응답이 2MB를 넘었어.', 502)
   return value
 }
@@ -366,7 +388,7 @@ function toolResult(value: unknown): PluginServerToolResult {
 setPluginServerToolInvoker(async (tool, args, requester, signal) => {
   try {
     if (signal?.aborted) throw new PluginError('취소됐어.', 499)
-    return toolResult(await invoke(tool.pluginId, 'tool', tool.localName, args, { account: accountOf(requester), tool: tool.name }, { requester }, TOOL_TIMEOUT_MS))
+    return toolResult(await invoke(tool.pluginId, 'tool', tool.localName, args, { account: accountOf(requester), tool: tool.name }, { requester }, TOOL_TIMEOUT_MS, signal))
   } catch (error) {
     return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }] }
   }

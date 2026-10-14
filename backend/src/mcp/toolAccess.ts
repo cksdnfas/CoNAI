@@ -11,7 +11,7 @@ import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
-  list_plugin_pages: 'files.view', run_plugin_action: 'files.view', get_plugin_action: 'files.view', cancel_plugin_action: 'files.view',
+  list_plugin_pages: [], run_plugin_action: [], get_plugin_action: [], cancel_plugin_action: [],
   workspace_list: 'files.view', workspace_read: 'files.view', workspace_search: 'files.view', workspace_apply: ['files.view', 'files.edit'],
   search_prompts: 'prompts.view', get_most_used_prompts: 'prompts.view', list_prompt_groups: 'prompts.view',
   list_prompt_presets: 'prompts.view', get_prompt_group_structure: 'prompts.view',
@@ -60,6 +60,11 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   list_audio_folders: 'audio.view', create_audio_folder: ['audio.view', 'audio.edit'], update_audio_folder: ['audio.view', 'audio.edit'],
   move_audio_candidates: ['audio.view', 'audio.edit'], import_audio: ['audio.view', 'audio.edit'],
   set_audio_group_comment_status: ['audio.view', 'audio.edit'],
+  set_audio_candidate_review: ['audio.view', 'audio.edit'],
+  delete_audio_candidate: ['audio.view', 'audio.edit'],
+  create_audio_group_comment: ['audio.view', 'audio.edit'],
+  update_audio_group_comment: ['audio.view', 'audio.edit'],
+  delete_audio_group_comment: ['audio.view', 'audio.edit'],
   delete_audio_group: ['audio.view', 'audio.edit'], delete_audio_folder: ['audio.view', 'audio.edit'], delete_audio_project: ['audio.view', 'audio.edit'],
   edit_audio_candidate: ['audio.view', 'audio.edit'], delete_unselected_audio_candidates: ['audio.view', 'audio.edit'],
   export_audio_selected: 'audio.view', get_audio_download: 'audio.view',
@@ -78,28 +83,13 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   propose_display_block: [], propose_chat_profile: [], propose_profile_update: [], propose_profile_assets: [], get_asset_batch: [],
 };
 
-const PAGE_SAFE_SCOPES = new Set(['read', 'configure']);
-
 /**
  * A turn answering a posts board call reads posts and comments other people wrote: whatever they ask, it must not
  * reach the caller's private file store.
  */
 const BOARD_CALL_BLOCKED_TOOLS = new Set(['run_plugin_action', 'get_plugin_action', 'cancel_plugin_action', 'list_plugin_pages', 'list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit', 'room_history_search', 'room_history_read', 'list_file_versions', 'read_file_version', 'restore_file_version']);
-const PAGE_PRIVATE_FILE_TOOLS = new Set(['list_files', 'get_file_info', 'read_file_text', 'search_files', 'list_file_versions', 'read_file_version']);
 /** Posts tools a board-call turn never gets: comments it answers are other people's text, and these cannot be taken back easily. */
 const BOARD_CALL_BLOCKED_POST_TOOLS = new Set(['posts_delete', 'posts_restore_revision', 'post_comment_delete']);
-
-/**
- * Page text may steer the reply, so a connected page keeps only tools that change nothing by themselves: library and
- * catalog reads, and the setup proposals that merely show a card for an administrator to save. Private file contents
- * stay out, and a public workflow page (written by someone else) keeps nothing beyond its own page tools.
- */
-function pageKeepsTool(path: string, toolName: string) {
-  if (path.startsWith('/public/')) return false;
-  // This only stores a pending draft; its organize scope and feature grants still apply below.
-  if (path.split('?')[0] === '/posts' && toolName === 'posts_propose_knowledge') return true;
-  return PAGE_SAFE_SCOPES.has(getMcpToolScope(toolName) ?? '') && !PAGE_PRIVATE_FILE_TOOLS.has(toolName);
-}
 
 /** A tool's feature keys; external MCP tools need none (their server's scope and the profile decide). Undefined: unclassified. */
 function featurePermissionOf(toolName: string): string | readonly string[] | undefined {
@@ -160,10 +150,9 @@ function keyHoldsTool(context: McpRequestContext, toolName: string): boolean {
 
 /**
  * The one decision on whether a tool is offered and may run: the account holds what the web would require, the chat's
- * own tools are always there, and everything else follows the profile's scopes and tool list. A connected page narrows
- * the reply to its own tools (and linked generation presets), because page text is untrusted input that must not steer
- * the bot into unrelated actions. `requireMcpToolAccess` re-runs this before each call, then rechecks the account with
- * explicit errors.
+ * own tools are always there, and everything else follows the profile's scopes and tool list. Ordinary page connections
+ * keep those grants; public pages retain their restricted tools. Page content never supplies authorization.
+ * `requireMcpToolAccess` re-runs this before each call, then rechecks the account with explicit errors.
  */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
   if (toolName.startsWith('workspace_')) {
@@ -178,15 +167,13 @@ export function isContextToolAllowed(context: McpRequestContext, toolName: strin
   if (isKeyContext(context) && (featurePermissionOf(toolName) === undefined || (accountChecks && !keyHoldsTool(context, toolName)))) return false;
   if (isChatMcpSource(context.source) && CHAT_BLOCKED_TOOLS.has(toolName)) return false;
   if (accountChecks && context.requester && !accountHoldsTool(context, toolName)) return false;
-  // Page text may steer the reply: lore files are not rewritten from it (save_lore still leaves an undoable entry), and
-  // linked private files and other chats' history stay out like the file store tools.
-  if ((toolName === 'edit_lore_file' || toolName.startsWith('linked_') || toolName.startsWith('room_history_')) && context.chatContext?.page) return false;
-  // The chat's own settings name its private files and links: not from page text or a board call either.
-  if (CHAT_SETTINGS_TOOLS.has(toolName)) return Boolean(context.chatContext) && !context.chatContext?.page && BoardCallRooms.runFor(context.chatContext!.threadId, context.chatContext!.profileId) === null;
+  const publicPage = context.chatContext?.page?.path.startsWith('/public/') === true;
+  if ((toolName === 'edit_lore_file' || toolName.startsWith('linked_') || toolName.startsWith('room_history_')) && publicPage) return false;
+  if (CHAT_SETTINGS_TOOLS.has(toolName)) return Boolean(context.chatContext) && !publicPage && BoardCallRooms.runFor(context.chatContext!.threadId, context.chatContext!.profileId) === null;
   if (CHAT_ROOM_TOOLS.has(toolName)) return Boolean(context.chatContext) && (!GROUP_ONLY_CHAT_TOOLS.has(toolName) || context.chatContext?.kind === 'group');
   if (CHAT_VISION_BUILTIN_TOOLS.has(toolName) && context.chatContext) return true;
   if (isConnectedChatPageTool(context, toolName)) return true;
-  if (context.chatContext?.page && !isChatGenerationTool(toolName) && !pageKeepsTool(context.chatContext.page.path, toolName)) return false;
+  if (publicPage && !isChatGenerationTool(toolName)) return false;
   if (context.toolAllowlist && !context.toolAllowlist.includes(toolName)) return false;
   const presetMode = (context.generationPresetIds?.length ?? 0) > 0;
   if (isChatGenerationTool(toolName)) return presetMode && context.scopes.includes('generate');

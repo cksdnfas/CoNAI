@@ -2,7 +2,8 @@ import fs from 'fs'
 import type { PluginInstance, PluginWriteProposal } from '@conai/shared'
 import { z } from 'zod'
 import type { McpRequester } from '../../mcp/context'
-import { FileStoreService, MAX_TEXT_DOCUMENT_BYTES } from '../fileStoreService'
+import { FileStoreService, MAX_TEXT_DOCUMENT_BYTES, fileOwnerKey } from '../fileStoreService'
+import { refreshMcpRequester } from '../../mcp/toolAccess'
 import { requireFileStoreOwner, requireFileStoreAction } from '../fileStoreAccess'
 import { pluginDb, pluginToken, sha256 as hash, PluginError, requireProposalRoom, issueProposalApproval, PluginMediaGrants } from './pluginStore'
 import { getPlugin } from './pluginRegistry'
@@ -30,7 +31,8 @@ function cleanup() {
 export function requirePluginInstance(id: string, caller: PluginCaller) {
   pluginTokenSchema.parse(id)
   if (!caller.sessionId) throw new PluginError('세션이 필요해.', 401)
-  const owner = requireFileStoreOwner(caller.requester)
+  refreshMcpRequester(caller.requester)
+  const owner = fileOwnerKey(caller.requester.accountId)
   const row = pluginDb().prepare('SELECT * FROM plugin_instances WHERE id = ? AND session_key = ? AND owner_key = ?').get(id, hash(caller.sessionId), owner) as InstanceRow | undefined
   if (!row || row.expires_at <= Date.now()) throw new PluginError('확장 연결이 만료됐어. 다시 열어줘.', 410)
   const plugin = getPlugin(row.plugin_id)
@@ -45,7 +47,9 @@ export function openPluginInstance(pluginId: string, pageId: string, input: unkn
   const page = plugin.definition.pages.find((item) => item.id === pageId)
   if (!page) throw new PluginError('페이지가 없어.', 404)
   const ids = [...new Set(z.array(fileIdSchema).max(20).parse(input))]
-  const owner = requireFileStoreOwner(caller.requester)
+  refreshMcpRequester(caller.requester)
+  const owner = fileOwnerKey(caller.requester.accountId)
+  if (ids.length || workspaceInput !== undefined) requireFileStoreOwner(caller.requester)
   if (!caller.sessionId) throw new PluginError('세션이 필요해.', 401)
   if ((pluginDb().prepare('SELECT COUNT(*) AS n FROM plugin_instances WHERE session_key = ? AND expires_at > ?').get(hash(caller.sessionId), Date.now()) as { n: number }).n >= 12) throw new PluginError('열린 확장 창이 너무 많아. 기존 창을 닫아줘.', 429)
   const files = ids.map((id) => {
@@ -56,9 +60,7 @@ export function openPluginInstance(pluginId: string, pageId: string, input: unkn
   let workspace: PluginInstance['workspace']
   if (workspaceInput !== undefined) {
     const selected = z.object({ id: workspaceIdSchema, write: z.boolean().default(false) }).strict().parse(workspaceInput)
-    if (!plugin.definition.capabilities.includes('workspace.read')) throw new PluginError('프로젝트 연결을 지원하지 않는 확장이야.', 403)
     if (selected.write) {
-      if (!plugin.definition.capabilities.includes('workspace.write')) throw new PluginError('프로젝트 쓰기를 지원하지 않는 확장이야.', 403)
       requireFileStoreAction(caller.requester, 'organize')
     }
     const project = WorkspaceService.get(owner, selected.id)
@@ -96,7 +98,7 @@ export function closePluginSession(sessionId: string) {
 function requireFile(instanceId: string, fileId: string, caller: PluginCaller, capability: 'files.read' | 'files.write' | 'files.media') {
   fileIdSchema.parse(fileId)
   const instance = requirePluginInstance(instanceId, caller)
-  if (!instance.plugin.capabilities.includes(capability) || !instance.fileIds.includes(fileId)) throw new PluginError('허용된 자료와 기능만 사용할 수 있어.', 403)
+  requireFileStoreOwner(caller.requester)
   if (capability === 'files.write') requireFileStoreAction(caller.requester, 'organize')
   return instance
 }

@@ -39,7 +39,7 @@
     {
       "id": "app-workbench.create_group",
       "label": "라이브러리 그룹 만들기",
-      "description": "새 라이브러리 그룹 생성을 호스트 검토에 올린다. 사람이 적용해야 생성된다.",
+      "description": "새 라이브러리 그룹을 만든다. AI/MCP 요청은 호스트 검토 후 적용한다.",
       "tool": "create_image_group",
       "schema": {
         "type": "object",
@@ -57,7 +57,7 @@
     {
       "id": "app-workbench.write_note",
       "label": "게시판 작업 기록",
-      "description": "작업 기록을 게시판 초안으로 작성하는 검토를 요청한다. 사람이 적용하면 저장한다.",
+      "description": "작업 기록을 게시판 초안으로 저장한다. AI/MCP 요청은 호스트 검토 후 적용한다.",
       "tool": "posts_create",
       "schema": {
         "type": "object",

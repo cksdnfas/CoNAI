@@ -28,7 +28,7 @@ export function wakeInstructionText(routing: ChatRoutineRouting, instruction: st
   if (routing.source === 'post') {
     return [`[Posts board call on "${routing.name}" — sent by the app, not typed by the person]`, '', instruction.trim()].join('\n')
   }
-  const sender = routing.source === 'routine' ? `Routine "${routing.name}"` : `Workflow "${routing.name}"`
+  const sender = `${routing.source === 'routine' ? 'Routine' : routing.source === 'plugin' ? 'Plugin' : 'Workflow'} "${routing.name}"`
   return [
     `[${sender} — sent by the app on a schedule, not typed by the person]`,
     'Do what it asks yourself, with your own tools. The person may not be watching; do not stop to ask them what you can decide.',
@@ -143,6 +143,6 @@ export function forgetAutomationRoom(accountId: number | null, key: string) {
 export function automationRoomKinds(accountId: number | null): Map<number, ChatAutomationRoomKind> {
   const rows = roomsTable().prepare('SELECT room_key, thread_id FROM chat_automation_rooms WHERE account_key = ?').all(accountKey(accountId)) as Array<{ room_key: string; thread_id: number }>
   const kinds = new Map<number, ChatAutomationRoomKind>()
-  for (const row of rows) kinds.set(row.thread_id, row.room_key.startsWith('posts:board:') ? 'board' : row.room_key.startsWith('workflow:') ? 'workflow' : 'routine')
+  for (const row of rows) kinds.set(row.thread_id, row.room_key.startsWith('posts:board:') ? 'board' : row.room_key.startsWith('workflow:') ? 'workflow' : row.room_key.startsWith('plugin:') ? 'plugin' : 'routine')
   return kinds
 }

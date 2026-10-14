@@ -31,7 +31,8 @@
 현재 계약:
 
 - `view`는 탐색·선택, `draft`는 초안 변경이다. 등록된 경로로 즉시 실행하고 결과 화면을 반환한다. 초안은 현재 상태가 맞을 때 되돌릴 수 있다.
-- `commit`은 저장·실행 등 확정 작업으로 검토 카드를 거친다. 제안 생성과 실제 적용을 구분한다.
+- `direct`는 파일 이름·이동과 실행 중단이다. 현재 화면 리비전을 브라우저에서 확인하고 기존 API 권한·검증으로 즉시 실행하며 초안 되돌리기는 제공하지 않는다. 확장 플러그인은 이 등급을 선언할 수 없다.
+- `commit`은 그 외 저장·실행 등 확정 작업으로 검토 카드를 거친다. 제안 생성과 실제 적용을 구분한다.
 - 페이지·모달·선택·리비전이 달라진 제안은 덮어쓰지 않는다. 페이지 접근과 작업 권한은 각각 확인한다.
 - 새 입력이나 버튼은 해당 기능의 상태 변경/API 경로와 어댑터를 함께 연결한다. 작업 ID를 추가할 때 공유 검증·권한 매핑·서버 적용·결과 반영을 같이 확인한다.
 - 지원 여부는 실제 등록된 작업이 기준이다. 페이지 제목이나 이동 경로만 제공되는 상태를 기능 전체 지원으로 세지 않는다.
@@ -53,6 +54,8 @@ API 연결의 일시적 장애 재시도와 출력 이후 재전송 금지는 `s
 | 채팅용 도구 탐색 | [toolCatalog.ts](backend/src/mcp/toolCatalog.ts) |
 | HTTP 진입과 요청 검증 | [index.ts](backend/src/mcp/index.ts), [httpAccess.ts](backend/src/mcp/httpAccess.ts), [requestSecurity.ts](backend/src/mcp/requestSecurity.ts) |
 | 기능별 도구 | `backend/src/mcp/tools/` |
+
+일반 페이지 연결은 계정·프로필이 이미 허용한 도구와 연결 파일 접근을 유지한다. 공개 페이지와 게시판 봇 호출의 별도 제한은 유지하며 페이지 내용은 권한 부여로 취급하지 않는다. 생성 프리셋은 자유 생성만 제한하고 허용된 워크플로 조회·진단은 유지한다. 오디오 검수·메모·댓글·단건 삭제는 기존 서비스를 공유하며 도구 수정에는 조회 리비전을 요구하고 성공 시 `audio.changed`로 해당 그룹을 갱신한다.
 
 채팅은 필요한 도구를 `open_tools`로 탐색하고 `run_tool`로 호출하는 카탈로그와 직접 제공되는 도구를 함께 사용한다. 외부 클라이언트의 도구 노출과 채팅의 노출은 같지 않다. 새 도구는 적절한 카테고리·권한·설명·입출력 제한과 호출 후 상태 확인을 연결한다. 카탈로그를 통하더라도 기존 검증과 권한 검사를 유지한다.
 
@@ -136,13 +139,17 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 ## 선택 설치 확장
 
-`shared/src/types/plugin.ts`, `backend/src/services/plugins/`, `frontend/src/features/plugins/`가 manifest, 설치·권한·승인, 격리 화면을 담당한다. `/settings?section=plugins`에서 앱 전체 플러그인을 관리한다. `/extensions`는 별도 실행·작업 화면이며 `/ext/<pluginId>/<pageId>`는 `kind: 'extension'` 페이지 계약으로 기존 어시스턴트에 연결한다. 서버는 설치 manifest와 작업 스키마를 대조한다. 플러그인 콜백의 등급은 view/draft만 허용하고, 실제 파일 쓰기는 호스트 검토 카드와 서버 승인·리비전 검사로 수행한다.
+`shared/src/types/plugin.ts`, `backend/src/services/plugins/`, `frontend/src/features/plugins/`가 manifest·설치·실행·격리 화면을 담당한다. `/settings?section=plugins`에서 관리하고 `/extensions`에서 실행·작업을 조회한다. `/ext/<pluginId>/<pageId>`는 `kind: extension` 어시스턴트 계약을 사용한다. 설치·활성화한 플러그인은 앱 기능이며 `capabilities`·`appTools`는 호환 정보다. 서버 모듈 유무와 무관하게 현재 계정의 앱 권한을 적용하고, 페이지를 여는 데 파일 권한을 요구하지 않는다.
 
-자산·미디어 라우트는 전역 CORS 이전의 credential-free 종단 라우트다. 일반 호스트 API의 null origin 거부와 Wallpaper Engine 예외를 합치지 않는다. 공용 파일함에서 명시적으로 선택한 자료는 FileStoreService로 제공한다. `pluginWorkspace.ts`는 호스트에서 연결한 프로젝트의 목록·읽기·검토 저장과 미디어 참조를 제공하며 WorkspaceService의 쓰기 잠금·리비전·멱등 처리를 재사용한다. 연결·승인은 요청 계정과 세션에 묶고 미디어 원본을 프로젝트에 자동 복제하지 않는다. `pluginMediaProcessing.ts`는 호스트 승인 후 제한된 crop/audio 처리만 기존 런타임 작업·라이브러리/오디오 저장으로 연결한다. 서버 모듈 없는 플러그인은 임의 서버 코드를 실행하지 않는다. `workspace.proposeChanges`는 공통 쓰기 잠금과 리비전으로 파일·폴더 이동을 처리하며 부분 실패 내역을 보존한다. `pluginAppActions.ts`와 `pluginAppBridge.ts`는 manifest의 appTools/serverActions를 기존 MCP 네이티브 서비스로 연결한다. 기능 권한·프로젝트 연결·키 범위를 교차 검사하며 변경은 호스트 검토와 plugin-action 작업으로 실행한다. MCP list_plugin_pages/run_plugin_action/get_plugin_action/cancel_plugin_action과 페이지 serverActions는 같은 계약을 공유한다. 명시적으로 server 기능을 선언하고 관리자가 활성화한 신뢰된 패키지는 pluginServerRuntime.ts의 Node worker와 전용 저장소를 사용한다. 설치하지 않은 개별 도구는 기본 번들에 포함하지 않는다. [개발 계약과 SDK](plugins/README.md), [사용자 가이드](docs/GUIDE/PLUGINS.md)를 참고한다.
+자산·미디어는 전역 CORS 이전의 credential-free 라우트다. iframe·MessageChannel·null origin 검증은 유지한다. 파일 선택은 초기 문맥이며 실제 파일 접근은 FileStoreService의 계정 기능 권한을 따른다. 프로젝트는 호스트가 연결하며 UI 편집 여부는 계정의 files.edit에서 정한다. `pluginInstanceAppContext`와 `pluginServerRuntime`이 서버 모듈에도 프로젝트 문맥을 전달하고, WorkspaceService의 쓰기 잠금·리비전 검사를 재사용한다. `pluginAppPolicy`는 활성 채팅처럼 없는 실행 문맥이 필요한 도구를 제외한다. 화면의 직접 앱 호출은 멱등 plugin-action 작업으로 즉시 시작한다. AI/MCP 변경과 명시적인 propose* 저장은 기존 호스트 검토를 유지한다. `server.entry`가 있으면 Node worker와 전용 저장소를 사용한다. [SDK](plugins/README.md), [사용자 가이드](docs/GUIDE/PLUGINS.md)를 참고한다.
 
-신뢰된 서버 플러그인의 `conai.llm`과 페이지의 `api.llm`은 `pluginLlm.ts`에서 사용 가능한 프로필 조회·단일 답변 시작·상태/본문 조회·취소를 제공한다. `chatProfileReply.ts`의 프롬프트 구성과 기존 모델 실행 경로를 워크플로와 공유하고, `plugin-llm` 런타임 작업으로 동시 실행·취소·재시작 실패 처리를 재사용한다. 요청 ID는 플러그인·계정에 묶으며 원본 입력은 영구 작업 인자에 저장하지 않는다. 어항 같은 개별 기능의 화면·기억·행동 규칙은 플러그인에 둔다. 실행 권한·멱등·취소 회귀는 `backend/test/plugin-server.test.ts`, 기존 프롬프트 호환성은 `backend/test/workflow-llm-nodes.test.ts`로 확인한다.
+서버 모듈의 `conai.llm`과 모든 활성 플러그인 페이지의 `api.llm`은 `pluginLlm.ts`에서 사용 가능한 프로필 조회·프로필 이미지 조회(`asset`)·단일 답변 시작·상태/본문 조회·취소를 제공한다. 이미지는 `chatProfileAssets.ts`의 기존 라이브러리·레거시·안전 설정과 이미지 조회 권한을 재사용하며, 크기가 제한된 WebP와 크롭 정보를 반환한다. `chatProfileReply.ts`의 프롬프트 구성과 기존 모델 실행 경로를 워크플로와 공유하고, `plugin-llm` 런타임 작업으로 동시 실행·취소·재시작 실패 처리를 재사용한다. 요청 ID는 플러그인·계정에 묶으며 원본 입력은 영구 작업 인자에 저장하지 않는다. 어항 같은 개별 기능의 화면·기억·행동 규칙은 플러그인에 둔다. 실행·이미지 권한·멱등·취소 회귀는 `backend/test/plugin-server.test.ts`, 기존 프롬프트 호환성은 `backend/test/workflow-llm-nodes.test.ts`로 확인한다.
+
+플러그인의 네이티브 HTTP 연결은 `shared/src/utils/pluginNativeApi.ts`의 기능 경로 검증과 `frontend/src/features/plugins/plugin-native-api.ts`의 호스트 fetch를 사용한다. 인증정보·외부 URL·플러그인 승인 API는 제외하고 나머지는 원래 라우트의 권한·리비전·multipart 계약을 따른다. Response body를 transferable stream으로 전달해 바이너리와 SSE를 전체 JSON으로 복사하지 않는다. `pluginArtifactMedia.ts`는 서명된 결과 ID를 계정·세션·원본 변경 검사와 함께 스트리밍 미디어로 제공한다. `pluginStorage.ts`는 plugin+account 설정에 SQLite CAS와 크기 상한을 적용한다. 변경 이벤트는 기존 탭당 SSE를 공유한다. SDK→호스트→HTTP/MCP→서버 모듈의 요청 취소와 영구 작업의 명시적 취소를 구분한다. 경로·격리·저장 충돌·미디어 회귀는 기존 plugin 테스트, 바이너리·스트림·취소 프로토콜은 `frontend/test/plugin-sdk.test.ts`에서 검증한다.
 
 공개 `plugins/`에는 SDK와 `text-editor`·`app-workbench`·`chat-instructions` 개발 예제를 둔다. 개인 플러그인과 전용 테스트·문서는 Git/Docker에서 제외한 `local-plugins/`에 보관한다. `node scripts/build-plugin.mjs --local <이름>`으로 `build-output/local-plugins/`에 개인 ZIP을 만들며, 공용 테스트는 개인 소스에 의존하지 않는다.
+
+`pluginLlm.ts`의 `mode: profile`은 `pluginProfileRun.ts` → `ensureAutomationRoom` / `wakeChatRoom` → 기존 채팅 엔진으로 실행한다. 플러그인·계정·프로필별 전용 대화에서 프로필의 도구 카탈로그·권한·생성 프리셋·검토를 재사용하며 별도 도구 실행 루프를 만들지 않는다. `profileRun`은 실제 메시지의 도구 결과를 크기 제한 안에서 반환하고, 재조회 시 `attachJobResults`로 지연 생성 결과를 갱신한다. 대화는 자동화 목록의 `plugin` 종류로 남고 SDK `navigation.openChat`으로 연다. 기존 생략/`text` 모드는 상태 없는 답변 계약을 유지한다. `plugin-server.test.ts`에서 모델 도구 호출 → 실제 파일 작업 → 모델 결과 재입력, 권한 회수·계정 격리·멱등·취소를 검증한다.
 
 `npx tsx --test backend/test/plugins.test.ts`로 계정·세션·선택 범위, 승인 재사용·권한 회수·저장 충돌, ZIP과 opaque-origin 경계를 검증한다.
 

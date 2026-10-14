@@ -5,6 +5,7 @@ import { resolvePluginWorkspaceMedia } from '../services/plugins/pluginWorkspace
 import { filePreviewMime } from '../services/fileStorePreview'
 import { AuthAccessControlService } from '../services/authAccessControlService'
 import { pluginRouteError } from './plugins.routes'
+import { resolvePluginArtifactMedia } from '../services/plugins/pluginArtifactMedia'
 
 /** These terminal routers precede the credentialed global CORS policy. No request falls through to that policy. */
 export const pluginAssetRoutes = Router()
@@ -38,6 +39,14 @@ pluginAssetRoutes.get('/:pluginId/:version/*asset', (req, res, next) => {
     res.setHeader('Content-Security-Policy', `sandbox allow-scripts; default-src 'none'; script-src ${base} 'wasm-unsafe-eval'; style-src ${base}; font-src ${base}; img-src ${base} ${origin}/api/plugin-media/ blob:; media-src ${base} ${origin}/api/plugin-media/ blob:; connect-src ${base}; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; frame-ancestors 'self'`)
     // The verified private root itself may be a dot-directory (portable/dev instances).
     res.sendFile(file, { dotfiles: 'allow' }, (error) => { if (error) next(error) })
+  } catch (error) { next(error) }
+})
+pluginMediaRoutes.get('/artifact/:token', (req, res, next) => {
+  try {
+    const artifact = resolvePluginArtifactMedia(String(req.params.token))
+    res.setHeader('Content-Type', artifact.mimeType)
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox")
+    res.sendFile(artifact.absolutePath, { dotfiles: 'allow' }, error => { if (error) next(error) })
   } catch (error) { next(error) }
 })
 pluginMediaRoutes.get(['/workspace/:token', '/:token'], async (req, res, next) => {

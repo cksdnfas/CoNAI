@@ -65,7 +65,7 @@ export type ChatFileChange = {
 }
 
 /** Wire contracts shared by the chat server and client. */
-export type ChatPageOperation = { commandId: string; tier: 'view' | 'draft'; label: string }
+export type ChatPageOperation = { commandId: string; tier: 'view' | 'draft' | 'direct'; label: string }
 
 export type ChatToolCall = {
   id: string

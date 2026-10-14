@@ -55,7 +55,7 @@ export function registerChatPageActionTools(server: McpServer, context: McpReque
     } catch (error) { return pageFailure(error) }
   })
 
-  server.registerTool('page_act', { description: 'Run one registered view/draft action using its current screen ID and exact schema; returns updated screen. Draft never saves. Leaving unsaved edits is blocked. Commit actions require propose_page_action; extension save requests require human host Apply.', inputSchema: z.object({
+  server.registerTool('page_act', { description: 'Run one registered view/draft/direct action using its current screen ID and exact schema; returns updated screen. Draft never saves; direct actions rename/move files or stop work immediately with a screen revision check. Leaving unsaved edits is blocked. Commit actions require propose_page_action; extension save requests require human host Apply.', inputSchema: z.object({
     action: z.string().max(80).describe('Operation ID from the screen.'),
     arguments: z.record(z.string(), z.unknown()).default({}).describe('Object matching the operation schema exactly.'),
   }) }, async ({ action: actionId, arguments: args }) => {
@@ -65,20 +65,20 @@ export function registerChatPageActionTools(server: McpServer, context: McpReque
       if (tier === 'commit') throw new Error('저장·확정 작업이야. propose_page_action으로 검토 카드를 만들어.')
       if (chatPageActionLeavesScreen(actionId, action) && page.dirty) throw new Error('이 화면에 저장하지 않은 변경이 있어. 떠나거나 다른 항목을 열기 전에 사용자가 저장하거나 버려야 해.')
       const commandId = newChatPageCommandId()
-      const next = knowledgePageForExecution(context, await runChatPageCommand(requester, page, context.chatContext!.threadId, { type: 'action', actionId, label: action.label, tier, arguments: validated }, { commandId }))
+      const next = knowledgePageForExecution(context, await runChatPageCommand(requester, page, context.chatContext!.threadId, { type: 'action', actionId, label: action.label, tier, ...(tier === 'direct' ? { revision: page.revision } : {}), arguments: validated }, { commandId }))
       if (context.source === 'codex-chat') notePageViewShown(context.chatContext!.threadId, requester, next)
       return { ...pageResult({ status: 'done', tier, action: action.label, page: pageOperationView(requester, page, next) }), structuredContent: { pageOperation: { commandId, tier, label: pageOperationLabel(action.label, actionId, validated) } } }
     } catch (error) { return pageFailure(error) }
   })
 
-  server.registerTool('propose_page_action', { description: 'Create a review card for one registered commit action. Only human Apply saves; never report a proposal as saved. View/draft actions, including extension save requests, use page_act.', inputSchema: z.object({
+  server.registerTool('propose_page_action', { description: 'Create a review card for one registered commit action. Only human Apply saves; never report a proposal as saved. View/draft/direct actions, including extension save requests, use page_act.', inputSchema: z.object({
     actionId: z.string().max(80).describe('Operation ID from the screen.'),
     arguments: z.record(z.string(), z.unknown()).describe('Object matching the exact registered schema for this action.'),
   }) }, async ({ actionId, arguments: args }) => {
     try {
       const page = live()
       const { action, validated, tier } = resolveAction(requester, page, actionId, args)
-      if (tier !== 'commit') throw new Error('저장이 아닌 작업이야. page_act로 바로 실행해.')
+      if (tier !== 'commit') throw new Error('검토 카드가 필요 없는 작업이야. page_act로 바로 실행해.')
       const data = page.data ?? {}
       const node = validated.fieldId && Array.isArray(data.nodes) ? data.nodes.find((item) => item && typeof item === 'object' && !Array.isArray(item) && item.fieldId === validated.fieldId) : undefined
       const before = node ?? (validated.fieldId ? Object.fromEntries(page.fields.filter((field) => field.id === validated.fieldId).map((field) => [field.id, field.value])) : data.selected ?? Object.fromEntries(page.fields.map((field) => [field.id, field.value])))

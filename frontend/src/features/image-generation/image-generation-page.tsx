@@ -292,7 +292,7 @@ function ImageGenerationPageContent() {
       <div
         className={cn(
           isWideLayout
-            ? 'flex h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col overflow-hidden'
+            ? 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col overflow-hidden'
             : 'space-y-4 pb-28',
         )}
       >
@@ -313,7 +313,7 @@ function ImageGenerationPageContent() {
       className={cn(
         'space-y-4',
         useNarrowTabs && narrowView === 'edit' ? 'pb-28' : isWideLayout ? 'pb-0' : 'pb-6',
-        useFixedHeightLayout && 'flex h-[calc(100vh-var(--theme-shell-header-height)-1.5rem-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
+        useFixedHeightLayout && 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
       )}
     >
       <div className={cn(useFixedHeightLayout && 'shrink-0 pb-2')}>

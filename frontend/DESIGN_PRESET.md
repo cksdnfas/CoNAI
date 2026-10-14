@@ -125,6 +125,9 @@ buttons up one tone.
 - `PageToolbar` (`components/common/page-toolbar`): one 56px row, no surface. `title?` · `start?` (segmented…) ·
   `children` (flexible middle, e.g. search) · `actions?` (ghost IconButtons, at most one primary). Adds the sidebar
   toggle itself inside PageWithSidebar. `PageHeader` is deprecated.
+- Header → content gap: the shell's main starts right under the app header (no extra top padding). The page's first
+  row is its PageToolbar (or a 56px row like a tab strip), and that row's height is the gap. Don't add `pt-*` / `-mt-*`
+  at a page root, and don't subtract a top gap in `calc(100dvh - header …)` heights.
 - `ExplorerSidebar` is legacy: flat, hairline, floating / pin props are inert. Migrate callers to PageWithSidebar.
 
 ### Rows

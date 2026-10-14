@@ -67,14 +67,13 @@ export function PluginsPage() {
   const fileCount = files ? files.split(',').filter(Boolean).length : 0
   const pages = enabled.flatMap(({ manifest }) => manifest.pages.map((page) => {
     // A page opened with a project needs project access; one opened with files needs file access.
-    const blocked = projectId && !manifest.capabilities.includes('workspace.read') ? t({ ko: '프로젝트 미지원', en: 'No project access' })
-      : fileCount && !manifest.capabilities.some((capability) => capability.startsWith('files.')) ? t({ ko: '파일 미지원', en: 'No file access' })
-        : null
+    const blocked = (projectId || fileCount) && !auth.data?.permissionKeys.includes('files.view')
+      ? t({ ko: '파일 조회 권한이 필요해', en: 'File access required' }) : null
     return { manifest, page, blocked }
   }))
 
   return (
-    <div className="px-4 pb-6">
+    <div className="pb-6">
       <PageToolbar
         title={t({ ko: '플러그인', en: 'Plugins' })}
         start={fileCount || projectId ? (

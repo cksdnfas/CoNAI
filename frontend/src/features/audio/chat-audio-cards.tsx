@@ -30,7 +30,7 @@ function argumentGroupId(call: ChatToolCall): string | null {
 
 /**
  * Sounds a reply made or referenced, one card per group: play in place, open the group in the 오디오 tab to review.
- * Review stays on the audio page (people review, the bot does not), so the card has no adopt/reject buttons.
+ * The card links to the audio page for manual review; requested review changes are also available through chat tools.
  */
 export function ChatAudioCards({ calls }: { calls: ChatToolCall[] }) {
   const auth = useAuthStatusQuery().data

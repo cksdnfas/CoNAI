@@ -79,8 +79,9 @@ live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `e
 
 Optional extensions live in `features/plugins/`: `/settings?section=plugins` embeds package management; `/extensions` is the standalone launcher and operation view and `/ext/:pluginId/:pageId`
 hosts an opaque `sandbox="allow-scripts"` iframe. Use the private MessageChannel SDK, never inject plugin code
-into the app bundle. The host registers `kind: 'extension'` with manifest actions and owns all save review cards.
-File selection is explicit and bounded. `useUnsavedSettingsGuard(..., true)` also guards query changes that replace
+into the app bundle. Installed plugins use native account permissions; opening a page does not require file access.
+Direct app calls execute normally, while assistant changes and explicit save proposals keep host review cards.
+File selection is bounded opening context. `useUnsavedSettingsGuard(..., true)` also guards query changes that replace
 the selected files. Keep the parent's `frame-src 'self'` policy and the dedicated asset proxy in Vite.
 See [plugin contracts](../plugins/README.md).
 

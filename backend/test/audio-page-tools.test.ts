@@ -6,8 +6,8 @@ import { test } from 'node:test'
 import type { ChatPageSnapshot } from '@conai/shared'
 import type { McpRequestContext } from '../src/mcp/context'
 
-/** A chat connected to the 오디오 page keeps the audio workspace tools; any other connected page narrows them away. */
-test('audio page: connected /audio offers the audio tools, other pages do not', { timeout: 60000 }, async (t) => {
+/** A chat connected to the 오디오 page keeps the audio workspace tools; other pages preserve the profile's existing grants. */
+test('audio page: connected pages preserve authorized tools and audio adds its bounded tools', { timeout: 60000 }, async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-audio-page-tools-'))
   process.env.RUNTIME_BASE_PATH = root
   for (const part of ['DATABASE', 'UPLOADS', 'LOGS', 'TEMP', 'SAVE', 'CANVAS', 'ARTIFACTS', 'MODELS', 'CUSTOM_NODES', 'RECYCLE_BIN']) {
@@ -45,11 +45,10 @@ test('audio page: connected /audio offers the audio tools, other pages do not', 
   const { InMemoryTransport } = await import('@modelcontextprotocol/client')
 
   assert.equal(chatPagePermission('/audio'), 'page.audio.view')
-  // Every page-kind tool is a real, classified tool, and review never is one.
+  // Every page-kind tool is a real, classified tool.
   for (const tool of CHAT_PAGE_KIND_TOOLS.audio ?? []) {
     assert.ok(getMcpToolScope(tool), `${tool} has a scope`)
     assert.notEqual(TOOL_FEATURE_PERMISSIONS[tool], undefined, `${tool} has a feature permission`)
-    assert.doesNotMatch(tool, /review/)
   }
 
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
@@ -84,12 +83,12 @@ test('audio page: connected /audio offers the audio tools, other pages do not', 
   const onAudio = await listTools(audioPage)
   assert.ok(onAudio.has('order_audio'), 'order_audio is offered on the connected audio page')
   assert.ok(onAudio.has('list_audio_candidates') && onAudio.has('edit_audio_candidate') && onAudio.has('get_current_page'))
-  assert.ok(![...onAudio].some((name) => /review|wait_audio_order/.test(name)), 'no review tool, no blocking wait in chat')
-  assert.ok(!onAudio.has('move_files') && !onAudio.has('extract_sprite_sheet'), 'other tools that change things stay narrowed away')
+  assert.ok(onAudio.has('set_audio_candidate_review') && !onAudio.has('wait_audio_order'), 'review is available, blocking wait is not')
+  assert.ok(onAudio.has('move_files') && onAudio.has('extract_sprite_sheet'), 'general tool grants survive the connection')
   assert.ok(onAudio.has('search_images'), 'reads stay offered on a connected page')
 
   const onFiles = await listTools(filesPage)
-  assert.ok(!onFiles.has('order_audio') && !onFiles.has('edit_audio_candidate'), 'another page does not bring the audio tools that change things')
+  assert.ok(onFiles.has('order_audio') && onFiles.has('edit_audio_candidate'), 'another page preserves the general audio grant')
   assert.ok(onFiles.has('get_current_page'))
 
   const noPage = await listTools()

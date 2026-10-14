@@ -3,19 +3,19 @@ import { validateChatPageArguments, type PluginAppRequest } from '@conai/shared'
 import type { McpRequestContext } from '../../mcp/context'
 import { ALL_MCP_HTTP_SCOPES } from '../../mcp/context'
 import { requireMcpToolAccess, refreshMcpRequester } from '../../mcp/toolAccess'
-import { isRequesterAdmin, requireRequesterPermission } from '../../middleware/featureAccess'
+import { isRequesterAdmin } from '../../middleware/featureAccess'
 import { mcpHttpSettingsService } from '../mcpHttpSettingsService'
 import { pluginDb, pluginToken as token, sha256 as hash, PluginError } from './pluginStore'
 import { getPlugin } from './pluginRegistry'
 import { requirePluginInstance, type PluginCaller } from './pluginHost'
-import { pluginAppToolScope, pluginAppTools, trustedAppTools } from './pluginAppPolicy'
+import { pluginAppToolScope, pluginAppTools } from './pluginAppPolicy'
 import { callPluginAppTool, pluginAppDefinitions } from './pluginAppBridge'
 import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
 import { RuntimeJobStore, RuntimeJobConflictError } from '../runtimeJobs/runtimeJobStore'
 import { WorkspaceService } from '../workspaceService'
 import { requireFileStoreOwner } from '../fileStoreAccess'
 
-type Context = Pick<McpRequestContext, 'requester' | 'scopes' | 'keyId' | 'keyGroup' | 'baseUrl' | 'contentRatingLimit' | 'toolAllowlist' | 'workspace'> & { projectGrant?: { id: string; revision: number; write: boolean; threadId?: number; bindingRevision?: string } }
+type Context = Pick<McpRequestContext, 'requester' | 'scopes' | 'keyId' | 'keyGroup' | 'baseUrl' | 'contentRatingLimit' | 'toolAllowlist' | 'workspace'> & { autoApply?: boolean; projectGrant?: { id: string; revision: number; write: boolean; threadId?: number; bindingRevision?: string } }
 type Row = { id: string; owner_key: string; request_key: string; fingerprint: string; plugin_id: string; digest: string; body: string; context: string; status: PluginAppRequest['status']; job_id: string | null; expires_at: number }
 const REQUEST_LIFETIME_MS = 24 * 60 * 60_000
 const requestKey = z.string().regex(/^[a-zA-Z0-9_-]{8,100}$/)
@@ -52,29 +52,26 @@ function fresh(context: Context) {
   }
   return context
 }
-/** A package with a server module is trusted code: it reaches every app tool without declaring it or waiting for approval. */
-export const isTrustedPlugin = (definition: { capabilities: readonly string[] }) => definition.capabilities.includes('server')
 function authorize(pluginId: string, tool: string, context: Context, args: Record<string, unknown>) {
-  const plugin = getPlugin(pluginId), trusted = isTrustedPlugin(plugin.definition), scope = pluginAppToolScope(tool, trusted)
-  if (!scope || (!trusted && !plugin.definition.appTools?.includes(tool))) throw new PluginError('확장에 선언하지 않은 앱 도구야.', 403)
+  const plugin = getPlugin(pluginId), scope = pluginAppToolScope(tool)
+  if (!scope) throw new PluginError(`플러그인 실행 문맥에서 지원하지 않는 앱 도구야: ${tool}`, 400)
   context = fresh(tool.startsWith('workspace_') ? context : { ...context, workspace: undefined, projectGrant: undefined })
-  // A caller's scope/allowlist stays narrower than the package's grant.
+  // Preserve the calling account/key/profile's scope and tool restrictions.
   if (!context.scopes.includes(scope) || (context.toolAllowlist && !context.toolAllowlist.includes(tool))) throw new PluginError('요청 주체에게 허용되지 않은 앱 기능이야.', 403)
   requireMcpToolAccess({ ...context, source: 'plugin' }, tool, args)
-  return { plugin, scope, context, trusted }
+  return { plugin, scope, context }
 }
-// `configure` only matters to trusted packages (others never get a configure tool); the account still has to be an admin.
-export function pluginBrowserContext(caller: PluginCaller, baseUrl?: string): Context { return { requester: caller.requester, scopes: [...ALL_MCP_HTTP_SCOPES, 'configure'], baseUrl } }
+// Direct app interactions execute as the current account; AI/MCP proposals keep the host review path.
+export function pluginBrowserContext(caller: PluginCaller, baseUrl?: string, review = false): Context { return { requester: caller.requester, scopes: [...ALL_MCP_HTTP_SCOPES, 'configure'], baseUrl, autoApply: !review } }
 export async function listPluginAppTools(pluginId: string | null, context: Context, input: unknown) {
   const options = z.object({ query: z.string().max(200).default(''), offset: z.number().int().min(0).max(1000).default(0), tool: z.string().max(64).optional() }).parse(input)
+  const autoApply = context.autoApply === true
   context = fresh(context)
-  const definition = pluginId ? getPlugin(pluginId).definition : null
-  const trusted = definition !== null && isTrustedPlugin(definition)
-  const permitted = definition ? trusted ? trustedAppTools() : definition.appTools ?? [] : pluginAppTools()
-  const names = permitted.filter(name => pluginAppToolScope(name, trusted) && context.scopes.includes(pluginAppToolScope(name, trusted)!) && (!context.toolAllowlist || context.toolAllowlist.includes(name)))
+  if (pluginId) getPlugin(pluginId)
+  const names = pluginAppTools().filter(name => context.scopes.includes(pluginAppToolScope(name)!) && (!context.toolAllowlist || context.toolAllowlist.includes(name)))
   const definitions = (await pluginAppDefinitions(context, names)).filter(tool => `${tool.name} ${tool.description}`.toLowerCase().includes(options.query.toLowerCase()) && (!options.tool || tool.name === options.tool))
   const selected = definitions.slice(options.offset, options.offset + (options.tool ? 1 : 20))
-  return { tools: selected.map(tool => ({ name: tool.name, description: options.tool ? tool.description : tool.description?.slice(0, 180), requiresApproval: !trusted && pluginAppToolScope(tool.name) !== 'read', ...(options.tool ? { inputSchema: tool.inputSchema } : {}) })), nextOffset: options.offset + selected.length < definitions.length ? options.offset + selected.length : null }
+  return { tools: selected.map(tool => ({ name: tool.name, description: options.tool ? tool.description : tool.description?.slice(0, 180), requiresApproval: !autoApply && pluginAppToolScope(tool.name) !== 'read', ...(options.tool ? { inputSchema: tool.inputSchema } : {}) })), nextOffset: options.offset + selected.length < definitions.length ? options.offset + selected.length : null }
 }
 function inputValue(value: unknown, input: Record<string, unknown>, depth = 0): unknown {
   if (depth > 15) throw new PluginError('작업 인자 중첩이 너무 깊어.')
@@ -95,20 +92,21 @@ function inputValue(value: unknown, input: Record<string, unknown>, depth = 0): 
     return [key, inputValue(item, input, depth + 1)]
   }))
 }
-export async function runPluginServerAction(value: unknown, context: Context) {
+export async function runPluginServerAction(value: unknown, context: Context, signal?: AbortSignal) {
   const args = pluginActionRunSchema.parse(value), plugin = getPlugin(args.pluginId)
   const action = plugin.definition.serverActions?.find(action => action.id === args.action)
   if (!action) throw new PluginError('등록된 서버 작업이 없어.', 404)
   const validated = validateChatPageArguments(action.schema, args.arguments) as Record<string, unknown>
   const resolved = action.arguments ? inputValue(action.arguments, validated) as Record<string, unknown> : validated
-  return runPluginAppTool(args.pluginId, { tool: action.tool, arguments: resolved, requestId: args.requestId }, context, action.label)
+  return runPluginAppTool(args.pluginId, { tool: action.tool, arguments: resolved, requestId: args.requestId }, context, action.label, signal)
 }
-export async function runPluginAppTool(pluginId: string, value: unknown, context: Context, label?: string) {
+export async function runPluginAppTool(pluginId: string, value: unknown, context: Context, label?: string, signal?: AbortSignal) {
+  signal?.throwIfAborted()
   const input = pluginAppCallSchema.parse(value)
   if (Buffer.byteLength(JSON.stringify(input.arguments)) > 256 * 1024) throw new PluginError('앱 작업 입력은 256KB까지 지원해.', 413)
   const authorized = authorize(pluginId, input.tool, context, input.arguments)
   if (authorized.scope === 'read') {
-    const result = await callPluginAppTool(authorized.context, input.tool, input.arguments, authorized.trusted)
+    const result = await callPluginAppTool(authorized.context, input.tool, input.arguments, signal)
     return { status: result.isError ? 'failed' : 'completed', result }
   }
   if (!input.requestId) throw new PluginError('변경 요청에는 재시도용 requestId가 필요해.')
@@ -129,8 +127,7 @@ export async function runPluginAppTool(pluginId: string, value: unknown, context
   const body: PluginAppRequest = { id: token(), pluginId, version: authorized.plugin.version, label: label ?? input.tool, tool: input.tool, scope: authorized.scope, ...(project ? { project: { id: project.id, name: project.name } } : {}), arguments: input.arguments, status: 'pending', jobId: null, expiresAt: Date.now() + REQUEST_LIFETIME_MS }
   const { workspace: _workspace, ...storedContext } = authorized.context
   store.prepare('INSERT INTO plugin_app_requests(id,owner_key,request_key,fingerprint,plugin_id,digest,body,context,expires_at) VALUES(?,?,?,?,?,?,?,?,?)').run(body.id, ownerKey, input.requestId, fingerprint, pluginId, authorized.plugin.digest, JSON.stringify(body), JSON.stringify(storedContext), body.expiresAt)
-  // A trusted package's change starts at once, as the account that asked; others wait for the person's approval.
-  if (authorized.trusted && context.requester) return startRequest(body.id, pluginBrowserContext({ requester: context.requester, sessionId: '' }), body, context.requester.accountId)
+  if (context.autoApply && context.requester) return startRequest(body.id, pluginBrowserContext({ requester: context.requester, sessionId: '' }), body, context.requester.accountId)
   return body
 }
 function view(row: Row, includeResult = true): PluginAppRequest {
@@ -176,11 +173,11 @@ function registerJob() {
       const original = fresh(JSON.parse(row.context) as Context)
       authorize(request.pluginId, request.tool, original, request.arguments)
       const execution = { ...original, requester: original.requester ?? ctx.params.actor.requester }
-      const { plugin, trusted } = authorize(request.pluginId, request.tool, execution, request.arguments)
+      const { plugin } = authorize(request.pluginId, request.tool, execution, request.arguments)
       if (plugin.digest !== row.digest) throw new PluginError('확장 버전이 바뀌었어. 새 작업을 요청해줘.', 409)
       ctx.throwIfCancelled(); ctx.flush({ total: 1, currentLabel: request.label, phase: 'executing' })
       const args = request.tool === 'workspace_apply' && request.arguments.requestId === undefined ? { ...request.arguments, requestId: `plugin-app-${row.id}` } : request.arguments
-      const result = await callPluginAppTool(execution, request.tool, args, trusted)
+      const result = await callPluginAppTool(execution, request.tool, args, ctx.signal)
       if (result.isError) throw new PluginError(JSON.stringify(result.content).slice(0, 1500))
       if (ctx.isCancelRequested()) ctx.recordWarning('이미 전달된 앱 작업은 완료됐어. 생성된 개별 작업의 취소 기능을 사용해줘.')
       pluginDb().prepare("UPDATE plugin_app_requests SET status='completed' WHERE id=?").run(row.id)
@@ -227,10 +224,14 @@ export function cancelPluginAppRequest(id: string, context: Context, admin = fal
   else pluginDb().prepare("UPDATE plugin_app_requests SET status='cancelled' WHERE id=? AND status='pending'").run(id)
   return getPluginAppRequest(id, context, admin)
 }
-export function pluginInstanceAppContext(id: string, caller: PluginCaller, baseUrl: string) {
+export function pluginInstanceAppContext(id: string, caller: PluginCaller, baseUrl: string, review = false) {
   const instance = requirePluginInstance(id, caller)
-  requireRequesterPermission(caller.requester, 'files.view')
-  const context = pluginBrowserContext(caller, baseUrl)
-  if (instance.workspace) context.projectGrant = { id: instance.workspace.id, write: instance.workspace.write, revision: WorkspaceService.get(instance.owner, instance.workspace.id).revision }
+  const context = pluginBrowserContext(caller, baseUrl, review)
+  if (instance.workspace) {
+    requireFileStoreOwner(caller.requester)
+    const project = WorkspaceService.get(instance.owner, instance.workspace.id)
+    context.projectGrant = { id: project.id, write: instance.workspace.write, revision: project.revision }
+    context.workspace = { project: { ...project, guidelines: '' }, write: instance.workspace.write, bindingRevision: 'plugin-approved-project' }
+  }
   return { pluginId: instance.plugin.id, context }
 }

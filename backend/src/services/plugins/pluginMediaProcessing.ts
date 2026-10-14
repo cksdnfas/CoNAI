@@ -28,7 +28,6 @@ const schema = z.object({
 }).strict()
 function access(id: string, caller: PluginCaller, kind: string) {
   const instance = requirePluginWorkspace(id, caller, 'workspace.write')
-  if (!instance.plugin.capabilities.includes('media.process')) throw new PluginError('미디어 처리 기능을 허용하지 않은 확장이야.', 403)
   for (const permission of kind === 'crop' ? ['images.view', 'images.edit', 'images.upload'] : ['images.view', 'audio.view', 'audio.edit']) requireRequesterPermission(caller.requester, permission)
   return instance
 }

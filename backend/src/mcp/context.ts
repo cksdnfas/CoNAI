@@ -38,7 +38,7 @@ export interface McpRequestContext {
   toolAllowlist?: string[] | null;
   /**
    * Chat profiles with generation presets: each becomes a `generate_image` tool, and the free-form generation and
-   * workflow discovery tools are withheld so the model draws only through the presets.
+   * execution tools are withheld so the model draws only through the presets. Authorized reads stay available.
    */
   generationPresetIds?: number[];
   /** Server-issued snapshot; edited presets require a fresh bridge/session before execution. */
@@ -63,11 +63,9 @@ export function isChatGenerationTool(toolName: string) {
   return /^generate_image(_\d+)?$/.test(toolName);
 }
 
-/** Withheld while a chat profile has generation presets: free-form generation and everything that discovers other routes. */
+/** Presets constrain generation, not authorized workflow discovery or diagnostics. */
 export const GENERATION_PRESET_BLOCKED_TOOLS = new Set([
   'generate_nai', 'generate_comfyui', 'generate_comfyui_all_servers', 'submit_generation_job', 'execute_graph_workflow',
-  'list_workflows', 'get_workflow_details', 'list_graph_workflows', 'get_graph_workflow_details', 'get_graph_workflow_execution',
-  'list_comfyui_servers', 'get_generation_routing_options', 'get_codex_generation_options', 'check_comfy_workflow',
 ]);
 
 export function isChatMcpSource(source: McpRequestContext['source']) {
@@ -84,9 +82,8 @@ export const CHAT_PAGE_TOOLS = new Set(['get_current_page', 'page_fill', 'page_a
 
 /**
  * Tools a connected page of one kind adds to the page tools: the sprite page works through its own engine tools, so
- * connecting it must not hide them. The audio page adds its workspace tools; reviewing or deleting a single take never has
- * a tool. Without the page they are offered like any app tool (through the chat's tool catalog). The account's feature
- * keys still apply to each call.
+ * connecting it must not hide them. The audio page adds its workspace, review and comment tools. Without the page
+ * they follow the profile grants through the catalog. The account's feature keys still apply to each call.
  */
 export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> = {
   extension: new Set(['list_plugin_pages', 'run_plugin_action', 'get_plugin_action', 'cancel_plugin_action']),
@@ -95,6 +92,7 @@ export const CHAT_PAGE_KIND_TOOLS: Partial<Record<string, ReadonlySet<string>>> 
     'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'get_audio_candidate', 'list_audio_group_comments',
     'create_audio_project', 'update_audio_project', 'create_audio_group', 'update_audio_group', 'move_audio_candidates', 'import_audio',
     'list_audio_folders', 'create_audio_folder', 'update_audio_folder',
+    'set_audio_candidate_review', 'delete_audio_candidate', 'create_audio_group_comment', 'update_audio_group_comment', 'delete_audio_group_comment',
     'set_audio_group_comment_status', 'list_audio_workflows', 'order_audio', 'get_audio_order', 'cancel_audio_order', 'retry_audio_order_job',
     'edit_audio_candidate', 'delete_unselected_audio_candidates', 'export_audio_selected', 'get_audio_download',
   ]),
@@ -234,7 +232,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   restore_prompt_data: 'restore',
   import_workflow_definition: 'restore',
   restore_deleted_workflow: 'restore',
-  // Audio workspace. Review (selected / rejected), deleting single takes and writing comments have no tool: people do those.
+  // Audio workspace, including user-requested review and comment changes.
   list_audio_projects: 'read',
   list_audio_groups: 'read',
   list_audio_candidates: 'read',
@@ -250,9 +248,14 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   move_audio_candidates: 'organize',
   import_audio: 'organize',
   set_audio_group_comment_status: 'organize',
+  set_audio_candidate_review: 'organize',
+  delete_audio_candidate: 'organize',
+  create_audio_group_comment: 'organize',
+  update_audio_group_comment: 'organize',
+  delete_audio_group_comment: 'organize',
   edit_audio_candidate: 'organize',
   delete_unselected_audio_candidates: 'organize',
-  // Whole effect / folder / project deletes: never page kind tools (organize is not kept on a connected page).
+  // Whole effect / folder / project deletes require the general organize grant.
   delete_audio_group: 'organize',
   delete_audio_folder: 'organize',
   delete_audio_project: 'organize',

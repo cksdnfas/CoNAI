@@ -13,7 +13,7 @@ function show(result) {
 }
 async function run(task, submit = false) {
   const version = formVersion
-  try { $('status').textContent = '처리 중…'; const result = await task(); if (submit && result.status === 'pending') submittedVersion = version; show(result) }
+  try { $('status').textContent = '처리 중…'; const result = await task(); if (submit && ['pending', 'starting', 'running', 'completed'].includes(result.status)) submittedVersion = version; show(result) }
   catch (error) { $('status').textContent = error.message || String(error) }
 }
 for (const action of ['groups', 'workflows', 'audio']) $(action).onclick = () => run(() => api.app.run(`app-workbench.${action}`))

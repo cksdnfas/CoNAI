@@ -8,7 +8,7 @@ import { runtimePaths } from '../../config/runtimePaths'
 import { WINDOWS_RESERVED_NAME } from '../../utils/pathResolver'
 import { pluginChanged, pluginDb, PluginError } from './pluginStore'
 import { removePluginData } from './pluginData'
-import { pluginAppToolScope, pluginAppToolCapability } from './pluginAppPolicy'
+import { pluginAppToolScope } from './pluginAppPolicy'
 import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
 import { zipEntryBytes, zipEntryKind } from '../../utils/zipEntries'
 
@@ -22,7 +22,7 @@ const actionSchema = z.object({
 const manifestSchema = z.object({
   apiVersion: z.literal(1), id: pluginIdSchema, name: z.string().min(1).max(100),
   version: z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}$/), description: z.string().max(1000),
-  capabilities: z.array(z.enum(['files.read', 'files.write', 'files.media', 'workspace.read', 'workspace.write', 'workspace.media', 'media.process', 'server'])).max(8),
+  capabilities: z.array(z.enum(['files.read', 'files.write', 'files.media', 'workspace.read', 'workspace.write', 'workspace.media', 'media.process', 'server'])).max(8).default([]),
   server: z.object({ entry: z.string().min(1).max(200) }).strict().optional(),
   appTools: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,63}$/)).max(128).optional(),
   serverActions: z.array(z.object({ id: z.string().max(100), label: z.string().min(1).max(160), description: z.string().max(1000), schema: z.unknown(), tool: z.string().max(64), arguments: z.record(z.string(), z.unknown()).optional() }).strict()).max(64).optional(),
@@ -48,24 +48,15 @@ export function pluginAssetName(value: string): string {
  */
 export function parsePluginManifest(value: unknown, stored = false): PluginManifest {
   const raw = manifestSchema.parse(value)
-  // A server module is trusted code; the capability says so where the person enabling it reads the list.
-  const trusted = raw.capabilities.includes('server')
-  if (trusted !== !!raw.server) throw new PluginError('server 권한과 server.entry는 함께 선언해줘.')
   if (raw.server && (!/\.m?js$/.test(pluginAssetName(raw.server.entry)))) throw new PluginError('서버 모듈은 .mjs나 .js 파일이어야 해.')
-  const declared = [...new Set(raw.appTools ?? [])]
-  // Project tools also need the matching capability: an app tool must not reach past what the package asks for.
-  const granted = (name: string) => {
-    if (trusted) return !!pluginAppToolScope(name, true)
-    const capability = pluginAppToolCapability(name)
-    return !!pluginAppToolScope(name) && (capability === null || raw.capabilities.includes(capability))
-  }
-  const appTools = stored ? declared.filter(granted) : declared
-  if (!stored && appTools.some(name => !granted(name))) throw new PluginError('지원하지 않는 앱 도구가 선언됐거나 필요한 capabilities가 빠졌어.')
-  const retired = new Set((raw.serverActions ?? []).filter(action => !appTools.includes(action.tool)).map(action => action.id))
+  // Legacy declarations remain readable metadata, not a second permission system.
+  const appTools = [...new Set(raw.appTools ?? [])]
+  const retired = new Set((raw.serverActions ?? []).filter(action => !pluginAppToolScope(action.tool)).map(action => action.id))
   if (stored && retired.size) raw.pages = raw.pages.map(page => ({ ...page, serverActions: page.serverActions?.filter(id => !retired.has(id)) }))
   const actionIds = new Set<string>()
   const serverActions = (raw.serverActions ?? []).filter(action => !stored || !retired.has(action.id)).map(action => {
-    if (!action.id.startsWith(`${raw.id}.`) || !/^[a-z][a-z0-9-]*\.[a-z][a-z0-9_]{0,47}$/.test(action.id) || actionIds.has(action.id) || !appTools.includes(action.tool)) throw new PluginError('서버 작업 ID나 앱 도구 선언을 확인해줘.')
+    if (!action.id.startsWith(`${raw.id}.`) || !/^[a-z][a-z0-9-]*\.[a-z][a-z0-9_]{0,47}$/.test(action.id) || actionIds.has(action.id)) throw new PluginError('서버 작업 ID를 확인해줘.')
+    if (!pluginAppToolScope(action.tool)) throw new PluginError(`플러그인에서 실행할 수 없는 앱 도구야: ${action.tool}`)
     actionIds.add(action.id)
     const schema = normalizeChatPageSchema(action.schema)
     if (schema.type !== 'object' || JSON.stringify(action.arguments ?? {}).length > 32000) throw new PluginError('서버 작업 입력 형식을 확인해줘.')
@@ -78,7 +69,7 @@ export function parsePluginManifest(value: unknown, stored = false): PluginManif
     const ids = new Set<string>()
     const referenced = new Set(page.serverActions ?? [])
     if (referenced.size !== (page.serverActions ?? []).length || [...referenced].some(id => !actionIds.has(id))) throw new PluginError('페이지의 서버 작업 참조를 확인해줘.')
-    const actions = [...page.actions.filter(action => !referenced.has(action.id)), ...serverActions.filter(action => referenced.has(action.id)).map(action => ({ id: action.id, label: action.label, description: action.description, schema: action.schema, effect: 'draft' as const, tier: pluginAppToolScope(action.tool, trusted) === 'read' ? 'view' as const : 'draft' as const }))]
+    const actions = [...page.actions.filter(action => !referenced.has(action.id)), ...serverActions.filter(action => referenced.has(action.id)).map(action => ({ id: action.id, label: action.label, description: action.description, schema: action.schema, effect: 'draft' as const, tier: pluginAppToolScope(action.tool) === 'read' ? 'view' as const : 'draft' as const }))]
     if (actions.length > 26) throw new PluginError('페이지 작업은 26개까지 등록할 수 있어.')
     return { ...page, actions: actions.map((action) => {
       if (!action.id.startsWith(`${raw.id}.`) || !/^[a-z][a-z0-9-]*\.[a-z][a-z0-9_]{0,47}$/.test(action.id) || ids.has(action.id)) throw new PluginError('페이지 작업 ID가 올바르지 않아.')
@@ -195,14 +186,9 @@ export function unpackPlugin(zipBytes: Buffer) {
   if (manifest.server && !assets.has(manifest.server.entry)) throw new PluginError(`서버 모듈 파일이 없어: ${manifest.server.entry}`)
   return { manifest, assets }
 }
-/** What a new version asks for beyond the installed one; enabling it again is the person's call. */
-function widens(previous: PluginManifest, next: PluginManifest) {
-  return next.capabilities.some(capability => !previous.capabilities.includes(capability))
-    || (next.appTools ?? []).some(tool => !(previous.appTools ?? []).includes(tool))
-}
 /**
  * A new package, or a new version of an installed one (same id): files are swapped in place, the plugin's data folder
- * stays, open windows close and waiting requests are cancelled. A version asking for more than before is turned off.
+ * stays, open windows close and waiting requests are cancelled. Valid installed packages keep their enabled state.
  */
 export async function installPlugin(zipBytes: Buffer): Promise<{ plugin: InstalledPlugin; updated: boolean; reenable: boolean }> {
   let unpacked: ReturnType<typeof unpackPlugin>
@@ -219,7 +205,7 @@ export async function installPlugin(zipBytes: Buffer): Promise<{ plugin: Install
   if (!existing && (db.prepare('SELECT COUNT(*) AS n FROM plugins').get() as { n: number }).n >= 100) throw new PluginError('플러그인은 100개까지 설치할 수 있어.')
   let previous: PluginManifest | null = null
   if (existing) { try { previous = definitionOf(existing) } catch { previous = null } }
-  const reenable = !!existing?.enabled && (!previous || widens(previous, manifest))
+  const reenable = !!existing?.enabled && !previous
   // Create/check each ancestor, including the private data root's children.
   let parent = runtimePaths.basePath
   for (const part of ['plugins', 'packages', manifest.id]) {
@@ -297,6 +283,7 @@ export async function removePlugin(id: string) {
   const db = pluginDb()
   db.transaction(() => {
     db.prepare('DELETE FROM plugins WHERE id = ?').run(id)
+    db.prepare('DELETE FROM plugin_storage WHERE plugin_id = ?').run(id)
     db.prepare("DELETE FROM plugin_app_requests WHERE plugin_id = ? AND status NOT IN ('starting','running')").run(id)
   })()
   await pluginChanged(id)

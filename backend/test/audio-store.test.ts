@@ -385,7 +385,7 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
   })
 
   // ---------------------------------------------------------------- MCP tools
-  await t.test('MCP: read tools follow audio.view, organize tools audio.edit, and no tool can review or delete', async () => {
+  await t.test('MCP: review, comments and single-candidate deletion require audio.edit', async () => {
     const { createMcpServer } = await import('../src/mcp/server')
     const { ALL_MCP_HTTP_SCOPES } = await import('../src/mcp/context')
     const { Client } = await import('@modelcontextprotocol/client')
@@ -406,8 +406,8 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     const admin = await connect({ accountId: adminId, accountType: 'admin' })
     const adminTools = await audioTools(admin)
     assert.ok(adminTools.includes('import_audio') && adminTools.includes('set_audio_group_comment_status'))
-    assert.deepEqual(adminTools.filter((name) => /review|delete_audio_candidate|restore|create_audio_group_comment/.test(name)), [], 'review, deleting single takes and comment writing stay with people (delete_unselected_audio_candidates never touches a selected take)')
-    assert.deepEqual(adminTools.filter((name) => name.startsWith('delete_audio_')), ['delete_audio_folder', 'delete_audio_group', 'delete_audio_project'], 'whole effect / folder / project deletes name what they delete')
+    assert.ok(['set_audio_candidate_review', 'delete_audio_candidate', 'create_audio_group_comment', 'update_audio_group_comment', 'delete_audio_group_comment'].every((name) => adminTools.includes(name)))
+    assert.deepEqual(adminTools.filter((name) => name.startsWith('delete_audio_')), ['delete_audio_candidate', 'delete_audio_folder', 'delete_audio_group', 'delete_audio_group_comment', 'delete_audio_project'], 'single-candidate and comment deletes check revisions')
 
     const listed = await listener.callTool({ name: 'list_audio_candidates', arguments: { group_id: snow.id } }) as { content: Array<{ text: string }> }
     assert.ok(JSON.parse(listed.content[0].text).candidates.every((candidate: Record<string, unknown>) => 'candidate_id' in candidate && !('composite_hash' in candidate)))
@@ -421,5 +421,43 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     assert.equal(summary.group_id, project.inbox_group_id)
     assert.equal(summary.origin, 'imported')
     assert.equal(summary.review, 'pending')
+    const invoke = async (name: string, args: Record<string, unknown>) => {
+      const response = await admin.callTool({ name, arguments: args }) as { isError?: boolean; content: Array<{ text: string }> }
+      return { error: response.isError === true, text: response.content[0]?.text, data: response.isError ? null : JSON.parse(response.content[0].text) }
+    }
+    for (const name of ['set_audio_candidate_review', 'delete_audio_candidate', 'create_audio_group_comment', 'update_audio_group_comment', 'delete_audio_group_comment']) {
+      await assert.rejects(listener.callTool({ name, arguments: {} }), { code: -32602 }, name)
+    }
+    const { subscribeToRuntimeEvents } = await import('../src/services/runtime-events/runtimeEventBus')
+    const changes: unknown[] = []
+    const stopEvents = subscribeToRuntimeEvents((event) => { if (event.name === 'audio.changed') { assert.equal(event.topic, 'audio'); changes.push(event.payload) } })
+    try {
+      const reviewed = await invoke('set_audio_candidate_review', { candidate_id: summary.candidate_id, expected_revision: summary.revision, review: 'selected', notes: 'Use this take' })
+      assert.equal(reviewed.error, false, reviewed.text)
+      assert.equal(reviewed.data.review, 'selected')
+      assert.equal(reviewed.data.notes, 'Use this take')
+      assert.equal((await invoke('set_audio_candidate_review', { candidate_id: summary.candidate_id, expected_revision: summary.revision, review: 'rejected' })).error, true, 'stale review cannot overwrite the selected state')
+      assert.equal((await invoke('delete_audio_candidate', { candidate_id: summary.candidate_id, expected_revision: summary.revision })).error, true, 'a changed review cannot be deleted with an old revision')
+      assert.equal(service.getAudioCandidate(summary.candidate_id).deleted_at, null)
+      const deleted = await invoke('delete_audio_candidate', { candidate_id: summary.candidate_id, expected_revision: reviewed.data.revision })
+      assert.equal(deleted.error, false, deleted.text)
+      assert.equal(deleted.data.deleted, 1)
+      assert.equal((await invoke('set_audio_candidate_review', { candidate_id: summary.candidate_id, expected_revision: reviewed.data.revision, review: 'pending' })).error, true)
+
+      const created = await invoke('create_audio_group_comment', { group_id: summary.group_id, text: 'Please shorten the tail' })
+      assert.equal(created.error, false, created.text)
+      assert.equal(created.data.author_account_id, adminId)
+      const args = { group_id: summary.group_id, comment_id: created.data.id, expected_revision: created.data.revision }
+      const edited = await invoke('update_audio_group_comment', { ...args, text: 'Keep the tail' })
+      assert.equal(edited.error, false, edited.text)
+      assert.equal((await invoke('update_audio_group_comment', { ...args, text: 'Stale edit' })).error, true)
+      assert.equal((await invoke('delete_audio_group_comment', args)).error, true, 'stale comment cannot be deleted')
+      const removed = await invoke('delete_audio_group_comment', { ...args, expected_revision: edited.data.revision })
+      assert.equal(removed.error, false, removed.text)
+      assert.equal(removed.data.deleted, true)
+      assert.equal(changes.length, 5, 'only successful mutations publish refresh hints')
+      assert.ok(changes.every((value) => (value as { group_id: string }).group_id === summary.group_id), 'refresh is scoped to the affected group')
+    } finally { stopEvents() }
+
   })
 })

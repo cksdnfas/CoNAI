@@ -116,7 +116,7 @@ test('chat linked files: links, index, tools stay inside the linked places, writ
     assert.match(linked.editLinked(places(), '[리나 일지]/2026-10-09.md', { edits: [{ old_text: '바다', new_text: '동해 바다' }] }), /1군데 바꿈/)
   })
 
-  await t.test('the tools: offered with links (write only with a writable link), withheld on a connected page, refused once unlinked', async () => {
+  await t.test('the tools: offered with links (write only with a writable link), retained on an ordinary page, refused once unlinked', async () => {
     const context = (replyId: string, extra: Partial<ChatExecutionContext> = {}): ChatExecutionContext => ({ threadId, profileId: profile.id, kind: 'direct', replyId, ...extra })
     const open = async (chatContext: ChatExecutionContext) => openChatMcpBridge({ accountId: null, accountType: 'admin' }, [], null, { chatContext })
     const names = (bridge: Awaited<ReturnType<typeof open>>) => bridge.tools.map((tool) => tool.function.name).filter((name) => name.startsWith('linked_')).sort()
@@ -138,7 +138,9 @@ test('chat linked files: links, index, tools stay inside the linked places, writ
     try { assert.deepEqual(names(readOnly), ['linked_list', 'linked_read', 'linked_search']) } finally { await readOnly.close() }
 
     const page = await open(context('t3', { page: { path: '/files', title: '파일', fields: [], actions: [] } as never }))
-    try { assert.deepEqual(names(page), [], 'a connected page carries no linked files') } finally { await page.close() }
+    try { assert.deepEqual(names(page), ['linked_list', 'linked_read', 'linked_search'], 'an ordinary page preserves read-only links') } finally { await page.close() }
+    const publicPage = await open(context('t4', { page: { path: '/public/workflows/example', title: '공개', fields: [], actions: [] } as never }))
+    try { assert.deepEqual(names(publicPage), [], 'public pages still cannot access linked files') } finally { await publicPage.close() }
   })
 
   await t.test('clearing the conversation keeps the links', () => {

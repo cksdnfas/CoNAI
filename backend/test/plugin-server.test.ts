@@ -18,9 +18,9 @@ function packageOf(folder: string, edit: (manifest: Record<string, unknown>) => 
   return zip.toBuffer()
 }
 
-async function until(check: () => boolean, label: string, timeoutMs = 15_000) {
+async function until(check: () => boolean | Promise<boolean>, label: string, timeoutMs = 15_000) {
   const started = Date.now()
-  while (!check()) {
+  while (!await check()) {
     if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for ${label}`)
     await new Promise(resolve => setTimeout(resolve, 50))
   }
@@ -60,10 +60,10 @@ test('trusted plugins run a server module with their own data, hooks and tools',
   const status = () => runtime.pluginServerStatus('chat-instructions')
   runtime.startPluginServers()
 
-  await t.test('the manifest ties server code to the server capability', () => {
+  await t.test('server entry validation does not require duplicate capability declarations', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(folder, 'plugin.json'), 'utf8'))
-    assert.throws(() => registry.parsePluginManifest({ ...manifest, capabilities: [] }), /server/)
-    assert.throws(() => registry.parsePluginManifest({ ...manifest, server: undefined }), /server/)
+    assert.ok(registry.parsePluginManifest({ ...manifest, capabilities: undefined }).server)
+    assert.equal(registry.parsePluginManifest({ ...manifest, server: undefined }).server, undefined)
     assert.throws(() => registry.parsePluginManifest({ ...manifest, server: { entry: 'server.py' } }), /mjs/)
     assert.throws(() => registry.unpackPlugin(packageOf(folder, m => { m.server = { entry: 'missing.mjs' } })), /서버 모듈 파일/)
   })
@@ -149,6 +149,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const guest = { accountId: guestId, accountType: 'guest' as const }
     const nobody = { accountId: 999999, accountType: 'admin' as const }
     let calls = 0, aborted = 0, hold = false
+    let replyText = '안녕, 이웃!'
     let lastBody = ''
     st.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       calls++; lastBody = String(init?.body)
@@ -157,12 +158,14 @@ test('trusted plugins run a server module with their own data, hooks and tools',
         if (init?.signal?.aborted) cancel()
         else init?.signal?.addEventListener('abort', cancel, { once: true })
       })
-      return Response.json({ choices: [{ message: { content: '안녕, 이웃!' }, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 4 } })
+      return Response.json({ choices: [{ message: { content: replyText }, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 4 } })
     })
     await registry.installPlugin(packageOf(folder, m => { m.id = 'llm-bridge' }, { 'server.mjs': `export function activate(conai) {
       let late = null;
       conai.onRequest(({ body }) => {
+        if (body.op === 'project') return conai.tools.call(body.tool || 'workspace_list', body.args || {});
         if (body.op === 'late') return late;
+        if (body.op === 'background') return conai.background.account();
         if (body.op === 'delay') {
           setTimeout(() => conai.llm.profiles().then(() => { late = 'unexpected success' }, e => { late = e.message }), 50);
           return true;
@@ -172,13 +175,53 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     }` }))
     await registry.setPluginEnabled('llm-bridge', true, adminId)
     await until(() => runtime.pluginServerStatus('llm-bridge').state === 'ready', 'LLM bridge ready')
+    const { WorkspaceService } = await import('../src/services/workspaceService')
+    const project = await WorkspaceService.create(`account:${adminId}`, 'Server bridge project')
+    const host = await import('../src/services/plugins/pluginHost')
+    const adminCaller = { requester: admin, sessionId: 'server-project-session' }
+    const projectPage = host.openPluginInstance('llm-bridge', 'rules', [], adminCaller, { id: project.id, write: false })
+    const app = await import('../src/services/plugins/pluginAppActions')
+    const binding = app.pluginInstanceAppContext(projectPage.id, adminCaller, 'http://localhost:1666').context.workspace
+    const projectResult = await runtime.requestPluginServer('llm-bridge', { op: 'project' }, admin, {}, 'http://localhost:1666', binding) as { isError?: boolean }
+    assert.notEqual(projectResult.isError, true, 'server calls inherit the page project')
+    await assert.rejects(runtime.requestPluginServer('llm-bridge', { op: 'project', tool: 'workspace_apply', args: {} }, admin, {}, 'http://localhost:1666', binding), /not permitted/, 'read-only connections remain read-only')
+    host.closePluginInstance(projectPage.id, adminCaller)
     const bridge = (op: string, input?: unknown) => runtime.requestPluginServer('llm-bridge', { op, input }, guest, {})
     const listed = await bridge('profiles') as Array<{ id: number }>
     assert.ok(listed.some(item => item.id === profile.id), 'ordinary chat users can select their profiles')
     assert.ok(!listed.some(item => item.id === off.id))
     assert.doesNotMatch(JSON.stringify(listed), /systemPrompt|village resident|apiKey/)
+    assert.deepEqual(await bridge('background'), { id: adminId, type: 'admin' }, 'modules learn which account their own timer calls run as')
+    await registry.installPlugin(packageOf(folder, m => { m.id = 'web-llm'; delete m.server; delete m.capabilities }))
+    await registry.setPluginEnabled('web-llm', true, adminId)
+    const { openPluginInstance, closePluginInstance } = await import('../src/services/plugins/pluginHost')
+    const webCaller = { requester: guest, sessionId: 'web-llm-user' }
+    const webPage = openPluginInstance('web-llm', 'rules', [], webCaller)
+    assert.ok(llm.listPluginLlmProfiles('web-llm', guest).some(item => item.id === profile.id), 'LLM use needs chat permission, not server code or file permission')
+    closePluginInstance(webPage.id, webCaller)
+    await registry.removePlugin('web-llm')
     assert.throws(() => llm.listPluginLlmProfiles('llm-bridge', nobody), /권한/)
     assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { requestId: 'off', profileId: off.id, message: 'hi' }), /프로필/)
+    // Images use native profile storage/crops and never bypass image or profile permissions.
+    const sharp = (await import('sharp')).default
+    const png = await sharp({ create: { width: 320, height: 160, channels: 3, background: '#c85784' } }).png().toBuffer()
+    const crop = { x: 30, y: 45, scale: 1.5 }
+    ChatProfileStore.update(profile.id, { avatar: `data:image/png;base64,${png.toString('base64')}`, avatarCrop: crop })
+    const publicProfile = llm.listPluginLlmProfiles('llm-bridge', admin).find(p => p.id === profile.id)!
+    assert.equal(publicProfile.assets.avatar, true)
+    assert.deepEqual(publicProfile.avatarCrop, crop)
+    assert.doesNotMatch(JSON.stringify(publicProfile), /base64|uploads|systemPrompt/)
+    assert.equal(llm.listPluginLlmProfiles('llm-bridge', guest).find(p => p.id === profile.id)!.assets.avatar, false)
+    await assert.rejects(bridge('asset', { profileId: profile.id }), /images.view/)
+    const portrait = await runtime.requestPluginServer('llm-bridge', { op: 'asset', input: { profileId: profile.id, maxSize: 128 } }, admin, {}) as import('@conai/shared').PluginProfileAsset
+    assert.equal(portrait.state, 'ready')
+    assert.deepEqual(portrait.crop, crop)
+    assert.equal(portrait.mimeType, 'image/webp')
+    const decoded = await sharp(Buffer.from(portrait.data!, 'base64')).metadata()
+    assert.equal(decoded.width, 128); assert.equal(decoded.height, 64)
+    assert.equal((await llm.readPluginProfileAsset('llm-bridge', admin, { profileId: profile.id, kind: 'reference' })).state, 'missing')
+    await assert.rejects(llm.readPluginProfileAsset('llm-bridge', admin, { profileId: off.id }), /프로필/)
+    await assert.rejects(llm.readPluginProfileAsset('llm-bridge', admin, { profileId: profile.id, maxSize: 4096 }))
     const input = { requestId: 'turn-1', profileId: profile.id, message: 'PRIVATE_INPUT', history: '사용자: 반가워', maxTokens: 512 }
     const first = await bridge('start', input) as { jobId: string }
     const again = await bridge('start', input) as { jobId: string }
@@ -196,6 +239,12 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...input, message: 'changed' }), /같은 요청 ID/)
     assert.throws(() => llm.getPluginLlmJob('llm-bridge', admin, first.jobId), /찾을 수 없어/)
     assert.throws(() => llm.getPluginLlmJob('chat-instructions', guest, first.jobId), /찾을 수 없어/)
+    replyText = '{"action":"wave"}'
+    const structured = llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'structured-turn', structuredOutput: { action: 'string' } })
+    await until(() => llm.getPluginLlmJob('llm-bridge', guest, structured.jobId).status === 'completed', 'structured reply')
+    assert.deepEqual(llm.getPluginLlmJob('llm-bridge', guest, structured.jobId).result?.json, { action: 'wave' })
+    assert.match(lastBody, /JSON/)
+    replyText = '안녕, 이웃!'
 
     // The same token means another account's independent turn, never its private result.
     const other = llm.startPluginLlmJob('llm-bridge', admin, input)
@@ -203,20 +252,20 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await until(() => llm.getPluginLlmJob('llm-bridge', admin, other.jobId).status === 'completed', 'admin reply')
     hold = true
     const active = [0, 1, 2, 3].map(i => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: `active-${i}` }))
-    await until(() => calls === 3, 'first call starts while the others wait for the shared connection slot')
+    await until(() => calls === 4, 'first call starts while the others wait for the shared connection slot')
     assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'overflow' }), /4개/)
     await bridge('cancel', active[0].jobId)
     await until(() => RuntimeJobStore.get(active[0].jobId)?.status === 'cancelled', 'cancel reaches provider')
     assert.equal(aborted, 1)
     assert.equal(llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'active-0' }).status, 'cancelled', 'cancelled turns are not replayed')
-    await until(() => calls === 4, 'next call acquires the released connection slot')
+    await until(() => calls === 5, 'next call acquires the released connection slot')
     await registry.setPluginEnabled('llm-bridge', false, adminId)
     await until(() => active.every(job => RuntimeJobStore.get(job.jobId)?.status === 'cancelled'), 'disable cancels all outstanding replies')
     assert.equal(aborted, 2, 'queued requests were cancelled without reaching the provider')
     await registry.setPluginEnabled('llm-bridge', true, adminId)
     await until(() => runtime.pluginServerStatus('llm-bridge').state === 'ready', 're-enabled bridge')
     const revoked = llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'revoked' })
-    await until(() => calls === 5, 'revoked call started')
+    await until(() => calls === 6, 'revoked call started')
     ChatProfileStore.update(profile.id, { isEnabled: false })
     await until(() => RuntimeJobStore.get(revoked.jobId)?.status === 'failed', 'profile revocation aborts provider')
     assert.equal(aborted, 3)
@@ -233,7 +282,75 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await registry.removePlugin('llm-bridge')
   })
 
-  await t.test('an update keeps the data, restarts the module and turns it off when it asks for more', async () => {
+  await t.test('profile runs execute native tools, return their results, recheck grants and cancel without replay', async st => {
+    const llm = await import('../src/services/plugins/pluginLlm')
+    const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    const { FileStoreService } = await import('../src/services/fileStoreService')
+    const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+    const { automationRoomKinds } = await import('../src/services/codex-chat/chatRoomWake')
+    const profile = ChatProfileStore.create({ name: 'Plugin worker', engine: 'llm', modelSlotId: ModelSlotStore.ensure('plugin-test', 'test-model')!,
+      mcpEnabled: true, mcpScopes: ['organize'], toolAllowlist: ['create_file_folder'], maxTokens: 1024, summaryEnabled: false, maxToolRounds: 3 })
+    let folderName = 'native-plugin-result', revoke = false, hold = false, aborted = false, calls = 0
+    const results: string[] = []
+    st.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      calls++
+      if (hold) await new Promise<void>((_resolve, reject) => {
+        const cancel = () => { aborted = true; reject(init?.signal?.reason) }
+        if (init?.signal?.aborted) cancel(); else init?.signal?.addEventListener('abort', cancel, { once: true })
+      })
+      const body = JSON.parse(String(init?.body ?? '{}'))
+      const messages = body.messages as Array<{ role: string; content: string }>
+      // Only inspect the current turn; a dedicated profile room retains its earlier tool history.
+      const current = messages.slice(messages.findLastIndex(message => message.role === 'user') + 1)
+      const result = current.find(message => message.role === 'tool')
+      if (result) results.push(result.content)
+      if (!result && body.tools?.length) {
+        if (revoke) ChatProfileStore.update(profile.id, { toolAllowlist: ['list_files'] })
+        const catalog = body.tools.some((tool: { function: { name: string } }) => tool.function.name === 'run_tool')
+        return Response.json({ choices: [{ message: { content: null, tool_calls: [{ id: `folder-${calls}`, type: 'function', function: {
+          name: catalog ? 'run_tool' : 'create_file_folder', arguments: JSON.stringify(catalog ? { tool: 'create_file_folder', arguments: { name: folderName } } : { name: folderName }) } }] }, finish_reason: 'tool_calls' }] })
+      }
+      return Response.json({ choices: [{ message: { content: '실행 결과를 확인했어.' }, finish_reason: 'stop' }] })
+    })
+    const input = { requestId: 'profile-run', profileId: profile.id, mode: 'profile', message: 'Create the requested folder and report the real result.', maxTokens: 1024 }
+    const job = llm.startPluginLlmJob('chat-instructions', admin, input)
+    const done = async (id: string) => { await until(() => !['queued','running'].includes(llm.getPluginLlmJob('chat-instructions', admin, id).status), 'native profile execution'); return llm.getPluginLlmJob('chat-instructions', admin, id) }
+    const result = await done(job.jobId)
+    assert.equal(result.status, 'completed', result.error ?? '')
+    assert.equal(result.result?.text, '실행 결과를 확인했어.')
+    assert.ok(results.some(output => output.includes(folderName)), 'the native tool result returns to the model')
+    assert.equal(FileStoreService.list(`account:${adminId}`, null).entries.filter(entry => entry.name === folderName).length, 1)
+    const run = result.result!.profileRun!
+    assert.equal(run.tools[0].name, 'create_file_folder')
+    assert.equal(run.tools[0].status, 'completed')
+    assert.ok(run.tools[0].output.includes(folderName))
+    assert.equal(automationRoomKinds(adminId).get(run.threadId), 'plugin')
+    assert.ok(CodexChatStore.findThread(run.threadId, adminId))
+    const callCount = calls
+    assert.equal(llm.startPluginLlmJob('chat-instructions', admin, input).jobId, job.jobId)
+    assert.equal(calls, callCount, 'a repeated request never repeats a tool mutation')
+    const guestId = Number((auth.prepare("SELECT id FROM auth_accounts WHERE username='llm-guest'").get() as { id: number }).id)
+    assert.throws(() => llm.getPluginLlmJob('chat-instructions', { accountId: guestId, accountType: 'guest' }, job.jobId), /찾을 수 없어/)
+    assert.ok(!CodexChatStore.findThread(run.threadId, guestId))
+
+    revoke = true; folderName = 'must-not-create-revoked'
+    const denied = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'profile-revoked' }).jobId)
+    assert.equal(denied.status, 'completed', denied.error ?? '')
+    assert.equal(denied.result?.profileRun?.threadId, run.threadId, 'the plugin retains its own profile conversation')
+    assert.ok(denied.result?.profileRun?.tools.some(tool => tool.status === 'failed'), 'revocation is checked at tool dispatch')
+    assert.ok(!FileStoreService.list(`account:${adminId}`, null).entries.some(entry => entry.name === folderName))
+    revoke = false; hold = true
+    const before = calls
+    const active = llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'profile-cancel' })
+    await until(() => calls > before, 'native model starts')
+    llm.cancelPluginLlmJob('chat-instructions', admin, active.jobId)
+    await until(() => aborted, 'native cancellation reaches provider')
+    await until(() => llm.getPluginLlmJob('chat-instructions', admin, active.jobId).status === 'cancelled', 'native job cancelled')
+    assert.equal(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'profile-cancel' }).status, 'cancelled')
+  })
+
+  await t.test('an update keeps data and activation regardless of legacy permission declarations', async () => {
     const same = await registry.installPlugin(packageOf(folder, m => { m.version = '1.0.1' }))
     assert.equal(same.updated, true)
     assert.equal(same.reenable, false)
@@ -245,8 +362,10 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await assert.rejects(registry.installPlugin(packageOf(folder, m => { m.version = '1.0.1' })), /같은 패키지/)
 
     const wider = await registry.installPlugin(packageOf(folder, m => { m.version = '1.0.2'; m.capabilities = ['server', 'files.read'] }))
-    assert.equal(wider.reenable, true)
-    assert.equal(wider.plugin.enabled, false)
+    assert.equal(wider.reenable, false)
+    assert.equal(wider.plugin.enabled, true)
+    await until(() => status().state === 'ready', 'updated module ready')
+    await registry.setPluginEnabled('chat-instructions', false)
     await until(() => status().state === 'off', 'module stopped')
     assert.equal(serverTools.findPluginServerTool('p_chat_instructions_list_rules'), null)
     assert.equal(await runtime.applyChatInstructionHooks('BASE', { engine: 'llm', threadId: 1, group: false, profile: { id: 5, name: '루나' } }, admin), 'BASE')
@@ -258,6 +377,11 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     fs.writeFileSync(path.join(lab, 'plugin.json'), JSON.stringify({ apiVersion: 1, id: 'lab', name: 'lab', version: '1.0.0', description: '', capabilities: ['server'], server: { entry: 'server.mjs' }, pages: [{ id: 'main', title: 'lab', entry: 'index.html', accepts: [], actions: [] }] }))
     fs.writeFileSync(path.join(lab, 'index.html'), '<!doctype html><title>lab</title>')
     fs.writeFileSync(path.join(lab, 'server.mjs'), `export function activate(conai) {
+      let cancelled = false;
+      conai.onRequest(({ body }, { signal }) => {
+        if (body.op === 'cancelled') return cancelled;
+        return new Promise((resolve, reject) => signal.addEventListener('abort', () => { cancelled = true; reject(signal.reason); }, { once: true }));
+      });
       conai.hooks.on('chat.instructions', () => new Promise(resolve => setTimeout(() => resolve('SLOW'), 5000)))
       conai.tools.register({ name: 'fail', scope: 'read', inputSchema: { type: 'object' }, handler: () => { throw new Error('boom') } })
       conai.tools.register({ name: 'crash', scope: 'read', inputSchema: { type: 'object' }, handler: () => process.exit(3) })
@@ -267,6 +391,12 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await registry.setPluginEnabled('lab', true, adminId)
     const lab_ = () => runtime.pluginServerStatus('lab')
     await until(() => lab_().state === 'ready' && lab_().tools.length === 2, 'lab ready')
+    const cancellation = new AbortController()
+    const waiting = runtime.requestPluginServer('lab', {}, admin, {}, undefined, undefined, cancellation.signal)
+    const rejected = assert.rejects(waiting, /취소/)
+    cancellation.abort()
+    await rejected
+    await until(async () => Boolean(await runtime.requestPluginServer('lab', { op: 'cancelled' }, admin, {})), 'cancellation reached the module')
     const started = Date.now()
     assert.equal(await runtime.applyChatInstructionHooks('BASE', { engine: 'codex', threadId: null, group: false, profile: { id: 1, name: 'x' } }, admin), 'BASE')
     assert.ok(Date.now() - started < 4_500, 'the hook gives up after three seconds')

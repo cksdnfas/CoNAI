@@ -12,6 +12,7 @@ import {
   DeleteProtectionSettings,
   HEADER_NAVIGATION_ITEM_KEYS,
   HEADER_NAVIGATION_PAGE_KEYS,
+  isHeaderNavigationItemKey,
   normalizeHeaderNavigationOrder,
   normalizeRecycleBinRetentionDays,
   HeaderNavigationSettings,
@@ -59,8 +60,8 @@ function normalizeHeaderNavigationSettings(rawNavigation: unknown): HeaderNaviga
   }
 
   const record = rawNavigation as Record<string, unknown>;
-  for (const key of HEADER_NAVIGATION_ITEM_KEYS) {
-    if (typeof record[key] === 'boolean') {
+  for (const key of Object.keys(record)) {
+    if (isHeaderNavigationItemKey(key) && typeof record[key] === 'boolean') {
       defaults[key] = record[key];
     }
   }

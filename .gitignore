@@ -79,6 +79,7 @@ frontend/test/*
 !frontend/test/resource-review.test.ts
 !frontend/test/post-rich-editor.test.ts
 !frontend/test/audio-waveform.test.ts
+!frontend/test/plugin-sdk.test.ts
 
 # Uploaded images
 uploads/

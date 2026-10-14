@@ -15,6 +15,7 @@ import { DEFAULT_APPEARANCE_SETTINGS } from '@/lib/appearance'
 import { GLOBAL_APPEARANCE_QUERY_KEY } from '@/lib/use-global-appearance-settings'
 import { APP_BRAND_TOOLTIP, APP_VERSION_LABEL } from '@/lib/app-metadata'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { useI18n } from '@/i18n'
 import type {
   ChatPageData,
@@ -148,6 +149,7 @@ export function SettingsPage() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
+  const pluginPages = usePluginPages()
   const authStatusQuery = useAuthStatusQuery()
   const [searchParams, setSearchParams] = useSearchParams()
   const rawSection = searchParams.get('section')
@@ -452,6 +454,7 @@ export function SettingsPage() {
   ]
   const dirtySections = draftSections.filter((section) => section.isDirty)
   const chatSources: SettingsChatSources = {
+    pluginPages,
     general: effectiveGeneralDraft,
     appearance: appearanceTabProps.appearanceDraft,
     metadata: effectiveMetadataDraft,

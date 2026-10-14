@@ -88,8 +88,7 @@ import {
 /**
  * /api/audio — the sound-effect workspace. Reads need `audio.view`, every change `audio.edit`.
  *
- * Review (selected / rejected / pending) is set only here, by a signed-in person: MCP keys and chat bots never reach
- * `/api` routes and have no review tool.
+ * Authorized MCP tools share the same domain services and audio permissions.
  */
 const router = Router();
 router.use(requirePermission('audio.view'));
@@ -226,7 +225,7 @@ router.post('/candidates/delete', edit, (req, res) => res.json({ success: true, 
 router.post('/candidates/restore', edit, (req, res) => res.json({ success: true, data: restoreAudioCandidates(req.body?.ids) }));
 router.get('/candidates/:candidateId', (req, res) => res.json({ success: true, data: getAudioCandidate(param(req, 'candidateId')) }));
 
-/** Human-only review: selected / rejected / pending plus the review memo. */
+/** Review: selected / rejected / pending plus the review memo. */
 router.patch('/candidates/:candidateId/review', edit, (req, res) => {
   res.json({ success: true, data: setAudioCandidateReview(param(req, 'candidateId'), { review: req.body?.review, notes: req.body?.notes }) });
 });

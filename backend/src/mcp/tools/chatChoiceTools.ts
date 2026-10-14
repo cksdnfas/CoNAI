@@ -23,7 +23,7 @@ export function registerChatChoiceTools(server: McpServer, context: McpRequestCo
     options: z.array(z.object({
       label: z.string().min(1).max(CHAT_CHOICE_LIMITS.label).describe('As the person would say it; sent as their message'),
       detail: z.string().max(CHAT_CHOICE_LIMITS.detail).optional().describe('One short line on what it does'),
-      without_page: z.boolean().optional().describe('Only with a page connected: this answer is sent without the page, so the tools a page withholds are offered for it'),
+      without_page: z.boolean().optional().describe('Only with a page connected: send this answer without its page context. Ordinary page connections already preserve granted tools; do not ask to disconnect just to use them'),
     })).min(CHAT_CHOICE_LIMITS.minOptions).max(CHAT_CHOICE_LIMITS.maxOptions),
     multiple: z.boolean().optional(),
   }) }, async ({ question, options, multiple }) => {

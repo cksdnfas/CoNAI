@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, LogIn, ShieldAlert, ShieldCheck, Sparkles, X, type LucideIcon } from 'lucide-react'
+import { ArrowRight, LogIn, Puzzle, ShieldAlert, ShieldCheck, Sparkles, X, type LucideIcon } from 'lucide-react'
+import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -111,6 +112,7 @@ export function AccessOverviewPage() {
   const navigate = useNavigate()
   const authStatusQuery = useAuthStatusQuery()
   const authStatus = authStatusQuery.data
+  const pluginPages = usePluginPages()
   const blockedRoute = readBlockedRoute(location.state)
   const publicWorkflowsQuery = useQuery({
     queryKey: ['public-generation-workflows', 'access-overview'],
@@ -144,13 +146,13 @@ export function AccessOverviewPage() {
         />
       ) : null}
 
-      {accessibleItems.length === 0 && publicWorkflows.length === 0 ? (
+      {accessibleItems.length === 0 && publicWorkflows.length === 0 && pluginPages.length === 0 ? (
         <EmptyState icon={ShieldCheck} title={t({ ko: '지금 열 수 있는 페이지가 없어.', en: 'There are no pages available right now.' })} />
       ) : (
         <div className="space-y-10">
           {pageItems.length > 0 ? (
             <section className="space-y-2">
-              {publicWorkflows.length > 0 ? (
+              {publicWorkflows.length > 0 || pluginPages.length > 0 ? (
                 <Heading level={3} className="text-sm">{t({ ko: '페이지', en: 'Pages' })}</Heading>
               ) : null}
               <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
@@ -161,6 +163,17 @@ export function AccessOverviewPage() {
                     label={t(labelKey)}
                     icon={icon}
                   />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {pluginPages.length > 0 ? (
+            <section className="space-y-2">
+              <Heading level={3} className="text-sm">{t({ ko: '플러그인 페이지', en: 'Plugin pages' })}</Heading>
+              <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
+                {pluginPages.map((page) => (
+                  <AccessEntryCard key={page.id} href={page.to} label={page.title} description={page.pluginName} icon={Puzzle} />
                 ))}
               </div>
             </section>

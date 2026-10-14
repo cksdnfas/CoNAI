@@ -87,9 +87,9 @@ export function PageWithSidebar({
       <div
         data-slot="page-with-sidebar"
         className={cn(
-          // Cancel the shell's top gap, side padding and bottom padding so the column meets the header and runs the
-          // full height; the content column puts the same spacing back.
-          '-mx-(--theme-shell-inline-padding) -mt-6 -mb-(--theme-shell-main-padding-bottom) flex min-h-[calc(100dvh-var(--theme-shell-header-height))]',
+          // Cancel the shell's side and bottom padding so the column runs the full height; the content column puts the
+          // same spacing back.
+          '-mx-(--theme-shell-inline-padding) -mb-(--theme-shell-main-padding-bottom) flex min-h-[calc(100dvh-var(--theme-shell-header-height))]',
           className,
         )}
         style={{ '--page-sidebar-width': `${sidebarWidth}px` } as CSSProperties}

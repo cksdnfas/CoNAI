@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { ChatFilledMark } from '@/features/codex-chat/chat-page-context'
 import { ChatFilledLabel } from './settings-filled-label'
-import { Archive, AudioLines, CircleUserRound, Film, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquare, MessageSquareText, Newspaper, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
+import { Archive, AudioLines, CircleUserRound, Film, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquare, MessageSquareText, Newspaper, Puzzle, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
+import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
 import { RowGroup } from '@/components/ui/row-group'
@@ -61,6 +62,11 @@ export function GeneralPreferencesSections({
   isSectionDirty,
 }: GeneralPreferencesSectionsProps) {
   const { t, languageOverride } = useI18n()
+  const pluginPages = usePluginPages()
+  const navigationOptions = { ...HEADER_NAVIGATION_OPTIONS }
+  for (const page of pluginPages) {
+    navigationOptions[page.id] = { icon: Puzzle, label: { ko: page.title, en: page.title } }
+  }
   const visibleSections = new Set(sections)
   const [draggedPage, setDraggedPage] = useState<HeaderNavigationPageKey | null>(null)
   const [dropTargetPage, setDropTargetPage] = useState<HeaderNavigationPageKey | null>(null)
@@ -78,7 +84,7 @@ export function GeneralPreferencesSections({
 
   const moveHeaderPage = (dragged: HeaderNavigationPageKey, target: HeaderNavigationPageKey) => {
     if (!generalDraft || dragged === target) return
-    const current = normalizeHeaderNavigationOrder(generalDraft.headerNavigationOrder)
+    const current = normalizeHeaderNavigationOrder(generalDraft.headerNavigationOrder, pluginPages.map((page) => page.id))
     const next = current.filter((key) => key !== dragged)
     next.splice(next.indexOf(target) + (current.indexOf(dragged) < current.indexOf(target) ? 1 : 0), 0, dragged)
     onPatchGeneral({ headerNavigationOrder: next })
@@ -89,7 +95,7 @@ export function GeneralPreferencesSections({
   }
 
   const headerNavigation = generalDraft.headerNavigation ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
-  const headerNavigationOrder = normalizeHeaderNavigationOrder(generalDraft.headerNavigationOrder)
+  const headerNavigationOrder = normalizeHeaderNavigationOrder(generalDraft.headerNavigationOrder, pluginPages.map((page) => page.id))
   const headerMenuLabel = t({ ko: '상단 메뉴', en: 'Header menu' })
   const languageLabel = t({ ko: '언어', en: 'Language' })
   const similarityLabel = t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })
@@ -143,7 +149,8 @@ export function GeneralPreferencesSections({
             controlClassName="justify-start sm:max-w-xl sm:justify-end"
           >
             {[...headerNavigationOrder, ...HEADER_TOOL_KEYS].map((key) => {
-              const option = HEADER_NAVIGATION_OPTIONS[key]
+              const option = navigationOptions[key]
+              if (!option) return null
               const Icon = option.icon
               const pressed = headerNavigation[key] ?? true
               const page = HEADER_TOOL_KEYS.includes(key) ? null : key as HeaderNavigationPageKey

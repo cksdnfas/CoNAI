@@ -1,8 +1,8 @@
 import { verifyPageSettingsWrite } from '../../services/pageSettings';
 import { Router, Request, Response } from 'express';
 import {
-  HEADER_NAVIGATION_ITEM_KEYS,
-  HEADER_NAVIGATION_PAGE_KEYS,
+  isHeaderNavigationItemKey,
+  isHeaderNavigationPageKey,
   MAX_RECYCLE_BIN_RETENTION_DAYS,
   normalizeRecycleBinRetentionDays,
   type GeneralSettings,
@@ -26,8 +26,6 @@ import { requestGenerationResultRetentionPrune } from '../../services/generation
 const router = Router();
 const validLanguages: SupportedLanguage[] = ['ko', 'en'];
 const validImageSimilarityCheckModes: ImageSimilarityCheckMode[] = ['manual', 'always'];
-const validHeaderNavigationItemKeys = new Set<string>(HEADER_NAVIGATION_ITEM_KEYS);
-const validHeaderNavigationPageKeys = new Set<string>(HEADER_NAVIGATION_PAGE_KEYS);
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 const MAX_PERMISSION_GROUP_COLORS = 500;
 const MAX_PERMISSION_GROUP_KEY_LENGTH = 200;
@@ -75,13 +73,13 @@ router.put(
     }
 
     if (generalSettings.headerNavigation !== undefined) {
-      if (!generalSettings.headerNavigation || typeof generalSettings.headerNavigation !== 'object') {
+      if (!generalSettings.headerNavigation || typeof generalSettings.headerNavigation !== 'object' || Array.isArray(generalSettings.headerNavigation)) {
         sendRouteBadRequest(res, 'headerNavigation must be an object');
         return;
       }
 
       for (const [key, value] of Object.entries(generalSettings.headerNavigation)) {
-        if (!validHeaderNavigationItemKeys.has(key)) {
+        if (!isHeaderNavigationItemKey(key)) {
           sendRouteBadRequest(res, `Invalid headerNavigation key: ${key}`);
           return;
         }
@@ -95,7 +93,7 @@ router.put(
 
     if (generalSettings.headerNavigationOrder !== undefined) {
       const order: unknown = generalSettings.headerNavigationOrder;
-      if (!Array.isArray(order) || order.some((key) => typeof key !== 'string' || !validHeaderNavigationPageKeys.has(key))) {
+      if (!Array.isArray(order) || order.some((key) => !isHeaderNavigationPageKey(key))) {
         sendRouteBadRequest(res, 'headerNavigationOrder must be a list of header page keys');
         return;
       }

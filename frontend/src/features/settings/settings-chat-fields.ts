@@ -22,6 +22,7 @@ import { APPEARANCE_PRESETS, DENSITY_PRESETS, FONT_PRESETS, GLASS_PRESETS, RADIU
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { SettingsTab } from './settings-tabs'
+import type { PluginPageLink } from '@/features/plugins/use-plugin-pages'
 import { VIDEO_OPTIMIZATION_PRESETS } from './video-optimization-presets'
 
 /**
@@ -44,9 +45,10 @@ export type SettingsChatSources = {
   posts: PostsSettings | null
   ratingTiers: RatingTierRecord[] | null
   taggerModels: string[]
+  pluginPages?: PluginPageLink[]
 }
 
-type ObjectSection = Exclude<keyof SettingsChatSources, 'ratingTiers' | 'taggerModels'>
+type ObjectSection = Exclude<keyof SettingsChatSources, 'ratingTiers' | 'taggerModels' | 'pluginPages'>
 
 export type SettingsChatSetters = { [K in ObjectSection]: (next: NonNullable<SettingsChatSources[K]>) => void } & {
   ratingTier: (tierId: number, patch: Partial<Pick<RatingTierRecord, 'tier_name' | 'min_score' | 'color' | 'feed_visibility'>>) => void
@@ -349,6 +351,17 @@ export function settingsChatFields(tab: SettingsTab, sources: SettingsChatSource
       fields.push(section === 'tagger' && spec.path === 'model' && sources.taggerModels.length > 0 ? { ...field, options: sources.taggerModels } : field)
     }
   }
+  if (tab === 'general' && sources.general) {
+    const room = Math.max(0, CHAT_PAGE_LIMITS.fields - fields.length)
+    for (const page of (sources.pluginPages ?? []).slice(0, room)) {
+      fields.push({
+        id: `headerNavigation.${page.id}`,
+        label: `${t({ ko: '상단 메뉴', en: 'Header menu' })} · ${page.title} · ${page.pluginName}`.slice(0, 160),
+        type: 'boolean',
+        value: sources.general.headerNavigation[page.id] ?? true,
+      })
+    }
+  }
   if (tab === 'auto' && sources.ratingTiers) {
     // Tiers are a list; four inputs each, as many as the snapshot has room for.
     const room = Math.max(0, Math.floor((CHAT_PAGE_LIMITS.fields - fields.length) / TIER_FIELDS.length))
@@ -384,7 +397,8 @@ export function applySettingsChatPatch(patch: Record<string, ChatPageValue>, sou
       tiers.set(tierId, { ...tiers.get(tierId), [tier[2]]: value })
       continue
     }
-    const target = locate(id)
+    const pluginPage = sources.pluginPages?.find((page) => id === `headerNavigation.${page.id}`)
+    const target = pluginPage && typeof value === 'boolean' ? { section: 'general' as const, path: id } : locate(id)
     if (!target) continue
     let base = next.get(target.section) ?? sources[target.section]
     if (!base) continue

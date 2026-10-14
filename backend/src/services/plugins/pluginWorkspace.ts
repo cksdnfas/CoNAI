@@ -7,7 +7,7 @@ import { pluginDb, pluginToken as token, sha256 as hash, PluginError, requirePro
 import { WorkspaceService, workspaceTarget } from '../workspaceService'
 import { workspaceListSchema, workspaceReadSchema, workspaceApplySchema } from '../workspaceSchemas'
 import type { WorkspaceOperation } from '@conai/shared'
-import { requireFileStoreAction } from '../fileStoreAccess'
+import { requireFileStoreAction, requireFileStoreOwner } from '../fileStoreAccess'
 import { FileStoreService } from '../fileStoreService'
 import { requireRequesterImagePermission } from '../../middleware/imageAccess'
 import { db } from '../../database/init'
@@ -25,7 +25,8 @@ const MAX_TEXT = 1024 * 1024
 const revision = z.string().regex(/^[a-f0-9]{64}$/)
 export function requirePluginWorkspace(id: string, caller: PluginCaller, capability: 'workspace.read' | 'workspace.write' | 'workspace.media' = 'workspace.read') {
   const instance = requirePluginInstance(id, caller)
-  if (!instance.workspace || !instance.plugin.capabilities.includes(capability)) throw new PluginError('이 확장에 연결된 프로젝트와 허용 기능만 사용할 수 있어.', 403)
+  if (!instance.workspace) throw new PluginError('프로젝트를 연결해줘.', 400)
+  requireFileStoreOwner(caller.requester)
   if (capability === 'workspace.write') {
     if (!instance.workspace.write) throw new PluginError('읽기 전용 프로젝트 연결이야.', 403)
     requireFileStoreAction(caller.requester, 'organize')

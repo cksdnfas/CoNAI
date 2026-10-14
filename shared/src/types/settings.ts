@@ -44,17 +44,30 @@ export const HEADER_NAVIGATION_ITEM_KEYS = [
   'account',
 ] as const;
 
-export type HeaderNavigationItemKey = typeof HEADER_NAVIGATION_ITEM_KEYS[number];
-export type HeaderNavigationPageKey = typeof HEADER_NAVIGATION_PAGE_KEYS[number];
-export type HeaderNavigationSettings = Record<HeaderNavigationItemKey, boolean>;
+export type PluginHeaderNavigationKey = `plugin:${string}:${string}`;
+export type HeaderNavigationItemKey = typeof HEADER_NAVIGATION_ITEM_KEYS[number] | PluginHeaderNavigationKey;
+export type HeaderNavigationPageKey = typeof HEADER_NAVIGATION_PAGE_KEYS[number] | PluginHeaderNavigationKey;
+export type HeaderNavigationSettings = Record<typeof HEADER_NAVIGATION_ITEM_KEYS[number], boolean> & Partial<Record<PluginHeaderNavigationKey, boolean>>;
+
+/** Matches the installed manifest's plugin/page ID contract, without allowing paths or property traversal. */
+export function isPluginHeaderNavigationKey(value: unknown): value is PluginHeaderNavigationKey {
+  return typeof value === 'string' && /^plugin:[a-z][a-z0-9-]{1,47}:[a-z][a-z0-9-]{1,47}$/.test(value);
+}
+
+export function isHeaderNavigationPageKey(value: unknown): value is HeaderNavigationPageKey {
+  return typeof value === 'string' && ((HEADER_NAVIGATION_PAGE_KEYS as readonly string[]).includes(value) || isPluginHeaderNavigationKey(value));
+}
+
+export function isHeaderNavigationItemKey(value: unknown): value is HeaderNavigationItemKey {
+  return typeof value === 'string' && ((HEADER_NAVIGATION_ITEM_KEYS as readonly string[]).includes(value) || isPluginHeaderNavigationKey(value));
+}
 
 /** Every header page exactly once: known keys in the stored order, then any missing ones in the default order. */
-export function normalizeHeaderNavigationOrder(value: unknown): HeaderNavigationPageKey[] {
-  const known = new Set<string>(HEADER_NAVIGATION_PAGE_KEYS);
+export function normalizeHeaderNavigationOrder(value: unknown, pluginPages: readonly PluginHeaderNavigationKey[] = []): HeaderNavigationPageKey[] {
   const order = Array.isArray(value)
-    ? [...new Set(value.filter((key): key is HeaderNavigationPageKey => typeof key === 'string' && known.has(key)))]
+    ? value.filter(isHeaderNavigationPageKey)
     : [];
-  return [...order, ...HEADER_NAVIGATION_PAGE_KEYS.filter((key) => !order.includes(key))];
+  return [...new Set([...order, ...HEADER_NAVIGATION_PAGE_KEYS, ...pluginPages.filter(isPluginHeaderNavigationKey)])];
 }
 
 /** What the header reads before sign-in: which items show and the page order. */

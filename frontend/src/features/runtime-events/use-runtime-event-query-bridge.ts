@@ -208,12 +208,13 @@ export function useRuntimeEventQueryBridge() {
         if (changes) pendingPostChangesRef.current.clear()
         const audioScopes = prefix === AUDIO_QUERY_KEY ? new Map(pendingAudioScopesRef.current) : null
         if (audioScopes) pendingAudioScopesRef.current.clear()
-        void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active', predicate: ({ queryKey }) => {
+        void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active', predicate: ({ queryKey, state }) => {
           if (audioScopes?.size && !audioScopes.has('*')) {
             const kind = queryKey[1]
+            if (kind === 'candidate') return audioScopes.has(String((state.data as { group_id?: string } | undefined)?.group_id))
             if (kind === 'projects' || (kind === 'groups' && queryKey[2] === 'search')) return true
             if (kind === 'groups' || kind === 'folders') return [...audioScopes.values()].includes(String(queryKey[2]))
-            if (['group', 'orders', 'candidates', 'chat-pending'].includes(String(kind))) return audioScopes.has(String(queryKey[2]))
+            if (['group', 'orders', 'candidates', 'chat-pending', 'comments'].includes(String(kind))) return audioScopes.has(String(queryKey[2]))
             return false
           }
           if (!changes?.size || changes.has(0)) return true
@@ -335,6 +336,12 @@ export function useRuntimeEventQueryBridge() {
         const id = Number.isSafeInteger(postId) && postId > 0 ? postId : 0
         if (changes.get(id) !== 'post') changes.set(id, kind)
         scheduleInvalidate([POSTS_QUERY_KEY], 400)
+        return
+      }
+      case 'audio.changed': {
+        const { group_id, project_id } = envelope.payload as { group_id: string; project_id: string }
+        pendingAudioScopesRef.current.set(group_id, project_id)
+        scheduleInvalidate([AUDIO_QUERY_KEY], 400)
         return
       }
       case 'files.changed': {

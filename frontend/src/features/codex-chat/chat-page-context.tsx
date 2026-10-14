@@ -48,7 +48,7 @@ type PageApi = {
 }
 const PageContext = createContext<PageApi | null>(null)
 
-export type ChatPageActivity = { id: string; threadId: number; label: string; tier: 'view' | 'draft'; at: number; state: 'done' | 'undone'; undo?: () => void }
+export type ChatPageActivity = { id: string; threadId: number; label: string; tier: 'view' | 'draft' | 'direct'; at: number; state: 'done' | 'undone'; undo?: () => void }
 const ACTIVITY_LIMIT = 30
 
 /**
@@ -275,7 +275,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     entry.undo()
     setActivity((old) => old.map((item) => item.id === id ? { ...item, state: 'undone' } : item))
   }, [activity])
-  /** Runs one view/draft operation the chat asked for, only from the registry of the screen it was checked against. */
+  /** Runs one immediate operation the chat asked for, only from the registry of the screen it was checked against. */
   const runCommand = useCallback(async (event: ChatPageCommandEvent) => {
     if (event.connectionId !== connectionRef.current || event.expiresAt < Date.now() || handledCommands.current.has(event.commandId)) return
     handledCommands.current.add(event.commandId)
@@ -291,7 +291,8 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       const assertCurrent = () => { if (connectionRef.current !== event.connectionId) throw new Error('페이지 연결이 해제됐어.') }
       if (event.type === 'action') {
         const action = live.snapshot.actions?.find((item) => item.id === event.actionId)
-        if (!action || chatPageActionTier(action.id, action) !== event.tier) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
+        if (!action || chatPageActionTier(action.id, action) === 'commit' || chatPageActionTier(action.id, action) !== event.tier) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
+        if (event.tier === 'direct' && (!event.revision || live.snapshot.revision !== event.revision)) throw new Error('그사이 화면이나 선택이 바뀌었어. get_current_page로 다시 읽고 요청해줘.')
         if (chatPageActionLeavesScreen(action.id, action) && live.snapshot.dirty) throw new Error('저장하지 않은 변경이 있어. 사용자가 저장하거나 버린 뒤에 다시 해.')
         const args = validateChatPageArguments(action.schema, event.arguments) as Record<string, ChatPageData>
         if (!live.editor.applyAction) throw new Error('페이지 작업 편집기가 닫혔어.')

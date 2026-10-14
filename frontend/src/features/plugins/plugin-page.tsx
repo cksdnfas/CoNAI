@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronDown, Files, FolderKanban, RefreshCw, TriangleAlert } from 'lucide-react'
 import { copyChatPageData, type ChatPageData, type PluginInstance, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
+import { CodeBlock } from '@/components/ui/code-block'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { LoadingState } from '@/components/ui/loading-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { FileBrowser } from '@/features/files/file-browser'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { WorkspaceProjectPicker } from '@/features/files/workspace-projects'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { closePlugin, listPlugins, openPlugin, pluginRequest, proposePluginWrite, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
@@ -23,6 +26,12 @@ import { createRandomUuid } from '@/lib/random-uuid'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { APP_REQUESTS_KEY, AppRequestJob, useAppRequestsById } from './plugin-app-requests'
 import { PluginReviewBar, PluginReviewModal, type PluginMediaJob, type PluginProposal } from './plugin-review'
+import { PLUGIN_NATIVE_API_ROOTS, PLUGIN_REQUEST_TIMEOUT_MS, PLUGIN_SDK_FEATURES, chatPagePermission, pluginNativeApiPath } from '@conai/shared'
+import { buildApiUrl } from '@/lib/api-url'
+import { fetchPluginNative, pluginNativeResponse } from './plugin-native-api'
+import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
+import { useCodexChat } from '@/features/codex-chat/codex-chat-context'
+import { getCodexChatThread } from '@/lib/api-codex-chat'
 const proposalRoute = (proposal: PluginProposal) => 'source' in proposal ? proposal.source === 'media' ? 'media-proposals' : 'workspace-proposals' : 'proposals'
 function appResultSummary(result: unknown) {
   return JSON.stringify(result, (_key, value: unknown) => {
@@ -45,14 +54,12 @@ function hostTheme() {
 }
 
 export function PluginPage() {
+  const auth = useAuthStatusQuery()
   const { pluginId = '', pageId = '' } = useParams()
   const [params, setParams] = useSearchParams()
   const files = params.get('files') ?? ''
   const projectId = params.get('project') ?? ''
-  // Write is granted per project in this tab (never from a link). Keyed by project, so picking another project and
-  // then cancelling the leave-confirm changes nothing for the open one.
-  const [writeGrants, setWriteGrants] = useState<Record<string, boolean>>({})
-  const write = writeGrants[projectId] === true
+  const write = hasAuthPermission(auth.data?.permissionKeys, 'files.edit')
   const [projectPicker, setProjectPicker] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [reload, setReload] = useState(0)
@@ -71,18 +78,18 @@ export function PluginPage() {
   const discardDraft = async () => !hasDraft || await confirm({ title: t({ ko: '지금 초안과 검토를 닫고 다시 열까?', en: 'Discard current drafts and reopen?' }) })
   if (plugins.isPending) return <LoadingState />
   if (!page || !definition) return <ErrorState description={t({ ko: '플러그인이 없거나 꺼져 있어.', en: 'The plugin is unavailable or disabled.' })} />
-  const canProject = definition.capabilities.includes('workspace.read')
-  const canFiles = definition.capabilities.some(capability => capability.startsWith('files.'))
+  const canFiles = hasAuthPermission(auth.data?.permissionKeys, 'files.view')
+  const canProject = canFiles
   const fileCount = files ? files.split(',').filter(Boolean).length : 0
   const contextButtons = <>
     {canProject ? (projectId
-      ? <Button variant="subtle" size="sm" onClick={() => setProjectPicker(true)}><FolderKanban />{project.data?.name ?? '…'}<span className="text-muted-foreground">· {t(write ? { ko: '저장 제안', en: 'Save proposals' } : { ko: '읽기 전용', en: 'Read only' })}</span><ChevronDown /></Button>
+      ? <Button variant="subtle" size="sm" onClick={() => setProjectPicker(true)}><FolderKanban />{project.data?.name ?? '…'}<span className="text-muted-foreground">· {t(write ? { ko: '편집 가능', en: 'Editable' } : { ko: '읽기 전용', en: 'Read only' })}</span><ChevronDown /></Button>
       : <IconButton variant="ghost" label={t({ ko: '프로젝트 연결', en: 'Connect project' })} onClick={() => setProjectPicker(true)}><FolderKanban /></IconButton>) : null}
     {canFiles ? (fileCount
       ? <Button variant="subtle" size="sm" onClick={() => setPicker(true)}><Files />{t({ ko: '파일 {count}개', en: '{count} files' }, { count: fileCount })}<ChevronDown /></Button>
       : <IconButton variant="ghost" label={t({ ko: '파일 고르기', en: 'Choose files' })} onClick={() => setPicker(true)}><Files /></IconButton>) : null}
   </>
-  return <div className="px-4 pb-6">
+  return <div className="pb-6">
     <PageToolbar
       title={<span className="flex min-w-0 items-baseline gap-2"><span className="truncate">{page.title}</span>{definition.name !== page.title ? <span className="truncate text-sm font-normal text-muted-foreground">{definition.name}</span> : null}</span>}
       start={<div className="flex min-w-0 flex-wrap items-center gap-1">{contextButtons}</div>}
@@ -94,12 +101,8 @@ export function PluginPage() {
       onClose={() => setProjectPicker(false)}
       projectId={projectId || null}
       write={write}
-      writeLabel={definition.capabilities.includes('workspace.write') ? t({ ko: '저장 제안 허용', en: 'Allow save proposals' }) : null}
-      onConnect={async (selected, allowWrite) => {
-        // Another project is a navigation, and the leave guard asks about drafts then; only a write toggle on the
-        // same project reopens without one, so ask here.
-        if (selected === (projectId || null) && !await discardDraft()) return
-        if (selected) setWriteGrants((grants) => ({ ...grants, [selected]: allowWrite }))
+      writeLabel={null}
+      onConnect={(selected) => {
         setParams(previous => { const next = new URLSearchParams(previous); if (selected) next.set('project', selected); else next.delete('project'); return next })
         setProjectPicker(false)
       }}
@@ -128,13 +131,17 @@ function PluginConnection({ pluginId, pageId, fileIds, projectId, write, onDirty
 }
 
 function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty: (value: boolean) => void }) {
+  const chat = useCodexChat()
   const { t } = useI18n()
+  const confirm = useConfirm()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const frame = useRef<HTMLIFrameElement>(null)
   const channel = useRef<MessagePort | null>(null)
   const initialized = useRef(false)
   const alive = useRef(true)
-  const inFlight = useRef(0)
+  const requests = useRef(new Map<string, { controller: AbortController; finish: () => void }>())
+  const eventSubscription = useRef<(() => void) | null>(null)
   const rate = useRef({ start: Date.now(), count: 0 })
   // Snapshots follow typing; the latest one is taken at most every 150 ms and never counts as a request.
   const latestSnapshot = useRef<PluginSnapshot | null>(null)
@@ -147,8 +154,8 @@ function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty:
   const [review, setReview] = useState(false)
   const appRequestsQuery = useAppRequestsById(appRequestIds)
   const appRequests = appRequestsQuery.data?.requests ?? []
-  const appCall = async (method: 'call' | 'action', args: unknown) => {
-    const result = await pluginRequest<import('@conai/shared').PluginAppRequest | { status: 'completed'; result: unknown }>(`/instances/${instance.id}/app/${method}`, 'POST', args)
+  const appCall = async (method: 'call' | 'action', args: unknown, requireReview = commands.current.size > 0, signal?: AbortSignal) => {
+    const result = await pluginRequest<import('@conai/shared').PluginAppRequest | { status: 'completed'; result: unknown }>(`/instances/${instance.id}/app/${method}${requireReview ? '?review=1' : ''}`, 'POST', args, signal)
     if ('id' in result) {
       setAppRequestIds(ids => [...new Set([...ids, result.id])].slice(-16))
       await queryClient.invalidateQueries({ queryKey: APP_REQUESTS_KEY })
@@ -164,6 +171,9 @@ function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty:
   const checking = useRef(false)
   useEffect(() => { onDirty(!!snapshot.dirty || proposals.length > 0 || busy); return () => onDirty(false) }, [snapshot.dirty, proposals.length, busy, onDirty])
   const stop = useCallback(() => {
+    eventSubscription.current?.(); eventSubscription.current = null
+    for (const request of requests.current.values()) { request.controller.abort(); request.finish() }
+    channel.current?.postMessage({ type: 'closed' })
     channel.current?.close(); channel.current = null
     for (const pending of commands.current.values()) { clearTimeout(pending.timer); pending.reject(new Error('플러그인 연결이 닫혔어.')) }
     commands.current.clear()
@@ -211,7 +221,7 @@ function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty:
     const port = channel.current
     if (!port || closed) { reject(new Error('플러그인 화면이 준비되지 않았어.')); return }
     const id = createRandomUuid()
-    const timer = setTimeout(() => { commands.current.delete(id); reject(new Error('플러그인 작업 응답이 늦어지고 있어. 화면을 확인해줘.')) }, 15_000)
+    const timer = setTimeout(() => { commands.current.delete(id); reject(new Error('플러그인 작업 제한 시간을 넘었어. 실행 상태를 확인해줘.')) }, PLUGIN_REQUEST_TIMEOUT_MS)
     commands.current.set(id, { resolve, reject, timer })
     port.postMessage({ type: 'action', id, actionId, args })
   })
@@ -229,7 +239,7 @@ function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty:
     apply: () => { throw new Error('등록된 플러그인 작업을 사용해줘.') },
     applyAction: async (actionId, args, assertCurrent) => {
       assertCurrent()
-      if (instance.page.serverActions?.includes(actionId)) await appCall('action', { action: actionId, arguments: args, requestId: createRandomUuid() })
+      if (instance.page.serverActions?.includes(actionId)) await appCall('action', { action: actionId, arguments: args, requestId: createRandomUuid() }, true)
       else await perform(actionId, args)
       assertCurrent()
     },
@@ -251,8 +261,9 @@ function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty:
     channel.current = connection.port1
     connection.port1.onmessage = (event: MessageEvent) => {
       if (!alive.current) return
-      const message = event.data as { type?: string; id?: string; method?: string; args?: unknown; error?: string; snapshot?: PluginSnapshot }
+      const message = event.data as { type?: string; id?: string; method?: string; args?: unknown; error?: string; snapshot?: PluginSnapshot; timeoutMs?: number }
       if (!message || typeof message !== 'object') return
+      if (message.type === 'cancel' && typeof message.id === 'string') { requests.current.get(message.id)?.controller.abort(); return }
       if (message.type === 'snapshot') {
         latestSnapshot.current = message.snapshot ?? null
         snapshotTimer.current ??= setTimeout(() => { snapshotTimer.current = null; if (alive.current) takeSnapshot(latestSnapshot.current) }, 150)
@@ -268,48 +279,113 @@ function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty:
         else pending.resolve()
         return
       }
-      if (message.type !== 'request' || typeof message.id !== 'string' || message.id.length > 100 || inFlight.current >= 4) return
+      if (message.type !== 'request' || typeof message.id !== 'string' || message.id.length > 100) return
       const requestId = message.id
-      const respond = (result: unknown, failed = false) => { if (alive.current) connection.port1.postMessage({ type: 'response', id: requestId, ...(failed ? { error: String(result).slice(0, 500) } : { result }) }) }
-      inFlight.current++
+      const respond = (result: unknown, failed = false, transfer: Transferable[] = []) => {
+        if (alive.current) connection.port1.postMessage({ type: 'response', id: requestId, ...(failed ? {
+          error: (result instanceof Error ? result.message : String(result)).slice(0, 1500),
+          errorInfo: { name: result instanceof Error ? result.name : 'Error', status: result instanceof ApiRequestError ? result.status : undefined, code: result instanceof ApiRequestError ? result.code : undefined },
+        } : { result }) }, transfer)
+      }
+      if (requests.current.size >= (['app.cancel', 'llm.cancel'].includes(message.method ?? '') ? 5 : 4) || requests.current.has(requestId)) { respond(new ApiRequestError('실행 중인 요청이 너무 많아.', 429, 'BUSY'), true); return }
+      const controller = new AbortController()
+      const timeoutMs = Math.min(PLUGIN_REQUEST_TIMEOUT_MS, Math.max(1000, Number.isFinite(message.timeoutMs) ? message.timeoutMs! : PLUGIN_REQUEST_TIMEOUT_MS))
+      const timeout = setTimeout(() => controller.abort(new DOMException('요청 제한 시간을 넘었어.', 'TimeoutError')), timeoutMs)
+      const finish = () => {
+        clearTimeout(timeout)
+        controller.signal.removeEventListener('abort', finish)
+        if (requests.current.get(requestId)?.controller === controller) requests.current.delete(requestId)
+      }
+      requests.current.set(requestId, { controller, finish })
+      controller.signal.addEventListener('abort', finish, { once: true })
+      let streaming = false
+      const request = <T,>(suffix: string, method = 'GET', body?: unknown) => pluginRequest<T>(suffix, method, body, controller.signal)
       void (async () => {
+        if (message.method === 'app.fetch') return fetchPluginNative(instance.id, message.args, controller.signal, async (path, method, details) => {
+          if (commands.current.size === 0) return true
+          if (details.length > 32_000) throw new ApiRequestError('검토할 입력이 너무 커. 변경을 나누거나 앱 도구의 저장 제안을 사용해줘.', 413)
+          return confirm({ title: t({ ko: '플러그인의 변경 적용', en: 'Apply plugin change' }), description: <div className="space-y-2"><p>{instance.page.title} · {method} {path}</p>{details ? <CodeBlock maxHeight="sm">{details}</CodeBlock> : null}</div>, confirmLabel: t({ ko: '적용', en: 'Apply' }) })
+        })
         if (JSON.stringify(message.args ?? null).length > 4_500_000) throw new Error('요청이 너무 커.')
         const args = message.args as Record<string, unknown> | undefined
-        if (message.method === 'app.tools') return pluginRequest(`/instances/${instance.id}/app/tools`, 'POST', args ?? {})
-        if (message.method === 'app.call' || message.method === 'app.action') return appCall(message.method === 'app.call' ? 'call' : 'action', args)
-        if (message.method === 'app.getRequest') return pluginRequest(`/instances/${instance.id}/app/requests/${encodeURIComponent(String(args?.requestId ?? ''))}`)
-        if (message.method === 'server.request') return pluginRequest(`/instances/${instance.id}/server`, 'POST', { body: args?.body ?? null })
-        if (['llm.profiles', 'llm.start', 'llm.get', 'llm.cancel'].includes(message.method ?? '')) return pluginRequest(`/instances/${instance.id}/llm/${message.method!.split('.')[1]}`, 'POST', args ?? {})
-        if (['workspace.list', 'workspace.read', 'workspace.stat'].includes(message.method ?? '')) return pluginRequest(`/instances/${instance.id}/workspace/${message.method!.split('.')[1]}`, 'POST', args)
+        if (message.method === 'app.download') {
+          const path = pluginNativeApiPath(String(args?.path ?? ''), [window.location.origin, new URL(buildApiUrl('/'), window.location.href).origin])
+          await request(`/instances/${instance.id}`)
+          const link = document.createElement('a')
+          link.href = buildApiUrl(path); link.download = Array.from(String(args?.filename ?? '')).map(char => char.charCodeAt(0) < 32 || '/\\'.includes(char) ? '_' : char).join('').slice(0, 200)
+          document.body.append(link); link.click(); link.remove()
+          return { started: true }
+        }
+        if (message.method === 'app.tools') return request(`/instances/${instance.id}/app/tools`, 'POST', args ?? {})
+        if (message.method === 'app.call' || message.method === 'app.action') return appCall(message.method === 'app.call' ? 'call' : 'action', args, commands.current.size > 0, controller.signal)
+        if (message.method === 'app.getRequest') return request(`/instances/${instance.id}/app/requests/${encodeURIComponent(String(args?.requestId ?? ''))}`)
+        if (message.method === 'app.cancel') return request(`/instances/${instance.id}/app/requests/${encodeURIComponent(String(args?.requestId ?? ''))}/cancel`, 'POST')
+        if (message.method === 'server.request') return request(`/instances/${instance.id}/server`, 'POST', { body: args?.body ?? null })
+        if (['storage.get', 'storage.set', 'storage.delete'].includes(message.method ?? '')) return request(`/instances/${instance.id}/storage/${message.method!.split('.')[1]}`, 'POST', args)
+        if (message.method === 'media.open') {
+          const media = await request<{ token: string; expiresAt: number; name: string; mimeType: string }>(`/instances/${instance.id}/artifact-media`, 'POST', args)
+          return { url: new URL(`/api/plugin-media/artifact/${media.token}`, window.location.href).href, expiresAt: media.expiresAt, name: media.name, mimeType: media.mimeType }
+        }
+        if (message.method === 'navigation.openChat') {
+          const threadId = Number(args?.threadId)
+          if (!chat?.canUse || !Number.isSafeInteger(threadId) || threadId < 1) throw new ApiRequestError('열 수 있는 대화를 선택해줘.', 400)
+          await request(`/instances/${instance.id}`)
+          await getCodexChatThread(threadId, 1)
+          controller.signal.throwIfAborted()
+          chat.selectThread(threadId); navigate('/chat'); return { navigated: true }
+        }
+        if (message.method === 'navigation.open') {
+          const path = String(args?.path ?? '')
+          if (!path.startsWith('/') || path.startsWith('//') || /[\\#]/.test(path) || chatPagePermission(path.split('?')[0]) === null) throw new ApiRequestError('등록된 앱 페이지 경로를 사용해줘.', 400)
+          navigate(path); return { navigated: true }
+        }
+        if (message.method === 'events.subscribe') {
+          eventSubscription.current?.()
+          eventSubscription.current = args?.enabled === false ? null : createRuntimeEventStream({
+            onEnvelope: envelope => { if (!envelope.name.startsWith('chat.')) connection.port1.postMessage({ type: 'event', event: envelope }) },
+            onStatusChange: status => connection.port1.postMessage({ type: 'event', event: { name: 'connection', status } }),
+            onResync: () => connection.port1.postMessage({ type: 'event', event: { name: 'resync' } }),
+            onSessionExpired: stop,
+          })
+          return { subscribed: args?.enabled !== false }
+        }
+        if (['llm.profiles', 'llm.asset', 'llm.start', 'llm.get', 'llm.cancel'].includes(message.method ?? '')) return request(`/instances/${instance.id}/llm/${message.method!.split('.')[1]}`, 'POST', args ?? {})
+        if (['workspace.list', 'workspace.read', 'workspace.stat'].includes(message.method ?? '')) return request(`/instances/${instance.id}/workspace/${message.method!.split('.')[1]}`, 'POST', args)
         if (message.method === 'workspace.proposeChanges' || message.method === 'media.proposeProcess') {
           const suffix = message.method === 'workspace.proposeChanges' ? 'workspace/changes' : 'media-proposals'
-          const proposal = await pluginRequest<PluginWorkspaceProposal | PluginMediaProposal>(`/instances/${instance.id}/${suffix}`, 'POST', args)
+          const proposal = await request<PluginWorkspaceProposal | PluginMediaProposal>(`/instances/${instance.id}/${suffix}`, 'POST', args)
           if (alive.current) setProposals(items => [...items, proposal].slice(-4))
           return { proposalId: proposal.id, status: 'pending' }
         }
         if (message.method === 'workspace.proposeWrite') {
-          const proposal = await pluginRequest<PluginWorkspaceProposal>(`/instances/${instance.id}/workspace/proposals`, 'POST', args)
+          const proposal = await request<PluginWorkspaceProposal>(`/instances/${instance.id}/workspace/proposals`, 'POST', args)
           if (alive.current) setProposals(items => [...items, proposal].slice(-4))
           return { proposalId: proposal.id, status: 'pending' }
         }
         if (message.method === 'workspace.media') {
-          const media = await pluginRequest<{ token: string; expiresAt: number }>(`/instances/${instance.id}/workspace/media`, 'POST', args)
+          const media = await request<{ token: string; expiresAt: number }>(`/instances/${instance.id}/workspace/media`, 'POST', args)
           return { url: new URL(`/api/plugin-media/workspace/${media.token}`, window.location.href).href, expiresAt: media.expiresAt }
         }
-        if (message.method === 'files.readText') return pluginRequest(`/instances/${instance.id}/files/${encodeURIComponent(String(args?.fileId ?? ''))}`)
+        if (message.method === 'files.readText') return request(`/instances/${instance.id}/files/${encodeURIComponent(String(args?.fileId ?? ''))}`)
         if (message.method === 'files.proposeWrite') {
-          const proposal = await proposePluginWrite(instance.id, message.args)
+          const proposal = await proposePluginWrite(instance.id, message.args, controller.signal)
           if (alive.current) setProposals((items) => [...items, proposal].slice(-4))
           return { proposalId: proposal.id, status: 'pending' }
         }
         if (message.method === 'files.media') {
-          const media = await pluginRequest<{ token: string; expiresAt: number }>(`/instances/${instance.id}/media/${encodeURIComponent(String(args?.fileId ?? ''))}`, 'POST')
+          const media = await request<{ token: string; expiresAt: number }>(`/instances/${instance.id}/media/${encodeURIComponent(String(args?.fileId ?? ''))}`, 'POST')
           return { url: new URL(`/api/plugin-media/${media.token}`, window.location.href).href, expiresAt: media.expiresAt }
         }
         throw new Error('등록되지 않은 SDK 호출이야.')
-      })().then((result) => respond(result), (reason: unknown) => respond(reason instanceof Error ? reason.message : reason, true)).finally(() => { inFlight.current-- })
+      })().then((result) => {
+        if (result instanceof Response) {
+          const response = pluginNativeResponse(result, finish)
+          respond(response, false, response.body ? [response.body] : [])
+          streaming = response.body !== null
+        } else respond(result)
+      }).catch((reason: unknown) => { controller.abort(); respond(reason, true) }).finally(() => { if (!streaming) finish() })
     }
-    frame.current?.contentWindow?.postMessage({ type: 'conai-plugin-connect', version: 1, files: instance.files, workspace: instance.workspace, actions: instance.page.actions, language: document.documentElement.lang || 'ko', theme: hostTheme() }, '*', [connection.port2])
+    frame.current?.contentWindow?.postMessage({ type: 'conai-plugin-connect', version: 1, features: PLUGIN_SDK_FEATURES, nativeApiRoots: PLUGIN_NATIVE_API_ROOTS, files: instance.files, workspace: instance.workspace, actions: instance.page.actions, language: document.documentElement.lang || 'ko', theme: hostTheme() }, '*', [connection.port2])
   }
   const apply = async (proposal: PluginProposal) => {
     setBusy(true); setError('')

@@ -567,7 +567,7 @@
 
   .theme-shell-main {
     padding-inline: var(--theme-shell-inline-padding);
-    padding-top: calc(var(--theme-shell-header-height) + 1.5rem);
+    padding-top: var(--theme-shell-header-height);
     padding-bottom: var(--theme-shell-main-padding-bottom);
   }
 
