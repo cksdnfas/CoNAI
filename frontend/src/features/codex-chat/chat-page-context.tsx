@@ -288,7 +288,17 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       const live = current.current
       if (!live.snapshot || !live.editor) throw new Error('연결된 페이지가 없어.')
       if (event.type !== 'capture' && live.snapshot.instanceId !== event.instanceId) throw new Error('그사이 화면이 바뀌었어. get_current_page로 지금 화면을 읽고 다시 해.')
-      const assertCurrent = () => { if (connectionRef.current !== event.connectionId) throw new Error('페이지 연결이 해제됐어.') }
+      const target = chatPageTarget(live.snapshot)
+      const assertTargetCurrent = () => {
+        if (connectionRef.current !== event.connectionId || !current.current.snapshot || !current.current.editor) throw new Error('페이지 연결이 해제됐어.')
+        requireChatPageTarget(current.current.snapshot, target)
+      }
+      const assertCurrent = () => {
+        assertTargetCurrent()
+        // Native drafts check again after loading inputs and before replacing their captured state.
+        // Extensions validate their own revisions and can report a new snapshot before returning.
+        if (event.type === 'action' && event.tier === 'draft' && live.snapshot!.kind !== 'extension' && current.current.snapshot!.revision !== live.snapshot!.revision) throw new Error('그사이 입력이나 선택이 바뀌었어. 지금 화면을 읽고 다시 요청해줘.')
+      }
       if (event.type === 'action') {
         const action = live.snapshot.actions?.find((item) => item.id === event.actionId)
         if (!action || chatPageActionTier(action.id, action) === 'commit' || chatPageActionTier(action.id, action) !== event.tier) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
@@ -297,23 +307,22 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
         const args = validateChatPageArguments(action.schema, event.arguments) as Record<string, ChatPageData>
         if (!live.editor.applyAction) throw new Error('페이지 작업 편집기가 닫혔어.')
         const undo = await live.editor.applyAction(action.id, args, assertCurrent)
-        record({ id: event.commandId, threadId: event.threadId, label: action.label, tier: event.tier, ...(undo && event.tier === 'draft' ? { undo: () => { if (!undo.isCurrent()) throw new Error('그 뒤에 입력이 바뀌어서 되돌리지 않았어.'); undo.restore() } } : {}) })
+        record({ id: event.commandId, threadId: event.threadId, label: action.label, tier: event.tier, ...(undo && event.tier === 'draft' ? { undo: () => { assertTargetCurrent(); if (!undo.isCurrent()) throw new Error('그 뒤에 입력이 바뀌어서 되돌리지 않았어.'); undo.restore() } } : {}) })
       } else if (event.type === 'workflow') {
         if (!live.snapshot.workflow || !live.editor.applyWorkflow) throw new Error('노드 워크플로 편집기가 닫혔어.')
         if (live.snapshot.workflow.revision !== event.revision) throw new Error('그사이 워크플로가 바뀌었어. get_workflow_editor로 다시 읽고 해.')
         // The editor re-runs the transaction against its own state before writing; only the fields it reads are passed.
         const undo = live.editor.applyWorkflow({ revision: event.revision, operations: event.operations, modules: event.modules } as WorkflowPageProposal)
-        record({ id: event.commandId, threadId: event.threadId, label: event.label, tier: 'draft', undo: () => undo.restore() })
+        record({ id: event.commandId, threadId: event.threadId, label: event.label, tier: 'draft', undo: () => { assertTargetCurrent(); if (!undo.isCurrent()) throw new Error('그 뒤에 워크플로가 바뀌어서 되돌리지 않았어.'); undo.restore() } })
       } else if (event.type === 'fields') {
         const proposal = { kind: 'page_fields' as const, page: chatPageTarget(live.snapshot), changes: event.changes, expiresAt: event.expiresAt }
         const filledOn = live.snapshot.instanceId
         live.editor.apply(chatPagePatch(live.snapshot, proposal))
         setFilled((old) => { const next = new Map(old); event.changes.forEach((change) => next.set(`${filledOn}:${change.fieldId}`, JSON.stringify(change.value))); return next })
-        const editor = live.editor
         record({ id: event.commandId, threadId: event.threadId, label: event.changes.map((change) => change.label).join(', '), tier: 'draft', undo: () => {
+          assertTargetCurrent()
           const now = current.current
-          if (!now.snapshot || now.editor !== editor) throw new Error('화면이 바뀌어서 되돌리지 않았어.')
-          now.editor.apply(chatPagePatch(now.snapshot, { ...proposal, page: chatPageTarget(now.snapshot) }, true))
+          now.editor!.apply(chatPagePatch(now.snapshot!, proposal, true))
           setFilled((old) => { const next = new Map(old); event.changes.forEach((change) => next.delete(`${filledOn}:${change.fieldId}`)); return next })
         } })
       }

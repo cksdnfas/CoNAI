@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
+import { MediaLibraryPicker } from '@/components/media/media-library-picker'
 import { FilePicker } from '@/features/files/file-browser'
 import { useI18n } from '@/i18n'
 import { downloadChatProfileAsset, importChatProfileAssetFromFileStore, uploadChatProfileAsset, type ChatProfileAssetResult } from '@/lib/api-codex-chat'
@@ -84,7 +84,7 @@ export function ChatProfileAssetInput({ characterName, onChange, onBusyChange, e
       event.target.value = ''
       if (file && !disabled) mutation.mutate(() => uploadChatProfileAsset(file, characterName))
     }} />
-    {picker === 'library' ? <ChatMediaPicker initial={[]} maxCount={1} imagesOnly initialGroupPath={`채팅 캐릭터/${groupName}`} title={t({ ko: '이미지 고르기', en: 'Choose image' })} applyLabel={t({ ko: '선택', en: 'Select' })} note={null} onClose={() => setPicker(null)} onPick={(items) => { if (disabled) return; if (items[0]) onChange(items[0].compositeHash); setPicker(null) }} /> : null}
+    {picker === 'library' ? <MediaLibraryPicker initial={[]} maxCount={1} mediaKind="image" initialGroupPath={`채팅 캐릭터/${groupName}`} title={t({ ko: '이미지 고르기', en: 'Choose image' })} applyLabel={t({ ko: '선택', en: 'Select' })} onClose={() => setPicker(null)} onPick={(items) => { if (disabled) return; if (items[0]) onChange(items[0].compositeHash); setPicker(null) }} /> : null}
     {picker === 'files' ? <FilePicker accept={FILE_EXTENSIONS} title={t({ ko: '보관함 이미지 고르기', en: 'Choose stored image' })} pickLabel={() => t({ ko: '선택', en: 'Select' })} onClose={() => setPicker(null)} onPick={(items) => {
       if (disabled) return
       if (items.length !== 1) { showSnackbar({ message: t({ ko: '이미지 한 장을 골라줘.', en: 'Choose one image.' }), tone: 'error' }); return }

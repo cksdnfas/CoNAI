@@ -6,7 +6,12 @@ import type { ChatPageSnapshot } from '../types/chatPage'
 export const CHAT_PAGE_ACTION_LIMITS = { actions: 26, bytes: 320000, text: 200000, depth: 20, array: 512 } as const
 function own(value: object, key: PropertyKey) { return Object.prototype.hasOwnProperty.call(value, key) }
 const privateKey = /password|secret|credential|api[ _-]?key|authorization|bearer|token|headers|(?:file|source|output|save|artifact)[ _-]?(?:path|directory)|(?:^|[_.-])(?:code|script|url|endpoint)(?:$|[_.-])|filename_prefix|비밀번호|인증키|저장.?경로/i
-export function isPrivateChatPageKey(key: string) { return privateKey.test(key) || ['__proto__', 'prototype', 'constructor', 'dataUrl', 'base64', 'encoded'].includes(key) }
+export function isPrivateChatPageKey(key: string) {
+  // These exact profile settings are model token counts, not authentication tokens.
+  // Keep the exception narrow so credential names and nested keys still receive the normal checks.
+  if (key === 'maxTokens' || key === 'contextTokens') return false
+  return privateKey.test(key) || ['__proto__', 'prototype', 'constructor', 'dataUrl', 'base64', 'encoded'].includes(key)
+}
 
 /** Copy only bounded JSON. Media and protected settings stay in the native page, outside model context. */
 export function copyChatPageData(value: unknown, depth = 0): ChatPageData {
@@ -33,10 +38,10 @@ export function normalizeChatPageSchema(input: unknown, depth = 0): ChatPageSche
     if (raw[key] !== undefined) { if (!Number.isFinite(raw[key]) || (key !== 'minimum' && key !== 'maximum' && raw[key]! < 0)) throw new Error('작업 입력 범위가 올바르지 않아.'); schema[key] = raw[key] }
   }
   if (raw.integer) schema.integer = true
-  if (raw.enum) { if (!Array.isArray(raw.enum) || !raw.enum.length || raw.enum.length > 512 || raw.enum.some((item) => typeof item !== 'string' && typeof item !== 'number')) throw new Error('작업 선택 목록이 올바르지 않아.'); schema.enum = [...raw.enum] }
+  if (raw.enum) { if (!Array.isArray(raw.enum) || !raw.enum.length || raw.enum.length > 512 || raw.enum.some((item) => typeof item !== raw.type || (typeof item !== 'string' && typeof item !== 'number') || (typeof item === 'number' && !Number.isFinite(item)))) throw new Error('작업 선택 목록이 올바르지 않아.'); schema.enum = [...raw.enum] }
   if (raw.type === 'object') {
     if (!raw.properties || Object.keys(raw.properties).length > 100) throw new Error('작업 필드 정의가 올바르지 않아.')
-    schema.properties = Object.fromEntries(Object.entries(raw.properties).map(([key, item]) => { if (isPrivateChatPageKey(key)) throw new Error('보호된 작업 필드야.'); return [key, normalizeChatPageSchema(item, depth + 1)] }))
+    schema.properties = Object.fromEntries(Object.entries(raw.properties).map(([key, item]) => { if (isPrivateChatPageKey(key)) throw new Error(`보호된 작업 필드야: ${key}`); return [key, normalizeChatPageSchema(item, depth + 1)] }))
     schema.required = raw.required ?? []
     if (!Array.isArray(schema.required) || schema.required.some((key) => !own(schema.properties!, key))) throw new Error('필수 작업 필드가 올바르지 않아.')
   }
@@ -63,7 +68,7 @@ export function validateChatPageArguments(schema: ChatPageSchema, input: unknown
 }
 
 /** IDs and route bindings are maintained by the app; snapshots cannot grant arbitrary native actions. */
-export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
+const nativeActionPermissions = {
   'workspace.open': 'files.view', 'workspace.search': 'files.view', 'workspace.new': 'files.edit', 'workspace.create': 'files.edit', 'workspace.mkdir': 'files.edit', 'workspace.save': 'files.edit',
   'page.navigate': null, 'page.refresh': null, 'page.settings_open': null, 'page_settings.save': null, 'page_settings.select': null, 'page_settings.close': null,
   'prompt.create': 'prompts.edit', 'prompt.update': 'prompts.edit', 'prompt.select': 'prompts.view',
@@ -89,7 +94,7 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
   'files.name_save': 'files.edit', 'files.move_save': 'files.edit', 'files.delete': 'files.delete', 'files.restore_version': 'files.edit',
   'files.doc_at': 'files.view', 'files.doc_edit': 'files.edit', 'files.doc_append': 'files.edit', 'files.doc_save': 'files.edit',
   // Settings › Chat › 자원 editors (lorebooks, generation presets, judge presets, blocks, tool presets). Saving uses each editor's own admin API.
-  'resource.open': null, 'resource.save': null, 'lorebook.entries': null,
+  'resource.open': null, 'resource.save': null, 'lorebook.entries': null, 'block.fields': null,
   'chat.open': 'chat.use', 'chat.prepare': 'chat.use',
   'audio.open': 'audio.view', 'audio.filter': 'audio.view', 'audio.select': 'audio.view',
   'sprite.select': null,
@@ -120,7 +125,10 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
   'settings.usage_period': null, 'settings.judge_filter': null,
   'settings.content_topic': null,
   'settings.user_profile': 'chat.use', 'settings.flag': 'chat.use', 'settings.routine': null, 'settings.automation_switch': null,
-}
+} satisfies Record<string, string | null>
+/** Native adapters can only declare IDs present in the shared permission contract. */
+export type NativeChatPageActionId = keyof typeof nativeActionPermissions
+export const CHAT_PAGE_ACTION_PERMISSIONS: Readonly<Record<string, string | null>> = nativeActionPermissions
 /**
  * What running an action does, decided here and never by the page that registers it:
  * - view: moves or opens something (navigation, tabs, selection, opening an editor). Runs right away.
@@ -135,8 +143,9 @@ const COMMIT_ACTIONS = new Set(['page_settings.save', 'prompt.create', 'prompt.u
 const VIEW_ACTIONS = new Set(['page.settings_open', 'page_settings.select', 'page_settings.close', 'page.navigate', 'page.refresh', 'prompt.select', 'preset.select', 'wildcard.select', 'comfy.select', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'workflow.select', 'group.select', 'profile.open_create', 'profile.open_edit', 'profile.section', 'library.search', 'library.history', 'library.open', 'library.select', 'files.open', 'files.preview', 'comfy.check', 'profile.copy', 'resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset', 'posts.open', 'posts.category', 'posts.tag', 'posts.back', 'posts.new', 'posts.edit', 'audio.project', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.filter', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.new_document', 'files.edit_document', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
 /** View operations that stay inside the open editor, so unsaved changes there do not block them. */
 const IN_PLACE_VIEW_ACTIONS = new Set(['page.settings_open', 'comfy.check', 'profile.section', 'library.select', 'resource.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
-for (const id of ['workspace.create', 'workspace.mkdir', 'workspace.save']) COMMIT_ACTIONS.add(id)
-for (const id of ['workspace.open', 'workspace.new', 'workspace.search']) VIEW_ACTIONS.add(id)
+for (const id of ['workspace.create', 'workspace.save']) COMMIT_ACTIONS.add(id)
+for (const id of ['workspace.open', 'workspace.new', 'workspace.search', 'workspace.mkdir']) VIEW_ACTIONS.add(id)
+IN_PLACE_VIEW_ACTIONS.add('workspace.mkdir')
 for (const id of ['posts.comments_more', 'posts.comments_at']) { VIEW_ACTIONS.add(id); IN_PLACE_VIEW_ACTIONS.add(id) }
 export function chatPageActionTier(id: string, action?: { tier?: ChatPageActionTier }): ChatPageActionTier {
   if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) {
@@ -160,7 +169,7 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   if (id.startsWith('profile.')) return path === '/settings'
   if (id.startsWith('library.')) return path === '/'
   if (id.startsWith('files.')) return path === '/files'
-  if (id.startsWith('resource.') || id.startsWith('lorebook.') || id.startsWith('settings.')) return path === '/settings'
+  if (id.startsWith('resource.') || id.startsWith('lorebook.') || id.startsWith('block.') || id.startsWith('settings.')) return path === '/settings'
   if (id.startsWith('chat.')) return path === '/chat'
   if (id.startsWith('audio.')) return path === '/audio'
   if (id.startsWith('sprite.')) return path === '/sprite'

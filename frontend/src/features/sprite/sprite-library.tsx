@@ -4,7 +4,7 @@ import { Images, Loader2, Upload } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
+import { MediaLibraryPicker } from '@/components/media/media-library-picker'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useI18n } from '@/i18n'
 import { getImage, getImageDetailQueryKey, uploadMultipleImages } from '@/lib/api-images'
@@ -61,14 +61,12 @@ export function LibraryMediaButtons({ kind, maxCount, onPick, initialHashes = []
         onChange={(event) => { const files = [...(event.target.files ?? [])]; event.target.value = ''; void upload(files) }}
       />
       {open ? (
-        <ChatMediaPicker
+        <MediaLibraryPicker
           initial={initialHashes.map((hash) => ({ compositeHash: hash, name: hash.slice(0, 12), mimeType: null }))}
           maxCount={maxCount}
-          imagesOnly={kind === 'image'}
-          videosOnly={kind === 'video'}
+          mediaKind={kind}
           title={kind === 'video' ? t({ ko: '영상 고르기', en: 'Choose videos' }) : t({ ko: '시트 고르기', en: 'Choose sheets' })}
           applyLabel={t({ ko: '고르기', en: 'Choose' })}
-          note={null}
           onClose={() => setOpen(false)}
           onPick={(items) => { setOpen(false); onPick(items.map((item) => item.compositeHash)) }}
         />

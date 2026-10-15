@@ -51,7 +51,7 @@ const HEADER_NAVIGATION_OPTIONS: Record<HeaderNavigationItemKey, { icon: LucideI
 }
 
 /** Header tools on the right keep their place; only the page links reorder. */
-const HEADER_TOOL_KEYS: HeaderNavigationItemKey[] = ['search', 'queue', 'account']
+const HEADER_TOOL_KEYS = ['queue', 'search', 'account'] as const
 
 /** Render app-wide preferences in their user-facing settings category, as flat hairline rows. */
 export function GeneralPreferencesSections({
@@ -148,27 +148,42 @@ export function GeneralPreferencesSections({
             align="start"
             controlClassName="justify-start sm:max-w-xl sm:justify-end"
           >
-            {[...headerNavigationOrder, ...HEADER_TOOL_KEYS].map((key) => {
+            {headerNavigationOrder.map((key) => {
               const option = navigationOptions[key]
               if (!option) return null
               const Icon = option.icon
               const pressed = headerNavigation[key] ?? true
-              const page = HEADER_TOOL_KEYS.includes(key) ? null : key as HeaderNavigationPageKey
               return (
                 <ToggleChip
                   key={key}
                   pressed={pressed}
                   onClick={() => updateHeaderNavigationItem(key, !pressed)}
-                  draggable={page !== null}
-                  onDragStart={page ? (event) => { setDraggedPage(page); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', page) } : undefined}
+                  draggable
+                  onDragStart={(event) => { setDraggedPage(key); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', key) }}
                   onDragEnd={() => { setDraggedPage(null); setDropTargetPage(null) }}
-                  onDragOver={page ? (event) => { if (draggedPage) { event.preventDefault(); setDropTargetPage(page) } } : undefined}
-                  onDragLeave={() => setDropTargetPage((current) => (current === page ? null : current))}
-                  onDrop={page ? (event) => { event.preventDefault(); if (draggedPage) moveHeaderPage(draggedPage, page); setDraggedPage(null); setDropTargetPage(null) } : undefined}
-                  className={cn(page && 'cursor-grab active:cursor-grabbing', page && draggedPage === page && 'opacity-50', page && dropTargetPage === page && draggedPage !== page && 'ring-2 ring-primary/60')}
+                  onDragOver={(event) => { if (draggedPage) { event.preventDefault(); setDropTargetPage(key) } }}
+                  onDragLeave={() => setDropTargetPage((current) => (current === key ? null : current))}
+                  onDrop={(event) => { event.preventDefault(); if (draggedPage) moveHeaderPage(draggedPage, key); setDraggedPage(null); setDropTargetPage(null) }}
+                  className={cn('cursor-grab active:cursor-grabbing', draggedPage === key && 'opacity-50', dropTargetPage === key && draggedPage !== key && 'ring-2 ring-primary/60')}
                 >
                   <Icon aria-hidden />
                   {t(option.label)}
+                  <ChatFilledMark fieldId={`headerNavigation.${key}`} />
+                </ToggleChip>
+              )
+            })}
+          </SettingRow>
+          <SettingRow
+            label={<SettingsLabelTip label={t({ ko: '오른쪽 고정 메뉴', en: 'Fixed right-side menu' })} tip={t({ ko: '헤더 오른쪽에 고정되는 메뉴야. 눌러서 표시 여부를 바꿔.', en: 'These controls stay on the right of the header. Click to show or hide them.' })} />}
+            controlClassName="justify-start sm:max-w-xl sm:justify-end"
+          >
+            {HEADER_TOOL_KEYS.map((key) => {
+              const { icon: Icon, label } = HEADER_NAVIGATION_OPTIONS[key]
+              const pressed = headerNavigation[key] ?? true
+              return (
+                <ToggleChip key={key} pressed={pressed} onClick={() => updateHeaderNavigationItem(key, !pressed)}>
+                  <Icon aria-hidden />
+                  {t(label)}
                   <ChatFilledMark fieldId={`headerNavigation.${key}`} />
                 </ToggleChip>
               )

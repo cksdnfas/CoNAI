@@ -253,12 +253,15 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const profile = thread?.profile_id ? profilesById.get(thread.profile_id) ?? null : pendingProfile
   const isCodexThread = (thread?.engine ?? pendingProfile?.engine) === 'codex'
   const { appearance, update: updateAppearance } = useChatAppearance(activeThreadId, chat.canUse)
-  // Chat flags: the account's own; which are on is kept per chat (on the thread).
+  // Chat flags stay in the pending chat until its first send, then on the saved thread.
   const flagsQuery = useChatFlags(chat.canUse)
   const flags = useMemo(() => flagsQuery.data ?? [], [flagsQuery.data])
-  const activeFlagIds = useMemo(() => readThreadFlagIds(thread).filter((id) => flags.some((flag) => flag.id === id)), [flags, thread])
+  const activeFlagIds = useMemo(() => (pendingChat?.flagIds ?? readThreadFlagIds(thread)).filter((id) => flags.some((flag) => flag.id === id)), [flags, pendingChat, thread])
+  const canToggleFlags = !isStartingChat && (activeThreadId !== null || pendingChat?.greeting != null)
+  const togglePendingFlag = chat.togglePendingFlag
   const toggleFlag = useCallback((flagId: number) => {
-    if (activeThreadId === null) return
+    if (!canToggleFlags) return
+    if (activeThreadId === null) { togglePendingFlag(flagId); return }
     const on = new Set(activeFlagIds)
     if (on.has(flagId)) on.delete(flagId)
     else on.add(flagId)
@@ -268,7 +271,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(activeThreadId) })
       showSnackbar({ message: getErrorMessage(error, t({ ko: '플래그를 바꾸지 못했어.', en: 'Could not change the flag.' })), tone: 'error' })
     })
-  }, [activeFlagIds, activeThreadId, flags, queryClient, showSnackbar, t])
+  }, [activeFlagIds, activeThreadId, canToggleFlags, flags, queryClient, showSnackbar, t, togglePendingFlag])
   const closeFlagTray = useCallback(() => setFlagTrayOpen(false), [])
   useEffect(() => setFlagTrayOpen(false), [activeThreadId])
   // Group rooms: `profile` is the representative (the room's look); every member speaks with its own face and emoticons.
@@ -1086,7 +1089,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         <ChatFlagTray
           flags={flags}
           activeIds={activeFlagIds}
-          open={flagTrayOpen && activeThreadId !== null}
+          open={flagTrayOpen && canToggleFlags}
           flagStyle={appearance.flagStyle}
           buttonRef={flagButtonRef}
           onToggle={toggleFlag}
@@ -1097,7 +1100,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <div {...fileDrop.dropHandlers} style={narrationColorStyle(profile?.style.roleplay ? profile.style.colors.narration : null)} className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', narrating && caretOnNarration(draft, caret) && 'focus-within:border-[color-mix(in_srgb,var(--chat-rp-narration,var(--secondary-text))_70%,transparent)]', backgroundUrl && 'bg-background/85 backdrop-blur-sm', fileDrop.dragging && 'border-primary focus-within:border-primary')}>
         <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} />
         {!isGroup && profile?.pageAssist ? <ChatPageConnectButton disabled={isBusy} /> : null}
-        {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={activeThreadId === null} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
+        {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={!canToggleFlags} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
         {profile?.suggestEnabled ? <ChatSuggestButton buttonRef={suggestButtonRef} open={suggestions.open} loading={suggestions.loading} disabled={isBusy || activeThreadId === null} onToggle={suggestions.toggle} /> : null}
         <div className="relative min-w-0 flex-1">
         {narrating ? <ChatComposerNarrationBackdrop textareaRef={composerRef} text={draft} /> : null}

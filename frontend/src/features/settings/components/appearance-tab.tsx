@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { SettingRow } from '@/components/ui/setting-row'
 import { APP_ICON_SRC } from '@/lib/app-metadata'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
+import { MediaLibraryPicker } from '@/components/media/media-library-picker'
 import { AppIconEditor } from './app-icon-editor'
 import { InstantApplyHint, SectionDirtyBadge } from './settings-section-status'
 import { AppearanceBadgeColorRows, AppearanceThemeRows } from './appearance-color-editor-content'
@@ -215,13 +215,12 @@ export function AppearanceTab({
         <SettingsRowsSkeleton rows={4} />
       )}
       {appIconPickerOpen ? (
-        <ChatMediaPicker
+        <MediaLibraryPicker
           initial={[]}
           maxCount={1}
-          imagesOnly
+          mediaKind="image"
           title={t({ ko: '앱 마크로 쓸 내부 이미지', en: 'Choose an app library image for the mark' })}
           applyLabel={t({ ko: '선택', en: 'Select' })}
-          note={null}
           onClose={() => setAppIconPickerOpen(false)}
           onPick={(items) => {
             if (isSaving || isLoadingAppIcon || !canViewImages) return

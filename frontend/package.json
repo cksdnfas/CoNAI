@@ -16,6 +16,8 @@
     "test:audio-waveform": "tsx --tsconfig tsconfig.app.json --test test/audio-waveform.test.ts",
     "test:media-previews": "tsx --tsconfig tsconfig.app.json --test test/media-preview-lifecycle.test.ts",
     "test:plugins": "tsx --tsconfig tsconfig.app.json --test test/plugin-sdk.test.ts",
+    "pretest:chat-page": "npm run build --prefix ../shared",
+    "test:chat-page": "tsx --tsconfig tsconfig.test.json --test test/chat-page-context.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

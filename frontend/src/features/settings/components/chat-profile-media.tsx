@@ -7,7 +7,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
-import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
+import { MediaLibraryPicker } from '@/components/media/media-library-picker'
 import { useI18n } from '@/i18n'
 import { chatAssetUrl, chatMediaThumbnailUrl, chatMediaUrl, getChatMediaInfo, localizeChatImages, type ChatMediaInfo } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
@@ -400,12 +400,11 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
       </CollapsibleRow>
       {preview ? <MediaPreview entry={preview} onClose={() => setPreview(null)} /> : null}
       {pickerOpen ? (
-        <ChatMediaPicker
+        <MediaLibraryPicker
           initial={[]}
           maxCount={20}
           title={t({ ko: '라이브러리에서 넣기', en: 'Insert from the library' })}
           applyLabel={t({ ko: '넣기', en: 'Insert' })}
-          note={null}
           onPick={insertPicked}
           onClose={() => setPickerOpen(false)}
         />

@@ -57,6 +57,7 @@ import { addChatGreeting } from './chatGreeting'
 import { deleteClaudeMemberSession, deleteClaudeSessions, isClaudeSessionValue } from './claudeChatSessions'
 import { codexHistoryRecap, codexInputMeta, nextLoreSent, pendingAuthorNote, pendingBlockState, prepareSessionLore, pendingRejectedLore, pendingReplyGuidance, pendingUserPersona, readLoreSent } from './chatSessionMemory'
 import { logger } from '../../utils/logger'
+import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { externalMcpToolsSignature } from '../externalMcp/externalMcpServers'
 import { pluginServerToolsSignature } from '../plugins/pluginServerTools'
 import { applyChatInstructionHooks } from '../plugins/pluginServerRuntime'
@@ -1057,18 +1058,24 @@ export const CodexChatService = {
     }
   },
 
-  createThread(requester: McpRequester, profileId: number, userProfileId?: number | null, greetingIndex?: number | null) {
+  createThread(requester: McpRequester, profileId: number, userProfileId?: number | null, greetingIndex?: number | null, flagIds?: unknown) {
     const user = ChatUserProfileStore.requireOwn(requester.accountId, userProfileId === undefined ? ChatUserProfileStore.resolveNew(requester.accountId) : userProfileId)
     const profile = ChatProfileStore.find(profileId)
-    if (profile?.engine !== 'codex') {
-      return requireThread(requester, LlmChatService.createThread(requester, profileId, user?.id ?? null, greetingIndex))
-    }
-    assertChatAvailable(requester)
-    requireCodexProfile(profile.id, requester)
-    const id = CodexChatStore.createThread(requester.accountId, '', 'codex', profile.id)
-    if (user) ChatUserProfileStore.setThreadUserProfile(id, user.id)
-    addChatGreeting(id, profile, userPersonaOf(user), greetingIndex)
-    return requireThread(requester, id)
+    const flags = ChatFlagStore.resolve(requester, parseFlagIds(flagIds))
+    return getUserSettingsDb().transaction(() => {
+      let id: number
+      if (profile?.engine !== 'codex') {
+        id = LlmChatService.createThread(requester, profileId, user?.id ?? null, greetingIndex)
+      } else {
+        assertChatAvailable(requester)
+        requireCodexProfile(profile.id, requester)
+        id = CodexChatStore.createThread(requester.accountId, '', 'codex', profile.id)
+        if (user) ChatUserProfileStore.setThreadUserProfile(id, user.id)
+        addChatGreeting(id, profile, userPersonaOf(user), greetingIndex)
+      }
+      if (flags.length) ChatFlagStore.setThreadFlags(id, flags.map((flag) => flag.id))
+      return requireThread(requester, id)
+    })()
   },
 
   /** Running state without loading the transcript, attachments, media or display blocks. */

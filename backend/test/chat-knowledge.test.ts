@@ -199,7 +199,7 @@ test('chat knowledge: linked search, file versions, connected history, group mem
     } finally { close(); await bridge.close() }
   })
 
-  await t.test('a direct chat gets the history tools once it shares knowledge, never on a page turn', async () => {
+  await t.test('a direct chat keeps shared history tools on native pages, but never on public pages', async () => {
     const threadId = CodexChatStore.createThread(null, '그냥 수다', 'llm', kai.id)
     const names = async (page?: ChatExecutionContext['page']) => {
       const bridge = await openChatMcpBridge(requester, [], null, { chatContext: { threadId, profileId: kai.id, kind: 'direct', replyId: 'plain', ...(page ? { page } : {}) } })
@@ -209,7 +209,8 @@ test('chat knowledge: linked search, file versions, connected history, group mem
     const book = OwnedLorebookStore.create(me, { name: '수다 기록' })
     OwnedLorebookStore.setThreadLinks(threadId, [book.id])
     assert.ok((await names()).includes('room_history_search'))
-    assert.ok(!(await names({ path: '/prompts', title: '프롬프트' } as ChatExecutionContext['page'])).includes('room_history_search'), 'page text cannot steer it into other chats')
+    assert.ok((await names({ path: '/prompts', title: '프롬프트' } as ChatExecutionContext['page'])).includes('room_history_search'), 'native page connections preserve already permitted tools')
+    assert.ok(!(await names({ path: '/public/workflows/shared', title: '공유 워크플로' } as ChatExecutionContext['page'])).includes('room_history_search'), 'public page content never gains access to chat history')
   })
 
   await t.test('a profile with only a writable linked folder gets the task tools', async () => {

@@ -1424,8 +1424,8 @@ export function listCodexChatThreads() {
 
 /** `userProfileId` left out: the server picks the default user profile; null: the plain user. */
 /** `greetingIndex`: the greeting previewChatGreeting showed (absent: one chosen at random). */
-export function createCodexChatThread(profileId: number, userProfileId?: number | null, greetingIndex?: number | null) {
-  return requestApiData<CodexChatThread>('/api/codex-chat/threads', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileId, ...(userProfileId === undefined ? {} : { userProfileId }), ...(greetingIndex === undefined ? {} : { greetingIndex }) }) })
+export function createCodexChatThread(profileId: number, userProfileId?: number | null, greetingIndex?: number | null, flagIds?: number[]) {
+  return requestApiData<CodexChatThread>('/api/codex-chat/threads', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileId, ...(userProfileId === undefined ? {} : { userProfileId }), ...(greetingIndex === undefined ? {} : { greetingIndex }), ...(flagIds === undefined ? {} : { flagIds }) }) })
 }
 
 /** A new chat's opening before it is saved: one greeting (index null: none) and the user profile the chat would take. */

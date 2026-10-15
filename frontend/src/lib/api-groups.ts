@@ -88,7 +88,7 @@ export async function getGroupImages(groupId: number, params?: {
   cursorAddedDate?: string | null
   cursorHash?: string | null
   includeChildren?: boolean
-}): Promise<GroupImagesPayload> {
+}, init?: RequestInit): Promise<GroupImagesPayload> {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
   searchParams.set('limit', String(params?.limit ?? 40))
@@ -108,7 +108,7 @@ export async function getGroupImages(groupId: number, params?: {
     searchParams.set('collection_type', params.collectionType)
   }
 
-  const response = await fetchJson<ApiResponse<GroupImagesPayload>>(`/api/groups/${groupId}/images?${searchParams.toString()}`)
+  const response = await fetchJson<ApiResponse<GroupImagesPayload>>(`/api/groups/${groupId}/images?${searchParams.toString()}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'groups.images.load')
   }

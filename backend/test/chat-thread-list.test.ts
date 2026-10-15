@@ -137,6 +137,33 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     assert.equal(CodexChatStore.listMessages(CodexChatService.createThread(requester, quiet.id, null, null).id).length, 0)
   })
 
+  await t.test('new chats keep only the selected flags visible to their owner', async () => {
+    const { ChatFlagStore } = await import('../src/services/codex-chat/chatFlags')
+    const guest = { accountId: 3, accountType: 'guest' as const }
+    const shared = ChatFlagStore.create(requester, { name: '공유', icon: '', content: '공유 지침' })
+    const hidden = ChatFlagStore.create(requester, { name: '숨김', icon: '', content: '숨긴 지침' })
+    const own = ChatFlagStore.create(guest, { name: '내 플래그', icon: '', content: '내 지침' })
+    const foreign = ChatFlagStore.create({ accountId: 4, accountType: 'guest' }, { name: '다른 계정', icon: '', content: '다른 계정 지침' })
+    ChatFlagStore.delete(guest, hidden.id)
+    const saved = CodexChatService.createThread(guest, profile.id, null, null, [shared.id, own.id, own.id, hidden.id, foreign.id, -1])
+    assert.deepEqual(JSON.parse(saved.flag_ids!), [shared.id, own.id])
+    assert.equal(CodexChatStore.findThread(saved.id, guest.accountId)?.flag_ids, saved.flag_ids)
+    assert.equal(CodexChatService.createThread(guest, profile.id, null, null).flag_ids, null)
+    assert.equal(CodexChatService.createThread(guest, profile.id, null, null, []).flag_ids, null)
+  })
+
+  await t.test('initial flag save failure rolls back the new chat and greeting', async (s) => {
+    const { ChatFlagStore } = await import('../src/services/codex-chat/chatFlags')
+    const flag = ChatFlagStore.list(requester)[0]
+    const greeter = ChatProfileStore.create({ name: 'rollback', engine: 'llm', providerName: 'test', model: 'm', greeting: 'hello' })
+    const db = dbModule.getUserSettingsDb()
+    const counts = () => [db.prepare('SELECT COUNT(*) AS count FROM codex_chat_threads').get(), db.prepare('SELECT COUNT(*) AS count FROM codex_chat_messages').get()]
+    const before = counts()
+    s.mock.method(ChatFlagStore, 'setThreadFlags', () => { throw new Error('flag save failed') })
+    assert.throws(() => CodexChatService.createThread(requester, greeter.id, null, 0, [flag.id]), /flag save failed/)
+    assert.deepEqual(counts(), before)
+  })
+
   await t.test('backup: a chat file in 채팅 백업/<date>, with its lorebook, that import brings back', async () => {
     const { backupChatToFiles, backupDateOf, backupFileName, exportChatJson, CHAT_BACKUP_FOLDER } = await import('../src/services/codex-chat/chatBackup')
     const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')

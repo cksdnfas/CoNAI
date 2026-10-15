@@ -114,7 +114,7 @@ type AppSettingsRecord = Awaited<ReturnType<typeof getAppSettings>>
 /** General-settings fields rendered (and therefore saved) by each preference section. */
 const GENERAL_SECTION_FIELDS = {
   basic: ['language', 'promptForDownloadLocation'],
-  appearance: ['enableGallery', 'showRatingBadges', 'headerNavigation'],
+  appearance: ['enableGallery', 'showRatingBadges', 'headerNavigation', 'headerNavigationOrder'],
   library: ['imageSimilarityCheckMode'],
   safety: ['deleteProtection', 'generationHistoryMaxItems', 'autoCleanupCanvasOnShutdown', 'applyRatingSafetyToGenerationHistory'],
 } as const satisfies Record<GeneralPreferenceSection, ReadonlyArray<keyof GeneralSettings>>

@@ -5,6 +5,7 @@ import { ImagePlus, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { MediaFileDropSurface } from '@/components/media/media-file-drop-surface'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
+import { MediaLibraryBrowser } from '@/components/media/media-library-browser'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -14,12 +15,11 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { getImageListDisplayName, getImageListItemId, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
-import { Modal } from '@/components/ui/modal'
+import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { useDropZoneState } from '@/features/upload/use-drop-zone-state'
 import { listGenerationSaveImages } from '@/lib/api-image-generation-history'
 import type { SaveBrowserImageRecord } from '@/lib/api-image-generation-types'
-import { getImages } from '@/lib/api-images'
 import { getImageViewerSettings } from '@/lib/api-settings'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
@@ -85,19 +85,6 @@ type ImageAttachmentBrowserSectionProps = {
 
 const IMAGE_ATTACHMENT_SOURCE_VALUES: ImageAttachmentSource[] = ['upload', 'system', 'save']
 
-const SYSTEM_IMAGE_PAGE_SIZE = 24
-
-/** Keep one canonical image-record map when paginated library pages append into the picker. */
-function mergeImageAttachmentRecords(current: ImageRecord[], incoming: ImageRecord[]) {
-  const next = new Map<string, ImageRecord>()
-
-  for (const item of [...current, ...incoming]) {
-    next.set(String(item.composite_hash ?? item.id), item)
-  }
-
-  return Array.from(next.values())
-}
-
 /** Convert one save-browser item into the shared image-list record shape. */
 function toSaveBrowserImageRecord(item: SaveBrowserImageRecord): ImageRecord {
   return {
@@ -137,7 +124,7 @@ function ImageAttachmentEmptyState({ title }: { title: string }) {
   return <EmptyState size="compact" title={title} />
 }
 
-/** Render one browser-style image list section for system/save sources. */
+/** Browse unregistered Save files; registered media uses MediaLibraryBrowser. */
 function ImageAttachmentBrowserSection({
   searchValue,
   searchPlaceholder,
@@ -223,11 +210,8 @@ export function ImageAttachmentPickerButton({
   const librarySourceLabel = librarySource?.label
   const [source, setSource] = useState<ImageAttachmentSource>('upload')
   const [isImporting, setIsImporting] = useState(false)
-  const [systemPage, setSystemPage] = useState(1)
-  const [systemImages, setSystemImages] = useState<ImageRecord[]>([])
-  const [selectedSystemIds, setSelectedSystemIds] = useState<string[]>([])
+  const [selectedLibraryImage, setSelectedLibraryImage] = useState<ImageRecord | null>(null)
   const [selectedSaveIds, setSelectedSaveIds] = useState<string[]>([])
-  const [systemSearch, setSystemSearch] = useState('')
   const [saveSearch, setSaveSearch] = useState('')
   const [imageSaveOptions, setImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [pendingImageSave, setPendingImageSave] = useState<PendingImageSaveState | null>(null)
@@ -254,12 +238,6 @@ export function ImageAttachmentPickerButton({
     queryFn: getImageViewerSettings,
   })
 
-  const systemImagesQuery = useQuery({
-    queryKey: ['image-attachment-system-images', systemPage],
-    queryFn: () => getImages({ page: systemPage, limit: SYSTEM_IMAGE_PAGE_SIZE }),
-    enabled: canViewImages && isOpen && !uploadOnly && source === 'system',
-  })
-
   const saveImagesQuery = useQuery({
     queryKey: ['image-attachment-save-images'],
     queryFn: () => listGenerationSaveImages(),
@@ -272,11 +250,8 @@ export function ImageAttachmentPickerButton({
     }
 
     setSource(hasLibrarySource ? 'library' : 'upload')
-    setSystemPage(1)
-    setSystemImages([])
-    setSelectedSystemIds([])
+    setSelectedLibraryImage(null)
     setSelectedSaveIds([])
-    setSystemSearch('')
     setSaveSearch('')
   }, [hasLibrarySource, isOpen])
 
@@ -285,25 +260,6 @@ export function ImageAttachmentPickerButton({
       setSource('upload')
     }
   }, [source, uploadOnly])
-
-  useEffect(() => {
-    if (!isOpen || source !== 'system' || !systemImagesQuery.data) {
-      return
-    }
-
-    setSystemImages((current) => (systemPage === 1 ? systemImagesQuery.data.images : mergeImageAttachmentRecords(current, systemImagesQuery.data.images)))
-  }, [isOpen, source, systemImagesQuery.data, systemPage])
-
-  const systemImageSearchEntries = useMemo(() => systemImages.map(toSearchableImageAttachmentRecord), [systemImages])
-
-  const filteredSystemImages = useMemo(() => {
-    const search = systemSearch.trim().toLowerCase()
-    if (!search) {
-      return systemImages
-    }
-
-    return systemImageSearchEntries.filter((entry) => entry.searchLabel.includes(search)).map((entry) => entry.image)
-  }, [systemImageSearchEntries, systemImages, systemSearch])
 
   const saveImageRecords = useMemo(() => (saveImagesQuery.data ?? []).map(toSaveBrowserImageRecord), [saveImagesQuery.data])
 
@@ -318,7 +274,6 @@ export function ImageAttachmentPickerButton({
     return saveImageSearchEntries.filter((entry) => entry.searchLabel.includes(search)).map((entry) => entry.image)
   }, [saveImageRecords, saveImageSearchEntries, saveSearch])
 
-  const systemHasMore = Boolean(systemImagesQuery.data?.hasMore)
   const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
   const effectiveModalTitle = modalTitle ?? t({ ko: '이미지 선택', en: 'Select image' })
 
@@ -470,10 +425,6 @@ export function ImageAttachmentPickerButton({
     },
   })
 
-  const handleSystemSelectionChange = (nextIds: string[]) => {
-    setSelectedSystemIds(nextIds.slice(-1))
-  }
-
   const handleSaveSelectionChange = (nextIds: string[]) => {
     setSelectedSaveIds(nextIds.slice(-1))
   }
@@ -560,7 +511,7 @@ export function ImageAttachmentPickerButton({
         title={effectiveModalTitle}
         widthClassName="max-w-7xl" height="tall"
       >
-        <div className="space-y-5">
+        <div className={source === 'system' ? 'flex min-h-0 flex-1 flex-col gap-3' : 'space-y-5'}>
           <input ref={inputRef} type="file" accept="image/*" hidden onChange={(event) => void handleUploadFileChange(event)} />
 
           {!uploadOnly ? (
@@ -586,40 +537,25 @@ export function ImageAttachmentPickerButton({
           ) : null}
 
           {!uploadOnly && source === 'system' ? (
-            <ImageAttachmentBrowserSection
-              searchValue={systemSearch}
-              searchPlaceholder={t({ ko: '불러온 시스템 이미지에서 이름 검색', en: 'Search loaded system images by name' })}
-              items={filteredSystemImages}
-              selectedIds={selectedSystemIds}
-              onSelectedIdsChange={handleSystemSelectionChange}
-              onSearchChange={setSystemSearch}
-              isLoading={systemImagesQuery.isLoading && systemImages.length === 0}
-              hasMore={systemHasMore && systemSearch.trim().length === 0}
-              isLoadingMore={systemImagesQuery.isFetching && systemPage > 1}
-              onLoadMore={() => {
-                if (!systemHasMore || systemImagesQuery.isFetching) {
-                  return
-                }
-
-                setSystemPage((current) => current + 1)
-              }}
-              renderSelectedAction={(image) => (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    void handleImportExistingImage(image, true)
-                  }}
-                  disabled={isImporting}
-                  aria-label={t({ ko: '이미지 선택', en: 'Select image' })}
-                  title={t({ ko: '이미지 선택', en: 'Select image' })}
-                >
-                  {isImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+            <>
+              <MediaLibraryBrowser
+                mediaKind="image"
+                maxCount={1}
+                disabled={isImporting}
+                selectedIds={selectedLibraryImage?.composite_hash ? [selectedLibraryImage.composite_hash] : []}
+                onSelectedIdsChange={(ids, items) => setSelectedLibraryImage((current) => {
+                  const hash = ids[0]
+                  return hash ? items.find((item) => item.composite_hash === hash) ?? (current?.composite_hash === hash ? current : null) : null
+                })}
+              />
+              <ModalFooter>
+                <span className="mr-auto min-w-0 truncate text-sm text-muted-foreground">{selectedLibraryImage ? getImageListDisplayName(selectedLibraryImage) : t({ ko: '이미지 한 장을 골라줘.', en: 'Choose one image.' })}</span>
+                <Button disabled={!canViewImages || isImporting || !selectedLibraryImage} onClick={() => void handleImportExistingImage(selectedLibraryImage, true)}>
+                  {isImporting ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {t({ ko: '선택', en: 'Select' })}
                 </Button>
-              )}
-            />
+              </ModalFooter>
+            </>
           ) : null}
 
           {!uploadOnly && source === 'save' ? (

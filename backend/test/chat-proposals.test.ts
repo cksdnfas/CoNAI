@@ -328,6 +328,84 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.deepEqual(buildChatPageChanges(page, [{ fieldId: 'prompt', value: ['first', 'second edited'] }])[0].value, ['first', 'second edited'])
   })
 
+  await t.test('profile token limits allow character drafts while saving remains a reviewed action', async () => {
+    const { validateChatPageArguments, normalizeChatPageActions, chatPageActionTier } = await import('@conai/shared')
+    const { chatPageView } = await import('../src/mcp/tools/chatPageView')
+    const admin = { accountId: null, accountType: 'admin' as const }
+    const { pageAction, pageNumber, pageObject, pageText } = await import('../../frontend/src/features/codex-chat/page-action-helpers')
+    const schema = pageObject({
+      systemPrompt: pageText(20000), appearance: pageText(20000),
+      maxTokens: pageNumber(0, 1_000_000, true), contextTokens: pageNumber(0, 4_000_000, true),
+    })
+    const profile = { systemPrompt: 'Character traits', appearance: 'blue hair', maxTokens: 2048, contextTokens: null }
+    const snapshot = normalizeChatPageSnapshot({
+      ...page, path: '/settings', kind: 'settings', resourceId: 'profile:1', revision: 'profile-draft-revision', fields: [], data: { profile },
+      actions: [
+        pageAction('profile.draft', 'Fill profile draft', '', schema),
+        pageAction('profile.save', 'Save profile', '', pageObject({}), 'save'),
+      ],
+    })
+    assert.deepEqual(snapshot.data?.profile, profile, 'the whole editor remains readable with token limits present')
+    assert.equal(chatPageView(admin, snapshot).actions?.length, 2)
+    const draft = snapshot.actions![0]
+    const patch = { systemPrompt: 'Revised character traits', appearance: 'black hair' }
+    assert.deepEqual(validateChatPageArguments(draft.schema, patch), patch, 'character-only edits do not trip other schema fields')
+    assert.deepEqual(validateChatPageArguments(draft.schema, { maxTokens: 4096, contextTokens: 32000 }), { maxTokens: 4096, contextTokens: 32000 })
+    assert.deepEqual(validateChatPageArguments(draft.schema, { maxTokens: 0, contextTokens: 0 }), { maxTokens: 0, contextTokens: 0 })
+    assert.throws(() => validateChatPageArguments(draft.schema, { maxTokens: 'credential' }), /허용 범위/)
+    assert.throws(() => validateChatPageArguments(draft.schema, { contextTokens: 4_000_001 }), /허용 범위/)
+    assert.equal(chatPageActionTier(draft.id), 'draft')
+    assert.equal(chatPageActionTier(snapshot.actions![1].id), 'commit')
+    assert.throws(() => normalizeChatPageActions('/settings', [{ ...snapshot.actions![1], effect: 'draft' }]), /저장 범위/)
+  })
+
+  await t.test('profile token-limit exceptions never admit credentials or protected nested keys', async () => {
+    const { copyChatPageData, normalizeChatPageSchema, isPrivateChatPageKey } = await import('@conai/shared')
+    for (const key of ['token', 'accessToken', 'refresh_token', 'apiKey', 'password', 'authorization', 'maxTokensSecret', 'contextTokens.accessToken', '__proto__']) {
+      assert.ok(isPrivateChatPageKey(key), key)
+      assert.throws(() => copyChatPageData({ profile: { [key]: 'private' } }), /보호된/, key)
+      assert.throws(() => normalizeChatPageSchema({ type: 'object', properties: { [key]: { type: 'string' } } }), /보호된/, key)
+    }
+    assert.throws(() => copyChatPageData({ maxTokens: { apiKey: 'private' } }), /보호된/, 'allowed names do not bypass nested checks')
+  })
+
+  await t.test('native editor actions retain their routes and draft/save boundaries', async () => {
+    const { chatPageActionTier, chatPageActionLeavesScreen, validateChatPageArguments, normalizeChatPageSchema } = await import('@conai/shared')
+    const { pageAction, pageObject, pageArray, pageText, pageChoice } = await import('../../frontend/src/features/codex-chat/page-action-helpers')
+    const block = normalizeChatPageSnapshot({ ...page, path: '/settings', kind: 'settings', resourceId: 'display-block:1', fields: [], revision: 'block-revision-1', actions: [
+      pageAction('block.fields', 'Field rules', '', pageObject({ fields: pageArray(pageObject({ name: pageText(60) }, ['name']), 40) }, ['fields'])),
+      pageAction('resource.save', 'Save block', '', undefined, 'save'),
+    ] })
+    assert.equal(chatPageActionTier(block.actions![0].id), 'draft')
+    assert.equal(chatPageActionTier(block.actions![1].id), 'commit')
+    assert.deepEqual(validateChatPageArguments(block.actions![0].schema, { fields: [{ name: 'hp' }] }), { fields: [{ name: 'hp' }] })
+    assert.throws(() => normalizeChatPageSnapshot({ ...block, path: '/generation', kind: 'page' }), /페이지 작업/)
+    const workspace = normalizeChatPageSnapshot({ ...page, path: '/files', kind: 'files', resourceId: 'workspace:1', fields: [], revision: 'workspace-revision-1', actions: [
+      pageAction('workspace.mkdir', 'Open folder dialog', ''),
+      pageAction('workspace.create', 'Create folder', '', undefined, 'save'),
+    ] })
+    assert.equal(chatPageActionTier(workspace.actions![0].id), 'view')
+    assert.equal(chatPageActionLeavesScreen('workspace.mkdir'), false)
+    assert.equal(chatPageActionTier(workspace.actions![1].id), 'commit')
+    const categories = normalizeChatPageSchema(pageObject({ id: pageChoice(['all', '1']) }, ['id']))
+    assert.deepEqual(validateChatPageArguments(categories, { id: '1' }), { id: '1' })
+    assert.throws(() => normalizeChatPageSchema({ type: 'string', enum: ['all', 1] }), /선택 목록/, 'a schema must never advertise impossible choices')
+  })
+
+  await t.test('large nested page data stays out of repeated context and remains available by key', async () => {
+    const { boundedPageView, PAGE_VIEW_BUDGET } = await import('../src/services/codex-chat/chatPageContext')
+    const { chatPageView } = await import('../src/mcp/tools/chatPageView')
+    const data = { profile: { name: 'Long profile', systemPrompt: 'character '.repeat(20000) }, section: 'character' }
+    const snapshot = normalizeChatPageSnapshot({ ...page, path: '/settings', kind: 'settings', resourceId: 'profile:1', fields: [], data })
+    const view = chatPageView({ accountId: null, accountType: 'admin' }, snapshot)
+    const bounded = boundedPageView(view)
+    assert.ok(JSON.stringify(view).length > PAGE_VIEW_BUDGET)
+    assert.ok(bounded.length <= PAGE_VIEW_BUDGET)
+    assert.deepEqual(JSON.parse(bounded).data.profile, { readWith: 'read_page_data' })
+    assert.equal(JSON.parse(bounded).data.section, 'character')
+    assert.deepEqual(snapshot.data, data, 'only the context view is shortened, never the stored screen or source text')
+  })
+
   await t.test('page action tools: user review only, native record changes and expired replies', async () => {
     const { PromptPresetModel } = await import('../src/models/PromptPreset')
     const { nativeEditRevision } = await import('../src/services/nativeEditRevision')

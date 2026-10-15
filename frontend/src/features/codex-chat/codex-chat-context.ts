@@ -47,6 +47,7 @@ export type CodexChatPendingChat = {
   /** Undefined until the preview says which user profile the chat takes (then a number or null). */
   userProfileId: number | null | undefined
   greeting: { index: number | null; text: string; greetings: string[] } | null
+  flagIds: number[]
 }
 
 /**
@@ -117,6 +118,7 @@ export interface CodexChatApi {
   /** Prepare a new chat with a profile. `userProfileId` left out: the default user profile; null: the plain user. */
   prepareChat: (profileId: number, userProfileId?: number | null) => void
   selectPendingGreeting: (index: number) => void
+  togglePendingFlag: (flagId: number) => void
   /** Save the prepared chat and send its first message. */
   sendPending: (text: string) => Promise<void>
   isStartingChat: boolean

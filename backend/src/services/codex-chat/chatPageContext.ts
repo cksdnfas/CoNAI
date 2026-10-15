@@ -100,7 +100,20 @@ export function boundedPageView(view: ReturnType<typeof chatPageView>, budget = 
   const note = 'Operation schemas and long values are shortened here; call get_current_page for the exact schema before using a shortened operation.'
   const compact = JSON.stringify({ ...view, fields: unhinted.map((field) => ({ ...field, value: clip(field.value), ...(field.options ? { options: field.options.slice(0, 20) } : {}) })), ...actions, truncated: note })
   if (compact.length <= budget) return compact
-  return JSON.stringify({ ...view, fields: view.fields.map((field) => ({ id: field.id, label: field.label, type: field.type, ...(field.editable === false ? { editable: false } : {}) })), ...actions, truncated: `${note} Field values are left out; read them with get_current_page.` })
+  const fields = view.fields.map((field) => ({ id: field.id, label: field.label, type: field.type, ...(field.editable === false ? { editable: false } : {}) }))
+  const fieldSummary = { ...view, fields, ...actions, truncated: `${note} Field values are left out; read them with get_current_page.` }
+  const withoutValues = JSON.stringify(fieldSummary)
+  if (withoutValues.length <= budget) return withoutValues
+  // Object-valued data (a profile, document or nested result) can be much larger than all fields together.
+  const data = Object.fromEntries(Object.entries(view.data ?? {}).map(([key, value]) => [key, JSON.stringify(value).length <= 200 ? value : { readWith: 'read_page_data' }]))
+  const workflow = view.workflow ? { revision: view.workflow.revision, nodeCount: view.workflow.nodeCount, edgeCount: view.workflow.edgeCount } : undefined
+  const dataSummary = JSON.stringify({ ...fieldSummary, data, ...(workflow ? { workflow } : {}), truncated: `${fieldSummary.truncated} Read omitted data by its exact key with read_page_data.` })
+  if (dataSummary.length <= budget) return dataSummary
+  const minimal = JSON.stringify({
+    instanceId: view.instanceId, connectionId: view.connectionId, path: view.path, kind: view.kind, resourceId: view.resourceId, revision: view.revision,
+    truncated: 'This screen exceeds the context budget. Call get_current_page for its fields and operations, then read_page_data for the needed data keys.',
+  })
+  return minimal.length <= budget ? minimal : JSON.stringify({ truncated: 'Call get_current_page to read the connected screen.' })
 }
 
 const PAGE_VIEW_INTRO = 'The screen as the person sees it at the start of this request (fields, operations with tier and schema, data collection sizes). Act on it directly; do not call get_current_page first. Call it only when the screen may have changed outside your own operations, or for shortened parts. Every page_act/page_fill returns the new screen.'

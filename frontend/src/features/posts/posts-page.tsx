@@ -216,8 +216,8 @@ export function PostsPage() {
       } : {}),
     },
     actions: [
-      ...(view === 'list' ? [pageAction('posts.open', t({ ko: '글 열기', en: 'Open post' }), t({ ko: '목록(data.posts)의 글을 열어.', en: 'Open a listed post.' }), pageObject({ id: pageChoice(posts.slice(0, 100).map((post) => post.id)) }, ['id']))] : []),
-      pageAction('posts.category', t({ ko: '카테고리 보기', en: 'Show category' }), t({ ko: '카테고리(data.categories) 글 목록을 열어. all은 전체.', en: 'List a category (all = every post).' }), pageObject({ id: pageChoice(['all', ...categories.map((category) => category.id)]) }, ['id'])),
+      ...(view === 'list' && posts.length ? [pageAction('posts.open', t({ ko: '글 열기', en: 'Open post' }), t({ ko: '목록(data.posts)의 글을 열어.', en: 'Open a listed post.' }), pageObject({ id: pageChoice(posts.slice(0, 100).map((post) => post.id)) }, ['id']))] : []),
+      pageAction('posts.category', t({ ko: '카테고리 보기', en: 'Show category' }), t({ ko: '카테고리(data.categories) 글 목록을 열어. all은 전체.', en: 'List a category (all = every post).' }), pageObject({ id: pageChoice(['all', ...categories.map((category) => String(category.id))]) }, ['id'])),
       ...(tagNames.length ? [pageAction('posts.tag', t({ ko: '태그 보기', en: 'Show tag' }), t({ ko: '그 태그가 붙은 글 목록을 열어.', en: 'List the posts with a tag.' }), pageObject({ tag: pageChoice(tagNames) }, ['tag']))] : []),
       ...(view !== 'list' ? [pageAction('posts.back', t({ ko: '목록으로', en: 'Back to the list' }), t({ ko: '글 목록으로 돌아가.', en: 'Go back to the post list.' }))] : []),
       ...(permissions.canWrite ? [pageAction('posts.new', t({ ko: '새 글 쓰기', en: 'New post' }), t({ ko: '새 글 편집기를 열어. 내용은 편집기 필드로 채워.', en: 'Open the editor for a new post; fill it through its fields.' }))] : []),

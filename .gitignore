@@ -83,6 +83,7 @@ frontend/test/*
 !frontend/test/media-preview-lifecycle.test.ts
 !frontend/test/audio-waveform.test.ts
 !frontend/test/plugin-sdk.test.ts
+!frontend/test/chat-page-context.test.ts
 
 # Uploaded images
 uploads/

@@ -3,7 +3,7 @@ import { ImagePlus } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
-import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
+import { MediaLibraryPicker } from '@/components/media/media-library-picker'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
 import { listWallpaperCanvasPresets, WALLPAPER_CANVAS_MAX, WALLPAPER_CANVAS_MIN, WALLPAPER_CUSTOM_CANVAS_ID } from './wallpaper-canvas-presets'
@@ -248,14 +248,12 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
       </div>
 
       {isPickerOpen && (background.kind === 'image' || background.kind === 'video') ? (
-        <ChatMediaPicker
+        <MediaLibraryPicker
           initial={[]}
           maxCount={1}
-          imagesOnly={background.kind === 'image'}
-          videosOnly={background.kind === 'video'}
+          mediaKind={background.kind}
           title={background.kind === 'video' ? t({ ko: '배경 영상', en: 'Background video' }) : t({ ko: '배경 이미지', en: 'Background image' })}
           applyLabel={t({ ko: '적용', en: 'Apply' })}
-          note={null}
           onClose={() => setIsPickerOpen(false)}
           onPick={(items) => {
             setIsPickerOpen(false)

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
+import { MediaLibraryPicker } from '@/components/media/media-library-picker'
 import { useI18n } from '@/i18n'
 import { createSpritePreset, deleteSpritePreset, getSpriteSheetSettings, listSpritePresets, updateSpritePreset, type SpriteExtractOptions, type SpritePreset } from '@/lib/api-sprite'
 import { getErrorMessage } from '@/lib/error-message'
@@ -115,14 +115,13 @@ export function SpritePresetMenu({ activeId, current, onApply, onActiveChange }:
         />
       ) : null}
       {picking ? (
-        <ChatMediaPicker
+        <MediaLibraryPicker
           initial={[]}
           maxCount={1}
-          imagesOnly
+          mediaKind="image"
           initialGroupPath="스프라이트"
           title={t({ ko: '설정을 가져올 시트', en: 'Sheet to load settings from' })}
           applyLabel={t({ ko: '가져오기', en: 'Load' })}
-          note={null}
           onClose={() => setPicking(false)}
           onPick={(items) => { setPicking(false); if (items[0]) void importSheet(items[0].compositeHash) }}
         />

@@ -194,8 +194,8 @@ test('project files share files while preserving revisions, execution boundaries
     } finally { unbindBoard() }
   })
   await t.test('page saves remain review actions and navigation remains view-only', () => {
-    for (const action of ['workspace.create', 'workspace.save', 'workspace.mkdir']) assert.equal(chatPageActionTier(action), 'commit')
-    assert.equal(chatPageActionTier('workspace.open'), 'view')
+    for (const action of ['workspace.create', 'workspace.save']) assert.equal(chatPageActionTier(action), 'commit')
+    for (const action of ['workspace.open', 'workspace.mkdir']) assert.equal(chatPageActionTier(action), 'view')
     assert.equal(chatPageActionAllowed('/files', 'workspace.save'), true)
     assert.equal(chatPageActionAllowed('/posts', 'workspace.save'), false)
   })

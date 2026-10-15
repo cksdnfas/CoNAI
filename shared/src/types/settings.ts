@@ -62,12 +62,16 @@ export function isHeaderNavigationItemKey(value: unknown): value is HeaderNaviga
   return typeof value === 'string' && ((HEADER_NAVIGATION_ITEM_KEYS as readonly string[]).includes(value) || isPluginHeaderNavigationKey(value));
 }
 
-/** Every header page exactly once: known keys in the stored order, then any missing ones in the default order. */
+/** Keep saved positions; add missing built-in pages in default order and new plugin pages just before Settings. */
 export function normalizeHeaderNavigationOrder(value: unknown, pluginPages: readonly PluginHeaderNavigationKey[] = []): HeaderNavigationPageKey[] {
   const order = Array.isArray(value)
     ? value.filter(isHeaderNavigationPageKey)
     : [];
-  return [...new Set([...order, ...HEADER_NAVIGATION_PAGE_KEYS, ...pluginPages.filter(isPluginHeaderNavigationKey)])];
+  const normalized = [...new Set([...order, ...HEADER_NAVIGATION_PAGE_KEYS])];
+  const knownPages = new Set(normalized);
+  const newPluginPages = [...new Set(pluginPages.filter(isPluginHeaderNavigationKey))].filter((key) => !knownPages.has(key));
+  normalized.splice(normalized.indexOf('settings'), 0, ...newPluginPages);
+  return normalized;
 }
 
 /** What the header reads before sign-in: which items show and the page order. */

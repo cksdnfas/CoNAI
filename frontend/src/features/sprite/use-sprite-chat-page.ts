@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { ChatPageAction, ChatPageField, ChatPageValue } from '@conai/shared'
-import { useChatPageRegistration, type WorkflowUndo } from '@/features/codex-chat/chat-page-context'
+import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
 import type { SpriteAnchorPolicy, SpriteAnimationOptions, SpriteBatchItem, SpriteExtractResult, SpriteNormalizeOptions, SpriteNormalizeSheet, SpriteVideoInfo } from '@/lib/api-sprite'
@@ -10,10 +11,6 @@ const HASH = /^[0-9a-f]{32,48}$/i
 /** A longer video list is picked by hash text (checked on apply): listing every hash in the schema fills the page view. */
 const SELECT_CHOICES_INLINE = 20
 const hashList = (max: number) => pageArray({ type: 'string', maxLength: 48 }, max, 1)
-
-function listUndo<T>(current: () => T, next: T, restore: () => void): WorkflowUndo {
-  return { isCurrent: () => JSON.stringify(current()) === JSON.stringify(next), restore }
-}
 
 /**
  * The sprite extract tab shares its video list, the extraction form, the sheet output and save choices, the last
@@ -49,6 +46,7 @@ export function useSpriteChatPage({ active, videoHash, videos, setVideos, maxVid
   downloadZip: () => void
 }) {
   const { t } = useI18n()
+  const commitVideos = useChatDraftTransaction(videos, setVideos)
   const fields: ChatPageField[] = [
     { id: 'rangeMode', label: t({ ko: '구간 (full = 영상 전체, common = 공통 구간)', en: 'Range (full = whole video, common = same start/end)' }), type: 'select', value: form.rangeMode, options: ['full', 'common'] },
     { id: 'startTime', label: t({ ko: '시작 (초)', en: 'Start (s)' }), type: 'number', value: form.startTime, min: 0 },
@@ -142,9 +140,7 @@ export function useSpriteChatPage({ active, videoHash, videos, setVideos, maxVid
           ? [...before, ...hashes.filter((hash, index) => !before.includes(hash) && hashes.indexOf(hash) === index)].slice(0, maxVideos)
           : args.all === true ? [] : before.filter((hash) => !hashes.includes(hash))
         if (next.length === before.length && next.every((hash, index) => hash === before[index])) throw new Error(id === 'sprite.add_videos' ? '넣을 새 영상이 없어.' : '목록에 없는 영상이야.')
-        setVideos(next)
-        let current = next
-        return listUndo(() => current, next, () => { current = before; setVideos(before) })
+        return commitVideos(next)
       }
       if (id === 'sprite.preview') { await preview(); return }
       if (id === 'sprite.run') { await runAll(); return }
@@ -204,6 +200,7 @@ export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected
   failures: Array<{ source: string; error: string }>
 }) {
   const { t } = useI18n()
+  const commitSheets = useChatDraftTransaction(sheets, setSheets)
   const fields: ChatPageField[] = [
     { id: 'mode', label: t({ ko: '모드 (per_sheet = 시트별, group = 묶음 공통 셀 크기)', en: 'Mode (per_sheet = each sheet, group = one shared cell size)' }), type: 'select', value: options.mode, options: ['per_sheet', 'group'] },
     { id: 'anchorPolicy', label: t({ ko: '기준점', en: 'Anchor' }), type: 'select', value: options.anchorPolicy, options: ['center', 'bottom_center', 'custom'] },
@@ -274,22 +271,17 @@ export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected
         const drop = (Array.isArray(args.hashes) ? args.hashes : []).map(String)
         const next = args.all === true ? [] : before.filter((sheet) => !drop.includes(sheet.hash))
         if (next.length === before.length) throw new Error('목록에 없는 시트야.')
-        setSheets(next)
         if (selected && !next.some((sheet) => sheet.hash === selected)) setSelected(next[0]?.hash ?? null)
-        let current = next
-        return listUndo(() => current, next, () => { current = before; setSheets(before) })
+        return commitSheets(next)
       }
       if (id === 'sprite.sheet') {
         const target = sheets.find((sheet) => sheet.hash === String(args.hash))
         if (!target) throw new Error('목록에 없는 시트야.')
         const { hash: _hash, ...patch } = args
         void _hash
-        const before = sheets
         const next = sheets.map((sheet) => sheet.hash === target.hash ? { ...sheet, options: { ...sheet.options, ...patch as Partial<SpriteNormalizeSheet['options']> } } : sheet)
-        setSheets(next)
         setSelected(target.hash)
-        let current = next
-        return listUndo(() => current, next, () => { current = before; setSheets(before) })
+        return commitSheets(next)
       }
       if (id === 'sprite.select') {
         if (!hashes.includes(String(args.hash))) throw new Error('목록에 없는 시트야.')

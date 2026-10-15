@@ -7,7 +7,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { ChatMediaPicker } from '@/features/codex-chat/chat-media-picker'
+import { MediaLibraryPicker } from '@/components/media/media-library-picker'
 import { useI18n } from '@/i18n'
 import { uploadMultipleImages } from '@/lib/api-images'
 import { getSpriteVideoInfo, libraryThumbnailUrl, type SpriteBatchItem } from '@/lib/api-sprite'
@@ -158,13 +158,12 @@ export function SpriteQueue({ hashes, selected, statuses, locked, onSelect, onCh
         })}
       </ul>
       {picking ? (
-        <ChatMediaPicker
+        <MediaLibraryPicker
           initial={[]}
           maxCount={Math.max(1, MAX_QUEUE_VIDEOS - hashes.length)}
-          videosOnly
+          mediaKind="video"
           title={t({ ko: '영상 고르기', en: 'Choose videos' })}
           applyLabel={t({ ko: '넣기', en: 'Add' })}
-          note={null}
           onClose={() => setPicking(false)}
           onPick={(items) => { setPicking(false); append(items.map((item) => item.compositeHash)) }}
         />

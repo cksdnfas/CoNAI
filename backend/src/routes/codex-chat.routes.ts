@@ -506,7 +506,7 @@ router.get('/profiles/:profileId/greeting', requireChatAccess, (req: Request, re
 })
 
 /**
- * POST /api/codex-chat/threads — `{ profileId, userProfileId?, greetingIndex? }`: a new chat with that profile's engine
+ * POST /api/codex-chat/threads — `{ profileId, userProfileId?, greetingIndex?, flagIds? }`: a new chat with that profile's engine
  * and persona (userProfileId absent: the default user profile, null: none; greetingIndex: the previewed greeting).
  */
 router.post('/threads', requireChatAccess, (req: Request, res: Response) => {
@@ -523,7 +523,7 @@ router.post('/threads', requireChatAccess, (req: Request, res: Response) => {
     return
   }
   try {
-    const created = CodexChatService.createThread(requesterFrom(req), profileId, userProfileId, greetingIndex as number | null | undefined)
+    const created = CodexChatService.createThread(requesterFrom(req), profileId, userProfileId, greetingIndex as number | null | undefined, req.body?.flagIds)
     ChatAppearanceStore.threadCreated(getRequesterAccountId(req), created.id)
     res.status(201).json({ success: true, data: created })
   } catch (error) {

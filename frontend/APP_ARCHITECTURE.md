@@ -74,6 +74,12 @@ live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `e
   server pages; focused comments and quote context do not require downloading the entire discussion.
 - Preserve the shared virtualized list in `features/images/components/image-list/` (Virtuoso + ViSelect), stable media
   identity, bounded loading and video preview lifecycle. Do not build a separate engine per page.
+- Library selection uses `components/media/media-library-browser.tsx`: the group tree, server prompt/tag search,
+  media/tool filters, sorting and virtualized list share the post attachment layout. `media-library-picker.tsx` adds
+  the modal and reference selection for chat, settings, wallpaper and sprites. Posts embed the browser with mixed
+  attachment ordering and group insertion; generation inputs embed it in their System tab and retain their existing
+  import/conversion flow. Pass media kind, selection limit and initial group as options; do not fork the browser.
+  Page assistants keep using each feature's existing hash-based draft/action contracts and domain APIs.
 - Keep expensive work out of input/scroll/render paths. Reuse the query cache and runtime event bridge; invalidate
   affected data instead of refetching every list. Keep page snapshots and tool responses bounded.
 - React Compiler is configured in `vite.config.ts`. Preserve the default compiler path; use the existing compiler-off
