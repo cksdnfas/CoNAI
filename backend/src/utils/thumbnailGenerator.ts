@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import type { Sharp } from 'sharp';
 import { runtimePaths } from '../config/runtimePaths';
 import { ImageProcessor } from '../services/imageProcessor';
@@ -11,8 +12,7 @@ import { ImageProcessor } from '../services/imageProcessor';
  * 이 유틸리티는 backgroundProcessorService와 thumbnailRegenerationService에서 공통으로 사용됩니다.
  */
 export class ThumbnailGenerator {
-  // 날짜별 디렉토리 생성 결과 메모 (하루에 한 번만 mkdir 수행)
-  private static ensuredDateDir: string | null = null;
+  private static readonly pending = new Map<string, Promise<string>>();
 
   /**
    * 썸네일 생성 및 경로 반환
@@ -32,26 +32,40 @@ export class ThumbnailGenerator {
     // 절대 경로로 디렉토리 생성 (루트 temp 폴더 사용)
     const tempDir = path.join(runtimePaths.tempDir, 'thumbnails', dateStr);
 
-    // Ensure directory exists (memoized per day key)
-    if (this.ensuredDateDir !== tempDir) {
-      await fs.promises.mkdir(tempDir, { recursive: true });
-      this.ensuredDateDir = tempDir;
-    }
-
     // DB 저장용 상대 경로 (temp 폴더 기준)
     const thumbnailPath = path.join('thumbnails', dateStr, `${compositeHash}.webp`);
     // 파일 시스템용 절대 경로
     const absoluteThumbnailPath = path.join(runtimePaths.tempDir, thumbnailPath);
 
-    // Skip if thumbnail already exists
-    if (fs.existsSync(absoluteThumbnailPath)) {
-      return thumbnailPath;
+    const pending = this.pending.get(absoluteThumbnailPath);
+    if (pending) return pending;
+
+    const work = (async () => {
+      try {
+        await fs.promises.access(absoluteThumbnailPath);
+        return thumbnailPath;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+
+      // The temp directory may have been cleaned since the last generation.
+      await fs.promises.mkdir(tempDir, { recursive: true });
+      const temporary = path.join(tempDir, `${compositeHash}.${randomUUID()}.partial.webp`);
+      try {
+        await ImageProcessor.generateThumbnail(inputPath, temporary, undefined, sourceImage);
+        // Readers must never mistake a partially written thumbnail for a completed one.
+        await fs.promises.rename(temporary, absoluteThumbnailPath);
+        return thumbnailPath;
+      } finally {
+        await fs.promises.rm(temporary, { force: true }).catch(() => undefined);
+      }
+    })();
+    this.pending.set(absoluteThumbnailPath, work);
+    try {
+      return await work;
+    } finally {
+      this.pending.delete(absoluteThumbnailPath);
     }
-
-    // Generate thumbnail using ImageProcessor (applies user settings)
-    await ImageProcessor.generateThumbnail(inputPath, absoluteThumbnailPath, undefined, sourceImage);
-
-    return thumbnailPath;
   }
 
   /**

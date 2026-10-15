@@ -4,11 +4,13 @@ import type {
   PostCategory,
   PostComment,
   PostCommentMode,
-  PostCommentsResult,
+  PostCommentPage,
+  PostCommentCursor,
   PostDetail,
   PostListResult,
   PostMentionableProfile,
   PostRevision,
+  PostRevisionSummary,
   PostsSettings,
   PostStatus,
   PostTag,
@@ -107,10 +109,17 @@ export const requestPostTopicEvaluation = (id: number, input: { expectedContentH
   requestApiData<PostTopicEvaluationView>(`/api/posts/${id}/topic-evaluation`, json('POST', input))
 export const createPost = (input: PostInput) => requestApiData<PostDetail>('/api/posts', json('POST', input))
 export const updatePost = (id: number, input: PostInput) => requestApiData<PostDetail>(`/api/posts/${id}`, json('PATCH', input))
-export const listPostRevisions = (id: number) => requestApiData<PostRevision[]>(`/api/posts/${id}/revisions`)
+export const listPostRevisionSummaries = (id: number, signal?: AbortSignal) => requestApiData<PostRevisionSummary[]>(`/api/posts/${id}/revisions?detail=summary`, { signal })
+export const getPostRevision = (id: number, revision: number, signal?: AbortSignal) => requestApiData<PostRevision>(`/api/posts/${id}/revisions/${revision}`, { signal })
 export const deletePost = (id: number) => requestApiData<void>(`/api/posts/${id}`, json('DELETE'))
 
-export const listPostComments = (postId: number) => requestApiData<PostCommentsResult>(`/api/posts/${postId}/comments`)
+export function listPostComments(postId: number, options: { parentId?: number; before?: PostCommentCursor | null; focusIds?: number[]; signal?: AbortSignal } = {}) {
+  const params = new URLSearchParams()
+  if (options.parentId !== undefined) params.set('parentId', String(options.parentId))
+  if (options.before) params.set('before', JSON.stringify(options.before))
+  if (options.focusIds?.length) params.set('focusIds', JSON.stringify(options.focusIds))
+  return requestApiData<PostCommentPage>(`/api/posts/${postId}/comments?${params}`, { signal: options.signal })
+}
 export const createPostComment = (postId: number, input: { body: string; parentId?: number | null; mentions?: number[] }) =>
   requestApiData<PostComment>(`/api/posts/${postId}/comments`, json('POST', input))
 export const updatePostComment = (commentId: number, input: { body: string; expectedRevision?: number }) =>

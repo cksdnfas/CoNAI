@@ -24,7 +24,7 @@ function changed(_actor: string, projectId: string) {
   publishRuntimeEvent({ name: 'workspace.changed', topic: 'workspaces', visibility: 'all', payload: { projectId } })
 }
 export const WORKSPACE_READ_BUDGET = 1024 * 1024
-export const WORKSPACE_TOOLS = ['workspace_list', 'workspace_read', 'workspace_search', 'workspace_apply'] as const
+export const WORKSPACE_TOOLS = ['workspace_list', 'workspace_read', 'workspace_search', 'workspace_apply', 'workspace_publish_resources'] as const
 
 function db() {
   const store = getUserSettingsDb()
@@ -344,10 +344,10 @@ export const WorkspaceService = {
    * `guidelines`: the screen may write AI_GUIDELINES.md. Chats and plugins may not: the file becomes the
    * "selected by the user" instructions of every connected chat, so text they read must not rewrite it.
    */
-  async apply(owner: string, projectId: string, requestId: string, operations: WorkspaceOperation[], checkAccess: () => void = () => {}, signal?: AbortSignal, options: { guidelines?: boolean } = {}): Promise<WorkspaceBatchResult> {
+  async apply(owner: string, projectId: string, requestId: string, operations: WorkspaceOperation[], checkAccess: () => void = () => {}, signal?: AbortSignal, options: { guidelines?: boolean; beforeWrite?: () => Promise<void>; inputIdentity?: unknown } = {}): Promise<WorkspaceBatchResult> {
     requireProject(owner, projectId)
     if (!/^[\w-]{8,100}$/.test(requestId) || !operations.length || operations.length > 100 || Buffer.byteLength(JSON.stringify(operations)) > MAX_TEXT) throw new WorkspaceError('한 번에 1~100개, 총 8MB까지 처리할 수 있어.')
-    const fingerprint = hash(JSON.stringify(operations))
+    const fingerprint = hash(JSON.stringify(options.inputIdentity === undefined ? operations : { operations, identity: options.inputIdentity }))
     const store = db()
     // Cross-process exclusion. Never expire a same-host lock merely because an operation is slow.
     const active = store.prepare("SELECT request_id,process_id,hostname,result,created_at FROM workspace_operations WHERE project_id=? AND status='running'").get(projectId) as { request_id: string; process_id: number; hostname: string; result: string; created_at: string } | undefined
@@ -377,6 +377,9 @@ export const WorkspaceService = {
     const activeKey = `${projectId}:${requestId}`
     activeOperations.add(activeKey)
     try {
+      checkAccess()
+      signal?.throwIfAborted()
+      await options.beforeWrite?.()
       for (const operation of operations) {
         signal?.throwIfAborted()
         checkAccess()

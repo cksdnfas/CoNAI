@@ -6,6 +6,7 @@ import {
   type PostCommentMode,
   type PostDetail,
   type PostRevision,
+  type PostRevisionSummary,
   type PostSourceChat,
   type PostListResult,
   type PostMediaRef,
@@ -29,6 +30,7 @@ import { findKnowledgeRow, getKnowledgeState, visibleKnowledgeSources, requireKn
 import { cachedKnowledgeMultipliers, getKnowledgeQuality, knowledgeTaskFitMultiplier, knowledgeSearchTaskKey, issueKnowledgeSearchReceipts } from './knowledgeAssessment';
 import { semanticPostCandidates } from '../embeddings/postSemantic';
 import { notifySemanticChange } from '../embeddings/semanticSignal';
+import { selectCommentPage, selectCommentRows, type CommentPageInput } from './postCommentQueries';
 
 type CategoryRow = { id: number; parent_id: number | null; name: string; name_key: string; description: string; sort_order: number };
 export type PostRow = {
@@ -49,6 +51,26 @@ export type PostOrigin = { threadId: number; replyId: string | null };
 const MAX_REVISIONS = 20;
 export const iso = (value: string | null) => (value ? `${value.replace(' ', 'T')}${value.endsWith('Z') ? '' : 'Z'}` : null);
 const db = () => getUserSettingsDb();
+
+type PostRevisionRow = {
+  revision: number; title: string; edited_by_type: string; edited_by_account_id: number | null;
+  edited_by_profile_id: number | null; created_at: string;
+};
+const REVISION_COLUMNS = 'revision, title, edited_by_type, edited_by_account_id, edited_by_profile_id, created_at';
+
+function revisionSummary(item: PostRevisionRow, author: ReturnType<typeof createAuthorResolver>): PostRevisionSummary {
+  const type = item.edited_by_type === 'profile' ? 'profile' : 'account';
+  return {
+    revision: item.revision, title: item.title, editedByType: type, editedByAccountId: item.edited_by_account_id, editedByProfileId: item.edited_by_profile_id,
+    editedBy: author({ author_type: type, author_profile_id: item.edited_by_profile_id, author_name: item.edited_by_account_id === null ? 'owner' : `#${item.edited_by_account_id}`, owner_account_id: item.edited_by_account_id }).name,
+    createdAt: iso(item.created_at) as string,
+  };
+}
+
+function requireRevisionAccess(actor: PostActor, postId: number) {
+  const row = requirePostRow(actor, postId);
+  if (!canEditPost(actor, row)) throw new PostError('이 글의 이전 판을 볼 권한이 없어.', 403);
+}
 
 function announce(postId: number, kind: 'post' | 'comment' | 'run') {
   publishRuntimeEvent({ name: 'posts.changed', topic: 'posts', visibility: 'all', payload: { postId, kind } });
@@ -600,17 +622,22 @@ export const PostStore = {
     notifySemanticChange('post');
   },
 
-  /** Earlier versions (newest first): each was replaced at `createdAt` by an edit from `editedBy`. */
-  revisions(actor: PostActor, postId: number): PostRevision[] {
-    const row = requirePostRow(actor, postId);
-    if (!canEditPost(actor, row)) throw new PostError('이 글의 이전 판을 볼 권한이 없어.', 403);
+  /** The page and version picker need names and dates, without copying every historical body. */
+  revisionSummaries(actor: PostActor, postId: number): PostRevisionSummary[] {
+    requireRevisionAccess(actor, postId);
     const author = createAuthorResolver(actor);
-    return (db().prepare('SELECT revision, title, body, edited_by_type, edited_by_account_id, edited_by_profile_id, created_at FROM post_revisions WHERE post_id = ? ORDER BY revision DESC').all(postId) as Array<{
-      revision: number; title: string; body: string; edited_by_type: string; edited_by_account_id: number | null; edited_by_profile_id: number | null; created_at: string;
-    }>).map((item) => ({
-      revision: item.revision, title: item.title, body: item.body, editedByType: item.edited_by_type === 'profile' ? 'profile' : 'account', editedByAccountId: item.edited_by_account_id, editedByProfileId: item.edited_by_profile_id,
-      editedBy: author({ author_type: item.edited_by_type === 'profile' ? 'profile' : 'account', author_profile_id: item.edited_by_profile_id, author_name: item.edited_by_account_id === null ? 'owner' : `#${item.edited_by_account_id}`, owner_account_id: item.edited_by_account_id }).name, createdAt: iso(item.created_at) as string,
-    }));
+    const rows = db().prepare(`SELECT ${REVISION_COLUMNS} FROM post_revisions WHERE post_id = ? ORDER BY revision DESC`).all(postId) as PostRevisionRow[];
+    return rows.map((item) => revisionSummary(item, author));
+  },
+
+  /** Earlier versions (newest first), or just the selected body for preview and restore. */
+  revisions(actor: PostActor, postId: number, revision?: number): PostRevision[] {
+    requireRevisionAccess(actor, postId);
+    if (revision !== undefined && (!Number.isSafeInteger(revision) || revision < 1)) throw new PostError('잘못된 판 번호야.');
+    const author = createAuthorResolver(actor);
+    const rows = db().prepare(`SELECT ${REVISION_COLUMNS}, body FROM post_revisions WHERE post_id = ?${revision === undefined ? '' : ' AND revision = ?'} ORDER BY revision DESC`)
+      .all(...(revision === undefined ? [postId] : [postId, revision])) as Array<PostRevisionRow & { body: string }>;
+    return rows.map((item) => ({ ...revisionSummary(item, author), body: item.body }));
   },
 
   /** The store whose file a post (or one of its comments) embeds, or null when it embeds no such file. */
@@ -665,15 +692,24 @@ export const PostCommentStore = {
     return () => { commentListeners.delete(listener); };
   },
 
-  list(actor: PostActor, postId: number): PostComment[] {
+  list(actor: PostActor, postId: number, options: { ids?: number[]; limit?: number; visibleOnly?: boolean } = {}): PostComment[] {
     requirePostRow(actor, postId);
-    const rows = db().prepare('SELECT * FROM post_comments WHERE post_id = ? ORDER BY created_at, id').all(postId) as CommentRow[];
+    const rows = selectCommentRows(actor, postId, options);
     const author = createAuthorResolver(actor);
     const source = createSourceChatResolver(actor);
     // A hidden comment shows only to administrators and its writer; others see the thread around it.
-    return rows
-      .filter((row) => row.status !== 'hidden' || actor.isAdmin || row.owner_account_id === actor.accountId)
-      .map((row) => toComment(actor, row, author, source));
+    return rows.map((row) => toComment(actor, row, author, source));
+  },
+
+  page(actor: PostActor, postId: number, input: CommentPageInput = {}) {
+    return db().transaction(() => {
+      requirePostRow(actor, postId);
+      const page = selectCommentPage(actor, postId, input);
+      const author = createAuthorResolver(actor);
+      const source = createSourceChatResolver(actor);
+      return { comments: page.rows.map((row) => toComment(actor, row, author, source)),
+        context: page.context.map((row) => toComment(actor, row, author, source)), nextCursor: page.nextCursor, replies: page.replies };
+    })();
   },
 
   get(actor: PostActor, commentId: number): PostComment {

@@ -55,7 +55,7 @@ export function ImageDetailMediaFrame({
           ref={canvasRef}
           role="img"
           aria-label={altText}
-          className={cn('absolute inset-0 h-full w-full pointer-events-none select-none object-contain transition-opacity duration-150', isPixelPreviewReady ? 'opacity-100' : 'opacity-0')}
+          className={cn('absolute inset-0 h-full w-full pointer-events-none select-none transition-opacity duration-150', isPixelPreviewReady ? 'opacity-100' : 'opacity-0')}
           style={{ imageRendering: 'pixelated' }}
         />
       ) : null}

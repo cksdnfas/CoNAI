@@ -134,6 +134,34 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     PostStore.update(admin, postId, { status: 'published' })
   })
 
+  await t.test('revision summaries and selected bodies preserve ownership, retention and restore conflicts', (t) => {
+    let post = PostStore.create(alice, { title: '긴 글 이력', body: '이전 본문 '.repeat(2000) })
+    try {
+      for (let index = 0; index < 21; index += 1) {
+        post = PostStore.update(alice, post.id, { body: `판 ${index}\n${'이전 본문 '.repeat(2000)}`, expectedRevision: post.revision })
+      }
+      const full = PostStore.revisions(alice, post.id)
+      const summaries = PostStore.revisionSummaries(alice, post.id)
+      assert.equal(summaries.length, 20, 'ordinary posts retain the newest twenty versions')
+      assert.deepEqual(summaries, full.map(({ body: _body, ...summary }) => summary))
+      assert.ok(summaries.every((item) => !('body' in item)), 'summary responses cannot be mistaken for a full body')
+      const selected = PostStore.revisions(alice, post.id, summaries[5].revision)
+      assert.deepEqual(selected, [full[5]], 'a selected read returns only that version')
+      assert.deepEqual(PostStore.revisions(alice, post.id, 1), [], 'pruned versions stay unavailable')
+      assert.equal(status(() => PostStore.revisions(alice, post.id, 0)), 400)
+      assert.equal(status(() => PostStore.revisionSummaries(bob, post.id)), 403)
+      assert.equal(status(() => PostStore.revisions(bob, post.id, summaries[5].revision)), 403)
+      const currentRevision = post.revision
+      post = PostStore.update(alice, post.id, { title: '동시에 고친 글', expectedRevision: currentRevision })
+      assert.equal(status(() => PostStore.update(alice, post.id, { title: selected[0].title, body: selected[0].body, expectedRevision: currentRevision })), 409)
+      const restored = PostStore.update(alice, post.id, { title: selected[0].title, body: selected[0].body, expectedRevision: post.revision })
+      assert.equal(restored.body, selected[0].body)
+      t.diagnostic(`20 revisions: full JSON ${Buffer.byteLength(JSON.stringify(full))} bytes; summary JSON ${Buffer.byteLength(JSON.stringify(summaries))} bytes; selected JSON ${Buffer.byteLength(JSON.stringify(selected[0]))} bytes`)
+    } finally {
+      PostStore.remove(alice, post.id)
+    }
+  })
+
   await t.test('bots: post as their profile, edit only their own posts', () => {
     const botPost = PostStore.create(lunaAsAlice, { title: '루나의 그림 일기', body: '오늘은 비.' }, 'chat')
     assert.equal(botPost.author.type, 'profile')
@@ -187,6 +215,57 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     PostStore.update(alice, postId, { commentMode: 'closed' })
     assert.equal(status(() => PostCommentStore.create(bob, postId, { body: '닫힘' })), 403)
     PostStore.update(alice, postId, { commentMode: 'open' })
+  })
+
+  await t.test('comment pages keep cursors, hidden ownership, deep links and quotes across large threads', (t) => {
+    const post = PostStore.create(alice, { title: '댓글 페이지', body: '본문' })
+    try {
+      const insert = db.prepare(`INSERT INTO post_comments (post_id, parent_id, quote_comment_id, author_type, author_name, owner_account_id, body, status)
+        VALUES (?, ?, ?, 'account', 'Alice', ?, ?, ?)`)
+      const roots: number[] = [], replies: number[] = []
+      db.transaction(() => {
+        for (let index = 0; index < 85; index += 1) roots.push(Number(insert.run(post.id, null, null, alice.accountId, `댓글 ${index} ${'본문 '.repeat(300)}`, 'visible').lastInsertRowid))
+        for (let index = 0; index < 995; index += 1) replies.push(Number(insert.run(post.id, roots[84], index === 994 ? replies[0] : null, alice.accountId, `답글 ${index} ${'본문 '.repeat(300)}`, 'visible').lastInsertRowid))
+      })()
+      PostCommentStore.setHidden(admin, replies[1], true)
+      PostCommentStore.setHidden(admin, roots[0], true)
+      const first = PostCommentStore.page(bob, post.id)
+      assert.equal(first.comments.filter((comment) => comment.parentId === null).length, 40)
+      assert.equal(first.comments.filter((comment) => comment.parentId === roots[84]).length, 40)
+      assert.equal(first.context.find((comment) => comment.id === replies[0])?.body.startsWith('답글 0'), true, 'older quotes accompany the visible reply')
+      assert.ok(first.nextCursor)
+      let before = first.replies.find((item) => item.parentId === roots[84])!.nextCursor
+      const walked = first.comments.filter((comment) => comment.parentId === roots[84]).map((comment) => comment.id)
+      while (before) {
+        const page = PostCommentStore.page(bob, post.id, { parentId: roots[84], before })
+        walked.unshift(...page.comments.map((comment) => comment.id))
+        before = page.nextCursor
+      }
+      assert.deepEqual(walked, replies.filter((id) => id !== replies[1]), 'equal timestamps page without duplicates or missing replies')
+      assert.deepEqual(PostCommentStore.page(bob, post.id, { focusIds: [replies[1], roots[0]] }).comments, [], 'hidden targets are absent for other accounts')
+      assert.ok(PostCommentStore.page(alice, post.id, { focusIds: [replies[1]] }).comments.some((item) => item.id === replies[1]), 'writers can still open hidden replies')
+      const focus = PostCommentStore.page(bob, post.id, { focusIds: [roots[2], replies[0]] })
+      assert.ok(focus.comments.some((item) => item.id === roots[2]))
+      assert.ok(focus.comments.some((item) => item.id === roots[84]), 'an old reply brings its visible parent')
+      assert.ok(focus.comments.some((item) => item.id === replies[0]))
+      const oldCursor = first.nextCursor!
+      PostCommentStore.remove(alice, oldCursor.id)
+      PostCommentStore.create(alice, post.id, { body: '새 댓글' })
+      const second = PostCommentStore.page(bob, post.id, { before: oldCursor })
+      assert.ok(second.comments.every((item) => item.id < oldCursor.id), 'deleting an anchor and inserting a newer root do not move the older page')
+      assert.equal(status(() => PostCommentStore.page(reader, post.id, { parentId: roots[0] })), 404)
+      assert.equal(status(() => PostCommentStore.page(bob, post.id, { before: { id: 1, createdAt: 'bad' } })), 400)
+      const recent = PostCommentStore.list(bob, post.id, { limit: 30, visibleOnly: true })
+      assert.equal(recent.length, 30)
+      assert.ok(recent.every((item) => item.status === 'visible'))
+      const { chatPageActionTier, chatPageActionAllowed } = require('@conai/shared') as typeof import('@conai/shared')
+      for (const action of ['posts.comments_more', 'posts.comments_at']) {
+        assert.equal(chatPageActionTier(action), 'view')
+        assert.equal(chatPageActionAllowed('/posts', action), true)
+        assert.equal(chatPageActionAllowed('/files', action), false)
+      }
+      t.diagnostic(`1,080 stored comments: first page materializes ${first.comments.length} displayed comments and ${first.context.length} quote; selected MCP read materializes ${recent.length}`)
+    } finally { PostStore.remove(alice, post.id) }
   })
 
   await t.test('search: title, tags and text; drafts stay private', async () => {

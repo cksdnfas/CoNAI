@@ -1,8 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import { randomUUID } from 'crypto'
-import { ZipArchive } from 'archiver'
-import { finished, pipeline } from 'stream/promises'
+import { writeZip, type ZipEntry as SpriteZipEntry } from '../../utils/zipArchive'
+export { writeZip, type ZipEntry as SpriteZipEntry } from '../../utils/zipArchive'
 import { SpriteError } from './spriteErrors'
 import { colorKeyFilter, extractRawFrames, resizeFilters, scaleRawFrames } from './spriteFfmpeg'
 import { encodeStill } from './spriteEncode'
@@ -311,29 +311,6 @@ export function renderSheet(workDir: string, meta: SpriteBuildMeta, render: Rend
     pasteCell(data, layout.width, frame, x, y)
   }
   return { sheet: { width: layout.width, height: layout.height, data }, layout, cellWidth, cellHeight }
-}
-
-export type SpriteZipEntry = { name: string; data: Buffer } | { name: string; file: string }
-
-/** File entries are opened lazily by archiver instead of retaining every image in memory. */
-export async function writeZip(output: string, entries: SpriteZipEntry[], signal?: AbortSignal): Promise<void> {
-  signal?.throwIfAborted()
-  const stream = fs.createWriteStream(output)
-  const archive = new ZipArchive({ zlib: { level: 6 } })
-  archive.on('warning', (error) => archive.destroy(error))
-  const completion = pipeline(archive, stream, { signal })
-  try {
-    for (const entry of entries) {
-      if ('file' in entry) archive.file(entry.file, { name: entry.name })
-      else archive.append(entry.data, { name: entry.name })
-    }
-    await Promise.all([completion, archive.finalize()])
-  } finally {
-    archive.abort()
-    archive.destroy()
-    stream.destroy()
-    await Promise.allSettled([completion, finished(stream)])
-  }
 }
 
 export async function loadBuildFrameAsync(workDir: string, meta: SpriteBuildMeta, index: number): Promise<RgbaFrame> {

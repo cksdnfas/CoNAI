@@ -174,7 +174,7 @@ test('project files share files while preserving revisions, execution boundaries
     await projectOnly.close()
     const bridge = await openChatMcpBridge(requester, [], null, { chatContext: { ...context, page: { path: '/files', kind: 'files', title: 'Files', fields: [], actions: [] } as never } })
     try {
-      assert.equal(bridge.tools.filter(tool => tool.function.name.startsWith('workspace_')).length, 4)
+      assert.equal(bridge.tools.filter(tool => tool.function.name.startsWith('workspace_')).length, 5)
       const result = await bridge.call('workspace_read', { targets: [{ target: 'long.md' }, { target: 'folder/note.md' }] })
       assert.ok(!result.isError, JSON.stringify(result))
       const payload = JSON.parse((result.content![0] as { text: string }).text)
@@ -361,6 +361,60 @@ test('project files share files while preserving revisions, execution boundaries
     const rest = (await service.read('bootstrap', project.id, [{ target: 'chat-cut.md', offset: cut.nextOffset!, revision: cut.revision, limit: 1048576 }])).files[0]
     assert.equal(cut.text + rest.text, full.files[0].text)
     assert.deepEqual((fitted.remaining as Array<{ target: string }>).map(item => item.target), ['chat-next.md'])
+  })
+  await t.test('publishing references retires work only after group registration and preserves retries and conflicts', async () => {
+    const main = await import('../src/database/init')
+    await main.initializeDatabase()
+    const { GroupModel } = await import('../src/models/Group')
+    const { publishWorkspaceResources } = await import('../src/services/workspacePublishResources')
+    const { listGroupResources } = await import('../src/services/groupResources')
+    const { isContextToolAllowed } = await import('../src/mcp/toolAccess')
+    const group = { groupId: GroupModel.create({ name: 'Publish/test' }) }
+    await apply('publish-setup', [
+      { kind: 'write', target: 'publish.json', text: 'pending', expectedRevision: null },
+      { kind: 'write', target: 'active.json', text: JSON.stringify({ items: [{ id: 'work', target: 'publish.json' }] }), expectedRevision: null },
+      { kind: 'write', target: 'source.md', text: 'Original instructions', expectedRevision: null },
+    ])
+    const ctx = { requester, scopes: ['read', 'organize'] as ('read' | 'organize')[], source: 'plugin' as const, workspace: { project: service.get('bootstrap', project.id), write: true, bindingRevision: 'test' } }
+    assert.equal(isContextToolAllowed({ ...ctx, workspace: { ...ctx.workspace, write: false } }, 'workspace_publish_resources'), false)
+    assert.equal(isContextToolAllowed({ ...ctx, scopes: ['read'] }, 'workspace_publish_resources'), false)
+    const input = {
+      requestId: 'publish-complete', groupId: group.groupId,
+      resources: [{ category: '문서', reference: { source: 'workspace' as const, projectId: project.id, target: 'source.md', label: 'Instructions' } }],
+      document: { target: 'publish.json', expectedRevision: (await read('publish.json')).revision, text: 'completed' },
+      queue: { target: 'active.json', expectedRevision: (await read('active.json')).revision, entryId: 'work' },
+    }
+    const first = await publishWorkspaceResources(ctx, 'bootstrap', project.id, input, () => {})
+    assert.equal(first.status, 'completed', first.error)
+    assert.deepEqual(await publishWorkspaceResources(ctx, 'bootstrap', project.id, input, () => {}), first, 'same request reuses its result despite changed file revisions')
+    await assert.rejects(publishWorkspaceResources(ctx, 'bootstrap', project.id, { ...input, resources: [] }, () => {}), /같은 요청/)
+    assert.deepEqual(JSON.parse((await read('active.json')).text).items, [])
+    assert.equal((await read('source.md')).text, 'Original instructions')
+    const child = main.db.prepare('SELECT id AS groupId FROM groups WHERE parent_id=? AND name=?').get(group.groupId, '문서') as { groupId: number }
+    assert.ok(child, 'group names containing slashes still publish under the selected parent ID')
+    assert.equal((await listGroupResources(ctx, child.groupId)).entries.length, 1)
+    const stale = await publishWorkspaceResources(ctx, 'bootstrap', project.id, { ...input, requestId: 'publish-stale' }, () => {})
+    assert.equal(stale.status, 'failed')
+    assert.equal((await listGroupResources(ctx, child.groupId)).entries.length, 1)
+    await apply('publish-next', [
+      { kind: 'write', target: 'publish.json', text: 'pending again', expectedRevision: (await read('publish.json')).revision },
+      { kind: 'write', target: 'active.json', text: JSON.stringify({ items: [{ id: 'work', target: 'publish.json' }] }), expectedRevision: (await read('active.json')).revision },
+    ])
+    const next = { ...input, requestId: 'publish-partial', document: { ...input.document, expectedRevision: (await read('publish.json')).revision }, queue: { ...input.queue, expectedRevision: (await read('active.json')).revision } }
+    let interfered = false
+    const result = await publishWorkspaceResources(ctx, 'bootstrap', project.id, next, () => {
+      // Simulate an external editor between the two writes, outside the app's writer gate.
+      if (!interfered && fs.readFileSync(path.join(directory, 'workspaces', project.id, 'publish.json'), 'utf8') === 'completed') {
+        interfered = true
+        fs.writeFileSync(path.join(directory, 'workspaces', project.id, 'active.json'), '["next","external"]')
+      }
+    })
+    assert.equal(result.status, 'failed')
+    assert.equal(result.results.length, 1, 'completed receipt survives a queue conflict')
+    assert.equal((await read('active.json')).text, '["next","external"]', 'never clear somebody else’s work')
+    assert.equal((await listGroupResources(ctx, child.groupId)).entries.length, 1, 'retry does not duplicate references')
+    const denied = await publishWorkspaceResources({ ...ctx, requester: { accountId: 999999, accountType: 'guest' } }, 'bootstrap', project.id, next, () => {}).catch(error => error)
+    assert.match(String(denied), /Permission/)
   })
   await t.test('legacy duplicate names migrate once while IDs and descendants stay intact', async () => {
     const { default: Database } = await import('better-sqlite3')

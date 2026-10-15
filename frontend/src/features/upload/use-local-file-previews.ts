@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export type LocalFilePreview = {
   file: File
@@ -6,54 +6,52 @@ export type LocalFilePreview = {
   url: string | null
 }
 
-type LocalFilePreviewState = {
-  files: File[]
-  limit: number
-  previews: LocalFilePreview[]
-}
-
 /** Identify image and video files that browsers can preview from object URLs. */
 function canPreviewLocalFile(file: File) {
   return file.type.startsWith('image/') || file.type.startsWith('video/')
 }
 
-/** Build one stable-enough render key while preserving duplicate files by index. */
-function buildLocalFilePreviewKey(file: File, index: number) {
-  return `${file.name}:${file.size}:${file.lastModified}:${index}`
-}
-
-/** Create and revoke local object URLs for the current selected-file snapshot. */
+/** Keep visible files' URLs and row identities across queue edits; release files that leave the preview window. */
 export function useLocalFilePreviews(files: File[], limit = files.length) {
-  const [state, setState] = useState<LocalFilePreviewState>({ files: [], limit: 0, previews: [] })
+  const owned = useRef(new Map<File, LocalFilePreview>())
+  const nextKey = useRef(0)
+  const [previews, setPreviews] = useState(new Map<File, LocalFilePreview>())
 
   useEffect(() => {
-    const previews = files.slice(0, limit).map((file, index) => ({
-      file,
-      key: buildLocalFilePreviewKey(file, index),
-      url: canPreviewLocalFile(file) ? URL.createObjectURL(file) : null,
-    }))
-
-    setState({ files, limit, previews })
-
     return () => {
-      for (const preview of previews) {
-        if (preview.url) {
-          URL.revokeObjectURL(preview.url)
-        }
+      for (const preview of owned.current.values()) {
+        if (preview.url) URL.revokeObjectURL(preview.url)
       }
+      owned.current.clear()
     }
+  }, [])
+
+  useEffect(() => {
+    const next = new Map<File, LocalFilePreview>()
+    for (const file of files.slice(0, limit)) {
+      if (next.has(file)) continue
+      next.set(file, owned.current.get(file) ?? {
+        file,
+        key: `local-preview-${nextKey.current++}`,
+        url: canPreviewLocalFile(file) ? URL.createObjectURL(file) : null,
+      })
+    }
+    for (const [file, preview] of owned.current) {
+      if (!next.has(file) && preview.url) URL.revokeObjectURL(preview.url)
+    }
+    owned.current = next
+    setPreviews(next)
   }, [files, limit])
 
-  if (state.files === files && state.limit === limit) {
-    return state.previews
-  }
-
+  const occurrences = new Map<File, number>()
   return files.slice(0, limit).map((file, index) => {
-    const currentPreview = state.previews.find((preview) => preview.file === file)
-    return currentPreview ?? {
+    const occurrence = occurrences.get(file) ?? 0
+    occurrences.set(file, occurrence + 1)
+    const preview = previews.get(file)
+    return {
       file,
-      key: buildLocalFilePreviewKey(file, index),
-      url: null,
+      key: preview ? `${preview.key}:${occurrence}` : `pending-preview-${index}`,
+      url: preview?.url ?? null,
     }
   })
 }

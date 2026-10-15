@@ -152,7 +152,7 @@ export function dismissPluginWorkspaceWrite(id: string, caller: PluginCaller) {
 
 // A project keeps small source references; media originals stay in their existing store.
 const mediaReferenceSchema = z.discriminatedUnion('source', [
-  z.object({ source: z.literal('library'), groupId: z.number().int().positive(), compositeHash: z.string().regex(MEDIA_HASH_PATTERN) }).strict(),
+  z.object({ source: z.literal('library'), groupId: z.number().int().positive().optional(), compositeHash: z.string().regex(MEDIA_HASH_PATTERN) }).strict(),
   z.object({ source: z.literal('files'), fileId: z.string().regex(/^[a-f0-9]{32}$/) }).strict(),
   z.object({ source: z.literal('audio'), candidateId: z.string().uuid() }).strict(),
 ])
@@ -174,7 +174,7 @@ export async function mediaTarget(id: string, target: string, caller: PluginCall
     resolved = { filePath: audioBlobPath(file.hash, file.ext), entry: { id: candidate.id, parentId: null, kind: 'file', name: `${candidate.name}.${file.ext}`, mimeType: AUDIO_MIME_BY_EXTENSION[file.ext], size: file.size, createdAt: '', updatedAt: '' } }
   } else {
     requireRequesterImagePermission(caller.requester)
-    if (!db.prepare('SELECT 1 FROM image_groups WHERE group_id=? AND composite_hash=?').get(reference.groupId, reference.compositeHash)) throw new PluginError('그룹에서 미디어 참조를 찾을 수 없어.', 404)
+    if (reference.groupId !== undefined && !db.prepare('SELECT 1 FROM image_groups WHERE group_id=? AND composite_hash=?').get(reference.groupId, reference.compositeHash)) throw new PluginError('그룹에서 미디어 참조를 찾을 수 없어.', 404)
     const metadata = MediaMetadataFileQueries.findVisibilityGuardByHash(reference.compositeHash)
     if (!metadata || !MediaPostprocessVisibilityService.isReadyRecord(metadata)) throw new PluginError('아직 사용할 수 없는 미디어야.', 404)
     if (ImageSafetyService.isHidden(metadata.rating_score)) throw new PluginError('현재 표시 정책에서 숨긴 미디어야.', 403)

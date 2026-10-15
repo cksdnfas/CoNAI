@@ -41,12 +41,16 @@ export type PluginLlmInput = {
   requestId: string; profileId: number; message: string; history?: string; userName?: string
   /** profile: native chat execution with the profile's tools and its own plugin/account room. text: stateless compatibility mode. */
   mode?: 'text' | 'profile'
+  /** Text mode only. judge: the profile's prompt on its judge model, else the default judge row (cheap quick calls). */
+  model?: 'chat' | 'judge'
   useLorebooks?: boolean; maxTokens?: number; timeoutMs?: number
   /** JSON example/schema passed through the native workflow LLM JSON mode. */
   structuredOutput?: string | Record<string, unknown>
 }
 export type PluginLlmProfile = {
   id: number; name: string; tagline: string; engine: string
+  /** Visible look as image-prompt tags (the profile's appearance field); empty when unset. */
+  appearance: string
   assetVersion: string | null; avatarCrop: { x: number; y: number; scale: number } | null
   assets: { avatar: boolean; background: boolean; reference: boolean }
 }

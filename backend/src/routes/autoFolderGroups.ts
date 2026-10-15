@@ -8,7 +8,8 @@ import { validateId,
 successResponse,
 errorResponse,
 PAGINATION } from '@conai/shared';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler';
+import { pipeFileToResponse } from './images/query-file-response-helpers';
 import { enrichCompactImageWithFileView } from './images/utils';
 import fs from 'fs';
 import { allowImagesView } from '../middleware/imageAccess';
@@ -221,12 +222,15 @@ router.post('/rebuild', asyncHandler(async (req: Request, res: Response) => {
  * 그룹 이미지 다운로드 (ZIP)
  * GET /api/auto-folder-groups/:id/download
  */
-router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/download', cancellableAsyncHandler(async (req, res, signal) => {
   try {
     const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const type = (req.query.type as DownloadType) || 'original';
     const hashesParam = req.query.hashes as string | undefined;
     const includeChildren = req.query.include_children === 'true';
+    if (!['thumbnail', 'original', 'video'].includes(type)) {
+      return res.status(400).json(errorResponse('Invalid download type. Must be: thumbnail, original, or video'));
+    }
 
     // 선택된 이미지만 다운로드 (옵션)
     const selectedHashes = hashesParam ? hashesParam.split(',') : undefined;
@@ -237,19 +241,6 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
       return res.status(400).json(errorResponse('Invalid captionMode. Must be: auto_tags or merged'));
     }
 
-    const group = await AutoFolderGroupService.getGroupById(id);
-    if (!group) {
-      return res.status(404).json(errorResponse('Group not found'));
-    }
-
-    // 다운로드할 해시 목록 가져오기
-    const allHashes = await AutoFolderGroupService.getGroupHashes(id);
-    const hashesToDownload = selectedHashes || allHashes;
-
-    if (hashesToDownload.length === 0) {
-      return res.status(400).json(errorResponse('No images to download'));
-    }
-
     // ZIP 파일 생성
     const result = await GroupDownloadService.createGroupZip({
       groupId: id,
@@ -257,26 +248,23 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
       groupType: 'auto-folder',
       compositeHashes: selectedHashes,
       includeChildren,
+      signal,
       captionOptions: captionMode ? { captionMode: captionMode as CaptionMode } : undefined
     });
 
-    // ZIP 파일 전송
-    res.download(result.zipPath, result.fileName, (err) => {
-      // 다운로드 완료 또는 실패 시 임시 파일 삭제
-      if (fs.existsSync(result.zipPath)) {
-        fs.unlinkSync(result.zipPath);
-      }
-
-      if (err) {
-        console.error('Error sending zip file:', err);
-      }
+    if (signal.aborted) { await GroupDownloadService.cleanupTempFile(result.zipPath); return; }
+    res.attachment(result.fileName);
+    res.setHeader('X-File-Count', result.fileCount.toString());
+    return pipeFileToResponse(res, fs.createReadStream(result.zipPath), () => {
+      void GroupDownloadService.cleanupTempFile(result.zipPath);
     });
-
-    return;
   } catch (error) {
+    if (signal.aborted) return;
     console.error('Error downloading group:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to download group';
-    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
+    const statusCode = errorMessage.includes('Invalid') ? 400
+      : errorMessage.includes('not found') || errorMessage.includes('No images') ? 404
+        : (error as { status?: number }).status === 503 ? 503 : 500;
     return res.status(statusCode).json(errorResponse(errorMessage));
   }
 }));
@@ -285,15 +273,16 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
  * 그룹의 파일 타입별 개수 조회 (다운로드 전 정보)
  * GET /api/auto-folder-groups/:id/file-counts
  */
-router.get('/:id/file-counts', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/file-counts', cancellableAsyncHandler(async (req, res, signal) => {
   try {
     const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const includeChildren = req.query.include_children === 'true';
 
-    const fileCounts = await GroupDownloadService.getFileCountByType(id, 'auto-folder', includeChildren);
+    const fileCounts = await GroupDownloadService.getFileCountByType(id, 'auto-folder', includeChildren, signal);
 
     return res.json(successResponse(fileCounts));
   } catch (error) {
+    if (signal.aborted) return;
     console.error('Error getting file counts:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to get file counts';
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;

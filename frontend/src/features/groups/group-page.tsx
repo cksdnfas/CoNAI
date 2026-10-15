@@ -33,6 +33,7 @@ import { useGroupPageQueries, type GroupCollectionFilter } from './use-group-pag
 import { useGroupPageActions } from './use-group-page-actions'
 import { useI18n } from '@/i18n'
 import { useGroupChatPage } from './use-group-chat-page'
+import { GroupLinkedResources } from './components/group-linked-resources'
 
 export function GroupPage() {
   const { canViewImages, canCreateImageCopies } = useImagePermissions()
@@ -351,6 +352,7 @@ export function GroupPage() {
                 />
               ) : null}
 
+              {isCustomSource && selectedGroupId ? <GroupLinkedResources key={selectedGroupId} groupId={selectedGroupId} /> : null}
               {isCustomSource && selectedGroupQuery.data.emoticon_enabled && emoticonView === 'keywords' ? (
                 <GroupEmoticonSection group={selectedGroupQuery.data} />
               ) : <GroupImageSection

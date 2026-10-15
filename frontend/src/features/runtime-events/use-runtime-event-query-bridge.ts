@@ -345,8 +345,8 @@ export function useRuntimeEventQueryBridge() {
         return
       }
       case 'files.changed': {
-        void queryClient.invalidateQueries({ queryKey: ['file-store'], refetchType: 'active' })
-        break
+        scheduleInvalidate(['file-store'], 400)
+        return
       }
       case 'workspace.changed': {
         const { projectId } = envelope.payload as { projectId: string }

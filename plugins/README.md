@@ -129,7 +129,7 @@ The host lets the user connect one project. Its edit mode follows the current ac
 
 Writes use the same `WorkspaceService.apply` gate and revision checks as AI tools, with the proposal ID as a stable retry key. The iframe cannot approve or apply. `onSaved` has the same contract as file-store saves. Preserve later draft edits when rereading the committed document.
 
-A media-reference JSON is either `{ "source":"library", "groupId":123, "compositeHash":"..." }` or `{ "source":"files", "fileId":"..." }`. Originals remain in the library/file store. The server validates the project reference revision, current group membership, file identity, live feature permissions and library visibility policy. A reference or source change invalidates issued links. File-store media can also represent audio; library references address existing image/video records. The iframe never receives storage paths or credentials.
+A media-reference JSON is either `{ "source":"library", "compositeHash":"..." }` or `{ "source":"files", "fileId":"..." }`. Library references may also specify `groupId`; when present, the server additionally requires membership in that group. Omitting it keeps identity independent of group organization. Originals remain in their stores. The server validates the project reference revision, file identity, live feature permissions and library visibility policy. A reference or source change invalidates issued links. File-store media can also represent audio; library references address existing image/video records. The iframe never receives storage paths or credentials.
 
 ## Server modules
 
@@ -167,9 +167,9 @@ Enabled plugins can generate a single character reply through `api.llm`; server 
 
 | Method | Contract |
 | --- | --- |
-| `llm.profiles()` | Enabled profiles this account can use: `id`, `name`, `tagline`, `engine`, `assetVersion`, `avatarCrop`, `assets: {avatar, background, reference}`. No prompts, image bytes or credentials. Normal chat users do not need administrator access. |
+| `llm.profiles()` | Enabled profiles this account can use: `id`, `name`, `tagline`, `engine`, `appearance` (image-prompt tags of the character's look), `assetVersion`, `avatarCrop`, `assets: {avatar, background, reference}`. No prompts, image bytes or credentials. Normal chat users do not need administrator access. |
 | `llm.asset({profileId, kind?, maxSize?})` | Reads a native profile image with the caller's profile and `images.view` permissions. `kind`: `avatar` (default), `background`, `reference`. `maxSize`: 64–512, default 256. Returns `PluginProfileAsset` with `state` (`ready`, `missing`, `hidden`), `version`, `crop`, and, when ready, base64 `data`, `mimeType: image/webp`, `width`, `height`. |
-| `llm.start(input)` | Starts one asynchronous reply and immediately returns a job. Required: `requestId`, `profileId`, `message`. Optional: `history`, `userName`, `useLorebooks`, `maxTokens`, `timeoutMs`. |
+| `llm.start(input)` | Starts one asynchronous reply and immediately returns a job. Required: `requestId`, `profileId`, `message`. Optional: `history`, `userName`, `useLorebooks`, `maxTokens`, `timeoutMs`, `mode`, `model`, `structuredOutput`. |
 | `llm.get(jobId)` | Returns `status`, `cancelRequested`, `result`, `error`, `expiresAt` and the request/profile IDs. A completed result contains `text`, `truncated`, `model`, `engine`. |
 | `llm.cancel(jobId)` | Requests cancellation, including the underlying model request. Poll until the job is terminal. |
 
@@ -207,6 +207,8 @@ The host creates one dedicated native room per plugin + account + profile; rooms
 ### Stateless text compatibility
 
 Omitted `mode` or `mode:'text'` preserves the original stateless API. `llm.start` accepts `structuredOutput`, a JSON example/schema object or JSON string within 16 KiB in this mode. It reuses the native workflow LLM JSON mode and returns parsed `result.json` (at most 32 KiB); malformed JSON fails instead of being reported as a successful structured answer. This is the native model JSON instruction/parse contract, not an independent JSON Schema validator. Structured replies keep at most 4,000 characters of display text alongside the complete bounded JSON.
+
+`model: 'judge'` (text mode only) sends the same profile prompt to the profile's judge model, or to the default judge row (⚖) when the profile has none, instead of its chat model. Use it for frequent small decisions where a cheaper, faster model is enough. Only LLM connections qualify (a TypeSafe decision model is skipped), and a Claude Code/Codex profile also runs on that row. `start` refuses with 409 when no judge model is available, so the caller can fall back. `api.supports('llm.judge')` detects host support; a server module on an older host gets a validation error from `start`.
 
 In text mode, the native character-turn builder supplies the persona, sections, optional lore and author note; the common model path supplies its configured engine/model and usage accounting. The plugin supplies recent conversation and owns its world/memory. This mode does not open a chat, execute chat tools, update native memory, translate the reply or run `chat.instructions` hooks. Usage appears under **플러그인**, with the profile and a reply ID containing the plugin/job IDs.
 

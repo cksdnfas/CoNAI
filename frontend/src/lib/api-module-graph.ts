@@ -528,7 +528,7 @@ export interface GraphExecutionListPage {
 }
 
 /** List recent executions for a saved graph workflow, newest first, with whole-workflow counts. */
-export async function getGraphWorkflowExecutions(workflowId: number, options: { limit?: number; offset?: number } = {}): Promise<GraphExecutionListPage> {
+export async function getGraphWorkflowExecutions(workflowId: number, options: { limit?: number; offset?: number; signal?: AbortSignal } = {}): Promise<GraphExecutionListPage> {
   const searchParams = new URLSearchParams()
   if (options.limit !== undefined) {
     searchParams.set('limit', String(options.limit))
@@ -539,6 +539,7 @@ export async function getGraphWorkflowExecutions(workflowId: number, options: { 
   const query = searchParams.toString()
   const payload = await requestJson<{ success: boolean; data: GraphExecutionRecord[]; meta?: GraphExecutionListMeta; error?: string }>(
     `/api/graph-workflows/${workflowId}/executions${query ? `?${query}` : ''}`,
+    { signal: options.signal },
   )
   if (!payload.success) {
     throw new Error(payload.error || 'Request failed')

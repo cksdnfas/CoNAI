@@ -19,8 +19,10 @@ const listeners = new Set<() => void>()
 /** Stop position for region playback (seconds), or null to play to the end. */
 let stopAt: number | null = null
 let onEnded: (() => void) | null = null
+let playAttempt = 0
 
 function emit(next: Partial<AudioPlayerState>) {
+  if ((Object.keys(next) as Array<keyof AudioPlayerState>).every((key) => state[key] === next[key])) return
   state = { ...state, ...next }
   listeners.forEach((listener) => listener())
 }
@@ -29,10 +31,15 @@ function audio(): HTMLAudioElement {
   if (element) return element
   element = new Audio()
   element.preload = 'auto'
-  element.addEventListener('play', () => emit({ playing: true }))
-  element.addEventListener('pause', () => emit({ playing: false }))
-  element.addEventListener('loadedmetadata', () => emit({ duration: Number.isFinite(element!.duration) ? element!.duration : 0 }))
+  // Events from the previous source may already be queued; read the element's current state.
+  const syncPlaying = () => emit({ playing: state.key !== null && !element!.paused })
+  element.addEventListener('play', syncPlaying)
+  element.addEventListener('pause', syncPlaying)
+  element.addEventListener('loadedmetadata', () => {
+    if (state.key !== null) emit({ duration: Number.isFinite(element!.duration) ? element!.duration : 0 })
+  })
   element.addEventListener('timeupdate', () => {
+    if (state.key === null) return
     if (stopAt !== null && element!.currentTime >= stopAt) {
       element!.pause()
       element!.currentTime = stopAt
@@ -41,12 +48,27 @@ function audio(): HTMLAudioElement {
     emit({ currentTime: element!.currentTime })
   })
   element.addEventListener('ended', () => {
+    if (state.key === null || !element!.ended) return
     emit({ playing: false })
     const callback = onEnded
     onEnded = null
     callback?.()
   })
+  element.addEventListener('error', () => {
+    if (state.key === null || !element!.error) return
+    playAttempt++
+    stopAt = null
+    onEnded = null
+    emit({ playing: false })
+  })
   return element
+}
+
+function startPlayback(player: HTMLAudioElement) {
+  const attempt = ++playAttempt
+  void player.play().catch(() => {
+    if (attempt === playAttempt) emit({ playing: false })
+  })
 }
 
 export interface PlayOptions {
@@ -65,7 +87,7 @@ export const audioPlayer = {
     const src = options.src ?? audioCandidateFileUrl(key)
     if (state.key !== key || player.src !== new URL(src, window.location.href).href) {
       player.src = src
-      emit({ key, currentTime: 0, duration: 0 })
+      emit({ key, playing: false, currentTime: 0, duration: 0 })
     }
     player.playbackRate = options.rate ?? 1
     player.preservesPitch = true
@@ -74,19 +96,22 @@ export const audioPlayer = {
     if (options.start !== undefined) player.currentTime = options.start
     else if (player.ended) player.currentTime = 0
     emit({ currentTime: player.currentTime })
-    void player.play().catch(() => emit({ playing: false }))
+    startPlayback(player)
   },
   toggle(key: string, options: PlayOptions = {}) {
     if (state.key === key && state.playing) audioPlayer.pause()
     else audioPlayer.play(key, options)
   },
   pause() {
+    playAttempt++
     element?.pause()
+    emit({ playing: false })
   },
   resume() {
-    if (element && state.key) void element.play().catch(() => emit({ playing: false }))
+    if (element && state.key) startPlayback(element)
   },
   stop() {
+    playAttempt++
     if (!element) return
     element.pause()
     element.removeAttribute('src')

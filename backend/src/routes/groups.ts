@@ -5,6 +5,7 @@ import { groupEmoticonRoutes } from './groups.emoticon.routes';
 import { groupHierarchyRoutes } from './groups.hierarchy.routes';
 import { groupMutationRoutes } from './groups.mutation.routes';
 import { groupReadRoutes } from './groups.read.routes';
+import { groupResourceRoutes } from './groups.resources.routes';
 
 const router = Router();
 router.use((req, res, next) => {
@@ -22,6 +23,7 @@ router.use((req, res, next) => {
 });
 
 router.use('/', groupHierarchyRoutes);
+router.use('/', groupResourceRoutes);
 router.use('/', groupEmoticonRoutes);
 router.use('/', groupMutationRoutes);
 router.use('/', groupReadRoutes);

@@ -68,6 +68,7 @@ backend/test/*
 !backend/test/chat-thread-list.test.ts
 !backend/test/image-permissions.test.ts
 !backend/test/generated-media-pipeline.test.ts
+!backend/test/group-download.test.ts
 !backend/test/document-search.test.ts
 !backend/test/posts.test.ts
 !backend/test/chat-semantic.test.ts
@@ -78,6 +79,8 @@ frontend/test/*
 !frontend/test/plugin-text-editor.test.ts
 !frontend/test/resource-review.test.ts
 !frontend/test/post-rich-editor.test.ts
+!frontend/test/post-comments.test.ts
+!frontend/test/media-preview-lifecycle.test.ts
 !frontend/test/audio-waveform.test.ts
 !frontend/test/plugin-sdk.test.ts
 

@@ -98,8 +98,9 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
 
   useEffect(() => () => {
     previewRequest.current?.abort()
+    if (audioPlayer.state.key === regionKey || audioPlayer.state.key === previewKey) audioPlayer.stop()
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current)
-  }, [])
+  }, [previewKey, regionKey])
 
   const playing = player.playing && (player.key === regionKey || player.key === previewKey || player.key === candidate.id)
   const playhead = player.key === regionKey || player.key === candidate.id ? player.currentTime : null

@@ -246,26 +246,38 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.match(lastBody, /JSON/)
     replyText = '안녕, 이웃!'
 
+    // model 'judge': the profile's prompt on its judge row, else the default judge row; refused up front without one.
+    assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'judge-none', model: 'judge' }), /판단 모델이 없어/)
+    assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'judge-profile', model: 'judge', mode: 'profile' }))
+    const judgeRow = ModelSlotStore.ensure('plugin-test', 'judge-model')!
+    ModelSlotStore.setDefaultJudge(judgeRow, true)
+    const judged = llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'judge-turn', model: 'judge' })
+    await until(() => llm.getPluginLlmJob('llm-bridge', guest, judged.jobId).status === 'completed', 'judge reply')
+    assert.match(lastBody, /"model":"judge-model"/)
+    assert.match(lastBody, /village resident/, 'the profile prompt goes along')
+    ModelSlotStore.setDefaultJudge(judgeRow, false)
+
     // The same token means another account's independent turn, never its private result.
     const other = llm.startPluginLlmJob('llm-bridge', admin, input)
     assert.notEqual(other.jobId, first.jobId)
     await until(() => llm.getPluginLlmJob('llm-bridge', admin, other.jobId).status === 'completed', 'admin reply')
     hold = true
+    const before = calls
     const active = [0, 1, 2, 3].map(i => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: `active-${i}` }))
-    await until(() => calls === 4, 'first call starts while the others wait for the shared connection slot')
+    await until(() => calls === before + 1, 'first call starts while the others wait for the shared connection slot')
     assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'overflow' }), /4개/)
     await bridge('cancel', active[0].jobId)
     await until(() => RuntimeJobStore.get(active[0].jobId)?.status === 'cancelled', 'cancel reaches provider')
     assert.equal(aborted, 1)
     assert.equal(llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'active-0' }).status, 'cancelled', 'cancelled turns are not replayed')
-    await until(() => calls === 5, 'next call acquires the released connection slot')
+    await until(() => calls === before + 2, 'next call acquires the released connection slot')
     await registry.setPluginEnabled('llm-bridge', false, adminId)
     await until(() => active.every(job => RuntimeJobStore.get(job.jobId)?.status === 'cancelled'), 'disable cancels all outstanding replies')
     assert.equal(aborted, 2, 'queued requests were cancelled without reaching the provider')
     await registry.setPluginEnabled('llm-bridge', true, adminId)
     await until(() => runtime.pluginServerStatus('llm-bridge').state === 'ready', 're-enabled bridge')
     const revoked = llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'revoked' })
-    await until(() => calls === 6, 'revoked call started')
+    await until(() => calls === before + 3, 'revoked call started')
     ChatProfileStore.update(profile.id, { isEnabled: false })
     await until(() => RuntimeJobStore.get(revoked.jobId)?.status === 'failed', 'profile revocation aborts provider')
     assert.equal(aborted, 3)

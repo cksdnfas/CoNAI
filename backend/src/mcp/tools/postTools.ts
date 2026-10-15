@@ -38,12 +38,11 @@ type ReadComment = {
 /** Fit the actual serialized tool response before issuing receipts. A later LLM cap must not cut through a receipt. */
 function boundedPostRead(actor:PostActor,context:McpRequestContext,input:{postId:number;offset?:number;limit?:number;commentLimit?:number;commentId?:number;commentOffset?:number}) {
   const post=PostStore.get(actor,input.postId);
-  const allComments=PostCommentStore.list(actor,input.postId).filter(comment=>comment.status==='visible');
   const count=input.commentLimit??30;
   if(input.commentOffset!==undefined&&input.commentId===undefined) throw new PostError('댓글 구간은 comment_id와 함께 지정해줘.');
-  let selected=count===0?[]:allComments.slice(-count);
+  let selected=PostCommentStore.list(actor,input.postId,{limit:count,visibleOnly:true,...(input.commentId!==undefined?{ids:[input.commentId]}:{})});
   if(input.commentId!==undefined&&count!==0) {
-    const selectedComment=allComments.find(comment=>comment.id===input.commentId);
+    const selectedComment=selected[0];
     if(!selectedComment) throw new PostError('이 게시글에서 공개된 댓글을 찾을 수 없어.',404);
     selected=[selectedComment];
   }
@@ -243,7 +242,7 @@ export function registerPostTools(server: McpServer, context: McpRequestContext)
     offset: z.number().int().min(0).optional(),
     limit: z.number().int().min(100).max(16000).optional(),
   }) }, ({ post_id, revision, offset, limit }) => run((current) => {
-    const revisions = PostStore.revisions(current, post_id);
+    const revisions = PostStore.revisions(current, post_id, revision);
     if (revision !== undefined) {
       const found = revisions.find((item) => item.revision === revision);
       if (!found) throw new Error(`Post ${post_id} has no earlier version ${revision}.`);
@@ -259,7 +258,7 @@ export function registerPostTools(server: McpServer, context: McpRequestContext)
     revision: z.number().int().positive(),
     expected_revision: z.number().int().positive(),
   }) }, ({ post_id, revision, expected_revision }) => run((current) => {
-    const found = PostStore.revisions(current, post_id).find((item) => item.revision === revision);
+    const found = PostStore.revisions(current, post_id, revision)[0];
     if (!found) throw new Error(`Post ${post_id} has no earlier version ${revision}.`);
     return postForModel(PostStore.update(current, post_id, { title: found.title, body: found.body, expectedRevision: expected_revision }));
   }));

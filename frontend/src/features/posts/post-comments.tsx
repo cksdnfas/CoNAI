@@ -5,6 +5,7 @@ import type { PostBotRun, PostComment, PostDetail, PostMentionableProfile } from
 import { Check, CornerDownRight, Eye, EyeOff, MessageSquareReply, Pencil, Send, Trash2, X } from 'lucide-react'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
+import { ErrorState } from '@/components/ui/error-state'
 import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
@@ -12,7 +13,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { mentionQueryAt } from '@/features/codex-chat/chat-mentions'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, cancelPostBotRun, createPostComment, deletePostComment, listMentionableProfiles, listPostComments, setPostCommentHidden, updatePostComment } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, cancelPostBotRun, createPostComment, deletePostComment, listMentionableProfiles, setPostCommentHidden, updatePostComment } from '@/lib/api-posts'
 import { buildApiUrl } from '@/lib/api-url'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
@@ -20,6 +21,7 @@ import { PostAuthorAvatar, useRelativeTime } from './post-author'
 import { PostAuthorChip, usePostReferenceEntry } from './post-chat-links'
 import { PostMarkdown } from './post-markdown'
 import { usePostPermissions } from './use-post-permissions'
+import { usePostCommentsData } from './use-post-comments'
 
 /** Profiles the comment still names: a picked profile counts only while its `@name` is in the text. */
 function mentionedIds(text: string, picked: Map<number, string>) {
@@ -306,11 +308,10 @@ export function PostComments({ post, draft, setDraft, hideHeading = false }: { p
   const mentionProps = (comment: PostComment) => (comment.author.type === 'profile' && canSummon && canComment && (post.commentMode === 'open' || isAdmin)
     ? { onMention: () => setDraft((current) => ({ ...current, reply: { to: comment.id, text: `@${comment.author.name} ` } })) } : {})
   const setReplyTo = (id: number | null) => setDraft((current) => ({ ...current, reply: id === null ? null : { to: id, text: current.reply?.to === id ? current.reply.text : '' } }))
-  const commentsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'comments', post.id], queryFn: () => listPostComments(post.id) })
+  const commentData = usePostCommentsData()
   const mentionableQuery = useQuery({ queryKey: ['post-mentionable'], queryFn: listMentionableProfiles, enabled: canSummon && canComment, staleTime: 60_000 })
   const mentionable = useMemo(() => mentionableQuery.data ?? [], [mentionableQuery.data])
-  const comments = useMemo(() => commentsQuery.data?.comments ?? [], [commentsQuery.data])
-  const runs = commentsQuery.data?.runs ?? []
+  const { comments, runs } = commentData
   // A link to one comment (`?comment=45`, from a chat): scroll to it once it is loaded and mark it for a moment.
   const [params] = useSearchParams()
   const linkedId = Number(params.get('comment')) || null
@@ -323,7 +324,7 @@ export function PostComments({ post, draft, setDraft, hideHeading = false }: { p
     const timer = window.setTimeout(() => setFocusedId(null), 1600)
     return () => window.clearTimeout(timer)
   }, [linkedId, loaded])
-  const byId = useMemo(() => new Map(comments.map((comment) => [comment.id, comment])), [comments])
+  const byId = useMemo(() => new Map([...commentData.context, ...comments.map((comment) => [comment.id, comment] as const)]), [comments, commentData.context])
   const mentionNames = useMemo(() => [...new Set([...mentionable.map((profile) => profile.name), ...comments.filter((comment) => comment.author.type === 'profile').map((comment) => comment.author.name)])], [mentionable, comments])
   const open = post.commentMode === 'open' || isAdmin
   const canReply = canComment && open
@@ -340,24 +341,11 @@ export function PostComments({ post, draft, setDraft, hideHeading = false }: { p
     }
     return { tops, children }
   }, [comments])
-  const [visibleCount, setVisibleCount] = useState(40)
-  const [visibleReplies, setVisibleReplies] = useState<Record<number, number>>({})
-  // Deep links and assistant-opened reply/edit targets remain reachable outside the visible prefix.
-  const requiredThreads = new Set([linkedId, replyTo, draft.edit?.id].flatMap((id) => {
-    const comment = id ? byId.get(id) : undefined
-    return comment ? [comment.parentId ?? comment.id] : []
-  }))
-  const visibleTops = tops.filter((top, index) => index >= tops.length - visibleCount || requiredThreads.has(top.id))
-  const childrenFor = (id: number) => {
-    const replies = children.get(id) ?? []
-    const count = visibleReplies[id] ?? 40
-    return replies.filter((child, index) => index >= replies.length - count || child.id === linkedId || child.id === replyTo || child.id === draft.edit?.id)
-  }
   // A bot call answers in the thread of the comment that called it; finished calls show as their reply instead.
   const pendingRuns = runs.filter((run) => run.status !== 'done')
   const runsFor = (threadId: number) => pendingRuns.filter((run) => {
     const trigger = run.triggerCommentId !== null ? byId.get(run.triggerCommentId) : undefined
-    return trigger && (trigger.parentId ?? trigger.id) === threadId
+    return (run.triggerParentId ?? (trigger ? trigger.parentId ?? trigger.id : null)) === threadId
   })
 
   // The reply box opens right under the comment it answers (the reply itself still lands at the end of the thread).
@@ -375,15 +363,16 @@ export function PostComments({ post, draft, setDraft, hideHeading = false }: { p
   return (
     <section className="space-y-2" aria-label={t({ ko: '댓글', en: 'Comments' })}>
       {hideHeading ? null : <h2 className="text-sm font-semibold">{t({ ko: '댓글 {count}', en: 'Comments {count}' }, { count: post.commentCount })}</h2>}
-      {commentsQuery.isPending ? <div className="h-16 animate-pulse rounded-sm bg-surface-low" /> : null}
-      {tops.length > visibleCount ? <Button variant="ghost" onClick={() => setVisibleCount((count) => count + 40)}>{t({ ko: '이전 댓글 더 보기', en: 'Load earlier comments' })}</Button> : null}
+      {commentData.isPending ? <div className="h-16 animate-pulse rounded-sm bg-surface-low" /> : null}
+      {commentData.error ? <ErrorState size="compact" error={commentData.error} onRetry={() => void commentData.retry()} /> : null}
+      {commentData.hasMore ? <Button variant="ghost" disabled={commentData.isLoadingMore} onClick={() => void commentData.loadMore().catch(() => undefined)}>{t({ ko: '이전 댓글 더 보기', en: 'Load earlier comments' })}</Button> : null}
       <div className={cn('divide-y divide-line', hideHeading ? (tops.length ? 'border-b border-line' : '') : 'border-y border-line')}>
-        {visibleTops.map((top) => (
+        {tops.map((top) => (
           <div key={top.id}>
             <CommentRow comment={top} quoted={null} mentionNames={mentionNames} canReply={canReply} reply={false} focused={focusedId === top.id} onReply={() => setReplyTo(top.id)} {...mentionProps(top)} {...editProps(top.id)} />
             {replyTo === top.id ? replyComposer : null}
-            {(children.get(top.id)?.length ?? 0) > (visibleReplies[top.id] ?? 40) ? <Button variant="ghost" className="ml-10" onClick={() => setVisibleReplies((current) => ({ ...current, [top.id]: (current[top.id] ?? 40) + 40 }))}>{t({ ko: '이전 답글 더 보기', en: 'Load earlier replies' })}</Button> : null}
-            {childrenFor(top.id).map((child) => (
+            {commentData.moreReplies.get(top.id) ? <Button variant="ghost" className="ml-10" disabled={commentData.loadingReplies.has(top.id)} onClick={() => void commentData.loadMoreReplies(top.id).catch(() => undefined)}>{t({ ko: '이전 답글 더 보기', en: 'Load earlier replies' })}</Button> : null}
+            {(children.get(top.id) ?? []).map((child) => (
               <Fragment key={child.id}>
                 <CommentRow comment={child} quoted={child.quoteCommentId ? byId.get(child.quoteCommentId) ?? null : null} mentionNames={mentionNames} canReply={canReply} reply focused={focusedId === child.id} onReply={() => setReplyTo(child.id)} {...mentionProps(child)} {...editProps(child.id)} />
                 {replyTo === child.id ? replyComposer : null}

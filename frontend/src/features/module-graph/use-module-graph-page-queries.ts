@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect } from 'react'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   getGraphExecution,
   getGraphWorkflow,
@@ -27,9 +27,7 @@ function hasActiveGraphExecution(meta: GraphExecutionListMeta | undefined) {
   return (meta?.queued_count ?? 0) + (meta?.running_count ?? 0) > 0
 }
 
-const EMPTY_EXECUTION_LIST: GraphExecutionRecord[] = []
-
-/** Runs fetched per page; "load more" grows the window by this much. */
+/** Runs fetched per page; "load more" reads the next offset instead of growing a capped server limit. */
 const EXECUTION_LIST_PAGE_SIZE = 20
 
 export function useModuleGraphPageQueries({
@@ -79,25 +77,26 @@ export function useModuleGraphPageQueries({
     queryFn: () => getGraphWorkflowFolders(),
   })
 
-  // The run list grows by whole pages per workflow; switching workflows starts again at one page.
-  const [executionListWindow, setExecutionListWindow] = useState<{ graphId: number | null; limit: number }>({ graphId: null, limit: EXECUTION_LIST_PAGE_SIZE })
-  const executionListLimit = executionListWindow.graphId === selectedGraphId ? executionListWindow.limit : EXECUTION_LIST_PAGE_SIZE
-
-  const graphExecutionsQuery = useQuery({
-    queryKey: ['module-graph-executions', selectedGraphId, executionListLimit],
-    queryFn: () => getGraphWorkflowExecutions(selectedGraphId as number, { limit: executionListLimit }),
+  const graphExecutionsQuery = useInfiniteQuery({
+    queryKey: ['module-graph-executions', selectedGraphId],
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) => getGraphWorkflowExecutions(selectedGraphId as number, { limit: EXECUTION_LIST_PAGE_SIZE, offset: pageParam, signal }),
+    getNextPageParam: (lastPage) => lastPage.meta.has_more && lastPage.executions.length > 0
+      ? lastPage.meta.offset + lastPage.executions.length : undefined,
     enabled: selectedGraphId !== null,
-    // Keep the current rows on screen while a larger window loads for the same workflow.
-    placeholderData: (previousData, previousQuery) => (previousQuery?.queryKey[1] === selectedGraphId ? previousData : undefined),
     refetchInterval: (query) => resolveStreamFallbackInterval(
       runtimeStreamStatus,
-      hasActiveGraphExecution(query.state.data?.meta) ? 5_000 : false,
+      query.state.data?.pages.some((page) => hasActiveGraphExecution(page.meta)) ? 5_000 : false,
     ),
   })
 
-  const loadMoreExecutions = useCallback(() => {
-    setExecutionListWindow({ graphId: selectedGraphId, limit: executionListLimit + EXECUTION_LIST_PAGE_SIZE })
-  }, [executionListLimit, selectedGraphId])
+  // A new run can shift offset pages before the SSE refetch; never render the same run twice.
+  const executionList = [...new Map((graphExecutionsQuery.data?.pages ?? []).flatMap((page) => page.executions).map((execution) => [execution.id, execution])).values()]
+  const firstExecutionPage = graphExecutionsQuery.data?.pages[0]
+  const executionListMeta = firstExecutionPage ? { ...firstExecutionPage.meta, limit: executionList.length, has_more: graphExecutionsQuery.hasNextPage } : null
+  const loadMoreExecutions = () => {
+    if (graphExecutionsQuery.hasNextPage && !graphExecutionsQuery.isFetching) void graphExecutionsQuery.fetchNextPage()
+  }
 
   const executionDetailQuery = useQuery({
     queryKey: ['module-graph-execution-detail', selectedExecutionId],
@@ -110,12 +109,12 @@ export function useModuleGraphPageQueries({
     queryKey: ['module-graph-execution-status', selectedExecutionId],
     queryFn: () => getGraphExecutionStatus(selectedExecutionId as number),
     enabled: selectedExecutionId !== null && isActiveExecutionStatus(selectedExecutionStatus),
-    refetchInterval: 10_000,
+    refetchInterval: resolveStreamFallbackInterval(runtimeStreamStatus, 10_000),
   })
 
   useEffect(() => {
     const status = executionStatusQuery.data?.status
-    if (!selectedExecutionId || isActiveExecutionStatus(status)) {
+    if (!selectedExecutionId || !status || isActiveExecutionStatus(status)) {
       return
     }
 
@@ -155,9 +154,9 @@ export function useModuleGraphPageQueries({
     appearanceQuery,
     refreshGraphWorkflows,
     modules: modulesQuery.data ?? [],
-    executionList: graphExecutionsQuery.data?.executions ?? EMPTY_EXECUTION_LIST,
-    executionListMeta: graphExecutionsQuery.data?.meta ?? null,
-    isLoadingMoreExecutions: graphExecutionsQuery.isPlaceholderData,
+    executionList,
+    executionListMeta,
+    isLoadingMoreExecutions: graphExecutionsQuery.isFetching,
     loadMoreExecutions,
     selectedGraphWorkflow: selectedGraphWorkflowQuery.data ?? null,
     reactFlowColorMode: appearanceQuery.data?.themeMode ?? DEFAULT_APPEARANCE_SETTINGS.themeMode,

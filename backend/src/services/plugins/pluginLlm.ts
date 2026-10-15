@@ -6,7 +6,9 @@ import { canRequesterViewImages, requireRequesterImagePermission } from '../../m
 import { resolveProfileAsset } from '../codex-chat/chatProfileAssets'
 import { MEDIA_MAX_PIXELS } from '../codex-chat/chatMediaLinks'
 import type { McpRequester } from '../../mcp/context'
-import { ChatProfileStore } from '../codex-chat/chatProfiles'
+import { ChatProfileStore, type ChatProfile } from '../codex-chat/chatProfiles'
+import { LLM_CONNECTION_TYPES, ModelSlotStore } from '../codex-chat/modelSlots'
+import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { canUseChatProfile, resolveChatAccess } from '../codex-chat/codexChatAccess'
 import { loadChatSettings } from '../codex-chat/chatSettings'
 import { buildChatProfileReplyMessages } from '../codex-chat/chatProfileReply'
@@ -25,11 +27,14 @@ const inputSchema = z.object({
   useLorebooks: z.boolean().default(true), maxTokens: z.number().int().min(1).max(4096).default(512),
   timeoutMs: z.number().int().min(1000).max(600_000).default(120_000),
   mode: z.enum(['text', 'profile']).optional(),
+  /** judge: the profile's prompt on its judge model (else the default judge row) instead of its chat model. */
+  model: z.enum(['chat', 'judge']).optional(),
   structuredOutput: z.union([z.string().min(1), z.record(z.string(), z.unknown())]).refine(value => {
     try { const text = typeof value === 'string' ? value : JSON.stringify(value); JSON.parse(text); return Buffer.byteLength(text) <= 16 * 1024 } catch { return false }
   }, 'structuredOutput must be valid JSON within 16KB').optional(),
 }).strict().refine(input => input.mode !== 'profile' || input.structuredOutput === undefined, 'structuredOutput is only available in text mode')
   .refine(input => input.mode !== 'profile' || input.useLorebooks, 'Profile execution uses the profile lorebook settings; use text mode to disable lorebooks')
+  .refine(input => input.mode !== 'profile' || input.model !== 'judge', 'The judge model is only available in text mode')
 type Input = z.infer<typeof inputSchema>
 type Row = { plugin_id: string; owner_key: string; request_key: string; fingerprint: string; digest: string; profile_id: number; job_id: string; expires_at: number }
 type Params = { pluginId: string; requester: McpRequester; digest: string; slot: number; inputKey: string }
@@ -51,11 +56,26 @@ function profileAccess(pluginId: string, requester: McpRequester | undefined, pr
   return { ...current, profile }
 }
 
+/**
+ * The row a `model: 'judge'` request runs on: the profile's own judge model, else the default judge row. Only LLM
+ * connections answer free text; a TypeSafe decision model is skipped.
+ */
+function judgeSlotOf(profile: ChatProfile): number {
+  const llm = (id: number | null | undefined) => {
+    const row = id ? ModelSlotStore.target(id) : null
+    const type = row ? ExternalApiProvider.findByName(row.providerName)?.provider_type : null
+    return row && type && LLM_CONNECTION_TYPES.includes(type) ? row.id : null
+  }
+  const slot = llm(profile.judgeSlotId) ?? llm(ModelSlotStore.defaultJudgeTarget()?.id)
+  if (!slot) throw new PluginError('판단 모델이 없어. 프로필의 판단 모델이나 기본 판단 모델(⚖)을 LLM 연결 모델로 정해줘.', 409)
+  return slot
+}
+
 export function listPluginLlmProfiles(pluginId: string, requester: McpRequester | undefined): PluginLlmProfile[] {
   const { chat, requester: actor } = access(pluginId, requester)
   const images = canRequesterViewImages(actor)
   return ChatProfileStore.list({ enabledOnly: true }).filter(profile => canUseChatProfile(chat, profile))
-    .map(profile => ({ id: profile.id, name: profile.name, tagline: profile.tagline, engine: profile.engine,
+    .map(profile => ({ id: profile.id, name: profile.name, tagline: profile.tagline, engine: profile.engine, appearance: profile.appearance ?? '',
       assetVersion: images ? `${profile.updatedDate}:${profile.avatarHash ?? ''}:${profile.backgroundHash ?? ''}:${profile.referenceHash ?? ''}` : null,
       avatarCrop: images ? profile.avatarCrop : null,
       assets: { avatar: images && Boolean(profile.avatarHash || profile.avatar), background: images && Boolean(profile.backgroundHash || profile.background), reference: images && Boolean(profile.referenceHash) },
@@ -159,11 +179,13 @@ function registerJob() {
           if (instruction && system) system.content = `${system.content}\n\n${instruction}`
           else if (instruction) messages.unshift({ role: 'system', content: instruction })
         }
+        // The judge row gets the profile's prompt as plain messages, so a Claude/Codex profile can use it too.
+        const judge = input.model === 'judge'
         const result = await runWorkflowLlmText({
-          target: { profileId: profile.id, requesterAccountId: requester.accountId }, messages,
+          target: judge ? { modelSlotId: judgeSlotOf(profile), requesterAccountId: requester.accountId } : { profileId: profile.id, requesterAccountId: requester.accountId }, messages,
           structuredOutputJson: input.structuredOutput,
           task: `Reply as ${profile.name}.`, signal: controller.signal,
-          overrides: { maxTokens: Math.min(input.maxTokens, profile.maxTokens ?? input.maxTokens) },
+          overrides: { maxTokens: judge ? input.maxTokens : Math.min(input.maxTokens, profile.maxTokens ?? input.maxTokens) },
           usage: { purpose: 'plugin', replyId: `plugin:${pluginId}:${ctx.jobId}` },
         })
         controller.signal.throwIfAborted(); ctx.throwIfCancelled()
@@ -188,7 +210,8 @@ function registerJob() {
 
 export function startPluginLlmJob(pluginId: string, requester: McpRequester | undefined, raw: unknown): PluginLlmJob {
   const input = inputSchema.parse(raw)
-  const { plugin, owner, requester: actor } = profileAccess(pluginId, requester, input.profileId)
+  const { plugin, owner, requester: actor, profile } = profileAccess(pluginId, requester, input.profileId)
+  if (input.model === 'judge') judgeSlotOf(profile) // refuse up front, not as a failed job
   const fingerprint = sha256(JSON.stringify(input))
   const db = pluginDb()
   registerJob()

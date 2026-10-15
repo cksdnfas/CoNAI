@@ -29,6 +29,8 @@ RUNTIME_RECYCLE_BIN_DIR=E:/CoNAI/RecycleBin
 
 ## 중요한 데이터
 
+계정별 채팅 모양과 저장 슬롯은 `user.db`에 보관되어 DB 백업에 포함됩니다. 이전 `save/chat-appearance/` JSON은 해당 계정이 처음 사용될 때 한 번 이관하고 원본을 남깁니다. 이관 후의 변경은 DB에만 저장하므로 이전 JSON을 최신 설정으로 사용하지 않습니다.
+
 | 경로 | 중요도 | 설명 |
 | --- | --- | --- |
 | `user/database` | 매우 높음 | 이미지/프롬프트/그룹/설정 DB |

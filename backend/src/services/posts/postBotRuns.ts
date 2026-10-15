@@ -10,6 +10,7 @@ import { loadPostsSettings } from './postsSettings';
 import { findKnowledgeRow, requireKnowledgeRow } from './knowledgeStore';
 
 export type BotRunRow = {
+  trigger_parent_id?: number | null;
   id: number; post_id: number; trigger_comment_id: number | null; profile_id: number; profile_name: string; status: PostBotRunStatus;
   run_as_account_id: number | null; requested_by_account_id: number | null; chain_root_comment_id: number | null; chain_depth: number;
   result_comment_id: number | null; error: string | null; created_at: string; started_at: string | null; finished_at: string | null;
@@ -35,6 +36,7 @@ function canCancel(actor: PostActor, row: BotRunRow) {
 export function toBotRun(actor: PostActor, row: BotRunRow): PostBotRun {
   return {
     id: row.id, postId: row.post_id, triggerCommentId: row.trigger_comment_id, profileId: row.profile_id, profileName: row.profile_name,
+    ...(row.trigger_parent_id !== undefined ? { triggerParentId: row.trigger_parent_id } : {}),
     status: row.status, chainDepth: row.chain_depth, resultCommentId: row.result_comment_id, error: row.error,
     createdAt: iso(row.created_at) as string, startedAt: iso(row.started_at), finishedAt: iso(row.finished_at), canCancel: canCancel(actor, row),
   };
@@ -50,7 +52,9 @@ export function summonableProfiles(accountId: number | null) {
 export const PostBotRuns = {
   list(actor: PostActor, postId: number): PostBotRun[] {
     requireRunPost(actor, postId);
-    return (db().prepare(`SELECT * FROM post_bot_runs WHERE post_id = ? AND (status IN ('queued', 'running') OR created_at >= ${RECENT_FINISHED}) ORDER BY id`)
+    return (db().prepare(`SELECT r.*, COALESCE(c.parent_id, c.id) AS trigger_parent_id FROM post_bot_runs r
+      LEFT JOIN post_comments c ON c.id = r.trigger_comment_id AND c.post_id = r.post_id
+      WHERE r.post_id = ? AND (r.status IN ('queued', 'running') OR r.created_at >= ${RECENT_FINISHED}) ORDER BY r.id`)
       .all(postId) as BotRunRow[]).map((row) => toBotRun(actor, row));
   },
 

@@ -103,6 +103,7 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Record<string, string | null> = {
   'posts.open': 'posts.view', 'posts.category': 'posts.view', 'posts.tag': 'posts.view', 'posts.back': 'posts.view',
   'posts.new': 'posts.write', 'posts.edit': 'posts.write', 'posts.save': 'posts.write', 'posts.comment': 'posts.comment',
   'posts.layout': 'posts.view', 'posts.filter': 'posts.view', 'posts.body_at': 'posts.view', 'posts.body_edit': 'posts.write',
+  'posts.comments_more': 'posts.view', 'posts.comments_at': 'posts.view',
   'posts.delete': 'posts.write', 'posts.restore_revision': 'posts.write', 'posts.comment_update': 'posts.comment', 'posts.comment_delete': 'posts.comment', 'posts.bot_cancel': 'posts.view',
   // Administrators only (the routes check the role; the page offers them only to administrators).
   'posts.comment_hide': 'posts.view', 'posts.category_create': 'posts.view', 'posts.category_update': 'posts.view', 'posts.category_delete': 'posts.view',
@@ -136,6 +137,7 @@ const VIEW_ACTIONS = new Set(['page.settings_open', 'page_settings.select', 'pag
 const IN_PLACE_VIEW_ACTIONS = new Set(['page.settings_open', 'comfy.check', 'profile.section', 'library.select', 'resource.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
 for (const id of ['workspace.create', 'workspace.mkdir', 'workspace.save']) COMMIT_ACTIONS.add(id)
 for (const id of ['workspace.open', 'workspace.new', 'workspace.search']) VIEW_ACTIONS.add(id)
+for (const id of ['posts.comments_more', 'posts.comments_at']) { VIEW_ACTIONS.add(id); IN_PLACE_VIEW_ACTIONS.add(id) }
 export function chatPageActionTier(id: string, action?: { tier?: ChatPageActionTier }): ChatPageActionTier {
   if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) {
     if (action?.tier === 'view' || action?.tier === 'draft') return action.tier

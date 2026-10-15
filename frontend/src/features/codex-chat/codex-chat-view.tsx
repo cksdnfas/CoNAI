@@ -1,4 +1,5 @@
-import { chatGenerationPollInterval } from '@/features/runtime-events/chat-generation-query-updates'
+import { useChatThreadData } from './use-chat-thread-data'
+import { useChatTranscriptWindow } from './use-chat-transcript-window'
 import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
@@ -29,15 +30,11 @@ import {
   getThreadLorebooks,
   LoreDecisionsNeededError,
   threadLorebooksQueryKey,
-  getCodexChatThread,
-  mergeThreadTail,
   editChatReplyText,
   branchCodexChatThread,
   importCodexChatThread,
   importChatFromFiles,
-  getCodexChatRunning,
   listChatProfiles,
-  listCodexChatThreads,
   selectChatAlternative,
   clearCodexChatThread,
   createGroupChat,
@@ -84,7 +81,6 @@ import {
   codexChatOrderMutationKey,
   codexChatMediaQueryKey,
   codexChatThreadQueryKey,
-  defaultThreadId,
   PENDING_DRAFT_KEY,
   useCodexChat,
   useCodexChatLiveTurn,
@@ -102,15 +98,12 @@ import { ChatReplyPreview } from './chat-reply'
 import { ChatDeleteDialog } from './chat-delete-dialog'
 import { LorebookMergeDialog } from './lorebook-merge-dialog'
 import type { ChatEmoticonMap } from './chat-markdown'
-import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
-import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 
 const CodexChatContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexChatContextView }))
 const CodexEngineContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).CodexEngineContextView }))
 const GroupContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).GroupContextView }))
 const CodexChatGallery = lazy(async () => ({ default: (await import('./codex-chat-gallery')).CodexChatGallery }))
 
-const RUNNING_POLL_MS = 2000
 const COMPOSER_MAX_HEIGHT_PX = 220
 /** Names longer than this are shortened in the composer hint so it stays on one line in narrow panels. */
 const COMPOSER_HINT_NAME_MAX = 10
@@ -118,13 +111,6 @@ const COMPOSER_HINT_NAME_MAX = 10
 function shortHintName(name: string) {
   return name.length > COMPOSER_HINT_NAME_MAX ? `${name.slice(0, COMPOSER_HINT_NAME_MAX - 1)}…` : name
 }
-const MESSAGE_FLASH_MS = 1600
-const MESSAGE_PAGE_SIZE = 80
-/** Messages a poll fetches; the rest come from the copy already loaded. */
-const POLL_TAIL_MESSAGES = 40
-
-/** Where each chat was left when read part-way up (absent: at the latest message), for coming back to it. */
-const readingPositions = new Map<number, number>()
 /** The chat list screen's scroll, kept while a chat covers it. */
 let chatListScrollTop = 0
 const restoreChatListScroll = (node: HTMLDivElement | null) => { if (node) node.scrollTop = chatListScrollTop }
@@ -184,9 +170,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const scrollRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
-  const [flashMessageId, setFlashMessageId] = useState<number | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [commandPending, setCommandPending] = useState(false)
   const [commandIndex, setCommandIndex] = useState(0)
@@ -212,7 +196,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const [dismissedMention, setDismissedMention] = useState<string | null>(null)
   const mentionListId = useId()
   const commandListId = useId()
-  const [historyWindow, setHistoryWindow] = useState<{ threadId: number | null; firstId: number | null }>({ threadId: null, firstId: null })
   // Status panel: docked / floating on a wide page (kept per browser), a fold-out strip elsewhere.
   const [statusLayout, setStatusLayout] = useStatusPanelLayout()
   const [statusKey, setStatusKey] = useState<string | null>(null)
@@ -220,11 +203,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const statusAreaRef = useRef<HTMLDivElement | null>(null)
   const isWide = useMinWidth(1024)
   const hasSideList = useMinWidth(768)
-  const prependHeightRef = useRef<number | null>(null)
-  const followBottomRef = useRef(true)
-  const { selectedThreadId, selectThread, listOpen, setListOpen, view, setView, messageFocus, clearMessageFocus, prepareChat, isStartingChat, editMessage, regenerate, continueReply } = chat
+  const { selectThread, listOpen, setListOpen, view, setView, messageFocus, clearMessageFocus, prepareChat, isStartingChat, editMessage, regenerate, continueReply } = chat
   const liveTurn = useCodexChatLiveTurn()
-  const { status: streamStatus } = useRuntimeEventStream()
 
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
   const profiles = useMemo(() => profilesQuery.data ?? [], [profilesQuery.data])
@@ -257,23 +237,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     else await startWith(profileIds)
   }, [startWith, userProfiles])
 
-  const threadsQuery = useQuery({
-    queryKey: CODEX_CHAT_THREADS_QUERY_KEY,
-    queryFn: listCodexChatThreads,
-    // A reply this tab is not streaming (another tab, or started before a reload): watch for it to end. Its saved
-    // message is announced on the event stream, so while the stream is live the list waits for that instead.
-    refetchInterval: (query) => resolveStreamFallbackInterval(streamStatus, query.state.data?.some((entry) => entry.running && entry.id !== liveTurn?.threadId) ? RUNNING_POLL_MS * 2 : false),
-  })
-  const threads = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data])
-  const activeThreadId = selectedThreadId === undefined ? defaultThreadId(threads) : selectedThreadId
-  const { keepDrafts, settleSelection } = chat
-  useEffect(() => {
-    if (selectedThreadId === undefined && activeThreadId !== null) settleSelection(activeThreadId)
-  }, [activeThreadId, selectedThreadId, settleSelection])
-  useEffect(() => {
-    if (threadsQuery.data) keepDrafts(threadsQuery.data.map((entry) => entry.id))
-  }, [keepDrafts, threadsQuery.data])
-  const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null
+  const { threadsQuery, threads, activeThreadId, activeThread, threadQuery, thread } = useChatThreadData(chat, liveTurn?.threadId ?? null)
   // The new chat being prepared (not saved yet) stands in for a chat until its first message saves it.
   const pendingChat = activeThreadId === null ? chat.pendingChat : null
   const pendingProfile = pendingChat ? profilesById.get(pendingChat.profileId) ?? null : null
@@ -284,32 +248,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     if (draftKey !== null) setChatDraft(draftKey, next)
   }, [draftKey, setChatDraft])
 
-  const threadQuery = useQuery({
-    queryKey: codexChatThreadQueryKey(activeThreadId),
-    queryFn: async () => {
-      const id = activeThreadId as number
-      const cached = queryClient.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(id))
-      // A result event may concern an older message outside the polled tail.
-      const invalidated = queryClient.getQueryState(codexChatThreadQueryKey(id))?.isInvalidated === true
-      if (!invalidated && cached?.running && !cached.pendingJobs) {
-        const status = await getCodexChatRunning(id)
-        if (status.running && status.latestMessageId === (cached.messages.at(-1)?.id ?? null)) {
-          return { ...cached, running: status.running }
-        }
-      }
-      // While a reply or a generation job is still landing, only the end of the transcript can change.
-      if (!invalidated && cached && (cached.running || cached.pendingJobs)) {
-        const merged = mergeThreadTail(cached, await getCodexChatThread(id, POLL_TAIL_MESSAGES))
-        if (merged) return merged
-      }
-      return getCodexChatThread(id)
-    },
-    enabled: activeThreadId !== null,
-    // A turn started before a reload keeps running on the server, and generation jobs finish after the reply that
-    // started them: poll until the turn is stored and every job has landed.
-    refetchInterval: (query) => (query.state.data?.running && liveTurn?.threadId !== activeThreadId ? RUNNING_POLL_MS : query.state.data?.pendingJobs ? chatGenerationPollInterval(streamStatus) : false),
-  })
-  const thread = threadQuery.data?.thread ?? activeThread
   const pendingUserProfileId = pendingChat?.userProfileId ?? null
   const userSpeaker = useMemo(() => userSpeakerOf(thread ?? { user_profile_id: pendingUserProfileId }, userProfiles), [thread, pendingUserProfileId, userProfiles])
   const profile = thread?.profile_id ? profilesById.get(thread.profile_id) ?? null : pendingProfile
@@ -424,11 +362,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     suggestions.close()
     composerRef.current?.focus()
   }, [suggestions, setDraft])
-  const firstIndex = historyWindow.threadId === activeThreadId ? messages.findIndex((message) => message.id === historyWindow.firstId) : -1
-  const visibleCount = firstIndex >= 0 ? messages.length - firstIndex : MESSAGE_PAGE_SIZE
-  const focusIndex = messageFocus ? messages.findIndex((message) => message.id === messageFocus.messageId) : -1
-  const windowCount = focusIndex >= 0 ? Math.max(visibleCount, messages.length - focusIndex) : visibleCount
-  const visibleMessages = useMemo(() => messages.slice(-windowCount), [messages, windowCount])
   const media = threadQuery.data?.media
   const runningFromServer = serverRunning ? threadQuery.data?.running ?? null : null
   // Group rooms: every member answering on the server (an older server sends only the first one).
@@ -437,8 +370,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     if (runningFromServer.replies) return runningFromServer.replies
     return runningFromServer.speakerProfileId != null ? [{ profileId: runningFromServer.speakerProfileId, text: runningFromServer.text, toolCalls: runningFromServer.toolCalls }] : []
   }, [isGroup, runningFromServer])
-  const liveReplyLength = (liveTurn?.replies ?? []).reduce((total, reply) => total + reply.text.length + reply.toolCalls.size, 0)
-    + serverReplies.reduce((total, reply) => total + reply.text.length + reply.toolCalls.length, 0)
   const activeView = activeThreadId === null ? 'chat' : view
   // The panel and a phone-width page have no room for the chat list beside a chat: the list is a screen of its own,
   // and a chat (or the picker) goes back to it. With no chat saved yet the picker is all there is.
@@ -446,6 +377,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const showList = canOpenList && listOpen
   // Off while the list covers the chat: coming back remounts the transcript, which scrolls down again.
   const isTranscript = activeView === 'chat' && !showList
+  const { scrollRef, visibleMessages, flashMessageId, observeTranscript, showEarlierMessages, onTranscriptScroll, followLatest } = useChatTranscriptWindow({
+    activeThreadId, messages, isTranscript, messageFocus, clearMessageFocus, liveTurn, runningText: threadQuery.data?.running?.text,
+    serverReplyLength: serverReplies.reduce((total, reply) => total + reply.text.length + reply.toolCalls.length, 0),
+  })
+  useLayoutEffect(() => setEditingMessageId(null), [activeThreadId, isTranscript])
 
   // An open chat on screen is read: its replies stop counting as unread (not while the tab is in the background).
   const latestMessageId = threadQuery.data?.messages.at(-1)?.id ?? null
@@ -757,87 +693,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     }
   }
 
-  const scrollToBottom = useCallback(() => {
-    const node = scrollRef.current
-    if (node) {
-      node.scrollTop = node.scrollHeight
-    }
-  }, [])
-
-  // What grows the transcript after it renders (a reply's quote card, a late translation, an image loading) or shrinks
-  // its frame (the composer growing) keeps a reader who was at the bottom there.
-  const transcriptObserverRef = useRef<ResizeObserver | null>(null)
-  const observeTranscript = useCallback((node: HTMLDivElement | null) => {
-    transcriptObserverRef.current?.disconnect()
-    transcriptObserverRef.current = null
-    if (!node) return
-    const observer = new ResizeObserver(() => {
-      if (followBottomRef.current && prependHeightRef.current === null) scrollToBottom()
-    })
-    observer.observe(node)
-    if (node.parentElement) observer.observe(node.parentElement)
-    transcriptObserverRef.current = observer
-  }, [scrollToBottom])
-
-  useLayoutEffect(() => {
-    setEditingMessageId(null)
-    prependHeightRef.current = null
-    // Back in a chat left part-way up: where the reader was; otherwise the latest message.
-    const saved = activeThreadId !== null ? readingPositions.get(activeThreadId) : undefined
-    if (saved !== undefined && scrollRef.current) {
-      followBottomRef.current = false
-      scrollRef.current.scrollTop = saved
-    } else {
-      followBottomRef.current = true
-      scrollToBottom()
-    }
-  }, [activeThreadId, isTranscript, scrollToBottom])
-
-  const showEarlierMessages = () => {
-    if (visibleCount >= messages.length || prependHeightRef.current !== null) return
-    prependHeightRef.current = scrollRef.current?.scrollHeight ?? null
-    followBottomRef.current = false
-    setHistoryWindow({ threadId: activeThreadId, firstId: messages[Math.max(0, messages.length - visibleCount - MESSAGE_PAGE_SIZE)]?.id ?? null })
-  }
-
-  useLayoutEffect(() => {
-    const node = scrollRef.current
-    if (node && prependHeightRef.current !== null) {
-      node.scrollTop += node.scrollHeight - prependHeightRef.current
-      prependHeightRef.current = null
-    }
-  }, [visibleMessages])
-
-  useEffect(() => {
-    if (isTranscript && followBottomRef.current && !messageFocus) {
-      scrollToBottom()
-    }
-  }, [isTranscript, messages.length, liveTurn?.text, liveTurn?.toolCalls.size, liveReplyLength, threadQuery.data?.running?.text, messageFocus, scrollToBottom])
-
-  // "Go to message" from the gallery: once the transcript is back, centre that message and flash it.
-  useEffect(() => {
-    if (!messageFocus || !isTranscript) {
-      return
-    }
-    const node = scrollRef.current?.querySelector<HTMLElement>(`[data-message-id="${messageFocus.messageId}"]`)
-    if (!node) {
-      return
-    }
-    node.scrollIntoView({ block: 'center' })
-    followBottomRef.current = false
-    setHistoryWindow({ threadId: activeThreadId, firstId: messages[Math.max(0, messages.length - windowCount)]?.id ?? null })
-    setFlashMessageId(messageFocus.messageId)
-    clearMessageFocus()
-  }, [activeThreadId, clearMessageFocus, isTranscript, messageFocus, messages, windowCount])
-
-  useEffect(() => {
-    if (flashMessageId === null) {
-      return
-    }
-    const timer = window.setTimeout(() => setFlashMessageId(null), MESSAGE_FLASH_MS)
-    return () => window.clearTimeout(timer)
-  }, [flashMessageId])
-
   // The chat's connection is down (Codex keeps its own sign-in warning): a room only when no member can answer.
   const connectionDown = isCodexThread ? null
     : isGroup ? memberProfiles.length > 0 && memberProfiles.every((member) => healthOf(member.id)) ? healthOf(memberProfiles[0].id) : null
@@ -972,8 +827,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     const literal = draft.startsWith('//') ? draft.slice(1) : undefined
     // A message sent from part-way up the chat still shows its answer.
     if (!isCommand) {
-      followBottomRef.current = true
-      scrollToBottom()
+      followLatest()
     }
     if (isCommand) void runCommand(draft)
     else if (activeThreadId !== null) void chat.send(activeThreadId, literal)
@@ -985,8 +839,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     if (!openChoice || activeThreadId === null) return
     chat.toggleChoice(activeThreadId, openChoice, label)
     if (openChoice.multiple) return
-    followBottomRef.current = true
-    scrollToBottom()
+    followLatest()
     void chat.send(activeThreadId)
   }
 
@@ -1109,15 +962,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   ) : null
 
   const transcript = (
-    <ChatBlockChangesContext.Provider value={blockChanges}><ChatChoiceStatesContext.Provider value={choiceStates}><div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={(event) => {
-      const node = event.currentTarget
-      followBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100
-      if (activeThreadId !== null) {
-        if (followBottomRef.current) readingPositions.delete(activeThreadId)
-        else readingPositions.set(activeThreadId, node.scrollTop)
-      }
-      if (node.scrollTop < 80) showEarlierMessages()
-    }}>
+    <ChatBlockChangesContext.Provider value={blockChanges}><ChatChoiceStatesContext.Provider value={choiceStates}><div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={onTranscriptScroll}>
       <div ref={observeTranscript} className={cn('mx-auto flex flex-col pb-6', layout === 'page' ? cn(CHAT_WIDTH_CLASS[appearance.width], 'px-4 pt-2 sm:px-6') : 'px-4 pt-3')} style={{ ...chatTranscriptStyle(appearance, profile?.style), gap: `${CHAT_MESSAGE_GAP_PX[appearance.messageGap]}px` }}>
         {visibleMessages.length < messages.length ? <Button variant="ghost" size="sm" onClick={showEarlierMessages}>{t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
         {pendingChat?.greeting?.text ? <div>

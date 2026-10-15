@@ -129,6 +129,38 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
     assert.equal(view.headers.get('content-security-policy'), 'sandbox')
   })
 
+  await t.test('system thumbnails share concurrent decoding and reject a changed or deleted source', async (t) => {
+    const { SystemFolderService } = await import('../src/services/systemFolderService')
+    const { VideoFrameExtractor } = await import('../src/services/videoFrameExtractor')
+    const source = path.join(uploads, 'preview.mp4')
+    fs.writeFileSync(source, Buffer.from('\0\0\0\0ftypisom'))
+    const render = t.mock.method(VideoFrameExtractor, 'extractPreviewFrame', async (_input: string, output: string) => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      await fs.promises.writeFile(output, 'complete preview')
+    })
+    const results = await Promise.all(Array.from({ length: 12 }, () => SystemFolderService.thumbnail('uploads', ['preview.mp4'])))
+    assert.equal(render.mock.callCount(), 1, 'concurrent requests occupy one decoder slot')
+    assert.equal(new Set(results).size, 1)
+    assert.equal(fs.readFileSync(results[0], 'utf8'), 'complete preview')
+    const directory = path.dirname(results[0])
+    const before = fs.readdirSync(directory)
+
+    fs.appendFileSync(source, 'new revision')
+    render.mock.mockImplementation(async (input: string, output: string) => {
+      await fs.promises.writeFile(output, 'outdated preview')
+      await fs.promises.appendFile(input, 'changed while decoding')
+    })
+    await assert.rejects(SystemFolderService.thumbnail('uploads', ['preview.mp4']), { status: 409 })
+    assert.deepEqual(fs.readdirSync(directory), before, 'an obsolete preview and its staging file are discarded')
+    render.mock.mockImplementation(async (input: string, output: string) => {
+      await fs.promises.writeFile(output, 'deleted preview')
+      await fs.promises.unlink(input)
+    })
+    await assert.rejects(SystemFolderService.thumbnail('uploads', ['preview.mp4']), { status: 404 })
+    assert.deepEqual(fs.readdirSync(directory), before)
+    t.diagnostic('12 simultaneous system-folder requests: 1 decoder invocation; changed/deleted sources not published')
+  })
+
   await t.test('RecycleBin names never collide and keep deletion order', async () => {
     const now = new Date('2026-10-08T01:02:03.456Z')
     const names = new Set(Array.from({ length: 200 }, () => recycle.generateRecycleBinFileName('/a/ComfyUI_00001_.png', now)))

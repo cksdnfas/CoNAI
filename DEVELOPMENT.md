@@ -39,6 +39,10 @@
 
 사용자 흐름은 [채팅 가이드](docs/GUIDE/CHAT.md)에 기록한다. 변경한 기능별로 조회·입력·확정·결과 확인 중 어느 단계까지 연결했는지 확인하며 오래된 전체 지원 표를 별도로 늘리지 않는다.
 
+채팅 화면의 조회·선택·폴링은 `use-chat-thread-data.ts`, 메시지 표시 범위·스트리밍 스크롤·검색 결과 위치 복원은 `use-chat-transcript-window.ts`가 맡는다. 패널과 전체 페이지는 같은 훅을 사용하며 메시지 저장·실행은 기존 채팅 provider와 서버 경로를 유지한다.
+
+채팅 모양은 `user.db`의 `user_preferences`에 계정별 슬롯과 채팅별 값을 분리해 저장한다. `chatAppearance.ts`는 기존 `save/chat-appearance/<account>.json`을 최초 접근 시 한 트랜잭션으로 이관하고 원본 파일을 보존한다. 이관 표시와 값이 함께 커밋되며 읽기·파싱·저장 실패는 빈 설정으로 확정하지 않는다. 이관 이후 DB가 정본이고 한 채팅 변경은 그 채팅의 행만 갱신한다.
+
 채팅 요청 최적화: API 답변은 라우팅·의미 검색·판단·컨텍스트 준비에 같은 기록을 재사용하며, 번역된 사용자 메시지만 갱신한다. 상태 블록·인용 복원에 필요한 과거 기록은 유지한다. 요약 입력은 요약 모델의 서버 컨텍스트에 맞추고, 다른 모델의 토큰 보정률을 재사용하지 않는다. 현재 요청이 들어갈 수 있으면 진행 중인 선행 요약을 기다리지 않으며, 그룹 선행 요약도 낮은 요청 우선순위를 쓴다. 세션 엔진 전체 실행에는 외부 재시도를 걸지 않는다.
 
 API 연결의 일시적 장애 재시도와 출력 이후 재전송 금지는 `streamChatCompletion`에서 공유한다. 답변 경로는 이미 표시한 출력과 일회성 반응의 추가 제한만 전달한다. 오류로 스트림 읽기를 끝내면 요청과 reader를 닫은 뒤 연결 슬롯을 반환한다. 입력 번역은 답변·방 실행의 취소 신호와 잠금을 공유한다. pi의 생성 설정은 `buildOpenAiGenerationFields`를 사용하고, 압축 및 실패 전에 완료한 호출의 사용량도 공통 원장에 전달한다. 워크플로 입력·JSON 처리만 `llmProviderService`에 남기며 별도 HTTP 실행 경로는 두지 않는다.
@@ -80,6 +84,10 @@ HTTP MCP는 설정에서 활성화하고 키로 인증한다. 외부 노출·계
 
 실행 주체와 근거는 서버가 확인한 문맥으로 연결한다. 외부 MCP의 검증되지 않은 자기보고와 서버가 관측한 실행을 구분한다. 문서가 바뀌면 이전 버전에 대한 평가를 현재 버전의 평가처럼 사용하지 않는다. 결과·실패 원인·산출물 참조·다음 행동은 이어받을 수 있게 남기되 반복 메시지와 전체 원문을 중복 저장하지 않는다.
 
+일반 게시글 화면·페이지 어시스턴트의 이전 판 목록은 `GET /api/posts/:id/revisions?detail=summary`로 본문 없이 조회한다. 미리보기·복원은 `GET /api/posts/:id/revisions/:revision`으로 선택한 본문만 읽으며, 페이지 작업은 읽기 후 화면 리비전을 다시 확인하고 기존 `expectedRevision` 저장을 사용한다. MCP의 판 지정 조회·복원도 같은 `PostStore.revisions`의 단건 조건을 사용한다. 기존 전체 이력 API와 MCP 목록의 발췌 계약, 편집 권한 및 보존 규칙은 유지한다.
+
+댓글은 `postCommentQueries.ts`의 `(created_at, id)` 커서로 루트 40개와 각 루트의 최근 답글 40개를 읽는다. 답글의 추가 페이지는 `parentId`·`before`, 오래된 직접 링크·편집 대상은 최대 3개 `focusIds`로 조회하고 인용 문맥을 별도로 반환한다. 숨김·계정·게시글 범위는 SQL 조회 전에 적용하며 `PostStore`의 게시글 접근 검사를 공유한다. `use-post-comments.ts`가 화면과 페이지 어시스턴트의 조회 상태를 공유하고, `posts.comments_more`·`posts.comments_at`은 조회 작업이다. MCP와 지식 참조는 필요한 최근 댓글 또는 지정 ID만 읽는다. 게시판 도구가 없는 봇의 대체 문맥도 루트와 최근 답글 40개·호출 댓글로 제한한다.
+
 ## 미디어 기반을 수정할 때
 
 프로젝트 작업 공간의 첫 단계는 셸 없는 서버 파일 도구다. `workspaceService.ts`의 공용 실제 폴더·리비전·프로젝트 쓰기 직렬화·요청별 결과를 HTTP `workspaces.routes.ts`와 MCP `workspaceTools.ts`가 공유한다. `chatWorkspace.ts`가 명시적인 1:1 채팅 연결과 지침을 해석하며 게시판 호출은 제외한다. 도구는 프로젝트를 연결한 채팅에만 직접 제공하고, `workspace.changed` 파일 조회 권한 구독자 이벤트로 해당 프로젝트 화면을 갱신한다.
@@ -103,7 +111,17 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 목록 성능은 공용 가상 목록·선택 엔진, 쿼리 범위와 인덱스, 썸네일/영상 프리뷰를 함께 확인한다. 화면별로 별도 목록 엔진을 만들지 않는다. 캐시 갱신은 [app-query-client.ts](frontend/src/lib/app-query-client.ts)와 `frontend/src/features/runtime-events/`의 이벤트 연결을 확인한다.
 
+정적 이미지 썸네일은 `ThumbnailGenerator`에서 출력 경로별 진행 중 작업을 공유하고 임시 파일을 완성한 뒤 이름을 바꿔 공개한다. 생성 실패는 임시 파일과 진행 상태를 정리해 재시도할 수 있고, temp 폴더 정리 뒤에도 디렉터리를 다시 만든다. 서버 폴더 썸네일도 같은 파일 상태의 요청을 합치며 디코딩 후 원본의 경로·크기·수정 시각을 다시 확인한다.
+
+업로드 목록의 `useLocalFilePreviews`는 표시 범위 안에 남은 File 객체의 URL과 행 키를 유지하고, 범위에서 빠진 파일과 화면 종료 시에만 URL을 해제한다. 배경화면 슬라이드쇼는 전환 시간 동안만 이전 미디어를 유지하며, 이전 이미지 로딩 결과를 무시하고 그룹 변경 시 이전 배경을 비운다. 영상은 호스트 일시정지 상태를 따르며 화면에서 제거될 때 재생을 멈춘다.
+
+이미지 상세의 픽셀 필터는 `renderPixelPreviewSample`이 화면·PNG 저장에 같은 설정과 워커·실패 시 처리를 제공한다. 화면 캔버스는 필터 샘플 해상도를 유지하고 CSS로 표시 크기를 맞추며, PNG 저장만 선택한 소스 크기로 확대한다. 취소된 로딩과 워커 요청은 종료 결과를 반환하고 임시 캔버스를 해제한다. 공용 오디오 플레이어는 현재 재생 요청의 실패만 반영하고 지연된 미디어 이벤트는 실제 재생 상태로 판단한다. 편집기를 닫을 때는 해당 편집기의 구간·편집본 미리듣기를 중단한다.
+
+그룹 다운로드는 소속 해시를 먼저 선택한 뒤 메타데이터를 최대 500개씩 읽는다. 파일 개수 조회도 같은 배치 조회를 쓰고 원본·썸네일 존재 여부를 한 번씩 확인한다. `utils/zipArchive.ts`는 그룹과 스프라이트의 ZIP 기록을 공유하며, 항목 하나의 기록이 끝난 뒤 다음 파일·캡션을 읽는다. 그룹 ZIP은 최대 2개 생성·20개 대기로 제한하고 요청별 임시 경로를 사용한다. HTTP 연결 종료 시 생성을 취소하며 실패한 부분 ZIP과 전송이 끝난 파일은 정리한다. 이미지 이름뿐 아니라 캡션 이름도 예약해 확장자가 다른 동명 이미지나 자동 접미사와의 충돌을 막는다.
+
 워크플로 진행 카드는 `/api/graph-workflows/executions/:id/progress`의 노드 이벤트만 폴링하고, 실행 상태 SSE는 해당 워크플로 목록·실행 조회를 갱신한다. `posts.changed`는 변경된 글의 상세 캐시와 공용 목록을 갱신한다. SSE 구독자의 미전송 버퍼가 256KB를 넘으면 연결을 닫고 기존 재연결·재생 경로로 복구한다.
+
+워크플로 실행 이력의 더 보기는 20개 단위 offset 조회를 이어 붙인다. 서버의 요청당 200개 제한을 전체 이력 제한으로 사용하지 않으며, 목록 갱신 중 다음 페이지 요청을 겹치지 않는다. 선택한 실행 상태의 폴링은 SSE가 살아 있으면 중지하고 연결이 끊기면 재개한다. `files.changed`의 파일함 재조회는 400ms 지연·최대 2.5초 대기로 병합한다.
 
 큐 상태 이벤트의 `audio_scopes`는 실제 오디오 주문·결과가 속한 그룹과 프로젝트만 지정한다. 빈 배열은 오디오 갱신을 생략하며, 일반 ComfyUI 작업의 오디오 결과도 포함한다. 오디오 전체 검색은 `/api/audio/groups` 한 번으로 조회하고 `list_audio_groups`의 `project_id` 생략도 같은 서비스를 사용한다. SQL 검색은 기존 JavaScript의 유니코드 소문자·부분 문자열 비교를 유지한다. 주문 목록은 작업·큐 상태·결과를 목록 단위로 읽으며, 상태가 달라진 작업만 캐시에 기록한다.
 
@@ -139,6 +157,8 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 ## 선택 설치 확장
 
+프로젝트 완료 자료 연결은 `workspacePublishResources.ts`의 `workspace_publish_resources`를 사용한다. `WorkspaceService.apply`의 프로젝트 쓰기 잠금 안에서 입력 리비전·원본 권한을 검사하고, 기존 이미지 그룹 관계와 `group_resources`의 오디오/문서 참조를 등록한 뒤 완료 문서와 진행 목록을 순서대로 저장한다. 그룹 등록은 멱등이며 파일 저장 실패 시 후속 목록 갱신을 실행하지 않는다. 완료 요청은 진행 목록 전체 대신 항목 ID·리비전만 받으며 서버가 문서 target과 함께 일치하는 항목 하나만 제거한다. 요청 ID는 자료와 그룹 입력까지 비교한다. `groupResources.ts`, `groups.resources.routes.ts`, `GroupLinkedResources`가 그룹의 추가 자료 조회·재생·파일함 연결을 담당하며 `list_group_resources`도 같은 조회를 사용한다. 원본 저장소와 파일 위치는 유지한다.
+
 `shared/src/types/plugin.ts`, `backend/src/services/plugins/`, `frontend/src/features/plugins/`가 manifest·설치·실행·격리 화면을 담당한다. `/settings?section=plugins`에서 관리하고 `/extensions`에서 실행·작업을 조회한다. `/ext/<pluginId>/<pageId>`는 `kind: extension` 어시스턴트 계약을 사용한다. 설치·활성화한 플러그인은 앱 기능이며 `capabilities`·`appTools`는 호환 정보다. 서버 모듈 유무와 무관하게 현재 계정의 앱 권한을 적용하고, 페이지를 여는 데 파일 권한을 요구하지 않는다.
 
 자산·미디어는 전역 CORS 이전의 credential-free 라우트다. iframe·MessageChannel·null origin 검증은 유지한다. 파일 선택은 초기 문맥이며 실제 파일 접근은 FileStoreService의 계정 기능 권한을 따른다. 프로젝트는 호스트가 연결하며 UI 편집 여부는 계정의 files.edit에서 정한다. `pluginInstanceAppContext`와 `pluginServerRuntime`이 서버 모듈에도 프로젝트 문맥을 전달하고, WorkspaceService의 쓰기 잠금·리비전 검사를 재사용한다. `pluginAppPolicy`는 활성 채팅처럼 없는 실행 문맥이 필요한 도구를 제외한다. 화면의 직접 앱 호출은 멱등 plugin-action 작업으로 즉시 시작한다. AI/MCP 변경과 명시적인 propose* 저장은 기존 호스트 검토를 유지한다. `server.entry`가 있으면 Node worker와 전용 저장소를 사용한다. [SDK](plugins/README.md), [사용자 가이드](docs/GUIDE/PLUGINS.md)를 참고한다.
@@ -163,8 +183,11 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 - 타입 검사: `npm run typecheck --prefix backend`, `npm run typecheck --prefix frontend`.
 - 프론트 린트: frontend 디렉터리에서 변경 파일 대상으로 `npx eslint <files>`.
 - 오디오 파형 공유·취소·계정 경계: `npm run test:audio-waveform --prefix frontend`.
+- 미리보기 자원 해제·필터 워커 취소·오디오 재생 경합·배경화면 로딩 취소: `npm run test:media-previews --prefix frontend`. 썸네일 동시 생성·실패 복구는 `backend/test/media-lifecycle.test.ts`, 서버 폴더 원본 변경 검사는 `backend/test/system-folders.test.ts`.
+- 그룹 ZIP 선택 범위·동시 다운로드·캡션 무결성·HTTP 취소: `npx tsx --test backend/test/group-download.test.ts`.
 - 채팅: `npm run test:chat --prefix backend` 또는 해당 기존 테스트 파일.
 - 지식·게시글: `npm run test:posts-knowledge --prefix backend`.
+- 댓글 페이지·직접 링크·조회 중 숨김 반영: `npm run test:post-comments --prefix frontend`.
 - 권한/계정 경계: `npm run test:permissions --prefix backend`.
 - 문서 검색: `npm run test:documents --prefix backend`.
 - 번들·라우팅·의존성 변경: 영향을 받는 빌드.

@@ -5,10 +5,12 @@ import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { ListRow } from '@/components/ui/list-row'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, listPostRevisions, updatePost } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, getPostRevision, listPostRevisionSummaries, updatePost } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { useRelativeTime } from './post-author'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
@@ -24,10 +26,16 @@ export function PostRevisionsDialog({ post, onClose }: { post: PostDetail; onClo
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const revisionsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'revisions', post.id, post.revision], queryFn: () => listPostRevisions(post.id) })
+  const revisionsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'revisions', post.id, post.revision, 'summary'], queryFn: ({ signal }) => listPostRevisionSummaries(post.id, signal) })
   const revisions = useMemo(() => revisionsQuery.data ?? [], [revisionsQuery.data])
   const [pickedRevision, setPickedRevision] = useState<number | null>(null)
-  const picked: PostRevision | null = revisions.find((item) => item.revision === pickedRevision) ?? revisions[0] ?? null
+  const selected = revisions.find((item) => item.revision === pickedRevision) ?? revisions[0] ?? null
+  const revisionQuery = useQuery({
+    queryKey: [POSTS_QUERY_KEY, 'revisions', post.id, post.revision, selected?.revision],
+    queryFn: ({ signal }) => getPostRevision(post.id, selected!.revision, signal),
+    enabled: selected !== null,
+  })
+  const picked = revisionQuery.data ?? null
   const mediaContext = useMemo(() => ({ postId: post.id, mediaHashes: mediaHashesOf(picked?.body ?? '') }), [post.id, picked?.body])
   const restore = useMutation({
     mutationFn: (revision: PostRevision) => updatePost(post.id, { title: revision.title, body: revision.body, expectedRevision: post.revision }),
@@ -44,9 +52,10 @@ export function PostRevisionsDialog({ post, onClose }: { post: PostDetail; onClo
       <ModalBody className="grid min-h-0 gap-4 md:grid-cols-[14rem_1fr]">
         <div className="flex max-h-[60vh] min-w-0 flex-col overflow-y-auto">
           {revisionsQuery.isPending ? <div className="h-24 animate-pulse rounded-sm bg-surface-low" /> : null}
+          {revisionsQuery.isError ? <ErrorState size="compact" error={revisionsQuery.error} onRetry={() => void revisionsQuery.refetch()} /> : null}
           {revisionsQuery.isSuccess && revisions.length === 0 ? <EmptyState size="compact" title={t({ ko: '남은 이전 판이 없어', en: 'No earlier versions' })} /> : null}
           {revisions.map((item) => (
-            <ListRow key={item.revision} asChild interactive size="sm" selected={item.revision === picked?.revision}>
+            <ListRow key={item.revision} asChild interactive size="sm" selected={item.revision === selected?.revision}>
               <button type="button" className="w-full" onClick={() => setPickedRevision(item.revision)}>
                 <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
                   <span className="whitespace-nowrap text-sm font-semibold">{t({ ko: '{revision}판', en: 'Version {revision}' }, { revision: item.revision })}</span>
@@ -58,6 +67,8 @@ export function PostRevisionsDialog({ post, onClose }: { post: PostDetail; onClo
           ))}
         </div>
         <article className="flex max-h-[60vh] min-w-0 flex-col gap-3 overflow-y-auto">
+          {selected && revisionQuery.isPending ? <LoadingState /> : null}
+          {revisionQuery.isError ? <ErrorState size="compact" error={revisionQuery.error} onRetry={() => void revisionQuery.refetch()} /> : null}
           {picked ? (
             <>
               <h3 className="text-lg font-bold leading-snug">{picked.title}</h3>

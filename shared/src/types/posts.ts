@@ -74,10 +74,9 @@ export interface PostSummary {
 }
 
 /** An earlier version of a post, kept when an edit replaced it (the newest 20). */
-export interface PostRevision {
+export interface PostRevisionSummary {
   revision: number;
   title: string;
-  body: string;
   /** Who made the edit that replaced it. */
   editedByType: PostAuthorType;
   editedByAccountId: number | null;
@@ -85,6 +84,10 @@ export interface PostRevision {
   editedBy: string;
   /** When it was replaced. */
   createdAt: string;
+}
+
+export interface PostRevision extends PostRevisionSummary {
+  body: string;
 }
 
 /** The chat reply a post or comment was written from; shown only to the chat's owner. */
@@ -148,6 +151,8 @@ export interface PostBotRun {
   id: number;
   postId: number;
   triggerCommentId: number | null;
+  /** Root thread for a call, even when its trigger reply is outside the loaded page. */
+  triggerParentId?: number | null;
   profileId: number;
   profileName: string;
   status: PostBotRunStatus;
@@ -164,6 +169,19 @@ export interface PostBotRun {
 export interface PostCommentsResult {
   comments: PostComment[];
   runs: PostBotRun[];
+}
+
+export interface PostCommentCursor {
+  createdAt: string;
+  id: number;
+}
+
+/** A bounded set of top-level comments (with recent replies), or one reply page. */
+export interface PostCommentPage extends PostCommentsResult {
+  nextCursor: PostCommentCursor | null;
+  replies: Array<{ parentId: number; nextCursor: PostCommentCursor | null }>;
+  /** Quoted comments outside this page; they do not become editable rows. */
+  context: PostComment[];
 }
 
 /** A profile the viewer may call with @ in a comment. */

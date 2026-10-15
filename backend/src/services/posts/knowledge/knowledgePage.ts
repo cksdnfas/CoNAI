@@ -57,7 +57,7 @@ export function knowledgePageForExecution(context: McpRequestContext, page: Chat
     const end = Math.min(post.body.length, start + Math.min(shownLength, 2000))
     const body = post.body.slice(start, end)
     const requestedComments = Array.isArray(page.data?.comments) ? new Set(page.data.comments.flatMap(item => item && typeof item === 'object' && !Array.isArray(item) && typeof item.id === 'number' ? [item.id] : [])) : new Set<number>()
-    const comments = PostCommentStore.list(actor, post.id).filter(item => item.status === 'visible' && requestedComments.has(item.id)).slice(-40)
+    const comments = PostCommentStore.list(actor, post.id, { ids: [...requestedComments].slice(-40), limit: 40, visibleOnly: true })
       .map(item => ({ id: item.id, replyTo: item.parentId, author: item.author.name, bot: item.author.type === 'profile', text: item.body.slice(0, 400) }))
     const serverOpen = { id: post.id, title: post.title, author: post.author.name, bot: post.author.type === 'profile', categoryId: post.categoryId,
       tags: post.tags, status: post.status, comments: post.commentCount, canEdit: false, revision: post.revision, pinned: post.pinned,

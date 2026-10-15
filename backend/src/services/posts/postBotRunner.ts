@@ -152,7 +152,9 @@ function callInstruction(post: PostRow, trigger: CommentRow) {
 function instructionFor(post: PostRow, trigger: CommentRow | null) {
   const category = categoryName(post);
   const top = trigger ? (trigger.parent_id ?? trigger.id) : null;
-  const thread = top ? db().prepare(`SELECT * FROM post_comments WHERE post_id = ? AND (id = ? OR parent_id = ?) AND status = 'visible' ORDER BY created_at, id`).all(post.id, top, top) as CommentRow[] : [];
+  const thread = top ? db().prepare(`SELECT * FROM post_comments WHERE post_id = ? AND id = ? AND status = 'visible'
+    UNION ALL SELECT * FROM (SELECT * FROM post_comments WHERE post_id = ? AND parent_id = ? AND status = 'visible' ORDER BY created_at DESC, id DESC LIMIT 40)
+    ORDER BY created_at, id`).all(post.id, top, post.id, top) as CommentRow[] : [];
   const line = (comment: CommentRow) => `- [${comment.id}] ${comment.author_name}${comment.author_type === 'profile' ? ' (bot)' : ''}: ${comment.body.replace(/\s+/g, ' ').slice(0, 600)}`;
   const body = post.body;
   return [

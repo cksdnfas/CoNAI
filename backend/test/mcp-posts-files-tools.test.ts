@@ -93,6 +93,8 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     assert.equal(chunk.body, '처음 본문')
     assert.equal(chunk.next_offset, null)
     assert.equal((await call(other, 'posts_revisions', { post_id: post.id })).isError, true, 'only an editor reads earlier versions')
+    assert.equal((await call(other, 'posts_revisions', { post_id: post.id, revision: 1 })).isError, true, 'selected bodies retain the same editor check')
+    assert.equal((await call(writer, 'posts_revisions', { post_id: post.id, revision: 99 })).isError, true, 'a missing version never falls back to the newest one')
 
     assert.equal((await call(writer, 'posts_restore_revision', { post_id: post.id, revision: 1, expected_revision: 1 })).isError, true, 'stale revision refused')
     const restored = ok(await call(writer, 'posts_restore_revision', { post_id: post.id, revision: 1, expected_revision: 2 }))

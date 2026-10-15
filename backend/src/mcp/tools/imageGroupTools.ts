@@ -18,6 +18,7 @@ import {
 import type { McpRequestContext } from '../context';
 import { createCustomGroup, updateCustomGroup } from '../../services/groupMutationService';
 import { GroupRematchJobService, type GroupRematchJobRecord } from '../../services/groupRematchJobService';
+import { listGroupResources } from '../../services/groupResources';
 
 type GroupSummary = {
   id: number;
@@ -136,6 +137,10 @@ function resolveParentGroup(parentId?: number, parentPath?: string): number | nu
 }
 
 export function registerImageGroupTools(server: McpServer, context: McpRequestContext): void {
+  server.registerTool('list_group_resources', { description: 'List linked audio and project documents in a custom group. Original assets remain in their stores. Source permissions are checked; unavailable references remain marked. Continue with nextOffset.', inputSchema: z.object({ group_id: z.number().int().positive(), offset: z.number().int().min(0).max(1000000).default(0) }) }, async ({ group_id, offset }) => {
+    try { return textResult(await listGroupResources(context, group_id, offset)); }
+    catch (error) { return errorResult('Failed to read linked resources', error); }
+  });
   const requesterAccountId = context.requester?.accountId ?? null;
 
   server.registerTool(

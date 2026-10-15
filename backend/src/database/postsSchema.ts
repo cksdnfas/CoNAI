@@ -91,6 +91,7 @@ export function ensurePostsSchema(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_post_comments_parent ON post_comments(parent_id);
+    CREATE INDEX IF NOT EXISTS idx_post_comments_thread_page ON post_comments(post_id, parent_id, created_at DESC, id DESC);
 
     -- Media a post or comment embeds, extracted from its body on save. file_owner_key: whose file store a file ref is in.
     CREATE TABLE IF NOT EXISTS post_media_refs (

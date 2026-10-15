@@ -27,13 +27,13 @@ function BackgroundVideo({ src, poster, style }: { src: string; poster?: string 
     if (!element) return
     if (running) void element.play().catch(() => undefined)
     else element.pause()
-  }, [running])
+    return () => element.pause()
+  }, [running, src])
   return (
     <video
       ref={videoRef}
       src={src}
       poster={poster ?? undefined}
-      autoPlay
       muted
       loop
       playsInline
@@ -81,18 +81,40 @@ function GroupSlideshow({ background, onAccentSource }: { background: Extract<Wa
   const [layers, setLayers] = useState<Array<{ key: string; image: ImageRecord }>>([])
 
   useEffect(() => {
-    if (!current) return
+    if (!current) {
+      setLayers([])
+      return
+    }
     const key = String(current.composite_hash ?? current.id)
+    let cancelled = false
+    const show = () => {
+      if (!cancelled) setLayers((previous) => (previous[previous.length - 1]?.key === key ? previous : [...previous.slice(-1), { key, image: current }]))
+    }
     // Preload before swapping so the fade never shows a half-loaded frame.
     const url = mediaUrl(current.image_url ?? current.thumbnail_url)
     if (!url || isVideoRecord(current)) {
-      setLayers((previous) => [...previous.slice(-1), { key, image: current }])
+      show()
       return
     }
     const loader = new Image()
-    loader.onload = () => setLayers((previous) => (previous[previous.length - 1]?.key === key ? previous : [...previous.slice(-1), { key, image: current }]))
+    loader.onload = show
     loader.src = url
+    return () => {
+      cancelled = true
+      loader.onload = null
+      loader.removeAttribute('src')
+    }
   }, [current])
+
+  const transition = background.transition
+  const transitionMs = transition === 'zoom' ? 1600 : transition === 'slide' ? 1200 : 1400
+  const topKey = layers[layers.length - 1]?.key
+  useEffect(() => {
+    if (!topKey) return
+    // Retain the outgoing media only during the fade, especially videos that would keep decoding underneath.
+    const timer = window.setTimeout(() => setLayers((previous) => previous.length > 1 && previous[previous.length - 1].key === topKey ? previous.slice(-1) : previous), transitionMs)
+    return () => window.clearTimeout(timer)
+  }, [topKey, transitionMs])
 
   const topImage = layers[layers.length - 1]?.image ?? null
   const accentSource = topImage ? mediaUrl(topImage.thumbnail_url ?? topImage.image_url) : null
@@ -100,7 +122,6 @@ function GroupSlideshow({ background, onAccentSource }: { background: Extract<Wa
     onAccentSource?.(accentSource)
   }, [accentSource, onAccentSource])
 
-  const transition = background.transition
   return (
     <>
       {layers.map((layer, layerIndex) => {
@@ -168,7 +189,7 @@ export function WallpaperBackgroundLayer({ background, onAccentSource, style }: 
       ) : null
       break
     case 'group-slideshow':
-      content = background.groupId !== null ? <GroupSlideshow background={background} onAccentSource={onAccentSource} /> : null
+      content = background.groupId !== null ? <GroupSlideshow key={`${background.groupId}:${background.includeChildren}`} background={background} onAccentSource={onAccentSource} /> : null
       break
     default:
       content = null

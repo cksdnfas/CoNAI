@@ -15,7 +15,7 @@ import {
 import { EnhancedVideoPlayer } from './enhanced-video-player'
 import { ImageDetailMediaFrame } from './image-detail-media-frame'
 import { ImageDetailMediaToolbar } from './image-detail-media-toolbar'
-import { createPixelPreviewWorkerTask } from './image-detail-pixel-preview-worker-client'
+import { renderPixelPreviewSample } from './image-detail-pixel-preview'
 import {
   getPixelPreviewProfile,
 } from './image-detail-pixel-preview-utils'
@@ -184,116 +184,34 @@ function InteractiveImageDetailMedia({
   const shouldRenderPixelPreview = canUsePixelPreview && pixelPreviewProfile !== null
 
   useEffect(() => {
-    if (!shouldRenderPixelPreview || !pixelPreviewProfile) {
-      setIsPixelPreviewReady(false)
-      return
-    }
-
-    let cancelled = false
-    let pixelPreviewTask: ReturnType<typeof createPixelPreviewWorkerTask> | null = null
     setIsPixelPreviewReady(false)
-    const sourceImage = new Image()
-    sourceImage.decoding = 'async'
+    if (!shouldRenderPixelPreview || !pixelPreviewProfile) return
 
-    sourceImage.onload = () => {
-      if (cancelled) {
-        return
-      }
-
-      const sourceWidth = sourceImage.naturalWidth || sourceImage.width
-      const sourceHeight = sourceImage.naturalHeight || sourceImage.height
-      if (sourceWidth <= 0 || sourceHeight <= 0) {
-        setHasRenderError(true)
-        return
-      }
-
-      const targetScale = Math.min(1, pixelPreviewProfile.targetLongEdge / Math.max(sourceWidth, sourceHeight))
-      const pixelWidth = Math.max(1, Math.round(sourceWidth * targetScale))
-      const pixelHeight = Math.max(1, Math.round(sourceHeight * targetScale))
-      const sampleCanvas = document.createElement('canvas')
-      sampleCanvas.width = pixelWidth
-      sampleCanvas.height = pixelHeight
-
-      const sampleContext = sampleCanvas.getContext('2d')
-      if (!sampleContext) {
-        setHasRenderError(true)
-        return
-      }
-
-      sampleContext.imageSmoothingEnabled = pixelPreviewProfile.smoothing
-      if (pixelPreviewProfile.smoothing) {
-        sampleContext.imageSmoothingQuality = 'high'
-      }
-      sampleContext.filter = pixelPreviewProfile.preFilter
-      sampleContext.clearRect(0, 0, pixelWidth, pixelHeight)
-      sampleContext.drawImage(sourceImage, 0, 0, pixelWidth, pixelHeight)
-
-      const sourceImageData = sampleContext.getImageData(0, 0, pixelWidth, pixelHeight)
-      pixelPreviewTask = createPixelPreviewWorkerTask(sourceImageData, pixelPreviewProfile)
-      pixelPreviewTask.promise
-        .then((result) => {
-          if (cancelled) {
-            return
-          }
-
+    const controller = new AbortController()
+    renderPixelPreviewSample(renderUrl, pixelPreviewProfile, controller.signal)
+      .then((sample) => {
+        try {
+          if (controller.signal.aborted) return
           const canvas = canvasRef.current
-          const canvasContext = canvas?.getContext('2d')
-          if (!canvas || !canvasContext) {
+          const context = canvas?.getContext('2d')
+          if (!canvas || !context) {
             setHasRenderError(true)
             return
           }
-
-          if (result.warning) {
-            console.warn('Failed to apply image-q pixel preview; falling back to plain pixel sampling.', result.warning)
-          }
-
-          const { imageData } = result
-          sampleContext.putImageData(imageData, 0, 0)
-          canvas.width = sourceWidth
-          canvas.height = sourceHeight
-          canvasContext.imageSmoothingEnabled = false
-          canvasContext.clearRect(0, 0, sourceWidth, sourceHeight)
-          canvasContext.drawImage(sampleCanvas, 0, 0, imageData.width, imageData.height, 0, 0, sourceWidth, sourceHeight)
+          // CSS scales the bounded bitmap to the original image's fitted frame.
+          canvas.width = sample.canvas.width
+          canvas.height = sample.canvas.height
+          context.drawImage(sample.canvas, 0, 0)
           setIsPixelPreviewReady(true)
           onPrimaryLoad?.()
-          pixelPreviewTask = null
-        })
-        .catch((error) => {
-          if (cancelled) {
-            return
-          }
-          console.warn('Failed to run pixel preview worker; falling back to plain pixel sampling.', error)
-          const canvas = canvasRef.current
-          const canvasContext = canvas?.getContext('2d')
-          if (!canvas || !canvasContext) {
-            setHasRenderError(true)
-            return
-          }
-          canvas.width = sourceWidth
-          canvas.height = sourceHeight
-          canvasContext.imageSmoothingEnabled = false
-          canvasContext.clearRect(0, 0, sourceWidth, sourceHeight)
-          canvasContext.drawImage(sampleCanvas, 0, 0, pixelWidth, pixelHeight, 0, 0, sourceWidth, sourceHeight)
-          setIsPixelPreviewReady(true)
-          onPrimaryLoad?.()
-          pixelPreviewTask = null
-        })
-    }
-
-    sourceImage.onerror = () => {
-      if (!cancelled) {
-        setIsPixelPreviewReady(false)
-        setHasRenderError(true)
-      }
-    }
-    sourceImage.src = renderUrl
-
-    return () => {
-      cancelled = true
-      sourceImage.onload = null
-      sourceImage.onerror = null
-      pixelPreviewTask?.cancel()
-    }
+        } finally {
+          sample.canvas.width = sample.canvas.height = 0
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setHasRenderError(true)
+      })
+    return () => controller.abort()
   }, [onPrimaryLoad, pixelPreviewProfile, renderUrl, shouldRenderPixelPreview])
 
   const handlePrimaryImageLoad = useCallback((event: ReactSyntheticEvent<HTMLImageElement>) => {

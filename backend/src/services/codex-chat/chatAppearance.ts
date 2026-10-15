@@ -1,12 +1,13 @@
 import fs from 'fs'
 import path from 'path'
 import { runtimePaths } from '../../config/runtimePaths'
+import { getUserSettingsDb } from '../../database/userSettingsDb'
 
 /**
  * Chat appearance: how a reader sees their chats (text size, avatar size, layout…). Each chat keeps its own values;
  * named slots hold values to apply quickly, and the default slot is copied into a chat when it is created (a later
- * change to the slot leaves existing chats alone). Everything of one account lives in one JSON file under the
- * runtime save directory; the values themselves are opaque here (the frontend owns their meaning).
+ * change to the slot leaves existing chats alone). Slots and individual chats use separate account-scoped
+ * user_preferences rows. Legacy JSON files are imported once; the frontend still owns the values' meaning.
  */
 
 export const CHAT_APPEARANCE_LIMITS = { slots: 12, name: 20, bytes: 4096 }
@@ -25,14 +26,6 @@ export class ChatAppearanceError extends Error {
   constructor(message: string, readonly status = 400) {
     super(message)
   }
-}
-
-const cache = new Map<string, ChatAppearanceFile>()
-
-function fileOf(accountId: number | null) {
-  const dir = path.join(runtimePaths.saveDir, 'chat-appearance')
-  fs.mkdirSync(dir, { recursive: true })
-  return path.join(dir, `${accountId ?? 'guest'}.json`)
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -104,49 +97,60 @@ function normalizeFile(value: unknown): ChatAppearanceFile {
   return { defaultSlotId: slots.some((slot) => slot.id === defaultId) ? defaultId : null, slots, threads }
 }
 
-function read(accountId: number | null): ChatAppearanceFile {
-  const file = fileOf(accountId)
-  const cached = cache.get(file)
-  if (cached) return cached
-  let parsed: unknown = null
-  try {
-    parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
-  } catch {
-    // Missing or unreadable: start empty; the next write replaces it.
+type AppearanceSlots = Pick<ChatAppearanceFile, 'defaultSlotId' | 'slots'>
+const UPSERT = 'INSERT INTO user_preferences (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP'
+
+/** The slots row also marks a completed migration; importing and marking it are one transaction. */
+function accountStore(accountId: number | null) {
+  if (accountId !== null && (!Number.isSafeInteger(accountId) || accountId < 1)) throw new ChatAppearanceError('잘못된 계정이야.')
+  const prefix = `chat_appearance:${accountId ?? 'guest'}:`
+  const db = getUserSettingsDb()
+  if (!db.prepare('SELECT 1 FROM user_preferences WHERE key = ?').get(`${prefix}slots`)) {
+    let parsed: unknown = null
+    const file = path.join(runtimePaths.saveDir, 'chat-appearance', `${accountId ?? 'guest'}.json`)
+    try {
+      parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new ChatAppearanceError('기존 채팅 모양 파일을 읽을 수 없어. 파일을 확인해줘.', 500)
+    }
+    const data = normalizeFile(parsed)
+    db.transaction(() => {
+      // Another connection may have imported this account while the file was being read.
+      if (db.prepare('SELECT 1 FROM user_preferences WHERE key = ?').get(`${prefix}slots`)) return
+      const insert = db.prepare('INSERT INTO user_preferences (key, value) VALUES (?, ?)')
+      insert.run(`${prefix}slots`, JSON.stringify({ defaultSlotId: data.defaultSlotId, slots: data.slots }))
+      for (const [id, value] of Object.entries(data.threads)) insert.run(`${prefix}thread:${id}`, JSON.stringify(value))
+    }).immediate()
   }
-  const data = normalizeFile(parsed)
-  cache.set(file, data)
-  return data
+  return { db, prefix }
 }
 
-/** Written whole, to a temporary file first, so a crash mid-write cannot leave a half file. */
-function write(accountId: number | null, data: ChatAppearanceFile) {
-  const file = fileOf(accountId)
-  const temp = `${file}.${process.pid}.tmp`
-  fs.writeFileSync(temp, JSON.stringify(data), 'utf8')
-  fs.renameSync(temp, file)
-  cache.set(file, data)
+function readSlots(store: ReturnType<typeof accountStore>): AppearanceSlots {
+  const row = store.db.prepare('SELECT value FROM user_preferences WHERE key = ?').get(`${store.prefix}slots`) as { value: string }
+  return JSON.parse(row.value) as AppearanceSlots
 }
 
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
+function threadKey(prefix: string, threadId: number) {
+  if (!Number.isSafeInteger(threadId) || threadId < 1) throw new ChatAppearanceError('잘못된 채팅이야.')
+  return `${prefix}thread:${threadId}`
 }
 
 export const ChatAppearanceStore = {
-  /** The account's file; entries of chats that no longer exist are dropped when `liveThreadIds` is given. */
+  /** Compatibility snapshot; normal edits update only one row. */
   read(accountId: number | null, liveThreadIds?: Iterable<number>): ChatAppearanceFile {
-    const data = read(accountId)
-    if (liveThreadIds) {
-      const live = new Set([...liveThreadIds].map(String))
-      const stale = Object.keys(data.threads).filter((key) => !live.has(key))
-      if (stale.length > 0) {
-        const threads = { ...data.threads }
-        for (const key of stale) delete threads[key]
-        write(accountId, { ...data, threads })
-        return clone(cache.get(fileOf(accountId)) as ChatAppearanceFile)
+    const store = accountStore(accountId)
+    return store.db.transaction(() => {
+      const live = liveThreadIds ? new Set([...liveThreadIds].map(String)) : null
+      const threads: ChatAppearanceFile['threads'] = {}
+      const rows = store.db.prepare('SELECT key, value FROM user_preferences WHERE key GLOB ?').all(`${store.prefix}thread:*`) as Array<{ key: string; value: string }>
+      const remove = store.db.prepare('DELETE FROM user_preferences WHERE key = ?')
+      for (const row of rows) {
+        const id = row.key.slice(`${store.prefix}thread:`.length)
+        if (live && !live.has(id)) remove.run(row.key)
+        else threads[id] = JSON.parse(row.value) as ChatAppearanceValue
       }
-    }
-    return clone(data)
+      return { ...readSlots(store), threads }
+    }).immediate()
   },
 
   /** Replaces the slots and the default; chats keep their own values. */
@@ -154,39 +158,40 @@ export const ChatAppearanceStore = {
     const slots = normalizeSlots(input.slots, true)
     const defaultId = input.defaultSlotId === null || input.defaultSlotId === undefined ? null : Number(input.defaultSlotId)
     if (defaultId !== null && !slots.some((slot) => slot.id === defaultId)) throw new ChatAppearanceError('기본 슬롯이 목록에 없어.')
-    const data = read(accountId)
-    write(accountId, { ...data, defaultSlotId: defaultId, slots })
-    return { defaultSlotId: defaultId, slots: clone(slots) }
+    const { db, prefix } = accountStore(accountId)
+    const data = { defaultSlotId: defaultId, slots }
+    db.prepare(UPSERT).run(`${prefix}slots`, JSON.stringify(data))
+    return data
   },
 
   threadAppearance(accountId: number | null, threadId: number): ChatAppearanceValue | null {
-    return clone(read(accountId).threads[String(threadId)] ?? null)
+    const { db, prefix } = accountStore(accountId)
+    const row = db.prepare('SELECT value FROM user_preferences WHERE key = ?').get(threadKey(prefix, threadId)) as { value: string } | undefined
+    return row ? JSON.parse(row.value) as ChatAppearanceValue : null
   },
 
   /** This chat's values; null clears them (the chat then shows the built-in defaults). */
   setThread(accountId: number | null, threadId: number, appearance: unknown) {
     const value = appearance === null || appearance === undefined ? null : normalizeValue(appearance, true)
-    const data = read(accountId)
-    const threads = { ...data.threads }
-    if (value) threads[String(threadId)] = value
-    else delete threads[String(threadId)]
-    write(accountId, { ...data, threads })
+    const { db, prefix } = accountStore(accountId)
+    const key = threadKey(prefix, threadId)
+    if (value) db.prepare(UPSERT).run(key, JSON.stringify(value))
+    else db.prepare('DELETE FROM user_preferences WHERE key = ?').run(key)
     return value
   },
 
   /** A new chat starts from the default slot, copied so the slot can change later without touching this chat. */
   threadCreated(accountId: number | null, threadId: number) {
-    const data = read(accountId)
-    const slot = data.slots.find((entry) => entry.id === data.defaultSlotId)
-    if (!slot) return
-    write(accountId, { ...data, threads: { ...data.threads, [String(threadId)]: clone(slot.appearance) } })
+    const store = accountStore(accountId)
+    store.db.transaction(() => {
+      const data = readSlots(store)
+      const slot = data.slots.find((entry) => entry.id === data.defaultSlotId)
+      if (slot) store.db.prepare(UPSERT).run(threadKey(store.prefix, threadId), JSON.stringify(slot.appearance))
+    }).immediate()
   },
 
   threadDeleted(accountId: number | null, threadId: number) {
-    const data = read(accountId)
-    if (!(String(threadId) in data.threads)) return
-    const threads = { ...data.threads }
-    delete threads[String(threadId)]
-    write(accountId, { ...data, threads })
+    const { db, prefix } = accountStore(accountId)
+    db.prepare('DELETE FROM user_preferences WHERE key = ?').run(threadKey(prefix, threadId))
   },
 }

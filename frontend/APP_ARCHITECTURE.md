@@ -68,6 +68,10 @@ live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `e
 - New page features include an assistant path: register bounded fields/data/actions with the page context and reuse
   the native state setters/API. Follow the shared action schema, permission mapping and view/draft/commit tiers.
 - Server-side automation uses MCP tools over the same domain services. A navigation entry alone is not full feature support.
+- Chat thread queries/selection live in `features/codex-chat/use-chat-thread-data.ts`; transcript windowing, streaming
+  follow and focus restoration live in `use-chat-transcript-window.ts`. Both chat layouts share them.
+- Posts share `use-post-comments.ts` between the page assistant and rendered threads. Root/reply cursors load bounded
+  server pages; focused comments and quote context do not require downloading the entire discussion.
 - Preserve the shared virtualized list in `features/images/components/image-list/` (Virtuoso + ViSelect), stable media
   identity, bounded loading and video preview lifecycle. Do not build a separate engine per page.
 - Keep expensive work out of input/scroll/render paths. Reuse the query cache and runtime event bridge; invalidate

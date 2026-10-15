@@ -11,6 +11,8 @@ import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
+  workspace_publish_resources: ['files.view', 'files.edit', 'images.view', 'images.edit'],
+  list_group_resources: 'images.view',
   list_plugin_pages: [], run_plugin_action: [], get_plugin_action: [], cancel_plugin_action: [],
   workspace_list: 'files.view', workspace_read: 'files.view', workspace_search: 'files.view', workspace_apply: ['files.view', 'files.edit'],
   search_prompts: 'prompts.view', get_most_used_prompts: 'prompts.view', list_prompt_groups: 'prompts.view',
@@ -156,10 +158,11 @@ function keyHoldsTool(context: McpRequestContext, toolName: string): boolean {
  */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
   if (toolName.startsWith('workspace_')) {
-    if (context.source === 'plugin') return !!context.workspace && !!context.requester && context.scopes.includes(toolName === 'workspace_apply' ? 'organize' : 'read') && (!context.toolAllowlist || context.toolAllowlist.includes(toolName)) && (toolName !== 'workspace_apply' || context.workspace.write) && featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
+    const writes = toolName === 'workspace_apply' || toolName === 'workspace_publish_resources';
+    if (context.source === 'plugin') return !!context.workspace && !!context.requester && context.scopes.includes(writes ? 'organize' : 'read') && (!context.toolAllowlist || context.toolAllowlist.includes(toolName)) && (!writes || context.workspace.write) && featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
     if (!context.workspace || !context.chatContext || context.chatContext.kind !== 'direct' || !isChatMcpSource(context.source)) return false;
     if (BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
-    if (toolName === 'workspace_apply' && !context.workspace.write) return false;
+    if (writes && !context.workspace.write) return false;
     return featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));
   }
   if ((BOARD_CALL_BLOCKED_TOOLS.has(toolName) || BOARD_CALL_BLOCKED_POST_TOOLS.has(toolName)) && context.chatContext && BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;

@@ -2,11 +2,15 @@ import { GroupModel, ImageGroupModel } from '../models/Group';
 import { AutoFolderGroupModel, AutoFolderGroupImageModel } from '../models/AutoFolderGroup';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
 import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
-import AdmZip from 'adm-zip';
+import { randomUUID } from 'crypto';
+import pLimit from 'p-limit';
 import path from 'path';
 import fs from 'fs';
 import { tmpdir } from 'os';
 import { ImageWithFileView } from '../types/image';
+import { writeZip, type ZipEntry } from '../utils/zipArchive';
+
+const zipLimit = pLimit(2);
 
 export type DownloadType = 'thumbnail' | 'original' | 'video';
 export type GroupType = 'custom' | 'auto-folder';
@@ -18,6 +22,7 @@ interface DownloadOptions {
   groupType: GroupType; // 그룹 타입 추가
   compositeHashes?: string[]; // 선택된 이미지만 다운로드 (없으면 전체)
   includeChildren?: boolean;
+  signal?: AbortSignal;
   captionOptions?: {
     captionMode: CaptionMode; // 'auto_tags': taglist만, 'merged': taglist + prompt 병합
   };
@@ -39,7 +44,14 @@ export class GroupDownloadService {
    * 그룹 이미지를 ZIP 파일로 생성
    */
   static async createGroupZip(options: DownloadOptions): Promise<DownloadResult> {
-    const { groupId, downloadType, groupType, compositeHashes, captionOptions, includeChildren = false } = options;
+    options.signal?.throwIfAborted();
+    if (zipLimit.pendingCount >= 20) throw Object.assign(new Error('Too many group downloads. Try again later.'), { status: 503 });
+    return zipLimit(() => this.buildGroupZip(options));
+  }
+
+  private static async buildGroupZip(options: DownloadOptions): Promise<DownloadResult> {
+    const { groupId, downloadType, groupType, compositeHashes, captionOptions, includeChildren = false, signal } = options;
+    signal?.throwIfAborted();
 
     // 그룹 정보 조회
     let groupName: string;
@@ -57,145 +69,80 @@ export class GroupDownloadService {
       groupName = group.folder_path;
     }
 
-    // 그룹에 속한 모든 이미지 조회 (파일 정보 포함)
-    const allImages = await this.getAllImagesWithFiles(groupId, groupType, includeChildren);
-
-    // 선택된 이미지만 필터링 (선택 옵션이 있는 경우)
-    let images = allImages;
-    if (compositeHashes && compositeHashes.length > 0) {
-      const selectedHashes = new Set(compositeHashes);
-      images = allImages.filter((img) => selectedHashes.has(img.composite_hash));
-    }
-
-    if (images.length === 0) {
-      throw new Error('No images found in group');
-    }
-
-    // 다운로드 타입에 따라 파일 필터링 및 경로 결정
-    const filesToZip = this.prepareFilesToZip(images, downloadType);
-
-    if (filesToZip.length === 0) {
-      throw new Error(`No ${downloadType} files found in group`);
-    }
-
-    // 캡션 옵션이 있으면 각 파일에 캡션 텍스트 생성
-    if (captionOptions) {
-      const imageMap = new Map(images.map(img => [img.composite_hash, img]));
-      for (const file of filesToZip) {
-        const image = imageMap.get(file.compositeHash);
-        if (image) {
-          file.captionContent = this.generateCaptionContent(image, captionOptions.captionMode);
-        }
-      }
-    }
-
-    // ZIP 파일명 레이블 결정
+    // Keep membership/order in the shared queries, but filter before loading the large metadata rows.
+    const hashes = this.getGroupHashes(groupId, groupType, includeChildren, compositeHashes);
+    if (hashes.length === 0) throw new Error('No images found in group');
     const zipLabel = captionOptions ? 'lora-dataset' : downloadType;
-
-    // ZIP 파일 생성
-    const zipPath = await this.createZipFile(filesToZip, groupName, zipLabel);
-
-    return {
-      zipPath,
-      fileName: this.generateZipFileName(groupName, zipLabel),
-      fileCount: filesToZip.length
-    };
+    // A download's disk path is private to the request, independent of its display filename.
+    const zipPath = path.join(tmpdir(), `conai-group-${randomUUID()}.zip`);
+    const usedNames = new Map<string, number>();
+    let fileCount = 0;
+    const service = this;
+    async function* entries(): AsyncGenerator<ZipEntry> {
+      for await (const image of service.loadImagesByCompositeHashes(hashes, signal)) {
+        const resolved = await service.resolveDownloadFile(image, downloadType);
+        if (!resolved) continue;
+        const baseName = image.original_file_path
+          ? path.basename(image.original_file_path, path.extname(image.original_file_path))
+          : 'image';
+        const name = service.getUniqueFileName(baseName, resolved.extension, usedNames, Boolean(captionOptions));
+        yield { name, file: resolved.filePath };
+        if (captionOptions) yield { name: name.replace(/\.[^.]+$/, '.txt'), data: Buffer.from(service.generateCaptionContent(image, captionOptions.captionMode), 'utf-8') };
+        fileCount++;
+      }
+      if (fileCount === 0) throw new Error(`No ${downloadType} files found in group`);
+    }
+    try {
+      await writeZip(zipPath, entries(), signal);
+      signal?.throwIfAborted();
+      return { zipPath, fileName: this.generateZipFileName(groupName, zipLabel), fileCount };
+    } catch (error) {
+      await this.cleanupTempFile(zipPath);
+      throw error;
+    }
   }
 
-  /**
-   * 그룹의 모든 이미지와 파일 정보 조회 (페이지네이션 없이 전체)
-   * composite_hash 기준으로 중복 제거 (해시당 1개만)
-   */
-  private static async getAllImagesWithFiles(groupId: number, groupType: GroupType, includeChildren: boolean = false): Promise<ImageWithFileView[]> {
+  /** Keep only member hashes, in the group's existing display order. */
+  private static getGroupHashes(groupId: number, groupType: GroupType, includeChildren: boolean = false, selected?: string[]): string[] {
     const compositeHashes = groupType === 'custom'
       ? ImageGroupModel.getCompositeHashesForGroup(groupId, includeChildren)
       : AutoFolderGroupImageModel.getCompositeHashesForGroup(groupId, includeChildren);
 
-    return this.loadImagesByCompositeHashes(compositeHashes);
+    const selection = selected?.length ? new Set(selected) : null;
+    return [...new Set(compositeHashes)].filter((hash) => hash && (!selection || selection.has(hash)));
   }
 
   /**
    * composite_hash 목록을 배치 로드하고, 요청 순서를 최대한 유지하면서 중복을 제거한다.
    */
-  private static loadImagesByCompositeHashes(compositeHashes: string[]): ImageWithFileView[] {
-    if (compositeHashes.length === 0) {
-      return [];
-    }
-
-    const uniqueHashes: string[] = [];
-    const seen = new Set<string>();
-
-    for (const hash of compositeHashes) {
-      if (!hash || seen.has(hash)) {
-        continue;
-      }
-      seen.add(hash);
-      uniqueHashes.push(hash);
-    }
-
-    const imagesByHash = new Map<string, ImageWithFileView>();
+  private static async *loadImagesByCompositeHashes(compositeHashes: string[], signal?: AbortSignal): AsyncGenerator<ImageWithFileView> {
     const batchSize = 500;
 
-    for (let offset = 0; offset < uniqueHashes.length; offset += batchSize) {
-      const batch = uniqueHashes.slice(offset, offset + batchSize);
+    for (let offset = 0; offset < compositeHashes.length; offset += batchSize) {
+      signal?.throwIfAborted();
+      const batch = compositeHashes.slice(offset, offset + batchSize);
       const rows = MediaMetadataModel.findByHashesWithFiles(batch) as ImageWithFileView[];
-
+      const imagesByHash = new Map<string, ImageWithFileView>();
       for (const row of rows) {
         if (!imagesByHash.has(row.composite_hash)) {
           imagesByHash.set(row.composite_hash, row);
         }
       }
-    }
-
-    return uniqueHashes
-      .map((hash) => imagesByHash.get(hash))
-      .filter((image): image is ImageWithFileView => !!image);
-  }
-
-  /**
-   * 다운로드 타입에 따라 ZIP에 포함할 파일 목록 준비
-   */
-  private static prepareFilesToZip(
-    images: ImageWithFileView[],
-    downloadType: DownloadType
-  ): Array<{ filePath: string; originalName: string; compositeHash: string; captionContent?: string }> {
-    const filesToZip: Array<{ filePath: string; originalName: string; compositeHash: string; captionContent?: string }> = [];
-    const usedNames = new Map<string, number>();
-
-    for (const image of images) {
-      const resolvedFile = this.resolveDownloadFile(image, downloadType);
-
-      if (resolvedFile) {
-        const baseName = image.original_file_path
-          ? path.basename(image.original_file_path, path.extname(image.original_file_path))
-          : 'image';
-
-        const finalName = this.getUniqueFileName(baseName, resolvedFile.extension, usedNames);
-
-        filesToZip.push({
-          filePath: resolvedFile.filePath,
-          originalName: finalName,
-          compositeHash: image.composite_hash
-        });
-        continue;
+      for (const hash of batch) {
+        signal?.throwIfAborted();
+        const image = imagesByHash.get(hash);
+        if (image) yield image;
       }
-
-      console.warn(`[GroupDownload] File not found for ${downloadType}:`, {
-        composite_hash: image.composite_hash,
-        thumbnail_path: image.thumbnail_path,
-        original_file_path: image.original_file_path,
-      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
     }
-
-    return filesToZip;
   }
 
   /**
    * 다운로드 타입에 맞는 실제 파일 경로를 해석한다.
    */
-  private static resolveDownloadFile(image: ImageWithFileView, downloadType: DownloadType): ResolvedDownloadFile | null {
-    const thumbnailPath = this.resolveExistingThumbnail(image);
-    const originalInfo = this.resolveExistingOriginal(image);
+  private static async resolveDownloadFile(image: ImageWithFileView, downloadType: DownloadType): Promise<ResolvedDownloadFile | null> {
+    const thumbnailPath = downloadType === 'video' ? null : await this.resolveExistingThumbnail(image);
+    const originalInfo = downloadType === 'thumbnail' ? null : await this.resolveExistingOriginal(image);
 
     if (downloadType === 'thumbnail') {
       return thumbnailPath
@@ -220,27 +167,35 @@ export class GroupDownloadService {
     return null;
   }
 
-  private static resolveExistingThumbnail(image: ImageWithFileView): string | null {
+  private static async resolveExistingThumbnail(image: ImageWithFileView): Promise<string | null> {
     if (!image.thumbnail_path) {
       return null;
     }
 
     const fullPath = path.join(runtimePaths.tempDir, image.thumbnail_path);
-    return fs.existsSync(fullPath) ? fullPath : null;
+    return await this.fileExists(fullPath) ? fullPath : null;
   }
 
-  private static resolveExistingOriginal(image: ImageWithFileView): {
+  private static async fileExists(filePath: string): Promise<boolean> {
+    try { return (await fs.promises.stat(filePath)).isFile(); }
+    catch (error) {
+      if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) return false;
+      throw error;
+    }
+  }
+
+  private static async resolveExistingOriginal(image: ImageWithFileView): Promise<{
     filePath: string;
     extension: string;
     isVideo: boolean;
     isAnimated: boolean;
-  } | null {
+  } | null> {
     if (!image.original_file_path) {
       return null;
     }
 
     const filePath = resolveUploadsPath(image.original_file_path);
-    if (!fs.existsSync(filePath)) {
+    if (!await this.fileExists(filePath)) {
       return null;
     }
 
@@ -262,57 +217,21 @@ export class GroupDownloadService {
   private static getUniqueFileName(
     baseName: string,
     extension: string,
-    usedNames: Map<string, number>
+    usedNames: Map<string, number>,
+    withCaption: boolean
   ): string {
-    const baseNameWithExt = `${baseName}${extension}`;
-
-    if (!usedNames.has(baseNameWithExt)) {
-      usedNames.set(baseNameWithExt, 1);
-      return baseNameWithExt;
+    const counterKey = `${baseName}${withCaption ? '.txt' : extension}`.toLowerCase();
+    for (let count = usedNames.get(counterKey) ?? 0; ; count++) {
+      const stem = count === 0 ? baseName : `${baseName}_${String(count).padStart(3, '0')}`;
+      const name = `${stem}${extension}`;
+      const caption = `${stem}.txt`;
+      // Also reserve the caption stem: a.png and a.jpg must not share a.txt.
+      if (usedNames.has(name.toLowerCase()) || (withCaption && usedNames.has(caption.toLowerCase()))) continue;
+      usedNames.set(name.toLowerCase(), 1);
+      if (withCaption) usedNames.set(caption.toLowerCase(), 1);
+      usedNames.set(counterKey, count + 1);
+      return name;
     }
-
-    // 중복된 경우 _001, _002 형식으로 번호 추가
-    const count = usedNames.get(baseNameWithExt)!;
-    usedNames.set(baseNameWithExt, count + 1);
-
-    const paddedCount = String(count).padStart(3, '0');
-    return `${baseName}_${paddedCount}${extension}`;
-  }
-
-  /**
-   * ZIP 파일 생성
-   */
-  private static async createZipFile(
-    files: Array<{ filePath: string; originalName: string; captionContent?: string }>,
-    groupName: string,
-    typeLabel: string
-  ): Promise<string> {
-    const zip = new AdmZip();
-
-    // 파일들을 ZIP에 추가
-    for (const file of files) {
-      try {
-        zip.addLocalFile(file.filePath, '', file.originalName);
-
-        // 캡션 .txt 파일 추가 (LoRA 데이터셋용)
-        if (file.captionContent !== undefined) {
-          const txtName = file.originalName.replace(/\.[^.]+$/, '.txt');
-          zip.addFile(txtName, Buffer.from(file.captionContent, 'utf-8'));
-        }
-      } catch (error) {
-        console.warn(`Failed to add file to zip: ${file.filePath}`, error);
-        // 개별 파일 실패 시 계속 진행
-      }
-    }
-
-    // 임시 파일로 ZIP 저장
-    const tempDir = tmpdir();
-    const zipFileName = this.generateZipFileName(groupName, typeLabel);
-    const zipPath = path.join(tempDir, zipFileName);
-
-    zip.writeZip(zipPath);
-
-    return zipPath;
   }
 
   /**
@@ -320,7 +239,7 @@ export class GroupDownloadService {
    */
   private static generateZipFileName(groupName: string, typeLabel: string): string {
     // 파일명에 사용할 수 없는 문자 제거
-    const sanitizedName = groupName.replace(/[<>:"/\\|?*]/g, '_');
+    const sanitizedName = groupName.replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g, '_');
 
     // 날짜 형식: YYYY-MM-DD
     const date = new Date().toISOString().split('T')[0];
@@ -384,9 +303,7 @@ export class GroupDownloadService {
    */
   static async cleanupTempFile(zipPath: string): Promise<void> {
     try {
-      if (fs.existsSync(zipPath)) {
-        fs.unlinkSync(zipPath);
-      }
+      await fs.promises.rm(zipPath, { force: true });
     } catch (error) {
       console.warn(`Failed to cleanup temp zip file: ${zipPath}`, error);
     }
@@ -395,29 +312,23 @@ export class GroupDownloadService {
   /**
    * 그룹의 파일 타입별 개수 조회
    */
-  static async getFileCountByType(groupId: number, groupType: GroupType, includeChildren: boolean = false): Promise<{
+  static async getFileCountByType(groupId: number, groupType: GroupType, includeChildren: boolean = false, signal?: AbortSignal): Promise<{
     thumbnail: number;
     original: number;
     video: number;
   }> {
-    const images = await this.getAllImagesWithFiles(groupId, groupType, includeChildren);
+    const hashes = this.getGroupHashes(groupId, groupType, includeChildren);
 
     let thumbnailCount = 0;
     let originalCount = 0;
     let videoCount = 0;
 
-    for (const image of images) {
-      if (this.resolveDownloadFile(image, 'thumbnail')) {
-        thumbnailCount++;
-      }
-
-      if (this.resolveDownloadFile(image, 'original')) {
-        originalCount++;
-      }
-
-      if (this.resolveDownloadFile(image, 'video')) {
-        videoCount++;
-      }
+    for await (const image of this.loadImagesByCompositeHashes(hashes, signal)) {
+      const thumbnail = await this.resolveExistingThumbnail(image);
+      const original = await this.resolveExistingOriginal(image);
+      if (thumbnail) thumbnailCount++;
+      if ((original && !original.isVideo) || thumbnail) originalCount++;
+      if (original && (original.isVideo || original.isAnimated)) videoCount++;
     }
 
     return { thumbnail: thumbnailCount, original: originalCount, video: videoCount };

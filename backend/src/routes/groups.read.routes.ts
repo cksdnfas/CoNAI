@@ -5,7 +5,7 @@ import { GroupModel, ImageGroupModel } from '../models/Group';
 import { db } from '../database/init';
 import { GroupDownloadService, DownloadType, CaptionMode } from '../services/groupDownloadService';
 import { PAGINATION, errorResponse, successResponse, validateId } from '@conai/shared';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler';
 import { enrichCompactImageWithFileView, enrichImageRecord, enrichImageWithFileView } from './images/utils';
 import { pipeFileToResponse } from './images/query-file-response-helpers';
 import { parsePositiveIntegerQuery } from './routeValidation';
@@ -216,7 +216,7 @@ router.get('/:id/random-image', asyncHandler(async (req: Request, res: Response)
   }
 }));
 
-router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/download', cancellableAsyncHandler(async (req, res, signal) => {
   try {
     const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const downloadType = (req.query.type as DownloadType) || 'thumbnail';
@@ -249,14 +249,12 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
       groupType: 'custom',
       compositeHashes,
       includeChildren,
+      signal,
       captionOptions: captionMode ? { captionMode: captionMode as CaptionMode } : undefined
     });
 
-    const encodedFilename = encodeURIComponent(result.fileName);
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition',
-      `attachment; filename="${result.fileName}"; filename*=UTF-8''${encodedFilename}`
-    );
+    if (signal.aborted) { await GroupDownloadService.cleanupTempFile(result.zipPath); return; }
+    res.attachment(result.fileName);
     res.setHeader('X-File-Count', result.fileCount.toString());
 
     // 중단된 다운로드도 임시 zip을 남기지 않도록 스트림이 실제로 닫힌 뒤 정리한다.
@@ -266,10 +264,11 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
       });
     });
   } catch (error) {
+    if (signal.aborted) return;
     console.error('Error downloading group images:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to download group images';
 
-    let statusCode = 500;
+    let statusCode = (error as { status?: number }).status === 503 ? 503 : 500;
     if (errorMessage.includes('not found') || errorMessage.includes('No images')) {
       statusCode = 404;
     } else if (errorMessage.includes('Invalid')) {
@@ -280,13 +279,14 @@ router.get('/:id/download', asyncHandler(async (req: Request, res: Response) => 
   }
 }));
 
-router.get('/:id/file-counts', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/file-counts', cancellableAsyncHandler(async (req, res, signal) => {
   try {
     const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
     const includeChildren = req.query.include_children === 'true';
-    const counts = await GroupDownloadService.getFileCountByType(id, 'custom', includeChildren);
+    const counts = await GroupDownloadService.getFileCountByType(id, 'custom', includeChildren, signal);
     return res.json(successResponse(counts));
   } catch (error) {
+    if (signal.aborted) return;
     console.error('Error getting file counts:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to get file counts';
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;

@@ -19,7 +19,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageFreeText, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, cancelPostBotRun, createPostCategory, createPostComment, deletePost, deletePostCategory, deletePostComment, getPost, getPostsSettings, listPostCategories, listPostComments, listPostRevisions, listPosts, listPostTags, restorePostKnowledge, setPostCommentHidden, updatePost, updatePostCategory, updatePostComment } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, cancelPostBotRun, createPostCategory, createPostComment, deletePost, deletePostCategory, deletePostComment, getPost, getPostRevision, getPostsSettings, listPostCategories, listPostRevisionSummaries, listPosts, listPostTags, restorePostKnowledge, setPostCommentHidden, updatePost, updatePostCategory, updatePostComment } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { PostCategoryDialog } from './post-category-dialog'
@@ -35,6 +35,7 @@ import { PostKnowledgeProposals } from './post-knowledge-proposals'
 import { parseKnowledgeSearchContext, type KnowledgeSearchContext } from './post-knowledge-task-fit'
 import { PostKnowledgePermanentDeleteDialog } from './post-knowledge-permanent-delete'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { PostCommentsContext, usePostComments } from './use-post-comments'
 
 const PAGE_SIZE = 20
 /** How much of a long post body the connected chat reads at a time (posts.body_at moves through it). */
@@ -143,15 +144,18 @@ export function PostsPage() {
   // Where the connected chat reads the open post's body from, when it is longer than one chunk.
   const [bodyOffset, setBodyOffset] = useState(0)
   useEffect(() => { setBodyOffset(0) }, [postId])
+  const [commentOffset, setCommentOffset] = useState<number | null>(null)
+  useEffect(() => { setCommentOffset(null) }, [postId])
   const openPostData = view === 'post' ? postQuery.data ?? null : null
-  const commentsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'comments', postId], queryFn: () => listPostComments(postId as number), enabled: openPostData !== null && !openPostData.knowledge?.deletedAt })
-  const visibleComments = (commentsQuery.data?.comments ?? []).filter((comment) => comment.status === 'visible')
+  const commentData = usePostComments(postId, [Number(params.get('comment')), commentDraft.reply?.to, commentDraft.edit?.id].filter((id): id is number => typeof id === 'number' && id > 0), openPostData !== null && !openPostData.knowledge?.deletedAt)
+  const visibleComments = commentData.comments.filter((comment) => comment.status === 'visible')
   // Hidden comments still show to administrators (and their writers), so the chat can show them again.
-  const shownComments = (commentsQuery.data?.comments ?? []).filter((comment) => comment.status !== 'deleted')
+  const shownComments = commentData.comments.filter((comment) => comment.status !== 'deleted')
   const editableComments = shownComments.filter((comment) => comment.canEdit)
-  const activeRuns = (commentsQuery.data?.runs ?? []).filter((run) => run.status === 'queued' || run.status === 'running')
+  const activeRuns = commentData.runs.filter((run) => run.status === 'queued' || run.status === 'running')
+  const moreReplyThreadIds = [...commentData.moreReplies].flatMap(([parentId, cursor]) => cursor ? [parentId] : []).slice(0, 100)
   const canRestore = openPostData?.canEdit === true && !openPostData.knowledge && openPostData.revision > 1
-  const revisionsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'revisions', postId, openPostData?.revision], queryFn: () => listPostRevisions(postId as number), enabled: canRestore })
+  const revisionsQuery = useQuery({ queryKey: [POSTS_QUERY_KEY, 'revisions', postId, openPostData?.revision, 'summary'], queryFn: ({ signal }) => listPostRevisionSummaries(postId as number, signal), enabled: canRestore })
   const revisions = canRestore ? revisionsQuery.data ?? [] : []
   const canCommentHere = openPostData !== null && !openPostData.knowledge?.deletedAt && permissions.canComment && (openPostData.commentMode === 'open' || permissions.isAdmin)
   const submitComment = useMutation({
@@ -204,7 +208,9 @@ export function PostsPage() {
           // A long body is read a chunk at a time (posts.body_at): the view goes with every request.
           body: pageFreeText(openPostData.body.slice(bodyOffset, bodyOffset + BODY_CHUNK)), bodyOffset, bodyLength: openPostData.body.length,
         },
-        comments: shownComments.slice(-40).map((comment) => ({ id: comment.id, replyTo: comment.parentId, author: comment.author.name, bot: comment.author.type === 'profile', text: pageFreeText(comment.body.slice(0, 400)), ...(comment.status === 'hidden' ? { hidden: true } : {}), ...(comment.canEdit ? { canEdit: true } : {}) })),
+        comments: (commentOffset === null ? shownComments.slice(-40) : shownComments.slice(commentOffset, commentOffset + 40)).map((comment) => ({ id: comment.id, replyTo: comment.parentId, author: comment.author.name, bot: comment.author.type === 'profile', text: pageFreeText(comment.body.slice(0, 400)), ...(comment.status === 'hidden' ? { hidden: true } : {}), ...(comment.canEdit ? { canEdit: true } : {}) })),
+        commentPaging: { loaded: shownComments.length, offset: commentOffset ?? Math.max(0, shownComments.length - 40), hasMore: commentData.hasMore,
+          replyThreadsWithMore: moreReplyThreadIds },
         ...(activeRuns.length ? { botCalls: activeRuns.map((run) => ({ id: run.id, bot: run.profileName, status: run.status, triggerCommentId: run.triggerCommentId })) } : {}),
         ...(revisions.length ? { earlierVersions: revisions.slice(0, 10).map((revision) => ({ revision: revision.revision, title: pageFreeText(revision.title), at: revision.createdAt })) } : {}),
       } : {}),
@@ -222,6 +228,10 @@ export function PostsPage() {
         pageAction('posts.filter', t({ ko: '목록 탭', en: 'List tab' }), t({ ko: '고른 카테고리 안에서 바꿔', en: 'Within the chosen category' }), pageObject({ tab: pageChoice(listTabs) }, ['tab'])),
       ] : []),
       ...(openPostData && openPostData.body.length > BODY_CHUNK ? [pageAction('posts.body_at', t({ ko: '본문 이어 읽기', en: 'Read the body from' }), t({ ko: 'data.open.body를 offset부터 보여줘', en: 'data.open.body from offset' }), pageObject({ offset: pageNumber(0, Math.max(0, openPostData.body.length - 1), true) }, ['offset']))] : []),
+      ...(openPostData ? [
+        pageAction('posts.comments_at', t({ ko: '댓글 구간 읽기', en: 'Read loaded comments' }), t({ ko: '불러온 댓글의 offset부터 40개를 읽어.', en: 'Read forty loaded comments from offset.' }), pageObject({ offset: pageNumber(0, Math.max(0, shownComments.length - 1), true) }, ['offset'])),
+        ...(commentData.hasMore || moreReplyThreadIds.length ? [pageAction('posts.comments_more', t({ ko: '이전 댓글 불러오기', en: 'Load earlier comments' }), t({ ko: 'parentId 생략은 이전 댓글, 지정하면 그 스레드의 이전 답글.', en: 'Omit parentId for older threads, or select a thread for older replies.' }), pageObject(moreReplyThreadIds.length ? { parentId: pageChoice(moreReplyThreadIds) } : {}))] : []),
+      ] : []),
       ...(openPostData?.canEdit && !openPostData.knowledge ? [pageAction('posts.delete', t({ ko: '이 글 지우기', en: 'Delete this post' }), '', undefined, 'save')] : []),
       ...(revisions.length && !openPostData?.knowledge ? [pageAction('posts.restore_revision', t({ ko: '이전 판으로 되돌리기', en: 'Restore earlier version' }), t({ ko: 'data.earlierVersions의 판', en: 'a version in data.earlierVersions' }), pageObject({ revision: pageNumber(1, undefined, true) }, ['revision']), 'save')] : []),
       ...(commentDraft.edit && commentDraft.edit.text.trim() ? [pageAction('posts.comment_update', t({ ko: '고친 댓글 저장', en: 'Save edited comment' }), '', undefined, 'save')] : []),
@@ -268,13 +278,21 @@ export function PostsPage() {
       else if (id === 'posts.layout') setLayout(args.layout as PostListLayout)
       else if (id === 'posts.filter' && listTabs.includes(args.tab as ListTab)) openTab(args.tab as ListTab)
       else if (id === 'posts.body_at') setBodyOffset(Number(args.offset))
+      else if (id === 'posts.comments_at') setCommentOffset(Number(args.offset))
+      else if (id === 'posts.comments_more') {
+        if (typeof args.parentId === 'number') await commentData.loadMoreReplies(args.parentId)
+        else await commentData.loadMore()
+        setCommentOffset(0)
+      }
       else if (id === 'posts.delete' && openPostData && !openPostData.knowledge) {
         await deletePost(openPostData.id)
         await refreshPosts()
         openList()
       } else if (id === 'posts.restore_revision' && openPostData && !openPostData.knowledge) {
-        const revision = revisions.find((item) => item.revision === Number(args.revision))
-        if (!revision) throw new Error('그 판을 찾을 수 없어.')
+        const selected = revisions.find((item) => item.revision === Number(args.revision))
+        if (!selected) throw new Error('그 판을 찾을 수 없어.')
+        const revision = await getPostRevision(openPostData.id, selected.revision)
+        assertCurrent()
         await updatePost(openPostData.id, { title: revision.title, body: revision.body, expectedRevision: openPostData.revision })
         await refreshPosts()
       } else if (id === 'posts.comment_update' && commentDraft.edit) {
@@ -506,7 +524,7 @@ export function PostsPage() {
   }
 
   return (
-    <>
+    <PostCommentsContext.Provider value={commentData}>
       <PageWithSidebar
         storageKey="posts"
         sidebarLabel={t({ ko: '게시판', en: 'Posts' })}
@@ -526,6 +544,6 @@ export function PostsPage() {
           onDeleted={(deleted) => { if (categoryId === deleted.id) filterCategory(deleted.parentId) }}
         />
       ) : null}
-    </>
+    </PostCommentsContext.Provider>
   )
 }

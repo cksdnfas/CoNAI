@@ -82,7 +82,13 @@ router.delete('/:id', write, (req, res) => {
   PostStore.remove(actorFromRequest(req), id(req), req.body ?? {});
   res.json({ success: true });
 });
-router.get('/:id/revisions', write, (req, res) => res.json({ success: true, data: PostStore.revisions(actorFromRequest(req), id(req)) }));
+router.get('/:id/revisions', write, (req, res) => res.json({ success: true, data: req.query.detail === 'summary'
+  ? PostStore.revisionSummaries(actorFromRequest(req), id(req)) : PostStore.revisions(actorFromRequest(req), id(req)) }));
+router.get('/:id/revisions/:revision', write, (req, res) => {
+  const [revision] = PostStore.revisions(actorFromRequest(req), id(req), id(req, 'revision'));
+  if (!revision) throw new PostError('이전 판을 찾을 수 없어.', 404);
+  res.json({ success: true, data: revision });
+});
 router.patch('/:id/knowledge', write, (req,res) => res.json({ success: true,data: KnowledgeStore.patch(actorFromRequest(req),id(req),req.body ?? {}) }));
 router.get('/:id/links', (req,res) => res.json({ success: true,data: KnowledgeStore.links(actorFromRequest(req),id(req)) }));
 router.get('/:id/knowledge/versions', write, (req,res) => res.json({ success: true,data: KnowledgeStore.versions(actorFromRequest(req),id(req)) }));
@@ -111,7 +117,14 @@ router.get('/:id/runs', (req, res) => res.json({ success: true, data: PostBotRun
 router.get('/:id/comments', (req, res) => {
   const actor = actorFromRequest(req);
   const postId = id(req);
-  res.json({ success: true, data: { comments: PostCommentStore.list(actor, postId), runs: PostBotRuns.list(actor, postId) } });
+  const parseJson = (value: unknown) => {
+    if (value === undefined) return undefined;
+    if (typeof value !== 'string') throw new PostError('잘못된 댓글 조회 조건이야.');
+    try { return JSON.parse(value) as unknown; } catch { throw new PostError('잘못된 댓글 조회 조건이야.'); }
+  };
+  const page = PostCommentStore.page(actor, postId, { parentId: req.query.parentId === undefined ? undefined : Number(req.query.parentId),
+    before: parseJson(req.query.before), focusIds: parseJson(req.query.focusIds) });
+  res.json({ success: true, data: { ...page, runs: PostBotRuns.list(actor, postId) } });
 });
 router.post('/:id/comments', comment, (req, res) => res.status(201).json({ success: true, data: PostCommentStore.create(actorFromRequest(req), id(req), req.body ?? {}) }));
 

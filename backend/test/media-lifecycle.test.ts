@@ -69,6 +69,48 @@ test('thumbnail paths resolve inside the temp dir whatever separators they were 
   assert.equal(resolveThumbnailAbsolutePath('', tempDir), null)
 })
 
+test('concurrent thumbnail generation publishes once, cleans failed output and recovers after temp cleanup', async (t) => {
+  const { runtimePaths } = await booted
+  const { ThumbnailGenerator } = await import('../src/utils/thumbnailGenerator')
+  const { ImageProcessor } = await import('../src/services/imageProcessor')
+  const hash = hex('c1')
+  let started!: () => void
+  const start = new Promise<void>((resolve) => { started = resolve })
+  let finish!: () => void
+  const done = new Promise<void>((resolve) => { finish = resolve })
+  const render = t.mock.method(ImageProcessor, 'generateThumbnail', async (_input: string, output: string) => {
+    await fs.promises.writeFile(output, 'partial')
+    started()
+    await done
+    await fs.promises.writeFile(output, 'complete')
+  })
+  const requests = Array.from({ length: 12 }, () => ThumbnailGenerator.generateThumbnail('unused', hash))
+  await start
+  const directory = path.join(runtimePaths.tempDir, 'thumbnails', new Date().toISOString().slice(0, 10))
+  const published = path.join(directory, `${hash}.webp`)
+  assert.equal(fs.existsSync(published), false, 'an unfinished file is never visible at the public thumbnail path')
+  assert.equal(render.mock.callCount(), 1, '12 requests share one decode')
+  finish()
+  const paths = await Promise.all(requests)
+  assert.equal(new Set(paths).size, 1)
+  assert.equal(fs.readFileSync(published, 'utf8'), 'complete')
+  assert.equal(fs.readdirSync(directory).length, 1, 'no staging files remain')
+
+  await fs.promises.unlink(published)
+  await fs.promises.rmdir(directory)
+  render.mock.mockImplementation(async (_input: string, output: string) => {
+    await fs.promises.writeFile(output, 'partial')
+    throw new Error('decode failed')
+  })
+  await assert.rejects(ThumbnailGenerator.generateThumbnail('unused', hash), /decode failed/)
+  assert.deepEqual(fs.readdirSync(directory), [], 'a failure cannot poison the thumbnail cache')
+  render.mock.mockImplementation(async (_input: string, output: string) => { await fs.promises.writeFile(output, 'retry') })
+  await ThumbnailGenerator.generateThumbnail('unused', hash)
+  assert.equal(fs.readFileSync(published, 'utf8'), 'retry', 'failed work is released for retry')
+  await fs.promises.unlink(published)
+  t.diagnostic('12 simultaneous requests: 1 renderer invocation; incomplete and failed files never published')
+})
+
 test('deleting an image removes its thumbnail and every file row', async () => {
   const { db, runtimePaths } = await booted
   const { DeletionService } = await import('../src/services/deletionService')

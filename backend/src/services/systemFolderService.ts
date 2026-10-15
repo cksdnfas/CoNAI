@@ -132,6 +132,7 @@ type DirectoryName = { name: string; folder: boolean };
 /** Sorted names per directory, reused until the directory changes; the RecycleBin can hold 100k+ files. */
 const listingCache = new Map<string, { mtimeMs: number; order: 'asc' | 'desc'; names: DirectoryName[] }>();
 const LISTING_CACHE_SIZE = 16;
+const pendingThumbnails = new Map<string, Promise<string>>();
 
 async function directoryNames(directory: string, order: 'asc' | 'desc'): Promise<DirectoryName[]> {
   const mtimeMs = (await fs.promises.stat(directory)).mtimeMs;
@@ -245,14 +246,29 @@ export const SystemFolderService = {
     if (fs.existsSync(directory) && fs.lstatSync(directory).isSymbolicLink()) throw new SystemFolderError('썸네일 폴더가 링크야.', 500);
     const cached = path.join(directory, `${key}.webp`);
     if (fs.existsSync(cached)) return cached;
-    fs.mkdirSync(directory, { recursive: true });
-    const temporary = path.join(directory, `${key}-${crypto.randomUUID()}.webp`);
+    const pending = pendingThumbnails.get(cached);
+    if (pending) return pending;
+    const work = (async () => {
+      await fs.promises.mkdir(directory, { recursive: true });
+      const temporary = path.join(directory, `${key}-${crypto.randomUUID()}.webp`);
+      try {
+        await renderPreviewWebp(view.absolute, view.mime, temporary);
+        // A queued decode can outlive a rename, deletion or replacement of the source.
+        const current = resolveFile(rootId, segments);
+        if (current.absolute !== view.absolute || current.stat.size !== stat.size || current.stat.mtimeMs !== stat.mtimeMs) {
+          throw new SystemFolderError('파일이 변경됐어. 다시 열어줘.', 409);
+        }
+        await fs.promises.rename(temporary, cached);
+        return cached;
+      } finally {
+        await fs.promises.rm(temporary, { force: true }).catch(() => undefined);
+      }
+    })();
+    pendingThumbnails.set(cached, work);
     try {
-      await renderPreviewWebp(view.absolute, view.mime, temporary);
-      fs.renameSync(temporary, cached);
-      return cached;
+      return await work;
     } finally {
-      await fs.promises.rm(temporary, { force: true }).catch(() => undefined);
+      pendingThumbnails.delete(cached);
     }
   },
 
