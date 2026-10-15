@@ -402,6 +402,8 @@ export function ImageList({
               onToggleSelect={handleToggleSelect}
               scrollMode={scrollMode}
               viewportHeight={viewportHeight}
+              hasMore={hasMore}
+              isLoadingMore={isLoadingMore}
               onEndReached={handleEndReached}
               renderItemOverlay={renderItemOverlay}
               renderItemPersistentOverlay={renderItemPersistentOverlay}

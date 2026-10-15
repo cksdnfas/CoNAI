@@ -18,6 +18,7 @@
     "test:plugins": "tsx --tsconfig tsconfig.app.json --test test/plugin-sdk.test.ts",
     "pretest:chat-page": "npm run build --prefix ../shared",
     "test:chat-page": "tsx --tsconfig tsconfig.test.json --test test/chat-page-context.test.ts",
+    "test:image-pagination": "tsx --tsconfig tsconfig.test.json --test test/image-list-pagination.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

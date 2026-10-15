@@ -84,6 +84,7 @@ frontend/test/*
 !frontend/test/audio-waveform.test.ts
 !frontend/test/plugin-sdk.test.ts
 !frontend/test/chat-page-context.test.ts
+!frontend/test/image-list-pagination.test.ts
 
 # Uploaded images
 uploads/

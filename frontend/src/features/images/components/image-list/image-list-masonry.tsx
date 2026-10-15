@@ -21,6 +21,8 @@ interface ImageListMasonryProps {
   onToggleSelect?: ImageListToggleSelectHandler
   scrollMode: ImageListScrollMode
   viewportHeight?: number | string
+  hasMore?: boolean
+  isLoadingMore?: boolean
   onEndReached?: () => void
   renderItemOverlay?: (image: ImageRecord) => ReactNode
   renderItemPersistentOverlay?: (image: ImageRecord) => ReactNode
@@ -91,6 +93,8 @@ export function ImageListMasonry({
   onToggleSelect,
   scrollMode,
   viewportHeight,
+  hasMore = false,
+  isLoadingMore = false,
   onEndReached,
   renderItemOverlay,
   renderItemPersistentOverlay,
@@ -110,17 +114,17 @@ export function ImageListMasonry({
   }, [onEndReached])
 
   /**
-   * Fire once per loaded item count. Masonry republishes column heights while items are measured,
-   * so scrollHeight is not a stable dedupe key and would restart the in-flight page request.
+   * Fire once per item count and request cycle. Measurements can emit repeated scroll events,
+   * while a fetched page can leave the visible count unchanged after filtering.
    */
   const fireContainerEndReached = useCallback(() => {
-    if (endReachedItemCountRef.current === itemCount) {
+    if (!hasMore || isLoadingMore || endReachedItemCountRef.current === itemCount) {
       return
     }
 
     endReachedItemCountRef.current = itemCount
     onEndReachedRef.current?.()
-  }, [itemCount])
+  }, [hasMore, isLoadingMore, itemCount])
 
   /** Mirror VirtuosoGrid endReached for container scrolling since VirtuosoMasonry has no endReached API. */
   const handleContainerScrollCapture = useCallback((event: UIEvent<HTMLDivElement>) => {
@@ -138,21 +142,22 @@ export function ImageListMasonry({
   }, [fireContainerEndReached])
 
   /**
-   * A page that does not fill the split pane never emits a scroll event, so auto-pagination would
-   * never start. Re-check once the masonry settled; fireContainerEndReached changes per item count.
+   * Recheck after each request, including pages filtered out of the visible list. Short cards can
+   * also leave the viewport near the end without producing another scroll event.
    */
   useEffect(() => {
-    if (usesWindowScroll) {
+    if (usesWindowScroll || !hasMore || isLoadingMore) {
       return
     }
 
+    endReachedItemCountRef.current = -1
     const settleTimeout = window.setTimeout(() => {
       const scroller = containerRef.current?.firstElementChild
       if (!(scroller instanceof HTMLElement) || scroller.scrollHeight === 0) {
         return
       }
 
-      if (scroller.scrollHeight > scroller.clientHeight) {
+      if (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > CONTAINER_SCROLL_END_REACHED_THRESHOLD_PX) {
         return
       }
 
@@ -160,7 +165,7 @@ export function ImageListMasonry({
     }, CONTAINER_UNFILLED_PANE_CHECK_MS)
 
     return () => window.clearTimeout(settleTimeout)
-  }, [fireContainerEndReached, usesWindowScroll])
+  }, [fireContainerEndReached, hasMore, isLoadingMore, usesWindowScroll])
   const resolvedContainerHeight = usesWindowScroll
     ? undefined
     : typeof viewportHeight === 'number'

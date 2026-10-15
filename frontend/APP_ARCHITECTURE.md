@@ -74,6 +74,7 @@ live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `e
   server pages; focused comments and quote context do not require downloading the entire discussion.
 - Preserve the shared virtualized list in `features/images/components/image-list/` (Virtuoso + ViSelect), stable media
   identity, bounded loading and video preview lifecycle. Do not build a separate engine per page.
+- Container masonry pagination checks both the request state and viewport distance after each page; filtered-out pages must not permanently lock loading at the same visible item count.
 - Library selection uses `components/media/media-library-browser.tsx`: the group tree, server prompt/tag search,
   media/tool filters, sorting and virtualized list share the post attachment layout. `media-library-picker.tsx` adds
   the modal and reference selection for chat, settings, wallpaper and sprites. Posts embed the browser with mixed
