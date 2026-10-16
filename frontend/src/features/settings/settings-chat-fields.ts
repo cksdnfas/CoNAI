@@ -103,7 +103,7 @@ const GENERAL_BASIC: FieldSpec[] = [
   toggle('promptForDownloadLocation', { ko: '다운로드할 때 파일명과 위치 확인', en: 'Ask for file name and save location' }),
   { ...toggle('enableGallery', { ko: '갤러리 기능 사용', en: 'Enable gallery features' }), fallback: true },
   { ...toggle('showRatingBadges', { ko: '등급 배지 표시', en: 'Show rating badges' }), fallback: true },
-  ...HEADER_NAVIGATION_ITEM_KEYS.map((key): FieldSpec => ({ ...toggle(`headerNavigation.${key}`, HEADER_NAVIGATION_LABELS[key]), fallback: true, group: { ko: '상단 메뉴', en: 'Header menu' } })),
+  ...HEADER_NAVIGATION_ITEM_KEYS.map((key): FieldSpec => ({ ...toggle(`headerNavigation.${key}`, HEADER_NAVIGATION_LABELS[key]), fallback: DEFAULT_HEADER_NAVIGATION_SETTINGS[key], group: { ko: '상단 메뉴', en: 'Header menu' } })),
 ]
 
 const APPEARANCE: FieldSpec[] = grouped({ ko: '테마', en: 'Theme' }, [

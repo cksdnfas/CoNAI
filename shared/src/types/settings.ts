@@ -44,10 +44,21 @@ export const HEADER_NAVIGATION_ITEM_KEYS = [
   'account',
 ] as const;
 
+/** Pages a fresh install keeps out of the header so first launch isn't crowded; Settings can turn them on. */
+export const HEADER_NAVIGATION_DEFAULT_HIDDEN_KEYS: readonly typeof HEADER_NAVIGATION_ITEM_KEYS[number][] = ['audio', 'sprite', 'chat'];
+
 export type PluginHeaderNavigationKey = `plugin:${string}:${string}`;
 export type HeaderNavigationItemKey = typeof HEADER_NAVIGATION_ITEM_KEYS[number] | PluginHeaderNavigationKey;
 export type HeaderNavigationPageKey = typeof HEADER_NAVIGATION_PAGE_KEYS[number] | PluginHeaderNavigationKey;
 export type HeaderNavigationSettings = Record<typeof HEADER_NAVIGATION_ITEM_KEYS[number], boolean> & Partial<Record<PluginHeaderNavigationKey, boolean>>;
+
+/** Build a complete top-header navigation visibility map for a fresh install. */
+export function getDefaultHeaderNavigationSettings(): HeaderNavigationSettings {
+  return HEADER_NAVIGATION_ITEM_KEYS.reduce((settings, key) => {
+    settings[key] = !HEADER_NAVIGATION_DEFAULT_HIDDEN_KEYS.includes(key);
+    return settings;
+  }, {} as HeaderNavigationSettings);
+}
 
 /** Matches the installed manifest's plugin/page ID contract, without allowing paths or property traversal. */
 export function isPluginHeaderNavigationKey(value: unknown): value is PluginHeaderNavigationKey {

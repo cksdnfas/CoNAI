@@ -10,7 +10,7 @@ import {
   AppearancePresetSlot,
   AppearanceThemeSettings,
   DeleteProtectionSettings,
-  HEADER_NAVIGATION_ITEM_KEYS,
+  getDefaultHeaderNavigationSettings,
   HEADER_NAVIGATION_PAGE_KEYS,
   isHeaderNavigationItemKey,
   normalizeHeaderNavigationOrder,
@@ -34,14 +34,6 @@ import {
 export const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
 const APPEARANCE_PRESET_SLOT_IDS = ['slot-1', 'slot-2', 'slot-3'] as const;
-
-/** Build a complete top-header navigation visibility map. */
-export function getDefaultHeaderNavigationSettings(): HeaderNavigationSettings {
-  return HEADER_NAVIGATION_ITEM_KEYS.reduce((settings, key) => {
-    settings[key] = true;
-    return settings;
-  }, {} as HeaderNavigationSettings);
-}
 
 /** Complete delete-protection settings; drops the never-used legacy `recycleBinPath`. */
 function normalizeDeleteProtectionSettings(raw: unknown, defaults: DeleteProtectionSettings): DeleteProtectionSettings {
