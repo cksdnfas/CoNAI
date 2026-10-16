@@ -68,9 +68,11 @@ export async function proposeTranslatedLore(context: ChatExecutionContext, input
   const profile = ChatProfileStore.find(context.profileId)
   if (!profile || typeof input.title !== 'string' || typeof input.content !== 'string' || !Array.isArray(input.keys)) return proposeLore(context, input)
   if (context.replyId && ChatProposalStore.forReply(context.threadId, context.replyId, 'lore').length) return proposeLore(context, input)
+  // A proposal the spacing rule refuses anyway is refused before paying for its translation.
+  if (context.replyId && !judgeGrantsLore(context.replyId) && !isChatOrderReply(context.threadId, context.replyId) && loreProposedRecently(context)) return proposeLore(context, input)
   signal?.throwIfAborted()
-  const titleKey = foldLoreTitle(input.title)
-  const previous = () => JSON.stringify(OwnedLorebookStore.recordBook(context.threadId)?.entries.find(e => foldLoreTitle(loreEntryTitle(e)) === titleKey) ?? null)
+  // The whole record book: translation can change the title, so the entry the proposal replaces is not known yet.
+  const previous = () => JSON.stringify(OwnedLorebookStore.recordBook(context.threadId)?.entries ?? null)
   const before = previous()
   const version = profile.updatedDate
   const translated = await bilingualLore(profile, { title: input.title.trim(), content: input.content.trim(), keys: input.keys as string[] }, signal, { threadId: context.threadId, replyId: context.replyId })

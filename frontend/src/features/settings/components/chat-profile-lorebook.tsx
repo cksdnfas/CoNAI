@@ -200,7 +200,8 @@ export function ChatLoreEntryFields({ entry, onChange, filePlace, keyLanguage = 
       <Input variant="settings" value={display.title ?? ''} maxLength={80} placeholder={loreEntryTitle({ ...entry, title: '' }) || t({ ko: '제목', en: 'Title' })} onChange={(event) => textChange({ title: event.target.value })} />
     </Field>
     <Field label={t({ ko: '키워드', en: 'Keywords' })} info={t({ ko: '/패턴/ 형태는 정규식으로 찾아.', en: '/pattern/ is matched as a regular expression.' })}>
-      <LanguageKeywordRows language={entry.translation?.language ?? keyLanguage} base={entry.keys} local={entry.translation?.keys ?? entry.localKeys ?? []} onBase={(keys) => sourceChange({ keys })} onLocal={(localKeys) => onChange(entry.translation ? { translation: { ...entry.translation, keys: localKeys } } : { localKeys })} addLabel={t({ ko: '키워드 추가', en: 'Add keyword' })} />
+      {/* Local keys written before the translation still match, so they show beside its keys and fold into them on edit. */}
+      <LanguageKeywordRows language={entry.translation?.language ?? keyLanguage} base={entry.keys} local={entry.translation ? [...new Set([...entry.translation.keys, ...(entry.localKeys ?? [])])] : entry.localKeys ?? []} onBase={(keys) => sourceChange({ keys })} onLocal={(localKeys) => onChange(entry.translation ? { translation: { ...entry.translation, keys: localKeys }, localKeys: [] } : { localKeys })} addLabel={t({ ko: '키워드 추가', en: 'Add keyword' })} />
     </Field>
     <Field label={t({ ko: '보조 키워드', en: 'Secondary keywords' })}>
       <div className="flex flex-col gap-2">

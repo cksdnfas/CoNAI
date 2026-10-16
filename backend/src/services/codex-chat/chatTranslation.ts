@@ -51,11 +51,8 @@ export function needsLanguageTranslation(text: string, language: ChatTranslation
   return letters.other > letters.own
 }
 
-/** Translate only declared prose leaves, never object keys, IDs, enum choices, amounts or source references. */
-export async function translateStructuredFields(profile: ModelRoleProfile & TranslationLanguages & { id?: number; translationInstructions?: string }, input: unknown, paths: string[], language: ChatTranslationLanguage, signal?: AbortSignal, attribution?: Omit<LlmUsageTag, 'purpose'>): Promise<unknown | null> {
-  const target = translationTargetOf(profile)
-  if (!target) return null
-  const copy = JSON.parse(JSON.stringify(input)) as unknown
+/** The nonempty string leaves `paths` select in `input` (dot paths, `*` for every key), or null for a bad path list. */
+function structuredLeaves(input: unknown, paths: string[]) {
   const leaves: Array<{ object: Record<string, unknown>; key: string; text: string }> = []
   const seen = new Set<string>()
   const visit = (value: unknown, parts: string[], prefix: string) => {
@@ -71,7 +68,23 @@ export async function translateStructuredFields(profile: ModelRoleProfile & Tran
     }
   }
   if (!paths.length || paths.length > 20 || paths.some(path => !/^[a-zA-Z][\w]*(?:\.(?:[a-zA-Z][\w]*|\*)){0,4}$/.test(path))) return null
-  for (const path of paths) visit(copy, path.split('.'), '')
+  for (const path of paths) visit(input, path.split('.'), '')
+  return leaves
+}
+
+/** True when the prose `paths` select is already written in `language`, so translating it into `language` is a no-op. */
+export function structuredProseIn(input: unknown, paths: string[], language: ChatTranslationLanguage) {
+  const leaves = structuredLeaves(input, paths)
+  return !!leaves?.length && !needsLanguageTranslation(leaves.map(leaf => leaf.text).join('\n'), language)
+}
+
+/** Translate only declared prose leaves, never object keys, IDs, enum choices, amounts or source references. */
+export async function translateStructuredFields(profile: ModelRoleProfile & TranslationLanguages & { id?: number; translationInstructions?: string }, input: unknown, paths: string[], language: ChatTranslationLanguage, signal?: AbortSignal, attribution?: Omit<LlmUsageTag, 'purpose'>): Promise<unknown | null> {
+  const target = translationTargetOf(profile)
+  if (!target) return null
+  const copy = JSON.parse(JSON.stringify(input)) as unknown
+  const leaves = structuredLeaves(copy, paths)
+  if (!leaves) return null
   if (!leaves.length) return copy
   if (leaves.length > 128 || leaves.reduce((n, leaf) => n + leaf.text.length, 0) > 20000) return null
   const strings = Object.fromEntries(leaves.map((leaf, index) => [String(index), leaf.text]))

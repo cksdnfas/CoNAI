@@ -2,7 +2,7 @@ import './support/testTemp'
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'
-import { maskCodeBlocks, modelLanguageGuidance, restoreCodeBlocks, translateReply, translateUserInput, translatorOf, translateStructuredFields } from '../src/services/codex-chat/chatTranslation'
+import { maskCodeBlocks, modelLanguageGuidance, restoreCodeBlocks, structuredProseIn, translateReply, translateUserInput, translatorOf, translateStructuredFields } from '../src/services/codex-chat/chatTranslation'
 import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import { mockModelRows } from './modelRowMocks'
 
@@ -39,6 +39,13 @@ function mockTranslator(t: TestContext, reply: string | (() => Response)) {
   })
   return requests
 }
+
+test('an answer already written in the display language is recognised, so it is not sent for translation', () => {
+  const fields = ['summary', 'entries.*.title', 'entries.*.content']
+  assert.equal(structuredProseIn({ summary: '보리와 이야기했다.', entries: [{ title: '보리', content: '고향 이야기를 들었다.', sourceIds: [1] }] }, fields, 'ko'), true)
+  assert.equal(structuredProseIn({ summary: 'Talked with Bori.', entries: [] }, fields, 'ko'), false)
+  assert.equal(structuredProseIn({ summary: '', entries: [] }, fields, 'ko'), false, 'nothing selected is not "already translated"')
+})
 
 test('user input: Korean goes to the model in English with the translation model, English is left alone', async (t) => {
   const requests = mockTranslator(t, 'Hello, how are you?')

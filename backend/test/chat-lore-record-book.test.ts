@@ -77,6 +77,19 @@ test('chat lore record book: create from the chat, save_lore and edit_lore_file 
     })
     await assert.rejects(proposeTranslatedLore({ threadId: room, profileId: p.id, kind: 'direct', replyId: 'racing' }, input), /항목이 바뀌었어/)
     assert.equal(OwnedLorebookStore.chatBookOf(room)!.entries[0].content, 'User corrected the gate.')
+
+    // Written in the display language: two keys become one model-language key, and a /regex/ key is never translated.
+    const sent: string[] = []
+    st.mock.method(globalThis, 'fetch', async (_url: string, init: { body: string }) => {
+      sent.push(init.body)
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ '0': 'Potion shop', '1': 'potion', '2': 'potion', '3': 'elixir', '4': 'Sells potions.' }) }, finish_reason: 'stop' }] })
+    })
+    await proposeTranslatedLore({ threadId: room, profileId: p.id, kind: 'direct', replyId: 'merged-keys' }, { title: '물약 상점', keys: ['포션', '회복약', '물약', '/elixirs?/i'], content: '회복약을 판다.' })
+    const shop = OwnedLorebookStore.chatBookOf(room)!.entries.find(entry => entry.title === 'Potion shop')!
+    assert.deepEqual(shop.keys, ['potion', 'elixir', '/elixirs?/i'])
+    assert.deepEqual(shop.translation?.keys, ['포션', '물약', '/elixirs?/i'], 'each written key stays paired with its own model-language key')
+    assert.equal(sent.length, 1, 'the written text is the display translation; no second call')
+    assert.ok(!sent[0].includes('elixirs?'), 'the regex key is not sent to the translator')
   })
 
   await t.test('a book made from the chat is empty, linked, recorded into, and shown in the index while empty', () => {

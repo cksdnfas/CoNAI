@@ -14,9 +14,9 @@ import { loadChatSettings } from '../codex-chat/chatSettings'
 import { buildChatProfileReplyMessages } from '../codex-chat/chatProfileReply'
 import { fileOwnerKey } from '../fileStoreService'
 import { hasTranslation } from '../codex-chat/chatModelRoles'
-import { translateStructuredFields } from '../codex-chat/chatTranslation'
+import { structuredProseIn, translateStructuredFields } from '../codex-chat/chatTranslation'
 import { runWorkflowLlmText } from '../graph-workflow-executor/workflow-llm-runtime'
-import { buildJsonInstruction } from '../llmProviderService'
+import { buildJsonInstruction, LlmJsonTruncatedError } from '../llmProviderService'
 import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
 import { RuntimeJobConflictError, RuntimeJobStore, RUNTIME_JOB_TTL_MS } from '../runtimeJobs/runtimeJobStore'
 import { getPlugin } from './pluginRegistry'
@@ -218,10 +218,13 @@ function registerJob() {
           clearTimeout(timeout)
           const translationSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(Math.max(1, input.timeoutMs - (Date.now() - startedAt)))])
           ctx.flush({ phase: 'translating', currentLabel: profile.name, total: 1 })
-          const language = profile.translationDisplayLanguage
-          const translated = hasTranslation(profile) ? await translateStructuredFields(profile, result.json ?? { text }, input.translation.fields, language, translationSignal, { replyId: `plugin:${pluginId}:${ctx.jobId}` }) : null
+          const language = profile.translationDisplayLanguage, source = result.json ?? { text }
+          // A persona can answer in the display language despite the model-language directive: that answer is the
+          // source as written, labelled with its real language, and has nothing to translate.
+          const written = hasTranslation(profile) && structuredProseIn(source, input.translation.fields, language)
+          const translated = hasTranslation(profile) && !written ? await translateStructuredFields(profile, source, input.translation.fields, language, translationSignal, { replyId: `plugin:${pluginId}:${ctx.jobId}` }) : null
           controller.signal.throwIfAborted(); ctx.throwIfCancelled(); profileAccess(pluginId, requester, input.profileId, digest)
-          translation = { status: !hasTranslation(profile) ? 'disabled' : translated ? 'completed' : 'failed', language, ...(hasTranslation(profile) ? { sourceLanguage: profile.translationModelLanguage } : {}), ...(translated ? { json: translated } : {}) }
+          translation = { status: !hasTranslation(profile) ? 'disabled' : written || translated ? 'completed' : 'failed', language, ...(hasTranslation(profile) ? { sourceLanguage: written ? language : profile.translationModelLanguage } : {}), ...(translated ? { json: translated } : {}) }
           if (Buffer.byteLength(JSON.stringify({ text, json: result.json, translation })) > 60 * 1024) translation = { ...translation, status: 'failed', json: undefined }
         }
         ctx.flush({ processed: 1, succeeded: 1 })
@@ -229,6 +232,7 @@ function registerJob() {
       } catch (error) {
         if (controller.signal.aborted) throw controller.signal.reason
         if (error instanceof PluginError) throw error
+        if (error instanceof LlmJsonTruncatedError) throw new PluginError(error.message)
         // Provider errors can contain request bodies or credentials; keep them out of job results/logs.
         throw new PluginError('프로필 답변 생성에 실패했어. 모델 연결과 입력 길이를 확인해줘.')
       } finally {
