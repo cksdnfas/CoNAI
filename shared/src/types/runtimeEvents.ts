@@ -12,6 +12,7 @@ export type RuntimeEventTopic =
   | 'runtime-job'
   | 'posts'
   | 'workspaces'
+  | 'plugins'
   | 'files'
   | 'audio'
 
@@ -34,6 +35,7 @@ export type RuntimeEventName =
   | 'job.status'
   | 'posts.changed'
   | 'workspace.changed'
+  | 'plugin.draft.changed'
   | 'files.changed'
   | 'audio.changed'
 
@@ -45,6 +47,7 @@ export const RUNTIME_EVENT_TOPICS: readonly RuntimeEventTopic[] = [
   'runtime-job',
   'posts',
   'workspaces',
+  'plugins',
   'files',
   'audio',
 ]
@@ -58,6 +61,7 @@ export const RUNTIME_EVENT_TOPIC_PERMISSIONS: Record<RuntimeEventTopic, string |
   'graph-execution': 'workflows.view',
   posts: 'posts.view',
   workspaces: 'files.view',
+  plugins: null,
   files: 'files.view',
   audio: 'audio.view',
 }

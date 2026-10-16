@@ -14,6 +14,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   workspace_publish_resources: ['files.view', 'files.edit', 'images.view', 'images.edit'],
   list_group_resources: 'images.view',
   list_plugin_pages: [], run_plugin_action: [], get_plugin_action: [], cancel_plugin_action: [],
+  list_plugin_drafts: [], create_plugin_draft: [], read_plugin_draft: [], edit_plugin_draft: [], prepare_plugin_install: [],
   workspace_list: 'files.view', workspace_read: 'files.view', workspace_search: 'files.view', workspace_apply: ['files.view', 'files.edit'],
   search_prompts: 'prompts.view', get_most_used_prompts: 'prompts.view', list_prompt_groups: 'prompts.view',
   list_prompt_presets: 'prompts.view', get_prompt_group_structure: 'prompts.view',
@@ -157,6 +158,9 @@ function keyHoldsTool(context: McpRequestContext, toolName: string): boolean {
  * `requireMcpToolAccess` re-runs this before each call, then rechecks the account with explicit errors.
  */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
+  if (['list_plugin_drafts', 'create_plugin_draft', 'read_plugin_draft', 'edit_plugin_draft', 'prepare_plugin_install'].includes(toolName)) {
+    if (!context.requester || !isChatMcpSource(context.source) || context.chatContext?.kind !== 'direct' || BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
+  }
   if (toolName.startsWith('workspace_')) {
     const writes = toolName === 'workspace_apply' || toolName === 'workspace_publish_resources';
     if (context.source === 'plugin') return !!context.workspace && !!context.requester && context.scopes.includes(writes ? 'organize' : 'read') && (!context.toolAllowlist || context.toolAllowlist.includes(toolName)) && (!writes || context.workspace.write) && featurePermissionOf(toolName) !== undefined && (!accountChecks || accountHoldsTool(context, toolName));

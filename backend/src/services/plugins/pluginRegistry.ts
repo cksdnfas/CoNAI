@@ -41,6 +41,8 @@ export const PLUGIN_ZIP_LIMIT = 8 * 1024 * 1024
 const MAX_FILE = 4 * 1024 * 1024
 const MAX_TOTAL = 16 * 1024 * 1024
 const allowedAssets = new Set(['.html', '.js', '.mjs', '.css', '.json', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.ico', '.svg', '.woff', '.woff2', '.ttf', '.otf', '.wasm', '.md', '.txt', '.csv', '.mp3', '.wav', '.ogg'])
+export const PLUGIN_PACKAGE_LIMITS = { file: MAX_FILE, total: MAX_TOTAL, entries: 256 } as const
+export function pluginAssetAllowed(name: string) { return allowedAssets.has(path.extname(pluginAssetName(name)).toLowerCase()) }
 export const pluginPackagesRoot = path.join(runtimePaths.basePath, 'plugins', 'packages')
 type Row = { id: string; version: string; manifest: string; digest: string; enabled: number; installed_at: string; enabled_by: number | null }
 
@@ -170,6 +172,31 @@ export function packageFile(id: string, version: string, asset: string) {
   if (!stat.isFile() || stat.nlink > 1 || stat.size > MAX_FILE) throw new PluginError('패키지 파일이 올바르지 않아.')
   return current
 }
+/** Only installed package assets, never the plugin's data directory or linked files. */
+export function readInstalledPluginAssets(id: string) {
+  const plugin = getPlugin(id, false)
+  const directory = walkPackagePath(['plugins', 'packages', id, plugin.version])!
+  const assets = new Map<string, Buffer>()
+  let entries = 0, directories = 0, total = 0
+  const visit = (folder: string, prefix: string) => {
+    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+      const name = pluginAssetName(`${prefix}${entry.name}`)
+      const file = path.join(folder, entry.name)
+      const stat = fs.lstatSync(file)
+      if (stat.isSymbolicLink()) throw new PluginError('패키지에 링크가 있어.', 403)
+      if (stat.isDirectory()) {
+        if (++directories > 256 * 100) throw new PluginError('패키지 폴더 개수가 너무 많아.')
+        visit(file, `${name}/`); continue
+      }
+      if (++entries > 256) throw new PluginError('패키지 파일 개수가 너무 많아.')
+      if (!stat.isFile() || stat.nlink !== 1 || !pluginAssetAllowed(name) || stat.size > MAX_FILE || (total += stat.size) > MAX_TOTAL) throw new PluginError('패키지 파일 형식이나 크기를 확인해줘.')
+      assets.set(name, fs.readFileSync(packageFile(id, plugin.version, name)))
+    }
+  }
+  visit(directory, '')
+  return { plugin, assets }
+}
+
 /** Inspect names and declared sizes before bounded decompression; never extract executable install hooks. */
 export function unpackPlugin(zipBytes: Buffer) {
   if (!zipBytes.length || zipBytes.length > PLUGIN_ZIP_LIMIT) throw new PluginError('패키지는 8MB까지 설치할 수 있어.', 413)
@@ -206,7 +233,7 @@ export function unpackPlugin(zipBytes: Buffer) {
  * A new package, or a new version of an installed one (same id): files are swapped in place, the plugin's data folder
  * stays, open windows close and waiting requests are cancelled. Valid installed packages keep their enabled state.
  */
-export async function installPlugin(zipBytes: Buffer): Promise<{ plugin: InstalledPlugin; updated: boolean; reenable: boolean }> {
+export async function installPlugin(zipBytes: Buffer, expectedDigest?: string | null): Promise<{ plugin: InstalledPlugin; updated: boolean; reenable: boolean }> {
   let unpacked: ReturnType<typeof unpackPlugin>
   try { unpacked = unpackPlugin(zipBytes) }
   catch (error) {
@@ -217,6 +244,7 @@ export async function installPlugin(zipBytes: Buffer): Promise<{ plugin: Install
   const db = pluginDb()
   const digest = createHash('sha256').update(zipBytes).digest('hex')
   const existing = db.prepare('SELECT * FROM plugins WHERE id = ?').get(manifest.id) as Row | undefined
+  if (expectedDigest !== undefined && (existing?.digest ?? null) !== expectedDigest) throw new PluginError('설치된 플러그인이 바뀌었어. 최신 패키지로 새 초안을 만들어줘.', 409)
   if (existing?.digest === digest) throw new PluginError('같은 패키지가 이미 설치돼 있어.', 409)
   if (!existing && (db.prepare('SELECT COUNT(*) AS n FROM plugins').get() as { n: number }).n >= 100) throw new PluginError('플러그인은 100개까지 설치할 수 있어.')
   let previous: PluginManifest | null = null

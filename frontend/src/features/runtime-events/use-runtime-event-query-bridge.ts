@@ -354,6 +354,12 @@ export function useRuntimeEventQueryBridge() {
         void queryClient.invalidateQueries({ queryKey: ['workspaces', 'list'], refetchType: 'active' })
         return
       }
+      case 'plugin.draft.changed': {
+        const { draftId } = envelope.payload as { draftId: string }
+        if (/^[a-f0-9]{32}$/.test(draftId)) void queryClient.invalidateQueries({ queryKey: ['plugin-draft', draftId], refetchType: 'active' })
+        scheduleInvalidate(['plugin-drafts'], 200)
+        return
+      }
       case 'job.status': {
         // 힌트에는 진행률 수치가 없다(정본은 `GET /api/jobs/:jobId`). 해당 잡 쿼리만 무효화한다.
         const payload = envelope.payload as RuntimeJobHintPayload

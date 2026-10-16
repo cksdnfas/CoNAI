@@ -13,6 +13,7 @@ import { COMFY_SEED_RULE } from '../comfyui/seedControl'
 import { createHash } from 'crypto'
 import { requireKnowledgePageAction } from '../posts/knowledge/knowledgePage'
 import { requirePluginPage, requirePluginPageAction, validatePluginPageSnapshot } from '../plugins/pluginRegistry'
+import { requirePluginAuthor } from '../plugins/pluginAuthoring'
 
 export class ChatPageContextError extends Error {
   constructor(message: string, readonly status = 400) { super(message) }
@@ -39,6 +40,7 @@ function requirePageSettingsAccess(requester: McpRequester, path: string, scope:
 }
 
 export function requireChatPageActionAccess(requester: McpRequester, page: Pick<ChatPageSnapshot, 'path'> & Partial<Pick<ChatPageSnapshot, 'resourceId' | 'data' | 'kind'>>, actionId: string, args?: Record<string, unknown>) {
+  if (actionId.startsWith('plugin_author.')) requirePluginAuthor(requester)
   if (page.path.startsWith('/ext/') && !actionId.startsWith('page.')) {
     requireChatPageAccess(requester, page)
     requirePluginPageAction(page, actionId, args)

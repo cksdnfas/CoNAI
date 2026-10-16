@@ -43,6 +43,7 @@ const RUNTIME_EVENT_NAMES: readonly RuntimeEventName[] = [
   'posts.changed',
   'audio.changed',
   'workspace.changed',
+  'plugin.draft.changed',
   'files.changed',
 ]
 

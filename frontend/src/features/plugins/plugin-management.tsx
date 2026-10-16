@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { ExternalLink, FileText, Puzzle, ServerCog, Trash2, Upload, Webhook, Wrench } from 'lucide-react'
+import { Code, Download, ExternalLink, FileText, Puzzle, ServerCog, Trash2, Upload, Webhook, Wrench } from 'lucide-react'
 import type { InstalledPlugin, PluginInstallResult, PluginServerStatus } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -20,11 +20,15 @@ import { useI18n } from '@/i18n'
 import { listPlugins, pluginRequest, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { getErrorMessage } from '@/lib/error-message'
 import { PluginRuntimeSummary } from './plugin-capabilities'
+import { PluginAuthoring } from './plugin-authoring'
+import { createPluginDraft, downloadPluginPackage, PLUGIN_DRAFTS_QUERY_KEY } from '@/lib/api-plugin-authoring'
+import { createRandomUuid } from '@/lib/random-uuid'
 
 /** Settings › 플러그인 관리: install a package, switch plugins on and off, see what each may do, remove one. */
 export function PluginManagement() {
   const { t } = useI18n()
   const navigate = useNavigate()
+  const cache = useQueryClient()
   const confirm = useConfirm()
   const auth = useAuthStatusQuery()
   const isAdmin = auth.data?.isAdmin === true
@@ -112,6 +116,8 @@ export function PluginManagement() {
         })}
       </RowGroup>
 
+      {isAdmin ? <PluginAuthoring /> : null}
+
       <Modal open={opened !== null} onClose={() => setDetail(null)} title={opened ? <span className="flex items-center gap-2">{opened.manifest.name}<Chip size="sm" tone="muted" className="font-mono">{opened.manifest.version}</Chip></span> : ''} widthClassName="max-w-lg">
         {opened ? (
           <>
@@ -153,6 +159,13 @@ export function PluginManagement() {
             </ModalBody>
             {isAdmin ? (
               <ModalFooter>
+                <Button variant="secondary" size="sm" disabled={busy} onClick={() => void run(async () => {
+                  const draft = await createPluginDraft({ requestId: createRandomUuid(), pluginId: opened.manifest.id, fromInstalled: true })
+                  await cache.invalidateQueries({ queryKey: PLUGIN_DRAFTS_QUERY_KEY })
+                  setDetail(null)
+                  navigate(`/settings?section=plugins&draft=${draft.id}`)
+                })}><Code />{t({ ko: '소스 수정', en: 'Edit source' })}</Button>
+                <Button variant="ghost" size="sm" disabled={busy} onClick={() => void run(() => downloadPluginPackage(`${opened.manifest.id}-${opened.manifest.version}.zip`, { pluginId: opened.manifest.id }))}><Download />{t({ ko: 'ZIP 내보내기', en: 'Export ZIP' })}</Button>
                 <Button variant="destructive" size="sm" disabled={busy} onClick={() => void remove(opened)}><Trash2 />{t({ ko: '제거', en: 'Remove' })}</Button>
                 <span className="flex-1" />
                 <SwitchLine label={t({ ko: '켜짐', en: 'Enabled' })} checked={opened.enabled} disabled={busy} onCheckedChange={(value) => void setEnabled(opened, value)} />

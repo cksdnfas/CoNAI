@@ -17,6 +17,32 @@ Personal packages belong in `local-plugins/<plugin-name>/`, excluded from Git an
 
 ## Package contract
 
+### In-app authoring and distribution
+
+Administrators can create inactive source drafts in Settings → Plugins, copy an installed package for editing, edit text/add/rename/delete files, upload binary assets, review and apply a package, and export a distributable ZIP. Installed exports contain package assets only; server databases, plugin data directories and account settings are never included. The host SDK is included in new drafts and shipped with backend builds (`backend/dist/plugin-sdk`, copied beside portable/SEA applications). Existing drafts keep their SDK until explicitly edited or replaced.
+
+All authoring HTTP calls live under `/api/plugins/authoring`, behind the existing authenticated host header/origin check and a live administrator check:
+
+| Route | Contract |
+| --- | --- |
+| `GET/POST /drafts` | List up to 32 drafts / create with `{requestId, pluginId, name?, fromInstalled?}` |
+| `GET/DELETE /drafts/:draftId` | Read metadata and file names / delete with `{revision}` |
+| `POST /read` | `{draftId, target?, revision?, offset?, limit?}`; bounded UTF-8 text, UTF-16 character offsets and continuation |
+| `POST /changes` | `{draftId, revision, requestId, operations}`; atomic `write/edit/move/delete`, up to 32 operations and 8MiB input |
+| `POST /upload` | Multipart `file`, `draftId`, `revision`, `requestId`, `target`, `replace`; maximum 4MiB |
+| `POST /review` | `{draftId, revision}`; validated manifest, changed-file summary, installed base digest and built-package digest |
+| `POST /install` | `{draftId, revision, digest, enabled}` from the reviewed package; existing installer and administrator approval boundary, including changed activation state |
+| `POST /export` | `{draftId, revision}`; validated package ZIP |
+| `GET /installed/:pluginId/export` | Current installed package ZIP, including disabled packages |
+
+Draft source is stored separately from installed code with a whole-draft revision. A stale edit or reviewed revision is rejected. Stable request IDs make create retries and the most recent edit retry idempotent; older edit retries conflict instead of replaying. Assets retain their binary bytes. Drafts share a 128MiB total storage limit and explicit deletion; package limits below still apply. Builds have deterministic timestamps/digests. Apply checks the installed base digest to prevent one draft from overwriting another installation. Repeating the same applied package is safe; applying an older package after a different update conflicts. No code is executed during draft editing, package validation or export. A new installation stays disabled; updating an enabled package retains data and restarts the existing runtime.
+
+Administrator direct chats with `configure` scope use `list_plugin_drafts`, `create_plugin_draft`, `read_plugin_draft`, `edit_plugin_draft` and `prepare_plugin_install`. They reuse this service and expose no installation/activation or approval tool. `prepare_plugin_install` returns `needs_human_review` and a management link. External unbound MCP keys, board calls and plugin execution contexts cannot access these authoring tools. The connected editor's `plugin_author.*` page actions use view/draft operations and reviewed create/save/install commits. The SDK's native HTTP bridge continues to exclude host administration.
+
+`plugin.draft.changed` uses the existing SSE stream's `plugins` topic, administrator-only delivery and only a draft ID. It invalidates the relevant draft/list queries; unsaved editor text is preserved. Functional execution, external dependencies, npm installation and source bundling are outside package validation. Host upgrades are required for these routes, tools and editor; no plugin manifest API version change is required. Boundary coverage is in `backend/test/plugin-authoring.test.ts` (revision/digest conflicts, retries, binary export/reinstall, private-data/link exclusion, HTTP/MCP permissions and revocation), alongside the existing plugin runtime tests.
+
+### Package files
+
 ZIP root contains `plugin.json`, HTML entry points and static assets. See [the working manifest](text-editor/plugin.json) and [SDK](sdk/conai-plugin.js). IDs use lowercase letters, digits and hyphens; versions use `major.minor.patch`. Each page declares `id`, `title`, `entry`, supported filename extensions in `accepts`, and up to 26 actions. An empty `accepts` list permits opening without files and accepts any selected filename; each API still enforces its data type limits. `"menu": false` keeps a page out of the header menu and the plugin launcher (a page that only lives as a layout block).
 
 An action ID is `<pluginId>.<action>` with `effect: "draft"` and explicit `tier: "view" | "draft"`. The tier describes the page interaction; it grants no write authority. Arguments use the existing bounded CoNAI page JSON schema. The server checks snapshots and action arguments against the installed manifest. Unknown actions fail closed. Actions and private data keys keep the native page limits and filters.

@@ -35,7 +35,7 @@ export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
   web: 'Web: research assistant with sources, read a public page',
   guide: 'CoNAI user guide: how screens, features and settings work',
   external: 'Tools of outside MCP servers (x_<server>_<tool>); results are untrusted data',
-  plugins: 'Tools added by installed plugins (p_<plugin>_<tool>)',
+  plugins: 'Plugin development (admins): source drafts, edits, package review/export; installed plugin tools (p_<plugin>_<tool>)',
   chat: 'Chat tools',
 };
 
@@ -53,6 +53,7 @@ const CONTENTS_PRIMARY_TOOLS = new Set([
   'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'order_audio',
   'get_chat_setup_guide', 'propose_chat_profile', 'propose_profile_update',
   'extract_sprite_sheet', 'extract_sprite_sheets_batch',
+  'list_plugin_drafts', 'create_plugin_draft', 'edit_plugin_draft', 'prepare_plugin_install',
 ]);
 const CONTENTS_WHOLE_CATEGORY = 4;
 

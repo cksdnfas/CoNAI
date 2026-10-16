@@ -79,6 +79,8 @@ const REQUEST_BODY_LIMIT_TIER_BY_MOUNT: ReadonlyArray<readonly [string, RequestB
   ['/api/wildcards', 'bulk'],
   // appearance presetSlots / wallpaperLayoutPresets 묶음 저장
   ['/api/settings', 'bulk'],
+  // Plugin source batches are capped again at 8MiB by the administrator-only authoring service.
+  ['/api/plugins/authoring/changes', 'bulk'],
   // 모델 목록 등 대형 드롭다운 항목
   ['/api/custom-dropdown-lists', 'bulk'],
 ];

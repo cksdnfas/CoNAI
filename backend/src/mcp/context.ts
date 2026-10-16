@@ -118,6 +118,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   workspace_publish_resources: 'organize',
   list_group_resources: 'read',
   list_plugin_pages: 'read',
+  list_plugin_drafts: 'configure', create_plugin_draft: 'configure', read_plugin_draft: 'configure', edit_plugin_draft: 'configure', prepare_plugin_install: 'configure',
   run_plugin_action: 'read',
   get_plugin_action: 'read',
   cancel_plugin_action: 'read',

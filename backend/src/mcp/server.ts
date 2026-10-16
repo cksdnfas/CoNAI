@@ -12,6 +12,7 @@ import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
 import { registerFileStoreTools } from './tools/fileStoreTools';
 import { registerPluginTools } from './tools/pluginTools';
+import { registerPluginAuthoringTools } from './tools/pluginAuthoringTools';
 import { registerWorkspaceTools } from './tools/workspaceTools';
 import { chatWorkspace } from '../services/codex-chat/chatWorkspace';
 import { registerChatLinkedFileTools } from './tools/chatLinkedFileTools';
@@ -100,6 +101,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   inCategory('files', () => registerFileStoreTools(server, context));
   inCategory('files', () => registerWorkspaceTools(server, context));
   if (!context.omitPluginTools) inCategory('files', () => registerPluginTools(server, context));
+  if (!context.omitPluginTools) inCategory('plugins', () => registerPluginAuthoringTools(server, context));
   inCategory('posts', () => registerPostTools(server, context));
   inCategory('image_groups', () => registerImageGroupTools(server, context));
   inCategory('emoticons', () => registerEmoticonTools(server, context));

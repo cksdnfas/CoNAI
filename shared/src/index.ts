@@ -44,6 +44,7 @@ export * from './constants/pageSettings'
 export * from './types/agentCli'
 export * from './utils/spriteSampling'
 export * from './types/plugin'
+export * from './types/pluginAuthoring'
 export * from './types/loreTranslation'
 export * from './utils/pluginNativeApi'
 export * from './constants/generationLayout';

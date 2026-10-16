@@ -27,6 +27,10 @@ CoNAI의 화면·내부 자료·AI·백그라운드 작업을 연결하는 플�
 
 ## 2. 패키지 만들기
 
+관리자는 앱의 **설정 → 플러그인 관리 → 새 플러그인**에서 SDK가 포함된 제작 초안을 만들거나, 설치된 플러그인의 **소스 수정**에서 패키지를 복사할 수 있습니다. 소스 저장·자산 업로드 후 **검증 및 설치 검토**로 정확한 리비전의 변경 파일을 확인하고 적용합니다. 초안과 설치된 패키지 모두 **ZIP 내보내기**를 지원하며 전용 데이터·계정별 설정은 제외합니다. 앱 안의 제작은 아래 로컬 빌드와 같은 manifest·설치 검증기를 사용하며 외부 패키지 관리자나 셸을 실행하지 않습니다.
+
+채팅은 관리자 1:1 대화의 `configure` 범위에서 `list_plugin_drafts` → `create_plugin_draft` → `read_plugin_draft` / `edit_plugin_draft` → `prepare_plugin_install`을 사용합니다. 생성과 변경에는 안정된 `requestId`, 변경과 검토에는 현재 `revision`을 전달합니다. 초안 저장은 실행 코드 적용이 아니며, 설치 준비 결과는 `needs_human_review`와 관리 화면 링크입니다. 실제 설치·활성화를 완료했다고 보고하면 안 됩니다. 새 기능의 페이지 작업과 SDK 핸들러를 함께 작성하고, 이 가이드는 `get_app_guide(topic: "PLUGIN_DEVELOPMENT")`로 필요한 절만 읽습니다.
+
 작업과 가까운 실행 예제부터 읽으세요.
 
 | 예제 | 참고할 기능 |
@@ -132,6 +136,7 @@ Node 서버 모듈은 파일·네트워크·프로세스 접근이 가능한 신
 
 | 공용 연결과 책임 | 호출 계약 | 메인 구현·검증 |
 | --- | --- | --- |
+| 앱 내부 제작·관리·배포 | 관리자 초안 파일 CRUD·업로드, 리비전/패키지 해시 검토·적용·ZIP 내보내기. `plugin_author.*` 페이지 작업과 관리자 채팅 제작 도구가 같은 서비스 사용 | [제작 서비스](../../backend/src/services/plugins/pluginAuthoring.ts), [HTTP](../../backend/src/routes/plugin-authoring.routes.ts), [MCP](../../backend/src/mcp/tools/pluginAuthoringTools.ts), [편집기](../../frontend/src/features/plugins/plugin-authoring.tsx), [제작 회귀](../../backend/test/plugin-authoring.test.ts) |
 | 격리 화면·페이지 어시스턴트 | `connectPlugin`, `api.publish`, manifest 페이지 작업. 화면 리비전·검토 경계를 호스트에서 관리 | [공유 타입](../../shared/src/types/plugin.ts), [페이지 호스트](../../frontend/src/features/plugins/plugin-page.tsx), [서버 호스트](../../backend/src/services/plugins/pluginHost.ts), [경계 테스트](../../backend/test/plugins.test.ts) |
 | 기존 앱 도구·HTTP·스트림 | `api.app.*`, `conai.tools.*`, `serverActions`. 기존 도메인 서비스와 계정 권한을 재사용 | [HTTP 경로 정책](../../shared/src/utils/pluginNativeApi.ts), [네이티브 연결](../../frontend/src/features/plugins/plugin-native-api.ts), [앱 도구 브리지](../../backend/src/services/plugins/pluginAppBridge.ts), [앱 작업](../../backend/src/services/plugins/pluginAppActions.ts), [SDK 테스트](../../frontend/test/plugin-sdk.test.ts) |
 | 연결 프로젝트·저장 | `workspace.*`. 실제 공용 프로젝트의 리비전·쓰기 잠금·검토를 재사용 | [프로젝트 연결](../../backend/src/services/plugins/pluginWorkspace.ts), [WorkspaceService](../../backend/src/services/workspaceService.ts), [경계 테스트](../../backend/test/plugins.test.ts) |

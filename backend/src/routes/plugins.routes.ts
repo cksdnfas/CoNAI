@@ -1,4 +1,5 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
+import pluginAuthoringRouter from './plugin-authoring.routes'
 import multer from 'multer'
 import { z } from 'zod'
 import { requireAdmin, requirePermission } from '../middleware/authMiddleware'
@@ -32,6 +33,7 @@ router.use((req, res, next) => {
   next()
 })
 const caller = (req: Request) => ({ requester: { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }, sessionId: req.sessionID })
+router.use('/authoring', pluginAuthoringRouter)
 const param = (req: Request, key: string) => String(req.params[key])
 const baseUrl = (req: Request) => `${req.protocol}://${req.get('host')}`
 router.post('/app-tools', asyncHandler(async (req, res) => res.json({ success: true, data: await listPluginAppTools(null, pluginBrowserContext(caller(req), baseUrl(req)), req.body) })))

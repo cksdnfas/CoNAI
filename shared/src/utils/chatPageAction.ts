@@ -70,6 +70,8 @@ export function validateChatPageArguments(schema: ChatPageSchema, input: unknown
 
 /** IDs and route bindings are maintained by the app; snapshots cannot grant arbitrary native actions. */
 const nativeActionPermissions = {
+  'plugin_author.open': null, 'plugin_author.create': null, 'plugin_author.file': null, 'plugin_author.edit': null,
+  'plugin_author.save': null, 'plugin_author.review': null, 'plugin_author.install': null, 'plugin_author.export': null, 'plugin_author.refresh': null,
   'workspace.open': 'files.view', 'workspace.search': 'files.view', 'workspace.new': 'files.edit', 'workspace.create': 'files.edit', 'workspace.mkdir': 'files.edit', 'workspace.save': 'files.edit',
   'page.navigate': null, 'page.refresh': null, 'page.settings_open': null, 'page_settings.save': null, 'page_settings.select': null, 'page_settings.close': null,
   'prompt.create': 'prompts.edit', 'prompt.update': 'prompts.edit', 'prompt.select': 'prompts.view',
@@ -145,6 +147,8 @@ const VIEW_ACTIONS = new Set(['page.settings_open', 'page_settings.select', 'pag
 /** View operations that stay inside the open editor, so unsaved changes there do not block them. */
 const IN_PLACE_VIEW_ACTIONS = new Set(['page.settings_open', 'comfy.check', 'profile.section', 'library.select', 'resource.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
 for (const id of ['workspace.create', 'workspace.save']) COMMIT_ACTIONS.add(id)
+for (const id of ['plugin_author.create', 'plugin_author.save', 'plugin_author.install']) COMMIT_ACTIONS.add(id)
+for (const id of ['plugin_author.open', 'plugin_author.file', 'plugin_author.review', 'plugin_author.export', 'plugin_author.refresh']) VIEW_ACTIONS.add(id)
 for (const id of ['workspace.open', 'workspace.new', 'workspace.search', 'workspace.mkdir']) VIEW_ACTIONS.add(id)
 IN_PLACE_VIEW_ACTIONS.add('workspace.mkdir')
 for (const id of ['posts.comments_more', 'posts.comments_at']) { VIEW_ACTIONS.add(id); IN_PLACE_VIEW_ACTIONS.add(id) }
@@ -160,6 +164,7 @@ export function chatPageActionLeavesScreen(id: string, action?: Pick<ChatPageAct
   return chatPageActionTier(id, action) === 'view' && !IN_PLACE_VIEW_ACTIONS.has(id)
 }
 export function chatPageActionAllowed(path: string, id: string): boolean {
+  if (id.startsWith('plugin_author.')) return path === '/settings' && own(CHAT_PAGE_ACTION_PERMISSIONS, id)
   const extension = /^\/ext\/([a-z][a-z0-9-]{1,47})\/([a-z][a-z0-9-]{1,47})$/.exec(path)
   // Structural validation only. The server additionally checks the installed manifest on every use.
   if (extension && !own(CHAT_PAGE_ACTION_PERMISSIONS, id)) return id.startsWith(`${extension[1]}.`) && /^[a-z][a-z0-9-]*\.[a-z][a-z0-9_]{0,47}$/.test(id)

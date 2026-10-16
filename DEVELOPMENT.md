@@ -161,6 +161,8 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 ## 선택 설치 확장
 
+앱 내부 제작은 `pluginAuthoring.ts`의 비실행 초안·파일 리비전·검증·패키징 서비스, `plugin-authoring.routes.ts`의 관리자 HTTP, `pluginAuthoringTools.ts`의 관리자 1:1 채팅 도구, `plugin-authoring.tsx`의 편집기를 사용한다. `shared/src/types/pluginAuthoring.ts`가 응답 계약이다. `plugin_author.*` 페이지 작업은 현재 편집기 초안·저장·설치 검토에 연결한다. 실제 적용은 검토 리비전/해시와 기존 설치 digest를 검사한 뒤 `installPlugin`으로 실행하고, ZIP 내보내기는 패키지 자산만 읽는다. `plugin.draft.changed`는 기존 SSE에서 관리자에게 초안 ID만 보내 관련 목록을 갱신한다. SDK는 백엔드 빌드의 `copy:plugin-sdk`와 portable/SEA 복사 경로로 배포한다. 중요한 경계는 `backend/test/plugin-authoring.test.ts`에서 검증하며 세부 한도와 호출 계약은 SDK 문서의 In-app authoring and distribution을 참고한다.
+
 제작 순서·연결 선택·공용 확장 기록은 [플러그인 제작 가이드](docs/GUIDE/PLUGIN_DEVELOPMENT.md)를 따른다. 플러그인 작업으로 메인 연결을 추가·변경하면 해당 가이드의 공용 연결 목록과 SDK 계약을 같은 작업에서 갱신한다.
 
 프로젝트 완료 자료 연결은 `workspacePublishResources.ts`의 `workspace_publish_resources`를 사용한다. `WorkspaceService.apply`의 프로젝트 쓰기 잠금 안에서 입력 리비전·원본 권한을 검사하고, 기존 이미지 그룹 관계와 `group_resources`의 오디오/문서 참조를 등록한 뒤 완료 문서와 진행 목록을 순서대로 저장한다. 그룹 등록은 멱등이며 파일 저장 실패 시 후속 목록 갱신을 실행하지 않는다. 완료 요청은 진행 목록 전체 대신 항목 ID·리비전만 받으며 서버가 문서 target과 함께 일치하는 항목 하나만 제거한다. 요청 ID는 자료와 그룹 입력까지 비교한다. `groupResources.ts`, `groups.resources.routes.ts`, `GroupLinkedResources`가 그룹의 추가 자료 조회·재생·파일함 연결을 담당하며 `list_group_resources`도 같은 조회를 사용한다. 원본 저장소와 파일 위치는 유지한다.
