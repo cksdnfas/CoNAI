@@ -33,6 +33,9 @@ import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { PromptToggleField } from './prompt-toggle-field'
 import { ResolutionPicker, type DimensionBounds } from './resolution-picker'
 
+/** The NAI form sections as separately placeable blocks. */
+export type NaiEditorBlockNodes = Record<'prompt' | 'characters' | 'settings' | 'images' | 'references' | 'vibes', ReactNode>
+
 /** Render the main editable NAI form sections while the parent panel handles data wiring and modals. */
 export function NaiGenerationEditorSections({
   naiForm,
@@ -79,6 +82,7 @@ export function NaiGenerationEditorSections({
   handleDeleteVibeFromStore,
   actionSection,
   showActionSection,
+  renderBlocks,
 }: {
   naiForm: NAIFormDraft
   setNaiForm: Dispatch<SetStateAction<NAIFormDraft>>
@@ -125,271 +129,293 @@ export function NaiGenerationEditorSections({
   handleDeleteVibeFromStore: (assetId: string) => Promise<void>
   actionSection: ReactNode
   showActionSection: boolean
+  /** Hand the sections to a layout (block layout presets) instead of stacking them in the default order. */
+  renderBlocks?: (blocks: NaiEditorBlockNodes) => ReactNode
 }) {
   const { t } = useI18n()
   const hasCharacters = naiForm.characters.length > 0
 
-  return (
-    <>
-      <NaiPromptSection
-        prompt={naiForm.prompt}
-        negativePrompt={naiForm.negativePrompt}
-        onPromptChange={(value) => handleNaiFieldChange('prompt', value)}
-        onNegativePromptChange={(value) => handleNaiFieldChange('negativePrompt', value)}
-      />
+  const prompt = (
+    <NaiPromptSection
+      prompt={naiForm.prompt}
+      negativePrompt={naiForm.negativePrompt}
+      onPromptChange={(value) => handleNaiFieldChange('prompt', value)}
+      onNegativePromptChange={(value) => handleNaiFieldChange('negativePrompt', value)}
+    />
+  )
 
-      <Section
-        // Remount when the list goes empty <-> non-empty so it opens once characters exist (e.g. reused from history).
-        key={hasCharacters ? 'nai-characters-present' : 'nai-characters-empty'}
-        variant="settings"
-        heading={t({ ko: '캐릭터 프롬프트', en: 'Character Prompt' })}
-        collapsible
-        defaultOpen={hasCharacters}
-        actions={(
-          <>
-            <span className="px-1 text-xs tabular-nums text-muted-foreground">{naiForm.characters.length}</span>
-            {supportsCharacterPrompts ? (
-              <IconButton
-                size="icon-sm"
-                variant="ghost"
-                onClick={handleAddCharacterPrompt}
-                label={t('image-generation.components.nai.generation.editor.sections.add.character')}
-              >
-                <Plus className="h-4 w-4" />
-              </IconButton>
-            ) : (
-              // A disabled button swallows hover, so the span carries the "why" tooltip.
-              <Tip content={t('image-generation.components.nai.generation.editor.sections.character.prompt.is.not.available.for.the')}>
-                <span className="inline-flex" tabIndex={0}>
-                  <IconButton
-                    size="icon-sm"
-                    variant="ghost"
-                    disabled
-                    tooltip={false}
-                    label={t('image-generation.components.nai.generation.editor.sections.add.character')}
-                  >
-                    <Plus className="h-4 w-4" />
-                  </IconButton>
-                </span>
-              </Tip>
-            )}
-          </>
-        )}
-      >
-        {!supportsCharacterPrompts ? null : (
-          <>
-            <ToggleRow variant="detail" className="justify-between">
-              <span className="font-medium">AI's Choice</span>
-              <Switch
-                checked={naiForm.characterPositionAiChoice}
-                disabled={!canUseCharacterPositions}
-                onCheckedChange={(checked) => setNaiForm((current) => ({
-                  ...current,
-                  characterPositionAiChoice: checked,
+  const characters = (
+    <Section
+      // Remount when the list goes empty <-> non-empty so it opens once characters exist (e.g. reused from history).
+      key={hasCharacters ? 'nai-characters-present' : 'nai-characters-empty'}
+      variant="settings"
+      heading={t({ ko: '캐릭터 프롬프트', en: 'Character Prompt' })}
+      collapsible
+      defaultOpen={hasCharacters}
+      actions={(
+        <>
+          <span className="px-1 text-xs tabular-nums text-muted-foreground">{naiForm.characters.length}</span>
+          {supportsCharacterPrompts ? (
+            <IconButton
+              size="icon-sm"
+              variant="ghost"
+              onClick={handleAddCharacterPrompt}
+              label={t('image-generation.components.nai.generation.editor.sections.add.character')}
+            >
+              <Plus className="h-4 w-4" />
+            </IconButton>
+          ) : (
+            // A disabled button swallows hover, so the span carries the "why" tooltip.
+            <Tip content={t('image-generation.components.nai.generation.editor.sections.character.prompt.is.not.available.for.the')}>
+              <span className="inline-flex" tabIndex={0}>
+                <IconButton
+                  size="icon-sm"
+                  variant="ghost"
+                  disabled
+                  tooltip={false}
+                  label={t('image-generation.components.nai.generation.editor.sections.add.character')}
+                >
+                  <Plus className="h-4 w-4" />
+                </IconButton>
+              </span>
+            </Tip>
+          )}
+        </>
+      )}
+    >
+      {!supportsCharacterPrompts ? null : (
+        <>
+          <ToggleRow variant="detail" className="justify-between">
+            <span className="font-medium">AI's Choice</span>
+            <Switch
+              checked={naiForm.characterPositionAiChoice}
+              disabled={!canUseCharacterPositions}
+              onCheckedChange={(checked) => setNaiForm((current) => ({
+                ...current,
+                characterPositionAiChoice: checked,
+              }))}
+            />
+          </ToggleRow>
+
+          {useCharacterPositions ? (
+            <NaiControllerInsetBlock>
+              <NaiCharacterPositionBoard
+                characters={naiForm.characters.map((character, index) => ({
+                  label: `Character ${index + 1}`,
+                  centerX: character.centerX,
+                  centerY: character.centerY,
                 }))}
+                selectedIndex={selectedCharacterIndex}
+                onSelectIndex={setSelectedCharacterIndex}
+                onPositionChange={(index, centerX, centerY) => {
+                  handleCharacterPromptChange(index, 'centerX', centerX)
+                  handleCharacterPromptChange(index, 'centerY', centerY)
+                }}
               />
-            </ToggleRow>
+            </NaiControllerInsetBlock>
+          ) : null}
 
-            {useCharacterPositions ? (
-              <NaiControllerInsetBlock>
-                <NaiCharacterPositionBoard
-                  characters={naiForm.characters.map((character, index) => ({
-                    label: `Character ${index + 1}`,
-                    centerX: character.centerX,
-                    centerY: character.centerY,
-                  }))}
-                  selectedIndex={selectedCharacterIndex}
-                  onSelectIndex={setSelectedCharacterIndex}
-                  onPositionChange={(index, centerX, centerY) => {
-                    handleCharacterPromptChange(index, 'centerX', centerX)
-                    handleCharacterPromptChange(index, 'centerY', centerY)
-                  }}
-                />
-              </NaiControllerInsetBlock>
-            ) : null}
-
-            {hasCharacters ? (
-              <div className="divide-y divide-line">
-                {naiForm.characters.map((character, index) => (
-                  <div
-                    key={`nai-character-${index}`}
-                    data-selected={index === selectedCharacterIndex || undefined}
-                    className="space-y-2 py-3 pl-3 transition-shadow data-[selected=true]:shadow-[inset_2px_0_0_var(--primary)]"
-                    onClick={() => setSelectedCharacterIndex(index)}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <Text as="div" variant="label">Character {index + 1}</Text>
-                      <IconButton
-                        size="icon-sm"
-                        variant="ghost"
-                        label={t('image-generation.components.nai.common.remove')}
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          handleRemoveCharacterPrompt(index)
-                        }}
-                      >
-                        <Trash2 />
-                      </IconButton>
-                    </div>
-
-                    <PromptToggleField
-                      compact
-                      tool="nai"
-                      positiveValue={character.prompt}
-                      negativeValue={character.uc}
-                      onPositiveChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
-                      onNegativeChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
-                    />
+          {hasCharacters ? (
+            <div className="divide-y divide-line">
+              {naiForm.characters.map((character, index) => (
+                <div
+                  key={`nai-character-${index}`}
+                  data-selected={index === selectedCharacterIndex || undefined}
+                  className="space-y-2 py-3 pl-3 transition-shadow data-[selected=true]:shadow-[inset_2px_0_0_var(--primary)]"
+                  onClick={() => setSelectedCharacterIndex(index)}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <Text as="div" variant="label">Character {index + 1}</Text>
+                    <IconButton
+                      size="icon-sm"
+                      variant="ghost"
+                      label={t('image-generation.components.nai.common.remove')}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleRemoveCharacterPrompt(index)
+                      }}
+                    >
+                      <Trash2 />
+                    </IconButton>
                   </div>
-                ))}
+
+                  <PromptToggleField
+                    compact
+                    tool="nai"
+                    positiveValue={character.prompt}
+                    negativeValue={character.uc}
+                    onPositiveChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
+                    onNegativeChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </>
+      )}
+    </Section>
+  )
+
+  const settings = (
+    <NaiSettingsSection
+      naiForm={naiForm}
+      setNaiForm={setNaiForm}
+      maxSampleCount={maxSampleCount}
+      handleNaiFieldChange={handleNaiFieldChange}
+      handleResolutionPresetChange={handleResolutionPresetChange}
+    />
+  )
+
+  const images = naiForm.action !== 'generate' ? (
+      <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} collapsible defaultOpen={false} className="@container">
+        <div className="space-y-4">
+          <FormField label={t({ ko: '원본 이미지', en: 'Source Image' })}>
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <ImageAttachmentPickerButton
+                  label={naiForm.sourceImage
+                    ? t('image-generation.components.nai.generation.editor.sections.change.source.image')
+                    : t('image-generation.components.nai.generation.editor.sections.select.source.image')}
+                  modalTitle={t('image-generation.components.nai.generation.editor.sections.select.source.image')}
+                  allowSaveDialog={false}
+                  onSelect={(image) => handleNaiImageChange('sourceImage', image)}
+                />
+                {naiForm.sourceImage ? (
+                  <>
+                    <IconButton
+                      variant="secondary"
+                      onClick={handleOpenImageEditor}
+                      label={naiForm.action === 'infill'
+                        ? t('image-generation.components.nai.generation.editor.sections.edit.source.mask')
+                        : t('image-generation.components.nai.generation.editor.sections.edit.source')}
+                    >
+                      <Brush />
+                    </IconButton>
+                    <IconButton
+                      variant="ghost"
+                      className="hover:text-destructive"
+                      onClick={() => void handleNaiImageChange('sourceImage')}
+                      label={t({ ko: '원본 이미지 제거', en: 'Remove source image' })}
+                    >
+                      <Trash2 />
+                    </IconButton>
+                  </>
+                ) : null}
               </div>
-            ) : null}
-          </>
-        )}
-      </Section>
+              {naiForm.sourceImage ? <NaiSelectedImageCard image={naiForm.sourceImage} alt="NAI source" /> : null}
+            </div>
+          </FormField>
 
-      <NaiSettingsSection
-        naiForm={naiForm}
-        setNaiForm={setNaiForm}
-        maxSampleCount={maxSampleCount}
-        handleNaiFieldChange={handleNaiFieldChange}
-        handleResolutionPresetChange={handleResolutionPresetChange}
-      />
-
-      {naiForm.action !== 'generate' ? (
-        <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} collapsible defaultOpen={false} className="@container">
-          <div className="space-y-4">
-            <FormField label={t({ ko: '원본 이미지', en: 'Source Image' })}>
+          {naiForm.action === 'infill' ? (
+            <FormField label={t({ ko: '마스크 이미지', en: 'Mask Image' })}>
               <div className="space-y-3">
                 <div className="flex flex-wrap gap-2">
                   <ImageAttachmentPickerButton
-                    label={naiForm.sourceImage
-                      ? t('image-generation.components.nai.generation.editor.sections.change.source.image')
-                      : t('image-generation.components.nai.generation.editor.sections.select.source.image')}
-                    modalTitle={t('image-generation.components.nai.generation.editor.sections.select.source.image')}
+                    label={naiForm.maskImage
+                      ? t('image-generation.components.nai.generation.editor.sections.change.mask.image')
+                      : t('image-generation.components.nai.generation.editor.sections.select.mask.image')}
+                    modalTitle={t('image-generation.components.nai.generation.editor.sections.select.mask.image')}
                     allowSaveDialog={false}
-                    onSelect={(image) => handleNaiImageChange('sourceImage', image)}
+                    onSelect={(image) => handleNaiImageChange('maskImage', image)}
                   />
-                  {naiForm.sourceImage ? (
-                    <>
-                      <IconButton
-                        variant="secondary"
-                        onClick={handleOpenImageEditor}
-                        label={naiForm.action === 'infill'
-                          ? t('image-generation.components.nai.generation.editor.sections.edit.source.mask')
-                          : t('image-generation.components.nai.generation.editor.sections.edit.source')}
-                      >
-                        <Brush />
-                      </IconButton>
-                      <IconButton
-                        variant="ghost"
-                        className="hover:text-destructive"
-                        onClick={() => void handleNaiImageChange('sourceImage')}
-                        label={t({ ko: '원본 이미지 제거', en: 'Remove source image' })}
-                      >
-                        <Trash2 />
-                      </IconButton>
-                    </>
+                  {naiForm.maskImage ? (
+                    <IconButton
+                      variant="ghost"
+                      className="hover:text-destructive"
+                      onClick={() => void handleNaiImageChange('maskImage')}
+                      label={t({ ko: '마스크 이미지 제거', en: 'Remove mask image' })}
+                    >
+                      <Trash2 />
+                    </IconButton>
                   ) : null}
                 </div>
-                {naiForm.sourceImage ? <NaiSelectedImageCard image={naiForm.sourceImage} alt="NAI source" /> : null}
+                {naiForm.maskImage ? <NaiSelectedImageCard image={naiForm.maskImage} alt="NAI mask" /> : null}
               </div>
             </FormField>
+          ) : null}
+
+          <NaiControllerInsetBlock className="space-y-4">
+            <div className="grid gap-4 @sm:grid-cols-2">
+              <FormField label={t({ ko: '강도', en: 'Strength' })}>
+                <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.strength} onValueCommit={(value) => handleNaiFieldChange('strength', value)} />
+              </FormField>
+              <FormField label={t({ ko: '노이즈', en: 'Noise' })}>
+                <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.noise} onValueCommit={(nextValue) => handleNaiFieldChange('noise', nextValue)} />
+              </FormField>
+            </div>
 
             {naiForm.action === 'infill' ? (
-              <FormField label={t({ ko: '마스크 이미지', en: 'Mask Image' })}>
-                <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2">
-                    <ImageAttachmentPickerButton
-                      label={naiForm.maskImage
-                        ? t('image-generation.components.nai.generation.editor.sections.change.mask.image')
-                        : t('image-generation.components.nai.generation.editor.sections.select.mask.image')}
-                      modalTitle={t('image-generation.components.nai.generation.editor.sections.select.mask.image')}
-                      allowSaveDialog={false}
-                      onSelect={(image) => handleNaiImageChange('maskImage', image)}
-                    />
-                    {naiForm.maskImage ? (
-                      <IconButton
-                        variant="ghost"
-                        className="hover:text-destructive"
-                        onClick={() => void handleNaiImageChange('maskImage')}
-                        label={t({ ko: '마스크 이미지 제거', en: 'Remove mask image' })}
-                      >
-                        <Trash2 />
-                      </IconButton>
-                    ) : null}
-                  </div>
-                  {naiForm.maskImage ? <NaiSelectedImageCard image={naiForm.maskImage} alt="NAI mask" /> : null}
-                </div>
-              </FormField>
+              <ToggleRow variant="detail" className="justify-between">
+                <span className="font-medium">{t({ ko: '원본', en: 'Original' })}</span>
+                <Switch checked={naiForm.addOriginalImage} onCheckedChange={(checked) => setNaiForm((current) => ({ ...current, addOriginalImage: checked }))} />
+              </ToggleRow>
             ) : null}
+          </NaiControllerInsetBlock>
+        </div>
+      </Section>
+    ) : null
 
-            <NaiControllerInsetBlock className="space-y-4">
-              <div className="grid gap-4 @sm:grid-cols-2">
-                <FormField label={t({ ko: '강도', en: 'Strength' })}>
-                  <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.strength} onValueCommit={(value) => handleNaiFieldChange('strength', value)} />
-                </FormField>
-                <FormField label={t({ ko: '노이즈', en: 'Noise' })}>
-                  <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.noise} onValueCommit={(nextValue) => handleNaiFieldChange('noise', nextValue)} />
-                </FormField>
-              </div>
+  const references = (
+    <NaiCharacterReferencesEditor
+      supportsCharacterReference={supportsCharacterReference}
+      references={naiForm.characterReferences}
+      onAddImage={handleAddCharacterReference}
+      onRemove={handleRemoveCharacterReference}
+      onImageChange={handleCharacterReferenceImageChange}
+      onFieldChange={handleCharacterReferenceFieldChange}
+      onSave={handleOpenCharacterReferenceSaveModal}
+      library={{
+        assets: filteredSavedCharacterReferences,
+        searchValue: savedCharacterReferenceSearch,
+        isLoading: savedCharacterReferencesLoading,
+        onSearchChange: setSavedCharacterReferenceSearch,
+        onSelect: (asset) => void handleLoadCharacterReferenceFromStore(asset.id),
+        onEdit: handleOpenEditCharacterReferenceFromStore,
+        onDelete: (assetId) => void handleDeleteCharacterReferenceFromStore(assetId),
+      }}
+    />
+  )
 
-              {naiForm.action === 'infill' ? (
-                <ToggleRow variant="detail" className="justify-between">
-                  <span className="font-medium">{t({ ko: '원본', en: 'Original' })}</span>
-                  <Switch checked={naiForm.addOriginalImage} onCheckedChange={(checked) => setNaiForm((current) => ({ ...current, addOriginalImage: checked }))} />
-                </ToggleRow>
-              ) : null}
-            </NaiControllerInsetBlock>
-          </div>
-        </Section>
-      ) : null}
+  const vibes = (
+    <NaiVibesEditor
+      vibes={naiForm.vibes}
+      encodesOnSubmit
+      onAddImage={handleAddVibe}
+      onRemove={handleRemoveVibe}
+      onImageChange={handleVibeImageChange}
+      onFieldChange={handleVibeFieldChange}
+      save={{
+        onSave: handleOpenVibeSaveModal,
+        encodingIndex: encodingVibeIndex,
+        unavailableReason: naiConnected ? undefined : t('image-generation.components.nai.vibes.section.saving.vibes.requires.novelai.login'),
+      }}
+      library={{
+        assets: filteredSavedVibes,
+        searchValue: savedVibeSearch,
+        isLoading: savedVibesLoading,
+        emptyMessage: naiConnected
+          ? undefined
+          : t('image-generation.components.nai.vibes.section.log.in.to.novelai.to.view.or'),
+        onSearchChange: setSavedVibeSearch,
+        onSelect: (asset) => void handleLoadVibeFromStore(asset.id),
+        onEdit: handleOpenEditVibeFromStore,
+        onDelete: (assetId) => void handleDeleteVibeFromStore(assetId),
+      }}
+    />
+  )
 
-      <NaiCharacterReferencesEditor
-        supportsCharacterReference={supportsCharacterReference}
-        references={naiForm.characterReferences}
-        onAddImage={handleAddCharacterReference}
-        onRemove={handleRemoveCharacterReference}
-        onImageChange={handleCharacterReferenceImageChange}
-        onFieldChange={handleCharacterReferenceFieldChange}
-        onSave={handleOpenCharacterReferenceSaveModal}
-        library={{
-          assets: filteredSavedCharacterReferences,
-          searchValue: savedCharacterReferenceSearch,
-          isLoading: savedCharacterReferencesLoading,
-          onSearchChange: setSavedCharacterReferenceSearch,
-          onSelect: (asset) => void handleLoadCharacterReferenceFromStore(asset.id),
-          onEdit: handleOpenEditCharacterReferenceFromStore,
-          onDelete: (assetId) => void handleDeleteCharacterReferenceFromStore(assetId),
-        }}
-      />
+  if (renderBlocks) {
+    return renderBlocks({ prompt, characters, settings, images, references, vibes })
+  }
 
-      <NaiVibesEditor
-        vibes={naiForm.vibes}
-        encodesOnSubmit
-        onAddImage={handleAddVibe}
-        onRemove={handleRemoveVibe}
-        onImageChange={handleVibeImageChange}
-        onFieldChange={handleVibeFieldChange}
-        save={{
-          onSave: handleOpenVibeSaveModal,
-          encodingIndex: encodingVibeIndex,
-          unavailableReason: naiConnected ? undefined : t('image-generation.components.nai.vibes.section.saving.vibes.requires.novelai.login'),
-        }}
-        library={{
-          assets: filteredSavedVibes,
-          searchValue: savedVibeSearch,
-          isLoading: savedVibesLoading,
-          emptyMessage: naiConnected
-            ? undefined
-            : t('image-generation.components.nai.vibes.section.log.in.to.novelai.to.view.or'),
-          onSearchChange: setSavedVibeSearch,
-          onSelect: (asset) => void handleLoadVibeFromStore(asset.id),
-          onEdit: handleOpenEditVibeFromStore,
-          onDelete: (assetId) => void handleDeleteVibeFromStore(assetId),
-        }}
-      />
-
+  return (
+    <>
+      {prompt}
+      {characters}
+      {settings}
+      {images}
+      {references}
+      {vibes}
       {showActionSection ? actionSection : null}
     </>
   )

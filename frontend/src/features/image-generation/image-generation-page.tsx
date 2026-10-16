@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import type { GenerationLayoutSurface } from '@conai/shared'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { CalendarClock, Workflow } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -13,6 +14,10 @@ import type { GenerationResultView } from './components/generation-result-area'
 import { GENERATION_TOOLBAR_STATUS_SLOT_ID } from './components/generation-toolbar-status'
 import { useGenerationHistoryFeed } from './components/use-generation-history-feed'
 import { usePendingHistorySettingsLoad } from './history-settings-load-store'
+import { GenerationLayoutControls } from './layout/generation-layout-controls'
+import { GenerationLayoutProvider, useGenerationLayout } from './layout/generation-layout-context'
+import { GenerationLayoutListEditor } from './layout/generation-layout-list-editor'
+import { resolveRecentStripPlacement } from './layout/generation-layout-ops'
 import {
   IMAGE_GENERATION_GRAPH_EDIT_PARAM,
   IMAGE_GENERATION_GRAPH_PARAM,
@@ -71,7 +76,11 @@ function PanelFallback() {
 /** Codex chat moved out of the generation tabs into its own panel and page; old `?tab=chat` links land there. */
 export function ImageGenerationPage() {
   const [searchParams] = useSearchParams()
-  return searchParams.get('tab') === 'chat' ? <Navigate to="/chat" replace /> : <ImageGenerationPageContent />
+  return searchParams.get('tab') === 'chat' ? <Navigate to="/chat" replace /> : (
+    <GenerationLayoutProvider>
+      <ImageGenerationPageContent />
+    </GenerationLayoutProvider>
+  )
 }
 
 function ImageGenerationPageContent() {
@@ -199,37 +208,19 @@ function ImageGenerationPageContent() {
 
   const stickyActionBarTargetId = useNarrowTabs ? STICKY_ACTION_BAR_SLOT_ID : undefined
 
-  const controllerPanel = activeTab === 'nai'
-    ? (
-      <NaiGenerationPanelLazy
-        onHistoryRefresh={handleHistoryRefresh}
-        splitPaneScroll={useWideSplitPaneScroll}
-        compactActionBar={useWideSplitPaneScroll || useNarrowTabs}
-        compactActionBarContentTargetId={stickyActionBarTargetId}
-        statusPortalTargetId={GENERATION_TOOLBAR_STATUS_SLOT_ID}
-      />
-    )
+  const generationLayout = useGenerationLayout()
+  const layoutSurface: GenerationLayoutSurface | null = activeTab === 'nai'
+    ? 'nai'
     : activeTab === 'codex'
-      ? (
-        <CodexGenerationPanelLazy
-          onHistoryRefresh={handleHistoryRefresh}
-          splitPaneScroll={useWideSplitPaneScroll}
-          compactActionBarContentTargetId={stickyActionBarTargetId}
-          statusPortalTargetId={GENERATION_TOOLBAR_STATUS_SLOT_ID}
-        />
-      )
+      ? 'codex'
       : activeTab === 'comfyui'
-        ? (
-          <ComfyGenerationPanelLazy
-            onHistoryRefresh={handleHistoryRefresh}
-            selectedWorkflowId={selectedComfyWorkflowId}
-            onSelectedWorkflowChange={setSelectedComfyWorkflowId}
-            splitPaneScroll={useWideSplitPaneScroll}
-            compactActionBarContentTargetId={stickyActionBarTargetId}
-            statusPortalTargetId={GENERATION_TOOLBAR_STATUS_SLOT_ID}
-          />
-        )
+        ? (selectedComfyWorkflowId !== null ? 'comfy' : 'comfy-home')
         : null
+  // Provider tabs on wide screens: the preset's columns hold the form blocks and the result block together.
+  const useBlockLayout = isProviderTab && isWideLayout && shouldShowResultPanel
+  const useComfyHomeBlockLayout = activeTab === 'comfyui' && selectedComfyWorkflowId === null && isWideLayout
+  const layoutEditingSurface = generationLayout.editing
+  const isNarrowLayoutEditing = !isWideLayout && layoutEditingSurface !== null
 
   const resultPanel = shouldShowArtifactExplorer && selectedComfyWorkflowId !== null ? (
     <WorkflowArtifactExplorerPanelLazy
@@ -248,8 +239,46 @@ function ImageGenerationPageContent() {
       followLatestNonce={historyRefreshNonce}
       view={resultView}
       onViewChange={setResultView}
+      recentStrip={layoutSurface ? resolveRecentStripPlacement(generationLayout.presetOf(layoutSurface)) : undefined}
     />
   ) : null
+
+  const blockLayoutProps = useBlockLayout ? { result: <Suspense fallback={<PanelFallback />}>{resultPanel}</Suspense> } : undefined
+  const controllerPanel = activeTab === 'nai'
+    ? (
+      <NaiGenerationPanelLazy
+        onHistoryRefresh={handleHistoryRefresh}
+        splitPaneScroll={useWideSplitPaneScroll}
+        compactActionBar={useWideSplitPaneScroll || useNarrowTabs}
+        compactActionBarContentTargetId={stickyActionBarTargetId}
+        statusPortalTargetId={GENERATION_TOOLBAR_STATUS_SLOT_ID}
+        blockLayout={blockLayoutProps}
+      />
+    )
+    : activeTab === 'codex'
+      ? (
+        <CodexGenerationPanelLazy
+          onHistoryRefresh={handleHistoryRefresh}
+          splitPaneScroll={useWideSplitPaneScroll}
+          compactActionBarContentTargetId={stickyActionBarTargetId}
+          statusPortalTargetId={GENERATION_TOOLBAR_STATUS_SLOT_ID}
+          blockLayout={blockLayoutProps}
+        />
+      )
+      : activeTab === 'comfyui'
+        ? (
+          <ComfyGenerationPanelLazy
+            onHistoryRefresh={handleHistoryRefresh}
+            selectedWorkflowId={selectedComfyWorkflowId}
+            onSelectedWorkflowChange={setSelectedComfyWorkflowId}
+            splitPaneScroll={useWideSplitPaneScroll}
+            compactActionBarContentTargetId={stickyActionBarTargetId}
+            statusPortalTargetId={GENERATION_TOOLBAR_STATUS_SLOT_ID}
+            blockLayout={blockLayoutProps}
+            homeBlockLayout={useComfyHomeBlockLayout}
+          />
+        )
+        : null
 
   // 제공자 3개와 워크플로우·예약작업을 한 줄의 탭으로 나란히 둔다.
   const tabItems = [
@@ -282,6 +311,7 @@ function ImageGenerationPageContent() {
         id={GENERATION_TOOLBAR_STATUS_SLOT_ID}
         className={cn('flex min-w-0 flex-1 items-center overflow-hidden max-sm:basis-full max-sm:empty:hidden', !isProviderTab && 'invisible')}
       />
+      <GenerationLayoutControls wide={isWideLayout} />
     </div>
   )
 
@@ -326,8 +356,16 @@ function ImageGenerationPageContent() {
         </Suspense>
       ) : null}
 
+      {isNarrowLayoutEditing ? <GenerationLayoutListEditor surface={layoutEditingSurface} /> : null}
+
       {isProviderTab && controllerPanel ? (
-        isWideLayout ? (
+        useBlockLayout ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <Suspense fallback={<PanelFallback />}>
+              {controllerPanel}
+            </Suspense>
+          </div>
+        ) : isWideLayout ? (
           <div
             className={cn(
               'grid items-start gap-8',
@@ -349,7 +387,7 @@ function ImageGenerationPageContent() {
             ) : null}
           </div>
         ) : useNarrowTabs ? (
-          <div className="space-y-4">
+          <div className={cn('space-y-4', isNarrowLayoutEditing && 'hidden')}>
             <SegmentedControl
               value={narrowView}
               items={[
@@ -385,7 +423,7 @@ function ImageGenerationPageContent() {
             </div>
           </div>
         ) : (
-          <div className="min-w-0">
+          <div className={cn('min-w-0', isNarrowLayoutEditing && 'hidden')}>
             <Suspense fallback={<PanelFallback />}>
               {controllerPanel}
             </Suspense>

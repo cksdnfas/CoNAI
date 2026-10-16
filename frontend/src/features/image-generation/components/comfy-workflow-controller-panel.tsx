@@ -1,5 +1,5 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, BookmarkPlus, RotateCcw, Save, Server } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -23,6 +23,9 @@ import {
   isComfyWorkflowModalServer,
   isComfyWorkflowServerRoutable,
 } from './comfy-workflow-routing'
+import { GenerationBlockLayout } from '../layout/generation-block-layout'
+import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
+import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 
 type WorkflowTargetOption = {
   value: string
@@ -184,6 +187,8 @@ type ComfyWorkflowControllerPanelProps = {
   splitPaneScroll?: boolean
   headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
+  /** Wide page: render the form and `result` as the shared block layout instead of a single scroll column. */
+  blockLayout?: { result: ReactNode }
   onBack: () => void
   onSelectTarget: (target: string) => void
   onQueueRegistrationCountChange: (value: string) => void
@@ -216,6 +221,7 @@ export function ComfyWorkflowControllerPanel({
   splitPaneScroll = false,
   headerPortalTargetId,
   compactActionBarContentTargetId,
+  blockLayout,
   onBack,
   onSelectTarget,
   onQueueRegistrationCountChange,
@@ -481,11 +487,71 @@ export function ComfyWorkflowControllerPanel({
     />
   )
 
+  const fieldsContent = (
+    <div className="space-y-6">
+      {servers.length === 0 ? (
+        <Alert className="py-2 text-xs">
+          <AlertTitle>{t({ ko: '서버를 먼저 등록해줘.', en: 'Register a server first.' })}</AlertTitle>
+        </Alert>
+      ) : null}
+
+      {readinessIssues.length > 0 ? (
+        <Alert variant="destructive">
+          <AlertTitle>{t({ ko: '실행 준비 필요', en: 'Run readiness needs attention' })}</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc space-y-1 pl-4">
+              {readinessIssues.map((issue) => (
+                <li key={issue}>{issue}</li>
+              ))}
+            </ul>
+            {onRevealFieldIssues && (missingRequiredFields.length > 0 || workflowNodeIssues.length > 0) ? (
+              <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={onRevealFieldIssues}>
+                {t({ ko: '문제 필드로 이동', en: 'Go to invalid field' })}
+              </Button>
+            ) : null}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <section className="space-y-3">
+        {workflowFields.length > 0 ? (
+          <GenerationControllerFieldStack>
+            <WorkflowFieldGroupList
+              fields={workflowFields}
+              values={workflowDraft}
+              loraOptions={loraOptions}
+              isRefreshingOptions={isRefreshingDropdownLists}
+              onRefreshOptions={onRefreshDropdownLists}
+              fieldIssues={fieldIssues}
+              onChange={onFieldChange}
+              onImageChange={onImageChange}
+            />
+          </GenerationControllerFieldStack>
+        ) : (
+          <Alert className="py-2 text-xs">
+            <AlertTitle>{t({ ko: '노출된 입력 필드 없음', en: 'No exposed input fields' })}</AlertTitle>
+          </Alert>
+        )}
+      </section>
+    </div>
+  )
+
+  // Narrow screens follow the preset's order of the name row and the fields; the generate bar keeps its own slot.
+  const { preset: layoutPreset } = useGenerationLayoutSurface('comfy')
+  const stackedBlocks = stackedLayoutBlocks(layoutPreset)
+  const workflowAfterFields = stackedBlocks.indexOf('workflow') > stackedBlocks.indexOf('fields')
+
+  if (blockLayout) {
+    return (
+      <GenerationBlockLayout surface="comfy" blocks={{ workflow: desktopHeaderContent, fields: fieldsContent, action: inlineActionBar, result: blockLayout.result }} />
+    )
+  }
+
   return (
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6')}>
       {useDrawerCompactChrome
         ? (headerPortalTarget ? createPortal(drawerHeaderContent, headerPortalTarget) : null)
-        : (
+        : workflowAfterFields ? null : (
           <div className="shrink-0 space-y-3">
             {desktopHeaderContent}
           </div>
@@ -496,50 +562,8 @@ export function ComfyWorkflowControllerPanel({
         splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
         useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
       )}>
-        {servers.length === 0 ? (
-          <Alert className="py-2 text-xs">
-            <AlertTitle>{t({ ko: '서버를 먼저 등록해줘.', en: 'Register a server first.' })}</AlertTitle>
-          </Alert>
-        ) : null}
-
-        {readinessIssues.length > 0 ? (
-          <Alert variant="destructive">
-            <AlertTitle>{t({ ko: '실행 준비 필요', en: 'Run readiness needs attention' })}</AlertTitle>
-            <AlertDescription>
-              <ul className="list-disc space-y-1 pl-4">
-                {readinessIssues.map((issue) => (
-                  <li key={issue}>{issue}</li>
-                ))}
-              </ul>
-              {onRevealFieldIssues && (missingRequiredFields.length > 0 || workflowNodeIssues.length > 0) ? (
-                <Button type="button" size="sm" variant="secondary" className="mt-2" onClick={onRevealFieldIssues}>
-                  {t({ ko: '문제 필드로 이동', en: 'Go to invalid field' })}
-                </Button>
-              ) : null}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
-        <section className="space-y-3">
-          {workflowFields.length > 0 ? (
-            <GenerationControllerFieldStack>
-              <WorkflowFieldGroupList
-                fields={workflowFields}
-                values={workflowDraft}
-                loraOptions={loraOptions}
-                isRefreshingOptions={isRefreshingDropdownLists}
-                onRefreshOptions={onRefreshDropdownLists}
-                fieldIssues={fieldIssues}
-                onChange={onFieldChange}
-                onImageChange={onImageChange}
-              />
-            </GenerationControllerFieldStack>
-          ) : (
-            <Alert className="py-2 text-xs">
-              <AlertTitle>{t({ ko: '노출된 입력 필드 없음', en: 'No exposed input fields' })}</AlertTitle>
-            </Alert>
-          )}
-        </section>
+        {fieldsContent}
+        {workflowAfterFields && !useDrawerCompactChrome ? desktopHeaderContent : null}
 
         {useStickyActionBar && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
       </div>

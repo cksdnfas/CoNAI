@@ -1,6 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { FeaturePermissionNotice } from '@/features/auth/feature-permission-notice'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -48,6 +48,9 @@ import { ComfyModuleSaveModal } from './comfy-module-save-modal'
 import { ComfyServerRegistrationModal } from './comfy-server-registration-modal'
 import { ComfyWorkflowAuthoringModal } from './comfy-workflow-authoring-modal'
 import { ComfyWorkflowControllerPanel } from './comfy-workflow-controller-panel'
+import { GenerationBlockLayout } from '../layout/generation-block-layout'
+import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
+import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 import { GenerationToolbarStatus, usePortalTargetById } from './generation-toolbar-status'
 import { findAutoCollectedPowerLoraOptions } from './power-lora-loader-utils'
 import { useComfyDropdownListActions } from './use-comfy-dropdown-list-actions'
@@ -65,6 +68,23 @@ type ComfyGenerationPanelProps = {
   compactActionBarContentTargetId?: string
   /** Page toolbar slot for the server connection summary. */
   statusPortalTargetId?: string
+  /** Wide page with a workflow open: the form and `result` render as the shared block layout. */
+  blockLayout?: { result: ReactNode }
+  /** Wide page on the workflow list: the list and the management area render as the shared block layout. */
+  homeBlockLayout?: boolean
+}
+
+/** Workflow list screen: arranged by the `comfy-home` preset (columns on wide screens, stacked otherwise). */
+function ComfyHomeLayout({ blocks, columns }: { blocks: Record<'workflows' | 'management', ReactNode>; columns: boolean }) {
+  const { preset } = useGenerationLayoutSurface('comfy-home')
+  if (columns) return <GenerationBlockLayout surface="comfy-home" blocks={blocks} />
+  return (
+    <div className="space-y-6">
+      {stackedLayoutBlocks(preset)
+        .filter((block): block is keyof typeof blocks => block in blocks)
+        .map((block) => <Fragment key={block}>{blocks[block]}</Fragment>)}
+    </div>
+  )
 }
 
 type ComfyWorkflowEditorState = {
@@ -92,6 +112,8 @@ function ComfyGenerationPanelContent({
   headerPortalTargetId,
   compactActionBarContentTargetId,
   statusPortalTargetId,
+  blockLayout,
+  homeBlockLayout = false,
 }: ComfyGenerationPanelProps) {
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
@@ -516,7 +538,7 @@ function ComfyGenerationPanelContent({
   return (
     <>
       {statusPortalTarget ? createPortal(toolbarStatusContent, statusPortalTarget) : null}
-      <div className={cn(splitPaneScroll && selectedWorkflowId !== null ? 'flex min-h-0 flex-1 flex-col gap-5' : 'space-y-5')}>
+      <div className={cn((splitPaneScroll && selectedWorkflowId !== null) || blockLayout ? 'flex min-h-0 flex-1 flex-col gap-5' : 'space-y-5')}>
         {workflowsQuery.isError ? (
           <Alert variant="destructive">
             <AlertTitle>{t({ ko: '워크플로우를 불러오지 못했어', en: 'Could not load workflows' })}</AlertTitle>
@@ -539,34 +561,40 @@ function ComfyGenerationPanelContent({
         ) : null}
 
         {selectedWorkflowId === null ? (
-          <div className="space-y-6">
-            <ComfyWorkflowListSection
-              workflows={workflowsQuery.data ?? []}
-              selectedWorkflowId={activeWorkflowId}
-              onSelectWorkflow={handleOpenWorkflow}
-              onCreateWorkflow={handleOpenCreateWorkflow}
-              onSaveModule={handleOpenModuleSave}
-              onEditWorkflow={(workflowId) => void handleEditWorkflow(workflowId)}
-              onCopyWorkflow={(workflowId) => void handleCopyWorkflow(workflowId)}
-              onDeleteWorkflow={(workflowId) => void handleDeleteWorkflow(workflowId)}
-            />
-
-            <ComfyManagementArea
-              servers={servers}
-              serverTests={comfyServerTests}
-              dropdownLists={dropdownListsQuery.data}
-              isRefreshingDropdownLists={isRefreshingDropdownLists}
-              onCreateManualList={(input) => handleCreateDropdownList(input)}
-              onUpdateList={(listId, input) => handleUpdateDropdownList(listId, input)}
-              onDeleteList={(listId) => handleDeleteDropdownList(listId)}
-              onScanAutoLists={(input) => handleScanDropdownLists(input)}
-              onOpenCreateServer={handleOpenCreateServer}
-              onEditServer={handleEditServer}
-              onDeleteServer={(serverId) => void handleDeleteServer(serverId)}
-              onTestServer={(serverId) => void handleTestComfyServer(serverId)}
-              onToggleServerActive={(serverId, isActive) => void handleToggleComfyServerActive(serverId, isActive)}
-            />
-          </div>
+          <ComfyHomeLayout
+            columns={homeBlockLayout}
+            blocks={{
+              workflows: (
+                <ComfyWorkflowListSection
+                  workflows={workflowsQuery.data ?? []}
+                  selectedWorkflowId={activeWorkflowId}
+                  onSelectWorkflow={handleOpenWorkflow}
+                  onCreateWorkflow={handleOpenCreateWorkflow}
+                  onSaveModule={handleOpenModuleSave}
+                  onEditWorkflow={(workflowId) => void handleEditWorkflow(workflowId)}
+                  onCopyWorkflow={(workflowId) => void handleCopyWorkflow(workflowId)}
+                  onDeleteWorkflow={(workflowId) => void handleDeleteWorkflow(workflowId)}
+                />
+              ),
+              management: (
+                <ComfyManagementArea
+                  servers={servers}
+                  serverTests={comfyServerTests}
+                  dropdownLists={dropdownListsQuery.data}
+                  isRefreshingDropdownLists={isRefreshingDropdownLists}
+                  onCreateManualList={(input) => handleCreateDropdownList(input)}
+                  onUpdateList={(listId, input) => handleUpdateDropdownList(listId, input)}
+                  onDeleteList={(listId) => handleDeleteDropdownList(listId)}
+                  onScanAutoLists={(input) => handleScanDropdownLists(input)}
+                  onOpenCreateServer={handleOpenCreateServer}
+                  onEditServer={handleEditServer}
+                  onDeleteServer={(serverId) => void handleDeleteServer(serverId)}
+                  onTestServer={(serverId) => void handleTestComfyServer(serverId)}
+                  onToggleServerActive={(serverId, isActive) => void handleToggleComfyServerActive(serverId, isActive)}
+                />
+              ),
+            }}
+          />
         ) : selectedWorkflow ? (
           <ComfyWorkflowControllerPanel
             workflowName={selectedWorkflow.name}
@@ -584,6 +612,7 @@ function ComfyGenerationPanelContent({
             splitPaneScroll={splitPaneScroll}
             headerPortalTargetId={headerPortalTargetId}
             compactActionBarContentTargetId={compactActionBarContentTargetId}
+            blockLayout={blockLayout}
             onBack={() => onSelectedWorkflowChange(null)}
             onSelectTarget={setSelectedTarget}
             onQueueRegistrationCountChange={setQueueRegistrationCount}

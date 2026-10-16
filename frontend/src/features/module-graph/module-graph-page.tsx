@@ -12,6 +12,7 @@ import { Text } from '@/components/ui/text'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { GenerationHistoryPanelView } from '@/features/image-generation/components/generation-history-panel'
 import { useGenerationHistoryFeed } from '@/features/image-generation/components/use-generation-history-feed'
+import { GenerationBlockLayout } from '@/features/image-generation/layout/generation-block-layout'
 import { IMAGE_GENERATION_GRAPH_EDIT_PARAM, IMAGE_GENERATION_GRAPH_PARAM, parseImageGenerationWorkflowId } from '@/features/image-generation/image-generation-tabs'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowSummaryRecord } from '@/lib/api-module-graph'
@@ -842,10 +843,10 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
   if (isWideLayout) {
     return (
       <>
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(360px,4fr)_minmax(0,6fr)] items-stretch gap-8">
-          <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{leftColumn}</div>
-          <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">{rightColumn}</div>
-        </div>
+        {/* Arranged by the shared generation-page presets: runner|results with a workflow open, list|outputs otherwise. */}
+        {selectedGraphId !== null
+          ? <GenerationBlockLayout surface="workflow-run" blocks={{ runner: leftColumn, results: rightColumn }} />
+          : <GenerationBlockLayout surface="workflow-browse" blocks={{ list: leftColumn, outputs: rightColumn }} />}
         {modals}
       </>
     )

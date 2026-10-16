@@ -44,6 +44,8 @@ type GenerationResultStageProps = {
   shouldBlur?: (image: ImageRecord) => boolean
   onDeleted?: () => void
   onShowHistory?: () => void
+  /** Where the recent-results filmstrip sits (layout preset); `hidden` drops it. */
+  stripPlacement?: 'top' | 'bottom' | 'hidden'
 }
 
 /**
@@ -138,6 +140,7 @@ export function GenerationResultStage({
   shouldBlur,
   onDeleted,
   onShowHistory,
+  stripPlacement = 'bottom',
 }: GenerationResultStageProps) {
   const { t } = useI18n()
   const imageViewModal = useImageViewModal()
@@ -230,8 +233,90 @@ export function GenerationResultStage({
     </div>
   ) : null
 
+  const strip = items.length > 0 ? (
+      <div className="flex shrink-0 items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+        <div
+          ref={stripRef}
+          role="listbox"
+          aria-label={t({ ko: '최근 결과', en: 'Recent results' })}
+          aria-orientation="horizontal"
+          onKeyDown={handleStripKeyDown}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+          onPointerLeave={handlePointerLeave}
+          onClickCapture={handleItemClick}
+          style={{ touchAction: 'pan-y pinch-zoom' }}
+          // Scrollbar hidden (it ran into the active thumb's ring); edge chevrons + drag replace it.
+          className={cn('scroll-x theme-nav-scroll flex gap-2 p-1.5', isDragging && 'cursor-grabbing select-none')}
+        >
+          {items.map((item) => {
+            const id = String(item.id)
+            const isActive = id === selectedId
+            return (
+              <Button
+                key={id}
+                type="button"
+                variant="ghost"
+                role="option"
+                aria-selected={isActive}
+                tabIndex={isActive || (selectedId === null && item === items[0]) ? 0 : -1}
+                data-stage-id={id}
+                onClick={() => onSelect(id)}
+                draggable={false}
+                className={cn(
+                  'relative h-16 w-auto shrink-0 overflow-hidden rounded-sm p-0 opacity-70 hover:opacity-100 sm:h-20',
+                  isDragging && 'pointer-events-none',
+                  isActive && 'opacity-100 ring-2 ring-primary ring-offset-2 ring-offset-background',
+                )}
+              >
+                {item.audio?.length && !item.composite_hash ? (
+                  <span className="flex aspect-square h-full items-center justify-center bg-surface-low text-muted-foreground">
+                    <AudioLines className="size-6" />
+                  </span>
+                ) : (
+                  <img
+                    src={item.thumbnail_url ?? undefined}
+                    alt=""
+                    loading="lazy"
+                    draggable={false}
+                    className={cn('h-full w-auto max-w-none object-contain', shouldBlur?.(item) && 'blur-md')}
+                    style={item.width && item.height ? { aspectRatio: `${item.width} / ${item.height}` } : undefined}
+                  />
+                )}
+                {item.audio?.length && item.composite_hash ? (
+                  <Badge variant="overlay" className="absolute right-1 bottom-1 p-0.5">
+                    <AudioLines />
+                  </Badge>
+                ) : null}
+              </Button>
+            )
+          })}
+        </div>
+        {canScrollLeft ? (
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-background via-background/90 to-transparent pr-4 pl-1 text-foreground/45">
+            <ChevronLeft className="h-4 w-4" />
+          </div>
+        ) : null}
+        {canScrollRight ? (
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-background via-background/90 to-transparent pl-4 pr-1 text-foreground/55">
+            <ChevronRight className="h-4 w-4" />
+          </div>
+        ) : null}
+        </div>
+        {onShowHistory ? (
+          <IconButton size="icon-sm" variant="ghost" onClick={onShowHistory} label={t({ ko: '전체 기록', en: 'All history' })}>
+            <History />
+          </IconButton>
+        ) : null}
+      </div>
+    ) : null
+
   return (
     <div className={cn('flex min-h-0 flex-col gap-3', !compact && 'flex-1')}>
+      {stripPlacement === 'top' ? strip : null}
       <div className={cn('flex min-h-0 gap-3', compact ? 'flex-col' : 'flex-1')}>
         <div
           className={cn(
@@ -289,86 +374,7 @@ export function GenerationResultStage({
         </div>
       ) : null}
 
-      {items.length > 0 ? (
-        <div className="flex shrink-0 items-center gap-2">
-          <div className="relative min-w-0 flex-1">
-          <div
-            ref={stripRef}
-            role="listbox"
-            aria-label={t({ ko: '최근 결과', en: 'Recent results' })}
-            aria-orientation="horizontal"
-            onKeyDown={handleStripKeyDown}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerCancel}
-            onPointerLeave={handlePointerLeave}
-            onClickCapture={handleItemClick}
-            style={{ touchAction: 'pan-y pinch-zoom' }}
-            // Scrollbar hidden (it ran into the active thumb's ring); edge chevrons + drag replace it.
-            className={cn('scroll-x theme-nav-scroll flex gap-2 p-1.5', isDragging && 'cursor-grabbing select-none')}
-          >
-            {items.map((item) => {
-              const id = String(item.id)
-              const isActive = id === selectedId
-              return (
-                <Button
-                  key={id}
-                  type="button"
-                  variant="ghost"
-                  role="option"
-                  aria-selected={isActive}
-                  tabIndex={isActive || (selectedId === null && item === items[0]) ? 0 : -1}
-                  data-stage-id={id}
-                  onClick={() => onSelect(id)}
-                  draggable={false}
-                  className={cn(
-                    'relative h-16 w-auto shrink-0 overflow-hidden rounded-sm p-0 opacity-70 hover:opacity-100 sm:h-20',
-                    isDragging && 'pointer-events-none',
-                    isActive && 'opacity-100 ring-2 ring-primary ring-offset-2 ring-offset-background',
-                  )}
-                >
-                  {item.audio?.length && !item.composite_hash ? (
-                    <span className="flex aspect-square h-full items-center justify-center bg-surface-low text-muted-foreground">
-                      <AudioLines className="size-6" />
-                    </span>
-                  ) : (
-                    <img
-                      src={item.thumbnail_url ?? undefined}
-                      alt=""
-                      loading="lazy"
-                      draggable={false}
-                      className={cn('h-full w-auto max-w-none object-contain', shouldBlur?.(item) && 'blur-md')}
-                      style={item.width && item.height ? { aspectRatio: `${item.width} / ${item.height}` } : undefined}
-                    />
-                  )}
-                  {item.audio?.length && item.composite_hash ? (
-                    <Badge variant="overlay" className="absolute right-1 bottom-1 p-0.5">
-                      <AudioLines />
-                    </Badge>
-                  ) : null}
-                </Button>
-              )
-            })}
-          </div>
-          {canScrollLeft ? (
-            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-background via-background/90 to-transparent pr-4 pl-1 text-foreground/45">
-              <ChevronLeft className="h-4 w-4" />
-            </div>
-          ) : null}
-          {canScrollRight ? (
-            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-background via-background/90 to-transparent pl-4 pr-1 text-foreground/55">
-              <ChevronRight className="h-4 w-4" />
-            </div>
-          ) : null}
-          </div>
-          {onShowHistory ? (
-            <IconButton size="icon-sm" variant="ghost" onClick={onShowHistory} label={t({ ko: '전체 기록', en: 'All history' })}>
-              <History />
-            </IconButton>
-          ) : null}
-        </div>
-      ) : null}
+      {stripPlacement === 'bottom' ? strip : null}
     </div>
   )
 }

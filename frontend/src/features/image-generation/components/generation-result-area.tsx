@@ -28,6 +28,8 @@ type GenerationResultAreaProps = {
   view: GenerationResultView
   onViewChange: (view: GenerationResultView) => void
   onBack?: () => void
+  /** Recent-results filmstrip placement from the layout preset. */
+  recentStrip?: 'top' | 'bottom' | 'hidden'
 }
 
 /** Result column of the generation page: a large result stage (default) or the full history list over one shared feed. */
@@ -41,6 +43,7 @@ export function GenerationResultArea({
   view,
   onViewChange,
   onBack,
+  recentStrip = 'bottom',
 }: GenerationResultAreaProps) {
   const { t } = useI18n()
   const { activeJob, activeJobCount, nowMs } = useGenerationStageQueue({ serviceType, workflowId })
@@ -128,6 +131,7 @@ export function GenerationResultArea({
         shouldBlur={shouldBlurItemPreview}
         onDeleted={() => void feed.refreshHistory()}
         onShowHistory={() => onViewChange('history')}
+        stripPlacement={recentStrip}
       />
     </section>
   )

@@ -1,7 +1,7 @@
 import { CodexIcon } from '@/components/common/provider-icons'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { createPortal } from 'react-dom'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LogIn, RefreshCw, RotateCcw, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
@@ -34,6 +34,9 @@ import { CodexCliUpdateButton } from './codex-cli-update-button'
 import { CodexModelSelect } from './codex-model-select'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
+import { GenerationBlockLayout } from '../layout/generation-block-layout'
+import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
+import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 
 type CodexGenerationPanelProps = {
   onHistoryRefresh: () => void
@@ -42,7 +45,11 @@ type CodexGenerationPanelProps = {
   compactActionBarContentTargetId?: string
   /** Page toolbar slot for the Codex status; replaces the inline Codex header row. */
   statusPortalTargetId?: string
+  /** Wide page: render the editor and `result` as the shared block layout instead of a single scroll column. */
+  blockLayout?: { result: ReactNode }
 }
+
+type CodexEditorBlock = 'model' | 'prompt' | 'output' | 'images'
 
 export type CodexFormDraft = {
   model: string
@@ -227,6 +234,7 @@ export function CodexGenerationPanel({
   headerPortalTargetId,
   compactActionBarContentTargetId,
   statusPortalTargetId,
+  blockLayout,
 }: CodexGenerationPanelProps) {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
@@ -570,6 +578,146 @@ export function CodexGenerationPanel({
     </div>
   )
 
+  const editorBlocks: Record<CodexEditorBlock, ReactNode> = {
+    model: (
+      <Tip content={t({ ko: 'Codex 실행 모델: 프롬프트를 해석하고 이미지를 만드는 에이전트 모델', en: 'Codex agent model: the agent that reads the prompt and makes the image' })}>
+        <div>
+          <CodexModelSelect
+            value={codexForm.model}
+            onChange={(value) => handleFieldChange('model', value)}
+            models={modelOptionsQuery.data?.data.models}
+            aria-label={t({ ko: 'Codex 실행 모델', en: 'Codex agent model' })}
+          />
+        </div>
+      </Tip>
+    ),
+    prompt: (
+      <div className="space-y-3">
+        <NaiPromptSection
+          tool="codex"
+          prompt={codexForm.prompt}
+          negativePrompt={codexForm.negativePrompt}
+          onPromptChange={(value) => handleFieldChange('prompt', value)}
+          onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
+        />
+        <div className="flex justify-end">
+          <CodexPromptPresetButton prompt={codexForm.prompt} negativePrompt={codexForm.negativePrompt} />
+        </div>
+      </div>
+    ),
+    output: (
+      <Section variant="settings" heading={t({ ko: '출력', en: 'Output' })} className="@container">
+        <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-3">
+          <ResolutionPicker
+            mode="ratio"
+            ratio={codexForm.aspectRatio}
+            ratios={CODEX_ASPECT_RATIO_OPTIONS.map((option) => ({
+              value: option.value,
+              label: option.value === 'random' ? t({ ko: '랜덤', en: 'Random' }) : option.label,
+            }))}
+            onRatioChange={(value) => handleFieldChange('aspectRatio', value)}
+            tier={codexForm.resolution}
+            tiers={CODEX_RESOLUTION_OPTIONS}
+            tierHint={outputSizeHint}
+            onTierChange={(value) => handleFieldChange('resolution', value)}
+          />
+        </div>
+      </Section>
+    ),
+    images: (
+      <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} className="@container">
+        <Tip content={t({ ko: '이미지 사용 방식: 참조로만 쓸지, 원본을 직접 편집할지', en: 'Image usage: reference only, or edit the source directly' })}>
+          <Select aria-label={t({ ko: '이미지 사용 방식', en: 'Image usage' })} value={codexForm.imageMode} onChange={(event) => setCodexForm((current) => ({ ...current, imageMode: event.target.value === 'edit' ? 'edit' : 'reference', maskImage: undefined }))}>
+            <option value="reference">{t({ ko: '새 이미지 생성 · 참조 (t2i)', en: 'New image · reference (t2i)' })}</option>
+            <option value="edit">{t({ ko: '원본 이미지 편집 (i2i)', en: 'Edit source image (i2i)' })}</option>
+          </Select>
+        </Tip>
+        <div className="grid gap-4 @2xl:grid-cols-2">
+          <div className="min-w-0 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <Text variant="label">{codexForm.imageMode === 'edit' ? t({ ko: '원본', en: 'Source' }) : t({ ko: '참조', en: 'Reference' })}</Text>
+              <div className="flex items-center gap-1">
+                <ImageAttachmentPickerButton
+                  label={codexForm.imageMode === 'edit'
+                    ? (codexForm.referenceImage ? t({ ko: '원본 이미지 교체', en: 'Replace source image' }) : t({ ko: '원본 이미지 선택', en: 'Select source image' }))
+                    : (codexForm.referenceImage ? t({ ko: '참조 이미지 교체', en: 'Replace reference image' }) : t({ ko: '참조 이미지 선택 (선택 사항)', en: 'Select reference image (optional)' }))}
+                  modalTitle={t({ ko: 'Codex 참조 이미지 선택', en: 'Select Codex reference image' })}
+                  onSelect={(image) => {
+                    setCodexForm((current) => ({
+                      ...current,
+                      referenceImage: image,
+                      maskImage: undefined,
+                    }))
+                  }}
+                />
+                {codexForm.referenceImage ? (
+                  <IconButton
+                    variant="ghost"
+                    className="hover:text-destructive"
+                    onClick={() => setCodexForm((current) => ({ ...current, referenceImage: undefined, maskImage: undefined }))}
+                    label={codexForm.imageMode === 'edit' ? t({ ko: '원본 이미지 제거', en: 'Remove source image' }) : t({ ko: '참조 이미지 제거', en: 'Remove reference image' })}
+                  >
+                    <X />
+                  </IconButton>
+                ) : null}
+              </div>
+            </div>
+
+            {codexForm.referenceImage ? (
+              <NaiSelectedImageCard image={codexForm.referenceImage} alt={t({ ko: 'Codex 참조 이미지', en: 'Codex reference image' })} />
+            ) : null}
+          </div>
+
+          {codexForm.imageMode === 'edit' ? <div className="min-w-0 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <Text variant="label">{t({ ko: '마스크', en: 'Mask' })}</Text>
+              <div className="flex items-center gap-1">
+                <ImageAttachmentPickerButton
+                  label={codexForm.maskImage ? t({ ko: '마스크 이미지 교체', en: 'Replace mask image' }) : t({ ko: '마스크 이미지 선택', en: 'Select mask image' })}
+                  modalTitle={t({ ko: 'Codex 마스크 이미지 선택', en: 'Select Codex mask image' })}
+                  disabled={!codexForm.referenceImage}
+                  onSelect={(image) => handleFieldChange('maskImage', image)}
+                />
+                {codexForm.maskImage ? (
+                  <IconButton
+                    variant="ghost"
+                    className="hover:text-destructive"
+                    onClick={() => handleFieldChange('maskImage', undefined)}
+                    label={t({ ko: '마스크 제거', en: 'Remove mask' })}
+                  >
+                    <X />
+                  </IconButton>
+                ) : null}
+              </div>
+            </div>
+
+            {codexForm.maskImage ? (
+              <NaiSelectedImageCard image={codexForm.maskImage} alt={t({ ko: 'Codex 마스크 이미지', en: 'Codex mask image' })} />
+            ) : null}
+          </div> : null}
+        </div>
+      </Section>
+    ),
+  }
+
+  // Narrow screens stack the preset's visible editor blocks in column order; the generate bar keeps its own slot.
+  const { preset: layoutPreset } = useGenerationLayoutSurface('codex')
+  const stackedEditorBlocks = stackedLayoutBlocks(layoutPreset)
+    .filter((block): block is CodexEditorBlock => block in editorBlocks)
+    .map((block) => <Fragment key={block}>{editorBlocks[block]}</Fragment>)
+
+  if (blockLayout) {
+    return (
+      <>
+        <div className="flex min-h-0 flex-1 flex-col">
+          {statusPortalTarget ? createPortal(toolbarStatusContent, statusPortalTarget) : null}
+          <GenerationBlockLayout surface="codex" blocks={{ ...editorBlocks, action: actionSection, result: blockLayout.result }} />
+        </div>
+        <CodexDeviceLoginDialog open={isCodexLoginOpen} onClose={handleCloseCodexLogin} onSucceeded={handleRefreshStatus} />
+      </>
+    )
+  }
+
   return (
     <>
       <div className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6')}>
@@ -588,117 +736,7 @@ export function CodexGenerationPanel({
           splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
           useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
         )}>
-        <Tip content={t({ ko: 'Codex 실행 모델: 프롬프트를 해석하고 이미지를 만드는 에이전트 모델', en: 'Codex agent model: the agent that reads the prompt and makes the image' })}>
-          <div>
-            <CodexModelSelect
-              value={codexForm.model}
-              onChange={(value) => handleFieldChange('model', value)}
-              models={modelOptionsQuery.data?.data.models}
-              aria-label={t({ ko: 'Codex 실행 모델', en: 'Codex agent model' })}
-            />
-          </div>
-        </Tip>
-        <NaiPromptSection
-          tool="codex"
-          prompt={codexForm.prompt}
-          negativePrompt={codexForm.negativePrompt}
-          onPromptChange={(value) => handleFieldChange('prompt', value)}
-          onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
-        />
-        <div className="flex justify-end">
-          <CodexPromptPresetButton prompt={codexForm.prompt} negativePrompt={codexForm.negativePrompt} />
-        </div>
-
-        <Section variant="settings" heading={t({ ko: '출력', en: 'Output' })} className="@container">
-          <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-3">
-            <ResolutionPicker
-              mode="ratio"
-              ratio={codexForm.aspectRatio}
-              ratios={CODEX_ASPECT_RATIO_OPTIONS.map((option) => ({
-                value: option.value,
-                label: option.value === 'random' ? t({ ko: '랜덤', en: 'Random' }) : option.label,
-              }))}
-              onRatioChange={(value) => handleFieldChange('aspectRatio', value)}
-              tier={codexForm.resolution}
-              tiers={CODEX_RESOLUTION_OPTIONS}
-              tierHint={outputSizeHint}
-              onTierChange={(value) => handleFieldChange('resolution', value)}
-            />
-          </div>
-        </Section>
-
-        <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} className="@container">
-          <Tip content={t({ ko: '이미지 사용 방식: 참조로만 쓸지, 원본을 직접 편집할지', en: 'Image usage: reference only, or edit the source directly' })}>
-            <Select aria-label={t({ ko: '이미지 사용 방식', en: 'Image usage' })} value={codexForm.imageMode} onChange={(event) => setCodexForm((current) => ({ ...current, imageMode: event.target.value === 'edit' ? 'edit' : 'reference', maskImage: undefined }))}>
-              <option value="reference">{t({ ko: '새 이미지 생성 · 참조 (t2i)', en: 'New image · reference (t2i)' })}</option>
-              <option value="edit">{t({ ko: '원본 이미지 편집 (i2i)', en: 'Edit source image (i2i)' })}</option>
-            </Select>
-          </Tip>
-          <div className="grid gap-4 @2xl:grid-cols-2">
-            <div className="min-w-0 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <Text variant="label">{codexForm.imageMode === 'edit' ? t({ ko: '원본', en: 'Source' }) : t({ ko: '참조', en: 'Reference' })}</Text>
-                <div className="flex items-center gap-1">
-                  <ImageAttachmentPickerButton
-                    label={codexForm.imageMode === 'edit'
-                      ? (codexForm.referenceImage ? t({ ko: '원본 이미지 교체', en: 'Replace source image' }) : t({ ko: '원본 이미지 선택', en: 'Select source image' }))
-                      : (codexForm.referenceImage ? t({ ko: '참조 이미지 교체', en: 'Replace reference image' }) : t({ ko: '참조 이미지 선택 (선택 사항)', en: 'Select reference image (optional)' }))}
-                    modalTitle={t({ ko: 'Codex 참조 이미지 선택', en: 'Select Codex reference image' })}
-                    onSelect={(image) => {
-                      setCodexForm((current) => ({
-                        ...current,
-                        referenceImage: image,
-                        maskImage: undefined,
-                      }))
-                    }}
-                  />
-                  {codexForm.referenceImage ? (
-                    <IconButton
-                      variant="ghost"
-                      className="hover:text-destructive"
-                      onClick={() => setCodexForm((current) => ({ ...current, referenceImage: undefined, maskImage: undefined }))}
-                      label={codexForm.imageMode === 'edit' ? t({ ko: '원본 이미지 제거', en: 'Remove source image' }) : t({ ko: '참조 이미지 제거', en: 'Remove reference image' })}
-                    >
-                      <X />
-                    </IconButton>
-                  ) : null}
-                </div>
-              </div>
-
-              {codexForm.referenceImage ? (
-                <NaiSelectedImageCard image={codexForm.referenceImage} alt={t({ ko: 'Codex 참조 이미지', en: 'Codex reference image' })} />
-              ) : null}
-            </div>
-
-            {codexForm.imageMode === 'edit' ? <div className="min-w-0 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <Text variant="label">{t({ ko: '마스크', en: 'Mask' })}</Text>
-                <div className="flex items-center gap-1">
-                  <ImageAttachmentPickerButton
-                    label={codexForm.maskImage ? t({ ko: '마스크 이미지 교체', en: 'Replace mask image' }) : t({ ko: '마스크 이미지 선택', en: 'Select mask image' })}
-                    modalTitle={t({ ko: 'Codex 마스크 이미지 선택', en: 'Select Codex mask image' })}
-                    disabled={!codexForm.referenceImage}
-                    onSelect={(image) => handleFieldChange('maskImage', image)}
-                  />
-                  {codexForm.maskImage ? (
-                    <IconButton
-                      variant="ghost"
-                      className="hover:text-destructive"
-                      onClick={() => handleFieldChange('maskImage', undefined)}
-                      label={t({ ko: '마스크 제거', en: 'Remove mask' })}
-                    >
-                      <X />
-                    </IconButton>
-                  ) : null}
-                </div>
-              </div>
-
-              {codexForm.maskImage ? (
-                <NaiSelectedImageCard image={codexForm.maskImage} alt={t({ ko: 'Codex 마스크 이미지', en: 'Codex mask image' })} />
-              ) : null}
-            </div> : null}
-          </div>
-        </Section>
+        {stackedEditorBlocks}
 
           {!useInlineActionBar && !useStickyActionBar ? actionSection : null}
           {useStickyActionBar && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}

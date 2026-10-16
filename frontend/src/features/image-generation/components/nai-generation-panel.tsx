@@ -1,6 +1,6 @@
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
@@ -32,7 +32,10 @@ import {
 } from '../history-settings-mapping'
 import { NaiAuthModal } from './nai-auth-modal'
 import { NaiAssetSaveModal } from './nai-asset-save-modal'
-import { NaiGenerationEditorSections } from './nai-generation-editor-sections'
+import { NaiGenerationEditorSections, type NaiEditorBlockNodes } from './nai-generation-editor-sections'
+import { GenerationBlockLayout } from '../layout/generation-block-layout'
+import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
+import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 import { NaiActionSection, NaiConnectionHeader, NaiToolbarStatus } from './nai-generation-panel-sections'
 import { usePortalTargetById } from './generation-toolbar-status'
 import { GenerateActionDock } from './generate-action-bar'
@@ -56,6 +59,8 @@ type NaiGenerationPanelProps = {
   compactActionBarContentTargetId?: string
   /** Page toolbar slot for the connection status; replaces the inline NovelAI header row. */
   statusPortalTargetId?: string
+  /** Wide block layout: the panel arranges its sections and the page's result block in the preset's columns. */
+  blockLayout?: { result: ReactNode }
 }
 
 /** Render the NAI login, generation, and image-editing workflow. */
@@ -66,6 +71,7 @@ export function NaiGenerationPanel({
   headerPortalTargetId,
   compactActionBarContentTargetId,
   statusPortalTargetId,
+  blockLayout,
 }: NaiGenerationPanelProps) {
   const { t, formatNumber } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -397,6 +403,18 @@ export function NaiGenerationPanel({
     />
   )
 
+  // Narrow screens stack the preset's visible sections in column order; the generate bar keeps its own sticky slot.
+  const { preset: layoutPreset } = useGenerationLayoutSurface('nai')
+  const renderEditorBlocks = (blocks: NaiEditorBlockNodes) => blockLayout
+    ? <GenerationBlockLayout surface="nai" blocks={{ ...blocks, action: actionSection, result: blockLayout.result }} />
+    : (
+      <>
+        {stackedLayoutBlocks(layoutPreset)
+          .filter((block): block is keyof NaiEditorBlockNodes => block in blocks)
+          .map((block) => <Fragment key={block}>{blocks[block]}</Fragment>)}
+      </>
+    )
+
   const editorSections = (
     <NaiGenerationEditorSections
       naiForm={naiForm}
@@ -443,6 +461,7 @@ export function NaiGenerationPanel({
       handleDeleteVibeFromStore={handleDeleteVibeFromStore}
       actionSection={actionSection}
       showActionSection={!useInlineActionBar}
+      renderBlocks={renderEditorBlocks}
     />
   )
 
@@ -461,6 +480,21 @@ export function NaiGenerationPanel({
 
   return (
     <>
+      {blockLayout ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {statusPortalTarget ? createPortal(
+            <NaiToolbarStatus
+              connected={connected}
+              tierName={naiUserQuery.data?.subscription.tierName}
+              anlasBalance={naiUserQuery.data?.anlasBalance}
+              opusRemainingPercent={naiUserQuery.data?.opusRemainingPercent}
+              onOpenAuth={handleOpenNaiAuthModal}
+            />,
+            statusPortalTarget,
+          ) : null}
+          {editorSections}
+        </div>
+      ) : (
       <div className={splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6'}>
         {statusPortalTargetId
           ? (statusPortalTarget ? createPortal(
@@ -503,6 +537,7 @@ export function NaiGenerationPanel({
         {/* 생성 버튼·결과 그룹은 편집 영역 아래에 고정해 스크롤 위치와 상관없이 바로 누를 수 있게 한다. */}
         {useInlineActionBar && !useDrawerCompactChrome ? <GenerateActionDock>{actionSection}</GenerateActionDock> : null}
       </div>
+      )}
 
       <ChatGenerationPresetSaveModal
         open={isChatPresetModalOpen}
