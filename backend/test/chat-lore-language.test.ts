@@ -69,6 +69,21 @@ test('lorebook key language and recursive scan', { timeout: 60000 }, async (t) =
     assert.deepEqual(chosen(pick(secondary, '모자 장수가 차를 따랐다.')), ['Hatter'])
   })
 
+  await t.test('bilingual lore keeps canonical model text, matches translated keys and invalidates stale reader text', () => {
+    const entry = normalizeLorebook([{ id: 'promise', title: 'Potion promise', keys: ['potion'], content: 'I promised to bring a potion.', language: 'en', translation: { language: 'ko', title: '회복약 약속', keys: ['회복약'], content: '회복약을 가져오기로 약속했다.' } }])[0]
+    assert.equal(entry.translation?.content, '회복약을 가져오기로 약속했다.')
+    assert.ok(entry.translation?.sourceHash)
+    const result = pick([entry], '회복약')
+    assert.match(result.text, /I promised to bring a potion/)
+    assert.doesNotMatch(result.text, /가져오기로/)
+    assert.equal(normalizeLorebook([{ ...entry, content: 'The promise is fulfilled.' }])[0].translation, null)
+    assert.equal(normalizeLorebook([{ ...entry, keys: ['medicine'] }])[0].translation, null)
+    const owner = fileOwnerKey(1)
+    const book = OwnedLorebookStore.create(owner, { name: 'Bilingual evidence', entries: [entry] })
+    assert.deepEqual(OwnedLorebookStore.find(book.id, owner)!.entries[0].translation, entry.translation)
+    assert.equal(OwnedLorebookStore.find(book.id, owner)!.entries[0].content, entry.content)
+  })
+
   await t.test('recursive scan: chosen entries pull in the entries their text names, level by level', () => {
     const book = [
       { title: 'Alice', keys: ['alice'], content: 'Alice fell down the rabbit hole.', order: 30 },

@@ -1,11 +1,12 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles';
+import { hasTranslation } from '../../services/codex-chat/chatModelRoles';
 import { CodexChatStore } from '../../services/codex-chat/codexChatStore';
 import { loreEntryKeys, loreEntryTitle, type ChatLoreEntry } from '../../services/codex-chat/chatLorebook';
 import { OwnedLorebookStore, loreEntryFile } from '../../services/codex-chat/chatLorebookFiles';
 import { booksForRequest, CHAT_BOOK_LABEL, hasLoreFiles, READ_LORE_FILE_TOOL, type AttachedLoreBook } from '../../services/codex-chat/chatLoreContext';
-import { LORE_PROPOSAL_LIMITS, LORE_PROPOSAL_MAX_KEYS, loreAutoSaveOn, proposeLore, SAVE_LORE_TOOL } from '../../services/codex-chat/chatLoreProposals';
+import { LORE_PROPOSAL_LIMITS, LORE_PROPOSAL_MAX_KEYS, loreAutoSaveOn, proposeTranslatedLore, SAVE_LORE_TOOL } from '../../services/codex-chat/chatLoreProposals';
 import { loadChatSettings } from '../../services/codex-chat/chatSettings';
 import { FileStoreService, applyTextEdits, fileOwnerKey } from '../../services/fileStoreService';
 import { loreKeyLanguageLabel, type FileWriteSource } from '@conai/shared';
@@ -174,7 +175,9 @@ export function registerChatLoreTools(server: McpServer, context: McpRequestCont
 }
 
 /** How save_lore asks for keywords: English, plus the lore key language of the chat settings when one is set. */
-function loreKeyGuidance() {
+function loreKeyGuidance(profileId?: number) {
+  const profile = profileId ? ChatProfileStore.find(profileId) : null;
+  if (profile && hasTranslation(profile)) return `in ${profile.translationModelLanguage} only (the model language; the app stores translated reader keys separately)`;
   const language = loadChatSettings().loreKeyLanguage;
   return language
     ? `in English and also in ${loreKeyLanguageLabel(language)} (both, so the entry comes back in either)`
@@ -214,22 +217,22 @@ function registerSaveLore(server: McpServer, context: McpRequestContext): void {
   const editable = context.source === 'codex-chat' || (autoSave && recordBookHasFiles(threadId));
   server.registerTool(
     SAVE_LORE_TOOL,
-    { description: `Save an entry to ${target.where}. Only what is worth remembering across sessions: what the user asks you to remember, a promise, a preference, who someone is.${memory} Never small talk or what the conversation already holds. At most one per reply and one every several turns (the app refuses more). ${saving} Never re-propose a title the user dismissed or undid, or one already waiting. keys: up to ${LORE_PROPOSAL_MAX_KEYS} distinctive words of the fact, ${loreKeyGuidance()}; no user or own names, dates or times. A title the book already has updates that entry (send its full new content). constant: true = sent with every request (keep few and short); otherwise it returns when a key appears. file: optional longer text kept in the book's 자료/ folder${editable ? `; change it later with ${EDIT_LORE_FILE_TOOL}` : ''}.`, inputSchema: z.object({
+    { description: `Save an entry to ${target.where}. Only what is worth remembering across sessions: what the user asks you to remember, a promise, a preference, who someone is.${memory} Never small talk or what the conversation already holds. At most one per reply and one every several turns (the app refuses more). ${saving} Never re-propose a title the user dismissed or undid, or one already waiting. keys: up to ${LORE_PROPOSAL_MAX_KEYS} distinctive words of the fact, ${loreKeyGuidance(context.chatContext?.profileId)}; no user or own names, dates or times. A title the book already has updates that entry (send its full new content). constant: true = sent with every request (keep few and short); otherwise it returns when a key appears. file: optional longer text kept in the book's 자료/ folder${editable ? `; change it later with ${EDIT_LORE_FILE_TOOL}` : ''}.`, inputSchema: z.object({
       title: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.title).describe('As the lore index shows it'),
       keys: z.array(z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.key)).max(LORE_PROPOSAL_LIMITS.keys).default([]),
-      content: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.content).describe('Short, factual, in the chat\'s language'),
+      content: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.content).describe('Short and factual. Use the profile model language, not the reader/display translation. The app stores a separate reader translation.'),
       constant: z.boolean().default(false),
       file: z.object({
         name: z.string().trim().min(1).max(LORE_PROPOSAL_LIMITS.fileName).describe('Plain file name, e.g. 반지.md'),
         text: z.string().min(1).describe(`UTF-8, ≤ ${LORE_PROPOSAL_LIMITS.fileBytes / 1024} KB`),
       }).optional(),
     }) },
-    async (args) => {
+    async (args, extra) => {
       try {
         const chatContext = context.chatContext;
         if (!chatContext) throw new Error('Proposals need an active chat reply.');
         if (!allowsLoreProposals(chatContext.profileId)) throw new Error('Lore proposals are turned off for this profile.');
-        const proposal = proposeLore(chatContext, args);
+        const proposal = await proposeTranslatedLore(chatContext, args, extra.mcpReq?.signal);
         const saved = proposal.kind === 'lore' && proposal.savedId !== undefined;
         const done = saved ? SAVE_LORE_SAVED : SAVE_LORE_DONE;
         return { content: [{ type: 'text' as const, text: proposal.replaces ? `${done} (${saved ? '같은 제목의 항목을 고쳤어.' : '같은 제목의 항목을 고치는 제안이야.'})` : done }], structuredContent: { proposal } };

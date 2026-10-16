@@ -1,7 +1,8 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { loreKeyLanguageTag } from '@conai/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookPlus, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -15,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { CHAT_STATUS_QUERY_KEY, getCodexChatStatus, loreEntryTitle, type ChatLoreEntry, type LoreSecondaryLogic } from '@/lib/api-codex-chat'
+import { CHAT_STATUS_QUERY_KEY, getCodexChatStatus, loreEntryTitle, translateLoreEntry, listChatProfiles, CHAT_PROFILES_QUERY_KEY, type ChatLoreEntry, type LoreSecondaryLogic } from '@/lib/api-codex-chat'
 import { createStoredFolder, listStoredFiles, uploadStoredFiles } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { createRandomUuid } from '@/lib/random-uuid'
@@ -166,14 +167,40 @@ export function lacksLanguageKeys(entry: ChatLoreEntry, language: string | null 
 /** One entry's fields, shared by the settings editor and the chat's context tab. `keyLanguage`: see useLoreKeyLanguage. */
 export function ChatLoreEntryFields({ entry, onChange, filePlace, keyLanguage = null }: { entry: ChatLoreEntry; onChange: (patch: Partial<ChatLoreEntry>) => void; filePlace: LoreFilePlace; keyLanguage?: string | null }) {
   const { t } = useI18n()
+  const [original, setOriginal] = useState(false)
+  const [translator, setTranslator] = useState<number | null>(null)
+  const [translationOpen, setTranslationOpen] = useState(false)
+  const latest = useRef(entry); latest.current = entry
+  const translationAbort = useRef<AbortController | null>(null)
+  useEffect(() => () => translationAbort.current?.abort(), [])
+  const { showSnackbar } = useSnackbar()
+  const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, enabled: translationOpen })
+  const translate = useMutation({ mutationFn: async () => {
+    const source = entry, key = JSON.stringify([source.id, source.title, source.keys, source.content, source.language, source.translation])
+    const controller = new AbortController(); translationAbort.current = controller
+    const result = await translateLoreEntry(translator!, { title: source.title ?? '', keys: source.keys, content: source.content }, controller.signal)
+    controller.signal.throwIfAborted()
+    if (JSON.stringify([latest.current.id, latest.current.title, latest.current.keys, latest.current.content, latest.current.language, latest.current.translation]) !== key) throw new Error(t({ ko: '번역 중 항목이 바뀌었어. 다시 시도해줘.', en: 'Entry changed while translating. Try again.' }))
+    if (!result.translation) throw new Error(t({ ko: '표시용 번역을 만들지 못했어. 번역 모델과 언어 설정을 확인해줘.', en: 'No display translation. Check the translation model and languages.' }))
+    onChange(result)
+  }, onError: error => showSnackbar({ message: getErrorMessage(error, t({ ko: '번역하지 못했어.', en: 'Translation failed.' })), tone: 'error' }) })
+  const display = !original && entry.translation ? entry.translation : entry
+  const sourceChange = (patch: Partial<ChatLoreEntry>) => onChange({ ...patch, translation: null })
+  const textChange = (patch: { title?: string; content?: string }) => entry.translation && !original ? onChange({ translation: { ...entry.translation, ...patch } }) : sourceChange(patch)
   const secondaryKeys = entry.secondaryKeys ?? []
   const localSecondaryKeys = entry.localSecondaryKeys ?? []
   return <>
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span>{t({ ko: '모델 원문', en: 'Model text' })}: {entry.language ?? t({ ko: '언어 미지정', en: 'unspecified' })}</span>
+      <Button size="xs" variant="ghost" onClick={() => setTranslationOpen(!translationOpen)}>{t({ ko: '번역 만들기', en: 'Translate' })}</Button>
+      {entry.translation ? <Button size="xs" variant="ghost" onClick={() => setOriginal(!original)}>{original ? t({ ko: '번역 보기', en: 'Show translation' }) : t({ ko: '원문 보기', en: 'Show original' })}</Button> : <span>{t({ ko: '표시용 번역 없음', en: 'No display translation' })}</span>}
+    </div>
+    {translationOpen ? <div className="flex gap-2"><Select variant="settings" value={translator ?? ''} onChange={e => setTranslator(Number(e.target.value) || null)} aria-label={t({ ko: '번역 프로필', en: 'Translation profile' })}><option value="">{t({ ko: '번역 모델이 설정된 프로필을 골라줘', en: 'Choose a profile with translation configured' })}</option>{(profilesQuery.data ?? []).filter(p => p.usable).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</Select><Button variant="secondary" size="xs" disabled={!translator || translate.isPending} onClick={() => translate.mutate()}>{translate.isPending ? t({ ko: '번역 중', en: 'Translating' }) : t({ ko: '초안에 반영', en: 'Apply to draft' })}</Button></div> : null}
     <Field label={t({ ko: '제목', en: 'Title' })}>
-      <Input variant="settings" value={entry.title ?? ''} maxLength={80} placeholder={loreEntryTitle({ ...entry, title: '' }) || t({ ko: '제목', en: 'Title' })} onChange={(event) => onChange({ title: event.target.value })} />
+      <Input variant="settings" value={display.title ?? ''} maxLength={80} placeholder={loreEntryTitle({ ...entry, title: '' }) || t({ ko: '제목', en: 'Title' })} onChange={(event) => textChange({ title: event.target.value })} />
     </Field>
     <Field label={t({ ko: '키워드', en: 'Keywords' })} info={t({ ko: '/패턴/ 형태는 정규식으로 찾아.', en: '/pattern/ is matched as a regular expression.' })}>
-      <LanguageKeywordRows language={keyLanguage} base={entry.keys} local={entry.localKeys ?? []} onBase={(keys) => onChange({ keys })} onLocal={(localKeys) => onChange({ localKeys })} addLabel={t({ ko: '키워드 추가', en: 'Add keyword' })} />
+      <LanguageKeywordRows language={entry.translation?.language ?? keyLanguage} base={entry.keys} local={entry.translation?.keys ?? entry.localKeys ?? []} onBase={(keys) => sourceChange({ keys })} onLocal={(localKeys) => onChange(entry.translation ? { translation: { ...entry.translation, keys: localKeys } } : { localKeys })} addLabel={t({ ko: '키워드 추가', en: 'Add keyword' })} />
     </Field>
     <Field label={t({ ko: '보조 키워드', en: 'Secondary keywords' })}>
       <div className="flex flex-col gap-2">
@@ -189,7 +216,7 @@ export function ChatLoreEntryFields({ entry, onChange, filePlace, keyLanguage = 
       </div>
     </Field>
     <Field label={t({ ko: '내용', en: 'Content' })}>
-      <Textarea variant="settings" rows={5} value={entry.content} maxLength={20000} onChange={(event) => onChange({ content: event.target.value })} />
+      <Textarea variant="settings" rows={5} value={display.content} maxLength={20000} onChange={(event) => textChange({ content: event.target.value })} />
     </Field>
     <LoreFileField place={filePlace} value={entry.file ?? null} onChange={(file) => onChange({ file, fileId: null })} />
     <div className="space-y-2">

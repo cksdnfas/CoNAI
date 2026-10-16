@@ -517,13 +517,15 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
   })
   const busy = saveMutation.isPending || dismissMutation.isPending || undoMutation.isPending
   const before = proposal.replaces ? proposal.before : undefined
+  const beforeText = before?.translation ?? before
+  const afterText = proposal.translation ?? proposal
   const keys = (list: string[]) => (list.length > 0 ? list.join(', ') : '—')
   const constantLabel = (value: boolean) => (value ? t({ ko: '상시', en: 'Always' }) : '—')
   // Replacing an entry of the same title: what changes, before and after.
   const changes = before ? [
-    { label: t({ ko: '제목', en: 'Title' }), before: before.title, after: proposal.title },
-    { label: t({ ko: '키워드', en: 'Keywords' }), before: keys(before.keys), after: keys(proposal.keys) },
-    { label: t({ ko: '본문', en: 'Content' }), before: before.content, after: proposal.content },
+    { label: t({ ko: '제목', en: 'Title' }), before: beforeText!.title, after: afterText.title },
+    { label: t({ ko: '키워드', en: 'Keywords' }), before: keys(beforeText!.keys), after: keys(afterText.keys) },
+    { label: t({ ko: '본문', en: 'Content' }), before: beforeText!.content, after: afterText.content },
     { label: t({ ko: '상시', en: 'Always' }), before: constantLabel(before.constant), after: constantLabel(proposal.constant) },
     ...(proposal.file ? [{ label: t({ ko: '자료', en: 'File' }), before: before.file ?? '—', after: `자료/${proposal.file.name}` }] : []),
   ].filter((change) => change.before !== change.after) : []
@@ -532,16 +534,17 @@ function LoreProposalCard({ proposal, threadId }: { proposal: LoreProposal; thre
     <ProposalFrame>
       <Header label={saved && !undone && !proposal.undone ? t({ ko: '로어북에 남겼어', en: 'Kept in the lorebook' }) : t({ ko: '로어북에 남길까?', en: 'Keep this in the lorebook?' })} name={`save_lore · ${proposal.bookName ?? t({ ko: '이 채팅', en: 'this chat' })}`} />
       <div className="space-y-2 text-sm">
-        <div className="font-semibold">{proposal.title}</div>
+        <div className="font-semibold">{proposal.translation?.title ?? proposal.title}</div>
         {changes.length > 0 ? (
           <div className="space-y-1.5">
             {changes.map((change) => <UpdateRow key={change.label} label={change.label} before={change.before} after={change.after} />)}
           </div>
-        ) : <div className="whitespace-pre-wrap break-words text-muted-foreground">{proposal.content}</div>}
+        ) : <div className="whitespace-pre-wrap break-words text-muted-foreground">{proposal.translation?.content ?? proposal.content}</div>}
+        {proposal.translation ? <details><summary className="cursor-pointer text-xs text-muted-foreground">{t({ ko: '원문 보기', en: 'Show original' })}</summary><div className="whitespace-pre-wrap">{proposal.title}{'\n'}{proposal.content}</div></details> : null}
       </div>
       {proposal.keys.length > 0 || proposal.constant || proposal.file ? (
         <div className="flex flex-wrap items-center gap-1.5">
-          {proposal.keys.map((key) => <Chip key={key} size="sm" tone="muted">{key}</Chip>)}
+          {(proposal.translation?.keys ?? proposal.keys).map((key) => <Chip key={key} size="sm" tone="muted">{key}</Chip>)}
           {proposal.constant ? <Chip size="sm" tone="primary">{t({ ko: '상시', en: 'Always' })}</Chip> : null}
           {proposal.file ? <span className="inline-flex items-center gap-1 font-mono text-2xs text-muted-foreground"><FileText className="size-3" aria-hidden />{proposal.file.name}</span> : null}
         </div>

@@ -3,6 +3,8 @@ import { sortLoreKeysByLanguage } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { notifySemanticChange } from '../embeddings/semanticSignal'
 import { loadChatSettings } from './chatSettings'
+import { normalizeLoreTranslation } from './loreTranslation'
+import { isChatTranslationLanguage, type BilingualLore } from '@conai/shared'
 
 /**
  * How secondary keywords narrow a match on the primary ones (SillyTavern's selective logic): any of them also
@@ -11,7 +13,7 @@ import { loadChatSettings } from './chatSettings'
 export type LoreSecondaryLogic = 'andAny' | 'notAll' | 'notAny' | 'andAll'
 const SECONDARY_LOGICS: readonly LoreSecondaryLogic[] = ['andAny', 'notAll', 'notAny', 'andAll']
 
-export type ChatLoreEntry = {
+export type ChatLoreEntry = BilingualLore & {
   source?: import('@conai/shared').ChatLoreSource
   id: string
   /** What the book's index calls the entry; '' derives one (see loreEntryTitle). */
@@ -79,8 +81,8 @@ export function loreEntryTitle(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'co
 }
 
 /** Every primary keyword: the English ones, then those in the lore key language. */
-export function loreEntryKeys(entry: Pick<ChatLoreEntry, 'keys'> & { localKeys?: string[] }) {
-  return entry.localKeys?.length ? [...entry.keys, ...entry.localKeys] : entry.keys
+export function loreEntryKeys(entry: Pick<ChatLoreEntry, 'keys'> & { localKeys?: string[]; translation?: import('@conai/shared').LoreTranslation | null }) {
+  return [...new Set([...entry.keys, ...(entry.localKeys ?? []), ...(entry.translation?.keys ?? [])])]
 }
 
 function loreEntrySecondaryKeys(entry: { secondaryKeys?: string[]; localSecondaryKeys?: string[] }) {
@@ -148,6 +150,7 @@ export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
     const title = typeof row.title === 'string' ? row.title : typeof row.comment === 'string' ? row.comment : ''
     const file = loreFilePath(row.file)
     const source = row.source as Partial<import('@conai/shared').ChatLoreSource> | null | undefined
+    const canonical = { title: title.trim().replace(/\s+/g, ' ').slice(0, LORE_TITLE_MAX_LENGTH), keys: keywordList(keys), content: content.trim().slice(0, 20_000) }
     return [{
       id,
       ...(source && Number.isSafeInteger(source.threadId) && source.threadId! > 0 && typeof source.replyId === 'string' && source.replyId.length > 0 && source.replyId.length <= 200 && Number.isSafeInteger(source.proposalId) && source.proposalId! > 0 ? { source: { threadId: source.threadId!, replyId: source.replyId, proposalId: source.proposalId! } } : {}),
@@ -158,6 +161,8 @@ export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
       localSecondaryKeys: keywordList(selective ? row.localSecondaryKeys : undefined),
       secondaryLogic: secondaryLogicOf(row),
       content: content.trim().slice(0, 20_000),
+      ...(isChatTranslationLanguage(row.language) ? { language: row.language } : {}),
+      ...(row.translation !== undefined ? { translation: normalizeLoreTranslation(canonical, row.translation) } : {}),
       enabled: row.enabled !== false && row.disable !== true,
       constant: row.constant === true || row.forceActivation === true,
       order: typeof order === 'number' && Number.isFinite(order) ? Math.max(-10_000, Math.min(10_000, Math.round(order))) : index,
@@ -181,7 +186,7 @@ export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
  */
 export function sortLorebookKeys(entries: ChatLoreEntry[]) {
   const language = loadChatSettings().loreKeyLanguage
-  return language ? entries.map((entry) => sortLoreKeysByLanguage(entry, language)) : entries
+  return language ? entries.map((entry) => entry.language ? entry : sortLoreKeysByLanguage(entry, language)) : entries
 }
 
 /** A global book links no files. */

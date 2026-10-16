@@ -185,6 +185,7 @@ function renderMarkdown(name: string, entries: ChatLoreEntry[]) {
     ].filter(Boolean)
     if (facts.length) lines.push(...facts.map((fact) => `- ${fact}`), '')
     if (entry.content) lines.push(entry.content, '')
+    if (entry.translation) lines.push(`### 번역 (${entry.translation.language})`, '', entry.translation.title, '', `키워드: ${entry.translation.keys.join(', ')}`, '', entry.translation.content, '')
   }
   return lines.join('\n')
 }

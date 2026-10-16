@@ -58,11 +58,14 @@ export type PluginLlmInput = {
   useLorebooks?: boolean; maxTokens?: number; timeoutMs?: number
   /** JSON example/schema passed through the native workflow LLM JSON mode. */
   structuredOutput?: string | Record<string, unknown>
+  /** Opt-in prose translation. `only` translates message JSON without a character/model turn. */
+  translation?: { fields: string[]; only?: boolean; direction?: 'model' | 'display' }
 }
 export type PluginLlmProfile = {
   id: number; name: string; tagline: string; engine: string
   /** Visible look as image-prompt tags (the profile's appearance field); empty when unset. */
   appearance: string
+  translation?: { enabled: boolean; modelLanguage: 'en' | 'ko' | 'ja' | 'zh'; displayLanguage: 'en' | 'ko' | 'ja' | 'zh' }
   assetVersion: string | null; avatarCrop: { x: number; y: number; scale: number } | null
   assets: { avatar: boolean; background: boolean; reference: boolean }
 }
@@ -75,7 +78,7 @@ export type PluginProfileAsset = {
 export type PluginLlmJob = {
   jobId: string; requestId: string; profileId: number
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'; cancelRequested: boolean
-  result: { text: string; truncated: boolean; model: string; engine: string; json?: unknown; profileRun?: PluginProfileRun } | null
+  result: { text: string; truncated: boolean; model: string; engine: string; json?: unknown; profileRun?: PluginProfileRun; translation?: { status: 'completed' | 'failed' | 'disabled'; language: 'en' | 'ko' | 'ja' | 'zh'; sourceLanguage?: 'en' | 'ko' | 'ja' | 'zh'; json?: unknown } } | null
   error: string | null; expiresAt: number
 }
 export type PluginProfileRun = {

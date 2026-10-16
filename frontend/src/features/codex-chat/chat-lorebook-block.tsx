@@ -376,7 +376,8 @@ function EntryRow({ entry, onOpen }: { entry: ChatLoreEntry; onOpen?: () => void
   )
   const className = 'flex items-center gap-2 border-t border-line py-1.5 pl-5 text-left'
   // The entry's text shows in a tooltip, not as a second line.
-  const preview = entry.content ? (entry.content.length > 240 ? `${entry.content.slice(0, 240)}…` : entry.content) : null
+  const shown = entry.translation?.content ?? entry.content
+  const preview = shown ? (shown.length > 240 ? `${shown.slice(0, 240)}…` : shown) : null
   return onOpen
     // eslint-disable-next-line no-restricted-syntax -- a full-width entry row; Button would pad and centre it
     ? <Tip content={preview} side="left"><button type="button" onClick={onOpen} className={cn(className, 'w-full hover:bg-fill outline-none focus-visible:ring-2 focus-visible:ring-ring/40')}>{body}</button></Tip>

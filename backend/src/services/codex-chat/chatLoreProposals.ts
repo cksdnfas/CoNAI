@@ -15,6 +15,7 @@ import { CodexChatStore, type CodexChatMessageRecord } from './codexChatStore'
 import { judgeGrantsLore } from './chatJudge'
 import { isChatOrderReply } from './chatOrderRuns'
 import { loadChatSettings } from './chatSettings'
+import { bilingualLore, normalizeLoreTranslation, loreTextHash } from './loreTranslation'
 
 /**
  * save_lore: the model proposes an entry for the chat's record book (a linked account book chosen for it, else the
@@ -61,7 +62,23 @@ export class LoreProposalError extends Error {
   constructor(message: string, readonly status = 400) { super(message) }
 }
 
-export type SaveLoreInput = { title?: unknown; keys?: unknown; content?: unknown; constant?: unknown; file?: unknown }
+export type SaveLoreInput = { title?: unknown; keys?: unknown; content?: unknown; constant?: unknown; file?: unknown; language?: import('@conai/shared').BilingualLore['language']; translation?: import('@conai/shared').LoreTranslation | null }
+
+export async function proposeTranslatedLore(context: ChatExecutionContext, input: SaveLoreInput, signal?: AbortSignal) {
+  const profile = ChatProfileStore.find(context.profileId)
+  if (!profile || typeof input.title !== 'string' || typeof input.content !== 'string' || !Array.isArray(input.keys)) return proposeLore(context, input)
+  if (context.replyId && ChatProposalStore.forReply(context.threadId, context.replyId, 'lore').length) return proposeLore(context, input)
+  signal?.throwIfAborted()
+  const titleKey = foldLoreTitle(input.title)
+  const previous = () => JSON.stringify(OwnedLorebookStore.recordBook(context.threadId)?.entries.find(e => foldLoreTitle(loreEntryTitle(e)) === titleKey) ?? null)
+  const before = previous()
+  const version = profile.updatedDate
+  const translated = await bilingualLore(profile, { title: input.title.trim(), content: input.content.trim(), keys: input.keys as string[] }, signal, { threadId: context.threadId, replyId: context.replyId })
+  signal?.throwIfAborted()
+  if (previous() !== before) throw new LoreProposalError('번역 중 로어 항목이 바뀌었어. 다시 조회해줘.', 409)
+  if (ChatProfileStore.find(context.profileId)?.updatedDate !== version) throw new LoreProposalError('번역 중 프로필 설정이 바뀌었어. 다시 시도해줘.', 409)
+  return proposeLore(context, { ...input, ...translated })
+}
 
 function loreProposals(threadId: number): LoreProposal[] {
   return ChatProposalStore.listForThread(threadId).map((row) => row.proposal).filter((proposal): proposal is LoreProposal => proposal.kind === 'lore')
@@ -172,17 +189,21 @@ export function proposeLore(context: ChatExecutionContext, input: SaveLoreInput)
   const bookId = OwnedLorebookStore.recordBookId(context.threadId)
   const book = OwnedLorebookStore.recordBook(context.threadId)
   const existing = book?.entries.find((entry) => foldLoreTitle(loreEntryTitle(entry)) === folded)
+  const original = { title, keys, content }
+  const translated = normalizeLoreTranslation(original, input.translation)
+  const translation = translated ? { ...translated, keys: useful.map(key => translated.keys[keys.indexOf(key)]).filter(Boolean), sourceHash: loreTextHash({ title, keys: useful, content }) } : null
   const proposal = ChatProposalStore.add(context, {
     kind: 'lore',
     ...(bookId !== null && book ? { bookId, bookName: book.name } : {}),
     title,
     keys: useful,
     content,
+    ...(input.language ? { language: input.language, translation } : {}),
     constant: input.constant === true,
     ...(file ? { file } : {}),
     ...(existing ? {
       replaces: existing.id,
-      before: { title: loreEntryTitle(existing), keys: loreEntryKeys(existing), content: existing.content, constant: existing.constant, file: existing.file },
+      before: { title: loreEntryTitle(existing), keys: loreEntryKeys(existing), content: existing.content, constant: existing.constant, file: existing.file, ...(existing.translation ? { translation: existing.translation } : {}) },
     } : {}),
   }) as LoreProposal
   if (!loreAutoSaveOn(context.threadId)) return proposal
@@ -230,7 +251,7 @@ export function applyLoreProposal(proposalId: number): { proposal: ChatProposal;
       const replaced = proposal.replaces ? entries.find((entry) => entry.id === proposal.replaces) : undefined
       const replyId = ChatProposalStore.replyIdOf(proposalId)!
       // The proposal's keywords replace both languages' lists; saving sorts them by the lore key language.
-      const fields = { title: proposal.title, keys: proposal.keys, localKeys: [], content: proposal.content, constant: proposal.constant, source: { threadId, replyId, proposalId } }
+      const fields = { title: proposal.title, keys: proposal.keys, localKeys: [], content: proposal.content, language: proposal.language, translation: proposal.translation ?? null, constant: proposal.constant, source: { threadId, replyId, proposalId } }
       let entryId = replaced?.id ?? `lore-p${proposal.id}`
       while (!replaced && entries.some((entry) => entry.id === entryId)) entryId += '-'
       const next = replaced

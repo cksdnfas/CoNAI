@@ -156,6 +156,8 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
   | {
       /** save_lore: an entry for the chat's own lorebook. Saving it is done by the server (POST /api/chat-proposals/:id/apply). */
       kind: 'lore'
+      language?: import('./loreTranslation').BilingualLore['language']
+      translation?: import('./loreTranslation').LoreTranslation | null
       /** The account book the chat recorded into when proposed (its record book); absent: the chat's own book. */
       bookId?: number
       bookName?: string
@@ -168,7 +170,7 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
       /** The book's entry with the same title: saving replaces it in place. */
       replaces?: string
       /** That entry as it was when proposed, for the before/after view. */
-      before?: { title: string; keys: string[]; content: string; constant: boolean; file: string | null }
+      before?: { title: string; keys: string[]; content: string; constant: boolean; file: string | null; translation?: import('./loreTranslation').LoreTranslation | null }
       /** The book the entry went into. */
       savedId?: number | null
       /** Snapshots for undoing the saved entry: the replaced entry (replacements only) and the entry as saved. */

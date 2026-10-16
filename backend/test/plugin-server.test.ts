@@ -150,15 +150,19 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const nobody = { accountId: 999999, accountType: 'admin' as const }
     let calls = 0, aborted = 0, hold = false
     let replyText = '안녕, 이웃!'
+    let translatedReply = '{}'
+    let holdTranslation = false
+    const requestBodies: string[] = []
     let lastBody = ''
     st.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       calls++; lastBody = String(init?.body)
-      if (hold) await new Promise<void>((_resolve, reject) => {
+      requestBodies.push(lastBody)
+      if (hold || (holdTranslation && JSON.parse(lastBody).model === 'translation-model')) await new Promise<void>((_resolve, reject) => {
         const cancel = () => { aborted++; reject(init?.signal?.reason) }
         if (init?.signal?.aborted) cancel()
         else init?.signal?.addEventListener('abort', cancel, { once: true })
       })
-      return Response.json({ choices: [{ message: { content: replyText }, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 4 } })
+      return Response.json({ choices: [{ message: { content: JSON.parse(lastBody).model === 'translation-model' ? translatedReply : replyText }, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 4 } })
     })
     await registry.installPlugin(packageOf(folder, m => { m.id = 'llm-bridge' }, { 'server.mjs': `export function activate(conai) {
       let late = null;
@@ -249,6 +253,35 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await until(() => llm.getPluginLlmJob('llm-bridge', guest, structured.jobId).status === 'completed', 'structured reply')
     assert.deepEqual(llm.getPluginLlmJob('llm-bridge', guest, structured.jobId).result?.json, { action: 'wave' })
     assert.match(lastBody, /JSON/)
+    const translationRow = ModelSlotStore.ensure('plugin-test', 'translation-model')!
+    ChatProfileStore.update(profile.id, { translationSlotId: translationRow, translationModelLanguage: 'en', translationDisplayLanguage: 'ko' })
+    replyText = '{"say":"I remember the potion.","action":"wait","sourceIds":[7]}'
+    translatedReply = '{"0":"회복약을 기억해."}'
+    const bilingual = llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'bilingual', structuredOutput: { say: 'text', action: 'wait' }, translation: { fields: ['say'] } })
+    await until(() => llm.getPluginLlmJob('llm-bridge', guest, bilingual.jobId).status === 'completed', 'translated structured reply')
+    const paired = llm.getPluginLlmJob('llm-bridge', guest, bilingual.jobId).result!
+    assert.deepEqual(paired.json, { say: 'I remember the potion.', action: 'wait', sourceIds: [7] })
+    assert.deepEqual(paired.translation?.json, { say: '회복약을 기억해.', action: 'wait', sourceIds: [7] })
+    assert.equal(paired.translation?.sourceLanguage, 'en')
+    assert.ok(requestBodies.some(body => body.includes('Write every reply in English')), 'the source model gets its configured language directive')
+    translatedReply = '{}'
+    const untranslated = llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'translation-failed', structuredOutput: { say: 'text' }, translation: { fields: ['say'] } })
+    await until(() => llm.getPluginLlmJob('llm-bridge', guest, untranslated.jobId).status === 'completed', 'translation failure preserves source')
+    assert.equal(llm.getPluginLlmJob('llm-bridge', guest, untranslated.jobId).result?.translation?.status, 'failed')
+    assert.equal((llm.getPluginLlmJob('llm-bridge', guest, untranslated.jobId).result?.json as any).say, 'I remember the potion.')
+    holdTranslation = true
+    const slowTranslation = llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'translation-timeout', timeoutMs: 1000, structuredOutput: { say: 'text' }, translation: { fields: ['say'] } })
+    await until(() => llm.getPluginLlmJob('llm-bridge', guest, slowTranslation.jobId).status === 'completed', 'a translation deadline keeps the successful original')
+    assert.equal(llm.getPluginLlmJob('llm-bridge', guest, slowTranslation.jobId).result?.translation?.status, 'failed')
+    assert.equal((llm.getPluginLlmJob('llm-bridge', guest, slowTranslation.jobId).result?.json as any).say, 'I remember the potion.')
+    holdTranslation = false; aborted = 0
+    translatedReply = '{"0":"Potion","1":"potion","2":"Keep a potion."}'
+    const only = llm.startPluginLlmJob('llm-bridge', guest, { requestId: 'translation-only', profileId: profile.id, message: JSON.stringify({ title: '회복약', keys: ['회복약'], content: '회복약을 보관한다.' }), translation: { only: true, direction: 'model', fields: ['title', 'keys.*', 'content'] } })
+    const beforeOnly = calls
+    await until(() => llm.getPluginLlmJob('llm-bridge', guest, only.jobId).status === 'completed', 'standalone translation')
+    assert.equal(calls, beforeOnly + 1, 'translation-only never runs a character turn')
+    assert.equal((llm.getPluginLlmJob('llm-bridge', guest, only.jobId).result?.translation?.json as any).content, 'Keep a potion.')
+    ChatProfileStore.update(profile.id, { translationSlotId: null })
     replyText = '안녕, 이웃!'
 
     // model 'judge': the profile's prompt on its judge row, else the default judge row; refused up front without one.

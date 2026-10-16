@@ -405,6 +405,8 @@ export interface ChatPromptSection {
 export type LoreSecondaryLogic = 'andAny' | 'notAll' | 'notAny' | 'andAll'
 
 export interface ChatLoreEntry {
+  language?: import('@conai/shared').BilingualLore['language']
+  translation?: import('@conai/shared').LoreTranslation | null
   source?: import('@conai/shared').ChatLoreSource
   id: string
   /** What the book's index calls the entry; empty: the first keyword (see loreEntryTitle). */
@@ -435,8 +437,8 @@ export interface ChatLoreEntry {
 }
 
 /** The entry's title as the index shows it: its own, else the first keyword, else the start of its text. */
-export function loreEntryTitle(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'content' | 'localKeys'>) {
-  return entry.title?.trim() || entry.keys[0] || entry.localKeys?.[0] || entry.content.slice(0, 20)
+export function loreEntryTitle(entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'content' | 'localKeys' | 'translation'>) {
+  return entry.translation?.title || entry.title?.trim() || entry.keys[0] || entry.localKeys?.[0] || entry.content.slice(0, 20)
 }
 
 /** `global`: the admin's shared books. `account`: a folder under the account's 로어북/. `chat`: one chat's own book. */
@@ -1620,6 +1622,9 @@ export function draftLorebookMerge(targetId: number, input: { sourceId: number; 
 /** The profile's translation model (else its summary model) writes the entries' keywords in `language`; nothing is saved. */
 export function fillLoreKeys(input: { profileId: number; language: string; entries: Array<{ id: string; title: string; keys: string[]; content: string }> }) {
   return requestApiData<{ keys: Record<string, string[]>; failed: string[] }>('/api/codex-chat/lorebooks/key-fill', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) }, { timeoutMs: 600_000 })
+}
+export function translateLoreEntry(profileId: number, entry: Pick<ChatLoreEntry, 'title' | 'keys' | 'content'>, signal?: AbortSignal) {
+  return requestApiData<Pick<ChatLoreEntry, 'title' | 'keys' | 'content' | 'language' | 'translation'>>('/api/codex-chat/lorebooks/translate', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileId, entry }), signal }, { timeoutMs: 200_000 })
 }
 
 /** Save a save_lore proposal into the chat book (the server writes it). */

@@ -13,6 +13,8 @@ import { canUseChatProfile, resolveChatAccess } from '../codex-chat/codexChatAcc
 import { loadChatSettings } from '../codex-chat/chatSettings'
 import { buildChatProfileReplyMessages } from '../codex-chat/chatProfileReply'
 import { fileOwnerKey } from '../fileStoreService'
+import { hasTranslation } from '../codex-chat/chatModelRoles'
+import { translateStructuredFields } from '../codex-chat/chatTranslation'
 import { runWorkflowLlmText } from '../graph-workflow-executor/workflow-llm-runtime'
 import { buildJsonInstruction } from '../llmProviderService'
 import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
@@ -28,12 +30,14 @@ const inputSchema = z.object({
   useLorebooks: z.boolean().default(true), maxTokens: z.number().int().min(1).max(4096).default(512),
   timeoutMs: z.number().int().min(1000).max(600_000).default(120_000),
   mode: z.enum(['text', 'profile']).optional(),
+  translation: z.object({ fields: z.array(z.string().max(120).regex(/^[a-zA-Z][\w]*(?:\.(?:[a-zA-Z][\w]*|\*)){0,4}$/)).min(1).max(20), only: z.boolean().optional(), direction: z.enum(['model', 'display']).optional() }).strict().optional(),
   /** judge: the profile's prompt on its judge model (else the default judge row) instead of its chat model. */
   model: z.enum(['chat', 'judge']).optional(),
   structuredOutput: z.union([z.string().min(1), z.record(z.string(), z.unknown())]).refine(value => {
     try { const text = typeof value === 'string' ? value : JSON.stringify(value); JSON.parse(text); return Buffer.byteLength(text) <= 16 * 1024 } catch { return false }
   }, 'structuredOutput must be valid JSON within 16KB').optional(),
 }).strict().refine(input => input.mode !== 'profile' || input.structuredOutput === undefined, 'structuredOutput is only available in text mode')
+  .refine(input => input.mode !== 'profile' || input.translation === undefined, 'profile mode uses native translation')
   .refine(input => input.mode !== 'profile' || input.useLorebooks, 'Profile execution uses the profile lorebook settings; use text mode to disable lorebooks')
   .refine(input => input.mode !== 'profile' || input.model !== 'judge', 'The judge model is only available in text mode')
 type Input = z.infer<typeof inputSchema>
@@ -77,6 +81,7 @@ export function listPluginLlmProfiles(pluginId: string, requester: McpRequester 
   const images = canRequesterViewImages(actor)
   return ChatProfileStore.list({ enabledOnly: true }).filter(profile => canUseChatProfile(chat, profile))
     .map(profile => ({ id: profile.id, name: profile.name, tagline: profile.tagline, engine: profile.engine, appearance: profile.appearance ?? '',
+      translation: { enabled: hasTranslation(profile), modelLanguage: profile.translationModelLanguage, displayLanguage: profile.translationDisplayLanguage },
       assetVersion: images ? `${profile.updatedDate}:${profile.avatarHash ?? ''}:${profile.backgroundHash ?? ''}:${profile.referenceHash ?? ''}` : null,
       avatarCrop: images ? profile.avatarCrop : null,
       assets: { avatar: images && Boolean(profile.avatarHash || profile.avatar), background: images && Boolean(profile.backgroundHash || profile.background), reference: images && Boolean(profile.referenceHash) },
@@ -154,6 +159,7 @@ function registerJob() {
       ctx.throwIfCancelled()
       const { profile } = profileAccess(pluginId, requester, input.profileId, digest)
       const controller = new AbortController()
+      const startedAt = Date.now()
       const abort = () => controller.abort(ctx.signal.reason)
       ctx.signal.addEventListener('abort', abort, { once: true })
       const timeout = setTimeout(() => controller.abort(new DOMException('답변 제한 시간을 넘었어.', 'TimeoutError')), input.timeoutMs)
@@ -173,7 +179,18 @@ function registerJob() {
           ctx.flush({ processed: 1, succeeded: 1 })
           return result
         }
-        const messages = buildChatProfileReplyMessages({ profile, message: input.message, history: input.history || null, userName: input.userName, useLorebooks: input.useLorebooks, loreOwner: fileOwnerKey(requester.accountId) })
+        if (input.translation?.only) {
+          let json: unknown
+          try { json = JSON.parse(input.message) } catch { throw new PluginError('번역할 JSON을 확인해줘.') }
+          const language = input.translation.direction === 'model' ? profile.translationModelLanguage : profile.translationDisplayLanguage
+          const translated = await translateStructuredFields(profile, json, input.translation.fields, language, controller.signal, { replyId: `plugin:${pluginId}:${ctx.jobId}` })
+          controller.signal.throwIfAborted(); ctx.throwIfCancelled(); profileAccess(pluginId, requester, input.profileId, digest)
+          if (!translated) throw new PluginError('번역에 실패했어. 프로필의 번역 모델을 확인해줘.')
+          const output = { text: '', json, truncated: false, model: 'translation', engine: profile.engine, translation: { status: 'completed' as const, language, json: translated } }
+          if (Buffer.byteLength(JSON.stringify(output)) > 60 * 1024) throw new PluginError('번역 결과가 너무 커. 항목을 나눠줘.', 413)
+          return output
+        }
+        const messages = buildChatProfileReplyMessages({ profile, message: input.message, history: input.history || null, userName: input.userName, useLorebooks: input.useLorebooks, loreOwner: fileOwnerKey(requester.accountId), translate: !!input.translation })
         if (input.structuredOutput !== undefined) {
           const instruction = buildJsonInstruction('json', typeof input.structuredOutput === 'string' ? input.structuredOutput : JSON.stringify(input.structuredOutput))
           const system = messages.find(message => message.role === 'system' && typeof message.content === 'string')
@@ -194,8 +211,21 @@ function registerJob() {
         // Even escape-heavy text fits the runtime job's 64 KiB JSON result cap.
         if (input.structuredOutput !== undefined && Buffer.byteLength(JSON.stringify(result.json)) > 32 * 1024) throw new PluginError('구조화 답변이 32KB를 넘었어. 요청 범위를 줄여줘.', 413)
         const text = result.text.slice(0, input.structuredOutput === undefined ? 8000 : 4000)
+        let translation: NonNullable<PluginLlmJob['result']>['translation']
+        if (input.translation) {
+          // Once the original is available, a translation deadline must not discard that successful answer.
+          // Explicit cancellation and permission revocation still abort the whole job via controller.
+          clearTimeout(timeout)
+          const translationSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(Math.max(1, input.timeoutMs - (Date.now() - startedAt)))])
+          ctx.flush({ phase: 'translating', currentLabel: profile.name, total: 1 })
+          const language = profile.translationDisplayLanguage
+          const translated = hasTranslation(profile) ? await translateStructuredFields(profile, result.json ?? { text }, input.translation.fields, language, translationSignal, { replyId: `plugin:${pluginId}:${ctx.jobId}` }) : null
+          controller.signal.throwIfAborted(); ctx.throwIfCancelled(); profileAccess(pluginId, requester, input.profileId, digest)
+          translation = { status: !hasTranslation(profile) ? 'disabled' : translated ? 'completed' : 'failed', language, ...(hasTranslation(profile) ? { sourceLanguage: profile.translationModelLanguage } : {}), ...(translated ? { json: translated } : {}) }
+          if (Buffer.byteLength(JSON.stringify({ text, json: result.json, translation })) > 60 * 1024) translation = { ...translation, status: 'failed', json: undefined }
+        }
         ctx.flush({ processed: 1, succeeded: 1 })
-        return { text, truncated: text.length !== result.text.length, model: result.model.slice(0, 200), engine: result.engine, ...(input.structuredOutput === undefined ? {} : { json: result.json }) }
+        return { text, truncated: text.length !== result.text.length, model: result.model.slice(0, 200), engine: result.engine, ...(translation ? { translation } : {}), ...(input.structuredOutput === undefined ? {} : { json: result.json }) }
       } catch (error) {
         if (controller.signal.aborted) throw controller.signal.reason
         if (error instanceof PluginError) throw error

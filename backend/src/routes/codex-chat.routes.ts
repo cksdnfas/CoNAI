@@ -33,6 +33,7 @@ import { ChatMinutesStore } from '../services/codex-chat/chatMinutes'
 import { loreIndexText, threadLorebooks } from '../services/codex-chat/chatLoreContext'
 import { applyMerge, assertMergeDecisions, draftMerge, hasDuplicates, MergeDecisionsMissingError, previewMerge, type MergeResult } from '../services/codex-chat/chatLorebookMerge'
 import { fillLoreKeys } from '../services/codex-chat/chatLoreKeyFill'
+import { bilingualLore } from '../services/codex-chat/loreTranslation'
 import { ChatSharedBlockStore, readBlockFile } from '../services/codex-chat/chatDisplayBlocks'
 import { ChatToolPresetStore, readToolPresetFile } from '../services/codex-chat/chatToolPresets'
 import { ChatJudgePresetStore, readJudgePresetFile } from '../services/codex-chat/chatJudgePresets'
@@ -1029,6 +1030,21 @@ router.post('/lorebooks/:targetId/merge/preview', requireChatAccess, (req: Reque
  * profile's translation model (else its summary model) writes each entry's keywords in `language`. Saves nothing;
  * entries it found none for come back in `failed`.
  */
+router.post('/lorebooks/translate', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
+  const body = req.body ?? {}, id = parseId(body.profileId)
+  const profile = id === null ? null : ChatProfileStore.find(id)
+  if (!profile || !canUseChatProfile(resolveChatAccess(getRequesterAccountId(req)), profile)) { sendRouteBadRequest(res, '사용할 수 없는 프로필이야.'); return }
+  const entry = body.entry
+  if (!entry || typeof entry.title !== 'string' || entry.title.length > 80 || typeof entry.content !== 'string' || !entry.content.trim() || entry.content.length > 12000 || !Array.isArray(entry.keys) || entry.keys.length > 20 || entry.keys.some((k: unknown) => typeof k !== 'string' || k.length > 100)) { sendRouteBadRequest(res, '번역할 항목을 확인해줘.'); return }
+  const controller = new AbortController()
+  res.on('close', () => { if (!res.writableFinished) controller.abort() })
+  const result = await bilingualLore(profile, { title: entry.title, keys: entry.keys, content: entry.content }, controller.signal)
+  if (controller.signal.aborted) return
+  const current = ChatProfileStore.find(profile.id)
+  if (!current || current.updatedDate !== profile.updatedDate || !canUseChatProfile(resolveChatAccess(getRequesterAccountId(req)), current)) { sendRouteBadRequest(res, '프로필 설정이나 권한이 바뀌었어. 다시 시도해줘.'); return }
+  res.json({ success: true, data: result }) // draft only; the normal book save owns revisions/approval
+}))
+
 router.post('/lorebooks/key-fill', requireChatAccess, asyncHandler(async (req: Request, res: Response) => {
   const body = (req.body ?? {}) as { profileId?: unknown; language?: unknown; entries?: unknown }
   if (parseId(body.profileId) === null) { sendRouteBadRequest(res, 'Invalid profile id'); return }

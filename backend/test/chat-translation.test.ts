@@ -1,12 +1,28 @@
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'
-import { maskCodeBlocks, modelLanguageGuidance, restoreCodeBlocks, translateReply, translateUserInput, translatorOf } from '../src/services/codex-chat/chatTranslation'
+import { maskCodeBlocks, modelLanguageGuidance, restoreCodeBlocks, translateReply, translateUserInput, translatorOf, translateStructuredFields } from '../src/services/codex-chat/chatTranslation'
 import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import { mockModelRows } from './modelRowMocks'
 
 // Model rows: 1 the translator's small model, 2 a model whose connection is gone, 3 a chat model.
 const translating = { translationSlotId: 1 }
+
+test('structured translation changes prose leaves only and rejects incomplete translations', async t => {
+  const original = { say: 'I will bring a potion.', action: { type: 'draw', prompt: 'forest, watercolor' }, entries: [{ id: 'promise-1', title: 'Potion', keys: ['potion'], content: 'Bring a potion.', state: 'active', sourceIds: [17] }] }
+  let answer = JSON.stringify({ '0': '회복약을 가져올게.', '1': '회복약', '2': '회복약', '3': '회복약을 가져온다.' })
+  mockTranslator(t, () => Response.json({ choices: [{ message: { content: answer }, finish_reason: 'stop' }] }))
+  const translated = await translateStructuredFields(translating, original, ['say', 'entries.*.title', 'entries.*.keys.*', 'entries.*.content'], 'ko') as typeof original
+  assert.equal(original.say, 'I will bring a potion.')
+  assert.equal(translated.say, '회복약을 가져올게.')
+  assert.deepEqual(translated.action, original.action)
+  assert.equal(translated.entries[0].id, 'promise-1'); assert.equal(translated.entries[0].state, 'active'); assert.deepEqual(translated.entries[0].sourceIds, [17])
+  assert.deepEqual(translated.entries[0].keys, ['회복약'])
+  answer = JSON.stringify({ '0': '일부만 번역' })
+  assert.equal(await translateStructuredFields(translating, original, ['say', 'entries.*.content'], 'ko'), null)
+  const controller = new AbortController(); controller.abort()
+  assert.equal(await translateStructuredFields(translating, original, ['say'], 'ko', controller.signal), null)
+})
 
 /** The translation connection answers `reply`; `requests` collects what was sent to it. */
 function mockTranslator(t: TestContext, reply: string | (() => Response)) {

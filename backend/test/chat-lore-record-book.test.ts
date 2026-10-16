@@ -35,7 +35,7 @@ test('chat lore record book: create from the chat, save_lore and edit_lore_file 
   const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
   const { FileStoreService, fileOwnerKey } = await import('../src/services/fileStoreService')
   const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
-  const { proposeLore, undoLoreProposal } = await import('../src/services/codex-chat/chatLoreProposals')
+  const { proposeLore, proposeTranslatedLore, undoLoreProposal } = await import('../src/services/codex-chat/chatLoreProposals')
   const { booksForRequest, buildLoreIndex, threadLorebooks } = await import('../src/services/codex-chat/chatLoreContext')
   const { editLoreFile } = await import('../src/mcp/tools/chatLoreTools')
 
@@ -54,6 +54,29 @@ test('chat lore record book: create from the chat, save_lore and edit_lore_file 
   const index = () => buildLoreIndex(booksForRequest({ thread: CodexChatStore.findThreadById(threadId)!, profile: ChatProfileStore.find(profile.id)! }), () => 1, (text) => text, false)
 
   const book = OwnedLorebookStore.createForThread(threadId, '리나 기억')
+
+  await t.test('translated save_lore persists original and reader text together, while cancellation writes nothing', async st => {
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    const p = ChatProfileStore.create({ name: 'Bilingual', engine: 'llm', providerName: 'conn', translationSlotId: ModelSlotStore.ensure('conn', 'translator'), translationModelLanguage: 'en', translationDisplayLanguage: 'ko' })
+    const room = CodexChatStore.createThread(null, 'Bilingual lore', 'llm', p.id)
+    CodexChatStore.addMessage({ thread_id: room, role: 'user', content: 'Remember this fact.', tool_calls: [], status: 'completed', error: null })
+    st.mock.method(globalThis, 'fetch', async () => Response.json({ choices: [{ message: { content: JSON.stringify({ '0': '북문 열쇠', '1': '사파이어', '2': '사파이어 열쇠로 북문을 연다.' }) }, finish_reason: 'stop' }] }))
+    const input = { title: 'North gate key', keys: ['sapphire'], content: 'A sapphire key opens the north gate.' }
+    const proposal = await proposeTranslatedLore({ threadId: room, profileId: p.id, kind: 'direct', replyId: 'paired' }, input)
+    const saved = OwnedLorebookStore.chatBookOf(room)!.entries[0]
+    assert.equal(proposal.savedId, OwnedLorebookStore.chatBookOf(room)!.id)
+    assert.equal(saved.language, 'en'); assert.equal(saved.content, input.content); assert.deepEqual(saved.keys, ['sapphire'])
+    assert.equal(saved.translation?.content, '사파이어 열쇠로 북문을 연다.'); assert.deepEqual(saved.translation?.keys, ['사파이어'])
+    const cancelled = new AbortController(); cancelled.abort()
+    await assert.rejects(proposeTranslatedLore({ threadId: room, profileId: p.id, kind: 'direct', replyId: 'cancelled' }, { ...input, title: 'Another key' }, cancelled.signal))
+    assert.equal(OwnedLorebookStore.chatBookOf(room)!.entries.length, 1)
+    st.mock.method(globalThis, 'fetch', async () => {
+      OwnedLorebookStore.saveChatBook(room, [{ ...saved, content: 'User corrected the gate.' }])
+      return Response.json({ choices: [{ message: { content: '{"0":"북문 열쇠","1":"사파이어","2":"오래된 번역"}' }, finish_reason: 'stop' }] })
+    })
+    await assert.rejects(proposeTranslatedLore({ threadId: room, profileId: p.id, kind: 'direct', replyId: 'racing' }, input), /항목이 바뀌었어/)
+    assert.equal(OwnedLorebookStore.chatBookOf(room)!.entries[0].content, 'User corrected the gate.')
+  })
 
   await t.test('a book made from the chat is empty, linked, recorded into, and shown in the index while empty', () => {
     assert.equal(book.kind, 'account')
