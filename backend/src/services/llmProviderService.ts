@@ -244,6 +244,9 @@ function extractFirstParseableJson(text: string) {
   return undefined
 }
 
+/** A JSON answer cut off before it closed. Its message names no provider detail, so callers may show it as is. */
+export class LlmJsonTruncatedError extends Error {}
+
 export function parseRequestedJson(text: string, responseMode: LlmResponseMode): {
   value: unknown | null
   strategy: LlmJsonParseStrategy
@@ -273,6 +276,13 @@ export function parseRequestedJson(text: string, responseMode: LlmResponseMode):
     if (repairedFencedParse.ok && repairedFencedParse.repaired) {
       return { value: repairedFencedParse.value, strategy: 'invalid_escape_repaired' }
     }
+  }
+
+  // An answer that opens as JSON but never closes was cut off, usually by the token cap. Scanning it for embedded
+  // JSON would return its first complete inner value (one list item, say) as if it were the whole answer.
+  const body = text.trimStart().replace(/^```(?:json|JSON)?\s*/, '')
+  if ((body.startsWith('{') || body.startsWith('[')) && !extractBalancedJsonAt(body, 0)) {
+    throw new LlmJsonTruncatedError('LLM의 JSON 답이 중간에 끊겼어. 답변 한도를 늘리거나 요청 범위를 줄여줘.')
   }
 
   const embeddedJson = extractFirstParseableJson(text)

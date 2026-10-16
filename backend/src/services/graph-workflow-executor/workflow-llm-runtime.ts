@@ -25,6 +25,7 @@ import {
   buildUserPrompt,
   normalizeStructuredOutputJson,
   normalizeVisionImageDataUrl,
+  LlmJsonTruncatedError,
   parseRequestedJson,
   type LlmResponseMode,
 } from '../llmProviderService'
@@ -356,7 +357,11 @@ export async function runWorkflowLlmText(request: WorkflowLlmRequest): Promise<W
   })
   const text = stripThinking(result.content).trim()
   if (!text) throw new Error(`LLM이 빈 답을 보냈어: ${resolved.label}`)
-  const parsed = parseRequestedJson(text, responseMode)
+  let parsed: ReturnType<typeof parseRequestedJson>
+  try { parsed = parseRequestedJson(text, responseMode) } catch (error) {
+    if (result.finishReason === 'length') throw new LlmJsonTruncatedError('LLM 답이 출력 토큰 한도에서 끊겼어. 답변 한도를 늘리거나 요청 범위를 줄여줘.')
+    throw error
+  }
 
   return {
     text,
