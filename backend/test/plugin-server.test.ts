@@ -223,6 +223,10 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await assert.rejects(llm.readPluginProfileAsset('llm-bridge', admin, { profileId: off.id }), /프로필/)
     await assert.rejects(llm.readPluginProfileAsset('llm-bridge', admin, { profileId: profile.id, maxSize: 4096 }))
     const input = { requestId: 'turn-1', profileId: profile.id, message: 'PRIVATE_INPUT', history: '사용자: 반가워', maxTokens: 512 }
+    const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
+    const { fileOwnerKey } = await import('../src/services/fileStoreService')
+    const profileBook = OwnedLorebookStore.create(fileOwnerKey(adminId), { name: 'Plugin profile lore', entries: [{ title: '마을 출신', content: 'FILE_BACKED_PROFILE_LORE', constant: true }] })
+    ChatProfileStore.update(profile.id, { lorebookIds: [profileBook.id] })
     const first = await bridge('start', input) as { jobId: string }
     const again = await bridge('start', input) as { jobId: string }
     assert.equal(first.jobId, again.jobId)
@@ -231,6 +235,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.equal(completed.result.text, '안녕, 이웃!')
     assert.equal(calls, 1)
     assert.match(lastBody, /village resident/)
+    assert.match(lastBody, /FILE_BACKED_PROFILE_LORE/, 'stateless plugin calls load the profile shared file-backed lore through the authenticated requester')
     assert.match(lastBody, /PRIVATE_INPUT/)
     assert.match(lastBody, /"max_tokens":100/)
     assert.doesNotMatch(RuntimeJobStore.getParamsJson(first.jobId)!, /PRIVATE_INPUT|반가워/)

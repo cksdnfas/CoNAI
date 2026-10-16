@@ -59,11 +59,11 @@ function ownedBook(book: OwnedLorebook, owner: string, via: AttachedLoreBook['vi
 
 /**
  * The books a request attaches, in index order: the chat's own book, the account books linked to this chat, then the
- * profile's books (account books, then global ones). Every account book must be the chat owner's: a profile is shared
- * across accounts, so another account's book on it is skipped silently. Without a chat (a profile preview) only the
- * profile's global books. A book attached twice counts once, where it first appears.
+ * profile's books (shared account books, then global ones). A trusted stateless caller can provide profileOwner
+ * from its authenticated requester to load shared profile books without any private chat state. An unscoped
+ * preview keeps only global books. A book attached twice counts once, where it first appears.
  */
-export function booksForRequest({ thread, profile }: { thread: RequestThread | null; profile: Pick<ChatProfile, 'lorebookIds'> }): AttachedLoreBook[] {
+export function booksForRequest({ thread, profile, profileOwner }: { thread: RequestThread | null; profile: Pick<ChatProfile, 'lorebookIds'>; profileOwner?: string }): AttachedLoreBook[] {
   const books: AttachedLoreBook[] = []
   const seen = new Set<number>()
   const add = (book: AttachedLoreBook) => {
@@ -71,7 +71,8 @@ export function booksForRequest({ thread, profile }: { thread: RequestThread | n
     seen.add(book.id)
     books.push(book)
   }
-  const owner = thread ? fileOwnerKey(thread.account_id ?? null) : null
+  // A trusted stateless caller can resolve shared profile books without inventing a private chat.
+  const owner = thread ? fileOwnerKey(thread.account_id ?? null) : profileOwner ?? null
   if (thread && owner) {
     const chat = OwnedLorebookStore.chatBookOf(thread.id)
     if (chat) add(ownedBook(chat, owner, 'chat'))

@@ -12,6 +12,7 @@ import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { canUseChatProfile, resolveChatAccess } from '../codex-chat/codexChatAccess'
 import { loadChatSettings } from '../codex-chat/chatSettings'
 import { buildChatProfileReplyMessages } from '../codex-chat/chatProfileReply'
+import { fileOwnerKey } from '../fileStoreService'
 import { runWorkflowLlmText } from '../graph-workflow-executor/workflow-llm-runtime'
 import { buildJsonInstruction } from '../llmProviderService'
 import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
@@ -172,7 +173,7 @@ function registerJob() {
           ctx.flush({ processed: 1, succeeded: 1 })
           return result
         }
-        const messages = buildChatProfileReplyMessages({ profile, message: input.message, history: input.history || null, userName: input.userName, useLorebooks: input.useLorebooks })
+        const messages = buildChatProfileReplyMessages({ profile, message: input.message, history: input.history || null, userName: input.userName, useLorebooks: input.useLorebooks, loreOwner: fileOwnerKey(requester.accountId) })
         if (input.structuredOutput !== undefined) {
           const instruction = buildJsonInstruction('json', typeof input.structuredOutput === 'string' ? input.structuredOutput : JSON.stringify(input.structuredOutput))
           const system = messages.find(message => message.role === 'system' && typeof message.content === 'string')

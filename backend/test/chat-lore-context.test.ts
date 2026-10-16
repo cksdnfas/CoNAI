@@ -31,6 +31,7 @@ test('lore context: books per request, the index, always-on entries, linked file
   const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
   const lore = await import('../src/services/codex-chat/chatLoreContext')
   const { booksForRequest, buildLoreIndex, LORE_INDEX_MAX_TITLES } = lore
+  const { buildChatProfileReplyMessages } = await import('../src/services/codex-chat/chatProfileReply')
   const { buildChatMessages, resolveContextConfig } = await import('../src/services/codex-chat/llmChatContext')
   const { buildGroupLlmMessages } = await import('../src/services/codex-chat/groupChatContext')
   const { exportChatMarkdown } = await import('../src/services/codex-chat/chatExport')
@@ -96,6 +97,16 @@ test('lore context: books per request, the index, always-on entries, linked file
     setProfileBooks(kai.id, [harbor.id, kaiBook.id])
     // A profile preview has no chat: global books only.
     assert.deepEqual(booksForRequest({ thread: null, profile: profile() }).map((book) => book.label), ['항구 도시 설정'])
+    // Authenticated stateless plugin replies include shared file-backed profile books, but never a chat's book/links.
+    assert.deepEqual(booksForRequest({ thread: null, profile: profile(), profileOwner: other }).map((book) => book.label), ['카이', '항구 도시 설정'])
+    const reply = (enabled = true) => JSON.stringify(buildChatProfileReplyMessages({ profile: profile(), message: '항구', history: null, userName: '손님', useLorebooks: enabled, loreOwner: other }))
+    assert.match(reply(), /왼손잡이/)
+    assert.doesNotMatch(reply(), /내일 저녁 바다에서 반지|단 음식을 좋아한다/)
+    assert.doesNotMatch(reply(false), /왼손잡이|항구 도시는 늘/)
+    const current = OwnedLorebookStore.find(kaiBook.id, me)!
+    OwnedLorebookStore.update(kaiBook.id, me, { entries: current.entries.map(e => e.constant ? { ...e, content: 'STATELESS_LIVE_UPDATE' } : e) })
+    assert.match(reply(), /STATELESS_LIVE_UPDATE/, 'the next stateless request reads updated file-backed lore')
+    OwnedLorebookStore.update(kaiBook.id, me, { entries: current.entries })
   })
 
   /** The system message split at the lore index: the persona prompt before it, the lore (and summary) from it on. */

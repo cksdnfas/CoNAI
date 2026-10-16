@@ -1,6 +1,7 @@
 import type { ChatProfile } from './chatProfiles'
 import { PLAIN_USER, type ChatUserPersona } from './chatUserProfiles'
 import type { ChatCompletionMessage } from './llmChatCompletion'
+import { booksForRequest } from './chatLoreContext'
 import {
   appendUserDirective, buildLeadingMessages, depthBlocks, insertDepthBlocks, parseExampleDialogue,
   postHistoryText, referenceBlock, resolveAuthorNote, selectChatLore,
@@ -8,12 +9,12 @@ import {
 
 /** A stateless character turn shared by workflow nodes and plugins; never reads a private chat's history. */
 export function buildChatProfileReplyMessages(params: {
-  profile: ChatProfile; message: string; history: string | null; userName: string | null; useLorebooks: boolean
+  profile: ChatProfile; message: string; history: string | null; userName: string | null; useLorebooks: boolean; loreOwner?: string
 }): ChatCompletionMessage[] {
   const { profile, message, history } = params
   const user: ChatUserPersona = { ...PLAIN_USER, name: params.userName ?? PLAIN_USER.name }
   const scanned = [...(history ? [{ role: 'user', content: history }] : []), { role: 'user', content: message }]
-  const lore = selectChatLore(profile, scanned, user, params.useLorebooks ? {} : { books: [] })
+  const lore = selectChatLore(profile, scanned, user, { books: params.useLorebooks ? booksForRequest({ thread: null, profile, profileOwner: params.loreOwner }) : [] })
   // Return the reply as written, without native chat translation or automatic memory updates.
   const leading = buildLeadingMessages({ ...profile, translationSlotId: null }, null, { summaryEnabled: false }, false, lore, user)
   const turns = history ? parseExampleDialogue(history, profile, user) : null
