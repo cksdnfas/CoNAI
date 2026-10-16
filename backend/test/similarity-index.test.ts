@@ -1,3 +1,4 @@
+import './support/testTemp'
 // Migrations and the services resolve runtime paths at import time: this import must stay first.
 import { scratchDir } from './support/scratchRuntime'
 import { randomUUID } from 'node:crypto'

@@ -1,3 +1,4 @@
+import './support/testTemp'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { hasNarration, narrationForModel, splitNarration, withoutNarrationMarks } from '@conai/shared'

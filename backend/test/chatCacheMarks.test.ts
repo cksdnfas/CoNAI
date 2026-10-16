@@ -1,3 +1,4 @@
+import './support/testTemp'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { markCacheBreakpoints, REFERENCE_BLOCK_START, type ChatCompletionMessage } from '../src/services/codex-chat/llmChatCompletion'

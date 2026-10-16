@@ -1,3 +1,4 @@
+import './support/testTemp'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { LlmRequestError, retryLlmRequest } from '../src/services/llmRequestRetry'

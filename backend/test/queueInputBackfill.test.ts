@@ -1,3 +1,4 @@
+import './support/testTemp'
 // The runtime base must point at a scratch folder before anything reads runtimePaths: this import must stay first.
 import './support/scratchRuntime'
 import assert from 'node:assert/strict'

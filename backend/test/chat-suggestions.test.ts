@@ -1,3 +1,4 @@
+import './support/testTemp'
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'

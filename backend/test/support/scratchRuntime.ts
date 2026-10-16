@@ -3,6 +3,7 @@
  * file's own statements, so a `process.env.RUNTIME_BASE_PATH = …` written in the test itself runs only after the src
  * modules have already resolved their data root.
  */
+import './testTemp'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
