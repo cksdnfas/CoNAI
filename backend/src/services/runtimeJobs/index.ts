@@ -2,7 +2,6 @@ import { RuntimeJobRunner } from './runtimeJobRunner'
 import { registerFolderScanJobHandlers } from './handlers/folderScanHandlers'
 import { registerGroupRematchJobHandlers } from './handlers/groupRematchHandlers'
 import { registerPromptSearchIndexJobHandlers } from './handlers/promptSearchIndexHandlers'
-import { registerThumbnailJobHandlers } from './handlers/thumbnailHandlers'
 import { registerThumbnailRepairJobHandlers } from './handlers/thumbnailRepairHandlers'
 import { registerVideoPosterJobHandlers } from './handlers/videoPosterHandlers'
 import { registerMediaOrphanCleanupJobHandlers } from './handlers/mediaOrphanCleanupHandlers'
@@ -41,7 +40,6 @@ export function registerRuntimeJobHandlers(): void {
   }
 
   handlersRegistered = true
-  registerThumbnailJobHandlers()
   registerThumbnailRepairJobHandlers()
   registerVideoPosterJobHandlers()
   registerPromptSearchIndexJobHandlers()

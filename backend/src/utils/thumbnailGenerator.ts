@@ -3,13 +3,14 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import type { Sharp } from 'sharp';
 import { runtimePaths } from '../config/runtimePaths';
+import { isPathStrictlyInside } from './pathResolver';
 import { ImageProcessor } from '../services/imageProcessor';
 
 /**
  * 썸네일 생성 유틸리티
  *
  * 썸네일은 temp/thumbnails/{날짜}/{해시}.webp 형식으로 생성됩니다.
- * 이 유틸리티는 backgroundProcessorService와 thumbnailRegenerationService에서 공통으로 사용됩니다.
+ * 이 유틸리티는 backgroundProcessorService에서 사용됩니다.
  */
 export class ThumbnailGenerator {
   private static readonly pending = new Map<string, Promise<string>>();
@@ -118,10 +119,5 @@ export function resolveThumbnailAbsolutePath(thumbnailPath: string, tempDir: str
     ? path.resolve(trimmed)
     : path.resolve(root, ...trimmed.split(/[\\/]+/).filter(Boolean));
 
-  const relative = path.relative(root, resolved);
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
-    return null;
-  }
-
-  return resolved;
+  return isPathStrictlyInside(root, resolved) ? resolved : null;
 }

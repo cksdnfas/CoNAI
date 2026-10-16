@@ -7,12 +7,9 @@ import { QueryCacheService } from './QueryCacheService';
 import { PromptCollectionService } from './promptCollectionService';
 import { AutoCollectionService } from './autoCollectionService';
 import { MetadataExtractionError } from '../types/errors';
-import { CivitaiService } from './civitaiService';
-import { ImageModel, ModelRole } from '../models/ImageModel';
 import { MediaMetadataModel } from '../models/Image/MediaMetadataModel';
-import { CivitaiSettings } from '../models/CivitaiSettings';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
-import type { AIMetadata, ModelReference } from './metadata/types';
+import type { AIMetadata } from './metadata/types';
 import { SystemMaintenanceLockService } from './systemMaintenanceLockService';
 
 function resolveBackgroundQueueBatchSize(): number {
@@ -66,8 +63,7 @@ function metadataPersistenceFields(aiInfo: AIMetadata) {
  */
 export enum TaskType {
   METADATA_EXTRACTION = 'metadata_extraction',
-  PROMPT_COLLECTION = 'prompt_collection',
-  CIVITAI_MODEL_LOOKUP = 'civitai_model_lookup'
+  PROMPT_COLLECTION = 'prompt_collection'
 }
 
 /**
@@ -82,7 +78,6 @@ export interface BackgroundTask {
   retries: number;
   maxRetries: number;
   createdAt: Date;
-  modelReferences?: ModelReference[];  // For Civitai lookup
 }
 
 /**
@@ -202,35 +197,6 @@ export class BackgroundQueueService {
   }
 
   /**
-   * Civitai 모델 조회 작업 추가
-   */
-  static addCivitaiModelLookupTask(compositeHash: string, modelReferences: ModelReference[]): void {
-    // Skip if no references with hashes
-    const refsWithHash = modelReferences.filter(ref => ref.hash);
-    if (refsWithHash.length === 0) return;
-
-    const task: BackgroundTask = {
-      id: `${compositeHash}_civitai_${Date.now()}`,
-      type: TaskType.CIVITAI_MODEL_LOOKUP,
-      filePath: '',
-      compositeHash,
-      priority: 5, // 낮은 우선순위
-      retries: 0,
-      maxRetries: 1, // 1번만 시도
-      createdAt: new Date(),
-      modelReferences: refsWithHash
-    };
-
-    this.queue.push(task);
-    logger.debug(`  📋 백그라운드 작업 추가: Civitai 모델 조회 (${refsWithHash.length}개)`);
-
-    // 큐 처리 시작
-    if (!this.processing) {
-      this.processQueue();
-    }
-  }
-
-  /**
    * 큐 처리 (배치 병렬 처리)
    */
   private static async processQueue(): Promise<void> {
@@ -334,10 +300,6 @@ export class BackgroundQueueService {
           await this.processPromptCollection(task);
           break;
 
-        case TaskType.CIVITAI_MODEL_LOOKUP:
-          await this.processCivitaiModelLookup(task);
-          break;
-
         default:
           logger.warn(`  ⚠️  알 수 없는 작업 타입: ${task.type}`);
       }
@@ -429,15 +391,6 @@ export class BackgroundQueueService {
       }
     }
 
-    // 모델 참조가 있으면 Civitai 조회 작업 추가
-    if (persistence.modelReferences.length > 0) {
-      try {
-        this.addCivitaiModelLookupTask(compositeHash, persistence.modelReferences);
-      } catch (error) {
-        logger.warn(`  ⚠️  Civitai 조회 작업 추가 실패: ${path.basename(filePath)}`, error);
-      }
-    }
-
     const releasedForVisibility = MediaPostprocessVisibilityService.markReadyIfNoPendingImmediateWork(compositeHash);
     if (!releasedForVisibility) {
       logger.debug(`  ⏳ Waiting for optional auto post-processing before gallery visibility: ${path.basename(filePath)}`);
@@ -480,92 +433,13 @@ export class BackgroundQueueService {
   }
 
   /**
-   * Civitai 모델 조회 처리
+   * 큐 상태 조회 (대기/처리 중 여부)
    */
-  private static async processCivitaiModelLookup(task: BackgroundTask): Promise<void> {
-    const settings = CivitaiSettings.get();
-    if (!settings.enabled) {
-      logger.debug(`  ⏭️  Civitai 기능 비활성화`);
-      return;
-    }
-
-    if (!task.modelReferences || task.modelReferences.length === 0) {
-      return;
-    }
-
-    // 1. image_models 테이블에 레코드 저장
-    for (const ref of task.modelReferences) {
-      ImageModel.create({
-        composite_hash: task.compositeHash,
-        model_hash: ref.hash,
-        model_role: ref.type as ModelRole,
-        weight: ref.weight
-      });
-    }
-
-    // 2. 각 해시에 대해 Civitai API 조회
-    for (const ref of task.modelReferences) {
-      try {
-        // Rate limiting
-        await CivitaiService.waitForRateLimit();
-
-        // 조회 및 캐싱
-        const success = await CivitaiService.lookupAndCacheModel(ref.hash);
-
-        if (success) {
-          logger.debug(`  ✅ Civitai 모델 정보 캐싱: ${ref.name} (${ref.hash})`);
-        } else {
-          logger.debug(`  ⏭️  Civitai에서 모델 찾지 못함: ${ref.name} (${ref.hash})`);
-        }
-      } catch (error) {
-        logger.error(`  ❌ Civitai 조회 실패: ${ref.hash}`, error);
-        // 개별 모델 실패는 전체 작업 실패로 처리하지 않음
-      }
-    }
-  }
-
-  /**
-   * 큐 상태 조회
-   */
-  static getQueueStatus(): {
-    queueLength: number;
-    activeCount: number;
-    processing: boolean;
-    tasksByType: Record<TaskType, number>;
-    activeTasksByType: Record<TaskType, number>;
-  } {
-    const tasksByType: Record<TaskType, number> = {
-      [TaskType.METADATA_EXTRACTION]: 0,
-      [TaskType.PROMPT_COLLECTION]: 0,
-      [TaskType.CIVITAI_MODEL_LOOKUP]: 0
-    };
-    const activeTasksByType: Record<TaskType, number> = {
-      [TaskType.METADATA_EXTRACTION]: 0,
-      [TaskType.PROMPT_COLLECTION]: 0,
-      [TaskType.CIVITAI_MODEL_LOOKUP]: 0
-    };
-
-    this.queue.forEach(task => {
-      tasksByType[task.type]++;
-    });
-    this.activeTasks.forEach(task => {
-      activeTasksByType[task.type]++;
-    });
-
+  static getQueueStatus(): { queueLength: number; activeCount: number; processing: boolean } {
     return {
       queueLength: this.queue.length,
       activeCount: this.activeTasks.length,
-      processing: this.processing,
-      tasksByType,
-      activeTasksByType
+      processing: this.processing
     };
-  }
-
-  /**
-   * 큐 초기화
-   */
-  static clearQueue(): void {
-    this.queue = [];
-    logger.info('🗑️  백그라운드 큐 초기화');
   }
 }

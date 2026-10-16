@@ -39,15 +39,12 @@ import { wildcardReadRoutes } from '../routes/wildcards.read.routes';
 import { wildcardUtilityRoutes } from '../routes/wildcards.utility.routes';
 import { watchedFoldersRoutes } from '../routes/watchedFolders';
 import { backupSourcesRoutes } from '../routes/backupSources';
-import { backgroundQueueRoutes } from '../routes/backgroundQueue';
 import { systemRoutes } from '../routes/system.routes';
 import imageEditorRoutes from '../routes/image-editor.routes';
 import { authRoutes } from '../routes/auth.routes';
 import fileVerificationRoutes from '../routes/fileVerification';
-import { thumbnailRoutes } from '../routes/thumbnails';
 import { runtimeJobRoutes } from '../routes/runtime-jobs.routes';
 import externalApiRoutes from '../routes/externalApi.routes';
-import civitaiRoutes from '../routes/civitai.routes';
 import searchHistoryRoutes from '../routes/search-history.routes';
 import searchOptionsRoutes from '../routes/search-options.routes';
 import { danbooruBrowserRoutes } from '../routes/danbooruBrowser.routes';
@@ -68,7 +65,7 @@ import {
   requireAuth,
   requirePermission,
 } from '../middleware/authMiddleware';
-import { buildAuthStatusPayload } from '../routes/auth-route-helpers';
+import { buildAuthStatusPayload } from '../services/auth/sessionAccess';
 import { settingsService } from '../services/settingsService';
 
 export interface RegisterAppRoutesOptions {
@@ -200,7 +197,6 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   // 인증/권한은 라우트 내부의 read-only 가드(resolveEventStreamAccess)가 직접 해석한다.
   app.use('/api/events', runtimeEventStreamRoutes);
   app.use('/api/external-api', optionalAuth, externalApiRoutes);
-  app.use('/api/civitai', options.readOnlyLimiter, optionalAuth, civitaiRoutes);
   // The runtime router resolves its own reader (login, runtime key session or anonymous) per route;
   // its event stream must not pass through session-writing middleware.
   app.use('/api/wallpaper-runtime', options.readOnlyLimiter, wallpaperRuntimeRoutes);
@@ -304,11 +300,9 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
   app.use('/api/backup-sources', requireAdmin, backupSourcesRoutes);
   app.use('/api/search-history', optionalAuth, searchHistoryRoutes);
   app.use('/api/search-options', options.readOnlyLimiter, allowReadAccess([IMAGE_VIEW_PERMISSION]), searchOptionsRoutes);
-  app.use('/api/background-queue', requireReadAccess('workflows.view'), backgroundQueueRoutes);
   app.use('/api/system', requireAdmin, systemRoutes);
   app.use('/api/image-editor', options.uploadLimiter, optionalAuth, imageEditorRoutes);
   app.use('/api/file-verification', requireAdmin, fileVerificationRoutes);
-  app.use('/api/thumbnails', optionalAuth, thumbnailRoutes);
   // 장기 실행 잡의 진행률/취소 공용 라우트. 잡을 시작하는 라우트는 각자의 기존 권한을 유지한다.
   app.use('/api/jobs', optionalAuth, runtimeJobRoutes);
   app.use('/api/sprite', spriteRoutes);

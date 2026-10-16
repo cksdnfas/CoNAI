@@ -21,7 +21,7 @@ test('maintenance routes are admin-only and search history is per account', { ti
   user.initializeUserSettingsDb()
   ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   t.after(async () => {
     auth.close()
     user.closeUserSettingsDb()
@@ -215,13 +215,9 @@ test('maintenance routes are admin-only and search history is per account', { ti
       ['/api/system/maintenance/compact-database', 'POST'], ['/api/system/database-stats', 'GET'],
       ['/api/system/database-backups/20260101-000000/download', 'GET'], ['/api/system/database-backups/20260101-000000', 'DELETE'],
       ['/api/file-verification/stats', 'GET'], ['/api/file-verification/verify', 'POST'], ['/api/file-verification/settings', 'PUT'],
-      ['/api/civitai/settings', 'PUT'], ['/api/civitai/stats/reset', 'POST'], ['/api/civitai/models', 'DELETE'],
-      ['/api/civitai/rescan-all', 'POST'], ['/api/civitai/reset-failed', 'POST'], ['/api/civitai/lookup/abc', 'POST'],
     ]
     for (const [url, method] of maintenance) assert.equal((await call(url, guestId, method)).status, 403, `${method} ${url}`)
-    assert.equal((await call('/api/civitai/settings', guestId)).status, 200, 'model info reads stay open to image viewers')
     assert.equal((await call('/api/file-verification/stats', adminId)).status, 200)
-    assert.equal((await call('/api/civitai/settings', adminId, 'PUT', { enabled: false })).status, 200)
     assert.equal((await call('/api/system/database-backups', adminId)).status, 200)
     ;(await import('../src/services/runtimeJobs')).registerRuntimeJobHandlers()
     const dryRun = await call('/api/system/maintenance/orphan-cleanup', adminId, 'POST', {})
