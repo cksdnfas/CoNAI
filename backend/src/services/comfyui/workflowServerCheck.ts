@@ -1,6 +1,6 @@
 import { ComfyUIServerModel } from '../../models/ComfyUIServer';
 import { WorkflowModel } from '../../models/Workflow';
-import { getMcpGenerationRoutingOptions } from '../../mcp/tools/generationJobRouting';
+import { getMcpGenerationRoutingOptions } from '../generation-queue/generationJobRouting';
 import type { ComfyUIServerRecord } from '../../types/comfyuiServer';
 import { comboChoices, fetchComfyNodeInfo, isRecord, specOf, specOptions, type ComfyObjectInfoNode } from './uiWorkflowConversion';
 

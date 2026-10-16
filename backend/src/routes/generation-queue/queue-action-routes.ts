@@ -7,24 +7,21 @@ import { WorkflowModel } from '../../models/Workflow'
 import { GenerationQueueService } from '../../services/generationQueueService'
 import { parseCodexGenerationRequest } from '../../services/codexGenerationOptions'
 import { externalizeQueueInputDataUrls } from '../../services/generation-queue/queueInputStore'
-import {
-  buildWorkflowRoleQueueLimitMessage,
-  checkWorkflowRoleQueueLimit,
-} from '../../services/generation-queue/queueRoleLimitPolicy'
+import { enqueueGenerationJobs } from '../../services/generation-queue/queueEnqueue'
 import { hasGenerationQueueServerRoutingTag } from '../../services/generationQueueRouting'
 import { GenerationTargetGroupService } from '../../services/generationTargetGroupService'
-import { publishQueueJobEvent } from '../../services/runtime-events/runtimeEventPublishers'
 import {
   normalizeWorkflowNumericPromptValues,
   WorkflowNumericFieldValidationError,
 } from '../../services/workflowNumericFieldPolicy'
 import type { WorkflowRecord } from '../../types/workflow'
-import { getRequesterAccountType, isAdminRequest } from '../requester-session-helpers'
+import { isAdminRequest } from '../requester-session-helpers'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
 import {
   getRequesterAccountId,
   parseRequestedServerTag,
   resolveAccessibleQueueJob,
+  sendQueueRoleLimitError,
   TERMINAL_QUEUE_STATUSES,
 } from './queue-route-helpers'
 
@@ -367,81 +364,34 @@ export function createGenerationQueueActionRoutes() {
 
       : 1
 
-    // PAYLOAD-3: the "개수" control used to fire one full HTTP request per copy, so a 32-way
-    // img2img submission uploaded and parsed 5MB thirty-two times. One request now expands
-    // server-side, and the shared inputs are stored once.
     const enqueueCount = service_type === 'codex' ? codexJobCount : (enqueue_count ?? 1)
 
     // 워크플로우에 등급별 회원 1인당 동시 대기열 제한이 설정돼 있으면 이 경로에서도 동일하게 막는다.
-    if (workflowRecord) {
+    // PAYLOAD-3: the "개수" control used to fire one full HTTP request per copy; one request now expands
+    // server-side, and every copy shares one stored payload.
+    let jobIds: number[]
 
-      const roleLimitViolation = checkWorkflowRoleQueueLimit({
-        workflow: workflowRecord,
-        accountId: requesterAccountId,
-        accountType: getRequesterAccountType(req),
-        requestedCount: enqueueCount,
-      })
+    try {
 
-      if (roleLimitViolation) {
-
-        res.status(429).json({
-          success: false,
-          error: buildWorkflowRoleQueueLimitMessage(roleLimitViolation),
-          limit: roleLimitViolation.limit,
-          active: roleLimitViolation.active,
-        })
-
-        return
-
-      }
-
-    }
-
-    const jobIds: number[] = []
-
-    for (let index = 0; index < enqueueCount; index += 1) {
-
-      const expandedPayload = service_type === 'codex'
-
-        ? {
-
-            ...normalizedRequestPayload,
-
-            count: 1,
-
-            n: 1,
-
-          }
-
-        : normalizedRequestPayload
-
-      jobIds.push(GenerationQueueModel.create({
+      jobIds = enqueueGenerationJobs({
 
         ...jobCreateBase,
 
-        request_payload: expandedPayload,
+        request_payload: service_type === 'codex' ? { ...normalizedRequestPayload, count: 1, n: 1 } : normalizedRequestPayload,
 
-        request_summary: enqueueCount > 1 && normalizedRequestSummary
+        request_summary: normalizedRequestSummary,
 
-          ? `${normalizedRequestSummary} (${index + 1}/${enqueueCount})`
+      }, { count: enqueueCount, roleLimitWorkflow: workflowRecord }).jobIds
 
-          : normalizedRequestSummary,
+    } catch (error) {
 
-      }))
+      if (sendQueueRoleLimitError(res, error)) return
+
+      throw error
 
     }
 
     const record = GenerationQueueModel.findListRecordById(jobIds[0] ?? 0)
-
-    // E7: 사용자 enqueue. 폴링 대신 헤더 위젯이 즉시 신규 잡을 보게 하는 유일한 경로다.
-
-    for (const jobId of jobIds) {
-
-      publishQueueJobEvent('queue.job.created', GenerationQueueModel.findListRecordById(jobId))
-
-    }
-
-    GenerationQueueService.requestDispatch()
 
     res.status(201).json({
 
@@ -472,39 +422,13 @@ export function createGenerationQueueActionRoutes() {
     const { jobId, job } = resolvedJob
 
     // 재시도는 원 요청자 계정으로 새 활성 잡을 만들므로, 관리자가 아닌 요청자는 등급 제한을 넘겨 쓸 수 없게 한다.
-    if (!isAdminRequest(req) && typeof job.workflow_id === 'number') {
-
-      const retryWorkflow = await WorkflowModel.findById(job.workflow_id)
-
-      if (retryWorkflow) {
-
-        const roleLimitViolation = checkWorkflowRoleQueueLimit({
-          workflow: retryWorkflow,
-          accountId: job.requested_by_account_id ?? null,
-          accountType: job.requested_by_account_type ?? null,
-          requestedCount: 1,
-        })
-
-        if (roleLimitViolation) {
-
-          res.status(429).json({
-            success: false,
-            error: buildWorkflowRoleQueueLimitMessage(roleLimitViolation),
-            limit: roleLimitViolation.limit,
-            active: roleLimitViolation.active,
-          })
-
-          return
-
-        }
-
-      }
-
-    }
+    const retryWorkflow = !isAdminRequest(req) && typeof job.workflow_id === 'number'
+      ? await WorkflowModel.findById(job.workflow_id)
+      : null
 
     try {
 
-      const retryRecord = GenerationQueueService.retryJob(jobId)
+      const retryRecord = GenerationQueueService.retryJob(jobId, { roleLimitWorkflow: retryWorkflow })
       const responseRecord = retryRecord ? GenerationQueueModel.findListRecordById(retryRecord.id) : null
 
       res.status(201).json({
@@ -518,6 +442,8 @@ export function createGenerationQueueActionRoutes() {
       })
 
     } catch (error) {
+
+      if (sendQueueRoleLimitError(res, error)) return
 
       sendRouteBadRequest(res, error instanceof Error ? error.message : 'Retry failed')
 

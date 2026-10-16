@@ -2,7 +2,7 @@ import fs from 'fs';
 import { comfyAssetFields, resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerationPresets';
 import type { ChatProfile } from './chatProfiles';
 import { resolveProfileAsset } from './chatProfileAssets';
-import { parseMcpMarkedFields } from '../../mcp/tools/mcpComfyWorkflowService';
+import { parseMcpMarkedFields } from '../comfyui/comfyWorkflowInputs';
 
 export const CHAT_NAI_REFERENCE_MAX_BYTES = 4 * 1024 * 1024;
 export const CHAT_NAI_PAYLOAD_MAX_BYTES = 8 * 1024 * 1024;

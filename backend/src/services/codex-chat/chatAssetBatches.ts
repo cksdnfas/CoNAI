@@ -4,7 +4,7 @@ import type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAsse
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { enqueueProfileAssetGenerationJob } from '../../mcp/tools/generationJobTools'
-import { parseMcpMarkedFields } from '../../mcp/tools/mcpComfyWorkflowService'
+import { parseMcpMarkedFields } from '../comfyui/comfyWorkflowInputs'
 import { PromptPresetModel } from '../../models/PromptPreset'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { GenerationQueueService } from '../generationQueueService'

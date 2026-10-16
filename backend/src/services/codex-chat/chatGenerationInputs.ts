@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { MarkedField } from '../../types/workflow'
-import { parseMcpMarkedFields } from '../../mcp/tools/mcpComfyWorkflowService'
+import { parseMcpMarkedFields } from '../comfyui/comfyWorkflowInputs'
 import { resolvePresetWorkflow, type ChatGenerationPreset } from './chatGenerationPresets'
 
 /**

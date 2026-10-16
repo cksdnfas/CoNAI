@@ -13,10 +13,9 @@ import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUISer
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { normalizeGenerationQueueRoutingTag } from '../generationQueueRouting'
-import { GenerationQueueService } from '../generationQueueService'
 import { readQueueDebugMeta } from '../generation-queue/queueDebugMeta'
 import { externalizeQueueInputDataUrls } from '../generation-queue/queueInputStore'
-import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers'
+import { enqueueGenerationJobs } from '../generation-queue/queueEnqueue'
 import { ImageUploadService } from '../imageUploadService'
 import { saveArtifactBuffer, saveCanonicalMediaArtifactReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
 import { resolveComfyGraphOutputDescriptor, resolveComfyOutputMimeType } from './comfyArtifactOutput'
@@ -331,7 +330,7 @@ async function executeQueueBackedComfyModule(context: ExecutionContext, node: Gr
     data_type: 'image' as const,
   }
 
-  const jobId = GenerationQueueModel.create({
+  const [jobId] = enqueueGenerationJobs({
     service_type: 'comfyui',
     workflow_id: workflow.id,
     workflow_name: workflow.name,
@@ -339,12 +338,7 @@ async function executeQueueBackedComfyModule(context: ExecutionContext, node: Gr
     requested_server_tag: target.requestedServerTag,
     request_payload: queuePayload,
     request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
-  })
-
-  // E9: 그래프 실행이 만든 잡도 사용자 큐와 같은 채널로 보여야 한다.
-  publishQueueJobEvent('queue.job.created', GenerationQueueModel.findListRecordById(jobId))
-
-  GenerationQueueService.requestDispatch()
+  }).jobIds
 
   writeExecutionLog({
     executionId: context.executionId,

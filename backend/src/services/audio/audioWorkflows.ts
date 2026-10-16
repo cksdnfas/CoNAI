@@ -3,7 +3,7 @@ import { getAudioDb } from '../../database/audioDb';
 import { ComfyUIServerModel } from '../../models/ComfyUIServer';
 import { WorkflowModel } from '../../models/Workflow';
 import type { MarkedField, WorkflowRecord } from '../../types/workflow';
-import { getMcpGenerationRoutingOptions } from '../../mcp/tools/generationJobRouting';
+import { getMcpGenerationRoutingOptions } from '../generation-queue/generationJobRouting';
 import { AudioServiceError } from './audioService';
 
 /**

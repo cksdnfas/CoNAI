@@ -4,11 +4,11 @@ import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { GenerationQueueModel } from '../../models/GenerationQueue';
 import type { GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue';
 import type { McpRequestContext } from '../../mcp/context';
-import { resolveMcpGenerationRoutingInput } from '../../mcp/tools/generationJobRouting';
-import { normalizeMcpWorkflowInputs } from '../../mcp/tools/mcpComfyWorkflowService';
+import { resolveMcpGenerationRoutingInput } from '../generation-queue/generationJobRouting';
+import { normalizeMcpWorkflowInputs } from '../comfyui/comfyWorkflowInputs';
 import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPolicy';
 import { GenerationQueueService } from '../generationQueueService';
-import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers';
+import { enqueueGenerationJobs } from '../generation-queue/queueEnqueue';
 import { linkChatGeneration } from '../codex-chat/chatReplyRegistry';
 import { ingestGeneratedAudioOutputs } from './audioGenerationOutputs';
 import { AudioServiceError, getAudioGroup } from './audioService';
@@ -244,7 +244,8 @@ function queuePendingRows(orderId: string, options: { binding?: ReturnType<typeo
     if (options.chat) payload.__conaiChatGrant = { toolName: options.chat.toolName, context: options.chat.context, usesImages: false };
     const routing = resolveMcpGenerationRoutingInput({ serviceType: 'comfyui', workflowId: order.workflow_id, serverId: order.server_id, serverTag: order.server_tag });
     const key = `audio:${orderId}:${row.idx}:${row.attempt}`;
-    const created = getUserSettingsDb().transaction(() => GenerationQueueModel.createIdempotent({
+    // The row points at its job before the job is announced, so the created event already carries its audio scope.
+    const created = enqueueGenerationJobs({
       service_type: 'comfyui',
       priority: 100,
       workflow_id: order.workflow_id,
@@ -256,16 +257,18 @@ function queuePendingRows(orderId: string, options: { binding?: ReturnType<typeo
       request_summary: `오디오 · ${group.name} · seed ${row.seed}`,
       requested_by_account_id: order.created_by_account_id,
       requested_by_account_type: (order.created_by_account_type ?? null) as GenerationQueueJobRecord['requested_by_account_type'],
-    }, { scope: AUDIO_ORDER_QUEUE_SCOPE, key, requestHash: sha256(stableJson({ order: orderId, idx: row.idx, attempt: row.attempt, seed: row.seed })) })).immediate();
-    db().prepare("UPDATE audio_order_jobs SET job_id = ?, status_cache = 'queued', error = NULL, updated_at = ? WHERE order_id = ? AND idx = ?")
-      .run(created.jobId, now(), orderId, row.idx);
+    }, {
+      idempotency: { scope: AUDIO_ORDER_QUEUE_SCOPE, key, requestHash: sha256(stableJson({ order: orderId, idx: row.idx, attempt: row.attempt, seed: row.seed })) },
+      withinTransaction: ({ jobIds }) => {
+        db().prepare("UPDATE audio_order_jobs SET job_id = ?, status_cache = 'queued', error = NULL, updated_at = ? WHERE order_id = ? AND idx = ?")
+          .run(jobIds[0], now(), orderId, row.idx);
+      },
+    });
     if (!created.reused) {
-      if (options.chat) linkChatGeneration(options.chat.context.chatContext, created.jobId);
-      publishQueueJobEvent('queue.job.created', GenerationQueueModel.findListRecordById(created.jobId));
+      if (options.chat) linkChatGeneration(options.chat.context.chatContext, created.jobIds[0]);
       queued += 1;
     }
   }
-  GenerationQueueService.requestDispatch();
   return queued;
 }
 

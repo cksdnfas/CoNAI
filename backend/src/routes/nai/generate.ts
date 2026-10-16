@@ -1,16 +1,11 @@
-import { GenerationTargetGroupService } from '../../services/generationTargetGroupService';
 import { requirePermission } from '../../middleware/authMiddleware';
 import { Router, type Request, type Response } from 'express'
 import axios from 'axios'
 // @ts-ignore - no types available
 import AdmZip from 'adm-zip'
 import sharp from 'sharp'
-import { type NAIMetadataInputParams, type NAIMetadataParams } from '../../utils/nai/metadata'
 import { normalizeBase64ImageData } from '../../utils/nai/requestBuilder'
 import { getToken } from '../../utils/nai/auth'
-import { GenerationHistoryService } from '../../services/generationHistoryService'
-import { executeNaiGeneration } from '../../services/naiGenerationExecutor'
-import type { GeneratedImageSaveOptions } from '../../utils/fileSaver'
 
 const router = Router()
 
@@ -74,83 +69,6 @@ function respondWithNaiError(res: Response, error: any, fallbackError: string) {
     details: errorMessage,
   })
 }
-
-router.post('/image', requirePermission('generation.execute'), async (req: Request<{}, {}, NAIMetadataInputParams & { imageSaveOptions?: GeneratedImageSaveOptions }>, res: Response): Promise<void> => {
-  try {
-    const token = resolveToken(req)
-    if (!token) {
-      res.status(401).json({ error: 'NovelAI 인증이 필요합니다. 먼저 토큰으로 로그인하세요.' })
-      return
-    }
-
-    const groupTarget = GenerationTargetGroupService.resolveForAccount(req.session?.accountId, { groupId: req.body.groupId })
-    if (!groupTarget.ok) { res.status(groupTarget.status).json({ error: groupTarget.error }); return }
-    const { metadata, imageBuffers } = await executeNaiGeneration(req.body, token)
-    const requestedByAccountId = typeof req.session?.accountId === 'number' ? req.session.accountId : undefined
-    const requestedByAccountType = req.session?.accountType
-
-    console.log('[NAI Generate] Request params:', {
-      resolution: `${metadata.width}x${metadata.height}`,
-      steps: metadata.steps,
-      model: metadata.model,
-      sampler: metadata.sampler,
-      scheduler: metadata.noise_schedule,
-      scale: metadata.scale,
-      n_samples: metadata.n_samples,
-      characterCount: metadata.characters?.length || 0,
-      vibeCount: metadata.vibes?.length || 0,
-      characterReferenceCount: metadata.character_refs?.length || 0,
-      tokenLength: token.length,
-      tokenPrefix: token.substring(0, 10) + '...',
-    })
-
-    const historyIds: number[] = []
-
-    try {
-      const groupId = groupTarget.groupId ?? undefined
-
-      for (let index = 0; index < imageBuffers.length; index += 1) {
-        const historyId = await GenerationHistoryService.createNAIHistory({
-          model: metadata.model || 'unknown',
-          groupId,
-          requestedByAccountId,
-          requestedByAccountType,
-        })
-
-        historyIds.push(historyId)
-
-        const imageBuffer = imageBuffers[index]
-        GenerationHistoryService.processAndUploadImage(historyId, imageBuffer, 'novelai', req.body.imageSaveOptions)
-          .catch((historyError) => console.error(`[NAI Generate] Background upload failed for history ${historyId}:`, historyError))
-      }
-    } catch (historyError) {
-      console.error('[NAI Generate] Failed to create history:', historyError)
-      res.status(500).json({
-        error: 'Failed to create generation history',
-        details: historyError instanceof Error ? historyError.message : 'Unknown error',
-      })
-      return
-    }
-
-    res.json({
-      historyIds,
-      count: historyIds.length,
-      metadata: {
-        prompt: metadata.prompt,
-        negative_prompt: metadata.negative_prompt,
-        seed: metadata.seed,
-        resolution: `${metadata.width}x${metadata.height}`,
-        steps: metadata.steps,
-        scale: metadata.scale,
-        sampler: metadata.sampler,
-        scheduler: metadata.noise_schedule,
-        model: metadata.model,
-      },
-    })
-  } catch (error: any) {
-    respondWithNaiError(res, error, 'Image generation failed')
-  }
-})
 
 router.post('/encode-vibe', requirePermission('generation.execute'), async (req: Request<{}, {}, { image?: string; model?: string; information_extracted?: number }>, res: Response): Promise<void> => {
   try {

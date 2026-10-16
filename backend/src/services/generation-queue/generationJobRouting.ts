@@ -4,7 +4,7 @@ import {
   hasGenerationQueueServerRoutingTag,
   normalizeGenerationQueueRoutingTag,
   parseGenerationQueueRoutingTag,
-} from '../../services/generationQueueRouting';
+} from '../generationQueueRouting';
 import type { ComfyUIServerRecord } from '../../types/comfyuiServer';
 import type { GenerationQueueJobListRecord } from '../../types/generationQueue';
 import type { ServiceType } from '../../types/generationHistory';

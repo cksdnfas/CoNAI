@@ -15,14 +15,14 @@ import {
   parseMcpMarkedFields,
   prepareMcpComfyWorkflow,
   resolveMcpComfyServer,
-} from './mcpComfyWorkflowService';
+} from '../../services/comfyui/comfyWorkflowInputs';
 import type { McpRequestContext } from '../context';
 import { registerGenerationJobTools } from './generationJobTools';
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { historyWithinContextRating } from '../../services/codex-chat/chatContentRating';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { resolveRequestBodyLimitsMb } from '../../middleware/requestBodyLimits';
-import { getMcpGenerationRoutingOptions, getMcpGenerationRoutingRules } from './generationJobRouting';
+import { getMcpGenerationRoutingOptions, getMcpGenerationRoutingRules } from '../../services/generation-queue/generationJobRouting';
 import { canRequesterViewImages } from '../../middleware/imageAccess';
 import { isChatMcpSource } from '../context';
 import { COMFY_SEED_RULE } from '../../services/comfyui/seedControl';

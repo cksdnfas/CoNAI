@@ -1,17 +1,19 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { GenerationHistoryService } from '../../services/generationHistoryService';
-import { executeNaiGeneration } from '../../services/naiGenerationExecutor';
 import { getToken } from '../../utils/nai/auth';
-import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
+import { mcpGroupPathSchema } from './mcpTargetGroup';
+import { enqueueMcpGenerationJob, waitForMcpGenerationJob } from './generationJobTools';
 import { assertChatNaiSampleCount, type McpRequestContext } from '../context';
 import { canRequesterViewImages } from '../../middleware/imageAccess';
+
+/** generate_nai answers synchronously; a job still running after this returns its id to wait on. */
+const GENERATE_NAI_WAIT_MS = 180_000;
 
 export function registerNovelAiGenerationTools(server: McpServer, context: McpRequestContext): void {
   // NovelAI 이미지 생성
   server.registerTool(
     'generate_nai',
-    { description: 'Compatibility synchronous NovelAI generation. Prefer submit_generation_job for durable work.', inputSchema: z.object({
+    { description: 'Generate with NovelAI and wait up to 3 minutes for the result. It queues the same job as submit_generation_job(service_type="novelai"); prefer that with wait_generation_job.', inputSchema: z.object({
       prompt: z.string().describe('Positive prompt for image generation'),
       negative_prompt: z.string().default('').describe('Negative prompt'),
       model: z.enum([
@@ -36,18 +38,15 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
     async ({ prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples, transparent_background, group_id, group_path }) => {
       try {
         assertChatNaiSampleCount(context, n_samples);
-        const token = getToken();
-        if (!token) {
+        if (!getToken()) {
           return {
             isError: true,
             content: [{ type: 'text' as const, text: 'NovelAI token not configured. Please connect a persistent API token via the web UI first (/api/nai/auth/login-with-token).' }],
           };
         }
 
-        const targetGroupId = resolveMcpTargetGroup(group_id, group_path);
-        const actualSeed = seed ?? Math.floor(Math.random() * 4294967295);
-
-        const result = await executeNaiGeneration({
+        // The same durable queue job submit_generation_job creates, waited on here for the synchronous answer.
+        const request = {
           prompt,
           negative_prompt,
           model,
@@ -56,51 +55,47 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
           steps,
           scale,
           sampler,
-          seed: actualSeed,
+          seed: seed ?? Math.floor(Math.random() * 4294967295),
           n_samples,
           transparent_background,
           action: 'generate',
           noise_schedule: 'karras',
-        }, token);
-        const metadata = result.metadata;
-        const images = result.imageBuffers.map((imageBuffer, index) => ({
-          filename: `nai_${Date.now()}_${index}.png`,
-          data: imageBuffer.toString('base64'),
-        }));
-
-        // 히스토리 저장
-        const historyIds: number[] = [];
-        for (let i = 0; i < images.length; i++) {
-          const historyId = await GenerationHistoryService.createNAIHistory({
-            model: metadata.model || 'unknown',
-            groupId: targetGroupId,
-            requestedByAccountId: context.requester?.accountId ?? undefined,
-            requestedByAccountType: context.requester?.accountType ?? undefined,
-          });
-          historyIds.push(historyId);
-
-          // 백그라운드 업로드
-          const imageBuffer = Buffer.from(images[i].data, 'base64');
-          GenerationHistoryService.processAndUploadImage(historyId, imageBuffer, 'novelai')
-            .catch(err => console.error(`[MCP NAI] Background upload failed for history ${historyId}:`, err));
+        };
+        const submitted = await enqueueMcpGenerationJob(context, {
+          service_type: 'novelai',
+          request_payload: request,
+          group_id,
+          group_path,
+          request_summary: 'MCP generate_nai',
+        }, 'generate_nai');
+        const jobId = submitted?.id;
+        if (typeof jobId !== 'number') throw new Error('The NovelAI job could not be queued.');
+        const job = await waitForMcpGenerationJob(context, jobId, GENERATE_NAI_WAIT_MS);
+        if (!job) throw new Error(`Queue job ${jobId} no longer exists`);
+        if (job.status === 'failed' || job.status === 'cancelled') {
+          return { isError: true, content: [{ type: 'text' as const, text: `NAI generation ${job.status}: ${job.failure_message ?? 'no details'} (job ${job.id})` }] };
         }
+        const canView = !context.requester || canRequesterViewImages(context.requester);
 
         return {
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
-              success: true,
-              ...(!context.requester || canRequesterViewImages(context.requester) ? { historyIds } : {}),
-              count: historyIds.length,
-              ...(!context.requester || canRequesterViewImages(context.requester) ? { metadata: {
-                prompt: metadata.prompt,
-                negative_prompt: metadata.negative_prompt,
-                seed: metadata.seed,
-                resolution: `${metadata.width}x${metadata.height}`,
-                steps: metadata.steps,
-                scale: metadata.scale,
-                sampler: metadata.sampler,
-                model: metadata.model,
+              success: job.finished,
+              job_id: job.id,
+              status: job.status,
+              ...(job.finished ? {} : { note: 'Still running: call wait_generation_job with this job_id.' }),
+              ...(canView ? { historyIds: job.history_ids } : {}),
+              count: job.history_ids.length,
+              ...(canView ? { metadata: {
+                prompt,
+                negative_prompt,
+                seed: request.seed,
+                resolution: `${width}x${height}`,
+                steps,
+                scale,
+                sampler,
+                model,
               } } : {}),
             }),
           }],

@@ -1,10 +1,9 @@
 import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
-import { parseMcpMarkedFields, normalizeMcpWorkflowInputs } from '../../mcp/tools/mcpComfyWorkflowService'
-import { resolveMcpGenerationRoutingInput } from '../../mcp/tools/generationJobRouting'
-import { GenerationQueueModel } from '../../models/GenerationQueue'
-import { hasConfiguredAuth } from '../../routes/auth-route-helpers'
+import { parseMcpMarkedFields, normalizeMcpWorkflowInputs } from '../comfyui/comfyWorkflowInputs'
+import { resolveMcpGenerationRoutingInput } from '../generation-queue/generationJobRouting'
+import { hasConfiguredAuth } from '../auth/sessionAccess'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { activeMediaFile } from '../codex-chat/chatCardAssets'
 import { buildChatGenerationPresetJob } from '../codex-chat/chatGenerationPayload'
@@ -22,8 +21,7 @@ import { actorFromRequester } from '../posts/postActor'
 import { PostStore } from '../posts/postStore'
 import { buildPersonaPrompt } from '../codex-chat/llmChatContext'
 import { fileOwnerKey } from '../fileStoreService'
-import { GenerationQueueService } from '../generationQueueService'
-import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers'
+import { enqueueGenerationJobs } from '../generation-queue/queueEnqueue'
 import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
 import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPolicy'
 import { ingestWorkflowInputImage, isLibraryImageRef } from '../workflowInputImages'
@@ -184,7 +182,7 @@ async function runComfyPresetJob(
 ) {
   const routing = resolveMcpGenerationRoutingInput({ serviceType: 'comfyui', workflowId: workflow.id, serverId: job.server_id ?? null, serverTag: job.server_tag ?? null })
   const promptData = normalizeMcpWorkflowInputs(markedFields, normalizeWorkflowNumericPromptValues(markedFields, job.inputs))
-  const jobId = GenerationQueueModel.create({
+  const [jobId] = enqueueGenerationJobs({
     service_type: 'comfyui',
     workflow_id: workflow.id,
     workflow_name: workflow.name,
@@ -192,9 +190,7 @@ async function runComfyPresetJob(
     requested_server_tag: routing.requestedServerTag,
     request_payload: buildQueuePayload(promptData, context),
     request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
-  })
-  publishQueueJobEvent('queue.job.created', GenerationQueueModel.findListRecordById(jobId))
-  GenerationQueueService.requestDispatch()
+  }).jobIds
   writeExecutionLog({
     executionId: context.executionId,
     nodeId: node.id,

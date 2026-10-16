@@ -18,7 +18,7 @@ import { parseChatFeatureInventory, chatFeatureOverrides, chatRuntimeArgs, chatT
 import { declineServerRequest } from '../src/services/codex-chat/codexAppServerClient'
 import { isolatedChatPreview } from '../../frontend/src/features/codex-chat/chat-preview'
 import { describeChatWorkflowModule } from '../../shared/src/utils/chatWorkflow'
-import { requireChatWorkflowInputs } from '../src/mcp/tools/mcpComfyWorkflowService'
+import { requireChatWorkflowInputs } from '../src/services/comfyui/comfyWorkflowInputs'
 import { claudeChatArgs, claudeChatInput, verifyClaudeTools } from '../src/services/codex-chat/claudeChatCompletion'
 import { claudeLoginUrl, claudeModelOptions } from '../src/services/claudeCli'
 import { mockModelRows } from './modelRowMocks'

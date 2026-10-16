@@ -16,9 +16,8 @@ import {
   type ParsedModuleDefinition,
   type RuntimeArtifact,
 } from './shared'
-import { GenerationQueueService } from '../generationQueueService'
 import { readQueueDebugMeta } from '../generation-queue/queueDebugMeta'
-import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers'
+import { enqueueGenerationJobs } from '../generation-queue/queueEnqueue'
 import { assertCodexAvailable } from '../codexGenerationExecutor'
 import { parseCodexGenerationRequest } from '../codexGenerationOptions'
 import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from './queue-wait'
@@ -370,7 +369,7 @@ export async function executeCodexImageGenerationNode(
   })
 
   try {
-    const jobId = GenerationQueueModel.create({
+    const [jobId] = enqueueGenerationJobs({
       service_type: 'codex',
       workflow_name: moduleDefinition.name,
       request_payload: {
@@ -381,12 +380,7 @@ export async function executeCodexImageGenerationNode(
         },
       },
       request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
-    })
-
-    // E9: 그래프 실행이 만든 잡도 사용자 큐와 같은 채널로 보여야 한다.
-    publishQueueJobEvent('queue.job.created', GenerationQueueModel.findListRecordById(jobId))
-
-    GenerationQueueService.requestDispatch()
+    }).jobIds
 
     writeExecutionLog({
       executionId: context.executionId,

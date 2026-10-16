@@ -6,8 +6,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
 import { ImageUploadService } from '../imageUploadService'
-import { GenerationQueueService } from '../generationQueueService'
-import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers'
+import { enqueueGenerationJobs } from '../generation-queue/queueEnqueue'
 import { settingsService } from '../settingsService'
 import { saveCanonicalMediaArtifactReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
 import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from './queue-wait'
@@ -195,7 +194,7 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
   const imageSaveOptions = buildQueueImageSaveOptions()
 
   try {
-    const jobId = GenerationQueueModel.create({
+    const [jobId] = enqueueGenerationJobs({
       service_type: 'novelai',
       workflow_name: moduleDefinition.name,
       request_payload: {
@@ -207,12 +206,7 @@ export async function executeNaiModule(context: ExecutionContext, node: GraphWor
         },
       },
       request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
-    })
-
-    // E9: 그래프 실행이 만든 잡도 사용자 큐와 같은 채널로 보여야 한다.
-    publishQueueJobEvent('queue.job.created', GenerationQueueModel.findListRecordById(jobId))
-
-    GenerationQueueService.requestDispatch()
+    }).jobIds
 
     writeExecutionLog({
       executionId: context.executionId,

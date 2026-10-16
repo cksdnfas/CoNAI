@@ -12,14 +12,9 @@ import { CustomDropdownListModel, type CustomDropdownListWithParsedItems } from 
 import { HistoryCommandService } from '../services/historyCommandService';
 import { GenerationHistoryService } from '../services/generationHistoryService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
-import { GenerationQueueService } from '../services/generationQueueService';
+import { enqueueGenerationJobs } from '../services/generation-queue/queueEnqueue';
 import { externalizeQueueInputDataUrls } from '../services/generation-queue/queueInputStore';
-import {
-  buildWorkflowRoleQueueLimitMessage,
-  checkWorkflowRoleQueueLimit,
-  resolveWorkflowRoleQueueLimitState,
-} from '../services/generation-queue/queueRoleLimitPolicy';
-import { publishQueueJobEvent } from '../services/runtime-events/runtimeEventPublishers';
+import { resolveWorkflowRoleQueueLimitState } from '../services/generation-queue/queueRoleLimitPolicy';
 import { settingsService } from '../services/settingsService';
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../services/workflowArtifactService';
 import { AUTO_COLLECT_SOURCE_PATH } from '../services/comfyDropdownAutoCollectionService';
@@ -31,6 +26,7 @@ import type { MarkedField, WorkflowRecord } from '../types/workflow';
 import { applyHistoryAccessScope } from './generation-history/historyRouteHelpers';
 import { removeDisplayFailedHistory } from './generation-history/cleanupRouteHandlers';
 import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers';
+import { sendQueueRoleLimitError } from './generation-queue/queue-route-helpers';
 
 const router = Router();
 
@@ -475,23 +471,7 @@ router.post('/:slug/queue', requirePermission('generation.execute'), asyncHandle
     return;
   }
 
-  // 등급별 회원 1인당 동시 대기열 제한. 여기부터 잡 생성까지 await 가 없어야 카운트 레이스가 없다.
   const requesterAccountId = getRequesterAccountId(req);
-  const roleLimitViolation = checkWorkflowRoleQueueLimit({
-    workflow,
-    accountId: requesterAccountId,
-    accountType: getRequesterAccountType(req),
-    requestedCount: parsedEnqueueCount.count,
-  });
-  if (roleLimitViolation) {
-    res.status(429).json({
-      success: false,
-      error: buildWorkflowRoleQueueLimitMessage(roleLimitViolation),
-      limit: roleLimitViolation.limit,
-      active: roleLimitViolation.active,
-    });
-    return;
-  }
 
   const imageSaveSettings = settingsService.loadSettings().imageSave;
   let normalizedRequestPayload: Record<string, unknown>;
@@ -521,8 +501,10 @@ router.post('/:slug/queue', requirePermission('generation.execute'), asyncHandle
     };
   }
 
-  const jobIds = Array.from({ length: parsedEnqueueCount.count }, () => {
-    const jobId = GenerationQueueModel.create({
+  // 등급별 회원 1인당 동시 대기열 제한은 잡을 만드는 같은 트랜잭션 안에서 확인한다.
+  let jobIds: number[];
+  try {
+    jobIds = enqueueGenerationJobs({
       service_type: 'comfyui',
       workflow_id: workflow.id,
       workflow_name: workflow.name,
@@ -531,15 +513,13 @@ router.post('/:slug/queue', requirePermission('generation.execute'), asyncHandle
         ? request_summary.trim()
         : `${workflow.name} public queue job`,
       requested_by_account_id: requesterAccountId,
-      requested_by_account_type: req.session?.accountType,
-    });
-
-    return jobId;
-  });
+      requested_by_account_type: getRequesterAccountType(req),
+    }, { count: parsedEnqueueCount.count, roleLimitWorkflow: workflow }).jobIds;
+  } catch (error) {
+    if (sendQueueRoleLimitError(res, error)) return;
+    throw error;
+  }
   const records = jobIds.map((jobId) => GenerationQueueModel.findListRecordById(jobId));
-  // E8: public 워크플로 enqueue 도 같은 큐를 쓰므로 같은 이벤트를 발행한다.
-  records.forEach((record) => publishQueueJobEvent('queue.job.created', record));
-  GenerationQueueService.requestDispatch();
 
   res.status(201).json({
     success: true,

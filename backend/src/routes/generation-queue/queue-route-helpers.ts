@@ -3,6 +3,7 @@ import { AuthAccount } from '../../models/AuthAccount'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting'
 import { readQueueDebugMeta } from '../../services/generation-queue/queueDebugMeta'
+import { QueueRoleLimitError } from '../../services/generation-queue/queueEnqueue'
 import type { GenerationQueueJobListRecord, GenerationQueueJobRecord, GenerationQueueJobStatus } from '../../types/generationQueue'
 import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers'
 import { parsePositiveInteger, sendRouteBadRequest } from '../routeValidation'
@@ -20,6 +21,13 @@ const ALL_QUEUE_STATUS_SET = new Set<GenerationQueueJobStatus>(ALL_QUEUE_STATUSE
  */
 export function parseQueueDebugMeta(job: Pick<GenerationQueueJobRecord, 'id'>) {
   return readQueueDebugMeta(job.id)
+}
+
+/** Answer a per-role queue limit refusal with 429 and its numbers; false for any other error. */
+export function sendQueueRoleLimitError(res: Response, error: unknown): boolean {
+  if (!(error instanceof QueueRoleLimitError)) return false
+  res.status(429).json({ success: false, error: error.message, limit: error.state.limit, active: error.state.active })
+  return true
 }
 
 export function parseStatusList(value: unknown): GenerationQueueJobStatus[] | undefined {

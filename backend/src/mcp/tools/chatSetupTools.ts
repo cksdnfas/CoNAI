@@ -18,7 +18,7 @@ import { proposeProfileAssets } from '../../services/codex-chat/chatAssetProposa
 import { chatAssetBatchInputSchema, getChatAssetBatch, latestChatAssetBatchId } from '../../services/codex-chat/chatAssetBatches';
 import { ChatGenerationPresetStore, resolvePresetWorkflow } from '../../services/codex-chat/chatGenerationPresets';
 import { PromptPresetModel } from '../../models/PromptPreset';
-import { parseMcpMarkedFields } from './mcpComfyWorkflowService';
+import { parseMcpMarkedFields } from '../../services/comfyui/comfyWorkflowInputs';
 
 function textResult(value: unknown, extra: Record<string, unknown> = {}) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(value) }], ...extra };

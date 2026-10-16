@@ -9,6 +9,7 @@ import { getComfyUIServerRuntimeStatuses } from '../services/comfyui/runtimeStat
 import { ComfyUIServerResponse, ComfyUIServerCreateData, ComfyUIServerUpdateData, type ComfyUIBackendType } from '../types/comfyuiServer';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { sendRouteBadRequest } from './routeValidation';
+import { GENERATION_QUEUE_ROUTING_TAG_PATTERN, normalizeGenerationQueueRoutingTag } from '../services/generationQueueRouting';
 
 const router = Router();
 const INVALID_SERVER_ID_ERROR = 'Invalid server ID';
@@ -30,10 +31,6 @@ function sendServerNotFound(res: Response) {
     success: false,
     error: 'Server not found'
   } as ComfyUIServerResponse);
-}
-
-function normalizeRoutingTag(value: string) {
-  return value.trim().toLowerCase();
 }
 
 function parseBackendTypeInput(value: unknown): ComfyUIBackendType {
@@ -86,8 +83,8 @@ function parseRoutingTagsInput(value: unknown) {
       throw new Error('routing_tags must contain only strings');
     }
 
-    const normalized = normalizeRoutingTag(entry);
-    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(normalized)) {
+    const normalized = normalizeGenerationQueueRoutingTag(entry);
+    if (!GENERATION_QUEUE_ROUTING_TAG_PATTERN.test(normalized)) {
       throw new Error(`Invalid routing tag: ${entry}`);
     }
 

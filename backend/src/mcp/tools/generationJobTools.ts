@@ -1,5 +1,4 @@
 import crypto from 'crypto';
-import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { linkChatGeneration, requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry';
 import { audioCandidatesByQueueJob } from '../../services/audio/audioJobCandidates';
 import { McpServer } from '@modelcontextprotocol/server';
@@ -9,6 +8,7 @@ import { WorkflowModel } from '../../models/Workflow';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { externalizeQueueInputDataUrls } from '../../services/generation-queue/queueInputStore';
 import { GenerationQueueService } from '../../services/generationQueueService';
+import { enqueueGenerationJobs, type EnqueueGenerationJobsOptions } from '../../services/generation-queue/queueEnqueue';
 import { codexGenerationRequestSchema, getCodexModelSuggestions, parseCodexGenerationRequest } from '../../services/codexGenerationOptions';
 import { buildGenerationHistoryRequestSnapshot } from '../../services/generationHistoryRequestSnapshot';
 import { McpArtifactService } from '../../services/mcpArtifactService';
@@ -16,7 +16,7 @@ import { historyWithinContextRating } from '../../services/codex-chat/chatConten
 import { normalizeWorkflowNumericPromptValues } from '../../services/workflowNumericFieldPolicy';
 import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting';
 import { assertChatNaiSampleCount, isChatMcpSource, type McpRequestContext } from '../context';
-import { normalizeMcpWorkflowInputs, parseMcpMarkedFields, requireChatWorkflowInputs } from './mcpComfyWorkflowService';
+import { normalizeMcpWorkflowInputs, parseMcpMarkedFields, requireChatWorkflowInputs } from '../../services/comfyui/comfyWorkflowInputs';
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
 import { requireMcpResourceOwner, requireMcpToolAccess } from '../toolAccess';
 import { requireContextPermission, requireRequesterPermission } from '../../middleware/featureAccess';
@@ -30,7 +30,7 @@ import {
   getMcpGenerationRoutingOptions,
   getMcpGenerationRoutingRules,
   resolveMcpGenerationRoutingInput,
-} from './generationJobRouting';
+} from '../../services/generation-queue/generationJobRouting';
 
 /** Serialize JSON-compatible request values deterministically across object key order. */
 function stringifyStableJson(value: unknown): string {
@@ -58,8 +58,6 @@ function resolveIdempotencyScope(context: McpRequestContext) {
   return context.keyId ? `mcp-key:${context.keyId}` : 'mcp-local';
 }
 
-const WAIT_POLL_MS = 1000;
-const WAIT_TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled']);
 
 async function describeJob(jobId: number, context: McpRequestContext) {
   const job = GenerationQueueModel.findListRecordById(jobId);
@@ -85,6 +83,16 @@ async function describeJob(jobId: number, context: McpRequestContext) {
     // Sounds the run saved (audio workspace, 생성 탭 project): playable in the reply and the generation history.
     ...(audioIds.length ? { audio_candidate_ids: audioIds } : {}),
   };
+}
+
+/** Wait until one job finishes or the timeout passes, then describe it; `finished` false means it is still going. */
+export async function waitForMcpGenerationJob(context: McpRequestContext, jobId: number, timeoutMs: number) {
+  const record = GenerationQueueModel.findListRecordById(jobId);
+  if (!record) return null;
+  requireMcpResourceOwner(context, record);
+  const finished = Boolean(await GenerationQueueService.waitForTerminalJob(jobId, { timeoutMs }));
+  const job = await describeJob(jobId, context);
+  return job ? { finished, ...job } : null;
 }
 
 export type McpGenerationJobInput = {
@@ -163,6 +171,7 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
   }
 
   let workflowName: string | null = null;
+  let roleLimitWorkflow: EnqueueGenerationJobsOptions['roleLimitWorkflow'] = null;
   // ComfyUI jobs keep `inputs` only as the source of `prompt_data`: spreading the raw inputs into the payload
   // used to copy every node input (with its inline base64 media) next to the externalized prompt_data.
   let payload = request_payload ?? (service_type === 'comfyui' ? {} : inputs ?? {});
@@ -177,6 +186,7 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
     }
     if (!workflow.is_active) throw new Error(`Workflow with ID ${workflow_id} is inactive`);
     workflowName = workflow.name;
+    roleLimitWorkflow = workflow;
     routing = resolveMcpGenerationRoutingInput({
       serviceType: service_type,
       workflowId: workflow_id,
@@ -245,23 +255,20 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
     requested_by_account_id: context.requester?.accountId ?? null,
     requested_by_account_type: context.requester?.accountType ?? null,
   };
-  const creation = getUserSettingsDb().transaction(() => {
-    const created = idempotency_key && idempotencyScope && requestHash
-      ? GenerationQueueModel.createIdempotent(createData, {
-        scope: idempotencyScope,
-        key: idempotency_key,
-        requestHash,
-      })
-      : { jobId: GenerationQueueModel.create(createData), requestHash: null, reused: false };
-    if (requestHash && created.requestHash !== requestHash) {
-      throw new Error(`idempotency_key "${idempotency_key}" was already used with a different request payload`);
-    }
-    options.recordJob?.(created.jobId);
-    return created;
-  }).immediate();
-  if (!creation.reused) linkChatGeneration(context.chatContext, creation.jobId);
-  GenerationQueueService.requestDispatch();
-  const job = await describeJob(creation.jobId, context);
+  // Same per-role workflow limit as the website queue; the chat's own account is the requester.
+  const creation = enqueueGenerationJobs(createData, {
+    idempotency: idempotency_key && idempotencyScope && requestHash ? { scope: idempotencyScope, key: idempotency_key, requestHash } : undefined,
+    roleLimitWorkflow,
+    withinTransaction: (created) => {
+      if (requestHash && created.requestHash !== requestHash) {
+        throw new Error(`idempotency_key "${idempotency_key}" was already used with a different request payload`);
+      }
+      options.recordJob?.(created.jobIds[0]);
+    },
+  });
+  const jobId = creation.jobIds[0];
+  if (!creation.reused) linkChatGeneration(context.chatContext, jobId);
+  const job = await describeJob(jobId, context);
   return idempotency_key ? { ...job, idempotency_key, idempotency_reused: creation.reused } : job;
 }
 
@@ -367,20 +374,10 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       timeout_seconds: z.number().int().min(5).max(180).default(90).describe('Longest wait before returning an unfinished job'),
     }) },
     async ({ job_id, timeout_seconds }) => {
-      const deadline = Date.now() + timeout_seconds * 1000;
-      for (;;) {
-        const record = GenerationQueueModel.findListRecordById(job_id);
-        if (!record) {
-          return { isError: true, content: [{ type: 'text' as const, text: `Queue job ${job_id} not found` }] };
-        }
-        requireMcpResourceOwner(context, record);
-        const finished = WAIT_TERMINAL_STATUSES.has(record.status);
-        if (finished || Date.now() >= deadline) {
-          const job = await describeJob(job_id, context);
-          return { content: [{ type: 'text' as const, text: JSON.stringify({ finished, ...job }) }] };
-        }
-        await new Promise((resolve) => setTimeout(resolve, WAIT_POLL_MS));
-      }
+      const job = await waitForMcpGenerationJob(context, job_id, timeout_seconds * 1000);
+      return job
+        ? { content: [{ type: 'text' as const, text: JSON.stringify(job) }] }
+        : { isError: true, content: [{ type: 'text' as const, text: `Queue job ${job_id} not found` }] };
     },
   );
 
