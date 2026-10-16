@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, Link2, Lock, Plus, RefreshCw, Server, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { ChevronDown, Dices, Link2, Lock, Plus, RefreshCw, Server, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -252,7 +251,7 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
       <Popover open={chipOpen} onOpenChange={setChipOpen}>
         <Tip content={t({ ko: '{detail}\n눌러서 워크플로·서버 고르기', en: '{detail}\nClick to pick the workflow and server' }, { detail: workflowDetail })} className="whitespace-pre-line">
           <PopoverTrigger asChild>
-            <Button type="button" variant="subtle" size="sm" className="max-w-full min-w-0 gap-2 px-2.5 text-xs font-normal text-foreground">
+            <Button type="button" variant="ghost" size="xs" className="max-w-full min-w-0 gap-1.5 font-normal text-foreground">
               <span className={cn('size-1.5 shrink-0 rounded-full', readiness.kind === 'ready' ? 'bg-success' : readiness.blocked ? 'bg-destructive' : 'bg-warning')} aria-hidden />
               <span className="min-w-0 truncate">{workflow?.name}</span>
               <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -284,45 +283,59 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
     )
   }
 
+  const seedText = prefs.seed.trim()
+  const lengthTip = secondsMax !== null
+    ? t({ ko: '길이(초): 만들 오디오 길이, 최대 {max}초', en: 'Length (s): clip length, up to {max} s' }, { max: secondsMax })
+    : t({ ko: '길이(초): 만들 오디오 길이', en: 'Length (s): clip length' })
+
+  // A composer: the prompt with one row of parameter chips under it; each chip opens its own small field.
   return (
-    <form className="space-y-2.5 border-b border-line pb-4" onSubmit={(event) => void submit(event)}>
-      <Textarea
-        autoFocus={autoFocus}
-        rows={2}
-        maxLength={8000}
-        aria-label={t({ ko: '대표 프롬프트', en: 'Representative prompt' })}
-        placeholder={t({ ko: '대표 프롬프트', en: 'Representative prompt' })}
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        onBlur={() => void savePrompt()}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
-            event.preventDefault()
-            void submit()
-          }
-        }}
-      />
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Tip content={secondsMax !== null
-          ? t({ ko: '길이(초): 만들 오디오 길이, 최대 {max}초', en: 'Length (s): clip length, up to {max} s' }, { max: secondsMax })
-          : t({ ko: '길이(초): 만들 오디오 길이', en: 'Length (s): clip length' })}
-        >
-          <span className="inline-flex">
-            <NumberStepperInput className="h-8 w-32 font-mono" min={0.1} max={secondsMax ?? undefined} precision={1} aria-label={t({ ko: '길이(초)', en: 'Length (s)' })} value={prefs.seconds} aria-invalid={secondsOver || undefined} onValueCommit={(value) => set({ seconds: value })} />
-          </span>
-        </Tip>
-        <Tip content={t({ ko: '개수: 한 번에 만들 후보 수 (1–50)', en: 'Count: candidates per run (1–50)' })}>
-          <span className="inline-flex">
-            <NumberStepperInput className="h-8 w-32 font-mono" min={1} max={50} precision={0} aria-label={t({ ko: '개수', en: 'Count' })} value={prefs.count} onValueCommit={(value) => set({ count: value })} />
-          </span>
-        </Tip>
-        <Tip content={t({ ko: 'seed: 비워두면 매번 랜덤', en: 'Seed: leave empty for a random one each time' })}>
-          <Input className="h-8 w-24 font-mono" inputMode="numeric" aria-label="seed" placeholder={t({ ko: 'seed 랜덤', en: 'seed: random' })} value={prefs.seed} onChange={(event) => set({ seed: event.target.value })} />
-        </Tip>
-        <span className="flex-1" />
-        <div className="flex min-w-0 items-center gap-2">
-          {chip}
-          {fix}
+    <form className="border-b border-line pb-4" onSubmit={(event) => void submit(event)}>
+      <div className="rounded-lg border border-line transition-colors focus-within:border-primary/55">
+        <textarea
+          autoFocus={autoFocus}
+          rows={2}
+          maxLength={8000}
+          aria-label={t({ ko: '대표 프롬프트', en: 'Representative prompt' })}
+          placeholder={t({ ko: '대표 프롬프트', en: 'Representative prompt' })}
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onBlur={() => void savePrompt()}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
+              event.preventDefault()
+              void submit()
+            }
+          }}
+          className="block w-full resize-y bg-transparent px-3 pt-2 pb-1 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+        />
+        <div className="flex items-center gap-0.5 px-1.5 pb-1.5">
+          <ParamChip
+            tip={lengthTip}
+            ariaLabel={t({ ko: '길이 {value}초', en: 'Length {value} s' }, { value: prefs.seconds })}
+            invalid={secondsOver}
+            value={<>{prefs.seconds}<span className="text-muted-foreground">{t({ ko: '초', en: 's' })}</span></>}
+          >
+            <NumberStepperInput autoFocus className="h-8 w-32 font-mono" min={0.1} max={secondsMax ?? undefined} precision={1} aria-label={t({ ko: '길이(초)', en: 'Length (s)' })} value={prefs.seconds} aria-invalid={secondsOver || undefined} onValueCommit={(value) => set({ seconds: value })} />
+          </ParamChip>
+          <ParamChip
+            tip={t({ ko: '개수: 한 번에 만들 후보 수 (1–50)', en: 'Count: candidates per run (1–50)' })}
+            ariaLabel={t({ ko: '개수 {value}', en: 'Count {value}' }, { value: prefs.count })}
+            value={<><span className="text-muted-foreground">×</span>{prefs.count}</>}
+          >
+            <NumberStepperInput autoFocus className="h-8 w-32 font-mono" min={1} max={50} precision={0} aria-label={t({ ko: '개수', en: 'Count' })} value={prefs.count} onValueCommit={(value) => set({ count: value })} />
+          </ParamChip>
+          <ParamChip
+            tip={t({ ko: 'seed: 비워두면 매번 랜덤', en: 'Seed: leave empty for a random one each time' })}
+            ariaLabel={seedText ? `seed ${seedText}` : t({ ko: 'seed 랜덤', en: 'seed: random' })}
+            value={<><Dices className="size-3.5 text-muted-foreground" />{seedText ? <span className="max-w-20 truncate">{seedText}</span> : null}</>}
+          >
+            <Input autoFocus className="h-8 w-36 font-mono" inputMode="numeric" aria-label="seed" placeholder={t({ ko: 'seed 랜덤', en: 'seed: random' })} value={prefs.seed} onChange={(event) => set({ seed: event.target.value })} />
+          </ParamChip>
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            {chip}
+            {fix}
+          </div>
           <IconButton type="submit" variant="default" size="icon-sm" disabled={!runnable || !valid || busy !== null} label={t({ ko: '{count}개 생성', en: 'Generate {count}' }, { count: Number.isInteger(count) && count > 0 ? count : 0 })}>
             <Sparkles />
           </IconButton>
@@ -332,9 +345,27 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
   )
 }
 
+/** One parameter in the composer row: its value as a small chip that opens the field to change it. */
+function ParamChip({ tip, ariaLabel, invalid = false, value, children }: { tip: string; ariaLabel: string; invalid?: boolean; value: ReactNode; children: ReactNode }) {
+  return (
+    <Popover>
+      <Tip content={tip}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="ghost" size="xs" aria-label={ariaLabel} aria-invalid={invalid || undefined} className={cn('shrink-0 gap-0.5 font-mono font-normal tabular-nums', invalid && 'text-destructive')}>
+            {value}
+          </Button>
+        </PopoverTrigger>
+      </Tip>
+      <PopoverContent align="start" className="w-auto p-2">
+        {children}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function StatusChip({ tone = 'idle', icon, children }: { tone?: 'idle' | 'warn' | 'bad'; icon?: ReactNode; children: ReactNode }) {
   return (
-    <Chip tone="muted" className="h-8 shrink gap-2 px-2.5">
+    <Chip tone="muted" className="h-6 shrink gap-1.5 px-2">
       {icon ?? <span className={cn('size-1.5 shrink-0 rounded-full', tone === 'bad' ? 'bg-destructive' : tone === 'warn' ? 'bg-warning' : 'bg-muted-foreground/50')} aria-hidden />}
       <span className="truncate">{children}</span>
     </Chip>

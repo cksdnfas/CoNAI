@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { Download, FolderInput, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { ChevronDown, ChevronUp, Download, FolderInput, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
@@ -725,31 +725,30 @@ function AudioPageContent() {
         />
       )}
       toolbar={(
-        <PageToolbar
-          title={groupTitle}
-          start={group?.label && !inbox ? (
+        // The file name chip shares the actions' row: on a phone the title takes the first line and chip + icons the
+        // second, instead of title, chip and icons each taking their own.
+        <PageToolbar title={groupTitle}>
+          {group?.label && !inbox ? (
             <Tip content={permissions.canEdit ? t({ ko: '내보낼 파일명: 눌러서 바꾸기', en: 'Export file name: click to change' }) : t({ ko: '내보낼 파일명', en: 'Export file name' })}>
               {/* The span carries the tooltip while the button is disabled (a disabled button gets no pointer events). */}
               <span className="inline-flex min-w-0" tabIndex={permissions.canEdit ? undefined : 0}>
                 <Button
                   variant="subtle"
                   size="xs"
-                  className="min-w-0 truncate font-mono font-normal"
+                  className="min-w-0 shrink font-mono font-normal"
                   disabled={!permissions.canEdit}
                   onClick={() => setDialog('group-edit')}
                 >
-                  {group.label}
+                  <span className="truncate">{group.label}</span>
                 </Button>
               </span>
             </Tip>
           ) : null}
-          actions={(
-            <>
-              {toolbarActions}
-              <GenerationLayoutControls wide={isDesktop} />
-            </>
-          )}
-        />
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            {toolbarActions}
+            <GenerationLayoutControls wide={isDesktop} />
+          </div>
+        </PageToolbar>
       )}
     >
       <input
@@ -795,7 +794,7 @@ function AudioPageContent() {
             blocks={{
               generate: !inbox && (group.description || permissions.canEdit) ? (
                 <div className="space-y-3">
-                  {!inbox && group.description ? <p className="text-sm whitespace-pre-wrap break-words text-muted-foreground">{group.description}</p> : null}
+                  {!inbox && group.description ? <EffectDescription key={group.id} text={group.description} /> : null}
                   {!inbox && permissions.canEdit ? (
                     <AudioGenerateBar
                       key={group.id}
@@ -925,6 +924,35 @@ function AudioPageContent() {
       ) : null}
       <AudioSettingsDialog open={dialog === 'settings'} canManage={permissions.canManageWorkflows} focusWorkflowId={settingsWorkflowId} onClose={() => setDialog(null)} />
     </PageWithSidebar>
+  )
+}
+
+/** The effect's description folded to two lines; the chevron appears only when it actually runs longer. */
+function EffectDescription({ text }: { text: string }) {
+  const { t } = useI18n()
+  const ref = useRef<HTMLParagraphElement>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [overflowing, setOverflowing] = useState(false)
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node || expanded) return
+    const measure = () => setOverflowing(node.scrollHeight > node.clientHeight + 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [text, expanded])
+
+  return (
+    <div className="flex items-start gap-1">
+      <p ref={ref} className={cn('min-w-0 flex-1 text-sm whitespace-pre-wrap break-words text-muted-foreground', !expanded && 'line-clamp-2')}>{text}</p>
+      {overflowing || expanded ? (
+        <IconButton variant="ghost" size="icon-xs" className="shrink-0" label={expanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })} onClick={() => setExpanded((value) => !value)}>
+          {expanded ? <ChevronUp /> : <ChevronDown />}
+        </IconButton>
+      ) : null}
+    </div>
   )
 }
 
