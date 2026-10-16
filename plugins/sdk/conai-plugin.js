@@ -107,6 +107,11 @@ export function connectPlugin(handlers = {}) {
         delete: (key, revision) => api.request('storage.delete', { key, revision }),
       }
       api.media = { open: (artifactId, options) => api.request('media.open', { artifactId }, options) }
+      /** A live HTML document to frame inside this page: `files` maps relative paths to media references or this package's files. update() keeps the address. */
+      api.preview = {
+        open: ({ html, files = {} }, options) => api.request('preview.open', { html, files }, options),
+        update: (url, { html, files = {} }, options) => api.request('preview.update', { url, html, files }, options),
+      }
       api.navigation = { open: path => api.request('navigation.open', { path }), openChat: threadId => api.request('navigation.openChat', { threadId }) }
       api.events = { on(name, listener) {
         if (typeof listener !== 'function') throw new TypeError('events.on(name, listener)')

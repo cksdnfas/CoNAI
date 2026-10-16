@@ -73,10 +73,11 @@ node scripts/build-plugin.mjs --local my-plugin
 | 플러그인 고유 서버 기능을 AI/MCP에 노출 | `conai.tools.register`; 등록 이름은 `p_<pluginId>_<name>` 형식이며 pluginId의 `-`를 `_`로 변환 |
 | 오래 걸리는 처리 | `conai.onJob` + `conai.jobs.start/get/cancel` |
 | 처리에 내부 원본 사용·결과 등록 | 서버 `conai.media.resolve/save`; 화면 재생은 `api.media.open`, `files.media`, `workspace.media` |
+| 페이지가 만든 HTML을 렌더 없이 바로 재생 | `api.preview.open/update`; 소재 참조와 패키지 파일을 경로에 연결해 화면 안 iframe으로 표시 |
 
 `serverActions`는 manifest에서 기존 앱 도구에 입력을 연결하는 계약입니다. `conai.tools.register`는 실행 중인 서버 모듈의 함수를 도구로 등록합니다. 등록 시점과 입력 계약이 다르므로 서로 대체 가능한 선언으로 가정하지 마세요.
 
-화면은 `sandbox="allow-scripts"`인 격리 iframe입니다. 직접 인증 API 요청, 외부 CDN, 내부 iframe, 브라우저 worker, localStorage/IndexedDB를 사용할 수 있다고 가정하면 안 됩니다. 의존성은 로컬 정적 자산으로 번들하고, 네이티브 호출은 호스트 브리지를 사용합니다. 상세 경계는 [Browser boundary](../../plugins/README.md#browser-boundary)를 참고하세요.
+화면은 `sandbox="allow-scripts"`인 격리 iframe입니다. 직접 인증 API 요청, 외부 CDN, 내부 iframe(`api.preview` 문서 제외), 브라우저 worker, localStorage/IndexedDB를 사용할 수 있다고 가정하면 안 됩니다. 의존성은 로컬 정적 자산으로 번들하고, 네이티브 호출은 호스트 브리지를 사용합니다. 상세 경계는 [Browser boundary](../../plugins/README.md#browser-boundary)를 참고하세요.
 
 ## 4. AI가 실제 기능을 사용할 수 있게 만들기
 
@@ -111,7 +112,6 @@ node scripts/build-plugin.mjs --local my-plugin
 
 Node 서버 모듈은 파일·네트워크·프로세스 접근이 가능한 신뢰된 앱 코드이며 보안 샌드박스가 아닙니다. 모델이 만든 코드나 외부 프로젝트를 실행하는 렌더러는 별도 격리 환경에 필요한 자료만 전달합니다. 설치 파일·대용량 의존성을 ZIP에 억지로 넣지 말고 별도 런타임 설치 방법, 지원 OS, 호스트/Docker 간 경로 매핑, 준비 상태 확인을 패키지 문서에 적습니다. 자식 프로세스에도 동시 실행·메모리·시간 상한과 중단·임시 파일 정리를 구현합니다.
 
-## 7. 메인 공용 연결을 확장할 때의 기록 규칙
 ### Docker로 격리 실행하기
 
 렌더러 같은 격리 환경은 Docker 컨테이너로 실행할 수 있습니다. CoNAI 본체는 Docker를 쓰지 않으므로 이 연결은 플러그인이 직접 만듭니다.
@@ -123,6 +123,7 @@ Node 서버 모듈은 파일·네트워크·프로세스 접근이 가능한 신
 - **실행 경계**: 이미지·명령·마운트는 플러그인 코드에 고정하고 모델·프로젝트·페이지 입력에서 받지 않습니다. 작업 컨테이너에는 그 작업의 입력 복사본과 빈 출력 폴더만 연결하고 `NetworkMode: none`, 읽기 전용 루트, `CapDrop: ALL`, `no-new-privileges`, 메모리·CPU·PID·시간 상한을 둡니다. 끝나거나 취소되면 컨테이너와 작업 폴더를 지웁니다.
 - **이미지 설치**: 이미지를 빌드하거나 받는 동작은 호스트를 바꾸므로 관리자 계정만 시작·취소할 수 있게 하고(`configure` 범위 도구 + 계정 확인), 진행 단계와 실패 이유를 화면에 보여 줍니다. 빌드 파일을 바꾸면 이미지 태그도 바꿉니다.
 
+## 7. 메인 공용 연결을 확장할 때의 기록 규칙
 
 **플러그인 작업 때문에 메인 코드를 확장하거나 기존 공용 계약을 바꾸면, 같은 작업에서 이 문서의 공용 연결 목록과 해당 설명을 반드시 갱신합니다.** 개인 플러그인이 계기여도 공용 변경 기록은 Git 문서에 남깁니다. 개인 패키지의 README나 최종 작업 보고만으로 대체하지 않습니다.
 
@@ -154,6 +155,7 @@ Node 서버 모듈은 파일·네트워크·프로세스 접근이 가능한 신
 | AI 프로필 실행 | `api.llm` / `conai.llm`, `text`와 `profile`. 기존 모델 실행·사용량·도구·대화 경계를 재사용 | [LLM 연결](../../backend/src/services/plugins/pluginLlm.ts), [프로필 실행](../../backend/src/services/plugins/pluginProfileRun.ts), [서버 테스트](../../backend/test/plugin-server.test.ts) |
 | 서버의 긴 처리 작업 | `conai.onJob`, `conai.jobs.start/get/cancel`. 별도 큐 없이 `plugin-task` 런타임 작업 사용 | [작업 서비스](../../backend/src/services/plugins/pluginTasks.ts), [서버 실행·종료](../../backend/src/services/plugins/pluginServerRuntime.ts), [작업 타입](../../shared/src/types/runtimeJob.ts), [서버 테스트](../../backend/test/plugin-server.test.ts) |
 | 내부 원본 처리·결과 등록 | `conai.media.resolve/save`. 프로젝트의 원본 해석과 네이티브 미디어 등록을 재사용. 화면에는 `api.media.open` 등으로 재생 링크만 전달 | [서버 미디어 연결](../../backend/src/services/plugins/pluginServerMedia.ts), [공유 원본 해석](../../backend/src/services/plugins/pluginWorkspace.ts), [화면 결과 미디어](../../backend/src/services/plugins/pluginArtifactMedia.ts), [서버 테스트](../../backend/test/plugin-server.test.ts) |
+| 화면 안 실시간 HTML 미리보기 | `api.preview.open({html, files})` → `{url, expiresAt}`, `api.preview.update(url, …)`는 같은 주소의 내용 교체. 렌더러 없이 편집 결과를 바로 재생하기 위한 연결. 문서는 `sandbox allow-scripts`·인라인 스크립트 허용·자기 경로만 읽기(앱 API·외부 URL 불가). 소재는 요청마다 현재 계정 권한과 원본 fingerprint를 다시 검사하고, 창이 닫히면 함께 만료(마지막 사용 후 10분). 256KB HTML·파일 64개·창당 최신 4개. 호스트 업데이트 필요: `api.supports('preview')`로 확인하고 없으면 기존 동작 유지 | [미리보기 서비스](../../backend/src/services/plugins/pluginPreview.ts), [전달 경로·CSP](../../backend/src/routes/plugin-assets.routes.ts), [발급 라우트](../../backend/src/routes/plugins.routes.ts), [페이지 호스트](../../frontend/src/features/plugins/plugin-page.tsx), [SDK](../../plugins/sdk/conai-plugin.js), [경계 테스트](../../backend/test/plugins.test.ts) |
 | 설정·변경 이벤트·이동 | `api.storage/events/navigation`. 설정 CAS, 기존 SSE와 호스트 이동 경로 사용 | [설정 저장](../../backend/src/services/plugins/pluginStorage.ts), [SDK](../../plugins/sdk/conai-plugin.js), [페이지 호스트](../../frontend/src/features/plugins/plugin-page.tsx), [SDK 테스트](../../frontend/test/plugin-sdk.test.ts) |
 
 긴 처리와 내부 미디어 연결은 영상 렌더링처럼 브라우저 요청 하나로 끝내기 어려운 기능을 위해 추가한 공용 경로입니다. 엔진 선택·명령 인자·제작 화면은 플러그인이 담당하고, 메인은 요청 계정과 작업 상태·중복 실행·원본 접근·라이브러리 등록을 담당합니다. 이를 사용하는 패키지는 해당 메서드를 포함한 호스트가 필요하며 `apiVersion: 1`만으로 지원 여부를 판단하지 않습니다. 브라우저 기능은 `api.host.features`/`api.supports`를 확인하고, 서버 전용 연결은 메서드 존재와 실행 준비 상태를 확인해 업데이트 필요를 안내합니다.

@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import { getPlugin, packageFile, PluginError } from '../services/plugins/pluginRegistry'
 import { resolvePluginMedia } from '../services/plugins/pluginHost'
 import { resolvePluginWorkspaceMedia } from '../services/plugins/pluginWorkspace'
@@ -6,6 +6,7 @@ import { filePreviewMime } from '../services/fileStorePreview'
 import { AuthAccessControlService } from '../services/authAccessControlService'
 import { pluginRouteError } from './plugins.routes'
 import { resolvePluginArtifactMedia } from '../services/plugins/pluginArtifactMedia'
+import { resolvePluginPreview } from '../services/plugins/pluginPreview'
 
 /** These terminal routers precede the credentialed global CORS policy. No request falls through to that policy. */
 export const pluginAssetRoutes = Router()
@@ -25,6 +26,11 @@ for (const router of [pluginAssetRoutes, pluginMediaRoutes]) {
     next()
   })
 }
+function requestOrigin(req: Request) {
+  const host = req.get('host') ?? ''
+  if (!/^[a-zA-Z0-9.:[\]-]+$/.test(host)) throw new PluginError('잘못된 호스트야.')
+  return `${req.protocol}://${host}`
+}
 pluginAssetRoutes.get('/:pluginId/:version/*asset', (req, res, next) => {
   try {
     const id = String(req.params.pluginId), version = String(req.params.version)
@@ -32,13 +38,26 @@ pluginAssetRoutes.get('/:pluginId/:version/*asset', (req, res, next) => {
     if (plugin.version !== version) throw new PluginError('패키지 버전이 바뀌었어.', 404)
     const asset = Array.isArray(req.params.asset) ? req.params.asset.join('/') : String(req.params.asset)
     const file = packageFile(id, version, asset)
-    const host = req.get('host') ?? ''
-    if (!/^[a-zA-Z0-9.:[\]-]+$/.test(host)) throw new PluginError('잘못된 호스트야.')
-    const origin = `${req.protocol}://${host}`
+    const origin = requestOrigin(req)
     const base = `${origin}/api/plugin-assets/${id}/${version}/`
-    res.setHeader('Content-Security-Policy', `sandbox allow-scripts; default-src 'none'; script-src ${base} 'wasm-unsafe-eval'; style-src ${base}; font-src ${base}; img-src ${base} ${origin}/api/plugin-media/ blob:; media-src ${base} ${origin}/api/plugin-media/ blob:; connect-src ${base}; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; frame-ancestors 'self'`)
+    res.setHeader('Content-Security-Policy', `sandbox allow-scripts; default-src 'none'; script-src ${base} 'wasm-unsafe-eval'; style-src ${base}; font-src ${base}; img-src ${base} ${origin}/api/plugin-media/ blob:; media-src ${base} ${origin}/api/plugin-media/ blob:; connect-src ${base}; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src ${origin}/api/plugin-media/preview/; worker-src 'none'; frame-ancestors 'self'`)
     // The verified private root itself may be a dot-directory (portable/dev instances).
     res.sendFile(file, { dotfiles: 'allow' }, (error) => { if (error) next(error) })
+  } catch (error) { next(error) }
+})
+// A page's live preview, framed inside that page: inline scripts allowed, reads only its own folder, never the app.
+pluginMediaRoutes.get(['/preview/:token/', '/preview/:token/*name'], async (req, res, next) => {
+  try {
+    const token = String(req.params.token), name = Array.isArray(req.params.name) ? req.params.name.join('/') : String(req.params.name ?? '')
+    const base = `${requestOrigin(req)}/api/plugin-media/preview/${token}/`
+    const resolved = await resolvePluginPreview(token, name)
+    res.removeHeader('X-Frame-Options')
+    res.setHeader('Content-Security-Policy', `sandbox allow-scripts; default-src 'none'; script-src ${base} 'unsafe-inline'; style-src ${base} 'unsafe-inline'; font-src ${base} data:; img-src ${base} data: blob:; media-src ${base} data: blob:; connect-src ${base}; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'`)
+    if (resolved.kind === 'html') { res.type('html').send(resolved.html); return }
+    if ('mimeType' in resolved && resolved.mimeType) res.setHeader('Content-Type', resolved.mimeType)
+    // A token's package files cannot change while its window is open, so redraws reuse them; media is revalidated.
+    res.setHeader('Cache-Control', 'immutable' in resolved ? 'private, max-age=600, immutable' : 'private, no-cache')
+    res.sendFile(resolved.filePath, { dotfiles: 'allow' }, error => { if (error) next(error) })
   } catch (error) { next(error) }
 })
 pluginMediaRoutes.get('/artifact/:token', (req, res, next) => {

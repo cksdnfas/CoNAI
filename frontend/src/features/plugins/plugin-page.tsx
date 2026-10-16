@@ -340,6 +340,13 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
           const media = await request<{ token: string; expiresAt: number; name: string; mimeType: string }>(`/instances/${instance.id}/artifact-media`, 'POST', args)
           return { url: new URL(`/api/plugin-media/artifact/${media.token}`, window.location.href).href, expiresAt: media.expiresAt, name: media.name, mimeType: media.mimeType }
         }
+        if (message.method === 'preview.open' || message.method === 'preview.update') {
+          const { url, ...content } = (args ?? {}) as { url?: unknown }
+          const token = message.method === 'preview.update' ? /^\/api\/plugin-media\/preview\/([a-f0-9]{48})\/$/.exec(new URL(String(url ?? ''), window.location.href).pathname)?.[1] : undefined
+          if (message.method === 'preview.update' && !token) throw new ApiRequestError('이 화면에서 연 미리보기 주소를 넘겨줘.', 400)
+          const preview = await request<{ token: string; expiresAt: number }>(`/instances/${instance.id}/previews${token ? `/${token}` : ''}`, token ? 'PUT' : 'POST', content)
+          return { url: new URL(`/api/plugin-media/preview/${preview.token}/`, window.location.href).href, expiresAt: preview.expiresAt }
+        }
         if (message.method === 'navigation.openChat') {
           const threadId = Number(args?.threadId)
           if (!chat?.canUse || !Number.isSafeInteger(threadId) || threadId < 1) throw new ApiRequestError('열 수 있는 대화를 선택해줘.', 400)
@@ -424,7 +431,7 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
   return <>
     {error ? <Alert variant="destructive" className="mb-2"><TriangleAlert /><AlertDescription>{error}</AlertDescription></Alert> : null}
     {connectionError ? <Alert variant="warning" className="mb-2"><TriangleAlert /><AlertDescription className="flex flex-wrap items-center gap-2"><span className="min-w-0 flex-1">{connectionError}</span>{closed ? null : <Button size="sm" variant="secondary" onClick={() => void checkConnection()}>{t({ ko: '다시 확인', en: 'Retry' })}</Button>}</AlertDescription></Alert> : null}
-    {blockedFrame ? null : <iframe ref={frame} title={instance.page.title} sandbox="allow-scripts" referrerPolicy="no-referrer" src={`/api/plugin-assets/${instance.plugin.id}/${instance.plugin.version}/${instance.page.entry}`} onLoad={connect} style={embed ? { height: embed.height } : undefined} className={cn('w-full rounded-sm border-0', !embed && 'h-[max(420px,calc(100dvh-var(--theme-shell-header-height)-7rem))]')} />}
+    {blockedFrame ? null : <iframe ref={frame} title={instance.page.title} sandbox="allow-scripts" allow="autoplay" referrerPolicy="no-referrer" src={`/api/plugin-assets/${instance.plugin.id}/${instance.plugin.version}/${instance.page.entry}`} onLoad={connect} style={embed ? { height: embed.height } : undefined} className={cn('w-full rounded-sm border-0', !embed && 'h-[max(420px,calc(100dvh-var(--theme-shell-header-height)-7rem))]')} />}
     {/* App operations started here report their job result back to the plugin page. */}
     {appRequests.filter(request => request.jobId).map(request => <AppRequestJob key={request.id} jobId={request.jobId!} showProgress={false} onFinished={result => { channel.current?.postMessage({ type: 'saved', proposalId: request.id, result }); setAppResult(appResultSummary(result)) }} />)}
     <PluginReviewBar

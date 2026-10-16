@@ -501,6 +501,72 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
       assert.equal(missing.headers.get('access-control-allow-origin'), '*')
     } finally { await new Promise<void>((resolve) => server.close(() => resolve())) }
   })
+  await t.test('a page preview serves its document and mapped files sandboxed, under the caller live permissions', async () => {
+    const express = (await import('express')).default
+    const { configureAppMiddleware } = await import('../src/startup/configureAppMiddleware')
+    const pluginRoutes = (await import('../src/routes/plugins.routes')).default
+    const previews = await import('../src/services/plugins/pluginPreview')
+    const app = express()
+    configureAppMiddleware(app)
+    app.use((req, _res, next) => { Object.assign(req, { sessionID: alice.sessionId, session: { authenticated: true, accountId: aliceId, accountType: 'guest' } }); next() })
+    app.use('/api/plugins', pluginRoutes)
+    const server = http.createServer(app)
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+    const staged = path.join(root, 'preview-upload.png'), png = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex')
+    fs.writeFileSync(staged, png)
+    const [picture] = FileStoreService.upload(`account:${aliceId}`, null, [{ originalname: 'pic.png', mimetype: 'image/png', size: png.length, path: staged } as Express.Multer.File])
+    const page = host.openPluginInstance('text-editor', 'editor', [], alice)
+    const call = (method: string, suffix: string, body: unknown) => fetch(`${origin}/api/plugins/instances/${page.id}/previews${suffix}`, { method, headers: { 'X-CoNAI-Plugin-Host': '1', 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    try {
+      const pageDocument = await fetch(`${origin}/api/plugin-assets/text-editor/1.0.0/index.html`)
+      assert.ok(pageDocument.headers.get('content-security-policy')!.includes(`frame-src ${origin}/api/plugin-media/preview/;`))
+      const files = { 'pic.png': { source: 'files', fileId: picture.id }, 'lib/main.js': { source: 'package', path: 'main.js' } }
+      const created = await call('POST', '', { html: '<img src="pic.png"><script src="lib/main.js"></script>', files })
+      assert.equal(created.status, 200)
+      const { token } = (await created.json()).data as { token: string }
+      const base = `${origin}/api/plugin-media/preview/${token}/`
+      const document = await fetch(base)
+      const policy = document.headers.get('content-security-policy')!
+      assert.equal(document.status, 200)
+      assert.match(document.headers.get('content-type')!, /^text\/html/)
+      assert.equal(await document.text(), '<img src="pic.png"><script src="lib/main.js"></script>')
+      assert.match(policy, /^sandbox allow-scripts;/)
+      assert.ok(!policy.includes('allow-same-origin') && !policy.includes('frame-ancestors'))
+      assert.ok(policy.includes(`script-src ${base} 'unsafe-inline';`) && policy.includes(`connect-src ${base};`))
+      assert.equal(document.headers.get('x-frame-options'), null)
+      assert.equal(document.headers.get('cache-control'), 'private, no-store')
+      const image = await fetch(`${base}pic.png`, { headers: { Origin: 'null' } })
+      assert.equal(image.status, 200)
+      assert.equal(image.headers.get('content-type'), 'image/png')
+      assert.equal(image.headers.get('access-control-allow-origin'), '*')
+      assert.deepEqual(Buffer.from(await image.arrayBuffer()), png)
+      assert.equal((await fetch(`${base}pic.png`, { headers: { Range: 'bytes=0-3' } })).status, 206)
+      const script = await fetch(`${base}lib/main.js`)
+      assert.equal(script.status, 200)
+      assert.match(script.headers.get('cache-control')!, /immutable/)
+      for (const name of ['main.js', 'missing.png', '..%2fplugin.json', 'index.html%2f..%2f..']) assert.ok((await fetch(`${base}${name}`)).status >= 400, name)
+      // Only image/video/audio media, only this package's files, only the window's own caller.
+      assert.equal((await call('POST', '', { html: 'x', files: { 'a.json': { source: 'files', fileId: file.id } } })).status, 415)
+      assert.ok((await call('POST', '', { html: 'x', files: { 'a.js': { source: 'package', path: '../plugin.json' } } })).status >= 400)
+      assert.ok((await call('POST', '', { html: 'x', files: { '../a.js': { source: 'package', path: 'main.js' } } })).status >= 400)
+      await assert.rejects(previews.issuePluginPreview(page.id, { html: 'x' }, bob))
+      await assert.rejects(previews.issuePluginPreview(page.id, { html: 'x' }, alice, token.replace(/^./, token[0] === 'a' ? 'b' : 'a')), /만료/)
+      // Redrawing keeps the address.
+      const updated = await call('PUT', `/${token}`, { html: '<p>v2</p>', files })
+      assert.equal((await updated.json()).data.token, token)
+      assert.equal(await (await fetch(base)).text(), '<p>v2</p>')
+      // Losing image access or closing the window ends the media and the document.
+      AuthPermissionGroup.removeAccountMembership(group.id, aliceId)
+      invalidateConfiguredAuthCache()
+      assert.equal((await fetch(`${base}pic.png`)).status, 403)
+      AuthPermissionGroup.addAccountMembership(group.id, aliceId)
+      invalidateConfiguredAuthCache()
+      assert.equal((await fetch(`${base}pic.png`)).status, 200)
+      host.closePluginInstance(page.id, alice)
+      assert.equal((await fetch(base)).status, 410)
+    } finally { host.closePluginInstance(page.id, alice); await new Promise<void>((resolve) => server.close(() => resolve())) }
+  })
   await t.test('removing a package revokes its instances but preserves user files', async () => {
     await registry.removePlugin('text-editor')
     assert.throws(() => host.readPluginFile(instance.id, file.id, alice))

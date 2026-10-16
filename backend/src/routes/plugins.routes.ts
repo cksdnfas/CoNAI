@@ -9,6 +9,7 @@ import { openPluginInstance, requirePluginInstance, renewPluginInstance, closePl
 import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler'
 import { pluginStorage } from '../services/plugins/pluginStorage'
 import { issuePluginArtifactMedia } from '../services/plugins/pluginArtifactMedia'
+import { issuePluginPreview } from '../services/plugins/pluginPreview'
 import { statPluginWorkspace, proposePluginWorkspaceChanges, listPluginWorkspace, readPluginWorkspace, proposePluginWorkspaceWrite, approvePluginWorkspaceWrite, applyPluginWorkspaceWrite, dismissPluginWorkspaceWrite, issuePluginWorkspaceMedia } from '../services/plugins/pluginWorkspace'
 
 export function pluginRouteError(error: unknown, _req: Request, res: Response, next: NextFunction) {
@@ -75,6 +76,9 @@ router.post('/instances/:instanceId/storage/:operation', (req, res) => {
 router.post('/instances/:instanceId/artifact-media', (req, res) => {
   res.json({ success: true, data: issuePluginArtifactMedia(param(req, 'instanceId'), req.body, caller(req)) })
 })
+/** A page's live preview document; its URL is framed inside that page and lives as long as the window. */
+router.post('/instances/:instanceId/previews', asyncHandler(async (req, res) => res.json({ success: true, data: await issuePluginPreview(param(req, 'instanceId'), req.body, caller(req)) })))
+router.put('/instances/:instanceId/previews/:token', asyncHandler(async (req, res) => res.json({ success: true, data: await issuePluginPreview(param(req, 'instanceId'), req.body, caller(req), param(req, 'token')) })))
 /** A package with a server module carries its live state (running, failed, the tools and hooks it registered). */
 const withServer = (plugin: InstalledPlugin): InstalledPlugin => plugin.manifest.server ? { ...plugin, server: pluginServerStatus(plugin.manifest.id) } : plugin
 router.get('/', (req, res) => res.json({ success: true, data: listPlugins(isAdminRequest(req)).map(withServer) }))

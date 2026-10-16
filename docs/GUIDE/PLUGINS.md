@@ -107,7 +107,7 @@ MCP의 `list_plugin_pages`로 활성 확장과 페이지별 작업 스키마를 
 
 MCP 도구가 없는 앱 기능도 `api.app.fetch`로 기존 앱 HTTP API를 사용할 수 있습니다. 이미지 업로드·메타데이터 수정, 파일 업로드, 오디오 검수, 프롬프트·와일드카드 편집, 워크플로·프로필·화면 설정 등을 앱과 같은 계정 권한·입력 검증·저장 충돌 검사로 처리합니다. FormData 업로드와 스트리밍 응답도 지원하므로 바이너리를 큰 JSON 문자열로 바꿀 필요가 없습니다. 정확한 경로·호출 예제는 [SDK의 네이티브 API](../../plugins/README.md#native-feature-apis-uploads-and-streaming)를 참고하세요.
 
-미디어 결과는 `api.media.open`으로 재생 링크를 받고, 파일 다운로드는 `api.app.download`를 사용합니다. 서버 모듈 없는 플러그인도 `api.storage`에 계정별 설정을 보관할 수 있으며, `api.events`로 파일·오디오·작업 등의 변경을 구독하고 `api.navigation`으로 앱 페이지를 열 수 있습니다. `api.host.features`에서 실행 중인 호스트의 지원 기능을 확인합니다.
+미디어 결과는 `api.media.open`으로 재생 링크를 받고, 파일 다운로드는 `api.app.download`를 사용합니다. 플러그인이 만든 HTML(영상 구성 등)은 `api.preview`로 화면 안에서 렌더 없이 바로 재생할 수 있으며, 연결한 소재는 현재 계정 권한으로만 읽고 창을 닫으면 함께 닫힙니다. 서버 모듈 없는 플러그인도 `api.storage`에 계정별 설정을 보관할 수 있으며, `api.events`로 파일·오디오·작업 등의 변경을 구독하고 `api.navigation`으로 앱 페이지를 열 수 있습니다. `api.host.features`에서 실행 중인 호스트의 지원 기능을 확인합니다.
 
 긴 도구 작업은 반환된 요청 ID로 `api.app.wait` / `api.app.cancel`을 사용합니다. 일반 요청은 AbortSignal로 중단할 수 있고 서버 모듈의 요청 처리에도 취소 신호가 전달됩니다. 스트리밍 응답은 끝까지 읽거나 취소해야 연결이 반환됩니다. 이미 끝난 저장이나 발생한 모델 사용량은 취소로 되돌아가지 않습니다. 중단된 쓰기를 자동 재전송하지 말고 기존 작업·결과를 조회합니다.
 
