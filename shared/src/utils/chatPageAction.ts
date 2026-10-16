@@ -21,7 +21,8 @@ export function copyChatPageData(value: unknown, depth = 0): ChatPageData {
   if (typeof value === 'string' && value.length <= CHAT_PAGE_ACTION_LIMITS.text && !/^data:|^https?:\/\//i.test(value.trim())) return value
   if (Array.isArray(value) && value.length <= CHAT_PAGE_ACTION_LIMITS.array) return value.map((item) => copyChatPageData(item, depth + 1))
   if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype && Object.keys(value).length <= 512) {
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => {
+    // Like JSON, a key whose value is undefined is left out rather than rejected.
+    return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined).map(([key, item]) => {
       if (isPrivateChatPageKey(key)) throw new Error(`보호된 페이지 항목이야: ${key}`)
       return [key, copyChatPageData(item, depth + 1)]
     }))

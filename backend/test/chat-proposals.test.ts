@@ -312,6 +312,8 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.throws(() => validateChatPageArguments(schema, { name: 'Test', items: [] }), /개수/)
     assert.throws(() => copyChatPageData({ nested: { api_key: 'private' } }), /보호된/)
     assert.throws(() => copyChatPageData({ image: 'data:image/png;base64,secret' }), /페이지 데이터/)
+    assert.deepEqual(copyChatPageData({ lore: { tab: 'lore', recent: undefined, next: undefined } }), { lore: { tab: 'lore' } }, 'undefined keys are dropped like JSON')
+    assert.throws(() => copyChatPageData({ list: [undefined] }), /페이지 데이터/)
     assert.throws(() => normalizeChatPageSnapshot({ ...current, path: '/wildcards' }), /대상 페이지/)
     assert.throws(() => normalizeChatPageSnapshot({ ...current, actions: [{ ...action, id: 'shell.execute' }] }), /등록되지/)
     assert.throws(() => normalizeChatPageSnapshot({ ...current, actions: [{ ...action, effect: 'draft' }] }), /저장 범위/)
