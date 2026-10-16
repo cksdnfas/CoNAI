@@ -159,7 +159,7 @@ export function isWorkflowDebugModeEnabled(workflow: ParsedGraphWorkflow) {
   return workflow.graph.metadata?.debug_mode === true
 }
 
-/** Parse a stored JSON string with a safe fallback value. */
+/** Parse a stored definition column: empty means `fallback`, malformed throws so a corrupt graph fails instead of running empty. */
 export function parseJson<T>(value: string | null | undefined, fallback: T): T {
   if (!value) {
     return fallback

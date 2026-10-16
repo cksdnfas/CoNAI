@@ -3,6 +3,7 @@ import { RatingWeights } from '../../types/rating';
 import {
   AUTO_TAG_CHARACTER_JSON_PATHS,
   AUTO_TAG_GENERAL_JSON_PATHS,
+  AUTO_TAG_KEY_LIKE_SQL,
   buildAutoTagExistsForPaths,
   buildAutoTagModelExpr,
   buildAutoTagRatingExpr,
@@ -240,5 +241,5 @@ function buildComplexFilterTagExistsCondition(
 
 /** Build the shared key/value predicate used inside json_each EXISTS checks. */
 function buildComplexFilterTagPredicate(condition: FilterCondition): string {
-  return `LOWER(key) LIKE ?${condition.min_score !== undefined ? ' AND value >= ?' : ''}${condition.max_score !== undefined ? ' AND value <= ?' : ''}`;
+  return `${AUTO_TAG_KEY_LIKE_SQL}${condition.min_score !== undefined ? ' AND value >= ?' : ''}${condition.max_score !== undefined ? ' AND value <= ?' : ''}`;
 }

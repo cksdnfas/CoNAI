@@ -27,7 +27,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
   const { seedAccessControlDefaults } = await import('../src/database/authDbSeed')
   const { PERMISSION_KEYS, withPagePermissions } = await import('@conai/shared')
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const { AuthAccessControlService, invalidateResolvedAuthAccessCache } = await import('../src/services/authAccessControlService')
   const { allowImagesView, requireRequesterImagePermission } = await import('../src/middleware/imageAccess')
   const { canAccessHistoryRecord } = await import('../src/routes/generation-history/historyRouteHelpers')

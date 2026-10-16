@@ -15,7 +15,7 @@ import {
   hasConfiguredAuth,
   invalidateConfiguredAuthCache,
   setAuthenticatedSession,
-} from './auth-route-helpers';
+} from '../services/auth/sessionAccess';
 import { hasValidRemoteSetupToken, isDirectLoopbackRequest } from '../utils/bootstrapAccess';
 
 const router = Router();

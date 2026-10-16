@@ -6,6 +6,7 @@ import {
 import { normalizeAutoTagSearchTerm } from '../autoTagSearch/autoTagSearchTerms';
 import { ImageSafetyService } from '../imageSafetyService';
 import { ImageMetadataRecord } from '../../types/image';
+import { parseJsonOr } from '../../utils/json';
 
 export function matchesComplexFilterImage(filter: ComplexFilter, image: ImageMetadataRecord): boolean {
   if (ImageSafetyService.isHidden(image.rating_score)) {
@@ -222,15 +223,7 @@ function includesText(
 }
 
 function parseAutoTags(autoTags: string | null): any | null {
-  if (!autoTags) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(autoTags);
-  } catch {
-    return null;
-  }
+  return parseJsonOr<any>(autoTags, null);
 }
 
 function matchesAutoTagInPaths(

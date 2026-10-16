@@ -1,4 +1,4 @@
-import { hasConfiguredAuth } from '../../routes/auth-route-helpers'
+import { hasConfiguredAuth } from '../auth/sessionAccess'
 import { ChatGenerationPresetStore } from '../codex-chat/chatGenerationPresets'
 import { ChatLorebookStore } from '../codex-chat/chatLorebook'
 import { OwnedLorebookStore } from '../codex-chat/chatLorebookFiles'

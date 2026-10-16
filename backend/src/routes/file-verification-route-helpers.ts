@@ -1,3 +1,5 @@
+import { parsePagination } from './routeValidation'
+
 export const DEFAULT_FILE_VERIFICATION_LOG_LIMIT = 50
 
 export interface FileVerificationSettingsSnapshot {
@@ -18,10 +20,9 @@ export interface FileVerificationSettingsUpdateDependencies {
   restartScheduler(): void
 }
 
-/** Preserve legacy log-limit parsing: invalid, missing, or zero values fall back. */
+/** Log limit: invalid, missing, or non-positive values fall back; never above 500. */
 export function parseFileVerificationLogLimit(value: unknown, fallback = DEFAULT_FILE_VERIFICATION_LOG_LIMIT): number {
-  const parsed = Number.parseInt(String(value ?? ''))
-  return parsed || fallback
+  return parsePagination({ limit: value }, { defaultLimit: fallback, maxLimit: 500 }).limit
 }
 
 export function readFileVerificationSettings(

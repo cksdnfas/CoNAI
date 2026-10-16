@@ -21,7 +21,7 @@ test('generation layout presets are readable by every account and editable only 
   user.initializeUserSettingsDb()
   ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   t.after(async () => {
     auth.close()
     user.closeUserSettingsDb()

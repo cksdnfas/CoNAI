@@ -1,6 +1,6 @@
 import type { McpRequester } from '../mcp/context'
 import { AuthAccount } from '../models/AuthAccount'
-import { hasConfiguredAuth } from '../routes/auth-route-helpers'
+import { hasConfiguredAuth } from './auth/sessionAccess'
 import { AuthAccessControlService } from './authAccessControlService'
 
 export type AutomationRunAs =

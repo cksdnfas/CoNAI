@@ -85,7 +85,7 @@ router.post('/', requirePermission('generation.execute'), parseWorkflowInputAsse
   }
 }));
 
-router.get('/:assetId', requireImagesView, (req: Request, res: Response) => {
+router.get('/:assetId', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const assetId = String(req.params.assetId || '');
   const absolutePath = resolveWorkflowInputAssetPath(assetId);
   if (!absolutePath || !fs.existsSync(absolutePath)) {
@@ -97,7 +97,7 @@ router.get('/:assetId', requireImagesView, (req: Request, res: Response) => {
     : 'application/octet-stream';
   res.setHeader('X-Content-Type-Options', 'nosniff');
   return streamRangeFile(req, res, absolutePath, mimeType);
-});
+}));
 
 router.delete('/:assetId', requirePermission('generation.execute'), (req: Request, res: Response) => {
   const removed = markWorkflowInputAssetForDeletion(String(req.params.assetId || ''));

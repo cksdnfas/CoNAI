@@ -490,7 +490,7 @@ test('character asset batches: durable jobs, dependencies, review and approved a
     const job = GenerationQueueModel.findById(owned.slots[0].attempts[0].jobId)!
     assert.equal(job.requested_by_account_id, 7)
     assert.equal(job.requested_by_account_type, 'admin')
-    const authHelpers = await import('../src/routes/auth-route-helpers')
+    const authHelpers = await import('../src/services/auth/sessionAccess')
     sub.mock.method(AuthAccount, 'countActiveAdmins', () => 1)
     authHelpers.invalidateConfiguredAuthCache()
     sub.after(() => authHelpers.invalidateConfiguredAuthCache())

@@ -1,5 +1,5 @@
 import { AuthAccount } from '../models/AuthAccount';
-import { hasConfiguredAuth } from '../routes/auth-route-helpers';
+import { hasConfiguredAuth } from '../services/auth/sessionAccess';
 import { isRequesterAdmin, keyGroupPermissionKeys, requesterPermissionKeys, requireContextPermission, requireRequesterPermission } from '../middleware/featureAccess';
 import { ChatProfileStore, isVisionTool, profileSeesImages } from '../services/codex-chat/chatProfiles';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';

@@ -37,7 +37,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
   await main.initializeDatabase()
   const user = await import('../src/database/userSettingsDb')
   user.initializeUserSettingsDb()
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const registry = await import('../src/services/plugins/pluginRegistry')
   const runtime = await import('../src/services/plugins/pluginServerRuntime')
   const serverTools = await import('../src/services/plugins/pluginServerTools')

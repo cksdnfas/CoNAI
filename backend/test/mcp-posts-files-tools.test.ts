@@ -36,7 +36,7 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
   })
 
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
   const addAccount = (name: string, permissionKeys: string[], type: 'guest' | 'admin' = 'guest') => {
     const id = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES (?, 'unused', ?)").run(name, type).lastInsertRowid)

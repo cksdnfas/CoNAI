@@ -5,6 +5,7 @@ import { execFile } from 'child_process';
 import { runtimePaths } from '../../config/runtimePaths';
 import { getAudioDb } from '../../database/audioDb';
 import { relocateFile } from '../../utils/recycleBin';
+import { isPathInside } from '../../utils/pathResolver';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ffprobeStatic = require('ffprobe-static') as { path?: string };
 
@@ -50,8 +51,7 @@ export interface AudioProbe {
 }
 
 function within(root: string, candidate: string): boolean {
-  const relative = path.relative(root, candidate);
-  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  return isPathInside(root, candidate);
 }
 
 /** True for anything inside the audio store, so library scanners and watchers can leave it alone. */

@@ -5,6 +5,7 @@ import { GroupRematchJobService } from '../services/groupRematchJobService';
 import { GroupCreateData, GroupUpdateData, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { createCustomGroup, GroupMutationError, updateCustomGroup } from '../services/groupMutationService';
+import { getRequesterAccountId } from './requester-session-helpers';
 
 const router = Router();
 
@@ -21,11 +22,6 @@ function parseRouteId(value: string | string[] | undefined, label = 'Group ID') 
 /** Read one required route parameter while preserving the legacy missing-param error flow. */
 function parseRequiredRouteParam(value: string | string[] | undefined) {
   return routeParam(value);
-}
-
-/** Read the session account id so started jobs carry an owner for `/api/jobs` access control. */
-function resolveJobRequesterAccountId(req: Request): number | null {
-  return typeof req.session?.accountId === 'number' ? req.session.accountId : null;
 }
 
 /** Validate the bulk composite hash array without changing the route error payload. */
@@ -52,7 +48,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       emoticon_enabled: emoticon_enabled === true,
     };
 
-    const { id: groupId } = createCustomGroup(groupData, resolveJobRequesterAccountId(req));
+    const { id: groupId } = createCustomGroup(groupData, getRequesterAccountId(req));
 
     return res.status(201).json(
       successResponse({
@@ -84,7 +80,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
       emoticon_enabled: typeof emoticon_enabled === 'boolean' ? emoticon_enabled : undefined,
     };
 
-    const { updated } = updateCustomGroup(id, groupData, resolveJobRequesterAccountId(req));
+    const { updated } = updateCustomGroup(id, groupData, getRequesterAccountId(req));
 
     if (!updated) {
       return res.status(404).json(errorResponse('Group not found'));
@@ -260,7 +256,7 @@ router.post('/:id/auto-collect', asyncHandler(async (req: Request, res: Response
     const id = parseRouteId(req.params.id);
     const job = GroupRematchJobService.startJobProcess('group-auto-collect', {
       groupId: id,
-      requestedByAccountId: resolveJobRequesterAccountId(req),
+      requestedByAccountId: getRequesterAccountId(req),
     });
     return res.status(202).json(successResponse(job));
   } catch (error) {
@@ -274,7 +270,7 @@ router.post('/:id/auto-collect', asyncHandler(async (req: Request, res: Response
 router.post('/auto-collect-all', asyncHandler(async (req: Request, res: Response) => {
   try {
     const job = GroupRematchJobService.startJobProcess('all-auto-collect', {
-      requestedByAccountId: resolveJobRequesterAccountId(req),
+      requestedByAccountId: getRequesterAccountId(req),
     });
     return res.status(202).json(successResponse(job));
   } catch (error) {

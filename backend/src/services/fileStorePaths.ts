@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
+import { isPathInside } from '../utils/pathResolver';
 
 export const fileStoreRoot = path.join(runtimePaths.basePath, 'files');
 export const fileStoreIncoming = path.join(fileStoreRoot, '.incoming');
@@ -8,8 +9,7 @@ export const fileStoreIncoming = path.join(fileStoreRoot, '.incoming');
 export const fileStoreOrphans = path.join(fileStoreRoot, '.orphans');
 
 function within(root: string, candidate: string) {
-  const relative = path.relative(root, candidate);
-  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  return isPathInside(root, candidate);
 }
 
 /** Exclude the whole private store even when a user watches an ancestor directory. */

@@ -12,6 +12,7 @@ import {
   PromptBackupItem
 } from '../types/promptGroup';
 import { db } from '../database/init';
+import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
 import {
   getPromptCollectionTableName as getPromptTableName,
   getPromptGroupTableName as getTableName,
@@ -421,7 +422,7 @@ export class PromptGroupService {
     try {
       const tableName = getPromptTableName(type);
       const offset = (page - 1) * limit;
-      const searchPattern = `%${query}%`;
+      const searchPattern = buildSqlContainsPattern(query);
       const orderBy = sortBy === 'created_at' ? 'created_at' : sortBy === 'prompt' ? 'prompt' : 'usage_count';
       const orderDirection = sortOrder === 'ASC' ? 'ASC' : 'DESC';
 
@@ -430,10 +431,10 @@ export class PromptGroupService {
       let countParams: any[];
 
       if (groupId === null || groupId === 0) {
-        countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id IS NULL AND prompt LIKE ?`;
+        countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id IS NULL AND prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
         countParams = [searchPattern];
       } else {
-        countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id = ? AND prompt LIKE ?`;
+        countQuery = `SELECT COUNT(*) as total FROM ${tableName} WHERE group_id = ? AND prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
         countParams = [groupId, searchPattern];
       }
 
@@ -445,10 +446,10 @@ export class PromptGroupService {
       let dataParams: any[];
 
       if (groupId === null || groupId === 0) {
-        dataQuery = `SELECT * FROM ${tableName} WHERE group_id IS NULL AND prompt LIKE ? ORDER BY ${orderBy} ${orderDirection}, prompt ASC LIMIT ? OFFSET ?`;
+        dataQuery = `SELECT * FROM ${tableName} WHERE group_id IS NULL AND prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE} ORDER BY ${orderBy} ${orderDirection}, prompt ASC LIMIT ? OFFSET ?`;
         dataParams = [searchPattern, limit, offset];
       } else {
-        dataQuery = `SELECT * FROM ${tableName} WHERE group_id = ? AND prompt LIKE ? ORDER BY ${orderBy} ${orderDirection}, prompt ASC LIMIT ? OFFSET ?`;
+        dataQuery = `SELECT * FROM ${tableName} WHERE group_id = ? AND prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE} ORDER BY ${orderBy} ${orderDirection}, prompt ASC LIMIT ? OFFSET ?`;
         dataParams = [groupId, searchPattern, limit, offset];
       }
 

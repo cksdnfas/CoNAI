@@ -356,7 +356,7 @@ test('audio generation: workflows, orders, queue sink, REST, MCP and chat refere
   })
 
   // ---------------------------------------------------------------- REST
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
   const adminId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('admin-gen', 'unused', 'admin')").run().lastInsertRowid)
   auth.prepare("INSERT INTO auth_account_group_memberships (account_id, group_id) SELECT ?, id FROM auth_permission_groups WHERE group_key = 'admin'").run(adminId)

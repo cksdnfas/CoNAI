@@ -55,7 +55,7 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
   const { GenerationQueueModel } = await import('../src/models/GenerationQueue')
   const { AuthAccount } = await import('../src/models/AuthAccount')
   const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
-  const authHelpers = await import('../src/routes/auth-route-helpers')
+  const authHelpers = await import('../src/services/auth/sessionAccess')
 
   // Account 1 is an active administrator, 2 an active guest without generation.execute, 9 is switched off.
   updateChatSettings({ enabled: true })

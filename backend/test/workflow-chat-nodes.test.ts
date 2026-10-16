@@ -42,7 +42,7 @@ test('workflow chat nodes: run requester, characters, presets, lorebooks and cha
   const { subscribeToRuntimeEvents } = await import('../src/services/runtime-events/runtimeEventBus')
   const { AuthAccount } = await import('../src/models/AuthAccount')
   const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
-  const authHelpers = await import('../src/routes/auth-route-helpers')
+  const authHelpers = await import('../src/services/auth/sessionAccess')
   const { BackgroundQueueService } = await import('../src/services/backgroundQueue')
   // Real isolated databases and library files; no generation dispatch, provider or metadata worker.
   t.mock.method(BackgroundQueueService, 'addMetadataExtractionTask', () => {})

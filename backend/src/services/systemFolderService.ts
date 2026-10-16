@@ -14,6 +14,7 @@ import {
   type RecycleBinOrigin,
 } from '../utils/recycleBin';
 import { fileStoreRoot } from './fileStorePaths';
+import { isPathInside } from '../utils/pathResolver';
 import { filePreviewMime, renderPreviewWebp } from './fileStorePreview';
 
 /**
@@ -52,8 +53,7 @@ function guessMime(name: string): string | null {
 }
 
 function within(root: string, candidate: string): boolean {
-  const relative = path.relative(root, candidate);
-  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  return isPathInside(root, candidate);
 }
 
 function realOrResolved(target: string): string {

@@ -6,6 +6,7 @@ import {
   AUTO_TAG_MODEL_JSON_PATHS,
 } from './autoTagSqlShared';
 import { canonicalAutoTagSearchKey } from './autoTagSearch/autoTagSearchTerms';
+import { parseJsonOr } from '../utils/json';
 
 type AutoTagIndexType = 'general' | 'character' | 'model';
 
@@ -90,16 +91,8 @@ function addModelEntry(
 }
 
 function parseAutoTags(autoTagsJson: string | null | undefined): Record<string, unknown> | null {
-  if (!autoTagsJson) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(autoTagsJson);
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
+  const parsed = parseJsonOr<unknown>(autoTagsJson, null);
+  return isRecord(parsed) ? parsed : null;
 }
 
 function extractEntries(compositeHash: string, autoTagsJson: string | null | undefined): AutoTagIndexEntry[] {

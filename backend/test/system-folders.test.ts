@@ -23,7 +23,7 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
   user.initializeUserSettingsDb()
   ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const recycle = await import('../src/utils/recycleBin')
   t.after(async () => {
     auth.close()

@@ -35,7 +35,7 @@ export interface StoredNaiCharacterReferenceAsset extends StoredNaiAssetImageFie
   has_letterbox: boolean;
 }
 
-const SAVE_ROOT = path.join(runtimePaths.basePath, 'save');
+const SAVE_ROOT = runtimePaths.saveDir;
 const VIBE_ROOT = path.join(SAVE_ROOT, 'vibe_transfer');
 const CHARACTER_REFERENCE_ROOT = path.join(SAVE_ROOT, 'character_reference');
 const CHARACTER_REFERENCE_LETTERBOX_ROOT = path.join(CHARACTER_REFERENCE_ROOT, 'letterboxed');

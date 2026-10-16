@@ -15,6 +15,7 @@ import { FileWatcherService } from '../services/fileWatcherService';
 import { RuntimeJobRunner } from '../services/runtimeJobs/runtimeJobRunner';
 import { RuntimeJobConflictError } from '../services/runtimeJobs/runtimeJobStore';
 import { successResponse, errorResponse } from '@conai/shared';
+import { getRequesterAccountId } from './requester-session-helpers';
 
 const router = Router();
 
@@ -132,7 +133,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 router.post('/scan-all', asyncHandler(async (req: Request, res: Response) => {
   try {
     const job = RuntimeJobRunner.start('folder-scan-all', {}, {
-      requestedByAccountId: typeof req.session?.accountId === 'number' ? req.session.accountId : null,
+      requestedByAccountId: getRequesterAccountId(req),
     });
 
     return res.status(202).json(successResponse(job));

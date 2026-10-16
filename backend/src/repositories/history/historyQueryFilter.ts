@@ -1,4 +1,5 @@
 import type { GenerationHistoryFilterOptions } from '../../types/generationHistory';
+import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
 
 export type HistoryFilterBinding = string | number;
 
@@ -52,8 +53,8 @@ export function buildHistoryFilterClause(
   }
 
   if (filters.workflow_name) {
-    clauses.push(`${prefix}workflow_name LIKE ?`);
-    params.push(`%${filters.workflow_name}%`);
+    clauses.push(`${prefix}workflow_name LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`);
+    params.push(buildSqlContainsPattern(filters.workflow_name));
   }
 
   if (filters.created_after) {

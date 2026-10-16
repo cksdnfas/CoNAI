@@ -13,8 +13,10 @@ import {
   buildAutoTagExistsForPaths,
   buildAutoTagModelExpr,
   buildAutoTagRatingExpr,
+  AUTO_TAG_KEY_LIKE_SQL,
   pushAutoTagPathMatchParams,
 } from './autoTagSqlShared';
+import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
 import { normalizeAutoTagSearchTerm } from './autoTagSearch/autoTagSearchTerms';
 import { AutoTagSearchMatcher } from './autoTagSearch/AutoTagSearchMatcher';
 import { AutoTagIndexService, MEDIA_ROW_ID_COLUMN, buildIndexedMediaSubquery } from './autoTagIndexService';
@@ -49,20 +51,20 @@ export class AutoTagSearchService {
     // 기본 검색 조건 추가
     if (basicSearchParams) {
       if (basicSearchParams.search_text) {
-        conditions.push('i.prompt LIKE ?');
-        params.push(`%${basicSearchParams.search_text}%`);
+        conditions.push(`i.prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`);
+        params.push(buildSqlContainsPattern(basicSearchParams.search_text));
       }
       if (basicSearchParams.negative_text) {
-        conditions.push('i.negative_prompt LIKE ?');
-        params.push(`%${basicSearchParams.negative_text}%`);
+        conditions.push(`i.negative_prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`);
+        params.push(buildSqlContainsPattern(basicSearchParams.negative_text));
       }
       if (basicSearchParams.ai_tool) {
         conditions.push('i.ai_tool = ?');
         params.push(basicSearchParams.ai_tool);
       }
       if (basicSearchParams.model_name) {
-        conditions.push('i.model_name LIKE ?');
-        params.push(`%${basicSearchParams.model_name}%`);
+        conditions.push(`i.model_name LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`);
+        params.push(buildSqlContainsPattern(basicSearchParams.model_name));
       }
       if (basicSearchParams.start_date) {
         conditions.push(buildOnOrAfterDateSql('i.upload_date'));
@@ -214,7 +216,7 @@ export class AutoTagSearchService {
         const keyMatchCondition = buildAutoTagExistsForPaths(
           'i',
           AUTO_TAG_GENERAL_JSON_PATHS,
-          'LOWER(key) LIKE ?'
+          AUTO_TAG_KEY_LIKE_SQL
         );
 
         tagOrConditions.push(keyMatchCondition);
@@ -249,7 +251,7 @@ export class AutoTagSearchService {
           const scoreCondition = buildAutoTagExistsForPaths(
             'i',
             AUTO_TAG_GENERAL_JSON_PATHS,
-            `LOWER(key) LIKE ?${scoreCheckStr}`
+            `${AUTO_TAG_KEY_LIKE_SQL}${scoreCheckStr}`
           );
 
           scoreConditions.push(scoreCondition);
@@ -390,24 +392,24 @@ export class AutoTagSearchService {
         const generalCondition = buildAutoTagExistsForPaths(
           'i',
           AUTO_TAG_GENERAL_JSON_PATHS,
-          'LOWER(key) LIKE ?'
+          AUTO_TAG_KEY_LIKE_SQL
         );
 
         // 2. Character 태그 검색 조건
         const characterCondition = buildAutoTagExistsForPaths(
           'i',
           AUTO_TAG_CHARACTER_JSON_PATHS,
-          'LOWER(key) LIKE ?'
+          AUTO_TAG_KEY_LIKE_SQL
         );
 
         variantConditions.push(`(${generalCondition} OR ${characterCondition})`);
 
         // 파라미터 추가 (json path 개수에 맞춰 반복)
         for (let i = 0; i < AUTO_TAG_GENERAL_JSON_PATHS.length; i++) {
-          params.push(`%${variant}%`);
+          params.push(buildSqlContainsPattern(variant));
         }
         for (let i = 0; i < AUTO_TAG_CHARACTER_JSON_PATHS.length; i++) {
-          params.push(`%${variant}%`);
+          params.push(buildSqlContainsPattern(variant));
         }
       }
 
@@ -459,7 +461,7 @@ export class AutoTagSearchService {
         const keyMatchCondition = buildAutoTagExistsForPaths(
           'i',
           AUTO_TAG_CHARACTER_JSON_PATHS,
-          'LOWER(key) LIKE ?'
+          AUTO_TAG_KEY_LIKE_SQL
         );
 
         charOrConditions.push(keyMatchCondition);
@@ -498,7 +500,7 @@ export class AutoTagSearchService {
           const scoreCondition = buildAutoTagExistsForPaths(
             'i',
             AUTO_TAG_CHARACTER_JSON_PATHS,
-            `LOWER(key) LIKE ?${scoreCheckStr}`
+            `${AUTO_TAG_KEY_LIKE_SQL}${scoreCheckStr}`
           );
 
           console.log('[AutoTagSearch] Character score condition SQL:', scoreCondition);

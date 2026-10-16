@@ -14,6 +14,7 @@ import {
   type AudioFileRecord,
 } from './audioStore';
 import { releaseUnreferencedAudioBlobs } from './audioMaintenance';
+import { parseJsonOr } from '../../utils/json';
 
 /**
  * The sound-effect workspace: projects → groups → candidates (generated takes, uploads, edits), group comments.
@@ -149,10 +150,6 @@ function isUniqueViolation(error: unknown): boolean {
   return String((error as { code?: string })?.code ?? '').startsWith('SQLITE_CONSTRAINT');
 }
 
-function parseJson(value: string | null): unknown {
-  if (value === null) return null;
-  try { return JSON.parse(value); } catch { return null; }
-}
 
 /* ---------------------------------------------------------------- projects */
 
@@ -430,7 +427,7 @@ function toCandidate(row: CandidateRow): AudioCandidate {
   return {
     id: row.id, group_id: row.group_id, project_id: row.project_id, file_hash: row.file_hash, parent_id: row.parent_id,
     origin: row.origin, name: row.name, review: row.review, notes: row.notes,
-    edit: parseJson(row.edit_json), provenance: parseJson(row.provenance_json),
+    edit: parseJsonOr<unknown>(row.edit_json, null), provenance: parseJsonOr<unknown>(row.provenance_json, null),
     order_id: row.order_id, job_id: row.job_id, created_by_account_id: row.created_by_account_id,
     created_at: row.created_at, updated_at: row.updated_at, deleted_at: row.deleted_at,
     file: {
@@ -666,7 +663,7 @@ export function registerEditedAudioCandidate(input: {
     db().transaction(() => {
       const source = db().prepare('SELECT * FROM audio_candidates WHERE id = ?').get(input.sourceId) as CandidateRow | undefined;
       if (!source || source.deleted_at) throw new AudioServiceError('편집하는 동안 원본 후보가 삭제됐어.', 409);
-      const inherited = parseJson(source.provenance_json);
+      const inherited = parseJsonOr<unknown>(source.provenance_json, null);
       const provenance = {
         ...(inherited && typeof inherited === 'object' && !Array.isArray(inherited) ? inherited as Record<string, unknown> : {}),
         edited_from: source.id,

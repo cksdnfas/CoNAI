@@ -1,13 +1,13 @@
 import type { Request } from 'express';
-import { AuthCredentials } from '../models/AuthCredentials';
-import { AuthAccount, type AuthAccountRecord } from '../models/AuthAccount';
+import { AuthCredentials } from '../../models/AuthCredentials';
+import { AuthAccount, type AuthAccountRecord } from '../../models/AuthAccount';
 import {
   AuthAccessControlService,
   getResolvedAuthAccessEpoch,
   invalidateResolvedAuthAccessCache,
   type ResolvedAuthAccessRecord,
-} from '../services/authAccessControlService';
-import { isDirectLoopbackRequest } from '../utils/bootstrapAccess';
+} from '../authAccessControlService';
+import { isDirectLoopbackRequest } from '../../utils/bootstrapAccess';
 
 let configuredAuthCache: boolean | null = null;
 const TRUSTED_BOOTSTRAP_USERNAME = 'Bootstrap';

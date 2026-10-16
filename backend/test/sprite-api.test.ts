@@ -26,7 +26,7 @@ test('sprite REST + MCP: permissions, ownership, library save and artifacts', { 
   user.initializeUserSettingsDb()
   ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const { registerSpriteJobHandlers } = await import('../src/services/sprite/spriteService')
   const { shutdownSpriteWorker } = await import('../src/services/sprite/spriteWorkerClient')
   const { saveSpriteOutputToLibrary, readSpriteSettings } = await import('../src/services/sprite/spriteLibrary')

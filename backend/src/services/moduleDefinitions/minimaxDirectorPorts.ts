@@ -5,6 +5,7 @@ import type {
   ModulePortDefinition,
   ModuleUiFieldDefinition,
 } from '../../types/moduleGraph'
+import { parseJsonRecord } from '../../utils/json'
 
 export const MINIMAX_DIRECTOR_NODE_EDITOR = 'minimax_h3_director_dasiwa' as const
 
@@ -214,16 +215,6 @@ export function normalizeMiniMaxDirectorLegacyGraphEdges<T extends {
   return changed ? { ...graph, edges } : graph
 }
 
-function parseJsonRecord(value: unknown) {
-  if (isRecord(value)) return { ...value }
-  if (typeof value !== 'string' || !value.trim()) return {}
-  try {
-    const parsed = JSON.parse(value) as unknown
-    return isRecord(parsed) ? { ...parsed } : {}
-  } catch {
-    return {}
-  }
-}
 
 function normalizeIncomingValues(value: unknown) {
   return Array.isArray(value) ? value : [value]

@@ -52,7 +52,7 @@ import { CHAT_IMPORT_MAX_BYTES, ChatImportError, importChatThread } from '../ser
 import { ChatSummaryStore } from '../services/codex-chat/chatMemory'
 import { isChatTargetReady, listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
 import { LlmChatError, LlmChatService } from '../services/codex-chat/llmChatService'
-import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
+import { getRequester, getRequesterAccountId } from './requester-session-helpers'
 import { sendRouteBadRequest } from './routeValidation'
 import { FileStoreError, FileStoreService, fileOwnerKey, parseFileId } from '../services/fileStoreService'
 import { requireFileStoreAction, requireFileStoreOwner } from '../services/fileStoreAccess'
@@ -96,7 +96,7 @@ router.use((_req: Request, _res: Response, next: NextFunction) => {
 })
 
 function requesterFrom(req: Request): McpRequester {
-  return { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) ?? 'admin' }
+  return getRequester(req)
 }
 
 function parseId(value: unknown) {
@@ -304,7 +304,7 @@ router.get('/media/:file', requireChatAccess, requireImagesView, asyncHandler(as
     return
   }
   res.setHeader('Cache-Control', 'private, no-cache')
-  if (file.mimeType.startsWith('video/')) streamRangeFile(req, res, file.path, file.mimeType)
+  if (file.mimeType.startsWith('video/')) await streamRangeFile(req, res, file.path, file.mimeType)
   else await streamCacheableFile(req, res, file.path, file.mimeType)
 }))
 

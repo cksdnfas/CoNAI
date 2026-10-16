@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import sharp from 'sharp'
 import { runtimePaths } from '../config/runtimePaths'
+import { isPathInside } from '../utils/pathResolver'
 import type { WorkflowArtifactDirectoryMode, WorkflowRecord } from '../types/workflow'
 
 export type WorkflowArtifactEntry = {
@@ -74,8 +75,7 @@ function normalizeRelativePath(value: string | undefined | null) {
 }
 
 function isSubPath(candidate: string, root: string) {
-  const relative = path.relative(root, candidate)
-  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative))
+  return isPathInside(root, candidate)
 }
 
 function getMimeType(filePath: string) {

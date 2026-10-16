@@ -14,6 +14,7 @@ import { enrichCompactImageWithFileView } from './images/utils';
 import fs from 'fs';
 import { allowImagesView } from '../middleware/imageAccess';
 import { requirePermission } from '../middleware/authMiddleware';
+import { getRequesterAccountId } from './requester-session-helpers';
 
 const router = Router();
 router.use((req, res, next) => {
@@ -209,7 +210,7 @@ router.get('/:id/breadcrumb', asyncHandler(async (req: Request, res: Response) =
 router.post('/rebuild', asyncHandler(async (req: Request, res: Response) => {
   try {
     const job = GroupRematchJobService.startJobProcess('auto-folder-rebuild', {
-      requestedByAccountId: typeof req.session?.accountId === 'number' ? req.session.accountId : null,
+      requestedByAccountId: getRequesterAccountId(req),
     });
     return res.status(202).json(successResponse(job));
   } catch (error) {

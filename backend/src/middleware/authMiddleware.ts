@@ -6,7 +6,7 @@ import {
   hasFreshSessionAccessCache,
   markSessionAccessCacheFresh,
   setTrustedBootstrapSession,
-} from '../routes/auth-route-helpers';
+} from '../services/auth/sessionAccess';
 import { AuthAccessControlService, getResolvedAuthAccessEpoch, isActiveAdminAccount, isActiveAdminRecord } from '../services/authAccessControlService';
 import { isDirectLoopbackRequest } from '../utils/bootstrapAccess';
 import { wallpaperRuntimeSessionGrantsImageView } from '../services/wallpaperRuntimeAccess';
@@ -97,7 +97,7 @@ export function hasAdminAccess(req: Request): boolean {
 
 /**
  * Refresh cached access data for the current authenticated account session.
- * The freshness rule itself lives in auth-route-helpers so this middleware and the SPA shell
+ * The freshness rule itself lives in services/auth/sessionAccess so this middleware and the SPA shell
  * payload builder share one definition of "this session's access cache is still current"; the TTL
  * is the steady-state optimization and the epoch makes explicit permission revocations invalidate
  * an already-open session on its very next request.

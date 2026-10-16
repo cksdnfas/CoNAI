@@ -1,4 +1,4 @@
-import { hasConfiguredAuth } from '../routes/auth-route-helpers';
+import { hasConfiguredAuth } from './auth/sessionAccess';
 import { GroupModel, ImageGroupModel } from '../models/Group';
 import { AuthAccessControlService } from './authAccessControlService';
 import { GroupPathError, GroupPathService } from './groupPathService';

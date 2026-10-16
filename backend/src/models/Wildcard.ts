@@ -1,4 +1,5 @@
 import { getUserSettingsDb } from '../database/userSettingsDb';
+import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
 
 /**
  * Wildcard 인터페이스
@@ -323,14 +324,14 @@ export class WildcardModel {
   static search(query: string, page: number = 1, limit: number = 50): { wildcards: Wildcard[]; total: number } {
     const db = getUserSettingsDb();
     const offset = (page - 1) * limit;
-    const pattern = `%${query}%`;
+    const pattern = buildSqlContainsPattern(query);
 
     const total = (db.prepare(
-      'SELECT COUNT(*) as count FROM wildcards WHERE name LIKE ?'
+      `SELECT COUNT(*) as count FROM wildcards WHERE name LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`
     ).get(pattern) as { count: number }).count;
 
     const wildcards = db.prepare(
-      'SELECT * FROM wildcards WHERE name LIKE ? ORDER BY name LIMIT ? OFFSET ?'
+      `SELECT * FROM wildcards WHERE name LIKE ?${SQL_LIKE_ESCAPE_CLAUSE} ORDER BY name LIMIT ? OFFSET ?`
     ).all(pattern, limit, offset) as Wildcard[];
 
     return { wildcards, total };

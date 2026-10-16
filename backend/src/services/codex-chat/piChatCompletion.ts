@@ -3,6 +3,7 @@ import path from 'path'
 import { randomUUID } from 'crypto'
 import type { AgentSessionEvent, ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { runtimePaths } from '../../config/runtimePaths'
+import { isInsideServedDir, isPathStrictlyInside } from '../../utils/pathResolver'
 import type { LlmTokenCounts } from '../llmUsage'
 import { buildOpenAiGenerationFields } from '../llmGenerationOptions'
 import type { ChatMcpToolResult } from './chatMcpBridge'
@@ -61,12 +62,8 @@ export function piSessionFileExists(dir: string, sessionId: string) {
 /** The session folder must sit inside the private root, which must sit outside every folder the app serves. */
 function preparePrivateDir(dir: string) {
   const root = piChatPrivateRoot()
-  for (const served of [runtimePaths.uploadsDir, runtimePaths.tempDir, runtimePaths.saveDir, runtimePaths.artifactsDir]) {
-    const relative = path.relative(path.resolve(served), root)
-    if (!relative || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))) throw new Error('pi 채팅 상태는 공개 미디어 폴더 밖에 있어야 해.')
-  }
-  const relative = path.relative(root, path.resolve(dir))
-  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('pi 세션 폴더가 올바르지 않아.')
+  if (isInsideServedDir(root)) throw new Error('pi 채팅 상태는 공개 미디어 폴더 밖에 있어야 해.')
+  if (!isPathStrictlyInside(root, dir)) throw new Error('pi 세션 폴더가 올바르지 않아.')
   fs.mkdirSync(root, { recursive: true, mode: 0o700 })
   if (fs.realpathSync(root) !== root) throw new Error('pi 채팅 상태 경로에 심볼릭 링크를 사용할 수 없어.')
   for (const sub of ['sessions', 'work', 'agent']) fs.mkdirSync(path.join(dir, sub), { recursive: true, mode: 0o700 })

@@ -4,8 +4,11 @@ import { GenerationHistoryService } from '../../services/generationHistoryServic
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
 import { getActiveFileOrBlock, type ImageDownloadType } from '../images/query-file-helpers';
 import { getRequesterAccountId, isAdminRequest } from '../requester-session-helpers';
-import { parsePositiveInteger } from '../routeValidation';
+import { parsePagination, parsePositiveInteger } from '../routeValidation';
 import type { GenerationHistoryFilterOptions, ServiceType } from '../../types/generationHistory';
+
+/** One history page never loads more than this many records. */
+const HISTORY_PAGE_MAX = 200;
 
 function parseOptionalPositiveIntegerQuery(value: unknown): number | undefined {
   const parsed = parsePositiveInteger(value);
@@ -83,14 +86,9 @@ export function buildHistoryQueryFilters(query: Request['query'], options: { inc
     requested_by_account_type,
     server_id,
     queue_job_id,
-    limit = '50',
-    offset = '0',
   } = query;
 
-  const filters: any = {
-    limit: parseInt(limit as string),
-    offset: parseInt(offset as string),
-  };
+  const filters: any = parsePagination(query, { defaultLimit: 50, maxLimit: HISTORY_PAGE_MAX });
 
   if (options.includeServiceType && service_type && (service_type === 'comfyui' || service_type === 'novelai' || service_type === 'codex')) {
     filters.service_type = service_type;

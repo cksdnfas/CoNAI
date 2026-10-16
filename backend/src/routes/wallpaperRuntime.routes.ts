@@ -7,7 +7,7 @@ import { GraphWorkflowFolderModel } from '../models/GraphWorkflowFolder';
 import { ImageGroupModel } from '../models/Group';
 import { WallpaperRuntimeToken, type WallpaperRuntimeTokenRecord } from '../models/WallpaperRuntimeToken';
 import { AuthAccount } from '../models/AuthAccount';
-import { setAuthenticatedSession } from './auth-route-helpers';
+import { setAuthenticatedSession } from '../services/auth/sessionAccess';
 import { RuntimeEventBroadcaster } from '../services/runtime-events/runtimeEventBroadcaster';
 import {
   getWallpaperRuntimeAccess,

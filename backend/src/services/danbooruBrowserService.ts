@@ -13,6 +13,7 @@ import {
   type PromptGroupSyntax,
 } from './danbooruBrowser/promptGroupSyntax';
 import { buildTaxonomyParentKeyByKey } from './danbooruBrowser/taxonomyHierarchy';
+import { buildSqlContainsPattern } from '../utils/sqlLike';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
@@ -228,10 +229,6 @@ function normalizeQuery(value?: string | null): string {
 
 function normalizePromptGroupLookup(value?: string | null): string {
   return normalizeQuery(value).replace(/[^a-z0-9_가-힣ぁ-んァ-ン一-龥]/g, '');
-}
-
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
 function buildDanbooruPostsUrl(tagName: string): string {
@@ -549,8 +546,8 @@ class DanbooruBrowserService {
 
     if (q) {
       clauses.push('(normalized_name LIKE ? ESCAPE \'\\\' OR display_name LIKE ? ESCAPE \'\\\' OR EXISTS (SELECT 1 FROM tag_translations tq WHERE tq.tag_id = tags.id AND tq.locale = \'ko\' AND tq.translated_name LIKE ? ESCAPE \'\\\'))');
-      const pattern = `%${escapeLike(q)}%`;
-      const translatedPattern = `%${escapeLike(String(params.q ?? '').trim().toLowerCase())}%`;
+      const pattern = buildSqlContainsPattern(q);
+      const translatedPattern = buildSqlContainsPattern(String(params.q ?? '').trim().toLowerCase());
       values.push(pattern, pattern.replace(/_/g, ' '), translatedPattern);
     }
 
@@ -609,8 +606,8 @@ class DanbooruBrowserService {
 
     if (q) {
       clauses.push('(a.normalized_name LIKE ? ESCAPE \'\\\' OR EXISTS (SELECT 1 FROM tag_translations tq WHERE tq.tag_id = a.tag_id AND tq.locale = \'ko\' AND tq.translated_name LIKE ? ESCAPE \'\\\'))');
-      const pattern = `%${escapeLike(q)}%`;
-      const translatedPattern = `%${escapeLike(String(params.q ?? '').trim())}%`;
+      const pattern = buildSqlContainsPattern(q);
+      const translatedPattern = buildSqlContainsPattern(String(params.q ?? '').trim());
       values.push(pattern, translatedPattern);
     }
 
@@ -662,8 +659,8 @@ class DanbooruBrowserService {
 
     if (q) {
       clauses.push('(c.normalized_name LIKE ? ESCAPE \'\\\' OR EXISTS (SELECT 1 FROM tag_translations tq WHERE tq.tag_id = c.tag_id AND tq.locale = \'ko\' AND tq.translated_name LIKE ? ESCAPE \'\\\'))');
-      const pattern = `%${escapeLike(q)}%`;
-      const translatedPattern = `%${escapeLike(String(params.q ?? '').trim().toLowerCase())}%`;
+      const pattern = buildSqlContainsPattern(q);
+      const translatedPattern = buildSqlContainsPattern(String(params.q ?? '').trim().toLowerCase());
       values.push(pattern, translatedPattern);
     }
 

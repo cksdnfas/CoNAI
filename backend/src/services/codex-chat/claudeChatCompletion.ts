@@ -7,6 +7,7 @@ import express from 'express'
 import { createMcpHandler, Server, type CallToolResult } from '@modelcontextprotocol/server'
 import { toNodeHandler } from '@modelcontextprotocol/node'
 import { runtimePaths } from '../../config/runtimePaths'
+import { isInsideServedDir, isPathStrictlyInside } from '../../utils/pathResolver'
 import { claudeConfigDir, claudeEnvironment, getClaudeStatus, resolveClaudeCommand, reserveClaudeRequest } from '../claudeCli'
 import { compareCodexVersions, killCodexProcessTree, scheduleCodexProcessTimeout } from '../codexGenerationExecutor'
 import { isClaudeReasoningEffort } from '../llmGenerationOptions'
@@ -135,16 +136,12 @@ export async function streamClaudeChatCompletion(params: {
     if (!status.available) throw new Error(status.message ?? 'Claude Code 로그인이 필요해.')
     const cli = resolveClaudeCommand()
     if (cli.version && compareCodexVersions(cli.version, '2.1.248') < 0) throw new Error('Claude Code 2.1.248 이상으로 업데이트해줘. 채팅 도구 격리에 필요한 버전이야.')
-    for (const served of [runtimePaths.uploadsDir, runtimePaths.tempDir, runtimePaths.saveDir, runtimePaths.artifactsDir]) {
-      const relative = path.relative(path.resolve(served), privateRoot)
-      if (!relative || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))) throw new Error('Claude 채팅 상태는 공개 미디어 폴더 밖에 있어야 해.')
-    }
+    if (isInsideServedDir(privateRoot)) throw new Error('Claude 채팅 상태는 공개 미디어 폴더 밖에 있어야 해.')
     fs.mkdirSync(privateRoot, { recursive: true, mode: 0o700 })
     if (fs.realpathSync(privateRoot) !== privateRoot) throw new Error('Claude 채팅 상태 경로에 심볼릭 링크를 사용할 수 없어.')
     if (session) {
       // A session folder is the chat's own and stays; it must sit inside the private root like a run's.
-      const relative = path.relative(privateRoot, path.resolve(session.dir))
-      if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Claude 세션 폴더가 올바르지 않아.')
+      if (!isPathStrictlyInside(privateRoot, session.dir)) throw new Error('Claude 세션 폴더가 올바르지 않아.')
       fs.mkdirSync(session.dir, { recursive: true, mode: 0o700 })
       if (fs.realpathSync(session.dir) !== path.resolve(session.dir)) throw new Error('Claude 세션 경로에 심볼릭 링크를 사용할 수 없어.')
     }

@@ -26,7 +26,7 @@ test('wallpaper runtime keys, access scope and feeds', { timeout: 120000 }, asyn
   const userDb = await import('../src/database/userSettingsDb')
   userDb.initializeUserSettingsDb()
   ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const { registerAppRoutes } = await import('../src/startup/registerAppRoutes')
   const { WallpaperRuntimeToken } = await import('../src/models/WallpaperRuntimeToken')
   const { AuthAccount } = await import('../src/models/AuthAccount')

@@ -143,6 +143,19 @@ export function parseIntegerWithFallback(value: unknown, fallback: number): numb
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
+/** Parse limit/offset query values: invalid or non-positive limits fall back, and the limit never exceeds `max`. */
+export function parsePagination(
+  query: { limit?: unknown; offset?: unknown },
+  options: { defaultLimit: number; maxLimit: number },
+): { limit: number; offset: number } {
+  const limit = Number.parseInt(String(query.limit ?? ''), 10)
+  const offset = Number.parseInt(String(query.offset ?? ''), 10)
+  return {
+    limit: Number.isFinite(limit) && limit > 0 ? Math.min(limit, options.maxLimit) : options.defaultLimit,
+    offset: Number.isFinite(offset) && offset > 0 ? offset : 0,
+  }
+}
+
 /** Parse a numeric query value while keeping the provided fallback for invalid input. */
 export function parseNumberWithFallback(value: unknown, fallback: number): number {
   const parsed = Number(value)

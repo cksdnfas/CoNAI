@@ -5,6 +5,7 @@ import AdmZip from 'adm-zip';
 import { zipEntryBytes, zipEntryKind } from '../../utils/zipEntries';
 import Database from 'better-sqlite3';
 import { runtimePaths } from '../../config/runtimePaths';
+import { isPathInside } from '../../utils/pathResolver';
 import { getAudioDb } from '../../database/audioDb';
 import { splitAudioGroupText } from '../../database/audioSchema';
 import { WorkflowModel } from '../../models/Workflow';
@@ -149,9 +150,7 @@ export function removeLegacyUpload(uploadId: string): void {
 export function isUnsafeZipEntry(root: string, name: string): boolean {
   const normalized = name.replace(/\\/g, '/');
   if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized) || normalized.split('/').some((part) => part === '..')) return true;
-  const target = path.resolve(root, normalized);
-  const relative = path.relative(path.resolve(root), target);
-  return relative.startsWith('..') || path.isAbsolute(relative);
+  return !isPathInside(path.resolve(root), path.resolve(root, normalized));
 }
 
 /** What an unpacked legacy archive may hold in all (its zip is at most 1 GiB; audio barely compresses). */

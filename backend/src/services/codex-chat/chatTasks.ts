@@ -3,7 +3,7 @@ import { CHAT_TASK_DEFAULT_BUDGET, CHAT_TASK_LIMITS, type ChatExecutionContext, 
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
-import { hasConfiguredAuth } from '../../routes/auth-route-helpers'
+import { hasConfiguredAuth } from '../auth/sessionAccess'
 import { publishRuntimeEvent, subscribeToRuntimeEvents } from '../runtime-events/runtimeEventBus'
 import { onChatReplyFinished } from './chatReplyRegistry'
 import { onProposalResolved } from './chatProposals'

@@ -1,7 +1,7 @@
 import type { Request } from 'express'
 import { AuthAccount } from '../../models/AuthAccount'
 import { AuthAccessControlService } from '../../services/authAccessControlService'
-import { hasConfiguredAuth } from '../auth-route-helpers'
+import { hasConfiguredAuth } from '../../services/auth/sessionAccess'
 import { RUNTIME_EVENT_TOPIC_PERMISSIONS, type RuntimeEventTopic } from '../../types/runtimeEvents'
 import { isDirectLoopbackRequest } from '../../utils/bootstrapAccess'
 

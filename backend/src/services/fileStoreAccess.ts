@@ -1,5 +1,5 @@
 import { AuthAccount } from '../models/AuthAccount';
-import { hasConfiguredAuth } from '../routes/auth-route-helpers';
+import { hasConfiguredAuth } from './auth/sessionAccess';
 import { AuthAccessControlService } from './authAccessControlService';
 import { FileStoreError, fileOwnerKey } from './fileStoreService';
 import type { McpRequester } from '../mcp/context';

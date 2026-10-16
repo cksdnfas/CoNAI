@@ -10,6 +10,18 @@ export function isPathInside(root: string, candidate: string): boolean {
   return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
 }
 
+/** True when `candidate` is strictly below `root` (the root itself does not count). */
+export function isPathStrictlyInside(root: string, candidate: string): boolean {
+  return path.resolve(root) !== path.resolve(candidate) && isPathInside(path.resolve(root), path.resolve(candidate));
+}
+
+/** True when `candidate` is one of the folders the app serves over HTTP, or below one. Private state must not be. */
+export function isInsideServedDir(candidate: string): boolean {
+  const resolved = path.resolve(candidate);
+  return [runtimePaths.uploadsDir, runtimePaths.tempDir, runtimePaths.saveDir, runtimePaths.artifactsDir]
+    .some((served) => isPathInside(path.resolve(served), resolved));
+}
+
 /**
  * 유니코드 문자열을 NFC(Canonical Composition) 형식으로 정규화
  *

@@ -3,6 +3,7 @@ import { errorResponse, successResponse } from '@conai/shared';
 import { RuntimeJobRunner } from '../services/runtimeJobs/runtimeJobRunner';
 import { RuntimeJobConflictError } from '../services/runtimeJobs/runtimeJobStore';
 import type { RuntimeJobKind } from '../types/runtimeJob';
+import { getRequesterAccountId } from './requester-session-helpers';
 
 /**
  * Start one runtime job from a route: 202 + the job record, 409 + the live job when its slot is taken.
@@ -17,7 +18,7 @@ export function respondWithStartedJob(
 ) {
   try {
     const job = RuntimeJobRunner.start(kind, params, {
-      requestedByAccountId: typeof req.session?.accountId === 'number' ? req.session.accountId : null,
+      requestedByAccountId: getRequesterAccountId(req),
     });
     return res.status(202).json(successResponse(job));
   } catch (error) {

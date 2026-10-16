@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/server'
 import { z } from 'zod'
-import { hasConfiguredAuth } from '../../routes/auth-route-helpers'
+import { hasConfiguredAuth } from '../../services/auth/sessionAccess'
 import { ChatGroupStore } from '../../services/codex-chat/chatGroupStore'
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles'
 import { CodexChatStore } from '../../services/codex-chat/codexChatStore'

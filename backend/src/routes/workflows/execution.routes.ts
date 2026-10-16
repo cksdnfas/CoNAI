@@ -24,6 +24,7 @@ import {
 } from '../../services/workflowNumericFieldPolicy';
 import { requirePermission } from '../../middleware/authMiddleware';
 import { assignGeneratedMediaToGroup, GenerationTargetGroupService } from '../../services/generationTargetGroupService';
+import { getRequesterAccountId } from '../requester-session-helpers';
 
 const router = Router();
 
@@ -41,7 +42,7 @@ router.post('/:id/generate', requirePermission('generation.execute'), asyncHandl
     source_image?: string;
     imageSaveOptions?: GeneratedImageSaveOptions;
   };
-  const requestedByAccountId = typeof req.session?.accountId === 'number' ? req.session.accountId : undefined;
+  const requestedByAccountId = getRequesterAccountId(req) ?? undefined;
   const requestedByAccountType = req.session?.accountType;
 
   if (isNaN(id) || !prompt_data) {

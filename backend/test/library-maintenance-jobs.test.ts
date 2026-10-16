@@ -402,7 +402,7 @@ test('maintenance routes answer 202 with a job, and a cancelled job stops after 
   app.use(express.json())
   const adminId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('jobs-admin', 'unused', 'admin')").run().lastInsertRowid)
   auth.prepare("INSERT INTO auth_account_group_memberships (account_id, group_id) SELECT ?, id FROM auth_permission_groups WHERE group_key = 'admin'").run(adminId)
-  ;(await import('../src/routes/auth-route-helpers')).invalidateConfiguredAuthCache()
+  ;(await import('../src/services/auth/sessionAccess')).invalidateConfiguredAuthCache()
   app.use((req, _res, next) => {
     Object.assign(req, { sessionID: 'jobs', session: { authenticated: true, accountId: adminId, accountType: 'admin' } })
     next()

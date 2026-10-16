@@ -75,7 +75,7 @@ test('state-changing API routes refuse an account without permissions', { timeou
   const user = await import('../src/database/userSettingsDb')
   user.initializeUserSettingsDb()
   ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const { registerAppRoutes } = await import('../src/startup/registerAppRoutes')
   t.after(async () => {
     auth.close()

@@ -19,7 +19,7 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
   const user = await import('../src/database/userSettingsDb')
   user.initializeUserSettingsDb()
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const { FileStoreService } = await import('../src/services/fileStoreService')
   const registry = await import('../src/services/plugins/pluginRegistry')
   const host = await import('../src/services/plugins/pluginHost')

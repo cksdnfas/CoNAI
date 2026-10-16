@@ -30,6 +30,7 @@ import {
   parseGraphRouteInteger,
   parseOptionalGraphFolderId,
 } from './route-helpers'
+import { parseJsonOr } from '../../utils/json'
 
 type ExportedModuleDefinition = Omit<ModuleDefinitionRecord, 'id' | 'created_date' | 'updated_date'> & {
   original_id: number
@@ -49,20 +50,9 @@ type GraphWorkflowExportPayload = {
   module_definitions: ExportedModuleDefinition[]
 }
 
-function parseJsonField<T>(value: unknown, fallback: T): T {
-  if (typeof value !== 'string' || value.length === 0) {
-    return fallback
-  }
-
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return fallback
-  }
-}
 
 function parseWorkflowGraph(value: string): GraphWorkflowDocument {
-  return parseJsonField<GraphWorkflowDocument>(value, { nodes: [], edges: [], metadata: {} })
+  return parseJsonOr<GraphWorkflowDocument>(value, { nodes: [], edges: [], metadata: {} })
 }
 
 function buildExportedModuleDefinition(moduleDefinition: ModuleDefinitionRecord): ExportedModuleDefinition {
@@ -148,10 +138,10 @@ function createPlaceholderModule(exportedModule?: ExportedModuleDefinition, orig
     authoring_source: 'manual',
     category: 'Imported placeholders',
     template_defaults: {},
-    exposed_inputs: parseJsonField<ModulePortDefinition[]>(exportedModule?.exposed_inputs, []),
-    output_ports: parseJsonField<ModulePortDefinition[]>(exportedModule?.output_ports, []),
+    exposed_inputs: parseJsonOr<ModulePortDefinition[]>(exportedModule?.exposed_inputs, []),
+    output_ports: parseJsonOr<ModulePortDefinition[]>(exportedModule?.output_ports, []),
     internal_fixed_values: {},
-    ui_schema: parseJsonField<ModuleUiFieldDefinition[]>(exportedModule?.ui_schema, []),
+    ui_schema: parseJsonOr<ModuleUiFieldDefinition[]>(exportedModule?.ui_schema, []),
     version: exportedModule?.version ?? 1,
     is_active: true,
     color: '#64748b',

@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { AuthAccount } from '../models/AuthAccount';
 import { WallpaperRuntimeToken } from '../models/WallpaperRuntimeToken';
-import { clearSessionAuthAccess, hasConfiguredAuth } from '../routes/auth-route-helpers';
+import { clearSessionAuthAccess, hasConfiguredAuth } from './auth/sessionAccess';
 import { isDirectLoopbackRequest } from '../utils/bootstrapAccess';
 import { AuthAccessControlService } from './authAccessControlService';
 

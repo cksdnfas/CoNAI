@@ -13,6 +13,7 @@ import {
   type RuntimeJobRecord,
   type RuntimeJobStatus,
 } from '../../types/runtimeJob'
+import { parseJsonOr } from '../../utils/json'
 
 /**
  * `runtime_jobs` 영속 계층.
@@ -80,18 +81,6 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
-/** JSON 컬럼 파싱은 절대 throw 하지 않는다. 한 행이 깨져도 목록 조회가 500이 되면 안 된다. */
-function parseJsonColumn<T>(raw: string | null, fallback: T): T {
-  if (!raw) {
-    return fallback
-  }
-
-  try {
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
-}
 
 /** Keep the job table bounded; large normalization results use private files with the job's retention. */
 function serializeResult(result: unknown, jobId: string, kind: RuntimeJobKind): string | null {
@@ -137,9 +126,9 @@ function mapRow(row: RuntimeJobRow): RuntimeJobRecord {
       currentLabel: row.current_label,
     },
     message: row.message,
-    result: parseJsonColumn<unknown>(row.result, null),
-    errors: parseJsonColumn<RuntimeJobError[]>(row.errors, []),
-    warnings: parseJsonColumn<string[]>(row.warnings, []),
+    result: parseJsonOr<unknown>(row.result, null),
+    errors: parseJsonOr<RuntimeJobError[]>(row.errors, []),
+    warnings: parseJsonOr<string[]>(row.warnings, []),
     failureCode: row.failure_code,
     failureMessage: row.failure_message,
     cancelRequested: (row.cancel_requested ?? 0) > 0,
@@ -374,7 +363,7 @@ export class RuntimeJobStore {
       return
     }
 
-    const existing = parseJsonColumn<RuntimeJobError[]>(row.errors, [])
+    const existing = parseJsonOr<RuntimeJobError[]>(row.errors, [])
     existing.push({ target, error })
     const trimmed = existing.slice(-RUNTIME_JOB_ERROR_LIMIT)
 
@@ -394,7 +383,7 @@ export class RuntimeJobStore {
       return
     }
 
-    const existing = parseJsonColumn<string[]>(row.warnings, [])
+    const existing = parseJsonOr<string[]>(row.warnings, [])
     existing.push(warning)
 
     db.prepare(`

@@ -1,3 +1,8 @@
+import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
+
+/** Tag-key containment. Separator variants are generated up front, so `_` and `%` must match literally. */
+export const AUTO_TAG_KEY_LIKE_SQL = `LOWER(key) LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
+
 export const AUTO_TAG_GENERAL_JSON_PATHS = [
   '$.general',
   '$.tagger.general',
@@ -40,7 +45,7 @@ export function pushAutoTagPathMatchParams(
   maxScore?: number
 ): void {
   for (let i = 0; i < pathCount; i++) {
-    params.push(`%${variant}%`);
+    params.push(buildSqlContainsPattern(variant));
     if (minScore !== undefined) {
       params.push(minScore);
     }

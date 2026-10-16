@@ -27,7 +27,7 @@ test('image batch resize: parity, job, permissions and MCP', { timeout: 240000 }
   user.initializeUserSettingsDb()
   ;(await import('../src/database/apiGenerationDb')).initializeApiGenerationDb()
   const { AuthPermissionGroup } = await import('../src/models/AuthPermissionGroup')
-  const { invalidateConfiguredAuthCache } = await import('../src/routes/auth-route-helpers')
+  const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const { registerImageBatchResizeJobHandlers, resizeImageFile } = await import('../src/services/imageBatchResize/imageBatchResizeService')
   const { pillowLanczosResize } = await import('../src/services/imageBatchResize/pillowResample')
   const { decodeImage } = await import('../src/services/sprite/spriteEncode')

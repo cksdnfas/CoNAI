@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import { asyncHandler } from '../../middleware/asyncHandler'
 import type { ModuleGraphResponse } from '../../types/moduleGraph'
 import { NODE_OPTION_SOURCES } from '../../services/graph-workflow-executor/node-option-sources'
+import { getRequesterAccountId } from '../requester-session-helpers'
 
 /** Live choices for node selects whose ui field names an `options_source`. */
 export function createGraphWorkflowNodeOptionRoutes() {
@@ -13,7 +14,7 @@ export function createGraphWorkflowNodeOptionRoutes() {
       return res.status(404).json({ success: false, error: 'Unknown option source' } as ModuleGraphResponse)
     }
 
-    const accountId = typeof req.session?.accountId === 'number' ? req.session.accountId : null
+    const accountId = getRequesterAccountId(req)
     const options = await source({ accountId })
     return res.json({ success: true, data: options } as ModuleGraphResponse)
   }))

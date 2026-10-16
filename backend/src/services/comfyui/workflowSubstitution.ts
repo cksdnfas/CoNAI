@@ -1,6 +1,7 @@
 import type { MarkedField } from '../../types/workflow';
 import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPolicy';
 import { randomizeComfyWorkflowSeeds } from './seedControl';
+import { parseJsonRecord } from '../../utils/json';
 
 const MINIMAX_DIRECTOR_MODES = new Set([
   'T2VA',
@@ -17,16 +18,6 @@ function isRecord(value: unknown): value is Record<string, any> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function parseJsonRecord(value: unknown): Record<string, any> {
-  if (isRecord(value)) return value;
-  if (typeof value !== 'string' || !value.trim()) return {};
-  try {
-    const parsed = JSON.parse(value);
-    return isRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
 
 function boundedNumber(value: unknown, fallback: number, minimum: number, maximum: number): number {
   const candidate = Number(value);

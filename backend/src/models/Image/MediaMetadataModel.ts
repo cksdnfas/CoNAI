@@ -10,6 +10,7 @@ import { MediaImageFeaturesModel } from './MediaImageFeaturesModel';
 import { MediaMetadataFileQueries } from './MediaMetadataFileQueries';
 import { AggregateCache, resolveSearchTotal } from '../../services/aggregateCache';
 import { placeholdersFor, sortedUniqueChunks } from '../../utils/sqlInChunks';
+import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
 
 function normalizeSuggestionLimit(limit: number, fallback = 16, max = 50): number {
   if (!Number.isFinite(limit) || limit <= 0) {
@@ -296,14 +297,15 @@ export class MediaMetadataModel {
     const offset = options?.offset || 0;
 
     const readyCondition = getReadyMediaMetadataCondition();
+    const pattern = buildSqlContainsPattern(query);
 
     return db.prepare(`
       SELECT * FROM media_metadata
       WHERE (${readyCondition})
-        AND (prompt LIKE ? OR negative_prompt LIKE ? OR model_name LIKE ?)
+        AND (prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE} OR negative_prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE} OR model_name LIKE ?${SQL_LIKE_ESCAPE_CLAUSE})
       ORDER BY first_seen_date DESC
       LIMIT ? OFFSET ?
-    `).all(`%${query}%`, `%${query}%`, `%${query}%`, limit, offset) as ImageMetadataRecord[];
+    `).all(pattern, pattern, pattern, limit, offset) as ImageMetadataRecord[];
   }
 
   /**

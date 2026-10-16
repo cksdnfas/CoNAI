@@ -1,4 +1,5 @@
 import { db } from '../database/init';
+import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
 import { PromptCollectionRecord,
 NegativePromptCollectionRecord,
 PromptCollectionData,
@@ -175,16 +176,16 @@ export class PromptCollectionModel {
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
     sortOrder: 'ASC' | 'DESC' = 'DESC'
   ): { prompts: PromptSearchResult[], total: number } {
-    const searchPattern = `%${query}%`;
+    const searchPattern = buildSqlContainsPattern(query);
     const offset = (page - 1) * limit;
 
-    const countRow = db.prepare('SELECT COUNT(*) as total FROM prompt_collection WHERE prompt LIKE ?').get(searchPattern) as { total: number };
+    const countRow = db.prepare('SELECT COUNT(*) as total FROM prompt_collection WHERE prompt LIKE ?' + SQL_LIKE_ESCAPE_CLAUSE).get(searchPattern) as { total: number };
     const total = countRow.total;
 
     const rows = db.prepare(
       `SELECT id, prompt, usage_count, group_id, synonyms
        FROM prompt_collection
-       WHERE prompt LIKE ?
+       WHERE prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}
        ORDER BY ${sortBy} ${sortOrder}
        LIMIT ? OFFSET ?`
     ).all(searchPattern, limit, offset) as PromptCollectionRecord[];
@@ -211,16 +212,16 @@ export class PromptCollectionModel {
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
     sortOrder: 'ASC' | 'DESC' = 'DESC'
   ): { prompts: PromptSearchResult[], total: number } {
-    const searchPattern = `%${query}%`;
+    const searchPattern = buildSqlContainsPattern(query);
     const offset = (page - 1) * limit;
 
-    const countRow = db.prepare('SELECT COUNT(*) as total FROM auto_prompt_collection WHERE prompt LIKE ?').get(searchPattern) as { total: number };
+    const countRow = db.prepare('SELECT COUNT(*) as total FROM auto_prompt_collection WHERE prompt LIKE ?' + SQL_LIKE_ESCAPE_CLAUSE).get(searchPattern) as { total: number };
     const total = countRow.total;
 
     const rows = db.prepare(
       `SELECT id, prompt, usage_count, group_id, synonyms
        FROM auto_prompt_collection
-       WHERE prompt LIKE ?
+       WHERE prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}
        ORDER BY ${sortBy} ${sortOrder}
        LIMIT ? OFFSET ?`
     ).all(searchPattern, limit, offset) as PromptCollectionRecord[];
@@ -247,16 +248,16 @@ export class PromptCollectionModel {
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
     sortOrder: 'ASC' | 'DESC' = 'DESC'
   ): { prompts: PromptSearchResult[], total: number } {
-    const searchPattern = `%${query}%`;
+    const searchPattern = buildSqlContainsPattern(query);
     const offset = (page - 1) * limit;
 
-    const countRow = db.prepare('SELECT COUNT(*) as total FROM negative_prompt_collection WHERE prompt LIKE ?').get(searchPattern) as { total: number };
+    const countRow = db.prepare('SELECT COUNT(*) as total FROM negative_prompt_collection WHERE prompt LIKE ?' + SQL_LIKE_ESCAPE_CLAUSE).get(searchPattern) as { total: number };
     const total = countRow.total;
 
     const rows = db.prepare(
       `SELECT id, prompt, usage_count, group_id, synonyms
        FROM negative_prompt_collection
-       WHERE prompt LIKE ?
+       WHERE prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}
        ORDER BY ${sortBy} ${sortOrder}
        LIMIT ? OFFSET ?`
     ).all(searchPattern, limit, offset) as NegativePromptCollectionRecord[];

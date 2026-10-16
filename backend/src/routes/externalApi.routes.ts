@@ -12,7 +12,7 @@ import { checkThinkingSwitch } from '../services/codex-chat/thinkingSwitchProbe'
 import { readLlmConnectionConfig } from '../services/llmGenerationOptions';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { optionalAuth, requireAdmin, requirePermission } from '../middleware/authMiddleware';
-import { hasConfiguredAuth } from './auth-route-helpers';
+import { hasConfiguredAuth } from '../services/auth/sessionAccess';
 import type {
   CreateExternalApiProviderInput,
   ProviderType,

@@ -6,7 +6,7 @@ import { applyLoreProposal, undoLoreProposal, LoreProposalError } from '../servi
 import { LorebookError } from '../services/codex-chat/chatLorebookFiles'
 import { FileStoreError } from '../services/fileStoreService'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
-import { getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
+import { getRequester, getRequesterAccountId, getRequesterAccountType } from './requester-session-helpers'
 import { ChatPageContextError, requireChatPageAccess, requireChatPageActionAccess, requireChatPageProposalBinding } from '../services/codex-chat/chatPageContext'
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess'
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles'
@@ -124,7 +124,7 @@ router.post('/:proposalId/apply', asyncHandler(async (req: Request, res: Respons
     // The chat's own settings: saved by its owner (the visibility check above) with the context tab's rules.
     if (ChatProposalStore.find(proposalId)?.kind === 'chat_settings') {
       try {
-        res.json({ success: true, data: applyChatSettingsProposal({ accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) ?? 'admin' }, proposalId) })
+        res.json({ success: true, data: applyChatSettingsProposal(getRequester(req), proposalId) })
       } catch (error) {
         if (error instanceof ChatSettingsError || error instanceof FileStoreError) { res.status(error.status).json({ success: false, error: error.message }); return }
         throw error

@@ -2,8 +2,15 @@ import { Request, Response, NextFunction } from 'express';
 
 export interface AppError extends Error {
   statusCode?: number;
-  status?: string;
+  /** Service errors carry the HTTP status here; body-parser and http-errors set both fields. */
+  status?: number | string;
   isOperational?: boolean;
+}
+
+/** The HTTP status an error asks for, from `statusCode` or a numeric `status`; anything outside 4xx/5xx means 500. */
+function resolveErrorStatus(err: AppError): number {
+  const candidate = typeof err.statusCode === 'number' ? err.statusCode : typeof err.status === 'number' ? err.status : NaN;
+  return Number.isInteger(candidate) && candidate >= 400 && candidate <= 599 ? candidate : 500;
 }
 
 export const errorHandler = (
@@ -22,9 +29,7 @@ export const errorHandler = (
   console.error('Error Stack:', err.stack);
   console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-  // Default error
-  error.statusCode = error.statusCode || 500;
-  error.status = error.status || 'error';
+  error.statusCode = resolveErrorStatus(err);
 
   // Multer error handling
   if (err.message?.includes('LIMIT_FILE_SIZE')) {
@@ -43,7 +48,13 @@ export const errorHandler = (
     error.statusCode = 400;
   }
 
-  res.status(error.statusCode || 500).json({
+  // A streamed response that already started can only be cut off; Express's default handler does that.
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+
+  res.status(error.statusCode).json({
     success: false,
     error: error.message || 'Server Error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack })

@@ -1,6 +1,6 @@
 import type { Response } from 'express'
 import { errorResponse } from '@conai/shared'
-import { parseRouteIntegerParam } from './routeValidation'
+import { parsePagination, parseRouteIntegerParam } from './routeValidation'
 
 export const WATCHED_FOLDER_ROUTE_MESSAGES = {
   invalidFolderId: '유효하지 않은 폴더 ID입니다',
@@ -20,10 +20,9 @@ export function parseWatchedFolderRouteId(value: string | string[] | undefined, 
   return parseRouteIntegerParam(value, radix)
 }
 
-/** Preserve legacy scan-log limit parsing: invalid, missing, or zero values fall back. */
+/** Scan-log limit: invalid, missing, or non-positive values fall back; never above 500. */
 export function parseWatchedFolderLimit(value: unknown, fallback: number) {
-  const parsed = Number.parseInt(String(value ?? ''))
-  return parsed || fallback
+  return parsePagination({ limit: value }, { defaultLimit: fallback, maxLimit: 500 }).limit
 }
 
 export function isInvalidWatchedFolderRouteId(id: number) {

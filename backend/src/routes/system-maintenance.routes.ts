@@ -20,6 +20,7 @@ import {
   assertDatabaseCompactionAllowed,
   DatabaseCompactionRefusedError,
 } from '../services/maintenance/databaseCompactionService';
+import { getRequesterAccountId } from './requester-session-helpers';
 
 /**
  * Admin maintenance: library orphan cleanup and database backups. Mounted under `/api/system` (requireAdmin).
@@ -27,13 +28,9 @@ import {
  */
 const router = Router();
 
-function requestedBy(req: Request): number | null {
-  return typeof req.session?.accountId === 'number' ? req.session.accountId : null;
-}
-
 function startJob(req: Request, res: Response, kind: RuntimeJobKind, params: object, conflictMessage: string) {
   try {
-    const job = RuntimeJobRunner.start(kind, params, { requestedByAccountId: requestedBy(req) });
+    const job = RuntimeJobRunner.start(kind, params, { requestedByAccountId: getRequesterAccountId(req) });
     return res.status(202).json(successResponse(job));
   } catch (error) {
     if (error instanceof RuntimeJobConflictError) {
