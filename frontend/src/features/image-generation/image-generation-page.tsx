@@ -309,9 +309,12 @@ function ImageGenerationPageContent() {
       {/* 폰 폭에서는 연결 상태를 탭 아랫줄로 내린다. 비어 있으면(워크플로우·예약작업) 줄을 차지하지 않는다. */}
       <div
         id={GENERATION_TOOLBAR_STATUS_SLOT_ID}
-        className={cn('flex min-w-0 flex-1 items-center overflow-hidden max-sm:basis-full max-sm:empty:hidden', !isProviderTab && 'invisible')}
+        className={cn('flex min-w-0 flex-1 items-center overflow-hidden max-sm:order-last max-sm:basis-full max-sm:empty:hidden', !isProviderTab && 'invisible')}
       />
-      <GenerationLayoutControls wide={isWideLayout} />
+      {/* 레이아웃 버튼은 폰 폭에서도 탭 줄 오른쪽 끝에 남는다(상태 줄 뒤로 밀려 혼자 한 줄을 차지하지 않게). */}
+      <div className="ml-auto flex shrink-0 items-center empty:hidden">
+        <GenerationLayoutControls wide={isWideLayout} />
+      </div>
     </div>
   )
 
