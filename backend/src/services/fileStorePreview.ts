@@ -70,16 +70,18 @@ export function getFileThumbnail(owner: string, entry: StoredFileEntry, filePath
     if (!mime?.startsWith('image/') && !mime?.startsWith('video/')) throw new FileStoreError('No thumbnail', 404)
     const cached = fileStoreThumbnailPath(entry.id)
     const directory = path.dirname(cached)
-    if (fs.existsSync(directory) && fs.lstatSync(directory).isSymbolicLink()) throw new FileStoreError('Invalid thumbnail directory')
-    if (fs.existsSync(cached) && fs.lstatSync(cached).isSymbolicLink()) throw new FileStoreError('Invalid thumbnail file')
-    if (fs.existsSync(cached) && fs.statSync(cached).mtimeMs >= fs.statSync(filePath).mtimeMs) return cached
-    fs.mkdirSync(directory, { recursive: true })
+    // Every icon in a file list lands here: no synchronous filesystem calls on the cache-hit path.
+    if ((await fs.promises.lstat(directory).catch(() => null))?.isSymbolicLink()) throw new FileStoreError('Invalid thumbnail directory')
+    const cachedStat = await fs.promises.lstat(cached).catch(() => null)
+    if (cachedStat?.isSymbolicLink()) throw new FileStoreError('Invalid thumbnail file')
+    if (cachedStat && cachedStat.mtimeMs >= (await fs.promises.stat(filePath)).mtimeMs) return cached
+    await fs.promises.mkdir(directory, { recursive: true })
     const temporary = path.join(directory, `${entry.id}-${crypto.randomUUID()}.webp`)
     try {
       FileStoreService.resolveFile(owner, entry.id)
       await renderPreviewWebp(filePath, mime, temporary)
       FileStoreService.resolveFile(owner, entry.id)
-      fs.renameSync(temporary, cached)
+      await fs.promises.rename(temporary, cached)
       return cached
     } finally {
       await fs.promises.rm(temporary, { force: true }).catch(() => undefined)

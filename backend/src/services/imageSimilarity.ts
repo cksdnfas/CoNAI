@@ -213,113 +213,6 @@ export class ImageSimilarityService {
   }
 
   /**
-   * Perceptual Hash (pHash) 생성
-   * DCT (Discrete Cosine Transform) 기반으로 64비트 해시 생성
-   * 밝기/색상 변화에 강한 해시 알고리즘
-   */
-  static async generatePerceptualHash(imagePath: string): Promise<string> {
-    try {
-      const sharpPath = toWindowsLongPathIfNeeded(imagePath);
-
-      // 1. 32x32 크기로 리사이즈 (DCT를 위한 충분한 데이터)
-      // 2. 그레이스케일 변환
-      // 3. Raw 픽셀 데이터 추출
-      const { data } = await sharp(sharpPath)
-        .resize(32, 32, { fit: 'fill' })
-        .greyscale()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-
-      if (data.length !== 1024) {
-        throw new Error(`Unexpected pixel data length: ${data.length}`);
-      }
-
-      // 픽셀 데이터를 32x32 행렬로 변환
-      const matrix: number[][] = [];
-      for (let i = 0; i < 32; i++) {
-        matrix[i] = [];
-        for (let j = 0; j < 32; j++) {
-          matrix[i][j] = data[i * 32 + j];
-        }
-      }
-
-      // DCT 변환 적용
-      const dctMatrix = this.applyDCT(matrix);
-
-      // 좌상단 8x8 저주파 영역 추출 (DC 성분 제외)
-      const lowFreq: number[] = [];
-      for (let i = 0; i < 8; i++) {
-        for (let j = 0; j < 8; j++) {
-          lowFreq.push(dctMatrix[i][j]);
-        }
-      }
-
-      // 중간값(median) 계산
-      const sorted = [...lowFreq].sort((a, b) => a - b);
-      const median = sorted[Math.floor(sorted.length / 2)];
-
-      // 각 값이 중간값보다 큰지 비교하여 비트 생성
-      let hash = '';
-      for (let i = 0; i < lowFreq.length; i++) {
-        hash += lowFreq[i] > median ? '1' : '0';
-      }
-
-      // 64비트 이진 문자열을 16진수로 변환
-      return this.binaryToHex(hash);
-    } catch (error) {
-      console.error('Failed to generate perceptual hash:', error);
-      throw new Error(`Perceptual hash generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * 색상 히스토그램 생성
-   * RGB 각 채널의 분포를 분석
-   */
-  static async generateColorHistogram(imagePath: string): Promise<ColorHistogram> {
-    try {
-      const sharpPath = toWindowsLongPathIfNeeded(imagePath);
-
-      // 이미지를 32x32로 리사이즈 (성능과 정확도의 균형)
-      const { data } = await sharp(sharpPath)
-        .resize(32, 32, { fit: 'fill' })
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-
-      // RGB 히스토그램 초기화 (각 채널 256개 구간)
-      const histogram: ColorHistogram = {
-        r: new Array(256).fill(0),
-        g: new Array(256).fill(0),
-        b: new Array(256).fill(0)
-      };
-
-      // 픽셀 데이터를 순회하며 히스토그램 생성
-      for (let i = 0; i < data.length; i += 3) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-
-        histogram.r[r]++;
-        histogram.g[g]++;
-        histogram.b[b]++;
-      }
-
-      // 정규화 (0-1 범위로)
-      const totalPixels = (32 * 32);
-      for (let i = 0; i < 256; i++) {
-        histogram.r[i] /= totalPixels;
-        histogram.g[i] /= totalPixels;
-        histogram.b[i] /= totalPixels;
-      }
-
-      return this.withColorDescriptor(histogram);
-    } catch (error) {
-      console.error('Failed to generate color histogram:', error);
-      throw new Error(`Color histogram generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
    * Hamming Distance 계산
    * 두 해시 간의 비트 차이 개수
    */
@@ -472,69 +365,6 @@ export class ImageSimilarityService {
     }
   }
 
-  /**
-   * Difference Hash (dHash) 생성
-   * 9x8 그리드에서 수평 그래디언트 계산
-   * 회전 및 밝기 변화에 강함
-   */
-  static async generateDHash(imagePath: string): Promise<string> {
-    try {
-      const sharpPath = toWindowsLongPathIfNeeded(imagePath);
-
-      // 9x8 크기로 리사이즈 (수평 차이를 위해 가로 1픽셀 더 필요)
-      const { data } = await sharp(sharpPath)
-        .resize(9, 8, { fit: 'fill' })
-        .greyscale()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-
-      if (data.length !== 72) {
-        throw new Error(`Unexpected pixel data length: ${data.length}`);
-      }
-
-      return this.buildDHashFromBuffer(data);
-    } catch (error) {
-      console.error('Failed to generate dHash:', error);
-      throw new Error(`dHash generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  /**
-   * Average Hash (aHash) 생성
-   * 8x8 그레이스케일의 평균값 기반
-   * 가장 빠르고 단순한 해시
-   */
-  static async generateAHash(imagePath: string): Promise<string> {
-    try {
-      const sharpPath = toWindowsLongPathIfNeeded(imagePath);
-
-      const { data } = await sharp(sharpPath)
-        .resize(8, 8, { fit: 'fill' })
-        .greyscale()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-
-      if (data.length !== 64) {
-        throw new Error(`Unexpected pixel data length: ${data.length}`);
-      }
-
-      // 평균값 계산
-      const average = data.reduce((sum, val) => sum + val, 0) / data.length;
-
-      // 비트 생성
-      let hash = '';
-      for (let i = 0; i < data.length; i++) {
-        hash += data[i] > average ? '1' : '0';
-      }
-
-      // 64비트 이진 문자열을 16진수로 변환
-      return this.binaryToHex(hash);
-    } catch (error) {
-      console.error('Failed to generate aHash:', error);
-      throw new Error(`aHash generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
   /** Canonical composite hashes from the existing 32x32 and 9x8 grayscale buffers. */
   private static buildCompositeHashes(grayBuffer: Buffer, dHashBuffer: Buffer) {
     // 2. Perceptual Hash 계산 (버퍼 기반)
@@ -654,18 +484,16 @@ export class ImageSimilarityService {
   }
 
   /**
-   * 복합 해시 및 컬러 히스토그램 동시 생성 - 최적화 버전
-   * 단일 sharp 인스턴스를 clone()해 파생 파이프라인 생성 (원본 메타데이터 포함)
+   * 복합 해시(pHash/dHash/aHash)와 원본 크기. 정체성 판정과 중복 확인에 필요한 전부라, 중복이면 히스토그램 디코드를 건너뛸 수 있다.
    * @param sourceImage 재사용할 sharp 인스턴스 (없으면 imagePath로 생성)
    */
-  static async generateHashAndHistogram(imagePath: string, sourceImage?: Sharp): Promise<{
+  static async generateImageHashes(imagePath: string, sourceImage?: Sharp): Promise<{
     hashes: {
       compositeHash: string;
       perceptualHash: string;
       dHash: string;
       aHash: string;
     };
-    colorHistogram: ColorHistogram;
     metadata: {
       width: number | null;
       height: number | null;
@@ -673,9 +501,7 @@ export class ImageSimilarityService {
   }> {
     try {
       const source = sourceImage ?? sharp(toWindowsLongPathIfNeeded(imagePath));
-
-      // 병렬 처리: 원본 메타데이터 + 그레이스케일 해시 + RGB 히스토그램
-      const [imageMetadata, grayBuffer, dHashBuffer, rgbBuffer] = await Promise.all([
+      const [imageMetadata, grayBuffer, dHashBuffer] = await Promise.all([
         source.metadata(),
         // 1. 32x32 그레이스케일 버퍼 (pHash/aHash용)
         source.clone()
@@ -689,23 +515,36 @@ export class ImageSimilarityService {
           .greyscale()
           .raw()
           .toBuffer(),
-        // 3. 32x32 RGB 버퍼 (히스토그램/descriptor용)
-        source.clone()
-          .resize(32, 32, { fit: 'fill' })
-          .removeAlpha()  // 알파 채널 제거하여 RGB 강제 변환
-          .toColourspace('srgb')  // RGB 색공간 명시
-          .raw()
-          .toBuffer()
       ]);
 
-      // === 해시 계산 (그레이스케일 버퍼 기반) ===
       if (grayBuffer.length !== 1024) {
         throw new Error(`Unexpected grayscale buffer length: ${grayBuffer.length}`);
       }
 
-      const hashes = this.buildCompositeHashes(grayBuffer, dHashBuffer);
+      return {
+        hashes: this.buildCompositeHashes(grayBuffer, dHashBuffer),
+        metadata: {
+          width: imageMetadata.width ?? null,
+          height: imageMetadata.height ?? null
+        }
+      };
+    } catch (error) {
+      console.error('Failed to generate image hashes:', error);
+      throw new Error(`Hash generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
 
-      // === 색상 히스토그램 계산 (RGB 버퍼 기반) ===
+  /** 32x32 RGB 색상 히스토그램(descriptor 포함). 색상 유사도 검색용. */
+  static async generateColorHistogram(imagePath: string, sourceImage?: Sharp): Promise<ColorHistogram> {
+    try {
+      const source = sourceImage ?? sharp(toWindowsLongPathIfNeeded(imagePath));
+      const rgbBuffer = await source.clone()
+        .resize(32, 32, { fit: 'fill' })
+        .removeAlpha()  // 알파 채널 제거하여 RGB 강제 변환
+        .toColourspace('srgb')  // RGB 색공간 명시
+        .raw()
+        .toBuffer();
+
       if (rgbBuffer.length !== 3072) {
         throw new Error(`Unexpected RGB buffer length: ${rgbBuffer.length}`);
       }
@@ -734,16 +573,39 @@ export class ImageSimilarityService {
         histogram.b[i] /= totalPixels;
       }
 
-      return {
-        hashes,
-        colorHistogram: this.withColorDescriptor(histogram),
-        metadata: {
-          width: imageMetadata.width ?? null,
-          height: imageMetadata.height ?? null
-        }
-      };
+      return this.withColorDescriptor(histogram);
     } catch (error) {
-      console.error('Failed to generate hash and histogram:', error);
+      console.error('Failed to generate color histogram:', error);
+      throw new Error(`Histogram generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * 복합 해시 및 컬러 히스토그램 동시 생성
+   * 단일 sharp 인스턴스를 clone()해 파생 파이프라인 생성 (원본 메타데이터 포함)
+   * @param sourceImage 재사용할 sharp 인스턴스 (없으면 imagePath로 생성)
+   */
+  static async generateHashAndHistogram(imagePath: string, sourceImage?: Sharp): Promise<{
+    hashes: {
+      compositeHash: string;
+      perceptualHash: string;
+      dHash: string;
+      aHash: string;
+    };
+    colorHistogram: ColorHistogram;
+    metadata: {
+      width: number | null;
+      height: number | null;
+    };
+  }> {
+    try {
+      const source = sourceImage ?? sharp(toWindowsLongPathIfNeeded(imagePath));
+      const [generated, colorHistogram] = await Promise.all([
+        this.generateImageHashes(imagePath, source),
+        this.generateColorHistogram(imagePath, source),
+      ]);
+      return { ...generated, colorHistogram };
+    } catch (error) {
       throw new Error(`Hash and histogram generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

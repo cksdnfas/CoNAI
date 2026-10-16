@@ -145,7 +145,7 @@ router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Respon
       return;
     }
 
-    const originalPath = getExistingActiveFilePathOrBlock(res, file, {
+    const originalPath = await getExistingActiveFilePathOrBlock(res, file, {
       missingError: 'File not found on disk',
       warnMessage: `[ImageServe] File missing on disk during raw file access: ${resolveUploadsPath(file.original_file_path)}`,
     });
@@ -162,7 +162,7 @@ router.get('/:compositeHash/file', asyncHandler(async (req: Request, res: Respon
         res.status(404).json({ success: false, error: 'Optimized video is unavailable' });
         return;
       }
-      streamRangeFile(req, res, optimizedPath || originalPath, optimizedPath ? 'video/mp4' : mimeType);
+      await streamRangeFile(req, res, optimizedPath || originalPath, optimizedPath ? 'video/mp4' : mimeType);
       return;
     }
 

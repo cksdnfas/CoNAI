@@ -27,7 +27,7 @@ export class MetadataExtractor {
     const fileExt = path.extname(filePath).toLowerCase();
     const buffer = await fs.promises.readFile(filePath);
     const rawData = await this.extractRawData(buffer, filePath, fileExt);
-    const metadata = await this.extractMetadata(filePath);
+    const metadata = await this.extractMetadata(filePath, buffer);
 
     return {
       metadata,
@@ -38,20 +38,23 @@ export class MetadataExtractor {
   /**
    * Extract metadata from image file (primary + secondary extraction)
    * @param filePath - Image file path
+   * @param preloaded - The file's bytes when the caller already read them
    * @returns ImageMetadata
    */
-  static async extractMetadata(filePath: string): Promise<ImageMetadata> {
+  static async extractMetadata(filePath: string, preloaded?: Buffer): Promise<ImageMetadata> {
     const startTime = Date.now();
     const fileName = path.basename(filePath);
     logger.debug(`⏱️ [MetadataExtractor] Starting extraction: ${fileName}`);
 
     try {
       // 파일 접근 권한 체크 (존재 여부 + 읽기 권한)
-      try {
-        await assertFileReadable(filePath);
-      } catch (error) {
-        // 파일 접근 오류 - 재시도 가능한 오류로 throw
-        throw MetadataExtractionError.fromNodeError(filePath, error as NodeJS.ErrnoException);
+      if (!preloaded) {
+        try {
+          await assertFileReadable(filePath);
+        } catch (error) {
+          // 파일 접근 오류 - 재시도 가능한 오류로 throw
+          throw MetadataExtractionError.fromNodeError(filePath, error as NodeJS.ErrnoException);
+        }
       }
 
       const fileExt = path.extname(filePath).toLowerCase();
@@ -59,7 +62,7 @@ export class MetadataExtractor {
       const readStart = Date.now();
       let buffer: Buffer;
       try {
-        buffer = await fs.promises.readFile(filePath);
+        buffer = preloaded ?? await fs.promises.readFile(filePath);
       } catch (error) {
         // 파일 읽기 오류 - 권한 또는 접근 오류
         throw MetadataExtractionError.fromNodeError(filePath, error as NodeJS.ErrnoException);
@@ -124,16 +127,8 @@ export class MetadataExtractor {
 
                 // 2차 추출 (Secondary extraction - Stealth PNG Info)
                 const secondaryStart = Date.now();
+                // fast 와 full 은 같은 픽셀을 읽는다(시그니처는 처음 120픽셀 안에서 판정): 재시도는 전체 디코드만 한 번 더 한다.
                 aiInfo = await this.secondaryExtraction(buffer, aiInfo, metadataSettings.stealthScanMode);
-
-                // Fast Scan 실패 시 Full Scan 자동 재시도
-                // 프론트엔드는 항상 Full Scan을 수행하므로, 백엔드도 동일한 정확도를 보장해야 함
-                const hasStealthPrompt = Boolean(aiInfo.prompt || aiInfo.positive_prompt);
-
-                if (!hasStealthPrompt && metadataSettings.stealthScanMode === 'fast') {
-                  console.log('⚠️ [MetadataExtractor] Fast scan failed to find prompt - retrying with FULL scan');
-                  aiInfo = await this.secondaryExtraction(buffer, aiInfo, 'full');
-                }
 
                 logger.debug(`⏱️ [MetadataExtractor] Secondary extraction: ${Date.now() - secondaryStart}ms`);
 
@@ -148,13 +143,6 @@ export class MetadataExtractor {
 
               const secondaryStart = Date.now();
               aiInfo = await this.secondaryExtraction(buffer, aiInfo, metadataSettings.stealthScanMode);
-
-              // Fast Scan 실패 시 Full Scan 자동 재시도
-              const hasStealthPrompt = Boolean(aiInfo.prompt || aiInfo.positive_prompt);
-              if (!hasStealthPrompt && metadataSettings.stealthScanMode === 'fast') {
-                console.log('⚠️ [MetadataExtractor] Fast scan failed to find prompt - retrying with FULL scan');
-                aiInfo = await this.secondaryExtraction(buffer, aiInfo, 'full');
-              }
 
               logger.debug(`⏱️ [MetadataExtractor] Secondary extraction: ${Date.now() - secondaryStart}ms`);
             }

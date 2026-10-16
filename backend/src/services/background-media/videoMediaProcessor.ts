@@ -42,7 +42,7 @@ export async function generateVideoPosterFrame(
 
     db.prepare(`
       UPDATE media_metadata
-      SET thumbnail_path = ?
+      SET thumbnail_path = ?, metadata_updated_date = CURRENT_TIMESTAMP
       WHERE composite_hash = ?
     `).run(thumbnailPath, compositeHash);
     return completedStage('poster');

@@ -151,6 +151,8 @@ router.get('/:id/view', asyncHandler(async (req, res, next) => {
   res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(entry.name)}`);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', 'sandbox');
+  // Revalidated (ETag/304) instead of no-store, so reopening a video or image does not download it again.
+  res.setHeader('Cache-Control', 'private, no-cache');
   res.sendFile(filePath, { dotfiles: 'allow' }, (error) => {
     if (!error || res.headersSent) return;
     if ((error as { status?: number }).status === 416) {

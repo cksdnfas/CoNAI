@@ -41,7 +41,6 @@ interface ActiveFolderFileRow {
  * 통합 서비스:
  * - FileDiscoveryService: 파일 발견 및 스캔
  * - FastRegistrationService: 빠른 등록
- * - HashGenerationService: 해시 생성 (Phase 2)
  * - ThumbnailGenerationService: 썸네일 생성 (Phase 2)
  * - ScanProgressTracker: 진행률 추적
  * - DuplicateDetectionService: 중복 감지
@@ -524,7 +523,6 @@ export class FolderScanService {
 // Export all sub-services for direct access if needed
 export { FileDiscoveryService } from './fileDiscoveryService';
 export { FastRegistrationService } from './fastRegistrationService';
-export { HashGenerationService } from './hashGenerationService';
 export { ThumbnailGenerationService } from './thumbnailGenerationService';
 export { ScanProgressTracker } from './scanProgressTracker';
 export { DuplicateDetectionService } from './duplicateDetectionService';

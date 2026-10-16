@@ -158,7 +158,7 @@ export async function getActiveFileOrBlock(res: Response, compositeHash: string,
 }
 
 /** Resolve the active file path and mark the DB row missing when the file disappeared on disk. */
-export function getExistingActiveFilePathOrBlock(
+export async function getExistingActiveFilePathOrBlock(
   res: Response,
   file: ImageFileRecord,
   options: {
@@ -168,7 +168,7 @@ export function getExistingActiveFilePathOrBlock(
 ) {
   const filePath = resolveUploadsPath(file.original_file_path);
 
-  if (!fs.existsSync(filePath)) {
+  if (!await pathExists(filePath)) {
     if (options.warnMessage) {
       console.warn(options.warnMessage);
     }
@@ -188,13 +188,18 @@ export function getExistingActiveFilePathOrBlock(
 }
 
 /** Resolve the on-disk thumbnail for one metadata row, or null when it is absent. */
-function resolveExistingThumbnailPath(metadata: Pick<ImageMetadataRecord, 'thumbnail_path'>): string | null {
+async function resolveExistingThumbnailPath(metadata: Pick<ImageMetadataRecord, 'thumbnail_path'>): Promise<string | null> {
   if (!metadata.thumbnail_path) {
     return null;
   }
 
   const thumbnailPath = path.join(runtimePaths.tempDir, metadata.thumbnail_path);
-  return fs.existsSync(thumbnailPath) ? thumbnailPath : null;
+  return await pathExists(thumbnailPath) ? thumbnailPath : null;
+}
+
+/** Existence check off the event loop: these run once per thumbnail or file request. */
+function pathExists(filePath: string): Promise<boolean> {
+  return fs.promises.access(filePath).then(() => true, () => false);
 }
 
 /**
@@ -223,13 +228,13 @@ export async function serveThumbnailOrOriginal(
   const isTimeBasedMedia = (mimeType && mimeType.startsWith('video/')) || fileType === 'animated';
 
   if (isTimeBasedMedia) {
-    const posterPath = resolveExistingThumbnailPath(metadata);
+    const posterPath = await resolveExistingThumbnailPath(metadata);
     if (posterPath) {
       await streamCacheableFile(req, res, posterPath, 'image/webp');
       return;
     }
 
-    const originalPath = getExistingActiveFilePathOrBlock(res, file, {
+    const originalPath = await getExistingActiveFilePathOrBlock(res, file, {
       missingError: 'Video file not found',
       warnMessage: `[ImageServe] Video file missing on disk: ${resolveUploadsPath(file.original_file_path)}`,
     });
@@ -241,14 +246,14 @@ export async function serveThumbnailOrOriginal(
     // No poster yet: answer from the original this once and build the poster in the
     // background so the next request costs a few KB instead of the whole file.
     requestVideoPoster(compositeHash, originalPath);
-    streamRangeFile(req, res, originalPath, mimeType);
+    await streamRangeFile(req, res, originalPath, mimeType);
     return;
   }
 
-  const thumbnailPath = resolveExistingThumbnailPath(metadata);
+  const thumbnailPath = await resolveExistingThumbnailPath(metadata);
 
   if (!thumbnailPath) {
-    const originalPath = getExistingActiveFilePathOrBlock(res, file, {
+    const originalPath = await getExistingActiveFilePathOrBlock(res, file, {
       missingError: 'Thumbnail and original file not found',
       warnMessage: `[ImageServe] Both thumbnail and original missing: ${file.original_file_path}`,
     });

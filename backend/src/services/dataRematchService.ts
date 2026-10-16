@@ -4,7 +4,7 @@ import path from 'path';
 import sharp from 'sharp';
 import { db } from '../database/init';
 import { getUserSettingsDb } from '../database/userSettingsDb';
-import { resolveUploadsPath } from '../config/runtimePaths';
+import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths';
 import { ImageSimilarityService } from './imageSimilarity';
 import { AutoTagIndexService, MEDIA_ROW_ID_COLUMN } from './autoTagIndexService';
 import { MediaImageFeaturesModel } from '../models/Image/MediaImageFeaturesModel';
@@ -548,6 +548,13 @@ export class DataRematchService {
     }
   }
 
+  /** The stored thumbnail of an existing media row, when its file is still on disk. */
+  private static async existingThumbnailPath(compositeHash: string): Promise<string | null> {
+    const row = db.prepare('SELECT thumbnail_path FROM media_metadata WHERE composite_hash = ?').get(compositeHash) as { thumbnail_path: string | null } | undefined;
+    if (!row?.thumbnail_path) return null;
+    return fs.promises.access(path.join(runtimePaths.tempDir, row.thumbnail_path)).then(() => row.thumbnail_path, () => null);
+  }
+
   private static async buildHashPayload(fileType: DataRematchSupportedFileType, fullPath: string): Promise<HashBuildPayload> {
     const sharpMetadata = await sharp(toWindowsLongPathIfNeeded(fullPath)).metadata();
     const width = sharpMetadata.width ?? null;
@@ -571,7 +578,9 @@ export class DataRematchService {
     const { hashes: perceptual, colorHistogram } = await ImageSimilarityService.generateHashAndHistogram(fullPath);
     const { compositeHash: identityHash } = await resolveImageIdentity({ filePath: fullPath, perceptualCompositeHash: perceptual.compositeHash });
     const hashes = { ...perceptual, compositeHash: identityHash };
-    const thumbnailPath = await ThumbnailGenerator.generateThumbnail(fullPath, hashes.compositeHash);
+    // A known image keeps its thumbnail; generating one again would leave a copy under today's date folder.
+    const thumbnailPath = await this.existingThumbnailPath(hashes.compositeHash)
+      ?? await ThumbnailGenerator.generateThumbnail(fullPath, hashes.compositeHash);
     return {
       compositeHash: hashes.compositeHash,
       perceptualHash: hashes.perceptualHash,

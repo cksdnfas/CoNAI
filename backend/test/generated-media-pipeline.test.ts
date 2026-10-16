@@ -60,7 +60,7 @@ test('generated previews precede enrichment and video copies preserve the origin
       await barrier;
       return { ai_info: {}, extractedAt: new Date().toISOString() };
     });
-    const hashes = t.mock.method(ImageSimilarityService, 'generateHashAndHistogram');
+    const hashes = t.mock.method(ImageSimilarityService, 'generateImageHashes');
     const historyId = await GenerationHistoryService.createNAIHistory({ model: 'test' });
     try {
       const buffer = await sharp({ create: { width: 32, height: 32, channels: 4, background: '#345678' } }).png().toBuffer();

@@ -3,10 +3,11 @@ import fs from 'fs';
 import { spawn } from 'child_process';
 import sharp from 'sharp';
 import ffmpegPath from 'ffmpeg-static';
+import { MediaProcessError, runMediaProcess } from '../utils/mediaProcess';
 const ffprobeStatic = require('ffprobe-static');
 import { settingsService } from './settingsService';
 import { VideoOptimizationService } from './videoOptimizationService';
-import { generateFileHash } from '../utils/fileHash';
+import { copyFileWithHash, generateBufferHash, generateFileHash } from '../utils/fileHash';
 import { getDateFolder, generateUniqueOriginalFilename, normalizeRelativePath } from '../utils/mediaStoragePaths';
 
 export interface VideoMetadata {
@@ -109,87 +110,79 @@ export class VideoProcessor {
    * FFmpeg 사용 여부 확인
    */
   static async checkFFmpegAvailable(): Promise<boolean> {
-    return new Promise((resolve) => {
+    // The binary does not change while the process runs: remember a success, and let a failure be asked again.
+    this.ffmpegAvailable ??= new Promise<boolean>((resolve) => {
       const ffmpegCmd = this.getFFmpegPath();
       const ffmpeg = spawn(ffmpegCmd, ['-version']);
       ffmpeg.on('error', () => resolve(false));
       ffmpeg.on('close', (code) => resolve(code === 0));
+    }).then((available) => {
+      if (!available) this.ffmpegAvailable = null;
+      return available;
     });
+    return this.ffmpegAvailable;
   }
+
+  private static ffmpegAvailable: Promise<boolean> | null = null;
 
   /**
    * FFprobe를 사용하여 동영상 메타데이터 추출
    */
   static async extractMetadata(filePath: string): Promise<VideoMetadata> {
-    return new Promise((resolve, reject) => {
-      const ffprobeCmd = this.getFFprobePath();
-      const ffprobe = spawn(ffprobeCmd, [
+    // Files users put in: local protocols only, and given up on after 30 seconds instead of hanging the queue.
+    let stdout: string;
+    try {
+      stdout = (await runMediaProcess([this.getFFprobePath()], [
         '-v', 'quiet',
+        '-protocol_whitelist', 'file,pipe',
         '-print_format', 'json',
         '-show_format',
         '-show_streams',
         filePath
-      ]);
+      ], { timeoutMs: 30_000 })).stdout.toString('utf8');
+    } catch (error) {
+      if (error instanceof MediaProcessError) {
+        throw new Error(error.reason === 'exit'
+          ? `FFprobe failed with code ${error.exitCode}: ${error.stderr}`
+          : `FFprobe ${error.reason === 'timeout' ? 'timed out' : `failed to start: ${error.message}`}`);
+      }
+      throw error;
+    }
 
-      let stdout = '';
-      let stderr = '';
+    let data: any;
+    try {
+      data = JSON.parse(stdout);
+    } catch (error) {
+      throw new Error(`Failed to parse FFprobe output: ${error}`);
+    }
 
-      ffprobe.stdout.on('data', (data) => {
-        stdout += data.toString();
-      });
+    // 비디오 스트림 찾기
+    const videoStream = data.streams?.find((s: any) => s.codec_type === 'video');
+    // 오디오 스트림 찾기
+    const audioStream = data.streams?.find((s: any) => s.codec_type === 'audio');
 
-      ffprobe.stderr.on('data', (data) => {
-        stderr += data.toString();
-      });
+    if (!videoStream) {
+      throw new Error('No video stream found');
+    }
 
-      ffprobe.on('close', (code) => {
-        if (code !== 0) {
-          reject(new Error(`FFprobe failed with code ${code}: ${stderr}`));
-          return;
-        }
+    // FPS 계산
+    let fps = 0;
+    if (videoStream.r_frame_rate) {
+      const [num, den] = videoStream.r_frame_rate.split('/').map(Number);
+      fps = den > 0 ? num / den : 0;
+    }
 
-        try {
-          const data = JSON.parse(stdout);
-
-          // 비디오 스트림 찾기
-          const videoStream = data.streams.find((s: any) => s.codec_type === 'video');
-          // 오디오 스트림 찾기
-          const audioStream = data.streams.find((s: any) => s.codec_type === 'audio');
-
-          if (!videoStream) {
-            reject(new Error('No video stream found'));
-            return;
-          }
-
-          // FPS 계산
-          let fps = 0;
-          if (videoStream.r_frame_rate) {
-            const [num, den] = videoStream.r_frame_rate.split('/').map(Number);
-            fps = den > 0 ? num / den : 0;
-          }
-
-          const metadata: VideoMetadata = {
-            duration: parseFloat(data.format.duration) || 0,
-            width: videoStream.width || 0,
-            height: videoStream.height || 0,
-            fps: Math.round(fps * 100) / 100,
-            video_codec: videoStream.codec_name || 'unknown',
-            audio_codec: audioStream ? audioStream.codec_name : null,
-            bitrate: parseInt(data.format.bit_rate) / 1000 || 0, // kbps로 변환
-            format: data.format.format_name || 'unknown',
-            extractedAt: new Date().toISOString()
-          };
-
-          resolve(metadata);
-        } catch (error) {
-          reject(new Error(`Failed to parse FFprobe output: ${error}`));
-        }
-      });
-
-      ffprobe.on('error', (error) => {
-        reject(new Error(`Failed to spawn FFprobe: ${error.message}`));
-      });
-    });
+    return {
+      duration: parseFloat(data.format?.duration) || 0,
+      width: videoStream.width || 0,
+      height: videoStream.height || 0,
+      fps: Math.round(fps * 100) / 100,
+      video_codec: videoStream.codec_name || 'unknown',
+      audio_codec: audioStream ? audioStream.codec_name : null,
+      bitrate: parseInt(data.format?.bit_rate) / 1000 || 0, // kbps로 변환
+      format: data.format?.format_name || 'unknown',
+      extractedAt: new Date().toISOString()
+    };
   }
 
   /**
@@ -341,6 +334,8 @@ export class VideoProcessor {
       const targetBasePath = path.join(folders.originFolder, path.parse(filename).name);
       let finalPath = initialPath;
       storedFilePath = finalPath;
+      // Known while the bytes pass through unchanged; an optimized file is hashed after it is written.
+      let fileHash: string | null = null;
 
       // diskStorage: 임시 파일 사용 또는 memoryStorage 버퍼 임시 저장
       if (file.path) {
@@ -354,7 +349,7 @@ export class VideoProcessor {
           finalPath = optimizationResult.outputPath;
           storedFilePath = finalPath;
         } else {
-          await fs.promises.copyFile(file.path, finalPath);
+          fileHash = await copyFileWithHash(file.path, finalPath);
         }
       } else if (file.buffer) {
         if (shouldOptimizeVideo) {
@@ -370,6 +365,7 @@ export class VideoProcessor {
           storedFilePath = finalPath;
         } else {
           await fs.promises.writeFile(finalPath, file.buffer);
+          fileHash = generateBufferHash(file.buffer);
         }
       } else {
         throw new Error('No file data available (neither path nor buffer)');
@@ -382,7 +378,7 @@ export class VideoProcessor {
 
       // MD5 파일 해시 생성
       console.log('🔐 Generating file hash...');
-      const fileHash = await generateFileHash(finalPath);
+      fileHash ??= await generateFileHash(finalPath);
       console.log(`✅ File hash: ${fileHash}`);
 
       const finalStat = await fs.promises.stat(finalPath);

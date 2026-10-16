@@ -2,7 +2,6 @@ import path from 'path';
 import { recordPixelHash, resolveImageIdentity } from '../imageIdentityService';
 import { db } from '../../database/init';
 import { ThumbnailGenerator } from '../../utils/thumbnailGenerator';
-import { AutoCollectionService } from '../autoCollectionService';
 import { ImageSimilarityService } from '../imageSimilarity';
 import { MediaImageFeaturesModel } from '../../models/Image/MediaImageFeaturesModel';
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService';
@@ -35,7 +34,7 @@ export class ImageMediaProcessor {
     const fileName = path.basename(file.original_file_path);
     const stages: MediaProcessingStageResult[] = [];
 
-    let generated: Awaited<ReturnType<typeof ImageSimilarityService.generateHashAndHistogram>>;
+    let generated: Awaited<ReturnType<typeof ImageSimilarityService.generateImageHashes>>;
     let sourceImage: Awaited<ReturnType<typeof ImageSimilarityService.createSharedSourceImage>>;
     try {
       sourceImage = await ImageSimilarityService.createSharedSourceImage(
@@ -47,7 +46,8 @@ export class ImageMediaProcessor {
     }
 
     try {
-      generated = await ImageSimilarityService.generateHashAndHistogram(
+      // The colour histogram is only needed for a new row; a duplicate stops before it is decoded.
+      generated = await ImageSimilarityService.generateImageHashes(
         file.original_file_path,
         sourceImage,
       );
@@ -65,7 +65,7 @@ export class ImageMediaProcessor {
       return stoppedFileProcessing(failedStage('image-hash', error, true), stages, { cause: error });
     }
 
-    const { colorHistogram, metadata: imageInfo } = generated;
+    const { metadata: imageInfo } = generated;
     // Identity is pixel-exact; the perceptual hashes stay on the row for similarity search.
     let identity: Awaited<ReturnType<typeof resolveImageIdentity>>;
     try {
@@ -128,12 +128,16 @@ export class ImageMediaProcessor {
     }
 
     let thumbnailPath: string;
+    let colorHistogram: Awaited<ReturnType<typeof ImageSimilarityService.generateColorHistogram>>;
     try {
-      thumbnailPath = await ThumbnailGenerator.generateThumbnail(
-        file.original_file_path,
-        hashes.compositeHash,
-        sourceImage,
-      );
+      [thumbnailPath, colorHistogram] = await Promise.all([
+        ThumbnailGenerator.generateThumbnail(
+          file.original_file_path,
+          hashes.compositeHash,
+          sourceImage,
+        ),
+        ImageSimilarityService.generateColorHistogram(file.original_file_path, sourceImage),
+      ]);
       stages.push(completedStage('thumbnail'));
     } catch (error) {
       return stoppedFileProcessing(failedStage('thumbnail', error, true), stages, {
@@ -190,24 +194,9 @@ export class ImageMediaProcessor {
       });
     }
 
+    // Auto-collection runs once, after metadata extraction (BackgroundQueueService.extractAndPersistMetadata), where
+    // every condition — prompts and model included — can match; running it here as well only repeated the work.
     if (options.metadataMode !== 'background') {
-      try {
-        console.log('  🔍 Running auto-collection (after hash generation)...');
-        const autoCollectResults = await AutoCollectionService.runAutoCollectionForNewImage(
-          hashes.compositeHash,
-        );
-        if (autoCollectResults.length > 0) {
-          console.log(`  ✅ Auto-assigned to ${autoCollectResults.length} group(s)`);
-        }
-        stages.push(completedStage('auto-collection'));
-      } catch (autoCollectError) {
-        console.warn(
-          `  ⚠️  Auto-collection failed (non-critical) for ${fileName}:`,
-          autoCollectError instanceof Error ? autoCollectError.message : autoCollectError,
-        );
-        stages.push(failedStage('auto-collection', autoCollectError, false));
-      }
-
       stages.push(await MediaPostprocessCoordinator.processApiGenerationGroupAssignment(hashes.compositeHash));
     }
     stages.push(await MediaPostprocessCoordinator.extractMetadataForProcessedMedia(

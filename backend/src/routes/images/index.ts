@@ -7,7 +7,6 @@ import { similarityRoutes } from './similarity.routes';
 import { semanticImageRoutes } from './semantic.routes';
 import complexSearchRoutes from './complex-search.routes';
 import metadataRoutes from './metadata.routes';
-import hashRoutes from './hash.routes';
 import promptSimilarityRoutes from './prompt-similarity.routes';
 import { batchResizeRoutes } from './batch-resize.routes';
 import { logger } from '../../utils/logger';
@@ -34,8 +33,6 @@ router.use('/', semanticImageRoutes);
 router.use('/metadata', metadataRoutes);
 
 // Hash generation routes (안전장치: 해시 생성)
-router.use('/generate-hash', requireImageAction('images.edit'));
-router.use('/', hashRoutes);
 
 // Prompt similarity routes
 router.use('/prompt-similarity', (req, res, next) => req.method === 'POST'

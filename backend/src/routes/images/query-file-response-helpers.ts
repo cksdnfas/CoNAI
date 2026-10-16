@@ -6,6 +6,9 @@ import { routeParam } from '../routeParam';
 // Thumbnails and media keep stable URLs across in-place regeneration, so clients
 // must revalidate via the ETag/Last-Modified validators instead of caching forever.
 const FILE_CACHE_CONTROL = 'private, no-cache';
+// A `?v=` URL names one version of the file (the row's metadata_updated_date): it never changes under that URL,
+// so the browser keeps it without asking again.
+const VERSIONED_FILE_CACHE_CONTROL = 'private, max-age=31536000, immutable';
 
 /** Build a stable ETag from file mtime and size. */
 function generateETag(stats: fs.Stats): string {
@@ -82,10 +85,12 @@ function shouldHonorRangeRequest(req: Request, stats: fs.Stats, etag: string) {
 }
 
 function setFileCacheHeaders(
+  req: Request,
   res: Response,
   validators: ReturnType<typeof getFileCacheValidators>,
 ) {
-  res.setHeader('Cache-Control', FILE_CACHE_CONTROL);
+  const version = req.query?.v;
+  res.setHeader('Cache-Control', typeof version === 'string' && version.length > 0 ? VERSIONED_FILE_CACHE_CONTROL : FILE_CACHE_CONTROL);
   res.setHeader('ETag', validators.etag);
   res.setHeader('Last-Modified', validators.lastModified);
 }
@@ -148,8 +153,8 @@ export function getCompositeHashOrBlock(req: Request, res: Response) {
 }
 
 /** Stream a video-like file with range support and revalidated caching headers. */
-export function streamRangeFile(req: Request, res: Response, filePath: string, mimeType: string) {
-  const stats = fs.statSync(filePath);
+export async function streamRangeFile(req: Request, res: Response, filePath: string, mimeType: string) {
+  const stats = await fs.promises.stat(filePath);
   const fileSize = stats.size;
   const validators = getFileCacheValidators(stats);
   const { etag } = validators;
@@ -157,7 +162,7 @@ export function streamRangeFile(req: Request, res: Response, filePath: string, m
 
   res.setHeader('Content-Type', mimeType);
   res.setHeader('Accept-Ranges', 'bytes');
-  setFileCacheHeaders(res, validators);
+  setFileCacheHeaders(req, res, validators);
 
   if (!range) {
     if (shouldReturnNotModified(req, stats, etag)) {
@@ -234,7 +239,7 @@ export async function streamCacheableFile(
   const { etag } = validators;
   const isNotModified = shouldReturnNotModified(req, stats, etag);
 
-  setFileCacheHeaders(res, validators);
+  setFileCacheHeaders(req, res, validators);
 
   if (isNotModified) {
     res.status(304).end();

@@ -75,6 +75,10 @@ export function enrichImageRecord(image: any) {
 function buildBaseImageWithFileView(image: any) {
   const isProcessing = !image.composite_hash;
   const imageMediaBaseUrl = image.composite_hash ? `/api/images/${image.composite_hash}` : null;
+  // Every thumbnail rewrite bumps metadata_updated_date, so the versioned URL can be cached for good.
+  const thumbnailVersion = typeof image.metadata_updated_date === 'string' && image.metadata_updated_date
+    ? `?v=${encodeURIComponent(image.metadata_updated_date)}`
+    : '';
 
   return {
     ...image,
@@ -82,7 +86,7 @@ function buildBaseImageWithFileView(image: any) {
     is_processing: isProcessing,
     thumbnail_url: isProcessing
       ? `/api/images/by-path/${encodeURIComponent(image.original_file_path)}`
-      : `${imageMediaBaseUrl}/thumbnail`,
+      : `${imageMediaBaseUrl}/thumbnail${thumbnailVersion}`,
     image_url: isProcessing
       ? `/api/images/by-path/${encodeURIComponent(image.original_file_path)}`
       : `${imageMediaBaseUrl}/file`,

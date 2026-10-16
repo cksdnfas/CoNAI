@@ -58,7 +58,7 @@ export async function handleHistoryFile(req: Request, res: Response, id: string)
     return;
   }
 
-  const originalPath = getExistingActiveFilePathOrBlock(res, media.file, {
+  const originalPath = await getExistingActiveFilePathOrBlock(res, media.file, {
     missingError: 'File not found on disk',
     warnMessage: buildMissingHistoryFileWarning(media.file.original_file_path),
   });
@@ -74,7 +74,7 @@ export async function handleHistoryFile(req: Request, res: Response, id: string)
       res.status(404).json({ success: false, error: 'Optimized video is unavailable' });
       return;
     }
-    streamRangeFile(req, res, optimizedPath || originalPath, optimizedPath ? 'video/mp4' : mimeType);
+    await streamRangeFile(req, res, optimizedPath || originalPath, optimizedPath ? 'video/mp4' : mimeType);
     return;
   }
 

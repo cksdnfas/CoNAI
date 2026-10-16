@@ -45,45 +45,11 @@ export class VideoFrameExtractor {
         throw new Error(`Video file not found: ${videoPath}`);
       }
 
-      // Get video metadata for duration
-      const metadata = await VideoProcessor.extractMetadata(videoPath);
-      const duration = metadata.duration;
-
-      if (duration <= 0) {
-        throw new Error(`Invalid video duration: ${duration}s`);
-      }
-
-      console.log(`[FrameExtractor] Video duration: ${duration}s`);
-
-      // Create unique temp directory for this video (using crypto.randomUUID)
-      const tempBaseDir = await this.ensureTempDir();
-      const videoTempDir = path.join(tempBaseDir, crypto.randomUUID());
-      await fs.promises.mkdir(videoTempDir, { recursive: true });
-
-      console.log(`[FrameExtractor] Temp directory: ${videoTempDir}`);
-
-      // Calculate frame timestamps (uniformly distributed)
-      // Use positions: 1/8, 2/8, 3/8, 4/8, 5/8, 6/8, 7/8 of duration
-      const framePaths: string[] = [];
-      const extractionPromises: Promise<void>[] = [];
-
-      for (let i = 1; i <= this.FRAME_COUNT; i++) {
-        const timestamp = (duration / (this.FRAME_COUNT + 1)) * i;
-        const framePath = path.join(videoTempDir, `frame_${String(i).padStart(3, '0')}.png`);
-
-        framePaths.push(framePath);
-        extractionPromises.push(this.extractSingleFrame(videoPath, timestamp, framePath));
-      }
-
-      // Extract all frames in parallel
-      await Promise.all(extractionPromises);
-
-      // Verify all frames were created
-      for (const framePath of framePaths) {
-        if (!fs.existsSync(framePath)) {
-          throw new Error(`Failed to extract frame: ${framePath}`);
-        }
-      }
+      // One duration probe, then frames at 1/8 … 7/8 of the running time, each fit inside 1024px (the tagger
+      // looks at 448px), three ffmpeg runs at a time instead of seven full-size decodes at once.
+      const duration = await this.probeDuration(videoPath);
+      const timestamps = Array.from({ length: this.FRAME_COUNT }, (_, index) => (duration / (this.FRAME_COUNT + 1)) * (index + 1));
+      const framePaths = await this.extractAnalysisFrames(videoPath, timestamps);
 
       console.log(`[FrameExtractor] Successfully extracted ${framePaths.length} frames`);
       return framePaths;
