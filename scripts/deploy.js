@@ -83,30 +83,17 @@ async function buildPortable() {
   console.log('   4. No installation required!\n');
 }
 
+/** The image is built from the root Dockerfile (the one Coolify deploys); compose files pick CPU or GPU. */
 async function buildDocker() {
-  console.log('🐳 Building Docker Package...\n');
+  console.log('🐳 Docker image from the root Dockerfile\n');
+  console.log('  CPU: docker compose up -d --build');
+  console.log('  GPU: docker compose -f compose.gpu.yaml up -d --build\n');
 
-  execSync('npm run build:integrated', { cwd: ROOT_DIR, stdio: 'inherit' });
-  execSync('npm run build:bundle', { cwd: ROOT_DIR, stdio: 'inherit' });
-  execSync('npm run build:docker', { cwd: ROOT_DIR, stdio: 'inherit' });
-
-  console.log('\n✅ Docker build artifacts ready!\n');
-  console.log('📊 Next Steps:\n');
-  console.log('  Option 1: Deploy Immediately');
-  console.log('    cd build-output/docker');
-  console.log('    docker-compose up -d\n');
-  console.log('  Option 2: Build Image');
-  console.log('    cd build-output/docker');
-  console.log('    docker build -t conai .\n');
-  console.log('  Option 3: Use npm script');
-  console.log('    npm run deploy:docker:build\n');
-
-  const deploy = await question('Deploy now with Docker Compose? (y/n): ');
+  const deploy = await question('Build and start the CPU image with Docker Compose now? (y/n): ');
 
   if (deploy.toLowerCase() === 'y') {
     console.log('\n🚀 Deploying with Docker Compose...\n');
-    const dockerDir = path.join(BUILD_OUTPUT_DIR, 'docker');
-    execSync('docker-compose up --build -d', { cwd: dockerDir, stdio: 'inherit' });
+    execSync('docker compose up -d --build', { cwd: ROOT_DIR, stdio: 'inherit' });
     console.log('\n✅ Deployment complete!');
     console.log('🌐 Access at: http://localhost:1666\n');
   }
@@ -134,9 +121,6 @@ async function buildAll() {
   console.log('\n📦 Building Portable...');
   execSync('npm run build:portable', { cwd: ROOT_DIR, stdio: 'inherit' });
 
-  console.log('\n🐳 Building Docker...');
-  execSync('npm run build:docker', { cwd: ROOT_DIR, stdio: 'inherit' });
-
   console.log('\n⚡ Building SEA...');
   execSync('npm run build:sea', { cwd: ROOT_DIR, stdio: 'inherit' });
 
@@ -144,18 +128,16 @@ async function buildAll() {
   console.log('📁 Build Output Structure:');
   console.log('   build-output/');
   console.log('   ├── portable/    (Standalone package)');
-  console.log('   ├── docker/      (Docker deployment)');
-  console.log('   └── sea/         (Single executable)\n');
+  console.log('   └── sea/         (Single executable)');
+  console.log('   Docker images build from the root Dockerfile (docker compose up -d --build).\n');
 
   const portableSize = getDirectorySize(path.join(BUILD_OUTPUT_DIR, 'portable'));
-  const dockerSize = getDirectorySize(path.join(BUILD_OUTPUT_DIR, 'docker'));
   const seaSize = getDirectorySize(path.join(BUILD_OUTPUT_DIR, 'sea'));
 
   console.log('📊 Size Summary:');
   console.log(`   Portable: ${(portableSize / 1024 / 1024).toFixed(2)} MB`);
-  console.log(`   Docker:   ${(dockerSize / 1024 / 1024).toFixed(2)} MB`);
   console.log(`   SEA:      ${(seaSize / 1024 / 1024).toFixed(2)} MB`);
-  console.log(`   Total:    ${((portableSize + dockerSize + seaSize) / 1024 / 1024).toFixed(2)} MB\n`);
+  console.log(`   Total:    ${((portableSize + seaSize) / 1024 / 1024).toFixed(2)} MB\n`);
 }
 
 function getDirectorySize(dirPath) {

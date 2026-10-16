@@ -38,7 +38,8 @@ function manualChunks(id: string) {
     return 'xyflow'
   }
 
-  if (id.includes('react-router-dom')) {
+  // react-router-dom only re-exports react-router (v7), so the core package has to match as well.
+  if (/[/\\]node_modules[/\\]react-router(?:-dom)?[/\\]/.test(id)) {
     return 'router'
   }
 
@@ -76,11 +77,11 @@ export default defineConfig(({ command, mode }) => {
       alias: {
         '@': path.resolve(__dirname, './src'),
         '@pdfjs': path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json')),
+        // Bundle the shared workspace from source: no separate CommonJS build to keep in step, and unused exports shake out.
+        '@conai/shared': path.resolve(__dirname, '../shared/src/index.ts'),
       },
       dedupe: ['react', 'react-dom'],
     },
-    // The linked shared workspace publishes CommonJS; dev pages need its named exports prebundled.
-    optimizeDeps: { include: ['@conai/shared'] },
     build: {
       chunkSizeWarningLimit: 550,
       rollupOptions: {

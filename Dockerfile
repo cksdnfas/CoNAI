@@ -24,6 +24,11 @@ RUN npm pkg delete devDependencies.lightningcss-win32-x64-msvc \
   && NODE_ENV=development npm install --include=dev --no-audit --no-fund lightningcss-linux-x64-gnu@1.32.0 \
   && npm run build:integrated
 
+# The server loads only backend and shared production packages; the build stage also holds every workspace's tooling
+# (vite, tsc, tailwind, the frontend's editor libraries…), which used to ship in the image.
+FROM build AS prod-deps
+RUN rm -rf node_modules backend/node_modules shared/node_modules frontend/node_modules backend/test   && npm install --omit=dev --no-audit --no-fund --workspace backend --workspace shared --include-workspace-root
+
 FROM node:24-bookworm-slim AS runtime-base
 
 WORKDIR /app/backend
@@ -50,10 +55,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN npm install -g --no-audit --no-fund @openai/codex
 RUN npm install -g --no-audit --no-fund @anthropic-ai/claude-code
 
-COPY --from=build /app/package*.json /app/
-COPY --from=build /app/node_modules /app/node_modules
-COPY --from=build /app/shared /app/shared
-COPY --from=build /app/backend /app/backend
+COPY --from=prod-deps /app/package*.json /app/
+COPY --from=prod-deps /app/node_modules /app/node_modules
+COPY --from=prod-deps /app/shared /app/shared
+COPY --from=prod-deps /app/backend /app/backend
 # User guides the chat and MCP read with get_app_guide (backend/src/services/appGuides.ts).
 COPY --from=build /app/docs/GUIDE /app/docs/GUIDE
 

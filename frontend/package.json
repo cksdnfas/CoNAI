@@ -4,9 +4,7 @@
   "version": "26.10.10",
   "type": "module",
   "scripts": {
-    "predev": "npm run build --prefix ../shared",
     "dev": "vite",
-    "prebuild": "npm run build --prefix ../shared",
     "build": "node scripts/build-production.mjs",
     "build:compiler-off": "node scripts/build-production.mjs --compiler=off",
     "build:compiler-on": "node scripts/build-production.mjs --compiler=on",

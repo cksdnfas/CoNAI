@@ -94,8 +94,8 @@ npm run docs:build
 | `npm run build` | 일반 전체 빌드 |
 | `npm run build:integrated` | 통합 빌드 |
 | `npm run build:portable` | 포터블 패키지 생성 |
-| `npm run build:docker` | Docker 패키지 생성 (루트 `Dockerfile` 사용법은 [Docker로 실행](./DOCKER.md)) |
-| `npm run build:all` | 통합/번들/포터블/Docker 빌드 묶음 |
+| `docker compose up -d --build` | 루트 `Dockerfile`로 Docker 이미지 빌드·실행 ([Docker로 실행](./DOCKER.md)) |
+| `npm run build:all` | 통합/번들/포터블 빌드 묶음 |
 
 ## 실행 후 확인
 
