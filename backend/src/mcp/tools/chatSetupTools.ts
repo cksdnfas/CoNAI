@@ -162,8 +162,9 @@ function profileGuide() {
     'Where to find those by hand (profile editor tabs 캐릭터 · 외형 · 모델 · 기억 · 도구 · 꾸미기): engine and model params in 모델; tool scopes, tool list, tool presets and the 페이지 어시스턴트 switch in 도구; generation presets and character images in 외형 (images: propose_profile_assets); who may chat with it in the editor header\'s access menu; colours and blocks in 꾸미기.',
     'Values equal to the current ones are dropped.',
     '',
-    `Models (connection · model): ${slots.length ? slots.filter((slot) => slot.providerType !== 'decision_typesafe').map((slot) => `#${slot.id} "${slot.label}"${slot.isDefault ? ' (default)' : ''}`).join(', ') : '(none yet)'}`,
-    `Judge models (TypeSafe): ${slots.filter((slot) => slot.providerType === 'decision_typesafe').map((slot) => `#${slot.id} "${slot.label}"`).join(', ') || '(none)'}`,
+    `Representative models (route to a model; picking one follows it when it is re-pointed; 대화 is the default): ${slots.filter((slot) => slot.kind === 'route').map((slot) => `#${slot.id} "${slot.label}" → ${slot.model || '(none)'}`).join(', ') || '(none)'}`,
+    `Models (connection · model): ${slots.some((slot) => slot.kind === 'model') ? slots.filter((slot) => slot.kind === 'model' && slot.providerType !== 'decision_typesafe').map((slot) => `#${slot.id} "${slot.label}"`).join(', ') : '(none yet)'}`,
+    `Judge models (TypeSafe): ${slots.filter((slot) => slot.kind === 'model' && slot.providerType === 'decision_typesafe').map((slot) => `#${slot.id} "${slot.label}"`).join(', ') || '(none)'}`,
     `Judge presets: ${judges.length ? judges.map((preset) => `#${preset.id} "${preset.name}"`).join(', ') : '(none)'}`,
     `Rating tiers (lowest first): ${tiers.length ? tiers.map((tier) => `#${tier.id} "${tier.tier_name}"`).join(', ') : '(none)'}`,
     `Profiles: ${profiles.map((profile) => `#${profile.id} "${profile.name}"`).join(', ') || '(none)'}`,
@@ -192,7 +193,7 @@ function resolveSlot(label: string, value: unknown, options: { judge?: boolean }
   const known = `Known models: ${slots.map((slot) => slot.label).join(', ') || '(none)'}`;
   if (typeof value === 'string') {
     const wanted = value.trim().toLowerCase();
-    const byName = slots.find((slot) => slot.label.toLowerCase() === wanted) ?? slots.find((slot) => slot.model.toLowerCase() === wanted);
+    const byName = slots.find((slot) => slot.label.toLowerCase() === wanted) ?? slots.find((slot) => slot.kind === 'model' && slot.model.toLowerCase() === wanted);
     if (byName) return byName.id;
   }
   const id = ModelSlotStore.existing(value);

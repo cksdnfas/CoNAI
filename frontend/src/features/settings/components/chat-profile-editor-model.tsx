@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils'
 import { CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage, type ClaudeModelOption } from '@conai/shared'
 import { ClaudeEffortSelect, ClaudeModelSelect } from './claude-model-select'
 import { JudgeModelSelect, useDefaultJudgeLabel, useModelLabel } from './chat-judge-connection-select'
-import { applyRoleChoice, ModelRoleSelect, roleChoice, type SuggestWriters } from './chat-model-role-select'
+import { applyRoleChoice, ModelRoleSelect, roleChoice, slotCeiling, type SuggestWriters } from './chat-model-role-select'
 import { GROW_TEXTAREA, numberOrNull, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { SwitchLine } from '@/components/ui/switch-line'
 import { ContentRatingSelect, useCeilingLabel } from './content-rating-select'
@@ -110,7 +110,7 @@ function ContentRatingField({ draft, patch, slots }: { draft: Draft; patch: Patc
       <ContentRatingSelect
         ariaLabel={t({ ko: '허용 등급', en: 'Content rating' })}
         value={isLlm && draft.contentRatingMode === 'model' ? 'model' : draft.contentRatingTierId}
-        followLabel={isLlm ? t({ ko: '모델 설정 따름 · {ceiling}', en: 'Model’s · {ceiling}' }, { ceiling: label(chatSlot?.contentRatingTierId ?? null) }) : undefined}
+        followLabel={isLlm ? t({ ko: '모델 설정 따름 · {ceiling}', en: 'Model’s · {ceiling}' }, { ceiling: label(slotCeiling(chatSlot, slots)) }) : undefined}
         onChange={(choice) => patch(choice === 'model' ? { contentRatingMode: 'model' } : { contentRatingMode: 'custom', contentRatingTierId: choice })}
       />
     </Field>

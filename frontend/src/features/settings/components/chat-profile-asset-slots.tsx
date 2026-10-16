@@ -19,6 +19,7 @@ import { getGroupEmoticons, getGroupsHierarchyAll, groupEmoticonsQueryKey, GROUP
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import { cn } from '@/lib/utils'
 import { ChosenCheckBadge, ReviewChips, SlotVisionReview } from './chat-asset-batch-modal'
+import { chatModelRows, useRouteOptionLabel } from './chat-model-role-select'
 import type { ProfileAssetRuns } from './chat-profile-asset-runs'
 
 /** The library group name the server uses for a character (characterMediaGroupPath). */
@@ -67,6 +68,8 @@ export function useSafeAssetImages(hashes: string[]) {
 export function AssetPresetPicker({ runs, showExpressionMenu = false }: { runs: ProfileAssetRuns; showExpressionMenu?: boolean }) {
   const { t } = useI18n()
   const modelSlots = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: showExpressionMenu })
+  const visionRows = chatModelRows(modelSlots.data ?? [])
+  const routeLabel = useRouteOptionLabel()
   const { presets, preset } = runs
   const support = preset?.assetSupport
   const warning = !preset
@@ -101,7 +104,9 @@ export function AssetPresetPicker({ runs, showExpressionMenu = false }: { runs: 
             <DropdownMenuLabel>{t({ ko: '비전 검수 모델', en: 'Vision review model' })}</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={String(runs.visionSlotId ?? 0)} onValueChange={(value) => runs.chooseVision(Number(value) || null)}>
               <DropdownMenuRadioItem value="0">{t({ ko: '안 씀', en: 'None' })}</DropdownMenuRadioItem>
-              {(modelSlots.data ?? []).filter((slot) => slot.providerType !== 'decision_typesafe').map((slot) => <DropdownMenuRadioItem key={slot.id} value={String(slot.id)}>{slot.label}</DropdownMenuRadioItem>)}
+              {visionRows.filter((slot) => slot.kind === 'route').map((slot) => <DropdownMenuRadioItem key={slot.id} value={String(slot.id)} disabled={slot.ready === false}>{routeLabel(slot)}</DropdownMenuRadioItem>)}
+              <DropdownMenuSeparator />
+              {visionRows.filter((slot) => slot.kind === 'model').map((slot) => <DropdownMenuRadioItem key={slot.id} value={String(slot.id)}>{slot.label}</DropdownMenuRadioItem>)}
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>

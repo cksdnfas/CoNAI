@@ -5,17 +5,32 @@ import { LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from '..
 import { getCodexModelSuggestions } from '../codexGenerationOptions'
 import type { NodeOption, NodeOptionSource } from './node-option-sources'
 
-/** Model rows on connections of `kinds`, labelled `model · connection`; rows of a connection that is off or gone stay visible but unpickable. */
-function modelRowOptions(kinds: readonly string[]): NodeOption[] {
+/**
+ * Representative models, a separator, then model rows on connections of `kinds` (`model · connection`); the part's own
+ * representative model comes first and is what an empty field uses. Rows of a connection that is off or gone, and
+ * routes reaching nothing usable, stay visible but unpickable.
+ */
+function modelRowOptions(kinds: readonly string[], part: 'chat' | 'judge'): NodeOption[] {
   const connections = new Map(ExternalApiProvider.findAll().map((provider) => [provider.provider_name, provider]))
-  return ModelSlotStore.list()
-    .filter((slot) => slot.providerType === null || kinds.includes(slot.providerType))
-    .map((slot) => ({
+  const usable = (slot: { providerType: string | null }) => slot.providerType === null || kinds.includes(slot.providerType)
+  const slots = ModelSlotStore.list()
+  const routes = slots.filter((slot) => slot.kind === 'route' && usable(slot))
+    .sort((a, b) => Number(b.routeKey === part) - Number(a.routeKey === part))
+  const models = slots.filter((slot) => slot.kind === 'model' && usable(slot))
+  return [
+    ...routes.map((slot) => ({
+      value: String(slot.id),
+      label: slot.model ? `${slot.label} (${slot.model})` : slot.label,
+      ...(slot.routeKey === part ? { is_default: true } : {}),
+      ...(slot.model && connections.get(slot.providerName)?.is_enabled ? {} : { disabled: true }),
+    })),
+    ...(routes.length > 0 && models.length > 0 ? [{ value: '__separator', label: '──────────', disabled: true }] : []),
+    ...models.map((slot) => ({
       value: String(slot.id),
       label: `${slot.model} · ${slot.providerLabel}`,
-      ...(slot.isDefault ? { is_default: true } : {}),
       ...(connections.get(slot.providerName)?.is_enabled ? {} : { disabled: true }),
-    }))
+    })),
+  ]
 }
 
 /** The account's Codex models as the CLI lists them (newest first); ★ marks the CLI's configured default. */
@@ -40,8 +55,8 @@ async function codexReasoningEffortOptions(): Promise<NodeOption[]> {
 
 /** Option lists for LLM node fields (model rows, chat profiles, Codex models). */
 export const LLM_NODE_OPTION_SOURCES: Record<string, NodeOptionSource> = {
-  llm_model_rows: () => modelRowOptions(LLM_CONNECTION_TYPES),
-  judge_model_rows: () => modelRowOptions(MODEL_CONNECTION_TYPES),
+  llm_model_rows: () => modelRowOptions(LLM_CONNECTION_TYPES, 'chat'),
+  judge_model_rows: () => modelRowOptions(MODEL_CONNECTION_TYPES, 'judge'),
   chat_profiles: () => ChatProfileStore.list().map((profile) => ({
     value: String(profile.id),
     label: profile.isEnabled ? profile.name : `${profile.name} (꺼짐)`,

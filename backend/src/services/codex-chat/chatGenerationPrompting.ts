@@ -178,7 +178,7 @@ function writerOf(profile: ChatProfile): { model: ResolvedModel; ownModel: boole
   const fallback = resolveProfileModel(profile, 'summary')
   if (fallback) return { model: fallback, ownModel: false }
   const slot = ModelSlotStore.defaultTarget()
-  return slot ? { model: { providerName: slot.providerName, model: slot.model, via: 'default', slotId: slot.id, label: slot.label }, ownModel: false } : null
+  return slot ? { model: { providerName: slot.providerName, model: slot.model, via: 'default', slotId: slot.id, routeId: slot.routeId, label: slot.label }, ownModel: false } : null
 }
 
 /** The reply as the model wrote it (display block fences kept: where and how things stand helps the picture). */
@@ -278,7 +278,7 @@ async function runDeferred(row: DeferredGenerationRow) {
   const sees = writer.ownModel ? profileSeesImages(profile) : profile.visionEnabled
   const images = sees ? await loadGeneratedImages({
     threadId: row.thread_id, requester, limit: preset.prompting.previousImages,
-    contentLimit: writer.ownModel ? profileContentLimit(profile) : slotContentLimit(writer.model.slotId),
+    contentLimit: writer.ownModel ? profileContentLimit(profile) : slotContentLimit(writer.model.routeId ?? writer.model.slotId),
   }) : []
   const messages = buildWriterMessages({
     preset, shape, guide: presetGuideText(preset),

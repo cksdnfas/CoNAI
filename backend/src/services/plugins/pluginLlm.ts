@@ -8,6 +8,7 @@ import { MEDIA_MAX_PIXELS } from '../codex-chat/chatMediaLinks'
 import type { McpRequester } from '../../mcp/context'
 import { ChatProfileStore, type ChatProfile } from '../codex-chat/chatProfiles'
 import { LLM_CONNECTION_TYPES, ModelSlotStore } from '../codex-chat/modelSlots'
+import { ChatJudgePresetStore } from '../codex-chat/chatJudgePresets'
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { canUseChatProfile, resolveChatAccess } from '../codex-chat/codexChatAccess'
 import { loadChatSettings } from '../codex-chat/chatSettings'
@@ -62,17 +63,19 @@ function profileAccess(pluginId: string, requester: McpRequester | undefined, pr
 }
 
 /**
- * The row a `model: 'judge'` request runs on: the profile's own judge model, else the default judge row. Only LLM
- * connections answer free text; a TypeSafe decision model is skipped.
+ * The row a `model: 'judge'` request runs on, in the order every judge uses: the profile's own judge model, else its
+ * judge preset's, else the judge representative model. Only LLM connections answer free text; a TypeSafe decision
+ * model is skipped.
  */
 function judgeSlotOf(profile: ChatProfile): number {
   const llm = (id: number | null | undefined) => {
     const row = id ? ModelSlotStore.target(id) : null
     const type = row ? ExternalApiProvider.findByName(row.providerName)?.provider_type : null
-    return row && type && LLM_CONNECTION_TYPES.includes(type) ? row.id : null
+    return row && type && LLM_CONNECTION_TYPES.includes(type) ? row.routeId ?? row.id : null
   }
-  const slot = llm(profile.judgeSlotId) ?? llm(ModelSlotStore.defaultJudgeTarget()?.id)
-  if (!slot) throw new PluginError('판단 모델이 없어. 프로필의 판단 모델이나 기본 판단 모델(⚖)을 LLM 연결 모델로 정해줘.', 409)
+  const preset = profile.judgePresetId ? ChatJudgePresetStore.find(profile.judgePresetId) : null
+  const slot = llm(profile.judgeSlotId) ?? llm(preset?.modelSlotId) ?? llm(ModelSlotStore.routeId('judge'))
+  if (!slot) throw new PluginError('판단 모델이 없어. 프로필의 판단 모델이나 판단 대표모델을 LLM 연결 모델로 정해줘.', 409)
   return slot
 }
 

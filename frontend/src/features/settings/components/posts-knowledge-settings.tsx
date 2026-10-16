@@ -58,11 +58,12 @@ export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKno
   const models = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots })
   const status = useQuery({ queryKey: [POSTS_QUERY_KEY, 'evaluation-status'], queryFn: getPostKnowledgeEvaluationStatus, refetchInterval: (query) => query.state.data?.queued || query.state.data?.running ? 10000 : false })
   const search = useQuery({ queryKey: [POSTS_QUERY_KEY, 'knowledge-search-status'], queryFn: getPostKnowledgeSearchStatus, staleTime: 30_000 })
-  const slot = models.data?.find((item) => item.providerName === draft.judgeProvider && item.model === draft.judgeModel)
-  const modelValue = slot ? `slot:${slot.id}` : draft.judgeProvider && draft.judgeModel ? 'saved' : ''
+  // The older connection + model pair shows as its row until a model is picked again.
+  const legacy = draft.judgeSlotId === null && draft.judgeProvider ? models.data?.find((item) => item.kind === 'model' && item.providerName === draft.judgeProvider && item.model === draft.judgeModel) : undefined
+  const modelValue = draft.judgeSlotId !== null ? `slot:${draft.judgeSlotId}` : legacy ? `slot:${legacy.id}` : draft.judgeProvider && draft.judgeModel ? 'saved' : ''
   const defaultJudge = models.data?.find((item) => item.isDefaultJudge)
   const defaultJudgeLabel = useDefaultJudgeLabel()
-  const ready = status.data && (modelValue || defaultJudge) ? status.data.providerReady : null
+  const ready = status.data && (modelValue || defaultJudge?.model) ? status.data.providerReady : null
   const readyLabel = ready ? t({ ko: '준비됨', en: 'Ready' }) : t({ ko: '준비 안 됨', en: 'Unavailable' })
   const searchLabel = search.data?.state === 'ready' ? t({ ko: '키워드 + 의미', en: 'Keyword + semantic' })
     : search.data?.state === 'partial' || search.data?.state === 'indexing' ? t({ ko: '키워드 · 의미 색인 {indexed} / {total}', en: 'Keyword · semantic index {indexed} / {total}' }, { indexed: search.data.indexed, total: search.data.total })
@@ -87,10 +88,10 @@ export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKno
           {ready !== null ? <span role="img" aria-label={readyLabel} title={readyLabel} className={cn('size-2 shrink-0 rounded-full', ready ? 'bg-success' : 'bg-warning')} /> : null}
           <Select variant="settings" aria-label={t({ ko: '판단 모델', en: 'Judge model' })} value={modelValue} disabled={!models.isSuccess || !draft.enabled} onChange={(event) => {
             const selected = models.data?.find((item) => `slot:${item.id}` === event.target.value)
-            onPatch({ judgeProvider: selected?.providerName ?? null, judgeModel: selected?.model ?? null })
+            onPatch({ judgeSlotId: selected?.id ?? null, judgeProvider: null, judgeModel: null })
           }}>
             <option value="">{defaultJudgeLabel}</option>
-            <ModelRowOptions slots={models.data ?? []} />
+            <ModelRowOptions slots={models.data ?? []} part="judge" />
             {modelValue === 'saved' ? <option value="saved" disabled>{draft.judgeProvider} · {draft.judgeModel}</option> : null}
           </Select>
         </SettingRow>

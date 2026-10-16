@@ -413,7 +413,7 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         data_type: 'number',
         required: false,
         multiple: false,
-        description: '비워두면 ★ 기본 모델을 써.',
+        description: '비워두면 대화 대표모델을 써.',
       },
       {
         key: 'profile_id',

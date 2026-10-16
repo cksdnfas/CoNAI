@@ -154,7 +154,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       },
       // What a save card shows as the contents it will store.
       selected: { name: draft.name, tagline: draft.tagline, engine: draft.engine, modelSlotId: draft.modelSlotId, greeting: draft.greeting.slice(0, 200), appearance: (draft.appearance ?? '').slice(0, 200) },
-      modelSlots: slots.map((slot) => ({ id: slot.id, label: slot.label, isDefault: slot.isDefault })),
+      modelSlots: slots.map((slot) => ({ id: slot.id, label: slot.label, ...(slot.kind === 'route' ? { reaches: slot.model || null } : {}), ...(slot.isDefault ? { isDefault: true } : {}) })),
       lorebooks: (lorebooks ?? []).map((book) => ({ id: book.id, name: book.name })),
       blocks: (blocks ?? []).map((block) => ({ id: block.id, name: block.name })),
       assets,

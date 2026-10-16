@@ -46,7 +46,9 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
     assert.deepEqual(configOf('conn-a'), { request_timeout_ms: 5000 })
     const defaults = ModelSlotStore.list().filter((slot) => slot.isDefault)
     assert.deepEqual(defaults.map((slot) => slot.model), ['conn-a-default'], 'the first LLM row becomes the one default')
-    assert.equal(defaults[0].label, 'Display conn-a · conn-a-default')
+    assert.equal(defaults[0].label, '대표 · 대화', 'the default is the chat representative model')
+    assert.equal(defaults[0].kind, 'route')
+    assert.equal(ModelSlotStore.defaultTarget()?.label, 'Display conn-a · conn-a-default')
     ExternalApiProvider.update('conn-b', { additional_config: { default_model: 'conn-b-second' } })
     assert.ok(rowOf('conn-b', 'conn-b-second'), 'an update with a default model adds it too')
     assert.deepEqual(configOf('conn-b'), {})
@@ -142,13 +144,14 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
   })
 
   await t.test('the default moves to another LLM row when its row goes; a connection with used models cannot be deleted', () => {
-    const conn = ModelSlotStore.ofConnection('conn-a')
-    const defaultRow = conn.find((slot) => slot.isDefault)!
+    const defaultRowId = ModelSlotStore.defaultTarget()!.id
+    assert.equal(ModelSlotStore.find(defaultRowId)?.providerName, 'conn-a')
     ModelSlotStore.syncConnection('conn-a', ['conn-a-other'])
-    assert.equal(ModelSlotStore.find(defaultRow.id), null)
+    assert.equal(ModelSlotStore.find(defaultRowId), null, 'the chat representative model never holds its row in place')
     const defaults = ModelSlotStore.list().filter((slot) => slot.isDefault)
     assert.equal(defaults.length, 1)
     assert.notEqual(defaults[0].providerType, 'decision_typesafe')
+    assert.notEqual(ModelSlotStore.defaultTarget()?.id, defaultRowId, 'it moved to another LLM row')
 
     const row = rowOf('conn-a', 'conn-a-other')!
     const preset = ChatJudgePresetStore.create({ name: '판정', items: [], modelSlotId: rowOf('jev', 'jev-latest'), escalationSlotId: row })
@@ -212,5 +215,78 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
     }
     db.prepare('INSERT INTO graph_workflows (name, graph_json) VALUES (?, ?)').run('wf test', JSON.stringify(graph))
     assert.deepEqual(buildModelUsage().slots.find((entry) => entry.id === row), { id: row, workflowNodes: 2 })
+  })
+
+  await t.test('representative models route to a model row across connections; re-pointing one reaches everything that picked it', async () => {
+    const { resolveSummaryPrompt, DEFAULT_CHAT_SUMMARY_PROMPT } = await import('../src/services/codex-chat/chatProfiles')
+    const chatRoute = ModelSlotStore.routeId('chat')!
+    const summaryRoute = ModelSlotStore.routeId('summary')!
+    const judgeRoute = ModelSlotStore.routeId('judge')!
+    assert.deepEqual(ModelSlotStore.list().filter((slot) => slot.kind === 'route').map((slot) => slot.routeKey), ['chat', 'summary', 'translation', 'suggest', 'judge'], 'the built-in routes come first, in part order')
+
+    const a = ModelSlotStore.ensure('conn-b', 'route-a')!
+    const b = ModelSlotStore.ensure('conn-a', 'route-b')!
+    ModelSlotStore.updateRoute(chatRoute, { targetSlotId: a })
+    const profile = ChatProfileStore.create({ name: 'routed', engine: 'llm', modelSlotId: chatRoute })
+    const chat = resolveProfileModel(profile, 'chat')!
+    assert.deepEqual([chat.providerName, chat.model, chat.slotId, chat.routeId], ['conn-b', 'route-a', a, chatRoute])
+    assert.deepEqual([resolveProfileModel(profile, 'summary')?.model, resolveProfileModel(profile, 'summary')?.via], ['route-a', 'inherit'], 'the summary route follows the chat model')
+    ModelSlotStore.updateRoute(chatRoute, { targetSlotId: b })
+    assert.equal(resolveProfileModel(ChatProfileStore.find(profile.id)!, 'chat')?.model, 'route-b', 'the profile follows without being saved again, onto another connection')
+
+    ModelSlotStore.updateRoute(summaryRoute, { targetSlotId: a })
+    assert.deepEqual([resolveProfileModel(profile, 'summary')?.model, resolveProfileModel(profile, 'summary')?.via], ['route-a', 'default'], 'a summary route with a target is what an empty summary uses')
+    const pinned = { ...profile, summarySlotId: summaryRoute }
+    ModelSlotStore.updateRoute(summaryRoute, { targetSlotId: null })
+    assert.equal(resolveProfileModel(pinned, 'summary')?.model, 'route-b', 'picking a summary route that follows the chat model follows the profile chat model')
+
+    assert.throws(() => ModelSlotStore.updateRoute(chatRoute, { targetSlotId: null }), /비워둘 수 없어/)
+    assert.throws(() => ModelSlotStore.updateRoute(chatRoute, { targetSlotId: rowOf('jev', 'jev-latest') }), /LLM 연결의 모델만/)
+    assert.throws(() => ModelSlotStore.updateRoute(chatRoute, { targetSlotId: summaryRoute }), /연결의 모델만/)
+    ModelSlotStore.updateRoute(judgeRoute, { targetSlotId: rowOf('jev', 'jev-latest') })
+    assert.equal(ModelSlotStore.defaultJudgeTarget()?.model, 'jev-latest')
+    assert.throws(() => ModelSlotStore.delete(rowOf('jev', 'jev-latest')!), /대표모델 판단/, 'the judge route holds its row')
+    assert.throws(() => ModelSlotStore.delete(judgeRoute), /기본 대표모델은 지울 수 없어/)
+
+    assert.equal(resolveSummaryPrompt(profile), DEFAULT_CHAT_SUMMARY_PROMPT)
+    ModelSlotStore.updateRoute(summaryRoute, { prompt: '  짧게 요약해.  ' })
+    assert.equal(resolveSummaryPrompt(profile), '짧게 요약해.', 'an empty summary prompt uses the part default')
+    assert.equal(resolveSummaryPrompt({ ...profile, summaryPrompt: '내 요약' }), '내 요약', 'the profile own prompt wins')
+    ModelSlotStore.updateRoute(summaryRoute, { prompt: '' })
+
+    const fast = ModelSlotStore.createRoute({ name: '빠른 모델', targetSlotId: a })!
+    assert.deepEqual([fast.kind, fast.routeKey, fast.label, fast.model], ['route', null, '대표 · 빠른 모델', 'route-a'])
+    assert.throws(() => ModelSlotStore.createRoute({ name: '대화', targetSlotId: a }), /같은 이름/)
+    assert.throws(() => ModelSlotStore.createRoute({ name: '빈 것' }), /가리킬 모델/)
+    const user = ChatProfileStore.create({ name: 'fast-user', engine: 'llm', modelSlotId: fast.id })
+    assert.throws(() => ModelSlotStore.delete(a), /대표모델 빠른 모델/, 'a named route holds its row')
+    assert.throws(() => ModelSlotStore.delete(fast.id), /쓰는 곳이 있어서 지울 수 없어: fast-user/)
+    ChatProfileStore.delete(user.id)
+    assert.equal(ModelSlotStore.delete(fast.id), true)
+    ChatProfileStore.delete(profile.id)
+  })
+
+  await t.test('route migration: the ★ / ⚖ rows a reference held move onto the chat / judge routes, other picks stay', async () => {
+    const { migrateLlmModelRoutes } = await import('../src/database/llmModelRoutesMigration')
+    const star = ModelSlotStore.ensure('conn-b', 'mig-star')!
+    const other = ModelSlotStore.ensure('conn-b', 'mig-other')!
+    const judge = rowOf('jev', 'jev-latest')!
+    db.prepare('DELETE FROM llm_model_slots WHERE is_route = 1').run()
+    db.prepare('UPDATE llm_model_slots SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END, is_default_judge = CASE WHEN id = ? THEN 1 ELSE 0 END').run(star, judge)
+    const auto = ChatProfileStore.create({ name: 'auto', engine: 'llm', modelSlotId: star, summarySlotId: other, judgeSlotId: judge })
+    const preset = ChatJudgePresetStore.create({ name: 'mig', items: [], modelSlotId: judge, escalationSlotId: star })
+    migrateLlmModelRoutes(db)
+    const chatRoute = ModelSlotStore.routeId('chat')!
+    const judgeRoute = ModelSlotStore.routeId('judge')!
+    assert.equal(ModelSlotStore.defaultTarget()?.id, star)
+    assert.equal(ModelSlotStore.defaultJudgeTarget()?.id, judge)
+    const migrated = ChatProfileStore.find(auto.id)!
+    assert.deepEqual([migrated.modelSlotId, migrated.summarySlotId, migrated.judgeSlotId], [chatRoute, other, judgeRoute])
+    const migratedPreset = ChatJudgePresetStore.find(preset.id)!
+    assert.deepEqual([migratedPreset.modelSlotId, migratedPreset.escalationSlotId], [judgeRoute, chatRoute])
+    migrateLlmModelRoutes(db)
+    assert.equal(ModelSlotStore.list().filter((slot) => slot.kind === 'route').length, 5, 'runs once')
+    ChatJudgePresetStore.delete(preset.id)
+    ChatProfileStore.delete(auto.id)
   })
 })

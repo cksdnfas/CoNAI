@@ -17,14 +17,13 @@ import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatS
  * Both are one choice question over the members (plus "wait"), so the probability of every member comes back at once.
  */
 
-/** The judge a room asks: its preset with the preset's connection, else the representative's own judge connection, else the default judge. */
+/** The judge a room asks, in the order every judge uses: the representative profile's own judge model, else the preset's, else the judge representative model. */
 export function roomJudgeSetup(thread: Pick<CodexChatThreadRecord, 'kind' | 'judge_preset_id' | 'profile_id'>): JudgeSetup | null {
   if (thread.kind !== 'group' || !thread.judge_preset_id) return null
   const preset = ChatJudgePresetStore.find(thread.judge_preset_id)
   if (!preset) return null
-  if (preset.modelSlotId) return judgeSetupFor(preset, preset.modelSlotId)
   const representative = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
-  return judgeSetupFor(preset, representative?.judgeSlotId ?? ModelSlotStore.defaultJudgeTarget()?.id)
+  return judgeSetupFor(preset, representative?.judgeSlotId ?? preset.modelSlotId ?? ModelSlotStore.routeId('judge'))
 }
 
 const WAIT = 'wait'

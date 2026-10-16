@@ -92,16 +92,17 @@ function apiTargetOfRow(slotId: number, profile: ChatProfile | null, via: 'slot'
     label: row.label,
     via,
     profile,
-    modelSlotId: row.id,
+    // The representative model when it came through one (its content rating ceiling applies).
+    modelSlotId: row.routeId ?? row.id,
     // A Claude Code / Codex profile's options belong to its engine, not to an API row it borrows for a role.
     profileGeneration: profile && profile.engine === 'llm' ? profileGenerationOptions(profile) : {},
   }
 }
 
 function defaultTarget(profile: ChatProfile | null): ResolvedWorkflowLlm {
-  const row = ModelSlotStore.defaultTarget()
-  if (!row) throw new Error('기본 모델이 없어. 설정 › LLM에서 ★ 기본 모델을 정하거나 노드에서 모델을 골라줘.')
-  return apiTargetOfRow(row.id, profile, 'default')
+  const routeId = ModelSlotStore.routeId('chat')
+  if (routeId === null || !ModelSlotStore.target(routeId)) throw new Error('대화 대표모델이 없어. 설정 › LLM에서 대표모델을 정하거나 노드에서 모델을 골라줘.')
+  return apiTargetOfRow(routeId, profile, 'default')
 }
 
 /** The chat role of a profile: Claude Code, Codex, or its API model row (the default row when it has none). */
@@ -126,7 +127,7 @@ function profileChatTarget(profile: ChatProfile): ResolvedWorkflowLlm {
     label: resolved.label,
     via: 'profile',
     profile,
-    modelSlotId: resolved.slotId,
+    modelSlotId: resolved.routeId ?? resolved.slotId,
     profileGeneration: profileGenerationOptions(profile),
   }
 }
@@ -164,7 +165,7 @@ export function resolveWorkflowLlm(target: WorkflowLlmTarget): ResolvedWorkflowL
     if (role !== 'chat') {
       const resolved = resolveProfileModel(profile, role)
       if (resolved && resolved.via !== 'engine' && resolved.slotId !== null) {
-        return { ...apiTargetOfRow(resolved.slotId, profile, 'slot'), via: 'profile' }
+        return { ...apiTargetOfRow(resolved.routeId ?? resolved.slotId, profile, 'slot'), via: 'profile' }
       }
     }
     return profileChatTarget(profile)

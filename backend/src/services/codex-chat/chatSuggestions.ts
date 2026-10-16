@@ -144,6 +144,12 @@ function writerDirection(writer: SuggestionWriter, character: ChatProfile, user:
   return text ? [heading, fillCharacterPlaceholders(text, character, user)].join('\n') : ''
 }
 
+/** The suggestion representative model's default prompt, as standing direction for every chat. */
+function suggestionDirection() {
+  const prompt = ModelSlotStore.routePrompt('suggest')
+  return prompt ? `## 추천 지시\n${prompt}` : ''
+}
+
 function readerText(message: CodexChatMessageRecord, keys: ReadonlySet<string>) {
   const text = (message.display_content || message.content || '').trim()
   const stripped = message.role === 'assistant' ? stripBlockFences(text, keys) : text
@@ -220,6 +226,7 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
     `이름: ${profile.name}`,
     profile.tagline ? profile.tagline : '',
     userPersonaPrompt(user),
+    suggestionDirection(),
     runner.writer ? writerDirection(runner.writer, profile, user, thread.user_profile_id ?? null) : '',
   ].filter(Boolean).join('\n')
   const prompt = `${transcript}\n\n---\n${user.name}이(가) 다음에 할 말 ${SUGGESTION_COUNT}개를 JSON 배열로.`

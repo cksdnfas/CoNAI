@@ -118,13 +118,18 @@ export const KnowledgeEvaluationStore = {
   },
 };
 
-/** The judge knowledge evaluations ask: the board's own connection + model, else the default judge. */
-function knowledgeJudgeOf(settings:{judgeProvider:string|null;judgeModel:string|null}):{provider:string;model:string|null}|null {
-  if(settings.judgeProvider) return {provider:settings.judgeProvider,model:settings.judgeModel};
+type KnowledgeJudgeSettings={judgeSlotId:number|null;judgeProvider:string|null;judgeModel:string|null};
+
+/** The judge knowledge evaluations ask: the board's own pick (a row, or the older connection + model pair), else the judge representative model. */
+function knowledgeJudgeOf(settings:KnowledgeJudgeSettings):{provider:string;model:string|null}|null {
+  if(settings.judgeSlotId!==null) {
+    const picked=ModelSlotStore.target(settings.judgeSlotId);
+    if(picked) return {provider:picked.providerName,model:picked.model};
+  } else if(settings.judgeProvider) return {provider:settings.judgeProvider,model:settings.judgeModel};
   const target=ModelSlotStore.defaultJudgeTarget();
   return target?{provider:target.providerName,model:target.model}:null;
 }
-function knowledgeJudgeReady(settings:{judgeProvider:string|null;judgeModel:string|null}) {
+function knowledgeJudgeReady(settings:KnowledgeJudgeSettings) {
   const judge=knowledgeJudgeOf(settings);
   return Boolean(judge&&isJudgeConnectionReady(judge.provider,judge.model));
 }

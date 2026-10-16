@@ -15,6 +15,8 @@ function normalizeKnowledgeSettings(value: unknown, fallback: PostsKnowledgeSett
   const input = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const result = { ...fallback };
   for (const key of ['enabled', 'rankingEnabled', 'autoEvaluationEnabled'] as const) if (typeof input[key] === 'boolean') result[key] = input[key];
+  if (input.judgeSlotId === null) result.judgeSlotId = null;
+  else if (typeof input.judgeSlotId === 'number' && Number.isSafeInteger(input.judgeSlotId) && input.judgeSlotId > 0) result.judgeSlotId = input.judgeSlotId;
   for (const key of ['judgeProvider', 'judgeModel'] as const) {
     if (input[key] === null) result[key] = null;
     else if (typeof input[key] === 'string') result[key] = input[key].trim().slice(0, 200) || null;

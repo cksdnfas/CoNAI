@@ -106,18 +106,19 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     assert.deepEqual(parseJudgeJson('```json\n{"a": {"yes": 0.9}}\n```'), { a: { yes: 0.9 } })
   })
 
-  await t.test('a judge with no model of its own asks the default judge, which cannot be deleted while set', async () => {
+  await t.test('a judge with no model of its own asks the judge representative model, whose row cannot be deleted while it points there', async () => {
     const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
     const modelless = ChatJudgePresetStore.create({ name: '모델 없음', items: [] })
     const profile = ChatProfileStore.create({ name: '기본 판단', engine: 'llm', providerName: 'chat', judgePresetId: modelless.id })
     assert.equal(judgeSetupOf(profile), null, 'no model anywhere: no judge')
-    const jev = ModelSlotStore.list().find((slot) => slot.providerName === 'jev')!
-    assert.equal(ModelSlotStore.setDefaultJudge(jev.id, true)?.isDefaultJudge, true)
+    const jev = ModelSlotStore.list().find((slot) => slot.kind === 'model' && slot.providerName === 'jev')!
+    ModelSlotStore.setDefaultJudge(jev.id, true)
+    assert.equal(ModelSlotStore.defaultJudgeTarget()?.id, jev.id)
     assert.equal(judgeSetupOf(profile)?.providerName, 'jev')
-    assert.throws(() => ModelSlotStore.delete(jev.id), /기본 판단 모델/)
-    const chatRow = ModelSlotStore.list().find((slot) => slot.providerName === 'chat')!
+    assert.throws(() => ModelSlotStore.delete(jev.id), /대표모델 판단/)
+    const chatRow = ModelSlotStore.list().find((slot) => slot.kind === 'model' && slot.providerName === 'chat')!
     ModelSlotStore.setDefaultJudge(chatRow.id, true)
-    assert.deepEqual(ModelSlotStore.list().filter((slot) => slot.isDefaultJudge).map((slot) => slot.id), [chatRow.id], 'one default judge at a time')
+    assert.equal(ModelSlotStore.find(ModelSlotStore.routeId('judge')!)?.targetSlotId, chatRow.id, 'the judge route points at one row')
     assert.equal(judgeSetupOf(profile)?.providerName, 'chat')
     ModelSlotStore.setDefaultJudge(chatRow.id, false)
     assert.equal(ModelSlotStore.defaultJudgeTarget(), null)

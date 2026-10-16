@@ -390,6 +390,9 @@ export interface PostsKnowledgeSettings {
   enabled: boolean;
   rankingEnabled: boolean;
   autoEvaluationEnabled: boolean;
+  /** The judge (a model row or representative model); null: the judge representative model. */
+  judgeSlotId: number | null;
+  /** The older connection + model pair, read only while judgeSlotId is null. */
   judgeProvider: string | null;
   judgeModel: string | null;
   policyVersion: 'v1';
@@ -414,7 +417,7 @@ export interface PostsKnowledgeSettings {
 
 export const DEFAULT_POSTS_KNOWLEDGE_SETTINGS: PostsKnowledgeSettings = {
   enabled: true, rankingEnabled: false, autoEvaluationEnabled: false,
-  judgeProvider: null, judgeModel: null, policyVersion: 'v1',
+  judgeSlotId: null, judgeProvider: null, judgeModel: null, policyVersion: 'v1',
   humanWeight: 1, useAiWeight: 0.25, judgeWeight: 0.5, aiBundleCap: 0.5,
   aiDailyFamilyLimit: 3, aiGlobalMinimumCap: 2, aiGlobalHumanRatio: 0.5,
   historyWeight: 0.25, historyCap: 2,

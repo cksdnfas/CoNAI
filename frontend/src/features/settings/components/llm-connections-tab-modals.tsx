@@ -17,7 +17,7 @@ import {
   type ExternalApiProviderRecord,
   type ExternalApiProviderType,
 } from '@/lib/api-external-api'
-import { MODEL_SLOTS_QUERY_KEY, listModelSlots, setDefaultModelSlot, syncConnectionModels } from '@/lib/api-codex-chat'
+import { MODEL_SLOTS_QUERY_KEY, listModelSlots, syncConnectionModels } from '@/lib/api-codex-chat'
 import type { LlmPresetRecord } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -378,8 +378,8 @@ export function LlmConnectionEditorModal({
 
   // The connection's models: its saved rows when editing; a new connection starts on the first model the server lists.
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: isOpen })
-  const saved = (slotsQuery.data ?? []).filter((slot) => provider !== null && slot.providerName === provider.provider_name)
-  const [modelDraft, setModelDraft] = useState<ConnectionModelsDraft>({ models: [], defaultModel: '' })
+  const saved = (slotsQuery.data ?? []).filter((slot) => provider !== null && slot.kind === 'model' && slot.providerName === provider.provider_name)
+  const [modelDraft, setModelDraft] = useState<ConnectionModelsDraft>({ models: [] })
   const modelsTouched = useRef(false)
   const modelsLoadedFor = useRef<string | null>(null)
   useEffect(() => {
@@ -392,7 +392,7 @@ export function LlmConnectionEditorModal({
     modelsLoadedFor.current = key
     modelsTouched.current = false
     setModelsChanged(false)
-    setModelDraft({ models: saved.map((slot) => slot.model), defaultModel: saved.find((slot) => slot.isDefault)?.model ?? '' })
+    setModelDraft({ models: saved.map((slot) => slot.model) })
     // Runs once per opened connection, when its rows are known.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, provider, slotsQuery.isSuccess])
@@ -408,11 +408,9 @@ export function LlmConnectionEditorModal({
   }
   const addEndpointModel = (model: string) => setModelDraft((current) => (current.models.includes(model) ? current : { ...current, models: [...current.models, model] }))
 
-  /** After the connection itself is saved: its models become exactly the checked ones, and a starred one the default. */
+  /** After the connection itself is saved: its models become exactly the checked ones. */
   const saveModels = async (providerName: string) => {
-    const rows = await syncConnectionModels(providerName, modelDraft.models)
-    const starred = rows.find((slot) => slot.model === modelDraft.defaultModel)
-    if (starred && !starred.isDefault) await setDefaultModelSlot(starred.id)
+    await syncConnectionModels(providerName, modelDraft.models)
   }
 
   const createMutation = useMutation({
@@ -567,7 +565,6 @@ export function LlmConnectionEditorModal({
             listed={models}
             saved={saved}
             loading={modelsQuery.isFetching}
-            canStar={draft.providerType !== 'decision_typesafe'}
             onRefresh={() => void modelsQuery.refetch()}
             onChange={changeModels}
           />

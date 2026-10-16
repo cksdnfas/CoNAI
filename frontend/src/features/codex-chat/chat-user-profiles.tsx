@@ -35,6 +35,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-chat-context'
+import { ChatModelOptionItems } from './chat-model-option-items'
 
 /** The account's user profiles (everyone keeps their own). */
 export function useChatUserProfiles(enabled = true) {
@@ -152,7 +153,7 @@ export function ChatUserProfileEditorModal({ open, profile, onClose }: { open: b
           >
             <option value="">{t({ ko: '없음', en: 'None' })}</option>
             {/* A model whose connection cannot be used shows greyed out. */}
-            {models.map((model) => <option key={model.id} value={model.id} disabled={!model.ready}>{model.label}</option>)}
+            <ChatModelOptionItems models={models} part="suggest" />
           </Select>
         </Field>
       </ModalBody>

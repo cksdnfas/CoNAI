@@ -48,15 +48,15 @@ function serverInput(server: ExternalMcpServer, patch: { enabled?: boolean; scop
 }
 
 /**
- * Settings › LLM › 연결 for a connected chat: the connections and their models (the default and the default judge), the
- * outside MCP servers and the Codex / Claude Code sign-in. Changes are review cards; connection keys and server secrets
+ * Settings › LLM › 연결 for a connected chat: the connections and their models, the representative models (대표모델) that
+ * route each part to one of them, the outside MCP servers and the Codex / Claude Code sign-in. Changes are review cards; connection keys and server secrets
  * never reach the chat. Lists sit at the top of `data`, so a long one shows as a count until read_page_data reads it.
  */
-export function useLlmConnectionsChatPage({ providers, slots, onSetDefault, onSetDefaultJudge, onDraftMcpServer }: {
+export function useLlmConnectionsChatPage({ providers, slots, onPointRoute, onDraftMcpServer }: {
   providers: ExternalApiProviderRecord[]
   slots: ModelSlot[]
-  onSetDefault: (slot: ModelSlot) => Promise<unknown>
-  onSetDefaultJudge: (slot: ModelSlot, on: boolean) => Promise<unknown>
+  /** Points a representative model at a model row (null: none, or follow the chat model). */
+  onPointRoute: (routeId: number, targetSlotId: number | null) => Promise<unknown>
   onDraftMcpServer: (seed: ExternalMcpDraftSeed | null) => void
 }) {
   const { t } = useI18n()
@@ -66,7 +66,8 @@ export function useLlmConnectionsChatPage({ providers, slots, onSetDefault, onSe
 
   const providerName = new Map(providers.map((provider) => [provider.provider_name, provider.display_name || provider.provider_name]))
   const data: Record<string, ChatPageData> = {
-    models: slots.map((slot) => ({ id: slot.id, connection: providerName.get(slot.providerName) ?? slot.providerName, model: slot.model, ...(slot.isDefault ? { isDefault: true } : {}), ...(slot.isDefaultJudge ? { isDefaultJudge: true } : {}), ...(slot.ready === false ? { ready: false } : {}) })),
+    models: slots.filter((slot) => slot.kind === 'model').map((slot) => ({ id: slot.id, connection: providerName.get(slot.providerName) ?? slot.providerName, model: slot.model, ...(slot.ready === false ? { ready: false } : {}) })),
+    routes: slots.filter((slot) => slot.kind === 'route').map((slot) => ({ id: slot.id, name: slot.routeName ?? '', ...(slot.routeKey ? { part: slot.routeKey } : {}), target: slot.followsChat ? 'chat' : slot.targetSlotId, ...(slot.prompt ? { hasPrompt: true } : {}) })),
     externalMcp: servers.map((server) => ({
       id: server.id, name: server.name, enabled: server.enabled, transport: server.transport, scope: server.scope, timeoutSeconds: server.timeoutSeconds,
       state: server.enabled ? server.status.state : 'off', ...(server.status.state === 'error' ? { error: chatPageText(server.status.error) } : {}),
@@ -77,8 +78,11 @@ export function useLlmConnectionsChatPage({ providers, slots, onSetDefault, onSe
 
   const actions = [
     ...(slots.length ? [
-      pageAction('settings.default_model', t({ ko: '기본 모델 정하기', en: 'Set the default model' }), t({ ko: 'data.models의 id 하나를 기본 모델로 해.', en: 'Make one id of data.models the default model.' }), pageObject({ slotId: pageNumber(1, undefined, true) }, ['slotId']), 'save'),
-      pageAction('settings.default_judge', t({ ko: '기본 판단 모델 정하기', en: 'Set the default judge' }), t({ ko: 'data.models의 id 하나를 기본 판단 모델로 해(on false = 해제). 모델을 따로 고르지 않은 판단·게시판 평가·주제 관련도가 이 모델을 써.', en: 'Make one id of data.models the default judge (on false clears it). Judges, board evaluations and topic relevance without a model of their own use it.' }), pageObject({ slotId: pageNumber(1, undefined, true), on: { type: 'boolean' } }, ['slotId']), 'save'),
+      pageAction('settings.default_model', t({ ko: '대표모델 대상 바꾸기', en: 'Point a representative model' }), t({
+        ko: 'data.routes의 대표모델 하나(routeId, 없으면 대화)가 data.models의 id 하나(slotId)를 가리키게 해. 그 대표모델을 고른 곳이 모두 따라가. slotId 0 = 비움(요약·답장 추천은 대화 따라감, 번역·판단은 없음).',
+        en: 'Point one representative model of data.routes (routeId, default the chat one) at one id of data.models (slotId); everything that picked it follows. slotId 0 clears it (summary and suggestions then follow chat, translation and judge are none).',
+      }), pageObject({ routeId: pageNumber(1, undefined, true), slotId: pageNumber(0, undefined, true) }, ['slotId']), 'save'),
+      pageAction('settings.default_judge', t({ ko: '판단 대표모델 바꾸기', en: 'Point the judge representative model' }), t({ ko: '판단 대표모델이 data.models의 id 하나를 가리키게 해(on false = 비움). 모델을 따로 고르지 않은 판단·게시판 평가·주제 관련도가 이걸 써.', en: 'Point the judge representative model at one id of data.models (on false clears it). Judges, board evaluations and topic relevance without a model of their own use it.' }), pageObject({ slotId: pageNumber(1, undefined, true), on: { type: 'boolean' } }, ['slotId']), 'save'),
     ] : []),
     ...(servers.length ? [pageAction('settings.mcp_server', t({ ko: '외부 MCP 서버 바꾸기', en: 'Change an outside MCP server' }), t({
       ko: 'data.externalMcp 서버 하나. update: enabled·scope(프로필 도구 범위에 있어야 씀)·제한 시간·도구별 켜기. reconnect: 다시 연결. remove: 삭제. 주소·명령·비밀은 사람이 바꿔.',
@@ -125,16 +129,21 @@ export function useLlmConnectionsChatPage({ providers, slots, onSetDefault, onSe
     apply: () => {},
     applyAction: async (id, args, assertCurrent): Promise<WorkflowUndo | void> => {
       assertCurrent()
+      const modelOf = (slotId: ChatPageData) => {
+        const slot = slots.find((entry) => entry.kind === 'model' && entry.id === slotId)
+        if (!slot) throw new Error('data.models에 없는 모델이야.')
+        return slot.id
+      }
       if (id === 'settings.default_model') {
-        const slot = slots.find((entry) => entry.id === args.slotId)
-        if (!slot) throw new Error('목록에 없는 모델이야.')
-        await onSetDefault(slot)
+        const route = typeof args.routeId === 'number' ? slots.find((entry) => entry.kind === 'route' && entry.id === args.routeId) : slots.find((entry) => entry.routeKey === 'chat')
+        if (!route) throw new Error('data.routes에 없는 대표모델이야.')
+        await onPointRoute(route.id, args.slotId === 0 ? null : modelOf(args.slotId))
         return
       }
       if (id === 'settings.default_judge') {
-        const slot = slots.find((entry) => entry.id === args.slotId)
-        if (!slot) throw new Error('목록에 없는 모델이야.')
-        await onSetDefaultJudge(slot, args.on !== false)
+        const route = slots.find((entry) => entry.routeKey === 'judge')
+        if (!route) throw new Error('판단 대표모델이 없어.')
+        await onPointRoute(route.id, args.on === false ? null : modelOf(args.slotId))
         return
       }
       if (id === 'settings.mcp_server') return changeServer(args)

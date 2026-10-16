@@ -162,7 +162,8 @@ export function migrateLlmModelRows(db: Database.Database): void {
     // Merge rows naming the same connection + model into the oldest.
     const duplicates = db.prepare(`
       SELECT a.id AS drop_id, MIN(b.id) AS keep_id, a.is_default AS was_default FROM llm_model_slots a
-      JOIN llm_model_slots b ON b.provider_name = a.provider_name AND b.model = a.model AND b.id < a.id
+      JOIN llm_model_slots b ON b.provider_name = a.provider_name AND b.model = a.model AND b.id < a.id AND b.is_route = 0
+      WHERE a.is_route = 0
       GROUP BY a.id
     `).all() as Array<{ drop_id: number; keep_id: number; was_default: number }>;
     for (const { drop_id: dropId, keep_id: keepId, was_default: wasDefault } of duplicates) {

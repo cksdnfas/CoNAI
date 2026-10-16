@@ -1,7 +1,8 @@
 import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
-import type { ModelRole, ModelSlot } from '@/lib/api-codex-chat'
+import { ROUTE_NO_CEILING, type ModelRole, type ModelRouteKey, type ModelSlot } from '@/lib/api-codex-chat'
 import type { Draft } from './chat-profile-editor-fields'
+import { useRouteName } from './llm-connection-models'
 
 /**
  * What a role's select shows: `off` (the role is disabled), `inherit` (summary / suggestions borrow the chat model),
@@ -19,25 +20,56 @@ export type SuggestWriters = { profiles?: SuggestWriter[]; users?: SuggestWriter
 /** Suggestions borrow the chat model on Codex profiles too (a one-shot Codex run); summaries only on API LLM ones. */
 const inheritsFor = (role: ModelRole, canInherit: boolean) => role === 'suggest' || (role === 'summary' && canInherit)
 
-/** Rows chat roles can use: the LLM connections' models (TypeSafe models only judge). */
+/** Rows chat roles can use: representative models and models that reach an LLM connection (TypeSafe models only judge). */
 export const chatModelRows = (slots: ModelSlot[]) => slots.filter((slot) => slot.providerType !== 'decision_typesafe')
 
+/** The content rating ceiling a row applies: a representative model's own, else the one of the model it reaches. */
+export function slotCeiling(slot: ModelSlot | undefined, slots: ModelSlot[]): number | null {
+  if (!slot) return null
+  if (slot.kind !== 'route') return slot.contentRatingTierId
+  if (slot.contentRatingTierId === ROUTE_NO_CEILING) return null
+  if (slot.contentRatingTierId !== null) return slot.contentRatingTierId
+  const reached = slot.followsChat ? slots.find((entry) => entry.routeKey === 'chat')?.targetSlotId : slot.targetSlotId
+  return slots.find((entry) => entry.id === reached)?.contentRatingTierId ?? null
+}
+
+/** A representative model as an option: `대표 · 대화 (strata-auto)`, with what it reaches now. */
+export function useRouteOptionLabel() {
+  const { t } = useI18n()
+  const routeName = useRouteName()
+  return (slot: ModelSlot) => {
+    const reaches = slot.followsChat ? t({ ko: '대화 따라감', en: 'follows chat' }) : slot.model || t({ ko: '비어 있음', en: 'empty' })
+    return `${t({ ko: '대표', en: 'Rep.' })} · ${routeName(slot)} (${reaches})`
+  }
+}
+
 /**
- * The model rows as one optgroup per connection, in list order: `★ connection · model` (a closed select shows only the
- * option, so it names the connection too), greyed out when the connection cannot be used. Values are `slot:{id}`.
+ * The rows as options, values `slot:{id}`: the representative models first (`part`'s own on top), a separator, then one
+ * optgroup per connection in list order (`connection · model`: a closed select shows only the option, so it names the
+ * connection too). Rows that cannot be used are greyed out.
  */
-export function ModelRowOptions({ slots }: { slots: ModelSlot[] }) {
+export function ModelRowOptions({ slots, part }: { slots: ModelSlot[]; part?: ModelRouteKey }) {
+  const { t } = useI18n()
+  const routeLabel = useRouteOptionLabel()
+  const routes = slots.filter((slot) => slot.kind === 'route').sort((a, b) => Number(b.routeKey === part) - Number(a.routeKey === part))
   const groups: Array<{ key: string; label: string; rows: ModelSlot[] }> = []
   for (const slot of slots) {
+    if (slot.kind === 'route') continue
     const group = groups.find((entry) => entry.key === slot.providerName)
     if (group) group.rows.push(slot)
     else groups.push({ key: slot.providerName, label: slot.providerLabel, rows: [slot] })
   }
   return (
     <>
+      {routes.length > 0 ? (
+        <optgroup label={t({ ko: '대표모델', en: 'Representative models' })}>
+          {routes.map((slot) => <option key={slot.id} value={`slot:${slot.id}`} disabled={slot.ready === false}>{routeLabel(slot)}</option>)}
+        </optgroup>
+      ) : null}
+      {routes.length > 0 && groups.length > 0 ? <option value="__separator" disabled>──────────</option> : null}
       {groups.map((group) => (
         <optgroup key={group.key} label={group.label}>
-          {group.rows.map((slot) => <option key={slot.id} value={`slot:${slot.id}`} disabled={slot.ready === false}>{`${slot.isDefault ? '★ ' : ''}${slot.label}`}</option>)}
+          {group.rows.map((slot) => <option key={slot.id} value={`slot:${slot.id}`} disabled={slot.ready === false}>{slot.label}</option>)}
         </optgroup>
       ))}
     </>
@@ -121,14 +153,20 @@ export function ModelRoleSelect({ role, value, slots, slotsReady, canInherit, wr
   ariaLabel: string
 }) {
   const { t } = useI18n()
-  const rows = chatModelRows(slots)
+  // The chat role never picks a representative model that follows the chat model (it would point back at itself).
+  const rows = chatModelRows(slots).filter((slot) => role !== 'chat' || !slot.followsChat)
+  // An empty summary / suggestion uses its part's representative model, which follows the chat model unless pointed elsewhere.
+  const partRoute = slots.find((slot) => slot.routeKey === role)
+  const inheritLabel = partRoute && !partRoute.followsChat && partRoute.model
+    ? t({ ko: '기본 · {model}', en: 'Default · {model}' }, { model: partRoute.model })
+    : t({ ko: '대화 모델 그대로', en: 'Same as chat' })
   return (
     <Select variant="settings" value={value} aria-label={ariaLabel} disabled={!slotsReady} onChange={(event) => onChange(event.target.value as RoleChoice)}>
       {role === 'chat' && value === 'off' ? <option value="off" disabled>{t({ ko: '모델 없음', en: 'No model' })}</option> : null}
       {role === 'translation' ? <option value="off">{t({ ko: '안 함', en: 'None' })}</option> : null}
       {role === 'summary' || role === 'suggest' ? <option value="off">{t({ ko: '끔', en: 'Off' })}</option> : null}
-      {inheritsFor(role, canInherit) ? <option value="inherit">{t({ ko: '대화 모델 그대로', en: 'Same as chat' })}</option> : null}
-      <ModelRowOptions slots={rows} />
+      {inheritsFor(role, canInherit) ? <option value="inherit">{inheritLabel}</option> : null}
+      <ModelRowOptions slots={rows} part={role} />
       {value.startsWith('slot:') && !rows.some((slot) => value === `slot:${slot.id}`)
         ? <option value={value} disabled>{t({ ko: '모델 #{id}', en: 'Model #{id}' }, { id: value.slice(5) })}</option>
         : null}

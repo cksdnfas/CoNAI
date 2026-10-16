@@ -525,9 +525,9 @@ export function profileGenerationOptions(profile: ChatProfile): LlmGenerationOpt
   }
 }
 
-/** The summary prompt a profile actually uses. */
+/** The summary prompt a profile actually uses: its own, else the summary representative model's default prompt, else the built-in one. */
 export function resolveSummaryPrompt(profile: ChatProfile) {
-  return profile.summaryPrompt.trim() || DEFAULT_CHAT_SUMMARY_PROMPT
+  return profile.summaryPrompt.trim() || ModelSlotStore.routePrompt('summary') || DEFAULT_CHAT_SUMMARY_PROMPT
 }
 
 /** Validate a full profile (create) or a merged update, returning the column values. */

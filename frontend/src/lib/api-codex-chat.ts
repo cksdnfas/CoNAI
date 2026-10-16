@@ -728,6 +728,8 @@ export interface ChatCardImportReport {
 export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'avatarThumbnailUrl'>> & { background?: string | null }
 
 export interface ChatProfileDefaults {
+  /** The chat representative model's default prompt: a new profile starts with it. */
+  systemPrompt?: string
   loreScanDepth: number
   loreTokenBudget: number
   loreDepth: number
@@ -1066,24 +1068,44 @@ export type ModelRole = 'chat' | 'summary' | 'translation' | 'suggest'
 /** What a profile uses a model row for: one of its roles, or its judge. */
 export type ModelUseRole = ModelRole | 'judge'
 
+/** The built-in representative models, one per part. */
+export type ModelRouteKey = ModelUseRole
+
 /**
- * One model an LLM connection serves (Settings → LLM lists them under their connection). Profiles, judge presets, user
- * profiles and chats reference rows by id, so changing a row's model reaches all of them.
+ * One model an LLM connection serves (`kind: 'model'`, listed under its connection in Settings → LLM) or a
+ * representative model (`kind: 'route'`, 대표모델) that points at one. Profiles, judge presets, user profiles and chats
+ * reference rows of either kind by id, so changing a row's model, or where a representative model points, reaches all
+ * of them. The list comes routes first.
  */
 export interface ModelSlot {
   id: number
+  kind: 'model' | 'route'
+  /** Routes: the connection of the model it reaches ('' for none). */
   providerName: string
   providerLabel: string
-  /** Null when the connection is gone. */
+  /** Null when the connection is gone, or a route reaches no model. */
   providerType: string | null
+  /** Routes: the model it reaches ('' for none). */
   model: string
-  /** `connection · model` */
+  /** `connection · model`, or `대표 · name` for a route */
   label: string
+  /** The built-in chat route: what a chat role with no model of its own uses, and where new profiles start. */
   isDefault: boolean
-  /** What a judge, board evaluation or topic relevance with no model of its own asks (at most one row). */
+  /** The built-in judge route: what a judge, board evaluation or topic relevance with no model of its own asks. */
   isDefaultJudge: boolean
   sortOrder: number
-  /** The highest rating tier (id) of media this model is shown; null: no ceiling. */
+  /** Routes: the built-in part, null for a named one. */
+  routeKey: ModelRouteKey | null
+  routeName: string | null
+  /** Routes: the model row it points at; null for none. */
+  targetSlotId: number | null
+  /** Routes: no target of its own (summary / suggestions), so it follows the chat model. */
+  followsChat: boolean
+  /** Built-in routes: the part's default prompt ('' keeps the built-in text). */
+  prompt: string
+  /** Model rows: the routes pointing at it. */
+  routes: Array<{ id: number; name: string; key: ModelRouteKey | null }>
+  /** The highest rating tier (id) of media this model is shown; null: no ceiling. A route: null follows its target's, ROUTE_NO_CEILING is none. */
   contentRatingTierId: number | null
   profiles: Array<{ id: number; name: string; roles: ModelUseRole[] }>
   judgePresets: Array<{ id: number; name: string }>
@@ -1117,13 +1139,19 @@ export function updateModelSlot(slotId: number, patch: { model?: string; isDefau
   return requestApiData<ModelSlot>(`/api/codex-chat/admin/model-slots/${slotId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
-export function setDefaultModelSlot(slotId: number) {
-  return requestApiData<ModelSlot>(`/api/codex-chat/admin/model-slots/${slotId}/default`, { method: 'POST' })
+/** A representative model's own "no ceiling" (null on one follows its target's). */
+export const ROUTE_NO_CEILING = -1
+
+export type ModelRouteInput = { name?: string; targetSlotId?: number | null; prompt?: string; contentRatingTierId?: number | null }
+
+/** A named representative model pointing at a model row. */
+export function createModelRoute(input: ModelRouteInput) {
+  return requestApiData<ModelSlot>('/api/codex-chat/admin/model-routes', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
 
-/** Makes a row the default judge, or with `on` false clears it. */
-export function setDefaultJudgeModelSlot(slotId: number, on: boolean) {
-  return requestApiData<ModelSlot>(`/api/codex-chat/admin/model-slots/${slotId}/default-judge`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ on }) })
+/** Changes a representative model; everything that picked it follows a new target. Deleting goes through deleteModelSlot. */
+export function updateModelRoute(routeId: number, patch: ModelRouteInput) {
+  return requestApiData<ModelSlot>(`/api/codex-chat/admin/model-routes/${routeId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
 export function deleteModelSlot(slotId: number) {
@@ -1176,9 +1204,11 @@ export interface ChatUserProfile {
 /** `modelSlotId` left out keeps the model the profile had. */
 export type ChatUserProfileInput = Pick<ChatUserProfile, 'name' | 'persona' | 'avatar' | 'isDefault'> & { modelSlotId?: number | null }
 
-/** A model any chat user can give a user profile: an LLM model row, and whether its connection works. */
+/** A model any chat user can give a user profile: an LLM model row or a representative model, and whether it works. */
 export interface ChatModelOption {
   id: number
+  kind: 'model' | 'route'
+  routeKey: ModelRouteKey | null
   providerName: string
   providerLabel: string
   /** `connection · model` */

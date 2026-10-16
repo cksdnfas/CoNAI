@@ -8,6 +8,7 @@ import {
 import { migrateLlmConnectionGenerationDefaults } from './llmConnectionDefaultsMigration';
 import { migrateLlmModelRows } from './llmModelRowsMigration';
 import { migrateWorkflowLlmNodes } from './workflowLlmNodeMigration';
+import { migrateLlmModelRoutes } from './llmModelRoutesMigration';
 import { DEFAULT_JUDGE_PRESETS } from '../services/codex-chat/chatJudgeDefaults';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
@@ -1028,6 +1029,17 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (!hasColumn('llm_model_slots', 'is_default_judge')) {
     db.exec('ALTER TABLE llm_model_slots ADD COLUMN is_default_judge INTEGER NOT NULL DEFAULT 0');
   }
+  // Representative models (대표모델): route rows that point at a model row (llmModelRoutesMigration.ts, modelSlots.ts).
+  const routeColumns: Array<[string, string]> = [
+    ['is_route', 'INTEGER NOT NULL DEFAULT 0'],
+    ['route_key', 'TEXT'],
+    ['route_name', 'TEXT'],
+    ['target_slot_id', 'INTEGER'],
+    ['prompt', 'TEXT'],
+  ];
+  for (const [columnName, definition] of routeColumns) {
+    if (!hasColumn('llm_model_slots', columnName)) db.exec(`ALTER TABLE llm_model_slots ADD COLUMN ${columnName} ${definition}`);
+  }
   // The model a user profile writes reply suggestions with (llm_model_slots; no foreign key, like the profile slots).
   if (!hasColumn('chat_user_profiles', 'model_slot_id')) {
     db.exec('ALTER TABLE chat_user_profiles ADD COLUMN model_slot_id INTEGER');
@@ -1591,6 +1603,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
   migrateLlmModelRows(db);
   // Saved LLM nodes that name a connection pick its model row instead (no-op once none does).
   migrateWorkflowLlmNodes(db);
+  // The built-in representative models take over the ★ / ⚖ defaults (no-op once they exist).
+  migrateLlmModelRoutes(db);
 
   // Pinned chat memories become "always on" entries of each chat's lorebook (no-op once every row is NULL).
   if (db.prepare('SELECT 1 FROM codex_chat_threads WHERE memories IS NOT NULL LIMIT 1').get()) {

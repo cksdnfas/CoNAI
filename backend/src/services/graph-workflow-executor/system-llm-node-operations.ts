@@ -93,13 +93,13 @@ export async function executeJudgeTextNode(
   if (mode === 'choice' && choices.length < 2) throw new Error('선택지를 두 줄 이상 적어줘')
   const threshold = Math.min(1, Math.max(0, normalizeOptionalNumber(resolvedInputs.threshold) ?? 0.5))
 
-  // The judge model: the picked row (LLM or TypeSafe), else the ★ default row.
+  // The judge model: the picked row (LLM or TypeSafe, or a representative model), else the judge representative model.
   const modelSlotId = normalizeOptionalId(resolvedInputs.model_slot_id)
-  const row = modelSlotId !== null ? ModelSlotStore.target(modelSlotId) : ModelSlotStore.defaultTarget()
+  const row = modelSlotId !== null ? ModelSlotStore.target(modelSlotId) : ModelSlotStore.defaultJudgeTarget()
   if (!row) {
     throw new Error(modelSlotId !== null
-      ? `모델을 찾을 수 없어 (지워졌을 수 있어): ${modelSlotId}`
-      : '기본 모델이 없어. 설정 › LLM에서 ★ 기본 모델을 정하거나 노드에서 모델을 골라줘.')
+      ? `모델을 찾을 수 없어 (지워졌거나 대표모델이 비어 있을 수 있어): ${modelSlotId}`
+      : '판단 대표모델이 비어 있어. 설정 › LLM › 대표모델에서 판단 모델을 정하거나 노드에서 모델을 골라줘.')
   }
   const connection = resolveJudgeConnection(row.providerName, row.model)
   logRequestStarted(context, node, moduleDefinition, operationKey, { modelSlotId: row.id, engine: connection.engine, mode })

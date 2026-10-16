@@ -81,7 +81,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     reasoningEffort: profile?.reasoningEffort ?? '',
     reasoningBudgetTokens: profile?.reasoningBudgetTokens ?? null,
     extraParams: profile?.extraParams ?? '',
-    systemPrompt: profile?.systemPrompt ?? '',
+    systemPrompt: profile?.systemPrompt ?? defaults?.systemPrompt ?? '',
     promptSections: profile?.promptSections ?? [],
     greeting: profile?.greeting ?? '',
     alternateGreetings: profile?.alternateGreetings ?? [],

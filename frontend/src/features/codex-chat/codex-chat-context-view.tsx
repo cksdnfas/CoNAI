@@ -23,6 +23,7 @@ import { ChatUserProfileRow } from './chat-user-profiles'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatCompactMutationKey, codexChatThreadQueryKey } from './codex-chat-context'
 import { CHAT_MODEL_OPTIONS_QUERY_KEY, listChatModelOptions } from '@/lib/api-codex-chat'
 import { parseServerDate } from '@/lib/server-time'
+import { ChatModelOptionItems } from './chat-model-option-items'
 
 /** Per-chat opt-in, using the same public model slots as reply suggestions. */
 function GenerationReactionSettings({ thread }: { thread: CodexChatThread }) {
@@ -46,7 +47,7 @@ function GenerationReactionSettings({ thread }: { thread: CodexChatThread }) {
           aria-label={t({ ko: '완료 반응 모델', en: 'Completion reaction model' })}
         >
           <option value="">{t({ ko: '대화 모델', en: 'Chat model' })}</option>
-          {(models.data ?? []).map((model) => <option key={model.id} value={model.id} disabled={!model.ready}>{model.label}</option>)}
+          <ChatModelOptionItems models={models.data ?? []} part="chat" />
         </Select>
         <Switch checked={thread.reaction_enabled === 1} onCheckedChange={(reactionEnabled) => mutation.mutate({ reactionEnabled })} disabled={mutation.isPending} aria-label={t({ ko: '완료 반응', en: 'Completion reaction' })} />
       </div>

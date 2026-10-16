@@ -1,12 +1,10 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plug, Plus } from 'lucide-react'
-import { MODEL_SLOTS_QUERY_KEY, MODEL_USAGE_QUERY_KEY, getModelUsage, listModelSlots, setDefaultJudgeModelSlot, setDefaultModelSlot, type ModelSlot } from '@/lib/api-codex-chat'
+import { MODEL_SLOTS_QUERY_KEY, MODEL_USAGE_QUERY_KEY, getModelUsage, listModelSlots, updateModelRoute } from '@/lib/api-codex-chat'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { CONTENT_EVALUATION_QUERY_KEY } from '@/lib/api-content-evaluation'
 import { getExternalApiProviders } from '@/lib/api-external-api'
-import { POSTS_QUERY_KEY } from '@/lib/api-posts'
 import { useI18n } from '@/i18n'
 import { RowGroup } from '@/components/ui/row-group'
 import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
@@ -15,38 +13,30 @@ import { AgentCliSettings } from './agent-cli-settings'
 import { ExternalMcpSettings } from './external-mcp-settings'
 import { useLlmConnectionsChatPage, type ExternalMcpDraftSeed } from './use-llm-connections-chat-page'
 import { LlmConnectionEditorModal, LlmConnectionListItem } from './llm-connections-tab-modals'
-import { ConnectionModelEditorModal, ConnectionModelRow, useRefreshModelRows } from './llm-connection-models'
+import { ConnectionModelEditorModal, ConnectionModelRow, ModelRouteEditorModal, ModelRouteRow, useRefreshModelRows, type ModelRouteModalState } from './llm-connection-models'
 import type { LlmConnectionModalState } from './llm-connections-tab-utils'
 
-/** Settings › LLM › 연결: Codex / Claude Code sign-in, the connections with their models, and outside MCP servers. */
+/**
+ * Settings › LLM › 연결: Codex / Claude Code sign-in, the connections with their models, the representative models
+ * (대표모델) that route each part to one of them, and outside MCP servers.
+ */
 export function LlmConnectionsTab() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const [connectionModalState, setConnectionModalState] = useState<LlmConnectionModalState>(null)
   const [editingSlotId, setEditingSlotId] = useState<number | null>(null)
+  const [routeModalState, setRouteModalState] = useState<ModelRouteModalState>(null)
   const [mcpSeed, setMcpSeed] = useState<ExternalMcpDraftSeed | null>(null)
   const refreshModelRows = useRefreshModelRows()
 
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots })
   const usageQuery = useQuery({ queryKey: MODEL_USAGE_QUERY_KEY, queryFn: getModelUsage })
-  const setDefaultMutation = useMutation({
-    mutationFn: (slot: ModelSlot) => setDefaultModelSlot(slot.id),
+  const pointRouteMutation = useMutation({
+    mutationFn: ({ routeId, targetSlotId }: { routeId: number; targetSlotId: number | null }) => updateModelRoute(routeId, { targetSlotId }),
     onSuccess: () => refreshModelRows(),
     onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '기본 모델을 바꾸지 못했어.', en: 'Could not change the default model.' }), tone: 'error' })
-    },
-  })
-  const setDefaultJudgeMutation = useMutation({
-    mutationFn: ({ slot, on }: { slot: ModelSlot; on: boolean }) => setDefaultJudgeModelSlot(slot.id, on),
-    onSuccess: () => Promise.all([
-      refreshModelRows(),
-      // Topic relevance and board evaluations follow the default judge; their readiness changes with it.
-      queryClient.invalidateQueries({ queryKey: [CONTENT_EVALUATION_QUERY_KEY] }),
-      queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
-    ]),
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '기본 판단 모델을 바꾸지 못했어.', en: 'Could not change the default judge.' }), tone: 'error' })
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '대표모델을 바꾸지 못했어.', en: 'Could not change the representative model.' }), tone: 'error' })
     },
   })
 
@@ -71,27 +61,20 @@ export function LlmConnectionsTab() {
   )
 
   const slots = slotsQuery.data ?? []
-  const slotsOf = (providerName: string) => slots.filter((slot) => slot.providerName === providerName)
-  const orphanProviders = [...new Set(slots.map((slot) => slot.providerName))].filter((name) => providersQuery.isSuccess && !llmProviders.some((provider) => provider.provider_name === name))
+  const models = slots.filter((slot) => slot.kind === 'model')
+  const routes = slots.filter((slot) => slot.kind === 'route')
+  const slotsOf = (providerName: string) => models.filter((slot) => slot.providerName === providerName)
+  const orphanProviders = [...new Set(models.map((slot) => slot.providerName))].filter((name) => providersQuery.isSuccess && !llmProviders.some((provider) => provider.provider_name === name))
   const nodesOf = (slotId: number | undefined) => usageQuery.data?.slots.find((entry) => entry.id === slotId)?.workflowNodes ?? 0
-  const editingSlot = slots.find((slot) => slot.id === editingSlotId) ?? null
+  const editingSlot = models.find((slot) => slot.id === editingSlotId) ?? null
   useLlmConnectionsChatPage({
     providers: llmProviders,
     slots,
-    onSetDefault: (slot) => setDefaultMutation.mutateAsync(slot),
-    onSetDefaultJudge: (slot, on) => setDefaultJudgeMutation.mutateAsync({ slot, on }),
+    onPointRoute: (routeId, targetSlotId) => pointRouteMutation.mutateAsync({ routeId, targetSlotId }),
     onDraftMcpServer: setMcpSeed,
   })
-  const modelRow = (slot: ModelSlot) => (
-    <ConnectionModelRow
-      key={slot.id}
-      slot={slot}
-      workflowNodes={nodesOf(slot.id)}
-      settingDefault={setDefaultMutation.isPending || setDefaultJudgeMutation.isPending}
-      onSetDefault={(next) => setDefaultMutation.mutate(next)}
-      onToggleDefaultJudge={(next) => setDefaultJudgeMutation.mutate({ slot: next, on: !next.isDefaultJudge })}
-      onOpen={(next) => setEditingSlotId(next.id)}
-    />
+  const modelRow = (slot: (typeof models)[number]) => (
+    <ConnectionModelRow key={slot.id} slot={slot} workflowNodes={nodesOf(slot.id)} onOpen={(next) => setEditingSlotId(next.id)} />
   )
 
   return (
@@ -138,9 +121,30 @@ export function LlmConnectionsTab() {
         )}
       </RowGroup>
 
+      <RowGroup
+        heading={t({ ko: '대표모델', en: 'Representative models' })}
+        count={slotsQuery.isSuccess ? routes.length : undefined}
+        actions={
+          <IconButton size="icon-sm" variant="ghost" onClick={() => setRouteModalState({ mode: 'create' })} label={t({ ko: '대표모델 추가', en: 'Add representative model' })}>
+            <Plus className="h-4 w-4" />
+          </IconButton>
+        }
+      >
+        {slotsQuery.isLoading ? <SettingsRowsSkeleton rows={5} /> : routes.map((slot) => (
+          <ModelRouteRow key={slot.id} slot={slot} workflowNodes={nodesOf(slot.id)} onOpen={(next) => setRouteModalState({ mode: 'edit', slot: next })} />
+        ))}
+      </RowGroup>
+
       <ExternalMcpSettings seed={mcpSeed} onSeedClose={() => setMcpSeed(null)} />
 
       <ConnectionModelEditorModal slot={editingSlot} workflowNodes={nodesOf(editingSlot?.id)} onClose={() => setEditingSlotId(null)} />
+
+      <ModelRouteEditorModal
+        state={routeModalState}
+        slots={slots}
+        workflowNodes={routeModalState?.mode === 'edit' ? nodesOf(routeModalState.slot.id) : 0}
+        onClose={() => setRouteModalState(null)}
+      />
 
       <LlmConnectionEditorModal
         state={connectionModalState}

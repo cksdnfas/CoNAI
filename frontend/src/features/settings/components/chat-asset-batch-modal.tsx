@@ -26,6 +26,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { cn } from '@/lib/utils'
 import { ChatAssetSubmissionError } from '@/lib/api-codex-chat'
+import { chatModelRows, ModelRowOptions } from './chat-model-role-select'
 
 const terminal = (status: string) => ['completed', 'failed', 'cancelled'].includes(status)
 const activeAttempt = (attempt: ChatAssetBatch['slots'][number]['attempts'][number]) => !terminal(attempt.status)
@@ -235,9 +236,9 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
         </Field>
         {preset?.kind === 'comfyui' ? <Field label={t({ ko: '프롬프트 필드', en: 'Prompt field' })} className="min-w-0"><Select variant="settings" className="w-auto max-w-full" value={promptField} disabled={frozen} aria-label={t({ ko: '슬롯 프롬프트 필드', en: 'Slot prompt field' })} onChange={(event) => setPromptChoice(event.target.value)}><option value="">{t({ ko: '프롬프트 필드', en: 'Prompt field' })}</option>{promptFields.map((field) => <option key={field.id} value={field.id}>{field.label}</option>)}</Select></Field> : null}
         <Field label={t({ ko: '비전 검수 모델', en: 'Vision review model' })} info={t({ ko: '후보가 기준 이미지와 같은 인물인지, 표정이 맞는지 보는 모델. 이미지를 볼 수 있는 모델을 골라줘.', en: 'Checks that a candidate matches the reference character and expression. Choose a model that can see images.' })} className="min-w-0">
-        <Select variant="settings" className="w-auto max-w-full" aria-label={t({ ko: '비전 검수 모델', en: 'Vision review model' })} value={visionSlotId} disabled={modelSlots.isPending} onChange={(event) => setVisionChoice(Number(event.target.value))}>
-          <option value={0}>{t({ ko: '비전 검수 모델', en: 'Vision review model' })}</option>
-          {modelSlots.data?.map((slot) => <option key={slot.id} value={slot.id}>{slot.label}</option>)}
+        <Select variant="settings" className="w-auto max-w-full" aria-label={t({ ko: '비전 검수 모델', en: 'Vision review model' })} value={visionSlotId ? `slot:${visionSlotId}` : ''} disabled={modelSlots.isPending} onChange={(event) => setVisionChoice(event.target.value.startsWith('slot:') ? Number(event.target.value.slice(5)) : 0)}>
+          <option value="">{t({ ko: '비전 검수 모델', en: 'Vision review model' })}</option>
+          <ModelRowOptions slots={chatModelRows(modelSlots.data ?? [])} />
         </Select>
         </Field>
         <span className="mx-1 mb-2 h-6 w-px bg-line" aria-hidden />

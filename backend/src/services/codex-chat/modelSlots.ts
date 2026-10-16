@@ -5,14 +5,18 @@ import { RatingScoreModel } from '../../models/RatingScore'
 import { ChatProfileError } from './chatProfileError'
 import { TYPESAFE_DEFAULT_MODEL } from '../judge/typesafeClient'
 import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
+import { loadPostsSettings } from '../posts/postsSettings'
 
 /**
- * The models of the LLM connections. A connection is a server (address, key, limits); each row here is one model it
- * serves, listed under it in Settings → LLM. Chat profiles (per role, and their judge), judge presets, user profiles
- * and chats reference rows by id and resolve them at request time, so changing a row's model reaches everything that
- * uses it. One row is the default (★): new profiles start on it and a chat role with no model of its own uses it.
- * At most one row is the default judge: judges, board evaluations and topic relevance with no model of their own ask it.
- * The table and the code keep the older "slot" name.
+ * The models of the LLM connections and the representative models (대표모델) that route to them.
+ * A connection is a server (address, key, limits); each model row is one model it serves, listed under it in
+ * Settings → LLM. A route row names no connection: it points at a model row (`target_slot_id`), so everything that
+ * picked the route follows when the route is pointed elsewhere, across connections too. Five routes are built in, one
+ * per part (chat, summary, translation, suggestions, judge); they are what each part uses when nothing picked a model,
+ * and hold that part's default prompt. More routes can be named freely. Summary and suggestion routes without a target
+ * follow the chat model. Chat profiles (per role, and their judge), judge presets, user profiles, chats and workflow
+ * nodes reference rows of either kind by id and resolve them at request time. The table and the code keep the older
+ * "slot" name; `is_default` / `is_default_judge` mirror the chat and judge routes' targets for older readers.
  */
 export type ModelRole = 'chat' | 'summary' | 'translation' | 'suggest'
 
@@ -21,6 +25,16 @@ export const MODEL_ROLES: readonly ModelRole[] = ['chat', 'summary', 'translatio
 /** What a profile uses a row for: one of its model roles, or its judge. */
 export type ModelUseRole = ModelRole | 'judge'
 
+/** The built-in routes, one per part. */
+export type RouteKey = ModelUseRole
+
+export const ROUTE_KEYS: readonly RouteKey[] = ['chat', 'summary', 'translation', 'suggest', 'judge']
+
+const ROUTE_NAMES: Record<RouteKey, string> = { chat: '대화', summary: '요약', translation: '번역', suggest: '답장 추천', judge: '판단' }
+
+/** Built-in routes that, without a target, follow the chat model. */
+const FOLLOWS_CHAT: readonly RouteKey[] = ['summary', 'suggest']
+
 /** Connections whose models chat roles can use. */
 export const LLM_CONNECTION_TYPES: readonly string[] = ['llm_openai_compatible', 'llm_ollama']
 /** Connections that hold models at all: the LLM ones and the TypeSafe decision models (judges only). */
@@ -28,23 +42,41 @@ export const MODEL_CONNECTION_TYPES: readonly string[] = [...LLM_CONNECTION_TYPE
 
 export type ModelSlot = {
   id: number
+  /** `model`: a connection's model; `route`: a representative model pointing at one. */
+  kind: 'model' | 'route'
+  /** Routes: the connection of the model the route reaches ('' when it reaches none). */
   providerName: string
   /** The connection's display name (its name when it has none or is gone). */
   providerLabel: string
-  /** Null when the connection is gone. */
+  /** Null when the connection is gone, or a route reaches no model. */
   providerType: string | null
+  /** Routes: the model the route reaches ('' when none). */
   model: string
-  /** `connection · model`, how pickers name the row. */
+  /** `connection · model`, or `대표 · name` for a route; how pickers name the row. */
   label: string
+  /** The built-in chat route: what a chat role with no model of its own uses, and where new profiles start. */
   isDefault: boolean
-  /** The default judge (see the header). */
+  /** The built-in judge route: what judges, board evaluations and topic relevance with no model of their own ask. */
   isDefaultJudge: boolean
   sortOrder: number
+  /** Routes: the built-in part, null for a named one. */
+  routeKey: RouteKey | null
+  /** Routes: the name (a built-in route's is its part's). */
+  routeName: string | null
+  /** Routes: the model row it points at; null for none (summary / suggestions then follow the chat model). */
+  targetSlotId: number | null
+  /** Routes: no target of its own, so it follows the chat model. */
+  followsChat: boolean
+  /** Built-in routes: the part's default prompt ('' for the built-in text). */
+  prompt: string
   /**
-   * The highest rating tier (rating_tiers.id) of media this model may be shown; null: no ceiling. Profiles
-   * that follow their model, workflow nodes and vision reviews use it (chatContentRating.ts).
+   * The highest rating tier (rating_tiers.id) of media this model may be shown; null: no ceiling. A route: null follows
+   * its target's, NO_CEILING (-1) is none. Profiles that follow their model, workflow nodes and vision reviews use it
+   * (chatContentRating.ts).
    */
   contentRatingTierId: number | null
+  /** Model rows: the routes pointing at it (`key`: the built-in part, null for a named one). */
+  routes: Array<{ id: number; name: string; key: RouteKey | null }>
   /** Profiles that reference this row, with what they use it for. */
   profiles: Array<{ id: number; name: string; roles: ModelUseRole[] }>
   /** Judge presets that ask this model (as the judge or as the escalation LLM). */
@@ -58,8 +90,8 @@ export type ModelSlot = {
   updatedDate: string
 }
 
-/** The request-time lookup of a row. */
-export type ModelTarget = { id: number; providerName: string; model: string; label: string }
+/** The request-time lookup of a row: the model it reaches, and the route it came through. */
+export type ModelTarget = { id: number; providerName: string; model: string; label: string; routeId: number | null }
 
 /** The llm_chat_profiles slot column of each role. */
 export const ROLE_SLOT_COLUMNS: Record<ModelRole, string> = {
@@ -69,7 +101,12 @@ export const ROLE_SLOT_COLUMNS: Record<ModelRole, string> = {
   suggest: 'suggest_slot_id',
 }
 
+/** A route's own "no ceiling" (null on a route follows its target's). */
+export const NO_CEILING = -1
+
 const MODEL_MAX_LENGTH = 200
+const ROUTE_NAME_MAX_LENGTH = 40
+const ROUTE_PROMPT_MAX_LENGTH = 20000
 
 type SlotRow = {
   id: number
@@ -79,6 +116,11 @@ type SlotRow = {
   is_default_judge: number
   sort_order: number
   content_rating_tier_id: number | null
+  is_route: number
+  route_key: string | null
+  route_name: string | null
+  target_slot_id: number | null
+  prompt: string | null
   created_date: string
   updated_date: string
 }
@@ -130,6 +172,8 @@ function collectUsage(): Usage {
   for (const row of db.prepare('SELECT model_slot_id FROM chat_user_profiles WHERE model_slot_id IS NOT NULL').all() as Array<{ model_slot_id: number }>) count(usage.userProfiles, row.model_slot_id)
   for (const row of db.prepare('SELECT reaction_model_slot_id FROM codex_chat_threads WHERE reaction_model_slot_id IS NOT NULL').all() as Array<{ reaction_model_slot_id: number }>) count(usage.chats, row.reaction_model_slot_id)
   for (const row of db.prepare('SELECT model_slot_id FROM content_evaluation_settings WHERE model_slot_id IS NOT NULL').all() as Array<{model_slot_id:number}>) count(usage.contentEvaluations,row.model_slot_id)
+  // Board knowledge evaluations keep their judge in the posts settings file.
+  count(usage.contentEvaluations, loadPostsSettings().knowledge.judgeSlotId)
   return usage
 }
 
@@ -138,20 +182,65 @@ function connectionOf(providerName: string) {
   return { label: provider?.display_name || providerName, type: provider?.provider_type ?? null }
 }
 
-function toSlot(row: SlotRow, usage: Usage, connections: Map<string, { label: string; type: string | null }>): ModelSlot {
-  const connection = connections.get(row.provider_name) ?? connectionOf(row.provider_name)
-  connections.set(row.provider_name, connection)
+function isRouteKey(value: unknown): value is RouteKey {
+  return typeof value === 'string' && (ROUTE_KEYS as readonly string[]).includes(value)
+}
+
+function routeKeyOf(row: Pick<SlotRow, 'is_route' | 'route_key'>): RouteKey | null {
+  return row.is_route === 1 && isRouteKey(row.route_key) ? row.route_key : null
+}
+
+function routeNameOf(row: Pick<SlotRow, 'is_route' | 'route_key' | 'route_name'>) {
+  const key = routeKeyOf(row)
+  return key ? ROUTE_NAMES[key] : row.route_name ?? ''
+}
+
+function followsChatRow(row: Pick<SlotRow, 'is_route' | 'route_key' | 'target_slot_id'>) {
+  const key = routeKeyOf(row)
+  return row.target_slot_id === null && key !== null && FOLLOWS_CHAT.includes(key)
+}
+
+/** The built-in route of a part (created by the schema; null only on a database that skipped it). */
+function routeRow(key: RouteKey) {
+  return getUserSettingsDb().prepare('SELECT * FROM llm_model_slots WHERE is_route = 1 AND route_key = ? ORDER BY id ASC LIMIT 1').get(key) as SlotRow | undefined
+}
+
+/** The model row a route reaches: its target, or for summary / suggestions without one, the chat route's. */
+function reachedId(row: SlotRow, rows?: Map<number, SlotRow>): number | null {
+  if (row.is_route !== 1) return row.id
+  const targetId = followsChatRow(row) ? (rows ? [...rows.values()].find((entry) => routeKeyOf(entry) === 'chat') : routeRow('chat'))?.target_slot_id ?? null : row.target_slot_id
+  if (targetId === null) return null
+  const target = rows ? rows.get(targetId) : getUserSettingsDb().prepare('SELECT * FROM llm_model_slots WHERE id = ?').get(targetId) as SlotRow | undefined
+  return target && target.is_route !== 1 ? target.id : null
+}
+
+function toSlot(row: SlotRow, rows: Map<number, SlotRow>, usage: Usage, connections: Map<string, { label: string; type: string | null }>): ModelSlot {
+  const isRoute = row.is_route === 1
+  const reachedRowId = reachedId(row, rows)
+  const reached = reachedRowId === null ? null : rows.get(reachedRowId) ?? null
+  const providerName = reached?.provider_name ?? ''
+  const connection = reached ? connections.get(providerName) ?? connectionOf(providerName) : { label: '', type: null }
+  if (reached) connections.set(providerName, connection)
+  const key = routeKeyOf(row)
+  const name = isRoute ? routeNameOf(row) : null
   return {
     id: row.id,
-    providerName: row.provider_name,
+    kind: isRoute ? 'route' : 'model',
+    providerName,
     providerLabel: connection.label,
     providerType: connection.type,
-    model: row.model,
-    label: `${connection.label} · ${row.model}`,
-    isDefault: row.is_default === 1,
-    isDefaultJudge: row.is_default_judge === 1,
+    model: reached?.model ?? '',
+    label: isRoute ? `대표 · ${name}` : `${connection.label} · ${row.model}`,
+    isDefault: key === 'chat',
+    isDefaultJudge: key === 'judge',
     sortOrder: row.sort_order,
+    routeKey: key,
+    routeName: name,
+    targetSlotId: isRoute ? row.target_slot_id : null,
+    followsChat: followsChatRow(row),
+    prompt: key ? row.prompt ?? '' : '',
     contentRatingTierId: row.content_rating_tier_id ?? null,
+    routes: isRoute ? [] : [...rows.values()].filter((entry) => entry.is_route === 1 && entry.target_slot_id === row.id).map((entry) => ({ id: entry.id, name: routeNameOf(entry), key: routeKeyOf(entry) })),
     profiles: usage.profiles.get(row.id) ?? [],
     judgePresets: usage.judgePresets.get(row.id) ?? [],
     userProfiles: usage.userProfiles.get(row.id) ?? 0,
@@ -162,14 +251,19 @@ function toSlot(row: SlotRow, usage: Usage, connections: Map<string, { label: st
   }
 }
 
-export function isSlotUsed(slot: Pick<ModelSlot, 'isDefaultJudge' | 'profiles' | 'judgePresets' | 'userProfiles' | 'chats' | 'contentEvaluations'>) {
-  return slot.isDefaultJudge || slot.profiles.length > 0 || slot.judgePresets.length > 0 || slot.userProfiles > 0 || slot.chats > 0 || (slot.contentEvaluations ?? 0) > 0
+/** Routes that hold a model row in place; the chat route never does, it moves to another LLM row when its row goes. */
+function holdingRoutes(slot: { routes?: ModelSlot['routes'] }) {
+  return (slot.routes ?? []).filter((route) => route.key !== 'chat')
 }
 
-/** "세라, 미나 · 판단 프리셋 기본 · 사용자 프로필 2" — who holds a row, for refusals. */
+export function isSlotUsed(slot: Pick<ModelSlot, 'isDefaultJudge' | 'profiles' | 'judgePresets' | 'userProfiles' | 'chats' | 'contentEvaluations'> & { routes?: ModelSlot['routes'] }) {
+  return slot.isDefaultJudge || holdingRoutes(slot).length > 0 || slot.profiles.length > 0 || slot.judgePresets.length > 0 || slot.userProfiles > 0 || slot.chats > 0 || (slot.contentEvaluations ?? 0) > 0
+}
+
+/** "대표모델 대화 · 세라, 미나 · 판단 프리셋 기본 · 사용자 프로필 2" — who holds a row, for refusals. */
 function describeUse(slot: ModelSlot) {
   return [
-    slot.isDefaultJudge ? '기본 판단 모델' : null,
+    holdingRoutes(slot).length > 0 ? `대표모델 ${holdingRoutes(slot).map((route) => route.name).join(', ')}` : null,
     slot.profiles.length > 0 ? slot.profiles.map((profile) => profile.name).join(', ') : null,
     slot.judgePresets.length > 0 ? `판단 프리셋 ${slot.judgePresets.map((preset) => preset.name).join(', ')}` : null,
     slot.userProfiles > 0 ? `사용자 프로필 ${slot.userProfiles}` : null,
@@ -200,79 +294,172 @@ function modelConnectionName(value: unknown) {
 }
 
 const LLM_ROW_SQL = `SELECT s.id FROM llm_model_slots s JOIN external_api_providers p ON p.provider_name = s.provider_name
-  WHERE p.provider_type IN (${LLM_CONNECTION_TYPES.map((type) => `'${type}'`).join(', ')})`
+  WHERE s.is_route = 0 AND p.provider_type IN (${LLM_CONNECTION_TYPES.map((type) => `'${type}'`).join(', ')})`
+
+/** Points a built-in route at a row (or none), keeping the older default flags in step. */
+function pointRoute(key: RouteKey, targetId: number | null) {
+  const db = getUserSettingsDb()
+  db.prepare("UPDATE llm_model_slots SET target_slot_id = ?, updated_date = datetime('now') WHERE is_route = 1 AND route_key = ?").run(targetId, key)
+  if (key === 'chat') db.prepare('UPDATE llm_model_slots SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END').run(targetId ?? 0)
+  if (key === 'judge') db.prepare('UPDATE llm_model_slots SET is_default_judge = CASE WHEN id = ? THEN 1 ELSE 0 END').run(targetId ?? 0)
+}
 
 /**
- * Keeps exactly one default while any LLM row exists: the given row, else the first LLM row when none is marked.
- * Only an LLM model can be the default (it is what chats fall back to); TypeSafe rows never are.
+ * Keeps the chat route on an LLM model while any exists: its target when that is still an LLM row, else the first
+ * LLM row. Chats fall back to it, so it is never left empty while there is something to point at.
  */
-function settleDefault(preferId?: number) {
+function settleChatRoute() {
   const db = getUserSettingsDb()
-  if (preferId !== undefined) {
-    db.prepare('UPDATE llm_model_slots SET is_default = CASE WHEN id = ? THEN 1 ELSE 0 END').run(preferId)
-    return
-  }
-  if (db.prepare(`${LLM_ROW_SQL} AND s.is_default = 1`).get()) return
-  db.prepare('UPDATE llm_model_slots SET is_default = 0').run()
+  const chat = routeRow('chat')
+  if (!chat) return
+  if (chat.target_slot_id !== null && db.prepare(`${LLM_ROW_SQL} AND s.id = ?`).get(chat.target_slot_id)) return
   const first = db.prepare(`${LLM_ROW_SQL} ORDER BY s.sort_order ASC, s.id ASC LIMIT 1`).get() as { id: number } | undefined
-  if (first) db.prepare('UPDATE llm_model_slots SET is_default = 1 WHERE id = ?').run(first.id)
+  pointRoute('chat', first?.id ?? null)
 }
 
 function insertRow(providerName: string, model: string) {
   const db = getUserSettingsDb()
-  const sortOrder = ((db.prepare('SELECT MAX(sort_order) AS max FROM llm_model_slots').get() as { max: number | null }).max ?? -1) + 1
+  const sortOrder = ((db.prepare('SELECT MAX(sort_order) AS max FROM llm_model_slots WHERE is_route = 0').get() as { max: number | null }).max ?? -1) + 1
   // The name column is a leftover of named slots (unique, not shown); a fresh token keeps it unique.
   const id = Number(db.prepare('INSERT INTO llm_model_slots (name, provider_name, model, sort_order) VALUES (?, ?, ?, ?)').run(randomUUID(), providerName, model, sortOrder).lastInsertRowid)
-  settleDefault()
+  settleChatRoute()
   return id
 }
 
 function findRowId(providerName: string, model: string) {
-  const row = getUserSettingsDb().prepare('SELECT id FROM llm_model_slots WHERE provider_name = ? AND model = ? ORDER BY id ASC LIMIT 1').get(providerName, model) as { id: number } | undefined
+  const row = getUserSettingsDb().prepare('SELECT id FROM llm_model_slots WHERE is_route = 0 AND provider_name = ? AND model = ? ORDER BY id ASC LIMIT 1').get(providerName, model) as { id: number } | undefined
   return row?.id ?? null
 }
 
+function allRows() {
+  const rows = getUserSettingsDb().prepare('SELECT * FROM llm_model_slots').all() as SlotRow[]
+  return new Map(rows.map((row) => [row.id, row]))
+}
+
+/** Routes first (built-in ones in part order, then named ones), then the models in list order. */
+function listOrder(a: SlotRow, b: SlotRow) {
+  if (a.is_route !== b.is_route) return b.is_route - a.is_route
+  const keyRank = (row: SlotRow) => {
+    const key = routeKeyOf(row)
+    return key ? ROUTE_KEYS.indexOf(key) : ROUTE_KEYS.length
+  }
+  return keyRank(a) - keyRank(b) || a.sort_order - b.sort_order || a.id - b.id
+}
+
+function plainTarget(row: Pick<SlotRow, 'id' | 'provider_name' | 'model'>, routeId: number | null): ModelTarget {
+  return { id: row.id, providerName: row.provider_name, model: row.model, label: `${connectionOf(row.provider_name).label} · ${row.model}`, routeId }
+}
+
+function routeName(value: unknown, exceptId: number) {
+  const name = typeof value === 'string' ? value.trim() : ''
+  if (name.length < 1 || name.length > ROUTE_NAME_MAX_LENGTH) throw new ChatProfileError('대표모델 이름은 1자 이상 40자 이하로 적어줘.')
+  const taken = (getUserSettingsDb().prepare('SELECT id, route_key, route_name FROM llm_model_slots WHERE is_route = 1 AND id != ?').all(exceptId) as Array<Pick<SlotRow, 'id' | 'route_key' | 'route_name'>>)
+    .some((row) => (isRouteKey(row.route_key) ? ROUTE_NAMES[row.route_key] : row.route_name ?? '').toLowerCase() === name.toLowerCase())
+  if (taken) throw new ChatProfileError('같은 이름의 대표모델이 이미 있어.')
+  return name
+}
+
+/** A route's target: a model row (never another route) on a connection the route's part can use; null when allowed. */
+function routeTarget(value: unknown, key: RouteKey | null): number | null {
+  if (value === null || value === undefined || value === '') {
+    if (key === 'chat' && getUserSettingsDb().prepare(LLM_ROW_SQL).get()) throw new ChatProfileError('대화 대표모델은 비워둘 수 없어.')
+    if (key === null) throw new ChatProfileError('대표모델이 가리킬 모델을 골라줘.')
+    return null
+  }
+  const id = Number(value)
+  const row = Number.isSafeInteger(id) ? getUserSettingsDb().prepare('SELECT * FROM llm_model_slots WHERE id = ?').get(id) as SlotRow | undefined : undefined
+  if (!row) throw new ChatProfileError('모델을 찾을 수 없어.')
+  if (row.is_route === 1) throw new ChatProfileError('대표모델은 연결의 모델만 가리킬 수 있어.')
+  const type = ExternalApiProvider.findByName(row.provider_name)?.provider_type
+  const kinds = key === 'judge' || key === null ? MODEL_CONNECTION_TYPES : LLM_CONNECTION_TYPES
+  if (!type || !kinds.includes(type)) throw new ChatProfileError(type === 'decision_typesafe' ? `${key ? ROUTE_NAMES[key] : '이'} 대표모델은 LLM 연결의 모델만 가리킬 수 있어. 판단 모델은 판단 대표모델에만 쓸 수 있어.` : '쓸 수 있는 연결의 모델을 골라줘.')
+  return row.id
+}
+
+/** A route's ceiling: null follows its target, NO_CEILING is none, else a rating tier. */
+function routeRatingTier(value: unknown) {
+  return Number(value) === NO_CEILING && value !== null && value !== '' ? NO_CEILING : contentRatingTier(value)
+}
+
+function routePrompt(value: unknown) {
+  const prompt = typeof value === 'string' ? value.trim() : ''
+  if (prompt.length > ROUTE_PROMPT_MAX_LENGTH) throw new ChatProfileError('기본 프롬프트는 20000자까지 쓸 수 있어.')
+  return prompt
+}
+
+/** Board readiness (topic relevance, evaluations) follows the judge route; a change refreshes it. */
+function publishJudgeChange() {
+  publishRuntimeEvent({ name: 'posts.changed', topic: 'posts', visibility: 'all', payload: { postId: null, kind: 'post' } })
+}
+
 export const ModelSlotStore = {
+  /** Routes, then the connections' models. */
   list() {
-    const rows = getUserSettingsDb().prepare('SELECT * FROM llm_model_slots ORDER BY sort_order ASC, id ASC').all() as SlotRow[]
+    const rows = allRows()
     const usage = collectUsage()
     const connections = new Map<string, { label: string; type: string | null }>()
-    return rows.map((row) => toSlot(row, usage, connections))
+    return [...rows.values()].sort(listOrder).map((row) => toSlot(row, rows, usage, connections))
   },
 
   find(slotId: number) {
-    const row = getUserSettingsDb().prepare('SELECT * FROM llm_model_slots WHERE id = ?').get(slotId) as SlotRow | undefined
-    return row ? toSlot(row, collectUsage(), new Map()) : null
+    const rows = allRows()
+    const row = rows.get(slotId)
+    return row ? toSlot(row, rows, collectUsage(), new Map()) : null
   },
 
+  /** The built-in chat route. */
   findDefault() {
-    const row = getUserSettingsDb().prepare('SELECT * FROM llm_model_slots WHERE is_default = 1 ORDER BY id ASC LIMIT 1').get() as SlotRow | undefined
-    return row ? toSlot(row, collectUsage(), new Map()) : null
+    const id = ModelSlotStore.routeId('chat')
+    return id === null ? null : ModelSlotStore.find(id)
   },
 
-  /** The connection + model of a row without its usage (the request-time lookup). */
+  /** The id of a part's built-in route (what new profiles and imported cards store for it). */
+  routeId(key: RouteKey): number | null {
+    return routeRow(key)?.id ?? null
+  },
+
+  /** A part's default prompt ('' when it keeps the built-in text). */
+  routePrompt(key: RouteKey): string {
+    return routeRow(key)?.prompt?.trim() ?? ''
+  },
+
+  /** Whether the row is a summary / suggestion route with no target, which follows whatever the chat role uses. */
+  followsChat(slotId: number | null | undefined): boolean {
+    if (slotId === null || slotId === undefined) return false
+    const row = getUserSettingsDb().prepare('SELECT is_route, route_key, target_slot_id FROM llm_model_slots WHERE id = ?').get(slotId) as Pick<SlotRow, 'is_route' | 'route_key' | 'target_slot_id'> | undefined
+    return row ? followsChatRow(row) : false
+  },
+
+  /** The connection + model a row reaches, without its usage (the request-time lookup); null when it reaches none. */
   target(slotId: number | null | undefined): ModelTarget | null {
     if (slotId === null || slotId === undefined) return null
-    const row = getUserSettingsDb().prepare('SELECT id, provider_name, model FROM llm_model_slots WHERE id = ?').get(slotId) as Pick<SlotRow, 'id' | 'provider_name' | 'model'> | undefined
-    return row ? { id: row.id, providerName: row.provider_name, model: row.model, label: `${connectionOf(row.provider_name).label} · ${row.model}` } : null
+    const row = getUserSettingsDb().prepare('SELECT * FROM llm_model_slots WHERE id = ?').get(slotId) as SlotRow | undefined
+    if (!row) return null
+    if (row.is_route !== 1) return plainTarget(row, null)
+    const reachedRowId = reachedId(row)
+    const reached = reachedRowId === null ? undefined : getUserSettingsDb().prepare('SELECT id, provider_name, model FROM llm_model_slots WHERE id = ?').get(reachedRowId) as Pick<SlotRow, 'id' | 'provider_name' | 'model'> | undefined
+    return reached ? plainTarget(reached, row.id) : null
   },
 
+  /** What the chat route reaches. */
   defaultTarget(): ModelTarget | null {
-    const row = getUserSettingsDb().prepare('SELECT id FROM llm_model_slots WHERE is_default = 1 ORDER BY id ASC LIMIT 1').get() as { id: number } | undefined
-    return row ? ModelSlotStore.target(row.id) : null
+    return ModelSlotStore.target(ModelSlotStore.routeId('chat'))
   },
 
-  /** The default judge row (see the header), or null when none is set. */
+  /** What the judge route reaches, or null when it points nowhere. */
   defaultJudgeTarget(): ModelTarget | null {
-    const row = getUserSettingsDb().prepare('SELECT id FROM llm_model_slots WHERE is_default_judge = 1 ORDER BY id ASC LIMIT 1').get() as { id: number } | undefined
-    return row ? ModelSlotStore.target(row.id) : null
+    return ModelSlotStore.target(ModelSlotStore.routeId('judge'))
   },
 
   /** A row's content rating ceiling (see ModelSlot.contentRatingTierId); null for no ceiling or no such row. */
   contentRatingTierId(slotId: number | null | undefined): number | null {
     if (slotId === null || slotId === undefined) return null
-    const row = getUserSettingsDb().prepare('SELECT content_rating_tier_id FROM llm_model_slots WHERE id = ?').get(slotId) as { content_rating_tier_id: number | null } | undefined
-    return row?.content_rating_tier_id ?? null
+    const row = getUserSettingsDb().prepare('SELECT * FROM llm_model_slots WHERE id = ?').get(slotId) as SlotRow | undefined
+    if (!row) return null
+    if (row.content_rating_tier_id === NO_CEILING) return null
+    if (row.content_rating_tier_id !== null || row.is_route !== 1) return row.content_rating_tier_id ?? null
+    const reachedRowId = reachedId(row)
+    return reachedRowId === null ? null : ModelSlotStore.contentRatingTierId(reachedRowId)
   },
 
   /** The id when that row exists, else null. */
@@ -284,15 +471,16 @@ export const ModelSlotStore = {
   },
 
   /**
-   * A row id for a saved field: null for empty, else the row, which must exist and sit on a connection of `kinds`
-   * (a connection that is gone passes, so a profile saved before it went keeps saving).
+   * A row id for a saved field: null for empty, else the row, which must exist and reach a connection of `kinds`
+   * (a connection that is gone passes, so a profile saved before it went keeps saving; so does a route reaching no
+   * model yet, which counts as unset until it does).
    */
   checked(slotId: unknown, kinds: readonly string[] = LLM_CONNECTION_TYPES): number | null {
     if (slotId === null || slotId === undefined || slotId === '') return null
     const id = ModelSlotStore.existing(slotId)
-    const target = id === null ? null : ModelSlotStore.target(id)
-    if (!target) throw new ChatProfileError('모델을 찾을 수 없어.')
-    const type = ExternalApiProvider.findByName(target.providerName)?.provider_type
+    if (id === null) throw new ChatProfileError('모델을 찾을 수 없어.')
+    const target = ModelSlotStore.target(id)
+    const type = target ? ExternalApiProvider.findByName(target.providerName)?.provider_type : undefined
     if (type && !kinds.includes(type)) throw new ChatProfileError(kinds.includes('decision_typesafe') ? '판단에 쓸 수 없는 모델이야.' : '판단 모델은 채팅에 쓸 수 없어. LLM 연결의 모델을 골라줘.')
     return id
   },
@@ -313,9 +501,9 @@ export const ModelSlotStore = {
     return insertRow(connection, name)
   },
 
-  /** Rows of one connection, in list order. */
+  /** Model rows of one connection, in list order. */
   ofConnection(providerName: string) {
-    return ModelSlotStore.list().filter((slot) => slot.providerName === providerName)
+    return ModelSlotStore.list().filter((slot) => slot.kind === 'model' && slot.providerName === providerName)
   },
 
   /**
@@ -343,14 +531,16 @@ export const ModelSlotStore = {
       const ids = wanted.map((model) => findRowId(connection, model) as number)
       const orders = (db.prepare(`SELECT sort_order FROM llm_model_slots WHERE id IN (${ids.map(() => '?').join(', ') || 'NULL'}) ORDER BY sort_order ASC`).all(...ids) as Array<{ sort_order: number }>).map((row) => row.sort_order)
       ids.forEach((id, index) => db.prepare('UPDATE llm_model_slots SET sort_order = ? WHERE id = ?').run(orders[index], id))
-      settleDefault()
+      settleChatRoute()
     })()
     return ModelSlotStore.ofConnection(connection)
   },
 
-  /** Change a row's model or content rating ceiling; everything that references the row follows. Null when the row does not exist. */
+  /** Change a model row's model or content rating ceiling; everything that references the row follows. Null when the row does not exist. */
   update(slotId: number, input: { model?: unknown; isDefault?: unknown; contentRatingTierId?: unknown }) {
     const db = getUserSettingsDb()
+    const row = db.prepare('SELECT is_route FROM llm_model_slots WHERE id = ?').get(slotId) as { is_route: number } | undefined
+    if (row?.is_route === 1) return ModelSlotStore.updateRoute(slotId, { contentRatingTierId: input.contentRatingTierId })
     const current = ModelSlotStore.target(slotId)
     if (!current) return null
     const model = input.model === undefined ? current.model : modelName(input.model)
@@ -363,50 +553,88 @@ export const ModelSlotStore = {
       }
       if (input.isDefault === true) ModelSlotStore.setDefault(slotId)
     })()
-    if (model !== current.model) publishRuntimeEvent({name:'posts.changed',topic:'posts',visibility:'all',payload:{postId:null,kind:'post'}})
+    if (model !== current.model) publishJudgeChange()
     return ModelSlotStore.find(slotId)
   },
 
-  /** The one default row: the new-profile starting point and the model of a chat role with none of its own. */
+  /** Points the chat route at a model row (the older "make default"). */
   setDefault(slotId: number) {
     const target = ModelSlotStore.target(slotId)
     if (!target) return null
-    const type = ExternalApiProvider.findByName(target.providerName)?.provider_type
-    if (!type || !LLM_CONNECTION_TYPES.includes(type)) throw new ChatProfileError('기본 모델은 LLM 연결의 모델만 될 수 있어.')
-    settleDefault(slotId)
+    const id = ModelSlotStore.routeId('chat')
+    if (id === null) return null
+    ModelSlotStore.updateRoute(id, { targetSlotId: slotId })
     return ModelSlotStore.find(slotId)
   },
 
-  /** Makes a row the default judge (any model connection, TypeSafe too), or with `on` false clears it. Null when the row does not exist. */
+  /** Points the judge route at a model row, or with `on` false clears it when it points there. Null when the row does not exist. */
   setDefaultJudge(slotId: number, on: boolean) {
     const target = ModelSlotStore.target(slotId)
     if (!target) return null
-    const type = ExternalApiProvider.findByName(target.providerName)?.provider_type
-    if (on && (!type || !MODEL_CONNECTION_TYPES.includes(type))) throw new ChatProfileError('판단에 쓸 수 없는 모델이야.')
-    const db = getUserSettingsDb()
-    if (on) db.prepare('UPDATE llm_model_slots SET is_default_judge = CASE WHEN id = ? THEN 1 ELSE 0 END').run(slotId)
-    else db.prepare('UPDATE llm_model_slots SET is_default_judge = 0 WHERE id = ?').run(slotId)
-    publishRuntimeEvent({ name: 'posts.changed', topic: 'posts', visibility: 'all', payload: { postId: null, kind: 'post' } })
+    const judge = routeRow('judge')
+    if (!judge) return null
+    if (on) ModelSlotStore.updateRoute(judge.id, { targetSlotId: slotId })
+    else if (judge.target_slot_id === slotId) ModelSlotStore.updateRoute(judge.id, { targetSlotId: null })
     return ModelSlotStore.find(slotId)
   },
 
-  /** Removes an unused row (refused while anything references it); the default passes to the first row left. */
+  /** A named route pointing at a model row. */
+  createRoute(input: { name?: unknown; targetSlotId?: unknown; contentRatingTierId?: unknown }) {
+    const db = getUserSettingsDb()
+    const name = routeName(input.name, 0)
+    const target = routeTarget(input.targetSlotId, null)
+    const tier = input.contentRatingTierId === undefined ? null : routeRatingTier(input.contentRatingTierId)
+    const sortOrder = ((db.prepare('SELECT MAX(sort_order) AS max FROM llm_model_slots WHERE is_route = 1').get() as { max: number | null }).max ?? -1) + 1
+    const id = Number(db.prepare("INSERT INTO llm_model_slots (name, provider_name, model, sort_order, is_route, route_name, target_slot_id, content_rating_tier_id) VALUES (?, '', '', ?, 1, ?, ?, ?)")
+      .run(randomUUID(), sortOrder, name, target, tier).lastInsertRowid)
+    return ModelSlotStore.find(id)
+  },
+
+  /**
+   * Changes a route: its target (everything that picked the route follows), its name (named routes), its part's
+   * default prompt (built-in routes) or its own content rating ceiling. Null when the route does not exist.
+   */
+  updateRoute(routeId: number, input: { name?: unknown; targetSlotId?: unknown; prompt?: unknown; contentRatingTierId?: unknown }) {
+    const db = getUserSettingsDb()
+    const row = db.prepare('SELECT * FROM llm_model_slots WHERE id = ? AND is_route = 1').get(routeId) as SlotRow | undefined
+    if (!row) return null
+    const key = routeKeyOf(row)
+    db.transaction(() => {
+      if (input.name !== undefined && key === null) db.prepare('UPDATE llm_model_slots SET route_name = ? WHERE id = ?').run(routeName(input.name, routeId), routeId)
+      if (input.targetSlotId !== undefined) {
+        const target = routeTarget(input.targetSlotId, key)
+        if (key) pointRoute(key, target)
+        else db.prepare('UPDATE llm_model_slots SET target_slot_id = ? WHERE id = ?').run(target, routeId)
+      }
+      if (input.prompt !== undefined && key !== null) db.prepare('UPDATE llm_model_slots SET prompt = ? WHERE id = ?').run(routePrompt(input.prompt) || null, routeId)
+      if (input.contentRatingTierId !== undefined) db.prepare('UPDATE llm_model_slots SET content_rating_tier_id = ? WHERE id = ?').run(routeRatingTier(input.contentRatingTierId), routeId)
+      db.prepare("UPDATE llm_model_slots SET updated_date = datetime('now') WHERE id = ?").run(routeId)
+    })()
+    if (input.targetSlotId !== undefined) publishJudgeChange()
+    return ModelSlotStore.find(routeId)
+  },
+
+  /**
+   * Removes an unused model row or named route (refused while anything references it; built-in routes stay).
+   * The chat route moves to the first LLM row left when its model goes.
+   */
   delete(slotId: number) {
     const slot = ModelSlotStore.find(slotId)
     if (!slot) return false
+    if (slot.routeKey !== null) throw new ChatProfileError('기본 대표모델은 지울 수 없어.')
     if (isSlotUsed(slot)) throw new ChatProfileError(`쓰는 곳이 있어서 지울 수 없어: ${describeUse(slot)}`)
     const db = getUserSettingsDb()
     return db.transaction(() => {
       const deleted = db.prepare('DELETE FROM llm_model_slots WHERE id = ?').run(slotId).changes > 0
-      settleDefault()
+      settleChatRoute()
       return deleted
     })()
   },
 }
 
-/** A connection's primary model: its default row when the default is on it, else its first row; null with none. */
+/** A connection's primary model: the chat route's model when it is on this connection, else its first row; null with none. */
 export function primaryModelOf(providerName: string): string | null {
-  const row = getUserSettingsDb().prepare('SELECT model FROM llm_model_slots WHERE provider_name = ? ORDER BY is_default DESC, sort_order ASC, id ASC LIMIT 1').get(providerName) as { model: string } | undefined
+  const row = getUserSettingsDb().prepare('SELECT model FROM llm_model_slots WHERE is_route = 0 AND provider_name = ? ORDER BY is_default DESC, sort_order ASC, id ASC LIMIT 1').get(providerName) as { model: string } | undefined
   return row?.model ?? null
 }
 
@@ -419,8 +647,8 @@ export function modelReferencesOfConnection(providerName: string): { models: str
 export function deleteModelsOfConnection(providerName: string) {
   const db = getUserSettingsDb()
   db.transaction(() => {
-    db.prepare('DELETE FROM llm_model_slots WHERE provider_name = ?').run(providerName)
-    settleDefault()
+    db.prepare('DELETE FROM llm_model_slots WHERE is_route = 0 AND provider_name = ?').run(providerName)
+    settleChatRoute()
   })()
 }
 

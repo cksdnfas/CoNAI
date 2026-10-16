@@ -3,14 +3,18 @@ import { ModelSlotStore, type ModelRole, type ModelTarget } from './modelSlots'
 import { CLAUDE_CHAT_PROVIDER } from './claudeChatCompletion'
 
 /**
- * Where a role's model comes from: `slot` (the role's model row), `inherit` (summary / suggestions borrowing the chat
- * role's model), `default` (the default row, for a chat role with nothing set), `engine` (Claude Code's own model).
+ * Where a role's model comes from: `slot` (the row the role picked, a model or a representative model), `inherit`
+ * (summary / suggestions borrowing the chat role's model), `default` (the part's built-in representative model, for a
+ * role with nothing set), `engine` (Claude Code's own model).
  */
 export type ResolvedModel = {
   providerName: string
   model: string
   via: 'slot' | 'inherit' | 'default' | 'engine'
+  /** The model row reached. */
   slotId: number | null
+  /** The representative model it came through, when it did (its content rating ceiling applies). */
+  routeId: number | null
   /** `connection · model`, or the engine's name for Claude Code. */
   label: string
 }
@@ -36,13 +40,13 @@ function slotIdOf(profile: ModelRoleProfile, role: ModelRole) {
 }
 
 function fromTarget(target: ModelTarget, via: ResolvedModel['via']): ResolvedModel {
-  return { providerName: target.providerName, model: target.model, via, slotId: target.id, label: target.label }
+  return { providerName: target.providerName, model: target.model, via, slotId: target.id, routeId: target.routeId, label: target.label }
 }
 
 function resolveChat(profile: ModelRoleProfile): ResolvedModel | null {
   if (profile.engine === 'claude') {
     const model = profile.model || 'sonnet'
-    return { providerName: CLAUDE_CHAT_PROVIDER, model, via: 'engine', slotId: null, label: `Claude Code · ${model}` }
+    return { providerName: CLAUDE_CHAT_PROVIDER, model, via: 'engine', slotId: null, routeId: null, label: `Claude Code · ${model}` }
   }
   if (profile.engine === 'codex') return null
   const slot = ModelSlotStore.target(profile.modelSlotId)
@@ -53,17 +57,28 @@ function resolveChat(profile: ModelRoleProfile): ResolvedModel | null {
 
 /**
  * The connection + model a profile uses for a role, or null when the role is off or has nothing to call.
- * The role's own row wins; without one, summary and suggestions borrow the chat role's model (API LLM / Claude
- * profiles), translation is off, and the chat role uses the default row. A Codex profile has no chat connection.
- * A row id that no longer exists counts as unset.
+ * The role's own row wins (a summary / suggestion representative model without a target follows the chat role);
+ * without one, summary and suggestions use their part's representative model, which by default follows the chat
+ * role's model (API LLM / Claude profiles); translation is off, and the chat role uses the chat representative model.
+ * A Codex profile has no chat connection. A row id that no longer exists counts as unset.
  */
 export function resolveProfileModel(profile: ModelRoleProfile, role: ModelRole): ResolvedModel | null {
   if (role === 'chat') return resolveChat(profile)
-  const slot = ModelSlotStore.target(slotIdOf(profile, role))
+  const slotId = slotIdOf(profile, role)
+  const inherit = () => {
+    const chat = resolveChat(profile)
+    return chat ? { ...chat, via: 'inherit' as const } : null
+  }
+  if (ModelSlotStore.followsChat(slotId)) return profile.engine === 'codex' ? null : inherit()
+  const slot = ModelSlotStore.target(slotId)
   if (slot) return fromTarget(slot, 'slot')
   if (role === 'translation' || profile.engine === 'codex') return null
-  const chat = resolveChat(profile)
-  return chat ? { ...chat, via: 'inherit' } : null
+  const routeId = ModelSlotStore.routeId(role)
+  if (!ModelSlotStore.followsChat(routeId)) {
+    const route = ModelSlotStore.target(routeId)
+    if (route) return fromTarget(route, 'default')
+  }
+  return inherit()
 }
 
 /** Whether the profile translates (user messages into the model language, replies into the display language). */

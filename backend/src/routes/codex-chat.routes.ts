@@ -786,9 +786,13 @@ router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
   res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch }) })
 })
 
-/** Values the profile editor fills in for a new profile, and the scopes it may offer. */
+/**
+ * Values the profile editor fills in for a new profile, and the scopes it may offer. `systemPrompt` is the chat
+ * representative model's default prompt (a new profile starts with it); `summaryPrompt` is what an empty summary
+ * prompt uses.
+ */
 router.get('/admin/profile-defaults', requireAdmin, (_req: Request, res: Response) => {
-  res.json({ success: true, data: { ...CHAT_PROFILE_DEFAULTS, summaryPrompt: DEFAULT_CHAT_SUMMARY_PROMPT, scopes: CHAT_SCOPES, style: DEFAULT_CHAT_STYLE } })
+  res.json({ success: true, data: { ...CHAT_PROFILE_DEFAULTS, systemPrompt: ModelSlotStore.routePrompt('chat'), summaryPrompt: ModelSlotStore.routePrompt('summary') || DEFAULT_CHAT_SUMMARY_PROMPT, scopes: CHAT_SCOPES, style: DEFAULT_CHAT_STYLE } })
 })
 
 router.get('/admin/profiles', requireAdmin, (_req: Request, res: Response) => {
@@ -853,18 +857,17 @@ router.post('/admin/profiles/import-card', requireAdmin, (req, res, next) => {
 }, asyncHandler(async (req, res) => {
   try {
     if (!req.file) throw new ChatProfileError('카드를 골라줘.')
-    // The card starts on the default model; the editor lets the admin pick another before saving.
-    res.json({ success: true, data: await importChatCard(req.file.buffer, ModelSlotStore.defaultTarget()?.id ?? null) })
+    // The card starts on the chat representative model; the editor lets the admin pick another before saving.
+    res.json({ success: true, data: await importChatCard(req.file.buffer, ModelSlotStore.defaultTarget() ? ModelSlotStore.routeId('chat') : null) })
   } catch (error) { sendChatError(res, error) }
 }))
 
 router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {
     const input = (req.body ?? {}) as ChatProfileInput
-    // An API LLM profile with no model of its own starts on the default row, when there is one.
+    // An API LLM profile with no model of its own starts on the chat representative model, when it reaches one.
     if (input.engine !== 'codex' && input.engine !== 'claude' && !input.providerName && (input.modelSlotId === null || input.modelSlotId === undefined)) {
-      const defaultSlot = ModelSlotStore.findDefault()
-      if (defaultSlot) input.modelSlotId = defaultSlot.id
+      if (ModelSlotStore.defaultTarget()) input.modelSlotId = ModelSlotStore.routeId('chat')
     }
     await assertCodexEffortSupported(input)
     // A copy keeps the links its source already has; anything added on top is checked as usual.
@@ -1266,14 +1269,15 @@ router.delete('/admin/blocks/:blockId', requireAdmin, (req: Request, res: Respon
 })
 
 /**
- * Model rows: the models each LLM connection serves (Settings → LLM lists them under their connection). Profiles,
- * judge presets, user profiles and chats reference rows by id, so changing a row's model reaches all of them.
+ * Model rows: the representative models (대표모델) and the models each LLM connection serves (Settings → LLM lists
+ * them under their connection). Profiles, judge presets, user profiles and chats reference rows of either kind by id,
+ * so changing a row's model, or where a representative model points, reaches all of them.
  */
 router.get('/admin/model-slots', requireAdmin, (_req: Request, res: Response) => {
   // TypeSafe decision rows are not chat targets, so their readiness is the judge's. `sharedServer`: the profiles that
   // send their reply and a per-turn helper to this row's connection (the connection editor warns about them).
   const shared = sharedServerProfiles()
-  res.json({ success: true, data: ModelSlotStore.list().map((slot) => ({ ...slot, ready: slot.providerType === 'decision_typesafe' ? isJudgeConnectionReady(slot.providerName, slot.model) : isChatTargetReady(slot.providerName, slot.model), sharedServer: shared.get(slot.providerName) ?? [] })) })
+  res.json({ success: true, data: ModelSlotStore.list().map((slot) => ({ ...slot, ready: slot.model === '' ? false : slot.providerType === 'decision_typesafe' ? isJudgeConnectionReady(slot.providerName, slot.model) : isChatTargetReady(slot.providerName, slot.model), sharedServer: shared.get(slot.providerName) ?? [] })) })
 })
 
 /** Adds one model to a connection (returns the existing row when it is already there). */
@@ -1298,6 +1302,24 @@ router.put('/admin/model-slots/:slotId', requireAdmin, (req: Request, res: Respo
   try {
     const updated = ModelSlotStore.update(slotId, (req.body ?? {}) as Record<string, unknown>)
     if (!updated) { res.status(404).json({ success: false, error: '모델을 찾을 수 없어.' }); return }
+    res.json({ success: true, data: updated })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** A named representative model: `{ name, targetSlotId, contentRatingTierId? }`. */
+router.post('/admin/model-routes', requireAdmin, (req: Request, res: Response) => {
+  try {
+    res.status(201).json({ success: true, data: ModelSlotStore.createRoute((req.body ?? {}) as Record<string, unknown>) })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** Changes a representative model: `{ name?, targetSlotId?, prompt?, contentRatingTierId? }` (it is deleted through /admin/model-slots). */
+router.put('/admin/model-routes/:routeId', requireAdmin, (req: Request, res: Response) => {
+  const routeId = parseId(req.params.routeId)
+  if (routeId === null) { sendRouteBadRequest(res, 'Invalid route id'); return }
+  try {
+    const updated = ModelSlotStore.updateRoute(routeId, (req.body ?? {}) as Record<string, unknown>)
+    if (!updated) { res.status(404).json({ success: false, error: '대표모델을 찾을 수 없어.' }); return }
     res.json({ success: true, data: updated })
   } catch (error) { sendChatError(res, error) }
 })
@@ -1426,8 +1448,8 @@ router.post('/admin/judge-presets/test', requireAdmin, asyncHandler(async (req: 
     const presetId = parseId(body.presetId)
     const preset = body.preset ? ChatJudgePresetStore.draft(body.preset) : presetId === null ? null : ChatJudgePresetStore.find(presetId)
     if (!preset) { res.status(404).json({ success: false, error: '판단 프리셋을 찾을 수 없어.' }); return }
-    // The model picked for the test, else the preset's, else the profile's own, else the default judge.
-    const target = ModelSlotStore.target(parseId(body.slotId) ?? preset.modelSlotId ?? profile.judgeSlotId) ?? ModelSlotStore.defaultJudgeTarget()
+    // The model picked for the test, else the order every judge uses: the profile's own, the preset's, the judge representative model.
+    const target = ModelSlotStore.target(parseId(body.slotId) ?? profile.judgeSlotId ?? preset.modelSlotId) ?? ModelSlotStore.defaultJudgeTarget()
     if (!target) { res.status(400).json({ success: false, error: '판단 모델을 골라줘.' }); return }
     const { providerName, model } = target
     const turns = Math.min(20, Math.max(1, Number(body.turns) || 6))
@@ -2067,7 +2089,7 @@ router.get('/user-profiles', requireChatAccess, (req: Request, res: Response) =>
 
 /** GET /api/codex-chat/model-options — the models a user profile can write reply suggestions with (any chat user). */
 router.get('/model-options', requireChatAccess, (_req: Request, res: Response) => {
-  res.json({ success: true, data: ModelSlotStore.list().filter((slot) => slot.providerType !== 'decision_typesafe').map((slot) => ({ id: slot.id, providerName: slot.providerName, providerLabel: slot.providerLabel, label: slot.label, model: slot.model, ready: isChatTargetReady(slot.providerName, slot.model) })) })
+  res.json({ success: true, data: ModelSlotStore.list().filter((slot) => slot.providerType !== 'decision_typesafe').map((slot) => ({ id: slot.id, kind: slot.kind, routeKey: slot.routeKey, providerName: slot.providerName, providerLabel: slot.providerLabel, label: slot.label, model: slot.model, ready: slot.model !== '' && isChatTargetReady(slot.providerName, slot.model) })) })
 })
 
 router.post('/user-profiles', requireChatAccess, (req: Request, res: Response) => {

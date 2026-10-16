@@ -121,9 +121,9 @@ test('workflow LLM nodes: model resolution, chat-path requests, usage, new nodes
     assert.equal((resolveWorkflowLlm({ profileId: sera.id, role: 'translation' }) as { model: string }).model, 'qwen3', 'no translation row: the chat model')
   })
 
-  await t.test('without a row, a profile or a ★ default the error says what to do', (s) => {
-    s.mock.method(ModelSlotStore, 'defaultTarget', () => null)
-    assert.throws(() => resolveWorkflowLlm({}), /기본 모델이 없어/)
+  await t.test('without a row, a profile or a chat representative model the error says what to do', (s) => {
+    s.mock.method(ModelSlotStore, 'routeId', () => null)
+    assert.throws(() => resolveWorkflowLlm({}), /대화 대표모델이 없어/)
   })
 
   await t.test('LLM 호출 goes through the chat completion path: node options win, JSON, image part, usage as workflow', async () => {
@@ -175,11 +175,13 @@ test('workflow LLM nodes: model resolution, chat-path requests, usage, new nodes
 
   await t.test('판단 answers yes/no and choices with the judge model, against the threshold', async () => {
     answer = '{"answer":{"yes":0.8,"no":0.2}}'
+    await assert.rejects(Promise.resolve(LLM_NODE_HANDLERS['system.judge_text'](context(), node, definition, { text: '화났어!!', question: '화났어?' })), /판단 대표모델이 비어 있어/)
+    ModelSlotStore.updateRoute(ModelSlotStore.routeId('judge')!, { targetSlotId: gemma })
     const ctx = context()
     await LLM_NODE_HANDLERS['system.judge_text'](ctx, node, definition, { text: '화났어!!', question: '화났어?' })
     let out = ctx.artifactsByNode.get('n1')!
     assert.deepEqual([out.yes.value, out.choice.value, out.probability.value], [true, 'yes', 0.8])
-    assert.equal(lastRequest().model, 'gemma-4', 'the ★ default row judges when none is picked')
+    assert.equal(lastRequest().model, 'gemma-4', 'the judge representative model judges when none is picked')
     assert.equal((lastUsage() as { purpose: string }).purpose, 'workflow')
 
     const strict = context()
@@ -245,13 +247,18 @@ test('workflow LLM nodes: model resolution, chat-path requests, usage, new nodes
 
   await t.test('option lists: LLM rows, judge rows, profiles', async () => {
     ExternalApiProvider.update('olla', { is_enabled: false })
-    const rows = await LLM_NODE_OPTION_SOURCES.llm_model_rows({ accountId: null })
+    const options = await LLM_NODE_OPTION_SOURCES.llm_model_rows({ accountId: null })
+    assert.deepEqual(options[0], { value: String(ModelSlotStore.routeId('chat')), label: '대표 · 대화 (gemma-4)', is_default: true }, 'the chat representative model first, as the empty choice')
+    const separator = options.findIndex((row) => row.value === '__separator')
+    assert.ok(separator > 0 && options[separator].disabled)
+    const rows = options.slice(separator + 1)
     assert.deepEqual(rows.slice(0, 2), [
-      { value: String(gemma), label: 'gemma-4 · Display strata', is_default: true },
+      { value: String(gemma), label: 'gemma-4 · Display strata' },
       { value: String(qwen), label: 'qwen3 · Display olla', disabled: true },
     ])
     assert.ok(!rows.some((row) => row.value === String(jev)), 'no TypeSafe rows for LLM nodes')
     const judges = await LLM_NODE_OPTION_SOURCES.judge_model_rows({ accountId: null })
+    assert.equal(judges[0].value, String(ModelSlotStore.routeId('judge')), 'judge fields list the judge representative model first')
     assert.ok(judges.some((row) => row.value === String(jev) && row.label === 'jev-latest · Display jev'))
     const profiles = await LLM_NODE_OPTION_SOURCES.chat_profiles({ accountId: null })
     assert.deepEqual(profiles.find((entry) => entry.value === String(off.id)), { value: String(off.id), label: '꺼짐이 (꺼짐)', disabled: true })

@@ -19,7 +19,8 @@ export function slotContentLimit(slotId: number | null | undefined): ContentRati
  */
 export function profileContentLimit(profile: ContentRatingProfile, role: ModelRole = 'chat'): ContentRatingLimit {
   if (profile.contentRatingMode === 'custom' || profile.engine === 'codex' || profile.engine === 'claude') return profile.contentRatingTierId
-  return slotContentLimit(resolveProfileModel(profile, role)?.slotId)
+  const resolved = resolveProfileModel(profile, role)
+  return slotContentLimit(resolved?.routeId ?? resolved?.slotId)
 }
 
 /**

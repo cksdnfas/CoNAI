@@ -41,7 +41,8 @@ export function useJudgeEvaluation(post: PostDetail) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '평가를 요청하지 못했어.', en: 'Could not request evaluation.' })) }),
   })
-  const configured = Boolean(settings.data?.knowledge.judgeProvider && settings.data?.knowledge.judgeModel)
+  const knowledge = settings.data?.knowledge
+  const configured = Boolean(knowledge && (knowledge.judgeSlotId !== null || (knowledge.judgeProvider && knowledge.judgeModel)))
   return { available: configured && post.knowledge?.canReview === true, pending: request.isPending, request: () => request.mutate() }
 }
 

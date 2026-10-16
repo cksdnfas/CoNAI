@@ -40,16 +40,17 @@ import { InstantApplyHint } from './settings-section-status'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 
-/** An API LLM profile's model row: its own, else the default (★) it falls back to. */
+/** An API LLM profile's model row: its own, else the chat representative model it falls back to. */
 function profileModelRow(profile: ChatProfile, slots: ModelSlot[]) {
   if (profile.engine !== 'llm') return undefined
   return slots.find((item) => item.id === profile.modelSlotId) ?? slots.find((item) => item.isDefault)
 }
 
-/** `★ connection · model` for an API LLM profile, else the engine and its model. */
+/** `connection · model` (through `대표 · name` when the profile picked a representative model), else the engine and its model. */
 function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnType<typeof useI18n>['t']) {
   const slot = profileModelRow(profile, slots)
-  if (slot) return `${slot.isDefault ? '★ ' : ''}${slot.label}${profile.llmRuntime === 'pi' ? ' · pi' : ''}`
+  const reaches = slot?.kind === 'route' ? ` (${slot.model ? `${slot.providerLabel} · ${slot.model}` : t({ ko: '비어 있음', en: 'empty' })})` : ''
+  if (slot) return `${slot.label}${reaches}${profile.llmRuntime === 'pi' ? ' · pi' : ''}`
   if (profile.engine === 'claude') return `Claude Code · ${profile.model || 'sonnet'}`
   if (profile.engine === 'codex') return `Codex · ${profile.model || t({ ko: '기본 모델', en: 'default model' })}`
   return t({ ko: '모델 없음', en: 'No model' })
@@ -58,7 +59,7 @@ function profileModelLine(profile: ChatProfile, slots: ModelSlot[], t: ReturnTyp
 /** Short chip text for the row: the model, else the engine. The full line is its tooltip. */
 function profileModelChip(profile: ChatProfile, slots: ModelSlot[]) {
   const slot = profileModelRow(profile, slots)
-  if (slot) return `${slot.isDefault ? '★ ' : ''}${slot.model}`
+  if (slot) return slot.model || slot.label
   if (profile.engine === 'claude') return 'Claude Code'
   return profile.engine === 'codex' ? 'Codex' : '—'
 }

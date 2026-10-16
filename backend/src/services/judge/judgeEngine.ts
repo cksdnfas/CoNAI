@@ -4,7 +4,7 @@ import { readLlmConnectionConfig } from '../llmGenerationOptions'
 import { callTypesafeSystemOne, TYPESAFE_DEFAULT_MODEL, type TypesafeQuestion, type TypesafeResponse } from './typesafeClient'
 import { readUsageCounts, recordLlmUsage, type LlmUsageTag } from '../llmUsage'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionTarget } from '../codex-chat/llmChatCompletion'
-import { primaryModelOf } from '../codex-chat/modelSlots'
+import { ModelSlotStore, primaryModelOf } from '../codex-chat/modelSlots'
 
 /**
  * The judge: typed questions about a state (any JSON — a conversation, an image's tags), answered either by the
@@ -175,7 +175,8 @@ async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, s
   const result = await streamChatCompletion({
     target,
     messages: [
-      { role: 'system', content: LLM_JUDGE_PROMPT },
+      // The judge representative model's default prompt adds standing guidance after the answer format.
+      { role: 'system', content: [LLM_JUDGE_PROMPT, ModelSlotStore.routePrompt('judge')].filter(Boolean).join('\n\n') },
       { role: 'user', content: JSON.stringify({ state, questions: asked }) },
     ],
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
