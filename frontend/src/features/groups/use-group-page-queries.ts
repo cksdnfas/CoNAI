@@ -2,11 +2,7 @@ import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useMemo } from 'react'
 import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getAutoFolderGroupFileCounts } from '@/lib/api-auto-folder-groups'
-import {
-  getGroupFileCounts,
-  getGroupImages,
-  getGroupsHierarchyAll,
-} from '@/lib/api-groups'
+import { getGroupFileCounts, getGroupImages, getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import type { GroupImagesPayload, GroupWithHierarchy } from '@/types/group'
 import { createEmptyGroupFileCounts, getDownloadCountsFromImages, type GroupSourceDefinition } from './group-page-shared'
 
@@ -46,7 +42,7 @@ export function useGroupPageQueries({
   })
 
   const assignableCustomGroupsQuery = useQuery({
-    queryKey: ['groups-hierarchy-all', 'assignable-custom'],
+    queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY,
     enabled: canViewImages,
     queryFn: getGroupsHierarchyAll,
   })

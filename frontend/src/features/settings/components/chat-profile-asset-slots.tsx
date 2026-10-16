@@ -15,7 +15,7 @@ import { useImageFeedSafety } from '@/features/images/components/image-list/use-
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
 import { MODEL_SLOTS_QUERY_KEY, listModelSlots } from '@/lib/api-codex-chat'
-import { getGroupEmoticons, getGroupsHierarchyAll, groupEmoticonsQueryKey } from '@/lib/api-groups'
+import { getGroupEmoticons, getGroupsHierarchyAll, groupEmoticonsQueryKey, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import { cn } from '@/lib/utils'
 import { ChosenCheckBadge, ReviewChips, SlotVisionReview } from './chat-asset-batch-modal'
@@ -30,7 +30,7 @@ export function characterGroupName(name: string) {
 /** The character's "채팅 캐릭터/<name>" groups: its expressions (with their keyworded images) and generated candidates. */
 export function useCharacterGroups(characterName: string) {
   const { canViewImages } = useImagePermissions()
-  const groups = useQuery({ queryKey: ['groups-hierarchy-all', 'chat-assets'], queryFn: getGroupsHierarchyAll, enabled: canViewImages, staleTime: 30000 })
+  const groups = useQuery({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY, queryFn: getGroupsHierarchyAll, enabled: canViewImages, staleTime: 30000 })
   const name = characterGroupName(characterName)
   const root = groups.data?.find((group) => group.name === '채팅 캐릭터' && !group.parent_id)
   const character = root ? groups.data?.find((group) => group.name === name && group.parent_id === root.id) : undefined

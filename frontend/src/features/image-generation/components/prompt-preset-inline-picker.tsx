@@ -45,7 +45,7 @@ export function PromptPresetInlinePicker({
   const { t } = useI18n()
   const { canViewPrompts } = useFeaturePermissions()
   const presetsQuery = useQuery({
-    queryKey: ['prompt-presets', 'inline-picker'],
+    queryKey: ['prompt-presets', 'hierarchical'],
     queryFn: () => getPromptPresets({ hierarchical: true, withItems: true }),
     staleTime: 60_000,
     enabled: canViewPrompts,

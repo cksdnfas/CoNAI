@@ -10,7 +10,7 @@ import {
   type ImageViewModalSyncInput,
   type ImageViewSequenceTotal,
 } from './image-view-modal-context'
-import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
+import { getImage, getImageDetailQueryKey, IMAGE_DETAIL_STALE_TIME_MS } from '@/lib/api-images'
 import { registerTranslationCatalog } from '@/i18n'
 import { lockBodyScroll } from '@/lib/body-scroll-lock'
 
@@ -261,7 +261,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       void queryClient.prefetchQuery({
         queryKey: getImageDetailQueryKey(neighborHash, neighborImage),
         queryFn: () => getImage(neighborHash, undefined, neighborImage),
-        staleTime: 0,
+        staleTime: IMAGE_DETAIL_STALE_TIME_MS,
       })
     }
   }, [canViewImages, activeIndex, modalState.compositeHash, modalState.compositeHashes, modalState.sourceItemsByHash, queryClient])
@@ -286,7 +286,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
     void queryClient.prefetchQuery({
       queryKey: getImageDetailQueryKey(input.compositeHash, activeInputImage),
       queryFn: () => getImage(input.compositeHash, undefined, activeInputImage),
-      staleTime: 0,
+      staleTime: IMAGE_DETAIL_STALE_TIME_MS,
     })
 
     setModalState((current) => {

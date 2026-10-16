@@ -54,7 +54,7 @@ import { Select } from '@/components/ui/select'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { getGroupsHierarchyAll } from '@/lib/api-groups'
+import { getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import { getWallpaperRuntimeSettings, updateAppearanceSettings } from '@/lib/api-settings-appearance'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { triggerBlobDownload } from '@/lib/api-client'
@@ -315,7 +315,7 @@ export function WallpaperEditorPage() {
   const notifyError = useCallback((message: string) => showSnackbar({ message, tone: 'error' }), [showSnackbar])
 
   const groupsQuery = useQuery({
-    queryKey: ['groups-hierarchy-all', 'wallpaper-widget-editor'],
+    queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY,
     queryFn: () => getGroupsHierarchyAll(),
     staleTime: 60_000,
   })

@@ -40,9 +40,9 @@ import { pageAction, pageChoice, pageNumber, pageObject, pageText } from './page
 
 type Translate = (input: TranslationInput, values?: Record<string, string | number>) => string
 
-/** Routines change on their own (runs finish in the background): the list refreshes while it is on screen. */
+/** Active routines change on their own (runs finish in the background): the list refreshes while one is on screen. */
 export function useChatRoutines(enabled = true) {
-  return useQuery({ queryKey: CHAT_ROUTINES_QUERY_KEY, queryFn: listChatRoutines, enabled, refetchInterval: 10_000, staleTime: 5_000 })
+  return useQuery({ queryKey: CHAT_ROUTINES_QUERY_KEY, queryFn: listChatRoutines, enabled, refetchInterval: (query) => query.state.data?.some((routine) => routine.status === 'active') ? 10_000 : false, staleTime: 5_000 })
 }
 
 /** Rooms that have a routine (the chat list marks them); empty for accounts that cannot manage routines. */

@@ -101,6 +101,12 @@ export async function searchImagesComplex(input: ComplexImageSearchRequest, init
 
 type ImageDetailRequestSource = Pick<ImageRecord, 'detail_url' | 'detail_scope_key'>
 
+/**
+ * How long an image detail stays fresh. Edits and postprocess events invalidate the `['image-detail', hash]` prefix,
+ * so this only stops the open-after-prefetch and back-and-forth navigation from fetching the same record again.
+ */
+export const IMAGE_DETAIL_STALE_TIME_MS = 15_000
+
 /** Keep gallery and authorized scoped-detail caches separate while preserving hash-prefix invalidation. */
 export function getImageDetailQueryKey(compositeHash: string, source?: ImageDetailRequestSource | null) {
   return ['image-detail', compositeHash, source?.detail_scope_key || 'gallery'] as const

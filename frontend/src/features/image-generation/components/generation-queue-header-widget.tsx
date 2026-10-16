@@ -129,7 +129,8 @@ export function GenerationQueueHeaderWidget() {
     && (authStatusQuery.data.hasCredentials !== true || authStatusQuery.data.authenticated === true)
 
   const workflowsQuery = useQuery({
-    queryKey: ['generation-workflows', 'header-widget'],
+    // The same request as the ComfyUI panel's list, so both read one cache entry.
+    queryKey: ['image-generation-workflows'],
     queryFn: () => getGenerationWorkflows(true, 'all'),
     staleTime: 60_000,
     enabled: canViewWorkflows,

@@ -19,7 +19,7 @@ import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { SEARCH_AI_TOOL_OPTIONS } from '@/features/search/search-constants'
 import { useI18n } from '@/i18n'
-import { getGroupImages, getGroupsHierarchyAll } from '@/lib/api-groups'
+import { getGroupImages, getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import { getImages, searchImagesComplex } from '@/lib/api-images'
 import type { ImageRecord } from '@/types/image'
 import type { GroupWithHierarchy } from '@/types/group'
@@ -49,7 +49,7 @@ export function MediaLibraryBrowser({
   const { canViewImages } = useImagePermissions()
   const { showSnackbar } = useSnackbar()
   const [groupOpen, setGroupOpen] = useState(false)
-  const groupsQuery = useQuery({ queryKey: ['groups-hierarchy-all', 'custom'], queryFn: getGroupsHierarchyAll, enabled: canViewImages, staleTime: 30_000 })
+  const groupsQuery = useQuery({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY, queryFn: getGroupsHierarchyAll, enabled: canViewImages, staleTime: 30_000 })
   const groups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data])
   const countMaps = useMemo(() => buildGroupCountMaps(groups), [groups])
   const groupPaths = useMemo(() => {

@@ -19,7 +19,7 @@ export function PromptDanbooruInstallation({ available }: { available: boolean }
     queryKey: QUERY_KEY,
     queryFn: getDanbooruInstallationStatus,
     retry: false,
-    refetchInterval: (query) => isRunning(query.state.data?.phase) ? 1000 : 60_000,
+    refetchInterval: (query) => isRunning(query.state.data?.phase) ? 1000 : false,
   })
   const status = statusQuery.data
   const check = useMutation({

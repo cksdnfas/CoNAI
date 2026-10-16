@@ -1,4 +1,4 @@
-import { useState, type PropsWithChildren } from 'react'
+import { useMemo, useState, type PropsWithChildren } from 'react'
 import { useLocation } from 'react-router-dom'
 import { pageSettingsScopes, pageSettingsPermission, type PageSettingsScopeId } from '@conai/shared'
 import { PageSettingsContext } from '@/components/common/page-settings-context'
@@ -7,9 +7,20 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 export function PageSettingsProvider({ children }: PropsWithChildren) {
   const { pathname } = useLocation()
   const auth = useAuthStatusQuery().data
-  const scopes = auth?.authenticated ? pageSettingsScopes(pathname).filter((id) => auth.permissionKeys.includes(pageSettingsPermission(id))) : []
+  const authenticated = auth?.authenticated === true
+  const permissionKeys = auth?.permissionKeys
+  const scopes = useMemo(
+    () => authenticated && permissionKeys ? pageSettingsScopes(pathname).filter((id) => permissionKeys.includes(pageSettingsPermission(id))) : [],
+    [authenticated, permissionKeys, pathname],
+  )
   const [selection, setSelection] = useState<{ path: string; scope: PageSettingsScopeId } | null>(null)
   const scope = selection?.path === pathname && scopes.includes(selection.scope) ? selection.scope : null
   if (selection && (selection.path !== pathname || (!scope && auth))) setSelection(null)
-  return <PageSettingsContext.Provider value={{ scopes, scope, open: (id = scopes[0]) => { if (scopes.includes(id)) setSelection({ path: pathname, scope: id }) }, close: () => setSelection(null) }}>{children}</PageSettingsContext.Provider>
+  const value = useMemo(() => ({
+    scopes,
+    scope,
+    open: (id: PageSettingsScopeId = scopes[0]) => { if (scopes.includes(id)) setSelection({ path: pathname, scope: id }) },
+    close: () => setSelection(null),
+  }), [scopes, scope, pathname])
+  return <PageSettingsContext.Provider value={value}>{children}</PageSettingsContext.Provider>
 }

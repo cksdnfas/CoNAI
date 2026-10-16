@@ -10,7 +10,7 @@ export function useChatPresetInsertion(targets: string[]) {
   const page = useChatPage()
   const { canViewPrompts } = useChatPagePermissions()
   const { t } = useI18n()
-  const presets = useQuery({ queryKey: ['prompt-presets', 'chat-insertion'], queryFn: () => getPromptPresets({ withItems: true }), enabled: !!page?.enabled && canViewPrompts })
+  const presets = useQuery({ queryKey: ['prompt-presets', 'chat-assets'], queryFn: () => getPromptPresets({ withItems: true }), enabled: !!page?.enabled && canViewPrompts })
   const records = canViewPrompts ? (presets.data ?? []).slice(0, 512) : []
   return {
     actions: targets.length && records.length ? [pageAction('preset.insert', t({ ko: '프리셋 입력', en: 'Insert preset' }), t({ ko: '선택한 프리셋의 설명·프롬프트를 입력해. append는 덧붙이기, replace는 전체 교체야.', en: 'Insert a preset. append adds to the input; replace replaces the complete input.' }), pageObject({ presetId: pageChoice(records.map((item) => item.id)), fieldId: pageChoice(targets), mode: pageChoice(['append', 'replace']) }, ['presetId', 'fieldId', 'mode']))] : [],

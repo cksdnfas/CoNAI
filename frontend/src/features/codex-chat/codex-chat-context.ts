@@ -122,8 +122,6 @@ export interface CodexChatApi {
   /** Save the prepared chat and send its first message. */
   sendPending: (text: string) => Promise<void>
   isStartingChat: boolean
-  /** The composer text of each chat (chats without one are left out). */
-  drafts: Record<number, string>
   setDraft: (threadId: number, draft: string | ((current: string) => string)) => void
   /** Forget the texts of chats not among these (deleted elsewhere). */
   keepDrafts: (threadIds: number[]) => void
@@ -185,6 +183,15 @@ export type CodexChatReferenceApi = {
 }
 
 export const CodexChatReferenceContext = createContext<CodexChatReferenceApi | null>(null)
+
+/**
+ * The composer text of each chat (chats without one are left out), on its own context: typing re-renders only what
+ * shows a draft, not every useCodexChat consumer across the app.
+ */
+export const CodexChatDraftsContext = createContext<Record<number, string>>({})
+export function useCodexChatDrafts() {
+  return useContext(CodexChatDraftsContext)
+}
 
 /** The streaming reply on its own context: only what renders it re-renders per token. */
 export const CodexChatLiveContext = createContext<CodexChatLiveTurn | null>(null)

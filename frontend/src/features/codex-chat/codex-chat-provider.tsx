@@ -14,6 +14,7 @@ import { useChatPage } from './chat-page-context'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   CodexChatContext,
+  CodexChatDraftsContext,
   CodexChatLiveContext,
   CodexChatReferenceContext,
   codexChatMediaQueryKey,
@@ -614,7 +615,6 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     togglePendingFlag,
     sendPending,
     isStartingChat,
-    drafts,
     setDraft,
     keepDrafts,
     picks,
@@ -643,16 +643,18 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, drafts, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, togglePendingFlag, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, togglePendingFlag, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referencePanelOpen = canUse && isPanelOpen
   const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ panelOpen: referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage }), [referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage])
 
   return (
     <CodexChatContext.Provider value={api}>
-      <CodexChatReferenceContext.Provider value={referenceApi}>
-        <CodexChatLiveContext.Provider value={liveTurn}>{children}</CodexChatLiveContext.Provider>
-      </CodexChatReferenceContext.Provider>
+      <CodexChatDraftsContext.Provider value={drafts}>
+        <CodexChatReferenceContext.Provider value={referenceApi}>
+          <CodexChatLiveContext.Provider value={liveTurn}>{children}</CodexChatLiveContext.Provider>
+        </CodexChatReferenceContext.Provider>
+      </CodexChatDraftsContext.Provider>
     </CodexChatContext.Provider>
   )
 }

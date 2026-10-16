@@ -9,7 +9,7 @@ import { SwitchLine } from '@/components/ui/switch-line'
 import { Tip } from '@/components/ui/tooltip'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { useI18n } from '@/i18n'
-import { getGroupsHierarchyAll } from '@/lib/api-groups'
+import { getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import type { SpriteVideoInfo } from '@/lib/api-sprite'
 import { cn } from '@/lib/utils'
 import { MAX_KEY_COLORS, MAX_SPRITE_FRAMES, normalizeHex, withDespill, type ExtractForm, type OutputForm, type SaveForm } from './sprite-options'
@@ -44,7 +44,7 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
     const hex = normalizeHex(value)
     if (hex) update({ keyColors: form.keyColors.map((color, position) => position === index ? hex : color) })
   }
-  const groups = useQuery({ queryKey: ['groups', 'hierarchy-all'], queryFn: getGroupsHierarchyAll, staleTime: 60_000, enabled: canSave })
+  const groups = useQuery({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY, queryFn: getGroupsHierarchyAll, staleTime: 60_000, enabled: canSave })
   const groupPaths = useMemo(() => {
     const list = groups.data ?? []
     const byId = new Map(list.map((group) => [group.id, group]))

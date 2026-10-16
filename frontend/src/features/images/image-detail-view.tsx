@@ -10,7 +10,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { getImage, getImageDetailQueryKey, getImageDuplicates, getPromptSimilarImages, getSimilarImages } from '@/lib/api-images'
+import { getImage, getImageDetailQueryKey, getImageDuplicates, IMAGE_DETAIL_STALE_TIME_MS, getPromptSimilarImages, getSimilarImages } from '@/lib/api-images'
 import { getRuntimeSimilaritySettings } from '@/lib/api-settings'
 import { getImageViewerSettings } from '@/lib/api-settings'
 import { getErrorMessage } from '@/lib/error-message'
@@ -257,7 +257,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
     queryFn: ({ signal }) => getImage(compositeHash, { signal }, imageDetailSource),
     enabled: canViewImages && Boolean(compositeHash),
     placeholderData: cachedInitialImage,
-    staleTime: 0,
+    staleTime: IMAGE_DETAIL_STALE_TIME_MS,
     // Recover missed completion events (including split API/worker runtimes) while this detail is open.
     refetchInterval: (query) => query.state.data?.postprocess_status === 'pending' ? 5_000 : false,
   })

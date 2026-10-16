@@ -56,6 +56,9 @@ function normalizeGroupFileCounts(counts: GroupFileCounts): GroupFileCounts {
   }
 }
 
+/** The whole custom group tree has one cache entry, shared by the group page and every picker. */
+export const GROUPS_HIERARCHY_ALL_QUERY_KEY = ['groups-hierarchy-all', 'custom'] as const
+
 export async function getGroupsHierarchyAll() {
   const response = await fetchJson<ApiResponse<GroupWithHierarchy[]>>('/api/groups/hierarchy/all')
   if (!response.success) {

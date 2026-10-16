@@ -7,7 +7,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
 import { formatGroupBulkAddNotice } from '@/features/groups/group-bulk-result-messages'
-import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
+import { addImagesToGroup, getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import type { ImageRecord } from '@/types/image'
 
 interface ImageGroupAssignActionProps {
@@ -26,7 +26,7 @@ export function ImageGroupAssignAction({ image, variant = 'secondary' }: ImageGr
   const compositeHash = image?.composite_hash ?? null
 
   const groupsQuery = useQuery({
-    queryKey: ['groups-hierarchy-all', 'custom'],
+    queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY,
     queryFn: getGroupsHierarchyAll,
     enabled: false,
     staleTime: 60_000,
@@ -39,7 +39,7 @@ export function ImageGroupAssignAction({ image, variant = 'secondary' }: ImageGr
       setIsModalOpen(false)
       showSnackbar(formatGroupBulkAddNotice(result, t, formatNumber))
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
+        queryClient.invalidateQueries({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
         queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
         queryClient.invalidateQueries({ queryKey: ['image-detail', compositeHash] }),

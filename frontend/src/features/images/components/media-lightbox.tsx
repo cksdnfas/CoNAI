@@ -1,6 +1,6 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useQuery } from '@tanstack/react-query'
-import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
+import { getImage, getImageDetailQueryKey, IMAGE_DETAIL_STALE_TIME_MS } from '@/lib/api-images'
 import { Spinner } from '@/components/ui/loading-state'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -100,7 +100,7 @@ function MediaLightboxStage({ item, canViewPrevious, canViewNext, onViewPrevious
     queryKey: getImageDetailQueryKey(item.composite_hash || '', item),
     queryFn: ({ signal }) => getImage(item.composite_hash!, { signal }, item),
     enabled: scopedVideo,
-    staleTime: 0,
+    staleTime: IMAGE_DETAIL_STALE_TIME_MS,
     retry: false,
   })
   const [sessionVideoUrl, setSessionVideoUrl] = useState<string | null>(null)

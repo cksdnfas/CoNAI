@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { TextTabs } from '@/components/common/text-tabs'
 import { TabsContent } from '@/components/ui/tabs'
@@ -7,7 +7,9 @@ import { useI18n } from '@/i18n'
 import { ChatSettingsMine } from './chat-settings-mine'
 import { ChatSettingsProfiles } from './chat-settings-profiles'
 import { ChatSettingsResources } from './chat-settings-resources'
-import { ChatSettingsRoutines } from '@/features/codex-chat/chat-routines'
+
+// Loaded on its tab: chat-routines shares its chunk with the chat view, which the settings page must not pull in.
+const ChatSettingsRoutines = lazy(() => import('@/features/codex-chat/chat-routines').then((module) => ({ default: module.ChatSettingsRoutines })))
 
 type ChatSettingsView = 'profiles' | 'resources' | 'mine' | 'routines'
 
@@ -59,7 +61,7 @@ export function ChatSettingsTab() {
       <TabsContent value="profiles"><ChatSettingsProfiles /></TabsContent>
       <TabsContent value="resources"><ChatSettingsResources /></TabsContent>
       <TabsContent value="mine"><ChatSettingsMine /></TabsContent>
-      {isAdmin ? <TabsContent value="routines"><ChatSettingsRoutines /></TabsContent> : null}
+      {isAdmin ? <TabsContent value="routines"><Suspense fallback={null}><ChatSettingsRoutines /></Suspense></TabsContent> : null}
     </TextTabs>
   )
 }

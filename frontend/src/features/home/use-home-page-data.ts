@@ -15,7 +15,7 @@ import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restor
 import { buildHomeSearchString, readHomeSortParam, readSearchChipsParam, type HomeSortOrder } from '@/features/home/home-search-url'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { addImagesToGroup, getGroupsHierarchyAll } from '@/lib/api-groups'
+import { addImagesToGroup, getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
 import { deleteImagesBulk, downloadImageSelection, getImages, getImagesCount, searchImagesComplex } from '@/lib/api-images'
 import { formatGroupBulkAddNotice } from '@/features/groups/group-bulk-result-messages'
@@ -180,7 +180,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   })
 
   const groupsQuery = useQuery({
-    queryKey: ['groups-hierarchy-all', 'custom'],
+    queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY,
     queryFn: getGroupsHierarchyAll,
     enabled: canViewHome && canViewImages && !isAnonymousSession,
   })
@@ -197,7 +197,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
         notifyInfo(notice.message)
       }
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
+        queryClient.invalidateQueries({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
         queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
       ])
@@ -374,7 +374,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['home-images'] }),
         queryClient.invalidateQueries({ queryKey: ['home-images-total'] }),
-        queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
+        queryClient.invalidateQueries({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
         queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
       ])

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { AppShell } from '@/components/layout/app-shell'
 import { Heading } from '@/components/ui/heading'
@@ -14,6 +15,12 @@ import { FeaturePermissionsContext, resolveFeaturePermissions } from './use-feat
 export function ProtectedAppShell() {
   const location = useLocation()
   const authStatusQuery = useAuthStatusQuery()
+  const permissionKeys = authStatusQuery.data?.permissionKeys
+  const authenticated = authStatusQuery.data?.authenticated
+  const isAdmin = authStatusQuery.data?.isAdmin
+  // Stable values: this shell re-renders on every navigation, and a fresh object would re-render every consumer.
+  const featurePermissions = useMemo(() => resolveFeaturePermissions(permissionKeys, authenticated, isAdmin), [permissionKeys, authenticated, isAdmin])
+  const imagePermissions = useMemo(() => resolveImagePermissions(permissionKeys, authenticated), [permissionKeys, authenticated])
 
   if (authStatusQuery.isLoading) {
     return <AuthScreenPlaceholder />
@@ -31,7 +38,7 @@ export function ProtectedAppShell() {
     }
   }
 
-  return <FeaturePermissionsContext.Provider value={resolveFeaturePermissions(authStatusQuery.data?.permissionKeys, authStatusQuery.data?.authenticated, authStatusQuery.data?.isAdmin)}><ImagePermissionsContext.Provider value={resolveImagePermissions(authStatusQuery.data?.permissionKeys, authStatusQuery.data?.authenticated)}><AppShell key={resolveAccountDraftOwner(authStatusQuery.data)} /></ImagePermissionsContext.Provider></FeaturePermissionsContext.Provider>
+  return <FeaturePermissionsContext.Provider value={featurePermissions}><ImagePermissionsContext.Provider value={imagePermissions}><AppShell key={resolveAccountDraftOwner(authStatusQuery.data)} /></ImagePermissionsContext.Provider></FeaturePermissionsContext.Provider>
 }
 
 /** Shown to other machines before the first admin exists; bootstrap access stays on the server PC. */

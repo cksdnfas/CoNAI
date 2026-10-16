@@ -8,7 +8,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { normalizeGroupPathInput, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
-import { getGroupsHierarchyAll } from '@/lib/api-groups'
+import { getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import { cn } from '@/lib/utils'
 import type { GroupWithHierarchy } from '@/types/group'
 import { useI18n } from '@/i18n'
@@ -110,7 +110,7 @@ function GenerationTargetGroupModal({
   const { t } = useI18n()
   const [draft, setDraft] = useState(initialPath)
   const groupsQuery = useQuery({
-    queryKey: ['groups-hierarchy-all', 'custom'],
+    queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY,
     queryFn: getGroupsHierarchyAll,
   })
   const groups = useMemo(() => groupsQuery.data ?? [], [groupsQuery.data])

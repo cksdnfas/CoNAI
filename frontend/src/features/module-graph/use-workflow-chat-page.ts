@@ -29,8 +29,13 @@ export function useWorkflowChatPage(params: Params) {
   const { t } = useI18n()
   const flow = useReactFlow()
   const modules = useMemo(() => params.modules.map(describeChatWorkflowModule), [params.modules])
-  const moduleSignature = JSON.stringify(modules)
-  const draftSignature = signature(params, params.debugMode)
+  const moduleSignature = useMemo(() => JSON.stringify(modules), [modules])
+  const { enabled, name, description, nodes, edges, runInputs, debugMode } = params
+  // Serializing the whole graph is only worth it while a chat is connected to this page, and only when it changed.
+  const draftSignature = useMemo(
+    () => enabled ? signature({ name, description, nodes, edges, runInputs }, debugMode) : '',
+    [enabled, name, description, nodes, edges, runInputs, debugMode],
+  )
   const revision = useMemo(() => ({ draftSignature, moduleSignature, id: createRandomUuid() }), [draftSignature, moduleSignature]).id
   const snapshot = useMemo<ChatWorkflowSnapshot | null>(() => {
     if (!params.enabled) return null

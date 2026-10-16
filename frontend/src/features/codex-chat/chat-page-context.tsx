@@ -397,7 +397,8 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
   const workflowApplyRef = useRef(input?.applyWorkflow)
   const actionApplyRef = useRef(input?.applyAction)
   useLayoutEffect(() => { applyRef.current = input?.apply; workflowApplyRef.current = input?.applyWorkflow; actionApplyRef.current = input?.applyAction })
-  const description = input ? JSON.stringify({ title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields, workflow: input.workflow, actions: input.actions, data: input.data, priority: input.priority, dirty: input.dirty }) : null
+  // Without a page provider (public pages) nothing registers, so the page is not serialized on every render.
+  const description = input && register ? JSON.stringify({ title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields, workflow: input.workflow, actions: input.actions, data: input.data, priority: input.priority, dirty: input.dirty }) : null
   const revisionKey = `${description}:${input?.localRevision ?? ''}`
   const revision = useMemo(() => ({ key: revisionKey, id: createRandomUuid() }), [revisionKey]).id
   const kind = input?.kind

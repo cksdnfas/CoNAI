@@ -83,6 +83,7 @@ import {
   codexChatThreadQueryKey,
   PENDING_DRAFT_KEY,
   useCodexChat,
+  useCodexChatDrafts,
   useCodexChatLiveTurn,
   type CodexChatApi,
 } from './codex-chat-context'
@@ -166,6 +167,7 @@ function ComposerPickChip({ icon, label, disabled, onRemove }: { icon: ReactNode
 }
 
 function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: CodexChatViewProps & { chat: CodexChatApi }) {
+  const drafts = useCodexChatDrafts()
   const { t } = useI18n()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
@@ -242,7 +244,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const pendingChat = activeThreadId === null ? chat.pendingChat : null
   const pendingProfile = pendingChat ? profilesById.get(pendingChat.profileId) ?? null : null
   const draftKey = activeThreadId ?? (pendingProfile ? PENDING_DRAFT_KEY : null)
-  const draft = draftKey !== null ? chat.drafts[draftKey] ?? '' : ''
+  const draft = draftKey !== null ? drafts[draftKey] ?? '' : ''
   const setChatDraft = chat.setDraft
   const setDraft = useCallback((next: string | ((current: string) => string)) => {
     if (draftKey !== null) setChatDraft(draftKey, next)
@@ -930,7 +932,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     <div ref={dense ? undefined : restoreChatListScroll} onScroll={dense ? undefined : (event) => { chatListScrollTop = event.currentTarget.scrollTop }} className={cn('min-h-0 flex-1 overflow-y-auto', !dense && 'px-1')}>
       {searchText.trim()
         ? <ChatSearchResults query={searchText} disabled={false} onPick={pickSearchResult} />
-        : <ChatThreadList threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} drafts={chat.drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />}
+        : <ChatThreadList threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} drafts={drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />}
     </div>
   </>
   // Context stays in the header, the rest of the chat's actions sit under ⋯; a second press on a view returns to the chat.
