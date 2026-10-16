@@ -17,7 +17,6 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useI18n } from '@/i18n'
 import { useGenerationLayout } from './generation-layout-context'
-import { GENERATION_LAYOUT_BLOCK_LABELS } from './generation-layout-labels'
 import { addLayoutColumn, resetLayoutPreset, setLayoutBlockHidden } from './generation-layout-ops'
 
 type NameDialogState = { mode: 'create' | 'rename'; value: string } | null
@@ -160,7 +159,7 @@ function SurfaceLayoutControls({ surface, wide }: { surface: GenerationLayoutSur
 /** "+" in the editor: blocks hidden in this preset, each one click from coming back. */
 function HiddenBlocksButton({ preset }: { preset: GenerationLayoutPreset }) {
   const { t } = useI18n()
-  const { updatePreset } = useGenerationLayout()
+  const { updatePreset, blockLabel } = useGenerationLayout()
   if (preset.hidden.length === 0) {
     return (
       <IconButton size="icon-sm" variant="ghost" label={t({ ko: '숨긴 블록 없음', en: 'No hidden blocks' })} disabled>
@@ -179,11 +178,11 @@ function HiddenBlocksButton({ preset }: { preset: GenerationLayoutPreset }) {
       <PopoverContent align="end" className="w-64 p-1">
         {preset.hidden.map((block) => (
           <div key={block} className="flex h-11 items-center gap-2 rounded-sm pr-1 pl-3 hover:bg-fill">
-            <span className="min-w-0 flex-1 truncate text-sm font-medium">{t(GENERATION_LAYOUT_BLOCK_LABELS[block])}</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">{blockLabel(block)}</span>
             <IconButton
               size="icon-sm"
               variant="ghost"
-              label={t({ ko: '{name} 다시 표시', en: 'Show {name}' }, { name: t(GENERATION_LAYOUT_BLOCK_LABELS[block]) })}
+              label={t({ ko: '{name} 다시 표시', en: 'Show {name}' }, { name: blockLabel(block) })}
               onClick={() => updatePreset((current) => setLayoutBlockHidden(current, block, false))}
             >
               <EyeOff />

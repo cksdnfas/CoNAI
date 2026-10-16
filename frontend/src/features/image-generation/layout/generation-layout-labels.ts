@@ -1,7 +1,7 @@
-import type { GenerationLayoutBlock } from '@conai/shared'
+import type { GenerationLayoutBuiltinBlock } from '@conai/shared'
 import type { TranslationDictionary } from '@/i18n'
 
-export const GENERATION_LAYOUT_BLOCK_LABELS: Record<GenerationLayoutBlock, TranslationDictionary> = {
+export const GENERATION_LAYOUT_BLOCK_LABELS: Record<GenerationLayoutBuiltinBlock, TranslationDictionary> = {
   prompt: { ko: '프롬프트', en: 'Prompt' },
   characters: { ko: '캐릭터 프롬프트', en: 'Character prompt' },
   settings: { ko: '설정', en: 'Settings' },

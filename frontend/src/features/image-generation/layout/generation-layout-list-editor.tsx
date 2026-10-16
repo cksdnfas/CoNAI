@@ -5,7 +5,6 @@ import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { useGenerationLayout } from './generation-layout-context'
-import { GENERATION_LAYOUT_BLOCK_LABELS } from './generation-layout-labels'
 import { moveLayoutBlock, setLayoutBlockHidden } from './generation-layout-ops'
 import { useLayoutBlockDrag } from './use-layout-block-drag'
 
@@ -15,11 +14,11 @@ import { useLayoutBlockDrag } from './use-layout-block-drag'
  */
 export function GenerationLayoutListEditor({ surface }: { surface: GenerationLayoutSurface }) {
   const { t } = useI18n()
-  const { presetOf, updatePreset } = useGenerationLayout()
+  const { presetOf, updatePreset, blockLabel } = useGenerationLayout()
   const preset = presetOf(surface)
   const drag = useLayoutBlockDrag(
     (block, target) => updatePreset((current) => moveLayoutBlock(surface, current, block, target)),
-    (block) => t(GENERATION_LAYOUT_BLOCK_LABELS[block]),
+    blockLabel,
   )
   const hidden = new Set(preset.hidden)
 
@@ -34,7 +33,7 @@ export function GenerationLayoutListEditor({ surface }: { surface: GenerationLay
             ) : null}
             <ul className="divide-y divide-line">
               {column.blocks.map((block, index) => {
-                const label = t(GENERATION_LAYOUT_BLOCK_LABELS[block])
+                const label = blockLabel(block)
                 const isHidden = hidden.has(block)
                 const edge = drag.indicator && 'block' in drag.indicator && drag.indicator.block === block ? drag.indicator.edge : null
                 return (

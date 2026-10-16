@@ -1,0 +1,10 @@
+{
+  "apiVersion": 1, "id": "generation-helper", "name": "생성 도우미", "version": "1.0.0",
+  "description": "생성 화면에 프롬프트 조각 블록과 태그 정리 버튼을 붙이고, 내 최근 생성 결과를 세어.",
+  "server": { "entry": "server.mjs" },
+  "pages": [{ "id": "snippets", "title": "프롬프트 조각", "entry": "index.html", "accepts": [], "actions": [], "menu": false }],
+  "generation": {
+    "blocks": [{ "id": "snippets", "page": "snippets", "surfaces": ["nai", "codex", "comfy"], "height": 240 }],
+    "actions": [{ "id": "tidy", "label": "태그 정리", "surfaces": ["nai", "comfy"] }]
+  }
+}

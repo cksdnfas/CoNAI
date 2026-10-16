@@ -426,6 +426,41 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await registry.removePlugin('lab')
   })
 
+  await t.test('generation layout blocks, Generate-bar buttons and generation hooks', async () => {
+    const helper = path.resolve(__dirname, '../../plugins/generation-helper')
+    const manifest = JSON.parse(fs.readFileSync(path.join(helper, 'plugin.json'), 'utf8'))
+    const parsed = registry.parsePluginManifest(manifest)
+    assert.deepEqual(parsed.generation?.blocks.map(block => [block.id, block.page, block.surfaces]), [['snippets', 'snippets', ['nai', 'codex', 'comfy']]])
+    assert.equal(parsed.pages[0].menu, false)
+    assert.throws(() => registry.parsePluginManifest({ ...manifest, generation: { blocks: [{ id: 'extra', page: 'missing', surfaces: ['nai'] }] } }), /페이지가 없어/)
+    assert.throws(() => registry.parsePluginManifest({ ...manifest, server: undefined }), /서버 모듈/)
+    assert.throws(() => registry.parsePluginManifest({ ...manifest, generation: { actions: [{ id: 'tidy', label: '정리', surfaces: ['nowhere'] }] } }))
+    assert.throws(() => registry.parsePluginManifest({ ...manifest, generation: { actions: [{ id: 'tidy', label: 'a', surfaces: ['nai'] }, { id: 'tidy', label: 'b', surfaces: ['nai'] }] } }), /겹쳐/)
+
+    await registry.installPlugin(packageOf(helper))
+    await registry.setPluginEnabled('generation-helper', true, adminId)
+    const helperStatus = () => runtime.pluginServerStatus('generation-helper')
+    await until(() => helperStatus().state === 'ready' && helperStatus().hooks.length === 3, 'generation helper ready')
+    assert.deepEqual(helperStatus().hooks, ['generation.action', 'generation.finished', 'generation.queued'])
+
+    const fields = [{ id: 'prompt', label: '프롬프트', type: 'text', value: '1girl,  smile , 1girl,, Smile' }, { id: 'seed', label: '시드', type: 'number', value: 1 }]
+    assert.deepEqual(await runtime.runGenerationActionHook('generation-helper', { action: 'tidy', surface: 'nai', fields }, admin), { message: '프롬프트 1개를 정리했어.', fill: { prompt: '1girl, smile' } })
+    assert.deepEqual(await runtime.runGenerationActionHook('generation-helper', { action: 'tidy', surface: 'nai', fields: [{ ...fields[0], value: 'a, b' }] }, admin), { message: '정리할 게 없어.' })
+    await assert.rejects(runtime.runGenerationActionHook('generation-helper', { action: 'nope', surface: 'nai', fields }, admin), /모르는 버튼/)
+    await assert.rejects(runtime.runGenerationActionHook('chat-instructions', { action: 'tidy', surface: 'nai', fields }, admin), /준비가 안 됐어/)
+
+    // Queue events reach the hooks as the job's requester, without anyone waiting for them.
+    const { publishQueueJobEvent } = await import('../src/services/runtime-events/runtimeEventPublishers')
+    const job = { id: 9001, service_type: 'novelai', status: 'queued', requested_by_account_id: adminId } as unknown as Parameters<typeof publishQueueJobEvent>[1]
+    publishQueueJobEvent('queue.job.created', job)
+    const jobs = async () => (await runtime.requestPluginServer('generation-helper', { op: 'jobs' }, admin, {}) as { jobs: Array<{ jobId: number; status: string }> }).jobs
+    await until(async () => (await jobs())[0]?.status === 'queued', 'queued hook')
+    publishQueueJobEvent('queue.job.status', { ...job!, status: 'completed' }, { previousStatus: 'running' })
+    await until(async () => (await jobs())[0]?.status === 'completed', 'finished hook')
+    assert.deepEqual((await runtime.requestPluginServer('generation-helper', { op: 'jobs' }, { accountId: adminId + 1000, accountType: 'guest' }, {}) as { jobs: unknown[] }).jobs, [], 'another account sees none of them')
+    await registry.removePlugin('generation-helper')
+  })
+
   await t.test('removing the plugin stops it and deletes its data', async () => {
     await registry.setPluginEnabled('chat-instructions', true, adminId)
     await until(() => status().state === 'ready', 'module ready again')

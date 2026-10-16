@@ -1,14 +1,16 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { createContext, useContext, useEffect, useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { AlertTriangle, Loader2, RotateCcw, Sparkles } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Tip } from '@/components/ui/tooltip'
 import { GenerationTargetGroupControl } from '@/features/groups/components/generation-target-group-control'
+import { PluginGenerationActions } from '@/features/plugins/plugin-generation-actions'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { GenerateActionBarIconButton, GenerateActionBarVariantContext, STICKY_ICON_SIZE, type GenerateActionBarVariant } from './generate-action-bar-icon-button'
 
-export type GenerateActionBarVariant = 'inline' | 'sticky'
+export { GenerateActionBarIconButton, type GenerateActionBarVariant }
 
 export type GenerateActionBarRepeat = {
   /** Queue jobs to create per click (not images per request). */
@@ -49,23 +51,6 @@ export type GenerateActionBarProps = {
   /** Register Ctrl/Cmd+Enter for this bar (default true). */
   shortcut?: boolean
   className?: string
-}
-
-const GenerateActionBarVariantContext = createContext<GenerateActionBarVariant>('inline')
-
-const STICKY_ICON_SIZE = 'size-11 sm:size-9'
-
-/** One secondary icon action sized for the surrounding GenerateActionBar variant. */
-export function GenerateActionBarIconButton({ className, ...props }: Omit<ComponentProps<typeof IconButton>, 'size' | 'variant'>) {
-  const variant = useContext(GenerateActionBarVariantContext)
-  return (
-    <IconButton
-      variant="ghost"
-      size="icon"
-      className={cn(variant === 'sticky' && STICKY_ICON_SIZE, className)}
-      {...props}
-    />
-  )
 }
 
 type ShortcutEntry = { token: symbol }
@@ -227,6 +212,9 @@ export function GenerateActionBar({
     </GenerateActionBarIconButton>
   ) : null
 
+  // Buttons enabled plugins add for this screen's layout surface.
+  const pluginActions = <PluginGenerationActions disabled={isGenerating} />
+
   const groupPicker = targetGroupStorageKey ? (
     <GenerationTargetGroupControl
       storageKey={targetGroupStorageKey}
@@ -254,6 +242,7 @@ export function GenerateActionBar({
           ) : null}
           <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
             {secondaryActions}
+            {pluginActions}
             {resetButton}
             {leading}
             {groupPicker}
@@ -269,12 +258,11 @@ export function GenerateActionBar({
     <GenerateActionBarVariantContext.Provider value="inline">
       <section data-slot="generate-action-bar" data-variant="inline" className={cn('space-y-2', className)}>
         <div className="flex flex-wrap items-center gap-2">
-          {secondaryActions || resetButton ? (
-            <div className="flex items-center gap-1">
-              {secondaryActions}
-              {resetButton}
-            </div>
-          ) : null}
+          <div className="flex items-center gap-1 empty:hidden">
+            {secondaryActions}
+            {pluginActions}
+            {resetButton}
+          </div>
           <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
             {leading}
             {groupPicker}

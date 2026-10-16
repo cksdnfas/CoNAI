@@ -23,7 +23,7 @@ import {
   isComfyWorkflowModalServer,
   isComfyWorkflowServerRoutable,
 } from './comfy-workflow-routing'
-import { GenerationBlockLayout } from '../layout/generation-block-layout'
+import { GenerationBlockLayout, StackedPluginBlocks } from '../layout/generation-block-layout'
 import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
 import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 
@@ -582,6 +582,7 @@ export function ComfyWorkflowControllerPanel({
       )}>
         {fieldsContent}
         {workflowAfterFields && !useDrawerCompactChrome ? desktopHeaderContent : null}
+        <StackedPluginBlocks surface="comfy" />
 
         {useStickyActionBar && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}
       </div>

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronDown, Files, FolderKanban, RefreshCw, TriangleAlert } from 'lucide-react'
-import { copyChatPageData, type ChatPageData, type PluginInstance, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
+import { copyChatPageData, type ChatPageData, type GenerationLayoutSurface, type PluginInstance, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { CodeBlock } from '@/components/ui/code-block'
@@ -15,7 +15,7 @@ import { FileBrowser } from '@/features/files/file-browser'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { WorkspaceProjectPicker } from '@/features/files/workspace-projects'
-import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatPage, useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { closePlugin, listPlugins, openPlugin, pluginRequest, proposePluginWrite, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { ApiRequestError } from '@/lib/api-request'
 import { FILES_QUERY_KEY } from '@/lib/api-files'
@@ -28,6 +28,7 @@ import { APP_REQUESTS_KEY, AppRequestJob, useAppRequestsById } from './plugin-ap
 import { PluginReviewBar, PluginReviewModal, type PluginMediaJob, type PluginProposal } from './plugin-review'
 import { PLUGIN_NATIVE_API_ROOTS, PLUGIN_REQUEST_TIMEOUT_MS, PLUGIN_SDK_FEATURES, chatPagePermission, pluginNativeApiPath } from '@conai/shared'
 import { buildApiUrl } from '@/lib/api-url'
+import { cn } from '@/lib/utils'
 import { fetchPluginNative, pluginNativeResponse } from './plugin-native-api'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
 import { useCodexChat } from '@/features/codex-chat/codex-chat-context'
@@ -113,7 +114,10 @@ export function PluginPage() {
   </div>
 }
 
-function PluginConnection({ pluginId, pageId, fileIds, projectId, write, onDirty }: { pluginId: string; pageId: string; fileIds: string; projectId: string; write: boolean; onDirty: (value: boolean) => void }) {
+/** Shown inside a generation layout instead of on its own page: fixed height, no chat registration, reads the screen's form. */
+export type PluginEmbed = { surface: GenerationLayoutSurface; height: number }
+
+export function PluginConnection({ pluginId, pageId, fileIds, projectId, write, onDirty, embed }: { pluginId: string; pageId: string; fileIds: string; projectId: string; write: boolean; onDirty: (value: boolean) => void; embed?: PluginEmbed }) {
   const [instance, setInstance] = useState<PluginInstance | null>(null)
   const [error, setError] = useState('')
   useEffect(() => {
@@ -127,11 +131,12 @@ function PluginConnection({ pluginId, pageId, fileIds, projectId, write, onDirty
     window.addEventListener('pagehide', onHide)
     return () => { disposed = true; window.removeEventListener('pagehide', onHide); if (active) void closePlugin(active.id) }
   }, [pluginId, pageId, fileIds, projectId, write])
-  return error ? <ErrorState description={error} /> : instance ? <PluginFrame instance={instance} onDirty={onDirty} /> : <LoadingState />
+  return error ? <ErrorState description={error} /> : instance ? <PluginFrame instance={instance} onDirty={onDirty} embed={embed} /> : <LoadingState />
 }
 
-function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty: (value: boolean) => void }) {
+function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; onDirty: (value: boolean) => void; embed?: PluginEmbed }) {
   const chat = useCodexChat()
+  const hostPage = useChatPage()
   const { t } = useI18n()
   const confirm = useConfirm()
   const navigate = useNavigate()
@@ -225,7 +230,8 @@ function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty:
     commands.current.set(id, { resolve, reject, timer })
     port.postMessage({ type: 'action', id, actionId, args })
   })
-  useChatPageRegistration(closed ? null : {
+  // An embedded block is part of the screen it sits on; that screen's own editor stays the chat's page.
+  useChatPageRegistration(closed || embed ? null : {
     title: instance.page.title,
     kind: 'extension', resourceId: instance.plugin.version, fields: [], actions: instance.page.actions,
     localRevision: `${snapshot.revision}:${proposals.map(item => item.id.slice(0, 6)).join(',')}:${jobs.map(item => item.status).join(',')}`,
@@ -321,6 +327,14 @@ function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty:
         if (message.method === 'app.getRequest') return request(`/instances/${instance.id}/app/requests/${encodeURIComponent(String(args?.requestId ?? ''))}`)
         if (message.method === 'app.cancel') return request(`/instances/${instance.id}/app/requests/${encodeURIComponent(String(args?.requestId ?? ''))}/cancel`, 'POST')
         if (message.method === 'server.request') return request(`/instances/${instance.id}/server`, 'POST', { body: args?.body ?? null })
+        if (message.method === 'page.form.get' || message.method === 'page.form.fill') {
+          if (!embed || !hostPage) throw new ApiRequestError('화면 입력은 생성 화면 블록에서만 쓸 수 있어.', 400)
+          if (message.method === 'page.form.get') return hostPage.form()
+          const values = args?.values
+          if (!values || typeof values !== 'object' || Array.isArray(values)) throw new ApiRequestError('채울 값은 { 필드 ID: 값 } 객체여야 해.', 400)
+          hostPage.fillForm(values as Record<string, unknown>)
+          return { filled: Object.keys(values) }
+        }
         if (['storage.get', 'storage.set', 'storage.delete'].includes(message.method ?? '')) return request(`/instances/${instance.id}/storage/${message.method!.split('.')[1]}`, 'POST', args)
         if (message.method === 'media.open') {
           const media = await request<{ token: string; expiresAt: number; name: string; mimeType: string }>(`/instances/${instance.id}/artifact-media`, 'POST', args)
@@ -385,7 +399,7 @@ function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty:
         } else respond(result)
       }).catch((reason: unknown) => { controller.abort(); respond(reason, true) }).finally(() => { if (!streaming) finish() })
     }
-    frame.current?.contentWindow?.postMessage({ type: 'conai-plugin-connect', version: 1, features: PLUGIN_SDK_FEATURES, nativeApiRoots: PLUGIN_NATIVE_API_ROOTS, files: instance.files, workspace: instance.workspace, actions: instance.page.actions, language: document.documentElement.lang || 'ko', theme: hostTheme() }, '*', [connection.port2])
+    frame.current?.contentWindow?.postMessage({ type: 'conai-plugin-connect', version: 1, features: PLUGIN_SDK_FEATURES, nativeApiRoots: PLUGIN_NATIVE_API_ROOTS, files: instance.files, workspace: instance.workspace, actions: instance.page.actions, language: document.documentElement.lang || 'ko', theme: hostTheme(), context: embed ? { kind: 'generation-block', surface: embed.surface } : null }, '*', [connection.port2])
   }
   const apply = async (proposal: PluginProposal) => {
     setBusy(true); setError('')
@@ -410,7 +424,7 @@ function PluginFrame({ instance, onDirty }: { instance: PluginInstance; onDirty:
   return <>
     {error ? <Alert variant="destructive" className="mb-2"><TriangleAlert /><AlertDescription>{error}</AlertDescription></Alert> : null}
     {connectionError ? <Alert variant="warning" className="mb-2"><TriangleAlert /><AlertDescription className="flex flex-wrap items-center gap-2"><span className="min-w-0 flex-1">{connectionError}</span>{closed ? null : <Button size="sm" variant="secondary" onClick={() => void checkConnection()}>{t({ ko: '다시 확인', en: 'Retry' })}</Button>}</AlertDescription></Alert> : null}
-    {blockedFrame ? null : <iframe ref={frame} title={instance.page.title} sandbox="allow-scripts" referrerPolicy="no-referrer" src={`/api/plugin-assets/${instance.plugin.id}/${instance.plugin.version}/${instance.page.entry}`} onLoad={connect} className="h-[max(420px,calc(100dvh-var(--theme-shell-header-height)-7rem))] w-full rounded-sm border-0" />}
+    {blockedFrame ? null : <iframe ref={frame} title={instance.page.title} sandbox="allow-scripts" referrerPolicy="no-referrer" src={`/api/plugin-assets/${instance.plugin.id}/${instance.plugin.version}/${instance.page.entry}`} onLoad={connect} style={embed ? { height: embed.height } : undefined} className={cn('w-full rounded-sm border-0', !embed && 'h-[max(420px,calc(100dvh-var(--theme-shell-header-height)-7rem))]')} />}
     {/* App operations started here report their job result back to the plugin page. */}
     {appRequests.filter(request => request.jobId).map(request => <AppRequestJob key={request.id} jobId={request.jobId!} showProgress={false} onFinished={result => { channel.current?.postMessage({ type: 'saved', proposalId: request.id, result }); setAppResult(appResultSummary(result)) }} />)}
     <PluginReviewBar

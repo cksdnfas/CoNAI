@@ -89,9 +89,22 @@ export const GENERATION_LAYOUT_SURFACE_DEFINITIONS = {
 
 export type GenerationLayoutSurface = keyof typeof GENERATION_LAYOUT_SURFACE_DEFINITIONS;
 export const GENERATION_LAYOUT_SURFACES = Object.keys(GENERATION_LAYOUT_SURFACE_DEFINITIONS) as GenerationLayoutSurface[];
-export type GenerationLayoutBlock = (typeof GENERATION_LAYOUT_SURFACE_DEFINITIONS)[GenerationLayoutSurface]['blocks'][number];
+export type GenerationLayoutBuiltinBlock = (typeof GENERATION_LAYOUT_SURFACE_DEFINITIONS)[GenerationLayoutSurface]['blocks'][number];
+/** A block an installed plugin contributes (`plugin:<plugin id>:<block id>`); never required, kept even while its plugin is off. */
+export type GenerationLayoutPluginBlock = `plugin:${string}:${string}`;
+export type GenerationLayoutBlock = GenerationLayoutBuiltinBlock | GenerationLayoutPluginBlock;
 
-export const GENERATION_LAYOUT_LIMITS = { columns: 4, presets: 20, nameLength: 40, minWeight: 10, maxWeight: 100 } as const;
+export const GENERATION_LAYOUT_LIMITS = { columns: 4, presets: 20, nameLength: 40, minWeight: 10, maxWeight: 100, pluginBlocks: 8 } as const;
+
+const PLUGIN_BLOCK_PATTERN = /^plugin:[a-z][a-z0-9-]{1,47}:[a-z][a-z0-9-]{1,47}$/;
+
+export function isGenerationLayoutPluginBlock(value: unknown): value is GenerationLayoutPluginBlock {
+  return typeof value === 'string' && PLUGIN_BLOCK_PATTERN.test(value);
+}
+
+export function generationLayoutPluginBlockId(pluginId: string, blockId: string): GenerationLayoutPluginBlock {
+  return `plugin:${pluginId}:${blockId}`;
+}
 
 export interface GenerationLayoutColumn {
   /** Relative width (fr). */
@@ -127,6 +140,7 @@ export function generationLayoutBlocks(surface: GenerationLayoutSurface): readon
 }
 
 export function isGenerationLayoutRequiredBlock(surface: GenerationLayoutSurface, block: GenerationLayoutBlock) {
+  if (isGenerationLayoutPluginBlock(block)) return false;
   return (GENERATION_LAYOUT_SURFACE_DEFINITIONS[surface].required as readonly string[]).includes(block);
 }
 
@@ -151,10 +165,15 @@ function clampWeight(value: unknown) {
 export function normalizeGenerationLayoutColumns(surface: GenerationLayoutSurface, raw: unknown, options: { keepEmptyColumns?: boolean } = {}): GenerationLayoutColumn[] {
   const known = generationLayoutBlocks(surface);
   const seen = new Set<GenerationLayoutBlock>();
+  let pluginBlocks = 0;
   let columns: GenerationLayoutColumn[] = (Array.isArray(raw) ? raw : []).slice(0, GENERATION_LAYOUT_LIMITS.columns).map((column) => {
     const record = column && typeof column === 'object' ? column as Record<string, unknown> : {};
     const blocks = (Array.isArray(record.blocks) ? record.blocks : []).filter((block): block is GenerationLayoutBlock => {
-      if (typeof block !== 'string' || !(known as readonly string[]).includes(block) || seen.has(block as GenerationLayoutBlock)) return false;
+      if (typeof block !== 'string' || seen.has(block as GenerationLayoutBlock)) return false;
+      if (isGenerationLayoutPluginBlock(block)) {
+        if (pluginBlocks >= GENERATION_LAYOUT_LIMITS.pluginBlocks) return false;
+        pluginBlocks += 1;
+      } else if (!(known as readonly string[]).includes(block)) return false;
       seen.add(block as GenerationLayoutBlock);
       return true;
     });
@@ -164,7 +183,7 @@ export function normalizeGenerationLayoutColumns(surface: GenerationLayoutSurfac
   if (columns.length === 0) return createDefaultGenerationLayoutPreset(surface).columns;
 
   // Blocks this layout does not know yet (added in a later version) join the first column.
-  const missing = known.filter((block) => !seen.has(block) && block !== 'recent');
+  const missing = known.filter((block): block is GenerationLayoutBuiltinBlock => !seen.has(block) && block !== 'recent');
   if (missing.length) columns[0].blocks.push(...missing);
 
   if (known.includes('recent')) {
@@ -187,7 +206,7 @@ export function normalizeGenerationLayoutPreset(surface: GenerationLayoutSurface
   const id = typeof record.id === 'string' && /^[a-z0-9-]{1,32}$/.test(record.id) ? record.id : fallbackId;
   const name = typeof record.name === 'string' ? record.name.replace(/\s+/g, ' ').trim().slice(0, GENERATION_LAYOUT_LIMITS.nameLength) : '';
   const known = generationLayoutBlocks(surface) as readonly string[];
-  const hidden = [...new Set((Array.isArray(record.hidden) ? record.hidden : []).filter((block): block is GenerationLayoutBlock => typeof block === 'string' && known.includes(block)))]
+  const hidden = [...new Set((Array.isArray(record.hidden) ? record.hidden : []).filter((block): block is GenerationLayoutBlock => typeof block === 'string' && (known.includes(block) || isGenerationLayoutPluginBlock(block))))]
     .filter((block) => !isGenerationLayoutRequiredBlock(surface, block));
   return { id, name: name || '프리셋', columns: normalizeGenerationLayoutColumns(surface, record.columns), hidden };
 }

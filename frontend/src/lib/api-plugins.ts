@@ -1,4 +1,4 @@
-import type { InstalledPlugin, PluginInstance, PluginWriteProposal } from '@conai/shared'
+import type { ChatPageField, GenerationLayoutSurface, InstalledPlugin, PluginGenerationActionResult, PluginInstance, PluginWriteProposal } from '@conai/shared'
 import { requestApiData } from './api-request'
 import { buildApiUrl } from './api-url'
 
@@ -15,3 +15,6 @@ export const PLUGINS_QUERY_KEY = ['plugins'] as const
 export const listPlugins = () => pluginRequest<InstalledPlugin[]>('')
 export const openPlugin = (id: string, page: string, files: string[], workspace?: { id: string; write: boolean }) => pluginRequest<PluginInstance>(`/${encodeURIComponent(id)}/pages/${encodeURIComponent(page)}/instances`, 'POST', { files, ...(workspace ? { workspace } : {}) })
 export const proposePluginWrite = (instance: string, value: unknown, signal?: AbortSignal) => pluginRequest<PluginWriteProposal>(`/instances/${instance}/proposals`, 'POST', value, signal)
+/** A plugin's button next to Generate: the screen's form goes to its server module, which may answer with values to fill. */
+export const runPluginGenerationAction = (pluginId: string, actionId: string, input: { surface: GenerationLayoutSurface; fields: Array<Pick<ChatPageField, 'id' | 'label' | 'type' | 'value'>> }) =>
+  pluginRequest<PluginGenerationActionResult>(`/${encodeURIComponent(pluginId)}/generation-actions/${encodeURIComponent(actionId)}`, 'POST', input)

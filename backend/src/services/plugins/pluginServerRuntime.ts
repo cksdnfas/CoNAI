@@ -1,5 +1,8 @@
 import { Worker } from 'worker_threads'
-import type { PluginServerStatus } from '@conai/shared'
+import { CHAT_PAGE_LIMITS, type ChatPageValue, type PluginGenerationActionResult, type PluginServerStatus } from '@conai/shared'
+import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { subscribeToRuntimeEvents } from '../runtime-events/runtimeEventBus'
+import type { QueueJobEventPayload } from '../../types/runtimeEvents'
 import { AuthAccount } from '../../models/AuthAccount'
 import type { McpRequester, McpRequestContext } from '../../mcp/context'
 import { getPlugin, listPlugins, packageFile } from './pluginRegistry'
@@ -20,9 +23,11 @@ import { callPluginLlm } from './pluginLlm'
  */
 
 /** Hooks a module may listen to; each one has a call site that waits for it. */
-export const PLUGIN_SERVER_HOOKS = ['chat.instructions'] as const
+export const PLUGIN_SERVER_HOOKS = ['chat.instructions', 'generation.action', 'generation.queued', 'generation.finished'] as const
 export type PluginServerHook = typeof PLUGIN_SERVER_HOOKS[number]
 const HOOK_TIMEOUT_MS = 3_000
+const ACTION_TIMEOUT_MS = 30_000
+const NOTIFY_TIMEOUT_MS = 10_000
 const REQUEST_TIMEOUT_MS = 10 * 60_000
 const TOOL_TIMEOUT_MS = 10 * 60_000
 const RESULT_LIMIT = 512 * 1024
@@ -40,6 +45,7 @@ type Server = {
 }
 const servers = new Map<string, Server>()
 let started = false
+let stopEvents: (() => void) | null = null
 
 // The worker's side: `conai` for the module, and the message loop. Plain CommonJS run with `eval`, so no build step
 // has to ship a separate file; it reaches better-sqlite3 through the absolute path the host resolved.
@@ -331,12 +337,16 @@ export function syncPluginServer(pluginId: string) {
 export function startPluginServers() {
   if (started) return
   started = true
+  stopEvents = subscribeToRuntimeEvents(record => {
+    if (record.name === 'queue.job.created' || record.name === 'queue.job.status') notifyGenerationHooks(record.name, record.payload as QueueJobEventPayload)
+  })
   onPluginChanged(id => syncPluginServer(id))
   for (const plugin of listPlugins()) if (plugin.manifest.server) void syncPluginServer(plugin.manifest.id)
 }
 
 export async function closePluginServers() {
   started = false
+  stopEvents?.(); stopEvents = null
   await Promise.all([...servers.values()].map(stopWorker))
   servers.clear()
 }
@@ -404,8 +414,7 @@ export type ChatInstructionsContext = {
  */
 export async function applyChatInstructionHooks(instructions: string, context: ChatInstructionsContext, requester: McpRequester | undefined) {
   let current = instructions
-  const listening = [...servers.values()].filter(server => server.state === 'ready' && server.hooks.has('chat.instructions')).sort((a, b) => a.pluginId.localeCompare(b.pluginId))
-  for (const server of listening) {
+  for (const server of listeningTo('chat.instructions')) {
     try {
       const value = await invoke(server.pluginId, 'hook', 'chat.instructions', { instructions: current, ...context, account: accountOf(requester) }, { account: accountOf(requester) }, { requester }, HOOK_TIMEOUT_MS)
       if (typeof value === 'string') current = value
@@ -415,6 +424,72 @@ export async function applyChatInstructionHooks(instructions: string, context: C
   }
   return current
 }
+function listeningTo(name: PluginServerHook) {
+  return [...servers.values()].filter(server => server.state === 'ready' && server.hooks.has(name)).sort((a, b) => a.pluginId.localeCompare(b.pluginId))
+}
+
+function actionValue(value: unknown): ChatPageValue {
+  if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) return value
+  if (typeof value === 'string' && value.length <= CHAT_PAGE_LIMITS.text) return value
+  if (Array.isArray(value) && value.length <= 32 && value.every(item => typeof item === 'string' && item.length <= CHAT_PAGE_LIMITS.text)) return [...value]
+  throw new PluginError('플러그인이 돌려준 입력값이 올바르지 않아.', 502)
+}
+
+/**
+ * `generation.action`: a plugin's button next to Generate. The module gets the screen's form fields and may answer
+ * `{ message, fill }`; the browser checks `fill` against the same fields before the form changes.
+ */
+export async function runGenerationActionHook(pluginId: string, input: { action: string; surface: string; fields: Array<{ id: string; label: string; type: string; value: ChatPageValue }> }, requester: McpRequester | undefined): Promise<PluginGenerationActionResult> {
+  const server = servers.get(pluginId)
+  if (!server || server.state !== 'ready' || !server.hooks.has('generation.action')) throw new PluginError('플러그인 서버가 이 버튼에 답할 준비가 안 됐어.', 503)
+  const value = await invoke(pluginId, 'hook', 'generation.action', { ...input, account: accountOf(requester) }, { account: accountOf(requester) }, { requester }, ACTION_TIMEOUT_MS)
+  if (value === null || value === undefined) return {}
+  if (typeof value !== 'object' || Array.isArray(value)) throw new PluginError('플러그인 답은 { message, fill } 객체여야 해.', 502)
+  const { message, fill } = value as { message?: unknown; fill?: unknown }
+  const result: PluginGenerationActionResult = {}
+  if (typeof message === 'string' && message.trim()) result.message = message.trim().slice(0, 500)
+  if (fill !== undefined && fill !== null) {
+    if (typeof fill !== 'object' || Array.isArray(fill) || Object.keys(fill).length > CHAT_PAGE_LIMITS.changes) throw new PluginError('플러그인이 돌려준 입력값이 올바르지 않아.', 502)
+    result.fill = Object.fromEntries(Object.entries(fill).map(([key, item]) => {
+      if (key.length > 100) throw new PluginError('플러그인이 돌려준 입력값이 올바르지 않아.', 502)
+      return [key, actionValue(item)]
+    }))
+  }
+  return result
+}
+
+const FINISHED = new Set(['completed', 'failed', 'cancelled'])
+
+/**
+ * `generation.queued` / `generation.finished`: every listening module hears about each queue job (any service, any
+ * caller) without holding it up. A finished job lists its history rows; images may still be post-processing then.
+ */
+function notifyGenerationHooks(name: 'queue.job.created' | 'queue.job.status', job: QueueJobEventPayload) {
+  const hook: PluginServerHook | null = name === 'queue.job.created' ? 'generation.queued'
+    : job.previous_status !== job.status && FINISHED.has(job.status) ? 'generation.finished' : null
+  if (!hook) return
+  const listening = listeningTo(hook)
+  if (!listening.length) return
+  const account = job.requested_by_account_id ? AuthAccount.findById(job.requested_by_account_id) : null
+  const requester = account && account.status === 'active' ? { accountId: account.id, accountType: account.account_type } : undefined
+  let history: Array<{ id: number; compositeHash: string | null }> = []
+  if (hook === 'generation.finished') {
+    try {
+      history = (getUserSettingsDb().prepare('SELECT id, composite_hash FROM api_generation_history WHERE queue_job_id = ? ORDER BY id LIMIT 32').all(job.job_id) as Array<{ id: number; composite_hash: string | null }>)
+        .map(row => ({ id: row.id, compositeHash: row.composite_hash }))
+    } catch { history = [] }
+  }
+  const input = {
+    jobId: job.job_id, service: job.service_type, status: job.status, workflowId: job.workflow_id,
+    ...(hook === 'generation.finished' ? { failureCode: job.failure_code, history } : {}),
+    account: accountOf(requester),
+  }
+  for (const server of listening) {
+    invoke(server.pluginId, 'hook', hook, input, { account: accountOf(requester) }, { requester }, NOTIFY_TIMEOUT_MS)
+      .catch(error => console.warn(`[plugin:${server.pluginId}] ${hook} skipped:`, error instanceof Error ? error.message : error))
+  }
+}
+
 /** Whether any module listens to the hook, so callers can skip the work around it. */
 export function hasPluginServerHook(name: PluginServerHook) {
   for (const server of servers.values()) if (server.state === 'ready' && server.hooks.has(name)) return true

@@ -70,6 +70,22 @@ test('plugin SDK preserves cancellation, structured errors, binary uploads and r
     await cancelled
   })
 
+  await t.test('a page outside a layout has no context; form reads and fills go to the host', async () => {
+    assert.equal(api.context, null)
+    let incoming = once(channel.port1, 'message')
+    const form = api.page.form()
+    const [read] = await incoming
+    assert.equal(read.method, 'page.form.get')
+    channel.port1.postMessage({ type: 'response', id: read.id, result: { title: 'NovelAI', fields: [] } })
+    assert.deepEqual(await form, { title: 'NovelAI', fields: [] })
+    incoming = once(channel.port1, 'message')
+    const fill = api.page.fill({ prompt: '1girl' })
+    const [write] = await incoming
+    assert.deepEqual([write.method, write.args], ['page.form.fill', { values: { prompt: '1girl' } }])
+    channel.port1.postMessage({ type: 'response', id: write.id, result: { filled: ['prompt'] } })
+    assert.deepEqual(await fill, { filled: ['prompt'] })
+  })
+
   await t.test('closing the host rejects pending calls immediately', async () => {
     const incoming = once(channel.port1, 'message')
     const task = api.request('workspace.read', {})

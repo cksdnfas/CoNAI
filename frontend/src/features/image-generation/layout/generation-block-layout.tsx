@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
+import { Fragment, Suspense, lazy, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
 import { Eye, GripVertical, Lock, MoveHorizontal, PanelTop, X } from 'lucide-react'
 import { isGenerationLayoutRequiredBlock, type GenerationLayoutBlock, type GenerationLayoutColumn, type GenerationLayoutPreset, type GenerationLayoutSurface } from '@conai/shared'
 import { TextTabs } from '@/components/common/text-tabs'
@@ -8,8 +8,8 @@ import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { GenerateActionDock } from '../components/generate-action-bar'
-import { useGenerationLayoutSurface } from './generation-layout-context'
-import { GENERATION_LAYOUT_BLOCK_LABELS } from './generation-layout-labels'
+import type { PluginLayoutBlock as PluginLayoutBlockContribution } from '@/features/plugins/plugin-generation'
+import { useGenerationLayoutBlockLabel, useGenerationLayoutSurface, useStackedPluginBlocks } from './generation-layout-context'
 import { moveLayoutBlock, removeLayoutColumn, resizeLayoutColumn, setLayoutBlockHidden, setLayoutColumnTabs } from './generation-layout-ops'
 import { useLayoutBlockDrag, type LayoutDropIndicator } from './use-layout-block-drag'
 
@@ -24,11 +24,37 @@ const FILL_BLOCKS: ReadonlySet<GenerationLayoutBlock> = new Set(['result', 'resu
 
 type UpdatePreset = (update: (preset: GenerationLayoutPreset) => GenerationLayoutPreset) => void
 
+// Plugin frames load with the plugin host code, which most screens never need.
+const PluginLayoutBlock = lazy(() => import('@/features/plugins/plugin-layout-block'))
+
+/**
+ * The screen's blocks plus the ones plugins add. In the editor a plugin block is only its name (no frame to open);
+ * on an inactive tab it renders nothing, so no plugin window stays open off screen.
+ */
+export function withPluginBlockNodes(surface: GenerationLayoutSurface, blocks: GenerationLayoutBlockNodes, pluginBlocks: PluginLayoutBlockContribution[], editing: boolean, active: boolean): GenerationLayoutBlockNodes {
+  if (!pluginBlocks.length) return blocks
+  const nodes = { ...blocks }
+  for (const block of pluginBlocks) {
+    nodes[block.key] = editing
+      ? <p className="text-sm text-muted-foreground">{block.pluginName}</p>
+      : active ? <Suspense fallback={null}><PluginLayoutBlock block={block} surface={surface} /></Suspense> : null
+  }
+  return nodes
+}
+
 /**
  * How the columns size: `fill` (the generation page) fills a fixed-height frame and each column scrolls itself;
  * `page` lets the page scroll, columns take their content height and the shorter ones stay in view (sticky).
  */
 export type GenerationBlockLayoutFlow = 'fill' | 'page'
+
+/** Narrow screens that stack their own sections: the plugin blocks the preset shows, in its order. */
+export function StackedPluginBlocks({ surface }: { surface: GenerationLayoutSurface }) {
+  const blocks = useStackedPluginBlocks(surface)
+  return blocks.map((block) => (
+    <Suspense key={block.key} fallback={null}><PluginLayoutBlock block={block} surface={surface} /></Suspense>
+  ))
+}
 
 /** Wide generation page: the surface's current preset as columns, or the in-place editor while an admin arranges it. */
 export function GenerationBlockLayout({ surface, blocks, active = true, flow = 'fill', stickyClassName = 'top-[calc(var(--theme-shell-header-height)+1rem)]' }: {
@@ -40,14 +66,15 @@ export function GenerationBlockLayout({ surface, blocks, active = true, flow = '
   /** `page` flow: the sticky offset of the columns; null keeps them in the normal flow. */
   stickyClassName?: string | null
 }) {
-  const { preset, editing, updatePreset } = useGenerationLayoutSurface(surface, { active })
-  const { t } = useI18n()
+  const { preset, editing, updatePreset, pluginBlocks } = useGenerationLayoutSurface(surface, { active })
+  const blockLabel = useGenerationLayoutBlockLabel()
   const containerRef = useRef<HTMLDivElement>(null)
   const [liveWeights, setLiveWeights] = useState<number[] | null>(null)
   const drag = useLayoutBlockDrag(
     (block, target) => updatePreset((current) => moveLayoutBlock(surface, current, block, target)),
-    (block) => t(GENERATION_LAYOUT_BLOCK_LABELS[block]),
+    blockLabel,
   )
+  blocks = withPluginBlockNodes(surface, blocks, pluginBlocks, editing, active)
   const weights = liveWeights ?? preset.columns.map((column) => column.weight)
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
   const hidden = new Set(preset.hidden)
@@ -101,7 +128,7 @@ export function GenerationBlockLayout({ surface, blocks, active = true, flow = '
 }
 
 function ViewColumn({ column, hidden, blocks, pageFlow }: { column: GenerationLayoutColumn; hidden: Set<GenerationLayoutBlock>; blocks: GenerationLayoutBlockNodes; pageFlow: boolean }) {
-  const { t } = useI18n()
+  const blockLabel = useGenerationLayoutBlockLabel()
   const visible = column.blocks.filter((block) => block !== 'recent' && !hidden.has(block) && blocks[block] != null)
   const body: GenerationLayoutBlock[] = visible.filter((block) => block !== 'action')
   const dock = visible.includes('action') ? <GenerateActionDock>{blocks.action}</GenerateActionDock> : null
@@ -117,7 +144,7 @@ function ViewColumn({ column, hidden, blocks, pageFlow }: { column: GenerationLa
           <>
             <TextTabs<GenerationLayoutBlock>
               value={active}
-              items={body.map((block) => ({ value: block, label: t(GENERATION_LAYOUT_BLOCK_LABELS[block]) }))}
+              items={body.map((block) => ({ value: block, label: blockLabel(block) }))}
               onChange={setPickedTab}
             />
             <div className="min-w-0">{blocks[active]}</div>
@@ -147,7 +174,7 @@ function ViewColumn({ column, hidden, blocks, pageFlow }: { column: GenerationLa
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         <TextTabs<GenerationLayoutBlock>
           value={active}
-          items={body.map((block) => ({ value: block, label: t(GENERATION_LAYOUT_BLOCK_LABELS[block]) }))}
+          items={body.map((block) => ({ value: block, label: blockLabel(block) }))}
           onChange={setPickedTab}
           className="shrink-0"
         />
@@ -244,7 +271,7 @@ function BlockFrame({ surface, block, columnIndex, index, indicator, dragging, g
   children: ReactNode
 }) {
   const { t } = useI18n()
-  const label = t(GENERATION_LAYOUT_BLOCK_LABELS[block])
+  const label = useGenerationLayoutBlockLabel()(block)
   const required = isGenerationLayoutRequiredBlock(surface, block)
   const edge = indicator && 'block' in indicator && indicator.block === block ? indicator.edge : null
   const fills = FILL_BLOCKS.has(block)

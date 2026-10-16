@@ -65,7 +65,7 @@ export function PluginsPage() {
   const pluginName = (id: string) => plugins.data?.find((plugin) => plugin.manifest.id === id)?.manifest.name ?? id
   const pending = (requests.data?.requests ?? []).filter((request) => request.status === 'pending')
   const fileCount = files ? files.split(',').filter(Boolean).length : 0
-  const pages = enabled.flatMap(({ manifest }) => manifest.pages.map((page) => {
+  const pages = enabled.flatMap(({ manifest }) => manifest.pages.filter((page) => page.menu !== false).map((page) => {
     // A page opened with a project needs project access; one opened with files needs file access.
     const blocked = (projectId || fileCount) && !auth.data?.permissionKeys.includes('files.view')
       ? t({ ko: '파일 조회 권한이 필요해', en: 'File access required' }) : null

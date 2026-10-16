@@ -1,8 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  GENERATION_LAYOUT_SURFACES,
   createDefaultGenerationLayoutPreset,
+  isGenerationLayoutPluginBlock,
   normalizeGenerationLayoutPresets,
+  type GenerationLayoutBlock,
   type GenerationLayoutPreset,
   type GenerationLayoutSnapshot,
   type GenerationLayoutSurface,
@@ -11,6 +14,9 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { GENERATION_LAYOUTS_QUERY_KEY, getGenerationLayouts, saveGenerationLayouts } from '@/lib/api-generation-layouts'
+import { usePluginGenerationContributions, type PluginLayoutBlock } from '@/features/plugins/plugin-generation'
+import { GENERATION_LAYOUT_BLOCK_LABELS } from './generation-layout-labels'
+import { stackedLayoutBlocks, withPluginBlocks } from './generation-layout-ops'
 
 const storageKey = (surface: GenerationLayoutSurface) => `conai.generation-layout.preset.${surface}`
 
@@ -51,6 +57,10 @@ type GenerationLayoutContextValue = {
   updatePreset: (update: (preset: GenerationLayoutPreset) => GenerationLayoutPreset) => void
   /** Replace the draft preset list (add/rename/reorder/delete), keeping `editingId` valid. */
   updatePresets: (update: (presets: GenerationLayoutPreset[]) => GenerationLayoutPreset[], editingId?: string) => void
+  /** Blocks enabled plugins add to the surface. */
+  pluginBlocksOf: (surface: GenerationLayoutSurface) => PluginLayoutBlock[]
+  /** A block's name: the built-in label or the plugin page's title. */
+  blockLabel: (block: GenerationLayoutBlock) => string
 }
 
 const GenerationLayoutContext = createContext<GenerationLayoutContextValue | null>(null)
@@ -69,15 +79,27 @@ export function GenerationLayoutProvider({ children }: PropsWithChildren) {
   const [selected, setSelected] = useState<Partial<Record<GenerationLayoutSurface, string>>>({})
   const [draft, setDraft] = useState<LayoutDraft | null>(null)
   const [activeSurface, setActiveSurface] = useState<GenerationLayoutSurface | null>(null)
+  const { blocks: pluginBlocks } = usePluginGenerationContributions()
+  const pluginBlocksOf = useCallback((surface: GenerationLayoutSurface) => pluginBlocks.filter((block) => block.surfaces.includes(surface)), [pluginBlocks])
+  const withPlugins = useCallback((surface: GenerationLayoutSurface, presets: GenerationLayoutPreset[]) => {
+    const available = pluginBlocksOf(surface).map((block) => block.key)
+    return presets.map((preset) => withPluginBlocks(preset, available))
+  }, [pluginBlocksOf])
+  const blockLabel = useCallback((block: GenerationLayoutBlock) => {
+    if (!isGenerationLayoutPluginBlock(block)) return t(GENERATION_LAYOUT_BLOCK_LABELS[block])
+    return pluginBlocks.find((item) => item.key === block)?.page.title ?? block.split(':')[1]
+  }, [pluginBlocks, t])
 
   // Leaving the edited surface (tab switch, workflow closed) drops the unsaved draft.
   useEffect(() => {
     if (draft && draft.surface !== activeSurface) setDraft(null)
   }, [activeSurface, draft])
 
-  const savedPresetsOf = useCallback((surface: GenerationLayoutSurface) => (
-    layoutsQuery.data?.[surface]?.presets ?? normalizeGenerationLayoutPresets(surface, [])
-  ), [layoutsQuery.data])
+  // One stable list per surface, so screens reading the preset don't see a new object on every render.
+  const savedPresets = useMemo(() => Object.fromEntries(GENERATION_LAYOUT_SURFACES.map((surface) => [
+    surface, withPlugins(surface, layoutsQuery.data?.[surface]?.presets ?? normalizeGenerationLayoutPresets(surface, [])),
+  ])) as Record<GenerationLayoutSurface, GenerationLayoutPreset[]>, [layoutsQuery.data, withPlugins])
+  const savedPresetsOf = useCallback((surface: GenerationLayoutSurface) => savedPresets[surface], [savedPresets])
 
   const presetsOf = useCallback((surface: GenerationLayoutSurface) => (
     draft?.surface === surface ? draft.presets : savedPresetsOf(surface)
@@ -127,7 +149,7 @@ export function GenerationLayoutProvider({ children }: PropsWithChildren) {
     startEditing: (surface) => {
       const snapshot = layoutsQuery.data?.[surface]
       if (!snapshot) return
-      setDraft({ surface, presets: snapshot.presets, editingId: presetOf(surface).id, revision: snapshot.revision })
+      setDraft({ surface, presets: withPlugins(surface, snapshot.presets), editingId: presetOf(surface).id, revision: snapshot.revision })
     },
     cancelEditing: () => setDraft(null),
     save: () => { if (draft) saveMutation.mutate(draft) },
@@ -142,7 +164,9 @@ export function GenerationLayoutProvider({ children }: PropsWithChildren) {
       const nextEditingId = editingId ?? current.editingId
       return { ...current, presets: next, editingId: next.some((item) => item.id === nextEditingId) ? nextEditingId : next[0].id }
     }),
-  }), [activeSurface, canEdit, draft, layoutsQuery.data, presetOf, presetsOf, registerSurface, saveMutation])
+    pluginBlocksOf,
+    blockLabel,
+  }), [activeSurface, blockLabel, canEdit, draft, layoutsQuery.data, pluginBlocksOf, presetOf, presetsOf, registerSurface, saveMutation, withPlugins])
 
   return <GenerationLayoutContext.Provider value={value}>{children}</GenerationLayoutContext.Provider>
 }
@@ -154,6 +178,28 @@ export function useGenerationLayout() {
 }
 
 const ignoreUpdate = () => {}
+const noPluginBlocks: PluginLayoutBlock[] = []
+
+/** The surface the screen shows right now (for the Generate bar's plugin buttons); null outside a layout. */
+export function useActiveGenerationLayoutSurface() {
+  return useContext(GenerationLayoutContext)?.activeSurface ?? null
+}
+
+/** The surface's visible plugin blocks in narrow-stack order, without claiming the toolbar (for screens that stack their own sections). */
+export function useStackedPluginBlocks(surface: GenerationLayoutSurface) {
+  const context = useContext(GenerationLayoutContext)
+  if (!context || context.editing === surface) return noPluginBlocks
+  const blocks = context.pluginBlocksOf(surface)
+  if (!blocks.length) return noPluginBlocks
+  return stackedLayoutBlocks(context.presetOf(surface)).flatMap((key) => blocks.filter((block) => block.key === key))
+}
+
+/** Block names, also outside the provider (built-in labels only there). */
+export function useGenerationLayoutBlockLabel() {
+  const context = useContext(GenerationLayoutContext)
+  const { t } = useI18n()
+  return context?.blockLabel ?? ((block: GenerationLayoutBlock) => isGenerationLayoutPluginBlock(block) ? block.split(':')[1] : t(GENERATION_LAYOUT_BLOCK_LABELS[block]))
+}
 
 /**
  * One surface's layout, registered as the screen's active surface while mounted (the toolbar edits that one).
@@ -164,6 +210,6 @@ export function useGenerationLayoutSurface(surface: GenerationLayoutSurface, { a
   const context = useContext(GenerationLayoutContext)
   const register = context?.registerSurface
   useEffect(() => (register && active ? register(surface) : undefined), [active, register, surface])
-  if (!context) return { surface, preset: createDefaultGenerationLayoutPreset(surface), editing: false, updatePreset: ignoreUpdate }
-  return { surface, preset: context.presetOf(surface), editing: context.editing === surface, updatePreset: context.updatePreset }
+  if (!context) return { surface, preset: createDefaultGenerationLayoutPreset(surface), editing: false, updatePreset: ignoreUpdate, pluginBlocks: noPluginBlocks }
+  return { surface, preset: context.presetOf(surface), editing: context.editing === surface, updatePreset: context.updatePreset, pluginBlocks: context.pluginBlocksOf(surface) }
 }

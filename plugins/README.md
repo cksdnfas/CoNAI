@@ -1,12 +1,13 @@
 # CoNAI web extension API v1
 
-This directory contains the shared SDK and three installable development examples, not automatically installed app features:
+This directory contains the shared SDK and four installable development examples, not automatically installed app features:
 
 | Example | Demonstrates |
 | --- | --- |
 | `text-editor` | File reading, draft editing, page assistant actions and host-reviewed saving. The app already has a built-in document editor. |
 | `app-workbench` | Native app tools, project access and headless server actions. |
 | `chat-instructions` | A trusted server module, persistent rules, chat hooks and an MCP tool. |
+| `generation-helper` | A generation layout block that reads and fills the screen's form, a button next to Generate and the generation queue hooks. |
 
 Build an example with `node scripts/build-plugin.mjs text-editor`, then upload `build-output/plugins/text-editor.zip` at `/#/settings?section=plugins` and enable it as an administrator.
 
@@ -14,7 +15,7 @@ Personal packages belong in `local-plugins/<plugin-name>/`, excluded from Git an
 
 ## Package contract
 
-ZIP root contains `plugin.json`, HTML entry points and static assets. See [the working manifest](text-editor/plugin.json) and [SDK](sdk/conai-plugin.js). IDs use lowercase letters, digits and hyphens; versions use `major.minor.patch`. Each page declares `id`, `title`, `entry`, supported filename extensions in `accepts`, and up to 26 actions. An empty `accepts` list permits opening without files and accepts any selected filename; each API still enforces its data type limits.
+ZIP root contains `plugin.json`, HTML entry points and static assets. See [the working manifest](text-editor/plugin.json) and [SDK](sdk/conai-plugin.js). IDs use lowercase letters, digits and hyphens; versions use `major.minor.patch`. Each page declares `id`, `title`, `entry`, supported filename extensions in `accepts`, and up to 26 actions. An empty `accepts` list permits opening without files and accepts any selected filename; each API still enforces its data type limits. `"menu": false` keeps a page out of the header menu and the plugin launcher (a page that only lives as a layout block).
 
 An action ID is `<pluginId>.<action>` with `effect: "draft"` and explicit `tier: "view" | "draft"`. The tier describes the page interaction; it grants no write authority. Arguments use the existing bounded CoNAI page JSON schema. The server checks snapshots and action arguments against the installed manifest. Unknown actions fail closed. Actions and private data keys keep the native page limits and filters.
 
@@ -153,13 +154,32 @@ export function activate(conai) {
 }
 ```
 
-- **Hooks.** `chat.instructions` gets the finished system instructions of every chat reply (API LLM, group members, Claude/pi sessions, Codex threads) and returns the changed string; listening plugins run in id order. A hook that throws or takes over three seconds is skipped for that request. Codex fixes its instructions when a thread starts or resumes, so changes show from the next thread; a changed Claude/pi system prompt starts a new session. Keep the output stable between requests so model servers keep their prompt cache.
+- **Hooks.** `generation.action`, `generation.queued` and `generation.finished` are described under [Generation layouts](#generation-layouts). `chat.instructions` gets the finished system instructions of every chat reply (API LLM, group members, Claude/pi sessions, Codex threads) and returns the changed string; listening plugins run in id order. A hook that throws or takes over three seconds is skipped for that request. Codex fixes its instructions when a thread starts or resumes, so changes show from the next thread; a changed Claude/pi system prompt starts a new session. Keep the output stable between requests so model servers keep their prompt cache.
 - **Tools.** A registered tool appears to chats and MCP clients as `p_<plugin id with _>_<name>` (at most 64 characters, `a-z0-9_`) under its `scope` (`read`, `organize`, `generate`, `configure`) and can be picked in a profile's tool list (플러그인 group). Return a string, any JSON value (sent as text) or an MCP result `{ content: [...] }`; at most 512 KiB.
 - **Who a call runs as.** Inside a hook, tool or request handler, `conai.tools.call` and `conai.llm` run as the account behind that call, with that account's permissions (`configure` tools need an administrator). Calls the module makes on its own (timers created at startup, startup itself) run as the administrator who enabled the plugin. `conai.background.account()` returns that account (`{ id, type }`, `id` null for the bootstrap administrator) or `null` when none is active, so a module that keeps per-account data runs background work only for that account. A timer created inside a request retains that request's identity; after its handler returns or times out, further bridge calls fail instead of becoming administrator calls. Without an account there is no app tool access.
 - **Pages.** `api.server(body, { signal })` calls the module's handler (up to ten minutes, 2 MiB). Its `conai.tools.call/list` receives the page's bound project and current account. Every enabled plugin, including pages without server modules, may use `api.app.call`; direct mutations start as native jobs without an extra approval card.
 - **Limits.** Each worker has a 512 MB heap. Tool calls wait at most ten minutes. The module cannot import packages that are not in the ZIP: bundle dependencies (better-sqlite3 is provided through `conai.db`).
 
 `plugins/chat-instructions` is a working example: rules kept in its database, appended to chat instructions by the hook, edited on its page through `api.server`, listed by a `read` tool.
+
+## Generation layouts
+
+Screens with block layouts (the generation tabs, the public workflow page, sprite, audio, image detail and upload inspection; surfaces are `GENERATION_LAYOUT_SURFACES` in `@conai/shared`) take two kinds of plugin additions, declared under `generation`:
+
+```json
+"pages": [{ "id": "snippets", "title": "프롬프트 조각", "entry": "index.html", "accepts": [], "actions": [], "menu": false }],
+"generation": {
+  "blocks": [{ "id": "snippets", "page": "snippets", "surfaces": ["nai", "codex", "comfy"], "height": 240 }],
+  "actions": [{ "id": "tidy", "label": "태그 정리", "surfaces": ["nai", "comfy"] }]
+}
+```
+
+- **Blocks** (up to 8) show one of the package's pages inline at a fixed `height` (120–1200 px, default 320). A new block joins the end of each preset's last column (above the Generate button there); administrators move or hide it in the layout editor like any other block, and the saved presets keep its place (`plugin:<plugin id>:<block id>`, at most 8 per preset). Blocks of a disabled or removed plugin drop out of the screen. The editor shows only the block's name; the frame opens on the live screen and only while that screen is on view, using the normal page connection (it counts toward the 12 connections per session) without registering a page of its own for chat. Inside a block, `api.context` is `{ kind: 'generation-block', surface }` (null on the page itself), `await api.page.form()` returns the screen's form (`{ title, fields: [{ id, label, type, value, options?… }] }`, or null without inputs; the same fields a connected chat sees) and `await api.page.fill({ fieldId: value })` sets some of them. Every value is checked against its field (type, options, range, read-only) before the form changes; nothing is generated. These two methods fail on a plugin's own page.
+- **Actions** (up to 8) are icon buttons (plugin icon, `label` as tooltip) in the Generate bar of the listed surfaces. A click sends the screen's form fields to the server module's `generation.action` hook, so actions need `server.entry`. The hook returns `{ message?, fill? }` within 30 seconds: `message` (≤ 500 characters) appears as a notice and `fill` goes through the same field checks as `api.page.fill`. It runs as the account that clicked; the button is disabled while Generate is busy.
+
+Two more hooks report every generation queue job (any service, any caller, including chat and graph runs) without holding it up: `generation.queued` gets `{ jobId, service, status, workflowId, account }` when a job is queued, and `generation.finished` gets the same plus `failureCode` and `history: [{ id, compositeHash }]` when it completes, fails or is cancelled (images may still be post-processing then; `compositeHash` can be null). They run as the job's requester, ten seconds at most, and failures are only logged.
+
+`plugins/generation-helper` is a working example: snippets inserted into the prompt from a block, a tag-tidying button and a per-account tally kept by the queue hooks.
 
 ### Profile replies
 
@@ -234,6 +254,7 @@ Profile assets use the same library references, legacy embedded images and safet
 - `backend/src/services/plugins/pluginServerRuntime.ts`, `pluginServerTools.ts`, `pluginData.ts`: server module workers, registered tools, data folders; `backend/test/plugin-server.test.ts` covers them.
 - `backend/src/services/plugins/pluginLlm.ts`, `backend/src/services/codex-chat/chatProfileReply.ts`: account-bound profile replies, shared prompts, idempotent jobs and cancellation; covered by the server plugin and workflow LLM tests.
 - `frontend/test/plugin-text-editor.test.ts`: draft preservation during conflict refresh and concurrent typing (`cd frontend && npx tsx --test test/plugin-text-editor.test.ts`).
+- Generation layouts: `frontend/src/features/plugins/plugin-generation.ts` (contributions), `plugin-layout-block.tsx` (embedded page), `plugin-generation-actions.tsx` (Generate-bar buttons), `withPluginBlocks` in `frontend/src/features/image-generation/layout/generation-layout-ops.ts`, the form bridge (`form`/`fillForm`) in `frontend/src/features/codex-chat/chat-page-context.tsx`; covered by `frontend/test/generation-layout.test.ts`, `frontend/test/plugin-sdk.test.ts` and `backend/test/plugin-server.test.ts`.
 
 ## Generic processing and project changes
 

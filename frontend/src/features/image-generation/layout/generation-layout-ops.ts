@@ -1,8 +1,10 @@
 import {
   GENERATION_LAYOUT_LIMITS,
   createDefaultGenerationLayoutPreset,
+  isGenerationLayoutPluginBlock,
   normalizeGenerationLayoutColumns,
   type GenerationLayoutBlock,
+  type GenerationLayoutPluginBlock,
   type GenerationLayoutColumn,
   type GenerationLayoutPreset,
   type GenerationLayoutSurface,
@@ -72,6 +74,24 @@ export function resolveRecentStripPlacement(preset: GenerationLayoutPreset): 'to
   if (preset.hidden.includes('recent')) return 'hidden'
   const column = preset.columns.find((item) => item.blocks.includes('result'))
   return column && column.blocks.includes('recent') && column.blocks.indexOf('recent') < column.blocks.indexOf('result') ? 'top' : 'bottom'
+}
+
+/**
+ * The preset with the plugin blocks that exist now: blocks of plugins that are gone drop out, and a plugin block the
+ * preset has never placed joins the end of the last column (before the Generate button).
+ */
+export function withPluginBlocks(preset: GenerationLayoutPreset, available: readonly GenerationLayoutPluginBlock[]): GenerationLayoutPreset {
+  const keep = (block: GenerationLayoutBlock) => !isGenerationLayoutPluginBlock(block) || available.includes(block)
+  const placed = new Set(preset.columns.flatMap((column) => column.blocks))
+  const missing = available.filter((block) => !placed.has(block)).slice(0, GENERATION_LAYOUT_LIMITS.pluginBlocks)
+  if (!missing.length && [...placed, ...preset.hidden].every(keep)) return preset
+  const columns = preset.columns.map((column) => ({ ...column, blocks: column.blocks.filter(keep) }))
+  const last = columns[columns.length - 1]
+  if (last && missing.length) {
+    const actionIndex = last.blocks.indexOf('action')
+    last.blocks.splice(actionIndex === -1 ? last.blocks.length : actionIndex, 0, ...missing)
+  }
+  return { ...preset, columns, hidden: preset.hidden.filter(keep) }
 }
 
 /** Narrow screens stack the visible blocks in column order. */

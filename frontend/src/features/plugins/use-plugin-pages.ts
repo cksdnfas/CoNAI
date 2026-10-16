@@ -11,7 +11,7 @@ export function usePluginPages() {
   const allowed = auth.data?.authenticated === true || auth.data?.hasCredentials === false
   const plugins = useQuery({ queryKey: PLUGINS_QUERY_KEY, queryFn: listPlugins, enabled: allowed, staleTime: 30_000 })
   const pages: PluginPageLink[] = allowed ? (plugins.data ?? []).filter((plugin) => plugin.enabled).flatMap(({ manifest }) =>
-    manifest.pages.map((page) => ({
+    manifest.pages.filter((page) => page.menu !== false).map((page) => ({
       id: `plugin:${manifest.id}:${page.id}` as const,
       to: `/ext/${manifest.id}/${page.id}`,
       title: page.title,

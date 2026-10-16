@@ -1,4 +1,6 @@
 import type { ChatPageAction, ChatPageData, ChatPageSchema } from './chatPageAction'
+import type { ChatPageValue } from './chatPage'
+import type { GenerationLayoutSurface } from '../constants/generationLayout'
 import type { WorkspaceOperation } from './workspace'
 
 /** Legacy manifest metadata; installed plugins use native account permissions instead of capability grants. */
@@ -7,7 +9,15 @@ export type PluginPage = {
   id: string; title: string; entry: string; accepts: string[]
   actions: Array<ChatPageAction & { tier: 'view' | 'draft' }>
   serverActions?: string[]
+  /** false: no header menu entry (a page that only lives as a layout block). */
+  menu?: boolean
 }
+/** One of the plugin's pages shown inline as a block of the listed layout surfaces. */
+export type PluginGenerationBlock = { id: string; page: string; surfaces: GenerationLayoutSurface[]; height?: number }
+/** A button next to Generate on the listed surfaces; the server module's `generation.action` hook answers it. */
+export type PluginGenerationAction = { id: string; label: string; surfaces: GenerationLayoutSurface[] }
+/** What `generation.action` may return: a short note and input values for the screen's form. */
+export type PluginGenerationActionResult = { message?: string; fill?: Record<string, ChatPageValue> }
 export type PluginServerAction = {
   id: string; label: string; description: string; schema: ChatPageSchema; tool: string
   /** JSON constants or { "$input": "field.nested" }; absent: forward validated input. */
@@ -19,6 +29,8 @@ export type PluginManifest = {
   appTools?: string[]; serverActions?: PluginServerAction[]
   /** Optional server module; independent of legacy capability declarations. */
   server?: { entry: string }
+  /** Blocks and Generate-bar buttons on the generation layouts. */
+  generation?: { blocks: PluginGenerationBlock[]; actions: PluginGenerationAction[] }
 }
 export type PluginAppRequest = {
   id: string; pluginId: string; version: string; label: string; tool: string; arguments: Record<string, unknown>

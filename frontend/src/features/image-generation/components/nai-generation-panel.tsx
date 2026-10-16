@@ -33,7 +33,7 @@ import {
 import { NaiAuthModal } from './nai-auth-modal'
 import { NaiAssetSaveModal } from './nai-asset-save-modal'
 import { NaiGenerationEditorSections, type NaiEditorBlockNodes } from './nai-generation-editor-sections'
-import { GenerationBlockLayout } from '../layout/generation-block-layout'
+import { GenerationBlockLayout, StackedPluginBlocks } from '../layout/generation-block-layout'
 import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
 import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 import { NaiActionSection, NaiConnectionHeader, NaiToolbarStatus } from './nai-generation-panel-sections'
@@ -412,6 +412,7 @@ export function NaiGenerationPanel({
         {stackedLayoutBlocks(layoutPreset)
           .filter((block): block is keyof NaiEditorBlockNodes => block in blocks)
           .map((block) => <Fragment key={block}>{blocks[block]}</Fragment>)}
+        <StackedPluginBlocks surface="nai" />
       </>
     )
 

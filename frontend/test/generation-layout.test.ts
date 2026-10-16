@@ -15,6 +15,7 @@ import {
   resolveRecentStripPlacement,
   setLayoutBlockHidden,
   stackedLayoutBlocks,
+  withPluginBlocks,
 } from '../src/features/image-generation/layout/generation-layout-ops'
 
 const allBlocks = (preset: { columns: Array<{ blocks: string[] }> }) => preset.columns.flatMap((column) => column.blocks).sort()
@@ -99,4 +100,34 @@ test('resizing keeps the pair total and the minimum width; only empty columns ca
   assert.equal(removeLayoutColumn(preset, 0), preset)
   const withEmpty = addLayoutColumn(preset)
   assert.equal(removeLayoutColumn(withEmpty, 2).columns.length, 2)
+})
+
+test('plugin blocks survive normalizing, are never required and stay within the limit', () => {
+  const extra = Array.from({ length: 10 }, (_, index) => `plugin:helper:block-${index}`)
+  const [preset] = normalizeGenerationLayoutPresets('nai', [{
+    id: 'plugins',
+    name: '플러그인',
+    columns: [{ weight: 50, blocks: ['prompt', 'plugin:helper:notes', 'plugin:helper:notes', 'plugin:Bad:x', 'plugin:helper'] }, { weight: 50, blocks: ['result', ...extra] }],
+    hidden: ['plugin:helper:notes', 'plugin:nope'],
+  }])
+  const plugins = allBlocks(preset).filter((block) => block.startsWith('plugin:'))
+  assert.equal(plugins.length, 8)
+  assert.ok(plugins.includes('plugin:helper:notes'))
+  assert.deepEqual(preset.hidden, ['plugin:helper:notes'])
+  assert.equal(isGenerationLayoutRequiredBlock('nai', 'plugin:helper:notes'), false)
+})
+
+test('the plugin blocks on screen follow the installed plugins', () => {
+  const preset = createDefaultGenerationLayoutPreset('nai')
+  assert.equal(withPluginBlocks(preset, []), preset)
+  const added = withPluginBlocks(preset, ['plugin:helper:notes'])
+  // A new block joins the last column; one in a column with the Generate button would sit above it.
+  assert.deepEqual(added.columns[1].blocks, ['result', 'recent', 'plugin:helper:notes'])
+  const moved = moveLayoutBlock('nai', added, 'plugin:helper:notes', { column: 0, index: 0 })
+  assert.deepEqual(withPluginBlocks(moved, ['plugin:helper:notes']), moved)
+  const single = { ...preset, columns: [{ weight: 100, blocks: preset.columns.flatMap((column) => column.blocks).filter((block) => block !== 'action').concat('action') }] }
+  assert.deepEqual(withPluginBlocks(single, ['plugin:helper:notes']).columns[0].blocks.slice(-2), ['plugin:helper:notes', 'action'])
+  const gone = withPluginBlocks(setLayoutBlockHidden(moved, 'plugin:helper:notes', true), [])
+  assert.equal(allBlocks(gone).some((block) => block.startsWith('plugin:')), false)
+  assert.deepEqual(gone.hidden, [])
 })

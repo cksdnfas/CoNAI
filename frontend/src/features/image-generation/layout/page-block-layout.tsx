@@ -1,7 +1,7 @@
 import { Fragment } from 'react'
 import type { GenerationLayoutSurface } from '@conai/shared'
 import { cn } from '@/lib/utils'
-import { GenerationBlockLayout, type GenerationLayoutBlockNodes } from './generation-block-layout'
+import { GenerationBlockLayout, withPluginBlockNodes, type GenerationLayoutBlockNodes } from './generation-block-layout'
 import { useGenerationLayoutSurface } from './generation-layout-context'
 import { GenerationLayoutListEditor } from './generation-layout-list-editor'
 import { stackedLayoutBlocks } from './generation-layout-ops'
@@ -20,8 +20,9 @@ export function PageBlockLayout({ surface, blocks, wide, active = true, stickyCl
   stickyClassName?: string | null
   stackClassName?: string
 }) {
-  const { preset, editing } = useGenerationLayoutSurface(surface, { active })
+  const { preset, editing, pluginBlocks } = useGenerationLayoutSurface(surface, { active })
   if (wide) return <GenerationBlockLayout surface={surface} blocks={blocks} active={active} flow="page" stickyClassName={stickyClassName} />
+  blocks = withPluginBlockNodes(surface, blocks, pluginBlocks, editing, active)
 
   return (
     <>

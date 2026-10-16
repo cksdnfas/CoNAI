@@ -116,6 +116,13 @@ export function connectPlugin(handlers = {}) {
       } }
       /** Plugins with a server module: send `body` to its `conai.onRequest` handler and get its answer. */
       api.server = (body, options) => api.request('server.request', { body }, options)
+      /** Where the page is shown: null on its own page, `{ kind: 'generation-block', surface }` inside a generation layout. */
+      api.context = event.data.context || null
+      /** Inside a layout block: the screen's form (`{ title, fields }`, or null) and filling some of its inputs by field id. */
+      api.page = {
+        form: options => api.request('page.form.get', {}, options),
+        fill: (values, options) => api.request('page.form.fill', { values }, options),
+      }
       /** Profile replies using the current account; no server module required. Reuse requestId only for the same turn. */
       api.llm = {
         profiles: options => api.request('llm.profiles', {}, options),

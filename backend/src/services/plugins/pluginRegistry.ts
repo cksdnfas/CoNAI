@@ -3,7 +3,7 @@ import path from 'path'
 import { createHash, randomBytes } from 'crypto'
 import AdmZip from 'adm-zip'
 import { z } from 'zod'
-import { normalizeChatPageSchema, normalizeChatPageActions, validateChatPageArguments, type ChatPageSnapshot, type PluginManifest, type InstalledPlugin } from '@conai/shared'
+import { GENERATION_LAYOUT_SURFACES, normalizeChatPageSchema, normalizeChatPageActions, validateChatPageArguments, type ChatPageSnapshot, type GenerationLayoutSurface, type PluginManifest, type InstalledPlugin } from '@conai/shared'
 import { runtimePaths } from '../../config/runtimePaths'
 import { WINDOWS_RESERVED_NAME } from '../../utils/pathResolver'
 import { pluginChanged, pluginDb, PluginError } from './pluginStore'
@@ -19,6 +19,7 @@ const actionSchema = z.object({
   id: z.string().max(110), label: z.string().min(1).max(160), description: z.string().max(1000),
   effect: z.literal('draft'), tier: z.enum(['view', 'draft']), schema: z.unknown(),
 }).strict()
+const surfacesSchema = z.array(z.enum(GENERATION_LAYOUT_SURFACES as [string, ...string[]])).min(1).max(GENERATION_LAYOUT_SURFACES.length)
 const manifestSchema = z.object({
   apiVersion: z.literal(1), id: pluginIdSchema, name: z.string().min(1).max(100),
   version: z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}$/), description: z.string().max(1000),
@@ -29,7 +30,12 @@ const manifestSchema = z.object({
   pages: z.array(z.object({
     id: pluginIdSchema, title: z.string().min(1).max(160), entry: z.string().min(1).max(200),
     accepts: z.array(z.string().regex(/^\.[a-z0-9]{1,16}$/)).max(40), actions: z.array(actionSchema).max(26), serverActions: z.array(z.string().max(100)).max(26).optional(),
+    menu: z.boolean().optional(),
   }).strict()).min(1).max(12),
+  generation: z.object({
+    blocks: z.array(z.object({ id: pluginIdSchema, page: pluginIdSchema, surfaces: surfacesSchema, height: z.number().int().min(120).max(1200).optional() }).strict()).max(8).default([]),
+    actions: z.array(z.object({ id: pluginIdSchema, label: z.string().min(1).max(40), surfaces: surfacesSchema }).strict()).max(8).default([]),
+  }).strict().optional(),
 }).strict()
 export const PLUGIN_ZIP_LIMIT = 8 * 1024 * 1024
 const MAX_FILE = 4 * 1024 * 1024
@@ -63,7 +69,8 @@ export function parsePluginManifest(value: unknown, stored = false): PluginManif
     return { ...action, schema, arguments: action.arguments as import('@conai/shared').PluginServerAction['arguments'] }
   })
   if (reserved.has(raw.id) || new Set(raw.pages.map((page) => page.id)).size !== raw.pages.length || new Set(raw.capabilities).size !== raw.capabilities.length) throw new PluginError('중복되거나 예약된 플러그인 ID야.')
-  return { ...raw, appTools, serverActions, pages: raw.pages.map((page) => {
+  const generation = raw.generation ? parseGeneration(raw.generation, raw.pages.map(page => page.id), !!raw.server) : undefined
+  return { ...raw, appTools, serverActions, generation, pages: raw.pages.map((page) => {
     pluginAssetName(page.entry)
     if (!page.entry.endsWith('.html')) throw new PluginError('페이지 진입 파일은 HTML이어야 해.')
     const ids = new Set<string>()
@@ -79,6 +86,15 @@ export function parsePluginManifest(value: unknown, stored = false): PluginManif
       return { ...action, schema }
     }) }
   }) }
+}
+/** Layout blocks show one of the package's pages; Generate-bar buttons need a server module to answer them. */
+function parseGeneration(raw: NonNullable<z.infer<typeof manifestSchema>['generation']>, pageIds: string[], hasServer: boolean): NonNullable<PluginManifest['generation']> {
+  const unique = <T extends { id: string }>(items: T[]) => new Set(items.map(item => item.id)).size === items.length
+  if (!unique(raw.blocks) || !unique(raw.actions)) throw new PluginError('생성 화면 블록·버튼 ID가 겹쳐.')
+  for (const block of raw.blocks) if (!pageIds.includes(block.page)) throw new PluginError(`블록이 가리키는 페이지가 없어: ${block.page}`)
+  if (raw.actions.length && !hasServer) throw new PluginError('생성 버튼은 서버 모듈(generation.action 훅)이 있어야 해.')
+  const dedupe = (surfaces: string[]) => [...new Set(surfaces)] as GenerationLayoutSurface[]
+  return { blocks: raw.blocks.map(block => ({ ...block, surfaces: dedupe(block.surfaces) })), actions: raw.actions.map(action => ({ ...action, surfaces: dedupe(action.surfaces) })) }
 }
 // Parsed manifests by package digest: asset requests and every tool call read them, the app tool policy only
 // changes with a restart, and a digest never changes under the same install.

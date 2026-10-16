@@ -3,7 +3,7 @@ import { type PageSettingsScopeId } from '@conai/shared'
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Monitor } from 'lucide-react'
-import { CHAT_PAGE_ACTION_LIMITS, chatPageActionLeavesScreen, chatPageActionTier, chatPagePatch, chatPagePermission, chatPageTarget, validateChatPageArguments, type ChatPageCommandEvent, normalizeChatPageSnapshot, requireChatPageTarget, requireChatPageActionState, type ChatPageAction, type ChatPageData, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
+import { CHAT_PAGE_ACTION_LIMITS, normalizeChatPageValue, chatPageActionLeavesScreen, chatPageActionTier, chatPagePatch, chatPagePermission, chatPageTarget, validateChatPageArguments, type ChatPageCommandEvent, normalizeChatPageSnapshot, requireChatPageTarget, requireChatPageActionState, type ChatPageAction, type ChatPageData, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -45,6 +45,10 @@ type PageApi = {
   driving: boolean
   /** The field still holds the value the chat filled on this screen; a manual edit clears it. */
   isFilled: (fieldId: string) => boolean
+  /** The screen's own form for plugin blocks on it, whether or not a chat is connected; null without inputs. */
+  form: () => { title: string; fields: ChatPageField[] } | null
+  /** Fill some of the screen's inputs by field id; every value is checked against its field before anything changes. */
+  fillForm: (values: Record<string, unknown>) => void
 }
 const PageContext = createContext<PageApi | null>(null)
 
@@ -176,6 +180,21 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     return () => setEditors((old) => old.filter((item) => item.instanceId !== next.instanceId))
   }, [])
   const capture = useCallback(() => current.current.snapshot ? normalizeChatPageSnapshot(current.current.snapshot) : undefined, [])
+  const form = useCallback(() => {
+    const editor = current.current.editor
+    return editor?.fields.length ? { title: editor.title, fields: editor.fields } : null
+  }, [])
+  const fillForm = useCallback((values: Record<string, unknown>) => {
+    const editor = current.current.editor
+    if (!editor?.fields.length) throw new Error('이 화면에는 채울 입력이 없어.')
+    const patch = Object.fromEntries(Object.entries(values).map(([id, value]) => {
+      const field = editor.fields.find((item) => item.id === id)
+      if (!field) throw new Error(`이 화면에 없는 입력이야: ${id}`)
+      if (field.editable === false) throw new Error(`${field.label}: 읽기 전용 항목은 변경할 수 없어.`)
+      return [id, normalizeChatPageValue(field, value)]
+    }))
+    if (Object.keys(patch).length) editor.apply(patch)
+  }, [])
   const apply = useCallback(async (proposal: PageProposal, undo = false) => {
     if (busy.current.size) throw new Error('다른 제안을 처리하고 있어.')
     const state = statesRef.current.get(proposal.id)
@@ -348,7 +367,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       onStatusChange: () => {}, onResync: () => {}, onSessionExpired: () => {},
     })
   }, [connectionId, runCommand])
-  const api = useMemo<PageApi>(() => ({ snapshot, available, enabled, toggle, disconnect, capture, register, states, apply, workflowProblem, applyWorkflow, actionProblem, applyAction, actionUndos: actionUndos.current, activity, undoActivity, driving, isFilled }), [snapshot, available, enabled, toggle, disconnect, capture, register, states, apply, workflowProblem, applyWorkflow, actionProblem, applyAction, activity, undoActivity, driving, isFilled])
+  const api = useMemo<PageApi>(() => ({ snapshot, available, enabled, toggle, disconnect, capture, register, states, apply, workflowProblem, applyWorkflow, actionProblem, applyAction, actionUndos: actionUndos.current, activity, undoActivity, driving, isFilled, form, fillForm }), [snapshot, available, enabled, toggle, disconnect, capture, register, states, apply, workflowProblem, applyWorkflow, actionProblem, applyAction, activity, undoActivity, driving, isFilled, form, fillForm])
   return <PageContext.Provider value={api}><PageNavigationRegistration title={fallbackTitle} />{driving ? <ChatPageDrivingBar /> : null}{children}</PageContext.Provider>
 }
 

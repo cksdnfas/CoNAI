@@ -34,7 +34,7 @@ import { CodexCliUpdateButton } from './codex-cli-update-button'
 import { CodexModelSelect } from './codex-model-select'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
-import { GenerationBlockLayout } from '../layout/generation-block-layout'
+import { GenerationBlockLayout, StackedPluginBlocks } from '../layout/generation-block-layout'
 import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
 import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 
@@ -737,6 +737,7 @@ export function CodexGenerationPanel({
           useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
         )}>
         {stackedEditorBlocks}
+        <StackedPluginBlocks surface="codex" />
 
           {!useInlineActionBar && !useStickyActionBar ? actionSection : null}
           {useStickyActionBar && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}

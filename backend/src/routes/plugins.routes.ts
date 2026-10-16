@@ -3,7 +3,7 @@ import multer from 'multer'
 import { z } from 'zod'
 import { requireAdmin, requirePermission } from '../middleware/authMiddleware'
 import { getRequesterAccountId, getRequesterAccountType, isAdminRequest } from './requester-session-helpers'
-import { installPlugin, listPlugins, setPluginEnabled, removePlugin, PLUGIN_ZIP_LIMIT } from '../services/plugins/pluginRegistry'
+import { getPlugin, installPlugin, listPlugins, setPluginEnabled, removePlugin, PLUGIN_ZIP_LIMIT } from '../services/plugins/pluginRegistry'
 import { openPluginInstance, requirePluginInstance, renewPluginInstance, closePluginInstance, readPluginFile, proposePluginWrite, approvePluginWrite, applyPluginWrite, dismissPluginWrite, issuePluginMedia } from '../services/plugins/pluginHost'
 import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler'
 import { pluginStorage } from '../services/plugins/pluginStorage'
@@ -20,8 +20,8 @@ export function pluginRouteError(error: unknown, _req: Request, res: Response, n
   next(error)
 }
 import { proposePluginMedia, approvePluginMedia, applyPluginMedia, dismissPluginMedia } from '../services/plugins/pluginMediaProcessing'
-import { pluginServerStatus, requestPluginServer } from '../services/plugins/pluginServerRuntime'
-import type { InstalledPlugin } from '@conai/shared'
+import { pluginServerStatus, requestPluginServer, runGenerationActionHook } from '../services/plugins/pluginServerRuntime'
+import { CHAT_PAGE_LIMITS, GENERATION_LAYOUT_SURFACES, type InstalledPlugin } from '@conai/shared'
 import { pluginInstanceAppContext, pluginBrowserContext, listPluginAppTools, runPluginAppTool, runPluginServerAction, listPluginAppRequests, getPluginAppRequest, applyPluginAppRequest, cancelPluginAppRequest } from '../services/plugins/pluginAppActions'
 
 const router = Router()
@@ -99,6 +99,19 @@ router.post('/instances/:instanceId/server', cancellableAsyncHandler(async (req,
   const page = { id: instance.page.id, files: instance.fileIds, ...(instance.workspace ? { workspace: instance.workspace } : {}) }
   const bound = pluginInstanceAppContext(instance.row.id, caller(req), baseUrl(req))
   res.json({ success: true, data: await requestPluginServer(instance.plugin.id, req.body?.body ?? null, caller(req).requester, page, baseUrl(req), bound.context.workspace, signal) })
+}))
+const actionValueSchema = z.union([z.string().max(CHAT_PAGE_LIMITS.text), z.number(), z.boolean(), z.array(z.string().max(CHAT_PAGE_LIMITS.text)).max(32)])
+const generationActionSchema = z.object({
+  surface: z.enum(GENERATION_LAYOUT_SURFACES as [string, ...string[]]),
+  fields: z.array(z.object({ id: z.string().max(100), label: z.string().max(160), type: z.string().max(20), value: actionValueSchema }).strip()).max(CHAT_PAGE_LIMITS.fields),
+}).strict()
+/** A plugin's button next to Generate: its server module answers with a note and form values, as the signed-in account. */
+router.post('/:pluginId/generation-actions/:actionId', cancellableAsyncHandler(async (req, res) => {
+  const input = generationActionSchema.parse(req.body)
+  const plugin = getPlugin(param(req, 'pluginId'))
+  const action = plugin.definition.generation?.actions.find(item => item.id === param(req, 'actionId'))
+  if (!action || !(action.surfaces as string[]).includes(input.surface)) { res.status(404).json({ error: '이 화면에 없는 플러그인 버튼이야.' }); return }
+  res.json({ success: true, data: await runGenerationActionHook(plugin.id, { action: action.id, surface: input.surface, fields: input.fields }, caller(req).requester) })
 }))
 router.post('/:pluginId/pages/:pageId/instances', (req, res) => {
   const input = z.object({ files: z.array(z.string()).max(20), workspace: z.object({ id: z.string(), write: z.boolean().default(false) }).strict().optional() }).strict().parse(req.body)
