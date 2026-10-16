@@ -156,6 +156,8 @@ services:
 | Ports Exposes | `1666` | `1666` |
 | Persistent Storage | `/app/data/user` | `/app/data/user` |
 
+Docker 컨테이너를 실행하는 플러그인(예: 영상 렌더러)을 쓸 때만 Persistent Storage에 호스트 경로 `/var/run/docker.sock` → 컨테이너 경로 `/var/run/docker.sock`을 추가하고 다시 배포(재시작)합니다. 이 소켓은 앱과 서버 모듈이 있는 모든 플러그인에 호스트 Docker 관리자 권한을 줍니다. 필요 없으면 연결하지 말고, 연결했다면 코드를 확인한 서버 플러그인만 활성화하세요. 자세한 내용은 [플러그인 관리](./PLUGINS.md#권한과-범위)를 참고하세요.
+
 빌드 단계 대상을 비워 두면 GPU가 있는 서버에서도 CPU 이미지가 만들어집니다. 배포 후에는 위의 [GPU 확인 명령](#gpu가-실제로-쓰이는지-확인)으로 확인하세요.
 
 ## 업데이트와 백업
