@@ -1,6 +1,7 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { AuthAccount } from '../../models/AuthAccount'
+import { isConfirmedAdminRequester } from '../../middleware/featureAccess'
 import type { ChatOrderKind } from './chatOrders'
 
 /**
@@ -77,7 +78,7 @@ function withOverride(row: ChatFlagRow, override: ChatFlagOverrideRow | undefine
   }
 }
 
-const isAdmin = (viewer: ChatFlagViewer) => viewer.accountType === 'admin'
+const isAdmin = (viewer: ChatFlagViewer) => isConfirmedAdminRequester(viewer)
 
 /** Flags written before sharing: those of the admin (no account, or an admin account) become shared. */
 function settleLegacyFlags() {

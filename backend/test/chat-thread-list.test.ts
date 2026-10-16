@@ -30,7 +30,8 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
   const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
 
   updateChatSettings({ enabled: true })
-  t.mock.method(AuthAccount, 'findById', () => ({ id: 1, status: 'active' }))
+  // Admin rights are re-read from the account (accounts 1 and 2 are the admins below, 3 and 4 guests).
+  t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: id === 1 || id === 2 ? 'admin' : 'guest' }) as never)
   t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use'] }))
   const requester = { accountId: 1, accountType: 'admin' as const }
   const stranger = { accountId: 2, accountType: 'admin' as const }

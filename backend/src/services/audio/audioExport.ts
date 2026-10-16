@@ -4,6 +4,7 @@ import path from 'path';
 import { pipeline, finished } from 'stream/promises';
 import { ZipArchive } from 'archiver';
 import { runtimePaths } from '../../config/runtimePaths';
+import { isConfirmedAdminRequester } from '../../middleware/featureAccess';
 import { getAudioDb } from '../../database/audioDb';
 import { audioBlobPath } from './audioStore';
 import { audioExportFileName } from './audioNaming';
@@ -362,7 +363,7 @@ export function audioExportRoot(): string {
 
 /** Owner or admin; unbound MCP keys (no account) own their own null-owner exports. */
 export function canAccessAudioExport(owner: { accountId: number | null }, requester: AudioExportOwner): boolean {
-  return requester.accountType === 'admin' || owner.accountId === requester.accountId;
+  return owner.accountId === requester.accountId || isConfirmedAdminRequester(requester);
 }
 
 function pruneAudioExports(now = Date.now()): void {

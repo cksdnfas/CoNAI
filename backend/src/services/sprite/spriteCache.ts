@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import { runtimePaths } from '../../config/runtimePaths'
+import { isConfirmedAdminRequester } from '../../middleware/featureAccess'
 
 /**
  * Temporary sprite workspaces (one per extraction build, normalisation or animation run). A build keeps its final
@@ -45,7 +46,7 @@ export interface SpriteWorkspace {
 
 /** Owner or admin. Unbound MCP keys (no account) own their own null-owner workspaces; accounts never see those. */
 export function canAccessSpriteWorkspace(owner: { accountId: number | null }, requester: { accountId: number | null; accountType: string | null }): boolean {
-  return requester.accountType === 'admin' || owner.accountId === requester.accountId
+  return owner.accountId === requester.accountId || isConfirmedAdminRequester(requester)
 }
 
 export function spriteWorkspaceRoot(): string {

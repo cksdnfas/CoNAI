@@ -24,6 +24,8 @@ test('chat flags: admin flags shared, each account keeps its own copy', { timeou
   const { ChatFlagStore } = await import('../src/services/codex-chat/chatFlags')
   const { AuthAccount } = await import('../src/models/AuthAccount')
   const admin = { accountId: 1, accountType: 'admin' as const }
+  // Admin rights are re-read from the account, never taken from the requester's claimed role.
+  t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: id === 1 || id === 7 ? 'admin' : 'guest' }) as never)
   const guest = { accountId: 2, accountType: 'guest' as const }
   const other = { accountId: 3, accountType: 'guest' as const }
   const names = (viewer: typeof admin | typeof guest, options?: { includeHidden?: boolean }) => ChatFlagStore.list(viewer, options).map((flag) => flag.name)

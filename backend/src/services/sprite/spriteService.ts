@@ -5,6 +5,7 @@ import { RuntimeJobRunner, type RuntimeJobContext } from '../runtimeJobs/runtime
 import { RuntimeJobStore } from '../runtimeJobs/runtimeJobStore'
 import { isRuntimeJobTerminalStatus, type RuntimeJobKind, type RuntimeJobRecord } from '../../types/runtimeJob'
 import { readBuildMeta, writeZip, type SpriteBuildMeta, type SpriteZipEntry } from './spriteBuild'
+import { isConfirmedAdminRequester } from '../../middleware/featureAccess'
 import { canAccessSpriteWorkspace, createSpriteWorkspace, getSpriteWorkspace, removeSpriteWorkspace, workspaceFile, type SpriteWorkspace } from './spriteCache'
 import { spriteOptionsXmp } from './spriteEncode'
 import { SpriteError } from './spriteErrors'
@@ -245,7 +246,7 @@ const LIVE_BATCH_KEEP_MS = 60 * 60 * 1000
 function requireBatchAccess(jobId: string, requester: SpriteRequester): void {
   const ownership = RuntimeJobStore.getOwnership(jobId)
   if (!ownership) throw new SpriteError('작업을 찾을 수 없습니다.', 404)
-  if (ownership.requestedByAccountId !== null && requester.accountType !== 'admin' && ownership.requestedByAccountId !== requester.accountId) {
+  if (ownership.requestedByAccountId !== null && ownership.requestedByAccountId !== requester.accountId && !isConfirmedAdminRequester(requester)) {
     throw new SpriteError('이 작업에 접근할 수 없습니다.', 403)
   }
 }

@@ -1,6 +1,6 @@
 import { AuthAccount } from '../models/AuthAccount';
 import { AuthAccessControlService, isActiveAdminAccount } from '../services/authAccessControlService';
-import { hasConfiguredAuth } from '../routes/auth-route-helpers';
+import { hasConfiguredAuth } from '../services/auth/sessionAccess';
 import type { McpRequester } from '../mcp/context';
 
 /** The account's current keys; the bootstrap owner holds every key only while no accounts are configured. */
@@ -13,6 +13,11 @@ export function requesterPermissionKeys(requester: McpRequester): string[] {
 /** The account's current role, re-read rather than taken from the session or the browser. */
 export function isRequesterAdmin(requester: McpRequester): boolean {
   return requester.accountId === null ? !hasConfiguredAuth() : isActiveAdminAccount(requester.accountId);
+}
+
+/** Claims admin and still is one: a cached or browser-supplied role never grants admin by itself. */
+export function isConfirmedAdminRequester(requester: { accountId: number | null; accountType?: string | null }): boolean {
+  return requester.accountType === 'admin' && isRequesterAdmin({ accountId: requester.accountId, accountType: 'admin' });
 }
 
 /** Account-bound tools recheck the account; HTTP MCP keys are checked through requireContextPermission. */
