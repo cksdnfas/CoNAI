@@ -195,7 +195,17 @@ type ComfyWorkflowControllerPanelProps = {
   onFieldChange: (fieldId: string, value: WorkflowFieldDraftValue) => void
   onImageChange: (fieldId: string, image?: SelectedImageDraft) => Promise<void> | void
   onRefreshDropdownLists?: () => Promise<void> | void
-  onOpenModuleSave: () => void
+  /** Omitted where the viewer cannot author modules (public pages): no save-as-module action. */
+  onOpenModuleSave?: () => void
+  /**
+   * False when the server picks the ComfyUI target itself (public pages): no target picker and no server readiness checks.
+   * The page still sends the job; the server answers if nothing can run it.
+   */
+  serverRouting?: boolean
+  /** Upper bound of the repeat counter (public pages can lower it). */
+  queueMaxCount?: number
+  /** Extra message above the fields, e.g. the viewer's queue limit on a public page. */
+  notice?: ReactNode
   onResetDraft: () => void
   /** Save this workflow and the current values as a chat generation preset (admins). */
   onSaveChatPreset?: () => void
@@ -229,6 +239,9 @@ export function ComfyWorkflowControllerPanel({
   onImageChange,
   onRefreshDropdownLists,
   onOpenModuleSave,
+  serverRouting = true,
+  queueMaxCount = 32,
+  notice,
   onResetDraft,
   onSaveChatPreset,
   onGenerateSelected,
@@ -269,7 +282,7 @@ export function ComfyWorkflowControllerPanel({
   const selectedTagRoutableCount = selectedTag
     ? routingSummary.tagRoutableCounts.get(selectedTag) ?? 0
     : 0
-  const routingCanGenerate = selectedTarget === 'auto'
+  const routingCanGenerate = !serverRouting ? true : selectedTarget === 'auto'
     ? routingSummary.autoRoutableCount > 0
     : selectedTag !== null
       ? selectedTagRoutableCount > 0
@@ -285,7 +298,7 @@ export function ComfyWorkflowControllerPanel({
     [workflowDraft, workflowFields],
   )
   const queueRegistrationNumber = Number(queueRegistrationCount)
-  const queueRegistrationCountValid = Number.isInteger(queueRegistrationNumber) && queueRegistrationNumber >= 1 && queueRegistrationNumber <= 32
+  const queueRegistrationCountValid = Number.isInteger(queueRegistrationNumber) && queueRegistrationNumber >= 1 && queueRegistrationNumber <= queueMaxCount
   const readinessIssues = useMemo(() => {
     const issues: string[] = []
 
@@ -301,7 +314,9 @@ export function ComfyWorkflowControllerPanel({
       issues.push(t({ ko: '필수 입력을 채워줘: {labels}{suffix}', en: 'Fill required inputs: {labels}{suffix}' }, { labels, suffix }))
     }
 
-    if (servers.length === 0) {
+    if (!serverRouting) {
+      // The server routes the job; nothing to check here.
+    } else if (servers.length === 0) {
       issues.push(t({ ko: '활성 ComfyUI 서버가 없어. 서버를 등록하거나 비활성 서버를 켜줘.', en: 'There are no active ComfyUI servers. Register a server or enable a disabled one.' }))
     } else if (!routingCanGenerate) {
       if (selectedTarget === 'auto') {
@@ -314,7 +329,7 @@ export function ComfyWorkflowControllerPanel({
     }
 
     if (!queueRegistrationCountValid) {
-      issues.push(t({ ko: '큐 등록 개수는 1부터 32 사이의 정수여야 해.', en: 'Queue count must be an integer between 1 and 32.' }))
+      issues.push(t({ ko: '큐 등록 개수는 1부터 {max} 사이의 정수여야 해.', en: 'Queue count must be an integer between 1 and {max}.' }, { max: queueMaxCount }))
     }
 
     if (workflowNodeIssues.length > 0) {
@@ -326,7 +341,7 @@ export function ComfyWorkflowControllerPanel({
     }
 
     return issues
-  }, [missingRequiredFields, queueRegistrationCountValid, routingCanGenerate, selectedTag, selectedTarget, servers.length, t, workflowFields.length, workflowNodeIssues])
+  }, [missingRequiredFields, queueMaxCount, queueRegistrationCountValid, routingCanGenerate, selectedTag, selectedTarget, serverRouting, servers.length, t, workflowFields.length, workflowNodeIssues])
   const canGenerateSelected = routingCanGenerate && missingRequiredFields.length === 0 && workflowNodeIssues.length === 0 && queueRegistrationCountValid
   const targetOptions = useMemo<WorkflowTargetOption[]>(() => {
     if (servers.length === 0) {
@@ -374,16 +389,16 @@ export function ComfyWorkflowControllerPanel({
   const queueRepeat = {
     value: queueRegistrationCount,
     min: 1,
-    max: 32,
+    max: queueMaxCount,
     onChange: onQueueRegistrationCountChange,
     disabled: workflowFields.length === 0,
   }
   const saveModuleLabel = t({ ko: '모듈로 저장', en: 'Save as module' })
-  const saveModuleAction = (
+  const saveModuleAction = onOpenModuleSave ? (
     <GenerateActionBarIconButton label={saveModuleLabel} onClick={onOpenModuleSave} disabled={isGenerating}>
       <Save />
     </GenerateActionBarIconButton>
-  )
+  ) : null
   const resetLabel = t({ ko: '워크플로우 설정 초기화', en: 'Reset workflow settings' })
 
   const inlineActionBar = (
@@ -398,7 +413,7 @@ export function ComfyWorkflowControllerPanel({
       secondaryActions={saveModuleAction}
       onReset={workflowFields.length > 0 ? onResetDraft : undefined}
       resetLabel={resetLabel}
-      leading={servers.length > 0 ? (
+      leading={serverRouting && servers.length > 0 ? (
         <WorkflowTargetSelect
           value={selectedTarget}
           options={targetOptions}
@@ -441,9 +456,11 @@ export function ComfyWorkflowControllerPanel({
         <ArrowLeft />
       </IconButton>
       <Heading level={3} as="div" className="min-w-0 flex-1 truncate">{workflowName}</Heading>
-      <IconButton variant="ghost" size="icon-sm" onClick={onOpenModuleSave} disabled={!(canUpdateWorkflows) || (isGenerating)} label={saveModuleLabel}>
-        <Save />
-      </IconButton>
+      {onOpenModuleSave ? (
+        <IconButton variant="ghost" size="icon-sm" onClick={onOpenModuleSave} disabled={!(canUpdateWorkflows) || (isGenerating)} label={saveModuleLabel}>
+          <Save />
+        </IconButton>
+      ) : null}
       {onSaveChatPreset ? (
         <IconButton variant="ghost" size="icon-sm" onClick={onSaveChatPreset} disabled={isGenerating} label={t({ ko: '채팅 프리셋으로 저장', en: 'Save as chat preset' })}>
           <BookmarkPlus />
@@ -473,7 +490,7 @@ export function ComfyWorkflowControllerPanel({
       secondaryActions={useDrawerCompactChrome ? undefined : saveModuleAction}
       onReset={useDrawerCompactChrome || workflowFields.length === 0 ? undefined : onResetDraft}
       resetLabel={resetLabel}
-      leading={servers.length > 0 ? (
+      leading={serverRouting && servers.length > 0 ? (
         <WorkflowTargetSelect
           value={selectedTarget}
           options={targetOptions}
@@ -489,7 +506,8 @@ export function ComfyWorkflowControllerPanel({
 
   const fieldsContent = (
     <div className="space-y-6">
-      {servers.length === 0 ? (
+      {notice}
+      {serverRouting && servers.length === 0 ? (
         <Alert className="py-2 text-xs">
           <AlertTitle>{t({ ko: '서버를 먼저 등록해줘.', en: 'Register a server first.' })}</AlertTitle>
         </Alert>

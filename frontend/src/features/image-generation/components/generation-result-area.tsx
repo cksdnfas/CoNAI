@@ -20,6 +20,8 @@ type GenerationResultAreaProps = {
   feed: GenerationHistoryFeed
   serviceType: GenerationServiceType
   workflowId?: number | null
+  /** Public workflow page: history actions use the public routes. */
+  publicWorkflowSlug?: string | null
   splitPaneScroll?: boolean
   /** Narrow layout: shorter stage, actions under the image. */
   compact?: boolean
@@ -37,6 +39,7 @@ export function GenerationResultArea({
   feed,
   serviceType,
   workflowId,
+  publicWorkflowSlug,
   splitPaneScroll = false,
   compact = false,
   followLatestNonce = 0,
@@ -100,6 +103,7 @@ export function GenerationResultArea({
         feed={feed}
         serviceType={serviceType}
         workflowId={workflowId}
+        publicWorkflowSlug={publicWorkflowSlug}
         splitPaneScroll={splitPaneScroll}
         onBack={onBack}
         headerLeading={compact ? (

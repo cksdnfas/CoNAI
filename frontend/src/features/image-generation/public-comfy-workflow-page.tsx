@@ -1,14 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { ArrowLeft, RotateCcw } from 'lucide-react'
-import { BottomDrawerNotice, BottomDrawerSheet } from '@/components/ui/bottom-drawer-sheet'
-import { Heading } from '@/components/ui/heading'
-import { IconButton } from '@/components/ui/icon-button'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Tip } from '@/components/ui/tooltip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -22,14 +16,18 @@ import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { refreshGenerationQueueViews } from './components/generation-queue-actions'
-import { GenerationHistoryPanel } from './components/generation-history-panel'
-import { CompactGenerationControllerActionBar, GenerationControllerFieldStack } from './components/shared-generation-controller'
-import { GenerateActionBar } from './components/generate-action-bar'
+import { GenerationNarrowSplit, type GenerationNarrowView } from './components/generation-narrow-split'
+import { GenerationResultArea, type GenerationResultView } from './components/generation-result-area'
+import { ComfyWorkflowControllerPanel } from './components/comfy-workflow-controller-panel'
 import { WorkflowArtifactExplorerPanel } from './components/workflow-artifact-explorer-panel'
-import { WorkflowFieldGroupList } from './components/workflow-field-group-list'
 import { useComfyChatPage } from './components/use-comfy-chat-page'
 import { ComfyWorkflowAuthoringModal } from './components/comfy-workflow-authoring-modal'
 import { findAutoCollectedPowerLoraOptions } from './components/power-lora-loader-utils'
+import { useGenerationHistoryFeed } from './components/use-generation-history-feed'
+import { GenerationLayoutControls } from './layout/generation-layout-controls'
+import { GenerationLayoutProvider, useGenerationLayout } from './layout/generation-layout-context'
+import { GenerationLayoutListEditor } from './layout/generation-layout-list-editor'
+import { resolveRecentStripPlacement } from './layout/generation-layout-ops'
 import {
   buildWorkflowDraft,
   buildWorkflowPromptData,
@@ -44,6 +42,7 @@ import {
 import {
   getErrorMessage,
   parseNumberInput,
+  type ComfyUIServerTestState,
   type SelectedImageDraft,
   type WorkflowFieldDraftValue,
 } from './image-generation-shared'
@@ -51,6 +50,9 @@ import { hasWorkflowDraftDifference } from './history-settings-mapping'
 
 const PUBLIC_QUEUE_REGISTRATION_MIN = 1
 const PUBLIC_QUEUE_REGISTRATION_MAX_FALLBACK = 32
+const PUBLIC_STICKY_ACTION_BAR_SLOT_ID = 'public-workflow-sticky-action-bar'
+const NO_SERVER_TESTS: Record<number, ComfyUIServerTestState> = {}
+const ignoreTargetChange = () => {}
 
 function resolvePublicQueueMaxCount(value?: number | null) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -65,18 +67,34 @@ function clampQueueRegistrationCount(value: string, maxCount: number) {
   return Math.min(maxCount, Math.max(PUBLIC_QUEUE_REGISTRATION_MIN, parsed))
 }
 
+/**
+ * A ComfyUI workflow shared by link. It is the generation page's workflow screen (same controller, result area and
+ * layout presets); only the data routes differ: the public ones, where the server picks the ComfyUI target and
+ * applies the viewer's queue limits.
+ */
 export function PublicComfyWorkflowPage() {
+  return (
+    <GenerationLayoutProvider>
+      <PublicComfyWorkflowPageContent />
+    </GenerationLayoutProvider>
+  )
+}
+
+function PublicComfyWorkflowPageContent() {
   const { slug = '' } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
   const isWideLayout = useDesktopPageLayout()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
+  const generationLayout = useGenerationLayout()
   const authStatusQuery = useAuthStatusQuery()
   const draftStorageOwner = resolveAccountDraftOwner(authStatusQuery.data)
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
+  const [resultView, setResultView] = useState<GenerationResultView>('stage')
+  const [narrowView, setNarrowView] = useState<GenerationNarrowView>('edit')
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
   const [workflowDraftOwnerId, setWorkflowDraftOwnerId] = useState<number | null>(null)
@@ -85,8 +103,6 @@ export function PublicComfyWorkflowPage() {
   const authoringDropdowns = useQuery({ queryKey: ['image-generation-custom-dropdown-lists'], queryFn: getGenerationCustomDropdownLists, enabled: isAuthoringOpen || authStatusQuery.data?.permissionKeys.includes('workflows.view') === true })
   const [isQueueSubmitting, setIsQueueSubmitting] = useState(false)
   const [isRefreshingDropdownLists, setIsRefreshingDropdownLists] = useState(false)
-  const [isControllerOpen, setIsControllerOpen] = useState(false)
-  const [drawerHeaderPortalRevision, setDrawerHeaderPortalRevision] = useState(0)
 
   const workflowQuery = useQuery({
     queryKey: ['public-generation-workflow', slug],
@@ -101,7 +117,7 @@ export function PublicComfyWorkflowPage() {
   })
 
   const workflow = workflowQuery.data ?? null
-  const workflowFields = useMemo(() => workflow?.marked_fields ?? [], [workflow?.marked_fields])
+  const workflowFields = useMemo(() => (workflow?.marked_fields ?? []) as WorkflowMarkedField[], [workflow?.marked_fields])
   const shouldShowArtifactExplorer = workflow?.result_view_mode === 'artifact_explorer'
   const publicQueueMaxCount = resolvePublicQueueMaxCount(workflow?.public_queue_max_count)
   // 등급별 회원 1인당 동시 대기열 제한(조회 시점 스냅샷). 최종 판정은 서버가 한다.
@@ -111,7 +127,13 @@ export function PublicComfyWorkflowPage() {
   const viewerQueueRoleLimitReached = viewerQueueRoleLimit !== null
     && (viewerQueueRoleLimit <= 0 || viewerQueueRoleActive >= viewerQueueRoleLimit)
   const generationSaveOptions = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
-  const useWideSplitPaneScroll = isWideLayout && workflow !== null
+  const historyFeed = useGenerationHistoryFeed({
+    refreshNonce: historyRefreshNonce,
+    serviceType: 'comfyui',
+    workflowId: workflow?.id ?? null,
+    publicWorkflowSlug: slug,
+    enabled: workflow !== null && !shouldShowArtifactExplorer,
+  })
 
   useEffect(() => {
     if (!workflow) {
@@ -142,7 +164,7 @@ export function PublicComfyWorkflowPage() {
     [workflowDraft, workflowFields],
   )
   const workflowNodeIssues = useMemo(
-    () => collectWorkflowNodeDraftIssues(workflowFields as WorkflowMarkedField[], workflowDraft),
+    () => collectWorkflowNodeDraftIssues(workflowFields, workflowDraft),
     [workflowDraft, workflowFields],
   )
 
@@ -160,9 +182,10 @@ export function PublicComfyWorkflowPage() {
     }))
   }
 
+  const loraOptions = findAutoCollectedPowerLoraOptions(authoringDropdowns.data ?? [])
   useComfyChatPage(workflow, workflowFields, workflowDraft, workflowDraftOwnerId, handleFieldChange, {
     enabled: !!workflow && !isAuthoringOpen,
-    loraOptions: findAutoCollectedPowerLoraOptions(authoringDropdowns.data ?? []),
+    loraOptions,
     onRefresh: async () => { const result = await workflowQuery.refetch(); if (result.error) throw result.error },
     onOpenCreate: authStatusQuery.data?.permissionKeys.includes('workflows.edit') && authStatusQuery.data.permissionKeys.includes('workflows.view') ? () => { setAuthoringWorkflow(null); setIsAuthoringOpen(true) } : undefined,
     onOpenEdit: authStatusQuery.data?.permissionKeys.includes('workflows.edit') && authStatusQuery.data.permissionKeys.includes('workflows.view') ? async (id, assertCurrent) => { const detail = await getGenerationWorkflow(id); assertCurrent(); setAuthoringWorkflow(detail); setIsAuthoringOpen(true) } : undefined,
@@ -230,7 +253,7 @@ export function PublicComfyWorkflowPage() {
       return
     }
 
-    const invalidNumberField = findInvalidWorkflowNumberField(workflowFields as WorkflowMarkedField[], workflowDraft)
+    const invalidNumberField = findInvalidWorkflowNumberField(workflowFields, workflowDraft)
     if (invalidNumberField) {
       showSnackbar({
         message: t(
@@ -254,7 +277,7 @@ export function PublicComfyWorkflowPage() {
       return
     }
 
-    const promptData = buildWorkflowPromptData(workflowFields as WorkflowMarkedField[], workflowDraft)
+    const promptData = buildWorkflowPromptData(workflowFields, workflowDraft)
     const registrationCount = clampQueueRegistrationCount(queueRegistrationCount, publicQueueMaxCount)
 
     try {
@@ -289,17 +312,6 @@ export function PublicComfyWorkflowPage() {
     }
   }
 
-  useEffect(() => {
-    if (isWideLayout || !isControllerOpen || typeof document === 'undefined') {
-      return
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      setDrawerHeaderPortalRevision((current) => current + 1)
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [isControllerOpen, isWideLayout])
-
   if (authStatusQuery.isLoading) {
     return <div className="ui-tone-plinth min-h-[40vh] animate-pulse rounded-sm" />
   }
@@ -318,153 +330,100 @@ export function PublicComfyWorkflowPage() {
     return <Navigate to={`/login?next=${encodeURIComponent(nextPath)}`} replace />
   }
 
-  const drawerHeaderContentId = 'public-comfy-workflow-drawer-header'
-  const drawerHeaderPortalTarget = !isWideLayout && typeof document !== 'undefined'
-    ? document.getElementById(drawerHeaderContentId)
-    : null
-  void drawerHeaderPortalRevision
-
-  const publicRepeat = {
-    value: queueRegistrationCount,
-    min: PUBLIC_QUEUE_REGISTRATION_MIN,
-    max: publicQueueMaxCount,
-    onChange: setQueueRegistrationCount,
-  }
-  const publicGenerateProps = {
-    generateLabel: t({ ko: '생성', en: 'Generate' }),
-    generatingLabel: t({ ko: '큐 등록 중…', en: 'Queueing…' }),
-    onGenerate: () => void handleQueueSubmit(),
-    generateDisabled: workflowFields.length === 0,
-    isGenerating: isQueueSubmitting,
-    repeat: publicRepeat,
-  }
-
-  const desktopControllerActions = (
-    <GenerateActionBar
-      variant="inline"
-      {...publicGenerateProps}
-      onReset={() => void handleResetDraft()}
-    />
-  )
-
-  const desktopControllerHeaderContent = workflow ? (
-    <div className="space-y-3">
-      <div className="flex min-w-0 items-center gap-2">
-        <IconButton asChild size="icon-sm" variant="ghost" label={t({ ko: '공개 워크플로 목록으로', en: 'Back to public workflows' })}>
-          <Link to="/access">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </IconButton>
-        <Tip content={workflow.description} className="whitespace-pre-line">
-          <Heading level={3} as="div" className="min-w-0 truncate">{workflow.name}</Heading>
-        </Tip>
-      </div>
-
-      {desktopControllerActions}
-    </div>
-  ) : null
-
-  const drawerControllerHeaderContent = workflow ? (
-    <div className="flex items-center gap-3">
-      <Heading level={3} as="div" className="min-w-0 flex-1 truncate">{workflow.name}</Heading>
-      <IconButton
-        variant="ghost"
-        size="icon-sm"
-        onClick={() => void handleResetDraft()}
-        disabled={isQueueSubmitting}
-        label={t({ ko: '초기화', en: 'Reset' })}
-      >
-        <RotateCcw />
-      </IconButton>
-    </div>
-  ) : null
-
   const viewerRoleName = viewerQueueRoleLabel ?? t({ ko: '현재', en: 'current' })
-  const controllerBodyContent = (
-    <>
-      {viewerQueueRoleLimit !== null ? (
-        <Alert variant={viewerQueueRoleLimitReached ? 'destructive' : undefined}>
-          <AlertTitle>{t({ ko: '대기열 생성 제한', en: 'Queue creation limit' })}</AlertTitle>
-          <AlertDescription>
-            {viewerQueueRoleLimit <= 0
-              ? t(
-                { ko: '{role} 등급은 이 워크플로우에서 대기열을 만들 수 없어.', en: 'The {role} role cannot create queue jobs on this workflow.' },
-                { role: viewerRoleName },
-              )
-              : viewerQueueRoleLimitReached
-                ? t(
-                  { ko: '{role} 등급은 이 워크플로우에서 동시에 {limit}개까지만 대기열을 만들 수 있어. 진행 중인 {active}개가 끝난 뒤에 다시 등록할 수 있어.', en: 'The {role} role can keep at most {limit} active queue job(s) on this workflow. You can enqueue again after your {active} active job(s) finish.' },
-                  { role: viewerRoleName, limit: viewerQueueRoleLimit, active: viewerQueueRoleActive },
-                )
-                : t(
-                  { ko: '{role} 등급은 이 워크플로우에서 동시에 {limit}개까지 대기열을 만들 수 있어. (현재 {active}개 진행 중)', en: 'The {role} role can keep up to {limit} active queue job(s) on this workflow. ({active} in progress now)' },
-                  { role: viewerRoleName, limit: viewerQueueRoleLimit, active: viewerQueueRoleActive },
-                )}
-          </AlertDescription>
-        </Alert>
-      ) : null}
+  const queueLimitNotice = viewerQueueRoleLimit !== null ? (
+    <Alert variant={viewerQueueRoleLimitReached ? 'destructive' : undefined}>
+      <AlertTitle>{t({ ko: '대기열 생성 제한', en: 'Queue creation limit' })}</AlertTitle>
+      <AlertDescription>
+        {viewerQueueRoleLimit <= 0
+          ? t(
+            { ko: '{role} 등급은 이 워크플로우에서 대기열을 만들 수 없어.', en: 'The {role} role cannot create queue jobs on this workflow.' },
+            { role: viewerRoleName },
+          )
+          : viewerQueueRoleLimitReached
+            ? t(
+              { ko: '{role} 등급은 이 워크플로우에서 동시에 {limit}개까지만 대기열을 만들 수 있어. 진행 중인 {active}개가 끝난 뒤에 다시 등록할 수 있어.', en: 'The {role} role can keep at most {limit} active queue job(s) on this workflow. You can enqueue again after your {active} active job(s) finish.' },
+              { role: viewerRoleName, limit: viewerQueueRoleLimit, active: viewerQueueRoleActive },
+            )
+            : t(
+              { ko: '{role} 등급은 이 워크플로우에서 동시에 {limit}개까지 대기열을 만들 수 있어. (현재 {active}개 진행 중)', en: 'The {role} role can keep up to {limit} active queue job(s) on this workflow. ({active} in progress now)' },
+              { role: viewerRoleName, limit: viewerQueueRoleLimit, active: viewerQueueRoleActive },
+            )}
+      </AlertDescription>
+    </Alert>
+  ) : null
 
-      {missingRequiredField ? (
-        <Alert>
-          <AlertTitle>{t({ ko: '입력이 더 필요해', en: 'More input is required' })}</AlertTitle>
-          <AlertDescription>{t({ ko: '{label} 필드는 꼭 채워야 해.', en: 'The {label} field is required.' }, { label: missingRequiredField.label })}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {workflowNodeIssues.length > 0 ? (
-        <Alert variant="destructive">
-          <AlertTitle>{t({ ko: '워크플로 입력 확인', en: 'Check workflow inputs' })}</AlertTitle>
-          <AlertDescription>{t({ ko: workflowNodeIssues[0].issue.ko, en: workflowNodeIssues[0].issue.en })}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {workflowFields.length === 0 ? (
-        <BottomDrawerNotice>{t({ ko: '노출된 입력 필드가 아직 없어.', en: 'There are no exposed input fields yet.' })}</BottomDrawerNotice>
-      ) : (
-        <GenerationControllerFieldStack>
-          <WorkflowFieldGroupList
-            fields={workflowFields}
-            values={workflowDraft}
-            isRefreshingOptions={isRefreshingDropdownLists}
-            onRefreshOptions={handleRefreshDropdownLists}
-            onChange={handleFieldChange}
-            onImageChange={handleImageChange}
-          />
-        </GenerationControllerFieldStack>
-      )}
-    </>
-  )
-
-  const controllerPanel = workflow ? (
-    isWideLayout ? (
-      <section className={cn(useWideSplitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6 overflow-hidden' : 'space-y-6')}>
-        <div className="shrink-0">{desktopControllerHeaderContent}</div>
-        <div className={cn(useWideSplitPaneScroll ? 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1' : undefined)}>
-          <div className="space-y-6">{controllerBodyContent}</div>
-        </div>
-      </section>
+  const resultPanel = workflow ? (
+    shouldShowArtifactExplorer ? (
+      <WorkflowArtifactExplorerPanel
+        workflowId={workflow.id}
+        publicWorkflowSlug={slug}
+        refreshNonce={historyRefreshNonce}
+        splitPaneScroll={isWideLayout}
+      />
     ) : (
-      <div className="space-y-6 px-5 pb-5">{controllerBodyContent}</div>
+      <GenerationResultArea
+        feed={historyFeed}
+        serviceType="comfyui"
+        workflowId={workflow.id}
+        publicWorkflowSlug={slug}
+        splitPaneScroll={isWideLayout}
+        compact={!isWideLayout}
+        followLatestNonce={historyRefreshNonce}
+        view={resultView}
+        onViewChange={setResultView}
+        recentStrip={resolveRecentStripPlacement(generationLayout.presetOf('comfy'))}
+      />
     )
   ) : null
 
-  const shouldUseControllerDrawer = !isWideLayout && workflow !== null
-  const isDrawerOpen = shouldUseControllerDrawer && isControllerOpen
-  const compactControllerActionBar = workflow && !isWideLayout ? (
-    <CompactGenerationControllerActionBar
-      isExpanded={isDrawerOpen}
-      onToggle={() => setIsControllerOpen((current) => !current)}
-      expandedContent={<GenerateActionBar variant="sticky" {...publicGenerateProps} />}
+  const controllerPanel = workflow ? (
+    <ComfyWorkflowControllerPanel
+      workflowName={workflow.name}
+      workflowDescription={workflow.description ?? undefined}
+      workflowFields={workflowFields}
+      servers={[]}
+      serverTests={NO_SERVER_TESTS}
+      selectedTarget="auto"
+      serverRouting={false}
+      queueMaxCount={publicQueueMaxCount}
+      notice={queueLimitNotice}
+      workflowDraft={workflowDraft}
+      queueRegistrationCount={queueRegistrationCount}
+      isGenerating={isQueueSubmitting}
+      loraOptions={loraOptions}
+      isRefreshingDropdownLists={isRefreshingDropdownLists}
+      splitPaneScroll={isWideLayout}
+      compactActionBarContentTargetId={isWideLayout ? undefined : PUBLIC_STICKY_ACTION_BAR_SLOT_ID}
+      blockLayout={isWideLayout ? { result: resultPanel } : undefined}
+      onBack={() => navigate('/access')}
+      onSelectTarget={ignoreTargetChange}
+      onQueueRegistrationCountChange={setQueueRegistrationCount}
+      onFieldChange={handleFieldChange}
+      onImageChange={handleImageChange}
+      onRefreshDropdownLists={handleRefreshDropdownLists}
+      onResetDraft={() => void handleResetDraft()}
+      onGenerateSelected={() => void handleQueueSubmit()}
     />
   ) : null
+
+  const historyTotal = historyFeed.historyQuery.data?.pages[0]?.total
+  const isNarrowLayoutEditing = !isWideLayout && generationLayout.editing !== null
 
   return (
     <div
       className={cn(
-        isWideLayout ? 'space-y-6' : 'space-y-6 pb-24',
-        useWideSplitPaneScroll && 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
+        isWideLayout
+          ? 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col overflow-hidden'
+          : 'space-y-4',
+        !isWideLayout && narrowView === 'edit' && 'pb-28',
       )}
     >
+      {/* Same toolbar end as the generation page: the preset picker, and the editor for admins. */}
+      <div className="flex shrink-0 items-center justify-end gap-2 py-2 empty:hidden">
+        <GenerationLayoutControls wide={isWideLayout} />
+      </div>
+
       {workflowQuery.isError ? (
         <Alert variant="destructive">
           <AlertTitle>{t({ ko: '공용 워크플로우를 불러오지 못했어', en: 'Failed to load the public workflow' })}</AlertTitle>
@@ -474,73 +433,21 @@ export function PublicComfyWorkflowPage() {
 
       {workflowQuery.isLoading ? <LoadingState variant="inline" label={t({ ko: '공용 워크플로우 불러오는 중…', en: 'Loading public workflow…' })} /> : null}
 
+      {isNarrowLayoutEditing && generationLayout.editing ? <GenerationLayoutListEditor surface={generationLayout.editing} /> : null}
+
       {workflow ? (
         isWideLayout ? (
-          <div
-            className={cn(
-              'grid items-start gap-8 grid-cols-[minmax(360px,4fr)_minmax(0,6fr)]',
-              useWideSplitPaneScroll && 'min-h-0 flex-1 items-stretch',
-            )}
-          >
-            <div className={cn(useWideSplitPaneScroll && 'min-h-0 flex flex-col overflow-hidden')}>
-              {controllerPanel}
-            </div>
-            <div className={cn(useWideSplitPaneScroll && 'min-h-0 flex flex-col overflow-hidden')}>
-              {shouldShowArtifactExplorer ? (
-                <WorkflowArtifactExplorerPanel
-                  workflowId={workflow.id}
-                  publicWorkflowSlug={slug}
-                  refreshNonce={historyRefreshNonce}
-                  splitPaneScroll={useWideSplitPaneScroll}
-                />
-              ) : (
-                <GenerationHistoryPanel
-                  refreshNonce={historyRefreshNonce}
-                  serviceType="comfyui"
-                  workflowId={workflow.id}
-                  publicWorkflowSlug={slug}
-                  splitPaneScroll={useWideSplitPaneScroll}
-                />
-              )}
-            </div>
-          </div>
+          <div className="flex min-h-0 flex-1 flex-col">{controllerPanel}</div>
         ) : (
-          <>
-            {shouldShowArtifactExplorer ? (
-              <WorkflowArtifactExplorerPanel
-                workflowId={workflow.id}
-                publicWorkflowSlug={slug}
-                refreshNonce={historyRefreshNonce}
-                onBack={() => navigate('/access')}
-              />
-            ) : (
-              <GenerationHistoryPanel
-                refreshNonce={historyRefreshNonce}
-                serviceType="comfyui"
-                workflowId={workflow.id}
-                publicWorkflowSlug={slug}
-                onBack={() => navigate('/access')}
-              />
-            )}
-
-            {compactControllerActionBar}
-
-            <BottomDrawerSheet
-              open={isDrawerOpen}
-              title={null}
-              headerContentId={drawerHeaderContentId}
-              ariaLabel={`${workflow.name} 컨트롤 패널`}
-              onClose={() => setIsControllerOpen(false)}
-              surfaceVariant="controller"
-              bodyClassName="p-0 pb-24"
-              headerPortalClassName="mt-0 border-t-0 pt-0"
-              footer={null}
-              hideHandle
-            >
-              {drawerHeaderPortalTarget && drawerControllerHeaderContent ? createPortal(drawerControllerHeaderContent, drawerHeaderPortalTarget) : null}
-              {controllerPanel}
-            </BottomDrawerSheet>
-          </>
+          <GenerationNarrowSplit
+            view={narrowView}
+            onViewChange={setNarrowView}
+            resultLabel={!shouldShowArtifactExplorer && historyTotal !== undefined ? `${t({ ko: '결과', en: 'Result' })} (${formatNumber(historyTotal)})` : undefined}
+            controller={controllerPanel}
+            result={resultPanel}
+            stickySlotId={PUBLIC_STICKY_ACTION_BAR_SLOT_ID}
+            className={cn(isNarrowLayoutEditing && 'hidden')}
+          />
         )
       ) : null}
       <ComfyWorkflowAuthoringModal open={isAuthoringOpen} mode={authoringWorkflow ? 'edit' : 'create'} initialData={authoringWorkflow ? { workflow: authoringWorkflow } : null} dropdownLists={authoringDropdowns.data ?? []} onClose={() => { setIsAuthoringOpen(false); setAuthoringWorkflow(null) }} onSaved={() => { setIsAuthoringOpen(false); setAuthoringWorkflow(null); void workflowQuery.refetch() }} />

@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { isGenerationLayoutSurface } from '@conai/shared';
-import { requireAdmin, requirePermission } from '../middleware/authMiddleware';
+import { requireAdmin, requireAuth } from '../middleware/authMiddleware';
 import { readGenerationLayouts, writeGenerationLayouts } from '../services/generationLayouts';
 
 const router = Router();
 
-router.get('/', requirePermission('page.generation.view'), (_req, res) => {
+// Any signed-in account: the arrangement is not sensitive, and public workflow pages (guests) use the same presets.
+router.get('/', requireAuth, (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({ success: true, data: readGenerationLayouts() });
 });

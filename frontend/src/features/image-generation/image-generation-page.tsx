@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { formatCountDisplay, countStateFromQuery } from '@/lib/count-display'
 import type { GenerationResultView } from './components/generation-result-area'
+import { GenerationNarrowSplit, type GenerationNarrowView } from './components/generation-narrow-split'
 import { GENERATION_TOOLBAR_STATUS_SLOT_ID } from './components/generation-toolbar-status'
 import { useGenerationHistoryFeed } from './components/use-generation-history-feed'
 import { usePendingHistorySettingsLoad } from './history-settings-load-store'
@@ -67,7 +68,6 @@ const PROVIDER_TABS: ImageGenerationTab[] = ['nai', 'codex', 'comfyui']
 /** Fixed bottom slot the provider panels portal their sticky Generate bar into on narrow screens. */
 const STICKY_ACTION_BAR_SLOT_ID = 'generation-sticky-action-bar'
 
-type NarrowView = 'edit' | 'result'
 
 function PanelFallback() {
   return <div className="min-h-[16rem] animate-pulse rounded-sm bg-fill" />
@@ -88,7 +88,7 @@ function ImageGenerationPageContent() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [historyRefreshNonce, setHistoryRefreshNonce] = useState(0)
   const [resultView, setResultView] = useState<GenerationResultView>('stage')
-  const [narrowView, setNarrowView] = useState<NarrowView>('edit')
+  const [narrowView, setNarrowView] = useState<GenerationNarrowView>('edit')
   const isWideLayout = useDesktopPageLayout()
   const rawTab = searchParams.get('tab')
   const activeTab = parseImageGenerationTab(rawTab)
@@ -387,41 +387,15 @@ function ImageGenerationPageContent() {
             ) : null}
           </div>
         ) : useNarrowTabs ? (
-          <div className={cn('space-y-4', isNarrowLayoutEditing && 'hidden')}>
-            <SegmentedControl
-              value={narrowView}
-              items={[
-                { value: 'edit', label: t({ ko: '편집', en: 'Edit' }) },
-                { value: 'result', label: resultCountLabel ? `${t({ ko: '결과', en: 'Result' })} (${resultCountLabel})` : t({ ko: '결과', en: 'Result' }) },
-              ]}
-              onChange={(next) => setNarrowView(next as NarrowView)}
-              size="sm"
-              semantics="tabs"
-              fullWidth
-              ariaLabel={t({ ko: '편집 또는 결과', en: 'Edit or result' })}
-            />
-
-            {/* 결과를 보는 동안에도 컨트롤러는 마운트해 둬서 입력 중인 폼 상태가 사라지지 않게 한다. */}
-            <div className={cn('min-w-0', narrowView !== 'edit' && 'hidden')}>
-              <Suspense fallback={<PanelFallback />}>
-                {controllerPanel}
-              </Suspense>
-            </div>
-            {narrowView === 'result' ? (
-              <Suspense fallback={<PanelFallback />}>
-                {resultPanel}
-              </Suspense>
-            ) : null}
-
-            <div
-              className={cn(
-                'pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[86] flex justify-end px-3',
-                narrowView !== 'edit' && 'hidden',
-              )}
-            >
-              <div id={STICKY_ACTION_BAR_SLOT_ID} className="pointer-events-auto flex max-w-full justify-end" />
-            </div>
-          </div>
+          <GenerationNarrowSplit
+            view={narrowView}
+            onViewChange={setNarrowView}
+            resultLabel={resultCountLabel ? `${t({ ko: '결과', en: 'Result' })} (${resultCountLabel})` : undefined}
+            controller={<Suspense fallback={<PanelFallback />}>{controllerPanel}</Suspense>}
+            result={<Suspense fallback={<PanelFallback />}>{resultPanel}</Suspense>}
+            stickySlotId={STICKY_ACTION_BAR_SLOT_ID}
+            className={cn(isNarrowLayoutEditing && 'hidden')}
+          />
         ) : (
           <div className={cn('min-w-0', isNarrowLayoutEditing && 'hidden')}>
             <Suspense fallback={<PanelFallback />}>
