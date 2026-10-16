@@ -1,28 +1,7 @@
-export type GenerationServiceType = 'novelai' | 'codex' | 'comfyui'
-export type GenerationQueueJobStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled'
+import type { GenerationQueueJobStatus, GenerationQueueLiveProgress, GenerationQueueProviderSubmitState, ServiceType, WorkflowNodeNumericBounds } from '@conai/shared'
 
-export type GenerationQueueProgressPhase = 'preparing' | 'executing' | 'sampling' | 'finalizing'
-
-export interface GenerationQueueLiveProgress {
-  source: 'comfyui_ws'
-  phase: GenerationQueueProgressPhase
-  node_id: string | null
-  node_label: string | null
-  value: number | null
-  max: number | null
-  percent: number | null
-  updated_at: string
-}
-/** status와 직교하는 축: 업스트림에 작업을 만들었을 가능성 (백엔드 타입 미러) */
-export type GenerationQueueProviderSubmitState =
-  | 'none'
-  | 'in_flight'
-  | 'accepted'
-  | 'orphan_suspected'
-  | 'orphan_unresolved'
-  | 'cancel_sent'
-  | 'cancel_confirmed'
-  | 'cancel_unsupported'
+export type GenerationServiceType = ServiceType
+export type { GenerationQueueJobStatus, GenerationQueueLiveProgress, GenerationQueueProgressPhase, GenerationQueueProviderSubmitState } from '@conai/shared'
 
 export interface GenerationQueueJobRecord {
   id: number
@@ -207,12 +186,7 @@ export interface WorkflowMarkedField {
   }>
 }
 
-export interface WorkflowNodeNumericBound {
-  min?: number
-  max?: number
-}
-
-export type WorkflowNodeNumericBounds = Record<string, WorkflowNodeNumericBound>
+export type { WorkflowNodeNumericBound, WorkflowNodeNumericBounds } from '@conai/shared'
 
 export type WorkflowResultViewMode = 'history' | 'artifact_explorer'
 export type WorkflowArtifactDirectoryMode = 'shared' | 'per_run'

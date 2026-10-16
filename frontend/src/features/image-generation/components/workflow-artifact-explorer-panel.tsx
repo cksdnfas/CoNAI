@@ -15,6 +15,7 @@ import { getPublicGenerationWorkflowArtifacts } from '@/lib/api-public-workflows
 import { cn } from '@/lib/utils'
 import { FLOATING_DROPDOWN_MENU_CLASS } from './floating-dropdown-utils'
 import { getErrorMessage } from '../image-generation-shared'
+import { formatFileSize } from '@/lib/format-size'
 
 type WorkflowArtifactExplorerPanelProps = {
   workflowId: number
@@ -22,22 +23,6 @@ type WorkflowArtifactExplorerPanelProps = {
   refreshNonce?: number
   splitPaneScroll?: boolean
   onBack?: () => void
-}
-
-function formatSize(value: number) {
-  if (value <= 0) {
-    return '—'
-  }
-
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let size = value
-  let unitIndex = 0
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex += 1
-  }
-
-  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
 
 function getParentPath(path: string) {
@@ -133,7 +118,7 @@ function ArtifactCard({
       {isDirectory ? <FolderThumbnail entry={entry} /> : <FileThumbnail entry={entry} />}
       <div className="mt-2 min-w-0 text-center">
         <div className="line-clamp-2 break-words text-xs font-medium text-foreground" title={entry.name}>{entry.name}</div>
-        <div className="mt-1 text-2xs text-muted-foreground">{isDirectory ? t({ ko: '폴더', en: 'Folder' }) : formatSize(entry.size)}</div>
+        <div className="mt-1 text-2xs text-muted-foreground">{isDirectory ? t({ ko: '폴더', en: 'Folder' }) : entry.size > 0 ? formatFileSize(entry.size) : '—'}</div>
         <div className="text-2xs text-muted-foreground/80">{formatDateTime(entry.modifiedAt)}</div>
       </div>
     </>

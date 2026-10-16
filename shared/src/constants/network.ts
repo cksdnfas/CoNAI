@@ -5,18 +5,11 @@
 export const PORTS = {
   BACKEND_DEFAULT: 1666,
   FRONTEND_DEFAULT: 1677,
-  VITE_DEV: 5555,
 } as const;
 
+/** HTTP server socket timeouts. Keep-alive must outlive the request timeout, and headers must outlive keep-alive. */
 export const TIMEOUTS = {
-  SERVER: 60000,          // 60 seconds
-  KEEP_ALIVE: 65000,      // 65 seconds
-  HEADERS: 66000,         // 66 seconds
-  SHUTDOWN: 10000,        // 10 seconds
-  REQUEST: 30000,         // 30 seconds (ComfyUI service)
-} as const;
-
-export const RATE_LIMITS = {
-  WINDOW_MS: 60000,       // 1 minute
-  MAX_REQUESTS: 1000,     // 1000 requests per window
+  SERVER: 60000,
+  KEEP_ALIVE: 65000,
+  HEADERS: 66000,
 } as const;

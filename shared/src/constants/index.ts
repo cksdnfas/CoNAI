@@ -4,7 +4,6 @@
  */
 
 export * from './network';
-export * from './api';
 export * from './image';
 export * from './codexChat';
 export * from './chatJudge';

@@ -55,6 +55,8 @@ export interface RatingTier {
  * Rating tier creation/update data
  */
 export interface RatingTierInput {
+  /** Bulk save: an existing tier keeps its id (model and profile content ceilings point at it); none or unknown adds one. */
+  id?: number;
   tier_name: string;
   min_score: number;
   max_score: number | null;

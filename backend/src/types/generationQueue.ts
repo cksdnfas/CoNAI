@@ -1,38 +1,11 @@
 import type { AuthAccountType } from './authAccount'
 import type { ServiceType } from './generationHistory'
+import type { GenerationQueueJobStatus, GenerationQueueLiveProgress, GenerationQueueProviderSubmitState } from '@conai/shared'
 
-export type GenerationQueueJobStatus = 'queued' | 'dispatching' | 'running' | 'completed' | 'failed' | 'cancelled'
-
-/**
- * `status`와 직교하는 축: "업스트림에 작업을 만들었을 가능성".
- * DB CHECK 없이 앱 레벨 enum으로만 강제하므로 상수 배열/컨트랙트로 정합을 지킨다.
- */
-export type GenerationQueueProviderSubmitState =
-  | 'none'
-  | 'in_flight'
-  | 'accepted'
-  | 'orphan_suspected'
-  | 'orphan_unresolved'
-  | 'cancel_sent'
-  | 'cancel_confirmed'
-  | 'cancel_unsupported'
+export type { GenerationQueueJobStatus, GenerationQueueLiveProgress, GenerationQueueProgressPhase, GenerationQueueProviderSubmitState } from '@conai/shared'
 
 /** 취소 요청의 출처. 스테일 스위퍼/기동 reconcile 이 만든 취소를 사용자 취소와 구분한다. */
 export type GenerationQueueCancelOrigin = 'user' | 'graph' | 'system' | 'reconcile'
-
-export type GenerationQueueProgressPhase = 'preparing' | 'executing' | 'sampling' | 'finalizing'
-
-/** Latest trusted progress sample received directly from a standard ComfyUI server. */
-export interface GenerationQueueLiveProgress {
-  source: 'comfyui_ws'
-  phase: GenerationQueueProgressPhase
-  node_id: string | null
-  node_label: string | null
-  value: number | null
-  max: number | null
-  percent: number | null
-  updated_at: string
-}
 
 export interface GenerationQueueJobRecord {
   id: number

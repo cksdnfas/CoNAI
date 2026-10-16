@@ -11,12 +11,9 @@ export function normalizeWorkflowKind(value: unknown): WorkflowKind {
   return value === 'audio' ? 'audio' : 'image';
 }
 
-export interface WorkflowNodeNumericBound {
-  min?: number;
-  max?: number;
-}
+import type { WorkflowNodeNumericBounds } from '@conai/shared';
 
-export type WorkflowNodeNumericBounds = Record<string, WorkflowNodeNumericBound>;
+export type { WorkflowNodeNumericBound, WorkflowNodeNumericBounds } from '@conai/shared';
 
 /**
  * 등급(권한 그룹)별 회원 1인당 동시 대기열 제한.

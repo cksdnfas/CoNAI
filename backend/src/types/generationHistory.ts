@@ -1,11 +1,9 @@
 import type { AuthAccountType } from './authAccount';
 import type { GenerationAudioResult } from '../services/audio/audioJobCandidates';
 
-/** Services that can create generation-history rows. */
-export type ServiceType = 'comfyui' | 'novelai' | 'codex';
+import type { GenerationStatus, ServiceType } from '@conai/shared';
 
-/** Persisted generation-history lifecycle states. */
-export type GenerationStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type { GenerationStatus, ServiceType };
 
 export interface GenerationHistoryRecord {
   id?: number;

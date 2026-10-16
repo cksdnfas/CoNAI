@@ -9,11 +9,6 @@ export const IMAGE_PROCESSING = {
   WEBP_QUALITY: 95,
 } as const;
 
-export const CACHE_CONTROL = {
-  IMAGES: 'public, max-age=31536000, immutable',
-  MAX_AGE: '1y',
-} as const;
-
 export const PAGINATION = {
   DEFAULT_PAGE: 1,
   DEFAULT_LIMIT: 25,
