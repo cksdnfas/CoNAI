@@ -3,6 +3,7 @@ import path from 'path'
 import type { AiRuntimeEnvironment } from '@conai/shared'
 import { runtimePaths } from '../../config/runtimePaths'
 import { isAiTorchBackend } from './torchBackends'
+import { writeJsonFileAtomic } from '../../utils/jsonFile'
 
 /**
  * Layout under `<basePath>/ai-runtime` (or AI_RUNTIME_DIR):
@@ -50,11 +51,7 @@ export function getActiveAiEnvironment(): AiRuntimeEnvironment | null {
 }
 
 export function setActiveAiEnvironment(environment: AiRuntimeEnvironment) {
-  fs.mkdirSync(aiRuntimeRoot(), { recursive: true })
-  const file = aiRuntimePaths.stateFile()
-  const temp = `${file}.tmp`
-  fs.writeFileSync(temp, JSON.stringify({ active: environment }, null, 2), 'utf-8')
-  fs.renameSync(temp, file)
+  writeJsonFileAtomic(aiRuntimePaths.stateFile(), { active: environment })
 }
 
 /**

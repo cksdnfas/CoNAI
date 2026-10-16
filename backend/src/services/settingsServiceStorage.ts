@@ -30,6 +30,7 @@ import {
   DEFAULT_GENERATION_HISTORY_MAX_ITEMS,
   normalizeGenerationHistoryMaxItems,
 } from '../constants/generationHistory';
+import { writeJsonFileAtomic } from '../utils/jsonFile';
 
 export const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
@@ -666,14 +667,6 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
   };
 }
 
-/** Ensure the config directory exists before reading or writing the settings file. */
-function ensureSettingsConfigDirectory(): void {
-  const configDir = path.dirname(SETTINGS_FILE_PATH);
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
-}
-
 /** Merge raw persisted settings into the canonical defaults with env overrides applied last. */
 export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: AppSettings): AppSettings {
   const {
@@ -887,8 +880,7 @@ export function readRawSettingsFile(): any {
   return JSON.parse(fileContent);
 }
 
-/** Persist the settings JSON to disk after ensuring the config directory exists. */
+/** Persist the settings JSON to disk (temp file + rename, so a crash cannot leave it half-written). */
 export function writeSettingsFile(settings: AppSettings): void {
-  ensureSettingsConfigDirectory();
-  fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(settings, null, 2), 'utf-8');
+  writeJsonFileAtomic(SETTINGS_FILE_PATH, settings);
 }

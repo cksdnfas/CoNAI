@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { DEFAULT_POSTS_SETTINGS, DEFAULT_POSTS_KNOWLEDGE_SETTINGS, POSTS_SAFETY_LIMITS, type PostListLayout, type PostsSafetySettings, type PostsSettings, type PostsKnowledgeSettings, type PostsTopicEvaluationSettings } from '@conai/shared';
 import { runtimePaths } from '../../config/runtimePaths';
+import { writeJsonFileAtomic } from '../../utils/jsonFile';
 
 const POSTS_SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'posts.json');
 const LAYOUTS: readonly PostListLayout[] = ['feed', 'cards', 'sns'];
@@ -83,14 +84,7 @@ export function updatePostsSettings(patch: unknown): PostsSettings {
     knowledge: { ...current.knowledge, ...(input.knowledge && typeof input.knowledge === 'object' ? input.knowledge : {}) },
     topicEvaluation: { ...current.topicEvaluation, ...(input.topicEvaluation && typeof input.topicEvaluation === 'object' ? input.topicEvaluation : {}) } };
   const next = normalizePostsSettings(merged, current);
-  fs.mkdirSync(path.dirname(POSTS_SETTINGS_FILE_PATH), { recursive: true });
-  const stagingPath = POSTS_SETTINGS_FILE_PATH + '.' + process.pid + '.tmp';
-  try {
-    fs.writeFileSync(stagingPath, JSON.stringify(next, null, 2), 'utf8');
-    fs.renameSync(stagingPath, POSTS_SETTINGS_FILE_PATH);
-  } finally {
-    if (fs.existsSync(stagingPath)) fs.unlinkSync(stagingPath);
-  }
+  writeJsonFileAtomic(POSTS_SETTINGS_FILE_PATH, next);
   cached = next;
   cachedStamp = settingsStamp();
   return loadPostsSettings();

@@ -5,6 +5,7 @@ import type { McpHttpApiKey, McpHttpScope, McpHttpSettings, ChatExecutionContext
 import { runtimePaths } from '../config/runtimePaths';
 import type { McpRequester } from '../mcp/context';
 import { AuthPermissionGroup } from '../models/AuthPermissionGroup';
+import { writeJsonFileAtomic } from '../utils/jsonFile';
 
 const MCP_HTTP_SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'mcp-http.json');
 const MCP_API_KEY_PREFIX = 'conai_mcp_';
@@ -155,11 +156,7 @@ class McpHttpSettingsService {
   private settings: StoredMcpHttpSettings | null = null;
 
   private saveSettings(settings: StoredMcpHttpSettings): McpHttpSettings {
-    fs.mkdirSync(path.dirname(MCP_HTTP_SETTINGS_FILE_PATH), { recursive: true });
-    fs.writeFileSync(MCP_HTTP_SETTINGS_FILE_PATH, JSON.stringify(settings, null, 2), {
-      encoding: 'utf8',
-      mode: 0o600,
-    });
+    writeJsonFileAtomic(MCP_HTTP_SETTINGS_FILE_PATH, settings, { mode: 0o600 });
 
     try {
       fs.chmodSync(MCP_HTTP_SETTINGS_FILE_PATH, 0o600);

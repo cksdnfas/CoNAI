@@ -1,6 +1,6 @@
-import fs from 'fs';
 import path from 'path';
 import { runtimePaths } from '../config/runtimePaths';
+import { createJsonFileReader, writeJsonFileAtomic } from '../utils/jsonFile';
 
 export type SearchChipScope = 'positive' | 'negative' | 'auto' | 'rating' | 'model' | 'lora' | 'tool' | 'meaning';
 
@@ -52,38 +52,19 @@ function ownsEntry(owner: SearchHistoryOwner, entry: SearchHistoryEntry): boolea
 
 /** SearchHistoryService manages persisted gallery search history in a JSON file. */
 export class SearchHistoryService {
-  /** Ensure the history file exists before read/write operations. */
-  private static ensureHistoryFile(): void {
-    if (!fs.existsSync(runtimePaths.databaseDir)) {
-      fs.mkdirSync(runtimePaths.databaseDir, { recursive: true });
-    }
+  /** The stored history, re-read only when the file changes; a missing or malformed file reads as empty. */
+  private static readonly storedHistory = createJsonFileReader(SEARCH_HISTORY_FILE_PATH, (raw): SearchHistoryStore => {
+    const entries = raw && typeof raw === 'object' ? (raw as Partial<SearchHistoryStore>).entries : null;
+    return { entries: Array.isArray(entries) ? entries.filter((entry) => SearchHistoryService.isValidEntry(entry)) : [] };
+  });
 
-    if (!fs.existsSync(SEARCH_HISTORY_FILE_PATH)) {
-      fs.writeFileSync(SEARCH_HISTORY_FILE_PATH, JSON.stringify({ entries: [] }, null, 2), 'utf-8');
-    }
-  }
-
-  /** Load the history store from disk and recover safely from malformed JSON. */
   private static readStore(): SearchHistoryStore {
-    this.ensureHistoryFile();
-
-    try {
-      const content = fs.readFileSync(SEARCH_HISTORY_FILE_PATH, 'utf-8');
-      const parsed = JSON.parse(content) as Partial<SearchHistoryStore>;
-      const entries = Array.isArray(parsed.entries) ? parsed.entries.filter((entry) => this.isValidEntry(entry)) : [];
-      return { entries };
-    } catch (error) {
-      console.warn('[SearchHistoryService] Failed to read search history file. Resetting store.', error);
-      const emptyStore: SearchHistoryStore = { entries: [] };
-      fs.writeFileSync(SEARCH_HISTORY_FILE_PATH, JSON.stringify(emptyStore, null, 2), 'utf-8');
-      return emptyStore;
-    }
+    return this.storedHistory.read();
   }
 
   /** Persist the full history store to disk. */
   private static writeStore(store: SearchHistoryStore): void {
-    this.ensureHistoryFile();
-    fs.writeFileSync(SEARCH_HISTORY_FILE_PATH, JSON.stringify(store, null, 2), 'utf-8');
+    writeJsonFileAtomic(SEARCH_HISTORY_FILE_PATH, store);
   }
 
   /** Validate a single search history chip. */

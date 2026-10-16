@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { normalizeLoreKeyLanguage } from '@conai/shared'
 import { runtimePaths } from '../../config/runtimePaths'
+import { writeJsonFileAtomic } from '../../utils/jsonFile'
 
 const CHAT_SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'chat.json')
 /** Before chat profiles: Codex chat and LLM chat each had their own settings file. */
@@ -98,8 +99,7 @@ export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Par
     loreKeyLanguage: patch.loreKeyLanguage === undefined ? current.loreKeyLanguage : normalizeLoreKeyLanguage(patch.loreKeyLanguage),
     webResearch: patch.webResearch === undefined ? current.webResearch : webResearchOf(patch.webResearch, current.webResearch),
   }
-  fs.mkdirSync(path.dirname(CHAT_SETTINGS_FILE_PATH), { recursive: true })
-  fs.writeFileSync(CHAT_SETTINGS_FILE_PATH, JSON.stringify(next, null, 2), 'utf8')
+  writeJsonFileAtomic(CHAT_SETTINGS_FILE_PATH, next)
   cachedSettings = next
   return loadChatSettings()
 }

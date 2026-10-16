@@ -1,9 +1,9 @@
 import crypto from 'crypto'
-import fs from 'fs'
 import path from 'path'
 import { runtimePaths } from '../../config/runtimePaths'
 import { SpriteError } from './spriteErrors'
 import { resolveExtractOptions, type SpriteExtractOptions } from './spriteOptions'
+import { createJsonFileReader, writeJsonFileAtomic } from '../../utils/jsonFile'
 
 /**
  * Sprite extraction presets, one list for every account (a game's look is shared, not per person). Each preset keeps
@@ -35,20 +35,17 @@ export interface SpritePresetInput {
   output?: unknown
 }
 
+const storedPresets = createJsonFileReader(PRESETS_FILE, (raw): SpritePreset[] => {
+  const presets = raw && typeof raw === 'object' ? (raw as { presets?: unknown }).presets : null
+  return Array.isArray(presets) ? presets as SpritePreset[] : []
+})
+
 function readAll(): SpritePreset[] {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(PRESETS_FILE, 'utf8')) as { presets?: SpritePreset[] }
-    return Array.isArray(parsed.presets) ? parsed.presets : []
-  } catch {
-    return []
-  }
+  return storedPresets.read()
 }
 
 function writeAll(presets: SpritePreset[]): void {
-  fs.mkdirSync(path.dirname(PRESETS_FILE), { recursive: true })
-  const temp = `${PRESETS_FILE}.${process.pid}.tmp`
-  fs.writeFileSync(temp, JSON.stringify({ version: 1, presets }, null, 2))
-  fs.renameSync(temp, PRESETS_FILE)
+  writeJsonFileAtomic(PRESETS_FILE, { version: 1, presets })
 }
 
 function cleanName(value: unknown): string {

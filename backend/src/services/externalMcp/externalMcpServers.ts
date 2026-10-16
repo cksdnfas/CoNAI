@@ -4,6 +4,7 @@ import { createHash } from 'crypto'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 import { runtimePaths } from '../../config/runtimePaths'
+import { writeJsonFileAtomic } from '../../utils/jsonFile'
 
 /**
  * Outside MCP servers an administrator connects (a search engine, a browser, a company wiki…). Their tools reach the
@@ -113,9 +114,7 @@ export function loadExternalMcpServers(): ExternalMcpServerConfig[] {
 }
 
 function saveServers(servers: ExternalMcpServerConfig[]) {
-  const file = CONFIG_FILE_PATH()
-  fs.mkdirSync(path.dirname(file), { recursive: true })
-  fs.writeFileSync(file, JSON.stringify({ servers }, null, 2), 'utf8')
+  writeJsonFileAtomic(CONFIG_FILE_PATH(), { servers })
   cachedConfig = servers
 }
 

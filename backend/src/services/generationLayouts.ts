@@ -1,4 +1,3 @@
-import fs from 'fs';
 import path from 'path';
 import {
   GENERATION_LAYOUT_SURFACES,
@@ -9,18 +8,20 @@ import {
 } from '@conai/shared';
 import { runtimePaths } from '../config/runtimePaths';
 import { nativeEditRevision } from './nativeEditRevision';
+import { createJsonFileReader, writeJsonFileAtomic } from '../utils/jsonFile';
 
 /** Generation page block layouts: one preset list per surface for every account, edited by admins. */
 const LAYOUTS_FILE = path.join(runtimePaths.basePath, 'config', 'generation-layouts.json');
 
+const storedLayouts = createJsonFileReader(LAYOUTS_FILE, (raw): Partial<Record<GenerationLayoutSurface, unknown>> => {
+  if (!raw || typeof raw !== 'object') return {};
+  const parsed = raw as { presets?: unknown; surfaces?: Record<string, unknown> };
+  // Version 1 held only the NAI list.
+  return parsed.surfaces && typeof parsed.surfaces === 'object' ? parsed.surfaces : { nai: parsed.presets };
+});
+
 function readStored(): Partial<Record<GenerationLayoutSurface, unknown>> {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(LAYOUTS_FILE, 'utf8')) as { presets?: unknown; surfaces?: Record<string, unknown> };
-    // Version 1 held only the NAI list.
-    return parsed.surfaces && typeof parsed.surfaces === 'object' ? parsed.surfaces : { nai: parsed.presets };
-  } catch {
-    return {};
-  }
+  return storedLayouts.read();
 }
 
 function snapshotOf(surface: GenerationLayoutSurface, raw: unknown): GenerationLayoutSurfaceSnapshot {
@@ -39,9 +40,6 @@ export function writeGenerationLayouts(surface: GenerationLayoutSurface, presets
   if (snapshotOf(surface, stored[surface]).revision !== revision) return 'conflict';
   const next = snapshotOf(surface, presetsInput);
   const surfaces = Object.fromEntries(GENERATION_LAYOUT_SURFACES.map((item) => [item, item === surface ? next.presets : snapshotOf(item, stored[item]).presets]));
-  fs.mkdirSync(path.dirname(LAYOUTS_FILE), { recursive: true });
-  const temp = `${LAYOUTS_FILE}.${process.pid}.tmp`;
-  fs.writeFileSync(temp, JSON.stringify({ version: 2, surfaces }, null, 2));
-  fs.renameSync(temp, LAYOUTS_FILE);
+  writeJsonFileAtomic(LAYOUTS_FILE, { version: 2, surfaces });
   return next;
 }
