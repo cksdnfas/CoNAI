@@ -1,38 +1,7 @@
-// Load environment variables from ROOT .env file
-// This must be done before any other imports that depend on process.env
-import dotenv from 'dotenv';
+// Environment and native-module paths load first: imports run before this file's own statements.
+import { isDevelopmentEnvironment } from './config/loadEnvironment';
 import fs from 'fs';
 import path from 'path';
-import { resolveEnvExamplePath, resolveEnvPath, isPackagedRuntime } from './utils/envPath';
-
-function ensureEnvFileExists(envPath: string): void {
-  const envExamplePath = resolveEnvExamplePath(envPath, __dirname);
-
-  if (!fs.existsSync(envPath) && fs.existsSync(envExamplePath)) {
-    fs.copyFileSync(envExamplePath, envPath);
-    console.log(`[Config] Created .env from ${path.basename(envExamplePath)} at: ${envPath}`);
-  }
-}
-
-const rootEnvPath = resolveEnvPath(__dirname);
-ensureEnvFileExists(rootEnvPath);
-dotenv.config({ path: rootEnvPath, quiet: true });
-console.log(`[Config] Loaded environment from: ${rootEnvPath}`);
-
-const normalizedNodeEnv = process.env.NODE_ENV?.trim().toLowerCase();
-const isDevelopmentEnvironment = normalizedNodeEnv === 'development';
-const isProductionEnvironment = !isDevelopmentEnvironment;
-
-// Configure NODE_PATH for native modules in SEA (Single Executable Application)
-// This must be done before any imports that depend on native modules
-if (isProductionEnvironment || isPackagedRuntime()) {
-  const nativeModulesPath = path.join(__dirname, '..', 'node_modules');
-  if (require('fs').existsSync(nativeModulesPath)) {
-    process.env.NODE_PATH = nativeModulesPath;
-    require('module').Module._initPaths();
-  }
-}
-
 import https from 'https';
 import express from 'express';
 import { runtimePaths, ensureRuntimeDirectories } from './config/runtimePaths';
@@ -44,7 +13,7 @@ import { StartupCheck } from './utils/startupCheck';
 import { initializeDatabase } from './database/init';
 import { initializeApiGenerationDb } from './database/apiGenerationDb';
 import { APIImageProcessor } from './services/APIImageProcessor';
-import { PORTS } from '@conai/shared';
+import { PORTS, TIMEOUTS } from '@conai/shared';
 import { QueryCacheService } from './services/QueryCacheService';
 import { WatchedFolderService } from './services/watchedFolderService';
 import { configureAppMiddleware } from './startup/configureAppMiddleware';
@@ -184,13 +153,13 @@ async function startServer() {
     initializeApiGenerationDb(); // Synchronous call (better-sqlite3)
 
     // 5-1. Generation History Cleanup (startup)
+    // Queue payload externalization (and its VACUUM) finishes before serving; the history sweep runs alongside.
     if (shouldRunWorkerStartupTasks) {
-      try {
-        const { CleanupService } = await import('./services/cleanupService');
-        await CleanupService.runStartupCleanup();
-      } catch (error) {
+      const { CleanupService } = await import('./services/cleanupService');
+      CleanupService.externalizeQueuePayloadInputs();
+      void CleanupService.runStartupCleanup().catch((error) => {
         console.warn('⚠️  Failed to run startup cleanup:', error instanceof Error ? error.message : error);
-      }
+      });
     } else {
       console.log('🧩 Worker startup cleanup skipped in API/smoke runtime');
     }
@@ -208,9 +177,9 @@ async function startServer() {
       console.log('🧩 Temp image startup cleanup skipped in API runtime');
     }
 
-    // 6-2. ComfyUI model preview negative cache cleanup
+    // 6-2. ComfyUI model preview negative cache cleanup (file-only; does not block serving)
     if (shouldRunWorkerStartupTasks) {
-      try {
+      void (async () => {
         const { cleanupComfyModelThumbnailStartupCache } = await import('./services/comfyModelThumbnailService');
         const thumbnailCleanupReport = await cleanupComfyModelThumbnailStartupCache();
         if (thumbnailCleanupReport.missingDeleted > 0 || thumbnailCleanupReport.sourceDeleted > 0 || thumbnailCleanupReport.errors > 0) {
@@ -218,9 +187,9 @@ async function startServer() {
             `🧹 ComfyUI model preview startup cleanup: ${thumbnailCleanupReport.missingDeleted} missing markers, ${thumbnailCleanupReport.sourceDeleted} source files, ${thumbnailCleanupReport.errors} errors`,
           );
         }
-      } catch (error) {
+      })().catch((error) => {
         console.warn('⚠️  Failed to cleanup ComfyUI model preview cache:', error instanceof Error ? error.message : error);
-      }
+      });
     } else {
       console.log('🧩 ComfyUI model preview startup cleanup skipped in API/smoke runtime');
     }
@@ -409,9 +378,9 @@ ${tips.join('\n')}
     }
 
     if (server) {
-      server.setTimeout?.(60000);
-      (server as any).keepAliveTimeout = 65000;
-      (server as any).headersTimeout = 66000;
+      server.setTimeout?.(TIMEOUTS.SERVER);
+      (server as any).keepAliveTimeout = TIMEOUTS.KEEP_ALIVE;
+      (server as any).headersTimeout = TIMEOUTS.HEADERS;
     }
 
     const shutdown = createGracefulShutdownCoordinator({

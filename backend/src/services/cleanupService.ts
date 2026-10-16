@@ -63,9 +63,10 @@ export class CleanupService {
   /**
    * Move inline base64 inputs still sitting in stored queue payloads to the queue input store, then
    * give the freed pages back to the file system when the backlog was large. Runs once per start; after
-   * the first pass it finds nothing and only costs the scan.
+   * the first pass it finds nothing and only costs the scan. Startup awaits this before serving: its VACUUM must
+   * not run under traffic, and the dispatcher must read rewritten payloads.
    */
-  private static externalizeQueuePayloadInputs(): void {
+  static externalizeQueuePayloadInputs(): void {
     try {
       const report = externalizeStoredQueuePayloads();
       if (report.rewritten === 0) {
@@ -272,10 +273,10 @@ export class CleanupService {
    * Run startup cleanup - clean stale records from previous session
    * This is automatically called on server startup
    */
+  /** The startup history sweep. It does not block serving; `externalizeQueuePayloadInputs` runs first, on its own. */
   static async runStartupCleanup(): Promise<void> {
     console.log('🚀 Running startup cleanup for generation history...');
 
-    this.externalizeQueuePayloadInputs();
     const report = await this.executeCleanup({ dryRun: false });
 
     if (report.deleted > 0 || report.updated > 0) {
