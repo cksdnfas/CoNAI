@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { IconButton } from '@/components/ui/icon-button'
+import { useImagePermissions } from '@/features/auth/use-image-permissions'
+import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useI18n } from '@/i18n'
 import type { GenerationServiceType } from '@/lib/api-image-generation-types'
@@ -49,11 +51,12 @@ export function GenerationResultArea({
   recentStrip = 'bottom',
 }: GenerationResultAreaProps) {
   const { t } = useI18n()
+  const { canViewImages } = useImagePermissions()
   const { activeJob, activeJobCount, nowMs } = useGenerationStageQueue({ serviceType, workflowId })
   const historySafetySettingsQuery = useQuery({
     queryKey: ['runtime-generation-history-settings'],
     queryFn: getRuntimeGenerationHistorySettings,
-    enabled: !feed.authStatusQuery.isPending,
+    enabled: canViewImages && !feed.authStatusQuery.isPending,
     staleTime: 60_000,
   })
   const applyRatingSafety = historySafetySettingsQuery.data?.applyRatingSafetyToGenerationHistory === true
@@ -123,20 +126,22 @@ export function GenerationResultArea({
           {compact ? null : toggle}
         </div>
       )}
-      <GenerationResultStage
-        items={visibleItems}
-        selected={selected}
-        onSelect={(id) => setPick({ id, nonce: followLatestNonce })}
-        isLoading={feed.isHistoryLoading}
-        activeJob={activeJob}
-        activeJobCount={activeJobCount}
-        nowMs={nowMs}
-        compact={compact}
-        shouldBlur={shouldBlurItemPreview}
-        onDeleted={() => void feed.refreshHistory()}
-        onShowHistory={() => onViewChange('history')}
-        stripPlacement={recentStrip}
-      />
+      {!canViewImages ? <ImagePermissionNotice /> : (
+        <GenerationResultStage
+          items={visibleItems}
+          selected={selected}
+          onSelect={(id) => setPick({ id, nonce: followLatestNonce })}
+          isLoading={feed.isHistoryLoading}
+          activeJob={activeJob}
+          activeJobCount={activeJobCount}
+          nowMs={nowMs}
+          compact={compact}
+          shouldBlur={shouldBlurItemPreview}
+          onDeleted={() => void feed.refreshHistory()}
+          onShowHistory={() => onViewChange('history')}
+          stripPlacement={recentStrip}
+        />
+      )}
     </section>
   )
 }

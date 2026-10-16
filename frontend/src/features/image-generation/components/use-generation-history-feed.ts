@@ -190,7 +190,8 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
     refreshHistory,
     isAdmin,
     isPublicView,
-    isHistoryLoading: authStatusQuery.isPending || historyQuery.isPending,
+    // Without image access the query never runs, so it is not loading either.
+    isHistoryLoading: authStatusQuery.isPending || (canViewImages && historyQuery.isPending),
   }
 }
 
