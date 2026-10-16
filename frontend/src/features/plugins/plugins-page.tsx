@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { ChevronRight, Files, FolderKanban, History, Puzzle, Settings2, ShieldCheck } from 'lucide-react'
+import { ChevronRight, Files, FolderKanban, History, Puzzle, ShieldCheck } from 'lucide-react'
 import { ListPager } from '@/components/common/list-pager'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +21,7 @@ import { getWorkspace } from '@/lib/api-workspaces'
 import { cn } from '@/lib/utils'
 import type { PluginAppRequest } from '@conai/shared'
 import { PluginAppRequestList, usePendingAppRequests, usePluginAppRequests } from './plugin-app-requests'
+import { PluginManagement } from './plugin-management'
 import { PluginReviewModal } from './plugin-review'
 
 const HISTORY_PAGE = 20
@@ -42,7 +43,7 @@ function AppRequestHistory({ open, onClose, pluginName, onReview }: { open: bool
   )
 }
 
-/** The plugin launcher: operations waiting for approval, then every page of the enabled plugins. */
+/** The plugin page: operations waiting for approval, every page of the enabled plugins, then the same management as Settings for admins. */
 export function PluginsPage() {
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -85,7 +86,6 @@ export function PluginsPage() {
         actions={(
           <>
             <IconButton variant="ghost" label={t({ ko: '작업 기록', en: 'Operation history' })} onClick={() => setHistory(true)}><History /></IconButton>
-            {auth.data?.isAdmin ? <IconButton variant="ghost" label={t({ ko: '플러그인 관리', en: 'Manage plugins' })} onClick={() => navigate('/settings?section=plugins')}><Settings2 /></IconButton> : null}
           </>
         )}
       />
@@ -132,6 +132,8 @@ export function PluginsPage() {
             ))}
           </RowGroup>
         )}
+
+        {auth.data?.isAdmin ? <PluginManagement /> : null}
       </div>
       <AppRequestHistory open={history} onClose={() => setHistory(false)} pluginName={pluginName} onReview={(request) => { setHistory(false); setReview(request) }} />
       <PluginReviewModal
