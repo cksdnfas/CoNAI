@@ -44,47 +44,9 @@ vitest.config.ts
 frontend/vitest.config.ts
 frontend/.playwright-dev.log
 
-# Keep the permanent chat cancellation, context and protocol regressions.
+# Repository tests are tracked in full, so a new test file is never left out of a commit.
 !backend/test/
-backend/test/*
-!backend/test/workspaces.test.ts
-!backend/test/plugins.test.ts
-!backend/test/plugin-server.test.ts
-!backend/test/chat-regressions.test.ts
-!backend/test/chat-diagnostics.test.ts
-!backend/test/chat-generation-results.test.ts
-!backend/test/chat-generation-reactions.test.ts
-!backend/test/chat-profile-assets.test.ts
-!backend/test/chat-asset-batches.test.ts
-!backend/test/chat-stage5.test.ts
-!backend/test/chat-replies.test.ts
-!backend/test/chat-memory.test.ts
-!backend/test/chat-group-memory.test.ts
-!backend/test/chatSummaryFold.test.ts
-!backend/test/chat-review-items.test.ts
-!backend/test/chat-lorebook-files.test.ts
-!backend/test/chat-lore-context.test.ts
-!backend/test/chat-lorebook-merge.test.ts
-!backend/test/chat-thread-list.test.ts
-!backend/test/image-permissions.test.ts
-!backend/test/generated-media-pipeline.test.ts
-!backend/test/group-download.test.ts
-!backend/test/document-search.test.ts
-!backend/test/posts.test.ts
-!backend/test/chat-semantic.test.ts
-!backend/test/mcp-posts-files-tools.test.ts
-!backend/test/posts-knowledge-runtime.test.ts
 !frontend/test/
-frontend/test/*
-!frontend/test/plugin-text-editor.test.ts
-!frontend/test/resource-review.test.ts
-!frontend/test/post-rich-editor.test.ts
-!frontend/test/post-comments.test.ts
-!frontend/test/media-preview-lifecycle.test.ts
-!frontend/test/audio-waveform.test.ts
-!frontend/test/plugin-sdk.test.ts
-!frontend/test/chat-page-context.test.ts
-!frontend/test/image-list-pagination.test.ts
 
 # Uploaded images
 uploads/

@@ -1,10 +1,7 @@
+// Migrations and the services resolve runtime paths at import time: this import must stay first.
+import { scratchDir } from './support/scratchRuntime'
 import { randomUUID } from 'node:crypto'
-import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
-// Migrations and the services resolve runtime paths at import time; keep everything in a scratch folder.
-const scratchDir = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-test-similarity-index-'))
-process.env.RUNTIME_BASE_PATH = scratchDir
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import Database from 'better-sqlite3'

@@ -1,6 +1,8 @@
 ﻿import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { resolveEnvBaseDir, resolveEnvConfiguredPath } from '../utils/envPath';
+import { PORTS } from '@conai/shared';
 
 const overrideBasePath = process.env.RUNTIME_BASE_PATH;
 
@@ -14,6 +16,16 @@ const basePath = (() => {
       console.log(`[Config] Data root overridden by RUNTIME_BASE_PATH: ${resolved}`);
       return resolved;
     }
+  }
+
+  // A test run never falls through to the real data root. ES imports are hoisted above a test file's own
+  // `process.env.RUNTIME_BASE_PATH = …`, so a test that sets it inline used to open (and migrate, and seed) the
+  // developer's user/ databases. Without an explicit base path, a test gets a throwaway folder instead.
+  const runningTests = process.env.NODE_TEST_CONTEXT !== undefined || /\.test\.[cm]?[jt]s$/.test(process.argv[1] ?? '');
+  if (runningTests) {
+    const resolved = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-test-runtime-'));
+    console.log(`[Config] Test run without RUNTIME_BASE_PATH: using scratch data root ${resolved}`);
+    return resolved;
   }
 
   // 2. Portable mode executable directory
@@ -85,7 +97,7 @@ function ensureProtocol(url: string): string {
   return `http://${url}`;
 }
 
-const resolvedPort = process.env.PORT || '1666';
+const resolvedPort = process.env.PORT || String(PORTS.BACKEND_DEFAULT);
 const publicBaseUrl = (() => {
   const overrides = [process.env.PUBLIC_BASE_URL, process.env.BACKEND_ORIGIN];
   const explicit = overrides.find(value => value && value.trim().length > 0);

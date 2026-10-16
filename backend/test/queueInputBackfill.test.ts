@@ -1,8 +1,5 @@
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
-// The runtime base must point at a scratch folder before anything reads runtimePaths.
-process.env.RUNTIME_BASE_PATH = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-test-queue-'))
+// The runtime base must point at a scratch folder before anything reads runtimePaths: this import must stay first.
+import './support/scratchRuntime'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { getUserSettingsDb, initializeUserSettingsDb } from '../src/database/userSettingsDb'
