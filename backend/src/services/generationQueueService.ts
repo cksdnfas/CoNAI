@@ -18,6 +18,7 @@ import { parseStoredRequestPayload, resolveFailureMessage } from './generation-q
 import { QueueServiceThrottle, type ThrottledServiceType } from './generation-queue/queueServiceThrottle'
 import { QueueTerminalJobWaiters } from './generation-queue/queueTerminalWaiters'
 import { publishQueueJobEvent } from './runtime-events/runtimeEventPublishers'
+import { enqueueGenerationJobs, type EnqueueGenerationJobsOptions } from './generation-queue/queueEnqueue'
 import { ALLOWED_QUEUE_TRANSITIONS, buildQueueTransitionUpdates } from './generation-queue/queueTransitions'
 import type { ServiceType } from '../types/generationHistory'
 import { HistoryCommandService } from './historyCommandService'
@@ -41,6 +42,9 @@ const ORPHAN_RECONCILE_INTERVAL_MS = 5 * 60 * 1000
 // 이 시간이 지나도록 상류 핸들을 확인하지 못한 제출은 회수 가망이 없다고 본다.
 const ORPHAN_RECOVERY_DEADLINE_HOURS = 24
 const TERMINAL_QUEUE_STATUSES: GenerationQueueJobStatus[] = ['completed', 'failed', 'cancelled']
+// An unreachable ComfyUI server is not probed again until this passes, so one dead endpoint does not cost a
+// connection timeout on every dispatch tick.
+const COMFY_UNREACHABLE_BACKOFF_MS = 30_000
 
 export class GenerationQueueService {
   private static started = false
@@ -52,6 +56,9 @@ export class GenerationQueueService {
   private static terminalJobWaiters = new QueueTerminalJobWaiters()
   private static serviceThrottle = new QueueServiceThrottle()
   private static comfyDispatchSkipStateByServerId = new Map<number, 'unreachable' | 'busy'>()
+  private static comfyUnreachableUntilByServerId = new Map<number, number>()
+  private static comfyDispatchRunning = false
+  private static comfyDispatchPending = false
   private static orphanReconcileHandle: ReturnType<typeof setInterval> | null = null
 
   /** Start queue recovery hooks and dispatcher once per process. */
@@ -102,6 +109,8 @@ export class GenerationQueueService {
     this.terminalJobWaiters.resolve(null)
     this.serviceThrottle.reset()
     this.comfyDispatchSkipStateByServerId.clear()
+    this.comfyUnreachableUntilByServerId.clear()
+    this.comfyDispatchPending = false
     return true
   }
 
@@ -434,7 +443,7 @@ export class GenerationQueueService {
   }
 
   /** Create a new queued retry job from one finished failed/cancelled job. */
-  static retryJob(id: number, options?: { force?: boolean }) {
+  static retryJob(id: number, options?: { force?: boolean; roleLimitWorkflow?: EnqueueGenerationJobsOptions['roleLimitWorkflow'] }) {
     // 재시도는 원본 페이로드를 그대로 복제해야 하므로 여기서는 전체 하이드레이션이 필수다.
     const existing = GenerationQueueModel.findById(id)
     if (!existing) {
@@ -468,7 +477,7 @@ export class GenerationQueueService {
       ? `${existing.request_summary} (retry)`
       : `Retry of queue job ${existing.id}`
 
-    const retryJobId = GenerationQueueModel.create({
+    const [retryJobId] = enqueueGenerationJobs({
       service_type: existing.service_type,
       priority: existing.priority,
       requested_by_account_id: existing.requested_by_account_id ?? null,
@@ -480,14 +489,10 @@ export class GenerationQueueService {
       requested_server_tag: existing.requested_server_tag ?? null,
       request_payload: requestPayload,
       request_summary: retrySummary,
-    })
+    }, { roleLimitWorkflow: options?.roleLimitWorkflow }).jobIds
 
-    const retryJob = GenerationQueueModel.findListRecordById(retryJobId)
-    // E5: 재시도는 신규 잡 생성이다.
-    publishQueueJobEvent('queue.job.created', retryJob)
-
-    this.requestDispatch()
-    return retryJob
+    // E5: 재시도는 신규 잡 생성이다 (enqueueGenerationJobs 가 created 이벤트를 낸다).
+    return GenerationQueueModel.findListRecordById(retryJobId)
   }
 
   /**
@@ -638,7 +643,29 @@ export class GenerationQueueService {
 
     this.tryStartNovelAiWorker()
     this.tryStartCodexWorker()
-    await this.tryStartComfyWorkers()
+    // ComfyUI dispatch probes servers over HTTP; it runs in its own lane so a slow probe never holds back
+    // NovelAI/Codex starts on the next tick.
+    this.requestComfyDispatch()
+  }
+
+  private static requestComfyDispatch() {
+    if (this.comfyDispatchRunning) {
+      this.comfyDispatchPending = true
+      return
+    }
+
+    this.comfyDispatchRunning = true
+    void this.tryStartComfyWorkers()
+      .catch((error) => {
+        console.error('❌ ComfyUI queue dispatch failed:', error)
+      })
+      .finally(() => {
+        this.comfyDispatchRunning = false
+        if (this.started && this.comfyDispatchPending) {
+          this.comfyDispatchPending = false
+          this.requestComfyDispatch()
+        }
+      })
   }
 
   /** Forecast the next service-level throttle start slots without mutating dispatcher state. */
@@ -698,6 +725,11 @@ export class GenerationQueueService {
   }
 
   private static async tryStartComfyWorkers(): Promise<void> {
+    // No queued ComfyUI work: nothing to probe servers for.
+    if (!this.started || !GenerationQueueModel.hasQueuedComfyJob()) {
+      return
+    }
+
     const activeServers = ComfyUIServerModel.findActiveServers()
 
     if (activeServers.length === 0) {
@@ -710,7 +742,9 @@ export class GenerationQueueService {
     }
 
     const routingContext = createGenerationQueueRoutingContext(activeServers)
-    const probeableServers = serversWithLocalCapacity.filter((server) => server.backend_type !== 'modal')
+    const now = Date.now()
+    const probeableServers = serversWithLocalCapacity.filter((server) => server.backend_type !== 'modal'
+      && (this.comfyUnreachableUntilByServerId.get(server.id) ?? 0) <= now)
     const runtimeStatuses = await getComfyUIServerRuntimeStatuses(probeableServers)
     const statusByServerId = new Map(runtimeStatuses.map((status) => [status.server_id, status]))
     const dispatchableServers: Array<{ server: ComfyUIServerRecord; availableSlots: number }> = []
@@ -720,6 +754,8 @@ export class GenerationQueueService {
         ? { is_connected: true, running_count: 0, pending_count: 0 }
         : statusByServerId.get(server.id)
       if (!runtimeStatus?.is_connected) {
+        // A server skipped for backoff has no status this tick; only a failed probe restarts the backoff.
+        if (runtimeStatus) this.comfyUnreachableUntilByServerId.set(server.id, now + COMFY_UNREACHABLE_BACKOFF_MS)
         if (this.comfyDispatchSkipStateByServerId.get(server.id) !== 'unreachable') {
           this.comfyDispatchSkipStateByServerId.set(server.id, 'unreachable')
           console.log(`⏭️ Skipping ComfyUI server ${server.name} (${server.id}), unreachable`)
@@ -745,6 +781,7 @@ export class GenerationQueueService {
       }
 
       this.comfyDispatchSkipStateByServerId.delete(server.id)
+      this.comfyUnreachableUntilByServerId.delete(server.id)
       dispatchableServers.push({ server, availableSlots })
     }
 

@@ -86,6 +86,7 @@ class AutoTagScheduler {
   private rerunRequested = false;
   private lockRetryScheduled = false;
   private pollingTimer: NodeJS.Timeout | null = null;
+  /** Pause before a requested rerun of the pending batch. */
   private readonly PROCESSING_DELAY_MS = 1000;
   private readonly LOCK_RETRY_DELAY_MS = 5000;
 
@@ -301,11 +302,9 @@ class AutoTagScheduler {
         const media = pendingMedia[index];
 
         try {
+          // No pause between images: tagging asks the vision worker at low priority, so interactive requests
+          // already go first, and a one-second sleep per image only capped the backlog at one image a second.
           await this.tagSingleMedia(media, capabilities);
-
-          if (index < pendingMedia.length - 1) {
-            await this.delay(this.PROCESSING_DELAY_MS);
-          }
         } catch (error) {
           console.error(
             `[AutoTagScheduler] Failed to tag media: ${path.basename(media.original_file_path)}`,
@@ -452,10 +451,6 @@ class AutoTagScheduler {
     } catch (error) {
       console.error('[AutoTagScheduler] Failed to collect auto prompts:', error);
     }
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /** Retry postprocess tagging promptly after an exclusive maintenance lock can clear. */

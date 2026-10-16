@@ -251,6 +251,8 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
   }
 
   let acceptedPromptId = job.provider_job_id ?? null
+  // The first saved output already pointed the history at itself and completed it (onImageSaved).
+  let firstSavedHash: string | null = null
   try {
     const audioOrders = audioOrderJob ? await import('../audio/audioOrders') : null
     const result = await executeComfyGeneration({
@@ -264,7 +266,10 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
           requestedByAccountType: job.requested_by_account_type ?? undefined,
           serverId: assignedServer?.id ?? job.assigned_server_id ?? undefined,
         })
-        if (savedCount === 1) historyId = outputHistoryId
+        if (savedCount === 1) {
+          historyId = outputHistoryId
+          firstSavedHash = image.compositeHash
+        }
         HistoryCommandService.updateImagePaths(outputHistoryId, { compositeHash: image.compositeHash })
         HistoryCommandService.updateStatus(outputHistoryId, 'completed')
         assignGeneratedMediaToGroup(job.requested_group_id, [image.compositeHash])
@@ -387,11 +392,14 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
       }
 
       if (historyId) {
-        HistoryCommandService.updateImagePaths(historyId, {
-          compositeHash: result.representativeImage.compositeHash,
-        })
+        const alreadyWritten = result.representativeImage.compositeHash === firstSavedHash
+        if (!alreadyWritten) {
+          HistoryCommandService.updateImagePaths(historyId, {
+            compositeHash: result.representativeImage.compositeHash,
+          })
+        }
         await BackgroundProcessorService.processApiGenerationGroupAssignmentForHash(result.representativeImage.compositeHash)
-        HistoryCommandService.updateStatus(historyId, 'completed')
+        if (!alreadyWritten) HistoryCommandService.updateStatus(historyId, 'completed')
       }
 
       // history 는 대표 이미지 하나만 가리키므로 배치의 나머지 출력은 직접 그룹에 넣는다.

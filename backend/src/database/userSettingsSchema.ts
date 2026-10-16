@@ -1548,6 +1548,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_assigned_server_id ON generation_queue_jobs(assigned_server_id)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_workflow_id ON generation_queue_jobs(workflow_id)',
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_cancel_requested ON generation_queue_jobs(cancel_requested)',
+    // The abandoned-cancel sweep runs every dispatch tick; past cancelled jobs keep cancel_requested = 1, so only
+    // the live ones are indexed.
+    "CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_live_cancel ON generation_queue_jobs(updated_date) WHERE cancel_requested = 1 AND status IN ('dispatching', 'running')",
     'CREATE INDEX IF NOT EXISTS idx_generation_queue_jobs_orphan_reconcile ON generation_queue_jobs(provider_submit_state, status)',
     'CREATE INDEX IF NOT EXISTS idx_runtime_jobs_status_created ON runtime_jobs(status, created_date DESC, job_id DESC)',
     'CREATE INDEX IF NOT EXISTS idx_runtime_jobs_kind_status ON runtime_jobs(kind, status, created_date DESC)',

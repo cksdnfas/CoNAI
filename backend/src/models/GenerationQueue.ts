@@ -145,8 +145,12 @@ const GENERATION_QUEUE_RECONCILE_COLUMNS = `
   cancel_requested
 `
 
-/** 상류에 작업이 남아 있을 수 있어 reconcile 대상이 되는 제출 상태들. */
-const ORPHAN_RECONCILE_SUBMIT_STATES: GenerationQueueProviderSubmitState[] = ['orphan_suspected', 'orphan_unresolved', 'cancel_sent']
+/**
+ * 상류에 작업이 남아 있을 수 있어 reconcile 대상이 되는 제출 상태들.
+ * `orphan_unresolved` 는 보상 취소까지 끝낸 최종 판정이라 다시 훑지 않는다. 훑으면 쌓인 미해결 잡이
+ * LIMIT 창을 채워 새 `orphan_suspected` 가 영영 처리되지 않는다.
+ */
+const ORPHAN_RECONCILE_SUBMIT_STATES: GenerationQueueProviderSubmitState[] = ['orphan_suspected', 'cancel_sent']
 const ORPHAN_RECONCILE_SUBMIT_STATE_PLACEHOLDERS = ORPHAN_RECONCILE_SUBMIT_STATES.map(() => '?').join(', ')
 
 const GENERATION_QUEUE_DISPATCH_CANDIDATE_COLUMNS = `
@@ -275,12 +279,16 @@ function getQueueOrderSql(hasStatusFilter: boolean) {
 export class GenerationQueueModel {
   /** Create one persistent queue job row. */
   static create(data: GenerationQueueJobCreateData) {
+    return GenerationQueueModel.createMany([data])[0]
+  }
+
+  /**
+   * Create queue job rows in one transaction. Copies sharing one payload object (an "개수" expansion) serialize and
+   * scan it once.
+   */
+  static createMany(rows: GenerationQueueJobCreateData[]): number[] {
     const db = getUserSettingsDb()
-    const queuedAt = data.queued_at ?? new Date().toISOString()
-    // PAYLOAD-2: the debug flag/metadata are lifted out of the payload at insert
-    // time, so no later stage has to parse the payload just to read them.
-    const debugSection = readCreateDebugSection(data.request_payload)
-    const info = db.prepare(`
+    const insert = db.prepare(`
       INSERT INTO generation_queue_jobs (
         service_type, status, priority,
         requested_by_account_id, requested_by_account_type,
@@ -295,44 +303,54 @@ export class GenerationQueueModel {
         debug_enabled, debug_meta,
         queued_at, started_at, completed_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      data.service_type,
-      data.status ?? 'queued',
-      data.priority ?? 100,
-      data.requested_by_account_id ?? null,
-      data.requested_by_account_type ?? null,
-      data.workflow_id ?? null,
-      data.workflow_name ?? null,
-      data.requested_group_id ?? null,
-      data.requested_server_id ?? null,
-      data.requested_server_tag ?? null,
-      data.assigned_server_id ?? null,
-      data.provider_job_id ?? null,
-      JSON.stringify(data.request_payload),
-      data.request_summary ?? null,
-      data.failure_code ?? null,
-      data.failure_message ?? null,
-      data.cancel_requested ? 1 : 0,
-      data.cancel_requested_at ?? null,
-      data.cancel_origin ?? null,
-      data.provider_submit_state ?? 'none',
-      data.provider_submit_started_at ?? null,
-      data.provider_cancel_state ?? null,
-      data.submit_attempt_count ?? 0,
-      debugSection.debugEnabled,
-      debugSection.debugMeta,
-      queuedAt,
-      data.started_at ?? null,
-      data.completed_at ?? null,
-    )
-
-    const jobId = info.lastInsertRowid as number
-    // PAYLOAD-3: claim every content-addressed input this payload points at. Doing it here means
-    // every enqueue path gets refcounting for free — user routes, public workflows, graph
-    // executors, and `retryJob`, which re-creates a job from a payload full of the same refs.
-    registerQueueInputRefs(jobId, collectQueueInputRefs(data.request_payload))
-
-    return jobId
+    `)
+    const prepared = new Map<unknown, { json: string; debug: ReturnType<typeof readCreateDebugSection>; refs: ReturnType<typeof collectQueueInputRefs> }>()
+    return db.transaction(() => rows.map((data) => {
+      const queuedAt = data.queued_at ?? new Date().toISOString()
+      let payload = prepared.get(data.request_payload)
+      if (!payload) {
+        // PAYLOAD-2: the debug flag/metadata are lifted out of the payload at insert
+        // time, so no later stage has to parse the payload just to read them.
+        payload = { json: JSON.stringify(data.request_payload), debug: readCreateDebugSection(data.request_payload), refs: collectQueueInputRefs(data.request_payload) }
+        prepared.set(data.request_payload, payload)
+      }
+      const info = insert.run(
+        data.service_type,
+        data.status ?? 'queued',
+        data.priority ?? 100,
+        data.requested_by_account_id ?? null,
+        data.requested_by_account_type ?? null,
+        data.workflow_id ?? null,
+        data.workflow_name ?? null,
+        data.requested_group_id ?? null,
+        data.requested_server_id ?? null,
+        data.requested_server_tag ?? null,
+        data.assigned_server_id ?? null,
+        data.provider_job_id ?? null,
+        payload.json,
+        data.request_summary ?? null,
+        data.failure_code ?? null,
+        data.failure_message ?? null,
+        data.cancel_requested ? 1 : 0,
+        data.cancel_requested_at ?? null,
+        data.cancel_origin ?? null,
+        data.provider_submit_state ?? 'none',
+        data.provider_submit_started_at ?? null,
+        data.provider_cancel_state ?? null,
+        data.submit_attempt_count ?? 0,
+        payload.debug.debugEnabled,
+        payload.debug.debugMeta,
+        queuedAt,
+        data.started_at ?? null,
+        data.completed_at ?? null,
+      )
+      const jobId = info.lastInsertRowid as number
+      // PAYLOAD-3: claim every content-addressed input this payload points at. Doing it here means
+      // every enqueue path gets refcounting for free — user routes, public workflows, graph
+      // executors, and `retryJob`, which re-creates a job from a payload full of the same refs.
+      registerQueueInputRefs(jobId, payload.refs)
+      return jobId
+    }))()
   }
 
   /** Find the durable queue job claimed by one scoped idempotency key. */
@@ -502,29 +520,6 @@ export class GenerationQueueModel {
     return row ?? null
   }
 
-  /** List full queue jobs, newest queue entries last within status groups. */
-  static findAll(input?: GenerationQueueFindAllInput) {
-    const db = getUserSettingsDb()
-    const filters = normalizeFindAllInput(input)
-    const { whereSql, values } = buildQueueWhereClause(filters)
-    const orderSql = getQueueOrderSql(Boolean(filters.statuses && filters.statuses.length > 0))
-    const limitSql = filters.limit !== undefined ? 'LIMIT ?' : ''
-    const offsetSql = filters.limit !== undefined && filters.offset !== undefined ? 'OFFSET ?' : ''
-    const pageValues = filters.limit !== undefined
-      ? filters.offset !== undefined
-        ? [Math.max(1, Math.floor(filters.limit)), Math.max(0, Math.floor(filters.offset))]
-        : [Math.max(1, Math.floor(filters.limit))]
-      : []
-
-    return db.prepare(`
-      SELECT * FROM generation_queue_jobs
-      ${whereSql}
-      ${orderSql}
-      ${limitSql}
-      ${offsetSql}
-    `).all(...values, ...pageValues) as GenerationQueueJobRecord[]
-  }
-
   /** List queue jobs for polling/UI without hydrating heavyweight request payloads. */
   static findAllListRecords(input?: GenerationQueueFindAllInput) {
     const db = getUserSettingsDb()
@@ -572,18 +567,6 @@ export class GenerationQueueModel {
       LIMIT 1
     `).get() as { 1: number } | undefined
     return Boolean(row)
-  }
-
-  /** List queued ComfyUI jobs ordered by dispatch priority. */
-  static findQueuedComfyJobs() {
-    const db = getUserSettingsDb()
-    return db.prepare(`
-      SELECT * FROM generation_queue_jobs
-      WHERE status = 'queued'
-        AND service_type = 'comfyui'
-        AND cancel_requested = 0
-      ORDER BY priority ASC, queued_at ASC, id ASC
-    `).all() as GenerationQueueJobRecord[]
   }
 
   /** List queued ComfyUI dispatch candidates without hydrating heavyweight request payloads. */
@@ -931,6 +914,7 @@ export class GenerationQueueModel {
       SELECT ${GENERATION_QUEUE_RECONCILE_COLUMNS}
       FROM generation_queue_jobs
       WHERE provider_submit_state IN (${ORPHAN_RECONCILE_SUBMIT_STATE_PLACEHOLDERS})
+      ORDER BY id ASC
       LIMIT ?
     `).all(...ORPHAN_RECONCILE_SUBMIT_STATES, safeLimit) as GenerationQueueReconcileCandidate[]
   }
@@ -989,13 +973,4 @@ export class GenerationQueueModel {
     return counts
   }
 
-  /** List jobs visible for one requester. */
-  static findByRequester(accountId: number) {
-    const db = getUserSettingsDb()
-    return db.prepare(`
-      SELECT * FROM generation_queue_jobs
-      WHERE requested_by_account_id = ?
-      ORDER BY queued_at DESC, id DESC
-    `).all(accountId) as GenerationQueueJobRecord[]
-  }
 }
