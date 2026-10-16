@@ -32,6 +32,9 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { pageAction, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useStreamFallbackInterval } from '@/features/runtime-events/use-runtime-event-stream'
 import { TextTabs, type TextTabItem } from '@/components/common/text-tabs'
+import { GenerationLayoutControls } from '@/features/image-generation/layout/generation-layout-controls'
+import { GenerationLayoutProvider } from '@/features/image-generation/layout/generation-layout-context'
+import { PageBlockLayout } from '@/features/image-generation/layout/page-block-layout'
 import { useI18n } from '@/i18n'
 import {
   AUDIO_QUERY_KEY,
@@ -131,6 +134,14 @@ function useAudioPermissions() {
 
 /** /audio — the sound-effect workspace: projects ▸ folders (그룹) ▸ effects (audio groups), takes, review, editing, generation and export. */
 export function AudioPage() {
+  return (
+    <GenerationLayoutProvider>
+      <AudioPageContent />
+    </GenerationLayoutProvider>
+  )
+}
+
+function AudioPageContent() {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
@@ -732,7 +743,12 @@ export function AudioPage() {
               </span>
             </Tip>
           ) : null}
-          actions={toolbarActions}
+          actions={(
+            <>
+              {toolbarActions}
+              <GenerationLayoutControls wide={isDesktop} />
+            </>
+          )}
         />
       )}
     >
@@ -761,83 +777,95 @@ export function AudioPage() {
       ) : null}
 
       {group ? (
-        <div className="flex items-start gap-6">
-          <div
-            className={cn('relative min-w-0 flex-1 space-y-3', dragging && 'after:pointer-events-none after:absolute after:inset-0 after:rounded-md after:border-2 after:border-dashed after:border-primary')}
-            onDragOver={(event) => {
-              if (!permissions.canEdit || !event.dataTransfer.types.includes('Files')) return
-              event.preventDefault()
-              setDragging(true)
+        <div
+          className={cn('relative', dragging && 'after:pointer-events-none after:absolute after:inset-0 after:rounded-md after:border-2 after:border-dashed after:border-primary')}
+          onDragOver={(event) => {
+            if (!permissions.canEdit || !event.dataTransfer.types.includes('Files')) return
+            event.preventDefault()
+            setDragging(true)
+          }}
+          onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false) }}
+          onDrop={onDrop}
+        >
+          <PageBlockLayout
+            surface="audio"
+            wide={isDesktop}
+            stickyClassName="top-[calc(var(--theme-shell-header-height)+4.5rem)]"
+            stackClassName="space-y-3"
+            blocks={{
+              generate: !inbox && (group.description || permissions.canEdit) ? (
+                <div className="space-y-3">
+                  {!inbox && group.description ? <p className="text-sm whitespace-pre-wrap break-words text-muted-foreground">{group.description}</p> : null}
+                  {!inbox && permissions.canEdit ? (
+                    <AudioGenerateBar
+                      key={group.id}
+                      group={group}
+                      autoFocus={freshGroupId === group.id}
+                      canGenerate={permissions.canGenerate}
+                      canAddWorkflow={permissions.canAddWorkflow}
+                      onPromptSaved={refreshCounts}
+                      onOpenSettings={(workflowId) => { setSettingsWorkflowId(workflowId); setDialog('settings') }}
+                      onOrdered={(order) => {
+                        queryClient.setQueryData([AUDIO_QUERY_KEY, 'orders', group.id], (current: { items: typeof order[]; total: number } | undefined) => ({
+                          items: [order, ...(current?.items ?? []).filter((entry) => entry.id !== order.id)],
+                          total: (current?.total ?? 0) + 1,
+                        }))
+                        void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'orders', group.id] })
+                      }}
+                    />
+                  ) : null}
+                </div>
+              ) : null,
+              takes: (
+                <div>
+                  <TextTabs value={reviewTab} items={tabs} onChange={(value) => { setReviewTab(value); setSelectedId(null) }} />
+                  <div role="listbox" aria-label={t({ ko: '후보', en: 'Takes' })} className="@container min-h-40">
+                    {visibleOrders.map((order) => (
+                      <AudioOrderRow
+                        key={order.id}
+                        order={order}
+                        canEdit={permissions.canGenerate}
+                        onCancel={() => void cancelAudioOrder(order.id).then(refreshAll, fail)}
+                        onRetry={() => void Promise.all(order.jobs.filter((job) => job.status === 'failed').map((job) => retryAudioOrderJob(order.id, job.idx))).then(refreshAll, fail)}
+                        onDismiss={() => setDismissedOrders((current) => new Set(current).add(order.id))}
+                      />
+                    ))}
+                    {rows.map((row) => (
+                      <AudioCandidateRow
+                        key={row.candidate.id}
+                        row={row}
+                        selected={row.candidate.id === selectedId}
+                        canEdit={permissions.canEdit}
+                        onSelect={() => setSelectedId(row.candidate.id)}
+                        onPlay={() => { setSelectedId(row.candidate.id); play(row.candidate) }}
+                        onReview={(next) => void review(row.candidate, next)}
+                        onDownload={() => void downloadAttachment(audioCandidateExportUrl(row.candidate.id), row.candidate.name).catch(fail)}
+                        checked={checked.has(row.candidate.id)}
+                        onCheck={inbox && permissions.canEdit ? (value) => setChecked((current) => {
+                          const next = new Set(current)
+                          if (value) next.add(row.candidate.id)
+                          else next.delete(row.candidate.id)
+                          return next
+                        }) : undefined}
+                        moveTargets={inboxEffects}
+                        onMove={inbox ? (target) => void moveTakes([row.candidate.id], target) : undefined}
+                        dragIds={() => (checked.has(row.candidate.id) ? [...checked] : [row.candidate.id])}
+                      />
+                    ))}
+                    {rows.length === 0 && candidatesQuery.isSuccess && visibleOrders.length === 0 ? (
+                      <EmptyState size="compact" className="text-center" title={t({ ko: '후보 없음', en: 'No takes' })} />
+                    ) : null}
+                    <div ref={loadMoreRef} className="h-px" />
+                  </div>
+                </div>
+              ),
+              editor: isDesktop && editor ? (
+                <aside className="max-h-[calc(100dvh-var(--theme-shell-header-height)-6rem)] overflow-y-auto overscroll-contain">
+                  {editor}
+                </aside>
+              ) : null,
             }}
-            onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false) }}
-            onDrop={onDrop}
-          >
-            {!inbox && group.description ? <p className="text-sm whitespace-pre-wrap break-words text-muted-foreground">{group.description}</p> : null}
-            {!inbox && permissions.canEdit ? (
-              <AudioGenerateBar
-                key={group.id}
-                group={group}
-                autoFocus={freshGroupId === group.id}
-                canGenerate={permissions.canGenerate}
-                canAddWorkflow={permissions.canAddWorkflow}
-                onPromptSaved={refreshCounts}
-                onOpenSettings={(workflowId) => { setSettingsWorkflowId(workflowId); setDialog('settings') }}
-                onOrdered={(order) => {
-                  queryClient.setQueryData([AUDIO_QUERY_KEY, 'orders', group.id], (current: { items: typeof order[]; total: number } | undefined) => ({
-                    items: [order, ...(current?.items ?? []).filter((entry) => entry.id !== order.id)],
-                    total: (current?.total ?? 0) + 1,
-                  }))
-                  void queryClient.invalidateQueries({ queryKey: [AUDIO_QUERY_KEY, 'orders', group.id] })
-                }}
-              />
-            ) : null}
-            <div>
-              <TextTabs value={reviewTab} items={tabs} onChange={(value) => { setReviewTab(value); setSelectedId(null) }} />
-              <div role="listbox" aria-label={t({ ko: '후보', en: 'Takes' })} className="@container min-h-40">
-                {visibleOrders.map((order) => (
-                  <AudioOrderRow
-                    key={order.id}
-                    order={order}
-                    canEdit={permissions.canGenerate}
-                    onCancel={() => void cancelAudioOrder(order.id).then(refreshAll, fail)}
-                    onRetry={() => void Promise.all(order.jobs.filter((job) => job.status === 'failed').map((job) => retryAudioOrderJob(order.id, job.idx))).then(refreshAll, fail)}
-                    onDismiss={() => setDismissedOrders((current) => new Set(current).add(order.id))}
-                  />
-                ))}
-                {rows.map((row) => (
-                  <AudioCandidateRow
-                    key={row.candidate.id}
-                    row={row}
-                    selected={row.candidate.id === selectedId}
-                    canEdit={permissions.canEdit}
-                    onSelect={() => setSelectedId(row.candidate.id)}
-                    onPlay={() => { setSelectedId(row.candidate.id); play(row.candidate) }}
-                    onReview={(next) => void review(row.candidate, next)}
-                    onDownload={() => void downloadAttachment(audioCandidateExportUrl(row.candidate.id), row.candidate.name).catch(fail)}
-                    checked={checked.has(row.candidate.id)}
-                    onCheck={inbox && permissions.canEdit ? (value) => setChecked((current) => {
-                      const next = new Set(current)
-                      if (value) next.add(row.candidate.id)
-                      else next.delete(row.candidate.id)
-                      return next
-                    }) : undefined}
-                    moveTargets={inboxEffects}
-                    onMove={inbox ? (target) => void moveTakes([row.candidate.id], target) : undefined}
-                    dragIds={() => (checked.has(row.candidate.id) ? [...checked] : [row.candidate.id])}
-                  />
-                ))}
-                {rows.length === 0 && candidatesQuery.isSuccess && visibleOrders.length === 0 ? (
-                  <EmptyState size="compact" className="text-center" title={t({ ko: '후보 없음', en: 'No takes' })} />
-                ) : null}
-                <div ref={loadMoreRef} className="h-px" />
-              </div>
-            </div>
-          </div>
-          {isDesktop && editor ? (
-            <aside className="sticky top-[calc(var(--theme-shell-header-height)+4.5rem)] max-h-[calc(100dvh-var(--theme-shell-header-height)-6rem)] w-[22.5rem] shrink-0 overflow-y-auto overscroll-contain border-l border-line pl-6">
-              {editor}
-            </aside>
-          ) : null}
+          />
         </div>
       ) : null}
 

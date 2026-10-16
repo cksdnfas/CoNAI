@@ -158,11 +158,12 @@ const ignoreUpdate = () => {}
 /**
  * One surface's layout, registered as the screen's active surface while mounted (the toolbar edits that one).
  * Outside the provider it is the surface's built-in default and never editable.
+ * `active: false` keeps a mounted-but-hidden screen (e.g. an inactive tab) from claiming the toolbar.
  */
-export function useGenerationLayoutSurface(surface: GenerationLayoutSurface) {
+export function useGenerationLayoutSurface(surface: GenerationLayoutSurface, { active = true }: { active?: boolean } = {}) {
   const context = useContext(GenerationLayoutContext)
   const register = context?.registerSurface
-  useEffect(() => (register ? register(surface) : undefined), [register, surface])
+  useEffect(() => (register && active ? register(surface) : undefined), [active, register, surface])
   if (!context) return { surface, preset: createDefaultGenerationLayoutPreset(surface), editing: false, updatePreset: ignoreUpdate }
   return { surface, preset: context.presetOf(surface), editing: context.editing === surface, updatePreset: context.updatePreset }
 }

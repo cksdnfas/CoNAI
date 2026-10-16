@@ -24,9 +24,23 @@ const FILL_BLOCKS: ReadonlySet<GenerationLayoutBlock> = new Set(['result', 'resu
 
 type UpdatePreset = (update: (preset: GenerationLayoutPreset) => GenerationLayoutPreset) => void
 
+/**
+ * How the columns size: `fill` (the generation page) fills a fixed-height frame and each column scrolls itself;
+ * `page` lets the page scroll, columns take their content height and the shorter ones stay in view (sticky).
+ */
+export type GenerationBlockLayoutFlow = 'fill' | 'page'
+
 /** Wide generation page: the surface's current preset as columns, or the in-place editor while an admin arranges it. */
-export function GenerationBlockLayout({ surface, blocks }: { surface: GenerationLayoutSurface; blocks: GenerationLayoutBlockNodes }) {
-  const { preset, editing, updatePreset } = useGenerationLayoutSurface(surface)
+export function GenerationBlockLayout({ surface, blocks, active = true, flow = 'fill', stickyClassName = 'top-[calc(var(--theme-shell-header-height)+1rem)]' }: {
+  surface: GenerationLayoutSurface
+  blocks: GenerationLayoutBlockNodes
+  /** False while mounted but not on screen (an inactive tab). */
+  active?: boolean
+  flow?: GenerationBlockLayoutFlow
+  /** `page` flow: the sticky offset of the columns; null keeps them in the normal flow. */
+  stickyClassName?: string | null
+}) {
+  const { preset, editing, updatePreset } = useGenerationLayoutSurface(surface, { active })
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const [liveWeights, setLiveWeights] = useState<number[] | null>(null)
@@ -37,9 +51,30 @@ export function GenerationBlockLayout({ surface, blocks }: { surface: Generation
   const weights = liveWeights ?? preset.columns.map((column) => column.weight)
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0)
   const hidden = new Set(preset.hidden)
+  const pageFlow = flow === 'page'
+
+  if (!editing) {
+    // A column with nothing to show right now (e.g. an editor before anything is picked) gives its width to the rest.
+    const shown = preset.columns
+      .map((column, index) => ({ column, weight: weights[index] }))
+      .filter(({ column }) => column.blocks.some((block) => block !== 'recent' && !hidden.has(block) && blocks[block] != null))
+    return (
+      <div className={cn('flex gap-8', pageFlow ? 'items-start' : 'min-h-0 flex-1 items-stretch')}>
+        {shown.map(({ column, weight }, index) => (
+          <div
+            key={index}
+            className={cn('flex min-w-[240px] flex-col', pageFlow ? stickyClassName && cn('sticky', stickyClassName) : 'min-h-0')}
+            style={{ flex: `${weight} 1 0%` }}
+          >
+            <ViewColumn column={column} hidden={hidden} blocks={blocks} pageFlow={pageFlow} />
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
-    <div ref={containerRef} className={cn('flex min-h-0 flex-1 items-stretch', !editing && 'gap-8')}>
+    <div ref={containerRef} className={cn('flex items-stretch', pageFlow ? 'min-h-[60vh]' : 'min-h-0 flex-1')}>
       {preset.columns.map((column, columnIndex) => (
         <Fragment key={columnIndex}>
           {editing && columnIndex > 0 ? (
@@ -56,9 +91,7 @@ export function GenerationBlockLayout({ surface, blocks }: { surface: Generation
             />
           ) : null}
           <div className="flex min-h-0 min-w-[240px] flex-col" style={{ flex: `${weights[columnIndex]} 1 0%` }}>
-            {editing
-              ? <EditColumn surface={surface} column={column} columnIndex={columnIndex} hidden={hidden} blocks={blocks} drag={drag} canRemove={preset.columns.length > 1} updatePreset={updatePreset} />
-              : <ViewColumn column={column} hidden={hidden} blocks={blocks} />}
+            <EditColumn surface={surface} column={column} columnIndex={columnIndex} hidden={hidden} blocks={blocks} drag={drag} canRemove={preset.columns.length > 1} updatePreset={updatePreset} />
           </div>
         </Fragment>
       ))}
@@ -67,15 +100,36 @@ export function GenerationBlockLayout({ surface, blocks }: { surface: Generation
   )
 }
 
-function ViewColumn({ column, hidden, blocks }: { column: GenerationLayoutColumn; hidden: Set<GenerationLayoutBlock>; blocks: GenerationLayoutBlockNodes }) {
+function ViewColumn({ column, hidden, blocks, pageFlow }: { column: GenerationLayoutColumn; hidden: Set<GenerationLayoutBlock>; blocks: GenerationLayoutBlockNodes; pageFlow: boolean }) {
   const { t } = useI18n()
   const visible = column.blocks.filter((block) => block !== 'recent' && !hidden.has(block) && blocks[block] != null)
   const body: GenerationLayoutBlock[] = visible.filter((block) => block !== 'action')
   const dock = visible.includes('action') ? <GenerateActionDock>{blocks.action}</GenerateActionDock> : null
   const [pickedTab, setPickedTab] = useState<GenerationLayoutBlock | null>(null)
+  const tabbed = column.tabs === true && body.length > 1
+
+  // Page flow: the page scrolls, so blocks simply stack (or sit behind tabs) at their own height.
+  if (pageFlow) {
+    const active = tabbed ? (pickedTab && body.includes(pickedTab) ? pickedTab : body[0]) : null
+    return (
+      <div className="flex flex-col gap-6">
+        {active ? (
+          <>
+            <TextTabs<GenerationLayoutBlock>
+              value={active}
+              items={body.map((block) => ({ value: block, label: t(GENERATION_LAYOUT_BLOCK_LABELS[block]) }))}
+              onChange={setPickedTab}
+            />
+            <div className="min-w-0">{blocks[active]}</div>
+          </>
+        ) : body.map((block) => <div key={block} className="min-w-0">{blocks[block]}</div>)}
+        {dock}
+      </div>
+    )
+  }
 
   // Self-scrolling blocks (the result) fill the column; anything sharing it keeps a bounded height and scrolls on its own.
-  if (body.some((block) => FILL_BLOCKS.has(block)) && !(column.tabs && body.length > 1)) {
+  if (body.some((block) => FILL_BLOCKS.has(block)) && !tabbed) {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-6">
         {body.map((block) => FILL_BLOCKS.has(block)
@@ -87,7 +141,7 @@ function ViewColumn({ column, hidden, blocks }: { column: GenerationLayoutColumn
   }
 
   // Tab column: one block at a time under text tabs.
-  if (column.tabs && body.length > 1) {
+  if (tabbed) {
     const active = pickedTab && body.includes(pickedTab) ? pickedTab : body[0]
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-4">

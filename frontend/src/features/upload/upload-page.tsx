@@ -22,6 +22,8 @@ import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
+import { GenerationLayoutControls } from '@/features/image-generation/layout/generation-layout-controls'
+import { GenerationLayoutProvider } from '@/features/image-generation/layout/generation-layout-context'
 import type { ImageRecord } from '@/types/image'
 import { buildMetadataRewritePatch, useMetadataRewriteDraft } from '../metadata/use-metadata-rewrite-draft'
 import { getImageGenerationParamItems } from '../images/components/detail/image-detail-utils'
@@ -48,6 +50,14 @@ const MANUAL_EXTRACT_ACTIONS: Array<{ action: ManualExtractAction; labelKey: 'up
 type UploadPageMode = 'library' | 'inspect'
 
 export function UploadPage() {
+  return (
+    <GenerationLayoutProvider>
+      <UploadPageContent />
+    </GenerationLayoutProvider>
+  )
+}
+
+function UploadPageContent() {
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
   const [mode, setMode] = useState<UploadPageMode>('library')
@@ -518,7 +528,7 @@ export function UploadPage() {
             ]}
           />
         )}
-        actions={isInspectMode ? inspectActions : libraryActions}
+        actions={isInspectMode ? <>{inspectActions}<GenerationLayoutControls wide={isDesktopPageLayout} /></> : libraryActions}
       />
 
       <input ref={uploadInputRef} type="file" multiple accept={UPLOAD_ACCEPT} className="hidden" onChange={handleUploadFileChange} />

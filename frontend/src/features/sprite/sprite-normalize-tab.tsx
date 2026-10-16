@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { detectSheetGrid } from './sprite-grid-detect'
 import { cellSize } from './sprite-options'
 import { LibraryMediaButtons, LibraryResults } from './sprite-library'
+import { PageBlockLayout } from '@/features/image-generation/layout/page-block-layout'
 import { MiniField, SpriteActionBar, SpriteCheckerStage, SpriteSection } from './sprite-ui'
 import { useSpriteNormalizeChatPage } from './use-sprite-chat-page'
 
@@ -214,15 +215,10 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
         </Tip>
       ) : null}
       {failures.length ? <ul role="alert" className="flex flex-col gap-1 text-xs text-destructive">{failures.map((failure) => <li key={failure.source} className="truncate">{failure.source} · {failure.error}</li>)}</ul> : null}
-      <LibraryResults hashes={savedHashes} />
     </div>
   )
 
-  return isWide ? (
-    <div className="grid grid-cols-[minmax(360px,4fr)_minmax(0,6fr)] items-start gap-8">{left}<div className="sticky top-[calc(var(--theme-shell-header-height)+1rem)]">{right}</div></div>
-  ) : (
-    <div className="flex flex-col gap-6">{left}{right}</div>
-  )
+  return <PageBlockLayout surface="sprite-normalize" active={active} wide={isWide} blocks={{ settings: left, preview: right, saved: <LibraryResults hashes={savedHashes} /> }} />
 }
 
 /** The sheet with its cell grid (dashed) and each cell's input anchor, drawn over the real image. */

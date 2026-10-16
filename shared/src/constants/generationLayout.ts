@@ -1,5 +1,5 @@
 /**
- * Block layouts of the generation page. Every arrangeable screen (a "surface": the NAI form, the Codex form, a ComfyUI
+ * Block layouts of the generation page and other split pages. Every arrangeable screen (a "surface": the NAI form, the Codex form, a ComfyUI
  * workflow, the workflows tab…) has its own blocks and its own shared preset list, edited by admins; viewers only pick
  * which preset to use.
  */
@@ -47,6 +47,43 @@ export const GENERATION_LAYOUT_SURFACE_DEFINITIONS = {
     blocks: ['runner', 'results'],
     required: ['runner', 'results'],
     columns: [{ weight: 40, blocks: ['runner'] }, { weight: 60, blocks: ['results'] }],
+  },
+  /** Public workflow pages reuse `comfy`. The surfaces below are other pages arranged the same way. */
+  /** Sprite page, extract tab: video queue, preview, settings. */
+  'sprite-extract': {
+    blocks: ['queue', 'preview', 'settings'],
+    required: ['queue', 'preview', 'settings'],
+    columns: [{ weight: 20, blocks: ['queue'] }, { weight: 55, blocks: ['preview'] }, { weight: 25, blocks: ['settings'] }],
+  },
+  /** Sprite page, normalize tab. */
+  'sprite-normalize': {
+    blocks: ['settings', 'preview', 'saved'],
+    required: ['settings', 'preview'],
+    columns: [{ weight: 40, blocks: ['settings'] }, { weight: 60, blocks: ['preview', 'saved'] }],
+  },
+  /** Sprite page, animation tab. */
+  'sprite-animation': {
+    blocks: ['settings', 'preview', 'saved'],
+    required: ['settings', 'preview'],
+    columns: [{ weight: 40, blocks: ['settings'] }, { weight: 60, blocks: ['preview', 'saved'] }],
+  },
+  /** Audio page, one effect open: generate bar, takes, take editor. */
+  audio: {
+    blocks: ['generate', 'takes', 'editor'],
+    required: ['takes', 'editor'],
+    columns: [{ weight: 72, blocks: ['generate', 'takes'] }, { weight: 28, blocks: ['editor'] }],
+  },
+  /** Image detail page: media, metadata, related images. */
+  'image-detail': {
+    blocks: ['media', 'related', 'meta'],
+    required: ['media', 'meta'],
+    columns: [{ weight: 75, blocks: ['media', 'related'] }, { weight: 25, blocks: ['meta'] }],
+  },
+  /** Upload page, metadata-only mode: the extracted sections. */
+  'upload-inspect': {
+    blocks: ['generation', 'lora', 'rewrite', 'prompts', 'tagger', 'artist'],
+    required: ['generation'],
+    columns: [{ weight: 50, blocks: ['generation', 'lora', 'rewrite'] }, { weight: 50, blocks: ['prompts', 'tagger', 'artist'] }],
   },
 } as const satisfies Record<string, { blocks: readonly string[]; required: readonly string[]; columns: ReadonlyArray<{ weight: number; blocks: readonly string[] }> }>;
 

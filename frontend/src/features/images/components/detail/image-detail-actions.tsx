@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, RefreshCcw, ScanSearch } from 'lucide-react'
 import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { IconButton } from '@/components/ui/icon-button'
@@ -24,13 +25,15 @@ interface ImageDetailActionsProps {
   sequence?: ImageDetailSequence | null
   /** Similar / duplicate scan: shown when the image can be scanned. */
   similarity?: { available: boolean; active: boolean; onRequest: () => void }
+  /** Extra controls at the end of the row (the page's layout preset picker). */
+  trailing?: ReactNode
 }
 
 /**
  * Top bar of the image page, same arrangement as the viewer: back · ‹ N / total › on the left, icon actions on the
  * right (group, editor, download, then ⋯ with metadata, similar scan, sprites and delete). Flat row with a hairline below.
  */
-export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, onRefresh, onDeleted, sequence, similarity }: ImageDetailActionsProps) {
+export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, onRefresh, onDeleted, sequence, similarity, trailing }: ImageDetailActionsProps) {
   const { t, formatNumber } = useI18n()
   const positionLabel = sequence
     ? `${formatNumber(sequence.index + 1)} / ${formatNumber(Math.max(sequence.total ?? 0, sequence.loadedCount))}${sequence.total === null && sequence.hasMore ? '+' : ''}`
@@ -74,6 +77,7 @@ export function ImageDetailActions({ downloadUrl, image, isRefreshing, onBack, o
         <ImageEditAction image={image} variant="ghost" />
         {downloadUrl ? <ImageDownloadTriggerButton image={image} variant="ghost" size="icon-sm" /> : null}
         <ActionMenuButton entries={moreEntries} label={t({ ko: '더 보기', en: 'More' })} variant="ghost" size="icon-sm" />
+        {trailing}
       </div>
     </div>
   )

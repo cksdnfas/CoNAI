@@ -19,6 +19,7 @@ import { useRuntimeJob } from '@/lib/use-runtime-job'
 import { detectSheetGrid } from './sprite-grid-detect'
 import { cellSize } from './sprite-options'
 import { LibraryMediaButtons, LibraryResults } from './sprite-library'
+import { PageBlockLayout } from '@/features/image-generation/layout/page-block-layout'
 import { MiniField, SpriteActionBar, SpriteCheckerStage, SpriteSection } from './sprite-ui'
 import { useSpriteAnimationChatPage } from './use-sprite-chat-page'
 
@@ -120,15 +121,10 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
       {sheet && cell?.exact ? <AnimationPreview sheet={sheet} options={options} cellWidth={cell.cellWidth} cellHeight={cell.cellHeight} /> : (
         <SpriteCheckerStage><Clapperboard className="size-10 text-muted-foreground opacity-30" /></SpriteCheckerStage>
       )}
-      <LibraryResults hashes={savedHashes} />
     </div>
   )
 
-  return isWide ? (
-    <div className="grid grid-cols-[minmax(360px,4fr)_minmax(0,6fr)] items-start gap-8">{left}<div className="sticky top-[calc(var(--theme-shell-header-height)+1rem)]">{right}</div></div>
-  ) : (
-    <div className="flex flex-col gap-6">{left}{right}</div>
-  )
+  return <PageBlockLayout surface="sprite-animation" active={active} wide={isWide} blocks={{ settings: left, preview: right, saved: <LibraryResults hashes={savedHashes} /> }} />
 }
 
 /** Draw the sheet's cells in order on a canvas at the chosen FPS, the way the exported file will play. */

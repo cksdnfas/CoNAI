@@ -34,6 +34,7 @@ import type { ExtractedPromptActionScope, ExtractedPromptCardItem } from '@/lib/
 import type { ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageRecord } from '@/types/image'
 import type { ImageSaveSettings } from '@conai/shared'
+import { PageBlockLayout } from '@/features/image-generation/layout/page-block-layout'
 
 const MAX_VISIBLE_FILES = 60
 const MAX_VISIBLE_RESULTS = 12
@@ -397,9 +398,14 @@ export function UploadInspectDetails({
       ) : null}
 
       {extractFile ? (
-        <div className={cn('grid gap-10', isDesktopPageLayout ? 'grid-cols-2 items-start' : 'grid-cols-1')}>
-          <div className="space-y-8">
-            {extractResult ? (
+        // The extracted sections, arranged by the shared layout presets (two columns by default).
+        <PageBlockLayout
+          surface="upload-inspect"
+          wide={isDesktopPageLayout}
+          stickyClassName={null}
+          stackClassName="flex flex-col gap-8"
+          blocks={{
+            generation: extractResult ? (
               <RowGroup headingAs="h2" heading={t({ ko: '생성 정보', en: 'Generation' })}>
                 <InfoRow label={t({ ko: '해상도', en: 'Dimensions' })} value={formatDimensions(extractResult.width, extractResult.height)} />
                 <InfoRow label={t({ ko: '생성 도구', en: 'Tool' })} value={extractResult.ai_metadata?.ai_tool || '—'} />
@@ -408,9 +414,8 @@ export function UploadInspectDetails({
                   <InfoRow key={item.id} label={item.label} value={item.value} copyValue={item.value} />
                 ))}
               </RowGroup>
-            ) : null}
-
-            {extractResult?.ai_metadata?.lora_models?.length ? (
+            ) : null,
+            lora: extractResult?.ai_metadata?.lora_models?.length ? (
               <RowGroup headingAs="h2" heading="LoRA">
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {extractResult.ai_metadata.lora_models.map((item) => (
@@ -418,34 +423,31 @@ export function UploadInspectDetails({
                   ))}
                 </div>
               </RowGroup>
-            ) : null}
-
-            <RowGroup
-              headingAs="h2"
-              heading={t('uploadPageSections.editMetadata')}
-              actions={(
-                <IconButton variant="ghost" size="icon-sm" onClick={onToggleRewritePanel} aria-expanded={isRewritePanelOpen} label={isRewritePanelOpen ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}>
-                  <ChevronDown className={cn('transition-transform', !isRewritePanelOpen && '-rotate-90')} />
-                </IconButton>
-              )}
-            >
-              {isRewritePanelOpen ? (
-                <div className="pt-2">
-                  <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} showHeader={false} onDraftChange={onRewriteDraftChange} />
-                </div>
-              ) : null}
-            </RowGroup>
-          </div>
-
-          <div className="space-y-8">
-            {extractResult && extractedPromptCards.length > 0 ? (
+            ) : null,
+            rewrite: (
+              <RowGroup
+                headingAs="h2"
+                heading={t('uploadPageSections.editMetadata')}
+                actions={(
+                  <IconButton variant="ghost" size="icon-sm" onClick={onToggleRewritePanel} aria-expanded={isRewritePanelOpen} label={isRewritePanelOpen ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}>
+                    <ChevronDown className={cn('transition-transform', !isRewritePanelOpen && '-rotate-90')} />
+                  </IconButton>
+                )}
+              >
+                {isRewritePanelOpen ? (
+                  <div className="pt-2">
+                    <MetadataRewriteForm draft={rewriteDraft} disabled={extractBusy} showHeader={false} onDraftChange={onRewriteDraftChange} />
+                  </div>
+                ) : null}
+              </RowGroup>
+            ),
+            prompts: extractResult && extractedPromptCards.length > 0 ? (
               <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
-            ) : null}
-
-            {taggerResult ? <WDTaggerResultBlock result={taggerResult} title={t({ ko: '자동', en: 'Auto' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}
-            {kaloscopeResult ? <KaloscopeResultBlock result={kaloscopeResult} title={t({ ko: '작가', en: 'Artist' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null}
-          </div>
-        </div>
+            ) : null,
+            tagger: taggerResult ? <WDTaggerResultBlock result={taggerResult} title={t({ ko: '자동', en: 'Auto' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null,
+            artist: kaloscopeResult ? <KaloscopeResultBlock result={kaloscopeResult} title={t({ ko: '작가', en: 'Artist' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null,
+          }}
+        />
       ) : null}
     </div>
   )

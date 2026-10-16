@@ -43,6 +43,7 @@ import { readStoredSpriteSettings, writeStoredSpriteSettings } from './sprite-st
 import { MiniField, SpriteActionBar, SpriteCheckerStage } from './sprite-ui'
 import { SpriteVideoSource, type SpriteVideoHandle } from './sprite-video-source'
 import { useSpriteChatPage } from './use-sprite-chat-page'
+import { PageBlockLayout } from '@/features/image-generation/layout/page-block-layout'
 
 type CenterView = 'video' | 'result'
 
@@ -352,11 +353,7 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
         />,
         toolbarSlot,
       ) : null}
-      {isWide ? (
-        <div className="grid grid-cols-[minmax(230px,280px)_minmax(0,1fr)_minmax(300px,360px)] items-start gap-7">{queue}{center}{right}</div>
-      ) : (
-        <div className="flex flex-col gap-6">{queue}{center}{right}</div>
-      )}
+      <PageBlockLayout surface="sprite-extract" active={active} wide={isWide} stickyClassName={null} blocks={{ queue, preview: center, settings: right }} />
 
       <SpriteActionBar className="mt-4 flex-wrap gap-3">
         {batchRunning ? (

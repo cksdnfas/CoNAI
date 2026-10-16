@@ -14,6 +14,7 @@ import { getImage, getImageDetailQueryKey, getImageDuplicates, getPromptSimilarI
 import { getRuntimeSimilaritySettings } from '@/lib/api-settings'
 import { getImageViewerSettings } from '@/lib/api-settings'
 import { getErrorMessage } from '@/lib/error-message'
+import { GenerationBlockLayout } from '@/features/image-generation/layout/generation-block-layout'
 import { useI18n } from '@/i18n'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useElementMinWidth, useMinWidth } from '@/lib/use-min-width'
@@ -762,18 +763,44 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
         </Alert>
       ) : null}
 
-      {!imageQuery.isLoading && !imageQuery.isError && image ? (
-        <div className="grid xl:grid-cols-[minmax(0,1fr)_380px]">
+      {!imageQuery.isLoading && !imageQuery.isError && image && canUseSplitPaneScroll ? (
+        // Wide: media, related images and the info column arranged by the shared layout presets.
+        <GenerationBlockLayout
+          surface="image-detail"
+          flow="page"
+          stickyClassName={null}
+          blocks={{
+            media: (
+              <div className="py-6">
+                <div className={cn('flex items-center justify-center', stageHeightClassName)}>
+                  <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} isRefreshing={imageQuery.isFetching} onPrimaryLoad={handlePrimaryMediaReady} />
+                </div>
+              </div>
+            ),
+            related: isSecondaryContentReady && isRelatedImageAreaActive ? (
+              <div ref={relatedImagesRef} className="scroll-mt-[calc(var(--theme-shell-header-height)+1rem)]">
+                {relatedImagesContent}
+              </div>
+            ) : null,
+            meta: (
+              <div className="py-6">
+                <ImageDetailMetaCard image={image as ImageRecord} />
+              </div>
+            ),
+          }}
+        />
+      ) : null}
+
+      {!imageQuery.isLoading && !imageQuery.isError && image && !canUseSplitPaneScroll ? (
+        <div className="grid">
           <div className="min-w-0 space-y-10 py-6 xl:pr-6">
             <div className={cn('flex items-center justify-center', stageHeightClassName)}>
               <ImageDetailMedia image={image as ImageRecord} renderUrl={renderUrl} isRefreshing={imageQuery.isFetching} onPrimaryLoad={handlePrimaryMediaReady} />
             </div>
 
-            {!canUseSplitPaneScroll ? (
-              <div className={metaColumnClassName}>
-                <ImageDetailMetaCard image={image as ImageRecord} />
-              </div>
-            ) : null}
+            <div className={metaColumnClassName}>
+              <ImageDetailMetaCard image={image as ImageRecord} />
+            </div>
 
             {isSecondaryContentReady && isRelatedImageAreaActive ? (
               <div ref={relatedImagesRef} className="scroll-mt-[calc(var(--theme-shell-header-height)+1rem)]">
@@ -781,12 +808,6 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               </div>
             ) : null}
           </div>
-
-          {canUseSplitPaneScroll ? (
-            <div className={cn(metaColumnClassName, 'pb-6')}>
-              <ImageDetailMetaCard image={image as ImageRecord} />
-            </div>
-          ) : null}
         </div>
       ) : null}
     </div>

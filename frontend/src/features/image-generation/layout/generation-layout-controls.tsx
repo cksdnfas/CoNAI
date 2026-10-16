@@ -22,8 +22,8 @@ import { addLayoutColumn, resetLayoutPreset, setLayoutBlockHidden } from './gene
 
 type NameDialogState = { mode: 'create' | 'rename'; value: string } | null
 
-/** Workflows-tab screens are arranged on wide screens only; narrow ones keep their own list/result switch. */
-const WIDE_ONLY_SURFACES: readonly GenerationLayoutSurface[] = ['workflow-browse', 'workflow-run']
+/** Arranged on wide screens only: narrow ones keep their own list/result switch (workflows tab) or fixed order. */
+const WIDE_ONLY_SURFACES: readonly GenerationLayoutSurface[] = ['workflow-browse', 'workflow-run', 'image-detail']
 
 /** Toolbar end of the generation page: the active surface's preset picker for everyone, plus the editor for admins. */
 export function GenerationLayoutControls({ wide }: { wide: boolean }) {
