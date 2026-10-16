@@ -161,6 +161,8 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 ## 선택 설치 확장
 
+제작 순서·연결 선택·공용 확장 기록은 [플러그인 제작 가이드](docs/GUIDE/PLUGIN_DEVELOPMENT.md)를 따른다. 플러그인 작업으로 메인 연결을 추가·변경하면 해당 가이드의 공용 연결 목록과 SDK 계약을 같은 작업에서 갱신한다.
+
 프로젝트 완료 자료 연결은 `workspacePublishResources.ts`의 `workspace_publish_resources`를 사용한다. `WorkspaceService.apply`의 프로젝트 쓰기 잠금 안에서 입력 리비전·원본 권한을 검사하고, 기존 이미지 그룹 관계와 `group_resources`의 오디오/문서 참조를 등록한 뒤 완료 문서와 진행 목록을 순서대로 저장한다. 그룹 등록은 멱등이며 파일 저장 실패 시 후속 목록 갱신을 실행하지 않는다. 완료 요청은 진행 목록 전체 대신 항목 ID·리비전만 받으며 서버가 문서 target과 함께 일치하는 항목 하나만 제거한다. 요청 ID는 자료와 그룹 입력까지 비교한다. `groupResources.ts`, `groups.resources.routes.ts`, `GroupLinkedResources`가 그룹의 추가 자료 조회·재생·파일함 연결을 담당하며 `list_group_resources`도 같은 조회를 사용한다. 원본 저장소와 파일 위치는 유지한다.
 
 `shared/src/types/plugin.ts`, `backend/src/services/plugins/`, `frontend/src/features/plugins/`가 manifest·설치·실행·격리 화면을 담당한다. `/settings?section=plugins`에서 관리하고 `/extensions`에서 실행·작업을 조회한다. `/ext/<pluginId>/<pageId>`는 `kind: extension` 어시스턴트 계약을 사용한다. 설치·활성화한 플러그인은 앱 기능이며 `capabilities`·`appTools`는 호환 정보다. 서버 모듈 유무와 무관하게 현재 계정의 앱 권한을 적용하고, 페이지를 여는 데 파일 권한을 요구하지 않는다.
@@ -178,6 +180,8 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 `pluginLlm.ts`의 `mode: profile`은 `pluginProfileRun.ts` → `ensureAutomationRoom` / `wakeChatRoom` → 기존 채팅 엔진으로 실행한다. 플러그인·계정·프로필별 전용 대화에서 프로필의 도구 카탈로그·권한·생성 프리셋·검토를 재사용하며 별도 도구 실행 루프를 만들지 않는다. `profileRun`은 실제 메시지의 도구 결과를 크기 제한 안에서 반환하고, 재조회 시 `attachJobResults`로 지연 생성 결과를 갱신한다. 대화는 자동화 목록의 `plugin` 종류로 남고 SDK `navigation.openChat`으로 연다. 기존 생략/`text` 모드는 상태 없는 답변 계약을 유지한다. `plugin-server.test.ts`에서 모델 도구 호출 → 실제 파일 작업 → 모델 결과 재입력, 권한 회수·계정 격리·멱등·취소를 검증한다.
 
 `npx tsx --test backend/test/plugins.test.ts`로 계정·세션·선택 범위, 승인 재사용·권한 회수·저장 충돌, ZIP과 opaque-origin 경계를 검증한다.
+
+플러그인 서버의 긴 처리는 `pluginTasks.ts`의 `conai.onJob`·`conai.jobs`로 기존 `plugin-task` 런타임 작업을 사용한다. 인스턴스 동시 2개·패키지당 1개, 요청 멱등·계정 경계·권한 회수·취소·재시작 실패 처리를 공유한다. 내부 소재는 `pluginWorkspace.ts`의 공용 참조 해석을 `pluginServerMedia.ts`에서 재사용하며, 경로는 신뢰된 서버 모듈에만 전달한다. 결과 등록은 패키지 데이터 폴더의 일반 파일만 네이티브 미디어 처리로 복사한다. 개인 플러그인별 제작 화면·엔진·원본 프로젝트 형식은 `local-plugins/`에 두고 공용 호스트에는 포함하지 않는다. 관련 경계는 `backend/test/plugin-server.test.ts`로 검증한다.
 
 ## 검증 선택
 

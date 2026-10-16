@@ -422,6 +422,67 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.equal(await runtime.applyChatInstructionHooks('BASE', { engine: 'llm', threadId: 1, group: false, profile: { id: 5, name: '루나' } }, admin), 'BASE')
   })
 
+  await t.test('server processing jobs preserve identity, cancellation and source permissions', async () => {
+    const module = `import fs from 'node:fs';
+      export function activate(conai) {
+        conai.onRequest(({ body }) => {
+          if (body.op === 'start') return conai.jobs.start(body.input);
+          if (body.op === 'get') return conai.jobs.get(body.id);
+          if (body.op === 'cancel') return conai.jobs.cancel(body.id);
+          if (body.op === 'resolve') return conai.media.resolve(body.reference);
+          if (body.op === 'save') return conai.media.save({path: body.path});
+          throw new Error('unknown');
+        });
+        conai.onJob(async (data, { signal, report }) => {
+          await report({percent: 25, phase:'processing'});
+          if (data.wait) await new Promise((resolve, reject) => {
+            if (signal.aborted) reject(signal.reason);
+            else signal.addEventListener('abort', () => reject(signal.reason), {once:true});
+          });
+          return { value: data.value };
+        });
+      }`
+    await registry.installPlugin(packageOf(folder, m => { m.version = '2.0.0' }, { 'server.mjs': module }))
+    await registry.setPluginEnabled('chat-instructions', true, adminId)
+    await until(() => status().state === 'ready', 'processing worker ready')
+    const tasks = await import('../src/services/plugins/pluginTasks')
+    const { RuntimeJobRunner } = await import('../src/services/runtimeJobs/runtimeJobRunner')
+    const runnerId = Number(auth.prepare("INSERT INTO auth_accounts(username,password_hash,account_type) VALUES ('processing-runner','unused','guest')").run().lastInsertRowid)
+    const runnerGroup = AuthPermissionGroup.createCustomGroup({ name: 'processing-test', permissionKeys: ['generation.execute', 'files.view', 'images.upload'] })
+    AuthPermissionGroup.addAccountMembership(runnerGroup.id, runnerId)
+    AuthPermissionGroup.addAccountMembership(runnerGroup.id, adminId)
+    const runner = { accountId: runnerId, accountType: 'guest' as const }
+    const submit = (requestId: string, data: object) => runtime.requestPluginServer('chat-instructions', { op: 'start', input: { requestId, data } }, runner, {}) as Promise<{ jobId: string }>
+    const first = await submit('same-request-123', { value: 42 })
+    await until(() => tasks.callPluginTask('chat-instructions', runner, 'get', { jobId: first.jobId }).status === 'completed', 'processing completed')
+    const again = await submit('same-request-123', { value: 42 })
+    assert.equal(first.jobId, again.jobId)
+    assert.deepEqual(tasks.callPluginTask('chat-instructions', runner, 'get', { jobId: first.jobId }).result, { value: 42 })
+    await assert.rejects(submit('same-request-123', { value: 43 }), /같은 요청 ID/)
+    assert.throws(() => tasks.callPluginTask('chat-instructions', admin, 'get', { jobId: first.jobId }), /찾을 수 없어/)
+    const waiting = await submit('cancel-request-123', { wait: true })
+    await until(() => tasks.callPluginTask('chat-instructions', runner, 'get', { jobId: waiting.jobId }).status === 'running', 'processing running')
+    await assert.rejects(submit('overlap-request-123', { value: 5 }))
+    tasks.callPluginTask('chat-instructions', runner, 'cancel', { jobId: waiting.jobId })
+    await until(() => tasks.callPluginTask('chat-instructions', runner, 'get', { jobId: waiting.jobId }).status === 'cancelled', 'processing cancelled')
+
+    const { FileStoreService, fileOwnerKey } = await import('../src/services/fileStoreService')
+    const incoming = path.join(root, 'source.png')
+    const sharp = (await import('sharp')).default
+    await sharp({ create: { width: 4, height: 4, channels: 3, background: 'red' } }).png().toFile(incoming)
+    const entry = FileStoreService.upload(fileOwnerKey(adminId), null, [{ path: incoming, originalname: 'source.png', size: fs.statSync(incoming).size, mimetype: 'image/png' } as Express.Multer.File])[0]
+    const read = () => runtime.requestPluginServer('chat-instructions', { op: 'resolve', reference: { source: 'files', fileId: entry.id } }, runner, {}) as Promise<{ path: string; fingerprint: string }>
+    const source = await read()
+    assert.match(source.fingerprint, /^[a-f0-9]{64}$/)
+    assert.ok(fs.existsSync(source.path), 'authorized shared media is available to the server worker')
+    await assert.rejects(runtime.requestPluginServer('chat-instructions', { op: 'save', path: '../outside.mp4' }, admin, {}), /데이터 폴더/)
+    AuthPermissionGroup.removeAccountMembership(runnerGroup.id, runnerId)
+    await assert.rejects(read(), /권한/)
+    await assert.rejects(submit('revoked-request-123', { value: 1 }), /generation.execute/)
+    RuntimeJobRunner.shutdown()
+    await registry.setPluginEnabled('chat-instructions', false)
+  })
+
   await t.test('slow hooks are skipped, failures stay inside the call and a crashed module comes back', async () => {
     const lab = path.join(root, 'lab-plugin')
     fs.mkdirSync(lab)

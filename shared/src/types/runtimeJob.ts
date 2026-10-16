@@ -34,6 +34,7 @@ export type RuntimeJobKind =
   | 'plugin-media'
   | 'plugin-action'
   | 'plugin-llm'
+  | 'plugin-task'
   | 'post-knowledge-evaluation'
   | 'post-topic-evaluation'
 
@@ -68,6 +69,7 @@ export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'plugin-media',
   'plugin-action',
   'plugin-llm',
+  'plugin-task',
   'post-knowledge-evaluation',
   'post-topic-evaluation',
 ]

@@ -20,6 +20,7 @@ import { MEDIA_HASH_PATTERN } from '../codex-chat/chatMediaLinks'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { audioCandidateFile } from '../audio/audioService'
 import { audioBlobPath, AUDIO_MIME_BY_EXTENSION } from '../audio/audioStore'
+import type { McpRequester } from '../../mcp/context'
 
 const MAX_TEXT = 1024 * 1024
 const revision = z.string().regex(/^[a-f0-9]{64}$/)
@@ -164,16 +165,22 @@ export async function mediaTarget(id: string, target: string, caller: PluginCall
   let value: unknown
   try { value = JSON.parse(file.text) } catch { throw new PluginError('미디어 참조 문서의 JSON 형식을 확인해줘.') }
   const reference = mediaReferenceSchema.parse(value)
+  return { ...await resolvePluginMediaReference(reference, caller.requester), revision: file.revision }
+}
+/** Shared resolver for project previews and trusted server-side processing. Paths never reach the iframe. */
+export async function resolvePluginMediaReference(value: unknown, requester: McpRequester | undefined) {
+  if (!requester) throw new PluginError('미디어 접근에는 계정이 필요해.', 403)
+  const reference = mediaReferenceSchema.parse(value)
   let resolved: { entry: StoredFileEntry; filePath: string }
   if (reference.source === 'files') {
-    resolved = FileStoreService.resolveFile(instance.owner, reference.fileId)
+    resolved = FileStoreService.resolveFile(requireFileStoreOwner(requester), reference.fileId)
   } else if (reference.source === 'audio') {
-    requireRequesterPermission(caller.requester, 'audio.view')
+    requireRequesterPermission(requester, 'audio.view')
     const { candidate, file } = audioCandidateFile(reference.candidateId)
     if (candidate.deleted_at) throw new PluginError('지운 오디오는 열 수 없어.', 404)
     resolved = { filePath: audioBlobPath(file.hash, file.ext), entry: { id: candidate.id, parentId: null, kind: 'file', name: `${candidate.name}.${file.ext}`, mimeType: AUDIO_MIME_BY_EXTENSION[file.ext], size: file.size, createdAt: '', updatedAt: '' } }
   } else {
-    requireRequesterImagePermission(caller.requester)
+    requireRequesterImagePermission(requester)
     if (reference.groupId !== undefined && !db.prepare('SELECT 1 FROM image_groups WHERE group_id=? AND composite_hash=?').get(reference.groupId, reference.compositeHash)) throw new PluginError('그룹에서 미디어 참조를 찾을 수 없어.', 404)
     const metadata = MediaMetadataFileQueries.findVisibilityGuardByHash(reference.compositeHash)
     if (!metadata || !MediaPostprocessVisibilityService.isReadyRecord(metadata)) throw new PluginError('아직 사용할 수 없는 미디어야.', 404)
@@ -187,7 +194,7 @@ export async function mediaTarget(id: string, target: string, caller: PluginCall
   })
   if (!stat.isFile()) throw new PluginError('일반 미디어 파일이 아니야.', 403)
   const fingerprint = hash(`${resolved.filePath}:${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`)
-  return { ...resolved, revision: file.revision, fingerprint, requester: caller.requester }
+  return { ...resolved, fingerprint, requester, size: Number(stat.size) }
 }
 export async function issuePluginWorkspaceMedia(id: string, input: unknown, caller: PluginCaller) {
   const args = z.object({ target: z.string().min(1).max(1000) }).strict().parse(input)

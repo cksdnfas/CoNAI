@@ -38,6 +38,11 @@ export function pluginDb(): Database.Database {
         job_id TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL,
         PRIMARY KEY(plugin_id, owner_key, request_key));
       CREATE INDEX IF NOT EXISTS plugin_llm_requests_expiry ON plugin_llm_requests(expires_at);
+      CREATE TABLE IF NOT EXISTS plugin_task_requests (
+        plugin_id TEXT NOT NULL, owner_key TEXT NOT NULL, request_key TEXT NOT NULL,
+        fingerprint TEXT NOT NULL, digest TEXT NOT NULL, job_id TEXT NOT NULL UNIQUE,
+        expires_at INTEGER NOT NULL, PRIMARY KEY(plugin_id, owner_key, request_key));
+      CREATE INDEX IF NOT EXISTS plugin_task_requests_expiry ON plugin_task_requests(expires_at);
       CREATE TABLE IF NOT EXISTS plugin_storage (
         plugin_id TEXT NOT NULL, owner_key TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, revision TEXT NOT NULL,
         PRIMARY KEY(plugin_id,owner_key,key));

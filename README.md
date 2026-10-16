@@ -209,6 +209,7 @@ CoNAI/
 
 - **개발 기준**: [AI_Guidelines.md](AI_Guidelines.md)
 - **개발 구조와 AI 연결**: [DEVELOPMENT.md](DEVELOPMENT.md)
+- **플러그인 제작과 공용 연결 확장**: [제작 가이드](docs/GUIDE/PLUGIN_DEVELOPMENT.md)
 - **GitHub Pages**: https://cksdnfas.github.io/CoNAI/
 - **가이드 홈**: [`docs/GUIDE/`](docs/GUIDE)
 - **릴리즈 노트**: [`docs/RELEASE-MD/`](docs/RELEASE-MD)

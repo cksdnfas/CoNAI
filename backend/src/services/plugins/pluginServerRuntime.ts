@@ -14,6 +14,9 @@ import {
 } from './pluginServerTools'
 import { callTrustedAppTool, trustedAppToolDefinitions } from './pluginAppBridge'
 import { callPluginLlm } from './pluginLlm'
+import { callPluginTask, setPluginTaskInvoker } from './pluginTasks'
+import { callPluginServerMedia } from './pluginServerMedia'
+import type { RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner'
 
 /**
  * Optional server modules (`server.entry`): one worker thread per enabled plugin,
@@ -34,7 +37,7 @@ const RESULT_LIMIT = 512 * 1024
 const CRASH_WINDOW_MS = 5 * 60_000
 const CRASH_LIMIT = 3
 
-type Invocation = { requester: McpRequester | undefined; baseUrl?: string; workspace?: McpRequestContext['workspace']; signal?: AbortSignal }
+type Invocation = { requester: McpRequester | undefined; baseUrl?: string; workspace?: McpRequestContext['workspace']; signal?: AbortSignal; job?: RuntimeJobContext }
 type Waiting = { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout; invocation: string; controller: AbortController; cleanup: () => void }
 type Server = {
   pluginId: string; digest: string; worker: Worker | null
@@ -61,6 +64,8 @@ const tools = new Map();
 const controllers = new Map();
 let seq = 0;
 let onRequest = null;
+let onJob = null;
+let shuttingDown = false;
 let db = null;
 const send = (message) => parentPort.postMessage(message);
 const text = (value) => {
@@ -109,6 +114,19 @@ const conai = Object.freeze({
     if (typeof handler !== 'function') throw new TypeError('onRequest(handler)');
     onRequest = handler;
   },
+  onJob(handler) {
+    if (typeof handler !== 'function') throw new TypeError('onJob(handler)');
+    onJob = handler;
+  },
+  jobs: Object.freeze({
+    start: (input) => call('jobs.start', input),
+    get: (jobId) => call('jobs.get', { jobId }),
+    cancel: (jobId) => call('jobs.cancel', { jobId }),
+  }),
+  media: Object.freeze({
+    resolve: (reference) => call('media.resolve', reference),
+    save: (input) => call('media.save', input),
+  }),
   llm: Object.freeze({
     profiles: () => call('llm.profiles', {}),
     asset: (input) => call('llm.asset', input),
@@ -123,6 +141,12 @@ const conai = Object.freeze({
   warn: (...values) => send({ type: 'log', level: 'warn', text: values.map(text).join(' ') }),
 });
 parentPort.on('message', async (message) => {
+  if (message.type === 'shutdown') {
+    shuttingDown = true;
+    for (const controller of controllers.values()) controller.abort(new Error('Plugin stopped'));
+    if (!controllers.size) send({ type: 'stopped' });
+    return;
+  }
   if (message.type === 'cancel') { controllers.get(message.invocation)?.abort(new Error('Plugin request cancelled')); return; }
   if (message.type === 'result') {
     const entry = pending.get(message.id);
@@ -136,14 +160,14 @@ parentPort.on('message', async (message) => {
   const controller = new AbortController();
   controllers.set(message.invocation, controller);
   const tool = message.kind === 'tool' ? tools.get(message.name) : null;
-  const handler = message.kind === 'hook' ? hooks.get(message.name) : message.kind === 'tool' ? (tool && tool.handler) : onRequest;
+  const handler = message.kind === 'job' ? onJob : message.kind === 'hook' ? hooks.get(message.name) : message.kind === 'tool' ? (tool && tool.handler) : onRequest;
   try {
     if (!handler) throw new Error('No ' + message.kind + ' handler' + (message.name ? ': ' + message.name : ''));
-    const value = await scope.run({ invocation: message.invocation }, () => handler(message.input, { ...message.context, signal: controller.signal }));
+    const value = await scope.run({ invocation: message.invocation }, () => handler(message.input, { ...message.context, signal: controller.signal, report: (progress) => call('job.progress', progress) }));
     send({ type: 'reply', id: message.id, value: value === undefined ? null : value });
   } catch (error) {
     send({ type: 'reply', id: message.id, error: text(error) });
-  } finally { controllers.delete(message.invocation); }
+  } finally { controllers.delete(message.invocation); if (shuttingDown && !controllers.size) send({ type: 'stopped' }); }
 });
 (async () => {
   const loaded = await import(pathToFileURL(workerData.entry).href);
@@ -198,6 +222,20 @@ async function answerCall(server: Server, message: { id: number; method: string;
       reply({ value: accountOf(backgroundRequester(server.pluginId)) })
     } else if (message.method.startsWith('llm.')) {
       reply({ value: await callPluginLlm(server.pluginId, requester, message.method.slice(4), message.params) })
+    } else if (message.method.startsWith('jobs.')) {
+      if (invocation?.job && message.method === 'jobs.start') throw new PluginError('작업 안에서 새 작업을 시작할 수 없어.')
+      reply({ value: callPluginTask(server.pluginId, requester, message.method.slice(5), message.params) })
+    } else if (message.method.startsWith('media.')) {
+      reply({ value: await callPluginServerMedia(server.pluginId, requester, message.method.slice(6), message.params, invocation?.signal) })
+    } else if (message.method === 'job.progress') {
+      const job = invocation?.job
+      if (!job) throw new PluginError('실행 중인 작업에서만 진행률을 보낼 수 있어.')
+      const progress = message.params
+      job.throwIfCancelled()
+      job.report({ total: 100, processed: Math.max(0, Math.min(100, Number(progress.percent) || 0)),
+        ...(typeof progress.phase === 'string' ? { phase: progress.phase.slice(0, 80) } : {}),
+        ...(typeof progress.message === 'string' ? { message: progress.message.slice(0, 500) } : {}) })
+      reply({ value: null })
     } else if (message.method === 'tool') {
       const name = String(message.params.name ?? '')
       const args = message.params.arguments && typeof message.params.arguments === 'object' && !Array.isArray(message.params.arguments) ? message.params.arguments as Record<string, unknown> : {}
@@ -305,6 +343,13 @@ async function stopWorker(server: Server) {
   server.tools.clear(); server.hooks.clear()
   failAll(server, '플러그인 서버가 멈췄어.')
   if (worker) {
+    await new Promise<void>(resolve => {
+      const done = () => { clearTimeout(timer); worker.off('message', message); worker.off('exit', done); resolve() }
+      const message = (value: { type?: string }) => { if (value.type === 'stopped') done() }
+      const timer = setTimeout(done, 3000)
+      worker.on('message', message); worker.once('exit', done)
+      try { worker.postMessage({ type: 'shutdown' }) } catch { done() }
+    })
     server.worker = null
     await worker.terminate().catch(() => undefined)
   }
@@ -357,7 +402,7 @@ export function pluginServerStatus(pluginId: string): PluginServerStatus {
   return { state: server.state, error: server.error, tools: [...server.tools.values()].map(tool => ({ name: tool.name, description: tool.description })), hooks: [...server.hooks].sort() }
 }
 
-function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request', name: string, input: unknown, context: Record<string, unknown>, invocation: Invocation, timeoutMs: number, signal?: AbortSignal) {
+function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request' | 'job', name: string, input: unknown, context: Record<string, unknown>, invocation: Invocation, timeoutMs: number, signal?: AbortSignal) {
   const server = servers.get(pluginId)
   const worker = server?.worker
   if (!server || !worker || server.state !== 'ready') return Promise.reject(new PluginError('플러그인 서버가 실행 중이 아니야.', 503))
@@ -379,6 +424,9 @@ function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request', name: strin
 }
 
 const accountOf = (requester: McpRequester | undefined) => requester ? { id: requester.accountId, type: requester.accountType } : null
+
+setPluginTaskInvoker((pluginId, data, requester, job) => invoke(pluginId, 'job', '', data,
+  { account: accountOf(requester), jobId: job.jobId }, { requester, job }, TOOL_TIMEOUT_MS, job.signal))
 
 /** A plugin page's `api.server(body)`: the module's `onRequest({ body, account, page })`. */
 export async function requestPluginServer(pluginId: string, body: unknown, requester: McpRequester | undefined, page: Record<string, unknown>, baseUrl?: string, workspace?: McpRequestContext['workspace'], signal?: AbortSignal) {
