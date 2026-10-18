@@ -47,6 +47,11 @@ function manualChunks(id: string) {
     return 'react-query'
   }
 
+  // One cached icon chunk instead of hundreds of sub-1KB per-icon requests on first load and navigation.
+  if (id.includes('lucide-react')) {
+    return 'icons'
+  }
+
   return undefined
 }
 
@@ -54,7 +59,8 @@ export default defineConfig(({ command, mode }) => {
   const envDir = path.resolve(__dirname, '..')
   const env = loadEnv(mode, envDir, '')
   const frontendPort = resolveFrontendPort(env.FRONTEND_URL)
-  const reactCompilerEnabled = env.CONAI_REACT_COMPILER === 'true'
+  // On by default; `build:compiler-off` (CONAI_REACT_COMPILER=false) exists only to investigate a compatibility issue.
+  const reactCompilerEnabled = env.CONAI_REACT_COMPILER !== 'false'
   const backendTarget = env.VITE_API_BASE_URL || 'http://localhost:1666'
 
   return {

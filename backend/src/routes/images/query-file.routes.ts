@@ -19,6 +19,7 @@ import {
   getExistingActiveFilePathOrBlock,
   getMimeTypeFromFilePath,
   getVisibleMetadataOrBlock,
+  pathExists,
   pipeFileToResponse,
   resolveDownloadFileForType,
   serveThumbnailOrOriginal,
@@ -319,7 +320,7 @@ router.get('/by-path/:encodedPath', asyncHandler(async (req: Request, res: Respo
     }
 
     const resolvedPath = resolveUploadsPath(filePath);
-    if (!fs.existsSync(resolvedPath)) {
+    if (!await pathExists(resolvedPath)) {
       return res.status(404).json({
         success: false,
         error: 'File not found'
@@ -345,7 +346,7 @@ router.get('/placeholder', asyncHandler(async (req: Request, res: Response) => {
   try {
     const placeholderPath = resolveUploadsPath('placeholder-image.svg');
 
-    if (!fs.existsSync(placeholderPath)) {
+    if (!await pathExists(placeholderPath)) {
       return res.status(404).json({
         success: false,
         error: 'Placeholder image not found'

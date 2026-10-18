@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { lazy, Suspense, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { FileText, SquarePen, Undo2 } from 'lucide-react'
@@ -10,8 +10,6 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { ChatBlockEditorModal } from '@/features/settings/components/chat-block-editor-modal'
-import { ChatProfileEditorModal } from '@/features/settings/components/chat-profile-editor-modal'
 import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
@@ -54,6 +52,10 @@ type LoreProposal = Extract<Proposal, { kind: 'lore' }>
 type ChatSettingsProposal = Extract<Proposal, { kind: 'chat_settings' }>
 
 import { TaskPlanCard } from './chat-task-ui'
+
+// The settings editors are large and only open on demand, so they stay out of the chat bundle until then.
+const ChatBlockEditorModal = lazy(() => import('@/features/settings/components/chat-block-editor-modal').then((module) => ({ default: module.ChatBlockEditorModal })))
+const ChatProfileEditorModal = lazy(() => import('@/features/settings/components/chat-profile-editor-modal').then((module) => ({ default: module.ChatProfileEditorModal })))
 
 const DEFAULTS_QUERY_KEY = ['codex-chat-profile-defaults'] as const
 const LONG_TEXT = 160
@@ -218,7 +220,7 @@ function BlockProposalCard({ proposal, threadId }: { proposal: BlockProposal; th
         <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending} />
         <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
       </Footer>
-      {admin ? <ChatBlockEditorModal open={editorOpen} shared={null} initialName={proposal.name} initialBlock={initialBlock} onClose={() => setEditorOpen(false)} onSaved={handleEditorSaved} /> : null}
+      {admin && editorOpen ? <Suspense fallback={null}><ChatBlockEditorModal open shared={null} initialName={proposal.name} initialBlock={initialBlock} onClose={() => setEditorOpen(false)} onSaved={handleEditorSaved} /></Suspense> : null}
     </ProposalFrame>
   )
 }
@@ -295,7 +297,7 @@ function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal
         <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending} />
         <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
       </Footer>
-      {admin ? <ChatProfileEditorModal open={editorOpen} profile={null} initialDraft={initialDraft} defaults={defaultsQuery.data} onClose={() => setEditorOpen(false)} /> : null}
+      {admin && editorOpen ? <Suspense fallback={null}><ChatProfileEditorModal open profile={null} initialDraft={initialDraft} defaults={defaultsQuery.data} onClose={() => setEditorOpen(false)} /></Suspense> : null}
     </ProposalFrame>
   )
 }
@@ -433,7 +435,7 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
         <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending} />
         <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
       </Footer>
-      {admin && editorOpen && editorProfile ? <ChatProfileEditorModal open profile={editorProfile} defaults={defaultsQuery.data} onClose={handleEditorClose} /> : null}
+      {admin && editorOpen && editorProfile ? <Suspense fallback={null}><ChatProfileEditorModal open profile={editorProfile} defaults={defaultsQuery.data} onClose={handleEditorClose} /></Suspense> : null}
     </ProposalFrame>
   )
 }

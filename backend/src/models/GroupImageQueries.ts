@@ -277,48 +277,6 @@ export function findImagesByGroupQuery(
   };
 }
 
-/** Find one page of group images together with file location fields. */
-export function findImagesByGroupWithFilesQuery(
-  groupId: number,
-  page: number = 1,
-  limit: number = 20,
-  collectionType?: GroupImageCollectionType
-): GroupImageListResult {
-  const normalizedPage = normalizeGroupImagePositiveInteger(page, 1);
-  const normalizedLimit = normalizeGroupImagePositiveInteger(limit, 20);
-  const offset = (normalizedPage - 1) * normalizedLimit;
-  const { fromClause, whereClause, queryParams } = buildGroupImageQuerySource(groupId, collectionType);
-
-  const countRow = db.prepare(
-    `SELECT COUNT(*) as total
-     FROM ${fromClause}
-     INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-     ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}`
-  ).get(...queryParams) as { total: number };
-  const total = countRow.total;
-
-  const query = `
-    SELECT
-      im.*,
-      if.id as file_id,
-      if.original_file_path,
-      if.file_status,
-      if.folder_id,
-      wf.folder_name
-    FROM ${fromClause}
-    INNER JOIN media_metadata im ON ig.composite_hash = im.composite_hash
-    LEFT JOIN image_files if ON if.composite_hash = im.composite_hash AND if.file_status = 'active'
-    LEFT JOIN watched_folders wf ON if.folder_id = wf.id
-    ${whereClause} AND ${getVisibleGroupImageCondition()} AND ${getReadyGroupImageCondition()}
-    ORDER BY ig.order_index ASC, ig.added_date DESC, ig.composite_hash ASC, if.id ASC
-    LIMIT ? OFFSET ?
-  `;
-
-  const rows = db.prepare(query).all(...queryParams, normalizedLimit, offset) as ImageWithFileView[];
-
-  return { images: rows, total };
-}
-
 /** Find one random visible image for a group. */
 export function findRandomImageForGroupQuery(groupId: number): ImageMetadataRecord | null {
   return findRandomGroupPreviewRows(groupId, 1)[0] ?? null;

@@ -1,4 +1,3 @@
-import type Database from 'better-sqlite3'
 import type { ChatExecutionContext, ChatProposal } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 
@@ -8,8 +7,6 @@ export type NewChatProposal = ChatProposal extends infer P ? (P extends { id: nu
 export type StoredChatProposal = { id: number; replyId: string; seq: number; proposal: ChatProposal; createdAt: string }
 
 type ProposalRow = { id: number; thread_id: number; reply_id: string; seq: number; kind: string; proposal: string; saved_id: number | null; saved: number; dismissed: number; created_date: string }
-
-const ensured = new WeakSet<Database.Database>()
 
 /** Told when a person saves or sets aside a card (a waiting task moves on from it). */
 const resolvedListeners = new Set<(threadId: number, proposal: ChatProposal) => void>()
@@ -23,37 +20,9 @@ function resolved(id: number, proposal: ChatProposal | null) {
   for (const listener of resolvedListeners) { try { listener(threadId, proposal) } catch { /* a listener must not break the save */ } }
 }
 
-/**
- * Creates the table on first use of a database handle. TODO: move this DDL into userSettingsSchema.ts (the schema file
- * was off limits when this was written); the statements are idempotent so the move is a pure relocation.
- */
-export function ensureProposalTable(db: Database.Database) {
-  if (ensured.has(db)) return
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS chat_proposals (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      thread_id INTEGER NOT NULL,
-      reply_id TEXT NOT NULL,
-      seq INTEGER NOT NULL,
-      kind TEXT NOT NULL,
-      proposal TEXT NOT NULL,
-      saved_id INTEGER,
-      saved INTEGER NOT NULL DEFAULT 0,
-      dismissed INTEGER NOT NULL DEFAULT 0,
-      created_date TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_chat_proposals_reply ON chat_proposals (thread_id, reply_id, seq);
-  `)
-  // Tables made before a person could set a proposal aside (무시).
-  const columns = db.prepare('PRAGMA table_info(chat_proposals)').all() as Array<{ name: string }>
-  if (!columns.some((column) => column.name === 'dismissed')) db.exec('ALTER TABLE chat_proposals ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0')
-  ensured.add(db)
-}
-
+/** The `chat_proposals` table is created by userSettingsSchema.ts when the database opens. */
 function table() {
-  const db = getUserSettingsDb()
-  ensureProposalTable(db)
-  return db
+  return getUserSettingsDb()
 }
 
 /** The stored JSON plus the columns a person's save writes back (`savedId`, or `saved` for updates). */

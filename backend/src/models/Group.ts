@@ -8,7 +8,6 @@ import type { IdPage, IdPageResponse } from '../utils/idPage';
 import { AggregateCache } from '../services/aggregateCache';
 import {
   findImagesByGroupQuery,
-  findImagesByGroupWithFilesQuery,
   findRandomImageForGroupQuery,
   findPreviewImagesQuery,
   getCompositeHashesForGroupQuery,
@@ -551,19 +550,6 @@ export class ImageGroupModel {
     includeChildren: boolean = false,
   ) {
     return findImagesByGroupQuery(groupId, page, limit, collectionType, cursor, includeChildren);
-  }
-
-  /**
-   * 특정 그룹의 이미지 목록 조회 (파일 경로 포함)
-   * 다운로드 기능 등에서 사용
-   */
-  static findImagesByGroupWithFiles(
-    groupId: number,
-    page: number = 1,
-    limit: number = 20,
-    collectionType?: 'manual' | 'auto'
-  ): { images: ImageWithFileView[], total: number } {
-    return findImagesByGroupWithFilesQuery(groupId, page, limit, collectionType);
   }
 
   /**

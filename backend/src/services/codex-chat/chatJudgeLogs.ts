@@ -1,6 +1,5 @@
 import type { ChatJudgeItemResult, ChatJudgeItemStats, ChatJudgeLogItem, ChatJudgeLogRun, ChatJudgeOutcome, ChatJudgeRunStage } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { ensureProposalTable } from './chatProposals'
 
 /**
  * The judge log: every judge call (chat_judge_runs: a chat turn's items, a group room's speaker, status fields, an
@@ -128,7 +127,6 @@ export const ChatJudgeLogStore = {
 
   list(filter: { profileId?: number; presetId?: number; itemId?: string; verdict?: string; stage?: string; threadId?: number; beforeId?: number; limit?: number } = {}): ChatJudgeLogRun[] {
     const db = getUserSettingsDb()
-    ensureProposalTable(db)
     const where: string[] = []
     const values: unknown[] = []
     if (filter.profileId) { where.push('r.profile_id = ?'); values.push(filter.profileId) }
@@ -183,7 +181,6 @@ export const ChatJudgeLogStore = {
   /** Per item over the last `days` days (at most STATS_RUNS_MAX runs), newest preset names first. */
   stats(filter: { profileId?: number; presetId?: number; days?: number } = {}): ChatJudgeItemStats[] {
     const db = getUserSettingsDb()
-    ensureProposalTable(db)
     const where = [`r.created_at >= datetime('now', ?)`]
     const values: unknown[] = [`-${Math.min(JUDGE_LOG_RETENTION_DAYS, Math.max(1, filter.days ?? 7))} days`]
     if (filter.profileId) { where.push('r.profile_id = ?'); values.push(filter.profileId) }

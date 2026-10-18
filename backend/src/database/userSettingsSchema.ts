@@ -799,6 +799,24 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (!hasColumn('chat_generation_links', 'reaction_target')) {
     db.exec('ALTER TABLE chat_generation_links ADD COLUMN reaction_target INTEGER NOT NULL DEFAULT 0');
   }
+  // Save/review cards a chat reply proposed (profiles, lore, page actions…), in reply order.
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_proposals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id INTEGER NOT NULL,
+    reply_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    proposal TEXT NOT NULL,
+    saved_id INTEGER,
+    saved INTEGER NOT NULL DEFAULT 0,
+    dismissed INTEGER NOT NULL DEFAULT 0,
+    created_date TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_chat_proposals_reply ON chat_proposals (thread_id, reply_id, seq)');
+  // Tables made before a person could set a proposal aside (무시).
+  if (!hasColumn('chat_proposals', 'dismissed')) {
+    db.exec('ALTER TABLE chat_proposals ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0');
+  }
   db.exec(`CREATE TABLE IF NOT EXISTS chat_generation_reactions (
     reply_id TEXT PRIMARY KEY,
     thread_id INTEGER NOT NULL REFERENCES codex_chat_threads(id) ON DELETE CASCADE,

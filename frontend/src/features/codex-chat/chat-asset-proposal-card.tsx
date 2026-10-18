@@ -1,11 +1,10 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Check, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { ChatAssetBatchModal } from '@/features/settings/components/chat-asset-batch-modal'
 import { useI18n } from '@/i18n'
 import { applyChatProfileAssetsProposal, CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, dismissChatProposal, type CodexChatToolCall } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
@@ -13,6 +12,9 @@ import { getPromptPresets } from '@/lib/api-prompt-presets'
 import { codexChatThreadQueryKey } from './codex-chat-context'
 import { ChatMediaAttachments } from './chat-media-picker'
 import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
+
+// Opened on demand from an approved card; keeps the settings asset editor out of the chat bundle.
+const ChatAssetBatchModal = lazy(() => import('@/features/settings/components/chat-asset-batch-modal').then((module) => ({ default: module.ChatAssetBatchModal })))
 
 type AssetsProposal = Extract<NonNullable<CodexChatToolCall['proposal']>, { kind: 'profile_assets' }>
 
@@ -51,6 +53,6 @@ export function ChatAssetProposalCard({ proposal, threadId }: { proposal: Assets
     <div className="text-sm">{parts.join(' · ')}</div>
     {proposal.action === 'apply' ? <ChatMediaAttachments items={[...new Map(Object.entries(proposal.chosenHashes).map(([name, compositeHash]) => [compositeHash, { name, compositeHash, mimeType: null }])).values()]} /> : null}
     {saved || dismissed ? <ProposalFooter status><span>{saved ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '거절됨', en: 'Dismissed' })}</span>{admin && saved && (batchId ?? proposal.savedId) ? <Button variant="link" size="xs" onClick={() => setOpen(true)}>{t({ ko: '자산 창 열기', en: 'Open assets' })}</Button> : null}</ProposalFooter> : admin ? <ProposalFooter className="justify-end"><Button size="xs" variant="ghost" disabled={busy} onClick={() => dismiss.mutate()}>{t({ ko: '거절', en: 'Dismiss' })}</Button><Button size="xs" disabled={busy} onClick={() => approve.mutate()}>{approve.isPending ? <Spinner /> : proposal.action === 'create' ? <Sparkles /> : <Check />}{t({ ko: '승인', en: 'Approve' })}</Button></ProposalFooter> : null}
-    {admin && open ? <ChatAssetBatchModal profile={{ id: proposal.profileId, name: proposal.profileName }} initialBatchId={batchId ?? proposal.savedId} onClose={() => setOpen(false)} /> : null}
+    {admin && open ? <Suspense fallback={null}><ChatAssetBatchModal profile={{ id: proposal.profileId, name: proposal.profileName }} initialBatchId={batchId ?? proposal.savedId} onClose={() => setOpen(false)} /></Suspense> : null}
   </ProposalFrame>
 }

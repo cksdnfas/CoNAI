@@ -198,7 +198,7 @@ async function resolveExistingThumbnailPath(metadata: Pick<ImageMetadataRecord, 
 }
 
 /** Existence check off the event loop: these run once per thumbnail or file request. */
-function pathExists(filePath: string): Promise<boolean> {
+export function pathExists(filePath: string): Promise<boolean> {
   return fs.promises.access(filePath).then(() => true, () => false);
 }
 
@@ -279,7 +279,7 @@ async function resolveThumbnailDownloadFile(
     ? path.join(runtimePaths.tempDir, metadata.thumbnail_path)
     : null;
 
-  if (thumbnailPath && fs.existsSync(thumbnailPath)) {
+  if (thumbnailPath && await pathExists(thumbnailPath)) {
     return {
       filePath: thumbnailPath,
       extension: path.extname(thumbnailPath) || '.webp',
@@ -287,7 +287,7 @@ async function resolveThumbnailDownloadFile(
   }
 
   const originalPath = resolveUploadsPath(file.original_file_path);
-  if (!fs.existsSync(originalPath)) {
+  if (!await pathExists(originalPath)) {
     return null;
   }
 
@@ -295,7 +295,7 @@ async function resolveThumbnailDownloadFile(
     const relativeThumbPath = await ThumbnailGenerator.generateThumbnail(originalPath, compositeHash);
     MediaMetadataModel.update(compositeHash, { thumbnail_path: relativeThumbPath });
     const regeneratedPath = path.join(runtimePaths.tempDir, relativeThumbPath);
-    if (fs.existsSync(regeneratedPath)) {
+    if (await pathExists(regeneratedPath)) {
       return {
         filePath: regeneratedPath,
         extension: path.extname(regeneratedPath) || '.webp',
@@ -319,7 +319,7 @@ export async function resolveDownloadFileForType(
   }
 
   const originalPath = resolveUploadsPath(file.original_file_path);
-  if (!fs.existsSync(originalPath)) {
+  if (!await pathExists(originalPath)) {
     return null;
   }
 

@@ -10,7 +10,6 @@ import { MediaImageFeaturesModel } from './MediaImageFeaturesModel';
 import { MediaMetadataFileQueries } from './MediaMetadataFileQueries';
 import { AggregateCache, resolveSearchTotal } from '../../services/aggregateCache';
 import { placeholdersFor, sortedUniqueChunks } from '../../utils/sqlInChunks';
-import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
 
 function normalizeSuggestionLimit(limit: number, fallback = 16, max = 50): number {
   if (!Number.isFinite(limit) || limit <= 0) {
@@ -96,39 +95,6 @@ export class MediaMetadataModel {
       ORDER BY rowid
       LIMIT ?
     `).all(rowidCursor, limit) as Array<ImageMetadataRecord & { row_id: number }>;
-  }
-
-  /**
-   * 모든 메타데이터 조회 (페이지네이션)
-   * 브라우징, 검색, 필터링의 기본
-   */
-  static findAll(options: {
-    page?: number;
-    limit?: number;
-    sortBy?: 'first_seen_date' | 'rating_score' | 'model_name' | 'metadata_updated_date';
-    sortOrder?: 'ASC' | 'DESC';
-  }): { items: ImageMetadataRecord[], total: number } {
-    const page = options.page || 1;
-    const limit = options.limit || 20;
-    const sortBy = options.sortBy || 'first_seen_date';
-    const sortOrder = options.sortOrder || 'DESC';
-    const offset = (page - 1) * limit;
-
-    const readyCondition = getReadyMediaMetadataCondition();
-    const countRow = db.prepare(`
-      SELECT COUNT(*) as total
-      FROM media_metadata
-      WHERE ${readyCondition}
-    `).get() as { total: number };
-
-    const items = db.prepare(`
-      SELECT * FROM media_metadata
-      WHERE ${readyCondition}
-      ORDER BY ${sortBy} ${sortOrder}
-      LIMIT ? OFFSET ?
-    `).all(limit, offset) as ImageMetadataRecord[];
-
-    return { items, total: countRow.total };
   }
 
   /**
@@ -287,84 +253,6 @@ export class MediaMetadataModel {
   }
 
   /**
-   * 검색 (프롬프트, 모델명 기반)
-   */
-  static search(query: string, options?: {
-    limit?: number;
-    offset?: number;
-  }): ImageMetadataRecord[] {
-    const limit = options?.limit || 100;
-    const offset = options?.offset || 0;
-
-    const readyCondition = getReadyMediaMetadataCondition();
-    const pattern = buildSqlContainsPattern(query);
-
-    return db.prepare(`
-      SELECT * FROM media_metadata
-      WHERE (${readyCondition})
-        AND (prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE} OR negative_prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE} OR model_name LIKE ?${SQL_LIKE_ESCAPE_CLAUSE})
-      ORDER BY first_seen_date DESC
-      LIMIT ? OFFSET ?
-    `).all(pattern, pattern, pattern, limit, offset) as ImageMetadataRecord[];
-  }
-
-  /**
-   * AI 도구별 필터
-   */
-  static findByAITool(aiTool: string, options?: {
-    page?: number;
-    limit?: number;
-  }): { items: ImageMetadataRecord[], total: number } {
-    const page = options?.page || 1;
-    const limit = options?.limit || 20;
-    const offset = (page - 1) * limit;
-
-    const readyCondition = getReadyMediaMetadataCondition();
-    const countRow = db.prepare(`
-      SELECT COUNT(*) as total
-      FROM media_metadata
-      WHERE ai_tool = ? AND ${readyCondition}
-    `).get(aiTool) as { total: number };
-
-    const items = db.prepare(`
-      SELECT * FROM media_metadata
-      WHERE ai_tool = ? AND ${readyCondition}
-      ORDER BY first_seen_date DESC
-      LIMIT ? OFFSET ?
-    `).all(aiTool, limit, offset) as ImageMetadataRecord[];
-
-    return { items, total: countRow.total };
-  }
-
-  /**
-   * 모델명별 필터
-   */
-  static findByModel(modelName: string, options?: {
-    page?: number;
-    limit?: number;
-  }): { items: ImageMetadataRecord[], total: number } {
-    const page = options?.page || 1;
-    const limit = options?.limit || 20;
-    const offset = (page - 1) * limit;
-
-    const readyCondition = getReadyMediaMetadataCondition();
-    const countRow = db.prepare(`
-      SELECT COUNT(*) as total
-      FROM media_metadata
-      WHERE model_name = ? AND ${readyCondition}
-    `).get(modelName) as { total: number };
-
-    const items = db.prepare(`
-      SELECT * FROM media_metadata
-      WHERE model_name = ? AND ${readyCondition}
-      ORDER BY first_seen_date DESC
-      LIMIT ? OFFSET ?
-    `).all(modelName, limit, offset) as ImageMetadataRecord[];
-
-    return { items, total: countRow.total };
-  }
-
-  /**
    * 날짜 범위 필터 (메서드 오버로드: page/limit 숫자 직접 전달)
    */
   static findByDateRange(
@@ -396,38 +284,6 @@ export class MediaMetadataModel {
     `).all(startDate, endDate, _limit, offset) as ImageMetadataRecord[];
 
     return { items, total };
-  }
-
-  /**
-   * 평점별 필터
-   */
-  static findByRating(
-    minRating: number,
-    maxRating: number = 5,
-    options?: {
-      page?: number;
-      limit?: number;
-    }
-  ): { items: ImageMetadataRecord[], total: number } {
-    const page = options?.page || 1;
-    const limit = options?.limit || 20;
-    const offset = (page - 1) * limit;
-
-    const readyCondition = getReadyMediaMetadataCondition();
-    const countRow = db.prepare(`
-      SELECT COUNT(*) as total
-      FROM media_metadata
-      WHERE rating_score BETWEEN ? AND ? AND ${readyCondition}
-    `).get(minRating, maxRating) as { total: number };
-
-    const items = db.prepare(`
-      SELECT * FROM media_metadata
-      WHERE rating_score BETWEEN ? AND ? AND ${readyCondition}
-      ORDER BY rating_score DESC, first_seen_date DESC
-      LIMIT ? OFFSET ?
-    `).all(minRating, maxRating, limit, offset) as ImageMetadataRecord[];
-
-    return { items, total: countRow.total };
   }
 
   /**
