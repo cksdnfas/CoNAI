@@ -13,6 +13,7 @@
     "test:documents": "tsx --test test/document-search.test.ts",
     "test:posts-knowledge": "tsx --test test/posts.test.ts test/posts-knowledge-runtime.test.ts test/chat-semantic.test.ts test/mcp-posts-files-tools.test.ts",
     "test:queue": "tsx --test test/queueInputBackfill.test.ts",
+    "test:prompt-syntax": "tsx --test test/prompt-random-token.test.ts test/prompt-suggest.test.ts",
     "test:migrations": "tsx --test test/migration-baseline.test.ts",
     "test:image-permissions": "tsx --test test/image-permissions.test.ts",
     "test:permissions": "tsx --test test/image-permissions.test.ts test/admin-route-guards.test.ts test/generation-layouts.test.ts test/route-guard-sweep.test.ts test/system-folders.test.ts",

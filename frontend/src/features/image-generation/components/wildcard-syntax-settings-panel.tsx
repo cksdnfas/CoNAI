@@ -9,19 +9,22 @@ import { useI18n } from '@/i18n'
 import {
   DEFAULT_PROMPT_INLINE_SYNTAX_SETTINGS,
   PROMPT_INLINE_SYNTAX_SOURCE_LABELS,
+  PROMPT_INLINE_TRIGGERS,
   type PromptInlineSyntaxSettings,
   type PromptInlineSyntaxSource,
+  type PromptInlineTrigger,
   usePromptInlineSyntaxSettings,
 } from './prompt-inline-syntax-settings'
 
 const HELP_ITEMS = [
-  { syntax: '__Group__', ko: '그룹에서 랜덤 1개를 출력해.', en: 'Output one random tag from the group.' },
-  { syntax: '__Group[3]__', ko: '그룹에서 정확히 3개를 출력해.', en: 'Output exactly three tags from the group.' },
-  { syntax: '__Group[0~3]__', ko: '그룹에서 0~3개를 랜덤 출력해.', en: 'Output zero to three random tags from the group.' },
-  { syntax: '__Group<1k>__', ko: '사용횟수 1000 이상 태그만 사용해.', en: 'Use only tags with at least 1000 uses.' },
-  { syntax: '__Group<-100>__', ko: '사용횟수 100 이하 태그만 사용해.', en: 'Use only tags with at most 100 uses.' },
-  { syntax: '__Group[3]<1k>__', ko: '개수와 사용횟수 필터를 같이 적용해.', en: 'Apply pick count and usage filters together.' },
-  { syntax: '++Wildcard++', ko: '기존 와일드카드 항목을 출력해.', en: 'Output an existing wildcard entry.' },
+  { syntax: '@ · Ctrl+Space', ko: '와일드카드·태그 그룹·내 그룹을 고르는 팔레트를 열어.', en: 'Open the palette of wildcards, tag groups and your groups.' },
+  { syntax: '__Wildcard__', ko: '와일드카드 항목을 랜덤 출력해.', en: 'Output a random wildcard entry.' },
+  { syntax: '__tag:Group__', ko: '단부루 태그 그룹에서 랜덤 1개를 출력해.', en: 'Output one random tag from the Danbooru group.' },
+  { syntax: '__tag:Group|3__', ko: '그룹에서 정확히 3개를 출력해.', en: 'Output exactly three tags from the group.' },
+  { syntax: '__tag:Group|0-3__', ko: '그룹에서 0~3개를 랜덤 출력해.', en: 'Output zero to three random tags from the group.' },
+  { syntax: '__tag:Group|1k+__', ko: '사용횟수 1000 이상 태그만 사용해.', en: 'Use only tags with at least 1000 uses.' },
+  { syntax: '__tag:Group|100-__', ko: '사용횟수 100 이하 태그만 사용해.', en: 'Use only tags with at most 100 uses.' },
+  { syntax: '__my:Group|1-2__', ko: '내 프롬프트 그룹에서 1~2개를 랜덤 출력해.', en: 'Output one or two random prompts from your prompt group.' },
   { syntax: 'preprocess', ko: '전처리 체인 키워드를 그대로 입력해.', en: 'Insert a preprocess chain keyword as plain text.' },
 ]
 
@@ -42,7 +45,7 @@ export function WildcardSyntaxSettingsPanel() {
   const { t } = useI18n()
   const { settings, setSettings } = usePromptInlineSyntaxSettings()
 
-  const setTrigger = (source: PromptInlineSyntaxSource, enabled: boolean) => {
+  const setTrigger = (source: PromptInlineTrigger, enabled: boolean) => {
     setSettings({
       ...settings,
       triggers: {
@@ -57,7 +60,7 @@ export function WildcardSyntaxSettingsPanel() {
       <div className="grid gap-10 lg:grid-cols-2">
         <RowGroup
           headingAs="h2"
-          heading={t({ ko: '문법 우선순위', en: 'Syntax Priority' })}
+          heading={t({ ko: '단어 추천 우선순위', en: 'Word Suggestion Priority' })}
           actions={(
             <IconButton variant="ghost" size="icon-sm" onClick={() => setSettings(DEFAULT_PROMPT_INLINE_SYNTAX_SETTINGS)} label={t({ ko: '기본값', en: 'Reset' })}>
               <RotateCcw />
@@ -92,7 +95,7 @@ export function WildcardSyntaxSettingsPanel() {
         </RowGroup>
 
         <RowGroup headingAs="h2" heading={t({ ko: '팝업 동작', en: 'Popup Behavior' })}>
-          {settings.priority.map((source) => {
+          {PROMPT_INLINE_TRIGGERS.map((source) => {
             const label = PROMPT_INLINE_SYNTAX_SOURCE_LABELS[source]
             return (
               <SettingRow
@@ -119,13 +122,23 @@ export function WildcardSyntaxSettingsPanel() {
               onCheckedChange={(checked) => setSettings({ ...settings, characterRelatedTags: checked })}
             />
           </SettingRow>
+          <SettingRow
+            htmlFor="wildcard-syntax-tag-underscores"
+            label={<span className="inline-flex items-center gap-1">{t({ ko: '태그를 밑줄로 넣기', en: 'Insert tags with underscores' })}<FieldInfo>{t({ ko: '끄면 blue hair, 켜면 blue_hair로 넣어.', en: 'Off inserts blue hair, on inserts blue_hair.' })}</FieldInfo></span>}
+          >
+            <Switch
+              id="wildcard-syntax-tag-underscores"
+              checked={settings.tagUnderscores}
+              onCheckedChange={(checked) => setSettings({ ...settings, tagUnderscores: checked })}
+            />
+          </SettingRow>
         </RowGroup>
       </div>
 
       <RowGroup
         headingAs="h2"
         heading={t({ ko: '문법 안내', en: 'Syntax Guide' })}
-        actions={<FieldInfo>{t({ ko: '완결된 __...__, ++...++, 쉼표 뒤 빈 구간에서는 추천 팝업을 띄우지 않아.', en: 'Suggestion popups stay hidden on completed __...__, ++...++, and empty comma-separated segments.' })}</FieldInfo>}
+        actions={<FieldInfo>{t({ ko: '완결된 토큰은 입력창에서 칩으로 보이고, 클릭하면 개수·사용량을 고를 수 있어. 예전 ++이름++, [1~2], <1k> 문법도 계속 동작해.', en: 'Finished tokens show as chips; click one to set pick count and usage. Old ++name++, [1~2] and <1k> forms still work.' })}</FieldInfo>}
       >
         {HELP_ITEMS.map((item) => (
           <ListRow key={item.syntax}>

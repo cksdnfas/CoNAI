@@ -408,6 +408,47 @@ export class PromptGroupService {
   }
 
   /**
+   * 이름으로 찾은 그룹(하위 그룹 포함)에서 프롬프트를 랜덤으로 뽑는다. (`__my:그룹__` 문법)
+   * positive 그룹을 먼저 찾고, 없으면 negative 그룹에서 찾는다.
+   */
+  static pickRandomPromptsByGroupName(
+    groupName: string,
+    count: number,
+    usageFilter: { min?: number; max?: number } = {}
+  ): string[] {
+    if (count <= 0) {
+      return [];
+    }
+
+    for (const type of ['positive', 'negative'] as const) {
+      const group = db.prepare(`SELECT id FROM ${getTableName(type)} WHERE lower(group_name) = lower(?) LIMIT 1`)
+        .get(groupName.trim()) as { id: number } | undefined;
+      if (!group) {
+        continue;
+      }
+
+      const groupIds = this.getGroupDescendantIds(group.id, type);
+      const placeholders = groupIds.map(() => '?').join(',');
+      const clauses = [`group_id IN (${placeholders})`];
+      const values: number[] = [...groupIds];
+      if (usageFilter.min !== undefined) {
+        clauses.push('usage_count >= ?');
+        values.push(usageFilter.min);
+      }
+      if (usageFilter.max !== undefined) {
+        clauses.push('usage_count <= ?');
+        values.push(usageFilter.max);
+      }
+
+      const rows = db.prepare(`SELECT prompt FROM ${getPromptTableName(type)} WHERE ${clauses.join(' AND ')} ORDER BY RANDOM() LIMIT ?`)
+        .all(...values, count) as Array<{ prompt: string }>;
+      return rows.map((row) => row.prompt);
+    }
+
+    return [];
+  }
+
+  /**
    * 특정 그룹의 프롬프트 목록 조회
    */
   static async getPromptsInGroup(

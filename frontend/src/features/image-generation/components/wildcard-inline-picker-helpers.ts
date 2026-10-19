@@ -14,70 +14,6 @@ export type FlattenedWildcardRecord = {
   items: WildcardItemRecord[]
 }
 
-export type ActiveWildcardQuery = {
-  start: number
-  end: number
-  query: string
-}
-
-export type WildcardInsertionRange = {
-  start: number
-  end: number
-}
-
-export type WildcardFilterMode = 'available-only' | 'all'
-
-const RECENT_WILDCARD_KEY_PREFIX = 'conai.wildcards.recent.'
-const FILTER_MODE_KEY_PREFIX = 'conai.wildcards.filter-mode.'
-export const MAX_RECENT_WILDCARDS = 8
-
-/** Read the persisted inline picker filter mode for one wildcard tool. */
-export function readStoredWildcardFilterMode(tool: PromptWildcardTool): WildcardFilterMode {
-  if (typeof window === 'undefined') {
-    return 'available-only'
-  }
-
-  const value = window.localStorage.getItem(`${FILTER_MODE_KEY_PREFIX}${tool}`)
-  return value === 'all' ? 'all' : 'available-only'
-}
-
-/** Persist the inline picker filter mode for one wildcard tool. */
-export function writeStoredWildcardFilterMode(tool: PromptWildcardTool, mode: WildcardFilterMode) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.localStorage.setItem(`${FILTER_MODE_KEY_PREFIX}${tool}`, mode)
-}
-
-/** Read the recent wildcard names for one tool from local storage. */
-export function readStoredRecentWildcards(tool: PromptWildcardTool): string[] {
-  if (typeof window === 'undefined') {
-    return []
-  }
-
-  try {
-    const raw = window.localStorage.getItem(`${RECENT_WILDCARD_KEY_PREFIX}${tool}`)
-    if (!raw) {
-      return []
-    }
-
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-/** Persist the bounded recent wildcard list for one tool. */
-export function writeStoredRecentWildcards(tool: PromptWildcardTool, names: string[]) {
-  if (typeof window === 'undefined') {
-    return
-  }
-
-  window.localStorage.setItem(`${RECENT_WILDCARD_KEY_PREFIX}${tool}`, JSON.stringify(names.slice(0, MAX_RECENT_WILDCARDS)))
-}
-
 /** Flatten the hierarchical wildcard tree into searchable inline picker records. */
 export function flattenWildcardRecords(nodes: WildcardRecord[], parentPath: string[] = []): FlattenedWildcardRecord[] {
   const entries: FlattenedWildcardRecord[] = []
@@ -104,44 +40,6 @@ export function flattenWildcardRecords(nodes: WildcardRecord[], parentPath: stri
   return entries
 }
 
-/** Resolve the active ++ wildcard token around the current caret position. */
-export function resolveActiveWildcardQuery(value: string, caretPosition: number): ActiveWildcardQuery | null {
-  const caret = Math.max(0, Math.min(caretPosition, value.length))
-  const prefix = value.slice(0, caret)
-  const tokenStart = prefix.lastIndexOf('++')
-
-  if (tokenStart < 0) {
-    return null
-  }
-
-  if (tokenStart > 0) {
-    const previousCharacter = prefix[tokenStart - 1]
-    if (!/[\s,(]/.test(previousCharacter)) {
-      return null
-    }
-  }
-
-  const closingIndex = value.indexOf('++', tokenStart + 2)
-  if (closingIndex >= 0 && caret <= closingIndex + 2) {
-    return null
-  }
-
-  const query = prefix.slice(tokenStart + 2)
-  if (query.includes('++')) {
-    return null
-  }
-
-  if (/[\s,()]/.test(query)) {
-    return null
-  }
-
-  return {
-    start: tokenStart,
-    end: caret,
-    query,
-  }
-}
-
 export function resolvePreferredWildcardItemTool(items: WildcardItemRecord[], tool: PromptWildcardTool): WildcardTool {
   if (tool === 'codex') {
     return 'general'
@@ -163,19 +61,6 @@ export function countStoredWildcardItemsForTool(items: WildcardItemRecord[], too
 export function countWildcardItemsForTool(items: WildcardItemRecord[], tool: PromptWildcardTool) {
   const preferredTool = resolvePreferredWildcardItemTool(items, tool)
   return countStoredWildcardItemsForTool(items, preferredTool)
-}
-
-/** Build the next prompt value for inline wildcard/preprocess insertion, auto-adding comma separators when chaining entries. */
-export function buildWildcardInsertion(value: string, insertionText: string, range: WildcardInsertionRange) {
-  const before = value.slice(0, range.start)
-  const after = value.slice(range.end)
-  const needsLeadingSeparator = before.trim().length > 0 && !/[\s,(]$/.test(before)
-  const insertedText = `${needsLeadingSeparator ? ', ' : ''}${insertionText}`
-
-  return {
-    nextValue: `${before}${insertedText}${after}`,
-    nextCaretPosition: before.length + insertedText.length,
-  }
 }
 
 /** Score one flattened wildcard record against the normalized inline query. */

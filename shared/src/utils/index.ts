@@ -19,3 +19,4 @@ export * from './chatEditing';
 export * from './chatNarration';
 export * from './loreKeyLanguage';
 export * from './groupAutoCollect';
+export * from './promptRandomToken';

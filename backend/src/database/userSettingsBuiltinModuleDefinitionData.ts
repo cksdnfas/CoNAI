@@ -357,7 +357,7 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         data_type: 'prompt',
         required: true,
         multiple: false,
-        description: '++이름++ 와일드카드가 들어간 원본 텍스트야.',
+        description: '__이름__ 와일드카드나 __tag:그룹__, __my:그룹__ 랜덤 토큰이 들어간 원본 텍스트야.',
       },
     ],
     outputPorts: [
@@ -395,7 +395,7 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         key: 'text',
         label: '텍스트',
         data_type: 'prompt',
-        placeholder: '예: ++character++, ++pose++',
+        placeholder: '예: __character__, __pose__, __tag:hair_color|1-2__',
         description: '그래프 입력으로 연결하지 않을 때 노드 안에서 바로 쓸 원본 텍스트야.',
       },
     ],

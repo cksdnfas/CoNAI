@@ -2,6 +2,9 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
 import { PromptCollectionService } from '../services/promptCollectionService';
 import { PromptGroupService } from '../services/promptGroupService';
+import { PromptSuggestService } from '../services/promptSuggestService';
+import { PromptEditorSettingsError, PromptEditorSettingsService } from '../services/promptEditorSettingsService';
+import { getRequesterAccountId } from './requester-session-helpers';
 import { hasAdminAccess, requirePermission } from '../middleware/authMiddleware';
 import { toPublicDanbooruDbInfo, type DanbooruBrowserDatabaseInfo } from '../services/danbooruBrowser/dbResolver';
 import { db } from '../database/init';
@@ -77,6 +80,50 @@ router.get('/search', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error in prompt search:', error);
     return res.status(500).json(errorResponse('Failed to search prompts'));
+  }
+});
+
+/**
+ * 프롬프트 입력창 자동완성 (내 프롬프트 + 단부루 태그/캐릭터 + 함께 쓰는 태그를 한 번에)
+ * GET /api/prompt-collection/suggest?q=blue&type=positive&limit=10&context=1girl,smile
+ */
+router.get('/suggest', (req: Request, res: Response) => {
+  const type = req.query.type === 'negative' || req.query.type === 'auto' ? req.query.type : 'positive';
+  const limit = Math.min(Math.max(Number.parseInt(String(req.query.limit ?? '10'), 10) || 10, 1), 30);
+  const relatedTagLimit = Math.min(Math.max(Number.parseInt(String(req.query.relatedTagLimit ?? '42'), 10) || 0, 0), 100);
+  const context = typeof req.query.context === 'string' ? req.query.context.split(',').map((term) => term.trim()).filter(Boolean) : [];
+
+  try {
+    return res.json(successResponse(PromptSuggestService.suggest({
+      query: typeof req.query.q === 'string' ? req.query.q : '',
+      type,
+      limit,
+      relatedTagLimit,
+      context,
+    })));
+  } catch (error) {
+    console.error('Error in prompt suggest:', error);
+    return res.status(500).json(errorResponse('Failed to load prompt suggestions'));
+  }
+});
+
+/**
+ * 계정별 프롬프트 입력창 설정 (팝업 트리거, 단어 추천 우선순위, 태그 밑줄)
+ * GET/PUT /api/prompt-collection/editor-settings
+ */
+router.get('/editor-settings', (req: Request, res: Response) => {
+  return res.json(successResponse(PromptEditorSettingsService.read(getRequesterAccountId(req))));
+});
+
+router.put('/editor-settings', requirePermission('prompts.view'), (req: Request, res: Response) => {
+  try {
+    return res.json(successResponse(PromptEditorSettingsService.write(getRequesterAccountId(req), req.body)));
+  } catch (error) {
+    if (error instanceof PromptEditorSettingsError) {
+      return res.status(400).json(errorResponse(error.message));
+    }
+    console.error('Error saving prompt editor settings:', error);
+    return res.status(500).json(errorResponse('Failed to save prompt editor settings'));
   }
 });
 

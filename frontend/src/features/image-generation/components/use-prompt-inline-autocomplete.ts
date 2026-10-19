@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { getDanbooruBrowserCharacters, getDanbooruBrowserTags } from '@/lib/api-danbooru-browser'
-import { searchPromptCollection } from '@/lib/api-prompts'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { getPromptSuggestions, type PromptSuggestResponse } from '@/lib/api-prompts'
 import type { DanbooruBrowserCharacterRecord, DanbooruBrowserRelatedTagRecord, DanbooruBrowserTagRecord } from '@/types/danbooru-browser'
-import type { PromptCollectionItem, PromptTypeFilter } from '@/types/prompt'
-import type { ActiveWildcardQuery } from './wildcard-inline-picker-helpers'
+import type { PromptTypeFilter } from '@/types/prompt'
 import { resolveActivePromptTextQuery } from './prompt-inline-token-scanner'
 
 export type PromptAutocompleteQuery = {
@@ -22,6 +20,8 @@ export type PromptAutocompleteSuggestion = {
   secondaryText?: string
   usageCount?: number
   relatedTags?: DanbooruBrowserRelatedTagRecord[]
+  /** How many recent images used this together with the current prompt's terms. */
+  relatedCount?: number
 }
 
 export type PromptDetectedCharacterCandidate = {
@@ -35,6 +35,9 @@ export type PromptDetectedCharacterCandidate = {
 export type PromptRelatedTagTab = 'general' | 'character' | 'other'
 
 export const PROMPT_AUTOCOMPLETE_PAGE_SIZE = 7
+/** Rows shown in the keyboard-navigable suggestion list. */
+export const PROMPT_AUTOCOMPLETE_LIST_SIZE = 10
+const PROMPT_AUTOCOMPLETE_DEBOUNCE_MS = 150
 const PROMPT_AUTOCOMPLETE_RELATED_TAG_LIMIT = 42
 const PROMPT_AUTOCOMPLETE_LABEL_MAX_LENGTH = 48
 export const PROMPT_RELATED_TAG_TABS: Array<{ id: PromptRelatedTagTab; label: string }> = [
@@ -49,6 +52,23 @@ export function normalizeAutocompleteText(value: string) {
 
 function normalizeAutocompleteLookup(value: string) {
   return normalizeAutocompleteText(value).replace(/ /g, '_')
+}
+
+/** Danbooru tag name as prompt text: underscores become spaces unless kept by setting, except short emoticon tags such as `^_^`. */
+export function formatDanbooruTagForPrompt(name: string, keepUnderscores = false) {
+  return keepUnderscores || name.length <= 3 ? name : name.replace(/_/g, ' ')
+}
+
+/** 3 = exact, 2 = starts with the query, 1 = contains it. */
+function getAutocompleteMatchTier(suggestion: PromptAutocompleteSuggestion, normalizedQuery: string) {
+  const candidates = [suggestion.insertText, suggestion.label].map(normalizeAutocompleteLookup)
+  if (candidates.some((candidate) => candidate === normalizedQuery)) {
+    return 3
+  }
+  if (candidates.some((candidate) => candidate.startsWith(normalizedQuery))) {
+    return 2
+  }
+  return 1
 }
 
 export function resolvePromptDetectedCharacterCandidates(value: string, limit = 8): PromptDetectedCharacterCandidate[] {
@@ -116,28 +136,35 @@ function getAutocompleteUsageCount(suggestion: Pick<PromptAutocompleteSuggestion
 }
 
 function buildPromptAutocompleteSuggestions({
+  query,
   prompts,
   tags,
   characters,
+  related,
+  tagUnderscores,
 }: {
-  prompts: PromptCollectionItem[]
+  query: string
+  prompts: PromptSuggestResponse['prompts']
   tags: DanbooruBrowserTagRecord[]
   characters: DanbooruBrowserCharacterRecord[]
+  related: PromptSuggestResponse['related']
+  tagUnderscores: boolean
 }): PromptAutocompleteSuggestion[] {
+  const relatedCountByTerm = new Map(related.map((item) => [normalizeAutocompleteLookup(item.term), item.count]))
   const suggestions: PromptAutocompleteSuggestion[] = [
     ...prompts.map((item) => ({
-      id: `prompt:${item.type}:${item.id}`,
+      id: `prompt:${item.id}`,
       kind: 'prompt' as const,
       label: item.prompt,
       insertText: item.prompt,
-      secondaryText: item.group_info?.group_name ?? item.type,
-      usageCount: item.usage_count,
+      secondaryText: item.groupName ?? undefined,
+      usageCount: item.usageCount,
     })),
     ...characters.map((item) => ({
       id: `character:${item.tagId}`,
       kind: 'character' as const,
       label: item.displayName,
-      insertText: item.name,
+      insertText: formatDanbooruTagForPrompt(item.name, tagUnderscores),
       translatedName: item.translatedName,
       secondaryText: item.copyrights.map((copyright) => copyright.displayName).slice(0, 2).join(' · '),
       usageCount: item.worksCount,
@@ -150,24 +177,48 @@ function buildPromptAutocompleteSuggestions({
       id: `tag:${item.id}`,
       kind: 'tag' as const,
       label: item.displayName,
-      insertText: item.name,
+      insertText: formatDanbooruTagForPrompt(item.name, tagUnderscores),
       translatedName: item.translatedName,
       secondaryText: 'Danbooru tag',
       usageCount: item.usageCount,
     })),
   ]
 
+  // 정확히 일치 > 앞부분 일치 > 포함 순서. 같은 단계에서는 지금 프롬프트와 자주 함께 쓴 것, 내 프롬프트, 사용량 순
+  const normalizedQuery = normalizeAutocompleteLookup(query)
   const seen = new Set<string>()
   return suggestions
     .filter((suggestion) => {
-      const key = normalizeAutocompleteText(suggestion.insertText)
+      const key = normalizeAutocompleteLookup(suggestion.insertText)
       if (seen.has(key)) {
         return false
       }
       seen.add(key)
       return true
     })
-    .sort((left, right) => getAutocompleteUsageCount(right) - getAutocompleteUsageCount(left))
+    .map((suggestion) => ({
+      suggestion: { ...suggestion, relatedCount: relatedCountByTerm.get(normalizeAutocompleteLookup(suggestion.insertText)) },
+      tier: getAutocompleteMatchTier(suggestion, normalizedQuery),
+    }))
+    .sort((left, right) => (
+      right.tier - left.tier
+      || (right.suggestion.relatedCount ?? 0) - (left.suggestion.relatedCount ?? 0)
+      || Number(right.suggestion.kind === 'prompt') - Number(left.suggestion.kind === 'prompt')
+      || getAutocompleteUsageCount(right.suggestion) - getAutocompleteUsageCount(left.suggestion)
+    ))
+    .slice(0, PROMPT_AUTOCOMPLETE_LIST_SIZE)
+    .map(({ suggestion }) => suggestion)
+}
+
+/** Finished terms of the prompt outside the segment being typed, newest last (context for "used together"). */
+function resolvePromptContextTerms(value: string, activeQuery: PromptAutocompleteQuery | null, limit = 3) {
+  const before = activeQuery ? value.slice(0, activeQuery.start) : value
+  const after = activeQuery ? value.slice(activeQuery.end) : ''
+  return `${before},${after}`
+    .split(/[,\n\r]/)
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 2 && !/__|\+\+|[<>()[\]{}@]/.test(term))
+    .slice(-limit)
 }
 
 export function getRelatedTagTab(categoryName: string): PromptRelatedTagTab {
@@ -191,7 +242,7 @@ export function getPromptAutocompleteKindLabel(kind: PromptAutocompleteSuggestio
   return '프롬프트'
 }
 
-function formatPromptAutocompleteCount(count: number | undefined) {
+export function formatPromptAutocompleteCount(count: number | undefined) {
   if (count === undefined) {
     return null
   }
@@ -226,69 +277,60 @@ function isSameAutocompleteCharacter(left: PromptAutocompleteSuggestion | null, 
 export function usePromptInlineAutocomplete({
   value,
   caretPosition,
-  activeWildcardQuery,
-  isExplorerPinned,
   isFocused,
   disabled,
   isWildcardPopupOpen,
   autocompletePromptType,
+  tagUnderscores,
 }: {
   value: string
   caretPosition: number
-  activeWildcardQuery: ActiveWildcardQuery | null
-  isExplorerPinned: boolean
   isFocused: boolean
   disabled: boolean
   isWildcardPopupOpen: boolean
   autocompletePromptType: PromptTypeFilter
+  /** Insert Danbooru tags with underscores instead of spaces. */
+  tagUnderscores: boolean
 }) {
   const [selectedCharacter, setSelectedCharacter] = useState<PromptAutocompleteSuggestion | null>(null)
-  const activeQuery = useMemo(
-    () => (activeWildcardQuery === null && !isExplorerPinned ? resolveActivePromptTextQuery(value, caretPosition) : null),
-    [activeWildcardQuery, caretPosition, isExplorerPinned, value],
-  )
-  const searchText = activeQuery?.query.trim() ?? ''
+  const activeQuery = useMemo(() => resolveActivePromptTextQuery(value, caretPosition), [caretPosition, value])
+  const liveSearchText = activeQuery?.query.trim() ?? ''
+  const liveContextKey = useMemo(() => resolvePromptContextTerms(value, activeQuery).join(','), [activeQuery, value])
+  const [request, setRequest] = useState({ searchText: liveSearchText, contextKey: liveContextKey })
+  const searchText = request.searchText
   const isOpen = isFocused && !disabled && !isWildcardPopupOpen && activeQuery !== null
 
-  const promptsQuery = useQuery({
-    queryKey: ['prompt-inline-autocomplete', 'collection', autocompletePromptType, searchText],
-    queryFn: () => searchPromptCollection({
-      query: searchText,
+  // 글자마다 요청하지 않도록 잠깐 모았다가 검색
+  useEffect(() => {
+    const timer = window.setTimeout(() => setRequest({ searchText: liveSearchText, contextKey: liveContextKey }), PROMPT_AUTOCOMPLETE_DEBOUNCE_MS)
+    return () => window.clearTimeout(timer)
+  }, [liveContextKey, liveSearchText])
+
+  // 내 프롬프트·단부루 태그·캐릭터·함께 쓴 태그를 한 번의 요청으로 받는다
+  const suggestQuery = useQuery({
+    queryKey: ['prompt-inline-autocomplete', autocompletePromptType, request.searchText, request.contextKey],
+    queryFn: ({ signal }) => getPromptSuggestions({
+      query: request.searchText,
       type: autocompletePromptType,
-      page: 1,
-      limit: PROMPT_AUTOCOMPLETE_PAGE_SIZE * 3,
-      sortBy: 'usage_count',
-      sortOrder: 'DESC',
-    }),
-    enabled: isOpen,
-    staleTime: 30_000,
-  })
-  const tagsQuery = useQuery({
-    queryKey: ['prompt-inline-autocomplete', 'danbooru-tags', searchText],
-    queryFn: () => getDanbooruBrowserTags({ query: searchText, page: 1, limit: PROMPT_AUTOCOMPLETE_PAGE_SIZE * 3 }),
-    enabled: isOpen && searchText.length > 0,
-    staleTime: 60_000,
-    retry: false,
-  })
-  const charactersQuery = useQuery({
-    queryKey: ['prompt-inline-autocomplete', 'danbooru-characters', searchText],
-    queryFn: () => getDanbooruBrowserCharacters({
-      query: searchText,
-      page: 1,
-      limit: PROMPT_AUTOCOMPLETE_PAGE_SIZE * 3,
+      limit: PROMPT_AUTOCOMPLETE_LIST_SIZE * 2,
       relatedTagLimit: PROMPT_AUTOCOMPLETE_RELATED_TAG_LIMIT,
-    }),
-    enabled: isOpen && searchText.length >= 2,
-    staleTime: 60_000,
+      context: request.contextKey ? request.contextKey.split(',') : [],
+    }, signal),
+    enabled: isOpen && request.searchText.length > 0,
+    staleTime: 30_000,
     retry: false,
+    placeholderData: keepPreviousData,
   })
   const suggestions = useMemo(
     () => buildPromptAutocompleteSuggestions({
-      prompts: promptsQuery.data?.items ?? [],
-      tags: tagsQuery.data?.items ?? [],
-      characters: charactersQuery.data?.items ?? [],
+      query: searchText,
+      prompts: suggestQuery.data?.prompts ?? [],
+      tags: suggestQuery.data?.tags ?? [],
+      characters: suggestQuery.data?.characters ?? [],
+      related: suggestQuery.data?.related ?? [],
+      tagUnderscores,
     }),
-    [charactersQuery.data?.items, promptsQuery.data?.items, tagsQuery.data?.items],
+    [searchText, suggestQuery.data, tagUnderscores],
   )
   const exactCharacter = useMemo(() => {
     const normalizedQuery = normalizeAutocompleteLookup(searchText)
@@ -304,7 +346,7 @@ export function usePromptInlineAutocomplete({
   const activeCharacter = isSameAutocompleteCharacter(selectedCharacter, exactCharacter)
     ? selectedCharacter
     : (selectedCharacter ?? exactCharacter)
-  const isLoading = promptsQuery.isLoading || tagsQuery.isLoading || charactersQuery.isLoading
+  const isLoading = suggestQuery.isLoading
 
   useEffect(() => {
     if (selectedCharacter && searchText.length > 0 && normalizeAutocompleteText(selectedCharacter.insertText) !== normalizeAutocompleteText(searchText)) {

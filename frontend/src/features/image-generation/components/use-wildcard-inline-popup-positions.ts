@@ -18,7 +18,6 @@ type UseWildcardInlinePopupPositionsParams = {
   caretPosition: number
   fieldScrollLeft: number
   fieldScrollTop: number
-  isTreeExplorerMode: boolean
   suggestionsLength: number
   promptAutocompleteSuggestionsLength: number
   value: string
@@ -78,7 +77,6 @@ export function useWildcardInlinePopupPositions({
   caretPosition,
   fieldScrollLeft,
   fieldScrollTop,
-  isTreeExplorerMode,
   suggestionsLength,
   promptAutocompleteSuggestionsLength,
   value,
@@ -168,7 +166,7 @@ export function useWildcardInlinePopupPositions({
       window.removeEventListener('resize', updatePosition)
       window.removeEventListener('scroll', updatePosition, true)
     }
-  }, [caretPosition, fieldRef, fieldScrollLeft, fieldScrollTop, isPopupOpen, isTreeExplorerMode, rootRef, suggestionsLength, value])
+  }, [caretPosition, fieldRef, fieldScrollLeft, fieldScrollTop, isPopupOpen, rootRef, suggestionsLength, value])
 
   useEffect(() => {
     if (!isPromptAutocompleteOpen || typeof window === 'undefined') {

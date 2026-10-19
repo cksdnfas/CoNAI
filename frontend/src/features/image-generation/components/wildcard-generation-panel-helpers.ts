@@ -28,7 +28,7 @@ export function getWildcardPromptSyntax(
     return name
   }
 
-  return `++${name}++`
+  return `__${name}__`
 }
 
 /** Return the human label for the syntax/token currently shown in the wildcard workspace. */

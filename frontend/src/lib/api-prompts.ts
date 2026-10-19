@@ -2,6 +2,7 @@ import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { fetchJson, triggerBlobDownload } from '@/lib/api-client'
 import { requestApiData } from '@/lib/api-request'
 import type { ApiResponse } from '@/types/image'
+import type { DanbooruBrowserCharacterRecord, DanbooruBrowserTagRecord } from '@/types/danbooru-browser'
 import type {
   DanbooruPromptGroupingMode,
   DanbooruPromptGroupingResult,
@@ -26,7 +27,33 @@ function normalizePromptItem(item: PromptCollectionItem & { synonyms?: string[] 
   }
 }
 
-export type PromptAuthorInput = { type: PromptTypeFilter; prompt: string; synonyms: string[]; group_id: number | null }
+export type PromptSuggestResponse = {
+  prompts: Array<{ id: number; prompt: string; usageCount: number; groupName: string | null }>
+  tags: DanbooruBrowserTagRecord[]
+  characters: DanbooruBrowserCharacterRecord[]
+  /** Terms the user often wrote next to the context terms in recent images. */
+  related: Array<{ term: string; count: number }>
+}
+
+/** Prompt editor autocomplete in one request: my prompts, Danbooru tags/characters, and terms used with the context. */
+export function getPromptSuggestions(params: { query: string; type: PromptTypeFilter; limit: number; relatedTagLimit: number; context: string[] }, signal?: AbortSignal) {
+  const searchParams = new URLSearchParams({ q: params.query, type: params.type, limit: String(params.limit), relatedTagLimit: String(params.relatedTagLimit) })
+  if (params.context.length > 0) {
+    searchParams.set('context', params.context.join(','))
+  }
+  return requestApiData<PromptSuggestResponse>(`/api/prompt-collection/suggest?${searchParams.toString()}`, { signal })
+}
+
+/** Per-account prompt editor settings; null until the account saved them once. */
+export function getPromptEditorSettings() {
+  return requestApiData<Record<string, unknown> | null>('/api/prompt-collection/editor-settings')
+}
+
+export function savePromptEditorSettings(settings: object) {
+  return requestApiData<Record<string, unknown>>('/api/prompt-collection/editor-settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) })
+}
+
+export type PromptAuthorInput ={ type: PromptTypeFilter; prompt: string; synonyms: string[]; group_id: number | null }
 export function getPromptCollectionItem(id: number, type: PromptTypeFilter) {
   return requestApiData<PromptCollectionItem & { assistant_revision: string }>(`/api/prompt-collection/item/${id}?type=${type}`)
 }

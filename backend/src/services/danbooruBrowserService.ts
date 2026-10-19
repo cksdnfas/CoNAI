@@ -7,13 +7,10 @@ import {
   resolveDanbooruDbInfo,
   type DanbooruBrowserDatabaseInfo,
 } from './danbooruBrowser/dbResolver';
-import {
-  parsePromptGroupSyntax,
-  resolvePromptGroupPickCount,
-  type PromptGroupSyntax,
-} from './danbooruBrowser/promptGroupSyntax';
+import type { PromptRandomTokenSpec } from '@conai/shared';
+import { resolvePromptGroupPickCount } from './danbooruBrowser/promptGroupSyntax';
 import { buildTaxonomyParentKeyByKey } from './danbooruBrowser/taxonomyHierarchy';
-import { buildSqlContainsPattern } from '../utils/sqlLike';
+import { buildSqlContainsPattern, escapeSqlLikePattern } from '../utils/sqlLike';
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 100;
@@ -450,7 +447,7 @@ class DanbooruBrowserService {
     return null;
   }
 
-  private listPromptGroupTags(node: TaxonomyNodeRow, syntax: PromptGroupSyntax, limit: number): string[] {
+  private listPromptGroupTags(node: TaxonomyNodeRow, spec: Pick<PromptRandomTokenSpec, 'usage'>, limit: number): string[] {
     if (limit <= 0) {
       return [];
     }
@@ -463,13 +460,13 @@ class DanbooruBrowserService {
     ];
     const values: Array<number | string> = [...taxonomyNodeIds];
 
-    if (syntax.usageFilter.min !== undefined) {
+    if (spec.usage.min !== undefined) {
       clauses.push('tags.post_count >= ?');
-      values.push(syntax.usageFilter.min);
+      values.push(spec.usage.min);
     }
-    if (syntax.usageFilter.max !== undefined) {
+    if (spec.usage.max !== undefined) {
       clauses.push('tags.post_count <= ?');
-      values.push(syntax.usageFilter.max);
+      values.push(spec.usage.max);
     }
 
     const maxRow = this.getDb().prepare(`
@@ -500,35 +497,23 @@ class DanbooruBrowserService {
     return rows.map((row) => row.name);
   }
 
-  expandPromptGroups(text: string): string {
-    if (!text) {
-      return text;
+  /** Expand one parsed tag-group token (`__tag:hair_color|1-2|1k+__`) into random tags; empty when unresolved. */
+  expandPromptGroupToken(spec: Pick<PromptRandomTokenSpec, 'name' | 'pick' | 'usage'>): string {
+    if (!this.hasAvailableDb()) {
+      return '';
     }
 
-    const hasDb = this.hasAvailableDb();
-    return text.replace(/__([^_\r\n][^\r\n]*?)__/g, (match, rawGroup: string) => {
-      if (!hasDb) {
-        return '';
-      }
+    const node = this.findPromptGroupNode(spec.name);
+    if (!node) {
+      return '';
+    }
 
-      const syntax = parsePromptGroupSyntax(rawGroup);
-      if (!syntax) {
-        return '';
-      }
+    const pickCount = resolvePromptGroupPickCount(spec.pick);
+    if (pickCount === 0) {
+      return '';
+    }
 
-      const node = this.findPromptGroupNode(syntax.groupName);
-      if (!node) {
-        return '';
-      }
-
-      const pickCount = resolvePromptGroupPickCount(syntax.pickRange);
-      if (pickCount === 0) {
-        return '';
-      }
-
-      const tags = this.listPromptGroupTags(node, syntax, pickCount);
-      return tags.length > 0 ? tags.join(', ') : '';
-    });
+    return this.listPromptGroupTags(node, spec, pickCount).join(', ');
   }
 
   listTags(params: { q?: string; category?: string; taxonomyNodeId?: string; page?: unknown; limit?: unknown }) {
@@ -700,6 +685,97 @@ class DanbooruBrowserService {
       })),
       pagination: this.buildPagination(page, limit, total),
     };
+  }
+
+  /**
+   * Run tiered lookups (exact → name prefix → Korean prefix → contains) and keep the first `limit` unique rows.
+   * Autocomplete path: no COUNT(*), and the contains scan only runs when the cheaper tiers came up short.
+   */
+  private collectTiered<Row>(limit: number, keyOf: (row: Row) => number, tiers: Array<(remaining: number) => Row[]>): Row[] {
+    const seen = new Set<number>();
+    const collected: Row[] = [];
+    for (const tier of tiers) {
+      const remaining = limit - collected.length;
+      if (remaining <= 0) {
+        break;
+      }
+      for (const row of tier(remaining + seen.size)) {
+        const key = keyOf(row);
+        if (!seen.has(key) && collected.length < limit) {
+          seen.add(key);
+          collected.push(row);
+        }
+      }
+    }
+    return collected;
+  }
+
+  /** Tag autocomplete: exact match first, then prefix, then contains, each ordered by post count. */
+  suggestTags(rawQuery: string, limit: number): DanbooruBrowserTagRecord[] {
+    const q = normalizeQuery(rawQuery);
+    if (!q || !this.hasAvailableDb()) {
+      return [];
+    }
+
+    const db = this.getDb();
+    const translated = rawQuery.trim().toLowerCase();
+    const select = `
+      SELECT tags.id, tags.name, tags.normalized_name, tags.display_name, tt.translated_name, tags.post_count
+      FROM tags
+      LEFT JOIN tag_translations tt ON tt.tag_id = tags.id AND tt.locale = 'ko'
+    `;
+    const rows = this.collectTiered<TagRow>(limit, (row) => row.id, [
+      (count) => db.prepare(`${select} WHERE tags.is_deprecated = 0 AND tags.normalized_name = ? LIMIT ?`).all(q, count) as TagRow[],
+      (count) => db.prepare(`${select} WHERE tags.is_deprecated = 0 AND tags.normalized_name >= ? AND tags.normalized_name < ? ORDER BY tags.post_count DESC LIMIT ?`).all(q, `${q}\uffff`, count) as TagRow[],
+      (count) => db.prepare(`${select} WHERE tags.is_deprecated = 0 AND tt.translated_name LIKE ? ESCAPE '\\' ORDER BY tags.post_count DESC LIMIT ?`).all(`${escapeSqlLikePattern(translated)}%`, count) as TagRow[],
+      (count) => (q.length < 2 ? [] : db.prepare(`${select} WHERE tags.is_deprecated = 0 AND (tags.normalized_name LIKE ? ESCAPE '\\' OR tt.translated_name LIKE ? ESCAPE '\\') ORDER BY tags.post_count DESC LIMIT ?`)
+        .all(buildSqlContainsPattern(q), buildSqlContainsPattern(translated), count) as TagRow[]),
+    ]);
+
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      normalizedName: row.normalized_name,
+      displayName: displayName(row.name, row.display_name),
+      translatedName: row.translated_name,
+      usageCount: row.post_count,
+    }));
+  }
+
+  /** Character autocomplete with related tags: exact, then prefix, then Korean prefix (no contains scan). */
+  suggestCharacters(rawQuery: string, limit: number, relatedTagLimit: number): DanbooruBrowserCharacterRecord[] {
+    const q = normalizeQuery(rawQuery);
+    if (q.length < 2 || !this.hasAvailableDb()) {
+      return [];
+    }
+
+    const db = this.getDb();
+    const select = `
+      SELECT c.tag_id, c.name, c.normalized_name, tt.translated_name, c.post_count
+      FROM characters c
+      LEFT JOIN tag_translations tt ON tt.tag_id = c.tag_id AND tt.locale = 'ko'
+    `;
+    const rows = this.collectTiered<CharacterRow>(limit, (row) => row.tag_id, [
+      (count) => db.prepare(`${select} WHERE c.normalized_name = ? LIMIT ?`).all(q, count) as CharacterRow[],
+      (count) => db.prepare(`${select} WHERE c.normalized_name >= ? AND c.normalized_name < ? ORDER BY c.post_count DESC LIMIT ?`).all(q, `${q}\uffff`, count) as CharacterRow[],
+      (count) => db.prepare(`${select} WHERE tt.translated_name LIKE ? ESCAPE '\\' ORDER BY c.post_count DESC LIMIT ?`).all(`${escapeSqlLikePattern(rawQuery.trim().toLowerCase())}%`, count) as CharacterRow[],
+    ]);
+
+    const tagIds = rows.map((row) => row.tag_id);
+    const copyrightsByCharacter = this.getCopyrightsByCharacter(tagIds);
+    const relatedTagsByCharacter = this.getRelatedTagsByCharacter(tagIds, {}, relatedTagLimit);
+    return rows.map((row) => ({
+      tagId: row.tag_id,
+      name: row.name,
+      normalizedName: row.normalized_name,
+      displayName: displayName(row.name),
+      translatedName: row.translated_name,
+      worksCount: row.post_count,
+      copyrights: copyrightsByCharacter.get(row.tag_id) ?? [],
+      relatedTags: relatedTagsByCharacter.get(row.tag_id) ?? [],
+      images: this.characterImages.getRecords(row),
+      danbooruUrl: buildDanbooruPostsUrl(row.name),
+    }));
   }
 
   private getCopyrightsByCharacter(tagIds: number[]): Map<number, DanbooruBrowserCopyrightRecord[]> {

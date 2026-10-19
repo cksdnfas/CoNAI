@@ -28,7 +28,6 @@ export type PromptSyntaxToken = {
   fallbackMessage: string | null
 }
 
-const WILDCARD_TOKEN_REGEX = /\+\+([^+\r\n]+?)\+\+/g
 const LORA_TOKEN_REGEX = /<lora:([^:>]+?)(?::([^>]+?))?>/gi
 const PROMPT_COMMENT_TOKEN_REGEX = /\/\/([^/\r\n]+?)\/\//g
 const MAX_PREVIEW_ITEMS = 3
@@ -180,18 +179,14 @@ function adjustTrimmedRange(value: string, start: number, end: number) {
   }
 }
 
-/** Detect recognized wildcard, preprocess, and LoRA syntax ranges inside one prompt-like field value. */
+/** Detect recognized preprocess, comment, and LoRA syntax ranges inside one prompt-like field value. */
 export function detectPromptSyntaxTokens(value: string, records: FlattenedWildcardRecord[], tool: PromptWildcardTool) {
   if (!value) {
     return []
   }
 
+  // 와일드카드·태그 그룹 토큰은 입력창 칩(prompt-random-token)이 담당한다
   const maps = createRecordMaps(records)
-  const wildcardByName = new Map(
-    records
-      .filter((record) => record.type === 'wildcard')
-      .map((record) => [normalizePromptSyntaxName(record.name), record]),
-  )
   const preprocessByName = new Map(
     records
       .filter((record) => record.type === 'chain' && !record.isAutoCollected)
@@ -215,23 +210,6 @@ export function detectPromptSyntaxTokens(value: string, records: FlattenedWildca
     }
 
     tokens.push(buildToken('comment', rawText, start, start + rawText.length, maps))
-  }
-
-  for (const match of value.matchAll(WILDCARD_TOKEN_REGEX)) {
-    const rawText = match[0]
-    const wildcardName = match[1]?.trim()
-    const start = match.index ?? -1
-
-    if (!wildcardName || start < 0) {
-      continue
-    }
-
-    const record = wildcardByName.get(normalizePromptSyntaxName(wildcardName))
-    if (!record) {
-      continue
-    }
-
-    tokens.push(buildToken('wildcard', rawText, start, start + rawText.length, maps, { record, tool }))
   }
 
   for (const match of value.matchAll(LORA_TOKEN_REGEX)) {
@@ -269,6 +247,7 @@ export function detectPromptSyntaxTokens(value: string, records: FlattenedWildca
     if (
       normalizedSegment
       && !rawSegment.includes('++')
+      && !rawSegment.includes('__')
       && !/<lora:/i.test(rawSegment)
       && !overlapsExistingRange(tokens, trimmedRange.start, trimmedRange.end)
     ) {

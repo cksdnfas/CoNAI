@@ -4,10 +4,15 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { IconButton } from '@/components/ui/icon-button'
+import { ListRow } from '@/components/ui/list-row'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { getFloatingDropdownStyle } from './floating-dropdown-utils'
+import { usePromptInlineSyntaxSettings } from './prompt-inline-syntax-settings'
+import { PROMPT_RANDOM_SOURCE_TONE } from './prompt-random-palette'
+import { formatPromptRandomTokenLabel, type PromptRandomToken } from './prompt-random-token'
+import type { PromptRandomTokenStatus } from './use-prompt-random-sources'
 import {
   getPromptSyntaxKindLabel,
   type PromptSyntaxToken,
@@ -16,6 +21,8 @@ import {
 import {
   PROMPT_AUTOCOMPLETE_PAGE_SIZE,
   PROMPT_RELATED_TAG_TABS,
+  formatDanbooruTagForPrompt,
+  formatPromptAutocompleteCount,
   formatPromptAutocompleteLabel,
   getPromptAutocompleteKindLabel,
   getRelatedTagTab,
@@ -134,6 +141,68 @@ export function renderPromptSyntaxOverlay(value: string, tokens: PromptSyntaxTok
     nodes.push(value.slice(cursor))
   }
 
+  if (value.endsWith('\n')) {
+    nodes.push('\u200b')
+  }
+
+  return nodes
+}
+
+/**
+ * Visible-text overlay used when the prompt has random tokens: the textarea text is transparent and this layer draws
+ * the text, with each random token shown as a chip label laid over its (invisible) raw text so wrapping stays identical.
+ */
+export function renderPromptFieldOverlay(
+  value: string,
+  syntaxTokens: PromptSyntaxToken[],
+  randomTokens: PromptRandomToken[],
+  getTokenStatus: (token: PromptRandomToken) => PromptRandomTokenStatus,
+  activeTokenKey: string | null,
+) {
+  const ranges = [
+    ...randomTokens.map((token) => ({ start: token.start, end: token.end, random: token, syntax: null })),
+    ...syntaxTokens
+      .filter((token) => !randomTokens.some((random) => token.start < random.end && token.end > random.start))
+      .map((token) => ({ start: token.start, end: token.end, random: null, syntax: token })),
+  ].sort((left, right) => left.start - right.start)
+
+  const nodes: ReactNode[] = []
+  let cursor = 0
+
+  for (const range of ranges) {
+    if (range.start < cursor) {
+      continue
+    }
+    if (range.start > cursor) {
+      nodes.push(value.slice(cursor, range.start))
+    }
+    const raw = value.slice(range.start, range.end)
+    if (range.random) {
+      const status = getTokenStatus(range.random)
+      nodes.push(
+        <span
+          key={range.random.key}
+          className={cn(
+            'relative rounded-sm ring-1 ring-inset',
+            status.state === 'missing' ? 'bg-destructive/12 text-destructive ring-destructive/50' : cn(PROMPT_RANDOM_SOURCE_TONE[status.source], 'ring-transparent'),
+            range.random.key === activeTokenKey && 'ring-current',
+          )}
+        >
+          <span className="invisible">{raw}</span>
+          <span className="absolute inset-0 overflow-hidden px-1 text-[0.85em] whitespace-nowrap">
+            {status.state === 'missing' ? '⚠ ' : '🎲 '}{formatPromptRandomTokenLabel({ ...range.random, source: status.source })}
+          </span>
+        </span>,
+      )
+    } else if (range.syntax) {
+      nodes.push(<mark key={range.syntax.id} className={cn('text-inherit', getPromptSyntaxHighlightClass(range.syntax.kind))}>{raw}</mark>)
+    }
+    cursor = range.end
+  }
+
+  if (cursor < value.length) {
+    nodes.push(value.slice(cursor))
+  }
   if (value.endsWith('\n')) {
     nodes.push('\u200b')
   }
@@ -313,6 +382,7 @@ export function WildcardInlinePickerPopup({
 export function PromptAutocompletePopup({
   position,
   suggestions,
+  activeIndex = -1,
   activeCharacter,
   isLoading,
   onSelect,
@@ -320,13 +390,15 @@ export function PromptAutocompletePopup({
 }: {
   position: InlinePickerPopupPosition
   suggestions: PromptAutocompleteSuggestion[]
+  /** Keyboard-highlighted row; -1 when nothing is highlighted. */
+  activeIndex?: number
   activeCharacter: PromptAutocompleteSuggestion | null
   isLoading: boolean
   onSelect: (suggestion: PromptAutocompleteSuggestion) => void
   onSelectRelatedTag: (tagName: string) => void
 }) {
   const { t } = useI18n()
-  const [suggestionPage, setSuggestionPage] = useState(0)
+  const { settings: syntaxSettings } = usePromptInlineSyntaxSettings()
   const [relatedTagTab, setRelatedTagTab] = useState<PromptRelatedTagTab>('general')
   const [relatedTagPage, setRelatedTagPage] = useState(0)
   const relatedTags = useMemo(() => (
@@ -335,15 +407,10 @@ export function PromptAutocompletePopup({
       .sort((left, right) => right.usageCount - left.usageCount)
   ), [activeCharacter?.relatedTags])
   const hasActiveCharacter = activeCharacter !== null
-  const visibleSuggestions = hasActiveCharacter ? [] : suggestions.slice(suggestionPage * PROMPT_AUTOCOMPLETE_PAGE_SIZE, (suggestionPage + 1) * PROMPT_AUTOCOMPLETE_PAGE_SIZE)
-  const suggestionPageCount = Math.max(1, Math.ceil(suggestions.length / PROMPT_AUTOCOMPLETE_PAGE_SIZE))
+  const visibleSuggestions = hasActiveCharacter ? [] : suggestions
   const relatedTagsByTab = relatedTags.filter((tag) => getRelatedTagTab(tag.categoryName) === relatedTagTab)
   const visibleRelatedTags = relatedTagsByTab.slice(relatedTagPage * PROMPT_AUTOCOMPLETE_PAGE_SIZE, (relatedTagPage + 1) * PROMPT_AUTOCOMPLETE_PAGE_SIZE)
   const relatedTagPageCount = Math.max(1, Math.ceil(relatedTagsByTab.length / PROMPT_AUTOCOMPLETE_PAGE_SIZE))
-
-  useEffect(() => {
-    setSuggestionPage(0)
-  }, [suggestions])
 
   useEffect(() => {
     setRelatedTagTab('general')
@@ -426,7 +493,7 @@ export function PromptAutocompletePopup({
                       title={tag.translatedName ? `${tag.displayName} [${tag.translatedName}]` : tag.displayName}
                       onMouseDown={(event) => {
                         event.preventDefault()
-                        onSelectRelatedTag(tag.name)
+                        onSelectRelatedTag(formatDanbooruTagForPrompt(tag.name, syntaxSettings.tagUnderscores))
                       }}
                     >
                       <span className="truncate">{formatPromptAutocompleteLabel({ label: tag.displayName, translatedName: tag.translatedName, usageCount: tag.usageCount })}</span>
@@ -446,29 +513,51 @@ export function PromptAutocompletePopup({
             {isLoading ? (
               <div className="px-2 py-2 text-xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.autocomplete.loading')}</div>
             ) : visibleSuggestions.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {visibleSuggestions.map((suggestion) => (
-                  <Button
+              <div role="listbox" className="flex flex-col">
+                {visibleSuggestions.map((suggestion, index) => (
+                  <ListRow
                     key={suggestion.id}
-                    type="button"
-                    size="xs"
-                    variant="secondary"
-                    className="max-w-full font-normal"
-                    title={getPromptAutocompleteKindLabel(suggestion.kind)}
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                      onSelect(suggestion)
-                    }}
+                    asChild
+                    interactive
+                    size="sm"
+                    selected={index === activeIndex}
+                    leading={<span className="rounded-sm bg-surface-container px-1 text-2xs text-muted-foreground">{getPromptAutocompleteKindLabel(suggestion.kind)}</span>}
+                    trailing={(
+                      <>
+                        {suggestion.relatedCount ? <span className="rounded-sm bg-primary/10 px-1 text-2xs text-foreground">{t({ ko: '함께 씀', en: 'Used together' })}</span> : null}
+                        <span className="font-mono text-2xs tabular-nums">{formatPromptAutocompleteCount(suggestion.usageCount)}</span>
+                      </>
+                    )}
                   >
-                    <span className="truncate">{formatPromptAutocompleteLabel(suggestion)}</span>
-                  </Button>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={index === activeIndex}
+                      tabIndex={-1}
+                      onMouseDown={(event) => {
+                        event.preventDefault()
+                        onSelect(suggestion)
+                      }}
+                    >
+                      <span className="truncate">
+                        {suggestion.insertText}
+                        {suggestion.translatedName ? <span className="ml-1.5 text-xs text-muted-foreground">{suggestion.translatedName}</span> : null}
+                      </span>
+                    </button>
+                  </ListRow>
                 ))}
               </div>
             ) : (
               <div className="px-2 py-2 text-xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.autocomplete.no.suggestions')}</div>
             )}
           </div>
-          {!isLoading && visibleSuggestions.length > 0 ? renderPager(suggestionPage, suggestionPageCount, setSuggestionPage) : null}
+          {!isLoading && visibleSuggestions.length > 0 ? (
+            <div className="flex shrink-0 gap-3 bg-surface-high px-3 py-1 text-2xs text-muted-foreground">
+              <span>{t({ ko: '↑↓ 이동', en: '↑↓ move' })}</span>
+              <span>{t({ ko: 'Enter/Tab 넣기', en: 'Enter/Tab insert' })}</span>
+              <span>{t({ ko: 'Esc 닫기', en: 'Esc close' })}</span>
+            </div>
+          ) : null}
         </>
       )}
     </WildcardInlinePickerPopup>

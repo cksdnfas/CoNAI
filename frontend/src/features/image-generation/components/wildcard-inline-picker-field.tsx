@@ -1,22 +1,35 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type MouseEvent, type SyntheticEvent, type UIEvent } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { AtSign, Dices } from 'lucide-react'
+import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
+import { Button } from '@/components/ui/button'
+import { IconButton } from '@/components/ui/icon-button'
 import { inputVariants } from '@/components/ui/input'
 import { textareaVariants } from '@/components/ui/textarea'
+import { useI18n } from '@/i18n'
+import { parseWildcards } from '@/lib/api-wildcards'
 import { cn } from '@/lib/utils'
+import {
+  convertLegacyPromptSyntax,
+  findPromptRandomTokens,
+  removePromptRandomToken,
+  replacePromptRange,
+  resolveActivePaletteQuery,
+  serializePromptRandomToken,
+  type PromptRandomTokenSpec,
+} from './prompt-random-token'
+import {
+  filterPromptPaletteEntries,
+  PROMPT_PALETTE_TABS,
+  PromptRandomPalette,
+  readPromptPaletteRecents,
+  rememberPromptPaletteEntry,
+  type PromptPaletteTab,
+} from './prompt-random-palette'
+import { PromptRandomTokenEditor } from './prompt-random-token-editor'
+import { usePromptRandomSources, type PromptRandomSourceEntry } from './use-prompt-random-sources'
 import type { PromptTypeFilter } from '@/types/prompt'
-import {
-  getWildcardPromptSyntax,
-  type WildcardWorkspaceTab,
-} from './wildcard-generation-panel-helpers'
-import {
-  buildWildcardInsertion,
-  MAX_RECENT_WILDCARDS,
-  readStoredRecentWildcards,
-  readStoredWildcardFilterMode,
-  writeStoredRecentWildcards,
-  type PromptWildcardTool,
-  type WildcardFilterMode,
-  type WildcardInsertionRange,
-} from './wildcard-inline-picker-helpers'
+import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 import {
   detectPromptSyntaxTokens,
   summarizePromptSyntaxTokens,
@@ -36,6 +49,7 @@ import { WildcardInlinePickerPopupContent } from './wildcard-inline-picker-popup
 import {
   PromptAutocompletePopup,
   PromptSyntaxTokenPopup,
+  renderPromptFieldOverlay,
   renderPromptSyntaxOverlay,
   WildcardInlinePickerPopup,
 } from './wildcard-inline-picker-field-ui'
@@ -57,7 +71,7 @@ type WildcardInlinePickerFieldProps = {
   errorMessageId?: string
 }
 
-/** Shared prompt-like text field with ++ wildcard autocomplete for NAI and ComfyUI. */
+/** Shared prompt-like text field: tag autocomplete, `@` random-source palette, and random tokens shown as editable chips. */
 export function WildcardInlinePickerField({
   value,
   onChange,
@@ -81,54 +95,49 @@ export function WildcardInlinePickerField({
   const detectedCharacterButtonRefs = useRef(new Map<string, HTMLButtonElement | null>())
   const [caretPosition, setCaretPosition] = useState(0)
   const [activeIndex, setActiveIndex] = useState(0)
+  const [promptAutocompleteIndex, setPromptAutocompleteIndex] = useState(-1)
   const [isFocused, setIsFocused] = useState(false)
-  const [filterMode, setFilterMode] = useState<WildcardFilterMode>(() => readStoredWildcardFilterMode(tool))
-  const [recentWildcardNames, setRecentWildcardNames] = useState<string[]>(() => readStoredRecentWildcards(tool))
-  const [activeExplorerTab, setActiveExplorerTab] = useState<WildcardWorkspaceTab>('wildcards')
-  const [expandedExplorerIds, setExpandedExplorerIds] = useState<number[]>([])
-  const [isExplorerPinned, setIsExplorerPinned] = useState(false)
   const [fieldScrollTop, setFieldScrollTop] = useState(0)
   const [fieldScrollLeft, setFieldScrollLeft] = useState(0)
   const [activeDetectedTokenKey, setActiveDetectedTokenKey] = useState<string | null>(null)
   const [activeDetectedCharacterKey, setActiveDetectedCharacterKey] = useState<string | null>(null)
+  const [paletteTab, setPaletteTab] = useState<PromptPaletteTab>('all')
+  const [paletteIndex, setPaletteIndex] = useState(0)
+  const [paletteRecents, setPaletteRecents] = useState<string[]>(() => readPromptPaletteRecents(tool))
+  /** Position of the `@` that Ctrl+Space or the `@` button inserted: opens the palette even when typing triggers are off. */
+  const [explicitPaletteStart, setExplicitPaletteStart] = useState<number | null>(null)
+  const [dismissedPaletteStart, setDismissedPaletteStart] = useState<number | null>(null)
+  const [dismissedTokenKey, setDismissedTokenKey] = useState<string | null>(null)
+  const [isRollPreviewOpen, setIsRollPreviewOpen] = useState(false)
+  const [rollNonce, setRollNonce] = useState(0)
+  const [legacyUndo, setLegacyUndo] = useState<{ before: string; after: string; count: number } | null>(null)
+  const { t } = useI18n()
+  const { canViewWildcards } = useFeaturePermissions()
   const { settings: syntaxSettings } = usePromptInlineSyntaxSettings()
-  const shouldLoadWildcardData = !disabled && isFocused
+  const randomTokens = useMemo(() => findPromptRandomTokens(value), [value])
+  const shouldLoadWildcardData = !disabled && (isFocused || randomTokens.length > 0)
+  const typedPaletteQuery = useMemo(() => resolveActivePaletteQuery(value, caretPosition), [caretPosition, value])
+  const paletteRange = typedPaletteQuery
+    && typedPaletteQuery.start !== dismissedPaletteStart
+    && (syntaxSettings.triggers.random || typedPaletteQuery.start === explicitPaletteStart)
+    ? typedPaletteQuery
+    : null
+  const isPaletteOpen = isFocused && !disabled && paletteRange !== null
+  // 팔레트가 열려 있으면 다른 추천 팝업은 쉬게 한다
+  const suggestionCaretPosition = isPaletteOpen ? -1 : caretPosition
 
+  const { wildcardsQuery, flattenedWildcards } = useWildcardInlinePickerData({ enabled: shouldLoadWildcardData })
   const {
-    wildcardsQuery,
-    flattenedWildcards,
-    explorerTreeNodes,
-    explorerEntries,
-    selectedExplorerId,
-    setSelectedExplorerId,
-    explorerEntryIdSet,
-    rootExplorerEntryIds,
-  } = useWildcardInlinePickerData({
-    activeTab: activeExplorerTab,
-    enabled: shouldLoadWildcardData,
-  })
-  const {
-    activeGroupQuery,
-    activeWildcardQuery,
     activeSource,
-    activeQuery,
     activePreprocessQuery,
-    activeDanbooruGroupQuery,
-    danbooruSummaryQuery,
     preprocessSuggestions,
-    groupSuggestions,
-    suggestions,
     normalizedActiveQuery,
     indexedSuggestions,
-    recentSuggestions,
-    remainingSuggestions,
   } = useWildcardInlinePickerSuggestions({
     value,
-    caretPosition,
+    caretPosition: suggestionCaretPosition,
     syntaxSettings,
     flattenedWildcards,
-    filterMode,
-    recentWildcardNames,
     tool,
   })
   const detectedTokens = useMemo(
@@ -149,8 +158,33 @@ export function WildcardInlinePickerField({
     [activeDetectedCharacterKey, detectedCharacters],
   )
 
-  const isTreeExplorerMode = activeSource === 'wildcard' && filterMode === 'all' && (activeQuery === null || (activeQuery?.query.trim().length ?? 0) === 0)
-  const isPopupOpen = isFocused && !disabled && (activeSource === 'danbooru-group' || activeSource === 'preprocess' || activeSource === 'wildcard' || isExplorerPinned)
+  const {
+    entries: randomSourceEntries,
+    isWildcardName,
+    getTokenStatus,
+    isLoading: isRandomSourcesLoading,
+  } = usePromptRandomSources({ flattenedWildcards, wildcardsReady: wildcardsQuery.isSuccess, enabled: shouldLoadWildcardData, promptType: autocompletePromptType })
+  const paletteEntries = useMemo(
+    () => (isPaletteOpen ? filterPromptPaletteEntries(randomSourceEntries, paletteTab, paletteRange?.query ?? '', paletteRecents) : []),
+    [isPaletteOpen, paletteRange?.query, paletteRecents, paletteTab, randomSourceEntries],
+  )
+  const activeRandomToken = randomTokens.find((token) => token.start < caretPosition && caretPosition < token.end) ?? null
+  const isTokenEditorOpen = isFocused && !disabled && !isPaletteOpen && activeRandomToken !== null && activeRandomToken.key !== dismissedTokenKey
+  const missingTokens = randomTokens
+    .map((token) => ({ token, status: getTokenStatus(token) }))
+    .filter(({ status }) => status.state === 'missing')
+  const legacyConversion = useMemo(
+    () => (wildcardsQuery.isSuccess ? convertLegacyPromptSyntax(value, isWildcardName) : { value, count: 0 }),
+    [isWildcardName, value, wildcardsQuery.isSuccess],
+  )
+  const rollPreviewQuery = useQuery({
+    queryKey: ['prompt-field-roll-preview', tool, value, rollNonce],
+    queryFn: () => parseWildcards({ text: value, tool, count: 3 }),
+    enabled: isRollPreviewOpen && canViewWildcards && value.trim().length > 0,
+    staleTime: Number.POSITIVE_INFINITY,
+  })
+
+  const isPopupOpen = isFocused && !disabled && !isPaletteOpen && activeSource === 'preprocess'
   const {
     activeQuery: activePromptAutocompleteQuery,
     isOpen: isPromptAutocompleteOpen,
@@ -160,13 +194,12 @@ export function WildcardInlinePickerField({
     setSelectedCharacter: setSelectedPromptAutocompleteCharacter,
   } = usePromptInlineAutocomplete({
     value,
-    caretPosition,
-    activeWildcardQuery: activeSource === 'tag' ? null : (activeWildcardQuery ?? activeGroupQuery),
-    isExplorerPinned,
+    caretPosition: suggestionCaretPosition,
     isFocused,
     disabled: disabled || activeSource !== 'tag',
     isWildcardPopupOpen: isPopupOpen,
     autocompletePromptType,
+    tagUnderscores: syntaxSettings.tagUnderscores,
   })
   const {
     detectedPopupPosition,
@@ -176,7 +209,8 @@ export function WildcardInlinePickerField({
   } = useWildcardInlinePopupPositions({
     activeDetectedTokenKey,
     activeDetectedCharacterKey: activeDetectedCharacter?.candidate.key ?? null,
-    isPopupOpen,
+    // 전처리 추천, 팔레트, 칩 편집기는 동시에 열리지 않으므로 같은 커서 위치 팝업 자리를 함께 쓴다
+    isPopupOpen: isPopupOpen || isPaletteOpen || isTokenEditorOpen,
     isPromptAutocompleteOpen,
     rootRef,
     fieldRef,
@@ -185,8 +219,7 @@ export function WildcardInlinePickerField({
     caretPosition,
     fieldScrollLeft,
     fieldScrollTop,
-    isTreeExplorerMode,
-    suggestionsLength: suggestions.length,
+    suggestionsLength: indexedSuggestions.length + paletteEntries.length,
     promptAutocompleteSuggestionsLength: promptAutocompleteSuggestions.length,
     value,
   })
@@ -203,22 +236,43 @@ export function WildcardInlinePickerField({
 
   useEffect(() => {
     setActiveIndex(0)
-  }, [activeDanbooruGroupQuery?.query, activePreprocessQuery?.query, activeQuery?.query, activeSource, filterMode, tool])
+  }, [activePreprocessQuery?.query, activeSource, tool])
 
   useEffect(() => {
-    setFilterMode(readStoredWildcardFilterMode(tool))
-    setRecentWildcardNames(readStoredRecentWildcards(tool))
+    setPaletteRecents(readPromptPaletteRecents(tool))
   }, [tool])
 
+  // `__`, `__tag:`, `__my:`로 연 팔레트는 맞는 탭에서 시작한다
+  const typedPaletteStart = typedPaletteQuery?.start
+  const typedPaletteTab = typedPaletteQuery?.tab
   useEffect(() => {
-    if (rootExplorerEntryIds.length === 0) {
-      return
+    if (typedPaletteTab) {
+      setPaletteTab(typedPaletteTab)
     }
+  }, [typedPaletteStart, typedPaletteTab])
 
-    if (selectedExplorerId === null || !explorerEntryIdSet.has(selectedExplorerId)) {
-      setExpandedExplorerIds((current) => Array.from(new Set([...current, ...rootExplorerEntryIds])))
+  // 목록이 바뀌면 선택 해제: Enter는 화살표로 고른 뒤에만 추천을 넣고, 그 전엔 줄바꿈으로 동작
+  useEffect(() => {
+    setPromptAutocompleteIndex(-1)
+  }, [promptAutocompleteSuggestions])
+
+  useEffect(() => {
+    setPaletteIndex(0)
+  }, [paletteRange?.query, paletteTab])
+
+  // `@`를 지우면 닫았던 팔레트 기록도 지워서 다음 `@`에서 다시 열리게 한다
+  useEffect(() => {
+    if (typedPaletteQuery === null) {
+      setDismissedPaletteStart(null)
     }
-  }, [explorerEntryIdSet, rootExplorerEntryIds, selectedExplorerId])
+  }, [typedPaletteQuery])
+
+  // 예전 문법 변환 뒤 사용자가 다시 고치면 되돌리기를 거둔다
+  useEffect(() => {
+    if (legacyUndo && value !== legacyUndo.after) {
+      setLegacyUndo(null)
+    }
+  }, [legacyUndo, value])
 
   useEffect(() => () => {
     if (closeTimerRef.current !== null) {
@@ -277,42 +331,6 @@ export function WildcardInlinePickerField({
     onChange(nextValue)
     syncCaretPosition(element)
     setSelectedPromptAutocompleteCharacter(null)
-
-    if (activeQuery === null && isExplorerPinned) {
-      setIsExplorerPinned(false)
-    }
-  }
-
-  const handleInsertWildcard = (wildcardName: string, explicitSyntaxText?: string) => {
-    if (!fieldRef.current) {
-      return
-    }
-
-    const insertionRange: WildcardInsertionRange | null = activeQuery
-      ? { start: activeQuery.start, end: activeQuery.end }
-      : isExplorerPinned
-        ? { start: caretPosition, end: caretPosition }
-        : null
-
-    if (!insertionRange) {
-      return
-    }
-
-    const insertionText = explicitSyntaxText ?? getWildcardPromptSyntax(wildcardName)
-    const { nextValue, nextCaretPosition } = buildWildcardInsertion(value, insertionText, insertionRange)
-    const nextRecentWildcardNames = [wildcardName, ...recentWildcardNames.filter((name) => name !== wildcardName)].slice(0, MAX_RECENT_WILDCARDS)
-
-    onChange(nextValue)
-    setCaretPosition(nextCaretPosition)
-    setActiveIndex(0)
-    setIsExplorerPinned(filterMode === 'all')
-    setRecentWildcardNames(nextRecentWildcardNames)
-    writeStoredRecentWildcards(tool, nextRecentWildcardNames)
-
-    window.requestAnimationFrame(() => {
-      fieldRef.current?.focus()
-      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
-    })
   }
 
   const handleInsertPreprocess = (preprocessName: string) => {
@@ -321,23 +339,6 @@ export function WildcardInlinePickerField({
     }
 
     const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, preprocessName, activePreprocessQuery)
-
-    onChange(nextValue)
-    setCaretPosition(nextCaretPosition)
-    setActiveIndex(0)
-
-    window.requestAnimationFrame(() => {
-      fieldRef.current?.focus()
-      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
-    })
-  }
-
-  const handleInsertDanbooruGroup = (groupName: string) => {
-    if (!fieldRef.current || !activeDanbooruGroupQuery) {
-      return
-    }
-
-    const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, `__${groupName}__`, activeDanbooruGroupQuery)
 
     onChange(nextValue)
     setCaretPosition(nextCaretPosition)
@@ -399,25 +400,116 @@ export function WildcardInlinePickerField({
     })
   }
 
+  const applyValueWithCaret = (nextValue: string, nextCaretPosition: number) => {
+    onChange(nextValue)
+    setCaretPosition(nextCaretPosition)
+
+    window.requestAnimationFrame(() => {
+      fieldRef.current?.focus()
+      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
+    })
+  }
+
+  /** Insert a palette source as a token; with `openEditor` the caret lands inside it so the chip editor opens. */
+  const handleInsertPaletteEntry = (entry: PromptRandomSourceEntry, openEditor: boolean) => {
+    if (!paletteRange) {
+      return
+    }
+
+    const tokenText = serializePromptRandomToken({ source: entry.source, name: entry.name, pick: { min: 1, max: 1 }, usage: {} })
+    const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, tokenText, paletteRange)
+    const tokenEnd = nextValue.lastIndexOf(tokenText, nextCaretPosition) + tokenText.length
+
+    setExplicitPaletteStart(null)
+    setDismissedTokenKey(null)
+    setPaletteRecents(rememberPromptPaletteEntry(tool, paletteRecents, entry))
+    applyValueWithCaret(nextValue, openEditor ? tokenEnd - 2 : nextCaretPosition)
+  }
+
+  /** Ctrl+Space / `@` button: type an `@` at the caret so the palette opens and the user can keep typing to filter. */
+  const openPaletteAtCaret = (caret: number) => {
+    const before = value.slice(0, caret)
+    const prefix = before.length > 0 && !/[\s,(]$/.test(before) ? ' ' : ''
+    const insertAt = caret + prefix.length
+    setPaletteTab('all')
+    setDismissedPaletteStart(null)
+    setExplicitPaletteStart(insertAt)
+    applyValueWithCaret(`${before}${prefix}@${value.slice(caret)}`, insertAt + 1)
+  }
+
+  const handleChangeRandomToken = (spec: PromptRandomTokenSpec) => {
+    if (!activeRandomToken) {
+      return
+    }
+
+    const tokenText = serializePromptRandomToken(spec)
+    applyValueWithCaret(replacePromptRange(value, activeRandomToken.start, activeRandomToken.end, tokenText), activeRandomToken.start + tokenText.length - 2)
+  }
+
+  const handleRemoveRandomToken = () => {
+    if (!activeRandomToken) {
+      return
+    }
+
+    const nextValue = removePromptRandomToken(value, activeRandomToken)
+    applyValueWithCaret(nextValue, Math.min(activeRandomToken.start, nextValue.length))
+  }
+
+  const handleRenameRandomToken = (token: (typeof randomTokens)[number], source: PromptRandomTokenSpec['source'], name: string) => {
+    const tokenText = serializePromptRandomToken({ ...token, source, name })
+    applyValueWithCaret(replacePromptRange(value, token.start, token.end, tokenText), token.start + tokenText.length)
+  }
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (isPopupOpen && activeSource === 'danbooru-group' && groupSuggestions.length > 0) {
-      if (event.key === 'ArrowDown') {
+    if (event.key === ' ' && event.ctrlKey) {
+      event.preventDefault()
+      openPaletteAtCaret(event.currentTarget.selectionStart ?? caretPosition)
+      return
+    }
+
+    if (isPaletteOpen && paletteRange) {
+      if (event.key === 'ArrowDown' && paletteEntries.length > 0) {
         event.preventDefault()
-        setActiveIndex((current) => (current + 1) % groupSuggestions.length)
+        setPaletteIndex((current) => (current + 1) % paletteEntries.length)
         return
       }
 
-      if (event.key === 'ArrowUp') {
+      if (event.key === 'ArrowUp' && paletteEntries.length > 0) {
         event.preventDefault()
-        setActiveIndex((current) => (current - 1 + groupSuggestions.length) % groupSuggestions.length)
+        setPaletteIndex((current) => (current - 1 + paletteEntries.length) % paletteEntries.length)
         return
       }
 
-      if (event.key === 'Enter' || event.key === 'Tab') {
+      if (event.key === 'Tab') {
         event.preventDefault()
-        handleInsertDanbooruGroup(groupSuggestions[activeIndex]?.label ?? groupSuggestions[0].label)
+        const tabIndex = PROMPT_PALETTE_TABS.indexOf(paletteTab)
+        setPaletteTab(PROMPT_PALETTE_TABS[(tabIndex + (event.shiftKey ? -1 : 1) + PROMPT_PALETTE_TABS.length) % PROMPT_PALETTE_TABS.length])
         return
       }
+
+      if (event.key === 'Enter' && paletteEntries.length > 0) {
+        event.preventDefault()
+        handleInsertPaletteEntry(paletteEntries[paletteIndex] ?? paletteEntries[0], event.shiftKey)
+        return
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        // Ctrl+Space / 버튼이 넣은 빈 `@`는 닫을 때 같이 지운다
+        if (paletteRange.start === explicitPaletteStart && paletteRange.query === '' && value[paletteRange.start] === '@') {
+          setExplicitPaletteStart(null)
+          applyValueWithCaret(replacePromptRange(value, paletteRange.start, paletteRange.start + 1, ''), paletteRange.start)
+          return
+        }
+        setDismissedPaletteStart(paletteRange.start)
+        return
+      }
+    }
+
+    if (isTokenEditorOpen && activeRandomToken && event.key === 'Escape') {
+      event.preventDefault()
+      setDismissedTokenKey(activeRandomToken.key)
+      return
     }
 
     if (isPopupOpen && activeSource === 'preprocess' && preprocessSuggestions.length > 0) {
@@ -440,22 +532,22 @@ export function WildcardInlinePickerField({
       }
     }
 
-    if (isPopupOpen && activeSource === 'wildcard' && !isTreeExplorerMode && suggestions.length > 0) {
+    if (isPromptAutocompleteOpen && !activePromptAutocompleteCharacter && promptAutocompleteSuggestions.length > 0) {
       if (event.key === 'ArrowDown') {
         event.preventDefault()
-        setActiveIndex((current) => (current + 1) % suggestions.length)
+        setPromptAutocompleteIndex((current) => (current + 1) % promptAutocompleteSuggestions.length)
         return
       }
 
       if (event.key === 'ArrowUp') {
         event.preventDefault()
-        setActiveIndex((current) => (current - 1 + suggestions.length) % suggestions.length)
+        setPromptAutocompleteIndex((current) => (current <= 0 ? promptAutocompleteSuggestions.length : current) - 1)
         return
       }
 
-      if (event.key === 'Enter' || event.key === 'Tab') {
+      if ((event.key === 'Enter' || event.key === 'Tab') && promptAutocompleteIndex >= 0) {
         event.preventDefault()
-        handleInsertWildcard(suggestions[activeIndex]?.record.name ?? suggestions[0].record.name)
+        handleInsertPromptAutocomplete(promptAutocompleteSuggestions[promptAutocompleteIndex] ?? promptAutocompleteSuggestions[0])
         return
       }
     }
@@ -470,7 +562,6 @@ export function WildcardInlinePickerField({
     if (event.key === 'Escape') {
       event.preventDefault()
       setCaretPosition(-1)
-      setIsExplorerPinned(false)
     }
   }
 
@@ -503,17 +594,8 @@ export function WildcardInlinePickerField({
     onBlur: () => {
       closeTimerRef.current = window.setTimeout(() => {
         setIsFocused(false)
-        setIsExplorerPinned(false)
       }, 120)
     },
-  }
-
-  const toggleExplorerExpanded = (wildcardId: number) => {
-    setExpandedExplorerIds((current) => (
-      current.includes(wildcardId)
-        ? current.filter((id) => id !== wildcardId)
-        : [...current, wildcardId]
-    ))
   }
 
   const cancelDetectedPopupClose = () => {
@@ -530,25 +612,34 @@ export function WildcardInlinePickerField({
     }, 120)
   }
 
+  // 랜덤 토큰이 있으면 textarea 글자를 투명하게 하고 덮개 레이어가 글자와 칩을 그린다
+  const isChipMode = randomTokens.length > 0
+  const hasOverlay = isChipMode || (showDetectedSyntax && detectedTokens.length > 0)
+  const overlayContent = isChipMode
+    ? renderPromptFieldOverlay(value, showDetectedSyntax ? detectedTokens : [], randomTokens, getTokenStatus, isTokenEditorOpen ? activeRandomToken?.key ?? null : null)
+    : renderPromptSyntaxOverlay(value, detectedTokens)
+  const overlayTextClass = isChipMode ? 'text-foreground' : 'text-transparent'
+  const fieldLayerClass = hasOverlay ? cn('relative z-10 bg-transparent', isChipMode && 'text-transparent caret-foreground') : 'relative z-10'
+
   return (
     <div ref={rootRef} className="relative space-y-2">
-      <div className={cn('relative rounded-sm', showDetectedSyntax && detectedTokens.length > 0 ? 'bg-surface-container' : undefined)}>
-        {showDetectedSyntax && detectedTokens.length > 0 ? (
+      <div className={cn('relative rounded-sm', hasOverlay ? 'bg-surface-container' : undefined)}>
+        {hasOverlay ? (
           <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-sm">
             {multiline ? (
               <div
-                className="absolute inset-0 whitespace-pre-wrap break-words px-3 py-2 text-sm text-transparent"
+                className={cn('absolute inset-0 whitespace-pre-wrap break-words py-2 pl-3 pr-10 text-sm', overlayTextClass)}
                 style={{ transform: `translate(${-fieldScrollLeft}px, ${-fieldScrollTop}px)` }}
               >
-                {renderPromptSyntaxOverlay(value, detectedTokens)}
+                {overlayContent}
               </div>
             ) : (
-              <div className="flex h-full items-center overflow-hidden px-3 text-sm text-transparent">
+              <div className={cn('flex h-full items-center overflow-hidden px-3 text-sm', overlayTextClass)}>
                 <div
                   className="min-w-full whitespace-pre"
                   style={{ transform: `translateX(${-fieldScrollLeft}px)` }}
                 >
-                  {renderPromptSyntaxOverlay(value, detectedTokens)}
+                  {overlayContent}
                 </div>
               </div>
             )}
@@ -562,7 +653,7 @@ export function WildcardInlinePickerField({
             }}
             rows={rows}
             {...sharedProps}
-            className={cn(textareaVariants(), 'overflow-hidden', showDetectedSyntax && detectedTokens.length > 0 ? 'relative z-10 bg-transparent' : 'relative z-10', className)}
+            className={cn(textareaVariants(), 'overflow-hidden pr-10', fieldLayerClass, className)}
           />
         ) : (
           <input
@@ -571,10 +662,100 @@ export function WildcardInlinePickerField({
             }}
             type="text"
             {...sharedProps}
-            className={cn(inputVariants(), showDetectedSyntax && detectedTokens.length > 0 ? 'relative z-10 bg-transparent' : 'relative z-10', className)}
+            className={cn(inputVariants(), fieldLayerClass, className)}
           />
         )}
+
+        {multiline && !disabled ? (
+          <div className="absolute top-1 right-1 z-20 flex flex-col gap-1">
+            <IconButton
+              size="icon-xs"
+              variant="ghost"
+              label={t({ ko: '랜덤 소스 팔레트 (@, Ctrl+Space)', en: 'Random source palette (@, Ctrl+Space)' })}
+              onMouseDown={(event) => {
+                event.preventDefault()
+                openPaletteAtCaret(isFocused ? fieldRef.current?.selectionStart ?? value.length : value.length)
+              }}
+            >
+              <AtSign />
+            </IconButton>
+            {canViewWildcards ? (
+              <IconButton
+                size="icon-xs"
+                variant={isRollPreviewOpen ? 'secondary' : 'ghost'}
+                aria-pressed={isRollPreviewOpen}
+                label={t({ ko: '실제로 들어갈 프롬프트 미리보기', en: 'Preview resolved prompts' })}
+                onClick={() => setIsRollPreviewOpen((current) => !current)}
+              >
+                <Dices />
+              </IconButton>
+            ) : null}
+          </div>
+        ) : null}
       </div>
+
+      {legacyConversion.count > 0 || legacyUndo ? (
+        <div className="flex items-center justify-between gap-2 rounded-sm bg-primary/8 px-3 py-1.5 text-xs">
+          <span>
+            {legacyUndo
+              ? t({ ko: `예전 문법 ${legacyUndo.count}곳을 새 문법으로 바꿨어요.`, en: `Converted ${legacyUndo.count} old syntax token(s).` })
+              : t({ ko: `예전 문법이 ${legacyConversion.count}곳 있어요. 뜻은 그대로 두고 새 문법으로 바꿀 수 있어요.`, en: `${legacyConversion.count} token(s) use the old syntax and can be converted without changing meaning.` })}
+          </span>
+          <Button
+            type="button"
+            size="xs"
+            variant="secondary"
+            onClick={() => {
+              if (legacyUndo) {
+                onChange(legacyUndo.before)
+                setLegacyUndo(null)
+                return
+              }
+              setLegacyUndo({ before: value, after: legacyConversion.value, count: legacyConversion.count })
+              onChange(legacyConversion.value)
+            }}
+          >
+            {legacyUndo ? t({ ko: '되돌리기', en: 'Undo' }) : t({ ko: '새 문법으로 바꾸기', en: 'Convert' })}
+          </Button>
+        </div>
+      ) : null}
+
+      {missingTokens.length > 0 ? (
+        <div className="space-y-1 px-1 text-xs text-destructive">
+          {missingTokens.map(({ token, status }) => (
+            <div key={token.key} className="flex flex-wrap items-center gap-1">
+              <span>{t({ ko: `⚠ ${token.name}: 찾을 수 없어 생성할 때 빈 값으로 들어가요.`, en: `⚠ ${token.name}: not found, becomes empty at generation.` })}</span>
+              {status.suggestion ? (
+                <Button type="button" size="xs" variant="ghost" className="underline" onClick={() => handleRenameRandomToken(token, status.source, status.suggestion ?? token.name)}>
+                  {t({ ko: `혹시 ${status.suggestion}?`, en: `Did you mean ${status.suggestion}?` })}
+                </Button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {isRollPreviewOpen && canViewWildcards ? (
+        <div className="space-y-1 rounded-sm bg-surface-low px-3 py-2 text-xs">
+          <div className="flex items-center justify-between text-2xs text-muted-foreground">
+            <span>{t({ ko: '실제로 들어갈 프롬프트 · 예시 3개', en: 'Resolved prompts · 3 samples' })}</span>
+            <Button type="button" size="xs" variant="ghost" onClick={() => setRollNonce((current) => current + 1)}>
+              {t({ ko: '다시 굴리기', en: 'Roll again' })}
+            </Button>
+          </div>
+          {!value.trim() ? (
+            <div className="text-muted-foreground">{t({ ko: '프롬프트를 입력하면 미리 굴려볼 수 있어요.', en: 'Type a prompt to preview it.' })}</div>
+          ) : rollPreviewQuery.isLoading ? (
+            <div className="text-muted-foreground">{t({ ko: '굴리는 중…', en: 'Rolling…' })}</div>
+          ) : rollPreviewQuery.isError ? (
+            <div className="text-destructive">{t({ ko: '미리보기를 불러오지 못했어요.', en: 'Could not load the preview.' })}</div>
+          ) : (
+            (rollPreviewQuery.data?.results ?? []).map((result, index) => (
+              <div key={index} className="border-t border-line pt-1 break-words first:border-t-0 first:pt-0">{result}</div>
+            ))
+          )}
+        </div>
+      ) : null}
 
       <WildcardInlinePickerDetectedChips
         showDetectedSyntax={showDetectedSyntax}
@@ -619,6 +800,7 @@ export function WildcardInlinePickerField({
         <PromptAutocompletePopup
           position={promptAutocompletePopupPosition}
           suggestions={promptAutocompleteSuggestions}
+          activeIndex={promptAutocompleteIndex}
           activeCharacter={activePromptAutocompleteCharacter}
           isLoading={isPromptAutocompleteLoading}
           onSelect={handleInsertPromptAutocomplete}
@@ -626,35 +808,45 @@ export function WildcardInlinePickerField({
         />
       ) : null}
 
+      {isPaletteOpen && inlinePopupPosition ? (
+        <WildcardInlinePickerPopup position={inlinePopupPosition}>
+          <PromptRandomPalette
+            tab={paletteTab}
+            entries={paletteEntries}
+            recents={paletteRecents}
+            activeIndex={paletteIndex}
+            isLoading={isRandomSourcesLoading || wildcardsQuery.isLoading}
+            tool={tool}
+            promptType={autocompletePromptType}
+            onChangeTab={setPaletteTab}
+            onHoverIndex={setPaletteIndex}
+            onInsert={handleInsertPaletteEntry}
+          />
+        </WildcardInlinePickerPopup>
+      ) : null}
+
+      {isTokenEditorOpen && activeRandomToken && inlinePopupPosition ? (
+        <WildcardInlinePickerPopup position={{ ...inlinePopupPosition, width: Math.min(inlinePopupPosition.width, 360) }}>
+          <PromptRandomTokenEditor
+            token={activeRandomToken}
+            status={getTokenStatus(activeRandomToken)}
+            tool={tool}
+            canPreview={canViewWildcards}
+            onChange={handleChangeRandomToken}
+            onRemove={handleRemoveRandomToken}
+            onRename={(name) => handleRenameRandomToken(activeRandomToken, getTokenStatus(activeRandomToken).source, name)}
+          />
+        </WildcardInlinePickerPopup>
+      ) : null}
+
       {isPopupOpen && inlinePopupPosition ? (
         <WildcardInlinePickerPopup position={inlinePopupPosition}>
           <WildcardInlinePickerPopupContent
-            activeSource={activeSource}
             activeIndex={activeIndex}
             activeListSuggestions={indexedSuggestions}
-            activeExplorerTab={activeExplorerTab}
-            expandedExplorerIds={expandedExplorerIds}
-            explorerEntriesCount={explorerEntries.length}
-            explorerTreeNodes={explorerTreeNodes}
-            filterMode={filterMode}
-            groupSuggestions={groupSuggestions}
-            isDanbooruDatabaseAvailable={danbooruSummaryQuery.data?.database.available !== false}
-            isDanbooruSummaryLoading={danbooruSummaryQuery.isLoading}
-            isTreeExplorerMode={isTreeExplorerMode}
-            isWildcardsLoading={wildcardsQuery.isLoading}
             normalizedActiveQuery={normalizedActiveQuery}
-            recentSuggestions={recentSuggestions}
-            remainingSuggestions={remainingSuggestions}
-            selectedExplorerId={selectedExplorerId}
             tool={tool}
-            onChangeActiveExplorerTab={setActiveExplorerTab}
-            onChangeFilterMode={setFilterMode}
-            onInsertDanbooruGroup={handleInsertDanbooruGroup}
             onInsertPreprocess={handleInsertPreprocess}
-            onInsertWildcard={handleInsertWildcard}
-            onSelectExplorerId={setSelectedExplorerId}
-            onSetExplorerPinned={setIsExplorerPinned}
-            onToggleExplorerExpanded={toggleExplorerExpanded}
           />
         </WildcardInlinePickerPopup>
       ) : null}

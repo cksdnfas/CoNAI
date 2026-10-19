@@ -2,16 +2,13 @@ import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getWildcards } from '@/lib/api-wildcards'
-import type { WildcardWorkspaceTab } from './wildcard-generation-panel-helpers'
 import { flattenWildcardRecords } from './wildcard-inline-picker-helpers'
-import { useWildcardWorkspaceBrowser } from './use-wildcard-workspace-browser'
 
 interface UseWildcardInlinePickerDataOptions {
-  activeTab: WildcardWorkspaceTab
   enabled: boolean
 }
 
-export function useWildcardInlinePickerData({ activeTab, enabled }: UseWildcardInlinePickerDataOptions) {
+export function useWildcardInlinePickerData({ enabled }: UseWildcardInlinePickerDataOptions) {
   const { canViewWildcards } = useFeaturePermissions()
   const wildcardsQuery = useQuery({
     queryKey: ['wildcards', 'inline-picker'],
@@ -22,30 +19,9 @@ export function useWildcardInlinePickerData({ activeTab, enabled }: UseWildcardI
 
   const wildcards = useMemo(() => canViewWildcards ? wildcardsQuery.data ?? [] : [], [canViewWildcards, wildcardsQuery.data])
   const flattenedWildcards = useMemo(() => flattenWildcardRecords(wildcards), [wildcards])
-  const {
-    treeNodes: explorerTreeNodes,
-    entries: explorerEntries,
-    selectedWildcardId: selectedExplorerId,
-    setSelectedWildcardId: setSelectedExplorerId,
-  } = useWildcardWorkspaceBrowser({
-    records: wildcards,
-    activeTab,
-  })
-  const explorerEntryIdSet = useMemo(() => new Set(explorerEntries.map((entry) => entry.wildcard.id)), [explorerEntries])
-  const rootExplorerEntryIds = useMemo(
-    () => explorerEntries.filter((entry) => entry.depth === 0).map((entry) => entry.wildcard.id),
-    [explorerEntries],
-  )
 
   return {
     wildcardsQuery,
-    wildcards,
     flattenedWildcards,
-    explorerTreeNodes,
-    explorerEntries,
-    selectedExplorerId,
-    setSelectedExplorerId,
-    explorerEntryIdSet,
-    rootExplorerEntryIds,
   }
 }

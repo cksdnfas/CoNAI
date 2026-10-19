@@ -1,5 +1,8 @@
 import { WildcardModel, WildcardWithItems, WildcardItem, type WildcardTool } from '../models/Wildcard';
 import { danbooruBrowserService } from './danbooruBrowserService';
+import { parsePromptRandomTokenBody, PROMPT_RANDOM_TOKEN_PATTERN } from '@conai/shared';
+import { resolvePromptGroupPickCount } from './danbooruBrowser/promptGroupSyntax';
+import { PromptGroupService } from './promptGroupService';
 
 type WildcardStoredTool = WildcardTool
 type WildcardResolutionTool = WildcardStoredTool | 'codex'
@@ -28,8 +31,8 @@ export class WildcardService {
     // 재귀 파싱 시작
     let result = text;
 
-    // 1. Danbooru 태그 그룹 처리 (__Group__)
-    result = danbooruBrowserService.expandPromptGroups(result);
+    // 1. 랜덤 토큰 처리 (__tag:그룹__, __my:그룹__, __와일드카드__)
+    result = this.expandRandomTokens(result, wildcardMap);
 
     // 2. 체인 처리 (전역 토큰 변환)
     result = this.parseChains(result, wildcardMap, tool);
@@ -38,6 +41,32 @@ export class WildcardService {
     result = this.parseRecursive(result, wildcardMap, tool, new Set());
 
     return this.compactPromptSegments(result);
+  }
+
+  /**
+   * `__...__` 토큰 해석
+   * - `__tag:그룹|옵션__` → 단부루 태그 그룹 랜덤
+   * - `__my:그룹|옵션__` → 내 프롬프트 그룹 랜덤
+   * - `__이름__` → 같은 이름의 와일드카드가 있으면 `++이름++`로 넘기고, 없으면 예전 문법(단부루 그룹)으로 해석
+   */
+  private static expandRandomTokens(text: string, wildcardMap: Map<string, WildcardWithItems>): string {
+    return text.replace(PROMPT_RANDOM_TOKEN_PATTERN, (_match, rawBody: string) => {
+      const token = parsePromptRandomTokenBody(rawBody);
+      if (!token) {
+        return '';
+      }
+
+      if (token.source === 'my') {
+        return PromptGroupService.pickRandomPromptsByGroupName(token.name, resolvePromptGroupPickCount(token.pick), token.usage).join(', ');
+      }
+
+      if (token.source === 'wildcard' && !token.hasOptions && wildcardMap.has(token.name)) {
+        return `++${token.name}++`;
+      }
+
+      // __tag:group__ 또는 와일드카드가 아닌 예전 __group__
+      return danbooruBrowserService.expandPromptGroupToken(token);
+    });
   }
 
   /**
@@ -317,10 +346,10 @@ export class WildcardService {
     tool: WildcardResolutionTool,
     visited: Set<string>
   ): string {
-    // ++name++ 패턴 매칭 (ComfyUI의 __name__과 구분)
+    // ++name++ 패턴 매칭 (항목 안의 __...__ 토큰은 먼저 ++name++ 또는 결과로 바꾼다)
     const pattern = /\+\+([^+]+)\+\+/g;
 
-    let result = text.replace(pattern, (match, name) => {
+    let result = this.expandRandomTokens(text, wildcardMap).replace(pattern, (match, name) => {
       // 순환 참조 체크
       if (visited.has(name)) {
         console.warn(`Circular reference detected for wildcard: ${name}`);
@@ -377,6 +406,14 @@ export class WildcardService {
 
     while ((match = pattern.exec(text)) !== null) {
       names.push(match[1]);
+    }
+
+    // __이름__ (접두사 없는 토큰)도 와일드카드 참조로 취급
+    for (const tokenMatch of text.matchAll(PROMPT_RANDOM_TOKEN_PATTERN)) {
+      const token = parsePromptRandomTokenBody(tokenMatch[1]);
+      if (token?.source === 'wildcard' && !token.hasOptions) {
+        names.push(token.name);
+      }
     }
 
     return [...new Set(names)]; // 중복 제거
