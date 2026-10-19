@@ -56,10 +56,11 @@ function Segmented({ options, label }: { label: string; options: Array<{ id: str
 }
 
 /** Chip editor: pick count and usage filter as buttons, live preview rolls, and the syntax it writes. */
-export function PromptRandomTokenEditor({ token, status, tool, canPreview, onChange, onRemove, onRename }: {
+export function PromptRandomTokenEditor({ token, status, tool, promptType, canPreview, onChange, onRemove, onRename }: {
   token: PromptRandomToken
   status: PromptRandomTokenStatus
   tool: PromptWildcardTool
+  promptType: 'positive' | 'negative'
   canPreview: boolean
   onChange: (spec: PromptRandomTokenSpec) => void
   onRemove: () => void
@@ -71,8 +72,8 @@ export function PromptRandomTokenEditor({ token, status, tool, canPreview, onCha
   const spec: PromptRandomTokenSpec = { source: token.source, name: token.name, pick: token.pick, usage: token.usage }
   const canonical = serializePromptRandomToken({ ...spec, source })
   const previewQuery = useQuery({
-    queryKey: ['prompt-random-token-preview', tool, token.raw],
-    queryFn: () => parseWildcards({ text: token.raw, tool, count: 3 }),
+    queryKey: ['prompt-random-token-preview', tool, promptType, token.raw],
+    queryFn: () => parseWildcards({ text: token.raw, tool, count: 3, promptType }),
     enabled: canPreview && status.state === 'ok',
     staleTime: 0,
   })
@@ -113,8 +114,7 @@ export function PromptRandomTokenEditor({ token, status, tool, canPreview, onCha
         </div>
       ) : null}
 
-      {source !== 'wildcard' ? (
-        <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-2">
+      <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-2">
           <span className="text-muted-foreground">{t({ ko: '뽑을 개수', en: 'Pick' })}</span>
           <Segmented
             label={t({ ko: '뽑을 개수', en: 'Pick' })}
@@ -138,13 +138,17 @@ export function PromptRandomTokenEditor({ token, status, tool, canPreview, onCha
               </div>
             </>
           ) : null}
-          <span className="text-muted-foreground">{t({ ko: '사용량', en: 'Usage' })}</span>
-          <Segmented
-            label={t({ ko: '사용량', en: 'Usage' })}
-            options={USAGE_PRESETS.map((preset) => ({ id: preset.id, label: t({ ko: preset.ko, en: preset.en }), selected: isSameUsage(preset.usage, token.usage), onSelect: () => onChange({ ...spec, source, usage: preset.usage }) }))}
-          />
-        </div>
-      ) : null}
+          {/* 사용량은 단부루/내 그룹에만 있다 (와일드카드 항목에는 사용횟수가 없음) */}
+          {source !== 'wildcard' ? (
+            <>
+              <span className="text-muted-foreground">{t({ ko: '사용량', en: 'Usage' })}</span>
+              <Segmented
+                label={t({ ko: '사용량', en: 'Usage' })}
+                options={USAGE_PRESETS.map((preset) => ({ id: preset.id, label: t({ ko: preset.ko, en: preset.en }), selected: isSameUsage(preset.usage, token.usage), onSelect: () => onChange({ ...spec, source, usage: preset.usage }) }))}
+              />
+            </>
+          ) : null}
+      </div>
 
       {canPreview && status.state === 'ok' ? (
         <div className="rounded-sm bg-surface-container p-2">

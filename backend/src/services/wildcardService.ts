@@ -6,6 +6,8 @@ import { PromptGroupService } from './promptGroupService';
 
 type WildcardStoredTool = WildcardTool
 type WildcardResolutionTool = WildcardStoredTool | 'codex'
+/** Which prompt box the text came from; `__my:group__` reads the same-named group of that kind first. */
+export type WildcardPromptKind = 'positive' | 'negative'
 
 /**
  * Wildcard Service
@@ -18,9 +20,10 @@ export class WildcardService {
    *
    * @param text 파싱할 텍스트
    * @param tool 사용할 도구 ('comfyui' | 'nai' | 'codex')
+   * @param promptKind 긍정/부정 프롬프트 구분 (`__my:` 그룹 선택 기준)
    * @returns 파싱된 텍스트
    */
-  static parseWildcards(text: string, tool: WildcardResolutionTool): string {
+  static parseWildcards(text: string, tool: WildcardResolutionTool, promptKind: WildcardPromptKind = 'positive'): string {
     // 모든 와일드카드를 항목과 함께 로드
     const wildcards = WildcardModel.findAllWithItems();
 
@@ -32,13 +35,13 @@ export class WildcardService {
     let result = text;
 
     // 1. 랜덤 토큰 처리 (__tag:그룹__, __my:그룹__, __와일드카드__)
-    result = this.expandRandomTokens(result, wildcardMap);
+    result = this.expandRandomTokens(result, wildcardMap, tool, promptKind);
 
     // 2. 체인 처리 (전역 토큰 변환)
     result = this.parseChains(result, wildcardMap, tool);
 
     // 3. 와일드카드 처리 (++name++)
-    result = this.parseRecursive(result, wildcardMap, tool, new Set());
+    result = this.parseRecursive(result, wildcardMap, tool, new Set(), promptKind);
 
     return this.compactPromptSegments(result);
   }
@@ -46,10 +49,16 @@ export class WildcardService {
   /**
    * `__...__` 토큰 해석
    * - `__tag:그룹|옵션__` → 단부루 태그 그룹 랜덤
-   * - `__my:그룹|옵션__` → 내 프롬프트 그룹 랜덤
-   * - `__이름__` → 같은 이름의 와일드카드가 있으면 `++이름++`로 넘기고, 없으면 예전 문법(단부루 그룹)으로 해석
+   * - `__my:그룹|옵션__` → 내 프롬프트 그룹 랜덤 (긍정 칸은 긍정 그룹, 부정 칸은 부정 그룹)
+   * - `__이름__` / `__이름|2__` → 같은 이름의 와일드카드가 있으면 항목을 (개수만큼 겹치지 않게) 뽑고,
+   *   없거나 예전 `[1~2]` 옵션을 쓰면 단부루 그룹으로 해석
    */
-  private static expandRandomTokens(text: string, wildcardMap: Map<string, WildcardWithItems>): string {
+  private static expandRandomTokens(
+    text: string,
+    wildcardMap: Map<string, WildcardWithItems>,
+    tool: WildcardResolutionTool,
+    promptKind: WildcardPromptKind
+  ): string {
     return text.replace(PROMPT_RANDOM_TOKEN_PATTERN, (_match, rawBody: string) => {
       const token = parsePromptRandomTokenBody(rawBody);
       if (!token) {
@@ -57,11 +66,17 @@ export class WildcardService {
       }
 
       if (token.source === 'my') {
-        return PromptGroupService.pickRandomPromptsByGroupName(token.name, resolvePromptGroupPickCount(token.pick), token.usage).join(', ');
+        return PromptGroupService.pickRandomPromptsByGroupName(token.name, resolvePromptGroupPickCount(token.pick), token.usage, promptKind).join(', ');
       }
 
-      if (token.source === 'wildcard' && !token.hasOptions && wildcardMap.has(token.name)) {
-        return `++${token.name}++`;
+      const wildcard = token.source === 'wildcard' && !token.legacy ? wildcardMap.get(token.name) : undefined;
+      if (wildcard) {
+        if (!token.hasOptions) {
+          return `++${token.name}++`;
+        }
+        // 뽑힌 항목 안의 ++이름++ / __토큰__은 이후 단계(parseRecursive)가 이어서 푼다
+        const items = this.collectItemsWithChildren(wildcard, tool, wildcardMap);
+        return this.selectDistinctItemsWithWeight(items, resolvePromptGroupPickCount(token.pick)).map((item) => item.content).join(', ');
       }
 
       // __tag:group__ 또는 와일드카드가 아닌 예전 __group__
@@ -222,6 +237,18 @@ export class WildcardService {
     return items[items.length - 1];
   }
 
+  /** 가중치를 고려해 서로 다른 항목을 최대 count개 뽑는다 (항목이 모자라면 있는 만큼). */
+  private static selectDistinctItemsWithWeight(items: WildcardItem[], count: number): WildcardItem[] {
+    const remaining = [...items];
+    const selected: WildcardItem[] = [];
+    while (selected.length < count && remaining.length > 0) {
+      const item = this.selectRandomItemWithWeight(remaining);
+      selected.push(item);
+      remaining.splice(remaining.indexOf(item), 1);
+    }
+    return selected;
+  }
+
   /**
    * 가중치 문법 파싱 - 리스트 방식
    * 예: (태그, 1.0, 1.1, 1.2) -> (태그:1.1) 중 랜덤
@@ -344,12 +371,13 @@ export class WildcardService {
     text: string,
     wildcardMap: Map<string, WildcardWithItems>,
     tool: WildcardResolutionTool,
-    visited: Set<string>
+    visited: Set<string>,
+    promptKind: WildcardPromptKind
   ): string {
     // ++name++ 패턴 매칭 (항목 안의 __...__ 토큰은 먼저 ++name++ 또는 결과로 바꾼다)
     const pattern = /\+\+([^+]+)\+\+/g;
 
-    let result = this.expandRandomTokens(text, wildcardMap).replace(pattern, (match, name) => {
+    let result = this.expandRandomTokens(text, wildcardMap, tool, promptKind).replace(pattern, (match, name) => {
       // 순환 참조 체크
       if (visited.has(name)) {
         console.warn(`Circular reference detected for wildcard: ${name}`);
@@ -378,7 +406,7 @@ export class WildcardService {
       visited.add(name);
 
       // 재귀 파싱 (중첩된 와일드카드 처리)
-      const recursiveResult = this.parseRecursive(selectedItem.content, wildcardMap, tool, visited);
+      const recursiveResult = this.parseRecursive(selectedItem.content, wildcardMap, tool, visited, promptKind);
 
       // 방문 해제 (다른 경로에서 사용 가능하도록)
       visited.delete(name);
@@ -411,7 +439,7 @@ export class WildcardService {
     // __이름__ (접두사 없는 토큰)도 와일드카드 참조로 취급
     for (const tokenMatch of text.matchAll(PROMPT_RANDOM_TOKEN_PATTERN)) {
       const token = parsePromptRandomTokenBody(tokenMatch[1]);
-      if (token?.source === 'wildcard' && !token.hasOptions) {
+      if (token?.source === 'wildcard' && !token.legacy) {
         names.push(token.name);
       }
     }
@@ -490,11 +518,12 @@ export class WildcardService {
   static parseMultiple(
     text: string,
     tool: WildcardResolutionTool,
-    count: number = 5
+    count: number = 5,
+    promptKind: WildcardPromptKind = 'positive'
   ): string[] {
     const results: string[] = [];
     for (let i = 0; i < count; i++) {
-      results.push(this.parseWildcards(text, tool));
+      results.push(this.parseWildcards(text, tool, promptKind));
     }
     return results;
   }

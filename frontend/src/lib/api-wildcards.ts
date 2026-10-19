@@ -194,7 +194,7 @@ export async function scanWildcardLoraFolder(input: LoraScanRequest) {
 }
 
 /** Ask the backend wildcard parser to preview one or more resolved prompt results. */
-export async function parseWildcards(input: { text: string; tool: WildcardTool | 'codex'; count?: number }) {
+export async function parseWildcards(input: { text: string; tool: WildcardTool | 'codex'; count?: number; promptType?: 'positive' | 'negative' }) {
   return requestWildcardData<WildcardParseResponse>('/api/wildcards/parse', 'wildcards.preview.parse', {
     method: 'POST',
     headers: {
@@ -204,6 +204,7 @@ export async function parseWildcards(input: { text: string; tool: WildcardTool |
       text: input.text,
       tool: input.tool,
       count: input.count ?? 5,
+      promptType: input.promptType,
     }),
   })
 }

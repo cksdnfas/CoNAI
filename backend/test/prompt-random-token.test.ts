@@ -34,7 +34,14 @@ test('serialize writes the canonical form and round-trips', () => {
   const text = serializePromptRandomToken(spec)
   assert.equal(text, '__tag:hair_color|1-2|1.5k+__')
   assert.deepEqual(findPromptRandomTokens(text)[0]?.usage, { min: 1500 })
-  assert.equal(serializePromptRandomToken({ source: 'wildcard', name: 'pose', pick: { min: 2, max: 3 }, usage: { min: 10 } }), '__pose__')
+  // 와일드카드는 개수만 쓰고 사용량은 버린다
+  assert.equal(serializePromptRandomToken({ source: 'wildcard', name: 'pose', pick: { min: 2, max: 3 }, usage: { min: 10 } }), '__pose|2-3__')
+  assert.equal(serializePromptRandomToken({ source: 'wildcard', name: 'pose', pick: { min: 1, max: 1 }, usage: {} }), '__pose__')
+})
+
+test('legacy conversion leaves a wildcard pick count (`__pose|2__`) as a wildcard', () => {
+  const result = convertLegacyPromptSyntax('__pose|2__, __hair|2__', (name) => name === 'pose')
+  assert.equal(result.value, '__pose|2__, __tag:hair|2__')
 })
 
 test('token scan finds new and ++legacy++ tokens in order and skips a__b text', () => {

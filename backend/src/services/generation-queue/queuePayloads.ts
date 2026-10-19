@@ -1,4 +1,4 @@
-import { WildcardService } from '../wildcardService'
+import { WildcardService, type WildcardPromptKind } from '../wildcardService'
 import { stripPromptPresetComments } from '../../utils/promptComments'
 import type { GeneratedImageSaveOptions } from '../../utils/fileSaver'
 import type { AIMetadata } from '../metadata/types'
@@ -46,7 +46,7 @@ export function parseNaiQueuePayload(record: GenerationQueueJobRecord) {
   return payload as unknown as NAIMetadataInputParams & { imageSaveOptions?: GeneratedImageSaveOptions }
 }
 
-function parseCodexWildcardText(value: unknown) {
+function parseCodexWildcardText(value: unknown, promptKind: WildcardPromptKind = 'positive') {
   if (typeof value !== 'string') {
     return undefined
   }
@@ -56,7 +56,7 @@ function parseCodexWildcardText(value: unknown) {
     return undefined
   }
 
-  return stripPromptPresetComments(WildcardService.parseWildcards(trimmed, 'codex'))
+  return stripPromptPresetComments(WildcardService.parseWildcards(trimmed, 'codex', promptKind))
 }
 
 export function parseCodexQueuePayload(record: GenerationQueueJobRecord) {
@@ -81,7 +81,7 @@ export function parseCodexQueuePayload(record: GenerationQueueJobRecord) {
   return {
     prompt,
     model: typeof payload.model === 'string' && payload.model.trim().length > 0 ? payload.model.trim() : undefined,
-    negative_prompt: parseCodexWildcardText(payload.negative_prompt),
+    negative_prompt: parseCodexWildcardText(payload.negative_prompt, 'negative'),
     size: typeof payload.size === 'string' && payload.size.trim().length > 0 ? payload.size.trim() : undefined,
     quality: typeof payload.quality === 'string' && payload.quality.trim().length > 0 ? payload.quality.trim() : undefined,
     background,

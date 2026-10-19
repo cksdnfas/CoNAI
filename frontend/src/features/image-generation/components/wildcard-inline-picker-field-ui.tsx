@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { useEffect, useMemo, useState, type ReactNode, type RefObject } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
@@ -148,6 +148,70 @@ export function renderPromptSyntaxOverlay(value: string, tokens: PromptSyntaxTok
   return nodes
 }
 
+type ChipLabelBox = { left: number; top: number; width: number; height: number }
+
+/** The element an absolutely positioned child of `node` is placed against: nearest positioned or transformed ancestor. */
+function findAbsoluteContainingBlock(node: HTMLElement) {
+  for (let current = node.parentElement; current; current = current.parentElement) {
+    const style = window.getComputedStyle(current)
+    if (style.position !== 'static' || style.transform !== 'none') {
+      return current
+    }
+  }
+  return null
+}
+
+/**
+ * One random token in the overlay: its raw text stays (invisible) so wrapping matches the textarea, every line piece
+ * gets the tone fill, and the label sits on the widest piece, so a token broken over two lines still shows its label.
+ */
+function PromptRandomTokenChip({ raw, label, className }: { raw: string; label: string; className: string }) {
+  const chipRef = useRef<HTMLSpanElement>(null)
+  const [box, setBox] = useState<ChipLabelBox | null>(null)
+  const [, setResizeTick] = useState(0)
+
+  // A field resize rewraps the text without re-rendering the overlay; re-measure then.
+  useEffect(() => {
+    const container = chipRef.current ? findAbsoluteContainingBlock(chipRef.current) : null
+    if (!container) {
+      return
+    }
+    const observer = new ResizeObserver(() => setResizeTick((tick) => tick + 1))
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [])
+
+  // Measured every render: typing, rewrapping and scrolling all re-render the overlay.
+  useLayoutEffect(() => {
+    const chip = chipRef.current
+    const container = chip ? findAbsoluteContainingBlock(chip) : null
+    if (!chip || !container) {
+      return
+    }
+    const pieces = Array.from(chip.getClientRects())
+    if (pieces.length === 0) {
+      return
+    }
+    const widest = pieces.reduce((best, piece) => (piece.width > best.width ? piece : best))
+    const origin = container.getBoundingClientRect()
+    const next = { left: widest.left - origin.left, top: widest.top - origin.top, width: widest.width, height: widest.height }
+    setBox((current) => (
+      current && current.left === next.left && current.top === next.top && current.width === next.width && current.height === next.height ? current : next
+    ))
+  })
+
+  return (
+    <span ref={chipRef} className={cn('rounded-sm ring-1 ring-inset [-webkit-box-decoration-break:clone] [box-decoration-break:clone]', className)}>
+      <span className="invisible">{raw}</span>
+      {box ? (
+        <span className="absolute overflow-hidden px-1 text-[0.85em] text-ellipsis whitespace-nowrap" style={box}>
+          {label}
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
 /**
  * Visible-text overlay used when the prompt has random tokens: the textarea text is transparent and this layer draws
  * the text, with each random token shown as a chip label laid over its (invisible) raw text so wrapping stays identical.
@@ -180,19 +244,15 @@ export function renderPromptFieldOverlay(
     if (range.random) {
       const status = getTokenStatus(range.random)
       nodes.push(
-        <span
+        <PromptRandomTokenChip
           key={range.random.key}
+          raw={raw}
+          label={`${status.state === 'missing' ? '⚠ ' : '🎲 '}${formatPromptRandomTokenLabel({ ...range.random, source: status.source })}`}
           className={cn(
-            'relative rounded-sm ring-1 ring-inset',
             status.state === 'missing' ? 'bg-destructive/12 text-destructive ring-destructive/50' : cn(PROMPT_RANDOM_SOURCE_TONE[status.source], 'ring-transparent'),
             range.random.key === activeTokenKey && 'ring-current',
           )}
-        >
-          <span className="invisible">{raw}</span>
-          <span className="absolute inset-0 overflow-hidden px-1 text-[0.85em] whitespace-nowrap">
-            {status.state === 'missing' ? '⚠ ' : '🎲 '}{formatPromptRandomTokenLabel({ ...range.random, source: status.source })}
-          </span>
-        </span>,
+        />,
       )
     } else if (range.syntax) {
       nodes.push(<mark key={range.syntax.id} className={cn('text-inherit', getPromptSyntaxHighlightClass(range.syntax.kind))}>{raw}</mark>)

@@ -19,10 +19,10 @@ export {
 /** Short chip text: `hair_color · 1~2개 · 1K+`. */
 export function formatPromptRandomTokenLabel(spec: PromptRandomTokenSpec) {
   const parts = [spec.name]
+  if (spec.pick.min !== 1 || spec.pick.max !== 1) {
+    parts.push(spec.pick.min === spec.pick.max ? `${spec.pick.min}개` : `${spec.pick.min}~${spec.pick.max}개`)
+  }
   if (spec.source !== 'wildcard') {
-    if (spec.pick.min !== 1 || spec.pick.max !== 1) {
-      parts.push(spec.pick.min === spec.pick.max ? `${spec.pick.min}개` : `${spec.pick.min}~${spec.pick.max}개`)
-    }
     if (spec.usage.min !== undefined) {
       parts.push(`${formatPromptCompactCount(spec.usage.min).toUpperCase()}+`)
     }

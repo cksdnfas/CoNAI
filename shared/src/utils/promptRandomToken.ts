@@ -2,6 +2,7 @@
  * Random prompt token syntax shared by the prompt editor (chips, palette) and the backend resolver.
  *
  * - `__name__`                  wildcard; when no wildcard has that name the backend reads it as a Danbooru tag group
+ * - `__name|2__`                wildcard: 2 different items (usage options do not apply to wildcards)
  * - `__tag:group|1-2|1k+__`     Danbooru tag group: pick 1-2 tags with at least 1000 uses (`100-` = at most 100)
  * - `__my:group|2__`            the user's own prompt group
  * Legacy forms still read: `++name++`, `__group [1~2] <1k>__` (`<-100>` = at most 100).
@@ -159,14 +160,14 @@ export function findPromptRandomTokens(value: string): PromptRandomToken[] {
   return tokens.sort((left, right) => left.start - right.start)
 }
 
-/** Canonical token text for one spec (wildcards carry no options). */
+/** Canonical token text for one spec (wildcards carry only the pick count). */
 export function serializePromptRandomToken(spec: PromptRandomTokenSpec) {
   const prefix = spec.source === 'wildcard' ? '' : `${spec.source}:`
   const options: string[] = []
+  if (spec.pick.min !== 1 || spec.pick.max !== 1) {
+    options.push(spec.pick.min === spec.pick.max ? String(spec.pick.min) : `${spec.pick.min}-${spec.pick.max}`)
+  }
   if (spec.source !== 'wildcard') {
-    if (spec.pick.min !== 1 || spec.pick.max !== 1) {
-      options.push(spec.pick.min === spec.pick.max ? String(spec.pick.min) : `${spec.pick.min}-${spec.pick.max}`)
-    }
     if (spec.usage.min !== undefined) {
       options.push(`${formatPromptCompactCount(spec.usage.min)}+`)
     }
@@ -184,7 +185,7 @@ export function replacePromptRange(value: string, start: number, end: number, in
 
 /**
  * Rewrite legacy tokens to the new syntax with the same meaning: `++name++` → `__name__`; an unprefixed `__group__`
- * the backend would read as a tag group (not a wildcard, or written with modifiers) → `__tag:group__`.
+ * the backend would read as a tag group (not a wildcard, or written with legacy modifiers) → `__tag:group__`.
  */
 export function convertLegacyPromptSyntax(value: string, isWildcardName: (name: string) => boolean) {
   let nextValue = value
@@ -192,7 +193,7 @@ export function convertLegacyPromptSyntax(value: string, isWildcardName: (name: 
 
   for (const token of findPromptRandomTokens(value).reverse()) {
     const isLegacyPlus = token.raw.startsWith('++')
-    const readsAsTagGroup = token.unprefixed && !isLegacyPlus && (token.hasOptions || !isWildcardName(token.name))
+    const readsAsTagGroup = token.unprefixed && !isLegacyPlus && (token.legacy || !isWildcardName(token.name))
     if (!isLegacyPlus && !readsAsTagGroup && !token.legacy) {
       continue
     }

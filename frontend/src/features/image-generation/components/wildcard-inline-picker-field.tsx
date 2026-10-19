@@ -116,7 +116,9 @@ export function WildcardInlinePickerField({
   const { canViewWildcards } = useFeaturePermissions()
   const { settings: syntaxSettings } = usePromptInlineSyntaxSettings()
   const randomTokens = useMemo(() => findPromptRandomTokens(value), [value])
-  const shouldLoadWildcardData = !disabled && (isFocused || randomTokens.length > 0)
+  // `__my:그룹__`은 이 칸 종류(긍정/부정)의 같은 이름 그룹으로 풀린다
+  const randomPromptKind = autocompletePromptType === 'negative' ? 'negative' : 'positive'
+  const shouldLoadWildcardData =!disabled && (isFocused || randomTokens.length > 0)
   const typedPaletteQuery = useMemo(() => resolveActivePaletteQuery(value, caretPosition), [caretPosition, value])
   const paletteRange = typedPaletteQuery
     && typedPaletteQuery.start !== dismissedPaletteStart
@@ -183,8 +185,8 @@ export function WildcardInlinePickerField({
     [isWildcardName, value, wildcardsQuery.isSuccess],
   )
   const rollPreviewQuery = useQuery({
-    queryKey: ['prompt-field-roll-preview', tool, value, rollNonce],
-    queryFn: () => parseWildcards({ text: value, tool, count: 3 }),
+    queryKey: ['prompt-field-roll-preview', tool, randomPromptKind, value, rollNonce],
+    queryFn: () => parseWildcards({ text: value, tool, count: 3, promptType: randomPromptKind }),
     enabled: isRollPreviewOpen && canViewWildcards && value.trim().length > 0,
     staleTime: Number.POSITIVE_INFINITY,
   })
@@ -838,6 +840,7 @@ export function WildcardInlinePickerField({
             token={activeRandomToken}
             status={getTokenStatus(activeRandomToken)}
             tool={tool}
+            promptType={randomPromptKind}
             canPreview={canViewWildcards}
             onChange={handleChangeRandomToken}
             onRemove={handleRemoveRandomToken}

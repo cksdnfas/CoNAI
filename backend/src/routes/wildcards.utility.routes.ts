@@ -9,7 +9,7 @@ const router = Router();
 
 router.post('/parse', requirePermission('wildcards.view'), asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { text, tool, count = 1 } = req.body;
+    const { text, tool, count = 1, promptType } = req.body;
 
     if (!text || typeof text !== 'string') {
       return res.status(400).json({ success: false, error: 'Text is required' });
@@ -20,7 +20,7 @@ router.post('/parse', requirePermission('wildcards.view'), asyncHandler(async (r
     }
 
     const parsedCount = Math.min(Math.max(parseInt(count) || 1, 1), 10);
-    const results = WildcardService.parseMultiple(text, tool, parsedCount);
+    const results = WildcardService.parseMultiple(text, tool, parsedCount, promptType === 'negative' ? 'negative' : 'positive');
 
     return res.json({
       success: true,

@@ -94,8 +94,10 @@ export function usePromptRandomSources({ flattenedWildcards, wildcardsReady, ena
       tag: summaryQuery.isSuccess || !canViewPrompts,
       my: (positiveGroupsQuery.isSuccess && negativeGroupsQuery.isSuccess) || !canViewPrompts,
     }
-    // 접두사 없는 토큰: 와일드카드가 없으면 백엔드가 태그 그룹으로 해석
-    const source: PromptRandomTokenSource = token.unprefixed && wildcardsReady && !namesBySource.wildcard.has(name) && !token.raw.startsWith('++') ? 'tag' : token.source
+    // 접두사 없는 토큰: 와일드카드가 없거나 예전 `[1~2]` 옵션을 쓰면 백엔드가 태그 그룹으로 해석
+    const isLegacyPlus = token.raw.startsWith('++')
+    const readsAsTagGroup = token.unprefixed && !isLegacyPlus && (token.legacy || (wildcardsReady && !namesBySource.wildcard.has(name)))
+    const source: PromptRandomTokenSource = readsAsTagGroup ? 'tag' : token.source
     if (!readyBySource[source] || (source === 'tag' && !canViewPrompts)) {
       return { state: 'pending', source, suggestion: null }
     }

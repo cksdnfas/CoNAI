@@ -13,7 +13,8 @@ export type PromptAutocompleteQuery = {
 
 export type PromptAutocompleteSuggestion = {
   id: string
-  kind: 'prompt' | 'tag' | 'character'
+  /** `related`: offered on an empty slot, from terms written together with the current prompt. */
+  kind: 'prompt' | 'tag' | 'character' | 'related'
   label: string
   insertText: string
   translatedName?: string | null
@@ -150,6 +151,17 @@ function buildPromptAutocompleteSuggestions({
   related: PromptSuggestResponse['related']
   tagUnderscores: boolean
 }): PromptAutocompleteSuggestion[] {
+  // 빈 칸: 지금 프롬프트와 자주 함께 쓴 말만 보여준다
+  if (!query.trim()) {
+    return related.slice(0, PROMPT_AUTOCOMPLETE_LIST_SIZE).map((item) => ({
+      id: `related:${item.term}`,
+      kind: 'related' as const,
+      label: item.term,
+      insertText: tagUnderscores ? item.term.replace(/ /g, '_') : item.term,
+      usageCount: item.count,
+    }))
+  }
+
   const relatedCountByTerm = new Map(related.map((item) => [normalizeAutocompleteLookup(item.term), item.count]))
   const suggestions: PromptAutocompleteSuggestion[] = [
     ...prompts.map((item) => ({
@@ -210,6 +222,20 @@ function buildPromptAutocompleteSuggestions({
     .map(({ suggestion }) => suggestion)
 }
 
+/** Caret on an empty slot right after `term, ` (or a new line after a term): where a "used together" term goes. */
+function resolveEmptyPromptSlot(value: string, caretPosition: number): PromptAutocompleteQuery | null {
+  if (caretPosition < 0) {
+    return null
+  }
+  const caret = Math.min(caretPosition, value.length)
+  const before = value.slice(0, caret)
+  const after = value.slice(caret)
+  if (!/(,\s+|\n\s*)$/.test(before) || !before.trim() || !/^\s*(?:[,\n]|$)/.test(after)) {
+    return null
+  }
+  return { query: '', start: caret, end: caret }
+}
+
 /** Finished terms of the prompt outside the segment being typed, newest last (context for "used together"). */
 function resolvePromptContextTerms(value: string, activeQuery: PromptAutocompleteQuery | null, limit = 3) {
   const before = activeQuery ? value.slice(0, activeQuery.start) : value
@@ -238,6 +264,9 @@ export function getPromptAutocompleteKindLabel(kind: PromptAutocompleteSuggestio
   }
   if (kind === 'tag') {
     return '단부루'
+  }
+  if (kind === 'related') {
+    return '함께 씀'
   }
   return '프롬프트'
 }
@@ -293,12 +322,18 @@ export function usePromptInlineAutocomplete({
   tagUnderscores: boolean
 }) {
   const [selectedCharacter, setSelectedCharacter] = useState<PromptAutocompleteSuggestion | null>(null)
-  const activeQuery = useMemo(() => resolveActivePromptTextQuery(value, caretPosition), [caretPosition, value])
-  const liveSearchText = activeQuery?.query.trim() ?? ''
+  const typedQuery = useMemo(() => resolveActivePromptTextQuery(value, caretPosition), [caretPosition, value])
+  // 쉼표 뒤 빈 칸에서는 "함께 씀"만 보여준다 (함께 쓴 기록은 긍정 프롬프트만 집계)
+  const emptySlotQuery = useMemo(
+    () => (typedQuery === null && autocompletePromptType === 'positive' ? resolveEmptyPromptSlot(value, caretPosition) : null),
+    [autocompletePromptType, caretPosition, typedQuery, value],
+  )
+  const activeQuery = typedQuery ?? emptySlotQuery
+  const liveSearchText = typedQuery?.query.trim() ?? ''
   const liveContextKey = useMemo(() => resolvePromptContextTerms(value, activeQuery).join(','), [activeQuery, value])
   const [request, setRequest] = useState({ searchText: liveSearchText, contextKey: liveContextKey })
   const searchText = request.searchText
-  const isOpen = isFocused && !disabled && !isWildcardPopupOpen && activeQuery !== null
+  const canSuggest = isFocused && !disabled && !isWildcardPopupOpen && activeQuery !== null
 
   // 글자마다 요청하지 않도록 잠깐 모았다가 검색
   useEffect(() => {
@@ -316,7 +351,7 @@ export function usePromptInlineAutocomplete({
       relatedTagLimit: PROMPT_AUTOCOMPLETE_RELATED_TAG_LIMIT,
       context: request.contextKey ? request.contextKey.split(',') : [],
     }, signal),
-    enabled: isOpen && request.searchText.length > 0,
+    enabled: canSuggest && (request.searchText.length > 0 || (emptySlotQuery !== null && request.contextKey.length > 0)),
     staleTime: 30_000,
     retry: false,
     placeholderData: keepPreviousData,
@@ -332,6 +367,8 @@ export function usePromptInlineAutocomplete({
     }),
     [searchText, suggestQuery.data, tagUnderscores],
   )
+  // 빈 칸은 보여줄 "함께 씀"이 있을 때만 연다 (빈 목록 팝업이 입력을 가리지 않게)
+  const isOpen = canSuggest && (typedQuery !== null || (searchText.length === 0 && suggestions.length > 0))
   const exactCharacter = useMemo(() => {
     const normalizedQuery = normalizeAutocompleteLookup(searchText)
     if (!normalizedQuery) {

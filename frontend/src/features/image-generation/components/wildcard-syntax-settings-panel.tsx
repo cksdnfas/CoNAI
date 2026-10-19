@@ -19,12 +19,13 @@ import {
 const HELP_ITEMS = [
   { syntax: '@ · Ctrl+Space', ko: '와일드카드·태그 그룹·내 그룹을 고르는 팔레트를 열어.', en: 'Open the palette of wildcards, tag groups and your groups.' },
   { syntax: '__Wildcard__', ko: '와일드카드 항목을 랜덤 출력해.', en: 'Output a random wildcard entry.' },
+  { syntax: '__Wildcard|2__', ko: '와일드카드에서 서로 다른 항목 2개를 출력해.', en: 'Output two different wildcard entries.' },
   { syntax: '__tag:Group__', ko: '단부루 태그 그룹에서 랜덤 1개를 출력해.', en: 'Output one random tag from the Danbooru group.' },
   { syntax: '__tag:Group|3__', ko: '그룹에서 정확히 3개를 출력해.', en: 'Output exactly three tags from the group.' },
   { syntax: '__tag:Group|0-3__', ko: '그룹에서 0~3개를 랜덤 출력해.', en: 'Output zero to three random tags from the group.' },
   { syntax: '__tag:Group|1k+__', ko: '사용횟수 1000 이상 태그만 사용해.', en: 'Use only tags with at least 1000 uses.' },
   { syntax: '__tag:Group|100-__', ko: '사용횟수 100 이하 태그만 사용해.', en: 'Use only tags with at most 100 uses.' },
-  { syntax: '__my:Group|1-2__', ko: '내 프롬프트 그룹에서 1~2개를 랜덤 출력해.', en: 'Output one or two random prompts from your prompt group.' },
+  { syntax: '__my:Group|1-2__', ko: '내 프롬프트 그룹에서 1~2개를 랜덤 출력해. 부정 칸에서는 부정 그룹을 써.', en: 'Output one or two random prompts from your prompt group (the negative group in negative prompts).' },
   { syntax: 'preprocess', ko: '전처리 체인 키워드를 그대로 입력해.', en: 'Insert a preprocess chain keyword as plain text.' },
 ]
 

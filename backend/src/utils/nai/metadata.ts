@@ -1,7 +1,7 @@
 /**
  * NovelAI metadata normalization helpers shared by direct generation and graph execution.
  */
-import { WildcardService } from '../../services/wildcardService'
+import { WildcardService, type WildcardPromptKind } from '../../services/wildcardService'
 import { stripPromptPresetComments } from '../promptComments'
 
 export interface NAICharacterPrompt {
@@ -72,7 +72,7 @@ export interface NAIMetadataInputParams extends Omit<NAIMetadataParams, 'charact
 const CHARACTER_GRID_VALUES = [0.1, 0.3, 0.5, 0.7, 0.9] as const
 
 /** Parse one NAI prompt-like string with preprocess chains first, then wildcards. */
-function parseNaiWildcardText(value: string | undefined) {
+function parseNaiWildcardText(value: string | undefined, promptKind: WildcardPromptKind = 'positive') {
   if (typeof value !== 'string') {
     return ''
   }
@@ -82,7 +82,7 @@ function parseNaiWildcardText(value: string | undefined) {
     return ''
   }
 
-  return stripPromptPresetComments(WildcardService.parseWildcards(trimmedValue, 'nai'))
+  return stripPromptPresetComments(WildcardService.parseWildcards(trimmedValue, 'nai', promptKind))
 }
 
 /** Parse JSON-or-array payloads into a safe array shape. */
@@ -135,7 +135,7 @@ function normalizeCharacters(value: NAIMetadataInputParams['characters']): NAICh
 
     normalized.push({
       prompt,
-      uc: typeof rawEntry.uc === 'string' ? parseNaiWildcardText(rawEntry.uc) : undefined,
+      uc: typeof rawEntry.uc === 'string' ? parseNaiWildcardText(rawEntry.uc, 'negative') : undefined,
       center_x: snapCharacterGridValue(Number.isFinite(centerX) ? centerX : 0.5),
       center_y: snapCharacterGridValue(Number.isFinite(centerY) ? centerY : 0.5),
     })
@@ -211,7 +211,7 @@ export function preprocessMetadata(params: NAIMetadataInputParams): NAIMetadataP
   const metadata: NAIMetadataParams = {
     ...params,
     prompt: parseNaiWildcardText(params.prompt),
-    negative_prompt: parseNaiWildcardText(params.negative_prompt),
+    negative_prompt: parseNaiWildcardText(params.negative_prompt, 'negative'),
     characters: normalizeCharacters(params.characters),
     vibes: normalizeVibes(params.vibes),
     character_refs: normalizeCharacterReferences(params.character_refs),

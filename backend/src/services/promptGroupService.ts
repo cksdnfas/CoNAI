@@ -414,13 +414,16 @@ export class PromptGroupService {
   static pickRandomPromptsByGroupName(
     groupName: string,
     count: number,
-    usageFilter: { min?: number; max?: number } = {}
+    usageFilter: { min?: number; max?: number } = {},
+    preferredType: 'positive' | 'negative' = 'positive'
   ): string[] {
     if (count <= 0) {
       return [];
     }
 
-    for (const type of ['positive', 'negative'] as const) {
+    // 칸 종류와 같은 그룹을 먼저 쓰고, 그 종류에 없을 때만 다른 쪽 같은 이름 그룹을 쓴다
+    const typeOrder = preferredType === 'negative' ? (['negative', 'positive'] as const) : (['positive', 'negative'] as const);
+    for (const type of typeOrder) {
       const group = db.prepare(`SELECT id FROM ${getTableName(type)} WHERE lower(group_name) = lower(?) LIMIT 1`)
         .get(groupName.trim()) as { id: number } | undefined;
       if (!group) {
