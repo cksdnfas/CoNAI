@@ -27,9 +27,9 @@ import {
   type PromptPaletteTab,
 } from './prompt-random-palette'
 import { PromptRandomTokenEditor } from './prompt-random-token-editor'
-import { usePromptRandomSources, type PromptRandomSourceEntry } from './use-prompt-random-sources'
+import { createWildcardNameMatcher, usePromptRandomSources, type PromptRandomSourceEntry } from './use-prompt-random-sources'
 import type { PromptTypeFilter } from '@/types/prompt'
-import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
+import { flattenWildcardRecords, type PromptWildcardTool } from './wildcard-inline-picker-helpers'
 import {
   detectPromptSyntaxTokens,
   summarizePromptSyntaxTokens,
@@ -714,14 +714,23 @@ export function WildcardInlinePickerField({
             type="button"
             size="xs"
             variant="secondary"
-            onClick={() => {
+            onClick={async () => {
               if (legacyUndo) {
                 onChange(legacyUndo.before)
                 setLegacyUndo(null)
                 return
               }
-              setLegacyUndo({ before: value, after: legacyConversion.value, count: legacyConversion.count })
-              onChange(legacyConversion.value)
+              // 다른 탭·기기에서 만든 와일드카드를 태그 그룹으로 바꾸지 않도록, 바꾸기 직전에 목록을 새로 받아 다시 판단한다
+              const fresh = await wildcardsQuery.refetch()
+              if (!fresh.isSuccess) {
+                return
+              }
+              const conversion = convertLegacyPromptSyntax(value, createWildcardNameMatcher(flattenWildcardRecords(fresh.data)))
+              if (conversion.count === 0) {
+                return
+              }
+              setLegacyUndo({ before: value, after: conversion.value, count: conversion.count })
+              onChange(conversion.value)
             }}
           >
             {legacyUndo ? t({ ko: '되돌리기', en: 'Undo' }) : t({ ko: '새 문법으로 바꾸기', en: 'Convert' })}

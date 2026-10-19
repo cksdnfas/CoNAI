@@ -22,6 +22,12 @@ export type PromptRandomSourceEntry = {
 /** `ok` resolves, `missing` turns into an empty value at generation, `pending` while lists load. */
 export type PromptRandomTokenStatus = { state: 'ok' | 'missing' | 'pending'; source: PromptRandomTokenSource; suggestion: string | null }
 
+/** Exact-name check against every wildcard record, the way the backend resolver looks names up. */
+export function createWildcardNameMatcher(records: FlattenedWildcardRecord[]) {
+  const names = new Set(records.map((record) => record.name))
+  return (name: string) => names.has(name.trim())
+}
+
 function normalizeSourceName(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, '_')
 }
@@ -85,10 +91,12 @@ export function usePromptRandomSources({ flattenedWildcards, wildcardsReady, ena
     return names
   }, [entries, negativeGroupsQuery.data, positiveGroupsQuery.data])
 
-  const isWildcardName = useCallback((name: string) => namesBySource.wildcard.has(normalizeSourceName(name)), [namesBySource])
+  // 생성 시 백엔드는 모든 와일드카드(로라 자동 수집 포함)를 이름 그대로 찾으므로 여기서도 같은 기준으로 본다
+  const isWildcardName = useMemo(() => createWildcardNameMatcher(flattenedWildcards), [flattenedWildcards])
 
   const getTokenStatus = useCallback((token: PromptRandomToken): PromptRandomTokenStatus => {
     const name = normalizeSourceName(token.name)
+    const isKnownWildcard = isWildcardName(token.name)
     const readyBySource: Record<PromptRandomTokenSource, boolean> = {
       wildcard: wildcardsReady,
       tag: summaryQuery.isSuccess || !canViewPrompts,
@@ -96,17 +104,17 @@ export function usePromptRandomSources({ flattenedWildcards, wildcardsReady, ena
     }
     // 접두사 없는 토큰: 와일드카드가 없거나 예전 `[1~2]` 옵션을 쓰면 백엔드가 태그 그룹으로 해석
     const isLegacyPlus = token.raw.startsWith('++')
-    const readsAsTagGroup = token.unprefixed && !isLegacyPlus && (token.legacy || (wildcardsReady && !namesBySource.wildcard.has(name)))
+    const readsAsTagGroup = token.unprefixed && !isLegacyPlus && (token.legacy || (wildcardsReady && !isKnownWildcard))
     const source: PromptRandomTokenSource = readsAsTagGroup ? 'tag' : token.source
     if (!readyBySource[source] || (source === 'tag' && !canViewPrompts)) {
       return { state: 'pending', source, suggestion: null }
     }
-    if (namesBySource[source].has(name)) {
+    if (source === 'wildcard' ? isKnownWildcard : namesBySource[source].has(name)) {
       return { state: 'ok', source, suggestion: null }
     }
     const candidates = entries.filter((entry) => entry.source === source).map((entry) => entry.name)
     return { state: 'missing', source, suggestion: findClosestName(token.name, candidates) }
-  }, [canViewPrompts, entries, namesBySource, negativeGroupsQuery.isSuccess, positiveGroupsQuery.isSuccess, summaryQuery.isSuccess, wildcardsReady])
+  }, [canViewPrompts, entries, isWildcardName, namesBySource, negativeGroupsQuery.isSuccess, positiveGroupsQuery.isSuccess, summaryQuery.isSuccess, wildcardsReady])
 
   return {
     entries,
