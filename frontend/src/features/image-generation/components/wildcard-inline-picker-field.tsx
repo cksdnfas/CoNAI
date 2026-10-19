@@ -108,6 +108,7 @@ export function WildcardInlinePickerField({
   const [explicitPaletteStart, setExplicitPaletteStart] = useState<number | null>(null)
   const [dismissedPaletteStart, setDismissedPaletteStart] = useState<number | null>(null)
   const [dismissedTokenKey, setDismissedTokenKey] = useState<string | null>(null)
+  const [dismissedSuggestionAt, setDismissedSuggestionAt] = useState<{ value: string; caret: number } | null>(null)
   const [isRollPreviewOpen, setIsRollPreviewOpen] = useState(false)
   const [rollNonce, setRollNonce] = useState(0)
   const [legacyUndo, setLegacyUndo] = useState<{ before: string; after: string; count: number } | null>(null)
@@ -124,7 +125,11 @@ export function WildcardInlinePickerField({
     : null
   const isPaletteOpen = isFocused && !disabled && paletteRange !== null
   // 팔레트가 열려 있으면 다른 추천 팝업은 쉬게 한다
-  const suggestionCaretPosition = isPaletteOpen ? -1 : caretPosition
+  // Esc로 닫은 추천은 글자나 커서가 바뀔 때까지 다시 열지 않는다
+  const isSuggestionDismissed = dismissedSuggestionAt !== null
+    && dismissedSuggestionAt.value === value
+    && dismissedSuggestionAt.caret === caretPosition
+  const suggestionCaretPosition = isPaletteOpen || isSuggestionDismissed ? -1 : caretPosition
 
   const { wildcardsQuery, flattenedWildcards } = useWildcardInlinePickerData({ enabled: shouldLoadWildcardData })
   const {
@@ -497,8 +502,10 @@ export function WildcardInlinePickerField({
         event.preventDefault()
         // Ctrl+Space / 버튼이 넣은 빈 `@`는 닫을 때 같이 지운다
         if (paletteRange.start === explicitPaletteStart && paletteRange.query === '' && value[paletteRange.start] === '@') {
+          const nextValue = replacePromptRange(value, paletteRange.start, paletteRange.start + 1, '')
           setExplicitPaletteStart(null)
-          applyValueWithCaret(replacePromptRange(value, paletteRange.start, paletteRange.start + 1, ''), paletteRange.start)
+          setDismissedSuggestionAt({ value: nextValue, caret: paletteRange.start })
+          applyValueWithCaret(nextValue, paletteRange.start)
           return
         }
         setDismissedPaletteStart(paletteRange.start)
@@ -554,7 +561,7 @@ export function WildcardInlinePickerField({
 
     if (isPromptAutocompleteOpen && event.key === 'Escape') {
       event.preventDefault()
-      setCaretPosition(-1)
+      setDismissedSuggestionAt({ value, caret: caretPosition })
       setSelectedPromptAutocompleteCharacter(null)
       return
     }

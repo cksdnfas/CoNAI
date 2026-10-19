@@ -202,7 +202,9 @@ export function PromptRandomPalette({ tab, entries, recents, activeIndex, isLoad
           {activeEntry ? (
             <>
               <div className="mb-1.5 truncate text-2xs text-muted-foreground">
-                {t({ ko: `${labels[activeEntry.source]} · ${activeEntry.count}개 중 일부`, en: `${labels[activeEntry.source]} · sample of ${activeEntry.count}` })}
+                {activeEntry.count > 0
+                  ? t({ ko: `${labels[activeEntry.source]} · ${activeEntry.count}개 중 일부`, en: `${labels[activeEntry.source]} · sample of ${activeEntry.count}` })
+                  : t({ ko: `${labels[activeEntry.source]} · 비어 있음`, en: `${labels[activeEntry.source]} · empty` })}
               </div>
               {peek.isLoading ? (
                 <div className="text-xs text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</div>

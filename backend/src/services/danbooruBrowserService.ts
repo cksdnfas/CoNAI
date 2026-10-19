@@ -726,7 +726,9 @@ class DanbooruBrowserService {
     `;
     const rows = this.collectTiered<TagRow>(limit, (row) => row.id, [
       (count) => db.prepare(`${select} WHERE tags.is_deprecated = 0 AND tags.normalized_name = ? LIMIT ?`).all(q, count) as TagRow[],
-      (count) => db.prepare(`${select} WHERE tags.is_deprecated = 0 AND tags.normalized_name >= ? AND tags.normalized_name < ? ORDER BY tags.post_count DESC LIMIT ?`).all(q, `${q}\uffff`, count) as TagRow[],
+      // Prefix of the name or of any word in it (`miku` → hatsune_miku), by post count.
+      (count) => db.prepare(`${select} WHERE tags.is_deprecated = 0 AND ((tags.normalized_name >= ? AND tags.normalized_name < ?) OR tags.normalized_name LIKE ? ESCAPE '\\') ORDER BY tags.post_count DESC LIMIT ?`)
+        .all(q, `${q}\uffff`, `%\\_${escapeSqlLikePattern(q)}%`, count) as TagRow[],
       (count) => db.prepare(`${select} WHERE tags.is_deprecated = 0 AND tt.translated_name LIKE ? ESCAPE '\\' ORDER BY tags.post_count DESC LIMIT ?`).all(`${escapeSqlLikePattern(translated)}%`, count) as TagRow[],
       (count) => (q.length < 2 ? [] : db.prepare(`${select} WHERE tags.is_deprecated = 0 AND (tags.normalized_name LIKE ? ESCAPE '\\' OR tt.translated_name LIKE ? ESCAPE '\\') ORDER BY tags.post_count DESC LIMIT ?`)
         .all(buildSqlContainsPattern(q), buildSqlContainsPattern(translated), count) as TagRow[]),
@@ -757,7 +759,8 @@ class DanbooruBrowserService {
     `;
     const rows = this.collectTiered<CharacterRow>(limit, (row) => row.tag_id, [
       (count) => db.prepare(`${select} WHERE c.normalized_name = ? LIMIT ?`).all(q, count) as CharacterRow[],
-      (count) => db.prepare(`${select} WHERE c.normalized_name >= ? AND c.normalized_name < ? ORDER BY c.post_count DESC LIMIT ?`).all(q, `${q}\uffff`, count) as CharacterRow[],
+      (count) => db.prepare(`${select} WHERE (c.normalized_name >= ? AND c.normalized_name < ?) OR c.normalized_name LIKE ? ESCAPE '\\' ORDER BY c.post_count DESC LIMIT ?`)
+        .all(q, `${q}\uffff`, `%\\_${escapeSqlLikePattern(q)}%`, count) as CharacterRow[],
       (count) => db.prepare(`${select} WHERE tt.translated_name LIKE ? ESCAPE '\\' ORDER BY c.post_count DESC LIMIT ?`).all(`${escapeSqlLikePattern(rawQuery.trim().toLowerCase())}%`, count) as CharacterRow[],
     ]);
 
