@@ -122,8 +122,16 @@ nul
 */nul
 **/nul
 
-# Claude Code settings (local only)
-.claude/settings.local.json
+# AI agent/tool local state (Claude, Codex, Cursor, Mixdog, Orca, ...)
+.claude/
+.codex/
+.cursor/
+.agents/
+.mixdog/
+.orca/
+CLAUDE.md
+AGENTS.md
+**/CLAUDE.local.md
 
 # Local/agent cleanup artifacts
 .sisyphus/
