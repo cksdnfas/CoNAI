@@ -513,7 +513,8 @@ class DanbooruBrowserService {
       return '';
     }
 
-    return this.listPromptGroupTags(node, spec, pickCount).join(', ');
+    // 입력창 기본 삽입과 같게 밑줄 없이 낸다 (long_hair → long hair)
+    return this.listPromptGroupTags(node, spec, pickCount).map((tag) => tag.replace(/_/g, ' ')).join(', ');
   }
 
   listTags(params: { q?: string; category?: string; taxonomyNodeId?: string; page?: unknown; limit?: unknown }) {
