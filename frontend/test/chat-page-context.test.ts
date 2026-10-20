@@ -4,6 +4,107 @@ import { JSDOM } from 'jsdom'
 import type { ChatPageCommand, ChatPageSnapshot } from '@conai/shared'
 import type { CodexChatMessage, CodexChatThreadDetail } from '../src/lib/api-codex-chat'
 
+test('room directory pages keep cursor order, off-page drafts and independent cached summaries', async t => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'http://localhost/', pretendToBeVisual: true })
+  const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true }
+  const previous = Object.keys(globals).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const)
+  for (const [key, value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, value })
+  const { act, createElement: h, useCallback, useEffect, useState } = await import('react')
+  const { createRoot } = await import('react-dom/client')
+  const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query')
+  const { patchChatRoomLists, useChatRoomPages, usePagedChatDraftRetention } = await import('../src/features/codex-chat/use-chat-room-directory')
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const requests: URL[] = []
+  let changed = false
+  const room = (id: number, title: string) => ({ id, title, kind: 'direct', updated_date: '2026-10-20 00:00:00' })
+  const fetchMock = t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+    const url = new URL(String(input), 'http://localhost')
+    requests.push(url)
+    const targeted = url.searchParams.has('ids')
+    const cursor = url.searchParams.get('cursor')
+    const data = targeted ? [room(90, 'Off-page draft')]
+      : url.searchParams.get('query') === 'rare' ? [room(7, 'Rare match')]
+        : url.searchParams.get('archive') === 'archived' ? [room(8, 'Archived room')]
+          : cursor === 'last-page' ? [room(4, 'Fourth room'), room(5, 'Fifth room')]
+            : cursor === 'next-page' ? [room(2, 'Stale duplicate'), room(3, changed ? 'Updated room' : 'Next room')]
+              : changed ? [room(6, 'New room'), room(1, 'First room')]
+                : [room(1, 'First room'), room(2, 'Latest duplicate')]
+    const browsing = !targeted && !url.searchParams.has('query') && url.searchParams.get('archive') === 'active'
+    const more = browsing && cursor !== 'last-page'
+    return new Response(JSON.stringify({ success: true, data, pagination: { total: browsing ? changed ? 6 : 5 : data.length, has_more: more, next_cursor: more ? cursor === 'next-page' ? 'last-page' : 'next-page' : null }, has_automation: false, has_archived_chats: true, has_archived_automation: false }), { headers: { 'Content-Type': 'application/json' } })
+  })
+  const root = createRoot(document.getElementById('root')!)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    client.clear()
+    fetchMock.mock.restore()
+    dom.window.close()
+    for (const [key, descriptor] of previous) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor)
+      else Reflect.deleteProperty(globalThis, key)
+    }
+  })
+  let directory!: ReturnType<typeof useChatRoomPages>
+  let search!: (value: string) => void
+  let archive!: () => void
+  let retained: number[] = []
+  function Directory() {
+    const [query, setQuery] = useState('')
+    const [view, setView] = useState<'active' | 'archived'>('active')
+    const page = useChatRoomPages({ archive: view, pinnedFirst: true, query, limit: 2 })
+    const keep = useCallback((ids: number[]) => { retained = ids }, [])
+    const retainDrafts = usePagedChatDraftRetention({ 90: 'keep me', 91: 'deleted room' }, keep)
+    useEffect(() => {
+      search = setQuery
+      archive = () => { setQuery(''); setView('archived') }
+      directory = page
+      if (page.data) retainDrafts(page.rooms.map((room) => room.id))
+    }, [retainDrafts, page])
+    return null
+  }
+  await act(async () => { root.render(h(QueryClientProvider, { client }, h(Directory))); await new Promise(resolve => setTimeout(resolve, 30)) })
+  await act(async () => { await directory.refetch(); await new Promise(resolve => setTimeout(resolve, 30)) })
+  assert.deepEqual(directory.rooms.map((room) => room.id), [1, 2])
+  assert.equal(directory.hasNextPage, true)
+  assert.ok(retained.includes(90), 'a draft outside the page is retained when its targeted lookup succeeds')
+  assert.ok(!retained.includes(91), 'only a confirmed missing room loses its draft')
+  await act(async () => { await directory.fetchNextPage(); await new Promise(resolve => setTimeout(resolve, 20)) })
+  assert.deepEqual(directory.rooms.map((room) => room.id), [1, 2, 3])
+  assert.equal(directory.rooms[1].title, 'Latest duplicate')
+  assert.equal(directory.hasNextPage, true)
+  assert.ok(requests.some((url) => url.searchParams.get('cursor') === 'next-page'))
+  client.setQueryData(['codex-chat-threads', 'unread'], 17)
+  await act(async () => {
+    patchChatRoomLists(client, 2, { pinned: 1 })
+    await new Promise(resolve => setTimeout(resolve, 20))
+  })
+  assert.equal(directory.rooms[1].pinned, 1)
+  assert.equal(client.getQueryData(['codex-chat-threads', 'unread']), 17, 'summary updates do not treat the aggregate badge as a room array')
+  await act(async () => { await directory.fetchNextPage(); await new Promise(resolve => setTimeout(resolve, 30)) })
+  await act(async () => { await directory.refetch(); await new Promise(resolve => setTimeout(resolve, 20)) })
+  assert.equal(directory.data?.pages.length, 2, 'the refetched cursor window is bounded')
+  assert.deepEqual(directory.rooms.map((room) => room.id), [1, 2, 3, 4, 5], 'the current first page survives cursor-window eviction')
+  const beforeRefresh = requests.length
+  changed = true
+  await act(async () => { await client.invalidateQueries({ queryKey: ['codex-chat-threads'] }); await new Promise(resolve => setTimeout(resolve, 20)) })
+  assert.equal(requests.slice(beforeRefresh).filter((url) => url.searchParams.has('limit')).length, 3, 'an event refreshes two cursor pages plus the independent head, not all browsed pages')
+  assert.equal(directory.rooms[0].id, 6, 'new rooms outside the retained cursor window still appear')
+  assert.equal(directory.rooms.find((room) => room.id === 3)?.title, 'Updated room')
+  client.setQueryData(['codex-chat-threads', 'ids', [3, 90]], [room(3, 'Updated room'), room(90, 'Off-page draft')])
+  await act(async () => { patchChatRoomLists(client, 3, null); await new Promise(resolve => setTimeout(resolve, 20)) })
+  assert.ok(!directory.rooms.some((room) => room.id === 3), 'deletion removes a room from every cursor page')
+  assert.deepEqual(client.getQueryData<Array<{ id: number }>>(['codex-chat-threads', 'ids', [3, 90]])?.map((room) => room.id), [90])
+  await act(async () => { patchChatRoomLists(client, 6, null); await new Promise(resolve => setTimeout(resolve, 20)) })
+  assert.ok(!directory.rooms.some((room) => room.id === 6), 'deletion also updates the independent head')
+  await act(async () => { search('rare'); await new Promise(resolve => setTimeout(resolve, 20)) })
+  await act(async () => { await directory.refetch(); await new Promise(resolve => setTimeout(resolve, 20)) })
+  assert.deepEqual(directory.rooms.map((room) => room.id), [7], 'search has its own SQL cursor chain')
+  await act(async () => { archive(); await new Promise(resolve => setTimeout(resolve, 20)) })
+  await act(async () => { await directory.refetch(); await new Promise(resolve => setTimeout(resolve, 20)) })
+  assert.deepEqual(directory.rooms.map((room) => room.id), [8])
+  assert.ok(requests.every((url) => url.searchParams.has('ids') || url.searchParams.get('limit') === '2'), 'no interaction fetches the complete directory')
+})
+
 test('cursor pages merge without gaps, duplicates or stale-revision resurrection', async () => {
   const { mergeThreadTail, mergeThreadBefore } = await import('../src/lib/api-codex-chat')
   const detail = (ids: number[], count: number, revision = 0, more = true): CodexChatThreadDetail => ({

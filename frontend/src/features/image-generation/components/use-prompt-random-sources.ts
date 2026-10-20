@@ -68,7 +68,7 @@ export function usePromptRandomSources({ flattenedWildcards, wildcardsReady, ena
   const entries = useMemo<PromptRandomSourceEntry[]>(() => [
     ...flattenedWildcards
       .filter((record) => record.type === 'wildcard' && !record.isAutoCollected)
-      .map((record) => ({ id: `wildcard:${record.id}`, source: 'wildcard' as const, name: record.name, translatedName: record.path.length > 1 ? record.path.slice(0, -1).join(' / ') : null, count: record.items.length, wildcard: record })),
+      .map((record) => ({ id: `wildcard:${record.id}`, source: 'wildcard' as const, name: record.name, translatedName: record.path.length > 1 ? record.path.slice(0, -1).join(' / ') : null, count: Object.values(record.itemCounts).reduce((sum, count) => sum + count, 0), wildcard: record })),
     ...(summaryQuery.data?.tree ?? [])
       .filter((node) => node.section === 'tags' && node.filter?.taxonomyNodeId !== undefined)
       .map((node) => ({ id: `tag:${node.id}`, source: 'tag' as const, name: node.label, translatedName: node.translatedLabel ?? null, count: node.count, taxonomyNodeId: node.filter?.taxonomyNodeId })),

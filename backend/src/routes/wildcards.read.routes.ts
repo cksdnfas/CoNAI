@@ -3,6 +3,7 @@ import { routeParam } from './routeParam';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { WildcardModel } from '../models/Wildcard';
+import { WildcardService } from '../services/wildcardService';
 import { requirePermission } from '../middleware/authMiddleware';
 import { withNativeEditRevisions } from '../services/nativeEditRevision';
 
@@ -18,7 +19,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
     let wildcards;
     if (hierarchical) {
-      wildcards = WildcardModel.findHierarchy(null);
+      wildcards = withItems ? WildcardModel.findHierarchy(null) : WildcardModel.findHierarchySummary();
     } else if (rootsOnly) {
       wildcards = WildcardModel.findRoots();
     } else if (withItems) {
@@ -29,7 +30,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
     return res.json({
       success: true,
-      data: withNativeEditRevisions(wildcards)
+      // Summary projections cannot supply an edit revision for the complete item record.
+      data: hierarchical && !withItems ? wildcards : withNativeEditRevisions(wildcards)
     });
   } catch (error) {
     console.error('Error getting wildcards:', error);
@@ -85,6 +87,27 @@ router.get('/:id/path', asyncHandler(async (req: Request, res: Response) => {
   }
 }));
 
+router.get('/:id/items', asyncHandler(async (req: Request, res: Response) => {
+  const id = Number(routeParam(req.params.id));
+  const tool = req.query.tool ?? 'general';
+  const rawLimit = req.query.limit;
+  const limit = rawLimit === undefined ? 50 : typeof rawLimit === 'string' && /^\d+$/.test(rawLimit) ? Number(rawLimit) : NaN;
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid wildcard ID' });
+  }
+  if (tool !== 'general' && tool !== 'nai' && tool !== 'comfyui' && tool !== 'codex') {
+    return res.status(400).json({ success: false, error: 'Invalid wildcard tool' });
+  }
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) {
+    return res.status(400).json({ success: false, error: 'Invalid wildcard item limit (1-200)' });
+  }
+  const wildcard = WildcardModel.findById(id);
+  if (!wildcard) {
+    return res.status(404).json({ success: false, error: 'Wildcard not found' });
+  }
+  return res.json({ success: true, data: WildcardService.getResolvedItems(wildcard.name, tool).slice(0, limit) });
+}));
+
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseInt(routeParam(routeParam(req.params.id)));
 
@@ -99,7 +122,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'Wildcard not found' });
     }
 
-    return res.json({ success: true, data: wildcard });
+    return res.json({ success: true, data: withNativeEditRevisions([wildcard])[0] });
   } catch (error) {
     console.error('Error getting wildcard:', error);
     return res.status(500).json({ success: false, error: 'Failed to get wildcard' });

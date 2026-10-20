@@ -9,11 +9,12 @@ import { CountBadge } from '@/components/ui/count-badge'
 import { LoadingState } from '@/components/ui/loading-state'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
-import { listCodexChatThreads } from '@/lib/api-codex-chat'
+import { getCodexChatDirectoryUnread } from '@/lib/api-codex-chat'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
 import { CHAT_DOCK_MIN_WIDTH_PX, CODEX_CHAT_ROUTE, CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
 import { lockBodyScroll } from '@/lib/body-scroll-lock'
+import { useStreamFallbackInterval } from '@/features/runtime-events/use-runtime-event-stream'
 
 const DOCK_DEFAULT_WIDTH_PX = 420
 const DOCK_RESIZE_MIN_PX = 360
@@ -141,9 +142,11 @@ export function useCodexChatDockVisible() {
 /** Unread replies across the chat list (archived chats left out); 0 when this account can't use chat. */
 export function useCodexChatUnreadCount() {
   const canUse = useCodexChat()?.canUse === true
-  const threadsQuery = useQuery({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY, queryFn: listCodexChatThreads, enabled: canUse })
+  // No directory download is needed for the badge, even when SSE is unavailable.
+  const refetchInterval = useStreamFallbackInterval(4000)
+  const unreadQuery = useQuery({ queryKey: [...CODEX_CHAT_THREADS_QUERY_KEY, 'unread'], queryFn: getCodexChatDirectoryUnread, enabled: canUse, refetchInterval })
   if (!canUse) return 0
-  return (threadsQuery.data ?? []).reduce((total, thread) => total + (thread.archived ? 0 : thread.unread_count ?? 0), 0)
+  return unreadQuery.data ?? 0
 }
 
 /**

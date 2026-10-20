@@ -1,6 +1,38 @@
-import { chatPageActionTier, type ChatPageSnapshot } from '@conai/shared'
+import { chatPageActionTier, type ChatPageData, type ChatPageSnapshot } from '@conai/shared'
 import type { McpRequester } from '../context'
 import { boundedPageView, PAGE_VIEW_BUDGET, requireChatPageActionAccess, requireChatPageDataAccess } from '../../services/codex-chat/chatPageContext'
+import { hideRatingRestrictedText, RATING_RESTRICTED_TEXT, ratingRestrictedHashesUnder } from '../../services/codex-chat/chatContentRating'
+import type { ContentRatingLimit } from '../../services/contentRating'
+
+/**
+ * The descriptive text a screen shows of the library media it is about (its resourceId): field ids, and data keys
+ * hidden whole or by their listed members. Other screens list media by hash only.
+ */
+const PAGE_MEDIA_TEXT: Partial<Record<ChatPageSnapshot['kind'], { fields: string[]; data: Record<string, string[] | 'all'> }>> = {
+  image_detail: { fields: ['prompt', 'negativePrompt'], data: { autoTags: 'all' } },
+  metadata: { fields: ['prompt', 'negativePrompt'], data: { selected: ['prompt', 'negativePrompt'] } },
+}
+
+/**
+ * The screen as a model under `limit` may read it: the media it is about above the ceiling (or unrated) keeps its
+ * fields and ids but its prompts and tags become the marker, with `rating_restricted: true` in the data. A copy: the
+ * live snapshot (revisions, field changes, review cards) is untouched. One stored-score lookup; no ceiling: as is.
+ */
+export function ratingFilteredPage(page: ChatPageSnapshot, limit: ContentRatingLimit): ChatPageSnapshot {
+  const text = PAGE_MEDIA_TEXT[page.kind]
+  if (!text || !page.resourceId || ratingRestrictedHashesUnder(limit, [page.resourceId]).size === 0) return page
+  const data: Record<string, ChatPageData> = { ...page.data, rating_restricted: true }
+  for (const [key, members] of Object.entries(text.data)) {
+    const value = data[key]
+    if (value === undefined || value === null) continue
+    data[key] = members === 'all' || typeof value !== 'object' || Array.isArray(value) ? RATING_RESTRICTED_TEXT : hideRatingRestrictedText(value, members)
+  }
+  return {
+    ...page,
+    fields: page.fields.map((field) => text.fields.includes(field.id) && field.value !== '' ? { ...field, value: RATING_RESTRICTED_TEXT } : field),
+    data,
+  }
+}
 
 export const pageResult = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] })
 export const pageFailure = (error: unknown) => ({ isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : 'Page tool failed' }] })
@@ -15,8 +47,12 @@ function collectionView(value: unknown[]) {
   return value.length <= INLINE_ITEMS && JSON.stringify(value).length <= INLINE_CHARS ? value : { count: value.length, readWith: 'read_page_data' }
 }
 
-/** What the model may see of a screen: fields, permitted operations with their tier, small collections whole, larger ones as sizes. */
-export function chatPageView(requester: McpRequester, page: ChatPageSnapshot) {
+/**
+ * What the model may see of a screen: fields, permitted operations with their tier, small collections whole, larger
+ * ones as sizes; the text of media above its content rating `limit` hidden (ratingFilteredPage).
+ */
+export function chatPageView(requester: McpRequester, live: ChatPageSnapshot, limit: ContentRatingLimit) {
+  const page = ratingFilteredPage(live, limit)
   const { data, workflow, ...summary } = page
   const allowedData = Object.entries(data ?? {}).filter(([key]) => { try { requireChatPageDataAccess(requester, key); return true } catch { return false } })
   const actions = (page.actions ?? []).filter((action) => { try { requireChatPageActionAccess(requester, page, action.id); return true } catch { return false } })
@@ -45,10 +81,10 @@ const clipValue = (value: unknown) => (typeof value === 'string' && value.length
  * whose state changed (long values clipped: the model just wrote them) and the operations only when they changed.
  * Another screen comes back whole, bounded like the request's view.
  */
-export function pageOperationView(requester: McpRequester, before: ChatPageSnapshot, next: ChatPageSnapshot): unknown {
-  const view = chatPageView(requester, next)
+export function pageOperationView(requester: McpRequester, before: ChatPageSnapshot, next: ChatPageSnapshot, limit: ContentRatingLimit): unknown {
+  const view = chatPageView(requester, next, limit)
   if (before.instanceId !== next.instanceId || before.path !== next.path || before.kind !== next.kind || before.resourceId !== next.resourceId) return JSON.parse(boundedPageView(view))
-  const previous = chatPageView(requester, before)
+  const previous = chatPageView(requester, before, limit)
   const earlier = new Map(previous.fields.map((field) => [field.id, JSON.stringify(field)]))
   const changed = view.fields.filter((field) => earlier.get(field.id) !== JSON.stringify(field)).map((field) => ({ ...field, value: clipValue(field.value) }))
   const sameActions = JSON.stringify(previous.actions ?? null) === JSON.stringify(view.actions ?? null)

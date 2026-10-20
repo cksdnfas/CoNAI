@@ -4,12 +4,13 @@ import { ListRow } from '@/components/ui/list-row'
 import { useI18n } from '@/i18n'
 import { getDanbooruBrowserTags } from '@/lib/api-danbooru-browser'
 import { searchPromptCollection } from '@/lib/api-prompts'
+import { wildcardItemsQueryOptions } from '@/lib/api-wildcards'
 import { cn } from '@/lib/utils'
 import type { PromptTypeFilter } from '@/types/prompt'
 import type { PromptRandomTokenSource } from './prompt-random-token'
 import type { PromptRandomSourceEntry } from './use-prompt-random-sources'
 import { formatPromptAutocompleteCount } from './use-prompt-inline-autocomplete'
-import { resolvePreferredWildcardItemTool, type PromptWildcardTool } from './wildcard-inline-picker-helpers'
+import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 
 export type PromptPaletteTab = 'all' | PromptRandomTokenSource
 
@@ -88,6 +89,7 @@ export function filterPromptPaletteEntries(entries: PromptRandomSourceEntry[], t
 }
 
 function usePaletteEntryPeek(entry: PromptRandomSourceEntry | null, tool: PromptWildcardTool, promptType: PromptTypeFilter) {
+  const wildcardQuery = useQuery(wildcardItemsQueryOptions(entry?.wildcard?.id ?? null, tool, PEEK_LIMIT))
   const tagQuery = useQuery({
     queryKey: ['prompt-palette-peek', 'tag', entry?.taxonomyNodeId],
     queryFn: () => getDanbooruBrowserTags({ taxonomyNodeId: entry?.taxonomyNodeId, page: 1, limit: PEEK_LIMIT }),
@@ -103,19 +105,19 @@ function usePaletteEntryPeek(entry: PromptRandomSourceEntry | null, tool: Prompt
   })
 
   if (!entry) {
-    return { items: [] as string[], isLoading: false }
+    return { items: [] as string[], isLoading: false, isError: false }
   }
   if (entry.source === 'wildcard' && entry.wildcard) {
-    const preferredTool = resolvePreferredWildcardItemTool(entry.wildcard.items, tool)
     return {
-      items: entry.wildcard.items.filter((item) => item.tool === preferredTool).map((item) => item.content.trim()).filter(Boolean).slice(0, PEEK_LIMIT),
-      isLoading: false,
+      items: (wildcardQuery.data ?? []).map((item) => item.content.trim()).filter(Boolean).slice(0, PEEK_LIMIT),
+      isLoading: wildcardQuery.isLoading,
+      isError: wildcardQuery.isError,
     }
   }
   if (entry.source === 'tag') {
-    return { items: (tagQuery.data?.items ?? []).map((tag) => tag.displayName), isLoading: tagQuery.isLoading }
+    return { items: (tagQuery.data?.items ?? []).map((tag) => tag.displayName), isLoading: tagQuery.isLoading, isError: tagQuery.isError }
   }
-  return { items: (myQuery.data?.items ?? []).map((item) => item.prompt), isLoading: myQuery.isLoading }
+  return { items: (myQuery.data?.items ?? []).map((item) => item.prompt), isLoading: myQuery.isLoading, isError: myQuery.isError }
 }
 
 /** `@` palette: one list for wildcards, Danbooru tag groups and my prompt groups, with a peek of the highlighted source. */
@@ -208,6 +210,8 @@ export function PromptRandomPalette({ tab, entries, recents, activeIndex, isLoad
               </div>
               {peek.isLoading ? (
                 <div className="text-xs text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</div>
+              ) : peek.isError ? (
+                <div className="text-xs text-destructive">{t({ ko: '미리보기를 불러오지 못했어.', en: 'Could not load the preview.' })}</div>
               ) : peek.items.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
                   {peek.items.map((item, index) => (

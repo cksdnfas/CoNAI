@@ -10,7 +10,7 @@ import { booksForRequest, hasLoreFiles, loreIndexText, selectRequestLore } from 
 import { buildLinkedIndex, placesForRequest } from './chatLinkedFiles'
 import { rejectedLoreLine } from './chatLoreProposals'
 import { userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
-import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
+import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { semanticContextFor } from '../embeddings/chatSemantic'
 import type { JudgedContext } from './chatJudgeContext'
 
@@ -51,9 +51,10 @@ const RECAP_CHARS = 16_000
  * What a new Codex thread is told of a chat it did not take part in (a branch, an import, a chat whose Codex memory was
  * reset): its summary and its last messages, once. Empty when there is no conversation yet (a greeting alone).
  */
-export function codexHistoryRecap(thread: Pick<CodexChatThreadRecord, 'summary'> | null, earlier: CodexChatMessageRecord[], profile: ChatProfile, user: ChatUserPersona) {
-  const messages = earlier.filter((message) => message.content.trim())
-  if (!messages.some((message) => message.role === 'user')) return ''
+export function codexHistoryRecap(thread: Pick<CodexChatThreadRecord, 'summary'> | null, earlier: CodexChatMessageRecord[], profile: ChatProfile, user: ChatUserPersona, source?: ChatHistorySource, before = Number.MAX_SAFE_INTEGER) {
+  const recap = source ? CodexChatStore.readSessionRecap(source, before, RECAP_MESSAGES) : null
+  const messages = recap?.messages ?? earlier.filter((message) => message.content.trim())
+  if (!(recap?.hasUser ?? messages.some((message) => message.role === 'user'))) return ''
   let transcript = messages.slice(-RECAP_MESSAGES).map((message) => `${message.role === 'user' ? user.name : profile.name}: ${message.content.trim()}`).join('\n\n')
   if (transcript.length > RECAP_CHARS) transcript = `…${transcript.slice(-RECAP_CHARS)}`
   const summary = thread?.summary?.trim()
@@ -124,10 +125,10 @@ export function pendingLore(thread: CodexChatThreadRecord | null, profile: ChatP
 }
 
 /** Shared input for Codex, Claude and pi. Provider session memory stays opaque; retrieved data is explicit. */
-export async function prepareSessionLore(thread: CodexChatThreadRecord | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, user: ChatUserPersona, context?: JudgedContext | null, signal?: AbortSignal) {
+export async function prepareSessionLore(thread: CodexChatThreadRecord | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, user: ChatUserPersona, context?: JudgedContext | null, signal?: AbortSignal, historySource?: ChatHistorySource) {
   let selected = context
   if (selected === undefined && thread) {
-    const semantic = await semanticContextFor({ thread, profile, messages, judgeDecidesLore: false, signal }).catch(() => null)
+    const semantic = await semanticContextFor({ thread, profile, messages, historySource, judgeDecidesLore: false, signal }).catch(() => null)
     selected = semantic ? { loreKeys: new Set<string>(), recallKeep: null, semantic } : null
   }
   const lore = pendingLore(thread, profile, messages, sent, user, selected)
@@ -168,8 +169,9 @@ export function pendingUserPersona(user: ChatUserPersona, sent: Set<string>) {
  * The display block state to put in this turn's input: given again only when it changed since it was last given
  * (or after a compaction), tracked as `state:<hash>` beside the lore keys.
  */
-export function pendingBlockState(thread: Pick<CodexChatThreadRecord, 'block_edits'> | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, speakerId?: number) {
-  const folded = foldBlockState(profile, messages, parseBlockEdits(thread?.block_edits), speakerId)
+export function pendingBlockState(thread: Pick<CodexChatThreadRecord, 'block_edits'> | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, speakerId?: number, historySource?: ChatHistorySource) {
+  const history = historySource ? CodexChatStore.listBlockMessages(historySource.threadId, historySource.untilMessageId).filter((message) => message.id !== historySource.excludeMessageId) : messages
+  const folded = foldBlockState(profile, history, parseBlockEdits(thread?.block_edits), speakerId)
   const text = folded ? blockStateText(profile.style.blocks, folded.state) : ''
   if (!text) return { text: '', keys: [] as string[] }
   const key = `state:${blockStateHash(text)}`

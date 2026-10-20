@@ -28,6 +28,7 @@ async function requestWildcardAction<T>(path: string, fallbackKey: WildcardFallb
 }
 
 export type WildcardTool = 'general' | 'comfyui' | 'nai'
+export type WildcardItemCounts = Record<WildcardTool, number>
 
 export interface WildcardItemRecord {
   id: number
@@ -52,6 +53,7 @@ export interface WildcardRecord {
   created_date: string
   updated_date: string
   items?: WildcardItemRecord[]
+  item_counts?: WildcardItemCounts
   children?: WildcardRecord[]
   is_auto_collected?: number
   source_path?: string | null
@@ -136,11 +138,33 @@ export async function getWildcards(params?: { hierarchical?: boolean; rootsOnly?
   return requestWildcardData<WildcardRecord[]>(`/api/wildcards${suffix}`, 'wildcards.list.load')
 }
 
-/** One library cache shared by the workspace browser and every inline prompt picker. */
+/** Shared browsing projection: counts and metadata, never the library's item content. */
 export const wildcardLibraryQueryOptions = {
   queryKey: ['wildcards', 'library'] as const,
-  queryFn: () => getWildcards({ hierarchical: true, withItems: true }),
+  queryFn: () => getWildcards({ hierarchical: true, withItems: false }),
   staleTime: 60_000,
+}
+
+/** Own items for the selected detail/editor, including the complete record's edit revision. */
+export function wildcardDetailQueryOptions(wildcardId: number | null) {
+  return {
+    queryKey: ['wildcards', 'detail', wildcardId] as const,
+    queryFn: ({ signal }: { signal: AbortSignal }) => requestWildcardData<WildcardRecord>(`/api/wildcards/${wildcardId}`, 'wildcards.list.load', { signal }),
+    enabled: wildcardId !== null,
+    staleTime: 60_000,
+    gcTime: 60_000,
+  }
+}
+
+/** Bounded preview of the wildcard's runtime item pool, including eligible descendants. */
+export function wildcardItemsQueryOptions(wildcardId: number | null, tool: WildcardTool | 'codex', limit = 50) {
+  return {
+    queryKey: ['wildcards', 'items', wildcardId, tool, limit] as const,
+    queryFn: ({ signal }: { signal: AbortSignal }) => requestWildcardData<WildcardItemRecord[]>(`/api/wildcards/${wildcardId}/items?tool=${tool}&limit=${limit}`, 'wildcards.list.load', { signal }),
+    enabled: wildcardId !== null,
+    staleTime: 60_000,
+    gcTime: 60_000,
+  }
 }
 
 /** Create a new wildcard-like record in the shared wildcard store. */

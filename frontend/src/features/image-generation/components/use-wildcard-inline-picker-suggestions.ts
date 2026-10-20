@@ -32,10 +32,10 @@ function createWildcardSuggestion(record: FlattenedWildcardRecord, normalizedQue
   return {
     record,
     score: scoreWildcardMatch(record, normalizedQuery),
-    toolItemCount: countWildcardItemsForTool(record.items, tool),
-    generalItemCount: countStoredWildcardItemsForTool(record.items, 'general'),
-    naiItemCount: countStoredWildcardItemsForTool(record.items, 'nai'),
-    comfyuiItemCount: countStoredWildcardItemsForTool(record.items, 'comfyui'),
+    toolItemCount: countWildcardItemsForTool(record.itemCounts, tool),
+    generalItemCount: countStoredWildcardItemsForTool(record.itemCounts, 'general'),
+    naiItemCount: countStoredWildcardItemsForTool(record.itemCounts, 'nai'),
+    comfyuiItemCount: countStoredWildcardItemsForTool(record.itemCounts, 'comfyui'),
   }
 }
 

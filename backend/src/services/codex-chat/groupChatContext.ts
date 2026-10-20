@@ -4,7 +4,10 @@ import { buildReplyContext } from './chatReplyContext'
 import { messageAddress } from './chatReplies'
 import { attachedImagesOf, chatContentWithAttachments, type AttachedImages } from './chatAttachments'
 import { generationPromptOf } from './chatToolReferences'
-import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
+import { CodexChatStore, type ChatHistoryOutline, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
+import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
+import { readReplyHistory } from './chatJudge'
+import { splitTurns } from './llmChatContext'
 import type { ChatCompletionMessage, ChatCompletionTool } from './llmChatCompletion'
 import { estimateMessagesTokens, replyReserveFor } from './llmChatContext'
 import { postHistoryText, buildContextMeta, recalledSegments, type ChatContextMeta } from './llmChatContext'
@@ -114,6 +117,7 @@ export function hiddenHistoryNote(thread: Pick<CodexChatThreadRecord, 'id'>, hid
  * user turns before the end.
  */
 type GroupLlmContext = {
+  history?: GroupHistory
   onMeta?: (meta: ChatContextMeta) => void
   routing?: ChatMessageRouting
   profile: ChatProfile
@@ -148,8 +152,8 @@ export function groupSummaryOn(thread: Pick<CodexChatThreadRecord, 'summary_enab
  * with every continuation; only the latest of each stays in a member's view, so the repeats do not fill the window the
  * members' own talk needs.
  */
-export function withoutStaleWakes(messages: CodexChatMessageRecord[]) {
-  const key = (message: CodexChatMessageRecord) => {
+export function withoutStaleWakes<T extends Pick<CodexChatMessageRecord, 'id' | 'role' | 'routing'>>(messages: T[]) {
+  const key = (message: T) => {
     if (message.role !== 'user') return null
     const wake = message.routing?.routine
     if (wake) return `${wake.source}:${wake.id ?? wake.name}`
@@ -169,12 +173,32 @@ export function withoutStaleWakes(messages: CodexChatMessageRecord[]) {
   })
 }
 
+export type GroupHistory = { source: ChatHistorySource; outline: ChatHistoryOutline[] }
+
+/** Both a resumed session and a reset session must be able to choose their window, without reading old bodies. */
+export function readGroupReplyHistory(thread: CodexChatThreadRecord, profile: ChatProfile, source: ChatHistorySource) {
+  source = { ...source, untilMessageId: source.untilMessageId ?? CodexChatStore.latestMessageId(source.threadId) ?? 0 }
+  const outline = CodexChatStore.listHistoryOutline(source)
+  const sendable = outline.filter((message) => message.sendable)
+  const active = withoutStaleWakes(sendable)
+  const limit = groupLimitsOf(thread).window
+  const lastSeen = ChatGroupStore.member(thread.id, profile.id)?.last_seen_message_id ?? null
+  const missed = active.filter((message) => message.id > (lastSeen ?? 0) && !(lastSeen !== null && message.role === 'assistant' && message.speaker_profile_id === profile.id))
+  const needed = [...active.slice(-limit), ...missed.slice(-limit), ...sendable.slice(-2)]
+  const afterId = needed.length ? Math.min(...needed.map((message) => message.id)) - 1 : Number.MAX_SAFE_INTEGER
+  return { messages: readReplyHistory(profile, source, afterId), history: { source, outline } }
+}
+
 export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMessage[] {
   // With the room's summary on, the messages it covers stay out: the summary stands in for them.
-  const sendable = withoutStaleWakes(sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) })))
-  let window = latestWindow(sendable, params.windowLimit)
+  const until = groupSummaryOn(params.thread) ? params.thread.summary_until_message_id ?? 0 : 0
+  const sendable: Array<CodexChatMessageRecord | ChatHistoryOutline> = params.history
+    ? withoutStaleWakes(params.history.outline.filter((message) => message.sendable && message.id > until))
+    : withoutStaleWakes(sendableMessages(unsummarizedMessages(params.messages, params.thread, { summaryEnabled: groupSummaryOn(params.thread) })))
+  const ids = new Set(latestWindow(sendable, params.windowLimit).map((message) => message.id))
+  let window = params.messages.filter((message) => ids.has(message.id))
   params = { ...params, books: params.books ?? booksForRequest({ thread: params.thread, profile: params.profile }) }
-  const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { thread: params.thread, books: params.books, toolOffered: offersLoreFileTool(params.tools), linkedOffered: offersLinkedFiles(params.tools), history: params.messages, speakerProfileId: params.profile.id, judged: params.judged?.loreKeys, semantic: params.judged?.semantic?.loreKeys })
+  const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { thread: params.thread, books: params.books, toolOffered: offersLoreFileTool(params.tools), linkedOffered: offersLinkedFiles(params.tools), history: params.messages, historySource: params.history?.source, speakerProfileId: params.profile.id, judged: params.judged?.loreKeys, semantic: params.judged?.semantic?.loreKeys })
   let context = buildGroupWindowMessages(params, window, sendable.length, lore)
   const budget = params.profile.contextTokens
   const reserve = replyReserveFor(budget, params.maxTokens) + (params.extraTokens ?? 0)
@@ -192,7 +216,11 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
     context = buildGroupWindowMessages(params, window, sendable.length, lore)
   }
   if (params.onMeta) {
-    const meta = buildContextMeta(params.profile, params.thread, params.messages, window, groupSummaryOn(params.thread), context.lore, context.recalled, params.tools, context.messages)
+    const meta = buildContextMeta(params.profile, params.thread, params.messages, window, groupSummaryOn(params.thread), context.lore, context.recalled, params.tools, context.messages, params.history?.source)
+    if (meta.version === 2 && params.history && meta.window) {
+      meta.window.droppedTurns = splitTurns(params.history.outline.filter((message) => message.sendable && message.id > until))
+        .filter((turn) => !turn.some((message) => window.some((entry) => entry.id === message.id))).length
+    }
     meta.estimatedTokens += params.extraTokens ?? 0
     if (meta.version === 2) meta.sources?.push(...contextSource('group-header', context.header))
     params.onMeta(limitContextMeta(meta))
@@ -235,8 +263,8 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   // Summaries the room's plot already took in come back when the latest exchange touches them, like in a direct chat.
   const recalled = summaryOn && params.segments ? recalledSegments(profile, params.segments, params.messages, { contextTokens: profile.contextTokens }, params.judged?.recallKeep, params.judged?.semantic?.recall) : []
   const recall = recallText(recalled)
-  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread, params.messages, profile.id), recall, rejectedLoreFor(thread.id, params.tools))
-  const reference = buildReplyContext(params.messages, params.routing, { group: true, maxChars: Math.max(256, Math.min(6000, Math.floor((profile.contextTokens ?? 24000) / 4))), visibleIds: new Set(window.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) })
+  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread, params.messages, profile.id, params.history?.source), recall, rejectedLoreFor(thread.id, params.tools))
+  const reference = buildReplyContext(params.messages, params.routing, { group: true, historySource: params.history?.source, positions: params.history?.outline, maxChars: Math.max(256, Math.min(6000, Math.floor((profile.contextTokens ?? 24000) / 4))), visibleIds: new Set(window.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) })
   const directive = [reference, hiddenHistoryNote(thread, total - window.length), flagDirectiveFor(params.messages, profile, user), postHistoryText(profile, user), mentionReminder(members, profile)].filter(Boolean).join('\n\n')
   const result = appendUserDirective([...system, ...insertDepthBlocks(conversation, blocks)], directive)
   return { messages: result, lore, recalled, header }
@@ -250,13 +278,15 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
  * What a member with its own memory of the room (a Codex thread, a Claude session) missed since it last spoke: its own
  * replies are in its memory already. `shown` is the part the window lets through.
  */
-export function groupMissedMessages(messages: CodexChatMessageRecord[], selfId: number, lastSeenMessageId: number | null, windowLimit: number) {
-  const missed = withoutStaleWakes(sendableMessages(messages)).filter((message) => message.id > (lastSeenMessageId ?? 0)
+export function groupMissedMessages(messages: CodexChatMessageRecord[], selfId: number, lastSeenMessageId: number | null, windowLimit: number, history?: GroupHistory) {
+  const missed = withoutStaleWakes<CodexChatMessageRecord | ChatHistoryOutline>(history ? history.outline.filter((message) => message.sendable) : sendableMessages(messages)).filter((message) => message.id > (lastSeenMessageId ?? 0)
     && !(lastSeenMessageId !== null && message.role === 'assistant' && message.speaker_profile_id === selfId))
-  return { missed, shown: missed.slice(-windowLimit) }
+  const ids = new Set(missed.slice(-windowLimit).map((message) => message.id))
+  return { missed, shown: messages.filter((message) => ids.has(message.id)) }
 }
 
 export function buildGroupCodexInput(params: {
+  history?: GroupHistory
   routing?: ChatMessageRouting
   thread: CodexChatThreadRecord
   members: Member[]
@@ -277,7 +307,7 @@ export function buildGroupCodexInput(params: {
   const { thread, members, self, lastSeenMessageId, windowLimit, lore, directive } = params
   const user = userPersonaForThread(thread)
   const names = new Map(members.map((member) => [member.id, member.name]))
-  const { missed, shown } = groupMissedMessages(params.messages, self.id, lastSeenMessageId, windowLimit)
+  const { missed, shown } = groupMissedMessages(params.messages, self.id, lastSeenMessageId, windowLimit, params.history)
   // The room's summary fills the gap a member's own memory cannot: its first turn, or more missed than the window shows.
   const gap = lastSeenMessageId === null || missed.length > shown.length
   const summary = gap && groupSummaryOn(thread) && thread.summary?.trim() ? `[방 요약]\n${thread.summary.trim()}\n[/방 요약]` : ''
@@ -285,7 +315,7 @@ export function buildGroupCodexInput(params: {
     params.header === false ? '' : buildGroupHeader({ thread, members, self, user }),
     summary,
     hiddenHistoryNote(thread, missed.length - shown.length),
-    buildReplyContext(params.messages, params.routing, { group: true, visibleIds: new Set(shown.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) }),
+    buildReplyContext(params.messages, params.routing, { group: true, historySource: params.history?.source, positions: params.history?.outline, visibleIds: new Set(shown.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) }),
     lore ? `[참고 설정]\n${lore}\n[/참고 설정]` : '',
     `[${lastSeenMessageId === null ? '지금까지의 대화' : '네가 마지막으로 말한 뒤의 대화'}]\n${shown.map((message) => transcriptLine(message, names, user, params.attachmentTexts, params.attachedImages)).join('\n\n')}`,
     directive,

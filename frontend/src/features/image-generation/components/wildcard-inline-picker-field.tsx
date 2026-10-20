@@ -792,6 +792,7 @@ export function WildcardInlinePickerField({
       {showDetectedSyntax && activeDetectedToken && detectedPopupPosition ? (
         <PromptSyntaxTokenPopup
           token={activeDetectedToken}
+          tool={tool}
           position={detectedPopupPosition}
           popupRef={detectedPopupRef}
           onMouseEnter={() => {

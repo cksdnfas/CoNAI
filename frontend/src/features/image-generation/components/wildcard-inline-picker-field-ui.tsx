@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,8 @@ import { ListRow } from '@/components/ui/list-row'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { wildcardItemsQueryOptions } from '@/lib/api-wildcards'
+import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 import { getFloatingDropdownStyle } from './floating-dropdown-utils'
 import { usePromptInlineSyntaxSettings } from './prompt-inline-syntax-settings'
 import { PROMPT_RANDOM_SOURCE_TONE } from './prompt-random-palette'
@@ -356,14 +359,17 @@ export function getTextFieldCaretClientRect(element: HTMLInputElement | HTMLText
   }
 }
 
-export function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter, onMouseLeave }: {
+export function PromptSyntaxTokenPopup({ token, tool, position, popupRef, onMouseEnter, onMouseLeave }: {
   token: PromptSyntaxToken
+  tool: PromptWildcardTool
   position: PromptSyntaxPopupPosition
   popupRef: RefObject<HTMLDivElement | null>
   onMouseEnter: () => void
   onMouseLeave: () => void
 }) {
   const { t } = useI18n()
+  const itemsQuery = useQuery(wildcardItemsQueryOptions(token.wildcardId, tool, 3))
+  const previewItems = Array.from(new Set((itemsQuery.data ?? []).map((item) => item.content.trim()).filter(Boolean))).slice(0, 3)
 
   if (typeof document === 'undefined') {
     return null
@@ -393,19 +399,23 @@ export function PromptSyntaxTokenPopup({ token, position, popupRef, onMouseEnter
           {token.loraWeight ? <div className="text-xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.weight.token.loraweight', { weight: token.loraWeight })}</div> : null}
         </div>
 
-        {token.previewItems.length > 0 ? (
+        {itemsQuery.isLoading ? (
+          <div className="text-xs text-muted-foreground">{t({ ko: '불러오는 중…', en: 'Loading…' })}</div>
+        ) : itemsQuery.isError ? (
+          <div className="text-xs text-destructive">{t({ ko: '미리보기를 불러오지 못했어.', en: 'Could not load the preview.' })}</div>
+        ) : previewItems.length > 0 ? (
           <div className="space-y-1.5">
-            {token.previewItems.map((item, index) => (
+            {previewItems.map((item, index) => (
               <div key={`${token.key}:preview:${index}`} className="rounded-sm bg-surface-container px-2.5 py-2 text-xs leading-5 text-foreground">
                 <div className="break-words whitespace-pre-wrap">{item}</div>
               </div>
             ))}
           </div>
-        ) : token.fallbackMessage ? (
+        ) : (
           <div className="rounded-sm bg-surface-container px-2.5 py-2 text-xs leading-5 text-foreground">
-            {token.fallbackMessage}
+            {token.fallbackMessage ?? t({ ko: '연결된 항목이 없어.', en: 'No linked items.' })}
           </div>
-        ) : null}
+        )}
       </div>
     </div>,
     document.body,

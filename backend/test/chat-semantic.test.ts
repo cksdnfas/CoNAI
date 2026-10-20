@@ -141,6 +141,26 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     while (await semanticIndexer.sweep() > 0) { /* drain */ }
   })
 
+  await t.test('session recall resolves older active-path messages outside a bounded input and excludes the replaced reply', async () => {
+    const sessionProfile = { ...profile, engine: 'claude' as const }
+    const id = CodexChatStore.createThread(null, 'session recall', 'llm', profile.id)
+    const older = say(id, 'assistant', '선술집 정보상이 비밀 통로 지도를 팔았다.')
+    for (let i = 0; i < 60; i++) CodexChatStore.addMessage({ thread_id: id, role: i % 2 ? 'user' : 'assistant', content: `unrelated ${i}`, tool_calls: [], status: 'completed', error: null })
+    say(id, 'user', '선술집 정보상 지도 기억나?')
+    const replaced = say(id, 'assistant', '선술집 정보상의 지도')
+    await indexMessagesNow([id], 100)
+    const source = { threadId: id, excludeMessageId: replaced.id }
+    const full = CodexChatStore.listMessages(id).filter(message => message.id !== replaced.id)
+    const bounded = CodexChatStore.listContextMessages(source, { afterId: Number.MAX_SAFE_INTEGER, recentMessages: 4, textMessages: 2 })
+    const params = { profile: sessionProfile, thread: CodexChatStore.findThreadById(id)!, judgeDecidesLore: false }
+    const expected = await semanticContextFor({ ...params, messages: full })
+    const actual = await semanticContextFor({ ...params, messages: bounded, historySource: source })
+    assert.deepEqual(actual, expected)
+    assert.ok(actual?.messages?.some(message => message.id === older.id))
+    assert.ok(!actual?.messages?.some(message => message.id === replaced.id))
+    CodexChatStore.deleteThread(id)
+  })
+
   await t.test('recall: an episode told in other words comes back, fused with shared words', async () => {
     say(threadId, 'assistant', '오늘은 어디로 갈까?')
     const latest = say(threadId, 'user', '너 저번에 내 국에 그 빨간 가루 왕창 넣었잖아. 고춧가루 말이야.')

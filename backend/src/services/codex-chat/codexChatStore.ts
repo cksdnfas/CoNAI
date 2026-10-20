@@ -206,7 +206,9 @@ export type ChatMessageAlternative = {
 type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives' | 'flags' | 'routing'> & { tool_calls: string | null; alternatives: string | null; flags: string | null; media_attachments: string | null; routing: string | null }
 
 /** A bounded request's historical lookups stay in this thread and exclude the reply being replaced. */
-export type ChatHistorySource = { threadId: number; excludeMessageId?: number }
+export type ChatHistorySource = { threadId: number; excludeMessageId?: number; untilMessageId?: number }
+/** Body-free turn boundaries and wake keys; sendability uses the same parsers as full message reads. */
+export type ChatHistoryOutline = Pick<CodexChatMessageRecord, 'id' | 'role' | 'speaker_profile_id' | 'routing'> & { sendable: boolean }
 // ECMAScript String.trim whitespace: SQL's default trim only removes ASCII spaces.
 const MESSAGE_WHITESPACE = '\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff'
 const CONTEXT_MESSAGE_COLUMNS = `id, thread_id, role, content, display_content, speaker_profile_id,
@@ -516,12 +518,13 @@ export const CodexChatStore = {
     }
   },
 
-  listMessages(threadId: number, options: { tail?: number; before?: number } = {}) {
+  listMessages(threadId: number, options: { tail?: number; before?: number; after?: number } = {}) {
     const tail = options.tail
     if (tail !== undefined && (!Number.isSafeInteger(tail) || tail < 1)) throw new Error('Invalid message limit')
     if (options.before !== undefined && (!Number.isSafeInteger(options.before) || options.before < 1)) throw new Error('Invalid message cursor')
-    const rows = getUserSettingsDb().prepare(`SELECT * FROM codex_chat_messages WHERE thread_id = ?${options.before === undefined ? '' : ' AND id < ?'} ORDER BY id ${tail === undefined ? '' : 'DESC LIMIT ?'}`)
-      .all(threadId, ...(options.before === undefined ? [] : [options.before]), ...(tail === undefined ? [] : [tail])) as StoredMessageRow[]
+    if (options.after !== undefined && (!Number.isSafeInteger(options.after) || options.after < 0)) throw new Error('Invalid message cursor')
+    const rows = getUserSettingsDb().prepare(`SELECT * FROM codex_chat_messages WHERE thread_id = ?${options.before === undefined ? '' : ' AND id < ?'}${options.after === undefined ? '' : ' AND id > ?'} ORDER BY id ${tail === undefined ? '' : 'DESC LIMIT ?'}`)
+      .all(threadId, ...(options.before === undefined ? [] : [options.before]), ...(options.after === undefined ? [] : [options.after]), ...(tail === undefined ? [] : [tail])) as StoredMessageRow[]
     return readMessageRows(threadId, tail === undefined ? rows : rows.reverse())
   },
 
@@ -529,13 +532,20 @@ export const CodexChatStore = {
     return Boolean(getUserSettingsDb().prepare('SELECT 1 FROM codex_chat_messages WHERE thread_id = ? AND id < ? LIMIT 1').get(threadId, before))
   },
 
+  /** Explicit historical range for summaries and orders; never includes alternatives/diagnostics or later turns. */
+  listContextRange(threadId: number, afterId: number, untilId = Number.MAX_SAFE_INTEGER) {
+    const rows = getUserSettingsDb().prepare(`SELECT ${CONTEXT_MESSAGE_COLUMNS} FROM codex_chat_messages WHERE thread_id = ? AND id > ? AND id <= ? ORDER BY id`)
+      .all(threadId, afterId, untilId) as StoredMessageRow[]
+    return readMessageRows(threadId, rows)
+  },
+
   /** All unsummarized rows, plus the exact recent suffix needed by lore/judges and the last user's flags.
    * Diagnostics and alternative bodies are not completion input; consumers needing those use the source below. */
   listContextMessages(source: ChatHistorySource, options: { afterId: number; recentMessages: number; textMessages: number }) {
     const db = getUserSettingsDb()
-    const args = [source.threadId, source.excludeMessageId ?? -1]
+    const args = [source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? Number.MAX_SAFE_INTEGER]
     const boundary = (filter: string, count: number, extra: string[] = []) =>
-      (db.prepare(`SELECT id FROM codex_chat_messages WHERE thread_id = ? AND id != ? ${filter} ORDER BY id DESC LIMIT 1 OFFSET ?`)
+      (db.prepare(`SELECT id FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id <= ? ${filter} ORDER BY id DESC LIMIT 1 OFFSET ?`)
         .get(...args, ...extra, Math.max(0, count - 1)) as { id: number } | undefined)?.id ?? 0
     const recent = boundary('', options.recentMessages)
     // Both original-language judging and model-language semantic retrieval filter blank text before taking a suffix.
@@ -543,34 +553,70 @@ export const CodexChatStore = {
     const original = boundary("AND length(trim(CASE WHEN role = 'user' THEN COALESCE(display_content, content) ELSE content END, ?)) > 0", options.textMessages, [MESSAGE_WHITESPACE])
     const user = boundary("AND role = 'user'", 1)
     const from = Math.min(options.afterId + 1, recent, text, original, user)
-    const rows = db.prepare(`SELECT ${CONTEXT_MESSAGE_COLUMNS} FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id >= ? ORDER BY id`)
+    const rows = db.prepare(`SELECT ${CONTEXT_MESSAGE_COLUMNS} FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id <= ? AND id >= ? ORDER BY id`)
       .all(...args, from) as StoredMessageRow[]
     return readMessageRows(source.threadId, rows)
   },
 
   /** Positions, not bodies: quote neighbours retain the same turn boundaries outside a request window. */
+  listHistoryOutline(source: ChatHistorySource): ChatHistoryOutline[] {
+    const rows = getUserSettingsDb().prepare(`SELECT id, role, speaker_profile_id, routing,
+      length(trim(content, ?)) > 0 AS has_text,
+      CASE WHEN length(trim(content, ?)) = 0 THEN tool_calls END AS tool_calls,
+      CASE WHEN length(trim(content, ?)) = 0 THEN media_attachments END AS media_attachments,
+      EXISTS(SELECT 1 FROM chat_file_attachments a JOIN stored_file_entries e ON e.id = a.file_id AND e.deleted_at IS NULL WHERE a.message_id = m.id) AS has_files
+      FROM codex_chat_messages m WHERE thread_id = ? AND id != ? AND id <= ? ORDER BY id`)
+      .all(MESSAGE_WHITESPACE, MESSAGE_WHITESPACE, MESSAGE_WHITESPACE, source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? Number.MAX_SAFE_INTEGER) as Array<{
+        id: number; role: CodexChatMessageRecord['role']; speaker_profile_id: number | null; routing: string | null
+        has_text: number; has_files: number; tool_calls: string | null; media_attachments: string | null
+      }>
+    return rows.map((row) => ({
+      id: row.id, role: row.role, speaker_profile_id: row.speaker_profile_id, routing: parseMessageRouting(row.routing),
+      sendable: Boolean(row.has_text || row.has_files || parseToolCalls(row.tool_calls).length || parseChatMediaAttachments(row.media_attachments).length),
+    }))
+  },
+
+  /** A session's recap is text-only; the older-user existence check is independent of its forty-row window. */
+  readSessionRecap(source: ChatHistorySource, before: number, limit: number) {
+    const db = getUserSettingsDb()
+    const args = [source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? Number.MAX_SAFE_INTEGER, before, MESSAGE_WHITESPACE]
+    const where = 'thread_id = ? AND id != ? AND id <= ? AND id < ? AND length(trim(content, ?)) > 0'
+    const hasUser = Boolean(db.prepare(`SELECT 1 FROM codex_chat_messages WHERE ${where} AND role = 'user' LIMIT 1`).get(...args))
+    const messages = db.prepare(`SELECT role, content FROM codex_chat_messages WHERE ${where} ORDER BY id DESC LIMIT ?`)
+      .all(...args, limit) as Array<Pick<CodexChatMessageRecord, 'role' | 'content'>>
+    return { hasUser, messages: messages.reverse() }
+  },
+
+  /** Session outcomes need forty assistant IDs/tool records, never transcript bodies or alternatives. */
+  listOutcomeMessages(source: ChatHistorySource, limit: number, before?: number, speakerId?: number) {
+    const rows = getUserSettingsDb().prepare(`SELECT role, routing, tool_calls FROM codex_chat_messages
+      WHERE thread_id = ? AND id != ? AND id <= ? AND role = 'assistant'${before === undefined ? '' : ' AND id < ?'}${speakerId === undefined ? '' : ' AND speaker_profile_id = ?'}
+      ORDER BY id DESC LIMIT ?`).all(source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? Number.MAX_SAFE_INTEGER, ...(before === undefined ? [] : [before]), ...(speakerId === undefined ? [] : [speakerId]), limit) as Array<{ role: 'assistant'; routing: string | null; tool_calls: string | null }>
+    return rows.reverse().map((row) => ({ role: row.role, routing: parseMessageRouting(row.routing), tool_calls: parseToolCalls(row.tool_calls) }))
+  },
+
   listMessagePositions(source: ChatHistorySource) {
-    return getUserSettingsDb().prepare('SELECT id, role FROM codex_chat_messages WHERE thread_id = ? AND id != ? ORDER BY id')
-      .all(source.threadId, source.excludeMessageId ?? -1) as Array<Pick<CodexChatMessageRecord, 'id' | 'role'>>
+    return getUserSettingsDb().prepare('SELECT id, role FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id <= ? ORDER BY id')
+      .all(source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? Number.MAX_SAFE_INTEGER) as Array<Pick<CodexChatMessageRecord, 'id' | 'role'>>
   },
 
   /** Lore timers count every message, but only need activation records inside their configured horizon. */
   readLoreTiming(source: ChatHistorySource, horizon: number) {
     const db = getUserSettingsDb()
-    const args = [source.threadId, source.excludeMessageId ?? -1]
-    const { count } = db.prepare('SELECT COUNT(*) AS count FROM codex_chat_messages WHERE thread_id = ? AND id != ?').get(...args) as { count: number }
+    const args = [source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? Number.MAX_SAFE_INTEGER]
+    const { count } = db.prepare('SELECT COUNT(*) AS count FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id <= ?').get(...args) as { count: number }
     const messages = db.prepare(`SELECT role, speaker_profile_id, '' AS content,
       CASE WHEN json_valid(context_meta) THEN json_object('loreEntries', json_extract(context_meta, '$.loreEntries')) ELSE NULL END AS context_meta
-      FROM codex_chat_messages WHERE thread_id = ? AND id != ? ORDER BY id DESC LIMIT ?`)
+      FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id <= ? ORDER BY id DESC LIMIT ?`)
       .all(...args, horizon) as Array<Pick<CodexChatMessageRecord, 'role' | 'speaker_profile_id' | 'content' | 'context_meta'>>
     return { messages: messages.reverse(), messageCount: count }
   },
 
   /** After-reply judges need only the last nonblank original-language texts, not tools or attachments. */
-  listJudgeMessages(threadId: number, limit: number): CodexChatMessageRecord[] {
+  listJudgeMessages(threadId: number, limit: number, untilId = Number.MAX_SAFE_INTEGER): CodexChatMessageRecord[] {
     const rows = getUserSettingsDb().prepare(`SELECT id, thread_id, role, content, display_content, speaker_profile_id
-      FROM codex_chat_messages WHERE thread_id = ? AND length(trim(CASE WHEN role = 'user' THEN COALESCE(display_content, content) ELSE content END, ?)) > 0
-      ORDER BY id DESC LIMIT ?`).all(threadId, MESSAGE_WHITESPACE, limit) as Array<Pick<CodexChatMessageRecord, 'id' | 'thread_id' | 'role' | 'content' | 'display_content' | 'speaker_profile_id'>>
+      FROM codex_chat_messages WHERE thread_id = ? AND id <= ? AND length(trim(CASE WHEN role = 'user' THEN COALESCE(display_content, content) ELSE content END, ?)) > 0
+      ORDER BY id DESC LIMIT ?`).all(threadId, untilId, MESSAGE_WHITESPACE, limit) as Array<Pick<CodexChatMessageRecord, 'id' | 'thread_id' | 'role' | 'content' | 'display_content' | 'speaker_profile_id'>>
     return rows.reverse().map((row) => ({ ...row, tool_calls: [], alternatives: [], active_alternative: 0, status: 'completed', error: null, finish_reason: null, created_date: '' }))
   },
 
@@ -589,18 +635,30 @@ export const CodexChatStore = {
     return CodexChatStore.listMessages(threadId, { tail: 1 })[0]
   },
 
+  latestUserMessageId(threadId: number) {
+    return (getUserSettingsDb().prepare("SELECT id FROM codex_chat_messages WHERE thread_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1").get(threadId) as { id: number } | undefined)?.id ?? null
+  },
+
+  /** Active routing only, scoped to this thread; variants do not own the current generation result. */
+  findMessageByReplyId(threadId: number, replyId: string, role?: CodexChatMessageRecord['role']) {
+    const row = getUserSettingsDb().prepare(`SELECT id FROM codex_chat_messages
+      WHERE thread_id = ? AND CASE WHEN json_valid(routing) THEN json_type(routing, '$.recipients') = 'array' AND json_extract(routing, '$.replyId') = ? ELSE 0 END
+      ${role === undefined ? '' : 'AND role = ?'} ORDER BY id LIMIT 1`).get(threadId, replyId, ...(role === undefined ? [] : [role])) as { id: number } | undefined
+    return row ? CodexChatStore.findMessage(threadId, row.id) : undefined
+  },
+
   messageCount(threadId: number) {
     return (getUserSettingsDb().prepare('SELECT COUNT(*) AS count FROM codex_chat_messages WHERE thread_id = ?').get(threadId) as { count: number }).count
   },
 
   /** Display state needs fenced replies, without tool outputs, alternatives, attachments or diagnostics. */
-  listBlockMessages(threadId: number) {
-    return getUserSettingsDb().prepare("SELECT id, role, content, speaker_profile_id FROM codex_chat_messages WHERE thread_id = ? AND role = 'assistant' AND instr(content, '```') > 0 ORDER BY id")
-      .all(threadId) as Array<Pick<CodexChatMessageRecord, 'id' | 'role' | 'content' | 'speaker_profile_id'>>
+  listBlockMessages(threadId: number, untilId = Number.MAX_SAFE_INTEGER) {
+    return getUserSettingsDb().prepare("SELECT id, role, content, speaker_profile_id FROM codex_chat_messages WHERE thread_id = ? AND id <= ? AND role = 'assistant' AND instr(content, '```') > 0 ORDER BY id")
+      .all(threadId, untilId) as Array<Pick<CodexChatMessageRecord, 'id' | 'role' | 'content' | 'speaker_profile_id'>>
   },
 
-  latestMessageId(threadId: number) {
-    const row = getUserSettingsDb().prepare('SELECT id FROM codex_chat_messages WHERE thread_id = ? ORDER BY id DESC LIMIT 1').get(threadId) as { id: number } | undefined
+  latestMessageId(threadId: number, before?: number) {
+    const row = getUserSettingsDb().prepare(`SELECT id FROM codex_chat_messages WHERE thread_id = ?${before === undefined ? '' : ' AND id < ?'} ORDER BY id DESC LIMIT 1`).get(threadId, ...(before === undefined ? [] : [before])) as { id: number } | undefined
     return row?.id ?? null
   },
 

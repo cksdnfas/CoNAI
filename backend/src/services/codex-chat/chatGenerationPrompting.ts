@@ -238,7 +238,7 @@ class DeferredSkip extends Error {}
 function announce(row: Pick<DeferredGenerationRow, 'thread_id' | 'reply_id'>) {
   const thread = CodexChatStore.findThreadById(row.thread_id)
   if (!thread) return
-  const message = CodexChatStore.listMessages(row.thread_id).find((entry) => entry.routing?.replyId === row.reply_id)
+  const message = CodexChatStore.findMessageByReplyId(row.thread_id, row.reply_id)
   publishRuntimeEvent({ name: 'chat.message.updated', topic: 'generation-queue', visibility: 'owner', accountId: thread.account_id,
     payload: { threadId: row.thread_id, messageId: message?.id ?? 0, requestedByAccountId: thread.account_id } })
 }
@@ -246,9 +246,8 @@ function announce(row: Pick<DeferredGenerationRow, 'thread_id' | 'reply_id'>) {
 async function savedReply(row: DeferredGenerationRow) {
   const deadline = Date.now() + REPLY_SAVE_WAIT_MS
   for (;;) {
-    const messages = CodexChatStore.listMessages(row.thread_id)
-    const index = messages.findIndex((message) => message.role === 'assistant' && message.routing?.replyId === row.reply_id)
-    if (index >= 0) return { messages: messages.slice(0, index), reply: messages[index] }
+    const reply = CodexChatStore.findMessageByReplyId(row.thread_id, row.reply_id, 'assistant')
+    if (reply) return { messages: CodexChatStore.listMessages(row.thread_id, { before: reply.id, tail: 6 }), reply }
     if (Date.now() > deadline) return null
     await new Promise((resolve) => setTimeout(resolve, 250))
   }

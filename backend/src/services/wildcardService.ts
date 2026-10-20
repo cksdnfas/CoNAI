@@ -69,6 +69,14 @@ export class WildcardService {
     return new WildcardResolver();
   }
 
+  /** Item previews use the same descendant and per-node tool fallback rules as expansion. */
+  static getResolvedItems(name: string, tool: WildcardResolutionTool): WildcardItem[] {
+    const resolver = this.createResolver();
+    resolver.loadNames([name]);
+    const wildcard = resolver.get(name);
+    return wildcard ? this.collectItemsWithChildren(wildcard, tool, resolver) : [];
+  }
+
   static parseWildcards(
     text: string,
     tool: WildcardResolutionTool,

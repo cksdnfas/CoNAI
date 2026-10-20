@@ -36,7 +36,7 @@ export function WildcardInlinePickerPopupContent({
     index,
   }: IndexedWildcardInlinePickerSuggestion) => {
     const isActive = index === activeIndex
-    const preferredBadgeTool = resolvePreferredWildcardItemTool(record.items, tool)
+    const preferredBadgeTool = resolvePreferredWildcardItemTool(record.itemCounts, tool)
 
     return (
       <Button

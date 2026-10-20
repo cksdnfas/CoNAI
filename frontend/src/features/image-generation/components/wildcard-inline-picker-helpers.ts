@@ -1,4 +1,4 @@
-import type { WildcardItemRecord, WildcardRecord, WildcardTool } from '@/lib/api-wildcards'
+import type { WildcardItemCounts, WildcardRecord, WildcardTool } from '@/lib/api-wildcards'
 
 export type PromptWildcardTool = WildcardTool | 'codex'
 
@@ -11,7 +11,7 @@ export type FlattenedWildcardRecord = {
   isAutoCollected: boolean
   includeChildren: boolean
   onlyChildren: boolean
-  items: WildcardItemRecord[]
+  itemCounts: WildcardItemCounts
 }
 
 /** Flatten the hierarchical wildcard tree into searchable inline picker records. */
@@ -29,7 +29,10 @@ export function flattenWildcardRecords(nodes: WildcardRecord[], parentPath: stri
       isAutoCollected: node.is_auto_collected === 1,
       includeChildren: node.include_children === 1,
       onlyChildren: node.only_children === 1,
-      items: node.items ?? [],
+      itemCounts: node.item_counts ?? (node.items ?? []).reduce((counts, item) => {
+        counts[item.tool] += 1
+        return counts
+      }, { general: 0, nai: 0, comfyui: 0 }),
     })
 
     if (node.children && node.children.length > 0) {
@@ -40,27 +43,27 @@ export function flattenWildcardRecords(nodes: WildcardRecord[], parentPath: stri
   return entries
 }
 
-export function resolvePreferredWildcardItemTool(items: WildcardItemRecord[], tool: PromptWildcardTool): WildcardTool {
+export function resolvePreferredWildcardItemTool(counts: WildcardItemCounts, tool: PromptWildcardTool): WildcardTool {
   if (tool === 'codex') {
     return 'general'
   }
 
   if (tool === 'nai' || tool === 'comfyui') {
-    return items.some((item) => item.tool === tool) ? tool : 'general'
+    return counts[tool] > 0 ? tool : 'general'
   }
 
   return 'general'
 }
 
 /** Count wildcard items stored for one concrete storage tab. */
-export function countStoredWildcardItemsForTool(items: WildcardItemRecord[], tool: WildcardTool) {
-  return items.filter((item) => item.tool === tool).length
+export function countStoredWildcardItemsForTool(counts: WildcardItemCounts, tool: WildcardTool) {
+  return counts[tool]
 }
 
 /** Count wildcard items available for one runtime tool, including General fallback. */
-export function countWildcardItemsForTool(items: WildcardItemRecord[], tool: PromptWildcardTool) {
-  const preferredTool = resolvePreferredWildcardItemTool(items, tool)
-  return countStoredWildcardItemsForTool(items, preferredTool)
+export function countWildcardItemsForTool(counts: WildcardItemCounts, tool: PromptWildcardTool) {
+  const preferredTool = resolvePreferredWildcardItemTool(counts, tool)
+  return countStoredWildcardItemsForTool(counts, preferredTool)
 }
 
 /** Score one flattened wildcard record against the normalized inline query. */

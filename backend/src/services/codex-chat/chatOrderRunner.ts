@@ -64,16 +64,14 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
   if (!loadChatSettings().enabled) throw new CodexChatError('채팅이 꺼져 있어.', 403)
   const thread = CodexChatStore.findThread(threadId, requester.accountId)
   if (!thread) throw new CodexChatError('채팅을 찾을 수 없어.', 404)
-  const messages = CodexChatStore.listMessages(threadId)
-  const index = messages.findIndex((message) => message.id === messageId)
-  const target = messages[index]
+  const target = CodexChatStore.findMessage(threadId, messageId)
   if (!target || target.role !== 'assistant') throw new ChatFlagError('지시는 캐릭터 답변에만 내릴 수 있어.')
   if (target.status !== 'completed') throw new ChatFlagError('끝까지 쓰인 답변에만 지시할 수 있어.', 409)
   if (kind === 'redraw' && !quoteMessage(thread, target).media) throw new ChatFlagError('이 답변에는 다시 그릴 이미지가 없어.')
   const profile = orderProfile(requester, thread, target)
   if (!chatOrdersOf(profile, resolveChatAccess(requester.accountId), thread.kind).includes(kind)) throw new ChatFlagError('이 캐릭터는 그 도구를 쓸 수 없어.', 403)
   // A choice card is answered by the next message, so only the latest reply can offer one.
-  if (kind === 'choices' && index !== messages.length - 1) throw new ChatFlagError('선택지는 마지막 답변에서만 만들 수 있어.', 409)
+  if (kind === 'choices' && CodexChatStore.latestMessageId(threadId) !== messageId) throw new ChatFlagError('선택지는 마지막 답변에서만 만들 수 있어.', 409)
   if (CodexChatService.isRunning(threadId) || GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
 
   const replyId = CodexChatStore.ensureReplyId(threadId, messageId, randomUUID)
@@ -88,7 +86,9 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
     const emit = (event: CodexChatStreamEvent) => { if (event.type === 'tool') listener(event) }
     const directive = chatOrderDirective(kind, messageId)
     // The conversation as it stood at the reply. A summary that already covers the reply would tell what came after.
-    const history = withGenerationOutcomes(messages.slice(0, index + 1))
+    // Historical orders still need an as-of-target prefix for lore timers, quotes and state; never read future rows.
+    // Alternatives and activation metadata remain necessary for these legacy in-memory consumers.
+    const history = withGenerationOutcomes(CodexChatStore.listMessages(threadId, { before: messageId + 1 }).map((message) => message.id === target.id ? target : message))
     const summarized = (thread.summary_until_message_id ?? 0) >= messageId
     const group = thread.kind === 'group'
     let result: GroupReplyResult
@@ -139,7 +139,7 @@ export async function runChatOrder(requester: McpRequester, threadId: number, me
       const failed = result.tool_calls.find((call) => call.status === 'failed' && chatOrderDone(kind, call))
       throw new CodexChatError(result.error ?? (failed?.summary ? `작업이 실패했어: ${failed.summary}` : '캐릭터가 그 작업을 하지 않았어. 다시 해봐.'), 502)
     }
-    const message = CodexChatStore.listMessages(threadId).find((entry) => entry.id === messageId) ?? target
+    const message = CodexChatStore.findMessage(threadId, messageId) ?? target
     listener({ type: 'done', message })
     knowledgeStatus = 'completed'
     return message

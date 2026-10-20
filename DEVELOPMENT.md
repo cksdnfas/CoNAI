@@ -72,7 +72,7 @@ API 연결의 일시적 장애 재시도와 출력 이후 재전송 금지는 `s
 
 `open_tools`는 `query`로 이름·설명을 검색하고 `detail: "summary"`로 짧은 목록을 조회한다. 기본 `schema`는 정의를 자르지 않으며 `max_tokens`와 API 채팅의 남은 컨텍스트 안에서 페이지를 나눈다. 개별 정의도 들어가지 않으면 필요한 크기를 알린다. 일반 도구의 큰 JSON 결과는 `truncated`와 재조회 안내를 포함한 JSON으로 축약한다. 정밀한 파일 편집·페이지 작업은 축약된 결과를 완전한 원문으로 취급하지 않는다.
 
-MCP 결과의 라이브러리 텍스트(프롬프트·메타데이터·자동 태그)는 호출 문맥의 허용 등급을 따른다. `chatContentRating.ts`의 `ratingRestrictedHashes`와 `hideRatingRestrictedRows`/`hideRatingRestrictedText`가 등급을 넘는 항목에 `rating_restricted: true`를 붙이고 설명 텍스트를 가린다. 저장된 점수만 보며(태거 실행 없음) 호출당 한 번 조회한다. 라이브러리 프롬프트나 태그를 반환하는 새 도구도 이 헬퍼를 사용한다.
+MCP 결과의 라이브러리 텍스트(프롬프트·메타데이터·자동 태그)는 호출 문맥의 허용 등급을 따른다. `chatContentRating.ts`의 `ratingRestrictedHashes`와 `hideRatingRestrictedRows`/`hideRatingRestrictedText`가 등급을 넘는 항목에 `rating_restricted: true`를 붙이고 설명 텍스트를 가린다. 저장된 점수만 보며(태거 실행 없음) 호출당 한 번 조회한다. 라이브러리 프롬프트나 태그를 반환하는 새 도구도 이 헬퍼를 사용한다. 페이지 어시스턴트 화면은 `chatPageView.ts`의 `ratingFilteredPage`가 `PAGE_MEDIA_TEXT` 표(화면 종류별 가릴 필드·데이터)를 기준으로 저장된 스냅샷을 바꾸지 않고 사본에서 가린다. 미디어 프롬프트나 태그를 보여 주는 새 페이지 어댑터는 이 표에 등록한다.
 
 배경화면 도구(`list_wallpapers`·`set_live_wallpaper`·`save_wallpaper_schedule`)는 편집 화면과 같은 `services/wallpaperSettings.ts` 검증과 `updateAppearanceSettings` 저장을 쓰고, 변경 도구는 `toolAccess.ts`의 `ADMIN_ONLY_TOOLS`로 관리자만 실행한다. 일정 판정은 라이브 화면과 공유하는 `@conai/shared`의 `resolveScheduledWallpaperPresetId`를 사용한다. 라이브 화면은 설정을 5분 주기로 다시 읽는다. 위젯·배경 편집은 페이지 연결(`wallpaper-chat-page.ts`)이 담당한다.
 
@@ -117,6 +117,8 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 | 노드 워크플로 | [graphWorkflowExecutor.ts](backend/src/services/graphWorkflowExecutor.ts), `frontend/src/features/module-graph/` | [워크플로 편집](docs/GUIDE/WORKFLOW_EDITOR.md) |
 | 파일 보관함 | [fileStoreService.ts](backend/src/services/fileStoreService.ts), `frontend/src/features/files/` | [파일](docs/GUIDE/FILES.md) |
 | AI 워커 | `backend/python/`, [설명](backend/python/README.md) | [설정](docs/GUIDE/SETTINGS_OVERVIEW.md) |
+
+와일드카드 탐색과 인라인 추천은 `/api/wildcards?hierarchical=true&withItems=false`의 메타데이터·도구별 `item_counts` 트리를 공유한다. 선택 상세·편집은 `GET /api/wildcards/:id`에서 자신의 항목과 완전한 레코드의 편집 리비전을 읽는다. 미리보기의 `GET /api/wildcards/:id/items?tool=general|nai|comfyui|codex&limit=10`는 `WildcardService`의 요청별 선택 조회를 재사용해 `include_children`·`only_children`과 노드별 도구 fallback이 적용된 항목을 `limit`개까지 반환한다(기본 50, 최대 200). 두 조회 모두 기존 `wildcards.view` 권한을 유지하며, 생성·파싱과 MCP 조회 계약은 바뀌지 않는다.
 
 이미지·영상·생성물의 식별과 저장 흐름을 재사용한다. 히스토리 항목 제거, 라이브러리 등록 해제, 원본 파일 삭제는 영향이 다르므로 섞지 않는다. 임시 생성 자산은 `runtimePaths`의 런타임 영역에 두고 수명과 정리 경로를 확인한다. 오디오는 별도 저장 흐름을 가지므로 모든 생성 결과를 이미지 저장 경로에 강제로 합치지 않는다.
 

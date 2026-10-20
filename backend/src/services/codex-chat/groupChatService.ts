@@ -24,7 +24,7 @@ import { CodexChatError, CodexChatService, deleteCodexRollout, runCodexGroupRepl
 import { buildClaudeGroupSessionTurn, deleteClaudeMemberSession, deleteClaudeSessions } from './claudeChatSessions'
 import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { withGenerationOutcomes } from './codexChatMedia'
-import { buildGroupCodexInput, buildGroupLlmMessages, groupMissedMessages, groupSummaryOn, parseMentions, resolveMemberName, trimForeignSpeakerLines, withoutStaleWakes } from './groupChatContext'
+import { buildGroupCodexInput, buildGroupLlmMessages, groupMissedMessages, groupSummaryOn, parseMentions, readGroupReplyHistory, resolveMemberName, trimForeignSpeakerLines, withoutStaleWakes } from './groupChatContext'
 import { isChatOwnTool } from '../../mcp/context'
 import { flagDirectiveFor, latestWindow, postHistoryText, groupSummarizer, sendableMessages, summarizeGroupAhead, summarizeGroupAll, unsummarizedMessages } from './llmChatContext'
 import { withServerContextLimit } from './serverContextLimit'
@@ -174,7 +174,7 @@ async function routeByJudge(run: GroupRun, requester: McpRequester, messageId: n
   if (!thread) return
   run.judging = new AbortController()
   try {
-    const picked = await judgeRoute({ thread, members: answerableMembers(requester, run.threadId), messages: CodexChatStore.listMessages(run.threadId), messageId, signal: run.judging.signal })
+    const picked = await judgeRoute({ thread, members: answerableMembers(requester, run.threadId), messages: CodexChatStore.listJudgeMessages(run.threadId, roomJudgeSetup(thread)?.preset.room.window ?? 0), messageId, signal: run.judging.signal })
     if (picked === null || run.stopped || (routing.recipients.length === 1 && routing.recipients[0] === picked)) return
     routing.recipients = [picked]
     CodexChatStore.setMessageRouting(run.threadId, messageId, routing)
@@ -192,12 +192,11 @@ async function routeByJudge(run: GroupRun, requester: McpRequester, messageId: n
 async function continueByJudge(run: GroupRun, requester: McpRequester) {
   if (!run.chain || run.stopped || run.chainUsed >= run.chainLimit || run.queue.length > 0) return false
   const thread = CodexChatStore.findThreadById(run.threadId)
-  const messages = CodexChatStore.listMessages(run.threadId)
-  const last = messages.at(-1)
+  const last = CodexChatStore.latestMessage(run.threadId)
   if (!thread || !last || last.role !== 'assistant' || last.status !== 'completed' || last.speaker_profile_id === null) return false
   run.judging = new AbortController()
   try {
-    const next = await judgeNext({ thread, members: answerableMembers(requester, run.threadId), messages, message: last, signal: run.judging.signal })
+    const next = await judgeNext({ thread, members: answerableMembers(requester, run.threadId), messages: CodexChatStore.listJudgeMessages(run.threadId, roomJudgeSetup(thread)?.preset.room.window ?? 0), message: last, signal: run.judging.signal })
     if (next === null || run.stopped || CodexChatStore.latestMessage(run.threadId)?.id !== last.id) return false
     run.queue.push({ profileId: next, sourceMessageId: last.id })
     run.chainUsed += 1
@@ -233,8 +232,10 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
   const members = memberProfiles(run.threadId)
   const limits = groupLimitsOf(thread)
   const controller = new AbortController()
-  const messages = withGenerationOutcomes(CodexChatStore.listMessages(run.threadId).filter((message) => message.id !== replacingMessageId))
-  const source = messages.find((message) => message.id === sourceMessageId) ?? null
+  const bounded = readGroupReplyHistory(thread, profile, { threadId: run.threadId, excludeMessageId: replacingMessageId })
+  const history = bounded.history
+  const messages = withGenerationOutcomes(bounded.messages)
+  const source = sourceMessageId === replacingMessageId ? null : CodexChatStore.findMessage(run.threadId, sourceMessageId) ?? null
   const replyId = randomUUID()
   const context: ChatExecutionContext = { threadId: run.threadId, profileId: profile.id, kind: 'group', replyId, rootExecutionId: chatExecutionRoot(run.threadId, sourceMessageId) }
   const active: ActiveReply = { controller, text: '', toolCalls: new Map(), routing: automaticReplyRouting(thread, source, replyId) }
@@ -256,7 +257,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     run.reserved.set(replyId, next)
   }
   const unregister = registerChatReply(context, controller.signal, (input) => {
-    const target = input.messageId === undefined ? null : requireReplyTarget(thread.id, input.messageId, messages)
+    const target = input.messageId === undefined ? null : requireReplyTarget(thread.id, input.messageId, messages, history.source)
     const recipients = input.recipients ?? (target ? [messageSender(target, thread)] : active.routing.recipients)
     reserve(recipients)
     active.routing = { replyId, replyTo: target ? quoteMessage(thread, target) : active.routing.replyTo, recipients: [...new Set(recipients)] }
@@ -325,8 +326,8 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
     const attachmentMessages = profile.engine === 'codex'
       // ensureCodexThread may reset the session after this preparation; cover either bounded window.
       ? [...new Map([
-        ...groupMissedMessages(messages, profile.id, null, limits.window).shown,
-        ...groupMissedMessages(messages, profile.id, ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, limits.window).shown,
+        ...groupMissedMessages(messages, profile.id, null, limits.window, history).shown,
+        ...groupMissedMessages(messages, profile.id, ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, limits.window, history).shown,
       ].map((message) => [message.id, message])).values()].sort((a, b) => a.id - b.id)
       : latestWindow(withoutStaleWakes(sendableMessages(unsummarizedMessages(messages, thread, { summaryEnabled: groupSummaryOn(thread) }))), limits.window)
     // A Claude or pi member continues its own session of the room, which keeps the pictures it was shown.
@@ -342,8 +343,9 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         profile,
         chatContext: context,
         messages,
+        history,
         windowLimit: limits.window,
-        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, routing: active.routing, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: [flagDirectiveFor(messages, profile, userPersonaForThread(thread)), postHistoryText(profile, userPersonaForThread(thread))].filter(Boolean).join('\n\n') , attachmentTexts, attachedImages }),
+        buildInput: (lore) => buildGroupCodexInput({ thread, members, self: profile, messages, history, routing: active.routing, lastSeenMessageId: ChatGroupStore.member(run.threadId, profile.id)?.last_seen_message_id ?? null, windowLimit: limits.window, lore, directive: [flagDirectiveFor(messages, profile, userPersonaForThread(thread)), postHistoryText(profile, userPersonaForThread(thread))].filter(Boolean).join('\n\n') , attachmentTexts, attachedImages }),
         attachedImages,
         signal: controller.signal,
         emit: forward,
@@ -362,12 +364,12 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
         chatContext: context,
         buildMessages: async (tools, onMeta, judged, useSession) => {
           if (inSession) {
-            const turn = await buildClaudeGroupSessionTurn({ requester, thread, members, profile, messages, routing: active.routing, windowLimit: limits.window, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), attachmentTexts, attachedImages, runtime: sessionRuntime ?? 'claude', judged, signal: controller.signal })
+            const turn = await buildClaudeGroupSessionTurn({ requester, thread, members, profile, messages, history, routing: active.routing, windowLimit: limits.window, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), attachmentTexts, attachedImages, runtime: sessionRuntime ?? 'claude', judged, signal: controller.signal })
             useSession(turn.session)
             onMeta(turn.contextMeta)
             return turn.messages
           }
-          return withGeneratedImages(buildGroupLlmMessages({ profile, thread, members, messages, routing: active.routing, windowLimit: limits.window, tools, maxTokens, extraTokens, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, attachedImages, onMeta, judged }), generatedImages)
+          return withGeneratedImages(buildGroupLlmMessages({ profile, thread, members, messages, history, routing: active.routing, windowLimit: limits.window, tools, maxTokens, extraTokens, withTools: tools.some((tool) => !isChatOwnTool(tool.function.name)), segments: groupSummaryOn(thread) ? ChatSummaryStore.list(run.threadId) : undefined , attachmentTexts, attachedImages, onMeta, judged }), generatedImages)
         },
         // The member's own cap, else the room's, else the profile's (a Codex member has no hard cap).
         generation: { maxTokens },
@@ -622,13 +624,12 @@ export const GroupChatService = {
     const thread = requireGroup(requester, threadId)
     assertGroupChatAvailable(requester)
     if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
-    const messages = CodexChatStore.listMessages(threadId)
-    const message = messages.find((entry) => entry.id === messageId)
+    const message = CodexChatStore.findMessage(threadId, messageId)
     if (!message) throw new CodexChatError('메시지를 찾을 수 없어.', 404)
 
     if (content === undefined) {
       const speaker = message.speaker_profile_id ? ChatProfileStore.find(message.speaker_profile_id) : null
-      if (message.role !== 'assistant' || messages[messages.length - 1].id !== messageId) throw new CodexChatError('마지막 답변만 다시 생성할 수 있어.', 409)
+      if (message.role !== 'assistant' || CodexChatStore.latestMessageId(threadId) !== messageId) throw new CodexChatError('마지막 답변만 다시 생성할 수 있어.', 409)
       if (!speaker || !memberProfiles(threadId).some((member) => member.id === speaker.id)) throw new CodexChatError('이 답변을 쓴 참가자가 방에 없어.', 409)
       if (speaker.engine === 'codex') throw new CodexChatError('Codex 참가자의 답변은 다시 생성할 수 없어.', 409)
       await startRun(threadId, listener, async (run) => {
@@ -637,7 +638,7 @@ export const GroupChatService = {
         // A Claude or pi member's session holds the reply being replaced: it starts over from the room.
         if (sessionRuntimeOf(speaker)) resetMemberMemory(requester, threadId, speaker.id)
         emit(run, { type: 'rewind', mode: 'regenerate', message })
-        const sourceId = message.routing?.replyTo?.messageId ?? [...messages].reverse().find((entry) => entry.role === 'user')?.id ?? 0
+        const sourceId = message.routing?.replyTo?.messageId ?? CodexChatStore.latestUserMessageId(threadId) ?? 0
         const reply = replyAs(run, requester, speaker, sourceId, messageId)
         emit(run, { type: 'speaker', profileId: speaker.id, speakers: [speaker.id], queue: [] })
         const routing = run.active.get(speaker.id)?.routing

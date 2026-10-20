@@ -7,12 +7,14 @@ import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { IconButton } from '@/components/ui/icon-button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   createWildcard,
   deleteWildcard,
   getWildcardLastScanLog,
   wildcardLibraryQueryOptions,
+  wildcardDetailQueryOptions,
   parseWildcards,
   scanWildcardLoraFolder,
   updateWildcard,
@@ -171,7 +173,9 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     searchQuery: searchInput,
   })
   const isSettingsTab = activeWorkspaceTab === 'settings'
-  const selectedWildcard = selectedEntry?.wildcard ?? null
+  const detailQuery = useQuery(wildcardDetailQueryOptions(isSettingsTab ? null : selectedEntry?.wildcard.id ?? null))
+  const selectedWildcard = detailQuery.data ?? null
+  const detailedEntry = selectedEntry && selectedWildcard ? { ...selectedEntry, wildcard: selectedWildcard } : null
   const selectedWildcardSyntax = selectedEntry
     ? getWildcardPromptSyntax(selectedEntry.wildcard.name, { type: selectedEntry.wildcard.type, tab: activeWorkspaceTab })
     : ''
@@ -394,7 +398,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
               browserTreeNodes={browserTreeNodes}
               filteredEntries={filteredEntries}
               selectedWildcardId={selectedWildcardId}
-              selectedWildcard={selectedWildcard}
+              selectedWildcard={selectedEntry?.wildcard ?? null}
               searchInput={searchInput}
               canCreateInActiveTab={canCreateInActiveTab}
               canEditInActiveTab={canEditWildcardEntries && !isReadonlyActiveTab}
@@ -413,8 +417,15 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
           )}
         >
           <div className="max-w-5xl space-y-10 pt-2">
+            {selectedEntry && detailQuery.isLoading ? <Skeleton className="h-32 w-full" /> : null}
+            {detailQuery.isError ? (
+              <Alert variant="destructive">
+                <AlertTitle>{t({ ko: '항목을 불러오지 못했어.', en: 'Could not load items.' })}</AlertTitle>
+                <AlertDescription>{getErrorMessage(detailQuery.error, t('image-generation.components.wildcard.generation.panel.could.not.load.the.list'))}</AlertDescription>
+              </Alert>
+            ) : null}
             <WildcardDetailCard
-              selectedEntry={selectedEntry}
+              selectedEntry={detailedEntry}
               onCopySyntax={handleCopy}
               extraActions={selectedWildcard && !isReadonlyActiveTab && (canEditWildcardEntries || canDeleteWildcardEntries) ? (
                 <>

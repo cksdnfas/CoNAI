@@ -8,7 +8,7 @@ import {
 } from '../aiWorker/textEmbeddingService'
 import { booksForRequest, keyedLoreEntries } from '../codex-chat/chatLoreContext'
 import type { ChatProfile } from '../codex-chat/chatProfiles'
-import type { CodexChatMessageRecord, CodexChatThreadRecord } from '../codex-chat/codexChatStore'
+import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord } from '../codex-chat/codexChatStore'
 import { indexLoreNow, indexSegmentsNow, indexMessagesNow, loreEntryDocument, loreEntryEmbeddable, loreEntryVectorKey } from './semanticIndex'
 import { SEMANTIC_SPACES, standouts } from './rankFusion'
 
@@ -100,6 +100,7 @@ export async function semanticContextFor(params: {
   profile: ChatProfile
   thread: CodexChatThreadRecord
   messages: CodexChatMessageRecord[]
+  historySource?: ChatHistorySource
   /** The profile's judge answers lore questions: meaning only proposes candidates. */
   judgeDecidesLore: boolean
   signal?: AbortSignal
@@ -156,13 +157,18 @@ export async function semanticContextFor(params: {
   const messages: NonNullable<SemanticContext['messages']> = []
   if (recallOn && session) {
     // Intersect stored vectors with the active conversation; never resurrect deleted or alternate-branch messages.
-    const eligible = new Map(params.messages.slice(0, -4).filter(message => message.role === 'user' || message.role === 'assistant').map(message => [String(message.id), message]))
+    const source = params.historySource
+    const history = source
+      ? (getUserSettingsDb().prepare('SELECT id, role, semantic_text_hash(content) AS hash FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id <= ? ORDER BY id')
+        .all(source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? params.messages.at(-1)?.id ?? 0) as Array<{ id: number; role: string; hash: string }>)
+      : params.messages.map(message => ({ id: message.id, role: message.role, hash: semanticTextHash(message.content) }))
+    const eligible = new Map(history.slice(0, -4).filter(message => message.role === 'user' || message.role === 'assistant').map(message => [String(message.id), message]))
     const scores = new Map<string, number>()
     const starts = new Map<string, number>()
     for (const [key, hit] of weightedScores(SEMANTIC_SPACES.message, queries, { ownerKeys: [`thread:${params.thread.id}`], sourceKeys: [...eligible.keys()] })) {
       const message = eligible.get(key)
       if (message) {
-        const fingerprint = semanticTextHash(message.content)
+        const fingerprint = message.hash
         if (hit.contentHash === fingerprint) {
           scores.set(key, hit.score)
           starts.set(key, hit.spanStart ?? 0)
@@ -170,7 +176,8 @@ export async function semanticContextFor(params: {
       }
     }
     for (const [key] of standouts(scores, RECALL_MIN_SCORE, RECALL_MIN_LEAD).slice(0, 2)) {
-      const message = eligible.get(key)!
+      const message = source ? CodexChatStore.findMessage(source.threadId, Number(key)) : params.messages.find(message => String(message.id) === key)
+      if (!message || semanticTextHash(message.content) !== eligible.get(key)!.hash) continue
       const start = starts.get(key) ?? 0
       messages.push({ id: message.id, role: message.role, text: message.content.slice(start, start + 1200) })
     }

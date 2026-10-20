@@ -83,7 +83,7 @@ export class ChatGenerationReactionService {
     // An order holds the chat for a moment; its end (a reply finishing, see chatOrderRunner) tries again.
     if (isChatOrderRunning(threadId)) return
     const db = getUserSettingsDb()
-    const source = CodexChatStore.listMessages(threadId).find((message) => message.role === 'assistant' && message.routing?.replyId === replyId)
+    const source = CodexChatStore.findMessageByReplyId(threadId, replyId, 'assistant')
     // A fast job may finish while its requesting reply is still being written; its close hook tries again.
     if (!source && (LlmChatService.isRunning(threadId) || GroupChatService.isRunning(threadId))) return
     db.transaction(() => {
@@ -95,11 +95,10 @@ export class ChatGenerationReactionService {
     const eligible = () => {
       const current = CodexChatStore.findThreadById(threadId)
       const currentProfile = profileId ? ChatProfileStore.find(profileId) : null
-      const messages = CodexChatStore.listMessages(threadId)
       return Boolean(current && source && current.reaction_enabled === 1 && currentProfile?.isEnabled && currentProfile.engine === 'llm'
-        && messages.some((message) => message.id === source.id && message.routing?.replyId === replyId)
+        && CodexChatStore.findMessage(threadId, source.id)?.routing?.replyId === replyId
         && (current.kind === 'group' ? ChatGroupStore.member(threadId, currentProfile.id) : current.engine === 'llm' && current.profile_id === currentProfile.id)
-        && !messages.some((message) => message.role === 'user' && message.id > source.id)
+        && (CodexChatStore.latestUserMessageId(threadId) ?? 0) <= source.id
         && !LlmChatService.isRunning(threadId) && !GroupChatService.isRunning(threadId))
     }
     if (!eligible() || !thread || !profile || !source) {

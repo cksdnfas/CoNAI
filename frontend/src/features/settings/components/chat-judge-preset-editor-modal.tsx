@@ -27,7 +27,8 @@ import {
   type ChatJudgePreset,
   type ChatJudgePresetInput,
 } from '@/lib/api-chat-judge'
-import { CHAT_ADMIN_PROFILES_QUERY_KEY, listCodexChatThreads } from '@/lib/api-codex-chat'
+import { CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, listChatProfiles } from '@/lib/api-codex-chat'
+import { ChatRoomPicker } from '@/features/codex-chat/chat-room-picker'
 import { getErrorMessage } from '@/lib/error-message'
 import { GROW_TEXTAREA } from './chat-profile-editor-fields'
 import { JudgeModelSelect, useDefaultJudgeLabel } from './chat-judge-connection-select'
@@ -99,8 +100,8 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
     setTestTurns(null)
   }, [initial, open, preset])
 
-  const threadsQuery = useQuery({ queryKey: ['codex-chat-judge-test-threads'], queryFn: listCodexChatThreads, enabled: open })
-  const threads = (threadsQuery.data ?? []).filter((thread) => thread.kind !== 'group')
+  const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000, enabled: open })
+  const profilesById = new Map((profilesQuery.data ?? []).map((profile) => [profile.id, profile]))
 
   const refresh = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY }),
@@ -183,10 +184,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   const asksLlmWhenUnsure = draft.items.some((item) => item.uncertain === 'llm') || draft.escalationSlotId !== null
   const testControls = (
     <div className="flex flex-wrap items-center gap-2 text-sm">
-      <Select variant="settings" className="h-8 w-56 min-w-0 flex-1 text-xs" aria-label={t({ ko: '테스트할 대화', en: 'Chat to test on' })} value={testThreadId ?? ''} onChange={(event) => setTestThreadId(event.target.value ? Number(event.target.value) : null)}>
-        <option value="">{threads.length === 0 ? t({ ko: '1:1 채팅이 없어', en: 'No direct chats' }) : t({ ko: '대화 고르기', en: 'Pick a chat' })}</option>
-        {threads.map((thread) => <option key={thread.id} value={thread.id}>{thread.title || t({ ko: '제목 없음 #{id}', en: 'Untitled #{id}' }, { id: thread.id })}</option>)}
-      </Select>
+      <div className="w-56 min-w-0 flex-1"><ChatRoomPicker profilesById={profilesById} kind="direct" value={testThreadId === null ? '' : String(testThreadId)} onChange={(value) => setTestThreadId(value ? Number(value) : null)} /></div>
       <Select variant="settings" className="h-8 w-24 text-xs" aria-label={t({ ko: '최근 메시지 수', en: 'Recent messages' })} value={testTurnCount} onChange={(event) => setTestTurnCount(Number(event.target.value))}>
         {TEST_TURNS.map((count) => <option key={count} value={count}>{t({ ko: '최근 {n}개', en: 'Last {n}' }, { n: count })}</option>)}
       </Select>

@@ -18,7 +18,7 @@ export function buildReplyContext(messages: CodexChatMessageRecord[], routing: C
   const source = options.historySource
   const find = (id: number) => {
     if (source) {
-      if (id === source.excludeMessageId) return undefined
+      if (id === source.excludeMessageId || id > (source.untilMessageId ?? Number.MAX_SAFE_INTEGER)) return undefined
       // The request projection intentionally omits alternatives, even for rows inside its window.
       return CodexChatStore.findMessage(source.threadId, id)
     }

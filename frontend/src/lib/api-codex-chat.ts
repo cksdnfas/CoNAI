@@ -1461,7 +1461,53 @@ export function selectChatAlternative(threadId: number, messageId: number, index
 }
 
 export function listCodexChatThreads() {
-  return requestApiData<CodexChatThreadSummary[]>('/api/codex-chat/threads', { cache: 'no-store' })
+  // Bootstrap/selection consumers need only the first page, not the complete directory.
+  return listCodexChatThreadPage({ bootstrap: true }).then((page) =>
+    page.default_thread && !page.data.some((room) => room.id === page.default_thread?.id) ? [...page.data, page.default_thread] : page.data)
+}
+
+export type ChatRoomListOptions = {
+  archive?: 'all' | 'active' | 'archived'
+  kind?: 'direct' | 'group'
+  query?: string
+  pinnedFirst?: boolean
+  limit?: number
+  /** Preserve default selection even when automation rooms fill the newest page. */
+  bootstrap?: boolean
+}
+export type ChatRoomPage = {
+  data: CodexChatThreadSummary[]
+  pagination: { total: number; has_more: boolean; next_cursor: string | null }
+  has_automation: boolean
+  has_archived_chats: boolean
+  has_archived_automation: boolean
+  default_thread?: CodexChatThreadSummary | null
+}
+
+export function listCodexChatThreadPage(options: ChatRoomListOptions = {}, cursor?: string, signal?: AbortSignal) {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 40) })
+  if (options.archive) params.set('archive', options.archive)
+  if (options.kind) params.set('kind', options.kind)
+  if (options.query?.trim()) params.set('query', options.query.trim())
+  if (options.pinnedFirst) params.set('pinned_first', 'true')
+  if (options.bootstrap) params.set('bootstrap', 'true')
+  if (cursor) params.set('cursor', cursor)
+  return requestJson<ChatRoomPage>(`/api/codex-chat/threads?${params}`, { cache: 'no-store', signal })
+}
+
+/** Targeted summaries for selected rooms, branch ancestors and routine targets outside a loaded page. */
+export async function getCodexChatThreadSummaries(ids: number[], signal?: AbortSignal) {
+  const unique = [...new Set(ids)]
+  const result: CodexChatThreadSummary[] = []
+  for (let offset = 0; offset < unique.length; offset += 100) {
+    const params = new URLSearchParams({ ids: unique.slice(offset, offset + 100).join(',') })
+    result.push(...await requestApiData<CodexChatThreadSummary[]>(`/api/codex-chat/threads?${params}`, { cache: 'no-store', signal }))
+  }
+  return result
+}
+
+export function getCodexChatDirectoryUnread() {
+  return requestApiData<number>('/api/codex-chat/threads/unread-count', { cache: 'no-store' })
 }
 
 /** `userProfileId` left out: the server picks the default user profile; null: the plain user. */

@@ -2,6 +2,7 @@ import { validateChatMediaAttachments } from './chatMediaAttachments'
 import { addChatGreeting } from './chatGreeting'
 import type { ChatExecutionContext, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 import { isCodexChatCreationTool } from '@conai/shared'
+import { ChatProposalStore } from './chatProposals'
 import { beginDirectReply, userReplyRouting } from './chatReplies'
 import type { McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
@@ -40,10 +41,10 @@ import { notifyChatUserSend } from './chatSendEvents'
 import { contextContentText, contextPartsOf, contextSections, limitContextMeta, markContextMessage, markContextParts, legacyContextMeta } from './chatContextDiagnostics'
 import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
-import { buildGroupLlmMessages, groupSummaryOn, withoutStaleWakes } from './groupChatContext'
+import { buildGroupLlmMessages, groupSummaryOn, readGroupReplyHistory, withoutStaleWakes, type GroupHistory } from './groupChatContext'
 import { skipThreadGenerationReactions } from './chatReplyRegistry'
 import { isChatOrderRunning, stopChatOrderRun } from './chatOrderRuns'
-import { cancelJudgeFollowUp, endJudgedTurn, judgeAfterReply, judgeBeforeReply, judgeDirectiveText, judgeSetupOf, type JudgedTurn } from './chatJudge'
+import { cancelJudgeFollowUp, endJudgedTurn, judgeAfterReply, judgeBeforeReply, judgeDirectiveText, judgeSetupOf, readReplyHistory, type JudgedTurn } from './chatJudge'
 import { withSemanticContext, type JudgedContext } from './chatJudgeContext'
 import { semanticContextFor, type SemanticContext } from '../embeddings/chatSemantic'
 import { embeddingFeatureOn } from '../aiWorker/textEmbeddingService'
@@ -115,6 +116,7 @@ type LlmTurn = {
   /** One active-path history shared by routing, semantic retrieval, judging and request preparation. */
   history?: CodexChatMessageRecord[]
   historySource?: ChatHistorySource
+  groupHistory?: GroupHistory
   /** Continuing a cut reply: its text, which `text` starts with, and the model is asked to carry on from. */
   continuing?: string
   /** …and its routing: the continuation keeps its quote and recipients, and takes over its generation jobs. */
@@ -226,7 +228,8 @@ async function runToolCall(turn: LlmTurn, bridge: ChatMcpBridge, call: { id: str
     if (['propose_page_changes', 'propose_workflow_changes', 'propose_page_action'].includes(record.tool) && !result.isError) {
       // propose_page_changes / propose_workflow_changes are retired; the names stay for chats recorded before.
       const structured = result.structuredContent as { proposal?: ChatProposal } | undefined
-      if (structured?.proposal?.kind === 'page_fields' || structured?.proposal?.kind === 'workflow_graph' || structured?.proposal?.kind === 'page_action') record.proposal = structured.proposal
+      // The card shows the stored proposal: the tool result may carry a copy with text above the rating ceiling hidden.
+      if (structured?.proposal?.kind === 'page_fields' || structured?.proposal?.kind === 'workflow_graph' || structured?.proposal?.kind === 'page_action') record.proposal = ChatProposalStore.find(structured.proposal.id) ?? structured.proposal
     }
     const { texts, historyIds, compositeHashes, jobIds, pendingJobIds, audioCandidateIds, pageOperation } = readMcpToolResult(result, record.tool)
     if (pageOperation && !result.isError) record.pageOperation = pageOperation
@@ -269,7 +272,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   // Without its own context length, the profile is sized to what a small local server holds.
   const profile = withServerContextLimit(chatProfile)
   // Creation calls replay with their outcome (image attached / failed / running), not the "queued" JSON of their submission.
-  const listMessages = () => withGenerationOutcomes(turnHistory(turn))
+  const listMessages = () => withGenerationOutcomes(turnHistory(turn, profile))
   const config = resolveContextConfig(thread, profile)
   if (turn.reaction && thread.kind === 'group') config.maxTokens = ChatGroupStore.member(thread.id, profile.id)?.max_tokens ?? config.maxTokens
   // A Claude Code or pi direct reply continues the chat's session: it sends only what is new, and the session (not
@@ -299,7 +302,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     // both is kept before the window is chosen.
     const continuation: ChatCompletionMessage[] = turn.continuing === undefined ? [] : [markContextMessage({ role: 'assistant', content: turn.continuing }, 'continuation'), markContextMessage({ role: 'user', content: CONTINUE_DIRECTIVE }, 'continuation')]
     // The "no page" note only matters to a model that has tools to misuse; a plain roleplay reply goes without it.
-    const reference = [turn.page ? chatPageReference(turn.page, requester) : tools.length > 0 ? NO_PAGE_NOTE : '', proposalOutcomeNote(thread.id)].filter(Boolean).join('\n\n')
+    const reference = [turn.page ? chatPageReference(turn.page, requester, profileContentLimit(profile)) : tools.length > 0 ? NO_PAGE_NOTE : '', proposalOutcomeNote(thread.id)].filter(Boolean).join('\n\n')
     const pageMessages: ChatCompletionMessage[] = reference ? [markContextMessage({ role: 'user', content: reference }, 'page')] : []
     const reactionMessages = turn.reaction ? [turn.reaction.result] : []
     const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages, ...reactionMessages]) + generatedImagesTokens(profile.id, generatedImages)
@@ -313,14 +316,14 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   return streamReply(turn, requester, profile, async (tools, judged) => {
     const { history, attachmentTexts, attachedImages, generatedImages, continuation, reference, reactionMessages, extraTokens } = await prepare(tools)
     if (inSession) {
-      const sessionTurn = await buildClaudeSessionTurn({ requester, threadId: thread.id, profile, history, page: turn.page, withTools: tools.length > 0, runtime: sessionRuntime ?? 'claude', judged, signal: turn.controller.signal })
+      const sessionTurn = await buildClaudeSessionTurn({ requester, threadId: thread.id, profile, history, historySource: turn.historySource, page: turn.page, withTools: tools.length > 0, runtime: sessionRuntime ?? 'claude', judged, signal: turn.controller.signal })
       turn.engineSession = sessionTurn.session
       turn.contextMeta = { ...sessionTurn.contextMeta, model: resolveProfileModel(profile, 'chat')?.model ?? null }
       return sessionTurn.messages
     }
     if (turn.reaction && thread.kind === 'group') {
       const members = ChatGroupStore.members(thread.id).flatMap((member) => ChatProfileStore.find(member.profile_id) ?? [])
-      const messages = buildGroupLlmMessages({ profile, thread, members, messages: history, routing: turn.delivery!.routing,
+      const messages = buildGroupLlmMessages({ profile, thread, members, messages: history, history: turn.groupHistory, routing: turn.delivery!.routing,
         windowLimit: groupLimitsOf(thread).window, tools: [], maxTokens: config.maxTokens, withTools: false, extraTokens: estimateMessagesTokens(profile.id, [turn.reaction.result]),
         segments: thread.summary_enabled === 1 ? ChatSummaryStore.list(thread.id) : undefined, attachmentTexts, attachedImages,
         onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } } })
@@ -397,8 +400,10 @@ function settleRestatement(turn: LlmTurn, previous: TextSpan | null, roundStart:
  * Meaning-based context of one reply (see chatSemantic), or null when embeddings are off or not answering. Never
  * fails the reply: the keyword paths stand on their own.
  */
-function turnHistory(turn: LlmTurn) {
-  return turn.history ??= CodexChatStore.listMessages(turn.threadId).filter((message) => message.id !== turn.replacingMessageId)
+function turnHistory(turn: LlmTurn, profile: ChatProfile) {
+  // Headless judging/semantic retrieval has its own current view, not the historical order or regeneration window.
+  turn.historySource ??= { threadId: turn.threadId, excludeMessageId: turn.replacingMessageId, untilMessageId: CodexChatStore.latestMessageId(turn.threadId) ?? 0 }
+  return turn.history ??= readReplyHistory(profile, turn.historySource)
 }
 
 /** Translate a stored user row under the same cancellation and lock as its reply. */
@@ -412,12 +417,12 @@ function translateTurnInput(turn: LlmTurn, profile: ChatProfile, messageId: numb
   turn.translation.catch(() => undefined)
 }
 
-async function replySemanticContext(threadId: number, profile: ChatProfile, messages: CodexChatMessageRecord[], signal: AbortSignal): Promise<SemanticContext | null> {
+async function replySemanticContext(threadId: number, profile: ChatProfile, messages: CodexChatMessageRecord[], signal: AbortSignal, historySource?: ChatHistorySource): Promise<SemanticContext | null> {
   if (!embeddingFeatureOn('chatRecall') && !embeddingFeatureOn('lorebook')) return null
   try {
     const thread = CodexChatStore.findThreadById(threadId)
     if (!thread) return null
-    return await semanticContextFor({ profile, thread, messages, judgeDecidesLore: Boolean(judgeSetupOf(profile)?.preset.context.lore.enabled), signal })
+    return await semanticContextFor({ profile, thread, messages, historySource, judgeDecidesLore: Boolean(judgeSetupOf(profile)?.preset.context.lore.enabled), signal })
   } catch (error) {
     console.warn('[LlmChat] semantic context skipped:', error instanceof Error ? error.message : error)
     return null
@@ -456,10 +461,10 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     // Preparation does not depend on semantic scores. Observe early rejection while retrieval is pending.
     preparation?.catch(() => undefined)
     // Closeness in meaning to the latest exchange comes first: the judge's lore and recall candidates use it.
-    const semantic = !turn.reaction && !turn.order && turn.continuing === undefined ? await replySemanticContext(turn.threadId, profile, turnHistory(turn), turn.controller.signal) : null
+    const semantic = !turn.reaction && !turn.order && turn.continuing === undefined ? await replySemanticContext(turn.threadId, profile, turnHistory(turn, profile), turn.controller.signal, turn.historySource) : null
     // The judge reads the user's own words, so it runs while their message is translated for the model.
     const judging = !turn.reaction && !turn.order && turn.continuing === undefined
-      ? judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: [...visible.map((tool) => tool.function.name), ...catalogued], messages: turnHistory(turn), context: true, signal: turn.controller.signal, semantic })
+      ? judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: [...visible.map((tool) => tool.function.name), ...catalogued], messages: turnHistory(turn, profile), context: true, signal: turn.controller.signal, semantic })
       : Promise.resolve(null)
     judged = (await Promise.all([judging, preparation]))[0]
     // The tool list stays the profile's every turn: tool definitions open the prompt, so a list that changes with the
@@ -747,18 +752,14 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   // The live reply shows the cut text, the continuation streams onto it.
   if (continuing) emit(turn, { type: 'delta', text: continuing.content })
   const updatedThread = CodexChatStore.findThreadById(thread.id) as CodexChatThreadRecord
-  // Session engines still consume their own recap/outcome history. A normal direct request has explicit
-  // historical lookups for lore timers, status patches and quotes, separate from its unsummarized bodies.
-  const bounded = updatedThread.kind === 'direct' && !sessionRuntimeOf(profile)
-  const source: ChatHistorySource = { threadId: thread.id, excludeMessageId: replacingMessageId }
-  const setup = judgeSetupOf(profile)
+  // Session recaps/outcomes and room turn boundaries have explicit historical reads, separate from request bodies.
+  const source: ChatHistorySource = { threadId: thread.id, excludeMessageId: replacingMessageId, untilMessageId: CodexChatStore.latestMessageId(thread.id) ?? 0 }
   const config = resolveContextConfig(updatedThread, profile)
-  const history = bounded ? CodexChatStore.listContextMessages(source, {
-    afterId: config.summaryEnabled ? updatedThread.summary_until_message_id ?? 0 : 0,
-    recentMessages: Math.max(2, profile.loreScanDepth),
-    textMessages: Math.max(2, setup?.preset.context.window ?? 0, ...(setup?.preset.items.map((item) => item.window) ?? [])),
-  }) : CodexChatStore.listMessages(thread.id).filter((entry) => entry.id !== replacingMessageId)
-  if (bounded) turn.historySource = source
+  const group = updatedThread.kind === 'group' ? readGroupReplyHistory(updatedThread, profile, source) : null
+  const inSession = sessionRuntimeOf(profile) && !reaction && continuing === undefined
+  const history = group?.messages ?? readReplyHistory(profile, source, inSession ? Number.MAX_SAFE_INTEGER : config.summaryEnabled ? updatedThread.summary_until_message_id ?? 0 : 0)
+  turn.historySource = source
+  turn.groupHistory = group?.history
   turn.history = history
   turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }), turn.historySource)
   if (reaction) turn.delivery.routing = { ...turn.delivery.routing, replyTo: null, recipients: ['user'] }
@@ -951,11 +952,10 @@ export const LlmChatService = {
     const profile = requireUsableProfile(thread.profile_id, requester)
     cancelJudgeFollowUp(thread.id)
     if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
-    const messages = CodexChatStore.listMessages(thread.id)
-    const message = messages.find((entry) => entry.id === messageId)
+    const message = CodexChatStore.findMessage(thread.id, messageId)
     if (!message) throw new LlmChatError('메시지를 찾을 수 없어.', 404)
     const regenerate = content === undefined
-    if (regenerate ? message.role !== 'assistant' || messages[messages.length - 1].id !== messageId || !messages.some((entry) => entry.role === 'user') : message.role !== 'user') {
+    if (regenerate ? message.role !== 'assistant' || CodexChatStore.latestMessageId(thread.id) !== messageId || CodexChatStore.latestUserMessageId(thread.id) === null : message.role !== 'user') {
       throw new LlmChatError(regenerate ? '마지막 답변만 다시 생성할 수 있어.' : '내 메시지만 수정할 수 있어.', 409)
     }
     if (!regenerate && !content.trim() && !message.attachments?.length && !message.mediaAttachments?.length) throw new LlmChatError('메시지를 입력해줘.')
@@ -978,9 +978,8 @@ export const LlmChatService = {
     const profile = requireUsableProfile(thread.profile_id, requester)
     cancelJudgeFollowUp(thread.id)
     if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
-    const messages = CodexChatStore.listMessages(thread.id)
-    const message = messages[messages.length - 1]
-    if (!message || message.id !== messageId || message.role !== 'assistant' || !messages.some((entry) => entry.role === 'user')) {
+    const message = CodexChatStore.latestMessage(thread.id)
+    if (!message || message.id !== messageId || message.role !== 'assistant' || CodexChatStore.latestUserMessageId(thread.id) === null) {
       throw new LlmChatError('마지막 답변만 이어 쓸 수 있어.', 409)
     }
     if (!message.content.trim()) throw new LlmChatError('이어 쓸 답변 내용이 없어.', 409)

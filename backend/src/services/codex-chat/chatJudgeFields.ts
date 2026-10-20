@@ -62,13 +62,11 @@ export function judgeStatusFields(params: { profile: ChatProfile; threadId: numb
 async function settleFields(setup: NonNullable<ReturnType<typeof judgeSetupOf>>, params: { profile: ChatProfile; threadId: number; messageId: number; speakerId?: number }) {
   const thread = CodexChatStore.findThreadById(params.threadId)
   if (!thread) return
-  const messages = CodexChatStore.listMessages(params.threadId)
-  const index = messages.findIndex((message) => message.id === params.messageId)
-  const message = messages[index]
+  const message = CodexChatStore.findMessage(params.threadId, params.messageId)
   if (!message || message.role !== 'assistant' || message.status !== 'completed' || !message.content.trim()) return
   if (params.speakerId !== undefined && message.speaker_profile_id !== params.speakerId) return
-  const upTo = messages.slice(0, index + 1)
-  const folded = foldBlockState(params.profile, upTo, parseBlockEdits(thread.block_edits), params.speakerId)
+  const upTo = CodexChatStore.listJudgeMessages(params.threadId, setup.preset.fields.window, params.messageId)
+  const folded = foldBlockState(params.profile, CodexChatStore.listBlockMessages(params.threadId, params.messageId), parseBlockEdits(thread.block_edits), params.speakerId)
   if (!folded) return
   const blocks = usableBlocks(params.profile.style.blocks)
   const keys = new Set(blocks.map((block) => block.key))

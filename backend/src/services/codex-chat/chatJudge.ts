@@ -9,7 +9,7 @@ import type { SemanticContext } from '../embeddings/chatSemantic'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { ModelSlotStore } from './modelSlots'
 import { userPersonaForThread } from './chatUserProfiles'
-import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
+import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import type { ChatCompletionTool } from './llmChatCompletion'
 import { inBackground } from '../llmRequestScheduler'
 import type { LlmUsageTag } from '../llmUsage'
@@ -328,13 +328,22 @@ export function judgeDirectiveText(judged: JudgedTurn | null | undefined, withhe
  * `availableTools`: the tools this turn offers; null when they cannot be steered per turn (Codex), where an item that
  * steers tools does nothing and only the directives of tool-less yes items go through.
  */
+export function readReplyHistory(profile: ChatProfile, source: ChatHistorySource, afterId = Number.MAX_SAFE_INTEGER) {
+  const setup = judgeSetupOf(profile)
+  return CodexChatStore.listContextMessages(source, {
+    afterId,
+    recentMessages: Math.max(2, profile.loreScanDepth),
+    textMessages: Math.max(2, setup?.preset.context.window ?? 0, ...(setup?.preset.items.map((item) => item.window) ?? [])),
+  })
+}
+
 export async function judgeBeforeReply(params: { profile: ChatProfile; threadId: number; replyId: string | null; availableTools: string[] | null; excludeMessageId?: number; messages?: CodexChatMessageRecord[]; context?: boolean; signal?: AbortSignal; semantic?: SemanticContext | null }): Promise<JudgedTurn | null> {
   const setup = judgeSetupOf(params.profile)
   if (!setup) return null
   const items = askableJudgeItems(setup.preset.items).filter((item) => item.stage === 'before'
     && (item.tools.length === 0 || (params.availableTools !== null && item.tools.some((pattern) => params.availableTools!.some((name) => judgeToolMatches(pattern, name))))))
   const thread = CodexChatStore.findThreadById(params.threadId)
-  const messages = (params.messages ?? CodexChatStore.listMessages(params.threadId)).filter((message) => message.id !== params.excludeMessageId)
+  const messages = (params.messages ?? readReplyHistory(params.profile, { threadId: params.threadId, excludeMessageId: params.excludeMessageId })).filter((message) => message.id !== params.excludeMessageId)
   const extra = params.context && thread ? contextQuestions(setup.preset.context, params.profile, thread, messages, params.semantic) : null
   if (items.length === 0 && !extra?.questions.length) return null
 

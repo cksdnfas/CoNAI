@@ -8,6 +8,7 @@ import { notePageViewShown, requireChatPageAccess } from '../../services/codex-c
 import { captureChatPage, currentChatPage, newChatPageCommandId, runChatPageCommand } from '../../services/codex-chat/chatPageBridge'
 import { chatPageView, pageFailure, pageOperationView, pageResult } from './chatPageView'
 import { knowledgePageForExecution } from '../../services/posts/knowledge/knowledgePage'
+import { contextContentLimit } from '../../services/codex-chat/chatContentRating'
 
 /**
  * Tools for the page the person connected to this chat. Reading and moving around (view) and filling inputs (draft)
@@ -23,9 +24,10 @@ export function registerChatPageTools(server: McpServer, context: McpRequestCont
       const captured = await captureChatPage(requester, context.chatContext!.page!, context.chatContext!.threadId)
       const page = knowledgePageForExecution(context, captured.page)
       const fresh = captured.live
+      const limit = contextContentLimit(context)
       requireChatPageAccess(requester, page)
-      if (context.source === 'codex-chat') notePageViewShown(context.chatContext!.threadId, requester, page)
-      return pageResult({ ...chatPageView(requester, page), ...(fresh ? {} : { note: 'The tab did not answer; this is the last screen it reported.' }) })
+      if (context.source === 'codex-chat') notePageViewShown(context.chatContext!.threadId, requester, page, limit)
+      return pageResult({ ...chatPageView(requester, page, limit), ...(fresh ? {} : { note: 'The tab did not answer; this is the last screen it reported.' }) })
     } catch (error) { return pageFailure(error) }
   })
 
@@ -42,9 +44,10 @@ export function registerChatPageTools(server: McpServer, context: McpRequestCont
       const validated = buildChatPageChanges(page, changes)
       const commandId = newChatPageCommandId()
       const next = await runChatPageCommand(requester, page, context.chatContext!.threadId, { type: 'fields', changes: validated }, { commandId })
-      if (context.source === 'codex-chat') notePageViewShown(context.chatContext!.threadId, requester, next)
+      const limit = contextContentLimit(context)
+      if (context.source === 'codex-chat') notePageViewShown(context.chatContext!.threadId, requester, next, limit)
       const label = validated.map((change) => change.label).join(', ')
-      return { ...pageResult({ status: 'filled', fields: validated.map((change) => change.label), page: pageOperationView(requester, page, next) }), structuredContent: { pageOperation: { commandId, tier: 'draft', label } } }
+      return { ...pageResult({ status: 'filled', fields: validated.map((change) => change.label), page: pageOperationView(requester, page, next, limit) }), structuredContent: { pageOperation: { commandId, tier: 'draft', label } } }
     } catch (error) { return pageFailure(error) }
   })
 

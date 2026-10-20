@@ -33,7 +33,7 @@ import { applyMerge, assertMergeDecisions, previewMerge, type MergeResult } from
 import { ModelSlotStore } from '../services/codex-chat/modelSlots'
 import { downChatProfiles } from '../services/codex-chat/chatConnectionHealth'
 import { effectiveModelOf, modelLabelOf } from '../services/codex-chat/chatModelRoles'
-import { CodexChatStore } from '../services/codex-chat/codexChatStore'
+import { CodexChatStore, type ChatThreadSummary } from '../services/codex-chat/codexChatStore'
 import { attachJobResults, collectCodexChatMedia } from '../services/codex-chat/codexChatMedia'
 import { CHAT_IMPORT_MAX_BYTES, ChatImportError, importChatThread } from '../services/codex-chat/chatImport'
 import { ChatSummaryStore } from '../services/codex-chat/chatMemory'
@@ -264,7 +264,19 @@ router.get('/assets/:name', requireChatAccess, requireImagesView, asyncHandler(a
   await streamCacheableFile(req, res, file.path, file.mimeType)
 }))
 
+/** Targeted list metadata, with the same projection and account predicate as the SQL directory pages. */
+function threadDirectoryByIds(ids: number[], accountId: number | null): ChatThreadSummary[] {
+  if (!ids.length) return []
+  return getUserSettingsDb().prepare(`
+    SELECT id, title, engine, profile_id, kind, pinned, archived, branched_from_thread_id,
+      branched_at_message_id, branch_purpose, created_date, updated_date
+    FROM codex_chat_threads WHERE account_id IS ? AND id IN (${ids.map(() => '?').join(',')})
+  `).all(accountId, ...ids) as ChatThreadSummary[]
+}
+
 const threadDirectoryQuery = z.object({
+  ids: z.string().max(2200).regex(/^\d+(,\d+)*$/).transform((value) => value.split(',').map(Number))
+    .pipe(z.array(z.number().int().positive().safe()).max(100)).optional(),
   archive: z.enum(['all', 'active', 'archived']).optional(),
   pinned: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
   kind: z.enum(['direct', 'group']).optional(),
@@ -272,29 +284,48 @@ const threadDirectoryQuery = z.object({
   pinned_first: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   cursor: z.string().max(512).optional(),
+  bootstrap: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
 })
 
-/** The legacy UI keeps its complete directory; limit/cursor opt into SQL pages without changing data's array shape. */
+/** limit/cursor select SQL pages; ids resolve only explicitly requested rooms outside those pages. */
 router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
   const parsed = threadDirectoryQuery.safeParse(req.query)
   if (!parsed.success) { sendRouteBadRequest(res, 'Invalid thread directory query'); return }
-  const { pinned_first: pinnedFirst, ...filters } = parsed.data
+  const { ids, bootstrap, pinned_first: pinnedFirst, ...filters } = parsed.data
+  if (ids && (filters.limit !== undefined || filters.cursor !== undefined)) { sendRouteBadRequest(res, 'Use either ids or a thread page'); return }
   const options = { ...filters, pinnedFirst }
   let page: ReturnType<typeof CodexChatStore.listThreadPage> | undefined
   let threads: ReturnType<typeof CodexChatStore.listThreads>
   try {
-    if (options.limit !== undefined || options.cursor !== undefined) page = CodexChatStore.listThreadPage(getRequesterAccountId(req), options)
-    threads = page?.threads ?? CodexChatStore.listThreads(getRequesterAccountId(req), options)
+    if (ids) {
+      threads = threadDirectoryByIds([...new Set(ids)], getRequesterAccountId(req))
+    } else {
+      if (options.limit !== undefined || options.cursor !== undefined) page = CodexChatStore.listThreadPage(getRequesterAccountId(req), options)
+      threads = page?.threads ?? CodexChatStore.listThreads(getRequesterAccountId(req), options)
+    }
   } catch (error) {
     if (error instanceof TypeError) { sendRouteBadRequest(res, error.message); return }
     throw error
   }
-  const members = ChatGroupStore.memberIdsByThread(threads.filter((thread) => thread.kind === 'group').map((thread) => thread.id))
-  const previews = CodexChatStore.listPreviews(threads.map((thread) => thread.id))
-  const unread = CodexChatStore.countUnread(threads.map((thread) => thread.id))
-  const tasks = ChatTaskStore.summaries(threads.map((thread) => thread.id))
   const automation = automationRoomKinds(getRequesterAccountId(req))
-  res.json({ success: true, data: threads.map((thread) => ({
+  const automatedIds = JSON.stringify([...automation.keys()])
+  const directory = page ? getUserSettingsDb().prepare(`
+    SELECT EXISTS(SELECT 1 FROM codex_chat_threads WHERE account_id IS ? AND id IN (SELECT value FROM json_each(?))) AS hasAutomation,
+      EXISTS(SELECT 1 FROM codex_chat_threads WHERE account_id IS ? AND archived = 1 AND id NOT IN (SELECT value FROM json_each(?))) AS hasArchivedChats,
+      EXISTS(SELECT 1 FROM codex_chat_threads WHERE account_id IS ? AND archived = 1 AND id IN (SELECT value FROM json_each(?))) AS hasArchivedAutomation
+  `).get(getRequesterAccountId(req), automatedIds, getRequesterAccountId(req), automatedIds, getRequesterAccountId(req), automatedIds) as { hasAutomation: number; hasArchivedChats: number; hasArchivedAutomation: number } : undefined
+  // Selecting a default room must not depend on how many newer automation rooms fit on the first page.
+  const defaultId = bootstrap ? (getUserSettingsDb().prepare(`
+    SELECT id FROM codex_chat_threads WHERE account_id IS ? AND archived = 0 AND id NOT IN (SELECT value FROM json_each(?))
+    ORDER BY updated_date DESC, id DESC LIMIT 1
+  `).get(getRequesterAccountId(req), automatedIds) as { id: number } | undefined)?.id : undefined
+  const defaultThread = defaultId === undefined ? undefined : threads.find((thread) => thread.id === defaultId) ?? threadDirectoryByIds([defaultId], getRequesterAccountId(req))[0]
+  const enrichedThreads = defaultThread && !threads.some((thread) => thread.id === defaultId) ? [...threads, defaultThread] : threads
+  const members = ChatGroupStore.memberIdsByThread(enrichedThreads.filter((thread) => thread.kind === 'group').map((thread) => thread.id))
+  const previews = CodexChatStore.listPreviews(enrichedThreads.map((thread) => thread.id))
+  const unread = CodexChatStore.countUnread(enrichedThreads.map((thread) => thread.id))
+  const tasks = ChatTaskStore.summaries(enrichedThreads.map((thread) => thread.id))
+  const summaries = enrichedThreads.map((thread) => ({
     ...thread,
     ...(thread.kind === 'group' ? { member_profile_ids: members.get(thread.id) ?? [] } : {}),
     preview: previews.get(thread.id) ?? null,
@@ -304,7 +335,27 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
     task: tasks.get(thread.id) ?? null,
     // Rooms a board call, routine or workflow made for itself: the list keeps them under 자동화.
     automation: automation.get(thread.id) ?? null,
-  })), ...(page ? { pagination: { total: page.total, has_more: page.has_more, next_cursor: page.next_cursor } } : {}) })
+  }))
+  res.json({ success: true, data: summaries.slice(0, threads.length),
+    ...(page ? {
+      pagination: { total: page.total, has_more: page.has_more, next_cursor: page.next_cursor },
+      has_automation: directory?.hasAutomation === 1,
+      has_archived_chats: directory?.hasArchivedChats === 1,
+      has_archived_automation: directory?.hasArchivedAutomation === 1,
+    } : {}),
+    ...(bootstrap ? { default_thread: summaries.find((thread) => thread.id === defaultId) ?? null } : {}),
+  })
+})
+
+/** The shell badge is an account-scoped aggregate, not the sum of whichever directory pages are loaded. */
+router.get('/threads/unread-count', requireChatAccess, (req: Request, res: Response) => {
+  const { count } = getUserSettingsDb().prepare(`
+    SELECT COUNT(m.id) AS count FROM codex_chat_threads t
+    JOIN codex_chat_messages m ON m.thread_id = t.id AND m.role = 'assistant'
+      AND m.id > COALESCE(t.last_read_message_id, 0)
+    WHERE t.account_id IS ? AND t.archived = 0
+  `).get(getRequesterAccountId(req)) as { count: number }
+  res.json({ success: true, data: count })
 })
 
 /** POST /api/codex-chat/threads/:threadId/read — `{ messageId }`: the owner has seen the chat up to this message. */

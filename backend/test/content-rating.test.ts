@@ -211,6 +211,51 @@ test('content rating ceilings: what a model may be shown', { timeout: 60000 }, a
     assert.equal(shown.prompt, 'redaction probe')
   })
 
+  await t.test('a connected screen hides the prompts and tags of media above the ceiling, the live snapshot kept', async () => {
+    const { normalizeChatPageSnapshot } = await import('@conai/shared')
+    const { chatPageView, ratingFilteredPage } = await import('../src/mcp/tools/chatPageView')
+    const detail = (hash: string) => normalizeChatPageSnapshot({ instanceId: `inst-rating-${hash.slice(0, 4)}`, connectionId: 'conn-rating', path: `/images/${hash}`, title: '이미지 상세', kind: 'image_detail', resourceId: hash, revision: 'rev-rating-1',
+      fields: [{ id: 'prompt', label: 'Prompt', type: 'text', value: 'page probe', editable: false }, { id: 'tab', label: 'Tab', type: 'select', value: 'current', options: ['current', 'similar'] }],
+      data: { selected: { hash, width: 16, height: 16 }, autoTags: { tagger: { general: [{ name: 'probe_tag', score: 0.9 }] } } } })
+    const page = detail(explicit)
+    const view = chatPageView(admin, page, teen)
+    assert.doesNotMatch(JSON.stringify(view), /page probe|probe_tag/)
+    assert.equal(view.data?.rating_restricted, true)
+    assert.deepEqual(view.data?.selected, { hash: explicit, width: 16, height: 16 }, 'ids and sizes stay')
+    assert.equal(view.fields.find((field) => field.id === 'tab')?.value, 'current')
+    assert.equal(page.fields[0].value, 'page probe', 'the live snapshot is not changed')
+    assert.equal(ratingFilteredPage(page, null), page, 'no ceiling: as is')
+    const safePage = detail(safe)
+    assert.equal(ratingFilteredPage(safePage, teen), safePage, 'media within the ceiling: as is')
+
+    const metadata = normalizeChatPageSnapshot({ ...page, kind: 'metadata', path: `/images/${explicit}/metadata`, fields: [{ id: 'negativePrompt', label: 'Negative', type: 'text', value: 'neg probe' }, { id: 'steps', label: 'Steps', type: 'number', value: 28 }], data: { selected: { prompt: 'page probe', negativePrompt: 'neg probe', steps: 28 } } })
+    const hidden = chatPageView(admin, metadata, teen)
+    assert.doesNotMatch(JSON.stringify(hidden), /page probe|neg probe/)
+    assert.equal((hidden.data?.selected as { steps: number }).steps, 28)
+
+    // A save proposal on that screen: the stored card keeps the live values, the model's copy hides them.
+    const { ChatProposalStore } = await import('../src/services/codex-chat/chatProposals')
+    const saving = normalizeChatPageSnapshot({ ...metadata, actions: [{ id: 'metadata.save', label: 'Save metadata', description: 'Write the draft.', effect: 'save', schema: { type: 'object', properties: {} } }] })
+    const assistant = ChatProfileStore.create({ name: 'Rated page assistant', engine: 'llm', modelSlotId: slotId, systemPrompt: 'p', mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['get_current_page', 'read_page_data', 'propose_page_action'], pageAssist: true })
+    const threadId = CodexChatStore.createThread(null, 'rated page', 'llm', assistant.id)
+    const context: ChatExecutionContext = { threadId, profileId: assistant.id, kind: 'direct', replyId: 'rated-page-action', page: saving }
+    const unregister = registerChatReply(context, controller.signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const bridge = await openChatMcpBridge(admin, ['read', 'generate', 'organize', 'configure'], null, { chatContext: context, contentRatingLimit: teen })
+    try {
+      const result = await bridge.call('propose_page_action', { actionId: 'metadata.save', arguments: {} })
+      assert.ok(!result.isError, JSON.stringify(result))
+      const shown = (result.structuredContent as { proposal: { id: number; before: Record<string, unknown>; rating_restricted?: boolean } }).proposal
+      assert.doesNotMatch(JSON.stringify(result), /page probe|neg probe/)
+      assert.equal(shown.rating_restricted, true)
+      assert.equal(shown.before.steps, 28)
+      const stored = ChatProposalStore.find(shown.id) as { before: Record<string, unknown> }
+      assert.equal(stored.before.prompt, 'page probe', 'the review card keeps the live values')
+    } finally {
+      await bridge.close()
+      unregister()
+    }
+  })
+
   await t.test('saving the tiers keeps their ids: ceilings follow renames and inserts; a deleted ceiling blocks all', async () => {
     const { RatingScoreService } = await import('../src/services/ratingScoreService')
     const before = RatingScoreModel.getAllTiers()

@@ -53,7 +53,17 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     add('user', '안녕')
     add('assistant', '안녕, 왔구나.')
     add('user', '오늘 뭐 했어?')
-    const build = () => buildClaudeSessionTurn({ requester, threadId, profile: ChatProfileStore.find(profile.id)!, history: CodexChatStore.listMessages(threadId), withTools: false })
+    const build = async () => {
+      const profile = ChatProfileStore.find(CodexChatStore.findThreadById(threadId)!.profile_id!)!
+      const { readReplyHistory } = await import('../src/services/codex-chat/chatJudge')
+      const historySource = { threadId }
+      const params = { requester, threadId, profile, withTools: false }
+      const full = await buildClaudeSessionTurn({ ...params, history: CodexChatStore.listMessages(threadId) })
+      const bounded = await buildClaudeSessionTurn({ ...params, history: readReplyHistory(profile, historySource), historySource })
+      assert.deepEqual(bounded.messages, full.messages)
+      assert.deepEqual(bounded.contextMeta, full.contextMeta)
+      return bounded
+    }
     const textOf = (messages: Awaited<ReturnType<typeof build>>['messages']) => String(messages[1].content)
     const fakeSession = (id: string) => {
       const dir = path.join(claudeSessionDir(threadId), 'home', 'projects', 'work')
@@ -112,6 +122,36 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     assert.equal(fs.existsSync(claudeSessionDir(threadId)), false)
   })
 
+  await t.test('a long fresh session restores its old quote and recap even when the only earlier user is outside the window', async (s) => {
+    const { readReplyHistory } = await import('../src/services/codex-chat/chatJudge')
+    const { quoteMessage } = await import('../src/services/codex-chat/chatReplies')
+    const { pendingGenerationOutcomes } = await import('../src/services/codex-chat/codexChatMedia')
+    const requester = { accountId: 1, accountType: 'admin' as const }
+    const profile = ChatProfileStore.create({ name: 'bounded session', engine: 'claude', model: 'haiku', loreScanDepth: 4 })
+    const threadId = CodexChatStore.createThread(1, 'long session', 'llm', profile.id)
+    for (let i = 0; i < 240; i++) CodexChatStore.addMessage({ thread_id: threadId, role: i === 0 || i === 239 ? 'user' : 'assistant', content: `turn-${i}`, tool_calls: [], status: 'completed', error: null })
+    const full = CodexChatStore.listMessages(threadId)
+    const thread = CodexChatStore.findThreadById(threadId)!
+    CodexChatStore.setMessageRouting(threadId, full.at(-1)!.id, { recipients: [profile.id], replyTo: quoteMessage(thread, full[0]) })
+    const historySource = { threadId }
+    const history = readReplyHistory(profile, historySource)
+    const complete = CodexChatStore.listMessages(threadId)
+    const params = { requester, threadId, profile, withTools: false }
+    const expected = await buildClaudeSessionTurn({ ...params, history: complete })
+    const bounded = await buildClaudeSessionTurn({ ...params, history, historySource })
+    assert.deepEqual(bounded.messages, expected.messages)
+    assert.deepEqual(bounded.contextMeta, expected.contextMeta)
+    assert.match(String(bounded.messages[1].content), /\[이전 기록\]/)
+    assert.match(String(bounded.messages[1].content), /turn-0\b/)
+    assert.equal(history.length, 4)
+    const before = full.at(-1)!.id
+    const outcomes = CodexChatStore.listOutcomeMessages(historySource, 40, before)
+    assert.equal(outcomes.length, 40)
+    assert.deepEqual(outcomes, complete.slice(0, -1).filter(row => row.role === 'assistant').slice(-40).map(({ role, routing, tool_calls }) => ({ role, routing, tool_calls })))
+    assert.deepEqual(pendingGenerationOutcomes(threadId, [], new Set(), { source: historySource, before }), pendingGenerationOutcomes(threadId, complete.slice(0, -1), new Set()))
+    s.diagnostic(`session startup bodies: ${complete.length} -> ${history.length}; reset recap: 40 text rows; outcomes: ${outcomes.length} tool/routing rows`)
+  })
+
   await t.test('a room member keeps its own session: what it missed goes in, member changes and rewrites start over', async () => {
     const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
     const { buildClaudeGroupSessionTurn, claudeMemberSessionDir } = await import('../src/services/codex-chat/claudeChatSessions')
@@ -122,9 +162,15 @@ test('claude sessions: forked turns, input once, resets and cleanup', { timeout:
     const roomId = ChatGroupStore.create(1, '방', [luna.id, kai.id], luna.id)
     const add = (role: 'user' | 'assistant', content: string, speaker: number | null = null) =>
       CodexChatStore.addMessage({ thread_id: roomId, role, content, tool_calls: [], status: 'completed', error: null, speaker_profile_id: speaker })
-    const build = (profileId: number) => {
+    const build = async (profileId: number) => {
       const members = ChatGroupStore.members(roomId).map((member) => ChatProfileStore.find(member.profile_id)!)
-      return buildClaudeGroupSessionTurn({ requester, thread: CodexChatStore.findThreadById(roomId)!, members, profile: members.find((member) => member.id === profileId)!, messages: CodexChatStore.listMessages(roomId), windowLimit: 20, withTools: false })
+      const { readGroupReplyHistory } = await import('../src/services/codex-chat/groupChatContext')
+      const params = { requester, thread: CodexChatStore.findThreadById(roomId)!, members, profile: members.find((member) => member.id === profileId)!, windowLimit: 20, withTools: false }
+      const full = await buildClaudeGroupSessionTurn({ ...params, messages: CodexChatStore.listMessages(roomId) })
+      const bounded = await buildClaudeGroupSessionTurn({ ...params, ...readGroupReplyHistory(params.thread, params.profile, { threadId: roomId }) })
+      assert.deepEqual(bounded.messages, full.messages)
+      assert.deepEqual(bounded.contextMeta, full.contextMeta)
+      return bounded
     }
     const textOf = (turn: Awaited<ReturnType<typeof build>>) => String(turn.messages[1].content)
     const finish = (turn: Awaited<ReturnType<typeof build>>, profileId: number, id: string, compacted = false) => {

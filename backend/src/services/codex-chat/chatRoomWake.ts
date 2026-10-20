@@ -61,7 +61,7 @@ export async function wakeChatRoom(params: {
   if (isGroup ? GroupChatService.isRunning(threadId) : CodexChatService.isRunning(threadId)) throw new ChatWakeBusyError()
   if (params.signal?.aborted) throw new CodexChatError('실행이 취소됐어.', 409)
 
-  const lastId = CodexChatStore.listMessages(threadId).at(-1)?.id ?? 0
+  const lastId = CodexChatStore.latestMessageId(threadId) ?? 0
   const text = wakeInstructionText(params.routing, params.instruction)
   const stop = () => {
     const stopping = isGroup ? GroupChatService.stop(threadId) : CodexChatService.interrupt(requester, threadId)
@@ -81,7 +81,7 @@ export async function wakeChatRoom(params: {
   } finally {
     params.signal?.removeEventListener('abort', stop)
   }
-  const replies = CodexChatStore.listMessages(threadId).filter((message) => message.id > lastId && message.role === 'assistant')
+  const replies = CodexChatStore.listMessages(threadId, { after: lastId }).filter((message) => message.role === 'assistant')
   return { thread, replies }
 }
 

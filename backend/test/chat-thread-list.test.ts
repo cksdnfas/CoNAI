@@ -99,7 +99,7 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
       assert.equal(denied.status, 404)
       assert.doesNotMatch(await denied.text(), /private message/)
       CodexChatStore.updateListState(id, { title: 'Directory visible' })
-      CodexChatStore.createThread(2, 'Directory secret', 'llm', profile.id)
+      const hidden = CodexChatStore.createThread(2, 'Directory secret', 'llm', profile.id)
       const directory = `http://127.0.0.1:${address.port}/api/codex-chat/threads`
       const listed = await (await fetch(`${directory}?limit=1&query=Directory`)).json() as any
       assert.equal(listed.success, true)
@@ -114,6 +114,52 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
       assert.ok(!legacy.data.some((thread: any) => thread.title === 'Directory secret'))
       assert.equal((await fetch(`${directory}?limit=101`)).status, 400)
       assert.equal((await fetch(`${directory}?limit=1&cursor=invalid`)).status, 400)
+      const targeted = await (await fetch(`${directory}?ids=${id},${hidden}`)).json() as any
+      assert.deepEqual(targeted.data.map((thread: any) => thread.id), [id], 'off-page lookups keep the same account boundary')
+      assert.equal(targeted.data[0].preview.text, 'last private message')
+      assert.equal('summary' in targeted.data[0], false)
+      assert.equal((await fetch(`${directory}?ids=0`)).status, 400)
+      assert.equal((await fetch(`${directory}?ids=${id}&limit=1`)).status, 400)
+      const unread = await (await fetch(`${directory}/unread-count`)).json() as any
+      const expectedUnread = [...CodexChatStore.countUnread(CodexChatStore.listThreads(1, { archive: 'active' }).map((thread) => thread.id)).values()].reduce((sum, count) => sum + count, 0)
+      assert.equal(unread.data, expectedUnread, 'the badge counts all active rooms rather than one directory page')
+      const pinned = newThread()
+      CodexChatStore.updateListState(pinned, { title: 'Directory pinned', pinned: true })
+      const firstRoomPage = await (await fetch(`${directory}?limit=1&query=Directory&pinned_first=true`)).json() as any
+      assert.deepEqual(firstRoomPage.data.map((thread: any) => thread.id), [pinned])
+      assert.equal(firstRoomPage.pagination.has_more, true)
+      const nextRoomPage = await (await fetch(`${directory}?limit=1&query=Directory&pinned_first=true&cursor=${encodeURIComponent(firstRoomPage.pagination.next_cursor)}`)).json() as any
+      assert.deepEqual(nextRoomPage.data.map((thread: any) => thread.id), [id])
+      assert.equal(nextRoomPage.pagination.has_more, false)
+      CodexChatStore.updateListState(pinned, { archived: true })
+      const archivedRooms = await (await fetch(`${directory}?limit=1&query=Directory&archive=archived`)).json() as any
+      assert.deepEqual(archivedRooms.data.map((thread: any) => thread.id), [pinned])
+      assert.equal(archivedRooms.has_archived_chats, true)
+      assert.equal(archivedRooms.has_archived_automation, false)
+      const otherAccountRooms = await (await fetch(`${directory}?limit=1`, { headers: { 'x-test-account': '2' } })).json() as any
+      assert.equal(otherAccountRooms.has_archived_chats, false, 'another account’s archives do not expose an archive section')
+      const automationIds: number[] = []
+      const db = dbModule.getUserSettingsDb()
+      try {
+        for (let index = 0; index < 41; index++) {
+          const roomId = CodexChatStore.createThread(1, `Directory automation ${index}`, 'llm', profile.id)
+          automationIds.push(roomId)
+          db.prepare('INSERT INTO chat_automation_rooms (account_key, room_key, thread_id) VALUES (?, ?, ?)').run('1', `workflow:directory:${index}`, roomId)
+        }
+        CodexChatStore.updateListState(automationIds[0], { archived: true })
+        const bootstrap = await (await fetch(`${directory}?limit=40&archive=active&bootstrap=true`)).json() as any
+        assert.equal(bootstrap.data.length, 40)
+        assert.ok(bootstrap.data.every((room: any) => room.automation === 'workflow'))
+        assert.equal(bootstrap.has_automation, true)
+        assert.equal(bootstrap.has_archived_automation, true)
+        assert.equal(bootstrap.default_thread.id, id, 'the newest regular room stays the default even beyond the first page')
+        assert.equal('summary' in bootstrap.default_thread, false)
+      } finally {
+        for (const roomId of automationIds) {
+          db.prepare('DELETE FROM chat_automation_rooms WHERE thread_id = ?').run(roomId)
+          CodexChatStore.deleteThread(roomId)
+        }
+      }
     } finally {
       await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
     }

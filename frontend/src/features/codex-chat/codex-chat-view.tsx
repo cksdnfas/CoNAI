@@ -70,6 +70,7 @@ import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatPortrait, ChatStatusAside, ChatStatusFloating, ChatStatusStrip, useStatusPanelLayout, type ChatStatusBlock, type ChatStatusData } from './chat-status-panel'
 import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatThreadList, type ChatListPatch } from './chat-thread-list'
+import { patchChatRoomLists, useChatRoomSummaries, usePagedChatDraftRetention } from './use-chat-room-directory'
 import { ChatAttachButton, ChatDraftAttachments, useChatFileDrop } from './chat-attachments'
 import { ChatFlagButton, ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
 import { ChatRoomRoutinesModal, useRoutineThreadIds } from './chat-routines'
@@ -239,7 +240,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     else await startWith(profileIds)
   }, [startWith, userProfiles])
 
-  const { threadsQuery, threads, activeThreadId, activeThread, threadQuery, thread, displayThread, loadEarlier, preserveHistory, loadingEarlier, earlierError, hasMoreBefore } = useChatThreadData(chat, liveTurn?.threadId ?? null)
+  const keepPagedDrafts = usePagedChatDraftRetention(drafts, chat.keepDrafts)
+  const { threadsQuery, threads, activeThreadId, activeThread, threadQuery, thread, displayThread, loadEarlier, preserveHistory, loadingEarlier, earlierError, hasMoreBefore } = useChatThreadData({ ...chat, keepDrafts: keepPagedDrafts }, liveTurn?.threadId ?? null)
+  const selectedRoomQuery = useChatRoomSummaries(activeThreadId === null ? [] : [activeThreadId], activeThread === null)
   // The new chat being prepared (not saved yet) stands in for a chat until its first message saves it.
   const pendingChat = activeThreadId === null ? chat.pendingChat : null
   const pendingProfile = pendingChat ? profilesById.get(pendingChat.profileId) ?? null : null
@@ -391,7 +394,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   // An open chat on screen is read: its replies stop counting as unread (not while the tab is in the background).
   const latestMessageId = threadQuery.data?.messages.at(-1)?.id ?? null
-  const activeUnreadCount = activeThread?.unread_count ?? 0
+  const activeUnreadCount = activeThread?.unread_count ?? selectedRoomQuery.data?.[0]?.unread_count ?? 0
   useEffect(() => {
     if (showList || activeThreadId === null || latestMessageId === null || activeUnreadCount === 0) return
     const threadId = activeThreadId
@@ -640,7 +643,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   /** A deleted chat: stop and drop its queries and take it out of the cached list, so nothing asks for its id again. */
   const dropThread = (threadId: number) => {
     void queryClient.cancelQueries({ queryKey: codexChatThreadQueryKey(threadId) })
-    queryClient.setQueryData<Array<{ id: number }>>(CODEX_CHAT_THREADS_QUERY_KEY, (current) => current?.filter((entry) => entry.id !== threadId))
+    patchChatRoomLists(queryClient, threadId, null)
     queryClient.removeQueries({ queryKey: codexChatThreadQueryKey(threadId) })
     queryClient.removeQueries({ queryKey: codexChatMediaQueryKey(threadId) })
     queryClient.removeQueries({ queryKey: threadLorebooksQueryKey(threadId) })
@@ -919,7 +922,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       ...(patch.pinned !== undefined ? { pinned: patch.pinned ? 1 as const : 0 as const } : {}),
       ...(patch.archived !== undefined ? { archived: patch.archived ? 1 as const : 0 as const } : {}),
     }
-    queryClient.setQueryData<CodexChatThread[]>(CODEX_CHAT_THREADS_QUERY_KEY, (current) => current?.map(apply))
+    patchChatRoomLists(queryClient, threadId, apply({ id: threadId } as CodexChatThread))
     queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId), (current) => current ? { ...current, thread: apply(current.thread) } : current)
     updateChatListState(threadId, patch).catch((error: unknown) => {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 바꾸지 못했어.', en: 'Could not change the chat.' })), tone: 'error' })
@@ -931,9 +934,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const threadList = (dense: boolean) => <>
     <div className={dense ? 'px-2 pb-2' : 'px-3 pb-2 pt-3'}><ChatSearchInput value={searchText} onChange={setSearchText} /></div>
     <div ref={dense ? undefined : restoreChatListScroll} onScroll={dense ? undefined : (event) => { chatListScrollTop = event.currentTarget.scrollTop }} className={cn('min-h-0 flex-1 overflow-y-auto', !dense && 'px-1')}>
-      {searchText.trim()
-        ? <ChatSearchResults query={searchText} disabled={false} onPick={pickSearchResult} />
-        : <ChatThreadList threads={threads} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} drafts={drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />}
+      <ChatThreadList query={searchText} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} drafts={drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />
+      {searchText.trim() ? <ChatSearchResults query={searchText} disabled={false} onPick={pickSearchResult} /> : null}
     </div>
   </>
   // Context stays in the header, the rest of the chat's actions sit under ⋯; a second press on a view returns to the chat.

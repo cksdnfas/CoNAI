@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import type { WildcardItem, WildcardSummary, WildcardWithItems } from '../src/models/Wildcard'
 import { test } from 'node:test'
 import {
   convertLegacyPromptSyntax,
@@ -143,4 +144,79 @@ test('wildcard previews preserve weighted nested expansion with bounded request-
   t.diagnostic(`209 wildcards, five expansions with a lazily discovered nested reference: ${queries.length} queries`)
   assert.ok(queries.length <= 5, `nested references must be cached for the request, got ${queries.length}`)
   assert.equal(random.mock.callCount(), 154)
+
+  // Browsing must not hydrate item content; details retain complete edit revisions,
+  // while preview pools use the expansion resolver's descendant/fallback semantics.
+  const { default: express } = await import('express')
+  const { default: session } = await import('express-session')
+  const { initializeAuthDb } = await import('../src/database/authDb')
+  initializeAuthDb()
+  const { wildcardReadRoutes } = await import('../src/routes/wildcards.read.routes')
+  const { nativeEditRevision } = await import('../src/services/nativeEditRevision')
+  const app = express()
+  app.use(session({ secret: 'wildcard-summary-test', resave: false, saveUninitialized: false }))
+  app.use('/wildcards', wildcardReadRoutes)
+  const server = app.listen(0, '127.0.0.1')
+  await new Promise<void>(resolve => server.once('listening', resolve))
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())))
+  const base = `http://127.0.0.1:${(server.address() as { port: number }).port}/wildcards`
+  queries.length = 0
+  const treeResponse = await fetch(`${base}?hierarchical=true&withItems=false`)
+  assert.equal(treeResponse.status, 200)
+  const tree: WildcardSummary[] = (await treeResponse.json()).data
+  const flatten = (nodes: WildcardSummary[]): WildcardSummary[] => nodes.flatMap(node => [node, ...flatten(node.children ?? [])])
+  const summaries = flatten(tree)
+  assert.equal(summaries.length, 209)
+  assert.ok(summaries.every(node => !('items' in node) && !('assistant_revision' in node)))
+  assert.deepEqual(summaries.find(node => node.id === 9)?.item_counts, { general: 3, nai: 1, comfyui: 1 })
+  assert.deepEqual(tree.find(node => node.id === 1)?.children?.map(node => node.name), ['A-child', 'B-child'])
+  assert.equal(queries.filter(sql => /\bFROM wildcards\b/.test(sql)).length, 1, 'one aggregate tree query, no per-node item queries')
+  assert.ok(!queries.some(sql => /SELECT \* FROM wildcard_items/.test(sql)))
+
+  queries.length = 0
+  const poolResponse = await fetch(`${base}/1/items?tool=nai`)
+  assert.equal(poolResponse.status, 200)
+  const pool: WildcardItem[] = (await poolResponse.json()).data
+  assert.deepEqual(pool.map(item => item.content), ['alpha', '++leaf++', 'beta'])
+  assert.ok(queries.length <= 3, `one root lookup plus two selective queries, got ${queries.length}`)
+  const limitedPoolResponse = await fetch(`${base}/1/items?tool=nai&limit=2`)
+  assert.equal(limitedPoolResponse.status, 200)
+  assert.deepEqual((await limitedPoolResponse.json()).data.map((item: WildcardItem) => item.content), ['alpha', '++leaf++'],
+    'limits truncate the ordered descendant pool without changing tool fallback')
+  for (const [tool, expectedContents] of [
+    ['general', ['one', 'two', 'zero']], ['nai', ['nai-only']],
+    ['comfyui', ['comfy-only']], ['codex', ['one', 'two', 'zero']],
+  ] as const) {
+    const response = await fetch(`${base}/9/items?tool=${tool}`)
+    assert.equal(response.status, 200)
+    assert.deepEqual((await response.json()).data.map((item: WildcardItem) => item.content), expectedContents)
+  }
+  const detailResponse = await fetch(`${base}/1`)
+  assert.equal(detailResponse.status, 200)
+  const detail: WildcardWithItems & { assistant_revision: string } = (await detailResponse.json()).data
+  assert.deepEqual(detail.items.map(item => item.content), ['excluded'], 'editing keeps own items even for only_children')
+  assert.equal(detail.assistant_revision, nativeEditRevision(WildcardModel.findByIdWithItems(1)))
+  const fullResponse = await fetch(`${base}?hierarchical=true`)
+  assert.equal(fullResponse.status, 200)
+  const fullTree = (await fullResponse.json()).data
+  assert.ok(fullTree.every((node: WildcardWithItems) => Array.isArray(node.items)), 'legacy full-tree clients keep their item contract')
+  for (const suffix of ['/0/items', '/2abc/items', '/9/items?tool=unknown', '/9/items?tool=nai&tool=general']) {
+    assert.equal((await fetch(`${base}${suffix}`)).status, 400, suffix)
+  }
+  assert.equal((await fetch(`${base}/99999/items`)).status, 404)
+  for (let index = 1; index <= 220; index += 1) {
+    item.run(10, 'general', `preview-${index}`, 1, index)
+  }
+  for (const [query, expectedCount] of [['', 50], ['?limit=3', 3], ['?limit=10', 10], ['?limit=200', 200]] as const) {
+    const response = await fetch(`${base}/10/items${query}`)
+    assert.equal(response.status, 200)
+    const data: WildcardItem[] = (await response.json()).data
+    assert.equal(data.length, expectedCount, 'preview responses enforce the requested/default bound')
+    assert.equal(data[0].content, 'not referenced')
+    assert.equal(data.at(-1)?.content, `preview-${expectedCount - 1}`)
+  }
+  for (const limit of ['0', '-1', '1.5', '201', 'Infinity', 'NaN', '2abc', '', '1&limit=2', '9007199254740992']) {
+    assert.equal((await fetch(`${base}/10/items?limit=${limit}`)).status, 400, `invalid limit: ${limit}`)
+  }
+  assert.equal(random.mock.callCount(), 154, 'summary and item previews never select random items')
 })

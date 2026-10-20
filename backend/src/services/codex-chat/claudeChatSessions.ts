@@ -11,6 +11,7 @@ import { contextSource } from './chatContextDiagnostics'
 import { pendingGeneratedImages } from './chatGenerationPrompting'
 import { ChatGroupStore } from './chatGroupStore'
 import { pendingPageReference, pendingProposalOutcomes } from './chatPageContext'
+import { profileContentLimit } from './chatContentRating'
 import type { ChatProfile } from './chatProfiles'
 import { buildReplyContext } from './chatReplyContext'
 import { codexHistoryRecap, codexInputMeta, nextLoreSent, pendingAuthorNote, pendingBlockState, prepareSessionLore, pendingRejectedLore, readLoreSent } from './chatSessionMemory'
@@ -18,8 +19,8 @@ import { userPersonaForThread } from './chatUserProfiles'
 import { claudeChatPrivateRoot, claudeSessionFileExists, type ClaudeChatSession } from './claudeChatCompletion'
 import { piChatPrivateRoot, piSessionFileExists } from './piChatCompletion'
 import { pendingGenerationOutcomes } from './codexChatMedia'
-import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
-import { buildGroupCodexInput, buildGroupHeader, groupMissedMessages } from './groupChatContext'
+import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
+import { buildGroupCodexInput, buildGroupHeader, groupMissedMessages, type GroupHistory } from './groupChatContext'
 import type { ChatCompletionMessage, ChatContentPart } from './llmChatCompletion'
 import { buildPersonaPrompt, fixedContextGuidance, flagDirectiveFor, postHistoryText, referenceBlock, resolveAuthorNote, type ChatContextMeta } from './llmChatContext'
 
@@ -97,6 +98,7 @@ export async function buildClaudeSessionTurn(params: {
   profile: ChatProfile
   /** The conversation up to and with the message being answered (the reply being replaced left out). */
   history: CodexChatMessageRecord[]
+  historySource?: ChatHistorySource
   page?: ChatPageSnapshot
   withTools: boolean
   judged?: JudgedContext | null
@@ -118,13 +120,13 @@ export async function buildClaudeSessionTurn(params: {
 
   const latest = [...history].reverse().find((message) => message.role === 'user') ?? null
   const earlier = latest ? history.filter((message) => message.id < latest.id) : history
-  const recap = resumeId ? '' : codexHistoryRecap(thread, earlier, profile, user)
-  const lore = await prepareSessionLore(thread, profile, history, sent, user, params.judged, params.signal)
+  const recap = resumeId ? '' : codexHistoryRecap(thread, earlier, profile, user, params.historySource, latest?.id)
+  const lore = await prepareSessionLore(thread, profile, history, sent, user, params.judged, params.signal, params.historySource)
   const note = pendingAuthorNote(thread, profile, sent, user)
-  const state = pendingBlockState(thread, profile, history, sent)
+  const state = pendingBlockState(thread, profile, history, sent, undefined, params.historySource)
   const rejected = pendingRejectedLore(threadId, profile, sent)
-  const outcomes = pendingGenerationOutcomes(threadId, earlier, sent)
-  const pageReference = pendingPageReference(params.page, requester, sent)
+  const outcomes = pendingGenerationOutcomes(threadId, earlier, sent, params.historySource ? { source: params.historySource, before: latest?.id } : undefined)
+  const pageReference = pendingPageReference(params.page, requester, sent, profileContentLimit(profile))
   const cards = pendingProposalOutcomes(threadId, sent)
   const [generated, images, attachmentTexts] = await Promise.all([
     pendingGeneratedImages(profile, requester, threadId, sent),
@@ -136,7 +138,7 @@ export async function buildClaudeSessionTurn(params: {
   const text = [
     recap,
     referenceBlock([lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text]),
-    buildReplyContext(history, latest?.routing),
+    buildReplyContext(history, latest?.routing, { historySource: params.historySource }),
     pageReference.text,
     cards.text,
     body,
@@ -184,6 +186,7 @@ export async function buildClaudeGroupSessionTurn(params: {
   profile: ChatProfile
   /** The room up to now (the reply being replaced left out). */
   messages: CodexChatMessageRecord[]
+  history?: GroupHistory
   routing?: ChatMessageRouting
   windowLimit: number
   withTools: boolean
@@ -204,12 +207,12 @@ export async function buildClaudeGroupSessionTurn(params: {
   const sent = resumeId ? readLoreSent(member?.codex_lore_sent ?? null) : new Set<string>()
   const lastSeen = resumeId ? member?.last_seen_message_id ?? null : null
 
-  const lore = await prepareSessionLore(thread, profile, messages, sent, user, params.judged, params.signal)
+  const lore = await prepareSessionLore(thread, profile, messages, sent, user, params.judged, params.signal, params.history?.source)
   const note = pendingAuthorNote(thread, profile, sent, user)
-  const state = pendingBlockState(thread, profile, messages, sent, profile.id)
+  const state = pendingBlockState(thread, profile, messages, sent, profile.id, params.history?.source)
   const rejected = pendingRejectedLore(thread.id, profile, sent)
-  const outcomes = pendingGenerationOutcomes(thread.id, messages.filter((message) => message.speaker_profile_id === profile.id), sent)
-  const { missed, shown } = groupMissedMessages(messages, profile.id, lastSeen, params.windowLimit)
+  const outcomes = pendingGenerationOutcomes(thread.id, messages.filter((message) => message.speaker_profile_id === profile.id), sent, params.history ? { source: params.history.source, speakerId: profile.id } : undefined)
+  const { missed, shown } = groupMissedMessages(messages, profile.id, lastSeen, params.windowLimit, params.history)
   const [generated, attachmentTexts, attachedImages] = await Promise.all([
     pendingGeneratedImages(profile, requester, thread.id, sent),
     params.attachmentTexts ?? inlineTextsForChat(profile, requester.accountId, shown),
@@ -217,7 +220,7 @@ export async function buildClaudeGroupSessionTurn(params: {
   ])
   const flags = flagDirectiveFor(messages, profile, user)
   const text = buildGroupCodexInput({
-    thread, members, self: profile, messages, routing: params.routing, lastSeenMessageId: lastSeen, windowLimit: params.windowLimit,
+    thread, members, self: profile, messages, history: params.history, routing: params.routing, lastSeenMessageId: lastSeen, windowLimit: params.windowLimit,
     lore: [lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text, generated.text].filter(Boolean).join('\n\n'),
     directive: [flags, postHistoryText(profile, user)].filter(Boolean).join('\n\n'),
     attachmentTexts, attachedImages, header: false,

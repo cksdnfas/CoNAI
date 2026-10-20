@@ -61,8 +61,12 @@ export const RATING_RESTRICTED_TEXT = 'hidden: above the content rating this mod
  * tagger is never run for text. No ceiling: none.
  */
 export function ratingRestrictedHashes(context: McpRequestContext, hashes: Iterable<string | null | undefined>): Set<string> {
+  return ratingRestrictedHashesUnder(contextContentLimit(context), hashes)
+}
+
+/** The same for a known ceiling (a chat request building its page reference). */
+export function ratingRestrictedHashesUnder(limit: ContentRatingLimit, hashes: Iterable<string | null | undefined>): Set<string> {
   const restricted = new Set<string>()
-  const limit = contextContentLimit(context)
   if (limit === null) return restricted
   const wanted = [...hashes].filter((hash): hash is string => typeof hash === 'string' && hash.length > 0)
   const scores = new Map<string, number | null>()

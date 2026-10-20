@@ -27,13 +27,14 @@ import {
   runChatRoutine, setAutomationSwitch, setChatRoutineActive, updateChatRoutine,
   type ChatRoutineInput, type ChatRoutineTarget, type ChatRoutineView,
 } from '@/lib/api-chat-routines'
-import { CHAT_PROFILES_QUERY_KEY, listChatProfiles, listCodexChatThreads } from '@/lib/api-codex-chat'
+import { CHAT_PROFILES_QUERY_KEY, listChatProfiles } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatProfilePicker, ChatRoomFace, ChatRoomPicker } from './chat-room-picker'
-import { CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
+import { useCodexChat } from './codex-chat-context'
 import { useChatPageRegistration } from './chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageObject, pageText } from './page-action-helpers'
+import { useChatRoomPages, useChatRoomSummaries } from './use-chat-room-directory'
 
 /**
  * Chat routines: wake a chat on a schedule (Settings › 채팅 › 루틴, and 채팅 메뉴 › 루틴 for the open room).
@@ -85,7 +86,7 @@ export function ChatRoutineRows({ routines, onEdit }: { routines: ChatRoutineVie
   const chat = useCodexChat()
   const myAccountId = useAuthStatusQuery().data?.accountId ?? null
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
-  const threadsQuery = useQuery({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY, queryFn: listCodexChatThreads, staleTime: 10_000 })
+  const threadsQuery = useChatRoomSummaries(routines.flatMap((routine) => routine.threadId === null ? [] : [routine.threadId]))
   const profilesById = useMemo(() => new Map((profilesQuery.data ?? []).map((profile) => [profile.id, profile])), [profilesQuery.data])
   const threadsById = useMemo(() => new Map((threadsQuery.data ?? []).map((thread) => [thread.id, thread])), [threadsQuery.data])
   const refresh = () => queryClient.invalidateQueries({ queryKey: CHAT_ROUTINES_QUERY_KEY })
@@ -223,7 +224,7 @@ export function ChatRoutineEditor({ open, routine, presetThreadId = null, onClos
     setBaseline(JSON.stringify(next))
   }, [open, routine, presetThreadId])
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000, enabled: open })
-  const threadsQuery = useQuery({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY, queryFn: listCodexChatThreads, staleTime: 10_000, enabled: open })
+  const threadsQuery = useChatRoomSummaries(draft.threadId ? [Number(draft.threadId)] : [], open)
   const profiles = useMemo(() => profilesQuery.data ?? [], [profilesQuery.data])
   const profilesById = useMemo(() => new Map(profiles.map((profile) => [profile.id, profile])), [profiles])
   const threads = useMemo(() => threadsQuery.data ?? [], [threadsQuery.data])
@@ -290,7 +291,7 @@ export function ChatRoutineEditor({ open, routine, presetThreadId = null, onClos
           />
           {draft.target === 'dedicated'
             ? <ChatProfilePicker profiles={profiles} value={draft.profileId} onChange={(value) => set('profileId', value)} disabled={save.isPending} />
-            : <ChatRoomPicker threads={threads} profilesById={profilesById} value={draft.threadId} onChange={(value) => set('threadId', value)} disabled={save.isPending} />}
+            : <ChatRoomPicker profilesById={profilesById} value={draft.threadId} onChange={(value) => set('threadId', value)} disabled={save.isPending} />}
         </FramedField>
         <Field label={t({ ko: '지시', en: 'Instruction' })}>
           <Textarea variant="settings" rows={5} value={draft.message} maxLength={CHAT_ROUTINE_LIMITS.message} onChange={(event) => set('message', event.target.value)} disabled={save.isPending} />
@@ -397,7 +398,12 @@ function useRoutinesChatPage(routines: ChatRoutineView[]) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const profiles = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 }).data ?? []
-  const threads = (useQuery({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY, queryFn: listCodexChatThreads, staleTime: 10_000 }).data ?? []).filter((thread) => !thread.archived).slice(0, 200)
+  const { rooms, data: roomPages, hasNextPage, isFetching, isError, fetchNextPage } = useChatRoomPages({ archive: 'active', limit: 100 })
+  const loadedPages = roomPages?.pages.length ?? 0
+  useEffect(() => {
+    if (loadedPages < 2 && hasNextPage && !isFetching && !isError) void fetchNextPage()
+  }, [loadedPages, hasNextPage, isFetching, isError, fetchNextPage])
+  const threads = rooms.slice(0, 200)
   const paused = useQuery({ queryKey: AUTOMATION_SWITCH_QUERY_KEY, queryFn: getAutomationSwitch, staleTime: 10_000 }).data?.paused ?? null
   const clip = (text: string | null, max = 120) => (text && text.length > max ? `${text.slice(0, max)}…` : text)
   // Lists sit at the top of data: a long one shows as a count until read_page_data reads it.

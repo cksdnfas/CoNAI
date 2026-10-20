@@ -15,7 +15,7 @@ export class ChatReplyError extends Error {
 export function requireReplyTarget(threadId: number, value: unknown, messages?: CodexChatMessageRecord[], historySource?: ChatHistorySource) {
   if (value === undefined || value === null) return null
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) throw new ChatReplyError('답장할 메시지를 다시 선택해줘.')
-  const excluded = historySource?.excludeMessageId === value
+  const excluded = historySource?.excludeMessageId === value || value > (historySource?.untilMessageId ?? Number.MAX_SAFE_INTEGER)
   const message = excluded ? undefined : messages?.find((entry) => entry.id === value && entry.thread_id === threadId)
     ?? (!messages || historySource?.threadId === threadId ? CodexChatStore.findMessage(threadId, value) : undefined)
   if (!message) throw new ChatReplyError('답장할 메시지가 없거나 다른 방의 메시지야. 답장 대상을 다시 선택해줘.', 409)

@@ -1,8 +1,5 @@
-import type { WildcardTool } from '@/lib/api-wildcards'
 import {
-  countStoredWildcardItemsForTool,
   countWildcardItemsForTool,
-  resolvePreferredWildcardItemTool,
   type FlattenedWildcardRecord,
   type PromptWildcardTool,
 } from './wildcard-inline-picker-helpers'
@@ -24,13 +21,12 @@ export type PromptSyntaxToken = {
   naiItemCount: number | null
   comfyuiItemCount: number | null
   loraWeight: string | null
-  previewItems: string[]
+  wildcardId: number | null
   fallbackMessage: string | null
 }
 
 const LORA_TOKEN_REGEX = /<lora:([^:>]+?)(?::([^>]+?))?>/gi
 const PROMPT_COMMENT_TOKEN_REGEX = /\/\/([^/\r\n]+?)\/\//g
-const MAX_PREVIEW_ITEMS = 3
 
 function normalizePromptSyntaxName(value: string) {
   return value.trim().toLowerCase()
@@ -44,90 +40,11 @@ function buildPathText(record?: FlattenedWildcardRecord | null) {
   return record.path.join(' / ')
 }
 
-function countItemsForStorageTool(record: FlattenedWildcardRecord, tool: WildcardTool) {
-  return countStoredWildcardItemsForTool(record.items, tool)
-}
-
-function createRecordMaps(records: FlattenedWildcardRecord[]) {
-  const byId = new Map(records.map((record) => [record.id, record]))
-  const childrenByParentId = new Map<number, FlattenedWildcardRecord[]>()
-
-  for (const record of records) {
-    if (record.parentId === null) {
-      continue
-    }
-
-    const siblings = childrenByParentId.get(record.parentId) ?? []
-    siblings.push(record)
-    childrenByParentId.set(record.parentId, siblings)
-  }
-
-  return {
-    byId,
-    childrenByParentId,
-  }
-}
-
-function collectRecordPreviewItems(
-  record: FlattenedWildcardRecord,
-  tool: PromptWildcardTool,
-  maps: ReturnType<typeof createRecordMaps>,
-  visited: Set<number> = new Set(),
-): string[] {
-  if (visited.has(record.id)) {
-    return []
-  }
-
-  visited.add(record.id)
-  const preferredTool = resolvePreferredWildcardItemTool(record.items, tool)
-  const previews = record.onlyChildren ? [] : record.items
-    .filter((item) => item.tool === preferredTool)
-    .map((item) => item.content.trim())
-    .filter(Boolean)
-
-  if (record.includeChildren || record.onlyChildren) {
-    const children = maps.childrenByParentId.get(record.id) ?? []
-    for (const child of children) {
-      previews.push(...collectRecordPreviewItems(child, tool, maps, visited))
-    }
-  }
-
-  return previews
-}
-
-function buildPreviewState(
-  kind: PromptSyntaxTokenKind,
-  record: FlattenedWildcardRecord | null,
-  tool: PromptWildcardTool | undefined,
-  maps: ReturnType<typeof createRecordMaps>,
-) {
-  if (!record || !tool) {
-    return {
-      previewItems: [] as string[],
-      fallbackMessage: kind === 'comment' ? '프리셋 주석이야. 생성 요청 전에는 제거돼.' : kind === 'lora' ? 'LoRA 태그로만 동작해.' : '프롬프트로 그대로 동작해.',
-    }
-  }
-
-  const previewItems = Array.from(new Set(collectRecordPreviewItems(record, tool, maps))).slice(0, MAX_PREVIEW_ITEMS)
-  if (previewItems.length > 0) {
-    return {
-      previewItems,
-      fallbackMessage: null,
-    }
-  }
-
-  return {
-    previewItems: [],
-    fallbackMessage: '연결된 항목이 없어서 프롬프트로 그대로 동작해.',
-  }
-}
-
 function buildToken(
   kind: PromptSyntaxTokenKind,
   value: string,
   start: number,
   end: number,
-  maps: ReturnType<typeof createRecordMaps>,
   options?: {
     record?: FlattenedWildcardRecord | null
     tool?: PromptWildcardTool
@@ -135,7 +52,6 @@ function buildToken(
   },
 ): PromptSyntaxToken {
   const record = options?.record ?? null
-  const previewState = buildPreviewState(kind, record, options?.tool, maps)
 
   return {
     id: `${kind}:${start}:${end}:${value}`,
@@ -147,13 +63,13 @@ function buildToken(
     name: kind === 'comment' ? '프리셋 주석' : record?.name ?? value,
     count: 1,
     pathText: buildPathText(record),
-    toolItemCount: record && options?.tool ? countWildcardItemsForTool(record.items, options.tool) : null,
-    generalItemCount: record ? countItemsForStorageTool(record, 'general') : null,
-    naiItemCount: record ? countItemsForStorageTool(record, 'nai') : null,
-    comfyuiItemCount: record ? countItemsForStorageTool(record, 'comfyui') : null,
+    toolItemCount: record && options?.tool ? countWildcardItemsForTool(record.itemCounts, options.tool) : null,
+    generalItemCount: record?.itemCounts.general ?? null,
+    naiItemCount: record?.itemCounts.nai ?? null,
+    comfyuiItemCount: record?.itemCounts.comfyui ?? null,
     loraWeight: options?.loraWeight?.trim() || null,
-    previewItems: previewState.previewItems,
-    fallbackMessage: previewState.fallbackMessage,
+    wildcardId: record?.id ?? null,
+    fallbackMessage: record ? null : kind === 'comment' ? '프리셋 주석이야. 생성 요청 전에는 제거돼.' : kind === 'lora' ? 'LoRA 태그로만 동작해.' : '프롬프트로 그대로 동작해.',
   }
 }
 
@@ -186,7 +102,6 @@ export function detectPromptSyntaxTokens(value: string, records: FlattenedWildca
   }
 
   // 와일드카드·태그 그룹 토큰은 입력창 칩(prompt-random-token)이 담당한다
-  const maps = createRecordMaps(records)
   const preprocessByName = new Map(
     records
       .filter((record) => record.type === 'chain' && !record.isAutoCollected)
@@ -209,7 +124,7 @@ export function detectPromptSyntaxTokens(value: string, records: FlattenedWildca
       continue
     }
 
-    tokens.push(buildToken('comment', rawText, start, start + rawText.length, maps))
+    tokens.push(buildToken('comment', rawText, start, start + rawText.length))
   }
 
   for (const match of value.matchAll(LORA_TOKEN_REGEX)) {
@@ -222,7 +137,7 @@ export function detectPromptSyntaxTokens(value: string, records: FlattenedWildca
     }
 
     const record = loraByName.get(normalizePromptSyntaxName(loraName))
-    tokens.push(buildToken('lora', rawText, start, start + rawText.length, maps, {
+    tokens.push(buildToken('lora', rawText, start, start + rawText.length, {
       record,
       tool,
       loraWeight: match[2] ?? null,
@@ -253,7 +168,7 @@ export function detectPromptSyntaxTokens(value: string, records: FlattenedWildca
     ) {
       const record = preprocessByName.get(normalizedSegment)
       if (record) {
-        tokens.push(buildToken('preprocess', segmentValue, trimmedRange.start, trimmedRange.end, maps, { record, tool }))
+        tokens.push(buildToken('preprocess', segmentValue, trimmedRange.start, trimmedRange.end, { record, tool }))
       }
     }
 

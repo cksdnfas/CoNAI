@@ -415,6 +415,14 @@ test('lore context: books per request, the index, always-on entries, linked file
       const request = (profile: typeof kai) => {
         let meta: import('../src/services/codex-chat/llmChatContext').ChatContextMeta | undefined
         buildGroupLlmMessages({ profile, thread: room, members: [kai, luna], messages: CodexChatStore.listMessages(roomId), windowLimit: 1, tools: [], withTools: false, maxTokens: null, onMeta: (value) => { meta = value } })
+        const source = { threadId: roomId }
+        let boundedMeta: typeof meta
+        buildGroupLlmMessages({
+          profile, thread: room, members: [kai, luna], messages: CodexChatStore.listContextMessages(source, { afterId: Number.MAX_SAFE_INTEGER, recentMessages: 1, textMessages: 1 }),
+          history: { source, outline: CodexChatStore.listHistoryOutline(source) },
+          windowLimit: 1, tools: [], withTools: false, maxTokens: null, onMeta: value => { boundedMeta = value },
+        })
+        assert.deepEqual(boundedMeta, meta, 'group activation timers retain the complete room count and member scope')
         return meta!
       }
       assert.equal(request(kai).loreEntries?.[0].reason, 'sticky')

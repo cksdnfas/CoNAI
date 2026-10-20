@@ -187,8 +187,8 @@ function buildExampleMessages(profile: ChatProfile, user?: ChatUserPersona | nul
 }
 
 /** A turn starts at a user message; a greeting before the first user message is a turn of its own. */
-export function splitTurns(messages: CodexChatMessageRecord[]) {
-  const turns: CodexChatMessageRecord[][] = []
+export function splitTurns<T extends Pick<CodexChatMessageRecord, 'role'>>(messages: T[]) {
+  const turns: T[][] = []
   for (const message of messages) {
     if (message.role === 'user' || turns.length === 0) {
       turns.push([message])
@@ -407,7 +407,7 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
 /** The display block state of a chat as the model reads it ('' without blocks). `speakerId`: a room member's own. */
 export function threadBlockStateText(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'block_edits'>, messages: ReadonlyArray<Pick<CodexChatMessageRecord, 'id' | 'role' | 'content' | 'speaker_profile_id'>>, speakerId?: number, historySource?: ChatHistorySource) {
   const history = historySource && usableBlockKeys(profile.style.blocks).size
-    ? CodexChatStore.listBlockMessages(historySource.threadId).filter((message) => message.id !== historySource.excludeMessageId) : messages
+    ? CodexChatStore.listBlockMessages(historySource.threadId, historySource.untilMessageId).filter((message) => message.id !== historySource.excludeMessageId) : messages
   const folded = foldBlockState(profile, history, parseBlockEdits(thread.block_edits), speakerId)
   return folded ? blockStateText(profile.style.blocks, folded.state) : ''
 }
@@ -1267,7 +1267,7 @@ function groupPlanner(members: ChatProfile[], window: number, mode: 'ahead' | 'a
     if (!profile) throw new Error('요약할 수 있는 LLM 참가자가 없어.')
     if (profile.engine === 'claude' && !resolveChatAccess(thread.account_id).claude) throw new Error('Claude Code 요약 모델을 사용할 권한이 없어.')
     const config = { ...resolveContextConfig(thread, profile), summaryEnabled: true }
-    const pending = sendableMessages(unsummarizedMessages(CodexChatStore.listMessages(thread.id), thread, config))
+    const pending = sendableMessages(CodexChatStore.listContextRange(thread.id, thread.summary_until_message_id ?? 0))
     const count = mode === 'all' ? pending.length : turnsToFold(pending.length, window, groupFoldBatch(window))
     const lineOf = groupTranscript(members, userPersonaForThread(thread))
     const summaryConfig = await summaryContextConfig(profile, config)

@@ -21,6 +21,7 @@ import { ChatProfileStore, chatGreetings, pickChatGreeting, type ChatProfile } f
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
 import { parseChatPageContext, pendingPageReference, pendingProposalOutcomes } from './chatPageContext'
+import { profileContentLimit } from './chatContentRating'
 import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
 import { notifyChatUserSend } from './chatSendEvents'
@@ -37,9 +38,9 @@ import { knowledgePageForExecution, recordQuotedBoardKnowledge } from '../posts/
 import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserInput } from './chatTranslation'
-import { groupMissedMessages } from './groupChatContext'
+import { groupMissedMessages, type GroupHistory } from './groupChatContext'
 import { hasTranslation } from './chatModelRoles'
-import { endJudgedTurn, judgeBeforeReply, judgeDirectiveText, type JudgedTurn } from './chatJudge'
+import { endJudgedTurn, judgeBeforeReply, judgeDirectiveText, readReplyHistory, type JudgedTurn } from './chatJudge'
 import { judgeStatusFields } from './chatJudgeFields'
 import { stripEchoedAddresses, withoutNarrationMarks } from '@conai/shared'
 import { currentLlmUsageContext, recordLlmUsage, type LlmTokenCounts, type LlmUsageTag } from '../llmUsage'
@@ -446,9 +447,7 @@ function recordCompaction(session: Session, codexThreadId: string) {
   const chatThread = CodexChatStore.findThreadByCodexId(codexThreadId)
   if (chatThread) {
     const turn = session.activeTurns.get(codexThreadId)
-    const messages = CodexChatStore.listMessages(chatThread.id)
-    const folded = turn?.userMessageId ? messages.filter((message) => message.id < (turn.userMessageId as number)) : messages
-    CodexChatStore.markCodexCompacted(codexThreadId, folded.at(-1)?.id ?? null)
+    CodexChatStore.markCodexCompacted(codexThreadId, CodexChatStore.latestMessageId(chatThread.id, turn?.userMessageId ?? undefined))
   } else {
     ChatGroupStore.markMemberCompacted(codexThreadId)
   }
@@ -711,6 +710,7 @@ export async function runCodexGroupReply(params: {
   threadId: number
   profile: ChatProfile
   messages: CodexChatMessageRecord[]
+  history?: GroupHistory
   windowLimit: number
   buildInput: (lore: string) => string
   /** The attached images the input shows (see loadAttachedImages); those of the messages it shows go in as images. */
@@ -765,16 +765,16 @@ export async function runCodexGroupReply(params: {
         const room = CodexChatStore.findThreadById(threadId) ?? null
         const user = userPersonaForThread(room)
         const persona = pendingUserPersona(user, sent)
-        const lore = await prepareSessionLore(room, profile, params.messages, sent, user, undefined, params.signal)
+        const lore = await prepareSessionLore(room, profile, params.messages, sent, user, undefined, params.signal, params.history?.source)
         const note = pendingAuthorNote(room, profile, sent, user)
-        const state = pendingBlockState(room, profile, params.messages, sent, profile.id)
+        const state = pendingBlockState(room, profile, params.messages, sent, profile.id, params.history?.source)
         const rejected = pendingRejectedLore(threadId, profile, sent)
-        const outcomes = pendingGenerationOutcomes(threadId, params.messages.filter((message) => message.speaker_profile_id === profile.id), sent)
+        const outcomes = pendingGenerationOutcomes(threadId, params.messages.filter((message) => message.speaker_profile_id === profile.id), sent, params.history ? { source: params.history.source, speakerId: profile.id } : undefined)
         const generated = await pendingGeneratedImages(profile, requester, threadId, sent)
         const input = params.buildInput([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text, generated.text].filter(Boolean).join('\n\n'))
         const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...generated.keys]
         const lastSeen = ChatGroupStore.member(threadId, profile.id)?.last_seen_message_id ?? null
-        const { missed, shown } = groupMissedMessages(params.messages, profile.id, lastSeen, params.windowLimit)
+        const { missed, shown } = groupMissedMessages(params.messages, profile.id, lastSeen, params.windowLimit, params.history)
         turn.contextMeta = codexInputMeta(profile, shown, lore, input, keys, [
           ...contextSource('user-persona', persona.text), ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''), ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),
           ...contextSource('author-note', note.text ? resolveAuthorNote(room, profile, user).text : ''), ...contextSource('state', state.text),
@@ -1249,7 +1249,8 @@ export const CodexChatService = {
       }
       const userMessage = CodexChatStore.findMessage(threadId, userMessageId) as CodexChatMessageRecord
       emit(turn, { type: 'user', message: userMessage })
-      turn.delivery = beginDirectReply(thread, profile.id, CodexChatStore.listMessages(threadId), userMessage, controller.signal, (delivery) => emit(turn, { type: 'routing', routing: delivery }))
+      const historySource = { threadId, untilMessageId: userMessageId }
+      turn.delivery = beginDirectReply(thread, profile.id, [userMessage], userMessage, controller.signal, (delivery) => emit(turn, { type: 'routing', routing: delivery }), historySource)
       turn.delivery.context.knowledgeProvider = 'codex'
       turn.delivery.context.knowledgeOutputLimit = profile.toolOutputLimit
       turn.delivery.context.knowledgeModel = run.model ?? session.catalog.models.find(item => item.isDefault)?.id ?? 'unspecified'
@@ -1264,15 +1265,15 @@ export const CodexChatService = {
         const current = CodexChatStore.findThreadById(threadId) ?? null
         const sent = readLoreSent(current?.codex_lore_sent ?? null)
         const user = userPersonaForThread(current)
-        const history = CodexChatStore.listMessages(threadId)
+        const history = readReplyHistory(profile, historySource)
         const persona = pendingUserPersona(user, sent)
-        const lore = await prepareSessionLore(current, profile, history, sent, user, undefined, controller.signal)
+        const lore = await prepareSessionLore(current, profile, history, sent, user, undefined, controller.signal, historySource)
         const note = pendingAuthorNote(current, profile, sent, user)
-        const state = pendingBlockState(current, profile, history, sent)
+        const state = pendingBlockState(current, profile, history, sent, undefined, historySource)
         const rejected = pendingRejectedLore(threadId, profile, sent)
-        const outcomes = pendingGenerationOutcomes(threadId, history.filter((entry) => entry.id < userMessageId), sent)
+        const outcomes = pendingGenerationOutcomes(threadId, history.filter((entry) => entry.id < userMessageId), sent, { source: historySource, before: userMessageId })
         const replyGuide = pendingReplyGuidance(sent)
-        const pageReference = pendingPageReference(knowledgePage, requester, sent)
+        const pageReference = pendingPageReference(knowledgePage, requester, sent, profileContentLimit(profile))
         const cards = pendingProposalOutcomes(threadId, sent)
         // The judge's yes items add their directives (Codex keeps its tools for the whole thread, so none are steered).
         turn.judged = await judgeBeforeReply({ profile, threadId, replyId: turn.delivery.context.replyId ?? null, availableTools: null, messages: history, signal: controller.signal }).catch((error: unknown) => {
@@ -1282,10 +1283,10 @@ export const CodexChatService = {
         })
         const directive = [buildFlagDirective(flags, (value) => fillCharacterPlaceholders(value, profile, user)), postHistoryText(profile, user), judgeDirectiveText(turn.judged)].filter(Boolean).join('\n\n')
         const reference = referenceBlock([persona.text, lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text])
-        const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user) : ''
+        const recap = freshCodexThread ? codexHistoryRecap(current, history.filter((entry) => entry.id < userMessageId), profile, user, historySource, userMessageId) : ''
         const images = await loadAttachedImages(profile, requester, [{ attachments, mediaAttachments }])
         const generated = await pendingGeneratedImages(profile, requester, threadId, sent)
-        const input = [recap, reference, replyGuide.text, buildReplyContext(history, routing), pageReference.text, cards.text, chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }]), images), directive, generated.text].filter(Boolean).join('\n\n')
+        const input = [recap, reference, replyGuide.text, buildReplyContext(history, routing, { historySource }), pageReference.text, cards.text, chatContentWithAttachments(modelText ?? trimmed, attachments, mediaAttachments, await inlineTextsForChat(profile, requester.accountId, [{ attachments }]), images), directive, generated.text].filter(Boolean).join('\n\n')
         const keys = [...persona.keys, ...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...replyGuide.keys, ...pageReference.keys, ...cards.keys, ...generated.keys]
         turn.contextMeta = codexInputMeta(profile, [userMessage], lore, input, keys, [
           ...contextSource('user-persona', persona.text), ...contextSource('lore-index', lore.index.keys.length ? lore.selected.index : ''), ...contextSource('constant-lore', lore.index.keys.length ? lore.selected.constant : ''),

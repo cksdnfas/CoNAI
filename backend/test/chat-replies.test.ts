@@ -216,6 +216,55 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.equal(positions.mock.callCount(), 1, 'the quote estimate and rendering share one position read')
   })
 
+  await t.test('bounded room history preserves stale wakes, hidden counts, quote ancestors and reset/resumed member windows', async (s) => {
+    const { readGroupReplyHistory, buildGroupLlmMessages, buildGroupCodexInput, groupMissedMessages } = await import('../src/services/codex-chat/groupChatContext')
+    const { sendableMessages } = await import('../src/services/codex-chat/llmChatContext')
+    const room = createRoom()
+    ChatGroupStore.setLimits(room.id, { window: 6 })
+    for (let i = 0; i < 240; i++) CodexChatStore.addMessage({
+      thread_id: room.id, role: i % 2 ? 'assistant' : 'user', content: i % 11 === 0 ? ' \n' : `room-${i}`,
+      speaker_profile_id: i % 2 ? (i % 3 ? a.id : b.id) : null,
+      routing: i % 4 === 0 ? { recipients: [a.id], routine: { source: 'routine', id: 1, name: 'repeat' } } : null,
+      tool_calls: [], status: 'completed', error: null,
+    })
+    const rows = CodexChatStore.listMessages(room.id)
+    const thread = CodexChatStore.findThreadById(room.id)!
+    CodexChatStore.setMessageRouting(room.id, rows[31].id, { recipients: ['user'], replyTo: quoteMessage(thread, rows[1]) })
+    CodexChatStore.setMessageRouting(room.id, rows.at(-2)!.id, { recipients: [a.id], replyTo: quoteMessage(thread, rows[31]) })
+    ChatGroupStore.setLastSeen(room.id, a.id, rows[180].id)
+    const source = { threadId: room.id, excludeMessageId: rows.at(-1)!.id }
+    const full = CodexChatStore.listMessages(room.id).filter(row => row.id !== source.excludeMessageId)
+    const bounded = readGroupReplyHistory(thread, a, source)
+    const later = CodexChatStore.addMessage({ thread_id: room.id, role: 'user', content: 'A concurrent message outside this reply snapshot', tool_calls: [], status: 'completed', error: null })
+    assert.throws(() => requireReplyTarget(room.id, later, bounded.messages, bounded.history.source))
+    assert.deepEqual(bounded.history.outline.filter(row => row.sendable).map(row => row.id), sendableMessages(full).map(row => row.id))
+    assert.ok(bounded.messages.length < 30)
+    const routing = full.at(-1)!.routing ?? undefined
+    const params = { profile: a, thread, members: profiles, routing, windowLimit: 6, tools: [], withTools: false, maxTokens: null }
+    let expectedMeta: unknown
+    let actualMeta: unknown
+    const expected = buildGroupLlmMessages({ ...params, messages: full, onMeta: meta => { expectedMeta = meta } })
+    assert.deepEqual(buildGroupLlmMessages({ ...params, ...bounded, onMeta: meta => { actualMeta = meta } }), expected)
+    assert.deepEqual(actualMeta, expectedMeta)
+    for (const lastSeenMessageId of [null, rows[180].id]) {
+      const input = { ...params, self: a, lastSeenMessageId, lore: '', directive: '' }
+      assert.equal(buildGroupCodexInput({ ...input, ...bounded }), buildGroupCodexInput({ ...input, messages: full }))
+      const complete = groupMissedMessages(full, a.id, lastSeenMessageId, 6)
+      const limited = groupMissedMessages(bounded.messages, a.id, lastSeenMessageId, 6, bounded.history)
+      assert.deepEqual(limited.shown.map(row => row.id), complete.shown.map(row => row.id))
+      assert.equal(limited.missed.length, complete.missed.length)
+    }
+    assert.equal(requireReplyTarget(room.id, rows[1].id, bounded.messages, source)?.id, rows[1].id)
+    assert.throws(() => requireReplyTarget(room.id, source.excludeMessageId, bounded.messages, source))
+    s.diagnostic(`group startup bodies: ${full.length} -> ${bounded.messages.length}; outline: ${bounded.history.outline.length} body-free rows`)
+    CodexChatStore.setMessageRouting(room.id, rows[1].id, { replyId: 'active-generation-owner', recipients: ['user'] })
+    assert.equal(CodexChatStore.findMessageByReplyId(room.id, 'active-generation-owner', 'assistant')?.id, rows[1].id)
+    assert.equal(CodexChatStore.findMessageByReplyId(room.id, 'active-generation-owner', 'user'), undefined)
+    assert.equal(CodexChatStore.findMessageByReplyId(createRoom().id, 'active-generation-owner'), undefined)
+    CodexChatStore.setMessageRouting(room.id, rows[1].id, null)
+    assert.equal(CodexChatStore.findMessageByReplyId(room.id, 'active-generation-owner'), undefined)
+  })
+
   await t.test('quote snapshots survive alternative selection and become unavailable after target removal', () => {
     const room = createRoom()
     const id = CodexChatStore.addMessage({ thread_id: room.id, role: 'assistant', speaker_profile_id: a.id, content: 'Original answer', tool_calls: [], status: 'completed', error: null })

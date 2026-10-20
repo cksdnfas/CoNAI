@@ -18,6 +18,8 @@ import { ChatProfileAvatar } from './chat-profile-avatar'
 import { UnreadCount } from './chat-unread-count'
 import { ChatTaskRing } from './chat-task-ui'
 import { parseServerDate } from '@/lib/server-time'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { ChatRoomPageMore, useChatBranchParents, useChatRoomPages, useChatRoomSummaries } from './use-chat-room-directory'
 
 export type ChatListPatch = { title?: string; pinned?: boolean; archived?: boolean }
 export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
@@ -32,8 +34,8 @@ export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
  * Several chats are picked with "Select" in the row menu; while any is picked the faces turn into checks, a row click
  * ticks it, and a floating bar archives or deletes them (Esc lets go).
  */
-export function ChatThreadList({ threads, profilesById, activeThreadId, runningThreadIds, routineThreadIds, drafts, dense = false, onSelect, onUpdate, onBulk }: {
-  threads: CodexChatThreadSummary[]
+export function ChatThreadList({ query = '', profilesById, activeThreadId, runningThreadIds, routineThreadIds, drafts, dense = false, onSelect, onUpdate, onBulk }: {
+  query?: string
   profilesById: Map<number, ChatProfileSummary>
   activeThreadId: number | null
   /** Chats with a reply on its way (a dot on the row). */
@@ -54,12 +56,23 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
   const groupDown = (memberIds: number[]) => memberIds.length > 0 && memberIds.every((id) => healthOf(id)) ? healthOf(memberIds[0]) : null
   const [openBranches, setOpenBranches] = useState<ReadonlySet<number>>(() => new Set())
   const [archiveOpen, setArchiveOpen] = useState(false)
-  const hasAutomation = threads.some((entry) => entry.automation)
+  const search = useDebouncedValue(query)
+  const activePage = useChatRoomPages({ archive: 'active', pinnedFirst: true, query: search })
+  const archivePage = useChatRoomPages({ archive: 'archived', pinnedFirst: true, query: search }, archiveOpen)
+  const loadedRooms = [...activePage.rooms, ...(archiveOpen ? archivePage.rooms : [])]
+  const selected = useChatRoomSummaries(activeThreadId === null ? [] : [activeThreadId], !loadedRooms.some((room) => room.id === activeThreadId))
+  const activeRoom = loadedRooms.find((room) => room.id === activeThreadId) ?? selected.data?.[0]
+  // Deep links and search results can select a room before its directory page has been opened.
+  const contextRooms = !search.trim() && activeRoom ? [activeRoom, ...loadedRooms] : loadedRooms
+  const parents = useChatBranchParents(contextRooms)
+  const threads = [...new Map([...(parents.data ?? []), ...contextRooms].map((room) => [room.id, room])).values()]
+    .sort((a, b) => (b.pinned ?? 0) - (a.pinned ?? 0) || b.updated_date.localeCompare(a.updated_date) || b.id - a.id)
   const [tab, setTab] = useState<'chats' | 'automation'>('chats')
   // Opening a chat from elsewhere (a link, the board) shows the tab it is on.
-  const activeTab = threads.find((entry) => entry.id === activeThreadId)?.automation ? 'automation' : 'chats'
+  const activeTab = activeRoom?.automation ? 'automation' : 'chats'
   useEffect(() => { setTab(activeTab) }, [activeThreadId, activeTab])
-  const shownTab = hasAutomation ? tab : 'chats'
+  useEffect(() => { if (activeRoom?.archived) setArchiveOpen(true) }, [activeRoom?.archived])
+  const shownTab = activePage.hasAutomation ? tab : 'chats'
   const inTab = threads.filter((entry) => (shownTab === 'automation') === Boolean(entry.automation))
   const [renaming, setRenaming] = useState<{ id: number; title: string } | null>(null)
   const [picked, setPicked] = useState<ReadonlySet<number>>(() => new Set())
@@ -89,8 +102,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
     : formatDate(date, date.getFullYear() === today.getFullYear() ? { month: 'short', day: 'numeric' } : { dateStyle: 'medium' })
 
   const listed = inTab.filter((entry) => !entry.archived)
-  const archived = inTab.filter((entry) => entry.archived)
-  const automationCount = threads.filter((entry) => entry.automation && !entry.archived).length
+  const archived = archiveOpen ? inTab.filter((entry) => entry.archived) : []
 
   /** One section: its top rows (pinned first) and the kept-before-an-edit branches under each. */
   const arrange = (section: CodexChatThreadSummary[]) => {
@@ -159,7 +171,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
             <span className={cn('flex shrink-0', dense ? 'items-center gap-2' : 'flex-col items-end gap-1')}>
               <span className="flex items-center gap-2">
                 {entry.task ? <ChatTaskRing summary={entry.task} /> : null}
-                {runningThreadIds.has(entry.id) ? <span role="img" aria-label={t({ ko: '답변 중', en: 'Replying' })} className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" /> : null}
+                {entry.running || runningThreadIds.has(entry.id) ? <span role="img" aria-label={t({ ko: '답변 중', en: 'Replying' })} className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" /> : null}
                 {dense ? null : time}
               </span>
               {entry.unread_count ? <UnreadCount count={entry.unread_count} /> : null}
@@ -196,11 +208,11 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
   }
 
   /** A folding row ("kept branches 2", "archive 5"): shows or hides what follows it. */
-  const foldRow = (key: string, open: boolean, onToggle: () => void, icon: ReactNode, label: string, count: number, nested = false) => (
+  const foldRow = (key: string, open: boolean, onToggle: () => void, icon: ReactNode, label: string, count?: number, nested = false) => (
     <ListRow key={key} asChild interactive size="sm">
       <button type="button" aria-expanded={open} onClick={onToggle} className={cn('w-full gap-2 text-xs text-muted-foreground', nested ? (dense ? 'pl-7' : 'pl-14') : dense ? '' : 'px-3')}>
         {icon}
-        <span className="flex-1">{label} <span className="tabular-nums">{formatNumber(count)}</span></span>
+        <span className="flex-1">{label} {count === undefined ? null : <span className="tabular-nums">{formatNumber(count)}</span>}</span>
         {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
       </button>
     </ListRow>
@@ -208,9 +220,9 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
 
   const section = (entries: CodexChatThreadSummary[]) => {
     const { top, branches } = arrange(entries)
-    return top.map((entry) => {
+    const render = (entry: CodexChatThreadSummary, nested = false): ReactNode => {
       const kept = branches.get(entry.id) ?? []
-      if (kept.length === 0) return row(entry)
+      if (kept.length === 0) return row(entry, nested)
       // The open chat never hides inside a folded group.
       const open = openBranches.has(entry.id) || kept.some((branch) => branch.id === activeThreadId)
       const toggle = () => setOpenBranches((current) => {
@@ -221,15 +233,17 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
       })
       return (
         <div key={entry.id}>
-          {row(entry)}
+          {row(entry, nested)}
           {foldRow(`branches-${entry.id}`, open, toggle, <GitBranch className="size-3.5" />, t({ ko: '수정 전 분기', en: 'Kept before edits' }), kept.length, true)}
-          {open ? kept.map((branch) => row(branch, true)) : null}
+          {open ? kept.map((branch) => render(branch, true)) : null}
         </div>
       )
-    })
+    }
+    return top.map((entry) => render(entry))
   }
 
   const archiveShown = archiveOpen || archived.some((entry) => entry.id === activeThreadId)
+  const hasArchive = shownTab === 'automation' ? activePage.hasArchivedAutomation : activePage.hasArchivedChats
   // "All" is every chat the list shows now (folded branches included; the archive only while it is open).
   const shownIds = [...listed, ...(archiveShown ? archived : [])].map((entry) => entry.id)
   const allPickedArchived = selecting && pickedIds.every((id) => threads.find((entry) => entry.id === id)?.archived)
@@ -248,7 +262,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
   }
 
   return <>
-    {hasAutomation ? (
+    {activePage.hasAutomation ? (
       <SegmentedControl
         size="xs"
         fullWidth
@@ -260,14 +274,17 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
         ariaLabel={t({ ko: '채팅 종류', en: 'Chat kind' })}
         items={[
           { value: 'chats', label: t({ ko: '대화', en: 'Chats' }) },
-          { value: 'automation', label: <>{t({ ko: '자동화', en: 'Automation' })} <span className="tabular-nums text-muted-foreground">{formatNumber(automationCount)}</span></> },
+          { value: 'automation', label: t({ ko: '자동화', en: 'Automation' }) },
         ]}
       />
     ) : null}
+    {query.trim() ? <p className="px-3 py-1 text-xs text-muted-foreground">{t({ ko: '방 이름 · 캐릭터', en: 'Rooms · characters' })}</p> : null}
     {section(listed)}
-    {archived.length > 0 ? <>
-      {foldRow('archive', archiveShown, () => setArchiveOpen((current) => !current), <Archive className="size-3.5" />, t({ ko: '보관된 채팅', en: 'Archived chats' }), archived.length)}
-      {archiveShown ? section(archived) : null}
+    {parents.isError ? <Button variant="ghost" size="xs" onClick={() => void parents.refetch()}>{t({ ko: '분기 원본 다시 불러오기', en: 'Retry branch parents' })}</Button> : null}
+    <ChatRoomPageMore page={activePage} />
+    {hasArchive ? <>
+      {foldRow('archive', archiveShown, () => setArchiveOpen((current) => !current), <Archive className="size-3.5" />, t({ ko: '보관된 채팅', en: 'Archived chats' }))}
+      {archiveShown ? <>{section(archived)}<ChatRoomPageMore page={archivePage} /></> : null}
     </> : null}
     {selecting ? (
       <div className="sticky bottom-2 z-10 mx-1 mt-2 flex items-center gap-0.5 rounded-lg border border-line bg-surface-high py-1 pl-3 pr-1 shadow-[var(--elevation-2)]">

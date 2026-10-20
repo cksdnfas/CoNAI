@@ -4,7 +4,7 @@ import { ChatProposalStore } from './chatProposals'
 import { attachFileChanges } from './chatFileChanges'
 import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibilityService'
 import { audioCandidatesByQueueJob, audioOrderGroupsByQueueJob } from '../audio/audioJobCandidates'
-import type { CodexChatMessageRecord } from './codexChatStore'
+import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord } from './codexChatStore'
 import { ChatDeferredGenerationStore } from './chatDeferredGenerations'
 
 export type CodexChatMediaSource = 'generated' | 'found'
@@ -283,8 +283,9 @@ const OUTCOME_LOOKBACK_MESSAGES = 40
  * told once in the next turn's input, tracked in the sent keys as `outcome:<job id>`. Jobs of the recent replies only;
  * running jobs wait for a later turn.
  */
-export function pendingGenerationOutcomes(threadId: number, messages: CodexChatMessageRecord[], sent: ReadonlySet<string>) {
-  const recent = messages.filter((message) => message.role === 'assistant').slice(-OUTCOME_LOOKBACK_MESSAGES)
+export function pendingGenerationOutcomes(threadId: number, messages: CodexChatMessageRecord[], sent: ReadonlySet<string>, history?: { source: ChatHistorySource; before?: number; speakerId?: number }) {
+  const recent = history ? CodexChatStore.listOutcomeMessages(history.source, OUTCOME_LOOKBACK_MESSAGES, history.before, history.speakerId)
+    : messages.filter((message) => message.role === 'assistant').slice(-OUTCOME_LOOKBACK_MESSAGES)
   const replyIds = new Set(recent.map((message) => message.routing?.replyId).filter((id): id is string => Boolean(id)))
   const linked = replyIds.size
     ? (getUserSettingsDb().prepare('SELECT job_id, reply_id FROM chat_generation_links WHERE thread_id = ?').all(threadId) as Array<{ job_id: number; reply_id: string }>)

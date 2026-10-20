@@ -87,6 +87,11 @@ export interface WildcardWithHierarchy extends WildcardWithItems {
   parent?: Wildcard;
 }
 
+export interface WildcardSummary extends Wildcard {
+  item_counts: Record<WildcardTool, number>;
+  children?: WildcardSummary[];
+}
+
 /**
  * Wildcard Model
  * user-settings.db의 wildcards 테이블 관리
@@ -408,6 +413,36 @@ export class WildcardModel {
       const children = WildcardModel.findHierarchy(wildcard.id);
       return { ...wildcard, items, children: children.length > 0 ? children : undefined };
     });
+  }
+
+  /** Browsing projection: aggregate counts in SQL without reading any item content. */
+  static findHierarchySummary(): WildcardSummary[] {
+    const db = getUserSettingsDb();
+    const rows = db.prepare(`
+      SELECT w.*, COALESCE(c.general_count, 0) AS general_count,
+        COALESCE(c.nai_count, 0) AS nai_count, COALESCE(c.comfyui_count, 0) AS comfyui_count
+      FROM wildcards w
+      LEFT JOIN (
+        SELECT wildcard_id, SUM(tool = 'general') AS general_count,
+          SUM(tool = 'nai') AS nai_count, SUM(tool = 'comfyui') AS comfyui_count
+        FROM wildcard_items GROUP BY wildcard_id
+      ) c ON c.wildcard_id = w.id
+      ORDER BY w.name
+    `).all() as Array<Wildcard & { general_count: number; nai_count: number; comfyui_count: number }>;
+    const nodes = rows.map(({ general_count, nai_count, comfyui_count, ...wildcard }): WildcardSummary => ({
+      ...wildcard, item_counts: { general: general_count, nai: nai_count, comfyui: comfyui_count },
+    }));
+    const byId = new Map(nodes.map(node => [node.id, node]));
+    const roots: WildcardSummary[] = [];
+    for (const node of nodes) {
+      if (node.parent_id === null) {
+        roots.push(node);
+      } else {
+        const parent = byId.get(node.parent_id);
+        if (parent) (parent.children ??= []).push(node);
+      }
+    }
+    return roots;
   }
 
   /**

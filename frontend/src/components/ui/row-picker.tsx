@@ -33,7 +33,7 @@ function PickerRow({ item, compact = false }: { item: RowPickerItem; compact?: b
  * A field that picks one row out of a list of faces (rooms, characters, workflows). Closed it shows the picked row;
  * open, a search box over the list. Arrow keys move, Enter picks. Sits inside a field frame, so it has no surface of its own.
  */
-export function RowPicker({ items, value, onChange, placeholder, searchPlaceholder, emptyLabel, disabled, ariaLabel }: {
+export function RowPicker({ items, value, onChange, placeholder, searchPlaceholder, emptyLabel, disabled, ariaLabel, onSearchChange, onOpenChange, footer, pickedItem }: {
   items: RowPickerItem[]
   value: string
   onChange: (id: string) => void
@@ -42,6 +42,11 @@ export function RowPicker({ items, value, onChange, placeholder, searchPlacehold
   emptyLabel: string
   disabled?: boolean
   ariaLabel: string
+  /** Remote lists own filtering and can append a page/retry control without forking the picker. */
+  onSearchChange?: (query: string) => void
+  onOpenChange?: (open: boolean) => void
+  footer?: ReactNode
+  pickedItem?: RowPickerItem
 }) {
   const { t } = useI18n()
   const listId = useId()
@@ -49,11 +54,11 @@ export function RowPicker({ items, value, onChange, placeholder, searchPlacehold
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const listRef = useRef<HTMLDivElement>(null)
-  const picked = items.find((item) => item.id === value)
+  const picked = items.find((item) => item.id === value) ?? pickedItem
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase()
-    return needle ? items.filter((item) => item.searchText.toLowerCase().includes(needle)) : items
-  }, [items, query])
+    return needle && !onSearchChange ? items.filter((item) => item.searchText.toLowerCase().includes(needle)) : items
+  }, [items, query, onSearchChange])
 
   useEffect(() => {
     if (!open) return
@@ -64,12 +69,16 @@ export function RowPicker({ items, value, onChange, placeholder, searchPlacehold
     onChange(id)
     setOpen(false)
     setQuery('')
+    onSearchChange?.('')
+    onOpenChange?.(false)
   }
 
   return (
     <Popover open={open} onOpenChange={(next) => {
       setOpen(next)
       setQuery('')
+      onSearchChange?.('')
+      onOpenChange?.(next)
       // Opening starts on the picked row.
       if (next) setActive(Math.max(0, items.findIndex((item) => item.id === value)))
     }}>
@@ -98,6 +107,7 @@ export function RowPicker({ items, value, onChange, placeholder, searchPlacehold
             value={query}
             onChange={(event) => {
               setQuery(event.target.value)
+              onSearchChange?.(event.target.value)
               setActive(0)
             }}
             placeholder={searchPlaceholder}
@@ -143,6 +153,7 @@ export function RowPicker({ items, value, onChange, placeholder, searchPlacehold
               </div>
             )
           })}
+          {footer}
         </div>
       </PopoverContent>
     </Popover>

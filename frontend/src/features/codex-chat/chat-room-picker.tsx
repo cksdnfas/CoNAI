@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Chip } from '@/components/ui/chip'
 import { RowPicker, type RowPickerItem } from '@/components/ui/row-picker'
 import { useI18n } from '@/i18n'
@@ -7,6 +7,8 @@ import type { ChatProfileSummary, CodexChatThreadSummary } from '@/lib/api-codex
 import { GroupAvatarStack } from './chat-group'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { parseServerDate } from '@/lib/server-time'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
+import { ChatRoomPageMore, useChatRoomPages, useChatRoomSummaries } from './use-chat-room-directory'
 
 /** A room's name as the chat list gives it: its title, else the character it talks to. */
 export function chatRoomName(thread: Pick<CodexChatThreadSummary, 'id' | 'title' | 'profile_id'>, profilesById: ReadonlyMap<number, ChatProfileSummary>, untitled: string) {
@@ -40,14 +42,21 @@ export function ChatRoomFace({ thread, profilesById, size = 'md', ringClassName 
 }
 
 /** Pick one chat room by its face, its people and its latest line (pinned first, then the latest activity). */
-export function ChatRoomPicker({ threads, profilesById, value, onChange, disabled }: {
-  threads: CodexChatThreadSummary[]
+export function ChatRoomPicker({ profilesById, value, onChange, disabled, kind }: {
   profilesById: ReadonlyMap<number, ChatProfileSummary>
   value: string
   onChange: (threadId: string) => void
   disabled?: boolean
+  kind?: 'direct' | 'group'
 }) {
   const { t, formatDate } = useI18n()
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const query = useDebouncedValue(search)
+  const page = useChatRoomPages({ archive: 'all', pinnedFirst: true, kind, query }, open)
+  const selected = useChatRoomSummaries(value ? [Number(value)] : [], !page.rooms.some((room) => String(room.id) === value))
+  const threads = useMemo(() => [...page.rooms, ...(selected.data ?? []).filter((room) => !page.rooms.some((loaded) => loaded.id === room.id))], [page.rooms, selected.data])
+  const pageIds = new Set(page.rooms.map((room) => String(room.id)))
   const items = useMemo<RowPickerItem[]>(() => {
     const untitled = t({ ko: '새 채팅', en: 'New chat' })
     const today = new Date()
@@ -79,7 +88,8 @@ export function ChatRoomPicker({ threads, profilesById, value, onChange, disable
   }, [formatDate, profilesById, t, threads])
   return (
     <RowPicker
-      items={items}
+      items={items.filter((item) => pageIds.has(item.id))}
+      pickedItem={items.find((item) => item.id === value)}
       value={value}
       onChange={onChange}
       disabled={disabled}
@@ -87,6 +97,9 @@ export function ChatRoomPicker({ threads, profilesById, value, onChange, disable
       placeholder={t({ ko: '채팅방 고르기', en: 'Pick a room' })}
       searchPlaceholder={t({ ko: '방 찾기', en: 'Find a room' })}
       emptyLabel={t({ ko: '맞는 방 없음', en: 'No matching room' })}
+      onOpenChange={setOpen}
+      onSearchChange={setSearch}
+      footer={<ChatRoomPageMore page={page} />}
     />
   )
 }
