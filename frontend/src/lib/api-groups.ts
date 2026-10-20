@@ -150,19 +150,35 @@ export async function updateGroup(groupId: number, input: Partial<GroupMutationI
   return response.data
 }
 
-export async function deleteGroup(groupId: number, options?: { cascade?: boolean }) {
-  const searchParams = new URLSearchParams()
-  if (options?.cascade) {
-    searchParams.set('cascade', 'true')
-  }
-
-  const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
-  const response = await fetchJson<ApiResponse<GroupMutationMessage>>(`/api/groups/${groupId}${suffix}`, {
-    method: 'DELETE',
+/** Delete groups in one transaction; without `cascade` their child groups move to the top level. */
+export async function deleteGroups(groupIds: number[], options?: { cascade?: boolean }) {
+  const response = await fetchJson<ApiResponse<{ deleted: number; missing_ids: number[] }>>('/api/groups/bulk-delete', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ids: groupIds, cascade: options?.cascade === true }),
   })
 
   if (!response.success) {
     throw createApiFallbackError(response.error, 'groups.delete')
+  }
+
+  return response.data
+}
+
+/** Move groups under one parent (`null`: top level); an invalid move cancels the whole batch. */
+export async function moveGroups(groupIds: number[], parentId: number | null) {
+  const response = await fetchJson<ApiResponse<{ moved: number }>>('/api/groups/bulk-move', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ids: groupIds, parent_id: parentId }),
+  })
+
+  if (!response.success) {
+    throw createApiFallbackError(response.error, 'groups.update')
   }
 
   return response.data

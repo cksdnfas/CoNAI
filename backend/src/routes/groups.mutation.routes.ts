@@ -4,7 +4,7 @@ import { GroupModel, ImageGroupModel } from '../models/Group';
 import { GroupRematchJobService } from '../services/groupRematchJobService';
 import { GroupCreateData, GroupUpdateData, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
-import { createCustomGroup, GroupMutationError, updateCustomGroup } from '../services/groupMutationService';
+import { createCustomGroup, deleteCustomGroups, GroupMutationError, moveCustomGroups, updateCustomGroup } from '../services/groupMutationService';
 import { getRequesterAccountId } from './requester-session-helpers';
 
 const router = Router();
@@ -95,6 +95,36 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     const errorMessage = error instanceof Error ? error.message : 'Failed to update group';
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
     return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
+router.post('/bulk-delete', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { ids, cascade } = req.body ?? {};
+    const result = deleteCustomGroups(ids, cascade === true);
+    if (result.deleted === 0) {
+      return res.status(404).json(errorResponse('Group not found'));
+    }
+    return res.json(successResponse({ deleted: result.deleted, missing_ids: result.missing }));
+  } catch (error) {
+    if (error instanceof GroupMutationError) {
+      return sendRouteBadRequest(res, error.message);
+    }
+    console.error('Error deleting groups:', error);
+    return res.status(500).json(errorResponse('Failed to delete groups'));
+  }
+}));
+
+router.post('/bulk-move', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { ids, parent_id } = req.body ?? {};
+    return res.json(successResponse(moveCustomGroups(ids, parent_id ?? null, getRequesterAccountId(req))));
+  } catch (error) {
+    if (error instanceof GroupMutationError) {
+      return sendRouteBadRequest(res, error.message);
+    }
+    console.error('Error moving groups:', error);
+    return res.status(500).json(errorResponse('Failed to move groups'));
   }
 }));
 

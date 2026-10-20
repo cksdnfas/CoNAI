@@ -11,6 +11,7 @@ import { canvasToBlob } from './engine/raster'
 import { DEFAULT_TEXT_STYLE } from './engine/text'
 import { EditorShell } from './ui/editor-shell'
 import { useEditorShortcuts } from './ui/use-editor-shortcuts'
+import { useImageEditorChatPage } from './use-image-editor-chat-page'
 
 export type ImageEditorResult = {
   /** Every visible layer merged, PNG at document size. */
@@ -175,15 +176,18 @@ function ImageEditorSurface({ sourceUrl, sourceFileName, maskUrl, enableMaskEdit
 
   useOverlayBackClose({ open: true, onClose: requestClose })
 
+  /** Resolves true once onSave finished; a connected chat's reviewed save reports false as a failure. */
   const handleSave = useCallback(async () => {
-    if (!engine || savingRef.current || engine.getSnapshot().status !== 'ready') return
+    if (!engine || savingRef.current || engine.getSnapshot().status !== 'ready') return false
     savingRef.current = true
     setSaving(true)
     try {
       const result = await engine.export()
       await onSave(result)
+      return true
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '편집 결과를 저장하지 못했어', en: 'Could not save the edit' }), tone: 'error' })
+      return false
     } finally {
       savingRef.current = false
       setSaving(false)
@@ -203,6 +207,9 @@ function ImageEditorSurface({ sourceUrl, sourceFileName, maskUrl, enableMaskEdit
   }, [])
 
   useEditorShortcuts({ open: true, engine, rootRef, maskEnabled: enableMaskEditing, onRequestClose: requestClose, onSave: () => void handleSave(), onCopy: handleCopy })
+
+  const fileName = sourceFileName ?? t({ ko: '이미지', en: 'Image' })
+  useImageEditorChatPage({ engine, snapshot, fileName, saving, save: handleSave })
 
   // Paste: our own copy goes back where it came from; anything else arrives centred as a floating piece.
   useEffect(() => {
@@ -235,7 +242,7 @@ function ImageEditorSurface({ sourceUrl, sourceFileName, maskUrl, enableMaskEdit
         snapshot={snapshot}
         stageRef={stageRef}
         rootRef={rootRef}
-        fileName={sourceFileName ?? t({ ko: '이미지', en: 'Image' })}
+        fileName={fileName}
         maskEnabled={enableMaskEditing}
         saving={saving}
         onRequestClose={requestClose}

@@ -47,7 +47,7 @@ function renderGroupIcon(group: GroupWithHierarchy) {
 }
 
 /** Keep the groups whose name matches plus every ancestor of a match; also return those ancestors to expand. */
-function filterGroupsByName(groups: GroupWithHierarchy[], filterText: string) {
+export function filterGroupsByName(groups: GroupWithHierarchy[], filterText: string) {
   const query = filterText.trim().toLocaleLowerCase()
   if (!query) {
     return { visibleGroups: groups, expandedIds: EMPTY_IDS }

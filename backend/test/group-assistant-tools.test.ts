@@ -86,12 +86,13 @@ test('group assistant tools: rules, page actions and MCP group create/update/run
 
   await t.test('group page actions are registered for /groups only', async () => {
     const { chatPageActionAllowed, normalizeChatPageActions, CHAT_PAGE_ACTION_PERMISSIONS } = await import('@conai/shared')
-    for (const id of ['group.select', 'group.create', 'group.update', 'group.auto_collect']) {
+    for (const id of ['group.select', 'group.create', 'group.update', 'group.auto_collect', 'group.move', 'group.delete']) {
       assert.equal(chatPageActionAllowed('/groups', id), true)
       assert.equal(chatPageActionAllowed('/groups/12', id), true)
       assert.equal(chatPageActionAllowed('/prompts', id), false)
     }
     assert.equal(CHAT_PAGE_ACTION_PERMISSIONS['group.create'], 'images.edit')
+    assert.equal(CHAT_PAGE_ACTION_PERMISSIONS['group.delete'], 'images.delete')
     const schema = { type: 'object' as const, properties: { name: { type: 'string' as const } }, required: ['name'] }
     assert.equal(normalizeChatPageActions('/groups', [{ id: 'group.create', label: 'Create', description: '', effect: 'save', schema }]).length, 1)
     assert.throws(() => normalizeChatPageActions('/groups', [{ id: 'group.create', label: 'Create', description: '', effect: 'draft', schema }]))
@@ -121,6 +122,26 @@ test('group assistant tools: rules, page actions and MCP group create/update/run
       assert.equal((await send('PUT', `${base}/${id}`, { description: 'changed' })).status, 200)
       assert.equal((await send('PUT', `${base}/${id}`, { parent_id: id })).status, 400, 'self parent')
       assert.equal((await send('PUT', `${base}/999999`, { description: 'missing' })).status, 404)
+
+      // Bulk move / delete: one transaction each; child groups survive a delete unless cascade is picked.
+      const { GroupModel } = await import('../src/models/Group')
+      const parent = (await send('POST', base, { name: 'Bulk parent' })).body.data!.id!
+      const child = (await send('POST', base, { name: 'Bulk child', parent_id: parent })).body.data!.id!
+      const other = (await send('POST', base, { name: 'Bulk other' })).body.data!.id!
+      const loose = (await send('POST', base, { name: 'Bulk loose' })).body.data!.id!
+      assert.equal((await send('POST', `${base}/bulk-move`, { ids: [other], parent_id: child })).status, 200)
+      assert.equal((await send('POST', `${base}/bulk-move`, { ids: [loose, parent], parent_id: other })).status, 400, 'a group cannot move under its own descendant')
+      assert.equal(GroupModel.findById(loose)!.parent_id, null, 'a failed batch moves nothing')
+      assert.equal((await send('POST', `${base}/bulk-delete`, { ids: [] })).status, 400)
+      const kept = await send('POST', `${base}/bulk-delete`, { ids: [parent] })
+      assert.equal(kept.status, 200)
+      assert.equal((kept.body.data as { deleted?: number }).deleted, 1)
+      assert.equal(GroupModel.findById(child)!.parent_id, null, 'children move to the top level by default')
+      assert.equal(GroupModel.findById(other)!.parent_id, child)
+      const cascaded = await send('POST', `${base}/bulk-delete`, { ids: [child, other, loose], cascade: true })
+      assert.equal((cascaded.body.data as { deleted?: number }).deleted, 3, 'a selected descendant is deleted once')
+      assert.equal(GroupModel.findById(other), null)
+      assert.equal((await send('POST', `${base}/bulk-delete`, { ids: [child] })).status, 404)
     } finally {
       await new Promise((resolve) => listener.close(resolve))
     }
@@ -174,5 +195,23 @@ test('group assistant tools: rules, page actions and MCP group create/update/run
 
     assert.equal((await call('update_image_group', { group_id: parent.data.group_id, auto_collect_enabled: true })).isError, true, 'enabling needs rules')
     assert.equal((await call('update_image_group', { group_id: parent.data.group_id })).isError, true, 'nothing to update')
+  })
+
+  await t.test('MCP moves groups and deletes them only by their confirmed names', async () => {
+    const top = await call('create_image_group', { name: 'Cleanup' })
+    const inner = await call('create_image_group', { name: 'Inner', parent_path: 'Cleanup' })
+    const loose = await call('create_image_group', { name: 'Loose' })
+    const moved = await call('move_image_groups', { group_ids: [loose.data.group_id], parent_path: 'Cleanup' })
+    assert.equal(moved.isError, false, moved.text)
+    assert.equal(moved.data.groups[0].path, 'Cleanup/Loose')
+
+    assert.equal((await call('delete_image_groups', { group_ids: [top.data.group_id], confirm_names: ['Clean'] })).isError, true, 'a wrong name is refused')
+    const deleted = await call('delete_image_groups', { group_ids: [top.data.group_id], confirm_names: ['Cleanup'] })
+    assert.equal(deleted.isError, false, deleted.text)
+    assert.equal(deleted.data.deleted, 1)
+    assert.equal((await call('get_image_group', { group_id: inner.data.group_id })).data.path, 'Inner', 'children move to the top level by default')
+
+    const cascade = await call('delete_image_groups', { group_ids: [inner.data.group_id, loose.data.group_id], confirm_names: ['Inner', 'Loose'], cascade: true })
+    assert.equal(cascade.data.deleted, 2)
   })
 })

@@ -7,6 +7,7 @@ export type {
   ChatMessageUpdatedEventPayload,
   ChatReactionCreatedEventPayload,
   GraphExecutionEventPayload,
+  GraphExecutionProgressEventPayload,
   GraphScheduleEventPayload,
   HistoryRecordEventPayload,
   QueueJobEventPayload,

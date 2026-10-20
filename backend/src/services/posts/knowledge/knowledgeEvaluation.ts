@@ -7,7 +7,7 @@ import { askJudge, choiceQuestion, isJudgeConnectionReady, resolveJudgeConnectio
 import { TypesafeError } from '../../judge/typesafeClient';
 import { LlmRequestError } from '../../llmRequestRetry';
 import { inBackground } from '../../llmRequestScheduler';
-import { subscribeToRuntimeEvents } from '../../runtime-events/runtimeEventBus';
+import { publishRuntimeEvent, subscribeToRuntimeEvents } from '../../runtime-events/runtimeEventBus';
 import { RuntimeJobRunner, type RuntimeJobContext } from '../../runtimeJobs/runtimeJobRunner';
 import { insertKnowledgeAssessment } from '../knowledgeAssessment';
 import { assertKnowledgeSourceVisibility, normalizeKnowledgeSources, requireKnowledgeRow } from '../knowledgeStore';
@@ -31,6 +31,11 @@ type EvaluationRow = {
   failure_diagnostic_json:string|null;failure_diagnostic_expires_at:string|null;
 };
 const rowById = (id:string) => db().prepare('SELECT * FROM post_evaluation_requests WHERE id = ?').get(id) as EvaluationRow|undefined;
+/**
+ * A request changed state: the post's open evaluation list refetches (kind 'run' touches only evaluation keys).
+ * Like `list()`, only the requester and administrators may learn the request exists.
+ */
+const announce = (row:Pick<EvaluationRow,'post_id'|'requester_account_id'>) => publishRuntimeEvent({name:'posts.changed',topic:'posts',visibility:'account',accountId:row.requester_account_id,payload:{postId:row.post_id,kind:'run'}});
 function canManage(actor:PostActor,row:EvaluationRow) {
   return actor.profileId === null && (actor.origin ?? 'human') === 'human' && (actor.isAdmin || row.requester_account_key === knowledgeAccountKey(actor.accountId));
 }
@@ -100,6 +105,7 @@ export const KnowledgeEvaluationStore = {
     if(['queued','running'].includes(row.status)) {
       db().prepare("UPDATE post_evaluation_requests SET status='cancelled',reason_code='cancelled',lease_token=NULL,lease_until=NULL,finished_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('queued','running')").run(id);
       if(row.runtime_job_id) RuntimeJobRunner.cancel(row.runtime_job_id);
+      announce(row);
     }
     return publicRequest(actor,rowById(id)!);
   },
@@ -345,11 +351,18 @@ const POST_TITLE_CAP=200;
 /** Recover request leases independently of the short-lived runtime job log. */
 export function recoverKnowledgeEvaluationRequests():number {
   const settings=loadPostsSettings().knowledge;
-  return db().prepare(`UPDATE post_evaluation_requests SET status=CASE WHEN attempts-retry_base_attempt<=? THEN 'queued' ELSE 'failed' END,
+  const recovered=db().prepare(`UPDATE post_evaluation_requests SET status=CASE WHEN attempts-retry_base_attempt<=? THEN 'queued' ELSE 'failed' END,
     reason_code=CASE WHEN attempts-retry_base_attempt<=? THEN 'lease_recovered' ELSE 'retry_exhausted' END,lease_token=NULL,lease_until=NULL,runtime_job_id=NULL,
     retry_after=NULL,updated_at=CURRENT_TIMESTAMP,finished_at=CASE WHEN attempts-retry_base_attempt>? THEN CURRENT_TIMESTAMP ELSE NULL END
-    WHERE status='running' AND (lease_until IS NULL OR datetime(lease_until)<=datetime('now'))`)
-    .run(settings.maxRetries,settings.maxRetries,settings.maxRetries).changes;
+    WHERE status='running' AND (lease_until IS NULL OR datetime(lease_until)<=datetime('now'))
+    RETURNING post_id,requester_account_id`)
+    .all(settings.maxRetries,settings.maxRetries,settings.maxRetries) as Array<Pick<EvaluationRow,'post_id'|'requester_account_id'>>;
+  const announced=new Set<string>();
+  for(const row of recovered) {
+    const key=`${row.post_id}:${row.requester_account_id}`;
+    if(!announced.has(key)) {announced.add(key);announce(row);}
+  }
+  return recovered.length;
 }
 
 export function pruneKnowledgeEvaluationEvidence():void {
@@ -379,10 +392,12 @@ export function kickKnowledgeEvaluationQueue():void {
       const claimed=db().prepare("UPDATE post_evaluation_requests SET status='running',attempts=attempts+1,lease_token=?,lease_until=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='queued'")
         .run(lease,new Date(Date.now()+LEASE_MS).toISOString(),id);
       if(!claimed.changes) continue;
+      const row=rowById(id);
       try {
-        const job=RuntimeJobRunner.start('post-knowledge-evaluation',{requestId:id,lease},{requestedByAccountId:rowById(id)?.requester_account_id,total:1});
+        const job=RuntimeJobRunner.start('post-knowledge-evaluation',{requestId:id,lease},{requestedByAccountId:row?.requester_account_id,total:1});
         db().prepare("UPDATE post_evaluation_requests SET runtime_job_id=? WHERE id=? AND lease_token=?").run(job.jobId,id,lease);
       } catch {transition(id,lease,'queued','runtime_dispatch_retry');}
+      if(row) announce(row);
     }
   } finally {draining=false;}
 }
@@ -390,7 +405,8 @@ export function kickKnowledgeEvaluationQueue():void {
 export function registerKnowledgeEvaluationHandler():void {
   RuntimeJobRunner.register<{requestId:string;lease:string},unknown>({kind:'post-knowledge-evaluation',singletonKey:params=>`post-evaluation:${params.requestId}`,handler:async ctx=>{
     ctx.flush({total:1,phase:'evaluate',currentLabel:ctx.params.requestId});
-    const result=await evaluateRequest(ctx),status=rowById(ctx.params.requestId)?.status;
+    const result=await evaluateRequest(ctx),row=rowById(ctx.params.requestId),status=row?.status;
+    if(row) announce(row);
     ctx.flush({processed:1,succeeded:status==='completed'?1:0,failed:status==='failed'?1:0,skipped:status==='skipped'||status==='cancelled'?1:0,phase:'finished'});
     return result;
   }});

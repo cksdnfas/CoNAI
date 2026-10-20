@@ -179,10 +179,8 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
   const isTextInputScope = isTextInputSearchScope(searchScope)
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-medium text-foreground">{t('groups.components.auto.collect.chip.editor.auto.collect.conditions')}</p>
-
+    <div className="space-y-3">
+      <div className="flex justify-end">
         <SegmentedControl
           value={mode}
           items={[
@@ -254,7 +252,8 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
 
           <SearchChipList
             chips={chips}
-            emptyMessage={t('groups.components.auto.collect.chip.editor.no.condition.chips.yet')}
+            title={null}
+            emptyMessage={null}
             onCycleOperator={(chipId) => {
               setChips((current) => current.map((item) => (item.id === chipId ? { ...item, operator: cycleSearchOperator(item.operator) } : item)))
             }}

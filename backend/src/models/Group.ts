@@ -148,6 +148,23 @@ export class GroupModel {
     return db.transaction(() => this.deleteInTransaction(id, cascade))();
   }
 
+  /**
+   * 여러 그룹을 한 트랜잭션으로 삭제한다. 하위 그룹 처리는 단건 삭제와 같다.
+   * @returns deleted: 실제로 지워진 그룹 수(cascade로 함께 지워진 하위 그룹 포함), missing: 처음부터 없던 ID
+   */
+  static deleteMany(ids: number[], cascade: boolean = false): { deleted: number; missing: number[] } {
+    return db.transaction(() => {
+      const countGroups = () => (db.prepare('SELECT COUNT(*) AS count FROM groups').get() as { count: number }).count;
+      const before = countGroups();
+      const missing = ids.filter((id) => !this.findById(id));
+      for (const id of ids) {
+        // 앞서 cascade로 지운 상위 그룹과 함께 이미 사라졌을 수 있다.
+        if (this.findById(id)) this.deleteInTransaction(id, cascade);
+      }
+      return { deleted: before - countGroups(), missing };
+    })();
+  }
+
   private static deleteInTransaction(id: number, cascade: boolean): boolean {
     if (!cascade) {
       // 하위 그룹은 루트로 올라간다. 루트 이름도 고유(대소문자 무시)하므로 충돌하면 접미사로 비켜 준다.

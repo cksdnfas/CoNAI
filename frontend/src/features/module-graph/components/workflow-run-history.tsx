@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Check, Loader2, RotateCcw, Square, X } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
+import { useStreamFallbackInterval } from '@/features/runtime-events/use-runtime-event-stream'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
@@ -104,12 +105,13 @@ export function WorkflowActiveRunCard({
   const { canExecuteGeneration } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
   const isRunning = execution.status === 'running'
-  // Progress polling needs only node event flags, not artifacts, IO, or full logs.
+  // Progress needs only node event flags, not artifacts, IO, or full logs. `graph.execution.progress` refetches it; polling is the stream fallback.
+  const progressInterval = useStreamFallbackInterval(isRunning ? 3_000 : false)
   const detailQuery = useQuery({
     queryKey: ['module-graph-execution-progress', execution.id],
     queryFn: ({ signal }) => getGraphExecutionProgress(execution.id, signal),
     enabled: isRunning,
-    refetchInterval: isRunning ? 3_000 : false,
+    refetchInterval: progressInterval,
   })
   const progress = useMemo(() => buildNodeProgress(detailQuery.data, selectedGraph, nodeLabelOverrides), [detailQuery.data, nodeLabelOverrides, selectedGraph])
   const doneCount = progress.filter((node) => node.state === 'done').length

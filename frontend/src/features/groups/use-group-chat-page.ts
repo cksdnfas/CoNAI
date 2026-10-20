@@ -27,16 +27,18 @@ interface GroupChatPageInput {
   createGroup: (input: GroupMutationInput) => Promise<unknown>
   updateGroup: (groupId: number, input: GroupMutationInput) => Promise<unknown>
   runAutoCollect: (groupId: number) => Promise<unknown>
+  moveGroups: (groupIds: number[], parentId: number | null) => Promise<unknown>
+  deleteGroups: (groupIds: number[], cascade: boolean) => Promise<unknown>
 }
 
 function rulesArgument(value: ChatPageData | undefined) {
   return value === undefined ? undefined : value as unknown as GroupAutoCollectRule[]
 }
 
-/** Chat connection for the group page: view controls plus reviewed group create/edit/auto-collect actions. */
+/** Chat connection for the group page: view controls plus reviewed group create/edit/move/delete/auto-collect actions. */
 export function useGroupChatPage(input: GroupChatPageInput) {
   const { t } = useI18n()
-  const { canAssignGroups } = useImagePermissions()
+  const { canAssignGroups, canDeleteImages } = useImagePermissions()
   const canReadImages = useChatPageDataPermissions().canReadImages
   const { isCustomSource, groups, selectedGroup } = input
   const editable = isCustomSource && canAssignGroups
@@ -59,6 +61,12 @@ export function useGroupChatPage(input: GroupChatPageInput) {
       ...(editable && selected ? [pageAction('group.update', t({ ko: '선택 그룹 수정', en: 'Edit selected group' }), t({ ko: '선택한 그룹의 이름·설명·자동수집을 바꿔. 준 필드만 바뀌고, auto_collect_rules는 규칙 전체를 교체해. 저장하면 자동수집을 다시 돌려. {help}', en: 'Edit the selected group. Only given fields change; auto_collect_rules replaces every rule. Saving re-runs auto-collect. {help}' }, { help: ruleHelp }), pageObject({
         id: pageChoice([selected.id]), name: pageText(200), description: pageText(2000), auto_collect_enabled: pageBoolean, auto_collect_rules: rulesSchema,
       }, ['id']), 'save')] : []),
+      ...(editable && groupIds.length ? [pageAction('group.move', t({ ko: '그룹 옮기기', en: 'Move groups' }), t({ ko: '목록의 그룹들을 다른 그룹 아래로 옮겨. parent_id 0은 최상위야. 안의 이미지와 하위 그룹도 같이 옮겨져.', en: 'Move listed groups under another group; parent_id 0 means top level. Images and child groups move along.' }), pageObject({
+        ids: pageArray(pageChoice(groupIds), 100, 1), parent_id: pageChoice([0, ...groupIds]),
+      }, ['ids', 'parent_id']), 'save')] : []),
+      ...(isCustomSource && canDeleteImages && groupIds.length ? [pageAction('group.delete', t({ ko: '그룹 삭제', en: 'Delete groups' }), t({ ko: '사용자가 지우라고 한 그룹만 삭제해. 이미지는 지워지지 않고 소속만 풀려. cascade가 true면 하위 그룹도 지우고, 아니면 하위 그룹은 최상위로 올라가.', en: 'Delete only the groups the person asked to delete. Images stay; only memberships go. cascade true also deletes child groups; otherwise they move to the top level.' }), pageObject({
+        ids: pageArray(pageChoice(groupIds), 100, 1), cascade: pageBoolean,
+      }, ['ids']), 'save')] : []),
       ...(editable && selected?.auto_collect_enabled ? [pageAction('group.auto_collect', t({ ko: '자동수집 다시 실행', en: 'Run auto-collect' }), t({ ko: '선택한 그룹의 자동수집을 한 번 더 돌려.', en: 'Run auto-collect again for the selected group.' }), pageObject({ id: pageChoice([selected.id]) }, ['id']), 'save')] : []),
     ] : [],
     data: {
@@ -90,6 +98,14 @@ export function useGroupChatPage(input: GroupChatPageInput) {
           auto_collect_enabled: Boolean(rules?.length),
           auto_collect_conditions: rules?.length ? buildGroupAutoCollectFilter(rules) : undefined,
         })
+        return
+      }
+      if (id === 'group.move' || id === 'group.delete') {
+        const requested = new Set((Array.isArray(args.ids) ? args.ids : []).map(Number))
+        const ids = groups.filter((group) => requested.has(group.id)).map((group) => group.id)
+        if (ids.length !== requested.size || ids.length === 0) throw new Error('목록에 없는 그룹이 있어. 다시 요청해줘.')
+        if (id === 'group.move') await input.moveGroups(ids, Number(args.parent_id) || null)
+        else await input.deleteGroups(ids, args.cascade === true)
         return
       }
       if (!selected || Number(args.id) !== selected.id) throw new Error('선택한 그룹이 바뀌었어. 다시 요청해줘.')

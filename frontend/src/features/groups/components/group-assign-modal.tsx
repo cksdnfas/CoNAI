@@ -1,14 +1,40 @@
-import { Folder, FolderOpen } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { HierarchyPicker } from '@/components/common/hierarchy-picker'
+import { useQueryClient } from '@tanstack/react-query'
+import { LoaderCircle, Plus } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
-import { Tip } from '@/components/ui/tooltip'
-import { buildGroupCountMaps, getGroupHierarchyCountDescription, getGroupHierarchyCountLabel } from '@/features/groups/group-count-utils'
+import { Input } from '@/components/ui/input'
+import { Modal, ModalBody } from '@/components/ui/modal'
+import { buildGroupCountMaps } from '@/features/groups/group-count-utils'
 import { buildGroupOptionItems } from '@/features/groups/group-option-utils'
+import { createGroup, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import type { GroupWithHierarchy } from '@/types/group'
 import { useI18n } from '@/i18n'
+import { GroupColorDot } from './group-color-dot'
+import { GroupLocationPicker } from './group-location-picker'
+import { GroupModalFooter } from './group-modal-parts'
+
+const RECENT_GROUPS_KEY = 'conai:groups:recent-assign:v1'
+const RECENT_GROUP_LIMIT = 5
+
+/** Groups images were last added to, newest first (this browser only). */
+function readRecentGroupIds(): number[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(RECENT_GROUPS_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((id): id is number => Number.isInteger(id)) : []
+  } catch {
+    return []
+  }
+}
+
+function rememberRecentGroup(groupId: number) {
+  const next = [groupId, ...readRecentGroupIds().filter((id) => id !== groupId)].slice(0, RECENT_GROUP_LIMIT)
+  try {
+    window.localStorage.setItem(RECENT_GROUPS_KEY, JSON.stringify(next))
+  } catch {
+    // Storage off (private mode): the recent list just stays empty.
+  }
+}
 
 interface GroupAssignModalProps {
   open: boolean
@@ -22,14 +48,21 @@ interface GroupAssignModalProps {
 export function GroupAssignModal({
   open,
   groups,
+  selectedCount,
   isSubmitting = false,
   onClose,
   onSubmit,
 }: GroupAssignModalProps) {
   const { t, formatNumber } = useI18n()
+  const queryClient = useQueryClient()
   const groupOptions = useMemo(() => buildGroupOptionItems(groups), [groups])
-  const { childCountByGroupId, totalImageCountByGroupId } = useMemo(() => buildGroupCountMaps(groups), [groups])
-  const [selectedGroupId, setSelectedGroupId] = useState('')
+  const countMaps = useMemo(() => buildGroupCountMaps(groups), [groups])
+  const groupById = useMemo(() => new Map(groups.map((group) => [group.id, group] as const)), [groups])
+  const [recentIds, setRecentIds] = useState<number[]>([])
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null)
+  // null: the "new group" field is closed.
+  const [newGroupName, setNewGroupName] = useState<string | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -37,68 +70,103 @@ export function GroupAssignModal({
       return
     }
 
-    setSelectedGroupId(groupOptions[0] ? String(groupOptions[0].id) : '')
+    const storedRecentIds = readRecentGroupIds()
+    setRecentIds(storedRecentIds)
+    setSelectedGroupId(storedRecentIds.find((id) => groupById.has(id)) ?? groupOptions[0]?.id ?? null)
+    setNewGroupName(null)
     setFormError(null)
-  }, [groupOptions, open])
+  }, [groupById, groupOptions, open])
+
+  const recentGroups = recentIds.flatMap((id) => groupById.get(id) ?? [])
+  const selectedGroup = selectedGroupId === null ? undefined : groupById.get(selectedGroupId)
+  const busy = isSubmitting || isCreating
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!selectedGroupId) {
+    if (selectedGroupId === null) {
       setFormError(t('groups.components.group.assign.modal.choose.a.group.to.assign.first'))
       return
     }
 
     setFormError(null)
-    await onSubmit(Number(selectedGroupId))
+    await onSubmit(selectedGroupId)
+    rememberRecentGroup(selectedGroupId)
+  }
+
+  // Make a top-level group with the typed name and add the images to it in one go.
+  const handleCreateAndAdd = async () => {
+    const name = newGroupName?.trim()
+    if (!name) {
+      return
+    }
+
+    setFormError(null)
+    setIsCreating(true)
+    let createdId: number
+    try {
+      createdId = (await createGroup({ name })).id
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : String(error))
+      return
+    } finally {
+      setIsCreating(false)
+    }
+
+    await queryClient.invalidateQueries({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY })
+    await onSubmit(createdId)
+    rememberRecentGroup(createdId)
   }
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={t('groups.components.group.assign.modal.add.selected.images.to.a.group')}
-      widthClassName="max-w-xl"
+      appearance="card"
+      title={t({ ko: '그룹에 추가', en: 'Add to group' })}
+      description={t({ ko: '{count}장', en: '{count} images' }, { count: formatNumber(selectedCount) })}
+      widthClassName="max-w-md"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
-        {formError ? (
-          <Alert variant="destructive">
-            <AlertTitle>{t('groups.components.group.assign.modal.confirmation.required')}</AlertTitle>
-            <AlertDescription>{formError}</AlertDescription>
-          </Alert>
-        ) : null}
+        <ModalBody className="space-y-3">
+          {formError ? (
+            <Alert variant="destructive">
+              <AlertTitle>{t('groups.components.group.assign.modal.confirmation.required')}</AlertTitle>
+              <AlertDescription>{formError}</AlertDescription>
+            </Alert>
+          ) : null}
 
-        <ModalBody className="space-y-5">
-          {groupOptions.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">{t('groups.components.group.assign.modal.target.group')}</p>
-              <HierarchyPicker
-                items={groups}
-                selectedId={selectedGroupId ? Number(selectedGroupId) : null}
-                onSelect={(group) => setSelectedGroupId(String(group.id))}
-                getId={(group) => group.id}
-                getParentId={(group) => group.parent_id}
-                getLabel={(group) => {
-                  const countLabel = getGroupHierarchyCountLabel(group, { childCountByGroupId, totalImageCountByGroupId }, formatNumber)
-                  const countDescription = getGroupHierarchyCountDescription(group, { childCountByGroupId, totalImageCountByGroupId }, formatNumber, t)
-
-                  return (
-                    <div className="flex min-w-0 items-center justify-between gap-2">
-                      <span className="truncate">{group.name}</span>
-                      <Tip content={countDescription}>
-                        <span className="shrink-0 text-xs tabular-nums">
-                          <span aria-hidden="true">{countLabel}</span>
-                          <span className="sr-only">{countDescription}</span>
-                        </span>
-                      </Tip>
-                    </div>
-                  )
-                }}
-                sortItems={(left, right) => left.name.localeCompare(right.name)}
-                renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
-                showRootOption={false}
-              />
+          {recentGroups.length > 0 ? (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-muted-foreground">{t({ ko: '최근', en: 'Recent' })}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {recentGroups.map((group) => (
+                  <Button
+                    key={group.id}
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="max-w-48 rounded-full aria-pressed:bg-primary/12 aria-pressed:text-primary"
+                    aria-pressed={group.id === selectedGroupId}
+                    onClick={() => setSelectedGroupId(group.id)}
+                  >
+                    <GroupColorDot color={group.color} />
+                    <span className="truncate">{group.name}</span>
+                  </Button>
+                ))}
+              </div>
             </div>
+          ) : null}
+
+          {groupOptions.length > 0 ? (
+            <GroupLocationPicker
+              groups={groups}
+              value={selectedGroupId}
+              onChange={setSelectedGroupId}
+              allowRoot={false}
+              collapsible={false}
+              countMaps={countMaps}
+            />
           ) : (
             <Alert>
               <AlertTitle>{t('groups.components.group.assign.modal.no.groups')}</AlertTitle>
@@ -106,15 +174,48 @@ export function GroupAssignModal({
             </Alert>
           )}
 
-          <ModalFooter>
-            <Button type="button" variant="secondary" onClick={onClose} disabled={isSubmitting}>
-              {t({ ko: '취소', en: 'Cancel' })}
-            </Button>
-            <Button type="submit" disabled={isSubmitting || groupOptions.length === 0}>
-              {isSubmitting ? t('groups.components.group.assign.modal.adding') : t('groups.components.group.assign.modal.add.to.group')}
-            </Button>
-          </ModalFooter>
+          {newGroupName !== null ? (
+            <div className="flex items-center gap-2">
+              <Input
+                autoFocus
+                value={newGroupName}
+                onChange={(event) => setNewGroupName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void handleCreateAndAdd()
+                  }
+                }}
+                aria-label={t({ ko: '새 그룹 이름', en: 'New group name' })}
+                placeholder={t({ ko: '새 그룹 이름', en: 'New group name' })}
+                disabled={busy}
+              />
+              <Button type="button" onClick={() => void handleCreateAndAdd()} disabled={busy || !newGroupName.trim()}>
+                {isCreating ? <LoaderCircle className="animate-spin" /> : null}
+                {t({ ko: '만들어 넣기', en: 'Create & add' })}
+              </Button>
+            </div>
+          ) : null}
         </ModalBody>
+
+        <GroupModalFooter
+          busy={busy}
+          start={newGroupName === null ? (
+            <Button type="button" variant="ghost" onClick={() => setNewGroupName('')} disabled={busy}>
+              <Plus />
+              {t({ ko: '새 그룹', en: 'New group' })}
+            </Button>
+          ) : null}
+        >
+          <Button type="submit" className="max-w-56" disabled={busy || !selectedGroup}>
+            {isSubmitting ? <LoaderCircle className="animate-spin" /> : null}
+            <span className="truncate">
+              {selectedGroup
+                ? t({ ko: '‘{name}’에 추가', en: 'Add to ‘{name}’' }, { name: selectedGroup.name })
+                : t({ ko: '추가', en: 'Add' })}
+            </span>
+          </Button>
+        </GroupModalFooter>
       </form>
     </Modal>
   )

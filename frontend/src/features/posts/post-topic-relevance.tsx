@@ -11,6 +11,8 @@ import { useI18n } from '@/i18n'
 import { getErrorMessage } from '@/lib/error-message'
 import { POSTS_QUERY_KEY, getPostTopicEvaluation, requestPostTopicEvaluation } from '@/lib/api-posts'
 import { cn } from '@/lib/utils'
+import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
+import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { usePostPermissions } from './use-post-permissions'
 
 type Translate = ReturnType<typeof useI18n>['t']
@@ -73,6 +75,7 @@ export function PostTopicSummary({ value }: { value: PostTopicEvaluationView | u
 export function usePostTopicEvaluation(post: PostDetail) {
   const { t } = useI18n()
   const { viewerKey } = usePostPermissions()
+  const { status: streamStatus } = useRuntimeEventStream()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const command = useRef<{ hash: string; key: string; force: boolean } | null>(null)
@@ -80,7 +83,7 @@ export function usePostTopicEvaluation(post: PostDetail) {
   const query = useQuery({
     queryKey: key, queryFn: () => getPostTopicEvaluation(post.id), initialData: post.topicEvaluation,
     enabled: Boolean(post.topicEvaluation?.requestId || post.topicEvaluation?.canRequest),
-    refetchInterval: result => ['queued', 'running'].includes(result.state.data?.status ?? '') ? 5000 : false,
+    refetchInterval: result => resolveStreamFallbackInterval(streamStatus, ['queued', 'running'].includes(result.state.data?.status ?? '') ? 5000 : false),
   })
   const fetched = query.data?.contentHash === post.topicEvaluation?.contentHash ? query.data : post.topicEvaluation
   const value = fetched && (fetched.requestId || fetched.canRequest) && !post.knowledge?.deletedAt ? fetched : null

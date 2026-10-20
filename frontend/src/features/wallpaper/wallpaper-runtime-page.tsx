@@ -12,7 +12,8 @@ import { WallpaperDataEnvironmentContext } from './wallpaper-widget-data'
 import { useWallpaperHostState } from './wallpaper-host-bridge'
 import { applyWallpaperHostOverrides, resolveWallpaperHostOverrides, WALLPAPER_HOST_PRESETS_PARAM } from './wallpaper-host-package'
 import { useWallpaperPlayback } from './wallpaper-playback'
-import { resolveScheduledWallpaperPresetId, useWallpaperMinuteClock } from './wallpaper-schedule-utils'
+import { resolveScheduledWallpaperPresetId } from '@conai/shared'
+import { useWallpaperMinuteClock } from './wallpaper-schedule-utils'
 
 /** The server checks every read; the page itself may try to show library images. */
 const RUNTIME_IMAGE_PERMISSIONS = resolveImagePermissions(['images.view'], true)

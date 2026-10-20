@@ -16,6 +16,8 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
 import { SwitchLine } from '@/components/ui/switch-line'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
+import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { useI18n } from '@/i18n'
 import { listPlugins, pluginRequest, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { getErrorMessage } from '@/lib/error-message'
@@ -34,8 +36,9 @@ export function PluginManagement() {
   const auth = useAuthStatusQuery()
   const isAdmin = auth.data?.isAdmin === true
   const { showSnackbar } = useSnackbar()
-  // A server module comes up a moment after it is turned on: follow it until it is running or failed.
-  const plugins = useQuery({ queryKey: PLUGINS_QUERY_KEY, queryFn: listPlugins, refetchInterval: (query) => query.state.data?.some((plugin) => plugin.server?.state === 'starting') ? 1000 : false })
+  // A server module comes up a moment after it is turned on: `plugin.server.changed` follows it; polling is the stream fallback.
+  const { status: streamStatus } = useRuntimeEventStream()
+  const plugins = useQuery({ queryKey: PLUGINS_QUERY_KEY, queryFn: listPlugins, refetchInterval: (query) => resolveStreamFallbackInterval(streamStatus, query.state.data?.some((plugin) => plugin.server?.state === 'starting') ? 1000 : false) })
   const fileInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')

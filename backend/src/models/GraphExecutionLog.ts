@@ -1,6 +1,26 @@
 import { getUserSettingsDb } from '../database/userSettingsDb'
+import { publishGraphExecutionProgressEvent } from '../services/runtime-events/runtimeEventPublishers'
 import { GraphExecutionLogLevel, GraphExecutionLogRecord } from '../types/moduleGraph'
 import { chunkSqliteValues, sqliteInPlaceholders } from '../utils/sqliteBatch'
+
+/** Log events read by `findNodeProgress`; writing one tells open progress cards to refetch. */
+const NODE_PROGRESS_EVENT_TYPES = new Set(['node_engine_start', 'node_engine_complete', 'node_failure'])
+/** Node events of one execution coalesce into one hint per window so long or looping runs do not flood the replay buffer. */
+const PROGRESS_EVENT_WINDOW_MS = 500
+const pendingProgressExecutionIds = new Set<number>()
+let progressFlushTimer: NodeJS.Timeout | null = null
+
+function queueProgressEvent(executionId: number) {
+  pendingProgressExecutionIds.add(executionId)
+  if (progressFlushTimer) return
+  progressFlushTimer = setTimeout(() => {
+    progressFlushTimer = null
+    const executionIds = [...pendingProgressExecutionIds]
+    pendingProgressExecutionIds.clear()
+    for (const execution_id of executionIds) publishGraphExecutionProgressEvent({ execution_id })
+  }, PROGRESS_EVENT_WINDOW_MS)
+  progressFlushTimer.unref()
+}
 
 export class GraphExecutionLogModel {
   /** Only the event flags used by node progress; log messages and payloads stay in the detail view. */
@@ -50,6 +70,9 @@ export class GraphExecutionLogModel {
       data.details ?? null,
     )
 
+    if (data.node_id && NODE_PROGRESS_EVENT_TYPES.has(data.event_type)) {
+      queueProgressEvent(data.execution_id)
+    }
     return info.lastInsertRowid as number
   }
 

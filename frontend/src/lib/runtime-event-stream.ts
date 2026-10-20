@@ -40,10 +40,13 @@ const RUNTIME_EVENT_NAMES: readonly RuntimeEventName[] = [
   'job.status',
   'graph.schedule.changed',
   'graph.execution.status',
+  'graph.execution.progress',
   'posts.changed',
   'audio.changed',
   'workspace.changed',
   'plugin.draft.changed',
+  'plugin.server.changed',
+  'chat.routine.changed',
   'files.changed',
 ]
 

@@ -8,6 +8,8 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, cancelPostEvaluation, getPostsSettings, listPostEvaluations, requestPostEvaluation } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
+import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
+import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { usePostPermissions } from './use-post-permissions'
 
 const statusLabels: Record<PostEvaluationStatus, { ko: string; en: string }> = {
@@ -52,7 +54,8 @@ export function PostKnowledgeEvaluations({ post, empty }: { post: PostDetail; em
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const permissions = usePostPermissions()
-  const query = useQuery({ queryKey: [POSTS_QUERY_KEY, 'evaluations', permissions.viewerKey, post.id], queryFn: () => listPostEvaluations(post.id), refetchInterval: (current) => current.state.data?.some((item) => item.status === 'queued' || item.status === 'running') ? 5000 : false })
+  const { status: streamStatus } = useRuntimeEventStream()
+  const query = useQuery({ queryKey: [POSTS_QUERY_KEY, 'evaluations', permissions.viewerKey, post.id], queryFn: () => listPostEvaluations(post.id), refetchInterval: (current) => resolveStreamFallbackInterval(streamStatus, current.state.data?.some((item) => item.status === 'queued' || item.status === 'running') ? 5000 : false) })
   const cancel = useMutation({
     mutationFn: (requestId: string) => cancelPostEvaluation(post.id, requestId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),

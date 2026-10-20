@@ -32,10 +32,13 @@ export type RuntimeEventName =
   | 'history.record.status'
   | 'graph.schedule.changed'
   | 'graph.execution.status'
+  | 'graph.execution.progress'
   | 'job.status'
   | 'posts.changed'
   | 'workspace.changed'
   | 'plugin.draft.changed'
+  | 'plugin.server.changed'
+  | 'chat.routine.changed'
   | 'files.changed'
   | 'audio.changed'
 
@@ -175,6 +178,11 @@ export interface GraphExecutionEventPayload {
   status: string
   trigger_type: string
   schedule_id: number | null
+}
+
+/** A node of one execution started, finished or failed: only that run's progress card refetches. */
+export interface GraphExecutionProgressEventPayload {
+  execution_id: number
 }
 
 /**

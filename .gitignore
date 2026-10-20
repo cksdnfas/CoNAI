@@ -177,3 +177,6 @@ worker-results/
 
 # Personal plugin sources and their dedicated tests (not public examples)
 /local-plugins/
+
+# Design mockups (local reference only)
+/design/mockups/

@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import { CHAT_ROUTINE_LIMITS, type ChatRoutine, type ChatRoutineInput, type ChatRoutineLastResult, type ChatRoutineScheduleType, type ChatRoutineStatus, type ChatRoutineTarget } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
 import { resolveAutomationRunAs } from '../automationRunAs'
 import { AutomationSwitch } from '../automationSwitch'
 import { DEFAULT_SCHEDULE_TIMEZONE, followingRunAt, initialRunAt, parseDailyTime, resolveScheduleTimezone } from '../scheduleTiming'
@@ -103,7 +104,11 @@ export const ChatRoutineStore = {
   },
   update(id: number, patch: RoutinePatch) {
     const keys = (Object.keys(patch) as Array<keyof RoutinePatch>).filter((key) => patch[key] !== undefined)
-    if (keys.length) table().prepare(`UPDATE chat_routines SET ${keys.map((key) => `${key} = ?`).join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...keys.map((key) => patch[key] ?? null), id)
+    if (keys.length) {
+      table().prepare(`UPDATE chat_routines SET ${keys.map((key) => `${key} = ?`).join(', ')}, updated_at = datetime('now') WHERE id = ?`).run(...keys.map((key) => patch[key] ?? null), id)
+      // Routines are administrator-managed (the list route requires admin): 'account' with no account reaches administrators only.
+      publishRuntimeEvent({ name: 'chat.routine.changed', topic: 'generation-queue', visibility: 'account', accountId: null, payload: { routineId: id } })
+    }
     return ChatRoutineStore.find(id)
   },
   delete(id: number) {

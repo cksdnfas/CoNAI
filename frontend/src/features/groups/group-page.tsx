@@ -1,6 +1,12 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
-import { CheckCheck, FolderMinus, FolderPlus, Play, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { CheckCheck, FolderInput, FolderMinus, FolderPlus, ListChecks, Pencil, Play, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import type { ActionMenuEntry } from '@/components/ui/action-menu'
+import { SelectionActionBar } from '@/components/common/selection-action-bar'
+import { GroupDeleteDialog } from './components/group-delete-dialog'
+import { GroupManageView } from './components/group-manage-view'
+import { GroupMoveDialog } from './components/group-move-dialog'
+import type { GroupWithHierarchy } from '@/types/group'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ErrorState } from '@/components/ui/error-state'
@@ -56,6 +62,9 @@ export function GroupPage() {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [downloadScope, setDownloadScope] = useState<'group' | 'selection' | null>(null)
   const [groupImageCollectionFilter, setGroupImageCollectionFilter] = useState<GroupCollectionFilter>('all')
+  // Root view only: the checkable group list for deleting / moving many groups at once.
+  const [isManagingGroups, setIsManagingGroups] = useState(false)
+  const [managedGroupIds, setManagedGroupIds] = useState<number[]>([])
   const isWideLayout = useDesktopPageLayout()
   const selectedSourceKey = normalizeGroupSourceKey(searchParams.get('tab'))
   const selectedSource = groupSources[selectedSourceKey]
@@ -114,7 +123,8 @@ export function GroupPage() {
   const {
     createGroupMutation,
     updateGroupMutation,
-    deleteGroupMutation,
+    deleteGroupsMutation,
+    moveGroupsMutation,
     autoCollectMutation,
     autoCollectAllMutation,
     rebuildAutoFolderGroupsMutation,
@@ -129,7 +139,14 @@ export function GroupPage() {
     handleOpenCreateModal,
     handleOpenEditModal,
     handleSubmitGroup,
-    handleDeleteSelectedGroup,
+    openCreateSubgroup,
+    openEditGroup,
+    groupDialog,
+    openDeleteGroups,
+    openMoveGroups,
+    closeGroupDialog,
+    handleConfirmDeleteGroups,
+    handleConfirmMoveGroups,
     handleRunAutoCollect,
     handleRunAutoCollectAll,
     handleRebuildAutoFolderGroups,
@@ -148,7 +165,7 @@ export function GroupPage() {
     isCustomSource,
     selectedGroupId,
     selectedGroup: selectedGroupQuery.data,
-    selectedGroupHierarchy,
+    allGroups,
     selectedGroupCompositeHashes,
     assignableCustomGroupsState: {
       isPending: assignableCustomGroupsQuery.isPending,
@@ -159,6 +176,7 @@ export function GroupPage() {
     editorState,
     setEditorState,
     setSelectedGroupImageIds,
+    setManagedGroupIds,
     setIsAssignModalOpen,
     setDownloadScope,
     refreshCustomGroupQueries,
@@ -183,6 +201,8 @@ export function GroupPage() {
     createGroup: (input) => createGroupMutation.mutateAsync(input),
     updateGroup: (targetGroupId, input) => updateGroupMutation.mutateAsync({ groupId: targetGroupId, input }),
     runAutoCollect: (targetGroupId) => autoCollectMutation.mutateAsync(targetGroupId),
+    moveGroups: (ids, parentId) => moveGroupsMutation.mutateAsync({ ids, parentId }),
+    deleteGroups: (ids, cascade) => deleteGroupsMutation.mutateAsync({ ids, cascade }),
   })
 
   useEffect(() => {
@@ -190,7 +210,23 @@ export function GroupPage() {
     setIsAssignModalOpen(false)
     setDownloadScope(null)
     setGroupImageCollectionFilter('all')
+    setIsManagingGroups(false)
+    setManagedGroupIds([])
   }, [selectedGroupId, selectedSource.key])
+
+  const groupById = useMemo(() => new Map(allGroups.map((group) => [group.id, group] as const)), [allGroups])
+  const dialogGroups = (groupDialog?.ids ?? [])
+    .map((id) => groupById.get(id))
+    .filter((group): group is GroupWithHierarchy => group !== undefined)
+  const showManageView = isCustomSource && !selectedGroupId && isManagingGroups
+
+  const getGroupMenu = (group: GroupWithHierarchy): ActionMenuEntry[] => [
+    { key: 'edit', label: t({ ko: '편집', en: 'Edit' }), icon: Pencil, onSelect: () => openEditGroup(group) },
+    { key: 'subgroup', label: t({ ko: '하위 그룹 추가', en: 'Add subgroup' }), icon: FolderPlus, onSelect: () => openCreateSubgroup(group.id) },
+    { key: 'move', label: t({ ko: '다른 위치로 옮기기', en: 'Move to…' }), icon: FolderInput, onSelect: () => openMoveGroups([group.id]) },
+    '-',
+    canDeleteImages ? { key: 'delete', label: t({ ko: '그룹 삭제', en: 'Delete group' }), icon: Trash2, destructive: true, onSelect: () => openDeleteGroups([group.id]) } : null,
+  ]
 
   // Drag-out payload: the whole selection when the held tile is part of it, otherwise just that tile.
   const handleImageDragStart = useCallback((itemId: string, event: DragEvent) => {
@@ -228,6 +264,7 @@ export function GroupPage() {
       onSelectGroup={handleOpenGroup}
       onCreateGroup={isCustomSource ? handleOpenCreateModal : undefined}
       onDropImages={isCustomSource && isWideLayout ? handleDropImages : undefined}
+      getGroupMenu={isCustomSource ? getGroupMenu : undefined}
     />
   )
 
@@ -243,6 +280,18 @@ export function GroupPage() {
             disabled={autoCollectAllMutation.isPending}
           >
             <Play />
+          </IconButton>
+          <IconButton
+            label={isManagingGroups ? t({ ko: '그룹 관리 끝내기', en: 'Done managing groups' }) : t({ ko: '그룹 관리 (여러 개 삭제·이동)', en: 'Manage groups (delete or move many)' })}
+            variant="ghost"
+            size="icon-sm"
+            active={isManagingGroups}
+            onClick={() => {
+              setIsManagingGroups((current) => !current)
+              setManagedGroupIds([])
+            }}
+          >
+            <ListChecks />
           </IconButton>
           <IconButton label={t('groups.group.page.new.group')} variant="ghost" size="icon-sm" onClick={handleOpenCreateModal}>
             <Plus />
@@ -270,6 +319,7 @@ export function GroupPage() {
       rootLabel={rootLabel}
       countState={headerCountState}
       isCustomSource={isCustomSource}
+      canDelete={canDeleteImages}
       autoCollect={isCustomSource ? {
         enabled: Boolean(selectedGroupQuery.data.auto_collect_enabled),
         conditionCount: countAutoCollectConditions(selectedGroupQuery.data.auto_collect_conditions),
@@ -277,14 +327,15 @@ export function GroupPage() {
       compact={!isWideLayout}
       isAutoCollectPending={autoCollectMutation.isPending}
       isDownloadPending={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
-      isDeletePending={deleteGroupMutation.isPending}
+      isDeletePending={deleteGroupsMutation.isPending}
       onOpenRoot={handleOpenRoot}
       onOpenGroup={handleOpenGroup}
       onRunAutoCollect={() => void handleRunAutoCollect()}
       onCreateSubgroup={handleOpenCreateModal}
       onEdit={handleOpenEditModal}
       onDownload={handleOpenGroupDownloadModal}
-      onDelete={() => void handleDeleteSelectedGroup()}
+      onMove={() => openMoveGroups([selectedGroupId])}
+      onDelete={() => openDeleteGroups([selectedGroupId])}
     />
   ) : selectedGroupId ? (
     <PageToolbar />
@@ -302,10 +353,20 @@ export function GroupPage() {
       sidebarWidth={248}
       toolbar={groupHeader}
       // Leave room under the list for the fixed selection bar while it is up.
-      contentClassName={cn(selectedGroupImageIds.length > 0 && 'pb-24')}
+      contentClassName={cn((selectedGroupImageIds.length > 0 || (showManageView && managedGroupIds.length > 0)) && 'pb-24')}
     >
         <section className="min-w-0 space-y-5">
-          {!selectedGroupId ? (
+          {showManageView ? (
+            <GroupManageView
+              groups={allGroups}
+              countMaps={groupCountMaps}
+              selectedIds={managedGroupIds}
+              onSelectedIdsChange={setManagedGroupIds}
+              onOpenGroup={handleOpenGroup}
+            />
+          ) : null}
+
+          {!selectedGroupId && !showManageView ? (
             <GroupRootOverview
               groups={rootGroups}
               countMaps={groupCountMaps}
@@ -445,7 +506,9 @@ export function GroupPage() {
 
       <GroupDownloadModal
         open={downloadScope !== null}
-        title={downloadScope === 'selection' ? t('groups.group.page.download.selected.images') : t('groups.group.page.download.current.group')}
+        description={downloadScope === 'selection'
+          ? t({ ko: '선택한 {count}장', en: '{count} selected' }, { count: formatNumber(selectedGroupCompositeHashes.length) })
+          : selectedGroupQuery.data?.name}
         counts={activeDownloadCounts}
         isLoading={downloadScope === 'group' ? groupFileCountsQuery.isLoading : false}
         isDownloading={downloadGroupArchiveMutation.isPending}
@@ -472,7 +535,49 @@ export function GroupPage() {
           isSubmitting={createGroupMutation.isPending || updateGroupMutation.isPending}
           onClose={() => setEditorState(null)}
           onSubmit={handleSubmitGroup}
+          onDelete={editorState?.mode === 'edit' && canDeleteImages ? () => openDeleteGroups([editorState.group.id]) : undefined}
         />
+      ) : null}
+
+      {showManageView ? (
+        <SelectionActionBar
+          selectedCount={managedGroupIds.length}
+          summary={t({ ko: '그룹 {count}개 선택됨', en: '{count} groups selected' }, { count: formatNumber(managedGroupIds.length) })}
+          onClear={() => setManagedGroupIds([])}
+          responsiveActions
+          actions={(
+            <>
+              <SelectionBarAction icon={FolderInput} label={t({ ko: '다른 위치로 옮기기', en: 'Move to…' })} onClick={() => openMoveGroups(managedGroupIds)} />
+              {canDeleteImages ? (
+                <SelectionBarAction icon={Trash2} label={t({ ko: '선택한 그룹 삭제', en: 'Delete selected groups' })} variant="destructive" onClick={() => openDeleteGroups(managedGroupIds)} />
+              ) : null}
+            </>
+          )}
+        />
+      ) : null}
+
+      {isCustomSource ? (
+        <>
+          <GroupDeleteDialog
+            key={groupDialog?.kind === 'delete' ? `delete:${groupDialog.ids.join(',')}` : 'delete'}
+            open={groupDialog?.kind === 'delete' && dialogGroups.length > 0}
+            targets={dialogGroups}
+            allGroups={allGroups}
+            isDeleting={deleteGroupsMutation.isPending}
+            onClose={closeGroupDialog}
+            onConfirm={handleConfirmDeleteGroups}
+          />
+          <GroupMoveDialog
+            key={groupDialog?.kind === 'move' ? `move:${groupDialog.ids.join(',')}` : 'move'}
+            open={groupDialog?.kind === 'move' && dialogGroups.length > 0}
+            targets={dialogGroups}
+            allGroups={allGroups}
+            countMaps={groupCountMaps}
+            isMoving={moveGroupsMutation.isPending}
+            onClose={closeGroupDialog}
+            onConfirm={handleConfirmMoveGroups}
+          />
+        </>
       ) : null}
     </PageWithSidebar>
   )

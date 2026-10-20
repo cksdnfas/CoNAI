@@ -1,19 +1,17 @@
-import { Folder, FolderOpen } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { HierarchyPicker } from '@/components/common/hierarchy-picker'
+import { ChevronDown, LoaderCircle } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { EditorFooter } from '@/components/ui/editor-footer'
-import { EditorGroup } from '@/components/ui/editor-group'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Field } from '@/components/ui/field'
 import { Modal, ModalBody } from '@/components/ui/modal'
-import { SettingRow } from '@/components/ui/setting-row'
-import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
-import { AppearanceColorControl } from '@/features/settings/components/appearance-tab-editor-shared'
+import { buildGroupCountMaps, getGroupHierarchyTotalCount } from '@/features/groups/group-count-utils'
 import { collectDescendantGroupIds } from '@/features/groups/group-option-utils'
+import { getGroupPreviewImages } from '@/lib/api-groups'
 import type { GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import { AutoCollectChipEditor } from './auto-collect-chip-editor'
+import { GroupCoverMosaic } from './group-cover-mosaic'
+import { GroupLocationPicker } from './group-location-picker'
+import { GroupColorSwatches, GroupModalFooter, GroupModalRow, GroupModalSection, GroupModalSwitchRow } from './group-modal-parts'
 import { useI18n } from '@/i18n'
 
 interface GroupEditorModalProps {
@@ -25,6 +23,8 @@ interface GroupEditorModalProps {
   isSubmitting?: boolean
   onClose: () => void
   onSubmit: (input: GroupMutationInput) => Promise<void>
+  /** Edit mode: open the delete confirmation for this group. */
+  onDelete?: () => void
 }
 
 interface AutoCollectEditorState {
@@ -47,12 +47,15 @@ export function GroupEditorModal({
   isSubmitting = false,
   onClose,
   onSubmit,
+  onDelete,
 }: GroupEditorModalProps) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
+  // A new group starts with only name and location; the rest opens on demand.
+  const [showMore, setShowMore] = useState(false)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState('')
-  const [parentValue, setParentValue] = useState('root')
+  const [parentValue, setParentValue] = useState<number | null>(null)
   const [autoCollectEnabled, setAutoCollectEnabled] = useState(false)
   const [emoticonEnabled, setEmoticonEnabled] = useState(false)
   const [autoCollectEditorState, setAutoCollectEditorState] = useState<AutoCollectEditorState>({
@@ -72,7 +75,7 @@ export function GroupEditorModal({
     setName(group?.name ?? '')
     setDescription(group?.description ?? '')
     setColor(group?.color ?? '')
-    setParentValue(String(group?.parent_id ?? defaultParentId ?? 'root'))
+    setParentValue(group?.parent_id ?? defaultParentId ?? null)
     setAutoCollectEnabled(Boolean(group?.auto_collect_enabled))
     setEmoticonEnabled(Boolean(group?.emoticon_enabled))
     setAutoCollectInitialText(getInitialAutoCollectText(group))
@@ -82,6 +85,7 @@ export function GroupEditorModal({
       errorMessage: null,
     })
     setFormError(null)
+    setShowMore(false)
   }, [defaultParentId, group, open])
 
   const excludedParentIds = useMemo(() => {
@@ -128,7 +132,7 @@ export function GroupEditorModal({
       name: trimmedName,
       description: trimmedDescription || null,
       color: trimmedColor || null,
-      parent_id: parentValue === 'root' ? null : Number(parentValue),
+      parent_id: parentValue,
       auto_collect_enabled: autoCollectEnabled,
       auto_collect_conditions: autoCollectEditorState.parsedValue,
       emoticon_enabled: emoticonEnabled,
@@ -139,7 +143,7 @@ export function GroupEditorModal({
   }
 
   // Auto-collect conditions are left out: the chip editor re-serialises them, so comparing would flag untouched groups.
-  const initialParentValue = String(group?.parent_id ?? defaultParentId ?? 'root')
+  const initialParentValue = group?.parent_id ?? defaultParentId ?? null
   const dirty = open && (
     name !== (group?.name ?? '')
     || description !== (group?.description ?? '')
@@ -149,94 +153,118 @@ export function GroupEditorModal({
     || emoticonEnabled !== Boolean(group?.emoticon_enabled)
   )
   const canSave = !isSubmitting && (mode === 'create' || dirty || autoCollectEnabled)
-  const colorValue = /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(color.trim()) ? color.trim() : '#7c3aed'
+  const editedGroup = mode === 'edit' ? group : null
+  const showDetails = mode === 'edit' || showMore
+  const countMaps = useMemo(() => buildGroupCountMaps(groups), [groups])
+  const hierarchyGroup = editedGroup ? groups.find((candidate) => candidate.id === editedGroup.id) : undefined
+  const imageTotal = hierarchyGroup ? getGroupHierarchyTotalCount(hierarchyGroup, countMaps) : editedGroup?.image_count ?? 0
+  const childCount = editedGroup ? countMaps.childCountByGroupId.get(editedGroup.id) ?? 0 : 0
+  const summary = childCount > 0
+    ? t({ ko: '{images}장 · 하위 {children}', en: '{images} images · {children} subgroups' }, { images: formatNumber(imageTotal), children: formatNumber(childCount) })
+    : t({ ko: '{images}장', en: '{images} images' }, { images: formatNumber(imageTotal) })
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={mode === 'create' ? t('groups.components.group.editor.modal.custom.group') : t('groups.components.group.editor.modal.custom.groups.edit')}
-      size="normal"
-      height="tall"
+      appearance="card"
+      title={mode === 'create' ? t({ ko: '새 그룹', en: 'New group' }) : t({ ko: '그룹 편집', en: 'Edit group' })}
+      description={editedGroup ? summary : undefined}
+      leading={editedGroup ? (
+        <GroupCoverMosaic groupId={editedGroup.id} sourceKey="custom" imageCount={imageTotal} loadPreviewImages={getGroupPreviewImages} className="size-10 rounded-lg" />
+      ) : undefined}
+      widthClassName={showDetails ? 'max-w-lg' : 'max-w-md'}
       dirty={dirty}
       onSave={canSave ? () => formRef.current?.requestSubmit() : undefined}
     >
       <form ref={formRef} onSubmit={(event) => void handleSubmit(event)}>
-        {formError ? (
-          <Alert variant="destructive">
-            <AlertTitle>{t('groups.components.group.editor.modal.check.your.input')}</AlertTitle>
-            <AlertDescription>{formError}</AlertDescription>
-          </Alert>
-        ) : null}
-
         <ModalBody className="space-y-4">
-          <Field label={t('groups.components.group.editor.modal.group.name')}>
-            <Input variant="settings" value={name} onChange={(event) => setName(event.target.value)} placeholder={t('groups.components.group.editor.modal.e.g.concept.art.characters.favorites')} />
-          </Field>
+          {formError ? (
+            <Alert variant="destructive">
+              <AlertTitle>{t('groups.components.group.editor.modal.check.your.input')}</AlertTitle>
+              <AlertDescription>{formError}</AlertDescription>
+            </Alert>
+          ) : null}
 
-          <Field label={t('groups.components.group.editor.modal.description')}>
-            <Textarea
-              variant="settings"
-              rows={3}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
+          <div>
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              aria-label={t('groups.components.group.editor.modal.group.name')}
+              placeholder={t('groups.components.group.editor.modal.e.g.concept.art.characters.favorites')}
+              autoFocus={mode === 'create'}
+              className="h-11 rounded-lg text-base font-semibold"
             />
-          </Field>
+            {showDetails ? (
+              <textarea
+                rows={1}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                aria-label={t('groups.components.group.editor.modal.description')}
+                placeholder={t('groups.components.group.editor.modal.description')}
+                className="mt-1 block w-full resize-none rounded-sm bg-transparent px-3 py-1.5 text-sm text-foreground outline-none field-sizing-content placeholder:text-muted-foreground/70 focus:bg-field"
+              />
+            ) : null}
+          </div>
 
-          <EditorGroup label={t('groups.components.group.editor.modal.group.location')}>
-            <HierarchyPicker
-              items={parentGroups}
-              selectedId={parentValue === 'root' ? null : Number(parentValue)}
-              onSelectRoot={() => setParentValue('root')}
-              onSelect={(candidate) => setParentValue(String(candidate.id))}
-              getId={(candidate) => candidate.id}
-              getParentId={(candidate) => candidate.parent_id}
-              getLabel={(candidate) => candidate.name}
-              sortItems={(left, right) => left.name.localeCompare(right.name)}
-              renderIcon={(_, state) => (state.hasChildren ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
+          <GroupModalSection>
+            <GroupLocationPicker
+              label={t({ ko: '위치', en: 'Location' })}
+              groups={parentGroups}
+              pathGroups={groups}
+              value={parentValue}
+              onChange={setParentValue}
             />
-          </EditorGroup>
+            {showDetails ? (
+              <GroupModalRow label={t({ ko: '색', en: 'Color' })}>
+                <GroupColorSwatches value={color} onChange={setColor} />
+              </GroupModalRow>
+            ) : (
+              <GroupModalRow label={t({ ko: '추가 설정', en: 'More settings' })}>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={t({ ko: '추가 설정 펼치기', en: 'Show more settings' })} aria-expanded={false} onClick={() => setShowMore(true)}>
+                  <ChevronDown />
+                </Button>
+              </GroupModalRow>
+            )}
+          </GroupModalSection>
 
-          <EditorGroup>
-            <div>
-              <div className="border-b border-line">
-                <SettingsSwitchRow
+          {showDetails ? (
+            <GroupModalSection>
+              <div className="border-b border-line last:border-b-0">
+                <GroupModalSwitchRow
                   className="border-b-0"
-                  label={t('groups.components.group.editor.modal.filter.apply')}
+                  label={t({ ko: '자동수집', en: 'Auto-collect' })}
                   checked={autoCollectEnabled}
                   onCheckedChange={setAutoCollectEnabled}
                 />
                 {autoCollectEnabled ? (
-                  <div className="pb-4">
+                  <div className="pb-3">
                     <AutoCollectChipEditor initialJsonText={autoCollectInitialText} onChange={setAutoCollectEditorState} />
                   </div>
                 ) : null}
               </div>
-              <SettingsSwitchRow
-                label={t({ ko: 'LLM 이모티콘 그룹', en: 'LLM emoticon group' })}
+              <GroupModalSwitchRow
+                label={t({ ko: '채팅 이모티콘', en: 'Chat emoticons' })}
                 checked={emoticonEnabled}
                 onCheckedChange={setEmoticonEnabled}
               />
-              <SettingRow label={t('groups.components.group.editor.modal.accent.color')}>
-                <AppearanceColorControl
-                  ariaLabel={t('groups.components.group.editor.modal.accent.color')}
-                  colorValue={colorValue}
-                  textValue={color}
-                  placeholder="#7c3aed"
-                  onChangeColor={setColor}
-                  onChangeText={setColor}
-                />
-              </SettingRow>
-            </div>
-          </EditorGroup>
+            </GroupModalSection>
+          ) : null}
         </ModalBody>
 
-        <EditorFooter
-          saveSubmit
-          canSave={canSave}
-          saving={isSubmitting}
-          saveLabel={mode === 'create' ? t('groups.components.group.editor.modal.create.group') : t('groups.components.group.editor.modal.save.changes')}
-        />
+        <GroupModalFooter
+          busy={isSubmitting}
+          start={mode === 'edit' && onDelete ? (
+            <Button type="button" variant="destructive-ghost" onClick={onDelete} disabled={isSubmitting}>
+              {t({ ko: '그룹 삭제', en: 'Delete group' })}
+            </Button>
+          ) : null}
+        >
+          <Button type="submit" disabled={!canSave}>
+            {isSubmitting ? <LoaderCircle className="animate-spin" /> : null}
+            {mode === 'create' ? t({ ko: '만들기', en: 'Create' }) : t({ ko: '저장', en: 'Save' })}
+          </Button>
+        </GroupModalFooter>
       </form>
     </Modal>
   )

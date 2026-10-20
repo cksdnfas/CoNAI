@@ -1,11 +1,13 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useMutation } from '@tanstack/react-query'
+import { useState } from 'react'
 import { downloadAutoFolderGroupArchive, rebuildAutoFolderGroups } from '@/lib/api-auto-folder-groups'
 import {
   addImagesToGroup,
   createGroup,
-  deleteGroup,
+  deleteGroups,
   downloadGroupArchive,
+  moveGroups,
   removeImagesFromGroup,
   runAllGroupsAutoCollect,
   runGroupAutoCollect,
@@ -13,11 +15,15 @@ import {
 } from '@/lib/api-groups'
 import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
 import { deleteImagesBulk } from '@/lib/api-images'
-import type { GroupDownloadType, GroupMutationInput, GroupRecord } from '@/types/group'
+import type { GroupDownloadType, GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import type { GroupEditorState, GroupSourceDefinition } from './group-page-shared'
 import { useI18n } from '@/i18n'
 import { formatGroupBulkAddNotice, formatGroupBulkRemoveNotice } from './group-bulk-result-messages'
+import { collectGroupSubtreeIds } from './group-option-utils'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+
+/** The open group delete / move confirmation and the groups it acts on. */
+export type GroupBulkDialogState = { kind: 'delete' | 'move'; ids: number[] }
 
 /** Own mutation wiring and user-triggered action handlers for the group page. */
 export function useGroupPageActions({
@@ -27,12 +33,13 @@ export function useGroupPageActions({
   isCustomSource,
   selectedGroupId,
   selectedGroup,
-  selectedGroupHierarchy,
+  allGroups,
   selectedGroupCompositeHashes,
   assignableCustomGroupsState,
   editorState,
   setEditorState,
   setSelectedGroupImageIds,
+  setManagedGroupIds,
   setIsAssignModalOpen,
   setDownloadScope,
   refreshCustomGroupQueries,
@@ -44,7 +51,8 @@ export function useGroupPageActions({
   isCustomSource: boolean
   selectedGroupId: number | undefined
   selectedGroup: GroupRecord | undefined
-  selectedGroupHierarchy: { has_children?: boolean | null } | null
+  /** The whole custom group tree, to tell which groups a cascade delete removes. */
+  allGroups: GroupWithHierarchy[]
   selectedGroupCompositeHashes: string[]
   assignableCustomGroupsState: {
     isPending: boolean
@@ -55,14 +63,17 @@ export function useGroupPageActions({
   editorState: GroupEditorState | null
   setEditorState: (state: GroupEditorState | null) => void
   setSelectedGroupImageIds: (ids: string[]) => void
+  /** Groups checked in the management list. */
+  setManagedGroupIds: (ids: number[]) => void
   setIsAssignModalOpen: (open: boolean) => void
   setDownloadScope: (scope: 'group' | 'selection' | null) => void
-  refreshCustomGroupQueries: () => Promise<unknown>
+  refreshCustomGroupQueries: (options?: { skipGroupIds?: ReadonlySet<number> }) => Promise<unknown>
   refreshFolderGroupQueries: () => Promise<unknown>
 }) {
   const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
   const { canDeleteImages } = useImagePermissions()
+  const [groupDialog, setGroupDialog] = useState<GroupBulkDialogState | null>(null)
 
   const createGroupMutation = useMutation({
     mutationFn: createGroup,
@@ -89,15 +100,42 @@ export function useGroupPageActions({
     },
   })
 
-  const deleteGroupMutation = useMutation({
-    mutationFn: ({ groupId: targetGroupId, cascade }: { groupId: number; cascade: boolean }) => deleteGroup(targetGroupId, { cascade }),
-    onSuccess: async () => {
-      showSnackbar({ message: t('groups.use.group.page.actions.custom.group.deleted'), tone: 'info' })
-      await refreshCustomGroupQueries()
-      navigate('/groups?tab=custom')
+  const deleteGroupsMutation = useMutation({
+    mutationFn: ({ ids, cascade }: { ids: number[]; cascade: boolean }) => deleteGroups(ids, { cascade }),
+    onSuccess: async (result, variables) => {
+      const removedIds = variables.cascade ? collectGroupSubtreeIds(allGroups, variables.ids) : new Set(variables.ids)
+      setGroupDialog(null)
+      setManagedGroupIds([])
+      if (editorState?.mode === 'edit' && removedIds.has(editorState.group.id)) {
+        setEditorState(null)
+      }
+      showSnackbar({
+        message: variables.ids.length === 1 && result.deleted === 1
+          ? t('groups.use.group.page.actions.custom.group.deleted')
+          : t({ ko: '그룹 {count}개를 삭제했어.', en: '{count} groups deleted.' }, { count: formatNumber(result.deleted) }),
+        tone: 'info',
+      })
+      if (selectedGroupId && removedIds.has(selectedGroupId)) {
+        navigate('/groups?tab=custom')
+      }
+      // The deleted group's page stays mounted until the route change lands; refreshing its queries would refetch it (404).
+      await refreshCustomGroupQueries({ skipGroupIds: removedIds })
     },
     onError: (error) => {
       showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.failed.to.delete.the.custom.group'), tone: 'error' })
+    },
+  })
+
+  const moveGroupsMutation = useMutation({
+    mutationFn: ({ ids, parentId }: { ids: number[]; parentId: number | null }) => moveGroups(ids, parentId),
+    onSuccess: async (result) => {
+      setGroupDialog(null)
+      setManagedGroupIds([])
+      showSnackbar({ message: t({ ko: '그룹 {count}개를 옮겼어.', en: '{count} groups moved.' }, { count: formatNumber(result.moved) }), tone: 'info' })
+      await refreshCustomGroupQueries()
+    },
+    onError: (error) => {
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '그룹을 옮기지 못했어.', en: 'Failed to move the groups.' }), tone: 'error' })
     },
   })
 
@@ -248,15 +286,45 @@ export function useGroupPageActions({
     })
   }
 
+  const openCreateSubgroup = (parentId: number) => {
+    setEditorState({ mode: 'create', defaultParentId: parentId })
+  }
+
+  const openEditGroup = (group: GroupRecord) => {
+    setEditorState({ mode: 'edit', group })
+  }
+
   const handleOpenEditModal = () => {
     if (!selectedGroup || !isCustomSource) {
       return
     }
 
-    setEditorState({
-      mode: 'edit',
-      group: selectedGroup,
-    })
+    openEditGroup(selectedGroup)
+  }
+
+  const openGroupDialog = (kind: GroupBulkDialogState['kind'], ids: number[]) => {
+    if (ids.length === 0) return
+    // A group made elsewhere (another tab, an assistant) may be missing from the cached tree; the dialog opens once it loads.
+    if (ids.some((id) => !allGroups.some((group) => group.id === id))) {
+      void refreshCustomGroupQueries()
+    }
+    setGroupDialog({ kind, ids })
+  }
+
+  const openDeleteGroups = (ids: number[]) => openGroupDialog('delete', ids)
+
+  const openMoveGroups = (ids: number[]) => openGroupDialog('move', ids)
+
+  const closeGroupDialog = () => setGroupDialog(null)
+
+  const handleConfirmDeleteGroups = (cascade: boolean) => {
+    if (groupDialog?.kind !== 'delete' || deleteGroupsMutation.isPending) return
+    deleteGroupsMutation.mutate({ ids: groupDialog.ids, cascade })
+  }
+
+  const handleConfirmMoveGroups = (parentId: number | null) => {
+    if (groupDialog?.kind !== 'move' || moveGroupsMutation.isPending) return
+    moveGroupsMutation.mutate({ ids: groupDialog.ids, parentId })
   }
 
   const handleSubmitGroup = async (input: GroupMutationInput) => {
@@ -272,40 +340,6 @@ export function useGroupPageActions({
     await updateGroupMutation.mutateAsync({
       groupId: editorState.group.id,
       input,
-    })
-  }
-
-  const handleDeleteSelectedGroup = async () => {
-    if (!selectedGroup || !selectedGroupId || !isCustomSource) {
-      return
-    }
-
-    const hasChildren = Boolean(selectedGroupHierarchy?.has_children)
-    const confirmed = await confirm({
-      title: t({ ko: '그룹 삭제', en: 'Delete group' }),
-      description: hasChildren
-        ? t({ ko: '정말 {groupName} 그룹을 삭제할까? 하위 그룹은 기본적으로 루트로 올라가.', en: 'Delete the {groupName} group? Child groups will move to the root by default.' }, { groupName: selectedGroup.name })
-        : t({ ko: '정말 {groupName} 그룹을 삭제할까?', en: 'Delete the {groupName} group?' }, { groupName: selectedGroup.name }),
-      confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-      tone: 'destructive',
-    })
-    if (!confirmed) {
-      return
-    }
-
-    const cascade = hasChildren
-      ? await confirm({
-        title: t({ ko: '하위 그룹도 삭제할까?', en: 'Delete child groups too?' }),
-        description: t({ ko: '현재 그룹만 삭제하면 하위 그룹은 유지돼.', en: 'Deleting only the current group keeps its child groups.' }),
-        confirmLabel: t({ ko: '하위 그룹까지 삭제', en: 'Delete child groups too' }),
-        cancelLabel: t({ ko: '현재 그룹만 삭제', en: 'Delete only this group' }),
-        tone: 'destructive',
-      })
-      : false
-
-    await deleteGroupMutation.mutateAsync({
-      groupId: selectedGroupId,
-      cascade,
     })
   }
 
@@ -452,7 +486,8 @@ export function useGroupPageActions({
   return {
     createGroupMutation,
     updateGroupMutation,
-    deleteGroupMutation,
+    deleteGroupsMutation,
+    moveGroupsMutation,
     autoCollectMutation,
     autoCollectAllMutation,
     rebuildAutoFolderGroupsMutation,
@@ -468,7 +503,14 @@ export function useGroupPageActions({
     handleOpenCreateModal,
     handleOpenEditModal,
     handleSubmitGroup,
-    handleDeleteSelectedGroup,
+    openCreateSubgroup,
+    openEditGroup,
+    groupDialog,
+    openDeleteGroups,
+    openMoveGroups,
+    closeGroupDialog,
+    handleConfirmDeleteGroups,
+    handleConfirmMoveGroups,
     handleRunAutoCollect,
     handleRunAutoCollectAll,
     handleRebuildAutoFolderGroups,

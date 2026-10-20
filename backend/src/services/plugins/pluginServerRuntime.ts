@@ -1,7 +1,7 @@
 import { Worker } from 'worker_threads'
 import { CHAT_PAGE_LIMITS, type ChatPageValue, type PluginGenerationActionResult, type PluginServerStatus } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
-import { subscribeToRuntimeEvents } from '../runtime-events/runtimeEventBus'
+import { publishRuntimeEvent, subscribeToRuntimeEvents } from '../runtime-events/runtimeEventBus'
 import type { QueueJobEventPayload } from '../../types/runtimeEvents'
 import { AuthAccount } from '../../models/AuthAccount'
 import type { McpRequester, McpRequestContext } from '../../mcp/context'
@@ -48,6 +48,8 @@ type Server = {
 }
 const servers = new Map<string, Server>()
 let started = false
+/** A server state changed: plugin lists refetch. No plugin id, so disabled plugins stay hidden from non-administrators. */
+const announceServerState = () => publishRuntimeEvent({ name: 'plugin.server.changed', topic: 'plugins', visibility: 'all', payload: {} })
 let stopEvents: (() => void) | null = null
 
 // The worker's side: `conai` for the module, and the message loop. Plain CommonJS run with `eval`, so no build step
@@ -253,10 +255,12 @@ function onMessage(server: Server, message: Record<string, unknown>) {
   switch (message.type) {
     case 'ready':
       server.state = 'ready'; server.error = null
+      announceServerState()
       return
     case 'fatal':
       server.state = 'error'; server.error = String(message.error ?? '').split('\n')[0].slice(0, 500)
       console.warn(`[plugin:${server.pluginId}] server module failed:`, message.error)
+      announceServerState()
       void stopWorker(server)
       return
     case 'hook':
@@ -301,6 +305,7 @@ function startWorker(pluginId: string) {
   }
   servers.set(pluginId, server)
   Object.assign(server, { digest: plugin.digest, state: 'starting', error: null, stopping: false })
+  announceServerState()
   let worker: Worker
   try {
     worker = new Worker(BOOTSTRAP, {
@@ -311,6 +316,7 @@ function startWorker(pluginId: string) {
     })
   } catch (error) {
     server.state = 'error'; server.error = error instanceof Error ? error.message : String(error)
+    announceServerState()
     return
   }
   server.worker = worker
@@ -332,6 +338,7 @@ function startWorker(pluginId: string) {
     server.error ??= `종료 코드 ${code}`
     if (server.crashes.length < CRASH_LIMIT) server.restartTimer = setTimeout(() => { server.restartTimer = null; if (started && !server.stopping) syncPluginServer(pluginId) }, 1_000)
     else server.error = `여러 번 멈춰서 중지했어: ${server.error}`
+    announceServerState()
   })
 }
 
@@ -354,6 +361,7 @@ async function stopWorker(server: Server) {
     await worker.terminate().catch(() => undefined)
   }
   if (server.state !== 'error') server.state = 'off'
+  announceServerState()
 }
 
 /** Brings one plugin's server in line with its row: running when enabled with a module, at the installed digest. */

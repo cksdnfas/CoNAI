@@ -17,7 +17,8 @@ router.use((req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD') {
     allowImagesView(req, res, next);
   } else {
-    const permission = req.method === 'DELETE' && /^\/[^/]+$/.test(req.path) ? 'images.delete' : 'images.edit';
+    const deletesGroups = (req.method === 'DELETE' && /^\/[^/]+$/.test(req.path)) || (req.method === 'POST' && req.path === '/bulk-delete');
+    const permission = deletesGroups ? 'images.delete' : 'images.edit';
     requirePermission(permission)(req, res, next);
   }
 });

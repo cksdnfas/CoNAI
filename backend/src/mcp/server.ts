@@ -19,6 +19,7 @@ import { registerChatLinkedFileTools } from './tools/chatLinkedFileTools';
 import { registerChatSettingsTools } from './tools/chatSettingsTools';
 import { registerPostTools } from './tools/postTools';
 import { registerEmoticonTools } from './tools/emoticonTools';
+import { registerWallpaperTools } from './tools/wallpaperTools';
 import { registerChatRoomTools } from './tools/chatRoomTools';
 import { registerChatRoomListTools } from './tools/chatRoomListTools';
 import { registerChatLoreTools } from './tools/chatLoreTools';
@@ -105,6 +106,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   inCategory('posts', () => registerPostTools(server, context));
   inCategory('image_groups', () => registerImageGroupTools(server, context));
   inCategory('emoticons', () => registerEmoticonTools(server, context));
+  inCategory('wallpaper', () => registerWallpaperTools(server));
   inCategory('audio', () => {
     registerAudioTools(server, context);
     registerAudioGenerationTools(server, context);

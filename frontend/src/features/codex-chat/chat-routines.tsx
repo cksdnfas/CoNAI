@@ -19,6 +19,8 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
+import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { useI18n, type TranslationInput } from '@/i18n'
 import {
   AUTOMATION_SWITCH_QUERY_KEY, CHAT_ROUTINES_QUERY_KEY, createChatRoutine, deleteChatRoutine, getAutomationSwitch, listChatRoutines,
@@ -40,9 +42,10 @@ import { pageAction, pageChoice, pageNumber, pageObject, pageText } from './page
 
 type Translate = (input: TranslationInput, values?: Record<string, string | number>) => string
 
-/** Active routines change on their own (runs finish in the background): the list refreshes while one is on screen. */
+/** Active routines change on their own (runs finish in the background): `chat.routine.changed` refreshes the list; polling is the stream fallback. */
 export function useChatRoutines(enabled = true) {
-  return useQuery({ queryKey: CHAT_ROUTINES_QUERY_KEY, queryFn: listChatRoutines, enabled, refetchInterval: (query) => query.state.data?.some((routine) => routine.status === 'active') ? 10_000 : false, staleTime: 5_000 })
+  const { status: streamStatus } = useRuntimeEventStream()
+  return useQuery({ queryKey: CHAT_ROUTINES_QUERY_KEY, queryFn: listChatRoutines, enabled, refetchInterval: (query) => resolveStreamFallbackInterval(streamStatus, query.state.data?.some((routine) => routine.status === 'active') ? 10_000 : false), staleTime: 5_000 })
 }
 
 /** Rooms that have a routine (the chat list marks them); empty for accounts that cannot manage routines. */

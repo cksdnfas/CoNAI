@@ -174,6 +174,43 @@ test('content rating ceilings: what a model may be shown', { timeout: 60000 }, a
     assert.notEqual((await download(null)).find((item) => item.composite_hash === explicit)!.error, rating.CONTENT_RATING_BLOCKED)
   })
 
+  await t.test('library text (prompts, metadata) above the ceiling is hidden, the item kept', async () => {
+    const { createMcpServer } = await import('../src/mcp/server')
+    const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
+    const sensitive = await addMedia('d'.repeat(48), 10)
+    main.db.prepare("UPDATE media_metadata SET prompt = 'redaction probe', negative_prompt = 'neg', width = 16 WHERE composite_hash IN (?, ?)").run(safe, sensitive)
+    const call = async (contentRatingLimit: number | null, name: string, args: Record<string, unknown>) => {
+      const server = createMcpServer({ scopes: ['read'], requester: admin, contentRatingLimit })
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+      await server.connect(serverTransport)
+      const client = new Client({ name: 'test', version: '1.0.0' })
+      await client.connect(clientTransport)
+      try {
+        const result = await client.callTool({ name, arguments: args }) as { content: Array<{ text: string }> }
+        return JSON.parse(result.content[0].text)
+      } finally {
+        await client.close()
+        await server.close()
+      }
+    }
+    const limited = await call(teen, 'get_image_metadata', { composite_hash: sensitive })
+    assert.equal(limited.rating_restricted, true)
+    assert.equal(limited.composite_hash, sensitive)
+    assert.equal(limited.width, 16)
+    assert.doesNotMatch(JSON.stringify(limited), /redaction probe|"neg"/)
+    assert.equal((await call(teen, 'get_image_metadata', { composite_hash: safe })).prompt, 'redaction probe')
+    assert.equal((await call(null, 'get_image_metadata', { composite_hash: sensitive })).prompt, 'redaction probe')
+
+    const found = (await call(teen, 'search_images', { search_text: 'redaction probe' })).images as Array<{ composite_hash: string; prompt: string; rating_restricted?: boolean }>
+    assert.equal(found.length, 2, 'restricted items stay in the results')
+    const hidden = found.find((image) => image.composite_hash === sensitive)!
+    assert.equal(hidden.rating_restricted, true)
+    assert.notEqual(hidden.prompt, 'redaction probe')
+    const shown = found.find((image) => image.composite_hash === safe)!
+    assert.equal(shown.rating_restricted, undefined)
+    assert.equal(shown.prompt, 'redaction probe')
+  })
+
   await t.test('saving the tiers keeps their ids: ceilings follow renames and inserts; a deleted ceiling blocks all', async () => {
     const { RatingScoreService } = await import('../src/services/ratingScoreService')
     const before = RatingScoreModel.getAllTiers()

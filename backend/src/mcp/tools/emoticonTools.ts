@@ -15,7 +15,7 @@ import { FRAMES_PER_SHEET_DEFAULT, FRAMES_PER_SHEET_MAX, MEDIA_FRAMES_DEFAULT, M
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { CONTENT_RATING_BLOCKED, libraryMediaAllowed, storedFileAllowed } from '../../services/contentRating';
-import { contextContentLimit } from '../../services/codex-chat/chatContentRating';
+import { contextContentLimit, RATING_RESTRICTED_TEXT, ratingRestrictedHashes } from '../../services/codex-chat/chatContentRating';
 import type { McpRequestContext } from '../context';
 
 const VIEW_MAX_IMAGES = 6;
@@ -65,7 +65,7 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'list_emoticons',
-    { description: 'List the images of a custom group with their emoticon keywords. Keywords marked explicit=false come from the file name. Includes file name and top auto tags to help choose keywords; use view_images to look at the images.', inputSchema: z.object({
+    { description: 'List the images of a custom group with their emoticon keywords. Keywords marked explicit=false come from the file name. Includes file name and top auto tags to help choose keywords; use view_images to look at the images. Images above the content rating this model may be shown carry rating_restricted: true with their auto tags hidden.', inputSchema: z.object({
       group_id: groupIdSchema,
       group_path: groupPathSchema,
       offset: z.number().int().min(0).default(0),
@@ -76,17 +76,19 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
         const groupId = resolveGroup(group_id, group_path);
         const group = EmoticonService.findGroup(groupId);
         const entries = EmoticonService.listEntries(groupId);
+        const page = entries.slice(offset, offset + limit);
+        const restricted = ratingRestrictedHashes(context, page.map((entry) => entry.compositeHash));
         return textResult({
           group: { id: groupId, name: group?.name, emoticon_enabled: group?.emoticon_enabled === 1 },
           total: entries.length,
           offset,
-          entries: entries.slice(offset, offset + limit).map((entry) => ({
+          entries: page.map((entry) => ({
             composite_hash: entry.compositeHash,
             keywords: entry.keywords,
             explicit: entry.explicit,
             file_name: entry.fileName,
             mime_type: entry.mimeType,
-            tags: topTags(entry.compositeHash),
+            ...(restricted.has(entry.compositeHash) ? { tags: RATING_RESTRICTED_TEXT, rating_restricted: true } : { tags: topTags(entry.compositeHash) }),
           })),
         });
       } catch (error) {

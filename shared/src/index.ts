@@ -48,3 +48,4 @@ export * from './types/pluginAuthoring'
 export * from './types/loreTranslation'
 export * from './utils/pluginNativeApi'
 export * from './constants/generationLayout';
+export * from './utils/wallpaperSchedule';

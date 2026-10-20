@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, type ComponentProps, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PropsWithChildren, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, type ComponentProps, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PropsWithChildren, type ReactNode } from 'react'
 import { Dialog as DialogPrimitive } from 'radix-ui'
 import { X } from 'lucide-react'
 import { useOptionalConfirm } from './confirm-dialog'
@@ -16,6 +16,10 @@ interface ModalProps extends PropsWithChildren {
   description?: ReactNode
   headerContent?: ReactNode
   headerActions?: ReactNode
+  /** Visual before the title, e.g. a cover thumbnail. */
+  leading?: ReactNode
+  /** `card`: rounded surface card with a hairline edge and a quiet ✕ (the group dialogs). */
+  appearance?: 'default' | 'card'
   onClose: () => void
   /**
    * Width step: `narrow` (35rem) for a few fields, `normal` (48rem) for one-column editors, `wide` (64rem) for editors
@@ -86,6 +90,17 @@ function ModalOpenerCapture({ open, targetRef }: { open: boolean; targetRef: { c
   return null
 }
 
+const ModalRequestCloseContext = createContext<(() => void) | null>(null)
+
+/** Close the surrounding modal the way ✕ does: with unsaved edits it asks first. For Cancel buttons in the body. */
+function useModalRequestClose() {
+  const requestClose = useContext(ModalRequestCloseContext)
+  if (!requestClose) {
+    throw new Error('useModalRequestClose must be used inside a Modal')
+  }
+  return requestClose
+}
+
 /** Stop Radix from treating clicks/focus on body-portaled popups (or the backdrop) as a dismiss; the backdrop closes explicitly. */
 function preventOutsideDismiss(event: Event) {
   event.preventDefault()
@@ -102,7 +117,7 @@ function preventOutsideDismiss(event: Event) {
  * Esc closes only the top-most dialog, and only when nothing handled the keydown first (`defaultPrevented`), whether in
  * the capture phase (image editor) or in content bubble handlers (inputs that revert their draft on Esc).
  */
-function Modal({ open, title, description, headerContent, headerActions, onClose, size, widthClassName, closeOnBack = true, height = 'auto', dirty = false, onSave, sidePanelInset, children }: ModalProps) {
+function Modal({ open, title, description, headerContent, headerActions, leading, appearance = 'default', onClose, size, widthClassName, closeOnBack = true, height = 'auto', dirty = false, onSave, sidePanelInset, children }: ModalProps) {
   const fixedHeight = height !== 'auto'
   const { t } = useI18n()
   const confirm = useOptionalConfirm()
@@ -221,6 +236,8 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
   }, [])
 
   const hasTitle = title !== null && title !== undefined && title !== false && title !== ''
+  const isCard = appearance === 'card'
+  const body = <ModalRequestCloseContext.Provider value={requestClose}>{children}</ModalRequestCloseContext.Provider>
 
   return (
     <>
@@ -243,7 +260,7 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
               aria-label={hasTitle ? undefined : t({ ko: '대화 상자', en: 'Dialog' })}
               {...(description ? {} : { 'aria-describedby': undefined })}
               data-height={height}
-              className={cn('mx-auto flex max-h-full w-full flex-col rounded-sm bg-background shadow-elevation-3 outline-none', !fixedHeight && 'overflow-y-auto', height === 'medium' && 'h-full max-h-[min(100%,40rem)]', height === 'tall' && 'h-full max-h-[min(100%,64rem)]', widthClassName ?? (size ? SIZE_CLASS[size] : 'max-w-4xl'))}
+              className={cn('mx-auto flex max-h-full w-full flex-col shadow-elevation-3 outline-none', isCard ? 'rounded-xl border border-line bg-surface-low' : 'rounded-sm bg-background', !fixedHeight && 'overflow-y-auto', height === 'medium' && 'h-full max-h-[min(100%,40rem)]', height === 'tall' && 'h-full max-h-[min(100%,64rem)]', widthClassName ?? (size ? SIZE_CLASS[size] : 'max-w-4xl'))}
               onMouseDown={(event) => event.stopPropagation()}
               onKeyDown={handleContentKeyDown}
               onEscapeKeyDown={handleEscapeKeyDown}
@@ -251,9 +268,10 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
               onOpenAutoFocus={handleOpenAutoFocus}
               onCloseAutoFocus={handleCloseAutoFocus}
             >
-              <div className="sticky top-0 z-10 shrink-0 bg-background/96 px-4 pt-4 pb-2 backdrop-blur md:px-5">
+              <div className={cn('sticky top-0 z-10 shrink-0 px-4 pt-4 pb-2 backdrop-blur md:px-5', isCard ? 'rounded-t-xl bg-surface-low/96' : 'bg-background/96')}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1 space-y-1">
+                  {leading ? <div className="shrink-0">{leading}</div> : null}
+                  <div className={cn('min-w-0 flex-1', isCard ? 'space-y-0.5' : 'space-y-1')}>
                     <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
                       {title}
                       {dirty ? (
@@ -264,13 +282,13 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
                     </DialogPrimitive.Title>
                     {description ? (
                       <DialogPrimitive.Description asChild>
-                        <div className="text-sm text-muted-foreground">{description}</div>
+                        <div className={cn('text-muted-foreground', isCard ? 'truncate text-xs' : 'text-sm')}>{description}</div>
                       </DialogPrimitive.Description>
                     ) : null}
                   </div>
 
                   {headerActions}
-                  <IconButton size="icon-sm" variant="secondary" className="shrink-0" onClick={requestClose} label={t({ ko: '닫기', en: 'Close' })}>
+                  <IconButton size="icon-sm" variant={isCard ? 'ghost' : 'secondary'} className="shrink-0" onClick={requestClose} label={t({ ko: '닫기', en: 'Close' })}>
                     <X className="h-4 w-4" />
                   </IconButton>
                 </div>
@@ -281,10 +299,10 @@ function Modal({ open, title, description, headerContent, headerActions, onClose
               {fixedHeight ? (
                 // Footer pinning lives in index.css (`[data-slot="modal-scroll"]`).
                 <div data-slot="modal-scroll" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2 pb-4 md:px-5 md:pb-5">
-                  {children}
+                  {body}
                 </div>
               ) : (
-                <div className="px-4 pt-2 pb-4 md:px-5 md:pb-5">{children}</div>
+                <div className="px-4 pt-2 pb-4 md:px-5 md:pb-5">{body}</div>
               )}
             </DialogPrimitive.Content>
           </div>
@@ -304,4 +322,4 @@ function ModalFooter({ className, ...props }: ComponentProps<'div'>) {
   return <div data-slot="modal-footer" className={cn('flex flex-wrap items-center justify-end gap-2 pt-2', className)} {...props} />
 }
 
-export { Modal, ModalBody, ModalFooter }
+export { Modal, ModalBody, ModalFooter, useModalRequestClose }

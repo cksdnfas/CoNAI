@@ -16,6 +16,7 @@ export type ChatToolGroupId =
   | 'configure'
   | 'image-groups' | 'prompt-groups' | 'file-ops' | 'post-ops' | 'emoticon-ops' | 'audio-ops'
   | 'sprites' | 'sprite-ops'
+  | 'wallpaper' | 'wallpaper-ops'
   | 'web'
   | 'external'
   | 'plugins'
@@ -34,6 +35,7 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'backups', scope: 'read', label: { ko: '백업', en: 'Backups' } },
   { id: 'sprites', scope: 'read', label: { ko: '스프라이트', en: 'Sprite' } },
   { id: 'web', scope: 'read', label: { ko: '웹', en: 'Web' } },
+  { id: 'wallpaper', scope: 'read', label: { ko: '배경화면', en: 'Wallpaper' } },
   { id: 'image-gen', scope: 'generate', label: { ko: '이미지 생성', en: 'Image generation' } },
   { id: 'workflow-run', scope: 'generate', label: { ko: '워크플로 실행', en: 'Workflow runs' } },
   { id: 'audio-gen', scope: 'generate', label: { ko: '오디오 생성', en: 'Audio generation' } },
@@ -44,6 +46,7 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'post-ops', scope: 'organize', label: { ko: '게시판 글쓰기', en: 'Posting' } },
   { id: 'emoticon-ops', scope: 'organize', label: { ko: '이모티콘 설정', en: 'Emoticon setup' } },
   { id: 'audio-ops', scope: 'organize', label: { ko: '오디오 정리', en: 'Audio organizing' } },
+  { id: 'wallpaper-ops', scope: 'organize', label: { ko: '배경화면 전환', en: 'Wallpaper switching' } },
   { id: 'configure', scope: 'configure', label: { ko: '설정', en: 'Setup' } },
 ]
 
@@ -136,6 +139,8 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   move_images_between_groups: { group: 'image-groups', label: { ko: '그룹 간 이미지 이동', en: 'Move images between groups' }, ko: '이미지를 한 그룹에서 다른 그룹으로 옮겨.' },
   create_image_group: { group: 'image-groups', label: { ko: '그룹 만들기', en: 'Create group' }, ko: '새 그룹을 만들어. 자동수집 조건을 같이 넣으면 바로 모으기 시작해.' },
   update_image_group: { group: 'image-groups', label: { ko: '그룹 설정 바꾸기', en: 'Update group' }, ko: '그룹 이름·설명·색과 자동수집 조건을 바꿔.' },
+  move_image_groups: { group: 'image-groups', label: { ko: '그룹 옮기기', en: 'Move groups' }, ko: '그룹을 다른 그룹 아래나 최상위로 옮겨. 안의 이미지와 하위 그룹도 같이 가.' },
+  delete_image_groups: { group: 'image-groups', label: { ko: '그룹 삭제', en: 'Delete groups' }, ko: '그룹을 지워. 이미지는 지우지 않고, 하위 그룹은 기본적으로 최상위로 올려.' },
   run_group_auto_collect: { group: 'image-groups', label: { ko: '자동수집 다시 실행', en: 'Run auto-collect' }, ko: '자동수집이 켜진 그룹을 한 번 더 모아.' },
   remove_images_from_group: { group: 'image-groups', label: { ko: '그룹에서 이미지 빼기', en: 'Remove images from group' }, ko: '그룹 소속만 풀어. 파일은 지우지 않아.' },
   batch_create_groups: { group: 'prompt-groups', label: { ko: '프롬프트 그룹 만들기', en: 'Create prompt groups' }, ko: '프롬프트 그룹을 하나 또는 여러 개 만들어.' },
@@ -151,6 +156,9 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   restore_file_version: { group: 'file-ops', label: { ko: '이전 버전 되돌리기', en: 'Restore file version' }, ko: '보관함 텍스트 파일을 이전 버전으로 되돌려. 지금 내용은 버전으로 남아.' },
   set_emoticon_keywords: { group: 'emoticon-ops', label: { ko: '이모티콘 키워드 설정', en: 'Set emoticon keywords' }, ko: '그룹 안 이미지의 이모티콘 키워드를 정해.' },
   set_emoticon_group: { group: 'emoticon-ops', label: { ko: '이모티콘 그룹 지정', en: 'Set emoticon group' }, ko: '그룹을 이모티콘 그룹으로 만들거나 되돌려.' },
+  list_wallpapers: { group: 'wallpaper', label: { ko: '배경화면 목록', en: 'List wallpapers' }, ko: '저장된 배경화면, 라이브 배경화면, 일정과 지금 보이는 배경화면을 알려 줘.' },
+  set_live_wallpaper: { group: 'wallpaper-ops', label: { ko: '라이브 배경화면 전환', en: 'Switch live wallpaper' }, ko: '저장된 배경화면을 라이브로 바꿔. 관리자만 쓸 수 있어.' },
+  save_wallpaper_schedule: { group: 'wallpaper-ops', label: { ko: '배경화면 일정 저장', en: 'Save wallpaper schedule' }, ko: '배경화면 일정 전체를 바꿔. 겹치면 위 항목이 이겨. 관리자만 쓸 수 있어.' },
   list_audio_projects: { group: 'audio', label: { ko: '오디오 프로젝트 목록', en: 'List audio projects' }, ko: '오디오 프로젝트와 그룹·후보 수, 받은 파일 그룹을 나열해.' },
   list_audio_groups: { group: 'audio', label: { ko: '오디오 그룹 목록', en: 'List audio groups' }, ko: '프로젝트의 효과음 그룹과 파일명 규칙, 채택·코멘트 수를 나열해.' },
   list_audio_candidates: { group: 'audio', label: { ko: '후보 목록', en: 'List candidates' }, ko: '그룹의 생성 후보·업로드·편집본을 검수 상태와 함께 나열해.' },

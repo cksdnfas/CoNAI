@@ -6,6 +6,7 @@ import { SearchField } from '@/components/common/search-field'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Skeleton } from '@/components/ui/skeleton'
 import { usePageSidebar } from '@/components/ui/sidebar'
+import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import type { GroupWithHierarchy } from '@/types/group'
 import type { GroupCountMaps } from '@/features/groups/group-count-utils'
 import { isGroupImageDrag, readGroupImageDrag } from '@/features/groups/group-image-drag'
@@ -27,6 +28,8 @@ interface GroupExplorerSidebarPanelProps {
   onCreateGroup?: () => void
   /** Custom groups only: images dropped on a tree row. */
   onDropImages?: (groupId: number, compositeHashes: string[]) => void
+  /** Custom groups only: a row's actions (edit, move, delete…), opened by right-click / long-press. */
+  getGroupMenu?: (group: GroupWithHierarchy) => ActionMenuEntry[]
 }
 
 /** Find the tree row under a drag event. */
@@ -52,6 +55,7 @@ export function GroupExplorerSidebarPanel({
   onSelectGroup,
   onCreateGroup,
   onDropImages,
+  getGroupMenu,
 }: GroupExplorerSidebarPanelProps) {
   const { t } = useI18n()
   const pageSidebar = usePageSidebar()
@@ -155,6 +159,7 @@ export function GroupExplorerSidebarPanel({
             selectedGroupId={selectedGroupId}
             filterText={filterText}
             dropTargetId={dropTargetId}
+            getGroupMenu={getGroupMenu}
             onSelectGroup={(groupId) => {
               closeDrawer()
               onSelectGroup(groupId)

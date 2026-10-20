@@ -1,4 +1,5 @@
 import type { AutoCollectCondition, ComplexFilter, GroupCreateData, GroupUpdateData } from '@conai/shared';
+import { db } from '../database/init';
 import { GroupModel } from '../models/Group';
 import { AutoCollectionService } from './autoCollectionService';
 import { ComplexFilterService } from './complexFilterService';
@@ -74,4 +75,36 @@ export function updateCustomGroup(id: number, data: GroupUpdateData, requestedBy
   }
   const autoCollectJob = updated && data.auto_collect_enabled && data.auto_collect_conditions ? startAutoCollect(id, requestedByAccountId, 'after group update') : null;
   return { updated, autoCollectJob };
+}
+
+const BULK_GROUP_LIMIT = 500;
+
+function requireGroupIds(ids: unknown): number[] {
+  if (!Array.isArray(ids) || ids.length === 0 || ids.length > BULK_GROUP_LIMIT || !ids.every((id) => Number.isInteger(id) && id > 0)) {
+    throw new GroupMutationError(`Group IDs must be 1-${BULK_GROUP_LIMIT} positive integers`);
+  }
+  return [...new Set(ids as number[])];
+}
+
+/**
+ * Delete several custom groups in one transaction. Without cascade their child groups move to the top level, as with a
+ * single delete; images only lose the membership.
+ */
+export function deleteCustomGroups(ids: unknown, cascade: boolean) {
+  return GroupModel.deleteMany(requireGroupIds(ids), cascade);
+}
+
+/** Move several custom groups under one parent (null: top level); any invalid move cancels the whole batch. */
+export function moveCustomGroups(ids: unknown, parentId: number | null, requestedByAccountId: number | null) {
+  const groupIds = requireGroupIds(ids);
+  if (parentId !== null && (!Number.isInteger(parentId) || parentId <= 0 || !GroupModel.findById(parentId))) {
+    throw new GroupMutationError('Target parent group not found');
+  }
+  return db.transaction(() => {
+    for (const id of groupIds) {
+      if (!GroupModel.findById(id)) throw new GroupMutationError(`Group ${id} not found`);
+      updateCustomGroup(id, { parent_id: parentId }, requestedByAccountId);
+    }
+    return { moved: groupIds.length };
+  })();
 }

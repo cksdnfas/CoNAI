@@ -89,6 +89,7 @@ const nativeActionPermissions = {
   'workflow.schedule_resume': 'generation.execute', 'workflow.schedule_run_now': 'generation.execute', 'workflow.schedule_delete': 'workflows.edit',
   'workflow.run_cancel': 'generation.execute', 'workflow.runs_cleanup': 'workflows.edit',
   'group.select': 'images.view', 'group.create': 'images.edit', 'group.update': 'images.edit', 'group.auto_collect': 'images.edit',
+  'group.move': 'images.edit', 'group.delete': 'images.delete',
   // Chat profile editor (settings › chat). Saving goes through the editor's own admin-only API.
   'profile.open_create': null, 'profile.open_edit': null, 'profile.copy': null, 'profile.section': null, 'profile.draft': null, 'profile.save': null, 'profile.assets': 'generation.execute',
   'library.search': 'images.view', 'library.history': 'images.view', 'library.open': 'images.view', 'library.select': 'images.view', 'files.open': 'files.view', 'files.preview': 'files.view',
@@ -121,6 +122,11 @@ const nativeActionPermissions = {
   'wallpaper.history': null, 'wallpaper.open_dialog': null,
   'wallpaper.delete_preset': null, 'wallpaper.save_schedule': null, 'wallpaper.issue_key': null, 'wallpaper.revoke_key': null,
   'metadata.save': 'images.edit',
+  // Full-screen image editor (an overlay on any page that opens it). Edits stay in the browser's canvas; saving runs the
+  // opener's own save path (library upload or the generation form), whose routes check their permissions.
+  'image_editor.tool': null, 'image_editor.layer_select': null, 'image_editor.brush': null, 'image_editor.layer': null,
+  'image_editor.crop': null, 'image_editor.crop_apply': null, 'image_editor.history': null, 'image_editor.transform': null,
+  'image_editor.selection': null, 'image_editor.mask': null, 'image_editor.save': null,
   // Settings tabs (an administrator's page). Every change saves through that tab's own admin API, so each is a review card.
   'settings.save': null, 'settings.ai_runtime': null, 'settings.ai_runtime_check': null, 'settings.kaloscope_requeue': null, 'settings.rating_tier_add': null,
   'settings.mcp_http': null, 'settings.maintenance': null,
@@ -142,7 +148,7 @@ export const CHAT_PAGE_ACTION_PERMISSIONS: Readonly<Record<string, string | null
 export type ChatPageActionTier = 'view' | 'draft' | 'direct' | 'commit'
 /** Native operations with bounded effects; extensions cannot declare this tier. */
 const DIRECT_ACTIONS = new Set(['files.name_save', 'files.move_save', 'sprite.stop', 'workflow.run_cancel', 'posts.bot_cancel'])
-const COMMIT_ACTIONS = new Set(['page_settings.save', 'prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect', 'profile.save', 'profile.assets', 'resource.save', 'wallpaper.save', 'metadata.save', 'posts.save', 'posts.comment', 'workflow.run', 'workflow.schedule_save', 'workflow.schedule_pause', 'workflow.schedule_resume', 'workflow.schedule_run_now', 'workflow.schedule_delete', 'workflow.runs_cleanup', 'sprite.run', 'upload.library', 'posts.delete', 'posts.restore_revision', 'posts.comment_update', 'posts.comment_delete', 'posts.comment_hide', 'posts.category_create', 'posts.category_update', 'posts.category_delete', 'files.delete', 'files.restore_version', 'files.doc_save', 'settings.save', 'settings.ai_runtime', 'settings.kaloscope_requeue', 'settings.mcp_http', 'settings.maintenance', 'settings.chat_options', 'settings.default_model', 'settings.default_judge', 'settings.llm_preset', 'settings.mcp_server', 'settings.user_profile', 'settings.flag', 'settings.routine', 'settings.automation_switch', 'wallpaper.delete_preset', 'wallpaper.save_schedule', 'wallpaper.issue_key', 'wallpaper.revoke_key'])
+const COMMIT_ACTIONS = new Set(['page_settings.save', 'prompt.create', 'prompt.update', 'preset.create', 'preset.update', 'wildcard.create', 'wildcard.update', 'comfy.save', 'comfy.register', 'group.create', 'group.update', 'group.auto_collect', 'group.move', 'group.delete', 'profile.save', 'profile.assets', 'resource.save', 'wallpaper.save', 'metadata.save', 'posts.save', 'posts.comment', 'workflow.run', 'workflow.schedule_save', 'workflow.schedule_pause', 'workflow.schedule_resume', 'workflow.schedule_run_now', 'workflow.schedule_delete', 'workflow.runs_cleanup', 'sprite.run', 'upload.library', 'posts.delete', 'posts.restore_revision', 'posts.comment_update', 'posts.comment_delete', 'posts.comment_hide', 'posts.category_create', 'posts.category_update', 'posts.category_delete', 'files.delete', 'files.restore_version', 'files.doc_save', 'settings.save', 'settings.ai_runtime', 'settings.kaloscope_requeue', 'settings.mcp_http', 'settings.maintenance', 'settings.chat_options', 'settings.default_model', 'settings.default_judge', 'settings.llm_preset', 'settings.mcp_server', 'settings.user_profile', 'settings.flag', 'settings.routine', 'settings.automation_switch', 'wallpaper.delete_preset', 'wallpaper.save_schedule', 'wallpaper.issue_key', 'wallpaper.revoke_key'])
 const VIEW_ACTIONS = new Set(['page.settings_open', 'page_settings.select', 'page_settings.close', 'page.navigate', 'page.refresh', 'prompt.select', 'preset.select', 'wildcard.select', 'comfy.select', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'workflow.select', 'group.select', 'profile.open_create', 'profile.open_edit', 'profile.section', 'library.search', 'library.history', 'library.open', 'library.select', 'files.open', 'files.preview', 'comfy.check', 'profile.copy', 'resource.open', 'chat.open', 'chat.prepare', 'audio.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'wallpaper.open_preset', 'posts.open', 'posts.category', 'posts.tag', 'posts.back', 'posts.new', 'posts.edit', 'audio.project', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.filter', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.new_document', 'files.edit_document', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
 /** View operations that stay inside the open editor, so unsaved changes there do not block them. */
 const IN_PLACE_VIEW_ACTIONS = new Set(['page.settings_open', 'comfy.check', 'profile.section', 'library.select', 'resource.open', 'audio.filter', 'audio.select', 'sprite.select', 'wallpaper.select', 'audio.search', 'sprite.download_zip', 'upload.download', 'posts.layout', 'posts.body_at', 'files.select', 'files.new_folder', 'files.rename', 'files.move', 'files.doc_at', 'settings.ai_runtime_check', 'settings.usage_period', 'settings.judge_filter', 'wallpaper.open_dialog'])
@@ -152,6 +158,7 @@ for (const id of ['plugin_author.open', 'plugin_author.file', 'plugin_author.rev
 for (const id of ['workspace.open', 'workspace.new', 'workspace.search', 'workspace.mkdir']) VIEW_ACTIONS.add(id)
 IN_PLACE_VIEW_ACTIONS.add('workspace.mkdir')
 for (const id of ['posts.comments_more', 'posts.comments_at']) { VIEW_ACTIONS.add(id); IN_PLACE_VIEW_ACTIONS.add(id) }
+COMMIT_ACTIONS.add('image_editor.save')
 export function chatPageActionTier(id: string, action?: { tier?: ChatPageActionTier }): ChatPageActionTier {
   if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) {
     if (action?.tier === 'view' || action?.tier === 'draft') return action.tier
@@ -172,6 +179,8 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) return false
   if (id.startsWith('page_settings.') || id === 'page.settings_open') return pageSettingsScopes(path).length > 0
   if (id.startsWith('page.')) return true
+  // The editor opens over library, group, detail and generation pages; extension pages never host it.
+  if (id.startsWith('image_editor.')) return !path.startsWith('/ext/')
   if (id.startsWith('profile.')) return path === '/settings'
   if (id.startsWith('library.')) return path === '/'
   if (id.startsWith('files.')) return path === '/files'

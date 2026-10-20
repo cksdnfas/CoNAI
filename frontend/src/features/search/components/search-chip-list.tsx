@@ -32,7 +32,7 @@ export function SearchChipList({
 }: SearchChipListProps) {
   const { t } = useI18n()
   const resolvedTitle = title === undefined ? t({ ko: '현재 필터', en: 'Current filters' }) : title
-  const resolvedEmptyMessage = emptyMessage ?? t('search.components.search.chip.list.no.condition.chips.yet')
+  const resolvedEmptyMessage = emptyMessage === undefined ? t('search.components.search.chip.list.no.condition.chips.yet') : emptyMessage
 
   return (
     <div className={cn('space-y-2', className)}>

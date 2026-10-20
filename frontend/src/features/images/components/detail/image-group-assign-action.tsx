@@ -8,7 +8,10 @@ import { useI18n } from '@/i18n'
 import { GroupAssignModal } from '@/features/groups/components/group-assign-modal'
 import { formatGroupBulkAddNotice } from '@/features/groups/group-bulk-result-messages'
 import { addImagesToGroup, getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
+import type { GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
+
+const GROUPS_STALE_TIME = 60_000
 
 interface ImageGroupAssignActionProps {
   image?: ImageRecord
@@ -29,7 +32,7 @@ export function ImageGroupAssignAction({ image, variant = 'secondary' }: ImageGr
     queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY,
     queryFn: getGroupsHierarchyAll,
     enabled: false,
-    staleTime: 60_000,
+    staleTime: GROUPS_STALE_TIME,
   })
 
   const assignMutation = useMutation({
@@ -64,17 +67,13 @@ export function ImageGroupAssignAction({ image, variant = 'secondary' }: ImageGr
       return
     }
 
-    let groups = groupsQuery.data ?? null
-    if (!groups) {
-      showSnackbar({ message: t('images.components.detail.image.group.assign.action.loading.custom.groups'), tone: 'info' })
-      const result = await groupsQuery.refetch()
-
-      if (result.error) {
-        showSnackbar({ message: result.error instanceof Error ? result.error.message : t('images.components.detail.image.group.assign.action.failed.to.load.groups'), tone: 'error' })
-        return
-      }
-
-      groups = result.data ?? []
+    // The cached list while it is fresh; a stale or invalidated one (e.g. after a group was created) is loaded again.
+    let groups: GroupWithHierarchy[]
+    try {
+      groups = await queryClient.fetchQuery({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY, queryFn: getGroupsHierarchyAll, staleTime: GROUPS_STALE_TIME })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : t('images.components.detail.image.group.assign.action.failed.to.load.groups'), tone: 'error' })
+      return
     }
 
     if (groups.length === 0) {

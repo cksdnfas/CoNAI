@@ -12,7 +12,7 @@ import { enqueueGenerationJobs, type EnqueueGenerationJobsOptions } from '../../
 import { codexGenerationRequestSchema, getCodexModelSuggestions, parseCodexGenerationRequest } from '../../services/codexGenerationOptions';
 import { buildGenerationHistoryRequestSnapshot } from '../../services/generationHistoryRequestSnapshot';
 import { McpArtifactService } from '../../services/mcpArtifactService';
-import { historyWithinContextRating } from '../../services/codex-chat/chatContentRating';
+import { hideRatingRestrictedText, historyWithinContextRating, RATING_RESTRICTED_TEXT, ratingRestrictedHashes } from '../../services/codex-chat/chatContentRating';
 import { normalizeWorkflowNumericPromptValues } from '../../services/workflowNumericFieldPolicy';
 import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting';
 import { assertChatNaiSampleCount, isChatMcpSource, type McpRequestContext } from '../context';
@@ -73,8 +73,11 @@ async function describeJob(jobId: number, context: McpRequestContext) {
   const audioIds = audioCandidatesByQueueJob([jobId]).get(jobId) ?? [];
   const workflow = job.workflow_id ? WorkflowModel.findByIdIncludingDeleted(job.workflow_id) : null;
   const workflowDeleted = Boolean(job.workflow_id && (!workflow || workflow.deleted_at));
+  // The queue summary may hold the start of the prompt (the UI saves it there), so it follows the results' rating.
+  const restricted = ratingRestrictedHashes(context, histories.map((history) => history.actual_composite_hash ?? history.composite_hash)).size > 0;
   return {
     ...job,
+    ...(restricted ? { request_summary: RATING_RESTRICTED_TEXT, rating_restricted: true } : {}),
     routing: describeMcpGenerationJobRouting(job),
     workflow_deleted: workflowDeleted,
     workflow_availability: workflowDeleted ? '삭제된 워크플로우(사용 불가)' : 'available',
@@ -286,12 +289,14 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'get_generation_history_request',
-    { description: 'Read the full saved prompt, negative prompt, selected model and request settings behind a generation result, as used by the UI reuse action. Image bytes are omitted; pruned requests may only retain result prompts.', inputSchema: z.object({ history_id: z.number().int().positive() }) },
+    { description: 'Read the full saved prompt, negative prompt, selected model and request settings behind a generation result, as used by the UI reuse action. Image bytes are omitted; pruned requests may only retain result prompts. A result above the content rating this model may be shown carries rating_restricted: true with the prompts and request payload hidden.', inputSchema: z.object({ history_id: z.number().int().positive() }) },
     async ({ history_id }) => {
       const record = HistoryQueryRepository.findAllWithMetadata({ ids: [history_id], limit: 1 })[0];
       if (!record) return { isError: true, content: [{ type: 'text' as const, text: 'Generation history not found' }] };
       requireMcpResourceOwner(context, record, true);
-      return { content: [{ type: 'text' as const, text: JSON.stringify(buildGenerationHistoryRequestSnapshot(record)) }] };
+      const snapshot = buildGenerationHistoryRequestSnapshot(record);
+      const restricted = ratingRestrictedHashes(context, [record.actual_composite_hash ?? record.composite_hash]).size > 0;
+      return { content: [{ type: 'text' as const, text: JSON.stringify(restricted ? hideRatingRestrictedText(snapshot, ['request_payload', 'result_prompt', 'result_negative_prompt']) : snapshot) }] };
     },
   );
 
@@ -358,7 +363,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'get_generation_job',
-    { description: 'Get one durable generation job, its workflow availability, history IDs, and completed artifacts.', inputSchema: z.object({ job_id: z.number().int().positive() }) },
+    { description: 'Get one durable generation job, its workflow availability, history IDs, and completed artifacts. A job with a result above the content rating this model may be shown carries rating_restricted: true with its request_summary hidden.', inputSchema: z.object({ job_id: z.number().int().positive() }) },
     async ({ job_id }) => {
       const job = await describeJob(job_id, context);
       return job
@@ -369,7 +374,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
 
   server.registerTool(
     'wait_generation_job',
-    { description: 'Wait until a generation job finishes (completed, failed or cancelled) or the timeout passes, then return it with its history IDs. Use this after submit_generation_job instead of calling get_generation_job repeatedly; call it again if finished is false.', inputSchema: z.object({
+    { description: 'Wait until a generation job finishes (completed, failed or cancelled) or the timeout passes, then return it with its history IDs. Use this after submit_generation_job instead of calling get_generation_job repeatedly; call it again if finished is false. A job with a result above the content rating this model may be shown carries rating_restricted: true with its request_summary hidden.', inputSchema: z.object({
       job_id: z.number().int().positive(),
       timeout_seconds: z.number().int().min(5).max(180).default(90).describe('Longest wait before returning an unfinished job'),
     }) },

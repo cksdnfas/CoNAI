@@ -37,7 +37,11 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   list_emoticon_groups: 'images.view', list_image_groups: 'images.view', get_image_groups: 'images.view', get_image_group: 'images.view',
   add_images_to_group: 'images.edit', remove_images_from_group: 'images.edit', move_images_between_groups: 'images.edit',
   create_image_group: 'images.edit', update_image_group: 'images.edit', run_group_auto_collect: 'images.edit',
+  // The same keys as the group page: moving needs images.edit, deleting groups images.delete.
+  move_image_groups: 'images.edit', delete_image_groups: 'images.delete',
   set_emoticon_keywords: 'images.edit', set_emoticon_group: 'images.edit',
+  // The wallpaper page's key; the writes are also administrator-only (ADMIN_ONLY_TOOLS), like the settings routes.
+  list_wallpapers: 'images.view', set_live_wallpaper: 'images.view', save_wallpaper_schedule: 'images.view',
   get_generation_artifacts: 'images.view', get_generation_job: [], wait_generation_job: [],
   get_video_info: 'images.view', get_sprite_job: 'images.view', download_sprite_frames: 'images.view',
   extract_sprite_sheet: ['images.edit', 'images.upload'], extract_sprite_sheets_batch: ['images.edit', 'images.upload'],
@@ -93,6 +97,12 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
 const BOARD_CALL_BLOCKED_TOOLS = new Set(['run_plugin_action', 'get_plugin_action', 'cancel_plugin_action', 'list_plugin_pages', 'list_files', 'get_file_info', 'read_file_text', 'search_files', 'write_text_file', 'update_file_text', 'edit_file_text', 'create_file_folder', 'rename_file', 'move_files', 'delete_files', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit', 'room_history_search', 'room_history_read', 'list_file_versions', 'read_file_version', 'restore_file_version']);
 /** Posts tools a board-call turn never gets: comments it answers are other people's text, and these cannot be taken back easily. */
 const BOARD_CALL_BLOCKED_POST_TOOLS = new Set(['posts_delete', 'posts_restore_revision', 'post_comment_delete']);
+
+/**
+ * Writes the web allows administrators only (`/api/settings` sits behind requireAdmin). They stay listed so a
+ * non-administrator's call gets a clear refusal; HTTP keys hold no administrator role.
+ */
+const ADMIN_ONLY_TOOLS = new Set(['set_live_wallpaper', 'save_wallpaper_schedule']);
 
 /** A tool's feature keys; external MCP tools need none (their server's scope and the profile decide). Undefined: unclassified. */
 function featurePermissionOf(toolName: string): string | readonly string[] | undefined {
@@ -228,6 +238,9 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
     if (featurePermissionOf(toolName) === undefined) throw new Error('Unclassified account-bound tool.');
     for (const permission of requiredToolKeys(toolName)) requireContextPermission(context, permission);
     if (getMcpToolScope(toolName) === 'configure' && context.requester?.accountType !== 'admin') throw new Error('Administrator access required.');
+    if (ADMIN_ONLY_TOOLS.has(toolName) && !(context.requester && isRequesterAdmin(context.requester))) {
+      throw new Error('Administrator access required: only administrators can switch the live wallpaper or save its schedule, as in the wallpaper editor. list_wallpapers still reads the current state.');
+    }
     if (toolName === 'resolve_image_group_path') requireContextPermission(context, params.create === false ? 'images.view' : 'images.edit');
     if (toolName === 'add_images_to_group' || getMcpToolScope(toolName) === 'generate' || isChatGenerationTool(toolName)) {
       if (params.group_id || params.group_path) requireContextPermission(context, 'images.edit');

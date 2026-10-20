@@ -10,7 +10,7 @@ import type { McpRequestContext } from '../context';
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { CONTENT_RATING_BLOCKED, libraryMediaAllowed } from '../../services/contentRating';
-import { contextContentLimit, historyWithinContextRating } from '../../services/codex-chat/chatContentRating';
+import { contextContentLimit, hideRatingRestrictedRows, hideRatingRestrictedText, historyWithinContextRating, ratingRestrictedHashes } from '../../services/codex-chat/chatContentRating';
 import { AuthAccount } from '../../models/AuthAccount';
 import { db } from '../../database/init';
 import { searchImagesByText, similarImagesByVector, type ImageVectorHit } from '../../services/embeddings/imageIndex';
@@ -24,11 +24,20 @@ function sanitizeMetadata(metadata: Record<string, unknown>, includeHeavyFields:
   )));
 }
 
+/** Descriptive text of a media_metadata row (prompts, captions, generation parameters, auto tags). */
+const METADATA_TEXT_FIELDS = [
+  'prompt', 'negative_prompt', 'character_prompt_text', 'raw_nai_parameters', 'auto_tags', 'lora_models', 'model_references',
+  'pos_prompt_normalized', 'neg_prompt_normalized', 'auto_prompt_normalized', 'raw_metadata', 'raw_exif', 'metadata_json',
+];
+
+/** Said in the descriptions of tools that hide text above the caller's content rating. */
+const RATING_RESTRICTED_NOTE = ' Items above the content rating this model may be shown keep their ids and sizes but carry rating_restricted: true with prompts, tags and metadata text hidden.';
+
 export function registerImageTools(server: McpServer, context: McpRequestContext): void {
   // 이미지 고급 검색
   server.registerTool(
     'search_images',
-    { description: 'Search the media library (images, videos and animated GIFs) by prompt text, AI tool, model, dimensions, date range, group or media type. Each result says its media_type.', inputSchema: z.object({
+    { description: 'Search the media library (images, videos and animated GIFs) by prompt text, AI tool, model, dimensions, date range, group or media type. Each result says its media_type.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
       search_text: z.string().optional().describe('Search in positive prompts'),
       negative_text: z.string().optional().describe('Search in negative prompts'),
       ai_tool: z.string().optional().describe('Filter by AI tool (e.g., "ComfyUI", "NovelAI", "Stable Diffusion")'),
@@ -59,7 +68,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
         );
 
         // 응답 크기를 줄이기 위해 핵심 필드만 추출
-        const images = result.images.map((img: any) => ({
+        const images = hideRatingRestrictedRows(context, result.images.map((img: any) => ({
           composite_hash: img.composite_hash,
           media_type: img.mime_type?.startsWith('video/') ? 'video' : img.mime_type === 'image/gif' ? 'animated' : 'image',
           mime_type: img.mime_type ?? null,
@@ -76,7 +85,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           sampler: img.sampler,
           first_seen_date: img.first_seen_date,
           file_size: img.file_size,
-        }));
+        })), ['prompt', 'negative_prompt']);
 
         return {
           content: [{
@@ -124,7 +133,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 이미지 메타데이터 상세 조회
   server.registerTool(
     'get_image_metadata',
-    { description: 'Get detailed metadata for a specific image by its composite hash. auto_tags holds the automatic analysis: tagger (model, booru-style general/character/rating tags with confidence; the PixAI tagger, model "pixai-v1", adds artist and meta tags) and kaloscope (likely artists with scores).', inputSchema: z.object({
+    { description: 'Get detailed metadata for a specific image by its composite hash. auto_tags holds the automatic analysis: tagger (model, booru-style general/character/rating tags with confidence; the PixAI tagger, model "pixai-v1", adds artist and meta tags) and kaloscope (likely artists with scores).' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
       composite_hash: z.string().describe('The 48-character composite hash of the image'),
       include_heavy_fields: z.boolean().default(false).describe('Include histogram and raw metadata fields'),
     }) },
@@ -139,10 +148,11 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           };
         }
 
+        const shown = sanitizeMetadata(metadata as unknown as Record<string, unknown>, include_heavy_fields);
         return {
           content: [{
             type: 'text' as const,
-            text: JSON.stringify(sanitizeMetadata(metadata as unknown as Record<string, unknown>, include_heavy_fields)),
+            text: JSON.stringify(ratingRestrictedHashes(context, [composite_hash]).size ? hideRatingRestrictedText(shown, METADATA_TEXT_FIELDS) : shown),
           }],
         };
       } catch (error) {
@@ -157,7 +167,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 이미지 생성 이력 조회
   server.registerTool(
     'get_generation_history',
-    { description: 'Get image generation history records. Supports filtering by service type (comfyui/novelai) and generation status.', inputSchema: z.object({
+    { description: 'Get image generation history records. Supports filtering by service type (comfyui/novelai) and generation status.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
       service_type: z.enum(['comfyui', 'novelai', 'codex']).optional().describe('Filter by service type'),
       generation_status: z.enum(['pending', 'processing', 'completed', 'failed']).optional().describe('Filter by generation status'),
       history_id: z.number().int().positive().optional().describe('Return one history record by ID'),
@@ -223,7 +233,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           content: [{
             type: 'text' as const,
             text: JSON.stringify({
-              records: summary,
+              records: hideRatingRestrictedRows(context, summary, ['positive_prompt', 'negative_prompt']),
               total,
               limit,
               offset,
@@ -242,7 +252,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 자동 태그 기반 이미지 검색
   server.registerTool(
     'search_images_by_tags',
-    { description: 'Search images by booru-style tags from the automatic tagger (the WD tagger or PixAI, whichever Settings › 자동 › 태거 uses). Supports tag name search, character search, rating filter, and rating score range. For a plain-language description of what an image shows, use search_images_by_meaning.', inputSchema: z.object({
+    { description: 'Search images by booru-style tags from the automatic tagger (the WD tagger or PixAI, whichever Settings › 자동 › 태거 uses). Supports tag name search, character search, rating filter, and rating score range. For a plain-language description of what an image shows, use search_images_by_meaning.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
       tags: z.string().optional().describe('Comma-separated tag names to search (e.g. "long_hair, blue_eyes, school_uniform")'),
       min_tag_score: z.number().min(0).max(1).optional().describe('Minimum confidence score for tag matching (0-1)'),
       character: z.string().optional().describe('Character name to search for'),
@@ -319,7 +329,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
 
         const result = await ImageSearchModel.searchByAutoTags(autoTagParams, basicSearchParams);
 
-        const images = result.images.map((img: any) => ({
+        const images = hideRatingRestrictedRows(context, result.images.map((img: any) => ({
           composite_hash: img.composite_hash,
           width: img.width,
           height: img.height,
@@ -329,7 +339,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           seed: img.seed,
           first_seen_date: img.first_seen_date,
           rating_score: img.rating_score,
-        }));
+        })), ['prompt']);
 
         return {
           content: [{
@@ -354,7 +364,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 뜻(설명)으로 이미지 검색 — 이미지 임베딩
   server.registerTool(
     'search_images_by_meaning',
-    { description: 'Find library images by what they show, from a plain description ("a girl reading under a tree at dusk"), using image embeddings; best match first with similarity (cosine × 100, about 64+ is a match). Same as the library\'s 설명 (meaning) search tab. Needs image embeddings on (Settings › 자동 › 임베딩 › 이미지 임베딩); prompt words are better searched with search_images, booru tags with search_images_by_tags.', inputSchema: z.object({
+    { description: 'Find library images by what they show, from a plain description ("a girl reading under a tree at dusk"), using image embeddings; best match first with similarity (cosine × 100, about 64+ is a match). Same as the library\'s 설명 (meaning) search tab. Needs image embeddings on (Settings › 자동 › 임베딩 › 이미지 임베딩); prompt words are better searched with search_images, booru tags with search_images_by_tags.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
       text: z.string().trim().min(1).max(MEANING_QUERY_MAX_CHARS).describe('What the image shows, in plain words (English matches best)'),
       limit: z.number().int().min(1).max(VECTOR_TOOL_MAX_LIMIT).default(20).describe('Results to return'),
     }) },
@@ -363,7 +373,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
         if (!embeddingFeatureOn('imageSearch')) return vectorToolError(IMAGE_SEARCH_OFF);
         const hits = await searchImagesByText(text, limit, { signal: ctx?.mcpReq?.signal });
         if (!hits) return vectorToolError('The embedding model did not answer (the AI runtime may not be installed or is still loading). Try again in a moment.');
-        const images = vectorHitSummaries(hits);
+        const images = hideRatingRestrictedRows(context, vectorHitSummaries(hits), ['prompt']);
         return { content: [{ type: 'text' as const, text: JSON.stringify({ images, total: images.length, query: text }) }] };
       } catch (error) {
         return vectorToolError(`Error searching by meaning: ${(error as Error).message}`);
@@ -374,7 +384,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
   // 한 이미지와 내용·화풍이 비슷한 이미지 — 상세 화면의 내용 유사 / 화풍 유사
   server.registerTool(
     'find_similar_images',
-    { description: 'Images closest to one library image, best first with similarity (cosine × 100): basis "content" = shows similar things (image embeddings, needs image embeddings on), "style" = drawn in a similar style (Kaloscope style vectors, needs Kaloscope style vectors saved). These are the image detail page\'s 내용 유사 / 화풍 유사 sections. An image without that vector yet is reported as such.', inputSchema: z.object({
+    { description: 'Images closest to one library image, best first with similarity (cosine × 100): basis "content" = shows similar things (image embeddings, needs image embeddings on), "style" = drawn in a similar style (Kaloscope style vectors, needs Kaloscope style vectors saved). These are the image detail page\'s 내용 유사 / 화풍 유사 sections. An image without that vector yet is reported as such.' + RATING_RESTRICTED_NOTE, inputSchema: z.object({
       composite_hash: z.string().trim().regex(/^(?:[0-9a-f]{48}|[0-9a-f]{32})$/, 'composite_hash must be a library media hash').describe('The image to compare against'),
       basis: z.enum(['content', 'style']).describe('"content" (what it shows) or "style" (how it is drawn)'),
       limit: z.number().int().min(1).max(VECTOR_TOOL_MAX_LIMIT).default(20).describe('Results to return'),
@@ -392,7 +402,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
             ? 'This image has no style vector yet (Kaloscope with style vectors on has to run on it first; Settings › 자동 › Kaloscope › 화풍 벡터 저장).'
             : 'This image has no image vector yet (it is still waiting to be indexed).');
         }
-        const images = vectorHitSummaries(hits);
+        const images = hideRatingRestrictedRows(context, vectorHitSummaries(hits), ['prompt']);
         return { content: [{ type: 'text' as const, text: JSON.stringify({ images, total: images.length, basis, composite_hash }) }] };
       } catch (error) {
         return vectorToolError(`Error finding similar images: ${(error as Error).message}`);

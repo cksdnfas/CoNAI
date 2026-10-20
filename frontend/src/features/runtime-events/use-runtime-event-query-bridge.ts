@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
-import type { ChatGenerationFinishedEventPayload, ChatGenerationUpdatedEventPayload, GraphExecutionEventPayload, HistoryRecordEventPayload, QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
+import type { ChatGenerationFinishedEventPayload, ChatGenerationUpdatedEventPayload, GraphExecutionEventPayload, GraphExecutionProgressEventPayload, HistoryRecordEventPayload, QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
 import { refreshChatGenerationQueries } from './chat-generation-query-updates'
 import { AUDIO_QUERY_KEY } from '@/lib/api-audio'
+import { CHAT_ROUTINES_QUERY_KEY } from '@/lib/api-chat-routines'
+import { PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { POSTS_QUERY_KEY } from '@/lib/api-posts'
 import { RUNTIME_JOB_QUERY_KEY } from '@/lib/use-runtime-job'
 
@@ -42,6 +44,9 @@ const GRAPH_SCHEDULE_QUERY_KEY_PREFIX = 'graph-workflow-schedules'
 const GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX = 'module-graph-browse-content'
 /** WF-2: 예약 탭이 browse-content 대신 전용 경량 스냅샷을 폴링하므로 그 표면도 함께 무효화한다. */
 const GRAPH_RESERVATION_QUERY_KEY_PREFIX = 'graph-workflow-reservations'
+const GRAPH_EXECUTION_PROGRESS_QUERY_KEY_PREFIX = 'module-graph-execution-progress'
+const PLUGINS_QUERY_KEY_PREFIX = PLUGINS_QUERY_KEY[0]
+const CHAT_ROUTINES_QUERY_KEY_PREFIX = CHAT_ROUTINES_QUERY_KEY[0]
 
 type QueueListResponse = { success: boolean; records: GenerationQueueJobRecord[]; total: number }
 
@@ -177,6 +182,7 @@ export function useRuntimeEventQueryBridge() {
   const progressFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingPostChangesRef = useRef(new Map<number, string>())
   const pendingAudioScopesRef = useRef(new Map<string, string>())
+  const pendingGraphProgressIdsRef = useRef(new Set<number>())
 
   const flushPendingProgress = useCallback(() => {
     progressFlushTimerRef.current = null
@@ -208,7 +214,12 @@ export function useRuntimeEventQueryBridge() {
         if (changes) pendingPostChangesRef.current.clear()
         const audioScopes = prefix === AUDIO_QUERY_KEY ? new Map(pendingAudioScopesRef.current) : null
         if (audioScopes) pendingAudioScopesRef.current.clear()
+        const progressIds = prefix === GRAPH_EXECUTION_PROGRESS_QUERY_KEY_PREFIX ? new Set(pendingGraphProgressIdsRef.current) : null
+        if (progressIds) pendingGraphProgressIdsRef.current.clear()
+        // Evaluation-request state ('run') concerns only that post's evaluation list, never shared lists.
+        const runOnly = !!changes?.size && !changes.has(0) && [...changes.values()].every((kind) => kind === 'run')
         void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active', predicate: ({ queryKey, state }) => {
+          if (progressIds) return !progressIds.size || progressIds.has(Number(queryKey[1]))
           if (audioScopes?.size && !audioScopes.has('*')) {
             const kind = queryKey[1]
             if (kind === 'candidate') return audioScopes.has(String((state.data as { group_id?: string } | undefined)?.group_id))
@@ -219,6 +230,7 @@ export function useRuntimeEventQueryBridge() {
           }
           if (!changes?.size || changes.has(0)) return true
           const kind = queryKey[1]
+          if (runOnly) return kind === 'evaluations' && changes.has(Number(queryKey[3]))
           if (['comments', 'card', 'revisions', 'knowledge-versions', 'links', 'proposals-pending'].includes(String(kind))) {
             return changes.has(Number(queryKey[2]))
           }
@@ -322,7 +334,7 @@ export function useRuntimeEventQueryBridge() {
           ['module-graph-executions', execution.graph_workflow_id],
           ['module-graph-execution-detail', execution.execution_id],
           ['module-graph-execution-status', execution.execution_id],
-          ['module-graph-execution-progress', execution.execution_id],
+          [GRAPH_EXECUTION_PROGRESS_QUERY_KEY_PREFIX, execution.execution_id],
         ]) void queryClient.invalidateQueries({ queryKey, refetchType: 'active' })
         scheduleInvalidate(
           [GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX, GRAPH_RESERVATION_QUERY_KEY_PREFIX],
@@ -330,11 +342,19 @@ export function useRuntimeEventQueryBridge() {
         )
         return
       }
+      case 'graph.execution.progress': {
+        // 노드 시작/완료가 몰려도 바뀐 실행의 진행 카드만 디바운스로 한 번 다시 읽는다.
+        pendingGraphProgressIdsRef.current.add((envelope.payload as GraphExecutionProgressEventPayload).execution_id)
+        scheduleInvalidate([GRAPH_EXECUTION_PROGRESS_QUERY_KEY_PREFIX], GRAPH_INVALIDATE_DEBOUNCE_MS)
+        return
+      }
       case 'posts.changed': {
         const { postId, kind } = envelope.payload as { postId: number; kind: string }
         const changes = pendingPostChangesRef.current
         const id = Number.isSafeInteger(postId) && postId > 0 ? postId : 0
-        if (changes.get(id) !== 'post') changes.set(id, kind)
+        const previous = changes.get(id)
+        // 'run' is the narrowest change: it never downgrades a pending wider change of the same post.
+        if (previous !== 'post' && !(kind === 'run' && previous)) changes.set(id, kind)
         scheduleInvalidate([POSTS_QUERY_KEY], 400)
         return
       }
@@ -358,6 +378,14 @@ export function useRuntimeEventQueryBridge() {
         const { draftId } = envelope.payload as { draftId: string }
         if (/^[a-f0-9]{32}$/.test(draftId)) void queryClient.invalidateQueries({ queryKey: ['plugin-draft', draftId], refetchType: 'active' })
         scheduleInvalidate(['plugin-drafts'], 200)
+        return
+      }
+      case 'plugin.server.changed': {
+        scheduleInvalidate([PLUGINS_QUERY_KEY_PREFIX], 200)
+        return
+      }
+      case 'chat.routine.changed': {
+        scheduleInvalidate([CHAT_ROUTINES_QUERY_KEY_PREFIX], 200)
         return
       }
       case 'job.status': {
@@ -391,8 +419,10 @@ export function useRuntimeEventQueryBridge() {
       'module-graph-executions',
       'module-graph-execution-detail',
       'module-graph-execution-status',
-      'module-graph-execution-progress',
+      GRAPH_EXECUTION_PROGRESS_QUERY_KEY_PREFIX,
       POSTS_QUERY_KEY,
+      PLUGINS_QUERY_KEY_PREFIX,
+      CHAT_ROUTINES_QUERY_KEY_PREFIX,
       'workspaces',
       'file-store',
       'workspace-binding',

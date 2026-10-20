@@ -5,6 +5,7 @@ import type {
   ChatGenerationFinishedEventPayload,
   ChatGenerationUpdatedEventPayload,
   GraphExecutionEventPayload,
+  GraphExecutionProgressEventPayload,
   GraphScheduleEventPayload,
   HistoryRecordEventPayload,
   QueueJobEventPayload,
@@ -218,6 +219,16 @@ export function publishGraphScheduleEvent(payload: GraphScheduleEventPayload): v
 export function publishGraphExecutionEvent(payload: GraphExecutionEventPayload): void {
   publishRuntimeEvent({
     name: 'graph.execution.status',
+    topic: 'graph-execution',
+    visibility: 'all',
+    payload,
+  })
+}
+
+/** Publish one node progress hint (start/complete/failure) with the same visibility as the execution status. */
+export function publishGraphExecutionProgressEvent(payload: GraphExecutionProgressEventPayload): void {
+  publishRuntimeEvent({
+    name: 'graph.execution.progress',
     topic: 'graph-execution',
     visibility: 'all',
     payload,

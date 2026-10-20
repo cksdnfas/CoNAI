@@ -1,4 +1,4 @@
-import { Bot, ChevronLeft, ChevronRight, Download, Ellipsis, FolderPlus, Pencil, Play, Trash2 } from 'lucide-react'
+import { Bot, ChevronLeft, ChevronRight, Download, Ellipsis, FolderInput, FolderPlus, Pencil, Play, Trash2 } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -25,6 +25,8 @@ interface GroupViewHeaderProps {
   rootLabel: string
   countState: CountState
   isCustomSource: boolean
+  /** The account may delete groups (images.delete). */
+  canDelete?: boolean
   autoCollect?: { enabled: boolean; conditionCount: number }
   compact?: boolean
   isAutoCollectPending?: boolean
@@ -36,6 +38,7 @@ interface GroupViewHeaderProps {
   onCreateSubgroup: () => void
   onEdit: () => void
   onDownload: () => void
+  onMove: () => void
   onDelete: () => void
 }
 
@@ -50,6 +53,7 @@ export function GroupViewHeader({
   rootLabel,
   countState,
   isCustomSource,
+  canDelete = false,
   autoCollect,
   compact = false,
   isAutoCollectPending = false,
@@ -61,6 +65,7 @@ export function GroupViewHeader({
   onCreateSubgroup,
   onEdit,
   onDownload,
+  onMove,
   onDelete,
 }: GroupViewHeaderProps) {
   const { t, formatNumber } = useI18n()
@@ -121,11 +126,19 @@ export function GroupViewHeader({
           </DropdownMenuItem>
           {isCustomSource ? (
             <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onSelect={onDelete} disabled={isDeletePending}>
-                <Trash2 />
-                {t({ ko: '그룹 삭제', en: 'Delete group' })}
+              <DropdownMenuItem onSelect={onMove}>
+                <FolderInput />
+                {t({ ko: '다른 위치로 옮기기', en: 'Move to…' })}
               </DropdownMenuItem>
+              {canDelete ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onSelect={onDelete} disabled={isDeletePending}>
+                    <Trash2 />
+                    {t({ ko: '그룹 삭제', en: 'Delete group' })}
+                  </DropdownMenuItem>
+                </>
+              ) : null}
             </>
           ) : null}
         </DropdownMenuContent>
