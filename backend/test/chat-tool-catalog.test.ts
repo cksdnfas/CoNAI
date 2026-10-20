@@ -153,6 +153,37 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
       }
     })
 
+    await t.test('prompt summaries and bounded pages share one aggregate and optional exact counts', async (t) => {
+      const { PromptGroupService } = await import('../src/services/promptGroupService')
+      const prepare = main.db.prepare.bind(main.db)
+      const queries: string[] = []
+      const spy = t.mock.method(main.db, 'prepare', (sql: string) => {
+        queries.push(sql)
+        return prepare(sql)
+      })
+      try {
+        const groups = await PromptGroupService.getAllGroups()
+        assert.equal(queries.length, 1, 'summaries include unclassified in one aggregate')
+        assert.ok(groups.some(group => group.id === 0))
+        assert.ok(groups.every(group => !('prompts' in group)))
+        queries.length = 0
+        const counted = await PromptGroupService.getPromptsInGroup(0, 'positive', 1, 1)
+        assert.equal(queries.length, 2, 'exact count plus bounded page')
+        queries.length = 0
+        const uncounted = await PromptGroupService.getPromptsInGroup(0, 'positive', 1, 1, '', 'usage_count', 'DESC', false)
+        assert.equal(queries.length, 1, 'no exact COUNT query when not requested')
+        assert.equal(uncounted.total, undefined)
+        assert.deepEqual(uncounted.prompts, counted.prompts)
+        assert.equal(uncounted.has_more, counted.has_more)
+        assert.ok(uncounted.prompts.length <= 1)
+        queries.length = 0
+        await PromptGroupService.getGroupedPrompts()
+        assert.equal(queries.length, 2, 'legacy compatibility does not issue one query per group')
+      } finally {
+        spy.mock.restore()
+      }
+    })
+
     await t.test('consolidated prompt moves preserve explicit targets and report missing IDs', async () => {
       const call = (tool: string, args: Record<string, unknown>) => client.callTool({ name: CATALOG_RUN_TOOL, arguments: { tool, arguments: args } })
       const created = await call('batch_create_groups', { groups: [{ group_name: 'Catalog move target' }] })
@@ -178,6 +209,22 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
       const unclassified = await call('get_prompts_in_group', { group_id: 0 })
       assert.notEqual(unclassified.isError, true, text(unclassified))
       assert.ok(JSON.parse(text(unclassified)).prompts.some((prompt: { id: number }) => prompt.id === promptId))
+      const firstPage = JSON.parse(text(await call('get_prompts_in_group', {
+        group_id: 0, query: 'catalog_', limit: 1, sort_by: 'prompt', sort_order: 'ASC',
+      })))
+      const secondPage = JSON.parse(text(await call('get_prompts_in_group', {
+        group_id: 0, query: 'catalog_', limit: 1, sort_by: 'prompt', sort_order: 'ASC', page: firstPage.next_page, include_total: false,
+      })))
+      assert.equal(firstPage.prompts.length, 1)
+      assert.ok(firstPage.total >= 2)
+      assert.equal(firstPage.has_more, true)
+      assert.equal(secondPage.total, undefined)
+      assert.equal(secondPage.prompts.length, 1)
+      assert.notEqual(firstPage.prompts[0].id, secondPage.prompts[0].id)
+      assert.equal((await call('get_prompts_in_group', { group_id: 0, limit: 101 })).isError, true)
+      const structure = JSON.parse(text(await call('get_prompt_group_structure', {})))
+      assert.ok(structure.groups.some((group: { id: number; prompt_count: number }) => group.id === 0 && group.prompt_count >= 2))
+      assert.ok(structure.groups.every((group: Record<string, unknown>) => !('prompts' in group)))
       const { normalizePresetAllowlist } = await import('../src/services/codex-chat/chatToolPresets')
       assert.deepEqual(normalizePresetAllowlist(['assign_prompts_to_group'], ['organize']), [], 'retired grants must not automatically grant the broader group move operation')
     })

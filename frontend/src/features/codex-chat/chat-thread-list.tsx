@@ -9,7 +9,7 @@ import { ListRow } from '@/components/ui/list-row'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import type { ChatProfileSummary, CodexChatThread } from '@/lib/api-codex-chat'
+import type { ChatProfileSummary, CodexChatThreadSummary } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { GroupAvatarStack } from './chat-group'
 import { ChatDeleteDialog } from './chat-delete-dialog'
@@ -33,7 +33,7 @@ export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
  * ticks it, and a floating bar archives or deletes them (Esc lets go).
  */
 export function ChatThreadList({ threads, profilesById, activeThreadId, runningThreadIds, routineThreadIds, drafts, dense = false, onSelect, onUpdate, onBulk }: {
-  threads: CodexChatThread[]
+  threads: CodexChatThreadSummary[]
   profilesById: Map<number, ChatProfileSummary>
   activeThreadId: number | null
   /** Chats with a reply on its way (a dot on the row). */
@@ -93,10 +93,10 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
   const automationCount = threads.filter((entry) => entry.automation && !entry.archived).length
 
   /** One section: its top rows (pinned first) and the kept-before-an-edit branches under each. */
-  const arrange = (section: CodexChatThread[]) => {
+  const arrange = (section: CodexChatThreadSummary[]) => {
     const ids = new Set(section.map((entry) => entry.id))
-    const branches = new Map<number, CodexChatThread[]>()
-    const top: CodexChatThread[] = []
+    const branches = new Map<number, CodexChatThreadSummary[]>()
+    const top: CodexChatThreadSummary[] = []
     for (const entry of section) {
       const parent = entry.branch_purpose === 'preserve' ? entry.branched_from_thread_id ?? null : null
       if (parent !== null && ids.has(parent)) branches.set(parent, [...(branches.get(parent) ?? []), entry])
@@ -105,7 +105,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
     return { top: top.sort((a, b) => (b.pinned ?? 0) - (a.pinned ?? 0)), branches }
   }
 
-  const previewOf = (entry: CodexChatThread) => {
+  const previewOf = (entry: CodexChatThreadSummary) => {
     const draft = drafts[entry.id]
     if (draft?.trim()) return <><span className="text-secondary-text">{t({ ko: '초안', en: 'Draft' })}</span> {draft.replace(/\s+/g, ' ')}</>
     const preview = entry.preview
@@ -113,7 +113,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
     return preview.text || (preview.media ? t({ ko: '이미지', en: 'Image' }) : preview.files ? t({ ko: '파일', en: 'File' }) : null)
   }
 
-  const row = (entry: CodexChatThread, nested = false) => {
+  const row = (entry: CodexChatThreadSummary, nested = false) => {
     const entryProfile = entry.profile_id ? profilesById.get(entry.profile_id) : undefined
     const movedAt = parseServerDate(entry.updated_date)
     const time = Number.isNaN(movedAt.getTime()) ? null : <time className="text-2xs tabular-nums text-muted-foreground" dateTime={movedAt.toISOString()}>{whenLabel(movedAt)}</time>
@@ -206,7 +206,7 @@ export function ChatThreadList({ threads, profilesById, activeThreadId, runningT
     </ListRow>
   )
 
-  const section = (entries: CodexChatThread[]) => {
+  const section = (entries: CodexChatThreadSummary[]) => {
     const { top, branches } = arrange(entries)
     return top.map((entry) => {
       const kept = branches.get(entry.id) ?? []

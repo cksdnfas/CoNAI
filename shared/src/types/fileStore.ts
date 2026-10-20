@@ -146,6 +146,6 @@ export interface SystemFolderListing {
 export type SystemFolderFailureCode = 'conflict' | 'no-origin';
 
 export interface SystemFolderBatchResult {
-  done: Array<{ name: string; restoredTo?: string }>;
+  done: Array<{ name: string; restoredTo?: string; /** File restored, but library reattachment failed. */ warning?: string }>;
   failed: Array<{ name: string; error: string; code?: SystemFolderFailureCode }>;
 }

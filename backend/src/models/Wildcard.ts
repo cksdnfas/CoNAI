@@ -311,10 +311,36 @@ export class WildcardModel {
    * 항목을 포함한 모든 와일드카드 조회
    */
   static findAllWithItems(): WildcardWithItems[] {
-    const wildcards = WildcardModel.findAll();
+    return WildcardModel.withItems(WildcardModel.findAll());
+  }
+
+  /** Load only named roots and children that can participate in their item selection. */
+  static findForResolution(names: string[]): Wildcard[] {
+    if (names.length === 0) return [];
+    const db = getUserSettingsDb();
+    return db.prepare(`
+      WITH RECURSIVE referenced(id) AS (
+        SELECT id FROM wildcards WHERE name IN (SELECT value FROM json_each(?))
+        UNION
+        SELECT child.id FROM wildcards child
+        JOIN wildcards parent ON child.parent_id = parent.id
+        JOIN referenced ON referenced.id = parent.id
+        WHERE parent.include_children = 1 OR parent.only_children = 1
+      )
+      SELECT * FROM wildcards WHERE id IN (SELECT id FROM referenced) ORDER BY name
+    `).all(JSON.stringify(names)) as Wildcard[];
+  }
+
+  /** Attach items in one batch, retaining the per-wildcard order used by weighted picks. */
+  static withItems(wildcards: Wildcard[], itemWildcardIds = wildcards.map(wildcard => wildcard.id)): WildcardWithItems[] {
+    const itemsByWildcard = new Map<number, WildcardItem[]>();
+    for (const item of WildcardItemModel.findByWildcardIds(itemWildcardIds)) {
+      const items = itemsByWildcard.get(item.wildcard_id) ?? [];
+      items.push(item);
+      itemsByWildcard.set(item.wildcard_id, items);
+    }
     return wildcards.map(wildcard => {
-      const items = WildcardItemModel.findByWildcardId(wildcard.id);
-      return { ...wildcard, items };
+      return { ...wildcard, items: itemsByWildcard.get(wildcard.id) ?? [] };
     });
   }
 
@@ -486,6 +512,16 @@ export class WildcardModel {
  * user-settings.db의 wildcard_items 테이블 관리
  */
 export class WildcardItemModel {
+  static findByWildcardIds(wildcardIds: number[]): WildcardItem[] {
+    if (wildcardIds.length === 0) return [];
+    const db = getUserSettingsDb();
+    return db.prepare(`
+      SELECT * FROM wildcard_items
+      WHERE wildcard_id IN (SELECT value FROM json_each(?))
+      ORDER BY order_index
+    `).all(JSON.stringify(wildcardIds)) as WildcardItem[];
+  }
+
   /**
    * 와일드카드 ID로 항목 조회
    */

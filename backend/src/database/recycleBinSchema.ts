@@ -15,4 +15,8 @@ export function ensureRecycleBinSchema(db: Database.Database): void {
       deleted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
+  const columns = db.prepare('PRAGMA table_info(recycle_bin_entries)').all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === 'library_restore_data')) {
+    db.exec('ALTER TABLE recycle_bin_entries ADD COLUMN library_restore_data TEXT');
+  }
 }

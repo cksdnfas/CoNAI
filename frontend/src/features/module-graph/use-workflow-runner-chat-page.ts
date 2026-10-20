@@ -3,6 +3,7 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { pageAction } from '@/features/codex-chat/page-action-helpers'
 import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowRecord } from '@/lib/api-module-graph'
 import { useI18n } from '@/i18n'
+import { getImageDraftRevision } from '@/features/image-generation/image-generation-shared'
 
 type RunnerChat = {
   graph: GraphWorkflowRecord | null
@@ -46,7 +47,7 @@ export function useWorkflowRunnerChatPage({ graph, definitions, values, change, 
   }))
   useChatPageRegistration(graph && enabled ? {
     kind: 'workflow_runner', title: t({ ko: '워크플로 실행 입력 · {name}', en: 'Workflow run inputs · {name}' }, { name: graph.name }).slice(0, 160), resourceId: String(graph.id), priority: 10, fields,
-    localRevision: JSON.stringify(values),
+    localRevision: getImageDraftRevision(values),
     data: { selected: { id: graph.id, name: graph.name, description: graph.description ?? '', nodeCount: graph.graph.nodes.length, edgeCount: graph.graph.edges.length }, runs },
     actions: [pageAction('workflow.run', t({ ko: '워크플로 실행', en: 'Run workflow' }), t({ ko: '현재 입력으로 실행. 결과는 get_graph_workflow_execution.', en: 'Run with the current inputs. Results: get_graph_workflow_execution.' }), undefined, 'save')],
     apply: (patch) => {

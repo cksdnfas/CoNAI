@@ -58,6 +58,65 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     assert.equal(CodexChatStore.findMessage(id, elsewhere), undefined)
     assert.equal(CodexChatStore.latestMessage(id)?.id, foreign)
     assert.equal(CodexChatStore.messageCount(id), 3)
+    assert.deepEqual(CodexChatStore.listMessages(id, { tail: 1, before: foreign }).map((message) => message.id), [own])
+    assert.deepEqual(CodexChatStore.listMessages(id, { tail: 2, before: own }).map((message) => message.id), [earlier])
+    assert.deepEqual(CodexChatStore.listMessages(id, { tail: 2, before: earlier }), [])
+    assert.equal(CodexChatStore.hasMessagesBefore(id, earlier), false)
+    assert.equal(CodexChatStore.hasMessagesBefore(id, own), true)
+    assert.throws(() => CodexChatStore.listMessages(id, { tail: 2, before: 0 }), /cursor/)
+    assert.deepEqual(CodexChatStore.listJudgeMessages(id, 2).map((message) => message.content), ['own quote', 'foreign quote'])
+    assert.equal(CodexChatStore.trailingReplyCount(id), 2)
+  })
+
+  await t.test('HTTP cursor pages retain thread authorization and validate cursors', async () => {
+    const express = (await import('express')).default
+    const router = (await import('../src/routes/codex-chat.routes')).default
+    const app = express()
+    app.use((req, _res, next) => {
+      req.session = { accountId: req.headers['x-test-account'] === '2' ? 2 : 1, accountType: 'admin' } as typeof req.session
+      next()
+    })
+    app.use('/api/codex-chat', router)
+    const server = app.listen(0, '127.0.0.1')
+    await new Promise<void>(resolve => server.once('listening', resolve))
+    try {
+      const address = server.address() as import('node:net').AddressInfo
+      const id = newThread()
+      const first = say(id, 'user', 'first private message')
+      const middle = say(id, 'assistant', 'middle private message')
+      const last = say(id, 'user', 'last private message')
+      const url = `http://127.0.0.1:${address.port}/api/codex-chat/threads/${id}`
+      const tail = await (await fetch(`${url}?tail=1`)).json() as any
+      assert.deepEqual(tail.data.messages.map((message: any) => message.id), [last])
+      assert.equal(tail.data.hasMoreBefore, true)
+      const page = await (await fetch(`${url}?tail=2&before=${last}`)).json() as any
+      assert.deepEqual(page.data.messages.map((message: any) => message.id), [first, middle])
+      assert.equal(page.data.hasMoreBefore, false)
+      assert.equal(page.data.messageCount, 3)
+      assert.equal((await fetch(`${url}?tail=2&before=0`)).status, 400)
+      assert.equal((await fetch(`${url}?before=${last}`)).status, 400)
+      const denied = await fetch(`${url}?tail=2&before=${last}`, { headers: { 'x-test-account': '2' } })
+      assert.equal(denied.status, 404)
+      assert.doesNotMatch(await denied.text(), /private message/)
+      CodexChatStore.updateListState(id, { title: 'Directory visible' })
+      CodexChatStore.createThread(2, 'Directory secret', 'llm', profile.id)
+      const directory = `http://127.0.0.1:${address.port}/api/codex-chat/threads`
+      const listed = await (await fetch(`${directory}?limit=1&query=Directory`)).json() as any
+      assert.equal(listed.success, true)
+      assert.deepEqual(listed.data.map((thread: any) => thread.id), [id])
+      assert.deepEqual(listed.pagination, { total: 1, has_more: false, next_cursor: null })
+      assert.equal(listed.data[0].preview.text, 'last private message')
+      assert.equal(listed.data[0].running, false)
+      assert.equal('summary' in listed.data[0], false, 'list rows do not load detail/context fields')
+      const legacy = await (await fetch(directory)).json() as any
+      assert.ok(Array.isArray(legacy.data))
+      assert.equal('pagination' in legacy, false, 'the existing full-directory UI keeps its response envelope')
+      assert.ok(!legacy.data.some((thread: any) => thread.title === 'Directory secret'))
+      assert.equal((await fetch(`${directory}?limit=101`)).status, 400)
+      assert.equal((await fetch(`${directory}?limit=1&cursor=invalid`)).status, 400)
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
   })
 
   await t.test('tail detail keeps state from earlier replies and manual edits, including group member state', async () => {
@@ -76,6 +135,15 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     assert.equal(tail.messagesFrom, tail.messages[0].id)
     assert.deepEqual(tail.blocks, full.blocks)
     assert.equal(tail.blocks?.state.status.hp, 8)
+    const { buildChatMessages, resolveContextConfig } = await import('../src/services/codex-chat/llmChatContext')
+    CodexChatStore.updateThreadContext(id, { summaryEnabled: true })
+    ;(await import('../src/services/codex-chat/chatMemory')).ChatSummaryStore.replaceAll(id, 'old state folded', beforeEdit)
+    const thread = CodexChatStore.findThreadById(id)!
+    const source = { threadId: id }
+    const bounded = CodexChatStore.listContextMessages(source, { afterId: beforeEdit, recentMessages: 1, textMessages: 1 })
+    const params = { profile: stateProfile, thread, config: resolveContextConfig(thread, stateProfile), tools: [] }
+    assert.deepEqual(buildChatMessages({ ...params, messages: bounded, historySource: source }),
+      buildChatMessages({ ...params, messages: CodexChatStore.listMessages(id) }))
     assert.throws(() => CodexChatService.getThread(stranger, id, 1), /찾을 수 없어/)
 
     const room = GroupChatService.create(requester, { profileIds: [stateProfile.id, profile.id], representativeId: stateProfile.id, userProfileId: null })
@@ -316,5 +384,51 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     const branch = CodexChatService.branchThread(requester, id, mine)
     assert.equal(CodexChatStore.countUnread([branch.id]).get(branch.id) ?? 0, 0)
     assert.equal(unread(), 1, 'the source keeps its own mark')
+  })
+
+  await t.test('full profile lists batch dependencies without changing role, preset or per-profile block resolution', async () => {
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    const { ChatJudgePresetStore } = await import('../src/services/codex-chat/chatJudgePresets')
+    const { ChatGenerationPresetStore } = await import('../src/services/codex-chat/chatGenerationPresets')
+    const { ChatSharedBlockStore } = await import('../src/services/codex-chat/chatDisplayBlocks')
+    const db = dbModule.getUserSettingsDb()
+    const slot = ModelSlotStore.routeId('chat')
+    const judge = ChatJudgePresetStore.create({ name: 'List judge' })
+    const generation = ChatGenerationPresetStore.create({ name: 'List generation', kind: 'nai' })
+    const a = ChatSharedBlockStore.create({ name: 'First state', block: { key: 'liststate', template: 'first' } })
+    const b = ChatSharedBlockStore.create({ name: 'Second state', block: { key: 'liststate', template: 'second' } })
+    const ids: number[] = []
+    for (let index = 0; index < 12; index++) {
+      const linked = ChatProfileStore.create({ name: `List linked ${index}`, engine: 'codex' })
+      ids.push(linked.id)
+      const blocks = index % 2 ? [b.id, a.id] : [a.id, b.id]
+      db.prepare(`UPDATE llm_chat_profiles SET model_slot_id = ?, summary_slot_id = ?, translation_slot_id = ?,
+        suggest_slot_id = ?, judge_slot_id = ?, judge_preset_id = ?, generation_preset_ids = ?, block_ids = ? WHERE id = ?`)
+        .run(slot, slot, slot, slot, slot, judge.id, JSON.stringify([generation.id, 999999]), JSON.stringify(blocks), linked.id)
+    }
+    // A missing role/preset stays unset in both full single-profile reads and the batched list.
+    db.prepare('UPDATE llm_chat_profiles SET model_slot_id = 999999, judge_preset_id = 999999 WHERE id = ?').run(ids[0])
+    const expected = ChatProfileStore.listNames().map(({ id }) => ChatProfileStore.find(id))
+    let queries = 0
+    const prepare = db.prepare.bind(db)
+    const counter = t.mock.method(db, 'prepare', (sql: string) => {
+      if (/^\s*SELECT\b/i.test(sql)) queries++
+      return prepare(sql)
+    })
+    try {
+      const listed = ChatProfileStore.list()
+      assert.deepEqual(listed, expected)
+      assert.equal(queries, 5, 'one profile query plus batched slots, judges, generation presets and requested block definitions')
+      queries = 0
+      assert.equal(ChatProfileStore.listNames({ ids }).length, 12)
+      assert.equal(queries, 1, 'name-only lists never hydrate dependencies')
+      const first = listed.find((row) => row.id === ids[0])!
+      const second = listed.find((row) => row.id === ids[1])!
+      assert.equal(first.modelSlotId, null)
+      assert.equal(first.judgePresetId, null)
+      assert.deepEqual(first.generationPresetIds, [generation.id])
+      assert.equal(first.style.blocks[0].template, 'first')
+      assert.equal(second.style.blocks[0].template, 'second', 'duplicate keys are resolved per profile, in link order')
+    } finally { counter.mock.restore() }
   })
 })

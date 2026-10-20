@@ -163,7 +163,7 @@ stdio:
 | Tool | 용도 |
 | --- | --- |
 | `get_prompt_group_structure` | 그룹 계층, 프롬프트 수, 미분류 수 조회 |
-| `get_prompts_in_group` | 특정 그룹 프롬프트 조회 (`group_id=0`은 미분류) |
+| `get_prompts_in_group` | 그룹 페이지 조회 (`group_id=0`은 미분류, 기본 50/최대 100개). `query`·`sort_by`·`sort_order` 지원. `include_total=false`는 정확한 `total`을 생략하며 `has_more`·`next_page`로 계속 조회 |
 | `batch_create_groups` | 하나 또는 여러 그룹 생성 (`groups` 배열) |
 | `move_prompts_between_groups` | 프롬프트 그룹 배정·이동 (지정 ID 1–100개 또는 원본 그룹 지정, 대상 0은 미분류) |
 | `backup_prompt_data` | 프롬프트/그룹/설정 JSON 백업 생성 |
@@ -365,10 +365,12 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 효과음 작업실(음향 탭)입니다. 프로젝트 → 그룹 → 후보(생성 테이크·업로드·편집본) 구조이고, 이미지 라이브러리와 따로 `audio.db`에 저장됩니다. 후보 식별자는 `candidate_id`이며 이미지의 `composite_hash`가 아닙니다. 도구의 "그룹"(audio group)은 화면의 효과음 하나이고, 화면에서 "그룹"이라 부르는 분류(UI, BGM 등)는 도구에서 폴더(`folder_id`)입니다. 효과음의 `description`은 사람이 읽는 설명이고, 생성 프롬프트는 `prompt`(대표 프롬프트)입니다.
 
+`list_audio_projects`와 `list_audio_groups`는 `{ items, limit, offset, has_more, next_cursor }`를 반환합니다. `has_more`가 참이면 같은 프로젝트·검색·필터·`limit`을 유지하고 `next_cursor`를 다음 요청의 `cursor`로 넘깁니다. 커서는 0부터 시작하는 오프셋 문자열이며 `cursor`와 `offset`을 함께 주면 `cursor`가 우선합니다. 프로젝트는 생성 시각·ID 순, 효과음은 받은 파일 우선 후 생성 시각·ID 순입니다. 검색은 기존 Unicode 대소문자 처리를 유지합니다. 목록을 순회하는 중 추가·삭제가 일어나면 첫 페이지부터 다시 읽어 최신 상태를 확인하세요.
+
 | Tool | 용도 | 도구 범위 | 계정 권한 |
 | --- | --- | --- | --- |
-| `list_audio_projects` | 프로젝트와 그룹·후보 수, 프로젝트별 받은 파일 그룹 ID | `read` | `audio.view` |
-| `list_audio_groups` | 프로젝트의 그룹, 설명·대표 프롬프트, 폴더, 파일명 규칙(`label`), 채택·코멘트 수. `project_id`를 생략하면 모든 프로젝트를 같은 검색·필터로 조회 | `read` | `audio.view` |
+| `list_audio_projects` | 프로젝트와 그룹·후보 수, 프로젝트별 받은 파일 그룹 ID. `limit`(기본/최대 200), `cursor` 또는 `offset`으로 페이지 조회 | `read` | `audio.view` |
+| `list_audio_groups` | 프로젝트의 그룹, 설명·대표 프롬프트, 폴더, 파일명 규칙(`label`), 채택·코멘트 수, `project_name`. `project_id` 생략 시 전체 프로젝트의 같은 검색·필터를 조회. `limit`(기본/최대 200), `cursor` 또는 `offset` 지원 | `read` | `audio.view` |
 | `list_audio_folders` | 프로젝트의 폴더(화면의 그룹)와 폴더별 효과음 수 | `read` | `audio.view` |
 | `list_audio_candidates` | 그룹의 후보 목록(검수 상태, 길이, 출처) | `read` | `audio.view` |
 | `get_audio_candidate` | 후보 하나의 출처(프롬프트, seed, 워크플로, 서버)와 검수 메모 | `read` | `audio.view` |

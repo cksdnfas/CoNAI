@@ -2,6 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useStat
 import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { hasOpenDialog, isTypingTarget } from '@/lib/keyboard-shortcut'
 import { useImageViewModal, type ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import { prepareImageSourceState } from '@/features/images/image-source-navigation'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
@@ -24,27 +25,6 @@ import { useImageListSelection } from './use-image-list-selection'
 /** Match the id the grid/masonry cells use so selection, ranges, and select-all agree. */
 function resolveImageListItemId(image: ImageRecord, getItemId?: (image: ImageRecord) => string) {
   return String(getItemId ? getItemId(image) : (image.composite_hash ?? image.id))
-}
-
-function isKeyboardEditingTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false
-  }
-
-  const tagName = target.tagName
-  return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target.isContentEditable
-}
-
-/** Any open dialog, drawer, or the image viewer owns Esc / Ctrl+A while it is up. */
-function hasOpenDialog() {
-  // Closed bottom drawers stay mounted with pointer-events off, so skip anything inert.
-  for (const element of document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')) {
-    if (element.dataset.state === 'closed' || window.getComputedStyle(element).pointerEvents === 'none') {
-      continue
-    }
-    return true
-  }
-  return false
 }
 
 function ImageListFallback() {
@@ -192,7 +172,7 @@ export function ImageList({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || isKeyboardEditingTarget(event.target) || hasOpenDialog()) {
+      if (event.defaultPrevented || event.isComposing || isTypingTarget(event) || hasOpenDialog()) {
         return
       }
 

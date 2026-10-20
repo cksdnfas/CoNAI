@@ -7,7 +7,7 @@ import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-a
 import { useChatPagePermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { uploadWorkflowInputAsset, deleteWorkflowInputAsset } from '@/lib/api-workflow-input-assets'
-import type { WorkflowFieldDraftValue } from '../image-generation-shared'
+import { getImageDraftRevision, type WorkflowFieldDraftValue } from '../image-generation-shared'
 import { applyComfyChatNode, comfyNodeChatData, COMFY_NODE_PATCH_SCHEMA } from './comfy-chat-node'
 import { buildMiniMaxH3DirectorNodeValue, normalizeMiniMaxH3DirectorNodeValue, parseMiniMaxH3DirectorTimeline, getMiniMaxH3DirectorAssets, createMiniMaxH3DirectorItemId, type MiniMaxH3DirectorMediaType, isMiniMaxH3DirectorInputLink } from './minimax-h3-director-dasiwa-utils'
 import { fitsMiniMaxDirectorMedia, getMiniMaxDirectorFreeSlot } from './minimax-h3-director-media'
@@ -42,7 +42,7 @@ export function useComfyChatPage(workflow: { id: number; name: string } | null |
   // Seeds the backend rolls per run unless this field gives one (backend comfyui/seedControl): empty or -1 = new seed each run.
   const seedFields = safe.filter((field) => field.type === 'number' && SEED_JSON_PATH.test(field.jsonPath))
   useChatPageRegistration(options.enabled !== false ? {
-    kind: 'comfyui', title: workflow ? t({ ko: 'ComfyUI · {name}', en: 'ComfyUI · {name}' }, { name: workflow.name }).slice(0, 160) : 'ComfyUI', resourceId: workflow ? String(workflow.id) : 'comfy-picker', fields, localRevision: JSON.stringify(draft),
+    kind: 'comfyui', title: workflow ? t({ ko: 'ComfyUI · {name}', en: 'ComfyUI · {name}' }, { name: workflow.name }).slice(0, 160) : 'ComfyUI', resourceId: workflow ? String(workflow.id) : 'comfy-picker', fields, localRevision: getImageDraftRevision(draft),
     data: { workflows: workflowChoices.map((item) => ({ id: item.id, name: item.name })), seedFields: seedFields.map((field) => field.id), nodes: nodeFields.map((field) => comfyNodeChatData(field, draft[field.id])), media: media.candidates, presets: presets.candidates,
       options: { ...Object.fromEntries(safe.filter((field) => field.options?.length).map((field) => [field.id, field.options!.slice(0, 512)])), loras: (options.loraOptions ?? []).slice(0, 512) }, selected: { workflowId: workflow?.id ?? 0, name: workflow?.name ?? '', images: mediaFields.map((field) => ({ fieldId: field.id, label: field.label, name: mediaName(draft[field.id]) })) } },
     actions: [...media.actions, ...presets.actions,

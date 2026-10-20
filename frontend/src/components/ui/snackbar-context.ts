@@ -2,14 +2,20 @@ import { createContext, useContext, type ReactNode } from 'react'
 
 export type SnackbarTone = 'info' | 'error'
 
+export interface SnackbarAction {
+  label: string
+  onClick: () => void
+}
+
 export interface ShowSnackbarOptions {
   message: string
+  action?: SnackbarAction
   /** Optional rich content; plain snackbars keep their existing rendering. */
   content?: ReactNode
   /** Replace a visible card with this key, even when its message changes. */
   key?: string
   tone?: SnackbarTone
-  /** Auto-close delay. Defaults to 2.8s for info; errors always stay at least 8s and can be closed by hand. */
+  /** Defaults to 2.8s for info, 10s with an action; errors stay at least 8s. */
   durationMs?: number
 }
 

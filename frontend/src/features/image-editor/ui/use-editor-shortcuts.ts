@@ -1,4 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react'
+import { isTypingTarget } from '@/lib/keyboard-shortcut'
 import type { EditorEngine, EditorTool } from '../engine/editor-engine'
 
 const TOOL_KEYS: Record<string, EditorTool> = {
@@ -10,10 +11,6 @@ const TOOL_KEYS: Record<string, EditorTool> = {
   i: 'eyedropper',
   t: 'text',
   c: 'crop',
-}
-
-function isTypingTarget(target: EventTarget | null) {
-  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
 }
 
 /**
@@ -53,7 +50,7 @@ export function useEditorShortcuts({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (!ownsEvent(event) || event.defaultPrevented) return
-      const typing = isTypingTarget(event.target)
+      const typing = isTypingTarget(event)
       const key = event.key.toLowerCase()
       const mod = event.ctrlKey || event.metaKey
       const consume = () => {

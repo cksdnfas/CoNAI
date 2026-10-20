@@ -38,10 +38,11 @@ const UNSCOPED_ALLOWED = new Set<string>([
   'get_chat_settings', 'propose_chat_settings',
 ])
 const FEATURE_UNCLASSIFIED_ALLOWED = new Set<string>([])
-const STALE_SCOPE_ALLOWED = new Set<string>([])
+// Publishing registers only for workspace-bound chat/plugin contexts, absent from this test.
+const STALE_SCOPE_ALLOWED = new Set<string>(['workspace_publish_resources'])
 // Project tools register only in a chat or plugin window bound to a project (context.workspace), which none of the
 // contexts above have; isContextToolAllowed scopes them itself.
-const STALE_FEATURE_ALLOWED = new Set<string>(['workspace_list', 'workspace_read', 'workspace_search', 'workspace_apply'])
+const STALE_FEATURE_ALLOWED = new Set<string>(['workspace_list', 'workspace_read', 'workspace_search', 'workspace_apply', 'workspace_publish_resources'])
 
 test('mcp tool classification: every registered tool has a scope and a feature permission, no stale entries', { timeout: 60000 }, async (t) => {
   // Isolate all runtime paths before importing modules that open databases or settings.

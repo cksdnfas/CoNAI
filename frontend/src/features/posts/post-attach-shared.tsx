@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { postLink } from '@conai/shared'
 import { cn } from '@/lib/utils'
 import { fileExtension } from '@/lib/file-extension'
+import { useInView } from '@/lib/use-in-view'
 
 export type AttachTab = 'media' | 'audio' | 'post' | 'file'
 /** How a picked post goes into the body: a small card (`![t](post:1)`) or an inline link (`[t](post:1)`). */
@@ -43,17 +44,12 @@ export function attachMarkdown(item: AttachItem, postStyle: PostInsertStyle) {
 }
 
 /** Calls `onVisible` when the sentinel scrolls into its scroll container: infinite lists without a "more" button. */
-export function LoadMoreSentinel({ enabled, onVisible }: { enabled: boolean; onVisible: () => void }) {
-  const ref = useRef<HTMLDivElement | null>(null)
+export function LoadMoreSentinel({ enabled, onVisible, rootMargin = '240px' }: { enabled: boolean; onVisible: () => void; rootMargin?: string }) {
+  const [ref, view] = useInView<HTMLDivElement>(rootMargin)
   const callback = useRef(onVisible)
   useEffect(() => { callback.current = onVisible }, [onVisible])
-  useEffect(() => {
-    const node = ref.current
-    if (!node || !enabled) return
-    const observer = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) callback.current() }, { rootMargin: '240px' })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [enabled])
+  // Re-enabling after a page lands while the sentinel is still in view asks for the next one.
+  useEffect(() => { if (enabled && view.visible) callback.current() }, [enabled, view.visible])
   return <div ref={ref} aria-hidden className="h-px w-full shrink-0" />
 }
 

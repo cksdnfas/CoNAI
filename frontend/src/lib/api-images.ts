@@ -140,6 +140,7 @@ export async function deleteImagesBulk(compositeHashes: string[]) {
       deleted: number
       failed: number
       errors: string[]
+      recycleBinEntries: string[]
     }
   }>>('/api/images/bulk', {
     method: 'DELETE',

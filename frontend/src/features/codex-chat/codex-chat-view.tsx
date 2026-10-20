@@ -239,7 +239,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     else await startWith(profileIds)
   }, [startWith, userProfiles])
 
-  const { threadsQuery, threads, activeThreadId, activeThread, threadQuery, thread } = useChatThreadData(chat, liveTurn?.threadId ?? null)
+  const { threadsQuery, threads, activeThreadId, activeThread, threadQuery, thread, displayThread, loadEarlier, preserveHistory, loadingEarlier, earlierError, hasMoreBefore } = useChatThreadData(chat, liveTurn?.threadId ?? null)
   // The new chat being prepared (not saved yet) stands in for a chat until its first message saves it.
   const pendingChat = activeThreadId === null ? chat.pendingChat : null
   const pendingProfile = pendingChat ? profilesById.get(pendingChat.profileId) ?? null : null
@@ -251,9 +251,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }, [draftKey, setChatDraft])
 
   const pendingUserProfileId = pendingChat?.userProfileId ?? null
-  const userSpeaker = useMemo(() => userSpeakerOf(thread ?? { user_profile_id: pendingUserProfileId }, userProfiles), [thread, pendingUserProfileId, userProfiles])
-  const profile = thread?.profile_id ? profilesById.get(thread.profile_id) ?? null : pendingProfile
-  const isCodexThread = (thread?.engine ?? pendingProfile?.engine) === 'codex'
+  const userSpeaker = useMemo(() => userSpeakerOf(activeThreadId === null ? { user_profile_id: pendingUserProfileId } : thread, userProfiles), [activeThreadId, thread, pendingUserProfileId, userProfiles])
+  const profile = displayThread?.profile_id ? profilesById.get(displayThread.profile_id) ?? null : pendingProfile
+  const isCodexThread = (displayThread?.engine ?? pendingProfile?.engine) === 'codex'
   const { appearance, update: updateAppearance } = useChatAppearance(activeThreadId, chat.canUse)
   // Chat flags stay in the pending chat until its first send, then on the saved thread.
   const flagsQuery = useChatFlags(chat.canUse)
@@ -277,7 +277,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const closeFlagTray = useCallback(() => setFlagTrayOpen(false), [])
   useEffect(() => setFlagTrayOpen(false), [activeThreadId])
   // Group rooms: `profile` is the representative (the room's look); every member speaks with its own face and emoticons.
-  const isGroup = thread?.kind === 'group'
+  const isGroup = displayThread?.kind === 'group'
   const group = isGroup ? threadQuery.data?.group ?? null : null
   const memberIdsKey = (isGroup ? group?.memberIds ?? activeThread?.member_profile_ids ?? [] : []).join(',')
   const memberProfiles = useMemo(() => memberIdsKey ? memberIdsKey.split(',').flatMap((id) => profilesById.get(Number(id)) ?? []) : [], [memberIdsKey, profilesById])
@@ -384,6 +384,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const isTranscript = activeView === 'chat' && !showList
   const { scrollRef, visibleMessages, flashMessageId, observeTranscript, showEarlierMessages, onTranscriptScroll, followLatest } = useChatTranscriptWindow({
     activeThreadId, messages, isTranscript, messageFocus, clearMessageFocus, liveTurn, runningText: threadQuery.data?.running?.text,
+    loadEarlier, preserveHistory, loadingEarlier, earlierError, hasMoreBefore,
     serverReplyLength: serverReplies.reduce((total, reply) => total + reply.text.length + reply.toolCalls.length, 0),
   })
   useLayoutEffect(() => setEditingMessageId(null), [activeThreadId, isTranscript])
@@ -937,7 +938,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   </>
   // Context stays in the header, the rest of the chat's actions sit under ⋯; a second press on a view returns to the chat.
   const toggleView = (next: 'context' | 'gallery') => setView(activeView === next ? 'chat' : next)
-  const headerActions = thread ? (
+  const headerActions = displayThread ? (
     <IconButton variant="ghost" size="icon-sm" active={activeView === 'context'} onClick={() => toggleView('context')} label={t({ ko: '컨텍스트', en: 'Context' })}><SlidersHorizontal /></IconButton>
   ) : null
   const headerAvatar = isGroup
@@ -969,7 +970,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const transcript = (
     <ChatBlockChangesContext.Provider value={blockChanges}><ChatChoiceStatesContext.Provider value={choiceStates}><div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={onTranscriptScroll}>
       <div ref={observeTranscript} className={cn('mx-auto flex flex-col pb-6', layout === 'page' ? cn(CHAT_WIDTH_CLASS[appearance.width], 'px-4 pt-2 sm:px-6') : 'px-4 pt-3')} style={{ ...chatTranscriptStyle(appearance, profile?.style), gap: `${CHAT_MESSAGE_GAP_PX[appearance.messageGap]}px` }}>
-        {visibleMessages.length < messages.length ? <Button variant="ghost" size="sm" onClick={showEarlierMessages}>{t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
+        {visibleMessages.length < messages.length || hasMoreBefore ? <Button variant="ghost" size="sm" disabled={loadingEarlier} onClick={() => void showEarlierMessages()}>{earlierError ? t({ ko: '이전 메시지 다시 불러오기', en: 'Retry earlier messages' }) : t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
         {pendingChat?.greeting?.text ? <div>
           <CodexChatAssistantMessage content={pendingChat.greeting.text} toolCalls={[]} appearance={appearance} speaker={speaker} />
           {pendingChat.greeting.greetings.length > 1 ? <div className="mt-1 flex items-center gap-1">
@@ -1010,11 +1011,11 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     <DropdownMenuContent align="end" className="min-w-48" onCloseAutoFocus={(event) => { if (appearanceOpenRef.current) { event.preventDefault(); appearanceOpenRef.current = false } }}>
       {/* This chat's own items first, then the account-wide managers it also opens, each group named. */}
       <DropdownMenuLabel>{t({ ko: '이 채팅', en: 'This chat' })}</DropdownMenuLabel>
-      {thread ? <DropdownMenuItem onSelect={() => toggleView('gallery')}><LayoutGrid />{activeView === 'gallery' ? t({ ko: '이미지 모아보기 닫기', en: 'Close image gallery' }) : t({ ko: '이미지 모아보기', en: 'Image gallery' })}</DropdownMenuItem> : null}
+      {displayThread ? <DropdownMenuItem onSelect={() => toggleView('gallery')}><LayoutGrid />{activeView === 'gallery' ? t({ ko: '이미지 모아보기 닫기', en: 'Close image gallery' }) : t({ ko: '이미지 모아보기', en: 'Image gallery' })}</DropdownMenuItem> : null}
       {statusItem}
       {inviteItem}
       <DropdownMenuItem onSelect={() => { appearanceOpenRef.current = true; setAppearanceOpen(true) }}><AppearanceIcon />{t({ ko: '채팅 모양', en: 'Chat appearance' })}</DropdownMenuItem>
-      {isGroup ? null : <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{isCodexThread ? t({ ko: '압축', en: 'Compact' }) : t({ ko: '지금 요약', en: 'Summarize now' })}</DropdownMenuItem>}
+      {isGroup ? null : <DropdownMenuItem disabled={!thread || isBusy} onSelect={() => void runCommand('/compact')}><FoldVertical />{isCodexThread ? t({ ko: '압축', en: 'Compact' }) : t({ ko: '지금 요약', en: 'Summarize now' })}</DropdownMenuItem>}
       <DropdownMenuItem onSelect={() => setExportOpen(true)}><Download />{t({ ko: '내보내기', en: 'Export' })}</DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuLabel>{t({ ko: '내 설정', en: 'My settings' })}</DropdownMenuLabel>
@@ -1022,7 +1023,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       <DropdownMenuItem onSelect={() => setUserProfileManagerOpen(true)}><UserRound />{t({ ko: '사용자 프로필', en: 'User profiles' })}</DropdownMenuItem>
       {canManageRoutines ? <DropdownMenuItem onSelect={() => setRoutinesOpen(true)}><AlarmClock />{t({ ko: '루틴', en: 'Routines' })}</DropdownMenuItem> : null}
       <DropdownMenuSeparator />
-      {thread ? <DropdownMenuItem disabled={isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem> : null}
+      {displayThread ? <DropdownMenuItem disabled={!thread || isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem> : null}
       <DropdownMenuItem disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()} className="text-destructive"><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu></span></ChatAppearancePopover>
@@ -1172,7 +1173,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     ? t({ ko: '이미지 모아보기', en: 'Image gallery' })
     : activeView === 'context'
       ? t({ ko: '컨텍스트', en: 'Context' })
-      : thread ? thread.title || untitled : pendingProfile?.name ?? untitled
+      : displayThread ? displayThread.title || untitled : pendingProfile?.name ?? untitled
 
   const dialogs = <>
     <ChatExportDialog threadId={activeThreadId} open={exportOpen} onClose={() => setExportOpen(false)} />
@@ -1267,10 +1268,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         </> : <>
           {backButton ?? <span className="w-1" />}
           {headerAvatar}
-          <span className="min-w-0 flex-1 truncate px-1.5 text-sm font-semibold">{thread ? thread.title || untitled : pendingProfile?.name ?? untitled}</span>
+          <span className="min-w-0 flex-1 truncate px-1.5 text-sm font-semibold">{displayThread ? displayThread.title || untitled : pendingProfile?.name ?? untitled}</span>
           {expandButton}
           {headerActions}
-          {thread ? chatMenu : null}
+          {displayThread ? chatMenu : null}
         </>}
         {closeButton}
       </div>

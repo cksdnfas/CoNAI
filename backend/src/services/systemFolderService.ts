@@ -276,25 +276,42 @@ export const SystemFolderService = {
    * Put RecycleBin files back where they were deleted from. An occupied original location fails the item, or with
    * `rename` gets a free ` (복원 N)` name next to it. Files without a recorded origin cannot be restored.
    */
-  async restore(names: string[], conflict: 'fail' | 'rename'): Promise<SystemFolderBatchResult> {
+  async restore(names: string[], conflict: 'fail' | 'rename', libraryOnly = false): Promise<SystemFolderBatchResult> {
     const result: SystemFolderBatchResult = { done: [], failed: [] };
     const origins = readRecycleBinOrigins(names);
-    const binRoot = rootDirectory('recycle-bin');
-    const denied = deniedAreas();
+    let roots: { binRoot: string; denied: string[] } | undefined;
     for (const name of names) {
       try {
-        const { absolute } = resolveFile('recycle-bin', [name]);
         const origin = origins.get(name);
+        if (libraryOnly && (origin?.source !== 'library' || !origin.libraryRestoreData)) {
+          throw new SystemFolderError('이 항목은 라이브러리 삭제 되돌리기 대상이 아니야.', 403);
+        }
         if (!origin) throw new SystemFolderError('원래 위치 기록이 없어서 복원할 수 없어.', 409, 'no-origin');
+        roots ??= { binRoot: rootDirectory('recycle-bin'), denied: deniedAreas() };
+        const { absolute } = resolveFile('recycle-bin', [name]);
         const original = path.resolve(origin.originalPath);
         const targetDirectory = realOrResolved(path.dirname(original));
-        if (isDenied(targetDirectory, denied) || within(binRoot, targetDirectory)) throw new SystemFolderError('이 위치로는 복원할 수 없어.', 403);
+        if (isDenied(targetDirectory, roots.denied) || within(roots.binRoot, targetDirectory)) throw new SystemFolderError('이 위치로는 복원할 수 없어.', 403);
         await fs.promises.mkdir(path.dirname(original), { recursive: true });
         // The move itself refuses an occupied name (EEXIST), so a file created after any check is never replaced.
         const restoredTo = await restoreWithoutReplacing(absolute, original, conflict);
+        let warning: string | undefined;
+        if (origin.source === 'library' && origin.libraryRestoreData) {
+          try {
+            const { DeletionService } = await import('./deletionService');
+            DeletionService.restoreLibraryEntry(origin.libraryRestoreData, restoredTo);
+          } catch (error) {
+            if (libraryOnly) {
+              await moveFileWithoutReplacing(restoredTo, absolute);
+              throw error;
+            }
+            // Administrators must still be able to recover the file when its former DB links no longer exist.
+            warning = `파일은 복원했지만 라이브러리에 다시 연결하지 못했어: ${errorMessage(error)}`;
+          }
+        }
         forgetRecycleBinOrigins([name]);
         if (origin.source === 'audio') await reattachRestoredAudio(restoredTo);
-        result.done.push({ name, restoredTo });
+        result.done.push({ name, restoredTo, ...(warning ? { warning } : {}) });
       } catch (error) {
         result.failed.push(failure(name, error));
       }

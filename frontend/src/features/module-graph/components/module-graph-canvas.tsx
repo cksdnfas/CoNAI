@@ -3,6 +3,7 @@ import { Background, Controls, MiniMap, ReactFlow, useNodesInitialized, type Con
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
+import { isTypingTarget } from '@/lib/keyboard-shortcut'
 import { ModuleGraphActionMenu, type ModuleGraphActionMenuState } from './module-graph-action-menu'
 import { ModuleGraphQuickCreateMenu, type RecommendedModuleMatch } from './module-graph-quick-create-menu'
 import { ModuleGraphNodeCard } from './module-graph-node-card'
@@ -85,15 +86,6 @@ function getEventClientPoint(event: unknown) {
   }
 
   return null
-}
-
-/** Resolve whether one target should keep its native text-editing shortcuts. */
-function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false
-  }
-
-  return target.isContentEditable || Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
 }
 
 /** Resolve whether one click is extending selection instead of opening a node menu. */
@@ -561,7 +553,7 @@ export function ModuleGraphCanvas({
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isCanvasActiveRef.current || isEditableTarget(event.target)) {
+      if (!isCanvasActiveRef.current || isTypingTarget(event)) {
         return
       }
 

@@ -60,7 +60,9 @@ test('chat workflow reach: field choices, room list, image refs, run and autorun
   const listRooms = async (accountId: number | null, input: Record<string, unknown> = {}) => {
     handlers.clear()
     registerChatRoomListTools(fakeServer as never, { scopes: ['read'], requester: { accountId, accountType: 'user' } })
-    return JSON.parse((await handlers.get('list_chat_rooms')!(input)).content[0].text) as { total: number; rooms: Array<Record<string, unknown>> }
+    return JSON.parse((await handlers.get('list_chat_rooms')!(input)).content[0].text) as {
+      total: number; rooms: Array<Record<string, unknown>>; has_more: boolean; next_cursor: string | null; nextOffset: number | null
+    }
   }
   const mine = await listRooms(1)
   assert.deepEqual(mine.rooms.map((room) => room.id).sort(), [direct, group].sort(), 'archived and other accounts\' rooms are left out')
@@ -70,6 +72,29 @@ test('chat workflow reach: field choices, room list, image refs, run and autorun
   assert.deepEqual((await listRooms(1, { kind: 'group' })).rooms.map((room) => room.id), [group])
   assert.deepEqual((await listRooms(1, { query: 'kai' })).rooms.map((room) => room.id), [group], 'a member name finds the room')
   assert.deepEqual((await listRooms(2)).rooms.map((room) => room.id), [theirs])
+  const noHydration = t.mock.method(ChatProfileStore, 'list', () => { throw new Error('Room names must not hydrate profiles') })
+  try {
+    const first = await listRooms(1, { limit: 1 })
+    assert.equal(first.total, 2)
+    assert.equal(first.has_more, true)
+    assert.ok(first.next_cursor)
+    const second = await listRooms(1, { limit: 1, cursor: first.next_cursor })
+    assert.equal(second.total, 2, 'the total is the filtered directory, not the remaining suffix')
+    assert.equal(second.has_more, false)
+    assert.equal(second.next_cursor, null)
+    assert.deepEqual([...first.rooms, ...second.rooms].map((room) => room.id), mine.rooms.map((room) => room.id), 'equal activity timestamps use id as the stable tie breaker')
+    assert.deepEqual((await listRooms(1, { limit: 1, offset: 1 })).rooms, second.rooms, 'legacy offsets also page in SQL')
+    const empty = await listRooms(1, { query: '%' })
+    assert.deepEqual(empty.rooms, [], 'search is literal, not a SQL LIKE pattern')
+    assert.equal(empty.has_more, false)
+    CodexChatStore.updateListState(direct, { pinned: true })
+    assert.deepEqual((await listRooms(1, { pinned: true })).rooms.map((room) => room.id), [direct])
+    assert.deepEqual((await listRooms(1, { pinned: false })).rooms.map((room) => room.id), [group])
+    assert.deepEqual((await listRooms(1, { query: 'kai', kind: 'direct' })).rooms, [], 'a group member does not match another direct room')
+    assert.deepEqual((await listRooms(2, { query: 'Tea' })).rooms, [], 'membership/name search never crosses account boundaries')
+    await assert.rejects(listRooms(1, { cursor: 'invalid' }), /cursor/)
+    await assert.rejects(listRooms(1, { cursor: first.next_cursor, offset: 1 }), /either/)
+  } finally { noHydration.mock.restore() }
   const admins = t.mock.method(AuthAccount, 'countActiveAdmins', () => 1)
   authHelpers.invalidateConfiguredAuthCache()
   try { assert.equal((await listRooms(null)).total, 0, 'nobody owns rooms once accounts exist') } finally { admins.mock.restore(); authHelpers.invalidateConfiguredAuthCache() }

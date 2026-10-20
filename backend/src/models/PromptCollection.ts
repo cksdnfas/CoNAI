@@ -3,8 +3,12 @@ import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLik
 import { PromptCollectionRecord,
 NegativePromptCollectionRecord,
 PromptCollectionData,
-PromptSearchResult } from '@conai/shared';
+PromptSearchResult,
+PAGINATION } from '@conai/shared';
 import { getPromptCollectionTableName as getTableName } from '../utils/promptTables';
+
+type PromptSearchRow = Pick<PromptCollectionRecord, 'id' | 'prompt' | 'usage_count' | 'group_id' | 'synonyms'>
+  & Pick<PromptSearchResult, 'type'>;
 
 export class PromptCollectionModel {
   /**
@@ -174,21 +178,60 @@ export class PromptCollectionModel {
     page: number = 1,
     limit: number = 20,
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
-    sortOrder: 'ASC' | 'DESC' = 'DESC'
+    sortOrder: 'ASC' | 'DESC' = 'DESC',
+    type: 'positive' | 'negative' | 'auto' | 'both' = 'positive'
   ): { prompts: PromptSearchResult[], total: number } {
+    if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1) {
+      throw new RangeError('page and limit must be positive integers');
+    }
+    limit = Math.min(limit, PAGINATION.MAX_LIMIT);
     const searchPattern = buildSqlContainsPattern(query);
     const offset = (page - 1) * limit;
+    if (!Number.isSafeInteger(offset)) {
+      throw new RangeError('page is too large');
+    }
 
-    const countRow = db.prepare('SELECT COUNT(*) as total FROM prompt_collection WHERE prompt LIKE ?' + SQL_LIKE_ESCAPE_CLAUSE).get(searchPattern) as { total: number };
+    const types: Array<PromptSearchResult['type']> = type === 'both' ? ['positive', 'negative']
+      : [type === 'auto' ? 'auto' : type === 'negative' ? 'negative' : 'positive'];
+    const orderBy = sortBy === 'created_at' ? 'created_at' : sortBy === 'prompt' ? 'prompt' : 'usage_count';
+    const orderDirection = sortOrder === 'ASC' ? 'ASC' : 'DESC';
+    const where = `WHERE prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}`;
+    const patterns = types.map(() => searchPattern);
+    const countQuery = types.map(promptType => `SELECT COUNT(*) AS total FROM ${getTableName(promptType)} ${where}`).join(' UNION ALL ');
+    const countRow = db.prepare(`SELECT SUM(total) AS total FROM (${countQuery})`).get(...patterns) as { total: number };
     const total = countRow.total;
 
-    const rows = db.prepare(
-      `SELECT id, prompt, usage_count, group_id, synonyms
-       FROM prompt_collection
-       WHERE prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}
-       ORDER BY ${sortBy} ${sortOrder}
-       LIMIT ? OFFSET ?`
-    ).all(searchPattern, limit, offset) as PromptCollectionRecord[];
+    const localeSort = type === 'both' && orderBy === 'prompt';
+    const selectQuery = types.map(promptType => {
+      const select = `SELECT id, prompt, usage_count, group_id, synonyms, created_at, '${promptType}' AS type
+        FROM ${getTableName(promptType)} ${where}`;
+      return localeSort ? `SELECT * FROM (${select} ORDER BY prompt ${orderDirection})` : select;
+    }).join(' UNION ALL ');
+
+    let rows: PromptSearchRow[];
+    if (localeSort) {
+      // "both" historically uses localeCompare, unlike single-type SQLite BINARY ordering.
+      // Stream matches and retain only a bounded prefix rather than materializing the whole collection.
+      const prefixSize = Math.min(offset + limit, total);
+      const compare = (a: PromptSearchRow, b: PromptSearchRow) => orderDirection === 'DESC'
+        ? b.prompt.localeCompare(a.prompt) : a.prompt.localeCompare(b.prompt);
+      rows = [];
+      if (offset < total) {
+        for (const row of db.prepare(selectQuery).iterate(...patterns) as Iterable<PromptSearchRow>) {
+          rows.push(row);
+          if (rows.length === prefixSize * 2) {
+            rows.sort(compare);
+            rows.length = prefixSize;
+          }
+        }
+        rows.sort(compare);
+        rows = rows.slice(offset, offset + limit);
+      }
+    } else {
+      rows = db.prepare(
+        `SELECT * FROM (${selectQuery}) ORDER BY ${orderBy} ${orderDirection}${type === 'both' ? ', type ASC, id ASC' : ''} LIMIT ? OFFSET ?`
+      ).all(...patterns, limit, offset) as PromptSearchRow[];
+    }
 
     const prompts: PromptSearchResult[] = rows.map(row => ({
       id: row.id,
@@ -196,7 +239,7 @@ export class PromptCollectionModel {
       usage_count: row.usage_count,
       group_id: row.group_id,
       synonyms: row.synonyms ? JSON.parse(row.synonyms) : [],
-      type: 'positive' as const
+      type: row.type
     }));
 
     return { prompts, total };
@@ -212,30 +255,7 @@ export class PromptCollectionModel {
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
     sortOrder: 'ASC' | 'DESC' = 'DESC'
   ): { prompts: PromptSearchResult[], total: number } {
-    const searchPattern = buildSqlContainsPattern(query);
-    const offset = (page - 1) * limit;
-
-    const countRow = db.prepare('SELECT COUNT(*) as total FROM auto_prompt_collection WHERE prompt LIKE ?' + SQL_LIKE_ESCAPE_CLAUSE).get(searchPattern) as { total: number };
-    const total = countRow.total;
-
-    const rows = db.prepare(
-      `SELECT id, prompt, usage_count, group_id, synonyms
-       FROM auto_prompt_collection
-       WHERE prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}
-       ORDER BY ${sortBy} ${sortOrder}
-       LIMIT ? OFFSET ?`
-    ).all(searchPattern, limit, offset) as PromptCollectionRecord[];
-
-    const prompts: PromptSearchResult[] = rows.map(row => ({
-      id: row.id,
-      prompt: row.prompt,
-      usage_count: row.usage_count,
-      group_id: row.group_id,
-      synonyms: row.synonyms ? JSON.parse(row.synonyms) : [],
-      type: 'auto' as const
-    }));
-
-    return { prompts, total };
+    return this.searchPrompts(query, page, limit, sortBy, sortOrder, 'auto');
   }
 
   /**
@@ -248,30 +268,7 @@ export class PromptCollectionModel {
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
     sortOrder: 'ASC' | 'DESC' = 'DESC'
   ): { prompts: PromptSearchResult[], total: number } {
-    const searchPattern = buildSqlContainsPattern(query);
-    const offset = (page - 1) * limit;
-
-    const countRow = db.prepare('SELECT COUNT(*) as total FROM negative_prompt_collection WHERE prompt LIKE ?' + SQL_LIKE_ESCAPE_CLAUSE).get(searchPattern) as { total: number };
-    const total = countRow.total;
-
-    const rows = db.prepare(
-      `SELECT id, prompt, usage_count, group_id, synonyms
-       FROM negative_prompt_collection
-       WHERE prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE}
-       ORDER BY ${sortBy} ${sortOrder}
-       LIMIT ? OFFSET ?`
-    ).all(searchPattern, limit, offset) as NegativePromptCollectionRecord[];
-
-    const prompts: PromptSearchResult[] = rows.map(row => ({
-      id: row.id,
-      prompt: row.prompt,
-      usage_count: row.usage_count,
-      group_id: row.group_id,
-      synonyms: row.synonyms ? JSON.parse(row.synonyms) : [],
-      type: 'negative' as const
-    }));
-
-    return { prompts, total };
+    return this.searchPrompts(query, page, limit, sortBy, sortOrder, 'negative');
   }
 
   /**

@@ -108,7 +108,7 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
 
   await t.test('a project has exactly one inbox that cannot be deleted or labelled', async () => {
     assert.ok(project.inbox_group_id)
-    const groups = service.listAudioGroups(project.id)
+    const groups = service.listAudioGroups(project.id).items
     assert.deepEqual(groups.map((group) => [group.name, group.is_inbox, group.label]), [[service.AUDIO_INBOX_GROUP_NAME, true, null]])
     await assert.rejects(service.deleteAudioGroup(project.inbox_group_id!), /지울 수 없어/)
     assert.throws(() => service.updateAudioGroup(project.inbox_group_id!, { label: 'x_[00]' }), /파일명을 붙일 수 없어/)
@@ -119,9 +119,49 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
   const snow = service.createAudioGroup(project.id, { name: '발자국 · 눈', label: 'footstep_snow_[00]', description: 'soft footstep on snow' })
   const stone = service.createAudioGroup(project.id, { name: '발자국 · 돌', label: 'footstep_stone_[00]' })
   const otherGroup = service.createAudioGroup(other.id, { name: 'UI', label: 'ui_click_[00]', description: 'ÜBER Wind' })
-  assert.deepEqual(service.searchAudioGroups({ search: '발자국' }).map(group => group.id), service.listAudioGroups(project.id, { search: '발자국' }).map(group => group.id))
-  assert.ok(service.searchAudioGroups({ search: 'UI' }).some(group => group.id === otherGroup.id), 'workspace search includes another project')
-  assert.ok(service.searchAudioGroups({ search: 'über' }).some(group => group.id === otherGroup.id), 'Unicode case folding stays compatible with the original search')
+  assert.deepEqual(service.searchAudioGroups({ search: '발자국' }).items.map(group => group.id), service.listAudioGroups(project.id, { search: '발자국' }).items.map(group => group.id))
+  assert.ok(service.searchAudioGroups({ search: 'UI' }).items.some(group => group.id === otherGroup.id), 'workspace search includes another project')
+  assert.ok(service.searchAudioGroups({ search: 'über' }).items.some(group => group.id === otherGroup.id), 'Unicode case folding stays compatible with the original search')
+
+  await t.test('directory pages are bounded, ordered and validate continuation inputs', () => {
+    const expectedProjects = (audioDb.prepare('SELECT id FROM audio_projects ORDER BY created_at, id').all() as Array<{ id: string }>).map((row) => row.id)
+    const firstPage = service.listAudioProjects({ limit: 1 })
+    assert.deepEqual(firstPage.items.map((row) => row.id), expectedProjects.slice(0, 1))
+    assert.equal(firstPage.has_more, true)
+    assert.equal(firstPage.next_cursor, '1')
+    assert.deepEqual(service.listAudioProjects({ limit: 1, cursor: firstPage.next_cursor }).items.map((row) => row.id), expectedProjects.slice(1, 2))
+    const expectedGroups = (audioDb.prepare('SELECT id FROM audio_groups WHERE project_id = ? ORDER BY is_inbox DESC, created_at, id').all(project.id) as Array<{ id: string }>).map((row) => row.id)
+    const groups = service.listAudioGroups(project.id, { limit: 1 })
+    assert.deepEqual(groups.items.map((row) => row.id), expectedGroups.slice(0, 1))
+    assert.equal(groups.has_more, true)
+    assert.deepEqual(service.listAudioGroups(project.id, { limit: 2, cursor: groups.next_cursor }).items.map((row) => row.id), expectedGroups.slice(1))
+    const end = service.listAudioGroups(project.id, { offset: expectedGroups.length })
+    assert.deepEqual(end.items, [])
+    assert.equal(end.next_cursor, null)
+    assert.equal(end.has_more, false)
+    for (const options of [{ limit: 0 }, { limit: 201 }, { offset: -1 }, { cursor: 'bad' }, { cursor: '1.5' }]) {
+      assert.throws(() => service.listAudioProjects(options), service.AudioServiceError)
+      assert.throws(() => service.searchAudioGroups(options), service.AudioServiceError)
+    }
+    assert.throws(() => service.listAudioCandidates('missing'), /찾을 수 없어/)
+    audioDb.transaction(() => {
+      const insert = audioDb.prepare('INSERT INTO audio_projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)')
+      for (let index = 0; index < 205; index += 1) insert.run(`page-${index}`, `page-${index}`, '2020-01-01', '2020-01-01')
+      const bounded = service.listAudioProjects()
+      assert.equal(bounded.items.length, 200)
+      assert.equal(bounded.has_more, true)
+      assert.equal(bounded.next_cursor, '200')
+      audioDb.prepare("DELETE FROM audio_projects WHERE id LIKE 'page-%'").run()
+      const insertGroup = audioDb.prepare('INSERT INTO audio_groups (id, project_id, name, label, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+      for (let index = 0; index < 205; index += 1) insertGroup.run(`page-${index}`, project.id, `page-${index}`, `page-${index}_[00]`, '2020-01-01', '2020-01-01')
+      assert.equal(service.listAudioGroups(project.id).items.length, 200)
+      assert.equal(service.searchAudioGroups({ search: 'page-' }).items.length, 200)
+      const all = service.searchAudioGroups({ search: 'page-', cursor: '200' })
+      assert.equal(all.items.length, 5)
+      assert.equal(all.has_more, false)
+      audioDb.prepare("DELETE FROM audio_groups WHERE id LIKE 'page-%'").run()
+    })()
+  })
 
   await t.test('group labels are validated and unique per project, case-insensitively', () => {
     assert.throws(() => service.createAudioGroup(project.id, { name: 'bad', label: 'bad.wav' }), AudioLabelError)
@@ -183,8 +223,38 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     const edited = service.updateAudioGroupComment(snow.id, comment.id, { text: '조금 더 짧게' })
     assert.equal(edited.status, 'pending')
     assert.equal(edited.revision, 3)
-    assert.equal(service.listAudioGroups(project.id, { filter: 'pending_comments' }).map((group) => group.id).join(), snow.id)
+    assert.equal(service.listAudioGroups(project.id, { filter: 'pending_comments' }).items.map((group) => group.id).join(), snow.id)
     assert.throws(() => service.updateAudioGroupComment(stone.id, comment.id, { text: 'x' }), /이 그룹의 코멘트가 아니야/)
+  })
+
+  await t.test('page counts do not multiply candidates by comments and exclude deleted reviews', () => {
+    audioDb.transaction(() => {
+      const group = service.createAudioGroup(other.id, { name: 'count fixture', label: 'count_fixture_[00]' })
+      const insert = audioDb.prepare(`INSERT INTO audio_candidates (id, group_id, file_hash, origin, name, review, created_at, updated_at, deleted_at)
+        VALUES (?, ?, ?, 'uploaded', 'count', ?, '2020-01-01', '2020-01-01', ?)`)
+      for (const [id, review, deleted] of [['pending', 'pending', null], ['selected', 'selected', null], ['rejected', 'rejected', null], ['deleted', 'selected', '2020-01-02']]) {
+        insert.run(`count-${id}`, group.id, first.file_hash, review, deleted)
+      }
+      service.createAudioGroupComment(group.id, { text: 'pending' }, null)
+      for (let index = 0; index < 2; index += 1) {
+        const comment = service.createAudioGroupComment(group.id, { text: 'completed' }, null)
+        service.setAudioGroupCommentStatus(group.id, comment.id, { status: 'completed', expected_revision: comment.revision })
+      }
+      const row = service.listAudioGroups(other.id, { search: 'count fixture', limit: 1 }).items[0]
+      assert.deepEqual(
+        [row.candidate_count, row.selected_count, row.pending_review_count, row.comment_count, row.pending_comment_count, row.completed_comment_count],
+        [3, 1, 1, 3, 1, 2],
+      )
+      for (const filter of ['unselected', 'has_comments', 'pending_comments', 'completed_comments']) {
+        assert.equal(service.searchAudioGroups({ search: 'count fixture', filter, limit: 1 }).items.length, filter === 'unselected' ? 0 : 1)
+      }
+      const listed = service.listAudioProjects().items.find((entry) => entry.id === other.id)!
+      const actual = audioDb.prepare(`SELECT count(*) AS n FROM audio_candidates c JOIN audio_groups g ON g.id = c.group_id
+        WHERE g.project_id = ? AND c.deleted_at IS NULL`).get(other.id) as { n: number }
+      assert.equal(listed.candidate_count, actual.n)
+      assert.equal(listed.group_count, service.getAudioProject(other.id).group_count)
+      audioDb.prepare('DELETE FROM audio_groups WHERE id = ?').run(group.id)
+    })()
   })
 
   await t.test('retention purge keeps shared blobs, recycles unused ones, and a RecycleBin restore brings them back', async () => {
@@ -330,7 +400,15 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
   await t.test('/api/audio: audio.view reads, audio.edit writes, everyone else is refused', async () => {
     assert.equal((await call('/api/audio/projects')).status, 401)
     assert.equal((await call('/api/audio/projects', imageOnlyId)).status, 403)
-    assert.equal((await call('/api/audio/projects', listenerId)).status, 200)
+    const projectPage = await call('/api/audio/projects?limit=1', listenerId)
+    assert.equal(projectPage.status, 200)
+    assert.equal(projectPage.json().data.items.length, 1)
+    assert.equal(projectPage.json().data.has_more, true)
+    const groupPage = (await call(`/api/audio/projects/${project.id}/groups?limit=1`, listenerId)).json().data
+    assert.equal(groupPage.items.length, 1)
+    assert.equal(groupPage.next_cursor, '1')
+    assert.equal((await call('/api/audio/groups?search=%C3%BCber&limit=1', listenerId)).json().data.items[0].id, otherGroup.id)
+    assert.equal((await call('/api/audio/projects?limit=201', listenerId)).status, 400)
     assert.equal((await call(`/api/audio/groups/${snow.id}/candidates`, listenerId)).json().data.total >= 1, true)
     assert.equal((await call('/api/audio/projects', listenerId, { method: 'POST', body: JSON.stringify({ name: 'nope' }) })).status, 403)
     assert.equal((await call(`/api/audio/candidates/${first.id}/review`, listenerId, { method: 'PATCH', body: JSON.stringify({ review: 'selected' }) })).status, 403)
@@ -338,6 +416,50 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
     assert.equal(reviewed.status, 200)
     assert.equal(reviewed.json().data.review, 'rejected')
     assert.equal((await call('/api/audio/projects', adminId, { method: 'POST', body: JSON.stringify({ name: '' }) })).status, 400)
+  })
+
+  await t.test('native audio directories preserve complete legacy arrays and opt into bounded pages', async () => {
+    const fixture = service.createAudioProject({ name: 'HTTP directory compatibility' }, null)
+    const projectIds = [fixture.id]
+    try {
+      audioDb.transaction(() => {
+        const insertProject = audioDb.prepare('INSERT INTO audio_projects (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)')
+        const insertGroup = audioDb.prepare('INSERT INTO audio_groups (id, project_id, name, label, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+        for (let index = 0; index < 205; index += 1) {
+          const id = `http-page-project-${index}`
+          projectIds.push(id)
+          insertProject.run(id, id, '2020-01-01', '2020-01-01')
+          insertGroup.run(`http-page-group-${index}`, fixture.id, `http-page-fixture-${index}`, `http-page-fixture-${index}_[00]`, '2020-01-01', '2020-01-01')
+        }
+      })()
+      const ids = (sql: string, ...params: string[]) => (audioDb.prepare(sql).all(...params) as Array<{ id: string }>).map((row) => row.id)
+      const cases = [
+        { url: '/api/audio/projects', expected: ids('SELECT id FROM audio_projects ORDER BY created_at, id') },
+        { url: `/api/audio/projects/${fixture.id}/groups`, expected: ids('SELECT id FROM audio_groups WHERE project_id = ? ORDER BY is_inbox DESC, created_at, id', fixture.id) },
+        { url: '/api/audio/groups?search=http-page-fixture', expected: ids("SELECT id FROM audio_groups WHERE name LIKE 'http-page-fixture-%' ORDER BY is_inbox DESC, created_at, id") },
+      ]
+      for (const { url, expected } of cases) {
+        const legacy = await call(url, listenerId)
+        assert.equal(legacy.status, 200)
+        assert.ok(Array.isArray(legacy.json().data), url)
+        assert.ok(expected.length > 200)
+        assert.deepEqual(legacy.json().data.map((row: { id: string }) => row.id), expected, url)
+        for (const [query, limit, offset] of [['limit=1', 1, 0], ['offset=200', 200, 200], ['cursor=200', 200, 200]] as const) {
+          const response = await call(`${url}${url.includes('?') ? '&' : '?'}${query}`, listenerId)
+          assert.equal(response.status, 200)
+          const page = response.json().data
+          assert.equal(Array.isArray(page), false)
+          assert.deepEqual(page.items.map((row: { id: string }) => row.id), expected.slice(offset, offset + limit))
+          assert.equal(page.limit, limit)
+          assert.equal(page.offset, offset)
+          assert.equal(page.has_more, expected.length > offset + limit)
+          assert.equal(page.next_cursor, page.has_more ? String(offset + limit) : null)
+        }
+        assert.equal((await call(`${url}${url.includes('?') ? '&' : '?'}cursor=`, listenerId)).status, 400)
+      }
+    } finally {
+      audioDb.prepare('DELETE FROM audio_projects WHERE id IN (SELECT value FROM json_each(?))').run(JSON.stringify(projectIds))
+    }
   })
 
   await t.test('upload, ranged playback and no static access to the store', async () => {
@@ -426,6 +548,18 @@ test('audio workspace: store, lifecycle, routes and MCP tools', { timeout: 18000
       const response = await admin.callTool({ name, arguments: args }) as { isError?: boolean; content: Array<{ text: string }> }
       return { error: response.isError === true, text: response.content[0]?.text, data: response.isError ? null : JSON.parse(response.content[0].text) }
     }
+    const projectPage = await invoke('list_audio_projects', { limit: 1 })
+    assert.equal(projectPage.error, false, projectPage.text)
+    assert.equal(projectPage.data.items.length, 1)
+    assert.equal(projectPage.data.has_more, true)
+    const nextProjects = await invoke('list_audio_projects', { limit: 1, cursor: projectPage.data.next_cursor })
+    assert.notEqual(nextProjects.data.items[0].id, projectPage.data.items[0].id)
+    const groupPage = await invoke('list_audio_groups', { project_id: project.id, limit: 1 })
+    assert.equal(groupPage.error, false, groupPage.text)
+    assert.equal(groupPage.data.items.length, 1)
+    assert.equal(groupPage.data.next_cursor, '1')
+    const searched = await invoke('list_audio_groups', { search: 'über', limit: 1 })
+    assert.equal(searched.data.items[0].id, otherGroup.id)
     for (const name of ['set_audio_candidate_review', 'delete_audio_candidate', 'create_audio_group_comment', 'update_audio_group_comment', 'delete_audio_group_comment']) {
       await assert.rejects(listener.callTool({ name, arguments: {} }), { code: -32602 }, name)
     }

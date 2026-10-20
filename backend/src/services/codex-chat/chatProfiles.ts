@@ -392,10 +392,20 @@ function legacySections(row: ProfileRow): ChatPromptSection[] {
   return sections.filter((section): section is ChatPromptSection => section !== null)
 }
 
-function toProfile(row: ProfileRow): ChatProfile {
+type ProfileListDependencies = {
+  slots: Set<number>
+  judges: Set<number>
+  generationPresets: Set<number>
+  blocks: Map<number, ChatStyle['blocks'][number]>
+}
+
+function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): ChatProfile {
   const storedSections = parseJsonArray(row.prompt_sections)
   const allowlist = parseJsonArray(row.tool_allowlist)
   const blockIds = normalizeBlockIds(row.block_ids)
+  const slot = (id: number | null) => dependencies ? id !== null && dependencies.slots.has(id) ? id : null : ModelSlotStore.existing(id)
+  const generationPresetIds = normalizeGenerationPresetIds(row.generation_preset_ids)
+  const blocks = ChatSharedBlockStore.blocksOf(blockIds, dependencies?.blocks)
   let avatarCrop: ChatAvatarCrop | null = null
   try { avatarCrop = normalizeAvatarCrop(row.avatar_crop ? JSON.parse(row.avatar_crop) : null) } catch { /* Keep malformed legacy crops unset. */ }
   return {
@@ -432,7 +442,7 @@ function toProfile(row: ProfileRow): ChatProfile {
     mcpScopes: parseScopes(row.mcp_scopes),
     toolAllowlist: allowlist ? allowlist.filter((name): name is string => typeof name === 'string') : null,
     toolOutputLimit: row.tool_output_limit ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit,
-    generationPresetIds: ChatGenerationPresetStore.existing(normalizeGenerationPresetIds(row.generation_preset_ids)),
+    generationPresetIds: dependencies ? generationPresetIds.filter((id) => dependencies.generationPresets.has(id)) : ChatGenerationPresetStore.existing(generationPresetIds),
     contextTurns: row.context_turns ?? CHAT_PROFILE_DEFAULTS.contextTurns,
     contextTokens: row.context_tokens,
     summaryEnabled: row.summary_enabled === 1,
@@ -443,10 +453,10 @@ function toProfile(row: ProfileRow): ChatProfile {
     translationDisplayLanguage: isChatTranslationLanguage(row.translation_display_language) ? row.translation_display_language : CHAT_TRANSLATION_DEFAULTS.displayLanguage,
     suggestEnabled: row.suggest_enabled === 1,
     // A row that no longer exists reads as unset (the next save clears the column).
-    modelSlotId: ModelSlotStore.existing(row.model_slot_id),
-    summarySlotId: ModelSlotStore.existing(row.summary_slot_id),
-    translationSlotId: ModelSlotStore.existing(row.translation_slot_id),
-    suggestSlotId: ModelSlotStore.existing(row.suggest_slot_id),
+    modelSlotId: slot(row.model_slot_id),
+    summarySlotId: slot(row.summary_slot_id),
+    translationSlotId: slot(row.translation_slot_id),
+    suggestSlotId: slot(row.suggest_slot_id),
     suggestProfileId: row.suggest_profile_id,
     suggestUserProfileId: row.suggest_profile_id === null ? row.suggest_user_profile_id : null,
     maxToolRounds: row.max_tool_rounds ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
@@ -456,10 +466,10 @@ function toProfile(row: ProfileRow): ChatProfile {
     pageAssist: row.page_assist === 1,
     allowLoreProposals: row.allow_lore_proposals !== 0,
     linkedFiles: normalizeLinkedFiles(row.linked_files),
-    judgePresetId: ChatJudgePresetStore.existing(row.judge_preset_id),
-    judgeSlotId: ModelSlotStore.existing(row.judge_slot_id),
+    judgePresetId: dependencies ? row.judge_preset_id !== null && dependencies.judges.has(row.judge_preset_id) ? row.judge_preset_id : null : ChatJudgePresetStore.existing(row.judge_preset_id),
+    judgeSlotId: slot(row.judge_slot_id),
     // Display blocks live in chat_display_blocks; the profile only links them (the style column's own list is legacy).
-    style: { ...normalizeChatStyle(row.chat_style), blocks: ChatSharedBlockStore.blocksOf(blockIds) },
+    style: { ...normalizeChatStyle(row.chat_style), blocks },
     background: row.background_image,
     isEnabled: row.is_enabled === 1,
     sortOrder: row.sort_order,
@@ -674,11 +684,33 @@ export const ChatProfileStore = {
     return toProfile({ ...toColumns(input, { draft: true }), id: profileId, created_date: now, updated_date: now } as ProfileRow)
   },
 
+  /** Name-only directory callers must not hydrate prompts, model roles, presets or blocks. */
+  listNames(options: { enabledOnly?: boolean; ids?: number[] } = {}) {
+    if (options.ids?.length === 0) return []
+    const ids = options.ids ? [...new Set(options.ids)] : undefined
+    const where = [
+      ...(options.enabledOnly ? ['is_enabled = 1'] : []),
+      ...(ids ? [`id IN (${ids.map(() => '?').join(', ')})`] : []),
+    ]
+    return getUserSettingsDb().prepare(`SELECT id, name FROM llm_chat_profiles ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY sort_order ASC, id ASC`)
+      .all(...ids ?? []) as Array<Pick<ChatProfile, 'id' | 'name'>>
+  },
+
   list(options: { enabledOnly?: boolean } = {}) {
-    const rows = getUserSettingsDb().prepare(`
+    const db = getUserSettingsDb()
+    const rows = db.prepare(`
       SELECT * FROM llm_chat_profiles ${options.enabledOnly ? 'WHERE is_enabled = 1' : ''} ORDER BY sort_order ASC, id ASC
     `).all() as ProfileRow[]
-    return rows.map(toProfile)
+    if (!rows.length) return []
+    const slots = new Set(ModelSlotStore.existingIds(rows.flatMap((row) =>
+      [row.model_slot_id, row.summary_slot_id, row.translation_slot_id, row.suggest_slot_id, row.judge_slot_id].filter((id): id is number => id !== null))))
+    const judgeIds = [...new Set(rows.flatMap((row) => row.judge_preset_id ? [row.judge_preset_id] : []))]
+    const judges = new Set(ChatJudgePresetStore.existingIds(judgeIds))
+    const generationPresets = new Set(ChatGenerationPresetStore.existing([...new Set(rows.flatMap((row) => normalizeGenerationPresetIds(row.generation_preset_ids)))]))
+    const blockIds = new Set(rows.flatMap((row) => normalizeBlockIds(row.block_ids)))
+    const blocks = ChatSharedBlockStore.byIds([...blockIds])
+    const dependencies = { slots, judges, generationPresets, blocks }
+    return rows.map((row) => toProfile(row, dependencies))
   },
 
   find(profileId: number) {
@@ -718,7 +750,7 @@ export const ChatProfileStore = {
     }
     // The character's library group follows the rename, unless another profile still goes by the old name.
     const oldGroup = chatCharacterGroupPath(current.name)
-    if (columns.name !== current.name && !ChatProfileStore.list().some((profile) => profile.id !== profileId && chatCharacterGroupPath(profile.name) === oldGroup)) {
+    if (columns.name !== current.name && !ChatProfileStore.listNames().some((profile) => profile.id !== profileId && chatCharacterGroupPath(profile.name) === oldGroup)) {
       renameCharacterGroup(current.name, columns.name, assetDatabase)
     }
     fileProfileAssetsUnderGroup(columns.name, [columns.avatar_hash, columns.background_hash, columns.reference_hash], assetDatabase)

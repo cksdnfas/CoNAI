@@ -13,6 +13,7 @@ import {
 } from '../types/promptGroup';
 import { db } from '../database/init';
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
+import { sqliteInPlaceholders } from '../utils/sqliteBatch';
 import {
   getPromptCollectionTableName as getPromptTableName,
   getPromptGroupTableName as getTableName,
@@ -23,6 +24,7 @@ import {
   collectDanbooruNodeKeysWithAncestors,
   formatDanbooruCategoryTitle,
   normalizeDanbooruGroupingOptions,
+  DANBOORU_GROUP_ROOT_NAMES,
   PROMPT_TYPES,
   resolveDanbooruNodeTitle,
   resolveDynamicCategoryParentKey,
@@ -35,7 +37,6 @@ import {
 import {
   getDanbooruGroupRootName,
   getDanbooruManagedGroupIds,
-  getHiddenDanbooruRootGroupsWithCounts,
   isDanbooruManagedGroupId,
 } from './promptGroups/danbooruManagedGroups';
 import {
@@ -62,24 +63,25 @@ export class PromptGroupService {
     type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<PromptGroupWithPrompts[]> {
     try {
-      const groups = await PromptGroupModel.findAllWithCounts(includeHidden, type);
-      const visibleGroups = includeHidden ? groups : [...getHiddenDanbooruRootGroupsWithCounts(type), ...groups];
-
-      // "Unclassified" 그룹 추가 (group_id가 NULL인 프롬프트들)
-      const unclassifiedCount = await this.getUnclassifiedPromptCount(type);
-
-      const unclassifiedGroup: PromptGroupWithPrompts = {
-        id: 0, // 특별한 ID
-        group_name: 'Unclassified',
-        display_order: -1, // 항상 맨 앞에 표시
-        is_visible: true,
-        parent_id: null,
-        prompt_count: unclassifiedCount,
-        created_at: '',
-        updated_at: ''
-      };
-
-      return [unclassifiedGroup, ...visibleGroups];
+      const groupTable = getTableName(type);
+      const promptTable = getPromptTableName(type);
+      // One aggregate, including the synthetic unclassified row. Hidden Danbooru
+      // roots remain available for managed-group detection, just as before.
+      return db.prepare(`
+        WITH counts AS (
+          SELECT group_id, COUNT(*) AS prompt_count FROM ${promptTable} GROUP BY group_id
+        ), summaries AS (
+          SELECT g.id, g.group_name, g.display_order, g.is_visible, g.parent_id,
+            g.created_at, g.updated_at, COALESCE(c.prompt_count, 0) AS prompt_count
+          FROM ${groupTable} g LEFT JOIN counts c ON c.group_id = g.id
+          WHERE ? OR g.is_visible = 1
+            OR (g.is_visible = 0 AND g.parent_id IS NULL AND g.group_name IN (${DANBOORU_GROUP_ROOT_NAMES.map(() => '?').join(',')}))
+          UNION ALL
+          SELECT 0, 'Unclassified', -1, 1, NULL, '', '',
+            COALESCE((SELECT prompt_count FROM counts WHERE group_id IS NULL), 0)
+        )
+        SELECT * FROM summaries ORDER BY (id = 0) DESC, display_order ASC, id ASC
+      `).all(Number(includeHidden), ...DANBOORU_GROUP_ROOT_NAMES) as PromptGroupWithPrompts[];
     } catch (error) {
       console.error('Error getting all groups:', error);
       throw error;
@@ -106,6 +108,34 @@ export class PromptGroupService {
       console.error('Error getting group by ID:', error);
       throw error;
     }
+  }
+
+  /** Resolve distinct typed group IDs with one query; IDs may overlap across prompt domains. */
+  static async getGroupsByIds(
+    groups: ReadonlyArray<{ id: number | null; type: PromptCollectionType }>
+  ): Promise<Map<PromptCollectionType, Map<number, PromptGroupRecord>>> {
+    const idsByType = new Map<PromptCollectionType, Set<number>>();
+    for (const { id, type } of groups) {
+      if (id === null || id === 0) continue;
+      if (!idsByType.has(type)) idsByType.set(type, new Set());
+      idsByType.get(type)!.add(id);
+    }
+
+    const result = new Map<PromptCollectionType, Map<number, PromptGroupRecord>>();
+    if (idsByType.size === 0) return result;
+
+    const params: number[] = [];
+    const queries = [...idsByType].map(([type, ids]) => {
+      const values = [...ids];
+      params.push(...values);
+      return `SELECT *, '${type}' AS type FROM ${getTableName(type)} WHERE id IN (${sqliteInPlaceholders(values)})`;
+    });
+    const rows = db.prepare(queries.join(' UNION ALL ')).all(...params) as Array<PromptGroupRecord & { type: PromptCollectionType }>;
+    for (const { type, ...group } of rows) {
+      if (!result.has(type)) result.set(type, new Map());
+      result.get(type)!.set(group.id, group);
+    }
+    return result;
   }
 
   /**
@@ -398,16 +428,6 @@ export class PromptGroupService {
   }
 
   /**
-   * Unclassified 프롬프트 개수 조회 (내부 유틸리티)
-   */
-  private static async getUnclassifiedPromptCount(type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<number> {
-    const tableName = getPromptTableName(type);
-
-    const row = db.prepare(`SELECT COUNT(*) as count FROM ${tableName} WHERE group_id IS NULL`).get() as { count: number };
-    return row.count || 0;
-  }
-
-  /**
    * 이름으로 찾은 그룹(하위 그룹 포함)에서 프롬프트를 랜덤으로 뽑는다. (`__my:그룹__` 문법)
    * positive 그룹을 먼저 찾고, 없으면 negative 그룹에서 찾는다.
    */
@@ -456,14 +476,35 @@ export class PromptGroupService {
    */
   static async getPromptsInGroup(
     groupId: number | null,
+    type?: 'positive' | 'negative' | 'auto',
+    page?: number, limit?: number, query?: string,
+    sortBy?: 'usage_count' | 'created_at' | 'prompt', sortOrder?: 'ASC' | 'DESC',
+    includeTotal?: true
+  ): Promise<{ prompts: any[], total: number, has_more: boolean }>;
+  static async getPromptsInGroup(
+    groupId: number | null,
+    type: 'positive' | 'negative' | 'auto',
+    page: number, limit: number, query: string,
+    sortBy: 'usage_count' | 'created_at' | 'prompt', sortOrder: 'ASC' | 'DESC',
+    includeTotal: boolean
+  ): Promise<{ prompts: any[], total: number | undefined, has_more: boolean }>;
+  static async getPromptsInGroup(
+    groupId: number | null,
     type: 'positive' | 'negative' | 'auto' = 'positive',
     page: number = 1,
     limit: number = 20,
     query: string = '',
     sortBy: 'usage_count' | 'created_at' | 'prompt' = 'usage_count',
-    sortOrder: 'ASC' | 'DESC' = 'DESC'
-  ): Promise<{ prompts: any[], total: number }> {
+    sortOrder: 'ASC' | 'DESC' = 'DESC',
+    includeTotal: boolean = true
+  ): Promise<{ prompts: any[], total: number | undefined, has_more: boolean }> {
     try {
+      // HTTP/MCP listing inputs cap limit at 100. Internal bulk-move callers also
+      // use this paginator; preserve their explicit finite batch size.
+      if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(limit) || limit < 1
+        || !Number.isSafeInteger((page - 1) * limit)) {
+        throw new Error('page and limit must be positive safe integers');
+      }
       const tableName = getPromptTableName(type);
       const offset = (page - 1) * limit;
       const searchPattern = buildSqlContainsPattern(query);
@@ -482,23 +523,24 @@ export class PromptGroupService {
         countParams = [groupId, searchPattern];
       }
 
-      const countRow = db.prepare(countQuery).get(...countParams) as { total: number };
-      const total = countRow.total;
+      const total = includeTotal
+        ? (db.prepare(countQuery).get(...countParams) as { total: number }).total
+        : undefined;
 
       // 데이터 조회
       let dataQuery: string;
       let dataParams: any[];
 
       if (groupId === null || groupId === 0) {
-        dataQuery = `SELECT * FROM ${tableName} WHERE group_id IS NULL AND prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE} ORDER BY ${orderBy} ${orderDirection}, prompt ASC LIMIT ? OFFSET ?`;
-        dataParams = [searchPattern, limit, offset];
+        dataQuery = `SELECT * FROM ${tableName} WHERE group_id IS NULL AND prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE} ORDER BY ${orderBy} ${orderDirection}, prompt ASC, id ASC LIMIT ? OFFSET ?`;
+        dataParams = [searchPattern, limit + 1, offset];
       } else {
-        dataQuery = `SELECT * FROM ${tableName} WHERE group_id = ? AND prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE} ORDER BY ${orderBy} ${orderDirection}, prompt ASC LIMIT ? OFFSET ?`;
-        dataParams = [groupId, searchPattern, limit, offset];
+        dataQuery = `SELECT * FROM ${tableName} WHERE group_id = ? AND prompt LIKE ?${SQL_LIKE_ESCAPE_CLAUSE} ORDER BY ${orderBy} ${orderDirection}, prompt ASC, id ASC LIMIT ? OFFSET ?`;
+        dataParams = [groupId, searchPattern, limit + 1, offset];
       }
 
       const rows = db.prepare(dataQuery).all(...dataParams) as any[];
-      const prompts = rows.map((row) => ({
+      const prompts = rows.slice(0, limit).map((row) => ({
         ...row,
         synonyms: row.synonyms ? JSON.parse(row.synonyms) : [],
         type,
@@ -506,7 +548,8 @@ export class PromptGroupService {
 
       return {
         prompts,
-        total
+        total,
+        has_more: rows.length > limit,
       };
     } catch (error) {
       console.error('Error getting prompts in group:', error);
@@ -684,7 +727,8 @@ export class PromptGroupService {
   }
 
   /**
-   * 그룹별로 묶인 프롬프트 조회 (배지 표시용)
+   * Legacy native-plugin response, retained for one compatibility release.
+   * New consumers must use getAllGroups + getPromptsInGroup.
    */
   static async getGroupedPrompts(
     type: 'positive' | 'negative' | 'auto' = 'positive'
@@ -703,55 +747,32 @@ export class PromptGroupService {
 
       const groupRows = db.prepare(groupQuery).all() as any[];
 
-      const groups: GroupedPrompts[] = [];
-
-      // 각 그룹별 프롬프트 조회
-      for (const group of groupRows) {
-        const promptQuery = `
-          SELECT id, prompt, usage_count, synonyms
-          FROM ${tableName}
-          WHERE group_id = ?
-          ORDER BY usage_count DESC, prompt ASC
-        `;
-
-        const promptRows = db.prepare(promptQuery).all(group.id) as any[];
-
-        const prompts: PromptItem[] = promptRows.map(row => ({
-          id: row.id,
-          prompt: row.prompt,
-          usage_count: row.usage_count,
-          synonyms: row.synonyms ? JSON.parse(row.synonyms) : undefined
-        }));
-
-        groups.push({
+      const groups: GroupedPrompts[] = groupRows.map(group => ({
           id: group.id,
           group_name: group.group_name,
           display_order: group.display_order,
           is_visible: group.is_visible,
           parent_id: group.parent_id,
-          prompts
-        });
-      }
-
-      // Unclassified 프롬프트들 조회
-      const unclassifiedQuery = `
-        SELECT id, prompt, usage_count, synonyms
-        FROM ${tableName}
-        WHERE group_id IS NULL
-        ORDER BY usage_count DESC, prompt ASC
-      `;
-
-      const unclassifiedRows = db.prepare(unclassifiedQuery).all() as any[];
-
-      const unclassifiedPrompts: PromptItem[] = unclassifiedRows.map(row => ({
-        id: row.id,
-        prompt: row.prompt,
-        usage_count: row.usage_count,
-        synonyms: row.synonyms ? JSON.parse(row.synonyms) : undefined
+          prompts: [],
       }));
-
-      // display_order로 정렬
-      groups.sort((a, b) => a.display_order - b.display_order);
+      const groupsById = new Map(groups.map(group => [group.id, group]));
+      const unclassifiedPrompts: PromptItem[] = [];
+      const rows = db.prepare(`
+        SELECT id, prompt, usage_count, synonyms, group_id
+        FROM ${tableName}
+        WHERE group_id IS NULL OR group_id IN (SELECT id FROM ${groupTableName} WHERE is_visible = 1)
+        ORDER BY usage_count DESC, prompt ASC, id ASC
+      `).all() as Array<{ id: number; prompt: string; usage_count: number; synonyms: string | null; group_id: number | null }>;
+      for (const row of rows) {
+        const prompt: PromptItem = {
+          id: row.id,
+          prompt: row.prompt,
+          usage_count: row.usage_count,
+          synonyms: row.synonyms ? JSON.parse(row.synonyms) : undefined,
+        };
+        if (row.group_id === null) unclassifiedPrompts.push(prompt);
+        else groupsById.get(row.group_id)?.prompts.push(prompt);
+      }
 
       return {
         groups,

@@ -4,8 +4,8 @@ import { Fragment, createElement, useCallback, useEffect, useMemo, useRef, useSt
 import { useLocation, useNavigate } from 'react-router-dom'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import { useHomeSearch } from '@/features/home/home-search-context'
-import { buildComplexSearchPayload, getMeaningSearchText } from '@/features/search/search-utils'
+import { getHomeFeedKeys, useHomeSearch } from '@/features/home/home-search-context'
+import { buildComplexSearchPayload } from '@/features/search/search-utils'
 import { VectorScoreOverlay } from '@/features/images/components/detail/similarity-score-overlay'
 import type { ImageRecord } from '@/types/image'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
@@ -17,6 +17,8 @@ import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { addImagesToGroup, getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
+import { removeBulkDeletedImagesFromListCaches } from '@/features/images/image-list-cache'
+import { useImageDeleteUndo } from '@/features/images/use-image-delete-undo'
 import { deleteImagesBulk, downloadImageSelection, getImages, getImagesCount, searchImagesComplex } from '@/lib/api-images'
 import { formatGroupBulkAddNotice } from '@/features/groups/group-bulk-result-messages'
 import { countStateFromQuery, type CountState } from '@/lib/count-display'
@@ -39,6 +41,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const queryClient = useQueryClient()
   const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
+  const notifyImageDeleted = useImageDeleteUndo()
   const authStatusQuery = useAuthStatusQuery()
   const { appliedChips } = useHomeSearch()
   const location = useLocation()
@@ -56,23 +59,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const isAuthenticated = authStatusQuery.data?.authenticated === true
   const isAnonymousSession = hasCredentials && !isAuthenticated
   const isSearchMode = !isAnonymousSession && appliedChips.length > 0
-  // Identifies the match set; the total does not depend on the order, so it is keyed on this alone.
-  const feedScopeKey = useMemo(() => {
-    if (isAnonymousSession) {
-      return 'anonymous'
-    }
-
-    if (appliedChips.length === 0) {
-      return 'home'
-    }
-
-    return `search:${appliedChips
-      .map((chip) => [chip.scope, chip.operator, chip.conditionCategory ?? '', chip.conditionType ?? '', chip.value, chip.minScore ?? '', chip.maxScore ?? ''].join('::'))
-      .join('|')}`
-  }, [appliedChips, isAnonymousSession])
-  // A description orders the search by meaning; the newest/oldest choice does not apply to it.
-  const meaningText = isSearchMode ? getMeaningSearchText(appliedChips) : null
-  const imageListResetKey = meaningText ? `${feedScopeKey}:meaning` : `${feedScopeKey}:${sortOrder}`
+  const { feedScopeKey, meaningText, imageListResetKey } = getHomeFeedKeys(appliedChips, sortOrder, isAnonymousSession)
 
   /** Change the order in the URL (next to `q`) and start the reordered list from the top. */
   const setSortOrder = useCallback((nextSortOrder: HomeSortOrder) => {
@@ -352,8 +339,8 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
 
     const selectedCount = formatNumber(selectedCompositeHashes.length)
     const confirmed = await confirm({
-      title: t({ ko: '휴지통으로 보내기', en: 'Move to Recycle Bin' }),
-      description: await withChatMediaDeleteWarning(t({ ko: '선택한 {count}개 항목을 휴지통으로 보낼까?', en: 'Move {count} selected items to the Recycle Bin?' }, { count: selectedCount }), selectedCompositeHashes, t),
+      title: t({ ko: '선택 항목 삭제', en: 'Delete selected items' }),
+      description: await withChatMediaDeleteWarning(t({ ko: '선택한 {count}개 항목을 삭제할까? 삭제 보호가 켜져 있으면 휴지통으로 보내고 되돌릴 수 있어. 꺼져 있으면 영구 삭제돼.', en: 'Delete {count} selected items? With deletion protection on, files move to the Recycle Bin and can be undone. Otherwise they are permanently deleted.' }, { count: selectedCount }), selectedCompositeHashes, t),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })
@@ -365,19 +352,8 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       setIsDeleting(true)
       const result = await deleteImagesBulk(selectedCompositeHashes)
       setSelectedIds([])
-      notifyInfo(result.details.failed > 0
-        ? t({ ko: '{deleted}개 삭제, {failed}개 실패했어.', en: '{deleted} deleted, {failed} failed.' }, {
-            deleted: formatNumber(result.details.deleted),
-            failed: formatNumber(result.details.failed),
-          })
-        : t({ ko: '{deleted}개를 RecycleBin으로 보냈어.', en: '{deleted} moved to the Recycle Bin.' }, { deleted: formatNumber(result.details.deleted) }))
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['home-images'] }),
-        queryClient.invalidateQueries({ queryKey: ['home-images-total'] }),
-        queryClient.invalidateQueries({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
-        queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
-      ])
+      await removeBulkDeletedImagesFromListCaches(queryClient, selectedCompositeHashes, result.details.errors)
+      notifyImageDeleted(result.details)
     } catch (error) {
       notifyError(error instanceof Error ? error.message : t('useHomePageData.failedToDeleteSelectedItems'))
     } finally {

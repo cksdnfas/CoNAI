@@ -125,7 +125,24 @@ The MCP app-call JSON cap remains 256 KiB. Binary uploads use multipart native r
 | Appearance and wallpaper layouts | `/api/runtime-appearance`, `/api/settings/appearance`, `/api/page-settings/:scope` |
 | Native job progress/cancellation | `/api/jobs/:jobId`; use the ID returned by the native operation |
 
+Prompt groups: use `GET /api/prompt-groups/summaries?type=positive` (also `negative`/`auto`) for IDs, names, parents, visibility, ordering and direct `prompt_count`; ID 0 represents unclassified prompts. Load bodies lazily with `GET /api/prompt-groups/:id/prompts?page=1&limit=40&type=positive`, maximum 100 rows. `q`, `sortBy=usage_count|created_at|prompt`, and `sortOrder=ASC|DESC` run server-side. `include_total=false` omits `total`/`totalPages`; follow `pagination.has_more` and `pagination.next_page` with the same filters. Exact counts remain the default. These read-only routes use the existing native prompt-view permission, require no approval/revision, and can be retried or cancelled through the native bridge.
+
+For compatibility, `/:id/prompts` clamps positive integer `limit` values above 100 instead of rejecting them; `pagination.limit` reports the effective limit, which also determines page offsets. Unrecognised `type` values retain the previous positive-collection fallback.
+
+**Legacy for one compatibility release only:** `/api/prompt-groups/grouped-prompts` retains its old unbounded `{groups, unclassified_prompts}` response for existing native-bridge plugins and sends deprecation/successor headers. Do not use it in new plugins; migrate to summaries plus bounded pages before the following host release. No SDK version change is required; the new routes require an updated host.
+
 These are the existing HTTP contracts, not new MCP tool names. Their input schemas, revisions, response envelopes and permission rules remain native. Native calls never retry automatically: after an interrupted mutation, query the affected resource/job before issuing another write. For durable idempotent tool execution use `api.app.call/run` with a retained request ID. `api.app.wait(result.id, { signal, timeoutMs })` waits for a plugin app request; `api.app.cancel(result.id)` requests cancellation. A `pending` review is returned immediately by wait. A native job UUID uses `/api/jobs`, and an LLM job uses `api.llm.get/wait/cancel`.
+
+#### Audio directory pagination
+
+`GET /api/audio/projects`, `GET /api/audio/projects/:projectId/groups` and `GET /api/audio/groups` have two native response forms:
+
+- **Legacy:** omitting all of `limit`, `cursor` and `offset` keeps `{ success: true, data: [...] }`, with the complete ordered array, including more than 200 entries. This compatibility path is unbounded as a response; new callers should use pagination. Group `search`/`filter` alone do not opt into paging.
+- **Paged:** passing any paging parameter returns `{ success: true, data: { items, limit, offset, has_more, next_cursor } }`. `limit` defaults to 200 and accepts integers 1–200. Start with `?limit=200`; pass the returned `next_cursor` as `cursor`, keeping the same project, search, filter and limit. `offset` is an alternative nonnegative integer; `cursor` takes precedence. Invalid paging inputs return the native error, never a legacy fallback.
+
+Projects keep creation-time/ID order. Groups keep inbox-first, creation-time/ID order and Unicode case-insensitive `search` over name, label and description; the existing `filter` values remain unchanged. These are offset cursors, not a snapshot: restart at the first page after directory changes. All forms require the current account's native `audio.view` permission. Listing is read-only and does not introduce approval, edit revisions, writes or automatic mutation retries. MCP `list_audio_projects`/`list_audio_groups` always return pages.
+
+Use the existing `api.app.fetch` bridge; no SDK change or additional capability is required. The paged response form requires a host implementing this contract. Older hosts can return the legacy array even when paging parameters are supplied; do not assume `apiVersion: 1` or `app.fetch` support alone guarantees pagination. Require an updated host before using `data.items`/`next_cursor`. Existing plugins that omit paging parameters remain compatible.
 
 ### Media, settings, events and navigation
 

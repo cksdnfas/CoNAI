@@ -27,6 +27,7 @@ const RESEARCH_TIMEOUT_MS = 5 * 60_000
 const CLI_PROBE_TIMEOUT_MS = 20_000
 /** Research runs at once, across the server: each is a CLI process holding a model turn for minutes. */
 const MAX_CONCURRENT_RESEARCH = 2
+const MAX_QUEUED_RESEARCH = 16
 const ANSWER_MAX_CHARS = 12_000
 
 /** The engine that answers `web_search`, or null when web tools are off. */
@@ -55,6 +56,7 @@ async function researchSlot(signal?: AbortSignal) {
   if (running < MAX_CONCURRENT_RESEARCH) {
     running += 1
   } else {
+    if (waiting.length >= MAX_QUEUED_RESEARCH) throw new WebResearchError('웹 검색 대기열이 가득 찼어. 잠시 후 다시 시도해줘.')
     await new Promise<void>((resolve, reject) => {
       const start = () => { signal?.removeEventListener('abort', cancel); resolve() }
       const cancel = () => { const index = waiting.indexOf(start); if (index >= 0) waiting.splice(index, 1); reject(signal?.reason) }
@@ -75,6 +77,7 @@ async function researchSlot(signal?: AbortSignal) {
 type CliRun = { stdout: string; code: number | null; timedOut: boolean }
 
 function runCodex(args: string[], runtime: ReturnType<typeof prepareChatRuntime>, timeoutMs: number, signal?: AbortSignal, input?: string) {
+  signal?.throwIfAborted()
   const resolved = resolveCodexCommand()
   return new Promise<CliRun>((resolve, reject) => {
     const child = spawn(resolved.command, [...resolved.prefixArgs, ...args], { cwd: runtime.cwd, env: runtime.env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' })
@@ -168,6 +171,16 @@ export const researchRunners = {
 const ANSWER_CACHE_MS = 10 * 60_000
 const ANSWER_CACHE_SIZE = 50
 const answers = new Map<string, { at: number; text: string }>()
+type ResearchAnswer = { answer: string; text: string; tokens: LlmTokenCounts | null }
+type SharedResearch = {
+  controller: AbortController
+  callers: number
+  startedAt: number | null
+  tokensClaimed: boolean
+  releaseReservation: () => void
+  promise: Promise<ResearchAnswer>
+}
+const inFlight = new Map<string, SharedResearch>()
 
 function answerKey(requester: McpRequester, settings: WebResearchSettings, query: string, focus: string) {
   const plain = (text: string) => text.replace(/\s+/g, ' ').trim().toLowerCase()
@@ -213,45 +226,88 @@ export async function researchWeb(requester: McpRequester, request: { query: str
   const query = request.query.trim()
   if (!query) throw new WebResearchError('검색할 내용을 적어줘.')
   const focus = request.focus?.trim() || undefined
+  options.signal?.throwIfAborted()
   const key = answerKey(requester, settings, query, focus ?? '')
   const cached = cachedAnswer(key)
   if (cached !== null) return cached
-  const limited = settings.dailyLimit !== null && !isRequesterAdmin(requester)
-  const accountKey = String(requester.accountId ?? 'bootstrap')
-  if (limited && dailyCount(requester).length + (reservedSearches.get(accountKey) ?? 0) >= settings.dailyLimit!) {
-    throw new WebResearchError(`웹 검색은 하루에 ${settings.dailyLimit}번까지야. 이미 찾은 내용으로 답해줘.`)
-  }
-  // Reserve before waiting: other chats and queued calls share the account's remaining allowance.
-  if (limited) reservedSearches.set(accountKey, (reservedSearches.get(accountKey) ?? 0) + 1)
   const question = researchQuestion(query, focus)
-  let release: (() => void) | undefined
-  let startedAt: number | null = null
-  const engine = settings.engine === 'codex' ? 'codex' : 'claude-code'
-  const meter = (ok: boolean, tokens: LlmTokenCounts | null, text = '') => recordLlmUsage({
-    purpose: 'web_search', profileId: options.usage?.profileId, threadId: options.usage?.threadId,
-    engine, providerName: settings.engine === 'codex' ? 'codex' : CLAUDE_CHAT_PROVIDER, model: settings.model ?? '',
-    tokens: tokens ?? (ok ? { inputTokens: rawTokenEstimate(`${RESEARCH_INSTRUCTIONS}\n\n${question}`), cachedInputTokens: 0, outputTokens: rawTokenEstimate(text) } : null),
-    estimated: ok && !tokens, latencyMs: startedAt === null ? 0 : Date.now() - startedAt, ok,
-  })
-  try {
-    release = await researchSlot(options.signal)
-    options.signal?.throwIfAborted()
-    startedAt = Date.now()
-    const { text, tokens } = await researchRunners[settings.engine === 'codex' ? 'codex' : 'claude'](requester, question, settings.model, options.signal)
-    meter(true, tokens, text)
-    if (limited) dailyCount(requester).push(Date.now())
-    const answer = text.length > ANSWER_MAX_CHARS ? `${text.slice(0, ANSWER_MAX_CHARS)}\n…(cut)` : text
-    keepAnswer(key, answer)
-    return answer
-  } catch (error) {
-    if (startedAt !== null && !options.signal?.aborted) meter(false, null)
-    throw error
-  } finally {
-    release?.()
-    if (limited) {
+  let shared = inFlight.get(key)
+  if (!shared) {
+    const limited = settings.dailyLimit !== null && !isRequesterAdmin(requester)
+    const accountKey = String(requester.accountId ?? 'bootstrap')
+    if (limited && dailyCount(requester).length + (reservedSearches.get(accountKey) ?? 0) >= settings.dailyLimit!) {
+      throw new WebResearchError(`웹 검색은 하루에 ${settings.dailyLimit}번까지야. 이미 찾은 내용으로 답해줘.`)
+    }
+    // Reserve once per model run, not once per caller of the same question.
+    if (limited) reservedSearches.set(accountKey, (reservedSearches.get(accountKey) ?? 0) + 1)
+    let reserved = limited
+    const releaseReservation = () => {
+      if (!reserved) return
+      reserved = false
       const remaining = (reservedSearches.get(accountKey) ?? 1) - 1
       if (remaining > 0) reservedSearches.set(accountKey, remaining)
       else reservedSearches.delete(accountKey)
+    }
+    const controller = new AbortController()
+    const run = async (): Promise<ResearchAnswer> => {
+      let release: (() => void) | undefined
+      try {
+        release = await researchSlot(controller.signal)
+        controller.signal.throwIfAborted()
+        const hit = cachedAnswer(key)
+        if (hit !== null) return { answer: hit, text: hit, tokens: null }
+        shared!.startedAt = Date.now()
+        const { text, tokens } = await researchRunners[settings.engine === 'codex' ? 'codex' : 'claude'](requester, question, settings.model, controller.signal)
+        controller.signal.throwIfAborted()
+        if (limited) dailyCount(requester).push(Date.now())
+        const answer = text.length > ANSWER_MAX_CHARS ? `${text.slice(0, ANSWER_MAX_CHARS)}\n…(cut)` : text
+        keepAnswer(key, answer)
+        return { answer, text, tokens }
+      } finally {
+        release?.()
+        releaseReservation()
+        if (inFlight.get(key) === shared) inFlight.delete(key)
+      }
+    }
+    shared = { controller, callers: 0, startedAt: null, tokensClaimed: false, releaseReservation, promise: run() }
+    inFlight.set(key, shared)
+  }
+  const work = shared
+  work.callers += 1
+  const engine = settings.engine === 'codex' ? 'codex' : 'claude-code'
+  const meter = (ok: boolean, tokens: LlmTokenCounts | null, estimated = false) => recordLlmUsage({
+    ...options.usage, purpose: 'web_search',
+    engine, providerName: settings.engine === 'codex' ? 'codex' : CLAUDE_CHAT_PROVIDER, model: settings.model ?? '',
+    tokens, estimated, latencyMs: work.startedAt === null ? 0 : Date.now() - work.startedAt, ok,
+  })
+  let abort: (() => void) | undefined
+  try {
+    const result = await new Promise<ResearchAnswer>((resolve, reject) => {
+      abort = () => reject(options.signal?.reason)
+      options.signal?.addEventListener('abort', abort, { once: true })
+      work.promise.then(resolve, reject)
+    })
+    options.signal?.throwIfAborted()
+    if (work.startedAt !== null) {
+      // Every caller keeps its own usage identity; shared work contributes tokens only once to the ledger.
+      const reused = work.tokensClaimed
+      work.tokensClaimed = true
+      const tokens = reused ? { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 } : result.tokens ?? {
+        inputTokens: rawTokenEstimate(`${RESEARCH_INSTRUCTIONS}\n\n${question}`), cachedInputTokens: 0, outputTokens: rawTokenEstimate(result.text),
+      }
+      meter(true, tokens, !reused && !result.tokens)
+    }
+    return result.answer
+  } catch (error) {
+    if (work.startedAt !== null && !options.signal?.aborted) meter(false, null)
+    throw error
+  } finally {
+    if (abort) options.signal?.removeEventListener('abort', abort)
+    work.callers -= 1
+    if (work.callers === 0 && inFlight.get(key) === work) {
+      inFlight.delete(key)
+      work.releaseReservation()
+      work.controller.abort()
     }
   }
 }

@@ -7,7 +7,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { AudioCandidate, AudioGroup, AudioOrder, AudioReview } from '@/lib/api-audio'
 import { cn } from '@/lib/utils'
-import { audioPlayer, useAudioPlayer } from './audio-player'
+import { audioPlayer, useAudioPlayerFor } from './audio-player'
 import { shortcutLabel, useAudioShortcuts } from './audio-shortcuts'
 import { WaveformThumb } from './audio-waveform'
 
@@ -127,9 +127,9 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
 }) {
   const { t } = useI18n()
   const shortcuts = useAudioShortcuts()
-  const player = useAudioPlayer()
   const detail = useRowDetail()
   const { candidate, depth } = row
+  const player = useAudioPlayerFor(candidate.id)
   const ref = useRef<HTMLDivElement>(null)
   const playing = player.key === candidate.id && player.playing
   const progress = player.key === candidate.id && player.duration > 0 ? player.currentTime / player.duration : undefined

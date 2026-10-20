@@ -5,10 +5,10 @@ import type { CodexChatApi, CodexChatLiveTurn } from './codex-chat-context'
 const MESSAGE_PAGE_SIZE = 80
 const MESSAGE_FLASH_MS = 1600
 /** Chats left part-way up remember their position while switching between the list and transcript. */
-const readingPositions = new Map<number, number>()
+const readingPositions = new Map<number, { top: number; firstId: number | null }>()
 
 /** Message window, prepending, streaming follow, focus and scroll restoration belong to one lifecycle. */
-export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript, messageFocus, clearMessageFocus, liveTurn, runningText, serverReplyLength }: {
+export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript, messageFocus, clearMessageFocus, liveTurn, runningText, serverReplyLength, hasMoreBefore, loadEarlier, loadingEarlier, earlierError, preserveHistory }: {
   activeThreadId: number | null
   messages: CodexChatMessage[]
   isTranscript: boolean
@@ -17,13 +17,22 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
   liveTurn: CodexChatLiveTurn | null
   runningText?: string
   serverReplyLength: number
+  hasMoreBefore: boolean
+  loadEarlier: () => Promise<number | null>
+  loadingEarlier: boolean
+  earlierError: unknown
+  preserveHistory?: () => void
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const prependHeightRef = useRef<number | null>(null)
+  const prependFirstRef = useRef<number | null>(null)
   const followBottomRef = useRef(true)
+  const currentThreadRef = useRef(activeThreadId)
+  useLayoutEffect(() => { currentThreadRef.current = activeThreadId }, [activeThreadId])
   const [flashMessageId, setFlashMessageId] = useState<number | null>(null)
   const [historyWindow, setHistoryWindow] = useState<{ threadId: number | null; firstId: number | null }>({ threadId: null, firstId: null })
-  const firstIndex = historyWindow.threadId === activeThreadId ? messages.findIndex((message) => message.id === historyWindow.firstId) : -1
+  const firstId = historyWindow.threadId === activeThreadId ? historyWindow.firstId : activeThreadId === null ? null : readingPositions.get(activeThreadId)?.firstId
+  const firstIndex = messages.findIndex((message) => message.id === firstId)
   const visibleCount = firstIndex >= 0 ? messages.length - firstIndex : MESSAGE_PAGE_SIZE
   const focusIndex = messageFocus ? messages.findIndex((message) => message.id === messageFocus.messageId) : -1
   const windowCount = focusIndex >= 0 ? Math.max(visibleCount, messages.length - focusIndex) : visibleCount
@@ -51,25 +60,45 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
     const saved = activeThreadId !== null ? readingPositions.get(activeThreadId) : undefined
     if (saved !== undefined && scrollRef.current) {
       followBottomRef.current = false
-      scrollRef.current.scrollTop = saved
+      scrollRef.current.scrollTop = saved.top
     } else {
       followBottomRef.current = true
       scrollToBottom()
     }
   }, [activeThreadId, isTranscript, scrollToBottom])
-  const showEarlierMessages = () => {
-    if (visibleCount >= messages.length || prependHeightRef.current !== null) return
+  const showEarlierMessages = async () => {
+    if (prependHeightRef.current !== null || loadingEarlier) return
+    if (visibleCount >= messages.length && !hasMoreBefore) return
     prependHeightRef.current = scrollRef.current?.scrollHeight ?? null
+    prependFirstRef.current = visibleMessages[0]?.id ?? null
     followBottomRef.current = false
-    setHistoryWindow({ threadId: activeThreadId, firstId: messages[Math.max(0, messages.length - visibleCount - MESSAGE_PAGE_SIZE)]?.id ?? null })
+    if (visibleCount < messages.length) {
+      setHistoryWindow({ threadId: activeThreadId, firstId: messages[Math.max(0, messages.length - visibleCount - MESSAGE_PAGE_SIZE)]?.id ?? null })
+      return
+    }
+    try {
+      const firstId = await loadEarlier()
+      if (currentThreadRef.current !== activeThreadId) return
+      if (firstId !== null) setHistoryWindow({ threadId: activeThreadId, firstId })
+      else prependHeightRef.current = null
+    } catch {
+      // The data hook exposes the error and the existing button retries without losing the reading position.
+      if (currentThreadRef.current === activeThreadId) prependHeightRef.current = null
+    }
   }
   useLayoutEffect(() => {
     const node = scrollRef.current
-    if (node && prependHeightRef.current !== null) {
+    if (node && prependHeightRef.current !== null && visibleMessages[0] && prependFirstRef.current !== null && visibleMessages[0].id < prependFirstRef.current) {
       node.scrollTop += node.scrollHeight - prependHeightRef.current
       prependHeightRef.current = null
     }
   }, [visibleMessages])
+  useEffect(() => {
+    if (!messageFocus || !isTranscript || focusIndex >= 0 || loadingEarlier || earlierError) return
+    if (hasMoreBefore && messages[0] && messageFocus.messageId < messages[0].id) {
+      void loadEarlier().catch(() => undefined)
+    } else if (messages.length > 0) clearMessageFocus()
+  }, [messageFocus, isTranscript, focusIndex, loadingEarlier, earlierError, hasMoreBefore, messages, loadEarlier, clearMessageFocus])
   useEffect(() => {
     if (isTranscript && followBottomRef.current && !messageFocus) scrollToBottom()
   }, [isTranscript, messages.length, liveTurn?.text, liveTurn?.toolCalls.size, liveReplyLength, runningText, messageFocus, scrollToBottom])
@@ -93,9 +122,12 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
     followBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 100
     if (activeThreadId !== null) {
       if (followBottomRef.current) readingPositions.delete(activeThreadId)
-      else readingPositions.set(activeThreadId, node.scrollTop)
+      else {
+        preserveHistory?.()
+        readingPositions.set(activeThreadId, { top: node.scrollTop, firstId: visibleMessages[0]?.id ?? null })
+      }
     }
-    if (node.scrollTop < 80) showEarlierMessages()
+    if (node.scrollTop < 80 && !earlierError) void showEarlierMessages()
   }
   return { scrollRef, visibleMessages, flashMessageId, observeTranscript, showEarlierMessages, onTranscriptScroll, followLatest }
 }

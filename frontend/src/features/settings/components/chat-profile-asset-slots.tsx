@@ -13,10 +13,10 @@ import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useI18n } from '@/i18n'
-import { buildApiUrl } from '@/lib/api-client'
 import { MODEL_SLOTS_QUERY_KEY, listModelSlots } from '@/lib/api-codex-chat'
 import { getGroupEmoticons, getGroupsHierarchyAll, groupEmoticonsQueryKey, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
+import { libraryThumbnailUrl } from '@/lib/api-sprite'
 import { cn } from '@/lib/utils'
 import { ChosenCheckBadge, ReviewChips, SlotVisionReview } from './chat-asset-batch-modal'
 import { chatModelRows, useRouteOptionLabel } from './chat-model-role-select'
@@ -54,7 +54,7 @@ export function useSafeAssetImages(hashes: string[]) {
     render: (hash: string, className = 'size-full object-cover') => {
       const image = visible.get(hash)
       if (!image) return images[unique.indexOf(hash)]?.isPending ? <span className="flex size-full items-center justify-center"><Spinner /></span> : null
-      return <><ChatProfileImage src={buildApiUrl(`/api/images/${hash}/file`)} className={cn(className, safety.shouldBlurItemPreview(image) && 'blur-lg')} />{safety.renderItemPersistentOverlay(image)}</>
+      return <><ChatProfileImage src={libraryThumbnailUrl(hash)} className={cn(className, safety.shouldBlurItemPreview(image) && 'blur-lg')} />{safety.renderItemPersistentOverlay(image)}</>
     },
     open: (hash: string) => { const index = safety.visibleItems.findIndex((image) => image.composite_hash === hash); if (index >= 0) setLightbox(index) },
     lightbox: <MediaLightbox items={safety.visibleItems} index={lightbox} onIndexChange={setLightbox} onClose={() => setLightbox(null)} />,

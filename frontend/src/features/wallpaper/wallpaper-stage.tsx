@@ -3,6 +3,7 @@ import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { isTypingTarget } from '@/lib/keyboard-shortcut'
 import { getWallpaperLayoutCanvas } from './wallpaper-canvas-presets'
 import { WALLPAPER_BACKGROUND_KEYFRAMES, WallpaperBackgroundLayer } from './wallpaper-background-layer'
 import type { WallpaperLayoutPreset, WallpaperWidgetFrame as Frame, WallpaperWidgetInstance } from './wallpaper-types'
@@ -324,7 +325,7 @@ export function WallpaperStage({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.code !== 'Space') return
       const target = event.target as HTMLElement | null
-      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A'].includes(target.tagName))) return
+      if (isTypingTarget(event) || (target && ['BUTTON', 'A'].includes(target.tagName))) return
       event.preventDefault()
       if (!event.repeat) setSpaceHeld(true)
     }

@@ -136,6 +136,13 @@ export async function getWildcards(params?: { hierarchical?: boolean; rootsOnly?
   return requestWildcardData<WildcardRecord[]>(`/api/wildcards${suffix}`, 'wildcards.list.load')
 }
 
+/** One library cache shared by the workspace browser and every inline prompt picker. */
+export const wildcardLibraryQueryOptions = {
+  queryKey: ['wildcards', 'library'] as const,
+  queryFn: () => getWildcards({ hierarchical: true, withItems: true }),
+  staleTime: 60_000,
+}
+
 /** Create a new wildcard-like record in the shared wildcard store. */
 export async function createWildcard(input: WildcardMutationInput) {
   return requestWildcardData<WildcardRecord>('/api/wildcards', 'wildcards.create', {

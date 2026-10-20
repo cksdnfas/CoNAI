@@ -57,6 +57,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import { getWallpaperRuntimeSettings, updateAppearanceSettings } from '@/lib/api-settings-appearance'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import { isTypingTarget } from '@/lib/keyboard-shortcut'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { getGraphWorkflowSchedules } from '@/lib/api-module-graph'
@@ -746,7 +747,7 @@ export function WallpaperEditorPage() {
     if (event.defaultPrevented) return
     const target = event.target as HTMLElement | null
     // Focused controls own their keys: arrows move a slider or a segmented choice, not the selection.
-    if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.closest('[role="slider"],[role="radio"],[role="tab"],[role="menu"],[role="listbox"],[role="option"]'))) {
+    if (isTypingTarget(event) || target?.closest('[role="slider"],[role="radio"],[role="tab"],[role="menu"],[role="listbox"],[role="option"]')) {
       return
     }
     if (document.querySelector('[role="dialog"]')) {

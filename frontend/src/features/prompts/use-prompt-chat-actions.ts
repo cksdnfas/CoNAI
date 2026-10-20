@@ -30,7 +30,7 @@ export function usePromptChatActions(type: PromptTypeFilter, items: PromptCollec
       if (id === 'prompt.create') await createPromptCollectionItem(input)
       else if (id === 'prompt.update') await updatePromptCollectionItem(Number(args.id), input, revision)
       else throw new Error('등록되지 않은 프롬프트 작업이야.')
-      await Promise.all(['prompt-search', 'prompt-top', 'prompt-statistics', 'prompt-group-statistics', 'chat-prompt-item'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })))
+      await Promise.all(['prompt-search', 'prompt-top', 'prompt-statistics', 'prompt-groups', 'prompt-group-statistics', 'chat-prompt-item'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })))
     },
   }
 }

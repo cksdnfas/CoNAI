@@ -394,13 +394,6 @@ export function cancelJudgeFollowUp(threadId: number) {
   if (pending.timer) clearTimeout(pending.timer)
 }
 
-/** Replies at the end of the chat since the user's last message. */
-function trailingReplies(messages: CodexChatMessageRecord[]) {
-  let count = 0
-  for (let index = messages.length - 1; index >= 0 && messages[index].role === 'assistant'; index -= 1) count += 1
-  return count
-}
-
 /**
  * After a direct chat's completed reply: asks the preset's after-reply items and, on a yes, writes one follow-up
  * message after the preset's delay via `write` (a headless reply the user's next message interrupts). Follow-ups in a
@@ -413,16 +406,16 @@ export function judgeAfterReply(params: { profile: ChatProfile; threadId: number
   if (items.length === 0 || params.message.role !== 'assistant' || params.message.status !== 'completed' || !params.message.content.trim()) return
   const thread = CodexChatStore.findThreadById(params.threadId)
   if (!thread || thread.kind === 'group') return
-  const messages = CodexChatStore.listMessages(params.threadId)
-  if (messages[messages.length - 1]?.id !== params.message.id) return
+  if (CodexChatStore.latestMessageId(params.threadId) !== params.message.id) return
   // The reply itself counts once; each follow-up after it once more.
-  if (trailingReplies(messages) > setup.preset.followUp.maxConsecutive) return
+  if (CodexChatStore.trailingReplyCount(params.threadId) > setup.preset.followUp.maxConsecutive) return
+  const messages = CodexChatStore.listJudgeMessages(params.threadId, Math.max(...items.map((item) => item.window)))
 
   cancelJudgeFollowUp(params.threadId)
   const pending = { controller: new AbortController(), timer: null as NodeJS.Timeout | null }
   pendingFollowUps.set(params.threadId, pending)
   const stillLatest = () => pendingFollowUps.get(params.threadId) === pending && !pending.controller.signal.aborted
-    && CodexChatStore.listMessages(params.threadId).at(-1)?.id === params.message.id
+    && CodexChatStore.latestMessageId(params.threadId) === params.message.id
 
   void inBackground(async () => {
     const run = await runJudgeItems(setup, params.profile, items, (window) => judgeStateOf(params.profile, thread, messages, window), pending.controller.signal, { usage: { purpose: 'judge', threadId: params.threadId, profileId: params.profile.id } })

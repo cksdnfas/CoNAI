@@ -58,12 +58,12 @@ function extractPromptTerms(prompt: string): string[] {
 
 export class PromptSuggestService {
   /** One autocomplete round trip: my prompts, Danbooru tags and characters (tiered), and terms used with the context. */
-  static suggest(params: { query: string; type: PromptTableType; limit: number; relatedTagLimit: number; context: string[] }): PromptSuggestResult {
+  static async suggest(params: { query: string; type: PromptTableType; limit: number; relatedTagLimit: number; context: string[] }): Promise<PromptSuggestResult> {
     const query = params.query.trim();
     return {
       prompts: query ? this.suggestPrompts(query, params.type, params.limit) : [],
       tags: query ? danbooruBrowserService.suggestTags(query, params.limit) : [],
-      characters: query ? danbooruBrowserService.suggestCharacters(query, Math.min(params.limit, 6), params.relatedTagLimit) : [],
+      characters: query ? await danbooruBrowserService.suggestCharacters(query, Math.min(params.limit, 6), params.relatedTagLimit) : [],
       related: params.type === 'positive' ? this.relatedTerms(params.context) : [],
     };
   }

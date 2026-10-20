@@ -11,7 +11,7 @@ import { GenerationQueueService } from '../generationQueueService';
 import { enqueueGenerationJobs } from '../generation-queue/queueEnqueue';
 import { linkChatGeneration } from '../codex-chat/chatReplyRegistry';
 import { ingestGeneratedAudioOutputs } from './audioGenerationOutputs';
-import { AudioServiceError, getAudioGroup } from './audioService';
+import { AudioServiceError, getAudioGroupInfo } from './audioService';
 import { AUDIO_SEED_LIMIT, freshAudioWorkflowCompatibility, requireBoundAudioWorkflow } from './audioWorkflows';
 import type { ComfyCollectedOutputFile } from '../comfyGenerationExecutor';
 
@@ -129,7 +129,7 @@ function orderJobRows(orderId: string): OrderJobRow[] {
 /** Validate, store the order + rows, then queue one job per row. Same request_key + same body returns the order. */
 export async function createAudioOrder(input: AudioOrderInput, actor: AudioOrderActor): Promise<AudioOrder> {
   if (typeof input.group_id !== 'string' || !input.group_id) throw new AudioServiceError('group_id가 필요해.');
-  const group = getAudioGroup(input.group_id);
+  const group = getAudioGroupInfo(input.group_id);
   const text = typeof input.text === 'string' ? input.text.trim() : '';
   if (!text || [...text].length > AUDIO_ORDER_MAX_TEXT) throw new AudioServiceError(`text는 1~${AUDIO_ORDER_MAX_TEXT}자여야 해.`);
   const seconds = Number(input.seconds ?? 3);
@@ -226,7 +226,7 @@ function queuePendingRows(orderId: string, options: { binding?: ReturnType<typeo
     return 0;
   }
   const binding = options.binding ?? bound.binding;
-  const group = getAudioGroup(order.group_id);
+  const group = getAudioGroupInfo(order.group_id);
   let queued = 0;
   for (const row of rows) {
     const inputs: Record<string, unknown> = {
@@ -371,7 +371,7 @@ export function listAudioOrders(options: { groupId?: unknown; limit?: unknown; o
   const limit = Math.min(200, Math.max(1, Math.floor(Number(options.limit) || 50)));
   const offset = Math.max(0, Math.floor(Number(options.offset) || 0));
   const groupId = typeof options.groupId === 'string' && options.groupId ? options.groupId : null;
-  if (groupId) getAudioGroup(groupId);
+  if (groupId) getAudioGroupInfo(groupId);
   const where = groupId ? 'WHERE group_id = ?' : '';
   const params = groupId ? [groupId] : [];
   const rows = db().prepare(`SELECT * FROM audio_orders ${where} ORDER BY created_at DESC, id LIMIT ? OFFSET ?`).all(...params, limit, offset) as OrderRow[];
@@ -450,7 +450,7 @@ export interface AudioOrderSinkContext {
  */
 export async function storeAudioOrderOutputs(binding: AudioOrderJobBinding, outputs: ComfyCollectedOutputFile[], context: AudioOrderSinkContext): Promise<{ order_id: string; candidate_ids: string[] }> {
   const { order, row } = binding;
-  const group = getAudioGroup(order.group_id);
+  const group = getAudioGroupInfo(order.group_id);
   const { candidates, failures } = await ingestGeneratedAudioOutputs(outputs, context, {
     groupId: group.id, accountId: order.created_by_account_id, orderId: order.id,
     name: (index) => outputs.length > 1 ? `${group.name} · ${row.seed} · ${index + 1}` : `${group.name} · ${row.seed}`,

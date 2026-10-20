@@ -2,6 +2,12 @@ import { PromptCollectionModel } from '../models/PromptCollection';
 import { PromptGroupService } from './promptGroupService';
 import { SynonymService } from './synonymService';
 import { isProtectedLoRAGroup } from './promptCollectionProtection';
+import { PromptGroupModel } from '../models/PromptGroup';
+import { db } from '../database/init';
+
+export class PromptCollectionMutationError extends Error {
+  constructor(message: string, readonly status: 400 | 409 = 409) { super(message); }
+}
 
 export class PromptCollectionMutationService {
   static async setSynonyms(mainPrompt: string, synonyms: string[], type: 'positive' | 'negative' | 'auto' = 'positive') {
@@ -39,23 +45,36 @@ export class PromptCollectionMutationService {
   }
 
   static async deletePrompt(id: number, type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<boolean> {
+    return this.deletePromptInTransaction(id, type);
+  }
+
+  /** Synchronous domain validation is shared by single deletes and the atomic bulk transaction. */
+  private static deletePromptInTransaction(id: number, type: 'positive' | 'negative' | 'auto'): boolean {
     try {
-      const prompt = await PromptCollectionModel.findById(id, type);
+      if (!Number.isSafeInteger(id) || id <= 0) throw new PromptCollectionMutationError('Invalid prompt ID', 400);
+      if (!['positive', 'negative', 'auto'].includes(type)) throw new PromptCollectionMutationError('Invalid prompt type', 400);
+      const prompt = PromptCollectionModel.findById(id, type);
       if (prompt?.group_id) {
-        const group = await PromptGroupService.getGroupById(prompt.group_id, type);
+        const group = PromptGroupModel.findById(prompt.group_id, type);
         if (isProtectedLoRAGroup(group)) {
-          throw new Error('LoRA prompts are protected');
+          throw new PromptCollectionMutationError('LoRA prompts are protected');
         }
         if (PromptGroupService.isDanbooruManagedGroupId(prompt.group_id, type)) {
-          throw new Error('Danbooru auto-group prompts are managed automatically');
+          throw new PromptCollectionMutationError('Danbooru auto-group prompts are managed automatically');
         }
       }
+      if (prompt?.usage_count > 0) throw new PromptCollectionMutationError('Prompts with remaining usage cannot be deleted');
 
-      return await PromptCollectionModel.delete(id, type);
+      return PromptCollectionModel.delete(id, type);
     } catch (error) {
       console.error('Error deleting prompt:', error);
       throw error;
     }
+  }
+
+  static deletePrompts(ids: number[], type: 'positive' | 'negative' | 'auto' = 'positive'): number[] {
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 1000) throw new PromptCollectionMutationError('Invalid prompt IDs: select 1–1000 prompts', 400);
+    return db.transaction(() => [...new Set(ids)].filter((id) => this.deletePromptInTransaction(id, type)))();
   }
 
   static async assignPromptToGroup(promptId: number, groupId: number | null, type: 'positive' | 'negative' | 'auto' = 'positive'): Promise<boolean> {

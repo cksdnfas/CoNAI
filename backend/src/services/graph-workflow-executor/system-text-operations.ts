@@ -326,9 +326,10 @@ export function executeWildcardTransformNode(
   resolvedInputs: Record<string, any>,
 ) {
   const sourceText = normalizeRequiredTextInput(resolvedInputs.text, '와일드카드 적용')
-  const generalText = WildcardService.parseWildcards(sourceText, 'general')
-  const naiText = WildcardService.parseWildcards(sourceText, 'nai')
-  const comfyuiText = WildcardService.parseWildcards(sourceText, 'comfyui')
+  const resolver = WildcardService.createResolver()
+  const generalText = WildcardService.parseWildcards(sourceText, 'general', 'positive', resolver)
+  const naiText = WildcardService.parseWildcards(sourceText, 'nai', 'positive', resolver)
+  const comfyuiText = WildcardService.parseWildcards(sourceText, 'comfyui', 'positive', resolver)
 
   const nodeArtifacts = {
     general: buildRuntimeArtifact(context.executionId, node.id, 'general', 'prompt', generalText, {

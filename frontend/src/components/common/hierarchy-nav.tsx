@@ -1,8 +1,9 @@
-import { ChevronRight } from 'lucide-react'
-import { useEffect, useMemo, useState, type FocusEvent, type PointerEvent, type ReactNode } from 'react'
+import { ChevronRight, Folder, FolderOpen } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useState, type FocusEvent, type PointerEvent, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { ActionContextMenu, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
+import { SidebarItem, type SidebarItemProps } from '@/components/ui/sidebar'
 import { useI18n } from '@/i18n'
 
 export type HierarchyNodeId = number | string
@@ -24,6 +25,10 @@ interface HierarchyNavProps<T> {
   getId: (item: T) => HierarchyNodeId
   getParentId: (item: T) => HierarchyNodeId | null | undefined
   getLabel: (item: T) => ReactNode
+  variant?: 'default' | 'sidebar'
+  getCount?: (item: T) => ReactNode
+  getIcon?: (item: T, state: { open: boolean; hasChildren: boolean }) => SidebarItemProps['icon']
+  baseDepth?: number
   sortItems?: (left: T, right: T) => number
   renderIcon?: (item: T, state: HierarchyNavItemState) => ReactNode
   isItemSelectable?: (item: T, hasChildren: boolean) => boolean
@@ -43,11 +48,13 @@ interface HierarchyNavProps<T> {
 }
 
 /** Build a parent-to-children map for hierarchy navigation rendering. */
-function buildHierarchyMap<T>(items: T[], getId: (item: T) => HierarchyNodeId, getParentId: (item: T) => HierarchyNodeId | null | undefined, sortItems?: (left: T, right: T) => number) {
+function buildHierarchyMap<T>(items: T[], getId: (item: T) => HierarchyNodeId, getParentId: (item: T) => HierarchyNodeId | null | undefined, sortItems?: (left: T, right: T) => number, parentsFirst = true) {
   const map = new Map<HierarchyNodeId | null, T[]>()
+  const ids = new Set(items.map(getId))
 
   for (const item of items) {
-    const parentId = getParentId(item) ?? null
+    const rawParentId = getParentId(item) ?? null
+    const parentId = rawParentId !== null && ids.has(rawParentId) ? rawParentId : null
     const siblings = map.get(parentId) ?? []
     siblings.push(item)
     map.set(parentId, siblings)
@@ -58,7 +65,7 @@ function buildHierarchyMap<T>(items: T[], getId: (item: T) => HierarchyNodeId, g
       const leftHasChildren = (map.get(getId(left)) ?? []).length > 0
       const rightHasChildren = (map.get(getId(right)) ?? []).length > 0
 
-      if (leftHasChildren !== rightHasChildren) {
+      if (parentsFirst && leftHasChildren !== rightHasChildren) {
         return leftHasChildren ? -1 : 1
       }
 
@@ -76,9 +83,11 @@ function collectAncestorIds(parentById: Map<HierarchyNodeId, HierarchyNodeId | n
   }
 
   const ancestors: HierarchyNodeId[] = []
+  const visited = new Set<HierarchyNodeId>()
   let currentParentId = parentById.get(selectedId) ?? null
 
-  while (currentParentId != null) {
+  while (currentParentId != null && !visited.has(currentParentId)) {
+    visited.add(currentParentId)
     ancestors.unshift(currentParentId)
     currentParentId = parentById.get(currentParentId) ?? null
   }
@@ -94,6 +103,10 @@ export function HierarchyNav<T>({
   getId,
   getParentId,
   getLabel,
+  variant = 'default',
+  getCount,
+  getIcon,
+  baseDepth = 0,
   sortItems,
   renderIcon,
   isItemSelectable,
@@ -110,12 +123,13 @@ export function HierarchyNav<T>({
   getItemMenu,
 }: HierarchyNavProps<T>) {
   const { t } = useI18n()
-  const itemsByParentId = useMemo(() => buildHierarchyMap(items, getId, getParentId, sortItems), [items, getId, getParentId, sortItems])
+  const itemsByParentId = useMemo(() => buildHierarchyMap(items, getId, getParentId, sortItems, variant !== 'sidebar'), [items, getId, getParentId, sortItems, variant])
   const parentById = useMemo(
     () => new Map(items.map((item) => [getId(item), getParentId(item) ?? null] as const)),
     [items, getId, getParentId],
   )
-  const [expandedIds, setExpandedIds] = useState<Set<HierarchyNodeId>>(() => new Set([...defaultExpandedIds, ...collectAncestorIds(parentById, selectedId)]))
+  const [expandedIds, setExpandedIds] = useState<Set<HierarchyNodeId>>(() => new Set([...defaultExpandedIds, ...(variant === 'sidebar' ? [] : collectAncestorIds(parentById, selectedId))]))
+  const selectedAncestors = new Set(collectAncestorIds(parentById, selectedId))
 
   useEffect(() => {
     if (!expandable) {
@@ -166,16 +180,17 @@ export function HierarchyNav<T>({
     const nodes = itemsByParentId.get(parentId) ?? []
     if (nodes.length === 0) return null
 
-    return (
-      <div className={cn('space-y-1', depth === 0 && className)}>
-        {nodes.map((item) => {
+    const Row = variant === 'sidebar' ? Fragment : 'div'
+    const rows = nodes.map((item) => {
           const itemId = getId(item)
           const hasChildren = (itemsByParentId.get(itemId) ?? []).length > 0
           const isSelected = selectedId === itemId
-          const isExpanded = !expandable || expandedIds.has(itemId)
+          const isExpanded = variant === 'sidebar'
+            ? expandedIds.has(itemId) || selectedAncestors.has(itemId)
+            : !expandable || expandedIds.has(itemId)
           const selectable = isItemSelectable ? isItemSelectable(item, hasChildren) : true
           const state: HierarchyNavItemState = {
-            depth,
+            depth: depth + baseDepth,
             hasChildren,
             isExpanded,
             isSelected,
@@ -198,9 +213,27 @@ export function HierarchyNav<T>({
           }
 
           return (
-            <div key={String(itemId)}>
+            <Row key={String(itemId)}>
               <ActionContextMenu entries={getItemMenu?.(item, state) ?? []}>
-                {expandable ? (
+                {variant === 'sidebar' ? (
+                  <SidebarItem
+                    {...itemEventHandlers}
+                    icon={getIcon?.(item, { open: hasChildren && isExpanded, hasChildren }) ?? (hasChildren && isExpanded ? FolderOpen : Folder)}
+                    label={getLabel(item)}
+                    count={getCount?.(item)}
+                    active={isSelected}
+                    depth={depth + baseDepth}
+                    className={itemClassName}
+                    aria-expanded={hasChildren ? isExpanded : undefined}
+                    onClick={() => {
+                      if (hasChildren) {
+                        if (isSelected && isExpanded) toggleExpanded(itemId)
+                        else expandItem(itemId)
+                      }
+                      if (selectable) onSelect(item)
+                    }}
+                  />
+                ) : expandable ? (
                   <div className="flex items-center gap-1 [-webkit-touch-callout:none]" style={{ paddingLeft: `${depth * 14}px` }}>
                     {hasChildren ? (
                       <Button
@@ -263,11 +296,10 @@ export function HierarchyNav<T>({
               </ActionContextMenu>
 
               {hasChildren && isExpanded ? renderNodes(itemId, depth + 1) : null}
-            </div>
+            </Row>
           )
-        })}
-      </div>
-    )
+        })
+    return variant === 'sidebar' ? <>{rows}</> : <div className={cn('space-y-1', depth === 0 && className)}>{rows}</div>
   }
 
   return <>{renderNodes(null, 0)}</>

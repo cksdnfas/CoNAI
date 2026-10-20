@@ -24,6 +24,8 @@ const KEPT_MIGRATIONS = [
   '042_add_media_similarity_index',
   '043_add_request_path_indexes',
   '044_add_media_postprocess_state',
+  '045_add_group_resources',
+  '046_add_prompt_group_page_indexes',
 ]
 
 let dbCounter = 0

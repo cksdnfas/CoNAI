@@ -23,7 +23,7 @@ import { buildLinkedIndex, LINKED_TOOLS, placesForRequest } from './chatLinkedFi
 import { appendMinutes } from './chatMinutes'
 import { buildFlagDirective } from './chatFlags'
 import { generationPromptOf } from './chatToolReferences'
-import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
+import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { ChatSummaryStore, recallText, selectRecall, splitSegments, type ChatSummarySegment } from './chatMemory'
 import type { JudgedContext } from './chatJudgeContext'
 import { REFERENCE_BLOCK_START, resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTool, type ChatContentPart } from './llmChatCompletion'
@@ -316,7 +316,7 @@ function selectWindow(profile: Pick<ChatProfile, 'id' | 'style'>, turns: CodexCh
  * no chat and gets the global books only), unless the caller resolved `books` already. Without messages only the
  * "always on" entries are chosen. `toolOffered`: read_lore_file is among the request's tools.
  */
-export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<LoreHistoryMessage>, user?: ChatUserPersona | null, options: { thread?: Pick<CodexChatThreadRecord, 'id' | 'account_id'> | null; books?: AttachedLoreBook[]; toolOffered?: boolean; history?: ReadonlyArray<LoreHistoryMessage>; speakerProfileId?: number; judged?: ReadonlySet<string>; semantic?: ReadonlySet<string>; linkedOffered?: boolean } = {}): ChatLore {
+export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<LoreHistoryMessage>, user?: ChatUserPersona | null, options: { thread?: Pick<CodexChatThreadRecord, 'id' | 'account_id'> | null; books?: AttachedLoreBook[]; toolOffered?: boolean; history?: ReadonlyArray<LoreHistoryMessage>; historySource?: ChatHistorySource; speakerProfileId?: number; judged?: ReadonlySet<string>; semantic?: ReadonlySet<string>; linkedOffered?: boolean } = {}): ChatLore {
   const books = options.books ?? booksForRequest({ thread: options.thread ?? null, profile })
   const estimate = (text: string) => estimateTokens(profile.id, text)
   // The linked files' index only beside the tools that open them.
@@ -326,7 +326,10 @@ export function selectChatLore(profile: ChatProfile, messages?: ReadonlyArray<Lo
     linked,
     judged: options.judged,
     semantic: options.semantic,
-    ...(profile.engine !== 'codex' && messages !== undefined ? { timing: { messages: options.history ?? messages, speakerProfileId: options.speakerProfileId } } : {}),
+    ...(profile.engine !== 'codex' && messages !== undefined ? { timing: {
+      ...(options.historySource ? CodexChatStore.readLoreTiming(options.historySource, Math.max(0, ...books.flatMap((book) => book.entries.filter((entry) => entry.enabled).map((entry) => (entry.sticky ?? 0) + (entry.cooldown ?? 0))))) : { messages: options.history ?? messages }),
+      speakerProfileId: options.speakerProfileId,
+    } } : {}),
   })
 }
 
@@ -402,8 +405,10 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
 }
 
 /** The display block state of a chat as the model reads it ('' without blocks). `speakerId`: a room member's own. */
-export function threadBlockStateText(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'block_edits'>, messages: ReadonlyArray<Pick<CodexChatMessageRecord, 'id' | 'role' | 'content' | 'speaker_profile_id'>>, speakerId?: number) {
-  const folded = foldBlockState(profile, messages, parseBlockEdits(thread.block_edits), speakerId)
+export function threadBlockStateText(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'block_edits'>, messages: ReadonlyArray<Pick<CodexChatMessageRecord, 'id' | 'role' | 'content' | 'speaker_profile_id'>>, speakerId?: number, historySource?: ChatHistorySource) {
+  const history = historySource && usableBlockKeys(profile.style.blocks).size
+    ? CodexChatStore.listBlockMessages(historySource.threadId).filter((message) => message.id !== historySource.excludeMessageId) : messages
+  const folded = foldBlockState(profile, history, parseBlockEdits(thread.block_edits), speakerId)
   return folded ? blockStateText(profile.style.blocks, folded.state) : ''
 }
 
@@ -627,7 +632,7 @@ export function auxiliaryInstructionText(profile: ChatProfile, user: ChatUserPer
   }
 }
 
-export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], sent: CodexChatMessageRecord[], summaryEnabled: boolean, lore: ChatLore, recalled: ReturnType<typeof recalledSegments>, tools: ChatCompletionTool[], request: ChatCompletionMessage[]): ChatContextMeta {
+export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], sent: CodexChatMessageRecord[], summaryEnabled: boolean, lore: ChatLore, recalled: ReturnType<typeof recalledSegments>, tools: ChatCompletionTool[], request: ChatCompletionMessage[], historySource?: ChatHistorySource): ChatContextMeta {
   const meta: ChatContextMeta = {
     windowFromMessageId: sent[0]?.id ?? null, sentMessages: sent.length,
     summaryUntilMessageId: summaryEnabled && thread.summary ? thread.summary_until_message_id : null,
@@ -651,7 +656,7 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
       ...contextSource('lore-index', lore.index), ...contextSource('constant-lore', lore.constant),
       ...contextSource('summary', summary),
       ...contextSource('author-note', resolveAuthorNote(thread, profile, user).text),
-      ...contextSource('state', threadBlockStateText(profile, thread, messages, thread.kind === 'group' ? profile.id : undefined)),
+      ...contextSource('state', threadBlockStateText(profile, thread, messages, thread.kind === 'group' ? profile.id : undefined, historySource)),
       ...contextSource('flags', flagDirectiveFor(messages, profile, user), [...messages].reverse().find((message) => message.role === 'user')?.id),
       ...sent.flatMap((message) => contextSource('window', message.content, message.id)),
       ...tools.flatMap((tool) => contextSource('tool-definition', JSON.stringify(tool), tool.function.name)),
@@ -667,13 +672,13 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
  * Shared by summary planning, the actual request and the profile preview. `segments`: the thread's summary segments,
  * read by the caller (recall comes from them; none without). `books`: the lore books, when the caller resolved them.
  */
-function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = [], books?: AttachedLoreBook[], judged?: JudgedContext | null) {
+function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord | null, messages: CodexChatMessageRecord[], config: Pick<LlmChatContextConfig, 'summaryEnabled'> & Partial<Pick<LlmChatContextConfig, 'contextTokens'>>, tools: ChatCompletionTool[], segments: ChatSummarySegment[] = [], books?: AttachedLoreBook[], judged?: JudgedContext | null, historySource?: ChatHistorySource) {
   const user = userPersonaForThread(thread)
-  const lore = selectChatLore(profile, messages, user, { thread, books, toolOffered: offersLoreFileTool(tools), linkedOffered: offersLinkedFiles(tools), judged: judged?.loreKeys, semantic: judged?.semantic?.loreKeys })
+  const lore = selectChatLore(profile, messages, user, { thread, books, historySource, toolOffered: offersLoreFileTool(tools), linkedOffered: offersLinkedFiles(tools), judged: judged?.loreKeys, semantic: judged?.semantic?.loreKeys })
   const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !isChatOwnTool(tool.function.name)), lore, user)
   const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }, judged?.recallKeep, judged?.semantic?.recall) : []
   const recall = recallText(recalled)
-  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages), recall, rejectedLoreFor(thread?.id, tools))
+  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages, undefined, historySource), recall, rejectedLoreFor(thread?.id, tools))
   const directive = [flagDirectiveFor(messages, profile, user), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
   const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + estimateDepthBlocks(profile.id, blocks) + estimateTokens(profile.id, directive)
   return { system, blocks, directive, fixedTokens, lore, recalled }
@@ -941,6 +946,7 @@ export function buildChatMessages(params: {
   profile: ChatProfile
   thread: CodexChatThreadRecord
   messages: CodexChatMessageRecord[]
+  historySource?: ChatHistorySource
   config: LlmChatContextConfig
   tools: ChatCompletionTool[]
   /** The thread's summary segments, for recall. */
@@ -959,22 +965,26 @@ export function buildChatMessages(params: {
   judged?: JudgedContext | null
 }): ChatCompletionMessage[] {
   const { profile, thread, config, tools } = params
-  const { system, blocks, directive, fixedTokens, lore, recalled } = buildRequestContext(profile, thread, params.messages, config, tools, params.segments, params.books, params.judged)
+  const { system, blocks, directive, fixedTokens, lore, recalled } = buildRequestContext(profile, thread, params.messages, config, tools, params.segments, params.books, params.judged, params.historySource)
   const routing = [...params.messages].reverse().find((message) => message.role === 'user')?.routing
   const maxChars = Math.max(256, Math.min(6000, Math.floor((config.contextTokens ?? 24000) / 4)))
-  const replyContext = buildReplyContext(params.messages, routing, { maxChars })
+  const replyOptions = {
+    maxChars, historySource: params.historySource,
+    positions: routing?.replyTo && !routing.replyTo.unavailable && params.historySource ? CodexChatStore.listMessagePositions(params.historySource) : undefined,
+  }
+  const replyContext = buildReplyContext(params.messages, routing, replyOptions)
   const turns = directContextTurns(params.messages, thread, config)
   const fit = selectWindow(profile, turns, config, fixedTokens + estimateTokens(profile.id, replyContext) + 40 + (params.extraTokens ?? 0), config.contextTurns, params.attachmentTexts, params.attachedImages).length
   const window = latestWindow(turns, fit)
   const blockKeys = usableBlockKeys(profile.style.blocks)
   const shortBefore = shortToolOutputsBefore(window)
   const conversation = insertDepthBlocks(window.flat().flatMap((message) => toCompletionMessages(message, blockKeys, params.attachmentTexts, message.id < shortBefore ? SHORT_TOOL_OUTPUT_LENGTH : undefined, params.attachedImages)), blocks)
-  const reference = buildReplyContext(params.messages, routing, { maxChars, visibleIds: new Set(window.flat().map((message) => message.id)) })
+  const reference = buildReplyContext(params.messages, routing, { ...replyOptions, visibleIds: new Set(window.flat().map((message) => message.id)) })
   // A direct chat has no room tools, so the request names no room id.
   const request = appendUserDirective([...system, ...conversation], [reference, directive].filter(Boolean).join('\n\n'))
   const sent = window.flat()
   if (params.onMeta) {
-    const meta = buildContextMeta(profile, thread, params.messages, sent, config.summaryEnabled, lore, recalled, tools, request)
+    const meta = buildContextMeta(profile, thread, params.messages, sent, config.summaryEnabled, lore, recalled, tools, request, params.historySource)
     meta.estimatedTokens += params.extraTokens ?? 0
     params.onMeta(meta)
   }
@@ -1050,7 +1060,7 @@ export function turnsToFold(pending: number, fit: number, batch: number) {
 type FoldMode = 'ahead' | 'overflow' | 'all'
 
 /** What the request adds beyond the conversation that planning must count too (see buildChatMessages). */
-type RequestExtras = { attachmentTexts?: ReadonlyMap<string, string>; attachedImages?: AttachedImages; extraTokens?: number }
+type RequestExtras = { attachmentTexts?: ReadonlyMap<string, string>; attachedImages?: AttachedImages; extraTokens?: number; historySource?: ChatHistorySource }
 
 function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: LlmChatContextConfig, messages: CodexChatMessageRecord[], turns: CodexChatMessageRecord[][], mode: FoldMode, tools: ChatCompletionTool[], segments: ChatSummarySegment[], extras: RequestExtras = {}) {
   if (mode === 'all' || turns.length === 0) {
@@ -1060,7 +1070,7 @@ function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: L
   // Fit the same compact instructions as the reply; the original turns still feed the summary.
   const compacted = new Map(compactRepeatedInstructions(turns.flat()).map((message) => [message.id, message]))
   const requestTurns = turns.map((turn) => turn.map((message) => compacted.get(message.id)!))
-  const fixedTokens = buildRequestContext(profile, thread, messages, config, tools, segments).fixedTokens + (extras.extraTokens ?? 0)
+  const fixedTokens = buildRequestContext(profile, thread, messages, config, tools, segments, undefined, undefined, extras.historySource).fixedTokens + (extras.extraTokens ?? 0)
     + (ahead ? estimateMessagesTokens(profile.id, requestTurns[requestTurns.length - 1].flatMap((message) => toCompletionMessages(message, usableBlockKeys(profile.style.blocks), extras.attachmentTexts, undefined, extras.attachedImages))) : 0)
   const fit = selectWindow(profile, requestTurns, config, fixedTokens, config.contextTurns - (ahead ? 1 : 0), extras.attachmentTexts, extras.attachedImages).length
   return turnsToFold(turns.length, fit, config.summaryTriggerTurns)
@@ -1223,9 +1233,12 @@ function directPlanner(profile: ChatProfile, mode: FoldMode, options: { messages
     if (profile.engine === 'claude' && !resolveChatAccess(thread.account_id).claude) throw new Error('Claude Code 요약 모델을 사용할 권한이 없어.')
     const config = resolveContextConfig(thread, profile)
     if (mode !== 'all' && !config.summaryEnabled) return null
-    const messages = options.messages ?? CodexChatStore.listMessages(thread.id)
+    const historySource = options.extras?.historySource ?? (options.messages ? undefined : { threadId: thread.id })
+    const messages = options.messages ?? CodexChatStore.listContextMessages(historySource!, {
+      afterId: thread.summary_until_message_id ?? 0, recentMessages: Math.max(2, profile.loreScanDepth), textMessages: 2,
+    })
     const turns = splitTurns(sendableMessages(unsummarizedMessages(messages, thread, { summaryEnabled: true })))
-    const count = planFold(profile, thread, config, messages, turns, mode, options.tools ?? [], segments, options.extras)
+    const count = planFold(profile, thread, config, messages, turns, mode, options.tools ?? [], segments, { ...options.extras, historySource })
     const lineOf = directTranscript(profile, userPersonaForThread(thread))
     const summaryConfig = count > 0 || segments.length > KEEP_RECENT_SEGMENTS ? await summaryContextConfig(profile, config) : config
     return { profile, config: summaryConfig, lineOf, chunk: count === 0 ? [] : takeSummaryChunk(profile, summaryConfig, turns.slice(0, count), lineOf) }

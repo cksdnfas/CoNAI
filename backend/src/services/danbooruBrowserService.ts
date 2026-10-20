@@ -283,7 +283,7 @@ class DanbooruBrowserService {
     return nextDb;
   }
 
-  getCharacterImageFilePath(tagId: unknown, fileName: string): string | null {
+  async getCharacterImageFilePath(tagId: unknown, fileName: string): Promise<string | null> {
     const parsedTagId = Number(tagId);
     if (!Number.isFinite(parsedTagId) || !fileName || fileName.includes('/') || fileName.includes('\\')) {
       return null;
@@ -622,7 +622,7 @@ class DanbooruBrowserService {
     };
   }
 
-  listCharacters(params: { q?: string; copyrightTagId?: string; page?: unknown; limit?: unknown; relatedTagCategories?: unknown; relatedTagScoreMin?: unknown; relatedTagScoreMax?: unknown; relatedTagLimit?: unknown }) {
+  async listCharacters(params: { q?: string; copyrightTagId?: string; page?: unknown; limit?: unknown; relatedTagCategories?: unknown; relatedTagScoreMin?: unknown; relatedTagScoreMax?: unknown; relatedTagLimit?: unknown }) {
     const page = clampInteger(params.page, 1, 1, 100_000);
     const limit = clampInteger(params.limit, CHARACTER_PAGE_SIZE, 1, CHARACTER_PAGE_SIZE);
     if (!this.hasAvailableDb()) {
@@ -672,7 +672,7 @@ class DanbooruBrowserService {
     const relatedTagsByCharacter = this.getRelatedTagsByCharacter(tagIds, relatedTagFilters, relatedTagLimit);
 
     return {
-      items: rows.map((row) => ({
+      items: await Promise.all(rows.map(async (row) => ({
         tagId: row.tag_id,
         name: row.name,
         normalizedName: row.normalized_name,
@@ -681,9 +681,9 @@ class DanbooruBrowserService {
         worksCount: row.post_count,
         copyrights: copyrightsByCharacter.get(row.tag_id) ?? [],
         relatedTags: relatedTagsByCharacter.get(row.tag_id) ?? [],
-        images: this.characterImages.getRecords(row),
+        images: await this.characterImages.getRecords(row),
         danbooruUrl: buildDanbooruPostsUrl(row.name),
-      })),
+      }))),
       pagination: this.buildPagination(page, limit, total),
     };
   }
@@ -746,7 +746,7 @@ class DanbooruBrowserService {
   }
 
   /** Character autocomplete with related tags: exact, then prefix, then Korean prefix (no contains scan). */
-  suggestCharacters(rawQuery: string, limit: number, relatedTagLimit: number): DanbooruBrowserCharacterRecord[] {
+  async suggestCharacters(rawQuery: string, limit: number, relatedTagLimit: number): Promise<DanbooruBrowserCharacterRecord[]> {
     const q = normalizeQuery(rawQuery);
     if (q.length < 2 || !this.hasAvailableDb()) {
       return [];
@@ -768,7 +768,7 @@ class DanbooruBrowserService {
     const tagIds = rows.map((row) => row.tag_id);
     const copyrightsByCharacter = this.getCopyrightsByCharacter(tagIds);
     const relatedTagsByCharacter = this.getRelatedTagsByCharacter(tagIds, {}, relatedTagLimit);
-    return rows.map((row) => ({
+    return Promise.all(rows.map(async (row) => ({
       tagId: row.tag_id,
       name: row.name,
       normalizedName: row.normalized_name,
@@ -777,9 +777,9 @@ class DanbooruBrowserService {
       worksCount: row.post_count,
       copyrights: copyrightsByCharacter.get(row.tag_id) ?? [],
       relatedTags: relatedTagsByCharacter.get(row.tag_id) ?? [],
-      images: this.characterImages.getRecords(row),
+      images: await this.characterImages.getRecords(row),
       danbooruUrl: buildDanbooruPostsUrl(row.name),
-    }));
+    })));
   }
 
   private getCopyrightsByCharacter(tagIds: number[]): Map<number, DanbooruBrowserCopyrightRecord[]> {

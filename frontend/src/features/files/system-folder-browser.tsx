@@ -160,6 +160,8 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
     const otherFailure = result.failed.find((item) => item.code !== 'conflict')
     setConflicts(targets.filter((entry) => conflicting.includes(entry.name)))
     if (result.done.length > 0) showSnackbar({ tone: 'info', message: t({ ko: '{count}개 복원했어.', en: 'Restored {count}.' }, { count: result.done.length }) })
+    const warning = result.done.find((item) => item.warning)?.warning
+    if (warning) showSnackbar({ tone: 'error', message: warning })
     if (otherFailure) showSnackbar({ tone: 'error', message: otherFailure.error })
   })
   const removeForever = async (targets: SystemFolderEntry[]) => {

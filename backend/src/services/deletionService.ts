@@ -6,11 +6,48 @@ import { HistoryQueryRepository } from '../repositories/history/HistoryQueryRepo
 import { HistoryCommandService } from './historyCommandService';
 import { PromptCollectionService } from './promptCollectionService';
 import { settingsService } from './settingsService';
-import { deleteFile as recycleBinDeleteFile } from '../utils/recycleBin';
+import { deleteFile as recycleBinDeleteFile, recordLibraryRestoreData, moveFileWithoutReplacing, forgetRecycleBinOrigins } from '../utils/recycleBin';
 import { runtimePaths } from '../config/runtimePaths';
 import { db } from '../database/init';
 import { ImageStatsModel } from '../models/Image/ImageStatsModel';
 import { resolveThumbnailAbsolutePath } from '../utils/thumbnailGenerator';
+import type { ImageMetadataRecord, ImageFileRecord } from '../types/image';
+import { QueryCacheService } from './QueryCacheService';
+import { MediaImageFeaturesModel } from '../models/Image/MediaImageFeaturesModel';
+
+interface RestorableImageModel {
+  model_hash: string;
+  model_role: string;
+  weight: number | null;
+  civitai_checked: number;
+  civitai_failed: number;
+  checked_at: string | null;
+  created_at: string;
+}
+
+interface RestorableVideoOptimization {
+  source_path: string;
+  source_size: number;
+  source_mtime: number;
+  crf: number;
+  audio_bitrate: number;
+  status: string;
+  output_path: string | null;
+  attempts: number;
+  lease_until: number;
+  last_error: string | null;
+}
+
+interface LibraryRestoreData {
+  metadata: ImageMetadataRecord;
+  file: ImageFileRecord;
+  groups: Array<{ group_id: number; added_date: string; order_index: number; collection_type: string; auto_collected_date: string | null }>;
+  folderGroups: Array<{ group_id: number; added_date: string }>;
+  /** Optional for entries created before side-table snapshots were supported. The BLOB is encoded losslessly. */
+  colorHistogram?: string | null;
+  models?: RestorableImageModel[];
+  videoOptimization?: RestorableVideoOptimization | null;
+}
 
 /**
  * 통합 삭제 서비스
@@ -135,6 +172,12 @@ export class DeletionService {
    * @returns 삭제 성공 여부
    */
   static async deleteImage(compositeHash: string): Promise<boolean> {
+    await this.deleteImageWithRestoreEntries(compositeHash);
+    return true;
+  }
+
+  /** Return only the exact files moved by this request; permanent/missing files have no undo entry. */
+  static async deleteImageWithRestoreEntries(compositeHash: string): Promise<string[]> {
     console.log(`🔍 Starting deleteImage for: ${compositeHash}`);
 
     // 1. composite_hash 검증 (이미지: 48자, 비디오: 32자)
@@ -148,7 +191,7 @@ export class DeletionService {
       // ✅ Idempotent: Already deleted images return success instead of error
       console.warn(`⚠️ Image already deleted or not found: ${compositeHash}`);
       this.cleanupGenerationHistoryForHash(compositeHash, true);
-      return true;
+      return [];
     }
 
     // 3. 파일 목록 조회
@@ -159,51 +202,112 @@ export class DeletionService {
 
     const settings = settingsService.loadSettings();
     const useRecycleBin = settings.general.deleteProtection.enabled;
+    const groups = useRecycleBin
+      ? db.prepare('SELECT group_id, added_date, order_index, collection_type, auto_collected_date FROM image_groups WHERE composite_hash = ?').all(compositeHash) as LibraryRestoreData['groups']
+      : [];
+    const folderGroups = useRecycleBin
+      ? db.prepare('SELECT group_id, added_date FROM auto_folder_group_images WHERE composite_hash = ?').all(compositeHash) as LibraryRestoreData['folderGroups']
+      : [];
+    const colorHistogram = useRecycleBin ? MediaImageFeaturesModel.getHistogram(compositeHash)?.toString('base64') ?? null : null;
+    const models = useRecycleBin
+      ? db.prepare('SELECT model_hash, model_role, weight, civitai_checked, civitai_failed, checked_at, created_at FROM image_models WHERE composite_hash = ?').all(compositeHash) as RestorableImageModel[]
+      : [];
+    const videoOptimization = useRecycleBin
+      ? db.prepare(`SELECT source_path, source_size, source_mtime, crf, audio_bitrate, status, output_path, attempts, lease_until, last_error
+        FROM generated_video_optimizations WHERE composite_hash = ?`).get(compositeHash) as RestorableVideoOptimization | undefined
+      : undefined;
+    const recycleBinEntries: string[] = [];
+    const movedFiles: Array<{ name: string; binPath: string; original: string }> = [];
 
     console.log(`🗑️ Deleting image ${compositeHash}:`, {
       useRecycleBin,
       fileCount: files.length,
     });
 
-    // 4. 프롬프트 정리 (먼저 실행 - 실패해도 계속 진행)
-    await this.cleanupPromptCollection(
-      metadata.prompt || null,
-      metadata.negative_prompt || null,
-      metadata.character_prompt_text || null,
-      metadata.auto_tags || null,
-    );
-
     // 5. 물리적 파일 삭제
     // 원본 파일들 - RecycleBin 설정에 따라 백업 또는 삭제
-    for (const file of files) {
-      try {
-        await this.deletePhysicalFile(file.original_file_path, useRecycleBin);
-      } catch (error) {
-        console.error(`❌ Failed to delete original file: ${file.original_file_path}`, error);
-        throw error;
+    try {
+      for (const file of files) {
+        const binPath = await this.deletePhysicalFile(file.original_file_path, useRecycleBin);
+        if (binPath) {
+          const name = path.basename(binPath);
+          const original = path.isAbsolute(file.original_file_path) ? file.original_file_path : path.join(this.UPLOAD_BASE_PATH, file.original_file_path);
+          movedFiles.push({ name, binPath, original });
+          recordLibraryRestoreData(name, JSON.stringify({ metadata, file, groups, folderGroups, colorHistogram, models, videoOptimization } satisfies LibraryRestoreData));
+          recycleBinEntries.push(name);
+        }
       }
-    }
 
-    // 썸네일 파일 - 항상 즉시 삭제 (복구 시 자동 생성 가능)
-    if (metadata.thumbnail_path) {
-      try {
-        await this.deleteThumbnailFile(metadata.thumbnail_path);
-      } catch (error) {
-        console.warn(`⚠️ Failed to delete thumbnail (continuing): ${metadata.thumbnail_path}`, error);
+      // Thumbnails are regenerable; only originals are backed up.
+      if (metadata.thumbnail_path) {
+        try {
+          await this.deleteThumbnailFile(metadata.thumbnail_path);
+        } catch (error) {
+          console.warn(`⚠️ Failed to delete thumbnail (continuing): ${metadata.thumbnail_path}`, error);
+        }
       }
+
+      if (!this.deleteMetadataWithFiles(compositeHash)) throw new Error('Failed to delete image from database');
+    } catch (error) {
+      // A failed protected deletion must not strand the first copies of a multi-file image in the bin.
+      for (const moved of movedFiles) {
+        await moveFileWithoutReplacing(moved.binPath, moved.original);
+        forgetRecycleBinOrigins([moved.name]);
+      }
+      throw error;
     }
 
-    // 6. 데이터베이스 삭제 (image_files FK는 SET NULL이므로 파일 행도 같은 트랜잭션에서 직접 삭제)
-    const deleted = this.deleteMetadataWithFiles(compositeHash);
-
-    if (!deleted) {
-      throw new Error('Failed to delete image from database');
-    }
-
+    await this.cleanupPromptCollection(metadata.prompt, metadata.negative_prompt, metadata.character_prompt_text, metadata.auto_tags);
     this.cleanupGenerationHistoryForHash(compositeHash);
 
     console.log(`✅ Image ${compositeHash} deleted successfully`);
-    return true;
+    return recycleBinEntries;
+  }
+
+  /** Reattach a restored file and its surviving groups without replacing newer library edits. */
+  static restoreLibraryEntry(data: string, restoredTo: string): void {
+    const snapshot = JSON.parse(data) as LibraryRestoreData;
+    const { metadata, file, groups, folderGroups } = snapshot;
+    db.transaction(() => {
+      if (!MediaMetadataModel.findByHash(metadata.composite_hash)) {
+        MediaMetadataModel.create(metadata);
+        db.prepare(`UPDATE media_metadata SET first_seen_date = ?, metadata_updated_date = ?,
+          postprocess_status = ?, postprocess_completed_at = ? WHERE composite_hash = ?`)
+          .run(metadata.first_seen_date, metadata.metadata_updated_date, metadata.postprocess_status ?? 'ready', metadata.postprocess_completed_at ?? null, metadata.composite_hash);
+        PromptCollectionService.restoreImageUsage(metadata.prompt, metadata.negative_prompt, metadata.character_prompt_text, metadata.auto_tags);
+        if (snapshot.colorHistogram) MediaImageFeaturesModel.setHistogram(metadata.composite_hash, Buffer.from(snapshot.colorHistogram, 'base64'));
+        const addModel = db.prepare(`INSERT INTO image_models
+          (composite_hash, model_hash, model_role, weight, civitai_checked, civitai_failed, checked_at, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+        for (const model of snapshot.models ?? []) {
+          addModel.run(metadata.composite_hash, model.model_hash, model.model_role, model.weight, model.civitai_checked, model.civitai_failed, model.checked_at, model.created_at);
+        }
+        // media_similarity_index and media_auto_tags are rebuilt by metadata creation / setHistogram.
+      }
+      const existing = ImageFileModel.findByPath(restoredTo);
+      if (existing && existing.composite_hash !== metadata.composite_hash) {
+        throw new Error('The restored path is already registered to another image');
+      }
+      if (!existing) ImageFileModel.create({ ...file, original_file_path: restoredTo, file_status: 'active' });
+      else ImageFileModel.updateStatus(existing.id, 'active');
+      const optimization = snapshot.videoOptimization;
+      const original = path.isAbsolute(file.original_file_path) ? file.original_file_path : path.join(this.UPLOAD_BASE_PATH, file.original_file_path);
+      if (optimization && path.resolve(optimization.source_path) === path.resolve(original)) {
+        db.prepare(`INSERT OR IGNORE INTO generated_video_optimizations
+          (composite_hash, source_path, source_size, source_mtime, crf, audio_bitrate, status, output_path, attempts, lease_until, last_error)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(metadata.composite_hash, restoredTo, optimization.source_size, optimization.source_mtime, optimization.crf, optimization.audio_bitrate,
+            optimization.status, optimization.output_path, optimization.attempts, optimization.lease_until, optimization.last_error);
+      }
+      const addGroup = db.prepare(`INSERT OR IGNORE INTO image_groups
+        (group_id, composite_hash, added_date, order_index, collection_type, auto_collected_date)
+        SELECT ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM groups WHERE id = ?)`);
+      for (const group of groups) addGroup.run(group.group_id, metadata.composite_hash, group.added_date, group.order_index, group.collection_type, group.auto_collected_date, group.group_id);
+      const addFolderGroup = db.prepare(`INSERT OR IGNORE INTO auto_folder_group_images (group_id, composite_hash, added_date)
+        SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM auto_folder_groups WHERE id = ?)`);
+      for (const group of folderGroups) addFolderGroup.run(group.group_id, metadata.composite_hash, group.added_date, group.group_id);
+    })();
+    QueryCacheService.invalidateImageCache(metadata.composite_hash, true);
   }
 
   /**
@@ -366,14 +470,16 @@ export class DeletionService {
     success: number;
     failed: number;
     errors: Array<{ hash: string; error: string }>;
+    recycleBinEntries: string[];
   }> {
     let successCount = 0;
     let failedCount = 0;
     const errors: Array<{ hash: string; error: string }> = [];
+    const recycleBinEntries: string[] = [];
 
-    for (const hash of compositeHashes) {
+    for (const hash of new Set(compositeHashes)) {
       try {
-        await this.deleteImage(hash);
+        recycleBinEntries.push(...await this.deleteImageWithRestoreEntries(hash));
         successCount++;
       } catch (error) {
         failedCount++;
@@ -384,7 +490,7 @@ export class DeletionService {
     }
 
     console.log(`✅ Batch deletion completed: ${successCount} success, ${failedCount} failed`);
-    return { success: successCount, failed: failedCount, errors };
+    return { success: successCount, failed: failedCount, errors, recycleBinEntries };
   }
 
 }

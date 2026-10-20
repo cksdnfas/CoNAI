@@ -18,8 +18,8 @@ import {
   deleteAudioProject,
   getAudioCandidate,
   getAudioFolder,
-  getAudioGroup,
-  getAudioProject,
+  getAudioGroupInfo,
+  getAudioProjectInfo,
   importAudioDataUrl,
   importAudioFromFileStore,
   listAudioCandidates,
@@ -56,7 +56,7 @@ async function run(action: () => unknown) {
 
 /** Refresh only the affected audio group after an authorized mutation completes. */
 function changed(groupId: string, action: () => unknown) {
-  const group = getAudioGroup(groupId);
+  const group = getAudioGroupInfo(groupId);
   const value = action();
   publishRuntimeEvent({ name: 'audio.changed', topic: 'audio', payload: { group_id: group.id, project_id: group.project_id } });
   return value;
@@ -90,6 +90,11 @@ export function candidateSummary(candidate: AudioCandidate) {
 }
 
 const id = z.string().trim().min(1).max(64);
+const listInputs = {
+  limit: z.number().int().min(1).max(200).optional().describe('Page size, default 200, maximum 200'),
+  cursor: z.string().regex(/^\d+$/).max(16).optional().describe('next_cursor from the previous page; keep the same search/filter'),
+  offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional().describe('Zero-based offset, default 0; cursor takes precedence'),
+};
 
 export function registerAudioTools(server: McpServer, context: McpRequestContext): void {
   const accountId = context.requester?.accountId ?? null;
@@ -119,14 +124,15 @@ export function registerAudioTools(server: McpServer, context: McpRequestContext
     group_id: id, comment_id: id, expected_revision: z.number().int().min(1),
   }) }, ({ group_id, comment_id, expected_revision }) => run(() => changed(group_id, () => deleteAudioGroupComment(group_id, comment_id, expected_revision))));
 
-  server.registerTool('list_audio_projects', { description: 'List sound-effect projects in the audio workspace with their group and candidate counts and the id of each project\'s 받은 파일 (inbox) group.', inputSchema: z.object({}) },
-    () => run(() => listAudioProjects()));
+  server.registerTool('list_audio_projects', { description: 'List a bounded page of sound-effect projects with group/candidate counts and the 받은 파일 (inbox) group id. Ordered by creation time then id. Returns items, limit, offset, has_more and next_cursor. Default/max limit 200; pass next_cursor as cursor to continue (or use offset).', inputSchema: z.object(listInputs) },
+    (input) => run(() => listAudioProjects(input)));
 
-  server.registerTool('list_audio_groups', { description: 'List sound groups in one project, or across all projects when project_id is omitted (the 오디오 tab calls a group a 효과음, "effect": one sound with one prompt and one file name). Each group has a description (what the sound is for, in a person\'s words), a prompt (its representative generation prompt), a folder_id (the folder it is sorted into, null = directly under the project) and a label (its export file-name rule, e.g. footstep_snow_[00]); counts include candidates, selected takes and pending/completed comments.', inputSchema: z.object({
+  server.registerTool('list_audio_groups', { description: 'List a bounded page of sound groups in one project, or across all projects when project_id is omitted (the 오디오 tab calls a group a 효과음, "effect"). Each has description, prompt, folder_id, label (export file-name rule), project_name and candidate/review/comment counts. Inbox first, then creation time and id. Returns items, limit, offset, has_more and next_cursor. Default/max limit 200; pass next_cursor as cursor with the same project/search/filter to continue (or use offset). Search is Unicode case-insensitive.', inputSchema: z.object({
+    ...listInputs,
     project_id: id.optional().describe('Omit to search groups across all projects'),
     search: z.string().max(120).optional().describe('Match group name, label or description'),
     filter: z.enum(['unselected', 'has_comments', 'pending_comments', 'completed_comments']).optional(),
-  }) }, ({ project_id, search, filter }) => run(() => project_id ? listAudioGroups(project_id, { search, filter }) : searchAudioGroups({ search, filter })));
+  }) }, ({ project_id, ...options }) => run(() => project_id ? listAudioGroups(project_id, options) : searchAudioGroups(options)));
 
   server.registerTool('list_audio_candidates', { description: 'List sound candidates (generated takes, uploads, edits) in one audio group, newest first, with review state, duration and provenance.', inputSchema: z.object({
     group_id: id,
@@ -202,7 +208,7 @@ export function registerAudioTools(server: McpServer, context: McpRequestContext
     group_id: id,
     confirm_name: confirmName,
   }) }, ({ group_id, confirm_name }) => run(async () => {
-    requireName(getAudioGroup(group_id).name, confirm_name);
+    requireName(getAudioGroupInfo(group_id).name, confirm_name);
     return deleteAudioGroup(group_id);
   }));
 
@@ -218,7 +224,7 @@ export function registerAudioTools(server: McpServer, context: McpRequestContext
     project_id: id,
     confirm_name: confirmName,
   }) }, ({ project_id, confirm_name }) => run(async () => {
-    requireName(getAudioProject(project_id).name, confirm_name);
+    requireName(getAudioProjectInfo(project_id).name, confirm_name);
     return deleteAudioProject(project_id);
   }));
 

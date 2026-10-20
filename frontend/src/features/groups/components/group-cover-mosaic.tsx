@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Folder } from 'lucide-react'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
+import { useInView } from '@/lib/use-in-view'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 
@@ -16,16 +17,17 @@ interface GroupCoverMosaicProps {
 
 /** A 2x2 mosaic of the group's preview images (one image fills the frame; empty groups show a folder). */
 export function GroupCoverMosaic({ groupId, sourceKey, imageCount, loadPreviewImages, className }: GroupCoverMosaicProps) {
+  const [ref, view] = useInView<HTMLDivElement>('200px')
   const previewQuery = useQuery({
     queryKey: ['group-cover-images', sourceKey, groupId],
     queryFn: () => loadPreviewImages(groupId, { includeChildren: true, count: COVER_IMAGE_COUNT }),
-    enabled: imageCount > 0,
+    enabled: imageCount > 0 && view.visible,
     staleTime: 60_000,
   })
   const images = (previewQuery.data ?? []).slice(0, COVER_IMAGE_COUNT)
 
   return (
-    <div className={cn('relative overflow-hidden bg-fill', className)}>
+    <div ref={ref} className={cn('relative overflow-hidden bg-fill', className)}>
       {images.length === 0 ? (
         <div className="flex h-full w-full items-center justify-center text-muted-foreground/60">
           <Folder className="size-1/3 max-h-10 max-w-10" aria-hidden="true" />

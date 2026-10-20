@@ -17,6 +17,16 @@ export const systemFolderDownloadUrl = (root: SystemFolderRootId, path: string) 
 export const systemFolderThumbnailUrl = (root: SystemFolderRootId, path: string) => fileUrl(root, path, 'thumbnail')
 export const restoreRecycleBinFiles = (names: string[], conflict: 'fail' | 'rename' = 'fail') =>
   requestApiData<SystemFolderBatchResult>('/api/system-folders/recycle-bin/restore', { method: 'POST', headers, body: JSON.stringify({ names, conflict }) })
+/** Image-delete permission only; the server accepts entries backed by library undo data, never other server files. */
+export async function restoreDeletedImageFiles(names: string[]) {
+  const result: SystemFolderBatchResult = { done: [], failed: [] }
+  for (let offset = 0; offset < names.length; offset += 1000) {
+    const batch = await requestApiData<SystemFolderBatchResult>('/api/images/restore', { method: 'POST', headers, body: JSON.stringify({ names: names.slice(offset, offset + 1000) }) })
+    result.done.push(...batch.done)
+    result.failed.push(...batch.failed)
+  }
+  return result
+}
 export const deleteRecycleBinFiles = (names: string[]) =>
   requestApiData<SystemFolderBatchResult>('/api/system-folders/recycle-bin/delete', { method: 'POST', headers, body: JSON.stringify({ names }) })
 export const emptyRecycleBin = () => requestApiData<{ deleted: number; failed: number }>('/api/system-folders/recycle-bin/empty', { method: 'POST', headers, body: '{}' })

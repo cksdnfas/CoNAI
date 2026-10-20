@@ -406,46 +406,73 @@ router.get('/:id/test-connection', asyncHandler(async (req: Request, res: Respon
 
 /**
  * Get canvas folder images for image-to-image workflows
- * GET /api/workflows/canvas-images
+ * GET /api/workflows/canvas-images?limit=100&cursor=...
+ * Retains data/canvasPath; pagination.nextCursor continues newest-first results.
  */
 router.get('/canvas-images', asyncHandler(async (req: Request, res: Response) => {
+  const limit = req.query.limit === undefined ? 100 : Number(req.query.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+    return res.status(400).json({ success: false, error: 'limit must be an integer between 1 and 200' });
+  }
+  let cursor: { modified: number; filename: string } | null = null;
+  if (req.query.cursor !== undefined) {
+    try {
+      if (typeof req.query.cursor !== 'string' || req.query.cursor.length > 2048) throw new Error('Invalid cursor');
+      const value = JSON.parse(Buffer.from(req.query.cursor, 'base64url').toString('utf8'));
+      if (!value || !Number.isFinite(value.modified) || typeof value.filename !== 'string') throw new Error('Invalid cursor');
+      cursor = { modified: value.modified, filename: value.filename };
+    } catch {
+      return res.status(400).json({ success: false, error: 'Invalid canvas image cursor' });
+    }
+  }
   try {
     const canvasPath = runtimePaths.canvasDir;
-
-    // Ensure canvas directory exists
-    if (!fs.existsSync(canvasPath)) {
-      fs.mkdirSync(canvasPath, { recursive: true });
-      return res.json({
-        success: true,
-        data: [],
-        canvasPath: canvasPath  // Provide actual path for user guidance
+    await fs.promises.mkdir(canvasPath, { recursive: true });
+    type CanvasImage = { filename: string; path: string; size: number; created: Date; modified: Date };
+    const images: CanvasImage[] = [];
+    const readImage = async (file: string) => {
+      let stats: fs.Stats;
+      try {
+        stats = await fs.promises.stat(path.join(canvasPath, file));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; // A file removed during the scan.
+        throw error;
+      }
+      if (!stats.isFile()) return;
+      const modified = stats.mtime.getTime();
+      if (cursor && (modified > cursor.modified || (modified === cursor.modified && file <= cursor.filename))) return;
+      images.push({
+        filename: file, path: `${publicUrls.canvasBaseUrl}/${file}`,
+        size: stats.size, created: stats.birthtime, modified: stats.mtime,
       });
+      images.sort((a, b) => b.modified.getTime() - a.modified.getTime()
+        || (a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0));
+      // Keep only this page and one lookahead, not metadata for the entire directory.
+      if (images.length > limit + 1) images.pop();
+    };
+    let pending: string[] = [];
+    const directory = await fs.promises.opendir(canvasPath);
+    for await (const entry of directory) {
+      if (!(entry.isFile() || entry.isSymbolicLink()) || !['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(path.extname(entry.name).toLowerCase())) continue;
+      pending.push(entry.name);
+      if (pending.length === 8) {
+        await Promise.all(pending.map(readImage));
+        pending = [];
+      }
     }
-
-    // Read directory and filter image files
-    const files = fs.readdirSync(canvasPath);
-    const imageFiles = files.filter(file => {
-      const ext = path.extname(file).toLowerCase();
-      return ['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(ext);
-    });
-
-    // Get file stats and create response data
-    const images = imageFiles.map(file => {
-      const filePath = path.join(canvasPath, file);
-      const stats = fs.statSync(filePath);
-      return {
-        filename: file,
-        path: `${publicUrls.canvasBaseUrl}/${file}`,
-        size: stats.size,
-        created: stats.birthtime,
-        modified: stats.mtime
-      };
-    }).sort((a, b) => b.modified.getTime() - a.modified.getTime()); // Sort by newest first
+    await Promise.all(pending.map(readImage));
+    const hasMore = images.length > limit;
+    if (hasMore) images.pop();
+    const last = images.at(-1);
+    const nextCursor = hasMore && last
+      ? Buffer.from(JSON.stringify({ modified: last.modified.getTime(), filename: last.filename })).toString('base64url')
+      : null;
 
     return res.json({
       success: true,
       data: images,
-      canvasPath: canvasPath  // Provide actual path for user guidance
+      canvasPath: canvasPath,  // Provide actual path for user guidance
+      pagination: { limit, nextCursor, hasMore },
     });
   } catch (error) {
     console.error('Error getting canvas images:', error);

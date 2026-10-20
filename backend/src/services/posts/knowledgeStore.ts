@@ -14,18 +14,34 @@ const date = (value: string | null) => value ? (value.includes('T') ? value : `$
 export type KnowledgeRow = { post_id: number; enabled: number; content_version: number; content_hash: string; review_status: 'unreviewed' | 'verified' | 'needs_review'; verified_content_version: number | null; replacement_post_id: number | null; deleted_at: string | null };
 export const findKnowledgeRow = (postId: number) => db().prepare('SELECT * FROM post_knowledge WHERE post_id = ?').get(postId) as KnowledgeRow | undefined;
 
-export function getKnowledgeState(postId: number, actor?: PostActor): PostKnowledge | null {
-  const row = findKnowledgeRow(postId);
-  if (!row) return null;
-  let replacementPostId = row.replacement_post_id;
-  if (actor && replacementPostId !== null) {
-    const target = db().prepare('SELECT * FROM posts WHERE id=?').get(replacementPostId) as PostRow | undefined;
-    if (!target || !canSeePost(actor,target) || findKnowledgeRow(replacementPostId)?.deleted_at) replacementPostId = null;
+/** Hydrate a page's knowledge and replacement visibility without reading replacement bodies. */
+export function getKnowledgeStates(postIds: number[], actor?: PostActor): Map<number, PostKnowledge> {
+  const states = new Map<number, PostKnowledge>();
+  if (!postIds.length) return states;
+  const rows = db().prepare(`SELECT k.*, p.id AS replacement_id, p.status AS replacement_status,
+    p.owner_account_id AS replacement_owner_account_id, replacement.deleted_at AS replacement_deleted_at
+    FROM post_knowledge k LEFT JOIN posts p ON p.id=k.replacement_post_id
+    LEFT JOIN post_knowledge replacement ON replacement.post_id=p.id
+    WHERE k.post_id IN (${postIds.map(() => '?').join(',')})`).all(...postIds) as Array<KnowledgeRow & {
+      replacement_id: number | null; replacement_status: PostRow['status'] | null;
+      replacement_owner_account_id: number | null; replacement_deleted_at: string | null;
+    }>;
+  for (const row of rows) {
+    let replacementPostId = row.replacement_post_id;
+    if (actor && replacementPostId !== null && (row.replacement_id === null || row.replacement_deleted_at
+      || !canSeePost(actor, { status: row.replacement_status!, owner_account_id: row.replacement_owner_account_id }))) replacementPostId = null;
+    states.set(row.post_id, {
+      enabled: row.enabled === 1, contentVersion: row.content_version, contentHash: row.content_hash, reviewStatus: row.review_status,
+      verifiedContentVersion: row.verified_content_version, deletedAt: date(row.deleted_at), replacementPostId,
+      canEvaluate: Boolean(actor && !row.deleted_at && (actor.isAdmin || actor.keys.has('posts.evaluate'))),
+      canReview: Boolean(actor && isHumanPostActor(actor) && (actor.isAdmin || actor.keys.has('posts.knowledge.review'))),
+    });
   }
-  return { enabled: row.enabled === 1, contentVersion: row.content_version, contentHash: row.content_hash, reviewStatus: row.review_status,
-    verifiedContentVersion: row.verified_content_version, deletedAt: date(row.deleted_at), replacementPostId,
-    canEvaluate: Boolean(actor && !row.deleted_at && (actor.isAdmin || actor.keys.has('posts.evaluate'))),
-    canReview: Boolean(actor && isHumanPostActor(actor) && (actor.isAdmin || actor.keys.has('posts.knowledge.review'))) };
+  return states;
+}
+
+export function getKnowledgeState(postId: number, actor?: PostActor): PostKnowledge | null {
+  return getKnowledgeStates([postId], actor).get(postId) ?? null;
 }
 
 export function requireKnowledgeRow(actor: PostActor, postId: number, options: { allowDeleted?: boolean } = {}): KnowledgeRow & { post: PostRow } {

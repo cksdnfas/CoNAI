@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from './routeParam';
+import { parsePositiveIntegerQuery } from './routeValidation';
 import { PromptCollectionService } from '../services/promptCollectionService';
+import { PromptCollectionMutationError } from '../services/promptCollectionMutationService';
 import { PromptGroupService } from '../services/promptGroupService';
 import { PromptSuggestService } from '../services/promptSuggestService';
 import { PromptEditorSettingsError, PromptEditorSettingsService } from '../services/promptEditorSettingsService';
@@ -18,6 +20,7 @@ import {
   errorResponse,
   PAGINATION,
   validateId,
+  ValidationError,
 } from '@conai/shared';
 
 const router = Router();
@@ -29,6 +32,11 @@ type PromptCollectionSortOrder = 'ASC' | 'DESC';
 
 function parseRouteId(value: string | string[] | undefined, label: string): number {
   return validateId(routeParam(value), label);
+}
+
+function sendPromptDeletionError(res: Response, error: unknown) {
+  const status = error instanceof PromptCollectionMutationError ? error.status : error instanceof ValidationError ? 400 : 500;
+  return res.status(status).json(errorResponse(error instanceof Error ? error.message : 'Failed to delete prompts'));
 }
 
 function parseOptionalGroupId(value: unknown): number | null | undefined {
@@ -48,20 +56,36 @@ router.get('/search', async (req: Request, res: Response) => {
     const {
       q: query = '',
       type = 'both',
-      page = '1',
-      limit = '20',
       sortBy = 'usage_count',
       sortOrder = 'DESC',
       group_id
     } = req.query;
 
+    const pageResult = parsePositiveIntegerQuery(req.query.page, PAGINATION.DEFAULT_PAGE, {
+      error: 'page must be a positive integer',
+    });
+    if (pageResult.ok === false) {
+      return res.status(400).json(errorResponse(pageResult.error));
+    }
+    const limitResult = parsePositiveIntegerQuery(req.query.limit, PAGINATION.GROUP_IMAGES_LIMIT, {
+      max: PAGINATION.MAX_LIMIT,
+      error: `limit must be an integer between 1 and ${PAGINATION.MAX_LIMIT}`,
+    });
+    if (limitResult.ok === false) {
+      return res.status(400).json(errorResponse(limitResult.error));
+    }
+    const page = pageResult.value;
+    const limit = limitResult.value;
+    if (!Number.isSafeInteger((page - 1) * limit)) {
+      return res.status(400).json(errorResponse('page is too large'));
+    }
     const groupId = parseOptionalGroupId(group_id);
 
     const result = await PromptCollectionService.searchPromptsWithGroups(
       query as string,
       type as PromptCollectionSearchType,
-      parseInt(page as string),
-      parseInt(limit as string),
+      page,
+      limit,
       sortBy as PromptCollectionSortBy,
       sortOrder as PromptCollectionSortOrder,
       groupId
@@ -71,10 +95,10 @@ router.get('/search', async (req: Request, res: Response) => {
       ...successResponse(result.prompts),
       group_info: result.group_info,
       pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
+        page,
+        limit,
         total: result.total,
-        totalPages: Math.ceil(result.total / parseInt(limit as string))
+        totalPages: Math.ceil(result.total / limit)
       }
     });
   } catch (error) {
@@ -87,14 +111,14 @@ router.get('/search', async (req: Request, res: Response) => {
  * 프롬프트 입력창 자동완성 (내 프롬프트 + 단부루 태그/캐릭터 + 함께 쓰는 태그를 한 번에)
  * GET /api/prompt-collection/suggest?q=blue&type=positive&limit=10&context=1girl,smile
  */
-router.get('/suggest', (req: Request, res: Response) => {
+router.get('/suggest', async (req: Request, res: Response) => {
   const type = req.query.type === 'negative' || req.query.type === 'auto' ? req.query.type : 'positive';
   const limit = Math.min(Math.max(Number.parseInt(String(req.query.limit ?? '10'), 10) || 10, 1), 30);
   const relatedTagLimit = Math.min(Math.max(Number.parseInt(String(req.query.relatedTagLimit ?? '42'), 10) || 0, 0), 100);
   const context = typeof req.query.context === 'string' ? req.query.context.split(',').map((term) => term.trim()).filter(Boolean) : [];
 
   try {
-    return res.json(successResponse(PromptSuggestService.suggest({
+    return res.json(successResponse(await PromptSuggestService.suggest({
       query: typeof req.query.q === 'string' ? req.query.q : '',
       type,
       limit,
@@ -338,6 +362,15 @@ router.post('/danbooru-grouping/apply', requirePermission('prompts.edit'), async
  * 프롬프트 삭제
  * DELETE /api/prompt-collection/:promptId
  */
+router.delete('/bulk', requirePermission('prompts.edit'), (req: Request, res: Response) => {
+  try {
+    const deletedIds = PromptCollectionService.deletePrompts(req.body?.promptIds, req.body?.type ?? 'positive');
+    return res.json(successResponse({ deletedIds, message: `Deleted ${deletedIds.length} prompt(s)` }));
+  } catch (error) {
+    return sendPromptDeletionError(res, error);
+  }
+});
+
 router.delete('/:promptId', requirePermission('prompts.edit'), async (req: Request, res: Response) => {
   try {
     const promptId = parseRouteId(req.params.promptId, 'Prompt ID');
@@ -354,9 +387,7 @@ router.delete('/:promptId', requirePermission('prompts.edit'), async (req: Reque
     }));
   } catch (error) {
     console.error('Error deleting prompt:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to delete prompt';
-    const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
-    return res.status(statusCode).json(errorResponse(errorMessage));
+    return sendPromptDeletionError(res, error);
   }
 });
 

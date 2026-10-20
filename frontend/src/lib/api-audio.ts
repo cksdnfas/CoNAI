@@ -25,6 +25,7 @@ export interface AudioProject {
 export interface AudioGroup {
   id: string
   project_id: string
+  project_name?: string
   name: string
   label: string | null
   /** What the sound is for, in a person's words. */
@@ -198,24 +199,52 @@ const enc = encodeURIComponent
 const body = (value: unknown, method = 'POST'): RequestInit => ({ method, headers: json, body: JSON.stringify(value) })
 
 /* projects / groups */
-export const listAudioProjects = () => requestApiData<AudioProject[]>('/api/audio/projects')
+export interface AudioListOptions { limit?: number; cursor?: string | null; offset?: number }
+export interface AudioListPage<T> {
+  items: T[]
+  limit: number
+  offset: number
+  has_more: boolean
+  next_cursor: string | null
+}
+export type AudioGroupListOptions = AudioListOptions & { search?: string; filter?: AudioGroupFilter | null }
+
+function audioListParams(options: AudioGroupListOptions = {}) {
+  const params = new URLSearchParams()
+  // Explicitly select the paged HTTP contract, including on the first/default page.
+  params.set('limit', String(options.limit ?? 200))
+  if (options.cursor != null) params.set('cursor', options.cursor)
+  else if (options.offset !== undefined) params.set('offset', String(options.offset))
+  if (options.search?.trim()) params.set('search', options.search.trim())
+  if (options.filter) params.set('filter', options.filter)
+  return params
+}
+
+export const listAudioProjectsPage = (options: AudioListOptions = {}, signal?: AbortSignal) =>
+  requestApiData<AudioListPage<AudioProject>>(`/api/audio/projects?${audioListParams(options)}`, { signal })
+export const getAudioProject = (id: string) => requestApiData<AudioProject>(`/api/audio/projects/${enc(id)}`)
+export const listAudioGroupsPage = (projectId: string, options: AudioGroupListOptions = {}, signal?: AbortSignal) =>
+  requestApiData<AudioListPage<AudioGroup>>(`/api/audio/projects/${enc(projectId)}/groups?${audioListParams(options)}`, { signal })
+export const searchAudioGroups = (options: AudioGroupListOptions = {}, signal?: AbortSignal) =>
+  requestApiData<AudioListPage<AudioGroup>>(`/api/audio/groups?${audioListParams(options)}`, { signal })
+
+/** Compatibility for existing pickers outside the audio workspace; each HTTP request is bounded. */
+async function collectAudioPages<T>(load: (cursor: string | null) => Promise<AudioListPage<T>>): Promise<T[]> {
+  const items: T[] = []
+  let cursor: string | null = null
+  do {
+    const page = await load(cursor)
+    items.push(...page.items)
+    cursor = page.next_cursor
+  } while (cursor !== null)
+  return items
+}
 export const createAudioProject = (input: { name: string; description?: string }) => requestApiData<AudioProject>('/api/audio/projects', body(input))
 export const updateAudioProject = (id: string, input: { name?: string; description?: string }) => requestApiData<AudioProject>(`/api/audio/projects/${enc(id)}`, body(input, 'PATCH'))
 export const deleteAudioProject = (id: string) => requestApiData<unknown>(`/api/audio/projects/${enc(id)}`, { method: 'DELETE' })
-export const listAudioGroups = (projectId: string, options: { search?: string; filter?: AudioGroupFilter | null } = {}) => {
-  const params = new URLSearchParams()
-  if (options.search?.trim()) params.set('search', options.search.trim())
-  if (options.filter) params.set('filter', options.filter)
-  const query = params.toString()
-  return requestApiData<AudioGroup[]>(`/api/audio/projects/${enc(projectId)}/groups${query ? `?${query}` : ''}`)
-}
+export const listAudioGroups = (projectId: string, options: { search?: string; filter?: AudioGroupFilter | null } = {}) =>
+  collectAudioPages((cursor) => listAudioGroupsPage(projectId, { ...options, cursor }))
 export const getAudioGroup = (id: string) => requestApiData<AudioGroup>(`/api/audio/groups/${enc(id)}`)
-export const searchAudioGroups = (options: { search?: string; filter?: AudioGroupFilter | null }, signal?: AbortSignal) => {
-  const params = new URLSearchParams()
-  if (options.search?.trim()) params.set('search', options.search.trim())
-  if (options.filter) params.set('filter', options.filter)
-  return requestApiData<AudioGroup[]>(`/api/audio/groups?${params}`, { signal })
-}
 export const createAudioGroup = (projectId: string, input: { name: string; label: string; description?: string; prompt?: string; folder_id?: string | null }) => requestApiData<AudioGroup>(`/api/audio/projects/${enc(projectId)}/groups`, body(input))
 export const updateAudioGroup = (id: string, input: { name?: string; label?: string; description?: string; prompt?: string; folder_id?: string | null }) => requestApiData<AudioGroup>(`/api/audio/groups/${enc(id)}`, body(input, 'PATCH'))
 export const deleteAudioGroup = (id: string) => requestApiData<unknown>(`/api/audio/groups/${enc(id)}`, { method: 'DELETE' })

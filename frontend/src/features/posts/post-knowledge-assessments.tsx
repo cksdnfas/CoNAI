@@ -8,7 +8,7 @@ import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, listPostAssessmentAudit, moderatePostAssessment } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScope, listPostAssessmentAudit, moderatePostAssessment } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { PostQuote } from './post-quote'
 import { usePostPermissions } from './use-post-permissions'
@@ -29,7 +29,7 @@ export function AssessmentModerationDialog({ post, entry, action, onClose }: { p
   const title = action === 'invalidate' ? t({ ko: 'AI 평가 무효화', en: 'Invalidate AI feedback' }) : t({ ko: 'AI 평가 정정', en: 'Correct AI feedback' })
   const save = useMutation({
     mutationFn: (idempotencyKey: string) => moderatePostAssessment(post.id, entry.eventId, { action, expectedHeadEventId: entry.eventId, idempotencyKey, reason, ...(action === 'correct' ? { quality } : {}) }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }); onClose() },
+    onSuccess: async () => { await invalidatePostScope(queryClient, post.id, 'post'); onClose() },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '평가 변경을 저장하지 못했어.', en: 'Could not save the feedback change.' })) }),
   })
   return <Modal open onClose={onClose} title={title} size="narrow">

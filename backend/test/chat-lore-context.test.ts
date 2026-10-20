@@ -273,6 +273,32 @@ test('lore context: books per request, the index, always-on entries, linked file
       ...Array.from({ length: age - 1 }, () => ({ role: 'user', content: 'other' })),
     ].map((message, index) => keyword && index === age - 1 ? { ...message, content: 'trigger' } : message)
 
+    await t.test('projected activation suffix preserves delay, sticky and cooldown beyond the body window', () => {
+      const id = CodexChatStore.createThread(1, 'bounded timers', 'llm', kai.id)
+      const add = (role: 'user' | 'assistant', content: string) => CodexChatStore.addMessage({ thread_id: id, role, content, tool_calls: [], status: 'completed', error: null })
+      for (let index = 0; index < 100; index += 1) add('user', 'other')
+      const activated = add('assistant', 'answer')
+      CodexChatStore.setContextMeta(activated, JSON.parse(selectionMeta()))
+      for (let age = 1; age <= 8; age += 1) {
+        if (age > 1) add('user', 'trigger')
+        const full = CodexChatStore.listMessages(id)
+        for (const delay of [0, 105]) {
+          const raw = [{ ...entry, delay }]
+          const actual = selectLoreEntries(
+            { lorebookIds: [], loreScanDepth: 1, loreTokenBudget: 1000 }, full.slice(-1), (text) => text.length, (text) => text,
+            { entries: normalizeLorebook(raw).map((entry) => ({ key: loreEntryKey(41, entry), entry, bookId: 41 })),
+              timing: CodexChatStore.readLoreTiming({ threadId: id }, 7) },
+          )
+          assert.deepEqual(actual, choose(full, raw), `age=${age}, delay=${delay}`)
+        }
+      }
+      const full = CodexChatStore.listMessages(id)
+      const excluding = CodexChatStore.readLoreTiming({ threadId: id, excludeMessageId: full.at(-1)!.id }, 7)
+      assert.equal(excluding.messageCount, full.length - 1)
+      assert.equal(excluding.messages.length, 7)
+      assert.ok(excluding.messages.every((message) => message.content === ''))
+    })
+
     await t.test('normalization defaults, integers, extensions and JSON round trips', () => {
       const [plain, invalid, imported] = normalizeLorebook([
         { content: 'plain' }, { content: 'bad', sticky: -1, cooldown: Infinity, delay: '2', group: 7 },

@@ -466,8 +466,14 @@ export const ModelSlotStore = {
   existing(slotId: unknown): number | null {
     const id = Number(slotId)
     if (slotId === null || slotId === undefined || slotId === '' || !Number.isSafeInteger(id) || id <= 0) return null
-    const row = getUserSettingsDb().prepare('SELECT id FROM llm_model_slots WHERE id = ?').get(id) as { id: number } | undefined
-    return row ? row.id : null
+    return ModelSlotStore.existingIds([id])[0] ?? null
+  },
+
+  /** Batch existence checks for profile lists, without slot usage or route hydration. */
+  existingIds(slotIds: number[]): number[] {
+    const ids = [...new Set(slotIds.filter((id) => Number.isSafeInteger(id) && id > 0))]
+    if (!ids.length) return []
+    return (getUserSettingsDb().prepare(`SELECT id FROM llm_model_slots WHERE id IN (${ids.map(() => '?').join(', ')})`).all(...ids) as Array<{ id: number }>).map((row) => row.id)
   },
 
   /**

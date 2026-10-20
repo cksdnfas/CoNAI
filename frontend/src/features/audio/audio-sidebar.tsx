@@ -24,6 +24,7 @@ import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { ErrorState } from '@/components/ui/error-state'
 import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -47,11 +48,19 @@ type Draft = { kind: 'effect'; folderId: string | null } | { kind: 'folder' } | 
  */
 export function AudioSidebar({
   projects,
+  hasMoreProjects,
+  loadingProjects,
+  onMoreProjects,
   project,
   onSelectProject,
   groups,
   folders,
   searchResults,
+  hasMoreGroups,
+  loadingGroups,
+  onMoreGroups,
+  listError,
+  onRetryGroups,
   expandedFolders,
   onToggleFolder,
   activeGroupId,
@@ -75,13 +84,21 @@ export function AudioSidebar({
   onDropFiles,
 }: {
   projects: AudioProject[]
+  hasMoreProjects: boolean
+  loadingProjects: boolean
+  onMoreProjects: () => void
   project: AudioProject | null
   onSelectProject: (id: string) => void
-  /** Every group of the open project, 받은 파일 included. */
+  /** Loaded pages of the open project, 받은 파일 included. */
   groups: AudioGroup[]
   folders: AudioFolder[]
   /** Matching effects by project while searching or filtering; null otherwise. */
   searchResults: Record<string, AudioGroup[] | undefined> | null
+  hasMoreGroups: boolean
+  loadingGroups: boolean
+  onMoreGroups: () => void
+  listError: Error | null
+  onRetryGroups: () => void
   expandedFolders: ReadonlySet<string>
   onToggleFolder: (id: string, open?: boolean) => void
   activeGroupId: string | null
@@ -245,6 +262,11 @@ export function AudioSidebar({
                   </DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
+              {hasMoreProjects ? (
+                <DropdownMenuItem disabled={loadingProjects} onSelect={(event) => { event.preventDefault(); onMoreProjects() }}>
+                  {t({ ko: '프로젝트 더 불러오기', en: 'Load more projects' })}
+                </DropdownMenuItem>
+              ) : null}
               {canEdit ? (
                 <>
                   <DropdownMenuSeparator />
@@ -287,12 +309,12 @@ export function AudioSidebar({
       </div>
       <SidebarNav aria-label={t({ ko: '그룹과 효과음', en: 'Groups and effects' })}>
         {searchResults ? (
-          projects.map((entry) => {
-            const found = (searchResults[entry.id] ?? []).filter((group) => !group.is_inbox)
+          Object.entries(searchResults).map(([id, entries]) => {
+            const found = (entries ?? []).filter((group) => !group.is_inbox)
             if (found.length === 0) return null
             return (
-              <div key={entry.id} className="flex flex-col gap-0.5">
-                <SidebarGroupLabel>{entry.name}</SidebarGroupLabel>
+              <div key={id} className="flex flex-col gap-0.5">
+                <SidebarGroupLabel>{projects.find((entry) => entry.id === id)?.name ?? found[0].project_name}</SidebarGroupLabel>
                 {found.map((group) => effectRow(group, 0, false))}
               </div>
             )
@@ -336,7 +358,7 @@ export function AudioSidebar({
                           <span className="truncate">{folder.name}</span>
                         </span>
                       )}
-                      count={inside.length}
+                      count={folder.group_count}
                       onClick={(event) => { event.preventDefault(); onToggleFolder(folder.id) }}
                       {...dropProps(`folder:${folder.id}`, hasEffect, (event) => {
                         moveDragged(event, folder.id)
@@ -370,6 +392,12 @@ export function AudioSidebar({
           </>
         )}
       </SidebarNav>
+      {listError ? <ErrorState error={listError} onRetry={onRetryGroups} isRetrying={loadingGroups} /> : null}
+      {hasMoreGroups ? (
+        <Button variant="ghost" size="sm" disabled={loadingGroups} onClick={onMoreGroups}>
+          {t({ ko: '효과음 더 불러오기', en: 'Load more effects' })}
+        </Button>
+      ) : null}
     </div>
   )
 }

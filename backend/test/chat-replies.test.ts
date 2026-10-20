@@ -183,6 +183,39 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.match(exportChatMarkdown(thread, rows, [], a.name, 'http://localhost'), /받는 사람|원문/)
   })
 
+  await t.test('bounded reply history preserves older targets, ancestors and the complete request', (s) => {
+    const id = LlmChatService.createThread(requester, a.id, null)
+    for (let index = 0; index < 120; index += 1) CodexChatStore.addMessage({
+      thread_id: id, role: index % 2 ? 'assistant' : 'user', content: `message-${index}`,
+      tool_calls: [], status: 'completed', error: null,
+    })
+    const original = CodexChatStore.listMessages(id)
+    const source = { threadId: id, excludeMessageId: original[119].id }
+    const thread = CodexChatStore.findThreadById(id)!
+    CodexChatStore.setMessageRouting(id, original[31].id, { recipients: ['user'], replyTo: quoteMessage(thread, original[1]) })
+    CodexChatStore.setMessageRouting(id, original[118].id, { recipients: [a.id], replyTo: quoteMessage(thread, original[31]) })
+    ChatSummaryStore.replaceAll(id, 'Folded history', original[111].id)
+    CodexChatStore.updateThreadContext(id, { summaryEnabled: true, contextTurns: 2 })
+    const full = CodexChatStore.listMessages(id).filter((message) => message.id !== source.excludeMessageId)
+    const bounded = CodexChatStore.listContextMessages(source, { afterId: original[111].id, recentMessages: 4, textMessages: 4 })
+    assert.deepEqual(bounded.map((message) => message.id), original.slice(112, 119).map((message) => message.id))
+    assert.equal(requireReplyTarget(id, original[1].id, bounded, source)?.content, 'message-1')
+    assert.throws(() => requireReplyTarget(id, source.excludeMessageId, bounded, source), /메시지/)
+    const other = LlmChatService.createThread(requester, a.id, null)
+    const privateId = CodexChatStore.addMessage({ thread_id: other, role: 'user', content: 'private', tool_calls: [], status: 'completed', error: null })
+    assert.throws(() => requireReplyTarget(id, privateId, bounded, source), /메시지/)
+    const routing = full.at(-1)!.routing
+    const restored = buildReplyContext(bounded, routing, { historySource: source })
+    assert.equal(restored, buildReplyContext(full, routing))
+    assert.match(restored, /message-1\b/)
+    assert.match(restored, /message-30\b/)
+    const current = CodexChatStore.findThreadById(id)!
+    const params = { profile: a, thread: current, config: resolveContextConfig(current, a), tools: [] }
+    const positions = s.mock.method(CodexChatStore, 'listMessagePositions')
+    assert.deepEqual(buildChatMessages({ ...params, messages: bounded, historySource: source }), buildChatMessages({ ...params, messages: full }))
+    assert.equal(positions.mock.callCount(), 1, 'the quote estimate and rendering share one position read')
+  })
+
   await t.test('quote snapshots survive alternative selection and become unavailable after target removal', () => {
     const room = createRoom()
     const id = CodexChatStore.addMessage({ thread_id: room.id, role: 'assistant', speaker_profile_id: a.id, content: 'Original answer', tool_calls: [], status: 'completed', error: null })
@@ -191,6 +224,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     CodexChatStore.addAlternative(room.id, id, { content: 'Regenerated answer', tool_calls: [], created_at: '', status: 'completed', error: null })
     const rows = CodexChatStore.listMessages(room.id)
     assert.match(buildReplyContext(rows, rows[1].routing), /Original answer/)
+    assert.equal(buildReplyContext(rows.slice(-1), rows[1].routing, { historySource: { threadId: room.id } }), buildReplyContext(rows, rows[1].routing))
     assert.equal(rows[1].routing?.replyTo?.excerpt, 'Original answer')
     dbModule.getUserSettingsDb().prepare('DELETE FROM codex_chat_messages WHERE id = ?').run(id)
     const saved = CodexChatStore.listMessages(room.id).find((message) => message.id === child)!

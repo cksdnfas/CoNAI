@@ -18,7 +18,7 @@ import { TextDiff } from '@/components/common/text-diff'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, applyPostKnowledgeProposal, createPostKnowledgeProposal, getPost, getPostKnowledgeProposal, listPostKnowledgeProposals, listPosts, rejectPostKnowledgeProposal } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScope, applyPostKnowledgeProposal, createPostKnowledgeProposal, getPost, getPostKnowledgeProposal, listPostKnowledgeProposals, listPosts, rejectPostKnowledgeProposal } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { KnowledgeSources, KnowledgeSourcesEditor, knowledgeSource } from './post-knowledge-sources'
 import { postRoute } from './post-links'
@@ -45,7 +45,7 @@ export function KnowledgeProposalEditor({ post, mode, onClose }: { post: PostDet
       ...(mode === 'update' ? { postId: post.id, baseRevision: post.revision, baseContentVersion: post.knowledge!.contentVersion } : { categoryId: post.categoryId, tags: post.tags, status }),
       sources: [...sources, ...selectedComments.map((commentId) => ({ ...knowledgeSource('comment'), postId: post.id, commentId }))],
     }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }); showSnackbar({ tone: 'info', message: t({ ko: '검토할 제안을 저장했어.', en: 'Saved the proposal for review.' }) }); onClose() },
+    onSuccess: async (saved) => { await invalidatePostScope(queryClient, saved.postId, 'proposal'); showSnackbar({ tone: 'info', message: t({ ko: '검토할 제안을 저장했어.', en: 'Saved the proposal for review.' }) }); onClose() },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '제안을 저장하지 못했어.', en: 'Could not save the proposal.' })) }),
   })
   return (
@@ -77,12 +77,12 @@ export function KnowledgeProposalReview({ proposalId, onClose }: { proposalId: s
   const [rejectReason, setRejectReason] = useState('')
   const apply = useMutation({
     mutationFn: () => applyPostKnowledgeProposal(proposalId, proposal.data!.kind === 'update' ? { expectedRevision: proposal.data!.baseRevision!, contentVersion: proposal.data!.baseContentVersion! } : {}),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }); showSnackbar({ tone: 'info', message: t({ ko: '제안을 반영했어.', en: 'Applied the proposal.' }) }); onClose() },
+    onSuccess: async (saved) => { queryClient.setQueryData([POSTS_QUERY_KEY, 'proposal', saved.id], saved); await invalidatePostScope(queryClient, saved.appliedPostId ?? saved.postId, 'post'); showSnackbar({ tone: 'info', message: t({ ko: '제안을 반영했어.', en: 'Applied the proposal.' }) }); onClose() },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '제안을 반영하지 못했어. 현재 판을 확인해줘.', en: 'Could not apply the proposal. Check the current version.' })) }),
   })
   const reject = useMutation({
     mutationFn: () => rejectPostKnowledgeProposal(proposalId, rejectReason),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }); onClose() },
+    onSuccess: async (saved) => { queryClient.setQueryData([POSTS_QUERY_KEY, 'proposal', saved.id], saved); await invalidatePostScope(queryClient, saved.postId, 'proposal'); onClose() },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '제안을 거절하지 못했어.', en: 'Could not reject the proposal.' })) }),
   })
   const data = proposal.data

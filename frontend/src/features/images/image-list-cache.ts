@@ -68,5 +68,23 @@ export async function removeDeletedImagesFromListCaches(queryClient: QueryClient
     queryClient.invalidateQueries({ queryKey: ['home-images-total'] }),
     queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all'] }),
     queryClient.invalidateQueries({ queryKey: ['group-detail'] }),
+    queryClient.invalidateQueries({ queryKey: ['group-file-counts'] }),
+    queryClient.invalidateQueries({ queryKey: ['group-images'], predicate: (query) => query.queryKey[3] === 'filter-total' }),
+    // Cover mosaics may show a deleted image.
+    queryClient.invalidateQueries({ queryKey: ['group-cover-images'] }),
+  ])
+}
+
+/** Bulk-delete failures use the API's `Image <hash>: <error>` format; keep those items in the lists. */
+export function removeBulkDeletedImagesFromListCaches(queryClient: QueryClient, compositeHashes: readonly string[], errors: readonly string[]) {
+  const failedHashes = new Set(errors.map((error) => error.slice('Image '.length, error.indexOf(': '))))
+  return removeDeletedImagesFromListCaches(queryClient, compositeHashes.filter((hash) => !failedHashes.has(hash)))
+}
+
+/** Restoration changes ordering and can reintroduce filtered items; refresh active lists and their dependent counts. */
+export async function refreshRestoredImageListCaches(queryClient: QueryClient) {
+  await Promise.all([
+    ...GALLERY_LIST_QUERY_KEYS.map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    ...['home-images-total', 'groups-hierarchy-all', 'group-detail', 'group-file-counts', 'group-cover-images', 'image-detail', 'system-folders', 'prompt-search', 'prompt-statistics', 'prompt-group-statistics', 'prompt-top'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
   ])
 }

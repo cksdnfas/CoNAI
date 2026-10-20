@@ -51,6 +51,8 @@ export interface AudioProject {
 export interface AudioGroup {
   id: string;
   project_id: string;
+  /** Project heading for workspace-wide search without loading the project directory. */
+  project_name?: string;
   name: string;
   label: string | null;
   /** What the sound is for, in a person's words. */
@@ -150,6 +152,54 @@ function isUniqueViolation(error: unknown): boolean {
   return String((error as { code?: string })?.code ?? '').startsWith('SQLITE_CONSTRAINT');
 }
 
+export interface AudioListOptions {
+  limit?: unknown;
+  cursor?: unknown;
+  offset?: unknown;
+}
+
+export interface AudioListPage<T> {
+  items: T[];
+  limit: number;
+  offset: number;
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+function listBounds(options: AudioListOptions): { limit: number; offset: number } {
+  const limit = options.limit === undefined ? 200 : Number(options.limit);
+  const rawOffset = options.cursor ?? options.offset ?? 0;
+  const offset = Number(rawOffset);
+  if ((options.limit !== undefined && typeof options.limit !== 'number' && typeof options.limit !== 'string')
+    || !Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new AudioServiceError('limit은 1~200 정수여야 해.');
+  if ((typeof rawOffset !== 'string' && typeof rawOffset !== 'number') || !Number.isSafeInteger(offset) || offset < 0
+    || (typeof rawOffset === 'string' && !/^\d+$/.test(rawOffset))) {
+    throw new AudioServiceError('cursor/offset은 0 이상의 정수여야 해.');
+  }
+  return { limit, offset };
+}
+
+function listPage<T>(rows: T[], limit: number, offset: number): AudioListPage<T> {
+  const has_more = rows.length > limit;
+  return { items: rows.slice(0, limit), limit, offset, has_more, next_cursor: has_more ? String(offset + limit) : null };
+}
+
+type AudioProjectInfo = Omit<AudioProject, 'group_count' | 'candidate_count' | 'inbox_group_id'>;
+type AudioGroupInfo = Omit<AudioGroup, 'candidate_count' | 'selected_count' | 'pending_review_count' | 'comment_count' | 'pending_comment_count' | 'completed_comment_count'>;
+
+/** Internal identity/metadata lookups deliberately do not calculate directory counts. */
+export function getAudioProjectInfo(id: string): AudioProjectInfo {
+  const row = db().prepare('SELECT * FROM audio_projects WHERE id = ?').get(String(id)) as AudioProjectInfo | undefined;
+  if (!row) throw new AudioServiceError('프로젝트를 찾을 수 없어.', 404);
+  return row;
+}
+
+export function getAudioGroupInfo(id: string): AudioGroupInfo {
+  const row = db().prepare('SELECT * FROM audio_groups WHERE id = ?').get(String(id)) as (Omit<AudioGroupInfo, 'is_inbox'> & { is_inbox: number }) | undefined;
+  if (!row) throw new AudioServiceError('효과음을 찾을 수 없어.', 404);
+  return { ...row, is_inbox: row.is_inbox === 1 };
+}
+
 
 /* ---------------------------------------------------------------- projects */
 
@@ -161,8 +211,25 @@ const PROJECT_SELECT = `
     (SELECT g.id FROM audio_groups g WHERE g.project_id = p.id AND g.is_inbox = 1) AS inbox_group_id
   FROM audio_projects p`;
 
-export function listAudioProjects(): AudioProject[] {
-  return db().prepare(`${PROJECT_SELECT} ORDER BY p.created_at, p.id`).all() as AudioProject[];
+export function listAudioProjects(options: AudioListOptions = {}): AudioListPage<AudioProject> {
+  const { limit, offset } = listBounds(options);
+  const rows = db().prepare(`
+    WITH page AS MATERIALIZED (
+      SELECT * FROM audio_projects ORDER BY created_at, id LIMIT ? OFFSET ?
+    ), groups AS MATERIALIZED (
+      SELECT g.id, g.project_id, g.is_inbox FROM page p JOIN audio_groups g ON g.project_id = p.id
+    ), group_counts AS (
+      SELECT project_id, count(*) AS group_count, max(CASE WHEN is_inbox = 1 THEN id END) AS inbox_group_id
+      FROM groups GROUP BY project_id
+    ), candidate_counts AS (
+      SELECT g.project_id, count(*) AS candidate_count FROM groups g
+      JOIN audio_candidates c ON c.group_id = g.id AND c.deleted_at IS NULL GROUP BY g.project_id
+    )
+    SELECT p.*, coalesce(g.group_count, 0) AS group_count, coalesce(c.candidate_count, 0) AS candidate_count, g.inbox_group_id
+    FROM page p LEFT JOIN group_counts g ON g.project_id = p.id LEFT JOIN candidate_counts c ON c.project_id = p.id
+    ORDER BY p.created_at, p.id
+  `).all(limit + 1, offset) as AudioProject[];
+  return listPage(rows, limit, offset);
 }
 
 export function getAudioProject(id: string): AudioProject {
@@ -192,7 +259,7 @@ export function createAudioProject(input: { name?: unknown; description?: unknow
 }
 
 export function updateAudioProject(id: string, input: { name?: unknown; description?: unknown }): AudioProject {
-  const current = getAudioProject(id);
+  const current = getAudioProjectInfo(id);
   const name = input.name === undefined ? current.name : text(input.name, '프로젝트 이름', 120);
   const description = input.description === undefined ? current.description : text(input.description, '설명', 4000, false);
   try {
@@ -206,7 +273,7 @@ export function updateAudioProject(id: string, input: { name?: unknown; descript
 
 /** Delete a project with its groups, candidates and comments; blobs nothing else uses go to the RecycleBin. */
 export async function deleteAudioProject(id: string): Promise<{ deleted: true; released: number }> {
-  const project = getAudioProject(id);
+  const project = getAudioProjectInfo(id);
   const hashes = db().prepare(`
     SELECT DISTINCT c.file_hash FROM audio_candidates c JOIN audio_groups g ON g.id = c.group_id WHERE g.project_id = ?
   `).all(project.id) as Array<{ file_hash: string }>;
@@ -219,30 +286,40 @@ export async function deleteAudioProject(id: string): Promise<{ deleted: true; r
 
 /* ---------------------------------------------------------------- groups */
 
-const GROUP_SELECT = `
-  SELECT g.*,
-    (SELECT count(*) FROM audio_candidates c WHERE c.group_id = g.id AND c.deleted_at IS NULL) AS candidate_count,
-    (SELECT count(*) FROM audio_candidates c WHERE c.group_id = g.id AND c.deleted_at IS NULL AND c.review = 'selected') AS selected_count,
-    (SELECT count(*) FROM audio_candidates c WHERE c.group_id = g.id AND c.deleted_at IS NULL AND c.review = 'pending') AS pending_review_count,
-    (SELECT count(*) FROM audio_group_comments m WHERE m.group_id = g.id) AS comment_count,
-    (SELECT count(*) FROM audio_group_comments m WHERE m.group_id = g.id AND m.status = 'pending') AS pending_comment_count,
-    (SELECT count(*) FROM audio_group_comments m WHERE m.group_id = g.id AND m.status = 'completed') AS completed_comment_count
-  FROM audio_groups g`;
+/** Aggregate each relation once for the bounded page; joining raw candidates and comments would multiply counts. */
+const GROUP_COUNTS = `
+  , candidate_counts AS (
+    SELECT c.group_id, count(*) AS candidate_count, sum(c.review = 'selected') AS selected_count,
+      sum(c.review = 'pending') AS pending_review_count
+    FROM page g CROSS JOIN audio_candidates c ON c.group_id = g.id AND c.deleted_at IS NULL GROUP BY c.group_id
+  ), comment_counts AS (
+    SELECT m.group_id, count(*) AS comment_count, sum(m.status = 'pending') AS pending_comment_count,
+      sum(m.status = 'completed') AS completed_comment_count
+    FROM page g CROSS JOIN audio_group_comments m ON m.group_id = g.id GROUP BY m.group_id
+  )
+  SELECT g.*, p.name AS project_name,
+    coalesce(c.candidate_count, 0) AS candidate_count, coalesce(c.selected_count, 0) AS selected_count,
+    coalesce(c.pending_review_count, 0) AS pending_review_count, coalesce(m.comment_count, 0) AS comment_count,
+    coalesce(m.pending_comment_count, 0) AS pending_comment_count, coalesce(m.completed_comment_count, 0) AS completed_comment_count
+  FROM page g JOIN audio_projects p ON p.id = g.project_id
+  LEFT JOIN candidate_counts c ON c.group_id = g.id LEFT JOIN comment_counts m ON m.group_id = g.id`;
 
 type GroupRow = Omit<AudioGroup, 'is_inbox'> & { is_inbox: number };
 const toGroup = (row: GroupRow): AudioGroup => ({ ...row, is_inbox: row.is_inbox === 1 });
+type AudioGroupListOptions = AudioListOptions & { search?: unknown; filter?: unknown };
 
-export function listAudioGroups(projectId: string, options: { search?: unknown; filter?: unknown } = {}): AudioGroup[] {
-  const project = getAudioProject(projectId);
+export function listAudioGroups(projectId: string, options: AudioGroupListOptions = {}): AudioListPage<AudioGroup> {
+  const project = getAudioProjectInfo(projectId);
   return queryAudioGroups(project.id, options);
 }
 
 /** Same group search across the workspace; shared by the page and MCP. */
-export function searchAudioGroups(options: { search?: unknown; filter?: unknown } = {}): AudioGroup[] {
+export function searchAudioGroups(options: AudioGroupListOptions = {}): AudioListPage<AudioGroup> {
   return queryAudioGroups(null, options);
 }
 
-function queryAudioGroups(projectId: string | null, options: { search?: unknown; filter?: unknown }): AudioGroup[] {
+function queryAudioGroups(projectId: string | null, options: AudioGroupListOptions): AudioListPage<AudioGroup> {
+  const { limit, offset } = listBounds(options);
   const filter = options.filter === undefined || options.filter === null || options.filter === '' ? null : String(options.filter);
   if (filter !== null && !['unselected', 'has_comments', 'pending_comments', 'completed_comments'].includes(filter)) {
     throw new AudioServiceError('그룹 필터는 unselected, has_comments, pending_comments, completed_comments 중 하나야.');
@@ -253,34 +330,43 @@ function queryAudioGroups(projectId: string | null, options: { search?: unknown;
   if (projectId !== null) { clauses.push('g.project_id = ?'); params.push(projectId); }
   if (search) { clauses.push('audio_search_match(g.name, g.label, g.description, ?) = 1'); params.push(search); }
   const filters: Record<AudioGroupFilter, string> = {
-    unselected: 'candidate_count > 0 AND selected_count = 0',
-    has_comments: 'comment_count > 0',
-    pending_comments: 'pending_comment_count > 0',
-    completed_comments: 'completed_comment_count > 0',
+    unselected: `EXISTS (SELECT 1 FROM audio_candidates c WHERE c.group_id = g.id AND c.deleted_at IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM audio_candidates c WHERE c.group_id = g.id AND c.deleted_at IS NULL AND c.review = 'selected')`,
+    has_comments: 'EXISTS (SELECT 1 FROM audio_group_comments m WHERE m.group_id = g.id)',
+    pending_comments: "EXISTS (SELECT 1 FROM audio_group_comments m WHERE m.group_id = g.id AND m.status = 'pending')",
+    completed_comments: "EXISTS (SELECT 1 FROM audio_group_comments m WHERE m.group_id = g.id AND m.status = 'completed')",
   };
   if (filter) clauses.push(`(${filters[filter as AudioGroupFilter]})`);
-  return (db().prepare(`${GROUP_SELECT} ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
-    ORDER BY g.is_inbox DESC, g.created_at, g.id`).all(...params) as GroupRow[]).map(toGroup);
+  const rows = db().prepare(`WITH page AS MATERIALIZED (
+    SELECT g.* FROM audio_groups g ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
+    ORDER BY g.is_inbox DESC, g.created_at, g.id LIMIT ? OFFSET ?
+  ) ${GROUP_COUNTS} ORDER BY g.is_inbox DESC, g.created_at, g.id`).all(...params, limit + 1, offset) as GroupRow[];
+  return listPage(rows.map(toGroup), limit, offset);
 }
 
 export function getAudioGroup(id: string): AudioGroup {
-  const row = db().prepare(`${GROUP_SELECT} WHERE g.id = ?`).get(String(id)) as GroupRow | undefined;
+  const row = db().prepare(`WITH page AS MATERIALIZED (SELECT * FROM audio_groups WHERE id = ?) ${GROUP_COUNTS}`)
+    .get(String(id)) as GroupRow | undefined;
   if (!row) throw new AudioServiceError('효과음을 찾을 수 없어.', 404);
   return toGroup(row);
 }
 
 export function getAudioInboxGroup(projectId: string): AudioGroup {
+  return getAudioGroup(audioInboxGroupId(projectId));
+}
+
+function audioInboxGroupId(projectId: string): string {
   const row = db().prepare('SELECT id FROM audio_groups WHERE project_id = ? AND is_inbox = 1').get(String(projectId)) as { id: string } | undefined;
   if (!row) {
-    getAudioProject(projectId);
+    getAudioProjectInfo(projectId);
     // A project always has an inbox; recreate it if an older row lost it.
     const at = now();
     const id = newId();
     db().prepare(`INSERT INTO audio_groups (id, project_id, name, label, description, is_inbox, created_at, updated_at) VALUES (?, ?, ?, NULL, '', 1, ?, ?)`)
       .run(id, String(projectId), AUDIO_INBOX_GROUP_NAME, at, at);
-    return getAudioGroup(id);
+    return id;
   }
-  return getAudioGroup(row.id);
+  return row.id;
 }
 
 /** A folder of the same project, or null; an empty value takes the effect out of its folder. */
@@ -292,7 +378,7 @@ function folderOf(projectId: string, value: unknown): string | null {
 }
 
 export function createAudioGroup(projectId: string, input: { name?: unknown; label?: unknown; description?: unknown; prompt?: unknown; folder_id?: unknown }): AudioGroup {
-  const project = getAudioProject(projectId);
+  const project = getAudioProjectInfo(projectId);
   const name = text(input.name, '효과음 이름', 120);
   const label = validateAudioLabel(text(input.label, '파일명 규칙', 120));
   const description = text(input.description, '설명', 4000, false);
@@ -311,7 +397,7 @@ export function createAudioGroup(projectId: string, input: { name?: unknown; lab
 }
 
 export function updateAudioGroup(id: string, input: { name?: unknown; label?: unknown; description?: unknown; prompt?: unknown; folder_id?: unknown }): AudioGroup {
-  const current = getAudioGroup(id);
+  const current = getAudioGroupInfo(id);
   if (current.is_inbox && input.label !== undefined && input.label !== null) {
     throw new AudioServiceError('받은 파일에는 파일명을 붙일 수 없어.');
   }
@@ -340,7 +426,7 @@ const FOLDER_SELECT = `
   FROM audio_folders f`;
 
 export function listAudioFolders(projectId: string): AudioFolder[] {
-  const project = getAudioProject(projectId);
+  const project = getAudioProjectInfo(projectId);
   return db().prepare(`${FOLDER_SELECT} WHERE f.project_id = ? ORDER BY f.name COLLATE NOCASE, f.id`).all(project.id) as AudioFolder[];
 }
 
@@ -351,7 +437,7 @@ export function getAudioFolder(id: string): AudioFolder {
 }
 
 export function createAudioFolder(projectId: string, input: { name?: unknown }): AudioFolder {
-  const project = getAudioProject(projectId);
+  const project = getAudioProjectInfo(projectId);
   const name = text(input.name, '그룹 이름', 120);
   const id = newId();
   const at = now();
@@ -395,7 +481,7 @@ async function cancelOrdersOf(groupIds: string[]): Promise<void> {
 
 /** Delete a group with its candidates and comments (never the inbox); unused blobs go to the RecycleBin. */
 export async function deleteAudioGroup(id: string): Promise<{ deleted: true; released: number }> {
-  const group = getAudioGroup(id);
+  const group = getAudioGroupInfo(id);
   if (group.is_inbox) throw new AudioServiceError('받은 파일은 지울 수 없어.');
   const hashes = (db().prepare('SELECT DISTINCT file_hash FROM audio_candidates WHERE group_id = ?').all(group.id) as Array<{ file_hash: string }>)
     .map((row) => row.file_hash);
@@ -438,7 +524,7 @@ function toCandidate(row: CandidateRow): AudioCandidate {
 }
 
 export function listAudioCandidates(groupId: string, options: { review?: unknown; deleted?: unknown; limit?: unknown; offset?: unknown } = {}): { items: AudioCandidate[]; total: number; limit: number; offset: number } {
-  const group = getAudioGroup(groupId);
+  const group = getAudioGroupInfo(groupId);
   const review = options.review === undefined || options.review === null || options.review === '' ? null : String(options.review);
   if (review !== null && !(AUDIO_REVIEW_STATES as readonly string[]).includes(review)) {
     throw new AudioServiceError('검수 상태는 pending, selected, rejected 중 하나야.');
@@ -484,7 +570,7 @@ function requireCandidates(ids: string[]): Array<{ id: string; group_id: string;
 /** Move candidates to another group of the same project. */
 export function moveAudioCandidates(ids: unknown, targetGroupId: string): { moved: number; group_id: string } {
   const list = candidateIds(ids);
-  const target = getAudioGroup(targetGroupId);
+  const target = getAudioGroupInfo(targetGroupId);
   const rows = requireCandidates(list);
   if (rows.some((row) => row.project_id !== target.project_id)) {
     throw new AudioServiceError('다른 프로젝트의 효과음으로는 옮길 수 없어.');
@@ -546,9 +632,9 @@ export function setAudioCandidateReview(id: string, input: { review?: unknown; n
 
 /* ---------------------------------------------------------------- imports */
 
-function resolveImportGroup(target: AudioImportTarget): AudioGroup {
-  if ('groupId' in target && target.groupId) return getAudioGroup(target.groupId);
-  if ('projectId' in target && target.projectId) return getAudioInboxGroup(target.projectId);
+function resolveImportGroup(target: AudioImportTarget): AudioGroupInfo {
+  if ('groupId' in target && target.groupId) return getAudioGroupInfo(target.groupId);
+  if ('projectId' in target && target.projectId) return getAudioGroupInfo(audioInboxGroupId(target.projectId));
   throw new AudioServiceError('넣을 효과음이나 프로젝트를 골라줘.');
 }
 
@@ -692,7 +778,7 @@ export function registerEditedAudioCandidate(input: {
 
 /** Freeze the ids a "delete unselected / delete all" confirmation is about; later arrivals are not part of it. */
 export function audioDeletionPlan(groupId: string, scope: unknown, candidateId?: unknown): { candidate_ids: string[]; count: number; selected_count: number } {
-  const group = getAudioGroup(groupId);
+  const group = getAudioGroupInfo(groupId);
   const value = String(scope ?? '');
   if (value !== 'all' && value !== 'unselected') throw new AudioServiceError('삭제 범위는 all 또는 unselected야.', 422);
   const only = candidateId === undefined || candidateId === null || candidateId === '' ? null : String(candidateId);
@@ -709,7 +795,7 @@ export function audioDeletionPlan(groupId: string, scope: unknown, candidateId?:
  * meantime stops the whole delete (409), so a confirmation never removes a take someone just adopted.
  */
 export function deleteAudioGroupCandidates(groupId: string, ids: unknown, includeSelected: boolean): { deleted: number } {
-  const group = getAudioGroup(groupId);
+  const group = getAudioGroupInfo(groupId);
   const list = candidateIds(ids);
   return db().transaction(() => {
     const rows = db().prepare(`SELECT id, group_id, review, deleted_at FROM audio_candidates WHERE id IN (SELECT value FROM json_each(?))`)
@@ -730,7 +816,7 @@ export function deleteAudioGroupCandidates(groupId: string, ids: unknown, includ
 /* ---------------------------------------------------------------- comments */
 
 export function listAudioGroupComments(groupId: string, options: { status?: unknown; limit?: unknown; offset?: unknown } = {}): AudioComment[] {
-  const group = getAudioGroup(groupId);
+  const group = getAudioGroupInfo(groupId);
   const status = options.status === undefined || options.status === null || options.status === '' ? null : String(options.status);
   if (status !== null && !(AUDIO_COMMENT_STATES as readonly string[]).includes(status)) {
     throw new AudioServiceError('코멘트 상태는 pending 또는 completed를 사용해 주세요.');
@@ -749,7 +835,7 @@ function getComment(groupId: string, commentId: string): AudioComment {
 }
 
 export function createAudioGroupComment(groupId: string, input: { text?: unknown }, accountId: number | null): AudioComment {
-  const group = getAudioGroup(groupId);
+  const group = getAudioGroupInfo(groupId);
   const body = text(input.text, '코멘트', 4000);
   const id = newId();
   const at = now();

@@ -359,7 +359,13 @@ export type SelectedLore = {
 export type LoreFileOptions = { inline: boolean; hint: (file: string, entry: { book?: string; title: string }) => string }
 
 export type LoreHistoryMessage = { content: string; display_content?: string | null; role?: string; context_meta?: string | null; speaker_profile_id?: number | null }
-export type LoreTimingOptions = { messages: ReadonlyArray<LoreHistoryMessage>; speakerProfileId?: number }
+export type LoreTimingOptions = {
+  /** A contiguous suffix containing at least the longest sticky + cooldown horizon. */
+  messages: ReadonlyArray<LoreHistoryMessage>
+  /** Total active-path messages, including the prefix omitted from the suffix (delay uses this count). */
+  messageCount?: number
+  speakerProfileId?: number
+}
 
 /** Only activation records start a period; a sticky selection never renews it. Scan the bounded suffix once. */
 function loreActivationAges(entries: KeyedLoreEntry[], timing: LoreTimingOptions) {
@@ -536,7 +542,7 @@ export function selectLoreEntries(profile: LoreProfile, messages: ReadonlyArray<
     const { key, entry } = item
     if (!entry.enabled || !entry.content.trim()) return false
     if (options.timing) {
-      if (options.timing.messages.length < (entry.delay ?? 0)) {
+      if ((options.timing.messageCount ?? options.timing.messages.length) < (entry.delay ?? 0)) {
         decisions.push(decisionOf(item, false, 'delay', []))
         return false
       }

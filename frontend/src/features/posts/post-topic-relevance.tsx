@@ -9,7 +9,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { getErrorMessage } from '@/lib/error-message'
-import { POSTS_QUERY_KEY, getPostTopicEvaluation, requestPostTopicEvaluation } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScope, getPostTopicEvaluation, requestPostTopicEvaluation } from '@/lib/api-posts'
 import { cn } from '@/lib/utils'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
@@ -97,7 +97,7 @@ export function usePostTopicEvaluation(post: PostDetail) {
     onSuccess: async next => {
       command.current = null
       queryClient.setQueryData(key, next)
-      await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
+      await invalidatePostScope(queryClient, post.id, 'post')
     },
     onError: error => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '평가를 요청하지 못했어.', en: 'Could not request an evaluation.' })) }),
   })

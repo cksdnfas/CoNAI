@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/ui/error-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, cancelPostEvaluation, getPostsSettings, listPostEvaluations, requestPostEvaluation } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScope, cancelPostEvaluation, getPostsSettings, listPostEvaluations, requestPostEvaluation } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
@@ -40,7 +40,7 @@ export function useJudgeEvaluation(post: PostDetail) {
   const settings = useQuery({ queryKey: ['post-settings'], queryFn: getPostsSettings, staleTime: 60_000 })
   const request = useMutation({
     mutationFn: () => requestPostEvaluation(post.id, post.knowledge!.contentVersion, crypto.randomUUID()),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
+    onSuccess: () => invalidatePostScope(queryClient, post.id, 'run'),
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '평가를 요청하지 못했어.', en: 'Could not request evaluation.' })) }),
   })
   const knowledge = settings.data?.knowledge
@@ -58,7 +58,7 @@ export function PostKnowledgeEvaluations({ post, empty }: { post: PostDetail; em
   const query = useQuery({ queryKey: [POSTS_QUERY_KEY, 'evaluations', permissions.viewerKey, post.id], queryFn: () => listPostEvaluations(post.id), refetchInterval: (current) => resolveStreamFallbackInterval(streamStatus, current.state.data?.some((item) => item.status === 'queued' || item.status === 'running') ? 5000 : false) })
   const cancel = useMutation({
     mutationFn: (requestId: string) => cancelPostEvaluation(post.id, requestId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
+    onSuccess: () => invalidatePostScope(queryClient, post.id, 'run'),
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '평가를 취소하지 못했어.', en: 'Could not cancel evaluation.' })) }),
   })
   if (query.isError) return <ErrorState size="compact" error={query.error} onRetry={() => void query.refetch()} />

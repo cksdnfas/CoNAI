@@ -15,6 +15,7 @@ import { getImage } from '@/lib/api-images'
 import { formatFileSize } from '@/lib/format-size'
 import { getPost, getPostFile, POSTS_QUERY_KEY, postFileUrl } from '@/lib/api-posts'
 import { buildApiUrl } from '@/lib/api-url'
+import { useInView } from '@/lib/use-in-view'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import { postRoute } from './post-links'
@@ -29,23 +30,6 @@ export function postCoverUrl(media: PostMediaRef[]) {
 
 /** The post being rendered (file embeds are served through it) and every library item it shows, for the lightbox. */
 export const PostMediaContext = createContext<{ postId: number | null; mediaHashes: string[]; knowledgeContentVersion?: number }>({ postId: null, mediaHashes: [] })
-
-/** True once the element has come near the viewport, and whether it is in view right now. */
-function useInView<T extends Element>(rootMargin = '200px') {
-  const ref = useRef<T | null>(null)
-  const [state, setState] = useState({ seen: false, visible: false })
-  useEffect(() => {
-    const node = ref.current
-    if (!node) return
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.some((entry) => entry.isIntersecting)
-      setState((current) => (current.visible === visible && (current.seen || !visible) ? current : { seen: current.seen || visible, visible }))
-    }, { rootMargin })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [rootMargin])
-  return [ref, state] as const
-}
 
 /** How a library item is shown: animated images and videos use the original so they move. */
 export function libraryMediaKind(record: Pick<ImageRecord, 'mime_type' | 'file_type'> | null | undefined): 'image' | 'animated' | 'video' {

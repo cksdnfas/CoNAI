@@ -17,28 +17,7 @@ export class PromptCollectionQueryService {
       const normalizedQuery = normalizeSearchTerm(query);
 
       if (type === 'both') {
-        const [positiveResult, negativeResult] = await Promise.all([
-          PromptCollectionModel.searchPrompts(normalizedQuery, page, limit, sortBy, sortOrder),
-          PromptCollectionModel.searchNegativePrompts(normalizedQuery, page, limit, sortBy, sortOrder)
-        ]);
-
-        const allPrompts = [...positiveResult.prompts, ...negativeResult.prompts];
-        allPrompts.sort((a, b) => {
-          if (sortBy === 'usage_count') {
-            return sortOrder === 'DESC' ? b.usage_count - a.usage_count : a.usage_count - b.usage_count;
-          } else if (sortBy === 'prompt') {
-            return sortOrder === 'DESC' ? b.prompt.localeCompare(a.prompt) : a.prompt.localeCompare(b.prompt);
-          }
-          return 0;
-        });
-
-        const offset = (page - 1) * limit;
-        const paginatedPrompts = allPrompts.slice(offset, offset + limit);
-
-        return {
-          prompts: paginatedPrompts,
-          total: positiveResult.total + negativeResult.total
-        };
+        return PromptCollectionModel.searchPrompts(normalizedQuery, page, limit, sortBy, sortOrder, 'both');
       }
 
       if (type === 'positive') {
@@ -190,12 +169,15 @@ export class PromptCollectionQueryService {
 
       result = await this.searchPrompts(normalizedQuery, type, page, limit, sortBy, sortOrder);
 
-      const enrichedPrompts = await Promise.all(
-        result.prompts.map(async (prompt) => ({
-          ...prompt,
-          group_info: await PromptGroupService.getGroupById(prompt.group_id, prompt.type)
-        }))
+      const groups = await PromptGroupService.getGroupsByIds(
+        result.prompts.map(prompt => ({ id: prompt.group_id, type: prompt.type }))
       );
+      const unclassifiedGroup = await PromptGroupService.getGroupById(null);
+      const enrichedPrompts = result.prompts.map(prompt => ({
+        ...prompt,
+        group_info: prompt.group_id === null || prompt.group_id === 0
+          ? unclassifiedGroup : groups.get(prompt.type)?.get(prompt.group_id) ?? null
+      }));
 
       return { prompts: enrichedPrompts, total: result.total };
     } catch (error) {

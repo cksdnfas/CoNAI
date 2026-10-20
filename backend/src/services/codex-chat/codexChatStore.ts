@@ -84,6 +84,65 @@ export type CodexChatThreadRecord = {
 /** `preserve`: the chat as it was before an edit rewrote it; `continue`: branched to go on from that point. */
 export type ChatBranchPurpose = 'preserve' | 'continue'
 
+/** Directory rows never read stored summaries, prompts, block edits or engine context. */
+export type ChatThreadSummary = Pick<CodexChatThreadRecord,
+  'id' | 'title' | 'engine' | 'profile_id' | 'kind' | 'pinned' | 'archived' |
+  'branched_from_thread_id' | 'branched_at_message_id' | 'branch_purpose' | 'created_date' | 'updated_date'>
+
+export type ChatThreadListOptions = {
+  archive?: 'all' | 'active' | 'archived'
+  pinned?: boolean
+  kind?: 'direct' | 'group'
+  query?: string
+  pinnedFirst?: boolean
+  limit?: number
+  cursor?: string
+  /** Legacy MCP offset, applied in SQL; new callers should use the activity cursor. */
+  offset?: number
+}
+
+const THREAD_SUMMARY_COLUMNS = `t.id, t.title, t.engine, t.profile_id, t.kind, t.pinned, t.archived,
+  t.branched_from_thread_id, t.branched_at_message_id, t.branch_purpose, t.created_date, t.updated_date`
+
+function threadListFilter(accountId: number | null, options: ChatThreadListOptions) {
+  const where = ['t.account_id IS ?']
+  const values: Array<string | number | null> = [accountId]
+  if (options.archive && options.archive !== 'all') {
+    where.push('t.archived = ?')
+    values.push(options.archive === 'archived' ? 1 : 0)
+  }
+  if (options.pinned !== undefined) { where.push('t.pinned = ?'); values.push(options.pinned ? 1 : 0) }
+  if (options.kind) { where.push('t.kind = ?'); values.push(options.kind) }
+  const search = options.query?.trim()
+  if (search) {
+    // Membership is searched inside an already account-scoped room, never used to grant room access.
+    where.push(`(instr(lower(t.title), lower(?)) > 0
+      OR (t.kind = 'direct' AND instr(lower(COALESCE((SELECT name FROM llm_chat_profiles WHERE id = t.profile_id), '#' || t.profile_id, '')), lower(?)) > 0)
+      OR (t.kind = 'group' AND EXISTS (
+        SELECT 1 FROM chat_group_members gm LEFT JOIN llm_chat_profiles p ON p.id = gm.profile_id
+        WHERE gm.thread_id = t.id AND instr(lower(COALESCE(p.name, '#' || gm.profile_id)), lower(?)) > 0))
+      OR (trim(t.title) = '' AND t.profile_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM chat_group_members gm WHERE gm.thread_id = t.id)
+        AND instr('채팅 ' || t.id, ?) > 0))`)
+    values.push(search, search, search, search)
+  }
+  if (options.cursor !== undefined) {
+    let cursor: unknown
+    try { cursor = JSON.parse(Buffer.from(options.cursor, 'base64url').toString('utf8')) } catch { /* Validated below. */ }
+    if (!Array.isArray(cursor) || cursor.length !== 3 || (cursor[0] !== 0 && cursor[0] !== 1)
+      || typeof cursor[1] !== 'string' || cursor[1].length > 100
+      || !Number.isSafeInteger(cursor[2]) || cursor[2] < 1) throw new TypeError('Invalid thread cursor')
+    if (options.pinnedFirst) {
+      where.push('(t.pinned, t.updated_date, t.id) < (?, ?, ?)')
+      values.push(cursor[0], cursor[1], cursor[2])
+    } else {
+      where.push('(t.updated_date, t.id) < (?, ?)')
+      values.push(cursor[1], cursor[2])
+    }
+  }
+  return { where: where.join(' AND '), values }
+}
+
 /** The chat list's line under a title: the latest message, flattened to plain text. */
 export type ChatThreadPreview = { text: string; role: 'user' | 'assistant'; media: boolean; files: boolean }
 
@@ -145,6 +204,14 @@ export type ChatMessageAlternative = {
 }
 
 type StoredMessageRow = Omit<CodexChatMessageRecord, 'tool_calls' | 'alternatives' | 'flags' | 'routing'> & { tool_calls: string | null; alternatives: string | null; flags: string | null; media_attachments: string | null; routing: string | null }
+
+/** A bounded request's historical lookups stay in this thread and exclude the reply being replaced. */
+export type ChatHistorySource = { threadId: number; excludeMessageId?: number }
+// ECMAScript String.trim whitespace: SQL's default trim only removes ASCII spaces.
+const MESSAGE_WHITESPACE = '\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff'
+const CONTEXT_MESSAGE_COLUMNS = `id, thread_id, role, content, display_content, speaker_profile_id,
+  tool_calls, status, error, finish_reason, flags, media_attachments, routing, created_date,
+  active_alternative, NULL AS alternatives, NULL AS context_meta`
 
 export function parseMessageRouting(value: string | null): ChatMessageRouting | null {
   try {
@@ -303,10 +370,32 @@ export const CodexChatStore = {
     if (patch.archived !== undefined) db.prepare('UPDATE codex_chat_threads SET archived = ? WHERE id = ?').run(patch.archived ? 1 : 0, threadId)
   },
 
-  listThreads(accountId: number | null) {
+  /** No limit retains the existing UI directory; paged callers enrich only the SQL-selected rows. */
+  listThreads(accountId: number | null, options: ChatThreadListOptions = {}) {
+    if (options.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 1)) throw new TypeError('Invalid thread limit')
+    if (options.offset !== undefined && (!Number.isSafeInteger(options.offset) || options.offset < 0)) throw new TypeError('Invalid thread offset')
+    if (options.cursor !== undefined && options.offset) throw new TypeError('Use either a thread cursor or an offset')
+    const { where, values } = threadListFilter(accountId, options)
     return getUserSettingsDb().prepare(`
-      SELECT * FROM codex_chat_threads WHERE account_id IS ? ORDER BY updated_date DESC, id DESC
-    `).all(accountId) as CodexChatThreadRecord[]
+      SELECT ${THREAD_SUMMARY_COLUMNS} FROM codex_chat_threads t WHERE ${where}
+      ORDER BY ${options.pinnedFirst ? 't.pinned DESC, ' : ''}t.updated_date DESC, t.id DESC
+      ${options.limit !== undefined || options.offset ? 'LIMIT ? OFFSET ?' : ''}
+    `).all(...values, ...(options.limit !== undefined || options.offset ? [options.limit ?? -1, options.offset ?? 0] : [])) as ChatThreadSummary[]
+  },
+
+  listThreadPage(accountId: number | null, options: ChatThreadListOptions = {}) {
+    const limit = options.limit ?? 40
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new TypeError('Thread page limit must be 1-100')
+    const rows = CodexChatStore.listThreads(accountId, { ...options, limit: limit + 1 })
+    const threads = rows.slice(0, limit)
+    const has_more = rows.length > limit
+    const last = threads.at(-1)
+    const { where, values } = threadListFilter(accountId, { ...options, cursor: undefined })
+    const { total } = getUserSettingsDb().prepare(`SELECT COUNT(*) AS total FROM codex_chat_threads t WHERE ${where}`).get(...values) as { total: number }
+    return {
+      threads, total, has_more,
+      next_cursor: has_more && last ? Buffer.from(JSON.stringify([last.pinned, last.updated_date, last.id])).toString('base64url') : null,
+    }
   },
 
   findThread(threadId: number, accountId: number | null) {
@@ -427,12 +516,68 @@ export const CodexChatStore = {
     }
   },
 
-  listMessages(threadId: number, options: { tail?: number } = {}) {
+  listMessages(threadId: number, options: { tail?: number; before?: number } = {}) {
     const tail = options.tail
     if (tail !== undefined && (!Number.isSafeInteger(tail) || tail < 1)) throw new Error('Invalid message limit')
-    const rows = getUserSettingsDb().prepare(`SELECT * FROM codex_chat_messages WHERE thread_id = ? ORDER BY id ${tail === undefined ? '' : 'DESC LIMIT ?'}`)
-      .all(threadId, ...(tail === undefined ? [] : [tail])) as StoredMessageRow[]
+    if (options.before !== undefined && (!Number.isSafeInteger(options.before) || options.before < 1)) throw new Error('Invalid message cursor')
+    const rows = getUserSettingsDb().prepare(`SELECT * FROM codex_chat_messages WHERE thread_id = ?${options.before === undefined ? '' : ' AND id < ?'} ORDER BY id ${tail === undefined ? '' : 'DESC LIMIT ?'}`)
+      .all(threadId, ...(options.before === undefined ? [] : [options.before]), ...(tail === undefined ? [] : [tail])) as StoredMessageRow[]
     return readMessageRows(threadId, tail === undefined ? rows : rows.reverse())
+  },
+
+  hasMessagesBefore(threadId: number, before: number) {
+    return Boolean(getUserSettingsDb().prepare('SELECT 1 FROM codex_chat_messages WHERE thread_id = ? AND id < ? LIMIT 1').get(threadId, before))
+  },
+
+  /** All unsummarized rows, plus the exact recent suffix needed by lore/judges and the last user's flags.
+   * Diagnostics and alternative bodies are not completion input; consumers needing those use the source below. */
+  listContextMessages(source: ChatHistorySource, options: { afterId: number; recentMessages: number; textMessages: number }) {
+    const db = getUserSettingsDb()
+    const args = [source.threadId, source.excludeMessageId ?? -1]
+    const boundary = (filter: string, count: number, extra: string[] = []) =>
+      (db.prepare(`SELECT id FROM codex_chat_messages WHERE thread_id = ? AND id != ? ${filter} ORDER BY id DESC LIMIT 1 OFFSET ?`)
+        .get(...args, ...extra, Math.max(0, count - 1)) as { id: number } | undefined)?.id ?? 0
+    const recent = boundary('', options.recentMessages)
+    // Both original-language judging and model-language semantic retrieval filter blank text before taking a suffix.
+    const text = boundary('AND length(trim(content, ?)) > 0', options.textMessages, [MESSAGE_WHITESPACE])
+    const original = boundary("AND length(trim(CASE WHEN role = 'user' THEN COALESCE(display_content, content) ELSE content END, ?)) > 0", options.textMessages, [MESSAGE_WHITESPACE])
+    const user = boundary("AND role = 'user'", 1)
+    const from = Math.min(options.afterId + 1, recent, text, original, user)
+    const rows = db.prepare(`SELECT ${CONTEXT_MESSAGE_COLUMNS} FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id >= ? ORDER BY id`)
+      .all(...args, from) as StoredMessageRow[]
+    return readMessageRows(source.threadId, rows)
+  },
+
+  /** Positions, not bodies: quote neighbours retain the same turn boundaries outside a request window. */
+  listMessagePositions(source: ChatHistorySource) {
+    return getUserSettingsDb().prepare('SELECT id, role FROM codex_chat_messages WHERE thread_id = ? AND id != ? ORDER BY id')
+      .all(source.threadId, source.excludeMessageId ?? -1) as Array<Pick<CodexChatMessageRecord, 'id' | 'role'>>
+  },
+
+  /** Lore timers count every message, but only need activation records inside their configured horizon. */
+  readLoreTiming(source: ChatHistorySource, horizon: number) {
+    const db = getUserSettingsDb()
+    const args = [source.threadId, source.excludeMessageId ?? -1]
+    const { count } = db.prepare('SELECT COUNT(*) AS count FROM codex_chat_messages WHERE thread_id = ? AND id != ?').get(...args) as { count: number }
+    const messages = db.prepare(`SELECT role, speaker_profile_id, '' AS content,
+      CASE WHEN json_valid(context_meta) THEN json_object('loreEntries', json_extract(context_meta, '$.loreEntries')) ELSE NULL END AS context_meta
+      FROM codex_chat_messages WHERE thread_id = ? AND id != ? ORDER BY id DESC LIMIT ?`)
+      .all(...args, horizon) as Array<Pick<CodexChatMessageRecord, 'role' | 'speaker_profile_id' | 'content' | 'context_meta'>>
+    return { messages: messages.reverse(), messageCount: count }
+  },
+
+  /** After-reply judges need only the last nonblank original-language texts, not tools or attachments. */
+  listJudgeMessages(threadId: number, limit: number): CodexChatMessageRecord[] {
+    const rows = getUserSettingsDb().prepare(`SELECT id, thread_id, role, content, display_content, speaker_profile_id
+      FROM codex_chat_messages WHERE thread_id = ? AND length(trim(CASE WHEN role = 'user' THEN COALESCE(display_content, content) ELSE content END, ?)) > 0
+      ORDER BY id DESC LIMIT ?`).all(threadId, MESSAGE_WHITESPACE, limit) as Array<Pick<CodexChatMessageRecord, 'id' | 'thread_id' | 'role' | 'content' | 'display_content' | 'speaker_profile_id'>>
+    return rows.reverse().map((row) => ({ ...row, tool_calls: [], alternatives: [], active_alternative: 0, status: 'completed', error: null, finish_reason: null, created_date: '' }))
+  },
+
+  trailingReplyCount(threadId: number) {
+    return (getUserSettingsDb().prepare(`SELECT COUNT(*) AS count FROM codex_chat_messages
+      WHERE thread_id = ? AND role = 'assistant' AND id > COALESCE((SELECT MAX(id) FROM codex_chat_messages WHERE thread_id = ? AND role = 'user'), 0)`)
+      .get(threadId, threadId) as { count: number }).count
   },
 
   findMessage(threadId: number, messageId: number) {

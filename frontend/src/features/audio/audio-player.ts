@@ -14,7 +14,8 @@ export interface AudioPlayerState {
 }
 
 let element: HTMLAudioElement | null = null
-let state: AudioPlayerState = { key: null, playing: false, currentTime: 0, duration: 0 }
+const idleState: AudioPlayerState = { key: null, playing: false, currentTime: 0, duration: 0 }
+let state = idleState
 const listeners = new Set<() => void>()
 /** Stop position for region playback (seconds), or null to play to the end. */
 let stopAt: number | null = null
@@ -138,4 +139,10 @@ function subscribe(listener: () => void) {
 
 export function useAudioPlayer(): AudioPlayerState {
   return useSyncExternalStore(subscribe, () => state, () => state)
+}
+
+/** Inactive rows share one snapshot, so another track's time updates do not re-render them. */
+export function useAudioPlayerFor(key: string): AudioPlayerState {
+  const getSnapshot = () => state.key === key ? state : idleState
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }

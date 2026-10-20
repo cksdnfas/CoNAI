@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { CircleUserRound, Languages, LogIn, LogOut, MessageSquare, Search, type LucideIcon } from 'lucide-react'
+import { CircleUserRound, Command, Languages, LogIn, LogOut, MessageSquare, Search, type LucideIcon } from 'lucide-react'
+import { openCommandPalette } from '@/components/layout/command-palette-launcher'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AnchoredPopup, anchoredPopupBodyClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
@@ -184,6 +185,9 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
               end={unreadCount > 0 ? <UnreadCount count={unreadCount} /> : null}
             />
           ) : null}
+
+          {/* Narrow (touch) headers have no Ctrl/⌘+K, so the palette sits with the other folded keys. */}
+          {menuChat ? <MenuRow icon={Command} label={t({ ko: '빠른 실행', en: 'Command palette' })} onClick={() => runAndClose(openCommandPalette)} /> : null}
 
           {isAnonymousSession ? (
             <MenuRow

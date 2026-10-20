@@ -7,7 +7,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, deletePost, exportPostKnowledge, restorePostKnowledge, trashPostKnowledge, updatePostKnowledge } from '@/lib/api-posts'
+import { invalidatePostScope, deletePost, exportPostKnowledge, restorePostKnowledge, trashPostKnowledge, updatePostKnowledge } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { usePostReferenceEntry } from './post-chat-links'
 import { useJudgeEvaluation } from './post-knowledge-evaluations'
@@ -39,7 +39,7 @@ export function PostActions({ post, onEdit, onGone }: { post: PostDetail; onEdit
   const knowledge = post.knowledge ?? null
   const trashed = Boolean(knowledge?.deletedAt)
   const onError = (fallback: string) => (error: unknown) => showSnackbar({ tone: 'error', message: getErrorMessage(error, fallback) })
-  const refresh = () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
+  const refresh = () => invalidatePostScope(queryClient, post.id, 'post')
 
   const remove = useMutation({
     mutationFn: async () => { if (knowledge) await trashPostKnowledge(post.id, post.revision); else await deletePost(post.id) },

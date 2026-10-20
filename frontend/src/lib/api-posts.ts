@@ -1,4 +1,5 @@
 import type { PageSettingsVersions } from '@conai/shared'
+import type { QueryClient } from '@tanstack/react-query'
 import type {
   PostBotRun,
   PostCategory,
@@ -38,8 +39,55 @@ import type {
 import { requestApiData } from './api-request'
 import { buildApiUrl } from './api-url'
 
-/** Every posts query starts with this, so the SSE `posts.changed` event refreshes them all. */
+/** Shared prefix; mutations and runtime events invalidate only their affected scope. */
 export const POSTS_QUERY_KEY = 'posts'
+
+export type PostChangeKind = 'post' | 'comment' | 'category' | 'run' | 'bot-run' | 'proposal'
+
+function matchesPostScope(queryKey: readonly unknown[], data: unknown, postId: number | null, change: string) {
+  const kind = String(queryKey[1])
+  const matchesId = (value: unknown) => postId === null || Number(value) === postId
+  const sharedList = ['list', 'attach-picker', 'proposal-similar'].includes(kind)
+  if (change === 'category') return kind === 'categories' || sharedList
+  // Evaluation requests do not affect shared lists or other posts.
+  if (change === 'run') return ['evaluations', 'permanent-delete-preview'].includes(kind) && matchesId(queryKey[3])
+  if (change === 'bot-run') return kind === 'comments' ? matchesId(queryKey[2])
+    : ['bot-runs', 'permanent-delete-preview'].includes(kind) && matchesId(queryKey[3])
+  if (change === 'proposal') return (kind === 'proposals' && queryKey[2] === 'all')
+    || (postId !== null && ['proposals', 'proposals-pending'].includes(kind) && matchesId(queryKey[2]))
+  if (kind === 'proposals') return change !== 'comment' && (queryKey[2] === 'all' || matchesId(queryKey[2]))
+  if (kind === 'proposals-pending') return change !== 'comment' && matchesId(queryKey[2])
+  if (kind === 'proposal') {
+    const proposal = data as { postId?: number | null; appliedPostId?: number | null } | undefined
+    return change !== 'comment' && (postId === null || proposal?.postId === postId || proposal?.appliedPostId === postId)
+  }
+  if (kind === 'post') return matchesId(queryKey[queryKey.length > 3 ? 3 : 2])
+  if (['comments', 'card'].includes(kind)) return matchesId(queryKey[2])
+  if (change === 'comment') return sharedList
+  if (['revisions', 'knowledge-versions', 'links'].includes(kind)) return matchesId(queryKey[2])
+  if (['quality', 'assessments', 'evaluations', 'task-fit', 'permanent-delete-preview', 'bot-runs', 'topic-evaluation'].includes(kind)) return matchesId(queryKey[3])
+  // Shared lists, ranking and search status may change when a post changes.
+  return true
+}
+
+/** Coalesce an SSE batch into one invalidation, including mixed post/comment/run changes. */
+export function invalidatePostScopes(queryClient: QueryClient, changes: ReadonlyMap<number, string>) {
+  return queryClient.invalidateQueries({
+    queryKey: [POSTS_QUERY_KEY],
+    refetchType: 'active',
+    predicate: ({ queryKey, state }) => {
+      for (const [postId, kind] of changes) {
+        if (matchesPostScope(queryKey, state.data, postId > 0 ? postId : null, kind)) return true
+      }
+      return false
+    },
+  })
+}
+
+/** Local fallback also refreshes correctly when the event stream is disconnected. */
+export function invalidatePostScope(queryClient: QueryClient, postId: number | null, kind: PostChangeKind) {
+  return invalidatePostScopes(queryClient, new Map([[postId ?? 0, kind]]))
+}
 
 const json = (method: string, body?: unknown): RequestInit => ({
   method,

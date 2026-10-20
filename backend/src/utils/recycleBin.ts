@@ -125,17 +125,23 @@ function recordOrigin(binPath: string, originalPath: string, size: number, sourc
   }
 }
 
-export type RecycleBinOrigin = { binName: string; originalPath: string; size: number; source: string | null; deletedAt: string };
+export type RecycleBinOrigin = { binName: string; originalPath: string; size: number; source: string | null; deletedAt: string; libraryRestoreData: string | null };
+
+/** Library undo data is required, unlike best-effort origins for older callers. */
+export function recordLibraryRestoreData(binName: string, data: string): void {
+  const result = recycleBinDb().prepare('UPDATE recycle_bin_entries SET library_restore_data = ? WHERE bin_name = ?').run(data, binName);
+  if (result.changes !== 1) throw new Error('Could not save library restore data');
+}
 
 /** Recorded origins for these RecycleBin file names (files deleted before origins were recorded have none). */
 export function readRecycleBinOrigins(binNames: readonly string[]): Map<string, RecycleBinOrigin> {
   const result = new Map<string, RecycleBinOrigin>();
   if (binNames.length === 0) return result;
   const db = recycleBinDb();
-  const select = db.prepare('SELECT bin_name, original_path, size, source, deleted_at FROM recycle_bin_entries WHERE bin_name = ?');
+  const select = db.prepare('SELECT bin_name, original_path, size, source, deleted_at, library_restore_data FROM recycle_bin_entries WHERE bin_name = ?');
   for (const name of binNames) {
-    const row = select.get(name) as { bin_name: string; original_path: string; size: number; source: string | null; deleted_at: string } | undefined;
-    if (row) result.set(name, { binName: row.bin_name, originalPath: row.original_path, size: row.size, source: row.source, deletedAt: `${row.deleted_at.replace(' ', 'T')}Z` });
+    const row = select.get(name) as { bin_name: string; original_path: string; size: number; source: string | null; deleted_at: string; library_restore_data: string | null } | undefined;
+    if (row) result.set(name, { binName: row.bin_name, originalPath: row.original_path, size: row.size, source: row.source, deletedAt: `${row.deleted_at.replace(' ', 'T')}Z`, libraryRestoreData: row.library_restore_data });
   }
   return result;
 }

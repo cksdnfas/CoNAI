@@ -9,7 +9,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, createPostCategory, deletePostCategory, updatePostCategory } from '@/lib/api-posts'
+import { invalidatePostScope, createPostCategory, deletePostCategory, updatePostCategory } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { flattenCategories } from './post-editor'
 
@@ -42,7 +42,7 @@ export function PostCategoryDialog({ category, parentId, categories, onClose, on
   }, [category, categories])
   const onError = (error: unknown) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '카테고리를 저장하지 못했어.', en: 'Could not save the category.' })) })
   const done = async () => {
-    await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
+    await invalidatePostScope(queryClient, null, 'category')
     onClose()
   }
   const save = useMutation({

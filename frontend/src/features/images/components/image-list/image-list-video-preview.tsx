@@ -1,5 +1,6 @@
-import { type CSSProperties, type DragEventHandler, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, type DragEventHandler, useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { useInView } from '@/lib/use-in-view'
 import type { ImageRecord } from '@/types/image'
 import { getImageListPreviewUrl } from './image-list-utils'
 
@@ -40,26 +41,10 @@ export function ImageListVideoPreview({
 }: ImageListVideoPreviewProps) {
   const previewUrl = getImageListPreviewUrl(image)
   const posterUrl = image.thumbnail_url || null
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const [isInViewport, setIsInViewport] = useState(false)
+  const [containerRef, view] = useInView<HTMLDivElement>(VIDEO_PREVIEW_VIEWPORT_ROOT_MARGIN)
   const [hasLoadedFrame, setHasLoadedFrame] = useState(false)
 
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container || typeof IntersectionObserver === 'undefined') {
-      setIsInViewport(true)
-      return
-    }
-
-    const observer = new IntersectionObserver((entries) => {
-      setIsInViewport(entries.some((entry) => entry.isIntersecting))
-    }, { rootMargin: VIDEO_PREVIEW_VIEWPORT_ROOT_MARGIN })
-
-    observer.observe(container)
-    return () => observer.disconnect()
-  }, [])
-
-  const shouldMountVideo = Boolean(previewUrl) && isInViewport && !suspendPlayback
+  const shouldMountVideo = Boolean(previewUrl) && view.visible && !suspendPlayback
 
   // 영상이 내려가거나 소스가 바뀌면 다음 마운트의 첫 프레임 전까지 포스터가 다시 자리를 지킨다.
   useEffect(() => {

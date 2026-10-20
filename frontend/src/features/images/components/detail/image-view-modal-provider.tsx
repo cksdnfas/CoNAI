@@ -13,6 +13,7 @@ import {
 import { getImage, getImageDetailQueryKey, IMAGE_DETAIL_STALE_TIME_MS } from '@/lib/api-images'
 import { registerTranslationCatalog } from '@/i18n'
 import { lockBodyScroll } from '@/lib/body-scroll-lock'
+import { isTypingTarget } from '@/lib/keyboard-shortcut'
 
 type ImageViewModalOverlayModule = typeof import('./image-view-modal-overlay')
 type ImageViewModalOverlayComponent = ImageViewModalOverlayModule['ImageViewModalOverlay']
@@ -206,15 +207,6 @@ function mergeSourceItemsByHash(currentItemsByHash: Record<string, ImageRecord>,
   }
 
   return currentItemsByHash
-}
-
-function isModalKeyboardEditingTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false
-  }
-
-  const tagName = target.tagName
-  return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target.isContentEditable
 }
 
 /** Provide a global image view modal for app-shell image browsing flows. */
@@ -460,7 +452,7 @@ export function ImageViewModalProvider({ children }: PropsWithChildren) {
       }
 
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        if (isModalKeyboardEditingTarget(event.target)) {
+        if (isTypingTarget(event)) {
           return
         }
 

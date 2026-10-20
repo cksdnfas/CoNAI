@@ -6,7 +6,7 @@ import { refreshChatGenerationQueries } from './chat-generation-query-updates'
 import { AUDIO_QUERY_KEY } from '@/lib/api-audio'
 import { CHAT_ROUTINES_QUERY_KEY } from '@/lib/api-chat-routines'
 import { PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
-import { POSTS_QUERY_KEY } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScopes } from '@/lib/api-posts'
 import { RUNTIME_JOB_QUERY_KEY } from '@/lib/use-runtime-job'
 
 /**
@@ -216,8 +216,10 @@ export function useRuntimeEventQueryBridge() {
         if (audioScopes) pendingAudioScopesRef.current.clear()
         const progressIds = prefix === GRAPH_EXECUTION_PROGRESS_QUERY_KEY_PREFIX ? new Set(pendingGraphProgressIdsRef.current) : null
         if (progressIds) pendingGraphProgressIdsRef.current.clear()
-        // Evaluation-request state ('run') concerns only that post's evaluation list, never shared lists.
-        const runOnly = !!changes?.size && !changes.has(0) && [...changes.values()].every((kind) => kind === 'run')
+        if (changes?.size) {
+          void invalidatePostScopes(queryClient, changes)
+          return
+        }
         void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active', predicate: ({ queryKey, state }) => {
           if (progressIds) return !progressIds.size || progressIds.has(Number(queryKey[1]))
           if (audioScopes?.size && !audioScopes.has('*')) {
@@ -228,19 +230,6 @@ export function useRuntimeEventQueryBridge() {
             if (['group', 'orders', 'candidates', 'chat-pending', 'comments'].includes(String(kind))) return audioScopes.has(String(queryKey[2]))
             return false
           }
-          if (!changes?.size || changes.has(0)) return true
-          const kind = queryKey[1]
-          if (runOnly) return kind === 'evaluations' && changes.has(Number(queryKey[3]))
-          if (['comments', 'card', 'revisions', 'knowledge-versions', 'links', 'proposals-pending'].includes(String(kind))) {
-            return changes.has(Number(queryKey[2]))
-          }
-          if (kind === 'post') return changes.has(Number(queryKey.length > 3 ? queryKey[3] : queryKey[2]))
-          if (['quality', 'assessments', 'evaluations', 'task-fit', 'permanent-delete-preview', 'bot-runs'].includes(String(kind))) {
-            return changes.has(Number(queryKey[3]))
-          }
-          if (kind === 'proposals' && typeof queryKey[2] === 'number') return changes.has(queryKey[2])
-          if (kind === 'categories' || kind === 'tags') return [...changes.values()].includes('post')
-          // Shared lists/ranking/proposal searches can be affected by any changed post.
           return true
         } })
       }, Math.min(delayMs, remainingMaxWaitMs))
@@ -353,8 +342,8 @@ export function useRuntimeEventQueryBridge() {
         const changes = pendingPostChangesRef.current
         const id = Number.isSafeInteger(postId) && postId > 0 ? postId : 0
         const previous = changes.get(id)
-        // 'run' is the narrowest change: it never downgrades a pending wider change of the same post.
-        if (previous !== 'post' && !(kind === 'run' && previous)) changes.set(id, kind)
+        // Mixed kinds must preserve both scopes, regardless of arrival order; run-only batches stay narrow.
+        changes.set(id, previous !== undefined && previous !== kind ? 'post' : kind)
         scheduleInvalidate([POSTS_QUERY_KEY], 400)
         return
       }

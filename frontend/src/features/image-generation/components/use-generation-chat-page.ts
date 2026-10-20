@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { type ChatPageField } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
-import { NAI_MODEL_OPTIONS, NAI_SAMPLER_OPTIONS, NAI_SCHEDULER_OPTIONS, supportsNaiTransparentBackground, type NAIFormDraft } from '../image-generation-shared'
+import { getImageDraftRevision, NAI_MODEL_OPTIONS, NAI_SAMPLER_OPTIONS, NAI_SCHEDULER_OPTIONS, supportsNaiTransparentBackground, type NAIFormDraft } from '../image-generation-shared'
 import { applyNaiFormPatch } from './use-nai-form-controller'
 import { useChatPageMedia } from '@/features/codex-chat/use-chat-page-media'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
@@ -36,7 +36,7 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
   ]
   if (supportsNaiTransparentBackground(form.model)) fields.push({ id: 'transparentBackground', label: t({ ko: '투명 배경', en: 'Transparent background' }), type: 'boolean', value: form.transparentBackground })
   useChatPageRegistration({
-    kind: 'nai', title: t({ ko: 'NovelAI 생성', en: 'NovelAI generation' }), resourceId: 'novelai', fields, localRevision: JSON.stringify(form),
+    kind: 'nai', title: t({ ko: 'NovelAI 생성', en: 'NovelAI generation' }), resourceId: 'novelai', fields, localRevision: getImageDraftRevision(form),
     data: { media: media.candidates, presets: presets.candidates, characters: form.characters.map((item) => ({ ...item })), selected: { sourceImage: form.sourceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', vibes: form.vibes.map((item) => ({ image: item.image?.fileName ?? '', strength: item.strength, informationExtracted: item.informationExtracted })), characterReferences: form.characterReferences.map((item) => ({ image: item.image?.fileName ?? '', type: item.type, strength: item.strength, fidelity: item.fidelity })) } },
     actions: [...media.actions, ...presets.actions, ...(supportsNaiCharacterPrompts(form.model) ? [pageAction('nai.characters', t({ ko: '캐릭터 프롬프트 편집', en: 'Edit character prompts' }), t({ ko: '캐릭터별 프롬프트·부정 프롬프트·위치의 전체 목록을 입력해.', en: 'Set the complete list of character prompts, negative prompts and positions.' }), pageObject({ characters: pageArray(pageObject({ prompt: pageText(), uc: pageText(), centerX: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']), centerY: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']) }, ['prompt', 'uc', 'centerX', 'centerY']), 6) }, ['characters']))] : [])],
     apply: (values) => {

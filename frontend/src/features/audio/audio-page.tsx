@@ -21,8 +21,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { EmptyState } from '@/components/ui/empty-state'
+import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
+import { LoadingState } from '@/components/ui/loading-state'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
@@ -48,12 +50,14 @@ import {
   deleteAudioProject,
   downloadAttachment,
   getAudioGroup,
+  getAudioProject,
   listAudioCandidates,
   listAudioFolders,
   listAudioGroups,
+  listAudioGroupsPage,
   searchAudioGroups,
   listAudioOrders,
-  listAudioProjects,
+  listAudioProjectsPage,
   moveAudioCandidates,
   retryAudioOrderJob,
   saveBlob,
@@ -118,7 +122,7 @@ function readExpanded(): Set<string> {
   }
 }
 
-/** Unfiltered group list of one project; the tree, the move targets and send-to-audio share this cache entry. */
+/** Unfiltered group pages of one project; the tree, move targets and send-to-audio share this cache entry. */
 const projectGroupsKey = (projectId: string | null) => [AUDIO_QUERY_KEY, 'groups', projectId, '', null] as const
 
 function useAudioPermissions() {
@@ -202,13 +206,29 @@ function AudioPageContent() {
 
   /* ---------------------------------------------------------------------------------------------- data */
 
-  const projectsQuery = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'projects'], queryFn: listAudioProjects })
-  const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data])
+  const projectsQuery = useInfiniteQuery({
+    queryKey: [AUDIO_QUERY_KEY, 'projects'],
+    queryFn: ({ pageParam, signal }) => listAudioProjectsPage({ cursor: pageParam }, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
+  })
+  const listedProjects = useMemo(() => projectsQuery.data?.pages.flatMap((page) => page.items) ?? [], [projectsQuery.data])
   const groupQuery = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'group', groupId], queryFn: () => getAudioGroup(groupId!), enabled: Boolean(groupId), retry: false })
   const group = groupQuery.data && groupQuery.data.id === groupId ? groupQuery.data : null
   // The open group decides the project. The URL (?group=) updates in a router transition, a render after the
   // remembered project, so comparing the two mid-switch would bounce the click back to the old group.
   const projectId = group?.project_id ?? storedProjectId
+  // A remembered project or deep link may be beyond the first directory page.
+  const projectQuery = useQuery({
+    queryKey: [AUDIO_QUERY_KEY, 'projects', 'detail', projectId],
+    queryFn: () => getAudioProject(projectId!),
+    enabled: Boolean(projectId) && !listedProjects.some((entry) => entry.id === projectId),
+    retry: false,
+  })
+  const projects = useMemo(() => {
+    const detail = projectQuery.data
+    return detail?.id === projectId && !listedProjects.some((entry) => entry.id === detail.id) ? [...listedProjects, detail] : listedProjects
+  }, [listedProjects, projectQuery.data, projectId])
 
   // A group link (chat card, ?group=) wins over the remembered project, and opens its folder in the tree — once per
   // group, so a stale group from before a switch never overwrites the project just picked.
@@ -222,14 +242,23 @@ function AudioPageContent() {
   useEffect(() => {
     if (!projectsQuery.isSuccess) return
     if (projects.length === 0) return
-    if (!projectId || !projects.some((project) => project.id === projectId)) {
+    if (!projectId || (!projects.some((project) => project.id === projectId) && projectQuery.isError)) {
       if (!groupId || groupQuery.isError) setProjectId(projects[0].id)
     }
-  }, [projectsQuery.isSuccess, projects, projectId, groupId, groupQuery.isError, setProjectId])
+  }, [projectsQuery.isSuccess, projects, projectId, projectQuery.isError, groupId, groupQuery.isError, setProjectId])
   const project = projects.find((entry) => entry.id === projectId) ?? null
 
-  const projectGroupsQuery = useQuery({ queryKey: projectGroupsKey(projectId), queryFn: () => listAudioGroups(projectId!), enabled: Boolean(projectId) })
-  const projectGroups = useMemo(() => projectGroupsQuery.data ?? [], [projectGroupsQuery.data])
+  const projectGroupsQuery = useInfiniteQuery({
+    queryKey: projectGroupsKey(projectId),
+    queryFn: ({ pageParam, signal }) => listAudioGroupsPage(projectId!, { cursor: pageParam }, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
+    enabled: Boolean(projectId),
+  })
+  const projectGroups = useMemo(() => {
+    const items = projectGroupsQuery.data?.pages.flatMap((page) => page.items) ?? []
+    return group?.project_id === projectId && !items.some((entry) => entry.id === group.id) ? [...items, group] : items
+  }, [projectGroupsQuery.data, group, projectId])
   const effects = useMemo(() => projectGroups.filter((entry) => !entry.is_inbox), [projectGroups])
 
   const foldersQuery = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'folders', projectId], queryFn: () => listAudioFolders(projectId!), enabled: Boolean(projectId) })
@@ -237,17 +266,20 @@ function AudioPageContent() {
   const folder = group?.folder_id ? folders.find((entry) => entry.id === group.folder_id) ?? null : null
 
   // The tree shows the open project; a search or filter looks through every project.
-  const groupSearchQuery = useQuery<AudioGroup[]>({
+  const groupSearchQuery = useInfiniteQuery({
     queryKey: [AUDIO_QUERY_KEY, 'groups', 'search', debouncedSearch, filter],
-    queryFn: ({ signal }) => searchAudioGroups({ search: debouncedSearch, filter }, signal),
+    queryFn: ({ pageParam, signal }) => searchAudioGroups({ search: debouncedSearch, filter, cursor: pageParam }, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
     enabled: searching,
-    placeholderData: (previous: AudioGroup[] | undefined) => previous,
   })
   const searchResults = useMemo(() => {
     if (!searching) return null
     const map: Record<string, AudioGroup[] | undefined> = {}
     for (const project of projects) map[project.id] = groupSearchQuery.data ? [] : undefined
-    for (const group of groupSearchQuery.data ?? []) (map[group.project_id] ??= []).push(group)
+    for (const page of groupSearchQuery.data?.pages ?? []) {
+      for (const group of page.items) (map[group.project_id] ??= []).push(group)
+    }
     return map
   }, [searching, projects, groupSearchQuery.data])
 
@@ -373,8 +405,9 @@ function AudioPageContent() {
   /* ---------------------------------------------------------------------------------------------- projects / effects */
 
   const createEffect = async (targetProjectId: string, name: string, folderId: string | null = null) => {
-    const siblings = queryClient.getQueryData<AudioGroup[]>(projectGroupsKey(targetProjectId)) ?? []
     try {
+      // Name allocation needs all conflicting labels, not just the currently visible directory page.
+      const siblings = await listAudioGroups(targetProjectId, { search: autoAudioLabel(name).replace(/_\[00\]$/, '') })
       const created = await createAudioGroup(targetProjectId, { name, label: autoAudioLabel(name, siblings.map((entry) => entry.label)), folder_id: folderId })
       setProjectId(targetProjectId)
       setFreshGroupId(created.id)
@@ -407,7 +440,7 @@ function AudioPageContent() {
     }
   }
   const removeFolder = async (target: AudioFolder) => {
-    const inside = projectGroups.filter((entry) => entry.folder_id === target.id).length
+    const inside = target.group_count
     const ok = await confirm({
       title: t({ ko: '그룹 삭제', en: 'Delete group' }),
       description: inside > 0
@@ -659,6 +692,11 @@ function AudioPageContent() {
                     {entry.is_inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : entry.name}
                   </DropdownMenuItem>
                 ))}
+                {projectGroupsQuery.hasNextPage ? (
+                  <DropdownMenuItem disabled={projectGroupsQuery.isFetching} onSelect={(event) => { event.preventDefault(); void projectGroupsQuery.fetchNextPage() }}>
+                    {t({ ko: '효과음 더 불러오기', en: 'Load more effects' })}
+                  </DropdownMenuItem>
+                ) : null}
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuItem onSelect={() => setDialog('cleanup')}><Trash2 />{t({ ko: '후보 정리', en: 'Clean up takes' })}</DropdownMenuItem>
@@ -682,6 +720,9 @@ function AudioPageContent() {
       sidebar={(
         <AudioSidebar
           projects={projects}
+          hasMoreProjects={projectsQuery.hasNextPage}
+          loadingProjects={projectsQuery.isFetching}
+          onMoreProjects={() => void projectsQuery.fetchNextPage()}
           project={project}
           onSelectProject={(id) => {
             if (id === projectId) return
@@ -691,6 +732,11 @@ function AudioPageContent() {
           groups={projectGroups}
           folders={folders}
           searchResults={searchResults}
+          hasMoreGroups={searching ? groupSearchQuery.hasNextPage : projectGroupsQuery.hasNextPage}
+          loadingGroups={searching ? groupSearchQuery.isFetching : projectGroupsQuery.isFetching}
+          onMoreGroups={() => void (searching ? groupSearchQuery.fetchNextPage() : projectGroupsQuery.fetchNextPage())}
+          listError={searching ? groupSearchQuery.error : projectGroupsQuery.error}
+          onRetryGroups={() => void (searching ? groupSearchQuery.refetch() : projectGroupsQuery.refetch())}
           expandedFolders={expanded}
           onToggleFolder={expand}
           activeGroupId={groupId}
@@ -851,7 +897,14 @@ function AudioPageContent() {
                         dragIds={() => (checked.has(row.candidate.id) ? [...checked] : [row.candidate.id])}
                       />
                     ))}
-                    {rows.length === 0 && candidatesQuery.isSuccess && visibleOrders.length === 0 ? (
+                    {candidatesQuery.isPending ? <LoadingState /> : candidatesQuery.isError ? (
+                      <ErrorState
+                        title={t({ ko: '후보를 불러오지 못했어.', en: 'Could not load takes.' })}
+                        error={candidatesQuery.error}
+                        onRetry={() => void candidatesQuery.refetch()}
+                        isRetrying={candidatesQuery.isFetching}
+                      />
+                    ) : rows.length === 0 && visibleOrders.length === 0 ? (
                       <EmptyState size="compact" className="text-center" title={t({ ko: '후보 없음', en: 'No takes' })} />
                     ) : null}
                     <div ref={loadMoreRef} className="h-px" />
@@ -884,6 +937,7 @@ function AudioPageContent() {
                 {inboxEffects.length === 0 ? <option value="">{t({ ko: '효과음 없음', en: 'No effects' })}</option> : null}
                 {inboxEffects.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
               </Select>
+              {projectGroupsQuery.hasNextPage ? <Button variant="ghost" size="sm" disabled={projectGroupsQuery.isFetching} onClick={() => void projectGroupsQuery.fetchNextPage()}>{t({ ko: '효과음 더 불러오기', en: 'Load more effects' })}</Button> : null}
               <SelectionBarAction icon={FolderInput} label={t({ ko: '옮기기', en: 'Move' })} variant="default" disabled={!moveTarget} onClick={() => moveTarget && void moveTakes([...checked], moveTarget)} />
             </>
           )}

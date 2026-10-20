@@ -4,13 +4,13 @@ import { PromptCollectionModel } from '../../models/PromptCollection';
 import { PromptGroupModel } from '../../models/PromptGroup';
 import { danbooruBrowserService, resolveDanbooruDbInfo } from '../../services/danbooruBrowserService';
 
-function searchDanbooru(query: string, section: 'all' | 'tags' | 'artists' | 'characters', page: number, limit: number, relatedTagLimit: number) {
+async function searchDanbooru(query: string, section: 'all' | 'tags' | 'artists' | 'characters', page: number, limit: number, relatedTagLimit: number) {
   const available = resolveDanbooruDbInfo().available;
   if (!available) return { available: false, status: 'not_installed' as const };
   try {
     const params = { q: query, page, limit };
     const characters = section === 'all' || section === 'characters'
-      ? danbooruBrowserService.listCharacters({ ...params, relatedTagLimit }) : undefined;
+      ? await danbooruBrowserService.listCharacters({ ...params, relatedTagLimit }) : undefined;
     return {
       available: true,
       status: 'ready' as const,
@@ -69,7 +69,7 @@ export function registerPromptTools(server: McpServer): void {
               page,
               limit,
               source,
-              ...(source !== 'stored' ? { danbooru: searchDanbooru(query, danbooru_section, page, limit, related_tag_limit) } : {}),
+              ...(source !== 'stored' ? { danbooru: await searchDanbooru(query, danbooru_section, page, limit, related_tag_limit) } : {}),
             }),
           }],
         };

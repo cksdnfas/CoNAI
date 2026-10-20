@@ -10,7 +10,7 @@ import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, getPostRevision, listPostRevisionSummaries, updatePost } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScope, getPostRevision, listPostRevisionSummaries, updatePost } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { useRelativeTime } from './post-author'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
@@ -40,7 +40,7 @@ export function PostRevisionsDialog({ post, onClose }: { post: PostDetail; onClo
   const restore = useMutation({
     mutationFn: (revision: PostRevision) => updatePost(post.id, { title: revision.title, body: revision.body, expectedRevision: post.revision }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
+      await invalidatePostScope(queryClient, post.id, 'post')
       showSnackbar({ tone: 'info', message: t({ ko: '이전 판으로 되돌렸어.', en: 'Restored the earlier version.' }) })
       onClose()
     },

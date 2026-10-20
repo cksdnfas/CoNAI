@@ -21,6 +21,7 @@ import {
   deleteAudioComment,
   deleteAudioGroupCandidates,
   listAudioComments,
+  listAudioGroups,
   setAudioCommentStatus,
   updateAudioComment,
   updateAudioGroup,
@@ -93,7 +94,7 @@ export function AudioGroupDialog({ open, group, folders, takenLabels, onClose, o
   group: AudioGroup | null
   /** Folders of the effect's project. */
   folders: AudioFolder[]
-  /** File names of the other effects in the project, so a followed name stays unique. */
+  /** Loaded sibling labels for the preview; save checks all matching labels on the server. */
   takenLabels: Array<string | null>
   onClose: () => void
   onSaved: (group: AudioGroup) => void
@@ -134,7 +135,10 @@ export function AudioGroupDialog({ open, group, folders, takenLabels, onClose, o
     if (!group || !canSave) return
     setBusy(true)
     try {
-      onSaved(await updateAudioGroup(group.id, inbox ? { name } : { name, label: effectiveLabel, description, prompt, folder_id: folderId || null }))
+      const conflicts = !inbox && follows && effectiveLabel !== group.label
+        ? await listAudioGroups(group.project_id, { search: autoAudioLabel(name).replace(/_\[00\]$/, '') }) : []
+      const savedLabel = follows && effectiveLabel !== group.label ? autoAudioLabel(name, conflicts.filter((entry) => entry.id !== group.id).map((entry) => entry.label)) : effectiveLabel
+      onSaved(await updateAudioGroup(group.id, inbox ? { name } : { name, label: savedLabel, description, prompt, folder_id: folderId || null }))
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '실패했어.', en: 'Failed.' })), tone: 'error' })
     } finally {

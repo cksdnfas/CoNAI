@@ -251,13 +251,13 @@ test('audio legacy import: old SFX manager data into audio.db', { timeout: 18000
     assert.equal(result.export_options, 'imported')
     assert.ok(result.warnings.some((warning) => warning.includes('bad/label')))
 
-    const project = service.listAudioProjects().find((entry) => entry.name === '레거시 게임')!
+    const project = service.listAudioProjects().items.find((entry) => entry.name === '레거시 게임')!
     assert.equal(project.description, '던전 효과음')
     assert.ok(project.inbox_group_id, 'an imported project gets its inbox')
-    const groups = service.listAudioGroups(project.id)
+    const groups = service.listAudioGroups(project.id).items
     const snow = groups.find((group) => group.label === 'footstep_snow_[00]')!
     assert.equal(snow.name, '발자국 · 눈')
-    assert.ok(service.listAudioGroups(existing.id).some((group) => group.label === 'door_[00]'), 'groups of a merged project land in the existing one')
+    assert.ok(service.listAudioGroups(existing.id).items.some((group) => group.label === 'door_[00]'), 'groups of a merged project land in the existing one')
 
     const rows = audioDb.prepare('SELECT * FROM audio_candidates WHERE source_key LIKE ? ORDER BY source_key').all('legacy:%') as Array<Record<string, string | null>>
     const byKey = Object.fromEntries(rows.map((row) => [row.source_key, row]))
@@ -305,11 +305,11 @@ test('audio legacy import: old SFX manager data into audio.db', { timeout: 18000
   })
 
   await t.test('a renamed project is still recognised by its old id', async () => {
-    const project = service.listAudioProjects().find((entry) => entry.name === '레거시 게임')!
+    const project = service.listAudioProjects().items.find((entry) => entry.name === '레거시 게임')!
     service.updateAudioProject(project.id, { name: '레거시 게임 (이전)' })
     const result = await legacyImport.runLegacyAudioImport({ source: { path: legacyDir }, dryRun: false, accountId: null })
     assert.equal(result.projects.created, 0)
-    assert.equal(service.listAudioProjects().filter((entry) => entry.name.startsWith('레거시 게임')).length, 1)
+    assert.equal(service.listAudioProjects().items.filter((entry) => entry.name.startsWith('레거시 게임')).length, 1)
   })
 
   await t.test('legacy workflows register on the generation side as audio workflows, once', async () => {

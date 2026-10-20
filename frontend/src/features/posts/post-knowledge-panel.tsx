@@ -13,7 +13,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, cancelPostVote, getPostQuality, getPostsSettings, reviewPost, updatePostKnowledge, votePost } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScope, cancelPostVote, getPostQuality, getPostsSettings, reviewPost, updatePostKnowledge, votePost } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { KnowledgeSourcesEditor } from './post-knowledge-sources'
@@ -52,7 +52,7 @@ export function KnowledgeMetadataEditor({ post, onClose }: { post: PostDetail; o
   const [sources, setSources] = useState(post.knowledgeSources ?? [])
   const save = useMutation({
     mutationFn: () => updatePostKnowledge(post.id, { expectedRevision: post.revision, sources }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }); onClose() },
+    onSuccess: async () => { await invalidatePostScope(queryClient, post.id, 'post'); onClose() },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '출처를 저장하지 못했어.', en: 'Could not save sources.' })) }),
   })
   return (
@@ -72,7 +72,7 @@ export function KnowledgeReviewDialog({ post, action, issue, onClose }: { post: 
   const title = action === 'verify' ? t({ ko: '현재 판 검증', en: 'Verify current version' }) : action === 'resolve_issue' ? t({ ko: '문제 해결 확인', en: 'Resolve issue' }) : action === 'report_error' ? t({ ko: '오류 제보', en: 'Report an error' }) : t({ ko: '재검토 요청', en: 'Request review' })
   const save = useMutation({
     mutationFn: () => reviewPost(post.id, { contentVersion: post.knowledge!.contentVersion, action, reason, evidenceQuote: quote, ...(issue ? { issueId: issue.id } : {}) }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }); onClose() },
+    onSuccess: async () => { await invalidatePostScope(queryClient, post.id, 'post'); onClose() },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '검토를 저장하지 못했어.', en: 'Could not save the review.' })) }),
   })
   return (
@@ -105,7 +105,7 @@ export function PostVoteBar({ post }: { post: PostDetail }) {
   const [downOpen, setDownOpen] = useState(false)
   const [reasonCode, setReasonCode] = useState<string | null>(null)
   const [reason, setReason] = useState('')
-  const refresh = () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
+  const refresh = () => invalidatePostScope(queryClient, post.id, 'post')
   const vote = useMutation({
     mutationFn: (input: { quality: PostAssessmentQuality; reasonCode?: string; reason?: string }) => votePost(post.id, {
       contentVersion: post.knowledge!.contentVersion, idempotencyKey: crypto.randomUUID(), quality: input.quality,

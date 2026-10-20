@@ -3,19 +3,19 @@ import { Chip } from '@/components/ui/chip'
 import { RowPicker, type RowPickerItem } from '@/components/ui/row-picker'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import type { ChatProfileSummary, CodexChatThread } from '@/lib/api-codex-chat'
+import type { ChatProfileSummary, CodexChatThreadSummary } from '@/lib/api-codex-chat'
 import { GroupAvatarStack } from './chat-group'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { parseServerDate } from '@/lib/server-time'
 
 /** A room's name as the chat list gives it: its title, else the character it talks to. */
-export function chatRoomName(thread: Pick<CodexChatThread, 'id' | 'title' | 'profile_id'>, profilesById: ReadonlyMap<number, ChatProfileSummary>, untitled: string) {
+export function chatRoomName(thread: Pick<CodexChatThreadSummary, 'id' | 'title' | 'profile_id'>, profilesById: ReadonlyMap<number, ChatProfileSummary>, untitled: string) {
   return thread.title.trim() || (thread.profile_id !== null ? profilesById.get(thread.profile_id)?.name : undefined) || untitled
 }
 
 /** The face of a room: its character, or the first members of a group. */
 export function ChatRoomFace({ thread, profilesById, size = 'md', ringClassName = 'ring-surface-high' }: {
-  thread: Pick<CodexChatThread, 'kind' | 'profile_id' | 'member_profile_ids'>
+  thread: Pick<CodexChatThreadSummary, 'kind' | 'profile_id' | 'member_profile_ids'>
   profilesById: ReadonlyMap<number, ChatProfileSummary>
   size?: 'sm' | 'md'
   /** The surface behind a group's overlapping faces. */
@@ -41,7 +41,7 @@ export function ChatRoomFace({ thread, profilesById, size = 'md', ringClassName 
 
 /** Pick one chat room by its face, its people and its latest line (pinned first, then the latest activity). */
 export function ChatRoomPicker({ threads, profilesById, value, onChange, disabled }: {
-  threads: CodexChatThread[]
+  threads: CodexChatThreadSummary[]
   profilesById: ReadonlyMap<number, ChatProfileSummary>
   value: string
   onChange: (threadId: string) => void
@@ -55,7 +55,7 @@ export function ChatRoomPicker({ threads, profilesById, value, onChange, disable
       ? formatDate(date, { hour: 'numeric', minute: '2-digit' })
       : formatDate(date, date.getFullYear() === today.getFullYear() ? { month: 'short', day: 'numeric' } : { dateStyle: 'medium' })
     // The server lists the latest activity first; pinned rooms go on top and the archive to the end, as in the chat list.
-    const order = (thread: CodexChatThread) => (thread.archived ? 2 : thread.pinned ? 0 : 1)
+    const order = (thread: CodexChatThreadSummary) => (thread.archived ? 2 : thread.pinned ? 0 : 1)
     return [...threads].sort((a, b) => order(a) - order(b)).map((thread) => {
       const name = chatRoomName(thread, profilesById, untitled)
       const people = thread.kind === 'group'

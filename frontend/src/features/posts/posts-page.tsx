@@ -12,20 +12,21 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { LoadingState } from '@/components/ui/loading-state'
+import { LoadingState, Spinner } from '@/components/ui/loading-state'
 import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
 import { TextTabs } from '@/components/common/text-tabs'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageFreeText, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, cancelPostBotRun, createPostCategory, createPostComment, deletePost, deletePostCategory, deletePostComment, getPost, getPostRevision, getPostsSettings, listPostCategories, listPostRevisionSummaries, listPosts, listPostTags, restorePostKnowledge, setPostCommentHidden, updatePost, updatePostCategory, updatePostComment } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScope, cancelPostBotRun, createPostCategory, createPostComment, deletePost, deletePostCategory, deletePostComment, getPost, getPostRevision, getPostsSettings, listPostCategories, listPostRevisionSummaries, listPosts, listPostTags, restorePostKnowledge, setPostCommentHidden, updatePost, updatePostCategory, updatePostComment } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { PostCategoryDialog } from './post-category-dialog'
 import { flattenCategories, PostEditor } from './post-editor'
 import { EMPTY_COMMENT_DRAFT, type PostCommentDraft } from './post-comments'
 import { PostActions } from './post-actions'
+import { LoadMoreSentinel } from './post-attach-shared'
 import { PostCards, PostFeed, PostSns } from './post-list'
 import { categoryPath, PostView } from './post-view'
 import { usePostPermissions } from './use-post-permissions'
@@ -134,7 +135,7 @@ export function PostsPage() {
   const openTab = (next: ListTab) => openList(TAB_PARAMS[next])
   const restoreTrash = useMutation({
     mutationFn: (post: Pick<PostSummary, 'id' | 'revision'>) => restorePostKnowledge(post.id, post.revision),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
+    onSuccess: (_result, post) => invalidatePostScope(queryClient, post.id, 'post'),
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '문서를 복원하지 못했어.', en: 'Could not restore the document.' })) }),
   })
 
@@ -165,15 +166,14 @@ export function PostsPage() {
       if (!openPostData || !body) throw new Error(t({ ko: '올릴 댓글 내용이 없어.', en: 'There is no comment to post.' }))
       return createPostComment(openPostData.id, { body, parentId: reply?.to ?? null })
     },
-    onSuccess: async (_comment, target) => {
+    onSuccess: async (comment, target) => {
       setCommentDraft((current) => (target === 'reply' ? { ...current, reply: null } : { ...current, top: '' }))
-      await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
+      await invalidatePostScope(queryClient, comment.postId, 'comment')
     },
   })
   const tagNames = (tagsQuery.data ?? []).slice(0, 100).map((item) => item.name)
   const listTabs: ListTab[] = ['all', ...(knowledgeEnabled ? ['knowledge' as const] : []), ...(permissions.canWrite ? ['draft' as const] : []),
     ...(knowledgeEnabled && (permissions.canWrite || permissions.isAdmin) ? ['trash' as const] : []), ...(permissions.isAdmin ? ['hidden' as const] : [])]
-  const refreshPosts = () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
   const draftedComment = Boolean(commentDraft.top.trim() || commentDraft.reply?.text.trim())
 
   useChatPageRegistration({
@@ -286,7 +286,7 @@ export function PostsPage() {
       }
       else if (id === 'posts.delete' && openPostData && !openPostData.knowledge) {
         await deletePost(openPostData.id)
-        await refreshPosts()
+        await invalidatePostScope(queryClient, openPostData.id, 'post')
         openList()
       } else if (id === 'posts.restore_revision' && openPostData && !openPostData.knowledge) {
         const selected = revisions.find((item) => item.revision === Number(args.revision))
@@ -294,39 +294,39 @@ export function PostsPage() {
         const revision = await getPostRevision(openPostData.id, selected.revision)
         assertCurrent()
         await updatePost(openPostData.id, { title: revision.title, body: revision.body, expectedRevision: openPostData.revision })
-        await refreshPosts()
+        await invalidatePostScope(queryClient, openPostData.id, 'post')
       } else if (id === 'posts.comment_update' && commentDraft.edit) {
         const comment = editableComments.find((item) => item.id === commentDraft.edit?.id)
         if (!comment) throw new Error('고칠 댓글을 찾을 수 없어.')
         await updatePostComment(comment.id, { body: commentDraft.edit.text.trim(), expectedRevision: comment.revision })
         setCommentDraft((current) => ({ ...current, edit: null }))
-        await refreshPosts()
+        await invalidatePostScope(queryClient, comment.postId, 'comment')
       } else if (id === 'posts.comment_delete') {
         if (!editableComments.some((comment) => comment.id === Number(args.id))) throw new Error('지울 수 있는 댓글이 아니야.')
         await deletePostComment(Number(args.id))
-        await refreshPosts()
+        await invalidatePostScope(queryClient, postId, 'comment')
       } else if (id === 'posts.comment_hide') {
         if (!shownComments.some((comment) => comment.id === Number(args.id))) throw new Error('이 글에 없는 댓글이야.')
         await setPostCommentHidden(Number(args.id), args.hidden === true)
-        await refreshPosts()
+        await invalidatePostScope(queryClient, postId, 'comment')
       } else if (id === 'posts.bot_cancel') {
         if (!activeRuns.some((run) => run.id === Number(args.id))) throw new Error('답하는 중인 봇 호출이 아니야.')
         await cancelPostBotRun(Number(args.id))
-        await refreshPosts()
+        await invalidatePostScope(queryClient, postId, 'bot-run')
       } else if (id === 'posts.category_create') {
         await createPostCategory({ name: String(args.name), parentId: Number(args.parentId) || null, ...(typeof args.description === 'string' ? { description: args.description } : {}) })
-        await refreshPosts()
+        await invalidatePostScope(queryClient, null, 'category')
       } else if (id === 'posts.category_update') {
         await updatePostCategory(Number(args.id), {
           ...(typeof args.name === 'string' ? { name: args.name } : {}),
           ...(args.parentId !== undefined ? { parentId: Number(args.parentId) || null } : {}),
           ...(typeof args.description === 'string' ? { description: args.description } : {}),
         })
-        await refreshPosts()
+        await invalidatePostScope(queryClient, null, 'category')
       } else if (id === 'posts.category_delete') {
         const deleted = categories.find((category) => category.id === Number(args.id))
         await deletePostCategory(Number(args.id))
-        await refreshPosts()
+        await invalidatePostScope(queryClient, null, 'category')
         if (deleted && categoryId === deleted.id) filterCategory(deleted.parentId)
       } else throw new Error('게시판에 없는 작업이야.')
     },
@@ -514,7 +514,10 @@ export function PostsPage() {
       <>
         {layout === 'sns' ? <PostSns {...listProps} onReachEnd={() => { if (listQuery.hasNextPage && !listQuery.isFetchingNextPage) void listQuery.fetchNextPage() }} />
           : layout === 'cards' ? <PostCards {...listProps} /> : <PostFeed {...listProps} />}
-        {layout !== 'sns' && listQuery.hasNextPage ? (
+        {/* Only the virtualized cards auto-load; the feed keeps an explicit button so its DOM grows on request. */}
+        {layout === 'cards' ? <LoadMoreSentinel rootMargin="800px" enabled={Boolean(listQuery.hasNextPage) && !listQuery.isFetchingNextPage} onVisible={() => void listQuery.fetchNextPage()} /> : null}
+        {layout === 'cards' && listQuery.isFetchingNextPage ? <div className="flex justify-center py-4"><Spinner /></div> : null}
+        {layout === 'feed' && listQuery.hasNextPage ? (
           <div className="flex justify-center pt-4">
             <Button variant="ghost" size="sm" disabled={listQuery.isFetchingNextPage} onClick={() => void listQuery.fetchNextPage()}>{t({ ko: '더 보기', en: 'Load more' })}</Button>
           </div>

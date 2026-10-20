@@ -243,7 +243,14 @@ export const ChatJudgePresetStore = {
   /** The id when that preset exists, else null (a profile whose preset went missing has none). */
   existing(presetId: number | null | undefined) {
     if (!presetId) return null
-    return getUserSettingsDb().prepare('SELECT 1 FROM chat_judge_presets WHERE id = ?').get(presetId) ? presetId : null
+    return ChatJudgePresetStore.existingIds([presetId])[0] ?? null
+  },
+
+  /** Batch existence checks without preset hydration or usage scans. */
+  existingIds(presetIds: number[]): number[] {
+    const ids = [...new Set(presetIds)]
+    if (!ids.length) return []
+    return (getUserSettingsDb().prepare(`SELECT id FROM chat_judge_presets WHERE id IN (${ids.map(() => '?').join(', ')})`).all(...ids) as Array<{ id: number }>).map((row) => row.id)
   },
 
   /** A preset as it would be saved, without saving it (testing an unsaved draft). */

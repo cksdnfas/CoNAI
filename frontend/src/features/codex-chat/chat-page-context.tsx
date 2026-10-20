@@ -3,11 +3,12 @@ import { type PageSettingsScopeId } from '@conai/shared'
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type PropsWithChildren, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Monitor } from 'lucide-react'
-import { CHAT_PAGE_ACTION_LIMITS, normalizeChatPageValue, chatPageActionLeavesScreen, chatPageActionTier, chatPagePatch, chatPagePermission, chatPageTarget, validateChatPageArguments, type ChatPageCommandEvent, normalizeChatPageSnapshot, requireChatPageTarget, requireChatPageActionState, type ChatPageAction, type ChatPageData, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
+import { CHAT_PAGE_ACTION_LIMITS, CHAT_PAGE_ACTION_PERMISSIONS, chatPageActionAllowed, normalizeChatPageValue, chatPageActionLeavesScreen, chatPageActionTier, chatPagePatch, chatPagePermission, chatPageTarget, validateChatPageArguments, type ChatPageCommandEvent, normalizeChatPageSnapshot, requireChatPageTarget, requireChatPageActionState, type ChatPageAction, type ChatPageData, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useI18n } from '@/i18n'
 import { acknowledgeChatPageProposal, answerChatPageCommand, checkChatPageProposal } from '@/lib/api-codex-chat'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
@@ -49,6 +50,14 @@ type PageApi = {
   form: () => { title: string; fields: ChatPageField[] } | null
   /** Fill some of the screen's inputs by field id; every value is checked against its field before anything changes. */
   fillForm: (values: Record<string, unknown>) => void
+  /** Pages register their operations (and unsaved state) for a connected chat or while the command palette watches. */
+  actionsWanted: boolean
+  /** The command palette's entries on this screen: native `view` operations without required input. Empty unless watched. */
+  commandActions: ChatPageAction[]
+  /** Watch `commandActions` until the returned cleanup runs. */
+  watchCommandActions: () => () => void
+  /** Run one of `commandActions` through the same checks a chat command gets; never a commit. */
+  runCommandAction: (id: string) => Promise<void>
 }
 const PageContext = createContext<PageApi | null>(null)
 
@@ -111,6 +120,24 @@ function withNavigation(editor: Editor | null, navigation: Editor | undefined): 
   }
 }
 
+/** The one way a registered operation runs, for chat commands and the command palette alike. */
+async function runRegisteredAction(editor: Editor, actionId: string, tier: 'view' | 'draft' | 'direct', input: unknown, assertCurrent: () => void) {
+  const action = editor.actions?.find((item) => item.id === actionId)
+  if (!action || chatPageActionTier(action.id, action) === 'commit' || chatPageActionTier(action.id, action) !== tier) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
+  if (chatPageActionLeavesScreen(action.id, action) && editor.dirty) throw new Error('저장하지 않은 변경이 있어. 사용자가 저장하거나 버린 뒤에 다시 해.')
+  const args = validateChatPageArguments(action.schema, input) as Record<string, ChatPageData>
+  if (!editor.applyAction) throw new Error('페이지 작업 편집기가 닫혔어.')
+  return { action, undo: await editor.applyAction(action.id, args, assertCurrent) }
+}
+
+const NO_ACTIONS: ChatPageAction[] = []
+/** Palette entries: native operations that only move or open something and need no input. Extension tiers are checked on the server, so they stay with the chat. */
+function isCommandAction(action: ChatPageAction, path: string, permissionKeys: string[] | undefined) {
+  if (!Object.hasOwn(CHAT_PAGE_ACTION_PERMISSIONS, action.id) || !chatPageActionAllowed(path, action.id) || chatPageActionTier(action.id) !== 'view' || action.schema.required?.length) return false
+  const permission = CHAT_PAGE_ACTION_PERMISSIONS[action.id]
+  return !permission || hasAuthPermission(permissionKeys, permission)
+}
+
 function validateWorkflow(snapshot: ChatPageSnapshot | null, proposal: WorkflowPageProposal, undo: boolean, record?: WorkflowUndo) {
   if (!snapshot?.workflow) throw new Error('워크플로 편집기를 채팅에 연결해줘.')
   requireChatPageTarget(snapshot, proposal.page)
@@ -150,6 +177,12 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       return runner(id, args, assertCurrent, nativeRevision)
     } }, navigation)
   }, [primaryEditor, workflowBrowser, navigation])
+  const [commandWatchers, setCommandWatchers] = useState(0)
+  const watchCommandActions = useCallback(() => {
+    setCommandWatchers((count) => count + 1)
+    return () => setCommandWatchers((count) => count - 1)
+  }, [])
+  const commandActions = useMemo(() => commandWatchers ? (activeEditor?.actions ?? []).filter((action) => isCommandAction(action, location.pathname, auth?.permissionKeys)) : NO_ACTIONS, [commandWatchers, activeEditor, location.pathname, auth?.permissionKeys])
   const fallbackTitle = t({
     ko: ({ '/': '이미지 라이브러리', '/access': '접근 가능한 페이지', '/chat': '채팅', '/generation': '이미지 생성', '/prompts': '프롬프트', '/groups': '그룹', '/wildcards': '와일드카드', '/files': '파일 보관함', '/upload': '업로드', '/settings': '설정', '/wallpaper': '배경화면', '/wallpaper/runtime': '배경화면 실행' } as Record<string, string>)[location.pathname] ?? (location.pathname.startsWith('/groups/') ? '그룹 상세' : '이미지 상세'),
     en: ({ '/': 'Image library', '/access': 'Available pages', '/chat': 'Chat', '/generation': 'Image generation', '/prompts': 'Prompts', '/groups': 'Groups', '/wildcards': 'Wildcards', '/files': 'File store', '/upload': 'Upload', '/settings': 'Settings', '/wallpaper': 'Wallpaper', '/wallpaper/runtime': 'Wallpaper runtime' } as Record<string, string>)[location.pathname] ?? (location.pathname.startsWith('/groups/') ? 'Group detail' : 'Image detail'),
@@ -170,8 +203,8 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     ...(activeEditor?.dirty ? { dirty: true as const } : {}),
     data: { view: new URLSearchParams(location.search).get('tab') ?? new URLSearchParams(location.search).get('section') ?? '', ...(activeEditor?.data ?? {}) },
   } : null, [enabled, connection, activeEditor, instanceId, location.pathname, location.search, title])
-  const current = useRef({ snapshot, editor: activeEditor })
-  useLayoutEffect(() => { current.current = { snapshot, editor: activeEditor } })
+  const current = useRef({ snapshot, editor: activeEditor, commandActions })
+  useLayoutEffect(() => { current.current = { snapshot, editor: activeEditor, commandActions } })
   useEffect(() => { statesRef.current = new Map(); workflowUndos.current.clear(); actionUndos.current.clear(); setStates(statesRef.current) }, [accountKey])
   const toggle = useCallback(() => setConnection((old) => old?.accountKey === accountKey ? null : { id: createRandomUuid(), accountKey }), [accountKey])
   const disconnect = useCallback(() => setConnection(null), [])
@@ -319,13 +352,8 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
         if (event.type === 'action' && event.tier === 'draft' && live.snapshot!.kind !== 'extension' && current.current.snapshot!.revision !== live.snapshot!.revision) throw new Error('그사이 입력이나 선택이 바뀌었어. 지금 화면을 읽고 다시 요청해줘.')
       }
       if (event.type === 'action') {
-        const action = live.snapshot.actions?.find((item) => item.id === event.actionId)
-        if (!action || chatPageActionTier(action.id, action) === 'commit' || chatPageActionTier(action.id, action) !== event.tier) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
         if (event.tier === 'direct' && (!event.revision || live.snapshot.revision !== event.revision)) throw new Error('그사이 화면이나 선택이 바뀌었어. get_current_page로 다시 읽고 요청해줘.')
-        if (chatPageActionLeavesScreen(action.id, action) && live.snapshot.dirty) throw new Error('저장하지 않은 변경이 있어. 사용자가 저장하거나 버린 뒤에 다시 해.')
-        const args = validateChatPageArguments(action.schema, event.arguments) as Record<string, ChatPageData>
-        if (!live.editor.applyAction) throw new Error('페이지 작업 편집기가 닫혔어.')
-        const undo = await live.editor.applyAction(action.id, args, assertCurrent)
+        const { action, undo } = await runRegisteredAction(live.editor, event.actionId, event.tier, event.arguments, assertCurrent)
         record({ id: event.commandId, threadId: event.threadId, label: action.label, tier: event.tier, ...(undo && event.tier === 'draft' ? { undo: () => { assertTargetCurrent(); if (!undo.isCurrent()) throw new Error('그 뒤에 입력이 바뀌어서 되돌리지 않았어.'); undo.restore() } } : {}) })
       } else if (event.type === 'workflow') {
         if (!live.snapshot.workflow || !live.editor.applyWorkflow) throw new Error('노드 워크플로 편집기가 닫혔어.')
@@ -354,6 +382,14 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       if (event.type !== 'capture') drivingTimer.current = window.setTimeout(() => { drivingTimer.current = null; setDriving(false) }, 1500)
     }
   }, [record])
+  const runCommandAction = useCallback(async (id: string) => {
+    const { editor, commandActions: listed } = current.current
+    if (!editor || !listed.some((action) => action.id === id)) throw new Error('이 화면에서 바로 실행할 수 없는 작업이야.')
+    await runRegisteredAction(editor, id, 'view', {}, () => {
+      if (current.current.editor?.instanceId !== editor.instanceId) throw new Error('그사이 화면이 바뀌었어.')
+    })
+  }, [])
+  const actionsWanted = enabled || commandWatchers > 0
   const isFilled = useCallback((fieldId: string) => {
     if (!snapshot) return false
     const value = filled.get(`${snapshot.instanceId}:${fieldId}`)
@@ -367,7 +403,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
       onStatusChange: () => {}, onResync: () => {}, onSessionExpired: () => {},
     })
   }, [connectionId, runCommand])
-  const api = useMemo<PageApi>(() => ({ snapshot, available, enabled, toggle, disconnect, capture, register, states, apply, workflowProblem, applyWorkflow, actionProblem, applyAction, actionUndos: actionUndos.current, activity, undoActivity, driving, isFilled, form, fillForm }), [snapshot, available, enabled, toggle, disconnect, capture, register, states, apply, workflowProblem, applyWorkflow, actionProblem, applyAction, activity, undoActivity, driving, isFilled, form, fillForm])
+  const api = useMemo<PageApi>(() => ({ snapshot, available, enabled, toggle, disconnect, capture, register, states, apply, workflowProblem, applyWorkflow, actionProblem, applyAction, actionUndos: actionUndos.current, activity, undoActivity, driving, isFilled, form, fillForm, actionsWanted, commandActions, watchCommandActions, runCommandAction }), [snapshot, available, enabled, toggle, disconnect, capture, register, states, apply, workflowProblem, applyWorkflow, actionProblem, applyAction, activity, undoActivity, driving, isFilled, form, fillForm, actionsWanted, commandActions, watchCommandActions, runCommandAction])
   return <PageContext.Provider value={api}><PageNavigationRegistration title={fallbackTitle} />{driving ? <ChatPageDrivingBar /> : null}{children}</PageContext.Provider>
 }
 
@@ -397,9 +433,12 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
   const workflowApplyRef = useRef(input?.applyWorkflow)
   const actionApplyRef = useRef(input?.applyAction)
   useLayoutEffect(() => { applyRef.current = input?.apply; workflowApplyRef.current = input?.applyWorkflow; actionApplyRef.current = input?.applyAction })
-  // Without a page provider (public pages) nothing registers, so the page is not serialized on every render.
-  const description = input && register ? JSON.stringify({ title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields, workflow: input.workflow, actions: input.actions, data: input.data, priority: input.priority, dirty: input.dirty }) : null
-  const revisionKey = `${description}:${input?.localRevision ?? ''}`
+  // Disconnected plugin forms still need fields/setters, but not the chat's workflow, actions or page data.
+  const connected = page?.enabled === true
+  // The command palette also needs the operations and unsaved state, only while it is open.
+  const listsActions = page?.actionsWanted === true
+  const description = input && register ? JSON.stringify({ title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields, priority: input.priority, ...(connected ? { workflow: input.workflow, data: input.data } : {}), ...(listsActions ? { actions: input.actions, dirty: input.dirty } : {}) }) : null
+  const revisionKey = `${description}:${connected ? input?.localRevision ?? '' : ''}`
   const revision = useMemo(() => ({ key: revisionKey, id: createRandomUuid() }), [revisionKey]).id
   const kind = input?.kind
   const resourceId = input?.resourceId

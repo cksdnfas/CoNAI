@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { WildcardRecord } from '@/lib/api-wildcards'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 import {
   filterWildcardTree,
   flattenWildcardTree,
@@ -65,6 +66,7 @@ export function useWildcardWorkspaceBrowser({
   searchQuery = '',
 }: UseWildcardWorkspaceBrowserOptions): UseWildcardWorkspaceBrowserResult {
   const [selectedWildcardId, setSelectedWildcardId] = useState<number | null>(null)
+  const debouncedSearch = useDebouncedValue(searchQuery)
 
   const treeNodes = useMemo(
     () => filterWildcardTree(records, (node) => matchesWorkspaceTab(node, activeTab)),
@@ -73,7 +75,7 @@ export function useWildcardWorkspaceBrowser({
   const entries = useMemo(() => flattenWildcardTree(treeNodes), [treeNodes])
 
   const filteredEntries = useMemo(() => {
-    const normalizedSearch = searchQuery.trim().toLowerCase()
+    const normalizedSearch = debouncedSearch.trim().toLowerCase()
     if (!normalizedSearch) {
       return entries
     }
@@ -82,9 +84,9 @@ export function useWildcardWorkspaceBrowser({
       const pathText = entry.path.join(' / ').toLowerCase()
       return entry.wildcard.name.toLowerCase().includes(normalizedSearch) || pathText.includes(normalizedSearch)
     })
-  }, [entries, searchQuery])
+  }, [entries, debouncedSearch])
 
-  const hasSearch = searchQuery.trim().length > 0
+  const hasSearch = debouncedSearch.trim().length > 0
   const selection = useMemo(
     () => resolveWildcardWorkspaceSelection({
       entries,

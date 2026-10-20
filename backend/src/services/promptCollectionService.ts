@@ -51,6 +51,10 @@ export class PromptCollectionService {
     return PromptCollectionMutationService.deletePrompt(id, type);
   }
 
+  static deletePrompts(ids: number[], type: 'positive' | 'negative' | 'auto' = 'positive'): number[] {
+    return PromptCollectionMutationService.deletePrompts(ids, type);
+  }
+
   static async removeFromImage(
     prompt: string | null,
     negativePrompt: string | null,
@@ -58,6 +62,10 @@ export class PromptCollectionService {
     autoTags: string | null = null,
   ): Promise<void> {
     return PromptCollectionIngestService.removeFromImage(prompt, negativePrompt, characterPromptText, autoTags);
+  }
+
+  static restoreImageUsage(prompt: string | null, negativePrompt: string | null, characterPromptText: string | null = null, autoTags: string | null = null): void {
+    PromptCollectionIngestService.restoreImageUsage(prompt, negativePrompt, characterPromptText, autoTags);
   }
 
   static async getTopPrompts(limit: number = 20, type: 'positive' | 'negative' | 'auto' | 'both' = 'both') {

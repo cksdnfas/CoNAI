@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getPromptGroupStatistics, getPromptGroups, getPromptStatistics, getTopPrompts, searchPromptCollection } from '@/lib/api-prompts'
+import { getPromptGroups, getPromptStatistics, getTopPrompts, searchPromptCollection } from '@/lib/api-prompts'
 import type { PromptSortBy, PromptSortOrder, PromptTypeFilter } from '@/types/prompt'
 import { getPromptTypeTotal, getSortedSiblingGroups } from './prompt-page-utils'
 
@@ -29,10 +29,8 @@ export function usePromptPageQueries({ promptType, selectedGroupId, searchQuery,
     queryFn: () => getTopPrompts({ type: promptType, limit: 9 }),
   })
 
-  const groupStatisticsQuery = useQuery({
-    queryKey: ['prompt-group-statistics', promptType],
-    queryFn: () => getPromptGroupStatistics(promptType),
-  })
+  // The sidebar summaries already contain the same direct counts.
+  const groupStatisticsQuery = groupsQuery
 
   const promptSearchQuery = useQuery({
     queryKey: ['prompt-search', promptType, selectedGroupId, searchQuery, page, sortBy, sortOrder],

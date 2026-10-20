@@ -11,7 +11,7 @@ import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Section } from '@/components/ui/section'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, cancelPostBotRun, cancelPostEvaluation, listPostBotRuns, listPostEvaluations, permanentlyDeletePostKnowledge, previewPostKnowledgePermanentDelete } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScope, cancelPostBotRun, cancelPostEvaluation, listPostBotRuns, listPostEvaluations, permanentlyDeletePostKnowledge, previewPostKnowledgePermanentDelete } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { usePostPermissions } from './use-post-permissions'
 
@@ -49,17 +49,17 @@ export function PostKnowledgePermanentDeleteDialog({ post, onClose, onDeleted }:
   const botRuns = useQuery({ queryKey: [POSTS_QUERY_KEY, 'bot-runs', permissions.viewerKey, post.id], queryFn: () => listPostBotRuns(post.id), enabled: hasActiveBots })
   const cancelEvaluation = useMutation({
     mutationFn: (requestId: string) => cancelPostEvaluation(post.id, requestId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
+    onSuccess: () => invalidatePostScope(queryClient, post.id, 'run'),
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '평가를 취소하지 못했어.', en: 'Could not cancel evaluation.' })) }),
   })
   const cancelBot = useMutation({
     mutationFn: (runId: number) => cancelPostBotRun(runId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
+    onSuccess: () => invalidatePostScope(queryClient, post.id, 'bot-run'),
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '봇 작업을 취소하지 못했어.', en: 'Could not cancel the bot task.' })) }),
   })
   const remove = useMutation({
     mutationFn: (data: PostKnowledgePermanentDeletePreview) => permanentlyDeletePostKnowledge(post.id, { expectedRevision: data.expectedRevision, previewToken: data.previewToken, confirm: true }),
-    onSuccess: async () => { onDeleted?.(); await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }); onClose(); showSnackbar({ message: t({ ko: '지식 문서를 영구 삭제했어. 파일은 보존했어.', en: 'The knowledge document was permanently deleted. Files were retained.' }) }) },
+    onSuccess: async () => { onDeleted?.(); await invalidatePostScope(queryClient, post.id, 'post'); onClose(); showSnackbar({ message: t({ ko: '지식 문서를 영구 삭제했어. 파일은 보존했어.', en: 'The knowledge document was permanently deleted. Files were retained.' }) }) },
     onError: (error) => { setConfirmedToken(null); showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '영구 삭제하지 못했어.', en: 'Could not permanently delete the document.' })) }); void preview.refetch() },
   })
   const data = preview.data

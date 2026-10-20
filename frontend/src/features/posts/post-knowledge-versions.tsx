@@ -9,7 +9,7 @@ import { LoadingState } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, listPostKnowledgeVersions, restorePostKnowledgeVersion } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScope, listPostKnowledgeVersions, restorePostKnowledgeVersion } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { KnowledgeSources } from './post-knowledge-sources'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
@@ -26,7 +26,7 @@ export function PostKnowledgeVersionsDialog({ post, onClose }: { post: PostDetai
   const mediaContext = useMemo(() => ({ postId: post.id, mediaHashes: mediaHashesOf(picked?.body ?? ''), knowledgeContentVersion: picked?.contentVersion }), [post.id, picked?.body, picked?.contentVersion])
   const restore = useMutation({
     mutationFn: () => restorePostKnowledgeVersion(post.id, picked!.contentVersion, post.revision),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }); onClose() },
+    onSuccess: async () => { await invalidatePostScope(queryClient, post.id, 'post'); onClose() },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '내용 판을 복원하지 못했어.', en: 'Could not restore the content version.' })) }),
   })
   return (

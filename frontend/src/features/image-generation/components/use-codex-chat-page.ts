@@ -5,6 +5,7 @@ import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-tr
 import { useChatPresetInsertion } from './use-chat-preset-insertion'
 import { useI18n } from '@/i18n'
 import type { CodexFormDraft } from './codex-generation-panel'
+import { getImageDraftRevision } from '../image-generation-shared'
 
 export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStateAction<CodexFormDraft>>, models: Array<{ id: string }>) {
   const { t } = useI18n()
@@ -12,7 +13,7 @@ export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStat
   const presets = useChatPresetInsertion(['prompt', 'negativePrompt'])
   const commit = useChatDraftTransaction(form, setForm)
   useChatPageRegistration({
-    kind: 'codex', title: t({ ko: 'Codex 이미지 생성', en: 'Codex image generation' }), resourceId: 'codex', localRevision: JSON.stringify(form),
+    kind: 'codex', title: t({ ko: 'Codex 이미지 생성', en: 'Codex image generation' }), resourceId: 'codex', localRevision: getImageDraftRevision(form),
     fields: [
       { id: 'prompt', label: t({ ko: '프롬프트', en: 'Prompt' }), type: 'text', value: form.prompt },
       { id: 'negativePrompt', label: t({ ko: '부정 프롬프트', en: 'Negative prompt' }), type: 'text', value: form.negativePrompt },

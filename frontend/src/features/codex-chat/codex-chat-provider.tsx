@@ -385,8 +385,31 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setLiveTurn({ threadId: sentThreadId, userText: text, userRouting: replyingTo ? { replyTo: replyingTo.quote, recipients: [] } : undefined, flags: shownFlags, attachments, mediaAttachments, text: '', reasoning: '', toolCalls: new Map(), replies: isGroup ? [] : undefined })
     let accepted = false
 
+    // Preserve event order (including replacement text and member completion), but publish at most once per frame.
+    let frame: number | null = null
+    let pending: Array<(current: CodexChatLiveTurn | null) => CodexChatLiveTurn | null> = []
+    const flush = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame)
+      frame = null
+      const changes = pending
+      pending = []
+      if (changes.length && streamAbortRef.current === controller && !controller.signal.aborted) {
+        setLiveTurn((current) => changes.reduce((value, change) => change(value), current))
+      }
+    }
+    const updateLiveTurn = (change: (current: CodexChatLiveTurn | null) => CodexChatLiveTurn | null) => {
+      pending.push(change)
+      frame ??= window.requestAnimationFrame(flush)
+    }
+    const discard = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame)
+      frame = null
+      pending = []
+    }
+    controller.signal.addEventListener('abort', discard, { once: true })
+
     /** Group rooms: change one member's streaming reply (added if its first event comes before `speaker`). */
-    const updateReply = (profileId: number, change: (reply: CodexChatLiveReply) => CodexChatLiveReply) => setLiveTurn((current) => {
+    const updateReply = (profileId: number, change: (reply: CodexChatLiveReply) => CodexChatLiveReply) => updateLiveTurn((current) => {
       if (!current) return current
       const replies = current.replies ?? []
       const existing = replies.find((reply) => reply.profileId === profileId)
@@ -398,7 +421,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
       }
     })
     /** Group rooms: keep only the replies of members still answering. */
-    const keepSpeakers = (speakers: number[], queue: number[]) => setLiveTurn((current) => current ? {
+    const keepSpeakers = (speakers: number[], queue: number[]) => updateLiveTurn((current) => current ? {
       ...current,
       replies: (current.replies ?? []).filter((reply) => speakers.includes(reply.profileId)),
       queue,
@@ -408,6 +431,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     const putMessage = (message: CodexChatMessage) => queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(sentThreadId), (current) => current ? {
       ...current,
       running: null,
+      messageCount: current.messageCount === undefined ? undefined : current.messageCount + (current.messages.some((entry) => entry.id === message.id) ? 0 : 1),
       messages: current.messages.some((entry) => entry.id === message.id)
         ? current.messages.map((entry) => entry.id === message.id ? message : entry)
         : [...current.messages, message],
@@ -419,7 +443,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         if (isGroup && event.type === 'user') {
           accepted = true
           putMessage(event.message)
-          setLiveTurn((current) => current ? { ...current, userText: '', userRouting: undefined, flags: [], attachments: [], mediaAttachments: [] } : current)
+          updateLiveTurn((current) => current ? { ...current, userText: '', userRouting: undefined, flags: [], attachments: [], mediaAttachments: [] } : current)
+          flush()
           void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
         } else if (event.type === 'speaker') {
           updateReply(event.profileId, () => ({ profileId: event.profileId, text: '', reasoning: '', toolCalls: new Map() }))
@@ -430,15 +455,15 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           showSnackbar({ message: event.message })
         } else if (event.type === 'routing') {
           if (event.profileId !== undefined) updateReply(event.profileId, (reply) => ({ ...reply, routing: event.routing }))
-          else setLiveTurn((current) => current ? { ...current, routing: event.routing } : current)
+          else updateLiveTurn((current) => current ? { ...current, routing: event.routing } : current)
         } else if (event.type === 'translating') {
           if (event.profileId !== undefined) updateReply(event.profileId, (reply) => ({ ...reply, translating: true }))
-          else setLiveTurn((current) => current ? { ...current, translating: true } : current)
+          else updateLiveTurn((current) => current ? { ...current, translating: true } : current)
         } else if (isGroup && event.type === 'done') {
           putMessage(event.message)
           // New jobs can finish while other members are still answering.
           void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(sentThreadId) })
-          setLiveTurn((current) => current ? {
+          updateLiveTurn((current) => current ? {
             ...current,
             replies: (current.replies ?? []).filter((reply) => reply.profileId !== event.message.speaker_profile_id),
             replacingMessageId: undefined,
@@ -452,13 +477,13 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
             return { ...reply, toolCalls: new Map(reply.toolCalls).set(groupEvent.call.id, groupEvent.call) }
           })
         } else if (event.type === 'delta') {
-          setLiveTurn((current) => (current ? { ...current, text: current.text + event.text } : current))
+          updateLiveTurn((current) => (current ? { ...current, text: current.text + event.text } : current))
         } else if (event.type === 'text') {
-          setLiveTurn((current) => (current ? { ...current, text: event.text } : current))
+          updateLiveTurn((current) => (current ? { ...current, text: event.text } : current))
         } else if (event.type === 'reasoning') {
-          setLiveTurn((current) => (current ? { ...current, reasoning: current.reasoning + event.text } : current))
+          updateLiveTurn((current) => (current ? { ...current, reasoning: current.reasoning + event.text } : current))
         } else if (event.type === 'tool') {
-          setLiveTurn((current) => {
+          updateLiveTurn((current) => {
             if (!current) return current
             const toolCalls = new Map(current.toolCalls)
             toolCalls.set(event.call.id, event.call)
@@ -476,15 +501,16 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
               ? current.messages.filter((message) => message.id <= event.message.id).map((message) => message.id === event.message.id ? event.message : message)
               : current.messages.filter((message) => message.id !== event.message.id),
           } : current)
-          setLiveTurn((current) => current ? { ...current, replacingMessageId: event.mode === 'regenerate' ? event.message.id : undefined } : current)
+          updateLiveTurn((current) => current ? { ...current, replacingMessageId: event.mode === 'regenerate' ? event.message.id : undefined } : current)
         } else if (event.type === 'done') {
           // Proposals are attached when the thread is read, so a reply that proposed something reloads it now.
           if (event.message.tool_calls.some((call) => call.tool.startsWith('propose_') || call.tool === 'offer_choices')) void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(sentThreadId) })
-          setLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, userText: '', userRouting: undefined, flags: [], attachments: [], mediaAttachments: [] } : current)
+          updateLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, text: event.message.display_content ?? event.message.content, userText: '', userRouting: undefined, flags: [], attachments: [], mediaAttachments: [] } : current)
         } else if (event.type === 'error') {
           // The full text stays on the failed message (its error chip); the toast only names the reason.
           showSnackbar({ message: summarizeChatError(event.message, t), tone: 'error' })
         }
+        if (event.type === 'done' || event.type === 'error' || event.type === 'rewind') flush()
       }
       if (rewrite?.continue) await streamChatContinue(sentThreadId, rewrite.messageId, onEvent, controller.signal)
       else if (rewrite) await streamChatRewrite(sentThreadId, rewrite.messageId, rewrite.content, onEvent, controller.signal)
@@ -506,6 +532,8 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         }
       }
     } finally {
+      flush()
+      controller.signal.removeEventListener('abort', discard)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(sentThreadId) }),
         queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(sentThreadId) }),
@@ -569,7 +597,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     // not show next to the streamed one.
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
-      queryClient.fetchQuery({ queryKey: codexChatThreadQueryKey(threadId), queryFn: () => getCodexChatThread(threadId) }).catch(() => undefined),
+      queryClient.fetchQuery({ queryKey: codexChatThreadQueryKey(threadId), queryFn: () => getCodexChatThread(threadId, 80) }).catch(() => undefined),
     ])
     // The new chat starts from the default appearance slot, copied on the server.
     void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })

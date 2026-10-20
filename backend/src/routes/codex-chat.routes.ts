@@ -3,6 +3,7 @@ import fs from 'fs'
 import { getUserSettingsDb } from '../database/userSettingsDb'
 import multer from 'multer'
 import express, { type NextFunction, type Request, type Response } from 'express'
+import { z } from 'zod'
 import { resolveChatPageCommand } from '../services/codex-chat/chatPageBridge'
 import { ChatTaskRunner, ChatTaskStore } from '../services/codex-chat/chatTasks'
 import { automationRoomKinds } from '../services/codex-chat/chatRoomWake'
@@ -33,6 +34,7 @@ import { ModelSlotStore } from '../services/codex-chat/modelSlots'
 import { downChatProfiles } from '../services/codex-chat/chatConnectionHealth'
 import { effectiveModelOf, modelLabelOf } from '../services/codex-chat/chatModelRoles'
 import { CodexChatStore } from '../services/codex-chat/codexChatStore'
+import { attachJobResults, collectCodexChatMedia } from '../services/codex-chat/codexChatMedia'
 import { CHAT_IMPORT_MAX_BYTES, ChatImportError, importChatThread } from '../services/codex-chat/chatImport'
 import { ChatSummaryStore } from '../services/codex-chat/chatMemory'
 import { isChatTargetReady, listChatCompletionModels } from '../services/codex-chat/llmChatCompletion'
@@ -262,8 +264,31 @@ router.get('/assets/:name', requireChatAccess, requireImagesView, asyncHandler(a
   await streamCacheableFile(req, res, file.path, file.mimeType)
 }))
 
+const threadDirectoryQuery = z.object({
+  archive: z.enum(['all', 'active', 'archived']).optional(),
+  pinned: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  kind: z.enum(['direct', 'group']).optional(),
+  query: z.string().max(120).optional(),
+  pinned_first: z.enum(['true', 'false']).transform((value) => value === 'true').optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  cursor: z.string().max(512).optional(),
+})
+
+/** The legacy UI keeps its complete directory; limit/cursor opt into SQL pages without changing data's array shape. */
 router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
-  const threads = CodexChatService.listThreads(requesterFrom(req))
+  const parsed = threadDirectoryQuery.safeParse(req.query)
+  if (!parsed.success) { sendRouteBadRequest(res, 'Invalid thread directory query'); return }
+  const { pinned_first: pinnedFirst, ...filters } = parsed.data
+  const options = { ...filters, pinnedFirst }
+  let page: ReturnType<typeof CodexChatStore.listThreadPage> | undefined
+  let threads: ReturnType<typeof CodexChatStore.listThreads>
+  try {
+    if (options.limit !== undefined || options.cursor !== undefined) page = CodexChatStore.listThreadPage(getRequesterAccountId(req), options)
+    threads = page?.threads ?? CodexChatStore.listThreads(getRequesterAccountId(req), options)
+  } catch (error) {
+    if (error instanceof TypeError) { sendRouteBadRequest(res, error.message); return }
+    throw error
+  }
   const members = ChatGroupStore.memberIdsByThread(threads.filter((thread) => thread.kind === 'group').map((thread) => thread.id))
   const previews = CodexChatStore.listPreviews(threads.map((thread) => thread.id))
   const unread = CodexChatStore.countUnread(threads.map((thread) => thread.id))
@@ -279,7 +304,7 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
     task: tasks.get(thread.id) ?? null,
     // Rooms a board call, routine or workflow made for itself: the list keeps them under 자동화.
     automation: automation.get(thread.id) ?? null,
-  })) })
+  })), ...(page ? { pagination: { total: page.total, has_more: page.has_more, next_cursor: page.next_cursor } } : {}) })
 })
 
 /** POST /api/codex-chat/threads/:threadId/read — `{ messageId }`: the owner has seen the chat up to this message. */
@@ -1074,16 +1099,28 @@ router.get('/threads/:threadId/running', requireChatAccess, (req: Request, res: 
   } catch (error) { sendChatError(res, error) }
 })
 
-/** GET /api/codex-chat/threads/:threadId — `?tail=N` (1-500) reads only the latest messages, keeping global state. */
+/** `tail=N` (1-500), optionally `before=messageId`: bounded messages, with current global thread state. */
 router.get('/threads/:threadId', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   const tail = req.query.tail === undefined ? null : Number(req.query.tail)
   if (tail !== null && (!Number.isSafeInteger(tail) || tail < 1 || tail > 500)) { sendRouteBadRequest(res, 'tail must be 1-500'); return }
+  const before = req.query.before === undefined ? null : Number(req.query.before)
+  if (before !== null && (!Number.isSafeInteger(before) || before < 1 || tail === null)) { sendRouteBadRequest(res, 'before requires a positive message id and tail'); return }
   try {
     const requester = requesterFrom(req)
-    const detail = isGroupThread(req, threadId) ? GroupChatService.getThread(requester, threadId, tail ?? undefined) : CodexChatService.getThread(requester, threadId, tail ?? undefined)
-    res.json({ success: true, data: detail })
+    // These services retain ownership/profile access checks and global block/job/group state. An older page
+    // needs just one latest row for that state, not a second whole page of message bodies.
+    const limit = before === null ? tail ?? undefined : 1
+    const detail = isGroupThread(req, threadId) ? GroupChatService.getThread(requester, threadId, limit) : CodexChatService.getThread(requester, threadId, limit)
+    if (before === null) {
+      res.json({ success: true, data: { ...detail, ...(tail === null ? {} : { hasMoreBefore: detail.messages.length > 0 && CodexChatStore.hasMessagesBefore(threadId, detail.messages[0].id) }) } })
+      return
+    }
+    const selected = CodexChatStore.listMessages(threadId, { tail: tail!, before })
+    const messages = visibleContextMessages(detail.thread, attachJobResults(selected).messages, requester.accountId)
+    const media = canRequesterViewImages(requester) ? Object.fromEntries(collectCodexChatMedia(messages).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height, historyId: item.historyId, postprocessStatus: item.postprocessStatus }])) : {}
+    res.json({ success: true, data: { ...detail, messages, media, messagesFrom: messages[0]?.id, messageCount: CodexChatStore.messageCount(threadId), hasMoreBefore: messages.length > 0 && CodexChatStore.hasMessagesBefore(threadId, messages[0].id) } })
   } catch (error) {
     sendChatError(res, error)
   }

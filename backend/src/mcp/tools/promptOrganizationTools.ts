@@ -62,19 +62,27 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
   server.registerTool(
     'get_prompts_in_group',
-    { description: 'Get all prompts currently assigned to a specific group. Use group_id=0 for unclassified prompts. Supports positive, negative, and auto prompt types.', inputSchema: z.object({
+    { description: 'Read one bounded page of prompts in a group. Use group_id=0 for unclassified. Follow next_page with the same filters. include_total=false skips the exact contains-search count; total is then omitted.', inputSchema: z.object({
       group_id: z.number().int().min(0).describe('Group ID (0 for Unclassified)'),
       type: z.enum(['positive', 'negative', 'auto']).default('positive').describe('Prompt type'),
       page: z.number().int().min(1).default(1).describe('Page number'),
       limit: z.number().int().min(1).max(100).default(50).describe('Results per page'),
+      query: z.string().default('').describe('Literal contains search'),
+      sort_by: z.enum(['usage_count', 'created_at', 'prompt']).default('usage_count'),
+      sort_order: z.enum(['ASC', 'DESC']).default('DESC'),
+      include_total: z.boolean().default(true).describe('Request the exact total; disable on subsequent pages when it is already known'),
     }) },
-    async ({ group_id, type, page, limit }) => {
+    async ({ group_id, type, page, limit, query, sort_by, sort_order, include_total }) => {
       try {
         const result = await PromptGroupService.getPromptsInGroup(
           group_id === 0 ? null : group_id,
           type,
           page,
-          limit
+          limit,
+          query,
+          sort_by,
+          sort_order,
+          include_total
         );
 
         return {
@@ -84,6 +92,8 @@ export function registerPromptOrganizationTools(server: McpServer): void {
               group_id,
               prompts: result.prompts,
               total: result.total,
+              has_more: result.has_more,
+              next_page: result.has_more ? page + 1 : null,
               page,
               limit,
               type,

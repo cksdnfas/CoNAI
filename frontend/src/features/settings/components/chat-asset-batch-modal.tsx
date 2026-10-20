@@ -17,11 +17,11 @@ import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useI18n } from '@/i18n'
-import { buildApiUrl } from '@/lib/api-client'
 import { MODEL_SLOTS_QUERY_KEY, listModelSlots, reviewChatAssetVision, applyChatAssetBatch, cancelChatAssetSlot, chatAssetBatchQueryKey, chatProfileEmoticonsQueryKey, CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, chooseChatAssetSlot, createChatAssetBatch, getChatAssetBatch, listChatAdminProfiles, listChatGenerationPresets, regenerateChatAssetSlot, type ChatAssetApplyResult, type ChatAssetBatch, type ChatAssetBatchInput, type ChatAssetReview, type ChatProfile } from '@/lib/api-codex-chat'
 import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import { getPromptPresets } from '@/lib/api-prompt-presets'
+import { libraryThumbnailUrl } from '@/lib/api-sprite'
 import { getErrorMessage } from '@/lib/error-message'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { cn } from '@/lib/utils'
@@ -280,7 +280,7 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
                 const loading = imageQuery?.isPending
                 const selected = slot?.chosenHash === candidate.compositeHash
                 return <Tip key={`${candidate.historyId}:${index}`} content={image ? t({ ko: '클릭해서 고르기 · 더블클릭해서 크게 보기', en: 'Click to choose · Double-click to view' }) : t({ ko: '이미지를 다시 불러오기', en: 'Reload image' })}><Panel asChild interactive tone="none" padding="none"><button type="button" disabled={create.isPending || apply.isPending || (!image && loading)} aria-pressed={selected} aria-label={t({ ko: '{name} 후보 {index} 고르기', en: 'Choose {name} candidate {index}' }, { name: entry.slotKey, index: index + 1 })} onClick={() => { if (!image) { void imageQuery?.refetch(); return } if (!busy) slotMutation.mutate({ slotKey: entry.slotKey, action: 'choose', hash: candidate.compositeHash }) }} onDoubleClick={() => { const index = safety.visibleItems.findIndex((image) => image.composite_hash === candidate.compositeHash); if (index >= 0) setLightboxIndex(index) }} className={cn('relative shrink-0 overflow-hidden rounded-md bg-foreground/5 outline-none focus-visible:ring-2 focus-visible:ring-ring', dimensions, selected && 'ring-2 ring-primary ring-offset-2 ring-offset-background')}>
-                  {image ? <><ChatProfileImage src={buildApiUrl(`/api/images/${candidate.compositeHash}/file`)} className={safety.shouldBlurItemPreview(image) ? 'blur-lg' : undefined} />{safety.renderItemPersistentOverlay(image)}</> : <span className="flex h-full items-center justify-center text-muted-foreground">{loading ? <Spinner /> : <ImageOff />}</span>}
+                  {image ? <><ChatProfileImage src={libraryThumbnailUrl(candidate.compositeHash)} className={safety.shouldBlurItemPreview(image) ? 'blur-lg' : undefined} />{safety.renderItemPersistentOverlay(image)}</> : <span className="flex h-full items-center justify-center text-muted-foreground">{loading ? <Spinner /> : <ImageOff />}</span>}
                   {selected ? <ChosenCheckBadge /> : null}
                 </button></Panel></Tip>
               })}

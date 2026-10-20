@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useWildcardChatPage } from './use-wildcard-chat-page'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pencil, RefreshCw, Trash2, WandSparkles } from 'lucide-react'
@@ -12,7 +12,7 @@ import {
   createWildcard,
   deleteWildcard,
   getWildcardLastScanLog,
-  getWildcards,
+  wildcardLibraryQueryOptions,
   parseWildcards,
   scanWildcardLoraFolder,
   updateWildcard,
@@ -85,14 +85,21 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   const [isLoraCollectModalOpen, setIsLoraCollectModalOpen] = useState(false)
 
   const wildcardsQuery = useQuery({
-    queryKey: ['wildcards', 'hierarchical-browser', refreshNonce],
-    queryFn: () => getWildcards({ hierarchical: true, withItems: true }),
+    ...wildcardLibraryQueryOptions,
   })
 
   const loraScanLogQuery = useQuery({
-    queryKey: ['wildcards', 'lora-scan-log', refreshNonce],
+    queryKey: ['wildcards', 'lora-scan-log'],
     queryFn: getWildcardLastScanLog,
   })
+
+  const previousRefreshNonce = useRef(refreshNonce)
+  useEffect(() => {
+    if (previousRefreshNonce.current !== refreshNonce) {
+      previousRefreshNonce.current = refreshNonce
+      void queryClient.invalidateQueries({ queryKey: ['wildcards'] })
+    }
+  }, [queryClient, refreshNonce])
 
   const parseMutation = useMutation({
     mutationFn: (input: { text: string; tool: WildcardTool | 'codex'; count: number }) => parseWildcards(input),
@@ -142,10 +149,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
       setIsLoraCollectModalOpen(false)
       showSnackbar({ message: t({ ko: 'LoRA 자동 수집 완료. {count}개 항목을 만들었어.', en: 'LoRA auto-collect complete. Created {count} items.' }, { count: result.created }), tone: 'info' })
       setSelectedWildcardId(null)
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['wildcards'] }),
-        queryClient.invalidateQueries({ queryKey: ['wildcards', 'lora-scan-log'] }),
-      ])
+      await queryClient.invalidateQueries({ queryKey: ['wildcards'] })
     },
     onError: (error) => {
       showSnackbar({ message: getErrorMessage(error, t('image-generation.components.wildcard.generation.panel.lora.auto.collect.failed')), tone: 'error' })
@@ -350,7 +354,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
       actions={(
         <>
           {!isSettingsTab ? (
-            <IconButton variant="ghost" size="icon-sm" onClick={() => void wildcardsQuery.refetch()} label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}>
+            <IconButton variant="ghost" size="icon-sm" onClick={() => void queryClient.invalidateQueries({ queryKey: ['wildcards'] })} label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}>
               <RefreshCw />
             </IconButton>
           ) : null}

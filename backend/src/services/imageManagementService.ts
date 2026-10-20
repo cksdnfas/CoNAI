@@ -1,5 +1,6 @@
 import { DeletionService } from './deletionService';
 import { QueryCacheService } from './QueryCacheService';
+import { SystemFolderService, parseNames } from './systemFolderService';
 
 export interface BulkDeleteImageFilesResult {
   deleted: number;
@@ -11,17 +12,19 @@ export interface BulkDeleteImagesResult {
   deleted: number;
   failed: number;
   errors: string[];
+  recycleBinEntries: string[];
 }
 
 export class ImageManagementService {
   /** Delete one image and invalidate dependent caches. */
-  static async deleteImageByCompositeHash(compositeHash: string): Promise<{ message: string }> {
-    await DeletionService.deleteImage(compositeHash);
+  static async deleteImageByCompositeHash(compositeHash: string): Promise<{ message: string; recycleBinEntries: string[] }> {
+    const recycleBinEntries = await DeletionService.deleteImageWithRestoreEntries(compositeHash);
     QueryCacheService.invalidateImageCache(compositeHash, true);
     console.log('🗑️ All caches invalidated for deleted image');
 
     return {
       message: 'Image deleted successfully',
+      recycleBinEntries,
     };
   }
 
@@ -40,8 +43,15 @@ export class ImageManagementService {
         deleted: batchResult.success,
         failed: batchResult.failed,
         errors: batchResult.errors.map((entry) => `Image ${entry.hash}: ${entry.error}`),
+        recycleBinEntries: batchResult.recycleBinEntries,
       },
     };
+  }
+
+  /** Same restore engine as the admin RecycleBin, restricted to library-deletion entries. */
+  static async restoreDeletedImages(names: unknown) {
+    const result = await SystemFolderService.restore(parseNames(names), 'fail', true);
+    return { done: result.done.map(({ name }) => ({ name })), failed: result.failed };
   }
 
   /** Delete multiple image files one by one and collect per-file failures. */

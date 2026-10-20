@@ -15,6 +15,22 @@ export type SelectedImageDraft = {
   compositeHash?: string
 }
 
+const imageDraftRevisions = new WeakMap<object, { dataUrl: string; id: number }>()
+let imageDraftRevision = 0
+
+/** Track image content by identity, without serializing base64 on every input change. */
+export function getImageDraftRevision(draft: object) {
+  return JSON.stringify(draft, function (this: object, key: string, value: unknown) {
+    if (key !== 'dataUrl' || typeof value !== 'string') return value
+    let revision = imageDraftRevisions.get(this)
+    if (!revision || revision.dataUrl !== value) {
+      revision = { dataUrl: value, id: ++imageDraftRevision }
+      imageDraftRevisions.set(this, revision)
+    }
+    return revision.id
+  })
+}
+
 export type NAICharacterPromptDraft = {
   prompt: string
   uc: string

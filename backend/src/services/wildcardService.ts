@@ -9,6 +9,48 @@ type WildcardResolutionTool = WildcardStoredTool | 'codex'
 /** Which prompt box the text came from; `__my:group__` reads the same-named group of that kind first. */
 export type WildcardPromptKind = 'positive' | 'negative'
 
+/** Request-local metadata/item cache; never caches selections or consumes random draws. */
+export class WildcardResolver {
+  private readonly wildcards = new Map<string, WildcardWithItems>();
+  private readonly lookedUp = new Set<string>();
+  private readonly childrenById = new Map<number, WildcardWithItems[]>();
+
+  loadNames(names: string[]): void {
+    const missing = [...new Set(names)].filter(name => !this.wildcards.has(name) && !this.lookedUp.has(name));
+    if (missing.length === 0) return;
+    const records = WildcardModel.findForResolution(missing);
+    const newRecords = records.filter(record => !this.wildcards.has(record.name));
+    const itemIds = newRecords.filter(record => record.only_children !== 1).map(record => record.id);
+    for (const wildcard of WildcardModel.withItems(newRecords, itemIds)) {
+      this.wildcards.set(wildcard.name, wildcard);
+    }
+    missing.forEach(name => this.lookedUp.add(name));
+
+    // Each result is a complete reachable subtree in SQLite's original name order.
+    // Rebuild child lists from it rather than relying on cache insertion order.
+    const children = new Map<number, WildcardWithItems[]>();
+    for (const record of records) {
+      if (record.parent_id === null) continue;
+      const siblings = children.get(record.parent_id) ?? [];
+      siblings.push(this.wildcards.get(record.name)!);
+      children.set(record.parent_id, siblings);
+    }
+    for (const record of records) {
+      if (record.include_children === 1 || record.only_children === 1) {
+        this.childrenById.set(record.id, children.get(record.id) ?? []);
+      }
+    }
+  }
+
+  get(name: string): WildcardWithItems | undefined {
+    return this.wildcards.get(name);
+  }
+
+  children(id: number): WildcardWithItems[] {
+    return this.childrenById.get(id) ?? [];
+  }
+}
+
 /**
  * Wildcard Service
  * 와일드카드 파싱 및 처리 로직
@@ -23,25 +65,29 @@ export class WildcardService {
    * @param promptKind 긍정/부정 프롬프트 구분 (`__my:` 그룹 선택 기준)
    * @returns 파싱된 텍스트
    */
-  static parseWildcards(text: string, tool: WildcardResolutionTool, promptKind: WildcardPromptKind = 'positive'): string {
-    // 모든 와일드카드를 항목과 함께 로드
-    const wildcards = WildcardModel.findAllWithItems();
+  static createResolver(): WildcardResolver {
+    return new WildcardResolver();
+  }
 
-    // 이름으로 빠른 조회를 위한 Map 생성
-    const wildcardMap = new Map<string, WildcardWithItems>();
-    wildcards.forEach(wc => wildcardMap.set(wc.name, wc));
+  static parseWildcards(
+    text: string,
+    tool: WildcardResolutionTool,
+    promptKind: WildcardPromptKind = 'positive',
+    resolver: WildcardResolver = this.createResolver()
+  ): string {
+    resolver.loadNames([...this.extractWildcardNames(text), ...this.splitChainTokens(text)]);
 
     // 재귀 파싱 시작
     let result = text;
 
     // 1. 랜덤 토큰 처리 (__tag:그룹__, __my:그룹__, __와일드카드__)
-    result = this.expandRandomTokens(result, wildcardMap, tool, promptKind);
+    result = this.expandRandomTokens(result, resolver, tool, promptKind);
 
     // 2. 체인 처리 (전역 토큰 변환)
-    result = this.parseChains(result, wildcardMap, tool);
+    result = this.parseChains(result, resolver, tool);
 
     // 3. 와일드카드 처리 (++name++)
-    result = this.parseRecursive(result, wildcardMap, tool, new Set(), promptKind);
+    result = this.parseRecursive(result, resolver, tool, new Set(), promptKind);
 
     return this.compactPromptSegments(result);
   }
@@ -55,10 +101,11 @@ export class WildcardService {
    */
   private static expandRandomTokens(
     text: string,
-    wildcardMap: Map<string, WildcardWithItems>,
+    resolver: WildcardResolver,
     tool: WildcardResolutionTool,
     promptKind: WildcardPromptKind
   ): string {
+    resolver.loadNames(this.extractWildcardNames(text));
     return text.replace(PROMPT_RANDOM_TOKEN_PATTERN, (_match, rawBody: string) => {
       const token = parsePromptRandomTokenBody(rawBody);
       if (!token) {
@@ -69,13 +116,13 @@ export class WildcardService {
         return PromptGroupService.pickRandomPromptsByGroupName(token.name, resolvePromptGroupPickCount(token.pick), token.usage, promptKind).join(', ');
       }
 
-      const wildcard = token.source === 'wildcard' && !token.legacy ? wildcardMap.get(token.name) : undefined;
+      const wildcard = token.source === 'wildcard' && !token.legacy ? resolver.get(token.name) : undefined;
       if (wildcard) {
         if (!token.hasOptions) {
           return `++${token.name}++`;
         }
         // 뽑힌 항목 안의 ++이름++ / __토큰__은 이후 단계(parseRecursive)가 이어서 푼다
-        const items = this.collectItemsWithChildren(wildcard, tool, wildcardMap);
+        const items = this.collectItemsWithChildren(wildcard, tool, resolver);
         return this.selectDistinctItemsWithWeight(items, resolvePromptGroupPickCount(token.pick)).map((item) => item.content).join(', ');
       }
 
@@ -89,7 +136,7 @@ export class WildcardService {
    * 쉼표로 구분된 토큰을 분석하여 체인이 있으면 치환
    * 
    * @param text 파싱할 텍스트
-   * @param wildcardMap 와일드카드 맵
+   * @param resolver 요청 내 와일드카드 조회 캐시
    * @param tool 사용할 도구
    * @returns 파싱된 텍스트
    */
@@ -155,13 +202,14 @@ export class WildcardService {
 
   private static parseChains(
     text: string,
-    wildcardMap: Map<string, WildcardWithItems>,
+    resolver: WildcardResolver,
     tool: WildcardResolutionTool
   ): string {
     const tokens = this.splitChainTokens(text);
+    resolver.loadNames(tokens);
     const processedTokens = tokens.map(token => {
       // 해당 이름의 체인이 있는지 확인
-      const chain = wildcardMap.get(token);
+      const chain = resolver.get(token);
 
       // 체인이 아니거나 타입이 체인이 아니면 원본 반환
       if (!chain || chain.type !== 'chain') {
@@ -169,7 +217,7 @@ export class WildcardService {
       }
 
       // 해당 도구의 항목 수집
-      const items = this.collectItemsWithChildren(chain, tool, wildcardMap);
+      const items = this.collectItemsWithChildren(chain, tool, resolver);
       if (items.length === 0) {
         return token; // 항목이 없으면 원본 유지
       }
@@ -319,14 +367,14 @@ export class WildcardService {
    *
    * @param wildcard 대상 와일드카드
    * @param tool 사용할 도구
-   * @param wildcardMap 모든 와일드카드 맵
+   * @param resolver 요청 내 와일드카드 조회 캐시
    * @param visited 순환 참조 방지용 (이미 방문한 와일드카드 ID)
    * @returns 항목 배열
    */
   private static collectItemsWithChildren(
     wildcard: WildcardWithItems,
     tool: WildcardResolutionTool,
-    wildcardMap: Map<string, WildcardWithItems>,
+    resolver: WildcardResolver,
     visited: Set<number> = new Set()
   ): WildcardItem[] {
     // 순환 참조 방지
@@ -345,13 +393,10 @@ export class WildcardService {
     // only_children이 활성화된 경우, include_children 설정과 관계없이(혹은 함께) 자식을 포함하는 것이 의도에 부합
     // 보통 only_children=1이면 include_children=1이어야 의미가 있음
     if (wildcard.include_children === 1 || wildcard.only_children === 1) {
-      // 모든 와일드카드를 순회하며 직계 자식 찾기
-      for (const [, wc] of wildcardMap) {
-        if (wc.parent_id === wildcard.id) {
-          // 자식의 include_children 설정도 고려하여 재귀 호출
-          const childItems = this.collectItemsWithChildren(wc, tool, wildcardMap, visited);
-          items.push(...childItems);
-        }
+      for (const wc of resolver.children(wildcard.id)) {
+        // 자식의 include_children 설정도 고려하여 재귀 호출
+        const childItems = this.collectItemsWithChildren(wc, tool, resolver, visited);
+        items.push(...childItems);
       }
     }
 
@@ -362,14 +407,14 @@ export class WildcardService {
    * 재귀적 파싱 (중첩 지원)
    *
    * @param text 파싱할 텍스트
-   * @param wildcardMap 와일드카드 맵
+   * @param resolver 요청 내 와일드카드 조회 캐시
    * @param tool 사용할 도구
    * @param visited 방문한 와일드카드 (순환 참조 방지)
    * @returns 파싱된 텍스트
    */
   private static parseRecursive(
     text: string,
-    wildcardMap: Map<string, WildcardWithItems>,
+    resolver: WildcardResolver,
     tool: WildcardResolutionTool,
     visited: Set<string>,
     promptKind: WildcardPromptKind
@@ -377,7 +422,9 @@ export class WildcardService {
     // ++name++ 패턴 매칭 (항목 안의 __...__ 토큰은 먼저 ++name++ 또는 결과로 바꾼다)
     const pattern = /\+\+([^+]+)\+\+/g;
 
-    let result = this.expandRandomTokens(text, wildcardMap, tool, promptKind).replace(pattern, (match, name) => {
+    const expanded = this.expandRandomTokens(text, resolver, tool, promptKind);
+    resolver.loadNames(this.extractWildcardNames(expanded));
+    let result = expanded.replace(pattern, (match, name) => {
       // 순환 참조 체크
       if (visited.has(name)) {
         console.warn(`Circular reference detected for wildcard: ${name}`);
@@ -385,14 +432,14 @@ export class WildcardService {
       }
 
       // 와일드카드 조회
-      const wildcard = wildcardMap.get(name);
+      const wildcard = resolver.get(name);
       if (!wildcard) {
         console.warn(`Wildcard not found: ${name}`);
         return ''; // 빈 문자열 반환
       }
 
       // 해당 도구의 항목 수집 (include_children 옵션 고려)
-      const toolItems = this.collectItemsWithChildren(wildcard, tool, wildcardMap);
+      const toolItems = this.collectItemsWithChildren(wildcard, tool, resolver);
 
       if (toolItems.length === 0) {
         console.warn(`No items found for wildcard '${name}' with tool '${tool}'`);
@@ -406,7 +453,7 @@ export class WildcardService {
       visited.add(name);
 
       // 재귀 파싱 (중첩된 와일드카드 처리)
-      const recursiveResult = this.parseRecursive(selectedItem.content, wildcardMap, tool, visited, promptKind);
+      const recursiveResult = this.parseRecursive(selectedItem.content, resolver, tool, visited, promptKind);
 
       // 방문 해제 (다른 경로에서 사용 가능하도록)
       visited.delete(name);
@@ -522,8 +569,9 @@ export class WildcardService {
     promptKind: WildcardPromptKind = 'positive'
   ): string[] {
     const results: string[] = [];
+    const resolver = this.createResolver();
     for (let i = 0; i < count; i++) {
-      results.push(this.parseWildcards(text, tool, promptKind));
+      results.push(this.parseWildcards(text, tool, promptKind, resolver));
     }
     return results;
   }

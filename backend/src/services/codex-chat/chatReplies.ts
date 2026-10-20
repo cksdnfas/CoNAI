@@ -5,17 +5,19 @@ import { registerChatReply } from './chatReplyRegistry'
 import { chatExecutionRoot } from './chatExecutionRoot'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { ChatProfileStore } from './chatProfiles'
-import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
+import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
 import { userPersonaForThread } from './chatUserProfiles'
 
 export class ChatReplyError extends Error {
   constructor(message: string, readonly status = 400) { super(message) }
 }
 
-export function requireReplyTarget(threadId: number, value: unknown, messages?: CodexChatMessageRecord[]) {
+export function requireReplyTarget(threadId: number, value: unknown, messages?: CodexChatMessageRecord[], historySource?: ChatHistorySource) {
   if (value === undefined || value === null) return null
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) throw new ChatReplyError('답장할 메시지를 다시 선택해줘.')
-  const message = messages ? messages.find((entry) => entry.id === value && entry.thread_id === threadId) : CodexChatStore.findMessage(threadId, value)
+  const excluded = historySource?.excludeMessageId === value
+  const message = excluded ? undefined : messages?.find((entry) => entry.id === value && entry.thread_id === threadId)
+    ?? (!messages || historySource?.threadId === threadId ? CodexChatStore.findMessage(threadId, value) : undefined)
   if (!message) throw new ChatReplyError('답장할 메시지가 없거나 다른 방의 메시지야. 답장 대상을 다시 선택해줘.', 409)
   return message
 }
@@ -70,12 +72,12 @@ export function messageAddress(message: CodexChatMessageRecord) {
   return `message_id=${message.id}${routing ? `; to=${JSON.stringify(routing.recipients)}${routing.replyTo ? `; reply_to=${routing.replyTo.messageId}` : ''}` : ''}`
 }
 
-export function beginDirectReply(thread: CodexChatThreadRecord, profileId: number, messages: CodexChatMessageRecord[], source: CodexChatMessageRecord | null, signal: AbortSignal, onRouting: (routing: ChatMessageRouting) => void) {
+export function beginDirectReply(thread: CodexChatThreadRecord, profileId: number, messages: CodexChatMessageRecord[], source: CodexChatMessageRecord | null, signal: AbortSignal, onRouting: (routing: ChatMessageRouting) => void, historySource?: ChatHistorySource) {
   const replyId = randomUUID()
   const context: ChatExecutionContext = { threadId: thread.id, profileId, kind: 'direct', replyId, rootExecutionId: chatExecutionRoot(thread.id, source?.id) }
   const state = { context, routing: automaticReplyRouting(thread, source, replyId), close: () => {} }
   state.close = registerChatReply(context, signal, (input) => {
-    const target = input.messageId === undefined ? null : requireReplyTarget(thread.id, input.messageId, messages)
+    const target = input.messageId === undefined ? null : requireReplyTarget(thread.id, input.messageId, messages, historySource)
     const recipients = input.recipients ?? ['user']
     if (recipients.some((id) => typeof id === 'number')) throw new ChatReplyError('1:1 채팅의 답변은 사용자에게 보내줘.')
     state.routing = { replyId, replyTo: target ? quoteMessage(thread, target) : state.routing.replyTo, recipients: [...new Set(recipients)] }

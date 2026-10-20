@@ -813,6 +813,12 @@ export interface CodexChatThread {
   updated_date: string
 }
 
+/** Directory projection; context/settings are fetched only with the selected thread's detail. */
+export type CodexChatThreadSummary = Pick<CodexChatThread,
+  'id' | 'title' | 'engine' | 'profile_id' | 'kind' | 'pinned' | 'archived' |
+  'branched_from_thread_id' | 'branched_at_message_id' | 'branch_purpose' | 'created_date' | 'updated_date' |
+  'member_profile_ids' | 'preview' | 'running' | 'unread_count' | 'task' | 'automation'>
+
 /** `preserve`: the chat as it was before an edit rewrote it; `continue`: branched to go on from that point. */
 export type ChatBranchPurpose = 'preserve' | 'continue'
 
@@ -891,6 +897,10 @@ export interface CodexChatThreadDetail {
   /** A `tail` fetch: the id of the first message sent, and how many the thread has in all. */
   messagesFrom?: number
   messageCount?: number
+  /** Whether an older server page exists before the first loaded message. */
+  hasMoreBefore?: boolean
+  /** Client cache only: older pages were explicitly requested, so refresh/restore their range too. */
+  historyLoaded?: boolean
   /** Direct LLM chats: the summary by stretch, the plot first. */
   summarySegments?: ChatSummarySegment[]
   group?: ChatGroupInfo
@@ -1451,7 +1461,7 @@ export function selectChatAlternative(threadId: number, messageId: number, index
 }
 
 export function listCodexChatThreads() {
-  return requestApiData<CodexChatThread[]>('/api/codex-chat/threads', { cache: 'no-store' })
+  return requestApiData<CodexChatThreadSummary[]>('/api/codex-chat/threads', { cache: 'no-store' })
 }
 
 /** `userProfileId` left out: the server picks the default user profile; null: the plain user. */
@@ -1489,22 +1499,33 @@ export function removeGroupChatMember(threadId: number, profileId: number) {
 }
 
 /** `tail`: only the last messages (see CodexChatThreadDetail.messagesFrom); merge with mergeThreadTail. */
-export function getCodexChatThread(threadId: number, tail?: number) {
-  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}${tail ? `?tail=${tail}` : ''}`, { cache: 'no-store' })
+export function getCodexChatThread(threadId: number, tail?: number, before?: number, signal?: AbortSignal) {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}${tail ? `?tail=${tail}${before === undefined ? '' : `&before=${before}`}` : ''}`, { cache: 'no-store', signal })
 }
 
 /**
  * A tail fetch laid over the full copy: the copy's messages before the tail, then the tail. Null when the copy cannot
  * be trusted — the history was rewritten since (edits, regeneration, variants move the context revision) or messages
- * are missing between the two — and a full fetch is needed.
+ * are missing between the two — and a fresh tail is needed.
  */
 export function mergeThreadTail(full: CodexChatThreadDetail, tail: CodexChatThreadDetail): CodexChatThreadDetail | null {
   if (tail.messagesFrom === undefined) return tail
-  if (full.messagesFrom !== undefined || full.thread.context_revision !== tail.thread.context_revision) return null
+  if (full.thread.id !== tail.thread.id || full.thread.context_revision !== tail.thread.context_revision) return null
   const from = tail.messagesFrom
-  const messages = [...full.messages.filter((message) => message.id < from), ...tail.messages]
-  if (messages.length !== tail.messageCount) return null
-  return { ...tail, messages, media: { ...full.media, ...tail.media }, messagesFrom: undefined, messageCount: undefined }
+  const combined = [...full.messages.filter((message) => message.id < from), ...tail.messages]
+  const added = (tail.messageCount ?? tail.messages.length) - (full.messageCount ?? full.messages.length)
+  if (added < 0 || combined.length !== full.messages.length + added) return null
+  const messages = full.historyLoaded ? combined : combined.slice(-80)
+  const partial = messages.length < (tail.messageCount ?? messages.length)
+  return { ...tail, messages, media: { ...full.media, ...tail.media }, messagesFrom: partial ? messages[0]?.id : undefined, hasMoreBefore: partial, historyLoaded: full.historyLoaded }
+}
+
+/** Prepend a cursor page only to the exact active history it was requested for. */
+export function mergeThreadBefore(current: CodexChatThreadDetail, page: CodexChatThreadDetail, before: number): CodexChatThreadDetail | null {
+  if (current.thread.id !== page.thread.id || current.thread.context_revision !== page.thread.context_revision
+    || current.messages[0]?.id !== before || page.messages.some((message) => message.id >= before)) return null
+  const messages = [...page.messages, ...current.messages]
+  return { ...current, messages, media: { ...page.media, ...current.media }, messagesFrom: page.hasMoreBefore ? messages[0]?.id : undefined, hasMoreBefore: page.hasMoreBefore, historyLoaded: current.historyLoaded || page.messages.length > 0 }
 }
 
 export function getCodexChatRunning(threadId: number) {

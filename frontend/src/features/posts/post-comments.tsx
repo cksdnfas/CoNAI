@@ -13,7 +13,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { mentionQueryAt } from '@/features/codex-chat/chat-mentions'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, cancelPostBotRun, createPostComment, deletePostComment, listMentionableProfiles, setPostCommentHidden, updatePostComment } from '@/lib/api-posts'
+import { invalidatePostScope, cancelPostBotRun, createPostComment, deletePostComment, listMentionableProfiles, setPostCommentHidden, updatePostComment } from '@/lib/api-posts'
 import { buildApiUrl } from '@/lib/api-url'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
@@ -69,7 +69,7 @@ function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, pla
       setText('')
       setPicked(new Map())
       onDone?.()
-      await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
+      await invalidatePostScope(queryClient, postId, 'comment')
     },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '댓글을 올리지 못했어.', en: 'Could not post the comment.' })) }),
   })
@@ -170,7 +170,7 @@ function BotRunRow({ run }: { run: PostBotRun }) {
   const queryClient = useQueryClient()
   const cancel = useMutation({
     mutationFn: () => cancelPostBotRun(run.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
+    onSuccess: () => invalidatePostScope(queryClient, run.postId, 'bot-run'),
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '취소하지 못했어.', en: 'Could not cancel.' })) }),
   })
   const active = run.status === 'queued' || run.status === 'running'
@@ -227,7 +227,7 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMentio
   // A long press opens the menu; the click that ends it must not also open the reply box.
   const touchMenuAt = useRef(0)
   const pointerType = useRef('mouse')
-  const refresh = () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
+  const refresh = () => invalidatePostScope(queryClient, comment.postId, 'comment')
   const onError = (error: unknown) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '댓글 작업에 실패했어.', en: 'Comment action failed.' })) })
   const save = useMutation({ mutationFn: (body: string) => updatePostComment(comment.id, { body, expectedRevision: comment.revision }), onSuccess: async () => { setEditing(null); await refresh() }, onError })
   const remove = useMutation({ mutationFn: () => deletePostComment(comment.id), onSuccess: refresh, onError })

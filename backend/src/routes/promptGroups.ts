@@ -7,11 +7,14 @@ import { PromptGroupResponse } from '../types/promptGroup';
 const router = Router();
 
 /**
- * 그룹별로 묶인 프롬프트 조회 (배지 표시용)
+ * Legacy plugin contract: retained for one compatibility release only.
+ * Use /summaries and /:id/prompts instead.
  * GET /api/prompt-groups/grouped-prompts
  */
 router.get('/grouped-prompts', async (req: Request, res: Response) => {
   try {
+    res.setHeader('Deprecation', 'true');
+    res.setHeader('Link', '</api/prompt-groups/summaries>; rel="successor-version"');
     const { type = 'positive' } = req.query;
 
     const result = await PromptGroupService.getGroupedPrompts(type as 'positive' | 'negative');
@@ -64,12 +67,16 @@ router.get('/export', async (req: Request, res: Response) => {
  * 모든 그룹 조회 (프롬프트 수 포함)
  * GET /api/prompt-groups
  */
-router.get('/', async (req: Request, res: Response) => {
+router.get(['/', '/summaries'], async (req: Request, res: Response) => {
   try {
     const {
       include_hidden = 'false',
       type = 'positive'
     } = req.query;
+
+    if (!['positive', 'negative', 'auto'].includes(String(type))) {
+      return res.status(400).json({ success: false, error: 'Invalid prompt type' });
+    }
 
     const groups = await PromptGroupService.getAllGroups(
       include_hidden === 'true',
@@ -231,24 +238,41 @@ router.get('/:id/prompts', async (req: Request, res: Response) => {
     const {
       type = 'positive',
       page = '1',
-      limit = '20'
+      limit = '20',
+      q = '',
+      sortBy = 'usage_count',
+      sortOrder = 'DESC',
+      include_total = 'true'
     } = req.query;
 
-    const groupId = id === '0' ? null : parseInt(id);
+    const groupId = id === '0' ? null : Number(id);
+    const pageNumber = Number(page);
+    const requestedLimit = Number(limit);
+    const pageLimit = Math.min(requestedLimit, 100);
 
-    if (groupId !== null && isNaN(groupId)) {
+    if ((groupId !== null && (!Number.isSafeInteger(groupId) || groupId < 1))
+      || !Number.isSafeInteger(pageNumber) || pageNumber < 1
+      || !Number.isSafeInteger(requestedLimit) || requestedLimit < 1
+      || !Number.isSafeInteger((pageNumber - 1) * pageLimit)
+      || !['usage_count', 'created_at', 'prompt'].includes(String(sortBy))
+      || !['ASC', 'DESC'].includes(String(sortOrder))
+      || !['true', 'false'].includes(String(include_total)) || typeof q !== 'string') {
       const response: PromptGroupResponse = {
         success: false,
-        error: 'Invalid group ID'
+        error: 'Invalid group, pagination, search or sort parameters'
       };
       return res.status(400).json(response);
     }
 
     const result = await PromptGroupService.getPromptsInGroup(
       groupId,
-      type as 'positive' | 'negative',
-      parseInt(page as string),
-      parseInt(limit as string)
+      type as 'positive' | 'negative' | 'auto',
+      pageNumber,
+      pageLimit,
+      q,
+      sortBy as 'usage_count' | 'created_at' | 'prompt',
+      sortOrder as 'ASC' | 'DESC',
+      include_total === 'true'
     );
 
     const response: PromptGroupResponse = {
@@ -256,10 +280,12 @@ router.get('/:id/prompts', async (req: Request, res: Response) => {
       data: {
         ...result,
         pagination: {
-          page: parseInt(page as string),
-          limit: parseInt(limit as string),
+          page: pageNumber,
+          limit: pageLimit,
           total: result.total,
-          totalPages: Math.ceil(result.total / parseInt(limit as string))
+          totalPages: result.total === undefined ? undefined : Math.ceil(result.total / pageLimit),
+          has_more: result.has_more,
+          next_page: result.has_more ? pageNumber + 1 : null,
         }
       }
     };

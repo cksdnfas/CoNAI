@@ -117,6 +117,121 @@ test('chat web research: settings gate, isolated runs, page text', { timeout: 60
     }
   })
 
+  await t.test('identical in-flight searches share one allowance and keep independent cancellation and usage identities', async () => {
+    updateChatSettings({ webResearch: { engine: 'claude', model: 'shared-meter', dailyLimit: 1 } })
+    let finish!: () => void
+    let started!: () => void
+    let engineSignal!: AbortSignal
+    const blocked = new Promise<void>((resolve) => { finish = resolve })
+    const running = new Promise<void>((resolve) => { started = resolve })
+    let calls = 0
+    const runner = t.mock.method(research.researchRunners, 'claude', async (_requester, _question, _model, signal) => {
+      calls += 1
+      engineSignal = signal!
+      started()
+      await blocked
+      return { text: 'shared answer', tokens: { inputTokens: 17, cachedInputTokens: 5, outputTokens: 3 } }
+    })
+    const requester = { accountId: 46, accountType: 'guest' as const }
+    const controller = new AbortController()
+    const first = research.researchWeb(requester, { query: ' Shared   question' }, { signal: controller.signal })
+    const stopped = assert.rejects(first, { name: 'AbortError' })
+    const second = research.researchWeb(requester, { query: 'shared question' }, { usage: { purpose: 'web_search', profileId: 4601, threadId: 4601, replyId: 'shared-1' } })
+    const third = research.researchWeb(requester, { query: 'SHARED question' }, { usage: { purpose: 'web_search', profileId: 4602, threadId: 4602, replyId: 'shared-2' } })
+    try {
+      await running
+      controller.abort()
+      await stopped
+      assert.equal(engineSignal.aborted, false, 'one caller cannot stop the other callers')
+      await assert.rejects(research.researchWeb(requester, { query: 'a different question' }), /하루에 1번/)
+      finish()
+      assert.deepEqual(await Promise.all([second, third]), ['shared answer', 'shared answer'])
+      assert.equal(calls, 1)
+      const rows = user.getUserSettingsDb().prepare(`
+        SELECT profile_id, thread_id, reply_id, input_tokens, cached_input_tokens, output_tokens
+        FROM llm_usage_events WHERE model = 'shared-meter' ORDER BY id
+      `).all() as Array<{ profile_id: number; thread_id: number; reply_id: string; input_tokens: number; cached_input_tokens: number; output_tokens: number }>
+      assert.deepEqual(rows.map(({ profile_id, thread_id, reply_id }) => [profile_id, thread_id, reply_id]), [
+        [4601, 4601, 'shared-1'], [4602, 4602, 'shared-2'],
+      ])
+      assert.equal(rows.reduce((sum, row) => sum + row.input_tokens, 0), 17, 'shared model tokens count once')
+      assert.equal(rows.reduce((sum, row) => sum + row.cached_input_tokens, 0), 5)
+      assert.equal(rows.reduce((sum, row) => sum + row.output_tokens, 0), 3)
+      await assert.rejects(research.researchWeb(requester, { query: 'after shared success' }), /하루에 1번/)
+    } finally {
+      finish()
+      await Promise.allSettled([first, second, third])
+      runner.mock.restore()
+      updateChatSettings({ webResearch: { model: null, dailyLimit: null } })
+    }
+  })
+
+  await t.test('the shared engine is cancelled only after every caller aborts, and a retry can run', async () => {
+    updateChatSettings({ webResearch: { engine: 'claude', dailyLimit: 1 } })
+    let engineSignal!: AbortSignal
+    let started!: () => void
+    const running = new Promise<void>((resolve) => { started = resolve })
+    const runner = t.mock.method(research.researchRunners, 'claude', async (_requester, _question, _model, signal) => {
+      engineSignal = signal!
+      started()
+      await new Promise<void>((_resolve, reject) => signal!.addEventListener('abort', () => reject(signal!.reason), { once: true }))
+      return { text: 'unreachable', tokens: null }
+    })
+    const requester = { accountId: 47, accountType: 'guest' as const }
+    const controllers = [new AbortController(), new AbortController()]
+    const requests = controllers.map((controller) => research.researchWeb(requester, { query: 'cancel shared' }, { signal: controller.signal }))
+    const stopped = requests.map((request) => assert.rejects(request, { name: 'AbortError' }))
+    try {
+      await running
+      controllers[0].abort()
+      await stopped[0]
+      assert.equal(engineSignal.aborted, false)
+      controllers[1].abort()
+      await stopped[1]
+      assert.equal(engineSignal.aborted, true)
+      runner.mock.mockImplementation(async () => ({ text: 'retry succeeded', tokens: null }))
+      assert.equal(await research.researchWeb(requester, { query: 'cancel shared' }), 'retry succeeded')
+    } finally {
+      controllers.forEach((controller) => controller.abort())
+      await Promise.all(stopped)
+      runner.mock.restore()
+      updateChatSettings({ webResearch: { dailyLimit: null } })
+    }
+  })
+
+  await t.test('the waiting queue is bounded; identical queued callers share a slot and cancellation frees capacity', async () => {
+    const requester = { accountId: null, accountType: 'admin' as const }
+    const runner = t.mock.method(research.researchRunners, 'claude', async (_requester, _question, _model, signal) => {
+      await new Promise<void>((_resolve, reject) => signal!.addEventListener('abort', () => reject(signal!.reason), { once: true }))
+      return { text: 'unreachable', tokens: null }
+    })
+    const controllers = Array.from({ length: 18 }, () => new AbortController())
+    const requests = controllers.map((controller, index) => research.researchWeb(requester, { query: `queue-cap-${index}` }, { signal: controller.signal }))
+    const settled = Promise.allSettled(requests)
+    const duplicateController = new AbortController()
+    const duplicate = research.researchWeb(requester, { query: 'queue-cap-17' }, { signal: duplicateController.signal })
+    const duplicateStopped = assert.rejects(duplicate, { name: 'AbortError' })
+    const replacementController = new AbortController()
+    let replacement: Promise<string> | undefined
+    try {
+      await assert.rejects(research.researchWeb(requester, { query: 'queue overflow' }), /대기열.*다시 시도/)
+      assert.equal(runner.mock.callCount(), 2, 'only two model runs may be active')
+      controllers[16].abort()
+      await assert.rejects(requests[16], { name: 'AbortError' })
+      replacement = research.researchWeb(requester, { query: 'queue replacement' }, { signal: replacementController.signal })
+      const replacementStopped = assert.rejects(replacement, { name: 'AbortError' })
+      await assert.rejects(research.researchWeb(requester, { query: 'queue still full' }), /대기열.*다시 시도/)
+      replacementController.abort()
+      await replacementStopped
+    } finally {
+      controllers.forEach((controller) => controller.abort())
+      duplicateController.abort()
+      replacementController.abort()
+      await Promise.all([settled, duplicateStopped, replacement?.catch(() => {})])
+      runner.mock.restore()
+    }
+  })
+
   await t.test('web_search can file its answer in a writable linked folder, and needs chat.web.use', async () => {
     const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')

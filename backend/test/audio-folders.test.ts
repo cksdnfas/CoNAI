@@ -78,7 +78,7 @@ test('audio folders and the description / prompt split', { timeout: 60000 }, asy
     assert.equal(panel.folder_id, ui.id)
     assert.equal(panel.description, 'HUD 패널이 밀려 들어올 때')
     assert.equal(panel.prompt, 'a quick swoosh')
-    assert.equal(service.listAudioGroups(project.id, { search: '밀려' }).length, 1)
+    assert.equal(service.listAudioGroups(project.id, { search: '밀려' }).items.length, 1)
 
     const moved = service.updateAudioGroup(panel.id, { folder_id: bgm.id, prompt: 'a slower swoosh' })
     assert.equal(moved.folder_id, bgm.id)

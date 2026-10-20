@@ -1,7 +1,5 @@
 import { db } from '../../database/init';
-import type { PromptGroupWithPrompts } from '../../types/promptGroup';
 import {
-  getPromptCollectionTableName as getPromptTableName,
   getPromptGroupTableName as getTableName,
 } from '../../utils/promptTables';
 import {
@@ -16,24 +14,6 @@ import {
 
 export function getDanbooruGroupRootName(language: DanbooruGroupingLanguage): string {
   return language === 'ko' ? DANBOORU_GROUP_ROOT_NAME_KO : DANBOORU_GROUP_ROOT_NAME_EN;
-}
-
-export function getHiddenDanbooruRootGroupsWithCounts(type: PromptCollectionType): PromptGroupWithPrompts[] {
-  const groupTableName = getTableName(type);
-  const promptTableName = getPromptTableName(type);
-  const placeholders = danbooruRootNamePlaceholders();
-  return db.prepare(`
-    SELECT
-      g.*,
-      COUNT(p.id) as prompt_count
-    FROM ${groupTableName} g
-    LEFT JOIN ${promptTableName} p ON g.id = p.group_id
-    WHERE g.is_visible = 0
-      AND g.parent_id IS NULL
-      AND g.group_name IN (${placeholders})
-    GROUP BY g.id
-    ORDER BY g.display_order ASC
-  `).all(...DANBOORU_GROUP_ROOT_NAMES) as PromptGroupWithPrompts[];
 }
 
 function getDanbooruRootGroupIds(type: PromptCollectionType): number[] {

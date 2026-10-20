@@ -56,7 +56,7 @@ router.get('/artists', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.get('/characters', asyncHandler(async (req: Request, res: Response) => {
-  sendSuccess(res, danbooruBrowserService.listCharacters({
+  sendSuccess(res, await danbooruBrowserService.listCharacters({
     q: typeof req.query.q === 'string' ? req.query.q : undefined,
     copyrightTagId: typeof req.query.copyrightTagId === 'string' ? req.query.copyrightTagId : undefined,
     page: req.query.page,
@@ -70,7 +70,7 @@ router.get('/characters', asyncHandler(async (req: Request, res: Response) => {
 
 router.get('/character-images/:tagId/:fileName', requireImagesView, asyncHandler(async (req: Request, res: Response) => {
   const fileName = typeof req.params.fileName === 'string' ? req.params.fileName : '';
-  const filePath = danbooruBrowserService.getCharacterImageFilePath(req.params.tagId, fileName);
+  const filePath = await danbooruBrowserService.getCharacterImageFilePath(req.params.tagId, fileName);
   if (!filePath) {
     res.sendStatus(404);
     return;

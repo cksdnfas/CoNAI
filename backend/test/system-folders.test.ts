@@ -224,6 +224,222 @@ test('administrators browse server folders and manage the RecycleBin safely', { 
     assert.equal((await call('/api/system-folders/recycle-bin/delete', adminId, 'POST', { names: [] })).status, 400)
   })
 
+  await t.test('bulk image undo restores only returned entries, library rows, groups and prompt counts', async (t) => {
+    const { settingsService } = await import('../src/services/settingsService')
+    const settings = settingsService.loadSettings()
+    t.mock.method(settingsService, 'loadSettings', () => ({ ...settings, general: { ...settings.general, deleteProtection: { ...settings.general.deleteProtection, enabled: true } } }))
+    const db = main.db
+    const folderId = (db.prepare('SELECT id FROM watched_folders ORDER BY id LIMIT 1').get() as { id: number }).id
+    const groupId = (db.prepare('SELECT id FROM groups ORDER BY id LIMIT 1').get() as { id: number }).id
+    const hash = 'ab'.repeat(24)
+    const otherHash = 'cd'.repeat(24)
+    const first = path.join(uploads, 'undo-first.png')
+    const second = path.join(uploads, 'undo-second.png')
+    const other = path.join(uploads, 'undo-unselected.png')
+    const insertImage = (imageHash: string, files: string[]) => {
+      db.prepare("INSERT INTO media_metadata (composite_hash, prompt, first_seen_date) VALUES (?, 'undo_prompt', '2020-01-01 00:00:00')").run(imageHash)
+      for (const file of files) {
+        fs.writeFileSync(file, path.basename(file))
+        db.prepare("INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_size, mime_type) VALUES (?, ?, ?, 1, 'image/png')").run(imageHash, file, folderId)
+      }
+    }
+    insertImage(hash, [first, second])
+    insertImage(otherHash, [other])
+    const cascadeTables = db.prepare(`SELECT DISTINCT m.name
+      FROM sqlite_master m JOIN pragma_foreign_key_list(m.name) fk
+      WHERE m.type = 'table' AND fk."table" = 'media_metadata' AND fk.on_delete = 'CASCADE'
+      ORDER BY m.name`).all() as Array<{ name: string }>
+    assert.deepEqual(cascadeTables.map((row) => row.name), [
+      'auto_folder_group_images', 'generated_video_optimizations', 'image_groups',
+      'image_models', 'media_image_features', 'media_similarity_index',
+    ], 'every cascaded media side table must have a restore strategy')
+    const { MediaImageFeaturesModel } = await import('../src/models/Image/MediaImageFeaturesModel')
+    const { AutoTagIndexService } = await import('../src/services/autoTagIndexService')
+    const histogram = {
+      r: Array.from({ length: 256 }, (_,index) => Number(index === 64)),
+      g: Array.from({ length: 256 }, (_,index) => Number(index === 128)),
+      b: Array.from({ length: 256 }, (_,index) => Number(index === 192)),
+    }
+    db.prepare("UPDATE media_metadata SET perceptual_hash = '123456789abcdef0', dhash = 'fedcba9876543210', ahash = '1122334455667788', auto_tags = ? WHERE composite_hash = ?")
+      .run(JSON.stringify({ tagger: { general: { undo_tag: 0.875 } } }), hash)
+    MediaImageFeaturesModel.setHistogram(hash, histogram)
+    AutoTagIndexService.syncForHash(hash, JSON.stringify({ tagger: { general: { undo_tag: 0.875 } } }))
+    const histogramBefore = MediaImageFeaturesModel.getHistogram(hash)
+    const similarityRow = db.prepare(`SELECT p_hi, p_lo, d_hi, d_lo, a_hi, a_lo, avg_r, avg_g, avg_b, dom_r, dom_g, dom_b, luminance, saturation
+      FROM media_similarity_index WHERE media_id = (SELECT media_id FROM media_metadata WHERE composite_hash = ?)`)
+    const similarityBefore = similarityRow.get(hash)
+    const modelRows = db.prepare('SELECT model_hash, model_role, weight, civitai_checked, civitai_failed, checked_at, created_at FROM image_models WHERE composite_hash = ? ORDER BY model_hash')
+    db.prepare(`INSERT INTO image_models (composite_hash, model_hash, model_role, weight, civitai_checked, civitai_failed, checked_at, created_at)
+      VALUES (?, 'model-checkpoint', 'checkpoint', 1.0, 1, 0, '2020-01-02', '2020-01-01'),
+             (?, 'model-lora', 'lora', 0.75, 0, 1, '2020-01-03', '2020-01-01')`).run(hash, hash)
+    const modelsBefore = modelRows.all(hash)
+    const videoRows = db.prepare('SELECT * FROM generated_video_optimizations WHERE composite_hash = ?')
+    db.prepare(`INSERT INTO generated_video_optimizations
+      (composite_hash, source_path, source_size, source_mtime, crf, audio_bitrate, status, output_path, attempts)
+      VALUES (?, ?, 1234, 1000, 23, 128, 'completed', ?, 2)`).run(hash, second, path.join(root, 'optimized-copy.mp4'))
+    const videoBefore = videoRows.get(hash)
+    const folderGroupId = Number(db.prepare(`INSERT INTO auto_folder_groups (folder_path, absolute_path, display_name)
+      VALUES ('undo-folder', ?, 'Undo folder')`).run(path.join(uploads, 'undo-folder')).lastInsertRowid)
+    db.prepare('INSERT INTO auto_folder_group_images (group_id, composite_hash) VALUES (?, ?)').run(folderGroupId, hash)
+    db.prepare("INSERT INTO prompt_collection (prompt, usage_count) VALUES ('undo_prompt', 2)").run()
+    db.prepare("INSERT INTO image_groups (group_id, composite_hash, collection_type, order_index) VALUES (?, ?, 'manual', 7)").run(groupId, hash)
+    const unused = path.join(uploads, 'unrelated-output.txt')
+    fs.writeFileSync(unused, 'unrelated')
+    const unrelatedName = path.basename(await recycle.deleteFile(unused, true, 'workflow-output') as string)
+    const deletion = await call('/api/images/bulk', adminId, 'DELETE', { compositeHashes: [hash, 'invalid'] })
+    assert.equal(deletion.status, 200)
+    const details = deletion.body.data.details
+    assert.equal(details.deleted, 1)
+    assert.equal(details.failed, 1)
+    assert.equal(details.recycleBinEntries.length, 2, 'one entry per physical copy, not per hash')
+    assert.equal(db.prepare('SELECT 1 FROM media_metadata WHERE composite_hash = ?').get(hash), undefined)
+    assert.deepEqual(modelRows.all(hash), [], 'model links really were cascaded away')
+    assert.equal(MediaImageFeaturesModel.getHistogram(hash), null)
+    assert.equal(videoRows.get(hash), undefined)
+    assert.equal(fs.existsSync(first), false)
+    assert.equal(fs.existsSync(second), false)
+    assert.ok(fs.existsSync(other), 'unselected files remain untouched')
+    assert.equal((db.prepare("SELECT usage_count FROM prompt_collection WHERE prompt = 'undo_prompt'").get() as { usage_count: number }).usage_count, 1)
+
+    assert.equal((await call('/api/images/restore', guestId, 'POST', { names: details.recycleBinEntries })).status, 403)
+    const editorGroup = AuthPermissionGroup.createCustomGroup({ name: 'image-undo', permissionKeys: ['images.view', 'images.delete'] })
+    const editorId = addAccount('image-undo-user', 'guest')
+    AuthPermissionGroup.addAccountMembership(editorGroup.id, editorId)
+    invalidateConfiguredAuthCache()
+    const unrecordedName = 'unrecorded-file.txt'
+    fs.writeFileSync(path.join(bin, unrecordedName), 'no origin')
+    const forbidden = await call('/api/images/restore', editorId, 'POST', { names: [unrelatedName, unrecordedName, 'missing-file.txt'] })
+    assert.equal(forbidden.body.data.done.length, 0)
+    assert.equal(forbidden.body.data.failed[0].name, unrelatedName)
+    assert.equal(forbidden.body.data.failed.length, 3)
+    assert.ok(forbidden.body.data.failed.every((item: { error: string; code?: string }) =>
+      item.error === forbidden.body.data.failed[0].error && item.code === undefined), 'non-library, unrecorded and absent names have the same response')
+    assert.ok(fs.existsSync(path.join(bin, unrelatedName)), 'image undo cannot restore other server files')
+    assert.equal((await call('/api/images/restore', editorId, 'POST', { names: ['../escape'] })).status, 400)
+
+    // A conflict affects only that entry and never overwrites a newly created file.
+    fs.writeFileSync(first, 'newer')
+    const restored = await call('/api/images/restore', editorId, 'POST', { names: details.recycleBinEntries })
+    assert.equal(restored.status, 200)
+    assert.equal(restored.body.data.done.length, 1)
+    assert.equal(restored.body.data.failed.length, 1)
+    assert.equal(restored.body.data.failed[0].code, 'conflict')
+    assert.equal(fs.readFileSync(first, 'utf8'), 'newer')
+    assert.equal(fs.readFileSync(second, 'utf8'), 'undo-second.png')
+    assert.equal((db.prepare('SELECT first_seen_date FROM media_metadata WHERE composite_hash = ?').get(hash) as { first_seen_date: string }).first_seen_date, '2020-01-01 00:00:00')
+    assert.equal((db.prepare('SELECT order_index FROM image_groups WHERE composite_hash = ? AND group_id = ?').get(hash, groupId) as { order_index: number }).order_index, 7)
+    assert.deepEqual(MediaImageFeaturesModel.getHistogram(hash), histogramBefore, 'histogram BLOB survives byte-for-byte')
+    assert.deepEqual(similarityRow.get(hash), similarityBefore, 'hash bands and color descriptors are rebuilt')
+    assert.deepEqual(modelRows.all(hash), modelsBefore, 'model roles, weights and lookup status survive')
+    assert.deepEqual(videoRows.get(hash), videoBefore, 'video optimization state survives when its source is restored')
+    assert.ok(db.prepare('SELECT 1 FROM auto_folder_group_images WHERE composite_hash = ? AND group_id = ?').get(hash, folderGroupId))
+    assert.deepEqual(db.prepare(`SELECT t.tag_key, mat.score FROM media_auto_tags mat
+      JOIN auto_tag_terms t ON t.term_id = mat.term_id
+      JOIN media_metadata m ON m.media_id = mat.media_id WHERE m.composite_hash = ?`).all(hash), [{ tag_key: 'undo_tag', score: 0.875 }], 'auto-tag search rows are rebuilt from metadata')
+    assert.equal((db.prepare("SELECT usage_count FROM prompt_collection WHERE prompt = 'undo_prompt'").get() as { usage_count: number }).usage_count, 2, 'restoring copies increments usage only once')
+    fs.unlinkSync(first)
+    const retry = await call('/api/images/restore', editorId, 'POST', { names: restored.body.data.failed.map((entry: { name: string }) => entry.name) })
+    assert.equal(retry.body.data.done.length, 1)
+    assert.equal(fs.readFileSync(first, 'utf8'), 'undo-first.png')
+    assert.equal((db.prepare('SELECT COUNT(*) AS count FROM image_files WHERE composite_hash = ?').get(hash) as { count: number }).count, 2)
+    assert.equal((db.prepare("SELECT usage_count FROM prompt_collection WHERE prompt = 'undo_prompt'").get() as { usage_count: number }).usage_count, 2)
+
+    // Single-image responses expose the same undo entries; permanently deleted files expose none.
+    const single = await call(`/api/images/${otherHash}`, adminId, 'DELETE')
+    assert.equal(single.body.data.recycleBinEntries.length, 1)
+    const adminRestore = await call('/api/system-folders/recycle-bin/restore', adminId, 'POST', { names: single.body.data.recycleBinEntries })
+    assert.equal(adminRestore.body.data.done.length, 1)
+    assert.ok(db.prepare('SELECT 1 FROM media_metadata WHERE composite_hash = ?').get(otherHash), 'the admin restore shares library reattachment')
+    const { ImageManagementService } = await import('../src/services/imageManagementService')
+    t.mock.method(settingsService, 'loadSettings', () => ({ ...settings, general: { ...settings.general, deleteProtection: { ...settings.general.deleteProtection, enabled: false } } }))
+    const permanent = await ImageManagementService.deleteImagesBulk([otherHash])
+    assert.deepEqual(permanent.details.recycleBinEntries, [])
+    assert.equal(fs.existsSync(other), false)
+  })
+
+  await t.test('administrators can recover files with warnings when library reattachment is impossible, while Undo stays strict', async (t) => {
+    const { settingsService } = await import('../src/services/settingsService')
+    const settings = settingsService.loadSettings()
+    t.mock.method(settingsService, 'loadSettings', () => ({ ...settings, general: { ...settings.general, deleteProtection: { ...settings.general.deleteProtection, enabled: true } } }))
+    const db = main.db
+    for (const [index, reason] of ['removed-folder', 'registered-path', 'malformed-json'].entries()) {
+      const hash = `${index + 1}f`.repeat(24)
+      const directory = path.join(uploads, `fallback-${reason}`)
+      fs.mkdirSync(directory)
+      const original = path.join(directory, 'recover.png')
+      fs.writeFileSync(original, 'recoverable content')
+      const folderId = Number(db.prepare('INSERT INTO watched_folders (folder_path, folder_name) VALUES (?, ?)').run(directory, reason).lastInsertRowid)
+      db.prepare('INSERT INTO media_metadata (composite_hash) VALUES (?)').run(hash)
+      db.prepare("INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_size, mime_type) VALUES (?, ?, ?, 19, 'image/png')").run(hash, original, folderId)
+      const deletion = await call('/api/images/bulk', adminId, 'DELETE', { compositeHashes: [hash] })
+      const [name] = deletion.body.data.details.recycleBinEntries
+      assert.ok(name, 'the protected deletion records an undo entry')
+      if (reason === 'removed-folder') db.prepare('DELETE FROM watched_folders WHERE id = ?').run(folderId)
+      else if (reason === 'registered-path') {
+        const otherHash = 'ef'.repeat(24)
+        db.prepare('INSERT INTO media_metadata (composite_hash) VALUES (?)').run(otherHash)
+        db.prepare("INSERT INTO image_files (composite_hash, original_file_path, folder_id, file_size, mime_type) VALUES (?, ?, ?, 1, 'image/png')").run(otherHash, original, folderId)
+      } else {
+        user.getUserSettingsDb().prepare("UPDATE recycle_bin_entries SET library_restore_data = '{broken' WHERE bin_name = ?").run(name)
+      }
+      const undo = await call('/api/images/restore', adminId, 'POST', { names: [name] })
+      assert.equal(undo.body.data.done.length, 0, reason)
+      assert.equal(undo.body.data.failed.length, 1, reason)
+      assert.equal(fs.existsSync(original), false, 'strict Undo rolls the physical file back')
+      assert.ok(fs.existsSync(path.join(bin, name)))
+      assert.equal(db.prepare('SELECT 1 FROM media_metadata WHERE composite_hash = ?').get(hash), undefined, 'failed DB reattachment rolls back all inserted rows')
+
+      // Even rename-on-conflict must be able to recover an otherwise unattachable file.
+      const renamed = reason === 'removed-folder'
+      if (renamed) fs.writeFileSync(original, 'newer content')
+      const result = await call('/api/system-folders/recycle-bin/restore', adminId, 'POST', { names: [name], conflict: renamed ? 'rename' : 'fail' })
+      assert.equal(result.body.data.done.length, 1, reason)
+      assert.equal(result.body.data.failed.length, 0, reason)
+      assert.ok(result.body.data.done[0].warning, 'file-only recovery is explicitly warned about')
+      const restoredTo = renamed ? path.join(directory, 'recover (복원 1).png') : original
+      assert.equal(result.body.data.done[0].restoredTo, restoredTo)
+      assert.equal(fs.readFileSync(restoredTo, 'utf8'), 'recoverable content')
+      if (renamed) assert.equal(fs.readFileSync(original, 'utf8'), 'newer content')
+      assert.equal(fs.existsSync(path.join(bin, name)), false)
+      assert.equal(recycle.readRecycleBinOrigins([name]).size, 0)
+    }
+  })
+
+  await t.test('prompt batch deletion is permission-checked, type-scoped and rolls back shared validation failures', async (t) => {
+    const db = main.db
+    const addPrompt = (prompt: string, usage = 0, groupId: number | null = null) => Number(db.prepare('INSERT INTO prompt_collection (prompt, usage_count, group_id) VALUES (?, ?, ?)').run(prompt, usage, groupId).lastInsertRowid)
+    const first = addPrompt('batch-allowed')
+    const inUse = addPrompt('batch-in-use', 1)
+    assert.equal((await call('/api/prompt-collection/bulk', guestId, 'DELETE', { promptIds: [first] })).status, 403)
+    const blocked = await call('/api/prompt-collection/bulk', adminId, 'DELETE', { promptIds: [first, inUse] })
+    assert.equal(blocked.status, 409)
+    assert.equal((await call(`/api/prompt-collection/${inUse}`, adminId, 'DELETE')).status, 409, 'single deletes expose the same domain conflict')
+    assert.equal((await call('/api/prompt-collection/not-a-prompt-id', adminId, 'DELETE')).status, 400)
+    assert.ok(db.prepare('SELECT 1 FROM prompt_collection WHERE id = ?').get(first), 'earlier deletes roll back')
+    const { PromptGroupModel } = await import('../src/models/PromptGroup')
+    const loraId = PromptGroupModel.create({ group_name: 'LoRA' })
+    const protectedId = addPrompt('batch-protected', 0, loraId)
+    assert.equal((await call('/api/prompt-collection/bulk', adminId, 'DELETE', { promptIds: [first, protectedId] })).status, 409)
+    assert.ok(db.prepare('SELECT 1 FROM prompt_collection WHERE id = ?').get(first))
+    for (const body of [{ promptIds: [] }, { promptIds: [first, '2'] }, { promptIds: [first], type: 'both' }]) {
+      assert.equal((await call('/api/prompt-collection/bulk', adminId, 'DELETE', body)).status, 400)
+      assert.ok(db.prepare('SELECT 1 FROM prompt_collection WHERE id = ?').get(first))
+    }
+    const deleted = await call('/api/prompt-collection/bulk', adminId, 'DELETE', { promptIds: [first, first] })
+    assert.deepEqual(deleted.body.data.deletedIds, [first])
+    assert.equal(db.prepare('SELECT 1 FROM prompt_collection WHERE id = ?').get(first), undefined)
+    for (const [type, table] of [['negative', 'negative_prompt_collection'], ['auto', 'auto_prompt_collection']] as const) {
+      const id = Number(db.prepare(`INSERT INTO ${table} (prompt, usage_count) VALUES ('batch-other-type', 0)`).run().lastInsertRowid)
+      const result = await call('/api/prompt-collection/bulk', adminId, 'DELETE', { promptIds: [id], type })
+      assert.deepEqual(result.body.data.deletedIds, [id])
+      assert.equal(db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(id), undefined)
+    }
+    const { PromptCollectionModel } = await import('../src/models/PromptCollection')
+    t.mock.method(PromptCollectionModel, 'delete', () => { throw new Error('Invalid database state') })
+    assert.equal((await call('/api/prompt-collection/bulk', adminId, 'DELETE', { promptIds: [inUse + 10000] })).status, 500, 'a DB error containing Invalid is not an input error or conflict')
+    assert.equal((await call(`/api/prompt-collection/${inUse + 10000}`, adminId, 'DELETE')).status, 500)
+  })
+
   await t.test('permanent delete and empty only touch RecycleBin files', async () => {
     fs.writeFileSync(path.join(bin, '2026-01-01T00-00-00-000Z_a.txt'), 'a')
     const removed = await call('/api/system-folders/recycle-bin/delete', adminId, 'POST', { names: ['2026-01-01T00-00-00-000Z_a.txt', 'missing.txt'] })

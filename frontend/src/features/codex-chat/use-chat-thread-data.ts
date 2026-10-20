@@ -1,13 +1,14 @@
-import { useEffect, useMemo } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { chatGenerationPollInterval } from '@/features/runtime-events/chat-generation-query-updates'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
-import { getCodexChatRunning, getCodexChatThread, listCodexChatThreads, mergeThreadTail, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { getCodexChatRunning, getCodexChatThread, listCodexChatThreads, mergeThreadBefore, mergeThreadTail, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey, defaultThreadId, type CodexChatApi } from './codex-chat-context'
 
 const RUNNING_POLL_MS = 2000
 const POLL_TAIL_MESSAGES = 40
+const MESSAGE_PAGE_SIZE = 80
 
 /** Own thread selection and server refresh policy for both the dock and the full chat page. */
 export function useChatThreadData({ selectedThreadId, settleSelection, keepDrafts }: Pick<CodexChatApi, 'selectedThreadId' | 'settleSelection' | 'keepDrafts'>, liveThreadId: number | null) {
@@ -29,7 +30,7 @@ export function useChatThreadData({ selectedThreadId, settleSelection, keepDraft
   const activeThread = threads.find((thread) => thread.id === activeThreadId) ?? null
   const threadQuery = useQuery({
     queryKey: codexChatThreadQueryKey(activeThreadId),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const id = activeThreadId as number
       const cached = queryClient.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(id))
       // A result event may concern an older message outside the polled tail.
@@ -38,15 +39,65 @@ export function useChatThreadData({ selectedThreadId, settleSelection, keepDraft
         const status = await getCodexChatRunning(id)
         if (status.running && status.latestMessageId === (cached.messages.at(-1)?.id ?? null)) return { ...cached, running: status.running }
       }
-      // Only the tail changes during a reply; a missed event still triggers a complete refresh.
+      // Routine reads start at the tail. Refresh only the older range the reader explicitly loaded.
       if (!invalidated && cached && (cached.running || cached.pendingJobs)) {
-        const merged = mergeThreadTail(cached, await getCodexChatThread(id, POLL_TAIL_MESSAGES))
+        const merged = mergeThreadTail(cached, await getCodexChatThread(id, POLL_TAIL_MESSAGES, undefined, signal))
         if (merged) return merged
       }
-      return getCodexChatThread(id)
+      let detail = await getCodexChatThread(id, MESSAGE_PAGE_SIZE, undefined, signal)
+      if (!cached || cached.thread.context_revision !== detail.thread.context_revision) return detail
+      if (!invalidated) return mergeThreadTail(cached, detail) ?? detail
+      if (!cached.historyLoaded) return detail
+      const first = cached.messages[0]?.id
+      while (first !== undefined && detail.hasMoreBefore && detail.messages[0].id > first) {
+        const before = detail.messages[0].id
+        const page = await getCodexChatThread(id, MESSAGE_PAGE_SIZE, before, signal)
+        const merged = mergeThreadBefore(detail, page, before)
+        if (!merged) break
+        detail = merged
+      }
+      return detail
     },
     enabled: activeThreadId !== null,
     refetchInterval: (query) => (query.state.data?.running && liveThreadId !== activeThreadId ? RUNNING_POLL_MS : query.state.data?.pendingJobs ? chatGenerationPollInterval(streamStatus) : false),
   })
-  return { threadsQuery, threads, activeThreadId, activeThread, threadQuery, thread: threadQuery.data?.thread ?? activeThread }
+  const loadingRef = useRef<{ threadId: number; promise: Promise<number | null> } | null>(null)
+  const older = useMutation({
+    mutationFn: async (id: number) => {
+      const key = codexChatThreadQueryKey(id)
+      const current = queryClient.getQueryData<CodexChatThreadDetail>(key)
+      const before = current?.messages[0]?.id
+      if (!current?.hasMoreBefore || before === undefined) return null
+      // Serialize against a refresh so it cannot overwrite a page just prepended.
+      await queryClient.cancelQueries({ queryKey: key })
+      const page = await getCodexChatThread(id, MESSAGE_PAGE_SIZE, before)
+      let first: number | null = null
+      queryClient.setQueryData<CodexChatThreadDetail>(key, (latest) => {
+        const merged = latest ? mergeThreadBefore(latest, page, before) : null
+        if (!merged) return latest
+        first = page.messages[0]?.id ?? null
+        return merged
+      })
+      return first
+    },
+  })
+  const { mutateAsync } = older
+  const loadEarlier = useCallback(() => {
+    if (activeThreadId === null) return Promise.resolve(null)
+    if (loadingRef.current?.threadId === activeThreadId) return loadingRef.current.promise
+    const request = { threadId: activeThreadId, promise: mutateAsync(activeThreadId).finally(() => {
+      if (loadingRef.current === request) loadingRef.current = null
+    }) }
+    loadingRef.current = request
+    return request.promise
+  }, [activeThreadId, mutateAsync])
+  const preserveHistory = useCallback(() => {
+    if (activeThreadId === null) return
+    queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(activeThreadId), (current) =>
+      current && !current.historyLoaded ? { ...current, historyLoaded: true } : current)
+  }, [activeThreadId, queryClient])
+  return { threadsQuery, threads, activeThreadId, activeThread, threadQuery, thread: threadQuery.data?.thread ?? null,
+    displayThread: threadQuery.data?.thread ?? activeThread,
+    loadEarlier, preserveHistory, loadingEarlier: older.variables === activeThreadId && older.isPending,
+    earlierError: older.variables === activeThreadId ? older.error : null, hasMoreBefore: threadQuery.data?.hasMoreBefore ?? false }
 }

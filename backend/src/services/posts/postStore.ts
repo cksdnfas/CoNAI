@@ -26,7 +26,7 @@ import { createPostTopicResolver, onPostTopicWrite, requestPostTopicEvaluation, 
 import { isHumanPostActor } from './postActor';
 import { loadPostsSettings } from './postsSettings';
 import { commentMatches, removePostSearchDocument, postSearchFilter, trashPostSearchFilter, refreshPostSearchIndex, writePostSearchDocument, createPostRelevanceResolver } from './postSearch';
-import { findKnowledgeRow, getKnowledgeState, visibleKnowledgeSources, requireKnowledgeRevision, syncKnowledgeContent, normalizeKnowledgeSources, saveKnowledgeSources, KnowledgeStore } from './knowledgeStore';
+import { findKnowledgeRow, getKnowledgeStates, visibleKnowledgeSources, requireKnowledgeRevision, syncKnowledgeContent, normalizeKnowledgeSources, saveKnowledgeSources, KnowledgeStore } from './knowledgeStore';
 import { cachedKnowledgeMultipliers, getKnowledgeQuality, knowledgeTaskFitMultiplier, knowledgeSearchTaskKey, issueKnowledgeSearchReceipts } from './knowledgeAssessment';
 import { semanticPostCandidates } from '../embeddings/postSemantic';
 import { notifySemanticChange } from '../embeddings/semanticSignal';
@@ -39,6 +39,7 @@ export type PostRow = {
   source: string; comment_mode: PostCommentMode; pinned: number; revision: number; comment_count: number;
   published_at: string | null; created_at: string; updated_at: string; source_thread_id: number | null; source_reply_id: string | null;
 };
+type PostSummaryRow = Omit<PostRow, 'body' | 'source' | 'source_thread_id' | 'source_reply_id'> & { contentHash: string };
 export type CommentRow = {
   id: number; post_id: number; parent_id: number | null; quote_comment_id: number | null; author_type: 'account' | 'profile';
   author_profile_id: number | null; author_name: string; owner_account_id: number | null; body: string; mentions: string;
@@ -51,6 +52,12 @@ export type PostOrigin = { threadId: number; replyId: string | null };
 const MAX_REVISIONS = 20;
 export const iso = (value: string | null) => (value ? `${value.replace(' ', 'T')}${value.endsWith('Z') ? '' : 'Z'}` : null);
 const db = () => getUserSettingsDb();
+
+// Same JSON [title, body] hash as postTopicContentHash, without returning bodies to the list reader.
+const SUMMARY_COLUMNS = `p.id, p.category_id, p.title, p.excerpt, p.status,
+  p.author_type, p.author_profile_id, p.author_name, p.owner_account_id,
+  p.comment_mode, p.pinned, p.revision, p.comment_count, p.published_at, p.created_at, p.updated_at,
+  substr(semantic_text_hash(json_array(p.title, p.body)), 8) AS contentHash`;
 
 type PostRevisionRow = {
   revision: number; title: string; edited_by_type: string; edited_by_account_id: number | null;
@@ -338,7 +345,7 @@ function postBody(value: unknown, limit: number = POST_LIMITS.body) {
   return body;
 }
 
-function summaries(actor: PostActor, rows: PostRow[]): PostSummary[] {
+function summaries(actor: PostActor, rows: Array<PostRow | PostSummaryRow>): PostSummary[] {
   if (rows.length === 0) return [];
   const ids = rows.map((row) => row.id);
   const marks = ids.map(() => '?').join(',');
@@ -356,11 +363,12 @@ function summaries(actor: PostActor, rows: PostRow[]): PostSummary[] {
   }
   const author = createAuthorResolver(actor);
   const topicEvaluation = createPostTopicResolver(ids);
+  const knowledge = getKnowledgeStates(ids, actor);
   return rows.map((row) => ({
     id: row.id, categoryId: row.category_id, title: row.title, excerpt: row.excerpt, status: row.status, author: author(row),
     tags: tags.get(row.id) ?? [], media: media.get(row.id) ?? [], mediaCount: counts.get(row.id) ?? 0, commentCount: row.comment_count,
     pinned: row.pinned === 1, commentMode: row.comment_mode, revision: row.revision, publishedAt: iso(row.published_at),
-    createdAt: iso(row.created_at) as string, updatedAt: iso(row.updated_at) as string, canEdit: canEditPost(actor, row), knowledge: getKnowledgeState(row.id, actor),
+    createdAt: iso(row.created_at) as string, updatedAt: iso(row.updated_at) as string, canEdit: canEditPost(actor, row), knowledge: knowledge.get(row.id) ?? null,
     topicEvaluation: topicEvaluation(row,canEditPost(actor,row) && isHumanPostActor(actor)),
   }));
 }
@@ -456,7 +464,7 @@ export const PostStore = {
     const order = status === 'published' ? 'p.pinned DESC, p.published_at DESC, p.id DESC' : 'p.updated_at DESC, p.id DESC';
     const policy = loadPostsSettings().knowledge;
     const ranking = Boolean(query.snapshot || query.sort === 'relevance' || (query.sort !== 'recent' && (terms.length || (query.kind === 'knowledge' && policy.rankingEnabled))));
-    let rows: PostRow[], total: number, snapshot: string | undefined, scoreVersion: string | undefined;
+    let rows: PostSummaryRow[], total: number, snapshot: string | undefined, scoreVersion: string | undefined;
     if (ranking) {
       const key = JSON.stringify([actor.accountId,actor.isAdmin,[...actor.keys].sort(),query.categoryId ?? null,query.tag ?? null,query.q ?? null,status,query.authorProfileId ?? null,query.kind ?? null,query.reviewStatus ?? null,query.deleted ?? null,query.sort ?? null,query.taskKey ?? null,query.taskConditionKey??null]);
       let stored: SearchSnapshot;
@@ -504,11 +512,11 @@ export const PostStore = {
       }
       scoreVersion = stored.scoreVersion; total = stored.ids.length;
       const pageIds = stored.ids.slice(offset,offset+limit);
-      const allowed = pageIds.length ? db().prepare(`SELECT p.* FROM posts p ${clause} AND p.id IN (${pageIds.map(() => '?').join(',')})`).all(...params,...pageIds) as PostRow[] : [];
+      const allowed = pageIds.length ? db().prepare(`SELECT ${SUMMARY_COLUMNS} FROM posts p ${clause} AND p.id IN (${pageIds.map(() => '?').join(',')})`).all(...params,...pageIds) as PostSummaryRow[] : [];
       const byId = new Map(allowed.map(row => [row.id,row]));
       rows = pageIds.flatMap(id => byId.has(id) ? [byId.get(id)!] : []);
     } else {
-      rows = db().prepare(`SELECT p.* FROM posts p ${clause} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params,limit,offset) as PostRow[];
+      rows = db().prepare(`SELECT ${SUMMARY_COLUMNS} FROM posts p ${clause} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...params,limit,offset) as PostSummaryRow[];
       total = (db().prepare(`SELECT COUNT(*) AS total FROM posts p ${clause}`).get(...params) as { total: number }).total;
     }
     // A post found only through one of its comments says which comment.

@@ -178,63 +178,41 @@ export class PromptCollectionIngestService {
     }
   }
 
-  static async removeFromImage(
-    prompt: string | null,
-    negativePrompt: string | null,
-    characterPromptText: string | null = null,
-    autoTags: string | null = null,
-  ): Promise<void> {
-    try {
-      if (prompt) {
-        const { terms } = parsePromptWithLoRAs(prompt);
-        for (const term of terms) {
-          const cleaned = cleanPromptTerm(term.trim());
-          if (cleaned) {
-            await PromptCollectionModel.decrementUsage(cleaned, 'positive');
-          }
-        }
+  /** The same term set drives deletion and undo, including character prompts and automatic tags. */
+  private static imageUsageTerms(prompt: string | null, negativePrompt: string | null, characterPromptText: string | null, autoTags: string | null) {
+    const result: Array<{ prompt: string; type: 'positive' | 'negative' | 'auto' }> = [];
+    for (const [text, type] of [[prompt, 'positive'], [characterPromptText, 'positive'], [negativePrompt, 'negative']] as const) {
+      if (!text) continue;
+      for (const term of parsePromptWithLoRAs(text).terms) {
+        const cleaned = cleanPromptTerm(term.trim());
+        if (cleaned) result.push({ prompt: cleaned, type });
       }
-
-      if (characterPromptText) {
-        const { terms } = parsePromptWithLoRAs(characterPromptText);
-        for (const term of terms) {
-          const cleaned = cleanPromptTerm(term.trim());
-          if (cleaned) {
-            await PromptCollectionModel.decrementUsage(cleaned, 'positive');
-          }
+    }
+    if (autoTags) {
+      try {
+        const parsed = JSON.parse(autoTags) as { tagger?: { caption?: string | null; taglist?: string | null } | null };
+        const text = parsed?.tagger?.taglist || parsed?.tagger?.caption || '';
+        for (const term of text.split(',').map((value) => value.trim()).filter(Boolean)) {
+          result.push({ prompt: term, type: 'auto' });
         }
+      } catch (error) {
+        console.warn('Failed to parse auto tags during prompt usage adjustment:', error);
       }
+    }
+    return result;
+  }
 
-      if (negativePrompt) {
-        const { terms } = parsePromptWithLoRAs(negativePrompt);
-        for (const term of terms) {
-          const cleaned = cleanPromptTerm(term.trim());
-          if (cleaned) {
-            await PromptCollectionModel.decrementUsage(cleaned, 'negative');
-          }
-        }
-      }
+  static async removeFromImage(prompt: string | null, negativePrompt: string | null, characterPromptText: string | null = null, autoTags: string | null = null): Promise<void> {
+    for (const term of this.imageUsageTerms(prompt, negativePrompt, characterPromptText, autoTags)) {
+      PromptCollectionModel.decrementUsage(term.prompt, term.type);
+    }
+  }
 
-      if (autoTags) {
-        try {
-          const parsed = JSON.parse(autoTags) as {
-            tagger?: {
-              caption?: string | null;
-              taglist?: string | null;
-            } | null;
-          };
-          const autoPromptText = parsed?.tagger?.taglist || parsed?.tagger?.caption || '';
-          for (const term of autoPromptText.split(',').map((value) => value.trim()).filter((value) => value.length > 0)) {
-            await PromptCollectionModel.decrementUsage(term, 'auto');
-          }
-        } catch (autoTagError) {
-          console.warn('Failed to parse auto tags during prompt removal:', autoTagError);
-        }
-      }
-
-    } catch (error) {
-      console.error('Error removing prompts from image:', error);
-      throw error;
+  static restoreImageUsage(prompt: string | null, negativePrompt: string | null, characterPromptText: string | null = null, autoTags: string | null = null): void {
+    for (const term of this.imageUsageTerms(prompt, negativePrompt, characterPromptText, autoTags)) {
+      if (term.type === 'positive') PromptCollectionModel.addOrIncrement(term.prompt);
+      else if (term.type === 'negative') PromptCollectionModel.addOrIncrementNegative(term.prompt);
+      else PromptCollectionModel.addOrIncrementAuto(term.prompt);
     }
   }
 }

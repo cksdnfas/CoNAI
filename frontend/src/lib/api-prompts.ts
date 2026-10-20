@@ -65,7 +65,7 @@ export function updatePromptCollectionItem(id: number, input: PromptAuthorInput,
 }
 
 export async function getPromptGroups(type: PromptTypeFilter = 'positive') {
-  const route = type === 'negative' ? '/api/negative-prompt-groups' : `/api/prompt-groups?type=${type}`
+  const route = `/api/prompt-groups/summaries?type=${type}`
   const response = await fetchJson<{ success: boolean; data?: PromptGroupRecord[]; error?: string }>(route)
   if (!response.success || !response.data) {
     throw createApiFallbackError(response.error, 'prompts.groups.load')
@@ -291,14 +291,6 @@ export async function reorderPromptGroups(groupOrders: Array<{ id: number; displ
   return response.data
 }
 
-export async function getPromptGroupStatistics(type: PromptTypeFilter = 'positive') {
-  const response = await fetchJson<ApiResponse<PromptGroupRecord[]>>(`/api/prompt-collection/group-statistics?type=${type}`)
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'prompts.groupStatistics.load')
-  }
-  return response.data
-}
-
 export async function exportPromptGroups(type: PromptTypeFilter = 'positive') {
   const route = type === 'negative' ? '/api/negative-prompt-groups/export' : `/api/prompt-groups/export?type=${type}`
   const response = await fetchJson<PromptGroupExportData>(route)
@@ -323,6 +315,14 @@ export async function importPromptGroups(payload: PromptGroupExportData, type: P
   }
 
   return response.data
+}
+
+export function deletePrompts(promptIds: number[], type: PromptTypeFilter = 'positive') {
+  return requestApiData<{ deletedIds: number[]; message: string }>('/api/prompt-collection/bulk', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ promptIds, type }),
+  })
 }
 
 export async function deletePrompt(promptId: number, type: PromptTypeFilter = 'positive') {

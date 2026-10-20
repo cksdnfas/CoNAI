@@ -46,6 +46,8 @@
 
 채팅 화면의 조회·선택·폴링은 `use-chat-thread-data.ts`, 메시지 표시 범위·스트리밍 스크롤·검색 결과 위치 복원은 `use-chat-transcript-window.ts`가 맡는다. 패널과 전체 페이지는 같은 훅을 사용하며 메시지 저장·실행은 기존 채팅 provider와 서버 경로를 유지한다.
 
+채팅방 디렉터리는 `CodexChatStore`의 공용 요약 projection을 사용한다(문맥·요약 본문은 상세 조회만 읽음). `/api/codex-chat/threads`는 기존 UI의 전체 목록 배열을 유지하며 `limit`·`cursor`가 있으면 SQL 페이지와 별도 `pagination`을 반환한다. `archive`·`pinned`·`kind`·`query` 필터와 `pinned_first` 정렬도 SQL에서 적용한다. MCP `list_chat_rooms`는 기본 40개, 최대 100개와 `has_more`·`next_cursor`를 사용하며 다음 페이지는 같은 필터로 요청한다. 프로필 이름만 필요한 경로는 `ChatProfileStore.listNames`를 사용하고 전체 프로필 목록은 역할·프리셋·표시 블록 의존성을 일괄 조회한다.
+
 채팅 모양은 `user.db`의 `user_preferences`에 계정별 슬롯과 채팅별 값을 분리해 저장한다. `chatAppearance.ts`는 기존 `save/chat-appearance/<account>.json`을 최초 접근 시 한 트랜잭션으로 이관하고 원본 파일을 보존한다. 이관 표시와 값이 함께 커밋되며 읽기·파싱·저장 실패는 빈 설정으로 확정하지 않는다. 이관 이후 DB가 정본이고 한 채팅 변경은 그 채팅의 행만 갱신한다.
 
 채팅 요청 최적화: API 답변은 라우팅·의미 검색·판단·컨텍스트 준비에 같은 기록을 재사용하며, 번역된 사용자 메시지만 갱신한다. 상태 블록·인용 복원에 필요한 과거 기록은 유지한다. 요약 입력은 요약 모델의 서버 컨텍스트에 맞추고, 다른 모델의 토큰 보정률을 재사용하지 않는다. 현재 요청이 들어갈 수 있으면 진행 중인 선행 요약을 기다리지 않으며, 그룹 선행 요약도 낮은 요청 우선순위를 쓴다. 세션 엔진 전체 실행에는 외부 재시도를 걸지 않는다.

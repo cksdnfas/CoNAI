@@ -43,8 +43,8 @@ export function createPostTopicResolver(ids: number[]) {
     for (const row of db().prepare('SELECT * FROM post_topic_evaluation_requests WHERE id IN (SELECT MAX(id) FROM post_topic_evaluation_requests WHERE post_id IN (' + marks + ') GROUP BY post_id)').all(...ids) as RequestRow[]) latest.set(row.post_id,row);
     for (const row of db().prepare('SELECT * FROM post_topic_evaluation_requests WHERE id IN (SELECT MAX(id) FROM post_topic_evaluation_requests WHERE post_id IN (' + marks + ") AND status IN ('completed','partial') AND result_json IS NOT NULL GROUP BY post_id)").all(...ids) as RequestRow[]) results.set(row.post_id,row);
   }
-  return (post: TopicPost, canManage: boolean): PostTopicEvaluationView => {
-    const contentHash = postTopicContentHash(post);
+  return (post: TopicPost | { id: number; status: string; contentHash: string }, canManage: boolean): PostTopicEvaluationView => {
+    const contentHash = 'contentHash' in post ? post.contentHash : postTopicContentHash(post);
     const request = latest.get(post.id), result = results.get(post.id);
     const staleReason = result ? result.content_hash !== contentHash ? 'content_changed'
       : result.definition_version !== definition.definitionVersion ? 'definition_changed'

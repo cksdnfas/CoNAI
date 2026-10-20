@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { VirtuosoMasonry, type ItemContent } from '@virtuoso.dev/masonry'
 import type { PostCategory, PostSummary } from '@conai/shared'
 import { EyeOff, FileClock, Images, MessageCircle, MessageSquare, Pin } from 'lucide-react'
 import { ActionContextMenu, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ToggleChip } from '@/components/ui/chip'
+import { useImageListColumnCount } from '@/features/images/components/image-list/use-image-list-column-count'
 import { useI18n } from '@/i18n'
 import { getImage } from '@/lib/api-images'
 import { buildApiUrl } from '@/lib/api-url'
@@ -106,36 +108,61 @@ export function PostFeed({ posts, categories, onOpen, onTag, menu, menuOnClick =
   )
 }
 
-/** Masonry cards: the cover at its own height, then title and meta. */
+const CARD_MIN_WIDTH = 260
+const CARD_GAP = 16
+const CARD_MAX_COLUMNS = 3
+type CardContext = Omit<ListProps, 'posts'> & { canViewImages: boolean }
+
+const PostCard: ItemContent<PostSummary, CardContext> = ({ data: post, context }) => {
+  if (!post) return null
+  const { categories, onOpen, onTag, menu, menuOnClick, canViewImages } = context
+  const cover = canViewImages ? coverUrl(post.media) : null
+  return (
+    <div className="pb-5">
+      <ActionContextMenu entries={menu?.(post) ?? []} openOnClick={menuOnClick}>
+        <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }}
+          className="flex cursor-pointer flex-col gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
+          {cover ? <img src={cover} alt="" loading="lazy" className="block h-auto w-full rounded-sm bg-surface-low" /> : (
+            <p className="line-clamp-6 border-l-2 border-line pl-3 text-sm text-muted-foreground">{post.excerpt}</p>
+          )}
+          <PostTitle post={post} className="line-clamp-2" />
+          <PostMeta post={post} categories={categories} />
+          <MatchedComment post={post} />
+          <TagRow tags={post.tags} onTag={onTag} />
+          <PostTopicSummary value={post.topicEvaluation} />
+        </div>
+      </ActionContextMenu>
+    </div>
+  )
+}
+
+/** Masonry cards: the cover at its own height, then title and meta. Virtualized on the window scroll like the image feed. */
 export function PostCards({ posts, categories, onOpen, onTag, menu, menuOnClick = false }: ListProps) {
   const { canViewImages } = usePostPermissions()
+  const [container, setContainer] = useState<HTMLDivElement | null>(null)
+  const fitColumns = useImageListColumnCount(container, CARD_MIN_WIDTH, CARD_GAP)
+  const columnCount = Math.min(CARD_MAX_COLUMNS, fitColumns)
+  // As in ImageListMasonry: VirtuosoMasonry seeds columns only at mount, so remount while posts are fewer than columns.
+  const masonryKey = posts.length < columnCount ? `sparse:${posts.length}:${columnCount}` : 'dense'
   return (
-    <div className="columns-1 gap-4 sm:columns-2 xl:columns-3">
-      {posts.map((post) => {
-        const cover = canViewImages ? coverUrl(post.media) : null
-        return (
-          <ActionContextMenu key={post.id} entries={menu?.(post) ?? []} openOnClick={menuOnClick}>
-            <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }}
-              className="mb-5 flex cursor-pointer break-inside-avoid flex-col gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
-              {cover ? <img src={cover} alt="" loading="lazy" className="block h-auto w-full rounded-sm bg-surface-low" /> : (
-                <p className="line-clamp-6 border-l-2 border-line pl-3 text-sm text-muted-foreground">{post.excerpt}</p>
-              )}
-              <PostTitle post={post} className="line-clamp-2" />
-              <PostMeta post={post} categories={categories} />
-              <MatchedComment post={post} />
-              <TagRow tags={post.tags} onTag={onTag} />
-              <PostTopicSummary value={post.topicEvaluation} />
-            </div>
-          </ActionContextMenu>
-        )
-      })}
+    <div ref={setContainer}>
+      <VirtuosoMasonry<PostSummary, CardContext>
+        key={masonryKey}
+        data={posts}
+        context={{ categories, onOpen, onTag, menu, menuOnClick, canViewImages }}
+        useWindowScroll
+        columnCount={columnCount}
+        initialItemCount={Math.min(posts.length, Math.max(columnCount * 2, 8))}
+        style={{ columnGap: `${CARD_GAP}px` }}
+        ItemContent={PostCard}
+      />
     </div>
   )
 }
 
 /** One library item filling an SNS slide; moving media plays while the slide is on screen. */
 function SnsMedia({ hash, active }: { hash: string; active: boolean }) {
-  const query = useQuery({ queryKey: ['post-media', hash], queryFn: () => getImage(hash), staleTime: 5 * 60_000, retry: false })
+  const query = useQuery({ queryKey: ['post-media', hash], queryFn: ({ signal }) => getImage(hash, { signal }), staleTime: 5 * 60_000, retry: false })
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const kind = libraryMediaKind(query.data)
   useEffect(() => {
@@ -147,10 +174,10 @@ function SnsMedia({ hash, active }: { hash: string; active: boolean }) {
   if (kind === 'video') {
     return <video ref={videoRef} src={active ? buildApiUrl(`/api/images/${hash}/file`) : undefined} poster={buildApiUrl(`/api/images/${hash}/thumbnail`)} muted loop playsInline className="size-full object-contain" />
   }
-  return <img src={buildApiUrl(`/api/images/${hash}/${kind === 'animated' && active ? 'file' : 'thumbnail'}`)} alt="" draggable={false} className="size-full object-contain" />
+  return <img src={buildApiUrl(`/api/images/${hash}/${kind === 'animated' && active ? 'file' : 'thumbnail'}`)} alt="" loading="lazy" draggable={false} className="size-full object-contain" />
 }
 
-function SnsSlide({ post, categories, onOpen, onTag, onVisible }: Omit<ListProps, 'posts'> & { post: PostSummary; onVisible: () => void }) {
+function SnsSlide({ post, categories, onOpen, onTag, onVisible, loadMedia }: Omit<ListProps, 'posts'> & { post: PostSummary; onVisible: (postId: number) => void; loadMedia: boolean }) {
   const { t } = useI18n()
   const { canViewImages } = usePostPermissions()
   const ref = useRef<HTMLElement | null>(null)
@@ -163,11 +190,11 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible }: Omit<ListProps
     const observer = new IntersectionObserver((entries) => {
       const visible = entries.some((entry) => entry.intersectionRatio >= 0.6)
       setActive(visible)
-      if (visible) onVisible()
+      if (visible) onVisible(post.id)
     }, { threshold: [0, 0.6] })
     observer.observe(node)
     return () => observer.disconnect()
-  }, [onVisible])
+  }, [onVisible, post.id])
 
   return (
     <article ref={ref} className="relative flex h-full snap-start snap-always flex-col items-center justify-center py-3">
@@ -190,7 +217,7 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible }: Omit<ListProps
             >
               {media.map((item, mediaIndex) => (
                 <div key={item.ref} role="button" tabIndex={0} className="size-full shrink-0 cursor-pointer snap-center" onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }} aria-label={post.title}>
-                  <SnsMedia hash={item.ref} active={active && mediaIndex === index} />
+                  {loadMedia && Math.abs(mediaIndex - index) <= 1 ? <SnsMedia hash={item.ref} active={active && mediaIndex === index} /> : null}
                 </div>
               ))}
             </div>
@@ -229,13 +256,18 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible }: Omit<ListProps
 
 /** One post per screen, media first, snapping as you scroll; the last slide asks for more. */
 export function PostSns({ posts, categories, onOpen, onTag, onReachEnd }: ListProps & { onReachEnd: () => void }) {
+  const [activePostId, setActivePostId] = useState<number | null>(null)
+  const activeIndex = Math.max(0, posts.findIndex((post) => post.id === activePostId))
+  const handleVisible = (postId: number) => {
+    setActivePostId(postId)
+    if (postId === posts[posts.length - 1]?.id) onReachEnd()
+  }
+
   return (
     <div className="-mx-4 h-[calc(100dvh-8.5rem)] snap-y snap-mandatory overflow-y-auto overscroll-contain px-4 sm:mx-0 sm:px-0">
       {posts.map((post, index) => (
-        <SnsSlide key={post.id} post={post} categories={categories} onOpen={onOpen} onTag={onTag} onVisible={index === posts.length - 1 ? onReachEnd : noop} />
+        <SnsSlide key={post.id} post={post} categories={categories} onOpen={onOpen} onTag={onTag} onVisible={handleVisible} loadMedia={Math.abs(index - activeIndex) <= 1} />
       ))}
     </div>
   )
 }
-
-const noop = () => undefined

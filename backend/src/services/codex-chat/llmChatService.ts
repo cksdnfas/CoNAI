@@ -22,7 +22,7 @@ import { stripEchoedAddresses, withoutNarrationMarks } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
 import { loadChatSettings } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, resolveChatAccess } from './codexChatAccess'
-import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
+import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { withGenerationOutcomes } from './codexChatMedia'
 import { generatedImagesTokens, loadInlineGeneratedImages, withGeneratedImages } from './chatGenerationPrompting'
 import { buildClaudeSessionTurn } from './claudeChatSessions'
@@ -114,6 +114,7 @@ type LlmTurn = {
   translation?: Promise<unknown>
   /** One active-path history shared by routing, semantic retrieval, judging and request preparation. */
   history?: CodexChatMessageRecord[]
+  historySource?: ChatHistorySource
   /** Continuing a cut reply: its text, which `text` starts with, and the model is asked to carry on from. */
   continuing?: string
   /** …and its routing: the continuation keeps its quote and recipients, and takes over its generation jobs. */
@@ -304,7 +305,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     const extraTokens = estimateMessagesTokens(profile.id, [...continuation, ...pageMessages, ...reactionMessages]) + generatedImagesTokens(profile.id, generatedImages)
     // Claude and pi sessions fold themselves; a direct chat with one keeps no summary of its own.
     if (config.summaryEnabled && !turn.reaction && !(sessionRuntime && thread.kind === 'direct')) {
-      await whileWaiting(turn, 'summary', fitThreadSummary(thread.id, profile, history, turn.controller.signal, tools, { attachmentTexts, attachedImages, extraTokens }))
+      await whileWaiting(turn, 'summary', fitThreadSummary(thread.id, profile, history, turn.controller.signal, tools, { attachmentTexts, attachedImages, extraTokens, historySource: turn.historySource }))
     }
     return { history, attachmentTexts, attachedImages, generatedImages, continuation, reference, reactionMessages, extraTokens }
   }
@@ -327,7 +328,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
     }
     const current = CodexChatStore.findThreadById(thread.id) ?? thread
     const request = buildChatMessages({
-      profile, thread: current, messages: history, config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, attachedImages, extraTokens, judged,
+      profile, thread: current, messages: history, historySource: turn.historySource, config, tools, segments: config.summaryEnabled ? ChatSummaryStore.list(thread.id) : [], attachmentTexts, attachedImages, extraTokens, judged,
       onMeta: (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(profile, 'chat')?.model ?? null } },
     })
     const final = withGeneratedImages([...withPageReference(request, reference), ...continuation, ...reactionMessages], generatedImages)
@@ -746,9 +747,20 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   // The live reply shows the cut text, the continuation streams onto it.
   if (continuing) emit(turn, { type: 'delta', text: continuing.content })
   const updatedThread = CodexChatStore.findThreadById(thread.id) as CodexChatThreadRecord
-  const history = CodexChatStore.listMessages(thread.id).filter((entry) => entry.id !== replacingMessageId)
+  // Session engines still consume their own recap/outcome history. A normal direct request has explicit
+  // historical lookups for lore timers, status patches and quotes, separate from its unsummarized bodies.
+  const bounded = updatedThread.kind === 'direct' && !sessionRuntimeOf(profile)
+  const source: ChatHistorySource = { threadId: thread.id, excludeMessageId: replacingMessageId }
+  const setup = judgeSetupOf(profile)
+  const config = resolveContextConfig(updatedThread, profile)
+  const history = bounded ? CodexChatStore.listContextMessages(source, {
+    afterId: config.summaryEnabled ? updatedThread.summary_until_message_id ?? 0 : 0,
+    recentMessages: Math.max(2, profile.loreScanDepth),
+    textMessages: Math.max(2, setup?.preset.context.window ?? 0, ...(setup?.preset.items.map((item) => item.window) ?? [])),
+  }) : CodexChatStore.listMessages(thread.id).filter((entry) => entry.id !== replacingMessageId)
+  if (bounded) turn.historySource = source
   turn.history = history
-  turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }))
+  turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }), turn.historySource)
   if (reaction) turn.delivery.routing = { ...turn.delivery.routing, replyTo: null, recipients: ['user'] }
   if (page) turn.chatContext = { ...turn.delivery.context, page }
   let stored: CodexChatMessageRecord | null = null

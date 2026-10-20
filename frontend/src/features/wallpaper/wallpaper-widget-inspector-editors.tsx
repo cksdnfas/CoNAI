@@ -1,11 +1,14 @@
-import { useMemo } from 'react'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { SearchField } from '@/components/common/search-field'
+import { Button } from '@/components/ui/button'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import { listAudioGroups, listAudioProjects } from '@/lib/api-audio'
+import { getAudioGroup, searchAudioGroups, type AudioGroup } from '@/lib/api-audio'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { getGraphWorkflowSchedules } from '@/lib/api-module-graph'
 import {
   InspectorColor,
@@ -99,27 +102,49 @@ function ScheduleSelect({ value, savedName, onChange }: { value: number | null; 
   )
 }
 
-/** Every audio group of every project, grouped by project. */
+/** Audio groups of every project, searched and loaded page by page, grouped by project. */
 function AudioGroupSelect({ value, onChange }: { value: string | null; onChange: (value: string | null) => void }) {
   const { t } = useI18n()
-  const projectsQuery = useQuery({ queryKey: ['wallpaper-editor', 'audio-projects'], queryFn: listAudioProjects, staleTime: 60_000 })
-  const projects = useMemo(() => projectsQuery.data ?? [], [projectsQuery.data])
-  const groupQueries = useQueries({
-    queries: projects.map((project) => ({
-      queryKey: ['wallpaper-editor', 'audio-groups', project.id],
-      queryFn: () => listAudioGroups(project.id),
-      staleTime: 60_000,
-    })),
+  const [input, setInput] = useState('')
+  const search = useDebouncedValue(input.trim(), 250)
+  const groupsQuery = useInfiniteQuery({
+    queryKey: ['wallpaper-editor', 'audio-groups', search],
+    queryFn: ({ pageParam, signal }) => searchAudioGroups({ search, cursor: pageParam, limit: 100 }, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
+    staleTime: 60_000,
   })
+  const groups = groupsQuery.data?.pages.flatMap((page) => page.items) ?? []
+  const listed = value === null || groups.some((group) => group.id === value)
+  // The saved group may sit on a page not loaded yet (or outside the search): show it anyway.
+  const savedQuery = useQuery({
+    queryKey: ['wallpaper-editor', 'audio-group', value],
+    queryFn: () => getAudioGroup(value ?? ''),
+    enabled: !listed && groupsQuery.isSuccess,
+    staleTime: 60_000,
+    retry: false,
+  })
+  const byProject = new Map<string, { name: string; groups: AudioGroup[] }>()
+  for (const group of !listed && savedQuery.data ? [savedQuery.data, ...groups] : groups) {
+    const entry = byProject.get(group.project_id) ?? { name: group.project_name ?? '', groups: [] }
+    entry.groups.push(group)
+    byProject.set(group.project_id, entry)
+  }
   return (
-    <Select value={value ?? ''} onChange={(event) => onChange(event.target.value || null)}>
-      <option value="">{t({ ko: '오디오 그룹 선택', en: 'Select an audio group' })}</option>
-      {projects.map((project, index) => (
-        <optgroup key={project.id} label={project.name}>
-          {(groupQueries[index]?.data ?? []).map((group) => <option key={group.id} value={group.id}>{group.label || group.name}</option>)}
-        </optgroup>
-      ))}
-    </Select>
+    <div className="space-y-1.5">
+      <SearchField value={input} onChange={setInput} placeholder={t({ ko: '오디오 그룹 찾기', en: 'Find an audio group' })} />
+      <Select value={value ?? ''} onChange={(event) => onChange(event.target.value || null)}>
+        <option value="">{t({ ko: '오디오 그룹 선택', en: 'Select an audio group' })}</option>
+        {[...byProject].map(([projectId, project]) => (
+          <optgroup key={projectId} label={project.name}>
+            {project.groups.map((group) => <option key={group.id} value={group.id}>{group.label || group.name}</option>)}
+          </optgroup>
+        ))}
+      </Select>
+      {groupsQuery.hasNextPage ? (
+        <Button variant="ghost" size="sm" disabled={groupsQuery.isFetchingNextPage} onClick={() => void groupsQuery.fetchNextPage()}>{t({ ko: '오디오 그룹 더 불러오기', en: 'Load more audio groups' })}</Button>
+      ) : null}
+    </div>
   )
 }
 

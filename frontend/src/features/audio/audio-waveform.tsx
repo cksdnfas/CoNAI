@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { audioCandidateFileUrl } from '@/lib/api-audio'
 import { cn } from '@/lib/utils'
+import { useInView } from '@/lib/use-in-view'
 import { useI18n } from '@/i18n'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 
@@ -142,22 +143,9 @@ export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = fa
   const { t } = useI18n()
   const auth = useAuthStatusQuery()
   const scope = JSON.stringify([auth.data?.accountId, auth.data?.hasCredentials, auth.data?.permissionKeys])
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [canvasRef, view] = useInView<HTMLCanvasElement>('200px', { once: true })
+  const visible = view.seen
   const [peaks, setPeaks] = useState<Float32Array | null>(null)
-  const [visible, setVisible] = useState(false)
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || ghost) return
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        setVisible(true)
-        observer.disconnect()
-      }
-    }, { rootMargin: '200px' })
-    observer.observe(canvas)
-    return () => observer.disconnect()
-  }, [ghost])
 
   useEffect(() => {
     if (!visible || ghost) return
@@ -175,7 +163,7 @@ export function WaveformThumb({ candidateId, fileHash, src, progress, ghost = fa
     const observer = new ResizeObserver(render)
     observer.observe(canvas)
     return () => observer.disconnect()
-  }, [peaks, progress, ghost])
+  }, [canvasRef, peaks, progress, ghost])
 
   const canvas = <canvas ref={canvasRef} aria-hidden className={cn('block h-7 w-full border-0 border-primary text-foreground/35', !onSeek && className)} />
   if (!onSeek || ghost) return canvas

@@ -7,6 +7,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { removeDeletedImagesFromListCaches } from '@/features/images/image-list-cache'
+import { useImageDeleteUndo } from '@/features/images/use-image-delete-undo'
 import { useI18n } from '@/i18n'
 import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
 import { deleteImagesBulk } from '@/lib/api-images'
@@ -53,6 +54,7 @@ export function ImageDeleteAction({ image, className, variant = 'secondary', onD
 export function useImageDeleteMenuAction(image: ImageRecord | undefined, onDeleted?: (compositeHash: string) => void): (ActionMenuAction & { label: string }) | null {
   const queryClient = useQueryClient()
   const confirm = useConfirm()
+  const notifyImageDeleted = useImageDeleteUndo()
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const canDeleteImages = useCanDeleteImages()
@@ -69,8 +71,8 @@ export function useImageDeleteMenuAction(image: ImageRecord | undefined, onDelet
     }
 
     const confirmed = await confirm({
-      title: t({ ko: '휴지통으로 보내기', en: 'Move to Recycle Bin' }),
-      description: await withChatMediaDeleteWarning(t({ ko: '이 이미지를 휴지통으로 보낼까?', en: 'Move this image to the Recycle Bin?' }), [compositeHash], t),
+      title: t({ ko: '이미지 삭제', en: 'Delete image' }),
+      description: await withChatMediaDeleteWarning(t({ ko: '이 이미지를 삭제할까? 삭제 보호가 켜져 있으면 휴지통으로 보내고 되돌릴 수 있어. 꺼져 있으면 영구 삭제돼.', en: 'Delete this image? With deletion protection on, files move to the Recycle Bin and can be undone. Otherwise they are permanently deleted.' }), [compositeHash], t),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })
@@ -89,9 +91,9 @@ export function useImageDeleteMenuAction(image: ImageRecord | undefined, onDelet
         return
       }
 
-      showSnackbar({ message: t({ ko: '휴지통으로 보냈어.', en: 'Moved to the Recycle Bin.' }), tone: 'info' })
       onDeleted?.(compositeHash)
       await removeDeletedImagesFromListCaches(queryClient, [compositeHash])
+      notifyImageDeleted(result.details)
     } catch (error) {
       showSnackbar({
         message: error instanceof Error ? error.message : t({ ko: '이미지를 지우지 못했어.', en: 'Could not delete the image.' }),

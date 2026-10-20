@@ -10,7 +10,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, getPostTaskFit, setPostTaskFit } from '@/lib/api-posts'
+import { POSTS_QUERY_KEY, invalidatePostScope, getPostTaskFit, setPostTaskFit } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { usePostPermissions } from './use-post-permissions'
 
@@ -38,7 +38,7 @@ function TaskFitDialog({ post, context, taskFit, onClose }: { post: PostDetail; 
   const [reason, setReason] = useState('')
   const save = useMutation({
     mutationFn: (idempotencyKey: string) => setPostTaskFit(post.id, { contentVersion: context.contentVersion, searchReceiptToken: context.receipt.token, taskFit, idempotencyKey, reasonCode: taskFit === 'unsuitable' ? 'scope_mismatch' : 'helpful', reason }),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }); onClose() },
+    onSuccess: async () => { await invalidatePostScope(queryClient, post.id, 'post'); onClose() },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '검색 의견을 저장하지 못했어.', en: 'Could not save search feedback.' })) }),
   })
   return <Modal open onClose={onClose} title={taskFit === 'useful' ? t({ ko: '이 검색에 유용했어', en: 'Useful for this search' }) : t({ ko: '이 검색엔 맞지 않아', en: 'Unsuitable for this search' })} size="narrow">
@@ -63,7 +63,7 @@ export function PostKnowledgeTaskFit({ post, context }: { post: PostDetail; cont
   const [picked, setPicked] = useState<'useful' | 'unsuitable' | null>(null)
   const cancel = useMutation({
     mutationFn: (idempotencyKey: string) => setPostTaskFit(post.id, { contentVersion: ownContext!.contentVersion, searchReceiptToken: ownContext!.receipt.token, taskFit: 'unknown', idempotencyKey }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
+    onSuccess: () => invalidatePostScope(queryClient, post.id, 'post'),
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '검색 의견을 취소하지 못했어.', en: 'Could not cancel search feedback.' })) }),
   })
   if (!ownContext) return null

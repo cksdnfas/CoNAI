@@ -29,6 +29,7 @@ import { normalizeHeaderNavigationOrder, type HeaderNavigationPageKey } from '@c
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
 import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
 import { Tip } from '@/components/ui/tooltip'
+import { CommandPaletteLauncher } from './command-palette-launcher'
 
 const GenerationQueueHeaderWidgetLazy = lazy(async () => {
   const [module, imageGenerationCatalog] = await Promise.all([
@@ -253,6 +254,7 @@ function AppShellLayout() {
       <CodexChatDock />
 
       <HomeSearchDrawer active={shouldShowHeaderSearch} />
+      <CommandPaletteLauncher />
       {shouldUseGlobalScrollRestoration ? <ScrollRestoration getKey={(location) => `${location.pathname}${location.search}`} /> : null}
     </div>
   )

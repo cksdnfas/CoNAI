@@ -16,7 +16,7 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { pageAction, pageArray, pageFreeText, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
-import { POSTS_QUERY_KEY, createPost, updatePost, getPostsSettings } from '@/lib/api-posts'
+import { invalidatePostScope, createPost, updatePost, getPostsSettings } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { PostAttachPicker, type AttachTab } from './post-attach-picker'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
@@ -150,7 +150,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
       return post ? updatePost(post.id, { ...input, expectedRevision: post.revision }) : createPost(input)
     },
     onSuccess: async (saved) => {
-      await queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] })
+      await invalidatePostScope(queryClient, saved.id, 'post')
       onSaved(saved)
     },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '글을 저장하지 못했어.', en: 'Could not save the post.' })) }),

@@ -5,6 +5,7 @@ import {
   collectPrompts,
   createPromptGroup,
   deletePrompt,
+  deletePrompts,
   deletePromptGroup,
   importPromptGroups,
   reorderPromptGroups,
@@ -151,31 +152,15 @@ export function usePromptPageMutations({
     },
   })
 
-  // Bulk delete keeps going past failures and reports once, instead of one snackbar per prompt.
+  // One request and one transaction: validation failure leaves every selected prompt intact.
   const deletePromptsMutation = useMutation({
-    mutationFn: async (promptIds: number[]) => {
-      const deletedIds: number[] = []
-      let failedCount = 0
-      for (const promptId of promptIds) {
-        try {
-          await deletePrompt(promptId, promptType)
-          deletedIds.push(promptId)
-        } catch {
-          failedCount += 1
-        }
-      }
-      return { deletedIds, failedCount }
-    },
-    onSuccess: async ({ deletedIds, failedCount }) => {
+    mutationFn: (promptIds: number[]) => deletePrompts(promptIds, promptType),
+    onSuccess: async ({ deletedIds }) => {
       deletedIds.forEach((promptId) => onAfterDeletePrompt?.(promptId))
-      const summaryParams = { deleted: formatNumber(deletedIds.length), failed: formatNumber(failedCount) }
-      if (failedCount > 0) {
-        onError(t({ ko: '{deleted}개 삭제, {failed}개 실패', en: '{deleted} deleted, {failed} failed' }, summaryParams))
-      } else {
-        onInfo(t({ ko: '{deleted}개 삭제했어.', en: '{deleted} deleted.' }, summaryParams))
-      }
+      onInfo(t({ ko: '{deleted}개 삭제했어.', en: '{deleted} deleted.' }, { deleted: formatNumber(deletedIds.length) }))
       await refreshPromptQueries()
     },
+    onError: (error) => onError(error instanceof Error ? error.message : t('prompts.use.prompt.page.mutations.failed.to.delete.the.prompt')),
   })
 
   const collectPromptsMutation = useMutation({

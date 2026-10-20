@@ -11,8 +11,8 @@ import { audioExportFileName } from './audioNaming';
 import {
   AudioServiceError,
   audioCandidateFile,
-  getAudioGroup,
-  getAudioProject,
+  getAudioGroupInfo,
+  getAudioProjectInfo,
 } from './audioService';
 import { audioRenderSlots, runAudioFfmpeg } from './audioFfmpeg';
 
@@ -293,8 +293,8 @@ const casefold = (value: string) => value.toLowerCase().replace(/ß/g, 'ss');
  * the inbox group (no label) keep their candidate name.
  */
 export function audioExportPlan(projectId: string, groupId: string | null, options: AudioExportOptions): AudioExportPlan {
-  const project = getAudioProject(projectId);
-  if (groupId && getAudioGroup(groupId).project_id !== project.id) throw new AudioServiceError('이 프로젝트의 그룹이 아니야.', 404);
+  const project = getAudioProjectInfo(projectId);
+  if (groupId && getAudioGroupInfo(groupId).project_id !== project.id) throw new AudioServiceError('이 프로젝트의 그룹이 아니야.', 404);
   const selected = getAudioDb().prepare(`
     SELECT c.id, c.group_id, c.name, g.name AS group_name, g.label
     FROM audio_candidates c JOIN audio_groups g ON g.id = c.group_id

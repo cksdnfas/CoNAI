@@ -46,6 +46,8 @@ import {
   updateAudioProject,
   type AudioCandidate,
   type AudioImportTarget,
+  type AudioListOptions,
+  type AudioListPage,
 } from '../services/audio/audioService';
 import { audioDeletionPlan, deleteAudioGroupCandidates } from '../services/audio/audioService';
 import { renderAudioEditPreview, saveAudioEdit } from '../services/audio/audioEdit';
@@ -107,9 +109,23 @@ function importTarget(source: Record<string, unknown> | undefined): AudioImportT
   throw new AudioServiceError('groupId 또는 projectId가 필요해.');
 }
 
+/** Existing native/plugin callers get the complete array unless they explicitly opt into paging. */
+function audioDirectoryResponse<T>(req: Request, load: (options: AudioListOptions) => AudioListPage<T>): AudioListPage<T> | T[] {
+  const { limit, cursor, offset } = req.query;
+  if (limit !== undefined || cursor !== undefined || offset !== undefined) return load({ limit, cursor, offset });
+  const items: T[] = [];
+  let next: string | null = null;
+  do {
+    const page = load({ cursor: next });
+    items.push(...page.items);
+    next = page.next_cursor;
+  } while (next !== null);
+  return items;
+}
+
 /* ------------------------------------------------------------------ projects */
 
-router.get('/projects', (_req, res) => res.json({ success: true, data: listAudioProjects() }));
+router.get('/projects', (req, res) => res.json({ success: true, data: audioDirectoryResponse(req, listAudioProjects) }));
 router.post('/projects', edit, (req, res) => res.status(201).json({ success: true, data: createAudioProject(req.body ?? {}, accountId(req)) }));
 router.get('/projects/:projectId', (req, res) => res.json({ success: true, data: getAudioProject(param(req, 'projectId')) }));
 router.patch('/projects/:projectId', edit, (req, res) => res.json({ success: true, data: updateAudioProject(param(req, 'projectId'), req.body ?? {}) }));
@@ -129,11 +145,11 @@ router.delete('/folders/:folderId', edit, (req, res) => res.json({ success: true
 /* ------------------------------------------------------------------ groups */
 
 router.get('/groups', (req, res) => {
-  res.json({ success: true, data: searchAudioGroups({ search: req.query.search, filter: req.query.filter }) });
+  res.json({ success: true, data: audioDirectoryResponse(req, (options) => searchAudioGroups({ ...options, search: req.query.search, filter: req.query.filter })) });
 });
 
 router.get('/projects/:projectId/groups', (req, res) => {
-  res.json({ success: true, data: listAudioGroups(param(req, 'projectId'), { search: req.query.search, filter: req.query.filter }) });
+  res.json({ success: true, data: audioDirectoryResponse(req, (options) => listAudioGroups(param(req, 'projectId'), { ...options, search: req.query.search, filter: req.query.filter })) });
 });
 router.post('/projects/:projectId/groups', edit, (req, res) => {
   res.status(201).json({ success: true, data: createAudioGroup(param(req, 'projectId'), req.body ?? {}) });

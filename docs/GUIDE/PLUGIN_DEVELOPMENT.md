@@ -144,6 +144,10 @@ Node 서버 모듈은 파일·네트워크·프로세스 접근이 가능한 신
 
 ### 현재 공용 연결 목록
 
+기존 플러그인 호환을 위해 `/api/prompt-groups/:id/prompts`는 100을 넘는 양의 정수 `limit`을 거부하지 않고 100으로 제한합니다. 응답의 `pagination.limit`과 페이지 오프셋에는 실제 적용한 크기를 사용하며, 알 수 없는 `type`은 이전처럼 긍정 프롬프트 테이블을 조회합니다.
+
+프롬프트 그룹 조회는 기존 네이티브 HTTP 브리지를 통해 `/api/prompt-groups/summaries`의 집계 요약과 `/:id/prompts`의 제한된 페이지(최대 100개)를 사용합니다. UI·MCP 모두 `backend/src/services/promptGroupService.ts`를 공유하며, 라우트는 `backend/src/routes/promptGroups.ts`에 있습니다. 정확한 개수는 기본 포함하고 `include_total=false`로 생략할 수 있습니다. 기존 `/grouped-prompts`는 플러그인 호환을 위해 한 릴리스만 레거시로 유지합니다. 기존 `prompts.view` 권한·취소/재시도 경계는 그대로이고 조회에 승인/리비전은 필요하지 않습니다. 새 호스트가 필요하지만 SDK 버전은 바뀌지 않습니다. 상세 계약은 [SDK 계약](../../plugins/README.md)을 참고하세요. MCP 연결 회귀는 `backend/test/chat-tool-catalog.test.ts`, 인덱스 마이그레이션은 `backend/test/migration-baseline.test.ts`로 확인합니다.
+
 현재 목록은 기능별 계약의 색인입니다. 새로운 연결은 행을 추가하고, 기존 연결을 바꿨다면 해당 행과 설명을 수정합니다. 일회성 작업 이력이나 출시 완료 목록으로 사용하지 않습니다.
 
 | 공용 연결과 책임 | 호출 계약 | 메인 구현·검증 |
@@ -151,6 +155,7 @@ Node 서버 모듈은 파일·네트워크·프로세스 접근이 가능한 신
 | 앱 내부 제작·관리·배포 | 관리자 초안 파일 CRUD·업로드, 리비전/패키지 해시 검토·적용·ZIP 내보내기. `plugin_author.*` 페이지 작업과 관리자 채팅 제작 도구가 같은 서비스 사용 | [제작 서비스](../../backend/src/services/plugins/pluginAuthoring.ts), [HTTP](../../backend/src/routes/plugin-authoring.routes.ts), [MCP](../../backend/src/mcp/tools/pluginAuthoringTools.ts), [편집기](../../frontend/src/features/plugins/plugin-authoring.tsx), [제작 회귀](../../backend/test/plugin-authoring.test.ts) |
 | 격리 화면·페이지 어시스턴트 | `connectPlugin`, `api.publish`, manifest 페이지 작업. 화면 리비전·검토 경계를 호스트에서 관리 | [공유 타입](../../shared/src/types/plugin.ts), [페이지 호스트](../../frontend/src/features/plugins/plugin-page.tsx), [서버 호스트](../../backend/src/services/plugins/pluginHost.ts), [경계 테스트](../../backend/test/plugins.test.ts) |
 | 기존 앱 도구·HTTP·스트림 | `api.app.*`, `conai.tools.*`, `serverActions`. 기존 도메인 서비스와 계정 권한을 재사용 | [HTTP 경로 정책](../../shared/src/utils/pluginNativeApi.ts), [네이티브 연결](../../frontend/src/features/plugins/plugin-native-api.ts), [앱 도구 브리지](../../backend/src/services/plugins/pluginAppBridge.ts), [앱 작업](../../backend/src/services/plugins/pluginAppActions.ts), [SDK 테스트](../../frontend/test/plugin-sdk.test.ts) |
+| 음향 디렉터리의 bounded 조회·기존 플러그인 호환 | 기존 `api.app.fetch`로 프로젝트·프로젝트별/전체 효과음 목록 조회. `limit`/`cursor`/`offset` 중 하나를 주면 `{items, limit, offset, has_more, next_cursor}`(기본/최대 200), 모두 생략하면 기존 전체 배열. SDK 상세: [Audio directory pagination](../../plugins/README.md#audio-directory-pagination) | [HTTP 분기](../../backend/src/routes/audio.routes.ts), [공용 음향 서비스](../../backend/src/services/audio/audioService.ts), [프론트의 명시적 paging](../../frontend/src/lib/api-audio.ts), [200개 초과 배열·커서·오프셋·권한 회귀](../../backend/test/audio-store.test.ts) |
 | 연결 프로젝트·저장 | `workspace.*`. 실제 공용 프로젝트의 리비전·쓰기 잠금·검토를 재사용 | [프로젝트 연결](../../backend/src/services/plugins/pluginWorkspace.ts), [WorkspaceService](../../backend/src/services/workspaceService.ts), [경계 테스트](../../backend/test/plugins.test.ts) |
 | AI 프로필 실행 | `api.llm` / `conai.llm`, `text`와 `profile`. 기존 모델 실행·사용량·도구·대화 경계를 재사용 | [LLM 연결](../../backend/src/services/plugins/pluginLlm.ts), [프로필 실행](../../backend/src/services/plugins/pluginProfileRun.ts), [서버 테스트](../../backend/test/plugin-server.test.ts) |
 | 서버의 긴 처리 작업 | `conai.onJob`, `conai.jobs.start/get/cancel`. 별도 큐 없이 `plugin-task` 런타임 작업 사용 | [작업 서비스](../../backend/src/services/plugins/pluginTasks.ts), [서버 실행·종료](../../backend/src/services/plugins/pluginServerRuntime.ts), [작업 타입](../../shared/src/types/runtimeJob.ts), [서버 테스트](../../backend/test/plugin-server.test.ts) |
@@ -161,6 +166,8 @@ Node 서버 모듈은 파일·네트워크·프로세스 접근이 가능한 신
 긴 처리와 내부 미디어 연결은 영상 렌더링처럼 브라우저 요청 하나로 끝내기 어려운 기능을 위해 추가한 공용 경로입니다. 엔진 선택·명령 인자·제작 화면은 플러그인이 담당하고, 메인은 요청 계정과 작업 상태·중복 실행·원본 접근·라이브러리 등록을 담당합니다. 이를 사용하는 패키지는 해당 메서드를 포함한 호스트가 필요하며 `apiVersion: 1`만으로 지원 여부를 판단하지 않습니다. 브라우저 기능은 `api.host.features`/`api.supports`를 확인하고, 서버 전용 연결은 메서드 존재와 실행 준비 상태를 확인해 업데이트 필요를 안내합니다.
 
 현재 공용 회귀 테스트는 계정 경계, 동일 작업 재요청, 실행 겹침, 취소, 파일 원본 접근과 권한 회수, 결과 경로 탈출 거부를 포함합니다. 외부 렌더러의 실제 출력과 개별 패키지의 UI·모델 호출은 패키지별로 별도 검증합니다. 공개 테스트의 통과만으로 개인 플러그인의 전체 실행을 검증했다고 보고하지 않습니다.
+
+음향 디렉터리의 페이지 조회는 대량 목록을 제한하면서 이미 공개된 HTTP 배열 계약을 유지하기 위한 공용 확장입니다. `/api/audio/projects`, `/api/audio/projects/:projectId/groups`, `/api/audio/groups`가 같은 서비스·`audio.view` 권한을 사용합니다. 조회라서 승인·편집 리비전·중복 쓰기·변경 이벤트의 의미는 추가하지 않습니다. `cursor`는 오프셋 문자열이고 `offset`보다 우선하며, 검색·필터·정렬은 유지합니다. 순회 중 목록이 바뀌면 첫 페이지부터 다시 읽습니다. 전체 배열 경로는 이전 플러그인 호환용으로만 남으며 무제한 응답이므로 새 구현은 반드시 `limit`을 명시합니다. 새 SDK는 필요 없지만 페이지 계약을 구현한 호스트 업데이트는 필요합니다. 구버전 호스트는 쿼리를 무시하고 배열을 반환할 수 있어 `apiVersion: 1`이나 `app.fetch` 지원만으로 페이지 지원을 판단하지 않습니다. MCP 목록은 항상 페이지 형식이며, 실제 플러그인 UI와 구버전 호스트 실행은 별도 검증 대상입니다.
 
 ## 8. 검증과 전달
 

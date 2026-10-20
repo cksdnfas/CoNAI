@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { isTypingTarget } from '@/lib/keyboard-shortcut'
 
 /** Review keys of the 오디오 page (original SFX manager defaults). Stored per browser, like the original. */
 export type AudioShortcutAction = 'next' | 'previous' | 'play' | 'select' | 'reject' | 'pending'
@@ -61,8 +62,8 @@ export function useAudioShortcuts(): Record<AudioShortcutAction, string> {
 /** True when a key press must not drive the review: typing, an open dialog, a modifier or auto-repeat. */
 export function shouldIgnoreReviewKey(event: KeyboardEvent): boolean {
   if (event.ctrlKey || event.metaKey || event.altKey || event.defaultPrevented) return true
+  if (isTypingTarget(event)) return true
   const target = event.target as HTMLElement | null
-  if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return true
   if (target?.closest('[role="slider"], [role="menuitem"], [role="checkbox"], [role="combobox"]')) return true
   if (target?.closest('button') && (event.key === ' ' || event.key === 'Enter')) return true
   if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"]')) return true

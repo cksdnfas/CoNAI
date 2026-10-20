@@ -6,12 +6,13 @@ import { ImageSaveOptionsModal } from '@/components/media/image-save-options-mod
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { addImagesToGroup } from '@/lib/api-groups'
+import { addImagesToGroup, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import { getExistingImageEditorSourceUrl, uploadMultipleImages } from '@/lib/api-images'
 import { getImageViewerSettings } from '@/lib/api-settings'
 import { DEFAULT_IMAGE_SAVE_SETTINGS, loadImageSaveSourceInfo, type ImageSaveSourceInfo } from '@/lib/image-save-output'
 import type { ImageEditorResult } from '@/features/image-editor/image-editor'
 import type { ImageRecord } from '@/types/image'
+import type { GroupWithHierarchy } from '@/types/group'
 import type { ImageSaveSettings } from '@conai/shared'
 
 const ImageEditor = lazy(() => import('@/features/image-editor/image-editor'))
@@ -70,9 +71,9 @@ export function ImageEditAction({ image, variant = 'secondary' }: ImageEditActio
       // Same place as the original: every manual group it is in (auto groups collect by their own rules).
       const groups = (image?.groups ?? []).filter((group) => group.collection_type !== 'auto')
       await Promise.all(groups.map((group) => addImagesToGroup(group.id, [uploaded.composite_hash as string])))
-      return { fileName: uploaded.original_name || uploaded.filename, groupCount: groups.length }
+      return { fileName: uploaded.original_name || uploaded.filename, groupCount: groups.length, groupIds: groups.map((group) => group.id) }
     },
-    onSuccess: async ({ fileName, groupCount }) => {
+    onSuccess: async ({ fileName, groupCount, groupIds }) => {
       setIsEditorOpen(false)
       setPendingResult(null)
       setPendingInfo(null)
@@ -82,9 +83,29 @@ export function ImageEditAction({ image, variant = 'secondary' }: ImageEditActio
           : t({ ko: '편집본을 라이브러리에 저장했어: {fileName}', en: 'Saved the edit to the library: {fileName}' }, { fileName }),
         tone: 'info',
       })
+      const hierarchy = queryClient.getQueryData<GroupWithHierarchy[]>(GROUPS_HIERARCHY_ALL_QUERY_KEY) ?? []
+      const parents = new Map(hierarchy.map((group) => [group.id, group.parent_id]))
+      const affectedGroups = new Set(groupIds)
+      // Group lists include descendants, so an assigned copy also affects its ancestors.
+      for (const id of groupIds) {
+        let parent = parents.get(id)
+        while (parent && !affectedGroups.has(parent)) {
+          affectedGroups.add(parent)
+          parent = parents.get(parent)
+        }
+      }
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['home-images'] }),
-        queryClient.invalidateQueries({ predicate: (query) => typeof query.queryKey[0] === 'string' && query.queryKey[0].startsWith('group') }),
+        // Saving creates a new image, not an update to the original. Restart affected lists
+        // at their initial page rather than refetching every previously loaded cursor.
+        queryClient.resetQueries({ queryKey: ['home-images'] }),
+        queryClient.invalidateQueries({ queryKey: ['home-images-total'] }),
+        queryClient.invalidateQueries({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY }),
+        ...[...affectedGroups].flatMap((id) => [
+          queryClient.resetQueries({ queryKey: ['group-images', 'custom', id] }),
+          queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom', id] }),
+          queryClient.invalidateQueries({ queryKey: ['group-file-counts', 'custom', id] }),
+          queryClient.invalidateQueries({ queryKey: ['group-cover-images', 'custom', id] }),
+        ]),
       ])
     },
   })

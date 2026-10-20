@@ -12,7 +12,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { FilePicker } from '@/features/files/file-browser'
 import { useI18n } from '@/i18n'
-import { CHAT_BACKUP_FOLDER, type ChatProfileSummary, type CodexChatThread } from '@/lib/api-codex-chat'
+import { CHAT_BACKUP_FOLDER, type ChatProfileSummary, type CodexChatThreadSummary } from '@/lib/api-codex-chat'
 import { listStoredFiles } from '@/lib/api-files'
 import { cn } from '@/lib/utils'
 import { GROUP_MEMBER_MAX } from './chat-group'
@@ -24,7 +24,7 @@ import { ChatProfileAvatar } from './chat-profile-avatar'
  * always on touch) collects a room instead: the first one ticked represents it, the rest join as members.
  */
 export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick, onPickGroup, onImport, onImportFiles }: {
-  profiles: ChatProfileSummary[]; threads: CodexChatThread[]; layout: 'panel' | 'page'; disabled: boolean
+  profiles: ChatProfileSummary[]; threads: CodexChatThreadSummary[]; layout: 'panel' | 'page'; disabled: boolean
   onPick: (profileId: number) => void
   /** A CoNAI chat JSON to bring back as a new chat. */
   onImport?: (file: File) => void
@@ -48,7 +48,7 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
   const importLabel = t({ ko: '대화 가져오기 (JSON)', en: 'Import a chat (JSON)' })
   // Each profile's latest direct chat (threads come newest first); group rooms belong to several profiles.
   const recent = useMemo(() => {
-    const result = new Map<number, CodexChatThread>()
+    const result = new Map<number, CodexChatThreadSummary>()
     for (const thread of threads) if (thread.kind !== 'group' && thread.profile_id !== null && !result.has(thread.profile_id)) result.set(thread.profile_id, thread)
     return result
   }, [threads])
