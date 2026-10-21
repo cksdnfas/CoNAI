@@ -86,6 +86,8 @@ export function HomePage() {
     hiddenGroupIds,
     hiddenGroups,
     setHiddenGroupIds,
+    hidingEnabled,
+    setHidingEnabled,
     isMeaningSearch,
     canAutoLoadMore,
     feedCountState,
@@ -148,6 +150,7 @@ export function HomePage() {
       { id: 'searchInput', label: t({ ko: '검색어 입력 (Enter로 검색 실행)', en: 'Search draft (press Enter to search)' }), type: 'text', value: searchInput },
       { id: 'searchScope', label: t({ ko: '검색 범위 (positive·negative 프롬프트, auto 자동 태그, model, lora, meaning 설명=뜻으로 찾기)', en: 'Search scope (prompts, auto tags, model, LoRA, meaning = by description)' }), type: 'select', value: searchScope, options: [...new Set([...chatScopes, searchScope])] },
       { id: 'columns', label: t({ ko: '한 줄의 이미지 수', en: 'Images per row' }), type: 'number', value: homeColumnCount, min: minHomeColumnCount, max: maxHomeColumnCount, integer: true },
+      { id: 'hideGroups', label: t({ ko: '그룹 숨김 켜기 (data.hiddenGroups를 갤러리에서 뺌)', en: 'Hide groups (leave data.hiddenGroups out of the gallery)' }), type: 'boolean', value: hidingEnabled },
     ],
     data: {
       filters: JSON.parse(JSON.stringify(appliedChips)), selected: { imageIds: selectedIds },
@@ -161,7 +164,7 @@ export function HomePage() {
       ...(chatHistory.length ? [pageAction('library.history', t({ ko: '최근 검색 다시 적용', en: 'Re-apply a recent search' }), t({ ko: '최근 검색(data.history)의 칩을 그대로 다시 적용해.', en: 'Re-apply the chips of a recent search (data.history).' }), pageObject({ id: pageChoice(chatHistory.map((entry) => entry.id)) }, ['id']))] : []),
       ...(chatOpenableHashes.length ? [pageAction('library.select', t({ ko: '이미지 선택', en: 'Select images' }), t({ ko: '목록(data.images)의 이미지를 선택해. 빈 목록이면 선택을 풀어. 선택한 이미지로 하단 작업줄(그룹 담기·다운로드)을 쓸 수 있어.', en: 'Select listed images (data.images); an empty list clears the selection.' }), pageObject({ hashes: pageArray(pageChoice(chatOpenableHashes), 100) }, ['hashes']))] : []),
       ...(chatOpenableHashes.length ? [pageAction('library.open', t({ ko: '이미지 열기', en: 'Open image' }), t({ ko: '목록(data.images)의 이미지 상세를 열어.', en: 'Open a listed image (data.images).' }), pageObject({ hash: pageChoice(chatOpenableHashes) }, ['hash']))] : []),
-      ...(chatGroups.length ? [pageAction('library.hide_groups', t({ ko: '숨길 그룹 지정', en: 'Set hidden groups' }), t({ ko: '갤러리 목록·검색 결과·전체 수에서 뺄 커스텀 그룹 목록을 통째로 바꿔(id는 data.groups, 목록에 없는 그룹은 list_image_groups로 찾아. 지금 숨긴 그룹은 data.hiddenGroups). 하위 그룹은 따로 넣어야 숨겨지고, 빈 목록이면 모두 다시 보여. 이 브라우저에만 저장돼.', en: 'Replace the list of custom groups the gallery, its searches and its total leave out (ids in data.groups, others via list_image_groups; data.hiddenGroups is the current list). Subgroups need their own ids; an empty list shows everything. Saved in this browser only.' }), pageObject({ groupIds: pageArray(pageNumber(1, undefined, true), HOME_HIDDEN_GROUPS_LIMIT) }, ['groupIds']))] : []),
+      ...(chatGroups.length ? [pageAction('library.hide_groups', t({ ko: '숨길 그룹 지정', en: 'Set hidden groups' }), t({ ko: '갤러리 목록·검색 결과·전체 수에서 뺄 커스텀 그룹 목록을 통째로 바꿔(id는 data.groups, 목록에 없는 그룹은 list_image_groups로 찾아. 지금 숨긴 그룹은 data.hiddenGroups). 하위 그룹은 따로 넣어야 숨겨지고, 빈 목록이면 모두 다시 보여. hideGroups 필드가 꺼져 있으면 목록이 있어도 숨기지 않아. 이 브라우저에만 저장돼.', en: 'Replace the list of custom groups the gallery, its searches and its total leave out (ids in data.groups, others via list_image_groups; data.hiddenGroups is the current list). Subgroups need their own ids; an empty list shows everything. Nothing is hidden while the hideGroups field is off. Saved in this browser only.' }), pageObject({ groupIds: pageArray(pageNumber(1, undefined, true), HOME_HIDDEN_GROUPS_LIMIT) }, ['groupIds']))] : []),
     ],
     applyAction: (id, args, assertCurrent) => {
       assertCurrent()
@@ -198,6 +201,7 @@ export function HomePage() {
       if (patch.searchScope !== undefined && chatScopes.includes(patch.searchScope as SearchScope)) setSearchScope(patch.searchScope as SearchScope)
       if (patch.sortOrder !== undefined) setSortOrder(patch.sortOrder === 'oldest' ? 'oldest' : 'newest')
       if (patch.columns !== undefined) setHomeColumnCount(Number(patch.columns))
+      if (patch.hideGroups !== undefined) setHidingEnabled(patch.hideGroups === true)
     },
   } : null, { preserveOnSearchChange: true })
 
@@ -248,6 +252,8 @@ export function HomePage() {
                 groupsStatus={groupsQuery.status}
                 hiddenGroupIds={hiddenGroupIds}
                 onHiddenGroupIdsChange={setHiddenGroupIds}
+                enabled={hidingEnabled}
+                onEnabledChange={setHidingEnabled}
               />
             ) : null}
           </>

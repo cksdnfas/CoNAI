@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 const HOME_HIDDEN_GROUPS_KEY = 'conai:home:hidden-group-ids:v1'
+const HOME_HIDDEN_GROUPS_ENABLED_KEY = 'conai:home:hidden-groups-enabled:v1'
 /** The server takes at most this many `exclude_group_ids` (backend/src/utils/groupExclusion.ts). */
 export const HOME_HIDDEN_GROUPS_LIMIT = 500
 
@@ -15,12 +16,32 @@ function readHiddenGroupIds(): number[] {
   }
 }
 
+/** On unless switched off; turning it off keeps the ticked groups. */
+function readHidingEnabled() {
+  try {
+    return window.localStorage.getItem(HOME_HIDDEN_GROUPS_ENABLED_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
 /**
- * Custom groups whose images the Home gallery leaves out, saved in this browser like the column count.
- * Kept sorted and unique so the feed cache key does not depend on the order they were ticked in.
+ * Custom groups whose images the Home gallery leaves out, and the switch that turns that on or off, saved in this
+ * browser like the column count. Ids are kept sorted and unique so the feed cache key does not depend on the order
+ * they were ticked in.
  */
 export function useHomeHiddenGroupIds() {
   const [hiddenGroupIds, setHiddenGroupIdsState] = useState(readHiddenGroupIds)
+  const [hidingEnabled, setHidingEnabledState] = useState(readHidingEnabled)
+
+  const setHidingEnabled = (enabled: boolean) => {
+    try {
+      window.localStorage.setItem(HOME_HIDDEN_GROUPS_ENABLED_KEY, String(enabled))
+    } catch {
+      // Storage off (private mode): the choice lasts for this visit.
+    }
+    setHidingEnabledState(enabled)
+  }
 
   const setHiddenGroupIds = (groupIds: number[]) => {
     const next = [...new Set(groupIds)].sort((a, b) => a - b).slice(0, HOME_HIDDEN_GROUPS_LIMIT)
@@ -32,5 +53,5 @@ export function useHomeHiddenGroupIds() {
     setHiddenGroupIdsState(next)
   }
 
-  return { hiddenGroupIds, setHiddenGroupIds }
+  return { hiddenGroupIds, setHiddenGroupIds, hidingEnabled, setHidingEnabled }
 }

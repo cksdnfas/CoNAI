@@ -61,9 +61,10 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const isAnonymousSession = hasCredentials && !isAuthenticated
   const isSearchMode = !isAnonymousSession && appliedChips.length > 0
   const { feedScopeKey, meaningText, imageListResetKey: searchResetKey } = getHomeFeedKeys(appliedChips, sortOrder, isAnonymousSession)
-  const { hiddenGroupIds, setHiddenGroupIds } = useHomeHiddenGroupIds()
-  // Signed-out visitors have no options menu, so hidden groups only shape a signed-in feed.
-  const excludeGroupIds = isAnonymousSession ? [] : hiddenGroupIds
+  const { hiddenGroupIds, setHiddenGroupIds, hidingEnabled, setHidingEnabled } = useHomeHiddenGroupIds()
+  // Signed-out visitors have no options menu, so hidden groups only shape a signed-in feed; the switch turns hiding
+  // off without losing the ticked groups.
+  const excludeGroupIds = isAnonymousSession || !hidingEnabled ? [] : hiddenGroupIds
   const hiddenGroupsKey = excludeGroupIds.join(',')
   const excludeGroupPayload = excludeGroupIds.length > 0 ? { exclude_group_ids: excludeGroupIds } : {}
   const imageListResetKey = hiddenGroupsKey ? `${searchResetKey}|hide:${hiddenGroupsKey}` : searchResetKey
@@ -316,14 +317,14 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   )
 
   // Hidden groups that still exist (stored ids of deleted groups match nothing).
-  const hiddenGroupIdSet = new Set(excludeGroupIds)
+  const hiddenGroupIdSet = new Set(hiddenGroupIds)
   const hiddenGroups = (groupsQuery.data ?? []).filter((group) => hiddenGroupIdSet.has(group.id))
 
   const emptyStateTitle = isSearchMode ? t('useHomePageData.noSearchResults') : t('useHomePageData.noImagesToShowYet')
   // Only filters the user cannot see in the list need a line: the feed is filtered, not empty.
   const emptyStateDescription = hasOnlyHiddenItems
     ? t('useHomePageData.itemsAreHiddenInThis')
-    : hiddenGroups.length > 0
+    : excludeGroupIds.length > 0 && hiddenGroups.length > 0
       ? t({ ko: '숨긴 그룹의 이미지는 빠져 있어. 갤러리 옵션에서 다시 보이게 할 수 있어.', en: 'Images in hidden groups are left out. Show them again from Gallery options.' })
       : undefined
   const errorTitle = isSearchMode ? t('useHomePageData.failedToLoadSearchResults') : t('useHomePageData.failedToLoadTheHome')
@@ -441,6 +442,8 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     hiddenGroupIds,
     hiddenGroups,
     setHiddenGroupIds,
+    hidingEnabled,
+    setHidingEnabled,
     isMeaningSearch: meaningText !== null,
     canAutoLoadMore,
     feedProgress,
