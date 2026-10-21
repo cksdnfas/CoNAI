@@ -1,7 +1,7 @@
 import { ImagePermissionNotice } from '@/features/images/components/image-permission-notice'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Info } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Info, PanelRightClose, PanelRightOpen } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -643,7 +643,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
                 onClick={() => setIsModalInfoViewerOpen(true)}
                 label={modalInfoToggleLabel}
               >
-                <ChevronLeft className="h-4 w-4" />
+                <PanelRightOpen className="h-4 w-4" />
               </IconButton>
             ) : null}
 
@@ -698,7 +698,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
                 onClick={() => setIsModalInfoViewerOpen(false)}
                 label={modalInfoToggleLabel}
               >
-                <ChevronRight className="h-4 w-4" />
+                <PanelRightClose className="h-4 w-4" />
               </IconButton>
             ) : null}
 

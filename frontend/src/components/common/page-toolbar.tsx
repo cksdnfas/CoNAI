@@ -114,7 +114,9 @@ export function PageToolbar({ title, start, children, actions, className, sticky
       )}
     >
       {showSidebarToggle || title || start ? (
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+        // A breadcrumb leading the row (a `nav` of ghost size="sm" crumb keys, e.g. /files, /posts) bleeds the first
+        // key's padding (px-3) into the gutter, so its label lines up with the title column on --page-gutter.
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 [&>nav:first-child]:-ml-3">
           {showSidebarToggle || title ? (
             <div className="flex min-w-0 items-center gap-2">
               {showSidebarToggle ? <SidebarToggle className="-ml-1.5" /> : null}

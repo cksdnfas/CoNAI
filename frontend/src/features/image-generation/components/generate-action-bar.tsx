@@ -234,7 +234,8 @@ export function GenerateActionBar({
           data-slot="generate-action-bar"
           data-variant="sticky"
           className={cn(
-            'flex max-w-full flex-col items-end gap-1 rounded-md bg-surface-container/95 p-1 shadow-elevation-3 backdrop-blur-md',
+            // The shared floating glass (appearance glass preset), not a local translucent fill.
+            'theme-floating-panel flex max-w-full flex-col items-end gap-1 rounded-md p-1 shadow-elevation-3',
             className,
           )}
         >

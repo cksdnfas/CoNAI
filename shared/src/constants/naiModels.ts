@@ -10,6 +10,23 @@
 
 export const NAI_V5_FULL_MEDIUM_MODEL = 'nai-diffusion-5-full-medium'
 
+/** Inpainting strength the web UI starts from: the masked area is redrawn fully (img2img keeps its own lower default). */
+export const NAI_INFILL_DEFAULT_STRENGTH = 1
+
+/** V5 family (Full, Curated, economy mode), including their inpainting variants. */
+export function isNaiV5Model(model: string | null | undefined): boolean {
+  return (model ?? '').includes('nai-diffusion-5')
+}
+
+/**
+ * API model a request is actually sent to: infill uses the model's inpainting variant, and V5 Curated, which has no
+ * inpainting model, uses V4.5 Curated inpainting. Cost and free-generation checks must use this, not the selected model.
+ */
+export function resolveNaiRequestModel(model: string | undefined, action: string | undefined): string | undefined {
+  if (action !== 'infill' || !model || model.endsWith('-inpainting')) return model
+  return model === 'nai-diffusion-5-curated' ? 'nai-diffusion-4-5-curated-inpainting' : `${model}-inpainting`
+}
+
 export interface NaiFixedModelSettings {
   steps: number
   sampler: string

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
-import { NAI_ENHANCE_DEFAULT_NOISE, NAI_ENHANCE_DEFAULT_STRENGTH } from '@conai/shared'
+import { NAI_ENHANCE_DEFAULT_NOISE, NAI_ENHANCE_DEFAULT_STRENGTH, NAI_INFILL_DEFAULT_STRENGTH } from '@conai/shared'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
@@ -37,6 +37,14 @@ export function applyNaiFormPatch(current: NAIFormDraft, patch: Partial<NAIFormD
   }
   if (patch.queueCount !== undefined) {
     nextForm.queueCount = String(clampNaiQueueCount(patch.queueCount))
+  }
+  // Inpainting starts from the web UI's full strength, and leaving it restores the img2img default; later edits are kept.
+  if (patch.action !== undefined && patch.action !== current.action && patch.strength === undefined) {
+    if (patch.action === 'infill') {
+      nextForm.strength = String(NAI_INFILL_DEFAULT_STRENGTH)
+    } else if (current.action === 'infill') {
+      nextForm.strength = DEFAULT_NAI_FORM.strength
+    }
   }
   // Turning enhance on starts from the web UI's enhance strength/noise; later edits are kept.
   if (patch.enhance !== undefined && patch.enhance !== 'off' && current.enhance === 'off') {

@@ -63,6 +63,7 @@ export function activate(conai) {
     if (op === 'add') {
       const text = String(body.text ?? '').trim().slice(0, 500)
       if (!text) throw new Error('조각 내용을 써줘.')
+      if (listSnippets.all(owner).some((snippet) => snippet.text.toLowerCase() === text.toLowerCase())) throw new Error('이미 있는 조각이야.')
       addSnippet.run(owner, text)
       return { snippets: listSnippets.all(owner) }
     }

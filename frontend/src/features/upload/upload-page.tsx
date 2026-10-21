@@ -523,8 +523,8 @@ function UploadPageContent() {
             semantics="tabs"
             ariaLabel={t({ ko: '업로드 방식', en: 'Upload mode' })}
             items={[
-              { value: 'library', label: <Library />, ariaLabel: t({ ko: '라이브러리에 저장: 올린 파일을 라이브러리에 넣어', en: 'Save to library: upload files into the library' }) },
-              { value: 'inspect', label: <FileSearch />, ariaLabel: t({ ko: '메타데이터만 보기: 저장 없이 이미지 정보만 확인해', en: 'Metadata only: inspect an image without saving it' }) },
+              { value: 'library', label: <><Library />{t({ ko: '라이브러리에 저장', en: 'Save to library' })}</>, ariaLabel: t({ ko: '라이브러리에 저장: 올린 파일을 라이브러리에 넣어', en: 'Save to library: upload files into the library' }) },
+              { value: 'inspect', label: <><FileSearch />{t({ ko: '메타데이터만 보기', en: 'Metadata only' })}</>, ariaLabel: t({ ko: '메타데이터만 보기: 저장 없이 이미지 정보만 확인해', en: 'Metadata only: inspect an image without saving it' }) },
             ]}
           />
         )}
@@ -537,6 +537,9 @@ function UploadPageContent() {
       <div className="space-y-6">
         <UploadDropZone
           ariaLabel={isInspectMode ? t('uploadPageSections.chooseAnImageToPreview') : t('uploadPageSections.chooseFilesToUpload')}
+          hint={isInspectMode
+            ? t({ ko: '이미지를 여기에 끌어다 놓거나 눌러서 골라 줘', en: 'Drop an image here or click to choose' })
+            : t({ ko: '파일을 여기에 끌어다 놓거나 눌러서 골라 줘', en: 'Drop files here or click to choose' })}
           dropZone={dropZone}
           onClick={() => (isInspectMode ? extractInputRef : uploadInputRef).current?.click()}
         >

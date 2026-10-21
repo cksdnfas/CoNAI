@@ -240,19 +240,22 @@ export function NaiGenerationPanel({
         height: naiCostHeight,
         steps: parseNumberInput(naiSampling.steps, 28),
         n_samples: clampNaiSampleCount(naiForm.samples),
+        model: naiForm.model,
+        action: naiForm.action,
         ...(naiForm.action === 'img2img' && strength > 0 && strength <= 1 ? { strength } : {}),
       }
     },
-    [naiCostHeight, naiCostWidth, naiForm.action, naiForm.samples, naiSampling.steps, naiForm.strength],
+    [naiCostHeight, naiCostWidth, naiForm.action, naiForm.model, naiForm.samples, naiSampling.steps, naiForm.strength],
   )
 
   const naiCostQuery = useQuery({
-    queryKey: ['image-generation-nai-cost', naiCostInputs, naiUserQuery.data?.subscription.tier, naiUserQuery.data?.anlasBalance],
+    queryKey: ['image-generation-nai-cost', naiCostInputs, naiUserQuery.data?.subscription.tier, naiUserQuery.data?.anlasBalance, naiUserQuery.data?.opusRemainingPercent],
     queryFn: () =>
       getNaiCostEstimate({
         ...naiCostInputs,
         subscriptionTier: naiUserQuery.data?.subscription.tier ?? 0,
         anlasBalance: naiUserQuery.data?.anlasBalance ?? 0,
+        opusRemainingPercent: naiUserQuery.data?.opusRemainingPercent ?? null,
       }),
     enabled:
       connected &&

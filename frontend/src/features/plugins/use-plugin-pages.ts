@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
+import type { LucideIcon } from 'lucide-react'
 import type { PluginHeaderNavigationKey } from '@conai/shared'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { listPlugins, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
+import { pluginPageIcon } from './plugin-page-icon'
 
-export type PluginPageLink = { id: PluginHeaderNavigationKey; to: string; title: string; pluginName: string }
+export type PluginPageLink = { id: PluginHeaderNavigationKey; to: string; title: string; pluginName: string; icon: LucideIcon }
 
 /** Share the launcher cache; permission loss also hides previously cached links. */
 export function usePluginPages() {
@@ -16,6 +18,7 @@ export function usePluginPages() {
       to: `/ext/${manifest.id}/${page.id}`,
       title: page.title,
       pluginName: manifest.name,
+      icon: pluginPageIcon(page.icon),
     })),
   ) : []
   return pages

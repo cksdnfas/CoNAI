@@ -3,7 +3,7 @@ import { Select } from '@/components/ui/select'
 import type { ChatProfileAssetFields, ChatProfileInput } from '@/lib/api-codex-chat'
 
 /** `background` stays undefined until the image is changed or removed, so saving does not resend it. */
-export type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background' | 'toolPresetName' | keyof ChatProfileAssetFields>> & Omit<ChatProfileAssetFields, 'assetVersion' | 'avatarThumbnailUrl'> & { sortOrder: number; background?: string | null }
+export type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background' | 'toolPresetName' | keyof ChatProfileAssetFields>> & Omit<ChatProfileAssetFields, 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl'> & { sortOrder: number; background?: string | null }
 export type PatchDraft = (next: Partial<Draft>) => void
 
 export function numberOrNull(value: string) {

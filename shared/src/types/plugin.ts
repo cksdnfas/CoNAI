@@ -6,12 +6,22 @@ import type { PluginPackageReview } from './pluginAuthoring'
 
 /** Legacy manifest metadata; installed plugins use native account permissions instead of capability grants. */
 export type PluginCapability = 'files.read' | 'files.write' | 'files.media' | 'workspace.read' | 'workspace.write' | 'workspace.media' | 'media.process' | 'server'
+/** Icons a page may name as `icon`; the host draws its own set, never package files. Append only: installed manifests keep their names. */
+export const PLUGIN_PAGE_ICONS = [
+  'audio-lines', 'book-open', 'bot', 'box', 'braces', 'calendar', 'chart-column', 'code', 'database', 'dices', 'file-text', 'film', 'fish',
+  'flask-conical', 'gamepad-2', 'globe', 'hammer', 'image', 'layers', 'layout-dashboard', 'list-checks', 'map', 'message-circle', 'music',
+  'notebook-pen', 'palette', 'puzzle', 'rocket', 'scroll-text', 'search', 'shapes', 'sparkles', 'star', 'table', 'terminal', 'users',
+  'wand-sparkles', 'workflow', 'wrench',
+] as const
+export type PluginPageIcon = (typeof PLUGIN_PAGE_ICONS)[number]
 export type PluginPage = {
   id: string; title: string; entry: string; accepts: string[]
   actions: Array<ChatPageAction & { tier: 'view' | 'draft' }>
   serverActions?: string[]
   /** false: no header menu entry (a page that only lives as a layout block). */
   menu?: boolean
+  /** Header menu and launcher icon; absent: the puzzle icon. */
+  icon?: PluginPageIcon
 }
 /** One of the plugin's pages shown inline as a block of the listed layout surfaces. */
 export type PluginGenerationBlock = { id: string; page: string; surfaces: GenerationLayoutSurface[]; height?: number }

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChatFilledMark } from '@/features/codex-chat/chat-page-context'
 import { ChatFilledLabel } from './settings-filled-label'
-import { Archive, AudioLines, CircleUserRound, Film, FolderTree, Images, LayoutGrid, ListTodo, Map as MapIcon, MessageSquare, MessageSquareText, Newspaper, Puzzle, Search, Settings2, Sparkles, Upload, type LucideIcon } from 'lucide-react'
+import { Archive, AudioLines, CircleUserRound, Film, FolderTree, Images, ListTodo, Map as MapIcon, MessageSquareText, Newspaper, Search, Settings2, Sparkles, Tags, Upload, Wallpaper, type LucideIcon } from 'lucide-react'
 import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
@@ -37,13 +37,13 @@ const HEADER_NAVIGATION_OPTIONS: Record<HeaderNavigationItemKey, { icon: LucideI
   groups: { icon: FolderTree, label: { ko: '그룹', en: 'Groups' } },
   upload: { icon: Upload, label: { ko: '업로드', en: 'Upload' } },
   files: { icon: Archive, label: { ko: '파일 보관함', en: 'Files' } },
-  prompts: { icon: MessageSquareText, label: { ko: '프롬프트', en: 'Prompts' } },
+  prompts: { icon: Tags, label: { ko: '프롬프트', en: 'Prompts' } },
   generation: { icon: Sparkles, label: { ko: '생성', en: 'Generation' } },
   audio: { icon: AudioLines, label: { ko: '오디오', en: 'Audio' } },
   sprite: { icon: Film, label: { ko: '스프라이트', en: 'Sprites' } },
-  chat: { icon: MessageSquare, label: { ko: '채팅', en: 'Chat' } },
+  chat: { icon: MessageSquareText, label: { ko: '채팅', en: 'Chat' } },
   posts: { icon: Newspaper, label: { ko: '게시판', en: 'Posts' } },
-  wallpaper: { icon: LayoutGrid, label: { ko: '월페이퍼', en: 'Wallpaper' } },
+  wallpaper: { icon: Wallpaper, label: { ko: '월페이퍼', en: 'Wallpaper' } },
   settings: { icon: Settings2, label: { ko: '설정', en: 'Settings' } },
   search: { icon: Search, label: { ko: '검색', en: 'Search' } },
   queue: { icon: ListTodo, label: { ko: '대기열', en: 'Queue' } },
@@ -65,7 +65,7 @@ export function GeneralPreferencesSections({
   const pluginPages = usePluginPages()
   const navigationOptions = { ...HEADER_NAVIGATION_OPTIONS }
   for (const page of pluginPages) {
-    navigationOptions[page.id] = { icon: Puzzle, label: { ko: page.title, en: page.title } }
+    navigationOptions[page.id] = { icon: page.icon, label: { ko: page.title, en: page.title } }
   }
   const visibleSections = new Set(sections)
   const [draggedPage, setDraggedPage] = useState<HeaderNavigationPageKey | null>(null)
@@ -156,6 +156,7 @@ export function GeneralPreferencesSections({
               return (
                 <span key={key} className={cn('inline-flex cursor-grab active:cursor-grabbing', draggedPage === key && 'opacity-50', dropTargetPage === key && draggedPage !== key && 'ring-2 ring-primary/60')}>
                 <ToggleChip
+                  tone="neutral"
                   pressed={pressed}
                   onClick={() => updateHeaderNavigationItem(key, !pressed)}
                   draggable
@@ -181,7 +182,7 @@ export function GeneralPreferencesSections({
               const { icon: Icon, label } = HEADER_NAVIGATION_OPTIONS[key]
               const pressed = headerNavigation[key] ?? true
               return (
-                <ToggleChip key={key} pressed={pressed} onClick={() => updateHeaderNavigationItem(key, !pressed)}>
+                <ToggleChip key={key} tone="neutral" pressed={pressed} onClick={() => updateHeaderNavigationItem(key, !pressed)}>
                   <Icon aria-hidden />
                   {t(label)}
                   <ChatFilledMark fieldId={`headerNavigation.${key}`} />

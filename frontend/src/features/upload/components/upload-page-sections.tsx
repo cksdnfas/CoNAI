@@ -12,6 +12,7 @@ import { ListRow } from '@/components/ui/list-row'
 import { Panel } from '@/components/ui/panel'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { MetadataRewriteForm } from '@/features/metadata/components/metadata-rewrite-form'
 import { useHomeSearch, type TextSearchScope } from '@/features/home/home-search-context'
@@ -68,17 +69,18 @@ function getTextSearchScopeForExtractedPrompt(scope: ExtractedPromptActionScope)
 /** The page's one drop target: a quiet filled area (no dashed box); a primary ring while files hover over it. */
 export function UploadDropZone({
   ariaLabel,
+  hint,
   dropZone,
   onClick,
   children,
 }: {
   ariaLabel: string
+  /** The visible guidance line under the icon while the zone is empty. */
+  hint: string
   dropZone: DropZoneHandlers
   onClick: () => void
   children?: ReactNode
 }) {
-  const { t } = useI18n()
-
   return (
     <Panel
       asChild
@@ -100,11 +102,10 @@ export function UploadDropZone({
         className="flex min-h-28 w-full items-center justify-center"
       >
         {children ?? (
-          <Tip content={t({ ko: '끌어다 놓거나 눌러서 고르기', en: 'Drop files or click to choose' })}>
-            <span className="inline-flex">
-              <ImagePlus className={cn('size-7', dropZone.isDragActive ? 'text-primary' : 'text-muted-foreground/70')} aria-hidden />
-            </span>
-          </Tip>
+          <span className="flex flex-col items-center gap-2 text-center">
+            <ImagePlus className={cn('size-7', dropZone.isDragActive ? 'text-primary' : 'text-muted-foreground/70')} aria-hidden />
+            <Text as="span" variant="muted">{hint}</Text>
+          </span>
         )}
       </button>
     </Panel>

@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronRight, Files, FolderKanban, History, Puzzle, ShieldCheck } from 'lucide-react'
+import { pluginPageIcon } from './plugin-page-icon'
 import { ListPager } from '@/components/common/list-pager'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { Badge } from '@/components/ui/badge'
@@ -115,23 +116,26 @@ export function PluginsPage() {
           <EmptyState icon={Puzzle} title={t({ ko: '쓸 수 있는 플러그인이 없어', en: 'No plugins available' })} />
         ) : (
           <RowGroup heading={t({ ko: '도구', en: 'Tools' })} count={pages.length}>
-            {pages.map(({ manifest, page, blocked }) => (
-              <ListRow
-                key={`${manifest.id}/${page.id}`}
-                asChild
-                interactive
-                size="lg"
-                leading={<Puzzle className="size-4 text-muted-foreground" aria-hidden />}
-                trailing={<ChevronRight className="size-4" aria-hidden />}
-              >
-                <button type="button" disabled={!!blocked} onClick={() => navigate(`/ext/${manifest.id}/${page.id}${contextParams.size ? `?${contextParams.toString()}` : ''}`)}>
-                  <span className="flex min-w-0 flex-col">
-                    <span className="flex min-w-0 items-center gap-2"><span className="truncate font-semibold">{page.title}</span>{blocked ? <Chip size="sm" tone="muted">{blocked}</Chip> : null}</span>
-                    <span className="truncate text-xs text-muted-foreground">{manifest.name}</span>
-                  </span>
-                </button>
-              </ListRow>
-            ))}
+            {pages.map(({ manifest, page, blocked }) => {
+              const Icon = pluginPageIcon(page.icon)
+              return (
+                <ListRow
+                  key={`${manifest.id}/${page.id}`}
+                  asChild
+                  interactive
+                  size="lg"
+                  leading={<Icon className="size-4 text-muted-foreground" aria-hidden />}
+                  trailing={<ChevronRight className="size-4" aria-hidden />}
+                >
+                  <button type="button" disabled={!!blocked} onClick={() => navigate(`/ext/${manifest.id}/${page.id}${contextParams.size ? `?${contextParams.toString()}` : ''}`)}>
+                    <span className="flex min-w-0 flex-col">
+                      <span className="flex min-w-0 items-center gap-2"><span className="truncate font-semibold">{page.title}</span>{blocked ? <Chip size="sm" tone="muted">{blocked}</Chip> : null}</span>
+                      {manifest.name.trim().toLowerCase() !== page.title.trim().toLowerCase() ? <span className="truncate text-xs text-muted-foreground">{manifest.name}</span> : null}
+                    </span>
+                  </button>
+                </ListRow>
+              )
+            })}
           </RowGroup>
         )}
 

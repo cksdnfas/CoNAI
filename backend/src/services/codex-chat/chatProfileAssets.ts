@@ -65,6 +65,8 @@ export function profileAssetFields(profile: ChatProfile, canViewImages: boolean)
     avatarCrop: profile.avatarCrop,
     backgroundHash: canViewImages ? profile.backgroundHash : null,
     assetVersion: canViewImages ? [profile.avatarHash, profile.backgroundHash, profile.referenceHash].map((hash) => hash?.slice(0, 8) ?? '').join('-') + `-${Date.parse(profile.updatedDate) || 0}` : null,
+    // Whether the avatar asset route has anything to serve (a library image or a legacy data URL); clients skip the request otherwise.
+    hasAvatar: canViewImages && Boolean(profile.avatarHash || profile.avatar),
     avatarThumbnailUrl: canViewImages && profile.avatarHash && !isProfileAssetHidden(profile.avatarHash) ? `/api/images/${profile.avatarHash}/thumbnail` : null,
   }
 }

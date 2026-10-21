@@ -1,11 +1,18 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { useCallback, useEffect, useRef } from 'react'
-import { useBeforeUnload, useBlocker } from 'react-router-dom'
-import { useBlockerConfirm } from '@/components/ui/use-blocker-confirm'
-import { shouldBypassOverlayHistoryBackNavigation } from '@/components/ui/use-overlay-back-close'
+import type { Location } from 'react-router-dom'
+import { useUnsavedSettingsGuard } from '@/features/settings/use-unsaved-settings-guard'
 import type { WorkflowValidationIssue } from './module-graph-types'
 import type { EditorSupportSectionKey } from './module-graph-types'
 import type { ModuleGraphNode } from './module-graph-shared'
+
+/**
+ * Only leaving the workflows tab (another route or tab) is guarded here. Moves inside the tab (graph/edit params, back
+ * and forward) go through the workspace, which asks through its own discard confirmation.
+ */
+function leavesWorkflowsTab(current: Location, next: Location) {
+  return current.pathname !== next.pathname || new URLSearchParams(current.search).get('tab') !== new URLSearchParams(next.search).get('tab')
+}
 
 /** Own editor-support navigation, validation focus, and unsaved-change blocking for the module-graph page. */
 export function useModuleGraphEditorShell({
@@ -106,28 +113,7 @@ export function useModuleGraphEditorShell({
     }
   }, [setIsEditorSupportOpen, workflowView])
 
-  useBeforeUnload(
-    useCallback((event) => {
-      if (!shouldBlockGraphExit || shouldBypassOverlayHistoryBackNavigation()) {
-        return
-      }
-
-      event.preventDefault()
-      event.returnValue = ''
-    }, [shouldBlockGraphExit]),
-  )
-
-  // Only leaving the workflows tab (another route or tab) is blocked here. Moves inside the tab (graph/edit params, back
-  // and forward) go through the workspace, which asks through its own discard confirmation.
-  const graphExitBlocker = useBlocker(useCallback(({ currentLocation, nextLocation }: { currentLocation: { pathname: string; search: string }; nextLocation: { pathname: string; search: string } }) => {
-    if (!shouldBlockGraphExit || shouldBypassOverlayHistoryBackNavigation()) {
-      return false
-    }
-    const currentTab = new URLSearchParams(currentLocation.search).get('tab')
-    const nextTab = new URLSearchParams(nextLocation.search).get('tab')
-    return currentLocation.pathname !== nextLocation.pathname || currentTab !== nextTab
-  }, [shouldBlockGraphExit]))
-  useBlockerConfirm(graphExitBlocker, confirmMessage)
+  useUnsavedSettingsGuard(shouldBlockGraphExit, confirmMessage, leavesWorkflowsTab)
 
   const setEditorSupportSectionRef = useCallback((section: EditorSupportSectionKey, node: HTMLDivElement | null) => {
     editorSupportSectionRefs.current[section] = node

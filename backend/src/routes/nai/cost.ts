@@ -1,5 +1,6 @@
 import { allowAnonymousAnyPermission } from '../../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
+import { resolveNaiRequestModel } from '@conai/shared';
 import { calculateAnlasCost, getMaxSamples, isOpusFreeGeneration } from '../../utils/nai/anlasCost';
 
 const router = Router();
@@ -13,6 +14,12 @@ interface CostCalculationRequest {
   anlasBalance?: number;
   /** img2img strength (0-1]; omitted for text-to-image. */
   strength?: number;
+  /** Selected model; V5 costs 1.5x and its free generations draw from the Opus usage pool. */
+  model?: string;
+  /** generate / img2img / infill; infill may be sent to a different model than the selected one. */
+  action?: string;
+  /** Remaining Opus usage percent from /api/nai/user/data; null when unknown. */
+  opusRemainingPercent?: number | null;
 }
 
 /**
@@ -29,7 +36,17 @@ router.post('/calculate', allowAnonymousAnyPermission(['workflows.view', 'genera
       subscriptionTier,
       anlasBalance = 0,
       strength: rawStrength,
+      model: rawModel,
+      action,
+      opusRemainingPercent: rawOpusRemainingPercent,
     } = req.body as CostCalculationRequest;
+    // 가격과 무료 판정은 고른 모델이 아니라 실제로 요청이 나가는 모델 기준이다.
+    const model = typeof rawModel === 'string'
+      ? resolveNaiRequestModel(rawModel, typeof action === 'string' ? action : undefined)
+      : undefined;
+    const opusRemainingPercent = typeof rawOpusRemainingPercent === 'number' && Number.isFinite(rawOpusRemainingPercent)
+      ? rawOpusRemainingPercent
+      : null;
 
     // 입력 검증
     if (!width || !height || !steps || !n_samples) {
@@ -58,17 +75,19 @@ router.post('/calculate', allowAnonymousAnyPermission(['workflows.view', 'genera
       steps,
       n_samples,
       strength,
+      model,
     });
 
     // 최대 샘플 수 계산
     const maxSamples = getMaxSamples(
-      { width, height, steps, strength },
+      { width, height, steps, strength, model },
       anlasBalance,
-      subscriptionTier
+      subscriptionTier,
+      opusRemainingPercent
     );
 
-    // Opus 무료는 크기/스텝/장수 조건을 모두 만족할 때만이다.
-    const isOpusFree = isOpusFreeGeneration({ width, height, steps, n_samples }, subscriptionTier);
+    // Opus 무료는 크기/스텝/장수 조건을 모두 만족하고, V5 는 사용량이 남아 있을 때만이다.
+    const isOpusFree = isOpusFreeGeneration({ width, height, steps, n_samples, model }, subscriptionTier, opusRemainingPercent);
 
     // 잔액이 충분한지 확인
     const canAfford = isOpusFree || anlasBalance >= estimatedCost;

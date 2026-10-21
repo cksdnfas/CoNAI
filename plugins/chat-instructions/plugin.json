@@ -3,5 +3,5 @@
   "description": "채팅 모델이 받는 지시문 끝에 내가 쓴 규칙을 붙여. 캐릭터마다 따로 정할 수 있어.",
   "capabilities": ["server"],
   "server": { "entry": "server.mjs" },
-  "pages": [{ "id": "rules", "title": "지시문 규칙", "entry": "index.html", "accepts": [], "actions": [] }]
+  "pages": [{ "id": "rules", "title": "지시문 규칙", "entry": "index.html", "icon": "scroll-text", "accepts": [], "actions": [] }]
 }

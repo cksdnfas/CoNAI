@@ -3,7 +3,7 @@ import path from 'path'
 import { createHash, randomBytes } from 'crypto'
 import AdmZip from 'adm-zip'
 import { z } from 'zod'
-import { GENERATION_LAYOUT_SURFACES, normalizeChatPageSchema, normalizeChatPageActions, validateChatPageArguments, type ChatPageSnapshot, type GenerationLayoutSurface, type PluginManifest, type InstalledPlugin } from '@conai/shared'
+import { GENERATION_LAYOUT_SURFACES, PLUGIN_PAGE_ICONS, normalizeChatPageSchema, normalizeChatPageActions, validateChatPageArguments, type ChatPageSnapshot, type GenerationLayoutSurface, type PluginManifest, type InstalledPlugin } from '@conai/shared'
 import { runtimePaths } from '../../config/runtimePaths'
 import { WINDOWS_RESERVED_NAME } from '../../utils/pathResolver'
 import { pluginChanged, pluginDb, PluginError } from './pluginStore'
@@ -30,7 +30,7 @@ const manifestSchema = z.object({
   pages: z.array(z.object({
     id: pluginIdSchema, title: z.string().min(1).max(160), entry: z.string().min(1).max(200),
     accepts: z.array(z.string().regex(/^\.[a-z0-9]{1,16}$/)).max(40), actions: z.array(actionSchema).max(26), serverActions: z.array(z.string().max(100)).max(26).optional(),
-    menu: z.boolean().optional(),
+    menu: z.boolean().optional(), icon: z.enum(PLUGIN_PAGE_ICONS).optional(),
   }).strict()).min(1).max(12),
   generation: z.object({
     blocks: z.array(z.object({ id: pluginIdSchema, page: pluginIdSchema, surfaces: surfacesSchema, height: z.number().int().min(120).max(1200).optional() }).strict()).max(8).default([]),

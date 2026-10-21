@@ -1,33 +1,44 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useId, useState, type PropsWithChildren } from 'react'
-import { useBeforeUnload, useBlocker, type BlockerFunction } from 'react-router-dom'
+import { useBeforeUnload, useBlocker, type BlockerFunction, type Location } from 'react-router-dom'
 import { useBlockerConfirm } from '@/components/ui/use-blocker-confirm'
 import { shouldBypassOverlayHistoryBackNavigation } from '@/components/ui/use-overlay-back-close'
 
-type Register = (id: string, message: string, includeSearch: boolean) => () => void
+/** Which navigations leave a guarded draft: false = another path, true = another path or query, or a custom test. */
+export type GuardedLeave = boolean | ((current: Location, next: Location) => boolean)
+
+type Guard = { message: string; leaves: GuardedLeave }
+type Register = (id: string, guard: Guard) => () => void
 const GuardContext = createContext<Register>(() => () => {})
 
-/** React Router supports one blocker. Combine a page's draft and any settings overlay's draft. */
+function leavesDraft(leaves: GuardedLeave, current: Location, next: Location) {
+  if (typeof leaves === 'function') return leaves(current, next)
+  return current.pathname !== next.pathname || (leaves && current.search !== next.search)
+}
+
+/**
+ * React Router consults only the last registered blocker, so this provider owns the app's single one and combines
+ * every page editor's, native draft's and settings overlay's guard. Never call useBlocker elsewhere.
+ */
 export function UnsavedSettingsGuardProvider({ children }: PropsWithChildren) {
-  const [guards, setGuards] = useState<Record<string, { message: string; includeSearch: boolean }>>({})
-  const register = useCallback<Register>((id, message, includeSearch) => {
-    setGuards((current) => ({ ...current, [id]: { message, includeSearch } }))
+  const [guards, setGuards] = useState<Record<string, Guard>>({})
+  const register = useCallback<Register>((id, guard) => {
+    setGuards((current) => ({ ...current, [id]: guard }))
     return () => setGuards((current) => { const next = { ...current }; delete next[id]; return next })
   }, [])
   const hasUnsavedChanges = Object.keys(guards).length > 0
-  const includeSearch = Object.values(guards).some((guard) => guard.includeSearch)
   useBeforeUnload(useCallback((event: BeforeUnloadEvent) => {
     if (hasUnsavedChanges) { event.preventDefault(); event.returnValue = '' }
   }, [hasUnsavedChanges]))
   const shouldBlock = useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => (
-    hasUnsavedChanges && (currentLocation.pathname !== nextLocation.pathname || (includeSearch && currentLocation.search !== nextLocation.search)) && !shouldBypassOverlayHistoryBackNavigation()
-  ), [hasUnsavedChanges, includeSearch])
+    Object.values(guards).some((guard) => leavesDraft(guard.leaves, currentLocation, nextLocation)) && !shouldBypassOverlayHistoryBackNavigation()
+  ), [guards])
   useBlockerConfirm(useBlocker(shouldBlock), [...new Set(Object.values(guards).map((guard) => guard.message))].join('\n'))
   return createElement(GuardContext.Provider, { value: register }, children)
 }
 
-/** Shared by native editors and settings dialogs; same-path tab changes preserve native drafts. */
-export function useUnsavedSettingsGuard(hasUnsavedChanges: boolean, confirmMessage: string, includeSearch = false) {
+/** Shared by page editors, native drafts and settings dialogs; a custom `leaves` test must keep a stable identity. */
+export function useUnsavedSettingsGuard(hasUnsavedChanges: boolean, confirmMessage: string, leaves: GuardedLeave = false) {
   const register = useContext(GuardContext)
   const id = useId()
-  useEffect(() => hasUnsavedChanges ? register(id, confirmMessage, includeSearch) : undefined, [hasUnsavedChanges, confirmMessage, includeSearch, register, id])
+  useEffect(() => hasUnsavedChanges ? register(id, { message: confirmMessage, leaves }) : undefined, [hasUnsavedChanges, confirmMessage, leaves, register, id])
 }

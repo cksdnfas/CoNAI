@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
 /** One settings section: a heading row and its controls, separated from the next by a hairline. */
@@ -14,13 +14,17 @@ export function SpriteSection({ title, actions, children, className }: { title: 
   )
 }
 
-/** A compact labelled number input used inside rows (start/end, sizes, grid). */
+/**
+ * A compact labelled field used inside rows (start/end, sizes, grid, presets + number). A group named by its label,
+ * not a `<label>`: steppers and segments start with a button that a click on a `<label>` would press.
+ */
 export function MiniField({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  const labelId = useId()
   return (
-    <label className={cn('flex min-w-0 flex-col gap-1', className)}>
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+    <div role="group" aria-labelledby={labelId} className={cn('flex min-w-0 flex-col gap-1', className)}>
+      <span id={labelId} className="text-xs font-medium text-muted-foreground">{label}</span>
       {children}
-    </label>
+    </div>
   )
 }
 

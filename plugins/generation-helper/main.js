@@ -29,7 +29,8 @@ function render() {
     use.type = 'button'; use.className = 'ghost use'; use.textContent = snippet.text; use.title = '프롬프트 끝에 넣기'
     use.onclick = () => insert(snippet)
     const remove = document.createElement('button')
-    remove.type = 'button'; remove.className = 'ghost destructive'; remove.textContent = '지우기'
+    remove.type = 'button'; remove.className = 'conai-icon-button sm'; remove.title = '지우기'; remove.setAttribute('aria-label', `${snippet.text} 지우기`)
+    remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>'
     remove.onclick = () => send({ op: 'remove', id: snippet.id })
     item.append(use, remove)
     return item

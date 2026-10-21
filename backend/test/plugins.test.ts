@@ -69,6 +69,8 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     const forged = structuredClone(installed.manifest)
     forged.pages[0].actions[0].effect = 'save'
     assert.throws(() => registry.parsePluginManifest(forged))
+    assert.equal(installed.manifest.pages[0].icon, 'file-text', 'a stored manifest keeps its page icon')
+    assert.throws(() => registry.parsePluginManifest({ ...installed.manifest, pages: [{ ...installed.manifest.pages[0], icon: 'skull' }] }), 'pages name an icon from the host set only')
     assert.throws(() => shared.chatPageActionTier('unknown.write'), /등록된/)
     await registry.setPluginEnabled('text-editor', true)
   })

@@ -164,6 +164,7 @@
       "id": "tools",
       "title": "자료 조회·작업 기록",
       "entry": "index.html",
+      "icon": "wrench",
       "accepts": [],
       "actions": [],
       "serverActions": [

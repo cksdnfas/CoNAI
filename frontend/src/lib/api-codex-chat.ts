@@ -265,6 +265,8 @@ export interface ChatProfileAssetFields {
   avatarCrop?: ChatAvatarCrop | null
   backgroundHash?: string | null
   assetVersion?: string | null
+  /** False when the server has no avatar to serve for this profile (absent on drafts and older payloads). */
+  hasAvatar?: boolean
   avatarThumbnailUrl?: string | null
 }
 
@@ -725,7 +727,7 @@ export interface ChatCardImportReport {
   dropped: string[]
 }
 
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'avatarThumbnailUrl'>> & { background?: string | null }
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl'>> & { background?: string | null }
 
 export interface ChatProfileDefaults {
   /** The chat representative model's default prompt: a new profile starts with it. */

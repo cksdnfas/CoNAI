@@ -6,6 +6,7 @@ import {
   getNaiFixedModelSettings,
   isNaiUcPresetId,
   NAI_ENHANCE_DEFAULT_STRENGTH,
+  NAI_INFILL_DEFAULT_STRENGTH,
   prependNaiUcPreset,
   type NaiEnhanceAmount,
   type NaiUcPresetId,
@@ -277,7 +278,9 @@ export function preprocessMetadata(params: NAIMetadataInputParams): NAIMetadataP
   metadata.noise_schedule = metadata.noise_schedule || 'karras'
 
   if (metadata.action === 'img2img' || metadata.action === 'infill') {
-    metadata.strength = metadata.strength || (metadata.enhance !== undefined ? NAI_ENHANCE_DEFAULT_STRENGTH : 0.3)
+    metadata.strength = metadata.strength || (metadata.enhance !== undefined
+      ? NAI_ENHANCE_DEFAULT_STRENGTH
+      : metadata.action === 'infill' ? NAI_INFILL_DEFAULT_STRENGTH : 0.3)
     metadata.noise = metadata.noise || 0
     metadata.extra_noise_seed = metadata.extra_noise_seed || Math.floor(Math.random() * 4294967288)
   }

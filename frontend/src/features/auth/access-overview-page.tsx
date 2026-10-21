@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, LogIn, Puzzle, ShieldAlert, ShieldCheck, Sparkles, X, type LucideIcon } from 'lucide-react'
+import { ArrowRight, LogIn, ShieldAlert, ShieldCheck, Sparkles, X, type LucideIcon } from 'lucide-react'
 import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -175,7 +175,7 @@ export function AccessOverviewPage() {
               <Heading level={3}>{t({ ko: '플러그인 페이지', en: 'Plugin pages' })}</Heading>
               <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
                 {pluginPages.map((page) => (
-                  <AccessEntryCard key={page.id} href={page.to} label={page.title} description={page.pluginName} icon={Puzzle} />
+                  <AccessEntryCard key={page.id} href={page.to} label={page.title} description={page.pluginName} icon={page.icon} />
                 ))}
               </div>
             </section>

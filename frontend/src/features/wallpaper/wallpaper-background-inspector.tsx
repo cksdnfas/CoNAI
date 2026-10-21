@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { ImagePlus } from 'lucide-react'
-import { TextTabs } from '@/components/common/text-tabs'
 import { MediaCard } from '@/components/common/media-card'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { MediaLibraryPicker } from '@/components/media/media-library-picker'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
-import { listWallpaperCanvasPresets, WALLPAPER_CANVAS_MAX, WALLPAPER_CANVAS_MIN, WALLPAPER_CUSTOM_CANVAS_ID } from './wallpaper-canvas-presets'
+import { WALLPAPER_CANVAS_MAX, WALLPAPER_CANVAS_MIN, WALLPAPER_CUSTOM_CANVAS_ID } from './wallpaper-canvas-presets'
 import {
   InspectorColor,
   InspectorHeading,
@@ -73,17 +72,7 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
     <div className="space-y-4">
       <div className="text-base font-semibold">{t({ ko: '캔버스', en: 'Canvas' })}</div>
       <div className="space-y-3">
-        <InspectorRow label={t({ ko: '크기', en: 'Size' })}>
-          <Select
-            value={layout.canvasPresetId}
-            onChange={(event) => onChangeCanvas(event.target.value, event.target.value === WALLPAPER_CUSTOM_CANVAS_ID ? { width: layout.canvasWidth ?? 1920, height: layout.canvasHeight ?? 1080 } : undefined)}
-          >
-            {listWallpaperCanvasPresets().map((preset) => (
-              <option key={preset.id} value={preset.id}>{preset.name} · {preset.aspectRatioLabel}</option>
-            ))}
-            <option value={WALLPAPER_CUSTOM_CANVAS_ID}>{t({ ko: '직접 입력', en: 'Custom' })}</option>
-          </Select>
-        </InspectorRow>
+        {/* The size preset lives in the page toolbar (reachable while a widget is selected); custom W/H stay here. */}
         {isCustom ? (
           <div className="grid grid-cols-2 gap-2">
             <InspectorNumber label="W" value={layout.canvasWidth ?? 1920} min={WALLPAPER_CANVAS_MIN} max={WALLPAPER_CANVAS_MAX} onCommit={(width) => onChangeCanvas(WALLPAPER_CUSTOM_CANVAS_ID, { width, height: layout.canvasHeight ?? 1080 })} />
@@ -105,21 +94,17 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
       </div>
 
       <div className="text-base font-semibold">{t({ ko: '배경', en: 'Background' })}</div>
-      <TextTabs<WallpaperBackgroundKind>
-        value={background.kind}
-        onChange={switchKind}
-        ariaLabel={t({ ko: '배경 종류', en: 'Background kind' })}
-        items={[
-          { value: 'theme', label: t({ ko: '테마', en: 'Theme' }) },
-          { value: 'color', label: t({ ko: '단색', en: 'Color' }) },
-          { value: 'gradient', label: t({ ko: '그라데이션', en: 'Gradient' }) },
-          { value: 'image', label: t({ ko: '이미지', en: 'Image' }) },
-          { value: 'video', label: t({ ko: '영상', en: 'Video' }) },
-          { value: 'group-slideshow', label: t({ ko: '그룹 슬라이드', en: 'Group slides' }) },
-        ]}
-      />
-
       <div className="space-y-3">
+        <InspectorRow label={t({ ko: '종류', en: 'Kind' })}>
+          <Select aria-label={t({ ko: '배경 종류', en: 'Background kind' })} value={background.kind} onChange={(event) => switchKind(event.target.value as WallpaperBackgroundKind)}>
+            <option value="theme">{t({ ko: '테마', en: 'Theme' })}</option>
+            <option value="color">{t({ ko: '단색', en: 'Color' })}</option>
+            <option value="gradient">{t({ ko: '그라데이션', en: 'Gradient' })}</option>
+            <option value="image">{t({ ko: '이미지', en: 'Image' })}</option>
+            <option value="video">{t({ ko: '영상', en: 'Video' })}</option>
+            <option value="group-slideshow">{t({ ko: '그룹 슬라이드', en: 'Group slides' })}</option>
+          </Select>
+        </InspectorRow>
         {background.kind === 'color' ? (
           <InspectorColor label={t({ ko: '색', en: 'Color' })} value={background.color} fallback="#131313" onChange={(value) => patch({ color: value ?? '#131313' } as Partial<WallpaperBackground>, 'color')} />
         ) : null}

@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import { isNaiV5Model, NAI_INFILL_DEFAULT_STRENGTH, resolveNaiRequestModel } from '@conai/shared'
 import { normalizeBase64ImageData } from '../base64ImageData'
 import { type NAICharacterReference, type NAICharacterPrompt, type NAIMetadataParams } from './metadata'
 import { normalizeNaiWeightSyntax } from './weightSyntax'
@@ -74,7 +75,7 @@ function buildTransparentBackgroundPrompt(prompt: string) {
 /** Build a direct NovelAI request body from normalized metadata. */
 export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
   const isV4Family = metadata.model?.includes('nai-diffusion-4')
-  const isV5Family = metadata.model?.includes('nai-diffusion-5')
+  const isV5Family = isNaiV5Model(metadata.model)
   const usesStructuredPrompts = isV4Family || isV5Family
   const effectivePrompt = normalizeNaiWeightSyntax(isV5Family && metadata.transparent_background
     ? buildTransparentBackgroundPrompt(metadata.prompt)
@@ -168,6 +169,10 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
     baseParams.inpaintImg2ImgStrength = metadata.strength ?? 1
     baseParams.noise = 0
     baseParams.controlnet_strength = 1
+    // V4 이상 인페인트 서버는 평면 inpaintImg2ImgStrength 가 아니라 중첩 img2img.strength 를 강도로 읽는다(웹 UI 와 동일).
+    if (usesStructuredPrompts) {
+      baseParams.img2img = { strength: metadata.strength ?? NAI_INFILL_DEFAULT_STRENGTH, color_correct: true }
+    }
   }
 
   if (metadata.vibes && metadata.vibes.length > 0) {
@@ -208,11 +213,7 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
 
   return {
     input: effectivePrompt,
-    model: metadata.action === 'infill' && metadata.model && !metadata.model.endsWith('-inpainting')
-      ? metadata.model === 'nai-diffusion-5-curated'
-        ? 'nai-diffusion-4-5-curated-inpainting'
-        : `${metadata.model}-inpainting`
-      : metadata.model,
+    model: resolveNaiRequestModel(metadata.model, metadata.action),
     action: metadata.action,
     parameters: baseParams,
     use_new_shared_trial: true,

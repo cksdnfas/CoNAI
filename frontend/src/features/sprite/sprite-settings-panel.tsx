@@ -97,8 +97,14 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
           label={t({ ko: '연속 중복 프레임 빼기', en: 'Drop repeated frames' })}
           checked={form.removeDuplicateFrames}
           onCheckedChange={(checked) => update({ removeDuplicateFrames: checked })}
-          extra={form.removeDuplicateFrames ? <NumberStepperInput controlSize="compact" className="w-32" value={form.similarityPercent} min={1} max={100} step={0.5} onValueCommit={(value) => update({ similarityPercent: Math.max(1, Math.min(100, Number(value) || 99)) })} aria-label={t({ ko: '유사도 %', en: 'Similarity %' })} /> : undefined}
         />
+        {form.removeDuplicateFrames ? (
+          <div className="border-l-2 border-line pl-3">
+            <MiniField label={t({ ko: '중복 유사도 %', en: 'Duplicate similarity %' })} className="w-32">
+              <NumberStepperInput value={form.similarityPercent} min={1} max={100} step={0.5} onValueCommit={(value) => update({ similarityPercent: Math.max(1, Math.min(100, Number(value) || 99)) })} aria-label={t({ ko: '중복 유사도 %', en: 'Duplicate similarity %' })} />
+            </MiniField>
+          </div>
+        ) : null}
       </SpriteSection>
 
       <SpriteSection title={t({ ko: '배경', en: 'Background' })}>
@@ -137,8 +143,14 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
           label={t({ ko: '자동 크롭', en: 'Auto crop' })}
           checked={form.autoCrop}
           onCheckedChange={(checked) => update({ autoCrop: checked })}
-          extra={form.autoCrop ? <NumberStepperInput controlSize="compact" className="w-32" value={form.alphaThreshold} min={1} max={255} step={1} onValueCommit={(value) => update({ alphaThreshold: Math.max(1, Math.min(255, Number(value) || 20)) })} aria-label={t({ ko: '알파 임계값', en: 'Alpha threshold' })} /> : undefined}
         />
+        {form.autoCrop ? (
+          <div className="border-l-2 border-line pl-3">
+            <MiniField label={t({ ko: '알파 임계값', en: 'Alpha threshold' })} className="w-32">
+              <NumberStepperInput value={form.alphaThreshold} min={1} max={255} step={1} onValueCommit={(value) => update({ alphaThreshold: Math.max(1, Math.min(255, Number(value) || 20)) })} aria-label={t({ ko: '알파 임계값', en: 'Alpha threshold' })} />
+            </MiniField>
+          </div>
+        ) : null}
         <SwitchLine
           label={t({ ko: '사전 크롭', en: 'Pre-crop' })}
           checked={Boolean(form.preCrop)}
@@ -170,45 +182,38 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
       </SpriteSection>
 
       <SpriteSection title={t({ ko: '시트', en: 'Sheet' })}>
-        <div className="flex items-center justify-end gap-3 text-sm">
-          <Tip content={t({ ko: '시트 열 수 (0은 자동)', en: 'Sheet columns (0 = auto)' })}>
-            <span className="inline-flex">
-              <NumberStepperInput className="w-28" value={output.columns} min={0} max={64} step={1} onValueCommit={(value) => setOutput({ ...output, columns: Math.max(0, Math.min(64, Math.round(Number(value) || 0))) })} aria-label={t({ ko: '열 수 (0은 자동)', en: 'Columns (0 = auto)' })} />
-            </span>
-          </Tip>
-        </div>
-        <SegmentedControl
-          size="sm"
-          fullWidth
-          value={COLUMN_PRESETS.includes(output.columns) ? String(output.columns) : ''}
-          onChange={(value) => setOutput({ ...output, columns: Number(value) })}
-          items={COLUMN_PRESETS.map((columns) => ({ value: String(columns), label: columns === 0 ? t({ ko: '자동', en: 'Auto' }) : String(columns) }))}
-          ariaLabel={t({ ko: '열 빠른 선택', en: 'Column presets' })}
-        />
-        <div className="flex items-center justify-end gap-3 text-sm">
-          <Tip content={t({ ko: '셀 사이 간격 (px)', en: 'Gap between cells (px)' })}>
-            <span className="inline-flex">
-              <NumberStepperInput className="w-28" value={output.spacing} min={0} max={64} step={1} onValueCommit={(value) => setOutput({ ...output, spacing: Math.max(0, Math.min(64, Math.round(Number(value) || 0))) })} aria-label={t({ ko: '셀 사이 간격 (px)', en: 'Cell spacing (px)' })} />
-            </span>
-          </Tip>
-        </div>
-        <div className="flex items-center justify-end gap-3 text-sm">
-          <SegmentedControl size="sm" value={output.format} onChange={(format) => setOutput({ ...output, format: format as OutputForm['format'] })} items={[{ value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }]} ariaLabel={t({ ko: '포맷', en: 'Format' })} />
+        <MiniField label={t({ ko: '열 수', en: 'Columns' })}>
+          <div className="flex flex-wrap items-center gap-2">
+            <SegmentedControl
+              size="sm"
+              value={COLUMN_PRESETS.includes(output.columns) ? String(output.columns) : ''}
+              onChange={(value) => setOutput({ ...output, columns: Number(value) })}
+              items={COLUMN_PRESETS.map((columns) => ({ value: String(columns), label: columns === 0 ? t({ ko: '자동', en: 'Auto' }) : String(columns) }))}
+              ariaLabel={t({ ko: '열 빠른 선택', en: 'Column presets' })}
+            />
+            <NumberStepperInput className="w-32" value={output.columns} min={0} max={64} step={1} onValueCommit={(value) => setOutput({ ...output, columns: Math.max(0, Math.min(64, Math.round(Number(value) || 0))) })} aria-label={t({ ko: '열 수 (0은 자동)', en: 'Columns (0 = auto)' })} />
+          </div>
+        </MiniField>
+        <div className="grid grid-cols-2 gap-2">
+          <MiniField label={t({ ko: '셀 간격 (px)', en: 'Cell spacing (px)' })}>
+            <NumberStepperInput value={output.spacing} min={0} max={64} step={1} onValueCommit={(value) => setOutput({ ...output, spacing: Math.max(0, Math.min(64, Math.round(Number(value) || 0))) })} aria-label={t({ ko: '셀 간격 (px)', en: 'Cell spacing (px)' })} />
+          </MiniField>
+          <MiniField label={t({ ko: '형식', en: 'Format' })}>
+            <SegmentedControl size="sm" fullWidth value={output.format} onChange={(format) => setOutput({ ...output, format: format as OutputForm['format'] })} items={[{ value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }]} ariaLabel={t({ ko: '형식', en: 'Format' })} />
+          </MiniField>
         </div>
         {output.format === 'webp' ? <SliderRow label={t({ ko: '품질', en: 'Quality' })} value={output.quality} min={1} max={100} onChange={(quality) => setOutput({ ...output, quality })} /> : null}
       </SpriteSection>
 
       {canSave ? (
         <SpriteSection title={t({ ko: '출력', en: 'Output' })}>
-          <div className="flex items-center justify-end gap-3 text-sm">
-            <Tip content={t({ ko: '라이브러리에 저장할 그룹', en: 'Library group to save in' })}>
-              <Select className="h-8 min-w-0 max-w-56" value={save.groupPath ?? ''} onChange={(event) => setSave({ ...save, groupPath: event.target.value || null })} aria-label={t({ ko: '저장할 그룹', en: 'Group to save in' })}>
-                <option value="">{SPRITE_GROUP}</option>
-                {save.groupPath && !groupPaths.includes(save.groupPath) && save.groupPath !== SPRITE_GROUP ? <option value={save.groupPath}>{save.groupPath}</option> : null}
-                {groupPaths.map((path) => <option key={path} value={path}>{path}</option>)}
-              </Select>
-            </Tip>
-          </div>
+          <MiniField label={t({ ko: '저장할 그룹', en: 'Group to save in' })}>
+            <Select value={save.groupPath ?? ''} onChange={(event) => setSave({ ...save, groupPath: event.target.value || null })} aria-label={t({ ko: '저장할 그룹', en: 'Group to save in' })}>
+              <option value="">{SPRITE_GROUP}</option>
+              {save.groupPath && !groupPaths.includes(save.groupPath) && save.groupPath !== SPRITE_GROUP ? <option value={save.groupPath}>{save.groupPath}</option> : null}
+              {groupPaths.map((path) => <option key={path} value={path}>{path}</option>)}
+            </Select>
+          </MiniField>
           <SwitchLine label={t({ ko: 'ZIP으로도 받기', en: 'Also download a ZIP' })} checked={save.zip} onCheckedChange={(zip) => setSave({ ...save, zip })} />
         </SpriteSection>
       ) : null}

@@ -167,6 +167,7 @@ Do not turn every observed combination into a new variant. Keep existing API def
 | Disabled `ListRow interactive` `disabled:opacity-*` | Remove: an interactive row dims and drops its wash when disabled. A row with nothing to do is a plain (non-interactive) row, not a disabled button. |
 | Ghost Button inside a chip with `text-current` (operator key) | `ChipAction`; it keeps the chip's tone. |
 | Category colours on a pressable chip (`bg-info-soft …`, active ring) | `ToggleChip tone="info" \| "warning" \| "success" \| "primary"`; pressed adds an inset ring. |
+| A dense block of on/off chips where primary would flood the screen (header menu items) | `ToggleChip tone="neutral"`: outlined when off, neutral fill when pressed. |
 | Per-item colour on the selected SegmentedControl key | Item `activeStyle` (data-driven colour, inline). |
 | Overlay Badge `font-semibold uppercase` (status / tier label on a thumbnail) | `casing="upper"`; a user-defined tier colour stays inline. |
 | Textarea `text-muted-foreground` (de-emphasised editable text) | `muted`. |

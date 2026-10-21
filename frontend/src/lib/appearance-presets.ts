@@ -273,21 +273,21 @@ export const GLASS_PRESETS: Record<GlassPreset, GlassPresetDefinition> = {
     description: 'appearancePresets.glass.subtle.description',
     blur: 10,
     headerAlpha: 0.84,
-    floatingAlpha: 0.9,
+    floatingAlpha: 0.98,
   },
   balanced: {
     label: 'Balanced',
     description: 'appearancePresets.glass.balanced.description',
     blur: 18,
     headerAlpha: 0.72,
-    floatingAlpha: 0.88,
+    floatingAlpha: 0.97,
   },
   immersive: {
     label: 'Immersive',
     description: 'appearancePresets.glass.immersive.description',
     blur: 28,
     headerAlpha: 0.62,
-    floatingAlpha: 0.82,
+    floatingAlpha: 0.92,
   },
 }
 

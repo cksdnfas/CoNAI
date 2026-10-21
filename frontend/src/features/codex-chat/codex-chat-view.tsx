@@ -584,7 +584,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const portraitShown = hasPortrait && appearance.portrait && (wideStatus || stripOpen)
   const portrait = hasPortrait && appearance.portrait && portraitSignal && portraitProfile ? <ChatPortrait signal={portraitSignal} profile={portraitProfile} /> : undefined
   const toSpeaker = useCallback((entry: ChatProfileSummary): ChatSpeaker => ({
-    id: entry.id, avatarHash: entry.avatarHash, avatarCrop: entry.avatarCrop, assetVersion: entry.assetVersion, avatarThumbnailUrl: entry.avatarThumbnailUrl,
+    id: entry.id, avatarHash: entry.avatarHash, avatarCrop: entry.avatarCrop, assetVersion: entry.assetVersion, hasAvatar: entry.hasAvatar, avatarThumbnailUrl: entry.avatarThumbnailUrl,
     name: entry.name, avatar: entry.avatar, engine: entry.engine, roleplay: entry.style?.roleplay ?? false, blocks: entry.style?.blocks, cast: entry.style?.cast,
     emoticons: emoticonsById.get(entry.id) ?? null,
     hiddenEmoticonGroupIds: portraitShown && entry.expressionGroupId ? new Set([entry.expressionGroupId]) : undefined, mentions: isGroup ? memberNames : undefined,

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Grid2X2, ImageIcon, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
+import { ArrowLeftFromLine, ArrowRightToLine, Grid2X2, ImageIcon, Lock, RotateCcw, RotateCw, ScanSearch, Undo2, Unlock, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { CountBadge } from '@/components/ui/count-badge'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -211,7 +211,7 @@ export function ImageDetailTransformControls({
             </IconButton>
           ) : null}
           <IconButton {...toolbarButtonProps} onClick={onToggleControlsCollapsed} label={t('images.components.detail.image.detail.media.collapse.controls')}>
-            <ChevronRight className="h-4 w-4" />
+            <ArrowRightToLine className="h-4 w-4" />
           </IconButton>
         </Panel>
       </div>
@@ -219,7 +219,7 @@ export function ImageDetailTransformControls({
       {isControlsCollapsed ? (
         <Panel tone="high" treatment="floating" padding="toolbar">
           <IconButton {...toolbarButtonProps} onClick={onToggleControlsCollapsed} label={t('images.components.detail.image.detail.media.expand.controls')}>
-            <ChevronLeft className="h-4 w-4" />
+            <ArrowLeftFromLine className="h-4 w-4" />
           </IconButton>
         </Panel>
       ) : null}

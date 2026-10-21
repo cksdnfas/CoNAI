@@ -1,6 +1,6 @@
 import axios from 'axios'
 import sharp from 'sharp'
-import { isNaiEnhanceAmount, planNaiEnhance } from '@conai/shared'
+import { isNaiEnhanceAmount, isNaiV5Model, planNaiEnhance } from '@conai/shared'
 // @ts-ignore - no types available
 import AdmZip from 'adm-zip'
 import { preprocessMetadata, type NAIMetadataInputParams, type NAIMetadataParams } from '../utils/nai/metadata'
@@ -145,6 +145,40 @@ async function prepareNaiEnhance(metadata: NAIMetadataParams) {
   metadata.upscaled_enhance = plan.serverUpscale
 }
 
+const NAI_MULTIPART_IMAGE_FIELDS = ['image', 'mask'] as const
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+/**
+ * V5 models only accept multipart/form-data: the JSON body goes in a `request` part, and image/mask bytes go in
+ * their own PNG parts that the JSON references by part name (base64 in the JSON is rejected with HTTP 400).
+ * Earlier models keep the plain JSON body.
+ */
+async function buildNaiHttpBody(requestBody: Awaited<ReturnType<typeof buildNaiRequestBody>>) {
+  if (!isNaiV5Model(requestBody.model)) {
+    return { data: requestBody as unknown, headers: { 'Content-Type': 'application/json' } }
+  }
+
+  const parameters: Record<string, unknown> = { ...requestBody.parameters }
+  const imageParts: Array<{ field: string; bytes: Buffer }> = []
+  for (const field of NAI_MULTIPART_IMAGE_FIELDS) {
+    const value = parameters[field]
+    if (typeof value !== 'string' || !value) continue
+    const bytes = Buffer.from(value, 'base64')
+    // The parts are sent as PNG like the web UI; library sources may be WebP or JPEG.
+    const png = bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE) ? bytes : await sharp(bytes).png().toBuffer()
+    imageParts.push({ field, bytes: png })
+    parameters[field] = field
+  }
+
+  const form = new FormData()
+  form.append('request', new Blob([JSON.stringify({ ...requestBody, parameters })], { type: 'application/json' }), 'blob')
+  for (const { field, bytes } of imageParts) {
+    form.append(field, new Blob([new Uint8Array(bytes)], { type: 'image/png' }), field)
+  }
+  // No Content-Type header: axios sets multipart/form-data with the boundary.
+  return { data: form as unknown, headers: {} }
+}
+
 /** Execute one NovelAI image-generation request and decode all returned images. */
 export async function executeNaiGeneration(
   input: NAIMetadataInputParams,
@@ -164,10 +198,11 @@ export async function executeNaiGeneration(
   // Mark the job as running before the upstream call so started_at reflects the real runtime.
   await options?.onUpstreamSubmitting?.()
 
-  const response = await axios.post('https://image.novelai.net/ai/generate-image', requestBody, {
+  const httpBody = await buildNaiHttpBody(requestBody)
+  const response = await axios.post('https://image.novelai.net/ai/generate-image', httpBody.data, {
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
+      ...httpBody.headers,
       Origin: 'https://novelai.net',
       Referer: 'https://novelai.net',
     },

@@ -96,4 +96,9 @@ File selection is bounded opening context. `useUnsavedSettingsGuard(..., true)` 
 the selected files. Keep the parent's `frame-src 'self'` policy and the dedicated asset proxy in Vite.
 See [plugin contracts](../plugins/README.md).
 
+Unsaved-change guards register through `useUnsavedSettingsGuard` (`features/settings/use-unsaved-settings-guard.ts`).
+Its provider in the app shell owns the app's only `useBlocker`, because React Router consults just the last registered
+blocker; never call `useBlocker` elsewhere. Pass `true` to also guard query changes, or a stable
+`(current, next) => boolean` for a narrower scope (the workflows tab).
+
 `npm run typecheck`, `npx eslint .`, `npm run build` (run in `frontend/`).

@@ -38,7 +38,7 @@ export function ChatProfileAvatar({ name, avatar, profile, imageUrl, avatarCrop,
   const base = cn('inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold', SIZE_CLASS[size], className)
   const { canViewImages } = useImagePermissions()
   const src = imageUrl !== undefined ? imageUrl : profile?.id
-    ? chatProfileAssetUrl(profile.id, 'avatar', profile.assetVersion) : avatar
+    ? profile.hasAvatar === false ? null : chatProfileAssetUrl(profile.id, 'avatar', profile.assetVersion) : avatar
   const thumbnailSrc = imageUrl === undefined && profile?.avatarHash && profile.avatarThumbnailUrl
     ? buildApiUrl(`${profile.avatarThumbnailUrl}?v=${encodeURIComponent(profile.assetVersion ?? '')}`) : null
   const fallback = engine === 'codex' ? <SquareTerminal className="size-[60%]" /> : Array.from(name.trim())[0] ?? '?'

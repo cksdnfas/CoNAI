@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type DragEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { useBlocker } from 'react-router-dom'
 import {
   Background,
   ControlButton,
@@ -17,8 +16,8 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { Textarea } from '@/components/ui/textarea'
-import { useBlockerConfirm } from '@/components/ui/use-blocker-confirm'
-import { shouldBypassOverlayHistoryBackNavigation, useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
+import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
+import { useUnsavedSettingsGuard } from '@/features/settings/use-unsaved-settings-guard'
 import { useI18n } from '@/i18n'
 import type { CustomDropdownList } from '@/lib/api-image-generation-types'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -181,21 +180,7 @@ export function ComfyWorkflowAuthoringModal({
     onClose()
   }, [confirm, isDirty, isSaving, onClose, t, unsavedMessage])
   useOverlayBackClose({ open, onClose: () => { void requestClose() } })
-  const navigationBlocker = useBlocker(useCallback(({ currentLocation, nextLocation }: { currentLocation: { pathname: string, search: string }, nextLocation: { pathname: string, search: string } }) => (
-    shouldGuard
-    && !shouldBypassOverlayHistoryBackNavigation()
-    && (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search)
-  ), [shouldGuard]))
-  useBlockerConfirm(navigationBlocker, unsavedMessage)
-  useEffect(() => {
-    if (!shouldGuard) return
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', handleBeforeUnload)
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [shouldGuard])
+  useUnsavedSettingsGuard(shouldGuard, unsavedMessage, true)
 
   // The editor covers the page: lock its scroll and move focus in, so keyboard users start inside the editor.
   useEffect(() => {

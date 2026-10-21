@@ -39,6 +39,12 @@ export async function getNaiCostEstimate(payload: {
   anlasBalance: number
   /** img2img strength; omit for text-to-image. */
   strength?: number
+  /** Selected model; V5 costs more and its free generations use the Opus usage pool. */
+  model: string
+  /** generate / img2img / infill; the server prices infill by the model it is actually sent to. */
+  action: string
+  /** Remaining Opus usage percent; null when unknown. */
+  opusRemainingPercent: number | null
 }) {
   return requestJson<NAICostEstimateResponse>('/api/nai/cost/calculate', {
     method: 'POST',

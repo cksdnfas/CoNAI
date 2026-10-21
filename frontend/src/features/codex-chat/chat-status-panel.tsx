@@ -75,7 +75,7 @@ export type ChatStatusBlock = ChatDisplayBlock & { label?: string }
 
 /** A safe profile/linked-emoticon image fills the existing panel width, above its blocks. */
 export function ChatPortrait({ signal, profile }: { signal: ChatPortraitSignal; profile: ChatProfileSummary }) {
-  const avatar = <ChatProfileImage src={chatProfileAssetUrl(profile.id, 'avatar', profile.assetVersion)} className="size-full object-cover object-top" fallback={<span className="flex size-full items-center justify-center text-5xl text-muted-foreground">{profile.name.slice(0, 1)}</span>} />
+  const avatar = <ChatProfileImage src={profile.hasAvatar === false ? null : chatProfileAssetUrl(profile.id, 'avatar', profile.assetVersion)} className="size-full object-cover object-top" fallback={<span className="flex size-full items-center justify-center text-5xl text-muted-foreground">{profile.name.slice(0, 1)}</span>} />
   const reference = profile.referenceHash ? <ChatProfileImage src={chatProfileAssetUrl(profile.id, 'reference', profile.assetVersion)} className="size-full object-cover object-top" fallback={avatar} /> : avatar
   return <div className="relative h-[400px] w-full shrink-0 overflow-hidden" aria-label={profile.name}>
     {signal.source === 'expression' && signal.compositeHash

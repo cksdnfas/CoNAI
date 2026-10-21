@@ -3,7 +3,7 @@ import { UnsavedSettingsGuardProvider } from '@/features/settings/use-unsaved-se
 import { PageSettingsButton } from '@/features/settings/page-settings-button'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Map as MapIcon, Puzzle, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Map as MapIcon, type LucideIcon } from 'lucide-react'
 import { matchPath, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
@@ -122,7 +122,7 @@ function AppShellLayout() {
   const headerNavigationOrder = normalizeHeaderNavigationOrder(headerNavigationQuery.data?.order, pluginPages.map((page) => page.id))
   const allNavItems = new Map(navItemsById)
   for (const page of pluginPages) {
-    allNavItems.set(page.id, { id: page.id, to: page.to, label: page.title, icon: Puzzle, permissionKey: null })
+    allNavItems.set(page.id, { id: page.id, to: page.to, label: page.title, icon: page.icon, permissionKey: null })
   }
   const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
@@ -220,13 +220,13 @@ function AppShellLayout() {
               </div>
 
               {canScrollNavLeft ? (
-                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-background via-background/90 to-transparent pl-1 text-foreground/45">
+                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-background via-background/90 to-transparent pr-6 pl-1 text-foreground/45">
                   <ChevronLeft className="h-4 w-4" />
                 </div>
               ) : null}
 
               {canScrollNavRight ? (
-                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-background via-background/90 to-transparent pr-1 text-foreground/55">
+                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-background via-background/90 to-transparent pr-1 pl-6 text-foreground/55">
                   <ChevronRight className="h-4 w-4" />
                 </div>
               ) : null}

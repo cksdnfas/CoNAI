@@ -1,4 +1,4 @@
-import { Archive, AudioLines, Film, FolderTree, Image as ImageIcon, Images, LayoutGrid, MessageSquareText, Newspaper, Settings2, Sparkles, Upload, WandSparkles, type LucideIcon } from 'lucide-react'
+import { Archive, AudioLines, Blocks, Film, FolderTree, Image as ImageIcon, Images, MessageSquareText, Newspaper, Settings2, Sparkles, Tags, Upload, Wallpaper, WandSparkles, type LucideIcon } from 'lucide-react'
 import { chatPagePermission } from '@conai/shared'
 import { hasAuthPermission } from './auth-permissions'
 
@@ -12,7 +12,7 @@ export interface PageAccessCatalogItem {
 
 // Same order as the header's default: library, making, chat then posts, the rest.
 const PAGE_ACCESS_ENTRIES: Omit<PageAccessCatalogItem, 'permissionKey'>[] = [
-  { path: '/extensions', labelKey: 'pageAccessCatalog.extensions', icon: LayoutGrid, category: 'derived' },
+  { path: '/extensions', labelKey: 'pageAccessCatalog.extensions', icon: Blocks, category: 'derived' },
   {
     path: '/',
     labelKey: 'pageAccessCatalog.home',
@@ -40,7 +40,7 @@ const PAGE_ACCESS_ENTRIES: Omit<PageAccessCatalogItem, 'permissionKey'>[] = [
   {
     path: '/prompts',
     labelKey: 'pageAccessCatalog.prompts',
-    icon: MessageSquareText,
+    icon: Tags,
     category: 'primary',
   },
   {
@@ -77,7 +77,7 @@ const PAGE_ACCESS_ENTRIES: Omit<PageAccessCatalogItem, 'permissionKey'>[] = [
   {
     path: '/wallpaper',
     labelKey: 'pageAccessCatalog.wallpaper',
-    icon: LayoutGrid,
+    icon: Wallpaper,
     category: 'primary',
   },
   {
