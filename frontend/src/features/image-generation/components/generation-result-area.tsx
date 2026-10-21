@@ -27,8 +27,6 @@ type GenerationResultAreaProps = {
   splitPaneScroll?: boolean
   /** Narrow layout: shorter stage, actions under the image. */
   compact?: boolean
-  /** Bumped on each generate click; a filmstrip pick made before it is released so the stage follows the new result. */
-  followLatestNonce?: number
   view: GenerationResultView
   onViewChange: (view: GenerationResultView) => void
   onBack?: () => void
@@ -44,7 +42,6 @@ export function GenerationResultArea({
   publicWorkflowSlug,
   splitPaneScroll = false,
   compact = false,
-  followLatestNonce = 0,
   view,
   onViewChange,
   onBack,
@@ -72,11 +69,10 @@ export function GenerationResultArea({
     visibilityMode: applyRatingSafety ? 'feed' : 'badge-only',
   })
 
-  // 생성을 누른 뒤 아무것도 안 고르면 무대는 최신 결과를 따라간다.
-  // 그 뒤 필름스트립에서 고른 결과는 새 결과가 완료돼도 유지하고, 다음 생성 클릭 때만 풀린다.
-  const [pick, setPick] = useState<{ id: string; nonce: number } | null>(null)
-  const pickedItem = pick && pick.nonce === followLatestNonce
-    ? visibleItems.find((item) => String(item.id) === pick.id) ?? null
+  // 직접 고른 결과는 생성 요청이나 완료로 바뀌지 않는다.
+  const [pick, setPick] = useState<string | null>(null)
+  const pickedItem = pick !== null
+    ? visibleItems.find((item) => String(item.id) === pick) ?? null
     : null
   const selected = pickedItem ?? visibleItems[0] ?? null
 
@@ -130,7 +126,7 @@ export function GenerationResultArea({
         <GenerationResultStage
           items={visibleItems}
           selected={selected}
-          onSelect={(id) => setPick({ id, nonce: followLatestNonce })}
+          onSelect={setPick}
           isLoading={feed.isHistoryLoading}
           activeJob={activeJob}
           activeJobCount={activeJobCount}

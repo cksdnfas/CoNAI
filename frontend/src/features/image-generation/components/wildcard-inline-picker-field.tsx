@@ -51,6 +51,7 @@ import {
   PromptSyntaxTokenPopup,
   renderPromptFieldOverlay,
   renderPromptSyntaxOverlay,
+  syncPromptOverlayStyle,
   WildcardInlinePickerPopup,
 } from './wildcard-inline-picker-field-ui'
 
@@ -88,6 +89,7 @@ export function WildcardInlinePickerField({
 }: WildcardInlinePickerFieldProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
+  const overlayRef = useRef<HTMLDivElement | null>(null)
   const closeTimerRef = useRef<number | null>(null)
   const detectedPopupCloseTimerRef = useRef<number | null>(null)
   const detectedPopupRef = useRef<HTMLDivElement | null>(null)
@@ -630,6 +632,17 @@ export function WildcardInlinePickerField({
   const overlayTextClass = isChipMode ? 'text-foreground' : 'text-transparent'
   const fieldLayerClass = hasOverlay ? cn('relative z-10 bg-transparent', isChipMode && 'text-transparent caret-foreground') : 'relative z-10'
 
+  useLayoutEffect(() => {
+    const field = fieldRef.current
+    const overlay = overlayRef.current
+    if (!field || !overlay) return
+    const sync = () => syncPromptOverlayStyle(field, overlay)
+    sync()
+    const observer = new ResizeObserver(sync)
+    observer.observe(field)
+    return () => observer.disconnect()
+  })
+
   return (
     <div ref={rootRef} className="relative space-y-2">
       <div className={cn('relative rounded-sm', hasOverlay ? 'bg-surface-container' : undefined)}>
@@ -637,13 +650,14 @@ export function WildcardInlinePickerField({
           <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-sm">
             {multiline ? (
               <div
-                className={cn('absolute inset-0 whitespace-pre-wrap break-words py-2 pl-3 pr-10 text-sm', overlayTextClass)}
+                ref={overlayRef}
+                className={cn('absolute inset-0', overlayTextClass)}
                 style={{ transform: `translate(${-fieldScrollLeft}px, ${-fieldScrollTop}px)` }}
               >
                 {overlayContent}
               </div>
             ) : (
-              <div className={cn('flex h-full items-center overflow-hidden px-3 text-sm', overlayTextClass)}>
+              <div ref={overlayRef} className={cn('flex h-full items-center overflow-hidden', overlayTextClass)}>
                 <div
                   className="min-w-full whitespace-pre"
                   style={{ transform: `translateX(${-fieldScrollLeft}px)` }}

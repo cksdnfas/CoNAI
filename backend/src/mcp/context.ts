@@ -17,6 +17,8 @@ export function fileWriteSource(context: McpRequestContext): FileWriteSource {
 }
 
 export interface McpRequestContext {
+  /** Host-only read scope and evidence accumulator for one isolated research execution. */
+  research?: import('../services/codex-chat/chatResearch').ChatResearchExecution;
   /** Internal native-tool bridge; prevents recursive plugin registration. */
   omitPluginTools?: boolean;
   /** Server-resolved project; never accepted from model arguments. */

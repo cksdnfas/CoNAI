@@ -369,7 +369,6 @@ function PublicComfyWorkflowPageContent() {
         publicWorkflowSlug={slug}
         splitPaneScroll={isWideLayout}
         compact={!isWideLayout}
-        followLatestNonce={historyRefreshNonce}
         view={resultView}
         onViewChange={setResultView}
         recentStrip={resolveRecentStripPlacement(generationLayout.presetOf('comfy'))}

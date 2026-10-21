@@ -296,7 +296,22 @@ const CARET_MIRROR_STYLE_PROPERTIES = [
   'tabSize',
   'wordBreak',
   'overflowWrap',
+  'fontFeatureSettings',
+  'fontVariationSettings',
+  'fontKerning',
+  'wordSpacing',
 ] as const
+
+/** Use the control's resolved metrics, including caller overrides, for the highlight mirror. */
+export function syncPromptOverlayStyle(field: HTMLInputElement | HTMLTextAreaElement, overlay: HTMLDivElement) {
+  const style = window.getComputedStyle(field)
+  for (const property of CARET_MIRROR_STYLE_PROPERTIES) {
+    overlay.style[property] = style[property]
+  }
+  overlay.style.borderStyle = 'solid'
+  overlay.style.borderColor = 'transparent'
+  overlay.style.whiteSpace = field instanceof HTMLTextAreaElement ? style.whiteSpace : 'pre'
+}
 
 function resolveLineHeight(style: CSSStyleDeclaration) {
   const lineHeight = Number.parseFloat(style.lineHeight)

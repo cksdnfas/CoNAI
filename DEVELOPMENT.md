@@ -192,6 +192,8 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 공개 `plugins/`에는 SDK와 `text-editor`·`app-workbench`·`chat-instructions` 개발 예제를 둔다. 개인 플러그인과 전용 테스트·문서는 Git/Docker에서 제외한 `local-plugins/`에 보관한다. `node scripts/build-plugin.mjs --local <이름>`으로 `build-output/local-plugins/`에 개인 ZIP을 만들며, 공용 테스트는 개인 소스에 의존하지 않는다.
 
+`mode: profile`의 선택적 `research`는 `shared/src/types/plugin.ts`의 `PluginResearchInput`/`PluginResearchResult` 계약이다. `pluginLlm.ts`가 입력·엔진·게시판 권한을 확인하고 `pluginProfileRun.ts`가 계정/플러그인/프로필/슬롯/활동/요청별 방과 기존 reply registry를 연결한다. 문맥은 `buildChatProfileReplyMessages(useLorebooks:false)`로 만들고 기존 `llmChatService.generateLlmGroupReply`의 같은 실행 루프를 사용한다. `chatResearch.ts`의 호스트 전용 상태가 실제 모델 요청·도구 시도를 제한하고, MCP `toolAccess.ts`/`server.ts`는 간접 도구까지 차단한다. `postStore.ts`의 내부 `allowedPostIds`는 검색 SQL/총수/스냅샷을 제한하고 임베딩 모델을 사용하지 않는다. `postTools.ts`는 공개 원문 범위와 실제 읽기 구간의 버전·발췌 증거를 반환한다. 기존 jobs·취소·권한·만료를 재사용하며 일반 profile 모드와 저장 검토는 바뀌지 않는다. 직접 API LLM만 지원하며 기타 엔진은 거절한다. 상세·호환성은 [SDK 조사 계약](plugins/README.md#isolated-read-only-post-research), 공개 회귀는 `backend/test/plugin-server.test.ts`를 참조한다.
+
 `pluginLlm.ts`의 `mode: profile`은 `pluginProfileRun.ts` → `ensureAutomationRoom` / `wakeChatRoom` → 기존 채팅 엔진으로 실행한다. 플러그인·계정·프로필별 전용 대화에서 프로필의 도구 카탈로그·권한·생성 프리셋·검토를 재사용하며 별도 도구 실행 루프를 만들지 않는다. `profileRun`은 실제 메시지의 도구 결과를 크기 제한 안에서 반환하고, 재조회 시 `attachJobResults`로 지연 생성 결과를 갱신한다. 대화는 자동화 목록의 `plugin` 종류로 남고 SDK `navigation.openChat`으로 연다. 기존 생략/`text` 모드는 상태 없는 답변 계약을 유지한다. `plugin-server.test.ts`에서 모델 도구 호출 → 실제 파일 작업 → 모델 결과 재입력, 권한 회수·계정 격리·멱등·취소를 검증한다.
 
 `npx tsx --test backend/test/plugins.test.ts`로 계정·세션·선택 범위, 승인 재사용·권한 회수·저장 충돌, ZIP과 opaque-origin 경계를 검증한다.

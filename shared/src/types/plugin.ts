@@ -53,9 +53,14 @@ export type PluginLlmInput = {
   requestId: string; profileId: number; message: string; history?: string; userName?: string
   /** profile: native chat execution with the profile's tools and its own plugin/account room. text: stateless compatibility mode. */
   mode?: 'text' | 'profile'
+  /** Opt-in isolated, read-only published-post research; direct API LLM profiles only. */
+  research?: PluginResearchInput
   /** Text mode only. judge: the profile's prompt on its judge model, else the default judge row (cheap quick calls). */
   model?: 'chat' | 'judge'
-  useLorebooks?: boolean; maxTokens?: number; timeoutMs?: number
+  useLorebooks?: boolean
+  /** Optional integer 1–4096, capped by the profile. Omitted: text uses 512; profile uses its native budget. */
+  maxTokens?: number
+  timeoutMs?: number
   /** JSON example/schema passed through the native workflow LLM JSON mode. */
   structuredOutput?: string | Record<string, unknown>
   /** Opt-in prose translation. `only` translates message JSON without a character/model turn. */
@@ -83,10 +88,20 @@ export type PluginLlmJob = {
 }
 export type PluginProfileRun = {
   threadId: number; messageIds: number[]
+  research?: PluginResearchResult
   tools: Array<{ id: string; name: string; status: 'running' | 'completed' | 'failed'; summary: string; output: string;
     historyIds: number[]; compositeHashes: string[]; audioCandidateIds: string[]; pendingJobIds: number[];
     proposalId: number | null; failedJobs: Array<{ jobId: number; message: string }>; deferred?: { state: 'writing' | 'failed'; error: string | null } }>
   toolsTruncated: boolean
+}
+export type PluginResearchInput = {
+  slotId: string; activityId: string; allowedPostIds: number[]
+  maxModelCalls?: number; maxToolCalls?: number
+}
+export type PluginResearchResult = {
+  slotId: string; activityId: string; modelCalls: number; toolCalls: number
+  stopReason: 'completed' | 'model_limit' | 'tool_limit'
+  evidence: Array<{ postId: number; revision: number; contentVersion: number | null; offset: number; end: number; excerpt: string }>
 }
 export type PluginInstance = {
   id: string; plugin: PluginManifest; page: PluginPage; expiresAt: number

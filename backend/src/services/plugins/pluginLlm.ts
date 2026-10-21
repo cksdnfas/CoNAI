@@ -23,14 +23,22 @@ import { RuntimeJobConflictError, RuntimeJobStore, RUNTIME_JOB_TTL_MS } from '..
 import { getPlugin } from './pluginRegistry'
 import { onPluginChanged, pluginDb, PluginError, sha256 } from './pluginStore'
 import { refreshPluginProfileRun, runPluginProfile } from './pluginProfileRun'
+import { requireResearchProfile } from '../codex-chat/chatResearch'
+import { requireRequesterPermission } from '../../middleware/featureAccess'
 
 const inputSchema = z.object({
   requestId: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_.:-]+$/),
   profileId: z.number().int().positive(), message: z.string().trim().min(1).max(16_000),
   history: z.string().max(32_000).default(''), userName: z.string().trim().min(1).max(100).default('사용자'),
-  useLorebooks: z.boolean().default(true), maxTokens: z.number().int().min(1).max(4096).default(512),
+  useLorebooks: z.boolean().default(true), maxTokens: z.number().int().min(1).max(4096).optional(),
   timeoutMs: z.number().int().min(1000).max(600_000).default(120_000),
   mode: z.enum(['text', 'profile']).optional(),
+  research: z.object({
+    slotId: z.string().trim().min(1).max(100), activityId: z.string().trim().min(1).max(100),
+    allowedPostIds: z.array(z.number().int().positive()).min(1).max(100),
+    maxModelCalls: z.number().int().min(1).max(8).default(4),
+    maxToolCalls: z.number().int().min(1).max(24).default(8),
+  }).strict().optional(),
   translation: z.object({ fields: z.array(z.string().max(120).regex(/^[a-zA-Z][\w]*(?:\.(?:[a-zA-Z][\w]*|\*)){0,4}$/)).min(1).max(20), only: z.boolean().optional(), direction: z.enum(['model', 'display']).optional() }).strict().optional(),
   /** judge: the profile's prompt on its judge model (else the default judge row) instead of its chat model. */
   model: z.enum(['chat', 'judge']).optional(),
@@ -39,8 +47,9 @@ const inputSchema = z.object({
   }, 'structuredOutput must be valid JSON within 16KB').optional(),
 }).strict().refine(input => input.mode !== 'profile' || input.structuredOutput === undefined, 'structuredOutput is only available in text mode')
   .refine(input => input.mode !== 'profile' || input.translation === undefined, 'profile mode uses native translation')
-  .refine(input => input.mode !== 'profile' || input.useLorebooks, 'Profile execution uses the profile lorebook settings; use text mode to disable lorebooks')
+  .refine(input => input.mode !== 'profile' || input.research || input.useLorebooks, 'Profile execution uses the profile lorebook settings; use text mode to disable lorebooks')
   .refine(input => input.mode !== 'profile' || input.model !== 'judge', 'The judge model is only available in text mode')
+  .refine(input => !input.research || input.mode === 'profile', 'research requires profile mode')
 type Input = z.infer<typeof inputSchema>
 type Row = { plugin_id: string; owner_key: string; request_key: string; fingerprint: string; digest: string; profile_id: number; job_id: string; expires_at: number }
 type Params = { pluginId: string; requester: McpRequester; digest: string; slot: number; inputKey: string }
@@ -145,7 +154,9 @@ export function cancelPluginLlmJob(pluginId: string, requester: McpRequester | u
   const row = owned(pluginId, requester, jobId)
   // A removed/disabled profile must not prevent stopping a previously admitted call.
   RuntimeJobRunner.cancel(row.job_id)
-  return view(row)
+  const result = view(row)
+  if (result.result?.profileRun?.research) requireRequesterPermission(requester, 'posts.view')
+  return result
 }
 
 function registerJob() {
@@ -202,11 +213,12 @@ function registerJob() {
         }
         // The judge row gets the profile's prompt as plain messages, so a Claude/Codex profile can use it too.
         const judge = input.model === 'judge'
+        const maxTokens = input.maxTokens ?? 512
         const result = await runWorkflowLlmText({
           target: judge ? { modelSlotId: judgeSlotOf(profile), requesterAccountId: requester.accountId } : { profileId: profile.id, requesterAccountId: requester.accountId }, messages,
           structuredOutputJson: input.structuredOutput,
           task: `Reply as ${profile.name}.`, signal: controller.signal,
-          overrides: { maxTokens: judge ? input.maxTokens : Math.min(input.maxTokens, profile.maxTokens ?? input.maxTokens) },
+          overrides: { maxTokens: judge ? maxTokens : Math.min(maxTokens, profile.maxTokens ?? maxTokens) },
           usage: { purpose: 'plugin', replyId: `plugin:${pluginId}:${ctx.jobId}` },
         })
         controller.signal.throwIfAborted(); ctx.throwIfCancelled()
@@ -249,6 +261,7 @@ function registerJob() {
 export function startPluginLlmJob(pluginId: string, requester: McpRequester | undefined, raw: unknown): PluginLlmJob {
   const input = inputSchema.parse(raw)
   const { plugin, owner, requester: actor, profile } = profileAccess(pluginId, requester, input.profileId)
+  if (input.research) { requireResearchProfile(profile); requireRequesterPermission(actor, 'posts.view') }
   if (input.model === 'judge') judgeSlotOf(profile) // refuse up front, not as a failed job
   const fingerprint = sha256(JSON.stringify(input))
   const db = pluginDb()

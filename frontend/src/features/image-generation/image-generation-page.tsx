@@ -236,7 +236,6 @@ function ImageGenerationPageContent() {
       workflowId={historyWorkflowId}
       splitPaneScroll={useWideSplitPaneScroll}
       compact={!isWideLayout}
-      followLatestNonce={historyRefreshNonce}
       view={resultView}
       onViewChange={setResultView}
       recentStrip={layoutSurface ? resolveRecentStripPlacement(generationLayout.presetOf(layoutSurface)) : undefined}

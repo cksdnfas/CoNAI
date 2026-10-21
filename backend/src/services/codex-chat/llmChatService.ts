@@ -38,6 +38,8 @@ import { knowledgePageForExecution, recordQuotedBoardKnowledge } from '../posts/
 import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
 import { notifyChatUserSend } from './chatSendEvents'
+import { requireResearchProfile, type ChatResearchExecution } from './chatResearch'
+import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { contextContentText, contextPartsOf, contextSections, limitContextMeta, markContextMessage, markContextParts, legacyContextMeta } from './chatContextDiagnostics'
 import { redactChatRequestBody, saveChatRequestCapture } from './chatRequestCaptures'
 import { ChatGroupStore, groupLimitsOf } from './chatGroupStore'
@@ -92,6 +94,7 @@ function chatConnectionOf(profile: ChatProfile) {
 }
 
 type LlmTurn = {
+  research?: ChatResearchExecution
   reaction?: GenerationReaction
   /**
    * An order on an earlier reply (see chatOrderRunner): no judge, no reply text needed, and the tool rounds end once a
@@ -431,6 +434,7 @@ async function replySemanticContext(threadId: number, profile: ChatProfile, mess
 
 async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[], judged: JudgedContext | null) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, generation: Partial<LlmGenerationOptions> = {}, prepare?: (tools: ChatCompletionTool[]) => Promise<unknown>) {
   requireProfileAccess(requester, profile)
+  if (turn.research) requireResearchProfile(profile)
   const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
   if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)
   const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
@@ -447,7 +451,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     turn.page = page
   }
   let catalogBudget = () => 12000
-  const bridge = !turn.reaction && (scopes.length > 0 || chatContext) ? await openChatMcpBridge(requester, scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds, chatContext, contentRatingLimit: profileContentLimit(profile), toolCatalogBudget: () => catalogBudget() }) : null
+  const bridge = !turn.reaction && (scopes.length > 0 || chatContext) ? await openChatMcpBridge(requester, scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds, chatContext, contentRatingLimit: profileContentLimit(profile), toolCatalogBudget: () => catalogBudget(), research: turn.research }) : null
 
   // The judge reads the conversation before the request is built: its answers decide the tools, the directive, and
   // the lore and past episodes beyond keywords. A reply carried on or a headless reaction is not judged again.
@@ -461,9 +465,9 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     // Preparation does not depend on semantic scores. Observe early rejection while retrieval is pending.
     preparation?.catch(() => undefined)
     // Closeness in meaning to the latest exchange comes first: the judge's lore and recall candidates use it.
-    const semantic = !turn.reaction && !turn.order && turn.continuing === undefined ? await replySemanticContext(turn.threadId, profile, turnHistory(turn, profile), turn.controller.signal, turn.historySource) : null
+    const semantic = !turn.research && !turn.reaction && !turn.order && turn.continuing === undefined ? await replySemanticContext(turn.threadId, profile, turnHistory(turn, profile), turn.controller.signal, turn.historySource) : null
     // The judge reads the user's own words, so it runs while their message is translated for the model.
-    const judging = !turn.reaction && !turn.order && turn.continuing === undefined
+    const judging = !turn.research && !turn.reaction && !turn.order && turn.continuing === undefined
       ? judgeBeforeReply({ profile, threadId: turn.threadId, replyId: chatContext?.replyId ?? null, availableTools: [...visible.map((tool) => tool.function.name), ...catalogued], messages: turnHistory(turn, profile), context: true, signal: turn.controller.signal, semantic })
       : Promise.resolve(null)
     judged = (await Promise.all([judging, preparation]))[0]
@@ -481,7 +485,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     turn.offeredTools = offeredTools
     const built = await buildMessages(offeredTools, withSemanticContext(judged?.context ?? null, semantic))
     // Plugins listening to chat.instructions rewrite the system message (session engines do it where they build theirs).
-    if (!turn.engineSession && hasPluginServerHook('chat.instructions')) {
+    if (!turn.research && !turn.engineSession && hasPluginServerHook('chat.instructions')) {
       const at = built.findIndex((message) => message.role === 'system')
       const current = at >= 0 && typeof built[at].content === 'string' ? built[at].content as string : ''
       const next = await applyChatInstructionHooks(current, { engine: 'llm', threadId: turn.threadId, group: CodexChatStore.findThreadById(turn.threadId)?.kind === 'group', profile: { id: profile.id, name: profile.name } }, requester)
@@ -523,6 +527,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     let wrapUp = false
     for (let round = 1; ; round += 1) {
       turn.controller.signal.throwIfAborted()
+      if (turn.research && !turn.research.canCallModel()) return
       let tools = bridge ? offeredTools : []
       // A request over the limit sheds old turns and cuts tool results first (fitChatContext). When a later round
       // still does not fit, the reply wraps up with what it did instead of failing; a first round has nothing to tell.
@@ -568,8 +573,8 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           tools,
           ...(lastRound && tools.length > 0 ? { toolChoice: 'none' as const } : {}),
           signal: turn.controller.signal,
-          allowCompatibilityFallback: !turn.reaction,
-          retry: !turn.reaction,
+          allowCompatibilityFallback: !turn.reaction && !turn.research,
+          retry: !turn.reaction && !turn.research,
           canRetry: () => turn.text.length === (turn.continuing?.length ?? 0) && turn.reasoning.length === 0,
           stopLoops: true,
           maxToolRounds: profile.maxToolRounds,
@@ -581,6 +586,11 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
             return (await runToolCall(turn, bridge, { id, function: { name, arguments: JSON.stringify(args) } }, profile.toolOutputLimit, [])).nativeResult
           } : undefined,
           onRequestBody: (body, actualTarget) => {
+            if (turn.research) {
+              requireProfileAccess(requester, profile)
+              requireRequesterPermission(requester, 'posts.view')
+              turn.research.takeModel()
+            }
             turn.requestSent = true
             if (turn.contextMeta?.version === 2) {
               turn.contextMeta.runtime = actualTarget.transport ?? 'direct'
@@ -619,6 +629,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       }
       previousRound = settleRestatement(turn, previousRound, roundStart)
       if (!bridge || tools.length === 0 || lastRound || result.toolCalls.length === 0) {
+        if (turn.research && lastRound && result.toolCalls.length > 0) turn.research.result.stopReason = 'model_limit'
         turn.finishReason = result.finishReason
         // Nothing to show at all (thinking ate the cap, or the model said nothing) is a failure the reader can retry.
         if (!turn.reaction && !turn.order && turn.continuing === undefined && turn.toolCalls.size === 0 && !replyContent(turn.text)) {
@@ -633,6 +644,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         if (turn.controller.signal.aborted) {
           return
         }
+        if (turn.research && !turn.research.takeTool()) return
         const target = calledTool(call.function.name, call.function.arguments)
         messages.push({ role: 'tool', tool_call_id: call.id, content: permitted(call.function.name) && permitted(target)
           ? (await runToolCall(turn, bridge, call, profile.toolOutputLimit, images)).text
@@ -820,6 +832,7 @@ export function generateLlmGroupReply(params: HeadlessReplyParams): Promise<Grou
 }
 
 type HeadlessReplyParams = {
+  research?: ChatResearchExecution
   chatContext: ChatExecutionContext
   requester: McpRequester
   threadId: number
@@ -848,6 +861,7 @@ async function runHeadlessReply(params: HeadlessReplyParams, order?: LlmTurn['or
   if (params.signal.aborted) abort()
   params.signal.addEventListener('abort', abort, { once: true })
   const turn: LlmTurn = {
+    research: params.research,
     chatContext: params.chatContext,
     order,
     threadId: params.threadId, controller, text: '', reasoning: '', toolCalls: new Map(), finishReason: null,

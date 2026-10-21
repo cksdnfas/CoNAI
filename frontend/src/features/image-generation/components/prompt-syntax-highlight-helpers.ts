@@ -132,7 +132,7 @@ export function detectPromptSyntaxTokens(value: string, records: FlattenedWildca
     const loraName = match[1]?.trim()
     const start = match.index ?? -1
 
-    if (!loraName || start < 0) {
+    if (!loraName || start < 0 || overlapsExistingRange(tokens, start, start + rawText.length)) {
       continue
     }
 

@@ -374,6 +374,8 @@ function summaries(actor: PostActor, rows: Array<PostRow | PostSummaryRow>): Pos
 }
 
 export type PostListQuery = {
+  /** Internal host scope; applied in SQL before pagination/ranking. Disables semantic model calls. */
+  allowedPostIds?: readonly number[];
   categoryId?: unknown; tag?: unknown; q?: unknown; status?: unknown; authorProfileId?: unknown; offset?: unknown; limit?: unknown;
   kind?: unknown; reviewStatus?: unknown; deleted?: unknown; sort?: unknown; snapshot?: unknown; taskKey?: unknown; taskConditionKey?:unknown;
 };
@@ -402,6 +404,11 @@ export const PostStore = {
     if (query.sort !== undefined && query.sort !== '' && query.sort !== 'relevance' && query.sort !== 'recent') throw new PostError('잘못된 정렬이야.');
     const where: string[] = [];
     const params: unknown[] = [];
+    if (query.allowedPostIds !== undefined) {
+      if (!query.allowedPostIds.length || query.allowedPostIds.length > 100 || query.allowedPostIds.some(id => !Number.isSafeInteger(id) || id <= 0)) throw new PostError('Invalid post scope.');
+      where.push(`p.id IN (${query.allowedPostIds.map(() => '?').join(',')}) AND p.status='published'`);
+      params.push(...query.allowedPostIds);
+    }
     const trashedOnly = query.deleted === 'only';
     where.push(trashedOnly ? 'EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.deleted_at IS NOT NULL)' : 'NOT EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.deleted_at IS NOT NULL)');
     if (trashedOnly && !actor.isAdmin) {
@@ -451,7 +458,7 @@ export const PostStore = {
       if(!trashedOnly) await refreshPostSearchIndex();
       const filter = trashedOnly?trashPostSearchFilter(query.q):postSearchFilter(query.q);
       terms = filter.terms;
-      if (!query.snapshot && !trashedOnly) {
+      if (!query.snapshot && !trashedOnly && query.allowedPostIds === undefined) {
         try { semantic = await semanticPostCandidates(actor, query.q); } catch { /* keyword search remains available */ }
       }
       // During snapshot continuation candidate IDs are fixed, with live visibility rechecked below.
@@ -466,7 +473,7 @@ export const PostStore = {
     const ranking = Boolean(query.snapshot || query.sort === 'relevance' || (query.sort !== 'recent' && (terms.length || (query.kind === 'knowledge' && policy.rankingEnabled))));
     let rows: PostSummaryRow[], total: number, snapshot: string | undefined, scoreVersion: string | undefined;
     if (ranking) {
-      const key = JSON.stringify([actor.accountId,actor.isAdmin,[...actor.keys].sort(),query.categoryId ?? null,query.tag ?? null,query.q ?? null,status,query.authorProfileId ?? null,query.kind ?? null,query.reviewStatus ?? null,query.deleted ?? null,query.sort ?? null,query.taskKey ?? null,query.taskConditionKey??null]);
+      const key = JSON.stringify([actor.accountId,actor.isAdmin,[...actor.keys].sort(),query.categoryId ?? null,query.tag ?? null,query.q ?? null,status,query.authorProfileId ?? null,query.kind ?? null,query.reviewStatus ?? null,query.deleted ?? null,query.sort ?? null,query.taskKey ?? null,query.taskConditionKey??null,query.allowedPostIds ?? null]);
       let stored: SearchSnapshot;
       if (query.snapshot) {
         snapshot = String(query.snapshot);

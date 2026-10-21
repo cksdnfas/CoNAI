@@ -5,13 +5,19 @@ import { CodexChatStore } from '../codex-chat/codexChatStore'
 import { ensureAutomationRoom, wakeChatRoom } from '../codex-chat/chatRoomWake'
 import { resolveProfileModel } from '../codex-chat/chatModelRoles'
 import { attachJobResults } from '../codex-chat/codexChatMedia'
-import { PluginError } from './pluginStore'
+import { PluginError, sha256 } from './pluginStore'
+import { ChatResearchExecution, requireResearchProfile } from '../codex-chat/chatResearch'
+import { buildChatProfileReplyMessages } from '../codex-chat/chatProfileReply'
+import { beginDirectReply } from '../codex-chat/chatReplies'
+import { generateLlmGroupReply } from '../codex-chat/llmChatService'
+import { requireRequesterPermission } from '../../middleware/featureAccess'
 
 const running = new Set<string>()
 
 /** Read only the replies created by this run; generated media/job references can finish after the model's text. */
 export function refreshPluginProfileRun(run: PluginProfileRun, requester: McpRequester): PluginProfileRun {
   if (!CodexChatStore.findThread(run.threadId, requester.accountId)) throw new PluginError('프로필 실행 대화를 찾을 수 없어.', 404)
+  if (run.research) requireRequesterPermission(requester, 'posts.view')
   const tools: PluginProfileRun['tools'] = []
   let bytes = 0, toolsTruncated = false
   const replies = run.messageIds.flatMap(id => { const reply = CodexChatStore.findMessage(run.threadId, id); return reply ? [reply] : [] })
@@ -42,11 +48,37 @@ export async function runPluginProfile(params: {
   running.add(lock)
   try {
     signal.throwIfAborted()
+    if (input.research) {
+      requireResearchProfile(profile)
+      requireRequesterPermission(requester, 'posts.view')
+      const research = new ChatResearchExecution(input.research)
+      const roomKey = `${key}:research:${sha256(JSON.stringify([input.research.slotId, input.research.activityId, input.requestId]))}`
+      const room = await ensureAutomationRoom(requester, profile.id, roomKey, `${pluginName} · ${profile.name} · Research`)
+      signal.throwIfAborted()
+      const userId = CodexChatStore.addMessage({ thread_id: room.id, role: 'user', content: input.message, display_content: null, tool_calls: [], status: 'completed', error: null })
+      const delivery = beginDirectReply(room, profile.id, [], CodexChatStore.findMessage(room.id, userId), signal, () => {})
+      try {
+        // The native headless reply executor owns tool rounds, usage, permissions and provider cancellation.
+        // Only the stateless persona builder supplies context: no room history, hooks, memory, lore or files.
+        const reply = await generateLlmGroupReply({
+          requester, profile, threadId: room.id, chatContext: delivery.context, signal, research, emit: () => {},
+          generation: { maxTokens: Math.min(input.maxTokens ?? 4096, profile.maxTokens ?? 4096) },
+          buildMessages: () => buildChatProfileReplyMessages({
+            profile, message: input.message, history: input.history ?? null, userName: input.userName ?? null, useLorebooks: false,
+          }),
+        })
+        const messageId = CodexChatStore.addMessage({ thread_id: room.id, role: 'assistant', ...reply, display_content: null, routing: delivery.routing })
+        signal.throwIfAborted()
+        if (reply.status !== 'completed') throw new PluginError(`Research failed (chat ${room.id}): ${reply.error ?? reply.status}`, 502)
+        const profileRun = refreshPluginProfileRun({ threadId: room.id, messageIds: [messageId], tools: [], toolsTruncated: false, research: research.result }, requester)
+        return { text: reply.content.slice(0, 4000), truncated: reply.content.length > 4000, model: resolveProfileModel(profile, 'chat')?.model ?? '', engine: profile.engine, profileRun }
+      } finally { delivery.close() }
+    }
     const room = await ensureAutomationRoom(requester, profile.id, key, `${pluginName} · ${profile.name}`)
     signal.throwIfAborted()
     const { CodexChatService } = await import('../codex-chat/codexChatService')
     if (CodexChatService.isRunning(room.id)) throw new PluginError('프로필 대화가 아직 실행 중이야.', 409)
-    CodexChatStore.updateThreadContext(room.id, { maxTokens: Math.min(input.maxTokens ?? 512, profile.maxTokens ?? input.maxTokens ?? 512) })
+    CodexChatStore.updateThreadContext(room.id, { maxTokens: input.maxTokens === undefined ? null : Math.min(input.maxTokens, profile.maxTokens ?? input.maxTokens) })
     const instruction = [input.history ? `<plugin-history>\n${input.history}\n</plugin-history>` : '',
       input.userName ? `Conversation partner: ${input.userName}` : '', input.message].filter(Boolean).join('\n\n')
     const result = await wakeChatRoom({ requester, threadId: room.id, instruction,

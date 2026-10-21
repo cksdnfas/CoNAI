@@ -1,6 +1,7 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client'
 import type { ChatExecutionContext } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
+import type { ChatResearchExecution } from './chatResearch'
 import { createMcpServer } from '../../mcp/server'
 import { CATALOG_RUN_TOOL, catalogToolNames } from '../../mcp/toolCatalog'
 import type { ChatScope } from './chatSettings'
@@ -12,8 +13,8 @@ export type ChatMcpToolResult = { content?: unknown[]; structuredContent?: unkno
  * The CoNAI MCP server, connected in-process for an API LLM chat: the same tools, scope filter and requester
  * ownership as the HTTP endpoint, without a network hop or token. One bridge per reply; close it afterwards.
  */
-export async function openChatMcpBridge(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null = null, options: { generationPresetIds?: number[]; chatContext?: ChatExecutionContext; allowEmpty?: boolean; contentRatingLimit?: number | null; toolCatalog?: boolean; toolCatalogBudget?: () => number } = {}) {
-  const server = createMcpServer({ scopes: [...scopes], requester, source: 'llm-chat', toolAllowlist, generationPresetIds: options.generationPresetIds ?? [], chatContext: options.chatContext, contentRatingLimit: options.contentRatingLimit, toolCatalog: options.toolCatalog, toolCatalogBudget: options.toolCatalogBudget })
+export async function openChatMcpBridge(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null = null, options: { generationPresetIds?: number[]; chatContext?: ChatExecutionContext; allowEmpty?: boolean; contentRatingLimit?: number | null; toolCatalog?: boolean; toolCatalogBudget?: () => number; research?: ChatResearchExecution } = {}) {
+  const server = createMcpServer({ scopes: [...scopes], requester, source: 'llm-chat', toolAllowlist, generationPresetIds: options.generationPresetIds ?? [], chatContext: options.chatContext, contentRatingLimit: options.contentRatingLimit, toolCatalog: options.toolCatalog, toolCatalogBudget: options.toolCatalogBudget, research: options.research })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await server.connect(serverTransport)
   const client = new Client({ name: 'conai-llm-chat', version: '1.0.0' })

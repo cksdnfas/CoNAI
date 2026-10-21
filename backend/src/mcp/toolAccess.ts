@@ -168,6 +168,7 @@ function keyHoldsTool(context: McpRequestContext, toolName: string): boolean {
  * `requireMcpToolAccess` re-runs this before each call, then rechecks the account with explicit errors.
  */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
+  if (context.research && !context.research.allowsTool(toolName)) return false;
   if (['list_plugin_drafts', 'create_plugin_draft', 'read_plugin_draft', 'edit_plugin_draft', 'prepare_plugin_install'].includes(toolName)) {
     if (!context.requester || !isChatMcpSource(context.source) || context.chatContext?.kind !== 'direct' || BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;
   }

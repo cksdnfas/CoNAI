@@ -37,8 +37,10 @@ type ReadComment = {
 
 /** Fit the actual serialized tool response before issuing receipts. A later LLM cap must not cut through a receipt. */
 function boundedPostRead(actor:PostActor,context:McpRequestContext,input:{postId:number;offset?:number;limit?:number;commentLimit?:number;commentId?:number;commentOffset?:number}) {
+  if (context.research && (!context.research.allowedPostIds.includes(input.postId) || input.commentId !== undefined || input.commentOffset !== undefined || (input.commentLimit ?? 0) !== 0)) throw new PostError('Research only reads allowed published post bodies.',403);
   const post=PostStore.get(actor,input.postId);
-  const count=input.commentLimit??30;
+  if (context.research && post.status !== 'published') throw new PostError('Research only reads published posts.',403);
+  const count=context.research ? 0 : input.commentLimit??30;
   if(input.commentOffset!==undefined&&input.commentId===undefined) throw new PostError('댓글 구간은 comment_id와 함께 지정해줘.');
   let selected=PostCommentStore.list(actor,input.postId,{limit:count,visibleOnly:true,...(input.commentId!==undefined?{ids:[input.commentId]}:{})});
   if(input.commentId!==undefined&&count!==0) {
@@ -52,7 +54,7 @@ function boundedPostRead(actor:PostActor,context:McpRequestContext,input:{postId
   const start=input.commentId!==undefined&&input.offset===undefined?post.body.length:Math.min(input.offset??0,post.body.length);
   const requestedEnd=Math.min(post.body.length,start+(input.limit??Math.min(16_000,cap)));
   const execution=post.knowledge?.enabled&&(context.chatContext||context.keyId)?knowledgeExecutionFromMcp(context):null;
-  let compact=false;
+  let compact=Boolean(context.research);
   const placeholder=(scope:'body'|'comment',first:number,end:number,commentId:number|null=null):ReadReference=>{
     const full:PostKnowledgeReference={useId:'0'.repeat(36),referenceToken:'x'.repeat(43),postId:post.id,commentId,scope,intervals:[{start:first,end}],
       contentVersion:post.knowledge!.contentVersion,contentHash:post.knowledge!.contentHash,trust:execution!.trust,expiresAt:'2026-10-12T00:00:00.000Z'};
@@ -111,6 +113,10 @@ function boundedPostRead(actor:PostActor,context:McpRequestContext,input:{postId
       }
     }
     if(JSON.stringify(packet).length>cap) throw new PostError('지식 참조가 출력 한도를 초과했어.',500);
+    if (context.research && end > start) context.research.result.evidence.push({
+      postId: post.id, revision: post.revision, contentVersion: post.knowledge?.contentVersion ?? null,
+      offset: start, end, excerpt: post.body.slice(start, Math.min(end, start + 400)),
+    });
     return packet;
   }).immediate();
 }
@@ -146,9 +152,10 @@ export function registerPostTools(server: McpServer, context: McpRequestContext)
     offset: z.number().int().min(0).optional(),
     limit: z.number().int().min(1).max(30).optional(),
   }) }, ({ query, category_id, tag, author_profile_id, status, kind, review_status, sort, snapshot, offset, limit }) => run(async (current) => {
+    if (context.research && status !== undefined && status !== 'published') throw new PostError('Research only searches published posts.',403);
     const taskKey = context.chatContext ? knowledgeExecutionFromMcp(context).rootExecutionId : undefined;
     const taskConditionKey=context.chatContext&&query?.trim()?knowledgeTaskConditionKey(knowledgeExecutionFromMcp(context),query):undefined;
-    const found = await PostStore.list(current, { q: query, categoryId: category_id, tag, authorProfileId: author_profile_id, status, kind, reviewStatus: review_status, sort, snapshot, taskKey,taskConditionKey, offset, limit: limit ?? 10 });
+    const found = await PostStore.list(current, { q: query, categoryId: category_id, tag, authorProfileId: author_profile_id, status, kind, reviewStatus: review_status, sort, snapshot, taskKey,taskConditionKey, offset, limit: limit ?? 10, allowedPostIds: context.research?.allowedPostIds });
     if (context.chatContext && query?.trim()) recordKnowledgeSearch(knowledgeExecutionFromMcp(context), query, found.items.filter(post => post.knowledge?.enabled).map(post => post.id));
     return {
       total: found.total,

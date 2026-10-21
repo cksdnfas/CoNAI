@@ -269,6 +269,8 @@ if (state.status === 'completed') showReply(state.result.text);
 
 Both browser `api.llm.start` and server `conai.llm.start` accept `mode: 'profile'`. This runs the native chat engine with the profile's tool catalog, tool allowlist, generation presets, hooks, lore, memory and review cards. No extra plugin or profile grant is needed. The initiating account and current profile permissions are checked by the native tool handlers on every call. API LLM, Pi, Claude and Codex follow their normal chat execution paths.
 
+Omit `maxTokens` to use the profile's normal native output budget, including full tool-call arguments; the text-mode default of 512 does not apply. Explicit `maxTokens` remains an integer from 1–4096 and is capped by the profile's configured budget. Each turn resets the room override, so an earlier explicit limit does not constrain later omitted limits. This behavior requires an updated host, not a new SDK; older hosts impose the 512 default even in profile mode. Account checks, tool reviews, cancellation and request-ID replay rules are unchanged.
+
 ```js
 const job = await api.llm.start({ requestId: crypto.randomUUID(), profileId,
   mode: 'profile', message: '내 도구로 요청한 작업을 처리하고 실제 결과를 알려줘.', maxTokens: 1024 });
@@ -285,9 +287,65 @@ The host creates one dedicated native room per plugin + account + profile; rooms
 
 `result.profileRun` includes `threadId`, `messageIds`, up to 32 bounded tool records and `toolsTruncated`. Records include actual tool status, summary/output excerpts, image history/hash and audio candidate references, pending jobs, failed jobs, deferred generation state and proposal IDs. `llm.get` refreshes linked generation/review outcomes after the reply completes. A completed tool that queued generation does not mean the media finished. Full outputs and review cards remain in the native room. Display text is capped at 4,000 characters and tool excerpts at 24 KiB. `api.supports('llm.profile')` detects host support; rebuild packages with the updated SDK for `navigation.openChat`.
 
+### Isolated read-only post research
+
+An updated host accepts `research` only with `mode:'profile'` through the existing browser/server `llm.start/get/wait/cancel` methods. The SDK needs no changes. Older hosts reject the unknown field: **never retry without `research`**, which would remove the boundary.
+
+```js
+const job = await api.llm.start({
+  requestId: crypto.randomUUID(), profileId, mode: 'profile',
+  message: 'Compare the supplied sources. Distinguish claims from evidence.',
+  research: {
+    slotId: 'save-1', activityId: 'activity-1',
+    allowedPostIds: [12, 34], maxModelCalls: 4, maxToolCalls: 8
+  }
+});
+const done = await api.llm.wait(job.jobId);
+if (done.status === 'completed') {
+  const { text, profileRun } = done.result;
+  // A completed answer is not an independent verification.
+  showResearch(text, profileRun.research);
+}
+```
+
+`PluginResearchInput`:
+
+| Field | Contract |
+| --- | --- |
+| `slotId`, `activityId` | Required nonblank strings, 1–100 characters each; both are part of the isolated execution identity. |
+| `allowedPostIds` | Required 1–100 positive integer IDs. Only currently published, accessible posts in this set may be searched/read. No category expansion. |
+| `maxModelCalls` | Integer 1–8, default 4. Bounds actual provider requests, not merely tool rounds. |
+| `maxToolCalls` | Integer 1–24, default 8. Bounds attempted calls, including rejected tool names. |
+
+Each new request uses its own account/plugin/profile/slot/activity/request automation room and **does not import room history**. `history`, if supplied, is explicit caller-provided context, not host-certified evidence. The native stateless persona builder and native headless LLM tool executor are reused. Automatic lore, linked files, semantic memory, judge, translation, instruction hooks and memory updates are omitted; `useLorebooks` does not enable them. Research output is capped at 4096 tokens per provider call (or the lower explicit/profile cap), with the existing `timeoutMs` deadline and native usage accounting. These are call/token/time limits, not a currency guarantee.
+
+Only **direct API LLM** profiles/connections are supported. Pi, Claude CLI and Codex fail closed before a model request. The host exposes only `posts_search` and `posts_read`, intersected with the account's current permissions and the profile's tool grants; every dispatch rechecks them. Search applies the explicit IDs before totals, ranking and pagination and does not call an embedding model. Read returns bounded original Markdown with its revision. Drafts/hidden/deleted posts, comment reads, attachments, indirect/catalog/plugin tools, web access and mutations are unavailable. Native search may include a visible matching comment snippet within an allowed post; it is not read evidence. Post text is untrusted data and cannot change these limits. Ordinary profile execution and its review cards are unchanged; publishing a result still uses the existing explicit native review/save path outside research.
+
+Completed jobs add `profileRun.research: PluginResearchResult`:
+
+```ts
+{
+  slotId: string; activityId: string;
+  modelCalls: number; toolCalls: number;
+  stopReason: 'completed' | 'model_limit' | 'tool_limit';
+  evidence: Array<{
+    postId: number; revision: number; contentVersion: number | null;
+    offset: number; end: number; excerpt: string;
+  }>;
+}
+```
+
+Evidence is captured from successfully returned original body slices, never from model text, search summaries, rejected reads or caller history. `offset`/`end` describe the returned half-open UTF-16 interval; `excerpt` is its first at most 400 UTF-16 units. `contentVersion` is the native knowledge version or `null` for ordinary posts. At most 24 reads can contribute evidence. These are historical read snapshots, not current-source validation or independent assessment: reopening a source must check its current visibility/version. Empty evidence remains empty even when the model claims success.
+
+Budget termination can complete the job with partial/empty text and `model_limit`/`tool_limit`; do not label that a completed investigation. Provider failures/timeouts/cancellation keep the existing failed/cancelled envelopes and do not promise a completed result; the native room retains the reply status. Request IDs retain their existing account/plugin-bound idempotency and input-conflict rules, with no automatic replay after interruption/restart. Existing plugin LLM concurrency and profile-busy limits apply. Poll/cancel using the job ID; account/profile checks remain, and fetching a research result also requires current `posts.view`. Rooms remain in the native Automation list and can be deleted there; runtime results use the existing job expiry.
+
+Implementation: `shared/src/types/plugin.ts`, `backend/src/services/plugins/pluginLlm.ts`, `pluginProfileRun.ts`, native `codex-chat/llmChatService.ts` and `chatResearch.ts`, MCP `toolAccess.ts`/`postTools.ts`, and scoped SQL in `posts/postStore.ts`. Permanent host regressions are in `backend/test/plugin-server.test.ts` (mocked providers; no real model costs).
+
 ### Stateless text compatibility
 
 Omitted `mode` or `mode:'text'` preserves the original stateless API. `llm.start` accepts `structuredOutput`, a JSON example/schema object or JSON string within 16 KiB in this mode. It reuses the native workflow LLM JSON mode and returns parsed `result.json` (at most 32 KiB); malformed JSON fails instead of being reported as a successful structured answer. This is the native model JSON instruction/parse contract, not an independent JSON Schema validator. Structured replies keep at most 4,000 characters of display text alongside the complete bounded JSON.
+
+Text output defaults to 512 tokens; explicit limits accept integers 1–4096. Chat-model calls are capped by the profile's budget; judge calls use the requested/default text limit.
 
 `model: 'judge'` (text mode only) sends the same profile prompt to the profile's judge model, or to the default judge row (⚖) when the profile has none, instead of its chat model. Use it for frequent small decisions where a cheaper, faster model is enough. Only LLM connections qualify (a TypeSafe decision model is skipped), and a Claude Code/Codex profile also runs on that row. `start` refuses with 409 when no judge model is available, so the caller can fall back. `api.supports('llm.judge')` detects host support; a server module on an older host gets a validation error from `start`.
 
