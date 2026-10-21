@@ -121,6 +121,7 @@ export function getRootLabel(section: DanbooruBrowserSection) {
 }
 
 export function getLocalizedTreeLabel(node: Pick<DanbooruBrowserTreeNode, 'id' | 'section' | 'label' | 'translatedLabel'>, language: string) {
+  if (node.label.toLowerCase() === 'unclassified') return language === 'ko' ? '미분류' : 'Unclassified'
   if (language !== 'ko') return node.label
   if (node.translatedLabel) return node.translatedLabel
   if (node.id === 'tags') return '태그'
@@ -205,7 +206,7 @@ export function TableLoading({ columns = 3 }: { columns?: number }) {
 
 export function EmptyTable() {
   const { t } = useI18n()
-  return <EmptyState title={t({ ko: '항목 없음', en: 'No items' })} />
+  return <EmptyState title={t({ ko: '항목이 없어', en: 'No items' })} />
 }
 
 export function TagsTable({ items, language }: { items: DanbooruBrowserTagRecord[]; language: string }) {

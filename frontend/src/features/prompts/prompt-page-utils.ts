@@ -1,12 +1,14 @@
+import type { TranslationDictionary } from '@/i18n'
 import type { PromptCollectionItem, PromptGroupRecord, PromptStatistics, PromptTypeFilter } from '@/types/prompt'
 
 export type PromptGroupLookup = PromptGroupRecord[] | ReadonlyMap<number, PromptGroupRecord>
 
-export const PROMPT_TYPE_TABS: Array<{ value: PromptTypeFilter; label: string }> = [
-  { value: 'positive', label: 'Positive' },
-  { value: 'negative', label: 'Negative' },
-  { value: 'auto', label: 'Auto' },
-]
+/** Display names of the prompt types, in tab order. */
+export const PROMPT_TYPE_LABELS: Record<PromptTypeFilter, TranslationDictionary> = {
+  positive: { ko: '포지티브', en: 'Positive' },
+  negative: { ko: '네거티브', en: 'Negative' },
+  auto: { ko: '오토', en: 'Auto' },
+}
 
 export function getSortedSiblingGroups(groups: PromptGroupRecord[], group: PromptGroupRecord | null) {
   if (!group) {

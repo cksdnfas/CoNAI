@@ -208,7 +208,7 @@ export function FoldersTab({
                 />
               ))
             ) : (
-              <SettingsEmptyRow>{t({ ko: '등록된 감시 폴더가 없어.', en: 'No registered watched folders yet.' })}</SettingsEmptyRow>
+              <SettingsEmptyRow>{t({ ko: '등록된 감시 폴더가 없어', en: 'No registered watched folders yet' })}</SettingsEmptyRow>
             )
           ) : null}
         </RowGroup>
@@ -237,7 +237,7 @@ export function FoldersTab({
                 <BackupSourceListItem key={source.id} source={source} onOpenOptions={setSelectedBackupSourceId} />
               ))
             ) : (
-              <SettingsEmptyRow>{t({ ko: '등록된 백업 소스가 없어.', en: 'No registered backup sources yet.' })}</SettingsEmptyRow>
+              <SettingsEmptyRow>{t({ ko: '등록된 백업 소스가 없어', en: 'No registered backup sources yet' })}</SettingsEmptyRow>
             )
           ) : null}
         </RowGroup>
@@ -245,7 +245,7 @@ export function FoldersTab({
         <RowGroup heading={t({ ko: '최근 스캔 로그', en: 'Recent scan logs' })}>
           {scanLogsLoading ? <SettingsRowsSkeleton rows={3} /> : null}
 
-          {!scanLogsLoading && scanLogs.length === 0 ? <SettingsEmptyRow>{t({ ko: '최근 스캔 로그가 없어.', en: 'No recent scan logs.' })}</SettingsEmptyRow> : null}
+          {!scanLogsLoading && scanLogs.length === 0 ? <SettingsEmptyRow>{t({ ko: '최근 스캔 로그가 없어', en: 'No recent scan logs' })}</SettingsEmptyRow> : null}
 
           {!scanLogsLoading && scanLogs.length > 0 ? (
             <SettingsResourceTable

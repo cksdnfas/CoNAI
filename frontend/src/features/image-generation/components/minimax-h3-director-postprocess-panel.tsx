@@ -121,16 +121,16 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, hiddenControls = [], 
           </div>
 
           {value.rtx.resize_type === 'Scale' ? (
-            <div className="max-w-xs space-y-1">{renderInputPort?.('postprocess.rtx.scale')}<FormField label={t({ ko: '배율', en: 'Scale' })}><NumberStepperInput min={1} max={4} step={0.05} value={String(value.rtx.scale)} onValueCommit={(next) => patchRtx({ scale: Number(next) })} /></FormField></div>
+            <div className="max-w-xs space-y-1">{renderInputPort?.('postprocess.rtx.scale')}<FormField label={t({ ko: '배율', en: 'Scale' })}><NumberStepperInput aria-label={t({ ko: '배율', en: 'Scale' })} min={1} max={4} step={0.05} value={String(value.rtx.scale)} onValueCommit={(next) => patchRtx({ scale: Number(next) })} /></FormField></div>
           ) : value.rtx.resize_type === 'Keep Ratio' || value.rtx.resize_type === 'Preset Ratio' ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">{renderInputPort?.('postprocess.rtx.megapixels')}<FormField label={t({ ko: '목표 MP', en: 'Target MP' })}><NumberStepperInput min={0.01} max={64} step={0.01} value={String(value.rtx.megapixels)} onValueCommit={(next) => patchRtx({ megapixels: Number(next) })} /></FormField></div>
+              <div className="space-y-1">{renderInputPort?.('postprocess.rtx.megapixels')}<FormField label={t({ ko: '목표 MP', en: 'Target MP' })}><NumberStepperInput aria-label={t({ ko: '목표 MP', en: 'Target MP' })} min={0.01} max={64} step={0.01} value={String(value.rtx.megapixels)} onValueCommit={(next) => patchRtx({ megapixels: Number(next) })} /></FormField></div>
               {value.rtx.resize_type === 'Preset Ratio' ? <div className="space-y-1">{renderInputPort?.('postprocess.rtx.ratio_preset')}<FormField label={t({ ko: '목표 비율', en: 'Target ratio' })}><Select value={value.rtx.ratio_preset} onChange={(event) => patchRtx({ ratio_preset: event.target.value as MiniMaxH3DirectorRtxSettings['ratio_preset'] })}>{['1:1', '4:3', '3:2', '16:9', '21:9'].map((option) => <option key={option}>{option}</option>)}</Select></FormField></div> : null}
             </div>
           ) : value.rtx.resize_type === 'Manual' ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">{renderInputPort?.('postprocess.rtx.width')}<FormField label={t({ ko: '너비', en: 'Width' })}><NumberStepperInput min={64} max={8192} step={8} value={String(value.rtx.width)} onValueCommit={(next) => patchRtx({ width: Number(next) })} /></FormField></div>
-              <div className="space-y-1">{renderInputPort?.('postprocess.rtx.height')}<FormField label={t({ ko: '높이', en: 'Height' })}><NumberStepperInput min={64} max={8192} step={8} value={String(value.rtx.height)} onValueCommit={(next) => patchRtx({ height: Number(next) })} /></FormField></div>
+              <div className="space-y-1">{renderInputPort?.('postprocess.rtx.width')}<FormField label={t({ ko: '너비', en: 'Width' })}><NumberStepperInput aria-label={t({ ko: '너비', en: 'Width' })} min={64} max={8192} step={8} value={String(value.rtx.width)} onValueCommit={(next) => patchRtx({ width: Number(next) })} /></FormField></div>
+              <div className="space-y-1">{renderInputPort?.('postprocess.rtx.height')}<FormField label={t({ ko: '높이', en: 'Height' })}><NumberStepperInput aria-label={t({ ko: '높이', en: 'Height' })} min={64} max={8192} step={8} value={String(value.rtx.height)} onValueCommit={(next) => patchRtx({ height: Number(next) })} /></FormField></div>
             </div>
           ) : null}
 
@@ -139,7 +139,7 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, hiddenControls = [], 
           ) : null}
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1">{renderInputPort?.('postprocess.rtx.device_id')}<FormField label={t({ ko: 'GPU 번호', en: 'GPU index' })}><NumberStepperInput min={0} max={8} step={1} value={String(value.rtx.device_id)} onValueCommit={(next) => patchRtx({ device_id: Math.trunc(Number(next)) })} /></FormField></div>
+            <div className="space-y-1">{renderInputPort?.('postprocess.rtx.device_id')}<FormField label={t({ ko: 'GPU 번호', en: 'GPU index' })}><NumberStepperInput aria-label={t({ ko: 'GPU 번호', en: 'GPU index' })} min={0} max={8} step={1} value={String(value.rtx.device_id)} onValueCommit={(next) => patchRtx({ device_id: Math.trunc(Number(next)) })} /></FormField></div>
             <ToggleRow checked={value.rtx.empty_cache} label={t({ ko: '실행 전 캐시 비우기', en: 'Empty cache first' })} port={renderInputPort?.('postprocess.rtx.empty_cache')} onChange={(empty_cache) => patchRtx({ empty_cache })} />
             <ToggleRow checked={value.rtx.use_mmap} label={t({ ko: '디스크 mmap 허용', en: 'Allow disk mmap' })} port={renderInputPort?.('postprocess.rtx.use_mmap')} onChange={(use_mmap) => patchRtx({ use_mmap })} />
             <ToggleRow checked={value.rtx.auto_unload_models} label={t({ ko: '모델 자동 언로드', en: 'Auto-unload models' })} port={renderInputPort?.('postprocess.rtx.auto_unload_models')} onChange={(auto_unload_models) => patchRtx({ auto_unload_models })} />

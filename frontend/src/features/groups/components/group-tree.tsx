@@ -101,7 +101,7 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
   }), [dropTargetId])
 
   if (visibleGroups.length === 0 && filterText.trim()) {
-    return <EmptyState size="compact" title={t({ ko: '맞는 그룹 없음', en: 'No matching groups' })} />
+    return <EmptyState size="compact" title={t({ ko: '맞는 그룹이 없어', en: 'No matching groups' })} />
   }
 
   return (

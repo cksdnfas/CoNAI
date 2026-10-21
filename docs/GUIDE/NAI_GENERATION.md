@@ -52,7 +52,7 @@ NAI 탭은 NovelAI 계정으로 이미지를 생성하고, 결과를 CoNAI 생�
 | 설정 | 설명 |
 | --- | --- |
 | Model | NAI Diffusion 모델 선택. `V5 Full Medium (Economy)`는 V5 Full의 절약 모드입니다. |
-| Action | Generate, img2img, infill 등 작업 선택 |
+| 생성 방식 | 새로 생성, 이미지 변형(img2img), 인페인트(infill) 중 작업 선택 |
 | Sampler / Scheduler | 샘플링 방식과 스케줄러 |
 | Steps | 생성 반복 수 |
 | CFG Scale | 프롬프트 반영 강도 |

@@ -222,7 +222,7 @@ export function ChatUserProfileManagerModal({ open, onClose }: { open: boolean; 
       >
         <ModalBody>
           {profilesQuery.isSuccess && profiles.length === 0 ? (
-            <EmptyState size="compact" className="justify-center" title={t({ ko: '아직 사용자 프로필이 없어.', en: 'No user profiles yet.' })} />
+            <EmptyState size="compact" className="justify-center" title={t({ ko: '아직 사용자 프로필이 없어', en: 'No user profiles yet' })} />
           ) : (
             <ChatUserProfileRows profiles={profiles} onEdit={(profile) => setEditor({ profile })} />
           )}

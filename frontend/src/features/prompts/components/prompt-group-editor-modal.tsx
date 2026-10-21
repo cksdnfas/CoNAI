@@ -10,6 +10,7 @@ import { Modal, ModalBody } from '@/components/ui/modal'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import type { PromptGroupRecord } from '@/types/prompt'
 import { useI18n } from '@/i18n'
+import { PROMPT_TYPE_LABELS } from '../prompt-page-utils'
 
 interface PromptGroupEditorModalProps {
   open: boolean
@@ -74,7 +75,7 @@ export function PromptGroupEditorModal({
     })
   }
 
-  const typeLabel = promptType === 'positive' ? 'Positive' : promptType === 'negative' ? 'Negative' : 'Auto'
+  const typeLabel = t(PROMPT_TYPE_LABELS[promptType])
 
   const dirty = open && (
     groupName !== (group?.group_name ?? '')

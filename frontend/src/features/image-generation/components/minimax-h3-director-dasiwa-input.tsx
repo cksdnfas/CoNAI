@@ -710,7 +710,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
             <div className="space-y-1">
               {renderInputPort?.('width')}
               <FormField label={t({ ko: '너비', en: 'Width' })}>
-                <NumberStepperInput min={numericBounds?.width?.min} max={numericBounds?.width?.max} step={1} value={widthValue} onValueCommit={(nextValue) => emit({ width: Number(nextValue) })} />
+                <NumberStepperInput aria-label={t({ ko: '너비', en: 'Width' })} min={numericBounds?.width?.min} max={numericBounds?.width?.max} step={1} value={widthValue} onValueCommit={(nextValue) => emit({ width: Number(nextValue) })} />
               </FormField>
             </div>
           ) : null}
@@ -718,7 +718,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
             <div className="space-y-1">
               {renderInputPort?.('height')}
               <FormField label={t({ ko: '높이', en: 'Height' })}>
-                <NumberStepperInput min={numericBounds?.height?.min} max={numericBounds?.height?.max} step={1} value={heightValue} onValueCommit={(nextValue) => emit({ height: Number(nextValue) })} />
+                <NumberStepperInput aria-label={t({ ko: '높이', en: 'Height' })} min={numericBounds?.height?.min} max={numericBounds?.height?.max} step={1} value={heightValue} onValueCommit={(nextValue) => emit({ height: Number(nextValue) })} />
               </FormField>
             </div>
           ) : null}
@@ -727,6 +727,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
               {renderInputPort?.('duration')}
               <FormField label={t({ ko: '길이(초)', en: 'Duration (seconds)' })}>
                 <NumberStepperInput
+                  aria-label={t({ ko: '길이(초)', en: 'Duration (seconds)' })}
                   disabled={mode === 'Image Inpaint'}
                   min={Math.max(MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS, numericBounds?.duration?.min ?? MINIMAX_H3_DIRECTOR_DURATION_MIN_SECONDS)}
                   max={Math.min(MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS, numericBounds?.duration?.max ?? MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS)}
@@ -746,6 +747,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
               {renderInputPort?.('frame_rate')}
               <FormField label={t({ ko: '프레임 레이트', en: 'Frame rate' })}>
                 <NumberStepperInput
+                  aria-label={t({ ko: '프레임 레이트', en: 'Frame rate' })}
                   disabled={mode === 'Image Inpaint'}
                   min={Math.max(MINIMAX_H3_DIRECTOR_FRAME_RATE_MIN, numericBounds?.frame_rate?.min ?? MINIMAX_H3_DIRECTOR_FRAME_RATE_MIN)}
                   max={Math.min(MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX, numericBounds?.frame_rate?.max ?? MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX)}

@@ -15,7 +15,7 @@ interface SearchChipStripProps {
 
 /**
  * Inline, removable filter chips for a toolbar row. Each chip reads "operator · value": the operator cycles on click
- * (포함 → 또는 → 제외) and the × removes the filter. The scope (긍정, 모델…) prefixes the value in muted text.
+ * (포함 → 또는 → 제외) and the × removes the filter. The scope (포지티브, 모델…) prefixes the value in muted text.
  */
 export function SearchChipStrip({ chips, onCycleOperator, onRemove, className }: SearchChipStripProps) {
   const { t } = useI18n()

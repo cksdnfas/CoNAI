@@ -279,7 +279,7 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
             <div key={entry.path} title={displayName(entry)} className="group relative min-w-0">
               <MediaCard
                 onClick={() => open(entry)}
-                title={<span className="line-clamp-2 whitespace-normal break-all">{displayName(entry)}</span>}
+                title={<span className="line-clamp-2 whitespace-normal wrap-anywhere">{displayName(entry)}</span>}
                 selected={isSelected}
                 className="w-full"
                 mediaClassName="aspect-square w-full"

@@ -196,7 +196,7 @@ export function WorkflowFinalResultsSection({
   emptyLabel?: string
 }) {
   const { t } = useI18n()
-  const resolvedEmptyLabel = emptyLabel ?? t({ ko: '최종 결과 노드가 없어.', en: 'No final result node.' })
+  const resolvedEmptyLabel = emptyLabel ?? t({ ko: '최종 결과 노드가 없어', en: 'No final result node' })
   const artifactsById = useMemo(() => new Map(artifacts.map((artifact) => [artifact.id, artifact])), [artifacts])
   const nodeLabelMap = useMemo(() => buildNodeDisplayLabelMap(selectedGraph), [selectedGraph])
   const resolvedEntries = useMemo<ResolvedFinalResultEntry[]>(() => finalResults.map((finalResult) => {

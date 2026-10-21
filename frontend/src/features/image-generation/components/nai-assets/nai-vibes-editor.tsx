@@ -179,7 +179,7 @@ export function NaiVibesEditor({
               menuFields={(
                 <>
                   <FormField label={t({ ko: '정보 추출량', en: 'Information Extracted' })}>
-                    <NumberStepperInput min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onValueCommit={(value) => onFieldChange(index, 'informationExtracted', value)} />
+                    <NumberStepperInput aria-label={t({ ko: '정보 추출량', en: 'Information Extracted' })} min={0.01} max={1} step={0.01} value={vibe.informationExtracted} onValueCommit={(value) => onFieldChange(index, 'informationExtracted', value)} />
                   </FormField>
                   {onEncodedChange ? (
                     <FormField label={t({ ko: '인코딩된 데이터', en: 'Encoded' })}>

@@ -140,7 +140,7 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
             </div>
           })}
         </div>
-        {usable.length === 0 ? <EmptyState size="compact" title={t({ ko: '프로필이 없어.', en: 'No profiles.' })} /> : null}
+        {usable.length === 0 ? <EmptyState size="compact" title={t({ ko: '프로필이 없어', en: 'No profiles' })} /> : null}
       </div>
     </div>
 

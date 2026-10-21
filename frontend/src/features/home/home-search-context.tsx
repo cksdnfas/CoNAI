@@ -159,7 +159,8 @@ export function HomeSearchProvider({ children }: { children: ReactNode }) {
     const currentKey = getHomeFeedKeys(appliedChips, sortOrder).imageListResetKey
     const targetKey = getHomeFeedKeys(nextChips, sortOrder).imageListResetKey
     if (targetKey === currentKey) {
-      void queryClient.invalidateQueries({ queryKey: ['home-images', targetKey], exact: true })
+      // Prefix match: the feed key also carries the hidden-group set after the search key.
+      void queryClient.invalidateQueries({ queryKey: ['home-images', targetKey] })
     }
   }, [appliedChips, isHomeRoute, location.search, queryClient])
 

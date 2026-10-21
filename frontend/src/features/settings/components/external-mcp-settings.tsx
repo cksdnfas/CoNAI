@@ -122,7 +122,7 @@ export function ExternalMcpSettings({ seed = null, onSeedClose }: { seed?: Exter
         {serversQuery.isLoading ? <SettingsRowsSkeleton rows={2} /> : serversQuery.isError ? (
           <p className="py-3 text-sm text-destructive">{getErrorMessage(serversQuery.error, t({ ko: '외부 MCP 서버를 불러오지 못했어.', en: 'Could not load external MCP servers.' }))}</p>
         ) : servers.length === 0 ? (
-          <SettingsEmptyRow>{t({ ko: '연결한 외부 MCP 서버가 아직 없어.', en: 'No external MCP servers yet.' })}</SettingsEmptyRow>
+          <SettingsEmptyRow>{t({ ko: '연결한 외부 MCP 서버가 아직 없어', en: 'No external MCP servers yet' })}</SettingsEmptyRow>
         ) : servers.map((server) => (
           <ResourceRow
             key={server.id}

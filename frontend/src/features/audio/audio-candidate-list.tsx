@@ -202,7 +202,7 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
                 <DropdownMenuLabel>{t({ ko: '옮길 효과음', en: 'Move to' })}</DropdownMenuLabel>
-                {(moveTargets ?? []).length === 0 ? <DropdownMenuItem disabled>{t({ ko: '효과음 없음', en: 'No effects' })}</DropdownMenuItem> : null}
+                {(moveTargets ?? []).length === 0 ? <DropdownMenuItem disabled>{t({ ko: '효과음이 없어', en: 'No effects' })}</DropdownMenuItem> : null}
                 {(moveTargets ?? []).map((group) => <DropdownMenuItem key={group.id} onSelect={() => onMove(group)}>{group.name}</DropdownMenuItem>)}
               </DropdownMenuContent>
             </DropdownMenu>

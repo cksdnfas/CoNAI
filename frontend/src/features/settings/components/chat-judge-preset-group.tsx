@@ -68,7 +68,7 @@ export function ChatJudgePresetGroup({ editor, setEditor }: { editor: { preset: 
         )}
       >
         {presetsQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
-        {presetsQuery.isSuccess && presets.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 판단 프리셋이 없어.', en: 'No judge presets yet.' })}</SettingsEmptyRow> : null}
+        {presetsQuery.isSuccess && presets.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 판단 프리셋이 없어', en: 'No judge presets yet' })}</SettingsEmptyRow> : null}
         {presets.map((preset) => (
           <ResourceRow
             key={preset.id}

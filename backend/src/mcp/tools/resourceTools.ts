@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { CustomDropdownListModel } from '../../models/CustomDropdownList';
 import { WildcardModel, WildcardItemModel } from '../../models/Wildcard';
+import { WildcardService } from '../../services/wildcardService';
 
 export function registerResourceTools(server: McpServer): void {
   // 커스텀 드롭다운 목록 조회 (경량)
@@ -166,6 +167,35 @@ export function registerResourceTools(server: McpServer): void {
               total,
               page: params.page,
               limit: params.limit,
+            }),
+          }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
+        };
+      }
+    }
+  );
+
+  // 랜덤 프롬프트 미리보기 (생성 화면의 미리보기와 같은 해석기)
+  server.registerTool(
+    'preview_random_prompt',
+    { description: 'Expand a prompt\'s random syntax into sample prompts with the same resolver generation uses: wildcards (++name++, __name__, __name|2__), Danbooru tag groups (__tag:group__), my prompt groups (__my:group__), chains and weight ranges. Each sample is an independent draw and the real generation draws again, so use it to check what a prompt can produce, not to predict the next image.', inputSchema: z.object({
+      text: z.string().trim().min(1).max(8000).describe('Prompt text containing random syntax'),
+      tool: z.enum(['comfyui', 'nai', 'codex', 'general']).describe('Engine whose wildcard variants to use (comfyui, nai, codex; general = shared items)'),
+      count: z.number().int().min(1).max(10).default(3).describe('Number of samples'),
+      prompt_kind: z.enum(['positive', 'negative']).default('positive').describe('Which prompt field; __my:group__ picks from positive or negative prompt groups accordingly'),
+    }) },
+    async ({ text, tool, count, prompt_kind }) => {
+      try {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              samples: WildcardService.parseMultiple(text, tool, count, prompt_kind),
+              used_wildcards: WildcardService.extractWildcardNames(text),
             }),
           }],
         };

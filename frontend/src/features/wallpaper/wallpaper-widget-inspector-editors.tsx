@@ -44,10 +44,10 @@ interface WallpaperWidgetTypeEditorFieldsProps {
 
 const DAY_OPTIONS = [1, 7, 14, 30, 90]
 
-function ServiceSelect({ value, onChange }: { value: string; onChange: (value: 'all' | 'novelai' | 'comfyui' | 'codex') => void }) {
+function ServiceSelect({ value, ariaLabel, onChange }: { value: string; ariaLabel: string; onChange: (value: 'all' | 'novelai' | 'comfyui' | 'codex') => void }) {
   const { t } = useI18n()
   return (
-    <Select value={value} onChange={(event) => {
+    <Select aria-label={ariaLabel} value={value} onChange={(event) => {
       const next = event.target.value
       onChange(next === 'novelai' || next === 'comfyui' || next === 'codex' ? next : 'all')
     }}>
@@ -59,10 +59,10 @@ function ServiceSelect({ value, onChange }: { value: string; onChange: (value: '
   )
 }
 
-function DaysSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+function DaysSelect({ value, ariaLabel, onChange }: { value: number; ariaLabel: string; onChange: (value: number) => void }) {
   const { t } = useI18n()
   return (
-    <Select value={String(value)} onChange={(event) => onChange(Number(event.target.value))}>
+    <Select aria-label={ariaLabel} value={String(value)} onChange={(event) => onChange(Number(event.target.value))}>
       {DAY_OPTIONS.map((days) => (
         <option key={days} value={days}>{days === 1 ? t({ ko: '오늘', en: 'Today' }) : t({ ko: '{days}일', en: '{days} days' }, { days })}</option>
       ))}
@@ -70,11 +70,11 @@ function DaysSelect({ value, onChange }: { value: number; onChange: (value: numb
   )
 }
 
-function CharacterSelect({ value, allowLatest, emptyLabel, onChange }: { value: number | null; allowLatest: boolean; emptyLabel?: string; onChange: (value: number | null) => void }) {
+function CharacterSelect({ value, allowLatest, emptyLabel, ariaLabel, onChange }: { value: number | null; allowLatest: boolean; emptyLabel?: string; ariaLabel: string; onChange: (value: number | null) => void }) {
   const { t } = useI18n()
   const profilesQuery = useWallpaperChatProfiles()
   return (
-    <Select value={value === null ? '' : String(value)} onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)}>
+    <Select aria-label={ariaLabel} value={value === null ? '' : String(value)} onChange={(event) => onChange(event.target.value ? Number(event.target.value) : null)}>
       <option value="">{emptyLabel ?? (allowLatest ? t({ ko: '가장 최근 대화', en: 'Latest chat' }) : t({ ko: '최근 대화의 캐릭터', en: 'Latest chat’s character' }))}</option>
       {(profilesQuery.data ?? []).map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
     </Select>
@@ -82,13 +82,14 @@ function CharacterSelect({ value, allowLatest, emptyLabel, onChange }: { value: 
 }
 
 /** Workflow schedules the quick-run button can press; the name is stored too because the live page cannot list them. */
-function ScheduleSelect({ value, savedName, onChange }: { value: number | null; savedName: string; onChange: (value: number | null, name: string) => void }) {
+function ScheduleSelect({ value, savedName, ariaLabel, onChange }: { value: number | null; savedName: string; ariaLabel: string; onChange: (value: number | null, name: string) => void }) {
   const { t } = useI18n()
   const schedulesQuery = useQuery({ queryKey: ['wallpaper-inspector', 'graph-workflow-schedules'], queryFn: () => getGraphWorkflowSchedules() })
   const schedules = schedulesQuery.data ?? []
   const missing = value !== null && !schedulesQuery.isLoading && !schedules.some((schedule) => schedule.id === value)
   return (
     <Select
+      aria-label={ariaLabel}
       value={value === null ? '' : String(value)}
       onChange={(event) => {
         const id = event.target.value ? Number(event.target.value) : null
@@ -103,7 +104,7 @@ function ScheduleSelect({ value, savedName, onChange }: { value: number | null; 
 }
 
 /** Audio groups of every project, searched and loaded page by page, grouped by project. */
-function AudioGroupSelect({ value, onChange }: { value: string | null; onChange: (value: string | null) => void }) {
+function AudioGroupSelect({ value, ariaLabel, onChange }: { value: string | null; ariaLabel: string; onChange: (value: string | null) => void }) {
   const { t } = useI18n()
   const [input, setInput] = useState('')
   const search = useDebouncedValue(input.trim(), 250)
@@ -133,7 +134,7 @@ function AudioGroupSelect({ value, onChange }: { value: string | null; onChange:
   return (
     <div className="space-y-1.5">
       <SearchField value={input} onChange={setInput} placeholder={t({ ko: '오디오 그룹 찾기', en: 'Find an audio group' })} />
-      <Select value={value ?? ''} onChange={(event) => onChange(event.target.value || null)}>
+      <Select aria-label={ariaLabel} value={value ?? ''} onChange={(event) => onChange(event.target.value || null)}>
         <option value="">{t({ ko: '오디오 그룹 선택', en: 'Select an audio group' })}</option>
         {[...byProject].map(([projectId, project]) => (
           <optgroup key={projectId} label={project.name}>
@@ -169,7 +170,7 @@ function GroupSourceFields({ widget, groups, updateWidgetSettings }: {
       </Field>
       <SwitchLine label={t({ ko: '하위 그룹 포함', en: 'Include child groups' })} checked={widget.settings.includeChildren !== false} onCheckedChange={(checked) => updateWidgetSettings({ includeChildren: checked })} />
       <InspectorRow label={t({ ko: '이미지 풀', en: 'Image pool' })}>
-        <Select value={String(widget.settings.poolRefreshMinutes ?? 0)} onChange={(event) => updateWidgetSettings({ poolRefreshMinutes: Number(event.target.value) })}>
+        <Select aria-label={t({ ko: '이미지 풀', en: 'Image pool' })} value={String(widget.settings.poolRefreshMinutes ?? 0)} onChange={(event) => updateWidgetSettings({ poolRefreshMinutes: Number(event.target.value) })}>
           <option value="0">{t({ ko: '처음 뽑은 그대로', en: 'Keep the first draw' })}</option>
           {[5, 10, 30, 60, 180].map((minutes) => (
             <option key={minutes} value={minutes}>{t({ ko: '{minutes}분마다 새로 뽑기', en: 'Redraw every {minutes} min' }, { minutes })}</option>
@@ -229,7 +230,7 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
         return (
           <>
             <InspectorRow label={t({ ko: '모양', en: 'Look' })}>
-              <Select value={normalizeWallpaperClockStyle(widget.settings.visualStyle)} onChange={(event) => updateWidgetSettings({ visualStyle: event.target.value as typeof widget.settings.visualStyle })}>
+              <Select aria-label={t({ ko: '모양', en: 'Look' })} value={normalizeWallpaperClockStyle(widget.settings.visualStyle)} onChange={(event) => updateWidgetSettings({ visualStyle: event.target.value as typeof widget.settings.visualStyle })}>
                 <option value="clean">{t({ ko: '클린', en: 'Clean' })}</option>
                 <option value="serif">{t({ ko: '세리프', en: 'Serif' })}</option>
                 <option value="glow">{t({ ko: '글로우', en: 'Glow' })}</option>
@@ -260,7 +261,7 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
       case 'generation-progress':
         return (
           <>
-            <InspectorRow label={t({ ko: '서비스', en: 'Service' })}><ServiceSelect value={widget.settings.service} onChange={(value) => updateWidgetSettings({ service: value })} /></InspectorRow>
+            <InspectorRow label={t({ ko: '서비스', en: 'Service' })}><ServiceSelect value={widget.settings.service} ariaLabel={t({ ko: '서비스', en: 'Service' })} onChange={(value) => updateWidgetSettings({ service: value })} /></InspectorRow>
             <InspectorSlider label={t({ ko: '작업 수', en: 'Jobs' })} value={widget.settings.maxJobs} min={1} max={8} onChange={(value) => updateWidgetSettings({ maxJobs: value })} />
             <SwitchLine label={t({ ko: '노드 이름', en: 'Node name' })} checked={widget.settings.showNodeLabel} onCheckedChange={(checked) => updateWidgetSettings({ showNodeLabel: checked })} />
             <SwitchLine label={t({ ko: '실행 · 대기 수', en: 'Running · queued' })} checked={widget.settings.showQueueCounts} onCheckedChange={(checked) => updateWidgetSettings({ showQueueCounts: checked })} />
@@ -269,14 +270,14 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
       case 'generation-stats':
         return (
           <>
-            <InspectorRow label={t({ ko: '기간', en: 'Period' })}><DaysSelect value={widget.settings.days} onChange={(value) => updateWidgetSettings({ days: value })} /></InspectorRow>
+            <InspectorRow label={t({ ko: '기간', en: 'Period' })}><DaysSelect value={widget.settings.days} ariaLabel={t({ ko: '기간', en: 'Period' })} onChange={(value) => updateWidgetSettings({ days: value })} /></InspectorRow>
             <InspectorSegments label={t({ ko: '표시', en: 'Show' })} value={widget.settings.display} items={[{ value: 'bars', label: t({ ko: '막대', en: 'Bars' }) }, { value: 'numbers', label: t({ ko: '숫자', en: 'Numbers' }) }]} onChange={(value) => updateWidgetSettings({ display: value })} />
           </>
         )
       case 'llm-usage':
         return (
           <>
-            <InspectorRow label={t({ ko: '기간', en: 'Period' })}><DaysSelect value={widget.settings.days} onChange={(value) => updateWidgetSettings({ days: value })} /></InspectorRow>
+            <InspectorRow label={t({ ko: '기간', en: 'Period' })}><DaysSelect value={widget.settings.days} ariaLabel={t({ ko: '기간', en: 'Period' })} onChange={(value) => updateWidgetSettings({ days: value })} /></InspectorRow>
             <InspectorSegments label={t({ ko: '기준', en: 'Measure' })} value={widget.settings.metric} items={[{ value: 'tokens', label: t({ ko: '토큰', en: 'Tokens' }) }, { value: 'requests', label: t({ ko: '요청', en: 'Requests' }) }]} onChange={(value) => updateWidgetSettings({ metric: value })} />
             <SwitchLine label={t({ ko: '모델별', en: 'By model' })} checked={widget.settings.showModels} onCheckedChange={(checked) => updateWidgetSettings({ showModels: checked })} />
           </>
@@ -292,7 +293,7 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
       case 'character-card':
         return (
           <>
-            <InspectorRow label={t({ ko: '캐릭터', en: 'Character' })}><CharacterSelect value={widget.settings.profileId} allowLatest={false} onChange={(value) => updateWidgetSettings({ profileId: value })} /></InspectorRow>
+            <InspectorRow label={t({ ko: '캐릭터', en: 'Character' })}><CharacterSelect value={widget.settings.profileId} allowLatest={false} ariaLabel={t({ ko: '캐릭터', en: 'Character' })} onChange={(value) => updateWidgetSettings({ profileId: value })} /></InspectorRow>
             <SwitchLine label={t({ ko: '아바타', en: 'Avatar' })} checked={widget.settings.showAvatar} onCheckedChange={(checked) => updateWidgetSettings({ showAvatar: checked })} />
             <SwitchLine label={t({ ko: '마지막 메시지', en: 'Last message' })} checked={widget.settings.showLastMessage} onCheckedChange={(checked) => updateWidgetSettings({ showLastMessage: checked })} />
             <SwitchLine label={t({ ko: '입력 중 표시', en: 'Typing indicator' })} checked={widget.settings.showTyping} onCheckedChange={(checked) => updateWidgetSettings({ showTyping: checked })} />
@@ -311,13 +312,13 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
       case 'chat-recent':
         return (
           <>
-            <InspectorRow label={t({ ko: '대화', en: 'Chat' })}><CharacterSelect value={widget.settings.profileId} allowLatest onChange={(value) => updateWidgetSettings({ profileId: value })} /></InspectorRow>
+            <InspectorRow label={t({ ko: '대화', en: 'Chat' })}><CharacterSelect value={widget.settings.profileId} allowLatest ariaLabel={t({ ko: '대화', en: 'Chat' })} onChange={(value) => updateWidgetSettings({ profileId: value })} /></InspectorRow>
           </>
         )
       case 'audio-player':
         return (
           <>
-            <InspectorRow label={t({ ko: '그룹', en: 'Group' })}><AudioGroupSelect value={widget.settings.audioGroupId} onChange={(value) => updateWidgetSettings({ audioGroupId: value })} /></InspectorRow>
+            <InspectorRow label={t({ ko: '그룹', en: 'Group' })}><AudioGroupSelect value={widget.settings.audioGroupId} ariaLabel={t({ ko: '그룹', en: 'Group' })} onChange={(value) => updateWidgetSettings({ audioGroupId: value })} /></InspectorRow>
             <SwitchLine label={t({ ko: '자동 재생', en: 'Autoplay' })} checked={widget.settings.autoplay} onCheckedChange={(checked) => updateWidgetSettings({ autoplay: checked })} />
             <SwitchLine label={t({ ko: '섞기', en: 'Shuffle' })} checked={widget.settings.shuffle} onCheckedChange={(checked) => updateWidgetSettings({ shuffle: checked })} />
             <InspectorSlider label={t({ ko: '음량', en: 'Volume' })} value={widget.settings.volume} min={0} max={100} unit="%" onChange={(value) => updateWidgetSettings({ volume: value })} />
@@ -335,7 +336,7 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
           <>
             <Textarea variant="settings" rows={3} aria-label={t({ ko: '템플릿', en: 'Template' })} placeholder="__character__, __scene__, __light__" value={widget.settings.template} onChange={(event) => updateWidgetSettings({ template: event.target.value })} />
             <InspectorRow label={t({ ko: '다시 뽑기', en: 'Reroll' })}>
-              <Select value={String(widget.settings.rerollMinutes)} onChange={(event) => updateWidgetSettings({ rerollMinutes: Number(event.target.value) })}>
+              <Select aria-label={t({ ko: '다시 뽑기', en: 'Reroll' })} value={String(widget.settings.rerollMinutes)} onChange={(event) => updateWidgetSettings({ rerollMinutes: Number(event.target.value) })}>
                 <option value="0">{t({ ko: '안 함', en: 'Never' })}</option>
                 {[10, 30, 60, 180, 1440].map((minutes) => (
                   <option key={minutes} value={minutes}>{minutes >= 60 ? t({ ko: '{hours}시간마다', en: 'Every {hours} h' }, { hours: minutes / 60 }) : t({ ko: '{minutes}분마다', en: 'Every {minutes} min' }, { minutes })}</option>
@@ -387,7 +388,7 @@ export function WallpaperWidgetTypeEditorFields({ selectedWidget, groups, update
         return (
           <>
             <InspectorRow label={t({ ko: '예약', en: 'Schedule' })}>
-              <ScheduleSelect value={widget.settings.scheduleId} savedName={widget.settings.scheduleName} onChange={(scheduleId, scheduleName) => updateWidgetSettings({ scheduleId, scheduleName })} />
+              <ScheduleSelect value={widget.settings.scheduleId} savedName={widget.settings.scheduleName} ariaLabel={t({ ko: '예약', en: 'Schedule' })} onChange={(scheduleId, scheduleName) => updateWidgetSettings({ scheduleId, scheduleName })} />
             </InspectorRow>
             <InspectorRow label={t({ ko: '버튼 글자', en: 'Label' })}>
               <Input value={widget.settings.label} maxLength={40} placeholder={widget.settings.scheduleName || t({ ko: '실행', en: 'Run' })} onChange={(event) => updateWidgetSettings({ label: event.target.value })} />

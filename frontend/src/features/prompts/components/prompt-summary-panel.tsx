@@ -6,17 +6,13 @@ import { Text } from '@/components/ui/text'
 import { Section } from '@/components/ui/section'
 import type { PromptCollectionItem, PromptGroupRecord, PromptStatistics, PromptTypeFilter } from '@/types/prompt'
 import { useI18n } from '@/i18n'
-import { PROMPT_TYPE_TABS, getPromptTypeTotal } from '../prompt-page-utils'
+import { PROMPT_TYPE_LABELS, getPromptTypeTotal } from '../prompt-page-utils'
 
 interface PromptSummaryPanelProps {
   promptType: PromptTypeFilter
   statistics?: PromptStatistics
   topPrompts?: PromptCollectionItem[]
   groupStatistics?: PromptGroupRecord[]
-}
-
-function getTypeLabel(promptType: PromptTypeFilter) {
-  return PROMPT_TYPE_TABS.find((tab) => tab.value === promptType)?.label ?? 'Prompt'
 }
 
 export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], groupStatistics = [] }: PromptSummaryPanelProps) {
@@ -28,7 +24,7 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-      <Section variant="settings" heading={t({ ko: '{typeLabel} 요약', en: '{typeLabel} summary' }, { typeLabel: getTypeLabel(promptType) })}>
+      <Section variant="settings" heading={t({ ko: '{typeLabel} 요약', en: '{typeLabel} summary' }, { typeLabel: t(PROMPT_TYPE_LABELS[promptType]) })}>
         <div className="grid gap-3 sm:grid-cols-3">
           <StatTile
             label={t({ ko: '현재 유형 전체', en: 'Current type total' })}
@@ -39,7 +35,7 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
             value={formatNumber(statistics?.total_prompts ?? 0)}
           />
           <StatTile
-            label={t({ ko: '전체 네거티브 / 자동', en: 'All negative / auto' })}
+            label={t({ ko: '전체 네거티브 / 오토', en: 'All negative / auto' })}
             value={`${formatNumber(statistics?.total_negative_prompts ?? 0)} / ${formatNumber(statistics?.total_auto_prompts ?? 0)}`}
           />
         </div>

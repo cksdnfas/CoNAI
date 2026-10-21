@@ -209,7 +209,7 @@ export function AppearanceBadgeColorRows({
     <>
       <AppearanceColorRow
         fieldId="appearance.positiveBadgeColor"
-        label={t({ ko: '긍정 배지', en: 'Positive badge' })}
+        label={t({ ko: '포지티브 배지', en: 'Positive badge' })}
         colorValue={colorValues.positiveBadgeColorValue}
         textValue={appearanceDraft.positiveBadgeColor}
         onChangeColor={(value) => onPatchAppearance({ positiveBadgeColor: value })}
@@ -218,7 +218,7 @@ export function AppearanceBadgeColorRows({
       />
       <AppearanceColorRow
         fieldId="appearance.negativeBadgeColor"
-        label={t({ ko: '부정 배지', en: 'Negative badge' })}
+        label={t({ ko: '네거티브 배지', en: 'Negative badge' })}
         colorValue={colorValues.negativeBadgeColorValue}
         textValue={appearanceDraft.negativeBadgeColor}
         onChangeColor={(value) => onPatchAppearance({ negativeBadgeColor: value })}

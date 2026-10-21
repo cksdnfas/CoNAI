@@ -15,8 +15,8 @@ export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStat
   useChatPageRegistration({
     kind: 'codex', title: t({ ko: 'Codex 이미지 생성', en: 'Codex image generation' }), resourceId: 'codex', localRevision: getImageDraftRevision(form),
     fields: [
-      { id: 'prompt', label: t({ ko: '긍정 프롬프트 (포지티브)', en: 'Positive prompt' }), type: 'text', value: form.prompt },
-      { id: 'negativePrompt', label: t({ ko: '부정 프롬프트 (네거티브)', en: 'Negative prompt' }), type: 'text', value: form.negativePrompt },
+      { id: 'prompt', label: t({ ko: '포지티브 프롬프트', en: 'Positive prompt' }), type: 'text', value: form.prompt },
+      { id: 'negativePrompt', label: t({ ko: '네거티브 프롬프트', en: 'Negative prompt' }), type: 'text', value: form.negativePrompt },
       { id: 'model', label: t({ ko: '모델 (빈 값은 기본 모델)', en: 'Model (empty means default)' }), type: 'select', value: form.model, options: [...new Set(['', form.model, ...models.map((item) => item.id)])].slice(0, 100) },
       { id: 'count', label: t({ ko: '생성 개수', en: 'Image count' }), type: 'number', value: form.count, min: 1, max: 4, integer: true },
       { id: 'aspectRatio', label: t({ ko: '화면 비율', en: 'Aspect ratio' }), type: 'select', value: form.aspectRatio, options: ['random', '1:1', '4:3', '3:4', '16:9', '9:16'] },

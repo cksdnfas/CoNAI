@@ -349,7 +349,7 @@ function UploadPageContent() {
     fields: [
       { id: 'mode', label: t({ ko: '업로드 화면 (library = 라이브러리에 저장, inspect = 메타데이터만 보기)', en: 'Upload view (library = save to the library, inspect = metadata only)' }), type: 'select', value: mode, options: ['library', 'inspect'] },
       ...(inspecting ? [
-        { id: 'prompt', label: t({ ko: '프롬프트', en: 'Prompt' }), type: 'text' as const, value: rewriteDraft.prompt }, { id: 'negativePrompt', label: t({ ko: '부정 프롬프트', en: 'Negative prompt' }), type: 'text' as const, value: rewriteDraft.negativePrompt },
+        { id: 'prompt', label: t({ ko: '프롬프트', en: 'Prompt' }), type: 'text' as const, value: rewriteDraft.prompt }, { id: 'negativePrompt', label: t({ ko: '네거티브 프롬프트', en: 'Negative prompt' }), type: 'text' as const, value: rewriteDraft.negativePrompt },
         { id: 'steps', label: 'Steps', type: 'number' as const, value: rewriteDraft.steps, min: 1, integer: true, allowEmpty: true }, { id: 'sampler', label: t({ ko: '샘플러', en: 'Sampler' }), type: 'text' as const, value: rewriteDraft.sampler }, { id: 'model', label: t({ ko: '모델', en: 'Model' }), type: 'text' as const, value: rewriteDraft.model }, { id: 'format', label: t({ ko: '파일 형식', en: 'File format' }), type: 'select' as const, value: rewriteDraft.format, options: ['png', 'jpeg', 'webp'] },
       ] : []),
     ],

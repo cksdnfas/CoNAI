@@ -147,7 +147,7 @@ export function CodexChatGallery({ threadId, columns }: { threadId: number; colu
         ) : mediaQuery.isError ? (
           <ErrorState title={t({ ko: '이미지를 불러오지 못했어.', en: 'Could not load images.' })} />
         ) : entries.length === 0 ? (
-          <EmptyState icon={ImageIcon} title={t({ ko: '아직 이미지가 없어.', en: 'No images yet.' })} />
+          <EmptyState icon={ImageIcon} title={t({ ko: '아직 이미지가 없어', en: 'No images yet' })} />
         ) : (
           sections.map((section) => (
             <section key={section.key}>

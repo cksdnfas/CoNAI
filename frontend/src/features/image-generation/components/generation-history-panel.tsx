@@ -307,7 +307,7 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
             ) : null}
 
             {hasOnlyHiddenItems && !historyQuery.hasNextPage && !historyQuery.isFetchingNextPage ? (
-              <EmptyState size="compact" title={t({ ko: '현재 등급 표시 설정으로 모든 생성 기록이 숨겨졌어.', en: 'All generation history is hidden by the current rating visibility settings.' })} />
+              <EmptyState size="compact" title={t({ ko: '등급 표시 설정으로 생성 기록이 모두 숨겨졌어', en: 'All generation history is hidden by the current rating visibility settings' })} />
             ) : null}
 
             <div className="flex shrink-0 flex-col items-center gap-3 pb-2">

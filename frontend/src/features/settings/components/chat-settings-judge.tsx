@@ -246,14 +246,14 @@ export function ChatSettingsJudge() {
       <section className="space-y-2">
         {statsQuery.isLoading ? <SettingsRowsSkeleton rows={2} /> : null}
         {statsQuery.isError ? <p className="text-sm text-destructive">{getErrorMessage(statsQuery.error, t({ ko: '통계를 불러오지 못했어.', en: 'Could not load the stats.' }))}</p> : null}
-        {statsQuery.isSuccess && stats.length === 0 ? <SettingsEmptyRow>{t({ ko: '이 기간에 판단한 기록이 없어.', en: 'No judgments in this period.' })}</SettingsEmptyRow> : null}
+        {statsQuery.isSuccess && stats.length === 0 ? <SettingsEmptyRow>{t({ ko: '이 기간에 판단한 기록이 없어', en: 'No judgments in this period' })}</SettingsEmptyRow> : null}
         {stats.length > 0 ? <StatsTable stats={stats} presetNames={new Map(presets.map((preset) => [preset.id, preset.name]))} /> : null}
       </section>
 
       <section>
         {logsQuery.isLoading ? <SettingsRowsSkeleton rows={3} /> : null}
         {logsQuery.isError ? <p className="text-sm text-destructive">{getErrorMessage(logsQuery.error, t({ ko: '기록을 불러오지 못했어.', en: 'Could not load the log.' }))}</p> : null}
-        {logsQuery.isSuccess && runs.length === 0 ? <SettingsEmptyRow>{t({ ko: '기록이 없어.', en: 'Nothing logged.' })}</SettingsEmptyRow> : null}
+        {logsQuery.isSuccess && runs.length === 0 ? <SettingsEmptyRow>{t({ ko: '기록이 없어', en: 'Nothing logged' })}</SettingsEmptyRow> : null}
         {runs.map((run) => <LogRow key={run.id} run={run} />)}
         {logsQuery.hasNextPage ? (
           <div className="flex justify-center pt-3">

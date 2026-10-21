@@ -1,5 +1,5 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { Fragment, createElement, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
@@ -7,11 +7,12 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getHomeFeedKeys, useHomeSearch } from '@/features/home/home-search-context'
 import { buildComplexSearchPayload } from '@/features/search/search-utils'
 import { VectorScoreOverlay } from '@/features/images/components/detail/similarity-score-overlay'
-import type { ImageRecord } from '@/types/image'
+import type { ImageListPayload, ImageRecord } from '@/types/image'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import type { ImageViewSequenceTotal } from '@/features/images/components/detail/image-view-modal-context'
 import { getHomeFeedProgressSummary } from '@/features/home/home-feed-progress'
 import { useHomeScrollRestoration } from '@/features/home/use-home-scroll-restoration'
+import { useHomeHiddenGroupIds } from '@/features/home/home-hidden-groups'
 import { buildHomeSearchString, readHomeSortParam, readSearchChipsParam, type HomeSortOrder } from '@/features/home/home-search-url'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -59,7 +60,13 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const isAuthenticated = authStatusQuery.data?.authenticated === true
   const isAnonymousSession = hasCredentials && !isAuthenticated
   const isSearchMode = !isAnonymousSession && appliedChips.length > 0
-  const { feedScopeKey, meaningText, imageListResetKey } = getHomeFeedKeys(appliedChips, sortOrder, isAnonymousSession)
+  const { feedScopeKey, meaningText, imageListResetKey: searchResetKey } = getHomeFeedKeys(appliedChips, sortOrder, isAnonymousSession)
+  const { hiddenGroupIds, setHiddenGroupIds } = useHomeHiddenGroupIds()
+  // Signed-out visitors have no options menu, so hidden groups only shape a signed-in feed.
+  const excludeGroupIds = isAnonymousSession ? [] : hiddenGroupIds
+  const hiddenGroupsKey = excludeGroupIds.join(',')
+  const excludeGroupPayload = excludeGroupIds.length > 0 ? { exclude_group_ids: excludeGroupIds } : {}
+  const imageListResetKey = hiddenGroupsKey ? `${searchResetKey}|hide:${hiddenGroupsKey}` : searchResetKey
 
   /** Change the order in the URL (next to `q`) and start the reordered list from the top. */
   const setSortOrder = useCallback((nextSortOrder: HomeSortOrder) => {
@@ -77,7 +84,8 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const imagesQuery = useInfiniteQuery({
     // Key on the id-free chip signature: chip ids embed Date.now()/Math.random(),
     // so keying on the chips themselves would never hit the query cache.
-    queryKey: ['home-images', imageListResetKey],
+    // The search key stays the second element so a re-applied search can refresh it by prefix.
+    queryKey: ['home-images', searchResetKey, hiddenGroupsKey],
     initialPageParam: {} as HomeImagesPageParam,
     queryFn: ({ pageParam, signal }) => {
       const typedPageParam = pageParam as HomeImagesPageParam
@@ -85,6 +93,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       if (isSearchMode) {
         return searchImagesComplex({
           ...buildComplexSearchPayload(appliedChips),
+          ...excludeGroupPayload,
           page: 1,
           limit: 40,
           sortBy: 'first_seen_date',
@@ -106,6 +115,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
         cursorHash: cursor.cursorHash,
         includeTotal: false,
         sortOrder: apiSortOrder,
+        excludeGroupIds,
       }, { signal })
     },
     getNextPageParam: (lastPage) => {
@@ -145,11 +155,12 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
    * is a status line, not layout, so it can arrive late without disturbing the grid.
    */
   const feedTotalQuery = useQuery({
-    queryKey: ['home-images-total', feedScopeKey],
+    queryKey: ['home-images-total', feedScopeKey, hiddenGroupsKey],
     queryFn: async ({ signal }) => {
       if (isSearchMode) {
         const result = await searchImagesComplex({
           ...buildComplexSearchPayload(appliedChips),
+          ...excludeGroupPayload,
           page: 1,
           limit: 1,
           sortBy: 'first_seen_date',
@@ -159,7 +170,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
         return result.totalKnown === false ? null : result.total
       }
 
-      const result = await getImagesCount({ signal })
+      const result = await getImagesCount(excludeGroupIds, { signal })
       return result.total
     },
     enabled: canViewHome && canViewImages && hasFirstFeedPage,
@@ -174,7 +185,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
 
   const assignToGroupMutation = useMutation({
     mutationFn: ({ groupId, compositeHashes }: { groupId: number; compositeHashes: string[] }) => addImagesToGroup(groupId, compositeHashes),
-    onSuccess: async (result) => {
+    onSuccess: async (result, { groupId, compositeHashes }) => {
       setIsAssignModalOpen(false)
       setSelectedIds([])
       const notice = formatGroupBulkAddNotice(result, t, formatNumber)
@@ -183,10 +194,23 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       } else {
         notifyInfo(notice.message)
       }
+      // Images just added to a hidden group leave the gallery: drop them from the loaded pages instead of reloading
+      // every page. Failed adds are not named per image, so then the feed is fetched again.
+      const feedKey = ['home-images', searchResetKey, hiddenGroupsKey]
+      const leavesFeed = excludeGroupIds.includes(groupId)
+      if (leavesFeed && !result.errors?.length) {
+        const added = new Set(compositeHashes)
+        queryClient.setQueryData<InfiniteData<ImageListPayload>>(feedKey, (data) => data && {
+          ...data,
+          pages: data.pages.map((page) => ({ ...page, images: page.images.filter((image) => !added.has(image.composite_hash ?? '')) })),
+        })
+      }
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY }),
         queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'] }),
         queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'] }),
+        ...(leavesFeed ? [queryClient.invalidateQueries({ queryKey: ['home-images-total', feedScopeKey, hiddenGroupsKey] })] : []),
+        ...(leavesFeed && result.errors?.length ? [queryClient.invalidateQueries({ queryKey: feedKey })] : []),
       ])
     },
     onError: (error) => {
@@ -291,9 +315,17 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     [selectedDownloadImages],
   )
 
+  // Hidden groups that still exist (stored ids of deleted groups match nothing).
+  const hiddenGroupIdSet = new Set(excludeGroupIds)
+  const hiddenGroups = (groupsQuery.data ?? []).filter((group) => hiddenGroupIdSet.has(group.id))
+
   const emptyStateTitle = isSearchMode ? t('useHomePageData.noSearchResults') : t('useHomePageData.noImagesToShowYet')
-  // Only the hidden-by-rating case needs a line: the user cannot tell the feed is filtered, not empty.
-  const emptyStateDescription = hasOnlyHiddenItems ? t('useHomePageData.itemsAreHiddenInThis') : undefined
+  // Only filters the user cannot see in the list need a line: the feed is filtered, not empty.
+  const emptyStateDescription = hasOnlyHiddenItems
+    ? t('useHomePageData.itemsAreHiddenInThis')
+    : hiddenGroups.length > 0
+      ? t({ ko: '숨긴 그룹의 이미지는 빠져 있어. 갤러리 옵션에서 다시 보이게 할 수 있어.', en: 'Images in hidden groups are left out. Show them again from Gallery options.' })
+      : undefined
   const errorTitle = isSearchMode ? t('useHomePageData.failedToLoadSearchResults') : t('useHomePageData.failedToLoadTheHome')
   const loadMoreErrorMessage =
     imagesQuery.error instanceof Error
@@ -406,6 +438,9 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     imageListResetKey,
     sortOrder,
     setSortOrder,
+    hiddenGroupIds,
+    hiddenGroups,
+    setHiddenGroupIds,
     isMeaningSearch: meaningText !== null,
     canAutoLoadMore,
     feedProgress,

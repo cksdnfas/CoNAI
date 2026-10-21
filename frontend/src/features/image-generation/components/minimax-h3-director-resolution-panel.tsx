@@ -92,7 +92,7 @@ export function MiniMaxH3DirectorResolutionPanel({ value, canvas, numericBounds,
             <div className="max-w-xs space-y-1">
               {renderInputPort?.('resolution.custom_mp')}
               <FormField label="MP">
-                <NumberStepperInput min={mpBounds?.min ?? 0.01} max={mpBounds?.max} step={0.01} value={String(value.custom_mp)} onValueCommit={(next) => patch({ custom_mp: Number(next) })} />
+                <NumberStepperInput aria-label="MP" min={mpBounds?.min ?? 0.01} max={mpBounds?.max} step={0.01} value={String(value.custom_mp)} onValueCommit={(next) => patch({ custom_mp: Number(next) })} />
               </FormField>
             </div>
           ) : (

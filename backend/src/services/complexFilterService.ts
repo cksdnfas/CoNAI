@@ -15,7 +15,9 @@ import {
 import { validateComplexFilter } from './complexFilter/complexFilterValidator';
 import { ImageMetadataRecord } from '../types/image';
 import { RatingWeights } from '../types/rating';
-import { peekSearchTotal, resolveSearchTotal } from './aggregateCache';
+import { peekSearchTotal, resolveSearchTotal, type AggregateScope } from './aggregateCache';
+// Hidden-group totals key on the DB-backed group version.
+import '../models/groupsAggregateVersion';
 import { buildIdPageResponse, normalizeIdPage, type IdPage, type IdPageResponse } from '../utils/idPage';
 import type { ImageVectorHit } from './embeddings/imageIndex';
 
@@ -35,6 +37,11 @@ import type { ImageVectorHit } from './embeddings/imageIndex';
 
 /** Share of the library a complex search must match before its page walks the date index. */
 const COMPLEX_DATE_WALK_MIN_SHARE = 0.1;
+
+/** A total that leaves out hidden groups changes with group membership, so its cache key follows the group version. */
+function searchTotalVersionScopes(basicParams?: ComplexSearchScope): AggregateScope[] {
+  return basicParams?.exclude_group_ids?.length ? ['groups'] : [];
+}
 
 export class ComplexFilterService {
 
@@ -113,7 +120,7 @@ export class ComplexFilterService {
       total = resolveSearchTotal('complexSearch', [countQuery], params, () => {
         const countRow = db.prepare(countQuery).get(...params) as { total?: number } | undefined;
         return countRow?.total || 0;
-      });
+      }, searchTotalVersionScopes(basicParams));
     }
 
     // Apply pagination
@@ -156,7 +163,7 @@ export class ComplexFilterService {
         : [...params, pagination.cursorValue, pagination.cursorValue, pagination.cursorHash];
     // Dense matches: walk the first_seen index and stop at LIMIT. Sparse matches: let the planner drive from the
     // matched set and sort it. Decided from the total (counted above, or still cached from an earlier page).
-    const knownTotal = shouldCountTotal ? total : peekSearchTotal('complexSearch', [countQuery], params);
+    const knownTotal = shouldCountTotal ? total : peekSearchTotal('complexSearch', [countQuery], params, searchTotalVersionScopes(basicParams));
     const baseQuery = sortsByFirstSeen && this.shouldWalkFirstSeenIndex(knownTotal, useCursor ? 0 : offset, limit)
       ? this.buildComplexQuery(filter, weights, basicParams, { walkFirstSeenIndex: true }).query
       : defaultBaseQuery;
@@ -319,7 +326,7 @@ export class ComplexFilterService {
     `).all(...params, page.limit + 1, page.offset) as { composite_hash: string }[];
     return buildIdPageResponse(rows.map(row => row.composite_hash), page, () => resolveSearchTotal('complexSearchIds', [hashesQuery], params, () => (
       (db.prepare(`SELECT COUNT(*) as total FROM (${hashesQuery}) AS matched`).get(...params) as { total: number }).total
-    )));
+    ), searchTotalVersionScopes(basicParams)));
   }
 
   /**

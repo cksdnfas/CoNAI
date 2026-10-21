@@ -88,7 +88,7 @@ export function LlmPromptPresets() {
         )}
       >
         {settingsQuery.isLoading ? <SettingsRowsSkeleton rows={2} /> : rows.length === 0 ? (
-          <SettingsEmptyRow>{t({ ko: '저장된 프롬프트 프리셋이 아직 없어.', en: 'No saved prompt presets yet.' })}</SettingsEmptyRow>
+          <SettingsEmptyRow>{t({ ko: '저장된 프롬프트 프리셋이 아직 없어', en: 'No saved prompt presets yet' })}</SettingsEmptyRow>
         ) : rows.map(({ section, preset }) => (
           <ResourceRow
             key={`${section.key}:${preset.id}`}

@@ -134,7 +134,7 @@ export function GroupLocationPicker({
                 renderIcon={renderGroupIcon}
               />
             ) : (
-              <EmptyState size="compact" title={filterText.trim() ? t({ ko: '맞는 그룹 없음', en: 'No matching groups' }) : t({ ko: '고를 수 있는 그룹 없음', en: 'No groups to pick' })} />
+              <EmptyState size="compact" title={filterText.trim() ? t({ ko: '맞는 그룹이 없어', en: 'No matching groups' }) : t({ ko: '고를 수 있는 그룹이 없어', en: 'No groups to pick' })} />
             )}
           </div>
         </div>

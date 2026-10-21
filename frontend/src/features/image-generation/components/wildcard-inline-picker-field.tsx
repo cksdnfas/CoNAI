@@ -70,6 +70,8 @@ type WildcardInlinePickerFieldProps = {
   invalid?: boolean
   /** Id of the element that describes the current validation error. */
   errorMessageId?: string
+  /** Accessible name when no visible label is associated with the field. */
+  ariaLabel?: string
 }
 
 /** Shared prompt-like text field: tag autocomplete, `@` random-source palette, and random tokens shown as editable chips. */
@@ -86,6 +88,7 @@ export function WildcardInlinePickerField({
   autocompletePromptType = 'positive',
   invalid = false,
   errorMessageId,
+  ariaLabel,
 }: WildcardInlinePickerFieldProps) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const fieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
@@ -574,6 +577,7 @@ export function WildcardInlinePickerField({
     value,
     placeholder,
     disabled,
+    'aria-label': ariaLabel,
     'aria-invalid': invalid || undefined,
     'aria-describedby': invalid ? errorMessageId : undefined,
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => handleChangeValue(event.target.value, event.target),

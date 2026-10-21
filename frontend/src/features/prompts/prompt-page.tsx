@@ -341,7 +341,7 @@ function PromptPageContent() {
 
     const confirmed = await confirm({
       title: t({ ko: '그룹 삭제', en: 'Delete group' }),
-      description: t({ ko: '정말 {groupName} 그룹을 삭제할까? 하위 그룹까지 삭제되고 포함된 프롬프트는 Unclassified로 이동해.', en: 'Delete the {groupName} group? Child groups will also be deleted, and included prompts will move to Unclassified.' }, { groupName: selectedGroup.group_name }),
+      description: t({ ko: '정말 {groupName} 그룹을 삭제할까? 하위 그룹까지 삭제되고 포함된 프롬프트는 미분류로 이동해.', en: 'Delete the {groupName} group? Child groups will also be deleted, and included prompts will move to Unclassified.' }, { groupName: selectedGroup.group_name }),
       confirmLabel: t({ ko: '삭제', en: 'Delete' }),
       tone: 'destructive',
     })

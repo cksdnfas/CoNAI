@@ -422,7 +422,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
       ) : null}
 
       {autoPromptContent ? (
-        <MetaSection title={t({ ko: '자동 프롬프트', en: 'Auto prompt' })}>
+        <MetaSection title={t({ ko: '오토 프롬프트', en: 'Auto prompt' })}>
           <div className="space-y-3">
             <RatingPromptSection entries={autoPromptContent.ratingEntries} />
             <CharacterPromptSection entries={autoPromptContent.characterEntries} />

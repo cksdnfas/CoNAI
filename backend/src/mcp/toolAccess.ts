@@ -21,7 +21,7 @@ export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]
   get_prompts_in_group: 'prompts.view', backup_prompt_data: 'prompts.view', list_backups: 'prompts.view',
   create_prompt_preset: 'prompts.edit', batch_create_groups: 'prompts.edit',
   move_prompts_between_groups: 'prompts.edit',
-  restore_prompt_data: 'prompts.edit', search_wildcards: 'wildcards.view',
+  restore_prompt_data: 'prompts.edit', search_wildcards: 'wildcards.view', preview_random_prompt: 'wildcards.view',
   list_workflows: 'workflows.view', get_workflow_details: 'workflows.view', list_comfyui_servers: 'workflows.view', check_comfy_workflow: 'workflows.edit',
   list_custom_dropdown_lists: 'workflows.view', search_custom_dropdown_items: 'workflows.view',
   get_workflow_editor: 'workflows.view', list_workflow_modules: 'workflows.view', workflow_edit: 'workflows.view',

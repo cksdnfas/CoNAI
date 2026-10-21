@@ -34,6 +34,6 @@ export const GENERATION_LAYOUT_BLOCK_LABELS: Record<GenerationLayoutBuiltinBlock
   lora: { ko: 'LoRA', en: 'LoRA' },
   rewrite: { ko: '메타데이터 편집', en: 'Edit metadata' },
   prompts: { ko: '추출한 프롬프트', en: 'Extracted prompts' },
-  tagger: { ko: '자동 태그', en: 'Auto tags' },
+  tagger: { ko: '오토 태그', en: 'Auto tags' },
   artist: { ko: '작가 추정', en: 'Artist' },
 }

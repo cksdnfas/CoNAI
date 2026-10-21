@@ -10,6 +10,7 @@ import { enrichCompactImageWithFileView } from './utils';
 import { normalizeIdPage } from '../../utils/idPage';
 import { rankImagesByText } from '../../services/embeddings/imageIndex';
 import { embeddingFeatureOn } from '../../services/aiWorker/textEmbeddingService';
+import { EXCLUDE_GROUP_IDS_ERROR, parseExcludedGroupIds } from '../../utils/groupExclusion';
 
 const router = Router();
 const MAX_MEANING_CHARS = 500;
@@ -19,6 +20,7 @@ type SearchScope = {
   model_name?: string;
   start_date?: string;
   end_date?: string;
+  exclude_group_ids?: number[];
 };
 
 function buildSimpleSearchFilter(searchText: string): ComplexFilter {
@@ -47,12 +49,19 @@ function buildSimpleSearchFilter(searchText: string): ComplexFilter {
   };
 }
 
-function buildSearchScope(requestBody: ComplexSearchRequest): SearchScope {
+/** The request's scope fields; null when `exclude_group_ids` is malformed. */
+function buildSearchScope(requestBody: ComplexSearchRequest): SearchScope | null {
+  const excludeGroupIds = parseExcludedGroupIds(requestBody.exclude_group_ids);
+  if (!excludeGroupIds) {
+    return null;
+  }
+
   return {
     ai_tool: requestBody.ai_tool,
     model_name: requestBody.model_name,
     start_date: requestBody.start_date,
     end_date: requestBody.end_date,
+    exclude_group_ids: excludeGroupIds,
   };
 }
 
@@ -100,6 +109,7 @@ function resolveSearchFilter(requestBody: ComplexSearchRequest): { filter?: Comp
  *   model_name?: string,
  *   start_date?: string,
  *   end_date?: string,
+ *   exclude_group_ids?: number[], // leave out media in these custom groups (the Home gallery's hidden groups)
  *   meaning?: { text: string },   // only images matching this description, best match first (image search on)
  *   page?: number,
  *   limit?: number,
@@ -130,6 +140,11 @@ router.post('/', cancellableAsyncHandler(async (req, res, signal) => {
       } as ComplexSearchResponse);
     }
 
+    const scope = buildSearchScope(requestBody);
+    if (!scope) {
+      return res.status(400).json({ success: false, error: EXCLUDE_GROUP_IDS_ERROR } as ComplexSearchResponse);
+    }
+
     const meaning = meaningText(requestBody);
     let ranked = null;
     if (meaning) {
@@ -148,10 +163,10 @@ router.post('/', cancellableAsyncHandler(async (req, res, signal) => {
       cursorHash: requestBody.cursorHash,
     };
     const result = ranked
-      ? await ComplexFilterService.executeMeaningSearch(filter, ranked, buildSearchScope(requestBody), { page, limit, ...cursor })
+      ? await ComplexFilterService.executeMeaningSearch(filter, ranked, scope, { page, limit, ...cursor })
       : await ComplexFilterService.executeComplexSearch(
         filter,
-        buildSearchScope(requestBody),
+        scope,
         {
           page,
           limit,
@@ -211,10 +226,15 @@ router.post('/ids', asyncHandler(async (req: Request, res: Response) => {
       });
     }
 
+    const scope = buildSearchScope(requestBody);
+    if (!scope) {
+      return res.status(400).json({ success: false, error: EXCLUDE_GROUP_IDS_ERROR });
+    }
+
     // Paged: up to ID_PAGE_DEFAULT_LIMIT ids come back whole as before; longer lists carry hasMore / nextOffset.
     const data = await ComplexFilterService.executeComplexSearchIds(
       filter,
-      buildSearchScope(requestBody),
+      scope,
       normalizeIdPage(req.body),
     );
 

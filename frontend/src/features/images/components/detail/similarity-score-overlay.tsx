@@ -235,9 +235,9 @@ export function VectorScoreOverlay({ score, basis }: { score: number; basis: Vec
 /** Build per-field rows for prompt-similarity results. */
 function buildPromptSimilarImageRows(item: PromptSimilarImage, t: Translate): SimilarityOverlayRow[] {
   const fields = [
-    { key: 'positive', label: t({ ko: '긍정 프롬프트', en: 'Positive prompt' }), score: item.positive },
-    { key: 'negative', label: t({ ko: '부정 프롬프트', en: 'Negative prompt' }), score: item.negative },
-    { key: 'auto', label: t({ ko: '자동 태그', en: 'Auto tags' }), score: item.auto },
+    { key: 'positive', label: t({ ko: '포지티브 프롬프트', en: 'Positive prompt' }), score: item.positive },
+    { key: 'negative', label: t({ ko: '네거티브 프롬프트', en: 'Negative prompt' }), score: item.negative },
+    { key: 'auto', label: t({ ko: '오토 태그', en: 'Auto tags' }), score: item.auto },
   ]
 
   const rows: SimilarityOverlayRow[] = fields

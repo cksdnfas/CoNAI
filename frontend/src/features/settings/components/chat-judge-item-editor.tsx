@@ -69,7 +69,7 @@ function ChoiceOptions({ item, onChange }: { item: ChatJudgeItem; onChange: (pat
 function ItemTestRows({ item, turns }: { item: ChatJudgeItem; turns: ChatJudgeTestTurn[] }) {
   const { t } = useI18n()
   const rows = testRowsOf(item, turns)
-  if (rows.length === 0) return <EmptyState size="compact" title={t({ ko: '이 항목이 판단할 턴이 없어.', en: 'No turns for this item.' })} />
+  if (rows.length === 0) return <EmptyState size="compact" title={t({ ko: '이 항목이 판단할 턴이 없어', en: 'No turns for this item' })} />
   return (
     <div className="divide-y divide-line">
       {rows.map(({ turn, result }) => {

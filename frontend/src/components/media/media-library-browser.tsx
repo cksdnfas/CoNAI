@@ -147,7 +147,7 @@ export function MediaLibraryBrowser({
   )
 
   const selectedGroup = groupId !== null ? groups.find((group) => group.id === groupId) : undefined
-  if (!canViewImages) return <EmptyState title={t({ ko: '미디어 보기 권한이 필요해.', en: 'Media viewing permission is required.' })} />
+  if (!canViewImages) return <EmptyState title={t({ ko: '미디어 보기 권한이 필요해', en: 'Media viewing permission is required' })} />
   return (
     <TwoPane sidebar={side} sidebarLabel={t({ ko: '미디어 그룹', en: 'Media groups' })}>
         <TwoPaneToolbar>
@@ -194,7 +194,7 @@ export function MediaLibraryBrowser({
               scrollMode="container" viewportHeight="100%" className="min-h-0 flex-1" minColumnWidth={150} columnGap={6} rowGap={6}
               showDefaultQuickActions={false} shouldBlurItemPreview={safety.shouldBlurItemPreview} renderItemPersistentOverlay={safety.renderItemPersistentOverlay} renderItemOverlay={renderOrder}
             />
-            : <EmptyState className="flex-1" title={t({ ko: '맞는 미디어 없음', en: 'No matching media' })} />}
+            : <EmptyState className="flex-1" title={t({ ko: '맞는 미디어가 없어', en: 'No matching media' })} />}
           {query.isError && items.length > 0 ? <ErrorState size="compact" title={t({ ko: '미디어를 불러오지 못했어.', en: 'Could not load media.' })} error={query.error} onRetry={() => void (query.isFetchNextPageError ? query.fetchNextPage() : query.refetch())} /> : null}
           {!query.isError && query.hasNextPage && !safety.visibleItems.length ? <Button variant="secondary" disabled={query.isFetchingNextPage} onClick={loadMore}>{t({ ko: '더 보기', en: 'Load more' })}</Button> : null}
         </div>

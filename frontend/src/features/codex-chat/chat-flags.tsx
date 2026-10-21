@@ -503,7 +503,7 @@ export function ChatFlagManagerModal({ open, onClose }: { open: boolean; onClose
       >
         <ModalBody>
           {flagsQuery.isSuccess && flags.length === 0 ? (
-            <EmptyState size="compact" className="justify-center" title={t({ ko: '아직 플래그가 없어.', en: 'No flags yet.' })} />
+            <EmptyState size="compact" className="justify-center" title={t({ ko: '아직 플래그가 없어', en: 'No flags yet' })} />
           ) : (
             <ChatFlagRows flags={flags} onEdit={(flag) => setEditor({ flag })} />
           )}

@@ -31,6 +31,8 @@ interface ComplexImageSearchRequest {
   cursorValue?: string | number | null
   cursorHash?: string | null
   includeTotal?: boolean
+  /** Leave out media in these custom groups (the Home gallery's hidden groups). */
+  exclude_group_ids?: number[]
 }
 
 export async function getImages(params?: {
@@ -42,6 +44,8 @@ export async function getImages(params?: {
   includeTotal?: boolean
   /** First-seen date direction; the cursor feed orders by nothing else. */
   sortOrder?: 'ASC' | 'DESC'
+  /** Cursor feed only: leave out media in these custom groups. */
+  excludeGroupIds?: number[]
 }, init?: RequestInit) {
   const searchParams = new URLSearchParams()
   searchParams.set('page', String(params?.page ?? 1))
@@ -57,6 +61,9 @@ export async function getImages(params?: {
     if (params.cursorHash) {
       searchParams.set('cursor_hash', params.cursorHash)
     }
+    if (params.excludeGroupIds?.length) {
+      searchParams.set('exclude_group_ids', params.excludeGroupIds.join(','))
+    }
   }
 
   const response = await fetchJson<ApiResponse<ImageListPayload>>(`/api/images?${searchParams.toString()}`, init)
@@ -71,10 +78,11 @@ export async function getImages(params?: {
  *
  * The home feed no longer asks the first page for a total: counting the whole
  * library is the single most expensive query on that path, so the grid renders
- * first and this fills the counter in afterwards.
+ * first and this fills the counter in afterwards. `excludeGroupIds` leaves out the media of those custom groups.
  */
-export async function getImagesCount(init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<{ total: number }>>('/api/images/count', init)
+export async function getImagesCount(excludeGroupIds: number[] = [], init?: RequestInit) {
+  const query = excludeGroupIds.length > 0 ? `?exclude_group_ids=${excludeGroupIds.join(',')}` : ''
+  const response = await fetchJson<ApiResponse<{ total: number }>>(`/api/images/count${query}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.list.load')
   }

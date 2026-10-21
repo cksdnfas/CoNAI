@@ -181,7 +181,7 @@ export function GraphExecutionDetailModal({
             <Badge variant="outline">{executionDetail.logs.length}</Badge>
           </div>
           {executionDetail.logs.length === 0 ? (
-            <EmptyState size="compact" title={t({ ko: '로그 없음', en: 'No logs' })} />
+            <EmptyState size="compact" title={t({ ko: '로그가 없어', en: 'No logs' })} />
           ) : (
             executionDetail.logs.map((log) => {
               const parsedDetails = parseMetadataValue(log.details)

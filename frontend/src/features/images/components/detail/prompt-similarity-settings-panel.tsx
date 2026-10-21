@@ -68,7 +68,7 @@ export function PromptSimilaritySettingsPanel({
                 </div>
 
                 <div className="space-y-2">
-                  <Text as="label" variant="overline">{t({ ko: '자동', en: 'Auto' })}</Text>
+                  <Text as="label" variant="overline">{t({ ko: '오토', en: 'Auto' })}</Text>
                   <NumberStepperInput min={0} max={1} step={0.05} variant="detailNested" value={draft.weights.auto} onValueCommit={(value) => onPatchDraft({ weights: { ...draft.weights, auto: Number(value) } })} />
                 </div>
               </div>
@@ -87,7 +87,7 @@ export function PromptSimilaritySettingsPanel({
                 </div>
 
                 <div className="space-y-2">
-                  <Text as="label" variant="overline">{t({ ko: '자동', en: 'Auto' })}</Text>
+                  <Text as="label" variant="overline">{t({ ko: '오토', en: 'Auto' })}</Text>
                   <NumberStepperInput min={0} max={100} step={1} variant="detailNested" value={draft.fieldThresholds.auto} onValueCommit={(value) => onPatchDraft({ fieldThresholds: { ...draft.fieldThresholds, auto: Number(value) } })} />
                 </div>
               </div>

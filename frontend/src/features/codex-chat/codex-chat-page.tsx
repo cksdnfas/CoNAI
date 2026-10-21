@@ -58,7 +58,7 @@ export function CodexChatPage() {
   }
 
   if (!chat?.canUse) {
-    return <EmptyState icon={MessageSquare} title={t({ ko: '채팅을 쓸 수 없어.', en: 'Chat is not available.' })} />
+    return <EmptyState icon={MessageSquare} title={t({ ko: '채팅을 쓸 수 없어', en: 'Chat is not available' })} />
   }
 
   return (

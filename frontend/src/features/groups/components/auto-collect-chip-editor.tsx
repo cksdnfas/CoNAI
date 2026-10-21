@@ -46,9 +46,9 @@ function createAutoCollectChip(scope: SearchScope, operator: SearchOperator, val
 function getSearchScopePlaceholder(scope: SearchScope, t: ReturnType<typeof useI18n>['t']) {
   switch (scope) {
     case 'positive':
-      return t({ ko: '긍정 프롬프트', en: 'Positive prompt' })
+      return t({ ko: '포지티브 프롬프트', en: 'Positive prompt' })
     case 'negative':
-      return t({ ko: '부정 프롬프트', en: 'Negative prompt' })
+      return t({ ko: '네거티브 프롬프트', en: 'Negative prompt' })
     case 'auto':
       return t({ ko: '오토 태그', en: 'Auto tag' })
     case 'model':

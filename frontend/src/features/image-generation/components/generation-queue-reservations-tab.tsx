@@ -39,7 +39,7 @@ export function GenerationQueueReservationsTab({
       {!isError && isPending ? <LoadingState variant="inline" label={t('image-generation.components.generation.queue.header.widget.loading.reservations')} /> : null}
 
       {!isPending && !isError && schedules.length === 0 ? (
-        <EmptyState size="compact" title={t({ ko: '등록된 예약작업이 아직 없어.', en: 'No reservations have been registered yet.' })} />
+        <EmptyState size="compact" title={t({ ko: '아직 예약 작업이 없어', en: 'No reservations have been registered yet' })} />
       ) : null}
 
       {schedules.length > 0 ? (

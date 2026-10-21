@@ -7,6 +7,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 import type { PromptTypeFilter } from '@/types/prompt'
 import type { PromptPageView } from '../prompt-page-view'
+import { PROMPT_TYPE_LABELS } from '../prompt-page-utils'
 
 export interface PromptPageToolbarProps {
   view: PromptPageView
@@ -27,9 +28,7 @@ export type PromptPageToolbarBaseProps = Omit<PromptPageToolbarProps, 'children'
 export function PromptPageToolbar({ view, promptType, canViewWildcards, onChangeView, children, actions }: PromptPageToolbarProps) {
   const { t } = useI18n()
   const items = [
-    { value: 'positive', label: t({ ko: '긍정', en: 'Positive' }) },
-    { value: 'negative', label: t({ ko: '부정', en: 'Negative' }) },
-    { value: 'auto', label: t({ ko: '자동', en: 'Auto' }) },
+    ...Object.entries(PROMPT_TYPE_LABELS).map(([value, label]) => ({ value, label: t(label) })),
     { value: 'danbooru', label: t({ ko: '단부루', en: 'Danbooru' }) },
   ]
   const isPresetView = view === 'presets'

@@ -244,7 +244,7 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
               ]
             })}
           </div>
-          {fields.length === 0 ? <EmptyState size="compact" title={t({ ko: '이 워크플로에는 표시된 필드가 없어.', en: 'This workflow has no marked fields.' })} /> : null}
+          {fields.length === 0 ? <EmptyState size="compact" title={t({ ko: '이 워크플로에는 표시된 필드가 없어', en: 'This workflow has no marked fields' })} /> : null}
         </EditorGroup>
       ) : null}
       {workflow ? <ComfyAssetFieldPicks config={config} fields={fields} onChange={patch} /> : null}

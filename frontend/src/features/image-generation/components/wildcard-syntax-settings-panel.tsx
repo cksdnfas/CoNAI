@@ -25,7 +25,7 @@ const HELP_ITEMS = [
   { syntax: '__tag:Group|0-3__', ko: '그룹에서 0~3개를 랜덤 출력해.', en: 'Output zero to three random tags from the group.' },
   { syntax: '__tag:Group|1k+__', ko: '사용횟수 1000 이상 태그만 사용해.', en: 'Use only tags with at least 1000 uses.' },
   { syntax: '__tag:Group|100-__', ko: '사용횟수 100 이하 태그만 사용해.', en: 'Use only tags with at most 100 uses.' },
-  { syntax: '__my:Group|1-2__', ko: '내 프롬프트 그룹에서 1~2개를 랜덤 출력해. 부정 칸에서는 부정 그룹을 써.', en: 'Output one or two random prompts from your prompt group (the negative group in negative prompts).' },
+  { syntax: '__my:Group|1-2__', ko: '내 프롬프트 그룹에서 1~2개를 랜덤 출력해. 네거티브 칸에서는 네거티브 그룹을 써.', en: 'Output one or two random prompts from your prompt group (the negative group in negative prompts).' },
   { syntax: 'preprocess', ko: '전처리 체인 키워드를 그대로 입력해.', en: 'Insert a preprocess chain keyword as plain text.' },
 ]
 

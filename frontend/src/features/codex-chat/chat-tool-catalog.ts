@@ -83,6 +83,7 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   get_prompts_in_group: { group: 'prompts', label: { ko: '그룹의 프롬프트', en: 'Prompts in a group' }, ko: '특정 그룹에 든 프롬프트를 모두 읽어.' },
   list_prompt_presets: { group: 'prompts', label: { ko: '프롬프트 프리셋', en: 'Prompt presets' }, ko: '저장된 프롬프트 프리셋과 전체 글을 읽어.' },
   search_wildcards: { group: 'prompts', label: { ko: '와일드카드 검색', en: 'Search wildcards' }, ko: '와일드카드를 이름으로 찾거나 계층을 둘러봐.' },
+  preview_random_prompt: { group: 'prompts', label: { ko: '랜덤 프롬프트 미리보기', en: 'Preview random prompt' }, ko: '와일드카드·랜덤 문법이 들어간 프롬프트가 실제로 어떻게 펼쳐지는지 예시를 뽑아 봐.' },
   list_custom_dropdown_lists: { group: 'prompts', label: { ko: '드롭다운 목록', en: 'Dropdown lists' }, ko: 'LoRA·체크포인트 같은 사용자 목록의 이름과 개수를 읽어.' },
   search_custom_dropdown_items: { group: 'prompts', label: { ko: '드롭다운 항목 검색', en: 'Search dropdown items' }, ko: '사용자 목록 안에서 LoRA·체크포인트 같은 항목을 찾아.' },
   list_workflows: { group: 'workflows', label: { ko: 'ComfyUI 워크플로 목록', en: 'ComfyUI workflows' }, ko: '등록된 ComfyUI 워크플로를 나열해.' },

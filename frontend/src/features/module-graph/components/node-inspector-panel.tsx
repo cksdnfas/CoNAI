@@ -468,7 +468,7 @@ export function NodeInspectorPanel({
     <div ref={panelRef} className="contents">
     <Section heading={showHeader ? t({ ko: '노드 인스펙터', en: 'Node Inspector' }) : undefined}>
       {!selectedNode && !selectedEdge ? (
-        <EmptyState size="compact" icon={MousePointerClick} title={t({ ko: '노드나 엣지를 선택해.', en: 'Select a node or edge.' })} />
+        <EmptyState size="compact" icon={MousePointerClick} title={t({ ko: '노드나 엣지를 선택해', en: 'Select a node or edge' })} />
       ) : null}
 
       {!selectedNode && selectedEdge && sourceEndpoint && targetEndpoint ? (

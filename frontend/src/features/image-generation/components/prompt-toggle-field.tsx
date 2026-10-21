@@ -26,6 +26,8 @@ type PromptToggleFieldProps = {
    * nothing is used), with why. The stored negative value is kept for switching back.
    */
   negativeLock?: { value: string; hint: string }
+  /** Prepended to the prompt boxes' accessible names when several editors share a screen ("Character 1"). */
+  ariaLabelPrefix?: string
 }
 
 /** Return a lightweight prompt segment count using commas and line breaks. */
@@ -71,6 +73,7 @@ export function PromptToggleField({
   negativePlaceholder = '',
   compact = false,
   negativeLock,
+  ariaLabelPrefix,
 }: PromptToggleFieldProps) {
   const { t } = useI18n()
   const [activeTab, setActiveTab] = useState<'positive' | 'negative'>('positive')
@@ -78,6 +81,8 @@ export function PromptToggleField({
   const resolvedNegativeLabel = negativeLabel ?? t('image-generation.components.prompt.toggle.field.negative')
   const shownNegativeValue = negativeLock ? negativeLock.value : negativeValue
   const promptValue = activeTab === 'negative' ? negativeValue : positiveValue
+  const promptKindLabel = t({ ko: '{label} 프롬프트', en: '{label} prompt' }, { label: activeTab === 'negative' ? resolvedNegativeLabel : resolvedPositiveLabel })
+  const promptFieldLabel = ariaLabelPrefix ? `${ariaLabelPrefix} ${promptKindLabel}` : promptKindLabel
 
   return (
     <div className="min-w-0 space-y-3">
@@ -97,7 +102,7 @@ export function PromptToggleField({
           <Textarea
             readOnly
             disabled={negativeLock.value.length === 0}
-            aria-label={resolvedNegativeLabel}
+            aria-label={promptFieldLabel}
             rows={compact ? 3 : DEFAULT_PROMPT_TEXTAREA_ROWS}
             value={negativeLock.value}
           />
@@ -110,6 +115,7 @@ export function PromptToggleField({
           value={promptValue}
           placeholder={activeTab === 'negative' ? negativePlaceholder : positivePlaceholder}
           autocompletePromptType={activeTab}
+          ariaLabel={promptFieldLabel}
           onChange={(nextRows) => (activeTab === 'negative' ? onNegativeChange : onPositiveChange)(joinTextSegmentSpreadsheetRows(nextRows))}
         />
       )}

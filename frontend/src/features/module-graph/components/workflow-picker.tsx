@@ -51,7 +51,7 @@ export function WorkflowPicker({ workflows, covers, value, onChange, disabled, d
       ariaLabel={t({ ko: '워크플로우', en: 'Workflow' })}
       placeholder={t({ ko: '워크플로우 고르기', en: 'Pick a workflow' })}
       searchPlaceholder={t({ ko: '워크플로우 찾기', en: 'Find a workflow' })}
-      emptyLabel={t({ ko: '맞는 워크플로우 없음', en: 'No matching workflow' })}
+      emptyLabel={t({ ko: '맞는 워크플로우가 없어', en: 'No matching workflow' })}
     />
   )
 }

@@ -102,7 +102,7 @@ export function ModuleWorkflowArtifactRecordsTab({
         </div>
       )}
       isEmpty={artifacts.length === 0}
-      empty={<EmptyState icon={FileSearch} title={t({ ko: '검색/필터 조건에 맞는 텍스트 또는 중간 산출물이 없어.', en: 'No text or intermediate artifacts match the search/filter.' })} />}
+      empty={<EmptyState icon={FileSearch} title={t({ ko: '검색/필터 조건에 맞는 텍스트 또는 중간 산출물이 없어', en: 'No text or intermediate artifacts match the search/filter' })} />}
       listContainerRef={setArtifactSelectionContainer}
     >
       {artifacts.map((artifact) => {

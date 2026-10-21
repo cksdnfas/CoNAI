@@ -143,7 +143,7 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, initialIss
 
         <RowGroup heading={t({ ko: '발급한 키', en: 'Issued keys' })}>
           {tokens.length === 0 ? (
-            <EmptyState size="compact" title={t({ ko: '아직 발급한 키가 없어.', en: 'No keys yet.' })} />
+            <EmptyState size="compact" title={t({ ko: '아직 발급한 키가 없어', en: 'No keys yet' })} />
           ) : tokens.map((token) => {
             const preset = token.presetId ? presetById.get(token.presetId) : null
             return (

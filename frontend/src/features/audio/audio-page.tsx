@@ -686,7 +686,7 @@ function AudioPageContent() {
             <DropdownMenuSub>
               <DropdownMenuSubTrigger disabled={!selected}><FolderInput />{t({ ko: '고른 후보 옮기기', en: 'Move the picked take' })}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
-                {moveTargets.length === 0 ? <DropdownMenuItem disabled>{t({ ko: '효과음 없음', en: 'No effects' })}</DropdownMenuItem> : null}
+                {moveTargets.length === 0 ? <DropdownMenuItem disabled>{t({ ko: '효과음이 없어', en: 'No effects' })}</DropdownMenuItem> : null}
                 {moveTargets.map((entry) => (
                   <DropdownMenuItem key={entry.id} onSelect={() => selected && void moveTakes([selected.id], entry)}>
                     {entry.is_inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : entry.name}
@@ -812,11 +812,11 @@ function AudioPageContent() {
       {exportJob.job ? <RuntimeJobProgress job={exportJob.job} cancel={exportJob.cancel} isCancelling={exportJob.isCancelling} className="mb-4" /> : null}
 
       {projectsQuery.isSuccess && projects.length === 0 ? (
-        <EmptyAudio title={t({ ko: '프로젝트 없음', en: 'No projects' })}>
+        <EmptyAudio title={t({ ko: '아직 프로젝트가 없어', en: 'No projects yet' })}>
           {permissions.canEdit ? <Button onClick={() => setDialog('project-new')}><FolderPlus />{t({ ko: '새 프로젝트', en: 'New project' })}</Button> : null}
         </EmptyAudio>
       ) : !group && project && projectGroupsQuery.isSuccess && effects.length === 0 && !groupId ? (
-        <EmptyAudio title={t({ ko: '효과음 없음', en: 'No effects' })}>
+        <EmptyAudio title={t({ ko: '아직 효과음이 없어', en: 'No effects yet' })}>
           {permissions.canEdit ? <NewEffectInput key={project.id} onCreate={(name) => createEffect(project.id, name)} /> : null}
         </EmptyAudio>
       ) : null}
@@ -905,7 +905,7 @@ function AudioPageContent() {
                         isRetrying={candidatesQuery.isFetching}
                       />
                     ) : rows.length === 0 && visibleOrders.length === 0 ? (
-                      <EmptyState size="compact" className="text-center" title={t({ ko: '후보 없음', en: 'No takes' })} />
+                      <EmptyState size="compact" className="text-center" title={t({ ko: '후보가 없어', en: 'No takes' })} />
                     ) : null}
                     <div ref={loadMoreRef} className="h-px" />
                   </div>
@@ -934,7 +934,7 @@ function AudioPageContent() {
           actions={(
             <>
               <Select className="h-8 w-44" aria-label={t({ ko: '옮길 효과음', en: 'Move to' })} value={moveTarget?.id ?? ''} disabled={inboxEffects.length === 0} onChange={(event) => setMoveTargetId(event.target.value)}>
-                {inboxEffects.length === 0 ? <option value="">{t({ ko: '효과음 없음', en: 'No effects' })}</option> : null}
+                {inboxEffects.length === 0 ? <option value="">{t({ ko: '효과음이 없어', en: 'No effects' })}</option> : null}
                 {inboxEffects.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
               </Select>
               {projectGroupsQuery.hasNextPage ? <Button variant="ghost" size="sm" disabled={projectGroupsQuery.isFetching} onClick={() => void projectGroupsQuery.fetchNextPage()}>{t({ ko: '효과음 더 불러오기', en: 'Load more effects' })}</Button> : null}

@@ -97,7 +97,7 @@ export function ChatSettingsMine() {
         )}
       >
         {userProfilesQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
-        {userProfilesQuery.isSuccess && userProfiles.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 사용자 프로필이 없어.', en: 'No user profiles yet.' })}</SettingsEmptyRow> : null}
+        {userProfilesQuery.isSuccess && userProfiles.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 사용자 프로필이 없어', en: 'No user profiles yet' })}</SettingsEmptyRow> : null}
         <ChatUserProfileRows profiles={userProfiles} onEdit={(profile) => setUserProfileEditor({ profile })} />
         {userProfilesQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(userProfilesQuery.error, t({ ko: '사용자 프로필을 불러오지 못했어.', en: 'Could not load user profiles.' }))}</p> : null}
       </RowGroup>
@@ -112,7 +112,7 @@ export function ChatSettingsMine() {
         )}
       >
         {flagsQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
-        {flagsQuery.isSuccess && flags.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 플래그가 없어.', en: 'No flags yet.' })}</SettingsEmptyRow> : null}
+        {flagsQuery.isSuccess && flags.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 플래그가 없어', en: 'No flags yet' })}</SettingsEmptyRow> : null}
         <ChatFlagRows flags={flags} onEdit={(flag) => setFlagEditor({ flag })} />
         {flagsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(flagsQuery.error, t({ ko: '플래그를 불러오지 못했어.', en: 'Could not load flags.' }))}</p> : null}
       </RowGroup>

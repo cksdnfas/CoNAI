@@ -239,7 +239,7 @@ export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onC
               </label>
             )
           })}
-          {candidates.length === 0 ? <EmptyState size="compact" title={t({ ko: '초대할 수 있는 프로필이 없어.', en: 'No profiles to invite.' })} /> : null}
+          {candidates.length === 0 ? <EmptyState size="compact" title={t({ ko: '초대할 수 있는 프로필이 없어', en: 'No profiles to invite' })} /> : null}
         </div>
         {mode?.kind === 'create' ? (
           <Field label={t({ ko: '방 이름', en: 'Room name' })}>

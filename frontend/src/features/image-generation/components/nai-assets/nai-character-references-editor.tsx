@@ -167,7 +167,7 @@ export function NaiCharacterReferencesEditor({
               onStrengthCommit={(value) => onFieldChange(index, 'strength', value)}
               menuFields={(
                 <FormField label={t({ ko: '충실도', en: 'Fidelity' })}>
-                  <NumberStepperInput min={0} max={1} step={0.01} value={reference.fidelity} onValueCommit={(value) => onFieldChange(index, 'fidelity', value)} />
+                  <NumberStepperInput aria-label={t({ ko: '충실도', en: 'Fidelity' })} min={0} max={1} step={0.01} value={reference.fidelity} onValueCommit={(value) => onFieldChange(index, 'fidelity', value)} />
                 </FormField>
               )}
               onReplaceImage={() => setPicker({ mode: 'replace', index })}

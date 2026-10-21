@@ -92,7 +92,7 @@ function WildcardItemSection({
         >
           <span className="min-w-0 truncate" title={item.content}>{item.content}</span>
         </ListRow>
-      )) : <EmptyState size="compact" title={t({ ko: '등록된 항목이 없어.', en: 'No registered items.' })} />}
+      )) : <EmptyState size="compact" title={t({ ko: '등록된 항목이 없어', en: 'No registered items' })} />}
     </RowGroup>
   )
 }
@@ -139,7 +139,7 @@ export function WildcardDetailCard({
   }, [selectedWildcard?.id, selectedGeneralItems, selectedNaiItems, selectedComfyItems])
 
   if (!selectedWildcard) {
-    return <EmptyState size="compact" title={t({ ko: '선택된 항목 없음', en: 'Nothing selected' })} />
+    return <EmptyState size="compact" title={t({ ko: '선택된 항목이 없어', en: 'Nothing selected' })} />
   }
 
   return (
@@ -228,7 +228,7 @@ export function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
           </div>
         </div>
       ) : (
-        <EmptyState size="compact" title={t({ ko: '아직 기록된 자동 수집 로그가 없어.', en: 'No auto-collection logs recorded yet.' })} />
+        <EmptyState size="compact" title={t({ ko: '아직 자동 수집 로그가 없어', en: 'No auto-collection logs recorded yet' })} />
       )}
     </RowGroup>
   )

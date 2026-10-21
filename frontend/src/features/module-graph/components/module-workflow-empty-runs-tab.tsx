@@ -111,7 +111,7 @@ export function ModuleWorkflowEmptyRunsTab({
             </IconButton>
         </div>
         {queueExecutions.length === 0 ? (
-          <EmptyState title={t({ ko: '이 범위에는 빈 실행이나 출력 없는 실행이 없어.', en: 'No empty or outputless runs in this scope.' })} />
+          <EmptyState title={t({ ko: '이 범위에는 빈 실행이나 출력 없는 실행이 없어', en: 'No empty or outputless runs in this scope' })} />
         ) : (
           <div>
             {queueExecutions.map((execution) => {

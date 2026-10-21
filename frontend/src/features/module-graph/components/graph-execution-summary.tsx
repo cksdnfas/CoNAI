@@ -124,7 +124,7 @@ export function SelectedExecutionSummary({
         <Text as="div" variant="overline">{t({ ko: '출력', en: 'Outputs' })}</Text>
 
         {compactArtifactGroups.length === 0 ? (
-          <EmptyState size="compact" title={t({ ko: '표시할 출력 없음', en: 'No outputs to display' })} />
+          <EmptyState size="compact" title={t({ ko: '표시할 출력이 없어', en: 'No outputs to display' })} />
         ) : (
           <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(12rem,1fr))]">
             {compactArtifactGroups.map((group) => (

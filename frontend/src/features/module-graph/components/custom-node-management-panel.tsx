@@ -272,7 +272,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               <PanelCardHeader title={t({ ko: '등록된 커스텀 노드', en: 'Registered custom nodes' })} />
 
               {loadedNodes.length === 0 ? (
-                <EmptyState size="compact" title={t({ ko: '노드 없음', en: 'No nodes' })} />
+                <EmptyState size="compact" title={t({ ko: '노드가 없어', en: 'No nodes' })} />
               ) : (
                 <div>
                   {loadedNodes.map((node) => {
@@ -345,7 +345,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               <PanelCardHeader title={t({ ko: '로드 오류', en: 'Load errors' })} />
 
               {loadErrors.length === 0 ? (
-                <EmptyState size="compact" title={t({ ko: '오류 없음', en: 'No errors' })} />
+                <EmptyState size="compact" title={t({ ko: '오류가 없어', en: 'No errors' })} />
               ) : (
                 <div className="space-y-3">
                   {loadErrors.map((errorItem) => (

@@ -149,7 +149,7 @@ export function AccessOverviewPage() {
       ) : null}
 
       {accessibleItems.length === 0 && publicWorkflows.length === 0 && pluginPages.length === 0 ? (
-        <EmptyState icon={ShieldCheck} title={t({ ko: '지금 열 수 있는 페이지가 없어.', en: 'There are no pages available right now.' })} />
+        <EmptyState icon={ShieldCheck} title={t({ ko: '지금 열 수 있는 페이지가 없어', en: 'There are no pages available right now' })} />
       ) : (
         <div className="space-y-10">
           {pageItems.length > 0 ? (

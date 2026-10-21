@@ -443,7 +443,7 @@ export function UploadInspectDetails({
             prompts: extractResult && extractedPromptCards.length > 0 ? (
               <ExtractedPromptSections items={extractedPromptCards} onAddSearchFilter={handleAddExtractedPromptSearchFilter} />
             ) : null,
-            tagger: taggerResult ? <WDTaggerResultBlock result={taggerResult} title={t({ ko: '자동', en: 'Auto' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null,
+            tagger: taggerResult ? <WDTaggerResultBlock result={taggerResult} title={t({ ko: '오토', en: 'Auto' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null,
             artist: kaloscopeResult ? <KaloscopeResultBlock result={kaloscopeResult} title={t({ ko: '작가', en: 'Artist' })} onAddSearchFilter={handleAddAutoPromptSearchFilter} /> : null,
           }}
         />

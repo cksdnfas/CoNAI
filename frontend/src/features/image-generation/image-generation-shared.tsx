@@ -177,9 +177,9 @@ export const NAI_MODEL_OPTIONS = [
 ] as const
 
 export const NAI_ACTION_OPTIONS = [
-  { value: 'generate', label: 'generate' },
-  { value: 'img2img', label: 'img2img' },
-  { value: 'infill', label: 'infill' },
+  { value: 'generate', label: { ko: '새로 생성', en: 'Generate' } },
+  { value: 'img2img', label: { ko: '이미지 변형 (img2img)', en: 'Image to image (img2img)' } },
+  { value: 'infill', label: { ko: '인페인트 (infill)', en: 'Inpaint (infill)' } },
 ] as const
 
 export const NAI_SAMPLER_OPTIONS = [

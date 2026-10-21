@@ -136,14 +136,14 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
         {background.kind === 'group-slideshow' ? (
           <>
             <InspectorRow label={t({ ko: '그룹', en: 'Group' })}>
-              <Select value={background.groupId !== null ? String(background.groupId) : ''} onChange={(event) => patch({ groupId: event.target.value ? Number(event.target.value) : null } as Partial<WallpaperBackground>, 'groupId')}>
+              <Select aria-label={t({ ko: '그룹', en: 'Group' })} value={background.groupId !== null ? String(background.groupId) : ''} onChange={(event) => patch({ groupId: event.target.value ? Number(event.target.value) : null } as Partial<WallpaperBackground>, 'groupId')}>
                 <option value="">{t({ ko: '그룹 선택', en: 'Select group' })}</option>
                 {groups.map((group) => <option key={group.id} value={group.id}>{`${'　'.repeat(group.depth ?? 0)}${group.name}`}</option>)}
               </Select>
             </InspectorRow>
             <SwitchLine label={t({ ko: '하위 그룹 포함', en: 'Include child groups' })} checked={background.includeChildren} onCheckedChange={(checked) => patch({ includeChildren: checked } as Partial<WallpaperBackground>, 'includeChildren')} />
             <InspectorRow label={t({ ko: '간격', en: 'Interval' })}>
-              <Select value={String(background.intervalSec)} onChange={(event) => patch({ intervalSec: Number(event.target.value) } as Partial<WallpaperBackground>, 'intervalSec')}>
+              <Select aria-label={t({ ko: '간격', en: 'Interval' })} value={String(background.intervalSec)} onChange={(event) => patch({ intervalSec: Number(event.target.value) } as Partial<WallpaperBackground>, 'intervalSec')}>
                 {[30, 60, 180, 300, 600, 1800, 3600].map((seconds) => (
                   <option key={seconds} value={seconds}>{seconds < 60 ? t({ ko: '{n}초', en: '{n}s' }, { n: seconds }) : t({ ko: '{n}분', en: '{n} min' }, { n: seconds / 60 })}</option>
                 ))}
@@ -186,7 +186,7 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
         ) : null}
         <InspectorColor label={t({ ko: '글자색', en: 'Text' })} value={options.textColor} fallback="#f2f2f2" themeVariable="--foreground" nullable onChange={(value) => setOption('textColor', value)} />
         <InspectorRow label={t({ ko: '글꼴', en: 'Font' })}>
-          <Select value={options.fontFamily} onChange={(event) => setOption('fontFamily', event.target.value as WallpaperWidgetFont)}>
+          <Select aria-label={t({ ko: '글꼴', en: 'Font' })} value={options.fontFamily} onChange={(event) => setOption('fontFamily', event.target.value as WallpaperWidgetFont)}>
             <option value="inherit">{t({ ko: '앱 설정', en: 'App' })}</option>
             <option value="sans">{t({ ko: '고딕', en: 'Sans' })}</option>
             <option value="serif">{t({ ko: '명조', en: 'Serif' })}</option>
@@ -199,7 +199,7 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
       <div className="text-base font-semibold">{t({ ko: '효과', en: 'Effects' })}</div>
       <div className="space-y-3">
         <InspectorRow label={t({ ko: '파티클', en: 'Particles' })}>
-          <Select value={options.particles} onChange={(event) => setOption('particles', event.target.value as WallpaperParticleKind)}>
+          <Select aria-label={t({ ko: '파티클', en: 'Particles' })} value={options.particles} onChange={(event) => setOption('particles', event.target.value as WallpaperParticleKind)}>
             <option value="none">{t({ ko: '없음', en: 'None' })}</option>
             <option value="snow">{t({ ko: '눈', en: 'Snow' })}</option>
             <option value="sakura">{t({ ko: '벚꽃', en: 'Sakura' })}</option>
@@ -229,7 +229,7 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
           <InspectorSlider label={t({ ko: '평소 투명도', en: 'Idle opacity' })} value={options.idleOpacity} min={0} max={100} unit="%" onChange={(value) => setOption('idleOpacity', value)} />
         ) : null}
         <InspectorRow label={t({ ko: 'FPS 상한', en: 'FPS cap' })}>
-          <Select value={String(options.fpsLimit)} onChange={(event) => setOption('fpsLimit', Number(event.target.value))}>
+          <Select aria-label={t({ ko: 'FPS 상한', en: 'FPS cap' })} value={String(options.fpsLimit)} onChange={(event) => setOption('fpsLimit', Number(event.target.value))}>
             <option value="0">{t({ ko: '제한 없음', en: 'None' })}</option>
             {[60, 30, 24, 15].map((fps) => <option key={fps} value={fps}>{fps}</option>)}
           </Select>

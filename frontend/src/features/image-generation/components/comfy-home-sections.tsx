@@ -30,7 +30,7 @@ function SectionLabel({ icon, children }: { icon: ReactNode; children: ReactNode
 
 function EmptyListRow() {
   const { t } = useI18n()
-  return <EmptyState size="compact" title={t({ ko: '없음', en: 'None' })} />
+  return <EmptyState size="compact" title={t({ ko: '아직 없어', en: 'None yet' })} />
 }
 
 type WorkflowListSectionProps = {

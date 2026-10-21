@@ -45,7 +45,7 @@ export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
  * listed by opening it; any catalogued tool still runs by name. A category this small or smaller is named whole.
  */
 const CONTENTS_PRIMARY_TOOLS = new Set([
-  'search_prompts', 'list_prompt_presets', 'search_wildcards',
+  'search_prompts', 'list_prompt_presets', 'search_wildcards', 'preview_random_prompt',
   'list_workflows', 'get_workflow_details', 'submit_generation_job', 'get_generation_job', 'generate_nai',
   'search_images', 'search_images_by_tags', 'search_images_by_meaning', 'find_similar_images', 'get_image_metadata',
   'list_files', 'search_files', 'read_file_text', 'write_text_file', 'edit_file_text',

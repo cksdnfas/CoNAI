@@ -97,7 +97,7 @@ export function LlmConnectionsTab() {
         {providersQuery.isLoading ? (
           <SettingsRowsSkeleton rows={3} />
         ) : llmProviders.length === 0 ? (
-          <SettingsEmptyRow>{t({ ko: '연결된 LLM이 아직 없어.', en: 'No connected LLMs yet.' })}</SettingsEmptyRow>
+          <SettingsEmptyRow>{t({ ko: '연결된 LLM이 아직 없어', en: 'No connected LLMs yet' })}</SettingsEmptyRow>
         ) : (
           <>
             {llmProviders.map((provider) => (

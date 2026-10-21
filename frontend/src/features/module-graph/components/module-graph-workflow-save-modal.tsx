@@ -89,7 +89,7 @@ export function ModuleGraphWorkflowSaveModal({
         {folderPanel}
 
         {!hasNodes ? (
-          <EmptyState size="compact" title={t({ ko: '저장하려면 먼저 노드를 하나 이상 배치해줘.', en: 'Place at least one node before saving.' })} />
+          <EmptyState size="compact" title={t({ ko: '저장하려면 먼저 노드를 하나 이상 배치해줘', en: 'Place at least one node before saving' })} />
         ) : null}
       </div>
       <EditorFooter onSave={() => void handleSave()} canSave={canSave} saving={isSavingGraph} />

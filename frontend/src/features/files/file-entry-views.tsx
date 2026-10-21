@@ -73,7 +73,7 @@ export function FileEntryView({ items, mode, selected, onToggle, onSelectAll, ca
               <div {...dragProps(item)} title={item.name} className="group relative min-w-0 [-webkit-touch-callout:none]">
                 <MediaCard
                   onClick={() => open(item)}
-                  title={<span className="line-clamp-2 whitespace-normal break-all">{item.name}</span>}
+                  title={<span className="line-clamp-2 whitespace-normal wrap-anywhere">{item.name}</span>}
                   selected={isSelected}
                   className="w-full"
                   mediaClassName="aspect-square w-full"

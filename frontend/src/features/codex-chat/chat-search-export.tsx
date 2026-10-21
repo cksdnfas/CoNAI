@@ -25,7 +25,7 @@ export function ChatSearchResults({ query, disabled, onPick }: { query: string; 
   if (results.isError) return <p role="alert" className="p-2 text-xs text-destructive">{getErrorMessage(results.error, t({ ko: '검색 실패', en: 'Search failed' }))}</p>
   if (results.isPending || term !== query.trim()) return <p role="status" className="p-2 text-xs text-muted-foreground">{t({ ko: '검색 중…', en: 'Searching…' })}</p>
   return <div className="space-y-1">
-    {!results.data?.length ? <EmptyState size="compact" title={t({ ko: '검색 결과가 없어.', en: 'No results.' })} /> : results.data.map((result) => (
+    {!results.data?.length ? <EmptyState size="compact" title={t({ ko: '검색 결과가 없어', en: 'No results' })} /> : results.data.map((result) => (
       <ListRow key={result.messageId} asChild interactive><button type="button" disabled={disabled} onClick={() => onPick(result)} className="w-full flex-col items-start gap-1 text-left">
         <span className="max-w-full truncate text-xs font-semibold">{result.title || t({ ko: '새 채팅', en: 'New chat' })}</span>
         <span className="line-clamp-3 break-all text-xs text-muted-foreground">{result.excerpt}</span>

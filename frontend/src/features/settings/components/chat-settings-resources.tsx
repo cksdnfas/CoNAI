@@ -257,7 +257,7 @@ export function ChatSettingsResources() {
         )}
       >
         {presetsQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
-        {presetsQuery.isSuccess && presets.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 도구 프리셋이 없어.', en: 'No tool presets yet.' })}</SettingsEmptyRow> : null}
+        {presetsQuery.isSuccess && presets.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 도구 프리셋이 없어', en: 'No tool presets yet' })}</SettingsEmptyRow> : null}
         {presets.map((preset) => (
           <ResourceRow
             key={preset.id}
@@ -291,7 +291,7 @@ export function ChatSettingsResources() {
         )}
       >
         {generationPresetsQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
-        {generationPresetsQuery.isSuccess && generationPresets.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 생성 프리셋이 없어.', en: 'No generation presets yet.' })}</SettingsEmptyRow> : null}
+        {generationPresetsQuery.isSuccess && generationPresets.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 생성 프리셋이 없어', en: 'No generation presets yet' })}</SettingsEmptyRow> : null}
         {generationPresets.map((preset) => (
           <ResourceRow
             key={preset.id}
@@ -329,7 +329,7 @@ export function ChatSettingsResources() {
         )}
       >
         {blocksQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
-        {blocksQuery.isSuccess && blocks.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 표시 블록이 없어.', en: 'No display blocks yet.' })}</SettingsEmptyRow> : null}
+        {blocksQuery.isSuccess && blocks.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 표시 블록이 없어', en: 'No display blocks yet' })}</SettingsEmptyRow> : null}
         {blocks.map((shared) => (
           <ResourceRow
             key={shared.id}
@@ -366,7 +366,7 @@ export function ChatSettingsResources() {
         )}
       >
         {lorebooksQuery.isLoading ? <SettingsRowsSkeleton rows={1} /> : null}
-        {lorebooksQuery.isSuccess && lorebooks.length === 0 && accountLorebooks.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 로어북이 없어.', en: 'No lorebooks yet.' })}</SettingsEmptyRow> : null}
+        {lorebooksQuery.isSuccess && lorebooks.length === 0 && accountLorebooks.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 로어북이 없어', en: 'No lorebooks yet' })}</SettingsEmptyRow> : null}
         {lorebooks.map((lorebook) => (
           <ResourceRow
             key={lorebook.id}

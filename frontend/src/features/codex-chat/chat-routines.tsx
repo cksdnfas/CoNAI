@@ -356,7 +356,7 @@ export function ChatSettingsRoutines() {
         <IconButton size="icon-sm" variant="secondary" onClick={() => open(null)} label={t({ ko: '루틴 추가', en: 'Add routine' })}><Plus /></IconButton>
       </div>
       {query.isLoading ? null : routines.length === 0
-        ? <EmptyState title={t({ ko: '루틴 없음', en: 'No routines' })} />
+        ? <EmptyState title={t({ ko: '루틴이 없어', en: 'No routines' })} />
         : <div className="border-t border-line"><ChatRoutineRows routines={routines} onEdit={open} /></div>}
       <ChatRoutineEditor open={editorOpen} routine={editing} onClose={() => setEditorOpen(false)} />
     </div>
@@ -481,7 +481,7 @@ export function ChatRoomRoutinesModal({ threadId, open, onClose }: { threadId: n
         headerActions={<IconButton size="icon-sm" variant="secondary" disabled={threadId === null} onClick={() => edit(null)} label={t({ ko: '이 방에 루틴 추가', en: 'Add a routine for this room' })}><Plus /></IconButton>}
       >
         {query.isLoading ? null : routines.length === 0
-          ? <EmptyState title={t({ ko: '이 방에 걸린 루틴 없음', en: 'No routines on this room' })} />
+          ? <EmptyState title={t({ ko: '이 방에 걸린 루틴이 없어', en: 'No routines on this room' })} />
           : <ChatRoutineRows routines={routines} onEdit={edit} />}
       </Modal>
       <ChatRoutineEditor open={editorOpen} routine={editing} presetThreadId={threadId} onClose={() => setEditorOpen(false)} />

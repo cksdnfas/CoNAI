@@ -211,6 +211,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   list_custom_dropdown_lists: 'read',
   search_custom_dropdown_items: 'read',
   search_wildcards: 'read',
+  preview_random_prompt: 'read',
   get_generation_job: 'read',
   wait_generation_job: 'read',
   get_generation_artifacts: 'read',

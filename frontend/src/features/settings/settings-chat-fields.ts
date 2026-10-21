@@ -132,8 +132,8 @@ const APPEARANCE: FieldSpec[] = grouped({ ko: '테마', en: 'Theme' }, [
   count('detailRelatedImageMobileColumns', { ko: '유사 이미지 한 줄 카드 수 (모바일)', en: 'Similar images per row (mobile)' }, 1, 6),
   count('detailRelatedImageColumns', { ko: '유사 이미지 한 줄 카드 수 (데스크톱)', en: 'Similar images per row (desktop)' }, 1, 6),
   choice('detailRelatedImageAspectRatio', { ko: '유사 이미지 카드 비율', en: 'Similar image card ratio' }, ['original', 'square', 'portrait', 'landscape']),
-  color('positiveBadgeColor', { ko: '긍정 배지', en: 'Positive badge' }),
-  color('negativeBadgeColor', { ko: '부정 배지', en: 'Negative badge' }),
+  color('positiveBadgeColor', { ko: '포지티브 배지', en: 'Positive badge' }),
+  color('negativeBadgeColor', { ko: '네거티브 배지', en: 'Negative badge' }),
   color('autoBadgeColor', { ko: '오토 배지', en: 'Auto badge' }),
   color('ratingBadgeColor', { ko: '평가 배지', en: 'Rating badge' }),
 ])

@@ -13,7 +13,7 @@ interface PromptTreeProps {
 
 /** Visible prompt groups as sidebar folder rows. Parents show "direct(total)" counts. */
 export function PromptTree({ groups, selectedGroupId, onSelectGroup, getIcon }: PromptTreeProps) {
-  const { formatNumber } = useI18n()
+  const { t, formatNumber } = useI18n()
   const treeGroups = useMemo(() => groups.filter((group) => group.id === 0 || Boolean(group.is_visible)), [groups])
   const visibleGroupIds = useMemo(() => new Set(treeGroups.map((group) => group.id)), [treeGroups])
   const { childCountByGroupId, totalPromptCountByGroupId } = useMemo(() => {
@@ -66,7 +66,7 @@ export function PromptTree({ groups, selectedGroupId, onSelectGroup, getIcon }: 
       onSelect={(group) => onSelectGroup(group.id)}
       getId={getId}
       getParentId={getParentId}
-      getLabel={(group) => group.group_name}
+      getLabel={(group) => (group.id === 0 ? t({ ko: '미분류', en: 'Unclassified' }) : group.group_name)}
       getCount={(group) => {
         const directCount = group.prompt_count ?? 0
         const hasChildren = (childCountByGroupId.get(group.id) ?? 0) > 0

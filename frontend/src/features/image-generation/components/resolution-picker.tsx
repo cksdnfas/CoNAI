@@ -51,16 +51,18 @@ export function DimensionInputs({
   className,
 }: DimensionInputsProps) {
   const { t } = useI18n()
+  const resolvedWidthLabel = widthLabel ?? t({ ko: '너비', en: 'Width' })
+  const resolvedHeightLabel = heightLabel ?? t({ ko: '높이', en: 'Height' })
   const fields = (
     <>
       <FieldSlot above={renderAbove?.('width')}>
-        <FormField label={widthLabel ?? t({ ko: '너비', en: 'Width' })}>
-          <NumberStepperInput min={bounds?.min} max={bounds?.max} step={bounds?.step} value={width} onValueCommit={onWidthCommit} />
+        <FormField label={resolvedWidthLabel}>
+          <NumberStepperInput aria-label={resolvedWidthLabel} min={bounds?.min} max={bounds?.max} step={bounds?.step} value={width} onValueCommit={onWidthCommit} />
         </FormField>
       </FieldSlot>
       <FieldSlot above={renderAbove?.('height')}>
-        <FormField label={heightLabel ?? t({ ko: '높이', en: 'Height' })}>
-          <NumberStepperInput min={heightBounds?.min} max={heightBounds?.max} step={heightBounds?.step} value={height} onValueCommit={onHeightCommit} />
+        <FormField label={resolvedHeightLabel}>
+          <NumberStepperInput aria-label={resolvedHeightLabel} min={heightBounds?.min} max={heightBounds?.max} step={heightBounds?.step} value={height} onValueCommit={onHeightCommit} />
         </FormField>
       </FieldSlot>
     </>

@@ -28,7 +28,8 @@ import { SEARCH_SCOPE_TABS, SEARCH_SCOPE_TABS_WITH_MEANING, SEARCH_TEXT_INPUT_SC
 import type { SearchScope } from '@/features/search/search-types'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
-import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
+import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { COUNT_UNITS } from '@/lib/count-display'
 import { getImageViewerSettings } from '@/lib/api-settings'
@@ -36,8 +37,10 @@ import { cn } from '@/lib/utils'
 import type { ImageViewModalAccessOptions } from '@/features/images/components/detail/image-view-modal-context'
 import type { ImageRecord } from '@/types/image'
 import { HomeSortMenu } from './components/home-sort-menu'
+import { HomeGalleryOptionsMenu } from './components/home-gallery-options-menu'
 import { useHomeSearch, type TextSearchScope } from './home-search-context'
 import { useHomePageData } from './use-home-page-data'
+import { HOME_HIDDEN_GROUPS_LIMIT } from './home-hidden-groups'
 
 /** Library images can be deleted from the viewer (still admin-only). Module constant keeps ImageList memoized. */
 const HOME_VIEWER_ACCESS_OPTIONS: ImageViewModalAccessOptions = { allowDeleteAction: true }
@@ -80,6 +83,9 @@ export function HomePage() {
     imageListResetKey,
     sortOrder,
     setSortOrder,
+    hiddenGroupIds,
+    hiddenGroups,
+    setHiddenGroupIds,
     isMeaningSearch,
     canAutoLoadMore,
     feedCountState,
@@ -130,6 +136,9 @@ export function HomePage() {
   const chatScopes: SearchScope[] = canSearchByMeaning ? SEARCH_SCOPE_TABS_WITH_MEANING : SEARCH_SCOPE_TABS.map((tab) => tab.value)
   const chatTextScopes = SEARCH_TEXT_INPUT_SCOPES.filter((scope) => chatScopes.includes(scope)) as TextSearchScope[]
   const chatHistory = historyEntries.slice(0, 20)
+  const chatGroups = groupsQuery.data ?? []
+  // Undo restores the list the chat replaced.
+  const applyChatHiddenGroups = useChatDraftTransaction(hiddenGroupIds, setHiddenGroupIds)
   useChatPageRegistration(canViewHome && !isAnonymousSession ? {
     kind: 'library', title: t({ ko: '이미지 라이브러리', en: 'Image library' }), resourceId: `library:${viewportClass}`,
     fields: [
@@ -144,12 +153,15 @@ export function HomePage() {
       filters: JSON.parse(JSON.stringify(appliedChips)), selected: { imageIds: selectedIds },
       images: chatCanReadImages ? visibleImages.slice(0, 100).map((image) => ({ hash: image.composite_hash ?? '', width: image.width ?? 0, height: image.height ?? 0, ...(typeof image.meaning_score === 'number' ? { meaningScore: image.meaning_score } : {}) })) : [],
       history: chatHistory.map((entry) => ({ id: entry.id, label: entry.label, chips: entry.chips.map((chip) => ({ scope: chip.scope, operator: chip.operator, value: chip.value })) })),
+      hiddenGroups: hiddenGroups.map((group) => ({ id: group.id, name: group.name })),
+      groups: chatGroups.slice(0, 200).map((group) => ({ id: group.id, name: group.name, ...(group.parent_id ? { parentId: group.parent_id } : {}) })),
     },
     actions: [
       pageAction('library.search', t({ ko: '검색 실행', en: 'Run a search' }), t({ ko: '검색어를 넣고 바로 검색해. scope를 주면 그 범위로 찾아 (meaning: 장면 설명과 뜻이 가까운 이미지, 결과는 뜻이 가까운 순이고 data.images에 meaningScore가 붙어). 결과 화면이 돌아와.', en: 'Search right away, optionally in one scope (meaning = images matching a description, ordered by meaning with meaningScore in data.images); the results come back.' }), pageObject({ query: pageText(500), scope: pageChoice(chatTextScopes) }, ['query'])),
       ...(chatHistory.length ? [pageAction('library.history', t({ ko: '최근 검색 다시 적용', en: 'Re-apply a recent search' }), t({ ko: '최근 검색(data.history)의 칩을 그대로 다시 적용해.', en: 'Re-apply the chips of a recent search (data.history).' }), pageObject({ id: pageChoice(chatHistory.map((entry) => entry.id)) }, ['id']))] : []),
       ...(chatOpenableHashes.length ? [pageAction('library.select', t({ ko: '이미지 선택', en: 'Select images' }), t({ ko: '목록(data.images)의 이미지를 선택해. 빈 목록이면 선택을 풀어. 선택한 이미지로 하단 작업줄(그룹 담기·다운로드)을 쓸 수 있어.', en: 'Select listed images (data.images); an empty list clears the selection.' }), pageObject({ hashes: pageArray(pageChoice(chatOpenableHashes), 100) }, ['hashes']))] : []),
       ...(chatOpenableHashes.length ? [pageAction('library.open', t({ ko: '이미지 열기', en: 'Open image' }), t({ ko: '목록(data.images)의 이미지 상세를 열어.', en: 'Open a listed image (data.images).' }), pageObject({ hash: pageChoice(chatOpenableHashes) }, ['hash']))] : []),
+      ...(chatGroups.length ? [pageAction('library.hide_groups', t({ ko: '숨길 그룹 지정', en: 'Set hidden groups' }), t({ ko: '갤러리 목록·검색 결과·전체 수에서 뺄 커스텀 그룹 목록을 통째로 바꿔(id는 data.groups, 목록에 없는 그룹은 list_image_groups로 찾아. 지금 숨긴 그룹은 data.hiddenGroups). 하위 그룹은 따로 넣어야 숨겨지고, 빈 목록이면 모두 다시 보여. 이 브라우저에만 저장돼.', en: 'Replace the list of custom groups the gallery, its searches and its total leave out (ids in data.groups, others via list_image_groups; data.hiddenGroups is the current list). Subgroups need their own ids; an empty list shows everything. Saved in this browser only.' }), pageObject({ groupIds: pageArray(pageNumber(1, undefined, true), HOME_HIDDEN_GROUPS_LIMIT) }, ['groupIds']))] : []),
     ],
     applyAction: (id, args, assertCurrent) => {
       assertCurrent()
@@ -171,6 +183,13 @@ export function HomePage() {
         const wanted = new Set(args.hashes.map(String))
         setSelectedIds(visibleImages.filter((image) => wanted.has(image.composite_hash ?? '')).map(getHomeImageSelectionId))
         return
+      }
+      if (id === 'library.hide_groups' && Array.isArray(args.groupIds)) {
+        const known = new Set(chatGroups.map((group) => group.id))
+        const groupIds = [...new Set(args.groupIds.map(Number))].sort((a, b) => a - b)
+        if (groupIds.some((groupId) => !known.has(groupId))) throw new Error('없는 그룹 id가 있어. data.groups나 list_image_groups로 다시 확인해.')
+        // Same order as the stored list, so undo recognises it as unchanged.
+        return applyChatHiddenGroups(groupIds)
       }
       throw new Error('라이브러리에 없는 작업이야.')
     },
@@ -223,6 +242,14 @@ export function HomePage() {
               </IconButton>
             ) : null}
             <HomeSortMenu value={sortOrder} onChange={setSortOrder} meaningOrder={isMeaningSearch} />
+            {!isAnonymousSession ? (
+              <HomeGalleryOptionsMenu
+                groups={groupsQuery.data ?? []}
+                groupsStatus={groupsQuery.status}
+                hiddenGroupIds={hiddenGroupIds}
+                onHiddenGroupIdsChange={setHiddenGroupIds}
+              />
+            ) : null}
           </>
         )}
       >

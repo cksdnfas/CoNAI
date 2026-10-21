@@ -42,8 +42,8 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
   const promptPresets = resolveNaiPromptPresets(form)
   const sampling = resolveNaiSamplingSettings(form)
   const fields: ChatPageField[] = [
-    { id: 'prompt', label: t({ ko: '긍정 프롬프트 (포지티브)', en: 'Positive prompt' }), type: 'text', value: form.prompt },
-    { id: 'negativePrompt', label: t({ ko: '부정 프롬프트 (네거티브)', en: 'Negative prompt' }), type: 'text', value: fixedSettings ? getNaiUcPresetText(form.model, fixedSettings.ucPreset) ?? '' : form.negativePrompt, ...fixedField },
+    { id: 'prompt', label: t({ ko: '포지티브 프롬프트', en: 'Positive prompt' }), type: 'text', value: form.prompt },
+    { id: 'negativePrompt', label: t({ ko: '네거티브 프롬프트', en: 'Negative prompt' }), type: 'text', value: fixedSettings ? getNaiUcPresetText(form.model, fixedSettings.ucPreset) ?? '' : form.negativePrompt, ...fixedField },
     { id: 'qualityToggle', label: t({ ko: '품질 태그', en: 'Quality tags' }), type: 'boolean', value: promptPresets.qualityToggle, hint: 'Appends the model quality tags to the prompt on the server. Not available for models without presets (NAI Diffusion 3).' },
     { id: 'ucPreset', label: t({ ko: 'UC 프리셋', en: 'UC preset' }), type: 'select', value: promptPresets.ucPreset, options: getNaiUcPresetIds(form.model), hint: 'Undesired Content preset placed before the negative prompt on the server; options depend on the model.', ...fixedField },
     { id: 'queueCount', label: t({ ko: '반복', en: 'Repeat' }), type: 'number', value: form.queueCount, min: NAI_QUEUE_COUNT_MIN, max: NAI_QUEUE_COUNT_MAX, integer: true, hint: 'Queue jobs per Generate click. Above 1 needs a random seed or random prompt syntax.' },
@@ -68,7 +68,7 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
   useChatPageRegistration({
     kind: 'nai', title: t({ ko: 'NovelAI 생성', en: 'NovelAI generation' }), resourceId: 'novelai', fields, localRevision: getImageDraftRevision(form),
     data: { media: media.candidates, presets: presets.candidates, characters: form.characters.map((item) => ({ ...item })), enhance: { sourceSize: sourceImageSize ? `${sourceImageSize.width}x${sourceImageSize.height}` : '', amounts: Object.fromEntries(NAI_ENHANCE_AMOUNTS.map((amount) => [amount, planNaiFormEnhance(form, sourceImageSize, amount).issue ?? 'available'])) }, selected: { sourceImage: form.sourceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', vibes: form.vibes.map((item) => ({ image: item.image?.fileName ?? '', strength: item.strength, informationExtracted: item.informationExtracted })), characterReferences: form.characterReferences.map((item) => ({ image: item.image?.fileName ?? '', type: item.type, strength: item.strength, fidelity: item.fidelity })) } },
-    actions: [...media.actions, ...presets.actions, ...(supportsNaiCharacterPrompts(form.model) ? [pageAction('nai.characters', t({ ko: '캐릭터 프롬프트 편집', en: 'Edit character prompts' }), t({ ko: '캐릭터별 프롬프트·부정 프롬프트·위치의 전체 목록을 입력해.', en: 'Set the complete list of character prompts, negative prompts and positions.' }), pageObject({ characters: pageArray(pageObject({ prompt: pageText(), uc: pageText(), centerX: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']), centerY: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']) }, ['prompt', 'uc', 'centerX', 'centerY']), 6) }, ['characters']))] : [])],
+    actions: [...media.actions, ...presets.actions, ...(supportsNaiCharacterPrompts(form.model) ? [pageAction('nai.characters', t({ ko: '캐릭터 프롬프트 편집', en: 'Edit character prompts' }), t({ ko: '캐릭터별 프롬프트·네거티브 프롬프트·위치의 전체 목록을 입력해.', en: 'Set the complete list of character prompts, negative prompts and positions.' }), pageObject({ characters: pageArray(pageObject({ prompt: pageText(), uc: pageText(), centerX: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']), centerY: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']) }, ['prompt', 'uc', 'centerX', 'centerY']), 6) }, ['characters']))] : [])],
     apply: (values) => {
       const patch = values as Partial<NAIFormDraft>
       const model = patch.model ?? form.model
@@ -93,7 +93,7 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
         const storedUcs = new Set(form.characters.map((character) => character.uc))
         if (fixedSettings && characters.some((character) => character.uc.trim() && !storedUcs.has(character.uc))) {
           throw new Error(t({
-            ko: '선택한 모델은 캐릭터 부정 프롬프트(uc)를 쓰지 않고 버려. uc는 비우거나 지금 값 그대로 보내고, 빼고 싶은 요소는 프롬프트에 -2::hat:: 처럼 음수 가중치로 넣어줘.',
+            ko: '선택한 모델은 캐릭터 네거티브 프롬프트(uc)를 쓰지 않고 버려. uc는 비우거나 지금 값 그대로 보내고, 빼고 싶은 요소는 프롬프트에 -2::hat:: 처럼 음수 가중치로 넣어줘.',
             en: 'The selected model drops character negative prompts (uc). Send uc empty or unchanged, and put unwanted elements in the prompt as negative weights like -2::hat::.',
           }))
         }

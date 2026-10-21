@@ -144,7 +144,7 @@ export function getCompositeHashOrBlock(req: Request, res: Response) {
   if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
     res.status(400).json({
       success: false,
-      error: 'Invalid composite hash'
+      error: '미디어 해시가 올바르지 않아.'
     });
     return null;
   }

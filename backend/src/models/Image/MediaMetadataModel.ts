@@ -415,6 +415,7 @@ export class MediaMetadataModel {
     cursorDate?: string;
     cursorHash?: string;
     includeTotal?: boolean;
+    excludeGroupIds?: number[];
   }): { items: any[], total: number, hasMore: boolean } {
     return MediaMetadataFileQueries.findAllWithFilesCursor(options);
   }
@@ -425,6 +426,11 @@ export class MediaMetadataModel {
    */
   static countVisibleWithActiveFile(): number {
     return MediaMetadataFileQueries.countVisibleWithActiveFile();
+  }
+
+  /** 위 총 개수 중 지정한 커스텀 그룹에 든 미디어 수 (홈 갤러리에서 숨긴 그룹을 total 에서 빼기 위함) */
+  static countVisibleWithActiveFileInGroups(groupIds: readonly number[]): number {
+    return MediaMetadataFileQueries.countVisibleWithActiveFileInGroups(groupIds);
   }
 
   /**

@@ -96,7 +96,7 @@ export function ChatRoomPicker({ profilesById, value, onChange, disabled, kind }
       ariaLabel={t({ ko: '채팅방', en: 'Room' })}
       placeholder={t({ ko: '채팅방 고르기', en: 'Pick a room' })}
       searchPlaceholder={t({ ko: '방 찾기', en: 'Find a room' })}
-      emptyLabel={t({ ko: '맞는 방 없음', en: 'No matching room' })}
+      emptyLabel={t({ ko: '맞는 방이 없어', en: 'No matching room' })}
       onOpenChange={setOpen}
       onSearchChange={setSearch}
       footer={<ChatRoomPageMore page={page} />}
@@ -128,7 +128,7 @@ export function ChatProfilePicker({ profiles, value, onChange, disabled }: {
       ariaLabel={t({ ko: '캐릭터', en: 'Character' })}
       placeholder={t({ ko: '캐릭터 고르기', en: 'Pick a character' })}
       searchPlaceholder={t({ ko: '캐릭터 찾기', en: 'Find a character' })}
-      emptyLabel={t({ ko: '맞는 캐릭터 없음', en: 'No matching character' })}
+      emptyLabel={t({ ko: '맞는 캐릭터가 없어', en: 'No matching character' })}
     />
   )
 }

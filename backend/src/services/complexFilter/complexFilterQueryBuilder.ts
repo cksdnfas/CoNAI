@@ -5,12 +5,15 @@ import { MediaPostprocessVisibilityService } from '../mediaPostprocessVisibility
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../../utils/sqlLike';
 import { buildComplexFilterAutoTagCondition } from './complexFilterAutoTagSql';
 import { buildOnOrAfterDateSql, buildOnOrBeforeDateSql } from '../../utils/sqlDateRange';
+import { buildInGroupsSql } from '../../utils/groupExclusion';
 
 export type ComplexSearchScope = {
   ai_tool?: string;
   model_name?: string;
   start_date?: string;
   end_date?: string;
+  /** Leave out media in these custom groups (the Home gallery's hidden groups); applies to the final result only. */
+  exclude_group_ids?: number[];
 };
 
 export type ComplexQueryStatsSources = {
@@ -181,6 +184,11 @@ export function buildComplexFilterQuery(
     ...basicScope.conditions,
   ];
   const finalParams = [...basicScope.params];
+
+  if (basicParams?.exclude_group_ids?.length) {
+    finalConditions.push(`NOT (${buildInGroupsSql('im.composite_hash', basicParams.exclude_group_ids)})`);
+    finalParams.push(...basicParams.exclude_group_ids);
+  }
 
   if (statsSources.orResults) {
     finalConditions.push('im.composite_hash IN (SELECT composite_hash FROM or_results)');

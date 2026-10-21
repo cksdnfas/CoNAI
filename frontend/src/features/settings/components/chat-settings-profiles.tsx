@@ -188,7 +188,7 @@ export function ChatSettingsProfiles() {
         )}
       >
         {profilesQuery.isLoading ? <SettingsRowsSkeleton rows={2} /> : null}
-        {profilesQuery.isSuccess && profiles.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 프로필이 없어.', en: 'No profiles yet.' })}</SettingsEmptyRow> : null}
+        {profilesQuery.isSuccess && profiles.length === 0 ? <SettingsEmptyRow>{t({ ko: '아직 프로필이 없어', en: 'No profiles yet' })}</SettingsEmptyRow> : null}
         {profiles.map((profile) => (
           <ResourceRow
             key={profile.id}

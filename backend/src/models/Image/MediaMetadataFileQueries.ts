@@ -2,6 +2,7 @@ import { db } from '../../database/init';
 import { ImageSafetyService } from '../../services/imageSafetyService';
 import { MediaPostprocessVisibilityService } from '../../services/mediaPostprocessVisibilityService';
 import type { FileType } from '../../types/image';
+import { buildInGroupsSql } from '../../utils/groupExclusion';
 
 function getVisibleMediaMetadataCondition() {
   return ImageSafetyService.buildVisibleScoreCondition('mm.rating_score');
@@ -136,12 +137,13 @@ ${COMPACT_FILE_COLUMNS}
  * (including their NULL handling), and requiring at least one active file row
  * is exactly what the LEFT JOIN form filtered on.
  */
-function buildVisibleWithActiveFileCountQuery(visibleCondition: string, readyCondition: string): string {
+function buildVisibleWithActiveFileCountQuery(visibleCondition: string, readyCondition: string, extraCondition?: string): string {
   return `
     SELECT COUNT(*) as total
     FROM media_metadata mm
     WHERE ${visibleCondition}
       AND ${readyCondition}
+      ${extraCondition ? `AND ${extraCondition}` : ''}
       AND EXISTS (
         SELECT 1
         FROM image_files activefile
@@ -210,16 +212,20 @@ export class MediaMetadataFileQueries {
     cursorDate?: string;
     cursorHash?: string;
     includeTotal?: boolean;
+    /** Leave out media in these custom groups (the Home gallery's hidden groups). */
+    excludeGroupIds?: number[];
   }): { items: any[]; total: number; hasMore: boolean } {
     const limit = options.limit || 50;
     const sortOrder = options.sortOrder || 'DESC';
     const cursorDate = options.cursorDate;
     const cursorHash = options.cursorHash;
+    const excludeGroupIds = options.excludeGroupIds ?? [];
     const visibleCondition = getVisibleMediaMetadataCondition();
     const readyCondition = getReadyMediaMetadataCondition();
+    const groupCondition = excludeGroupIds.length > 0 ? `AND NOT (${buildInGroupsSql('mm.composite_hash', excludeGroupIds)})` : '';
 
     let cursorCondition = '';
-    const queryParams: any[] = [];
+    const queryParams: any[] = [...excludeGroupIds];
 
     if (cursorDate && cursorHash) {
       if (sortOrder === 'DESC') {
@@ -233,6 +239,7 @@ export class MediaMetadataFileQueries {
     const query = `
       ${METADATA_FIRST_SEEN_WITH_ACTIVE_FILE_SELECT}
       WHERE ${visibleCondition} AND ${readyCondition}
+      ${groupCondition}
       ${cursorCondition}
       ORDER BY mm.first_seen_date ${sortOrder}, mm.composite_hash ${sortOrder}
       LIMIT ?
@@ -247,7 +254,7 @@ export class MediaMetadataFileQueries {
     }
 
     const total = options.includeTotal === true
-      ? MediaMetadataFileQueries.countVisibleWithActiveFile()
+      ? MediaMetadataFileQueries.countVisibleWithActiveFile() - MediaMetadataFileQueries.countVisibleWithActiveFileInGroups(excludeGroupIds)
       : items.length + (hasMore ? 1 : 0);
 
     return { items, total, hasMore };
@@ -266,6 +273,24 @@ export class MediaMetadataFileQueries {
     const row = db.prepare(
       buildVisibleWithActiveFileCountQuery(visibleCondition, readyCondition),
     ).get() as { total: number } | undefined;
+
+    return row?.total ?? 0;
+  }
+
+  /**
+   * Count the media of countVisibleWithActiveFile() that are in any of these custom groups. Driven from the groups'
+   * members, so the cost follows the groups' size instead of the library's.
+   */
+  static countVisibleWithActiveFileInGroups(groupIds: readonly number[]): number {
+    if (groupIds.length === 0) {
+      return 0;
+    }
+
+    const row = db.prepare(buildVisibleWithActiveFileCountQuery(
+      getVisibleMediaMetadataCondition(),
+      getReadyMediaMetadataCondition(),
+      buildInGroupsSql('mm.composite_hash', groupIds),
+    )).get(...groupIds) as { total: number } | undefined;
 
     return row?.total ?? 0;
   }

@@ -95,7 +95,7 @@ export function McpHttpSettingsCard() {
             }} label={t({ ko: '키 추가', en: 'Add key' })}><Plus /></IconButton>
           )}
         >
-          {query.data.keys.length === 0 ? <SettingsEmptyRow>{t({ ko: '발급한 키가 없어.', en: 'No keys yet.' })}</SettingsEmptyRow> : null}
+          {query.data.keys.length === 0 ? <SettingsEmptyRow>{t({ ko: '발급한 키가 없어', en: 'No keys yet' })}</SettingsEmptyRow> : null}
           {query.data.keys.map((key) => {
             const visible = visibleKeys.has(key.id)
             return (

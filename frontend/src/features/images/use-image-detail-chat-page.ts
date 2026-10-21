@@ -92,7 +92,7 @@ export function useImageDetailChatPage(image: ImageRecord | undefined, presentat
     fields: [
       { id: 'tab', label: t({ ko: '이미지 표시', en: 'Image view' }), type: 'select', value: tab, options: ['current', 'similar'] },
       { id: 'prompt', label: t({ ko: '현재 이미지 프롬프트', en: 'Current image prompt' }), type: 'text', value: (image.ai_metadata?.prompts?.prompt ?? '').slice(0, 8000), editable: false },
-      { id: 'negativePrompt', label: t({ ko: '현재 이미지 부정 프롬프트', en: 'Current image negative prompt' }), type: 'text', value: (image.ai_metadata?.prompts?.negative_prompt ?? '').slice(0, 8000), editable: false },
+      { id: 'negativePrompt', label: t({ ko: '현재 이미지 네거티브 프롬프트', en: 'Current image negative prompt' }), type: 'text', value: (image.ai_metadata?.prompts?.negative_prompt ?? '').slice(0, 8000), editable: false },
     ],
     data: {
       selected: { hash: image.composite_hash, width: image.width ?? 0, height: image.height ?? 0, mimeType: image.mime_type ?? '', model: image.ai_metadata?.model_name ?? '', tool: image.ai_metadata?.ai_tool ?? '' },

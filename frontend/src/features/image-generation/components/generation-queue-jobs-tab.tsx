@@ -194,7 +194,7 @@ export function GenerationQueueJobsTab({
           <Text as="div" variant="overline">{t({ ko: '범위', en: 'Scope' })}</Text>
           <Badge variant={filteredActiveCount > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">{t({ ko: '작업 큐 · {count}', en: 'Job Queue · {count}' }, { count: formatNumber(filteredActiveCount) })}</Badge>
         </div>
-        <Select value={selectedFilter} onChange={(event) => onFilterChange(event.target.value as QueueFilterValue)} className="h-9 w-full min-w-0">
+        <Select aria-label={t({ ko: '범위', en: 'Scope' })} value={selectedFilter} onChange={(event) => onFilterChange(event.target.value as QueueFilterValue)} className="h-9 w-full min-w-0">
           <option value="all">{t('image-generation.components.generation.queue.header.widget.all.queues')}</option>
           <option value="novelai">NAI</option>
           <option value="codex">Codex</option>
@@ -214,7 +214,7 @@ export function GenerationQueueJobsTab({
         {!isError && isPending ? <LoadingState variant="inline" label={t('image-generation.components.generation.queue.header.widget.loading.queue')} /> : null}
 
         {!isPending && !isError && records.length === 0 ? (
-          <EmptyState size="compact" title={t({ ko: '지금 진행 중인 큐 작업이 없어.', en: 'No queue jobs are currently running.' })} />
+          <EmptyState size="compact" title={t({ ko: '진행 중인 큐 작업이 없어', en: 'No queue jobs are currently running' })} />
         ) : null}
 
         {records.length > 0 ? (

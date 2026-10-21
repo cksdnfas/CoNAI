@@ -239,7 +239,7 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
 
       {usageQuery.isLoading ? <SettingsRowsSkeleton rows={4} /> : null}
       {usageQuery.isError ? <p className="text-sm text-destructive">{getErrorMessage(usageQuery.error, t({ ko: '사용량을 불러오지 못했어.', en: 'Could not load the usage.' }))}</p> : null}
-      {summary && totals && totals.requests === 0 ? <SettingsEmptyRow>{t({ ko: '이 기간에 기록된 요청이 없어.', en: 'No requests recorded in this period.' })}</SettingsEmptyRow> : null}
+      {summary && totals && totals.requests === 0 ? <SettingsEmptyRow>{t({ ko: '이 기간에 기록된 요청이 없어', en: 'No requests recorded in this period' })}</SettingsEmptyRow> : null}
 
       {summary && totals && totals.requests > 0 && chart ? <>
         <div className="grid grid-cols-2 gap-y-4 sm:grid-cols-5">
@@ -361,7 +361,7 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
                     <div className="text-xs text-muted-foreground">{t({ ko: '애매 30% 넘는 항목: {items}', en: 'Over 30% unsure: {items}' }, { items: unsureItems.map((entry) => entry.name).join(', ') })}</div>
                   ) : null}
                 </div>
-              ) : judgeQuery.isSuccess ? <SettingsEmptyRow>{t({ ko: '이 기간에 판단한 기록이 없어.', en: 'No judgments in this period.' })}</SettingsEmptyRow> : <SettingsRowsSkeleton rows={1} />}
+              ) : judgeQuery.isSuccess ? <SettingsEmptyRow>{t({ ko: '이 기간에 판단한 기록이 없어', en: 'No judgments in this period' })}</SettingsEmptyRow> : <SettingsRowsSkeleton rows={1} />}
             </RowGroup>
             <SubscriptionLimits />
           </div>

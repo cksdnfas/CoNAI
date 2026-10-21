@@ -256,7 +256,7 @@ export function SecurityPermissionGroupEditorModal({
                   groupLabels={groupLabels}
                   pageSize={10}
                   searchPlaceholder={t({ ko: '멤버 검색', en: 'Search members' })}
-                  emptyMessage={members.length === 0 ? t({ ko: '멤버가 없어.', en: 'There are no members.' }) : t({ ko: '멤버 계정 정보를 불러오는 중이야.', en: 'Loading member account details.' })}
+                  emptyMessage={members.length === 0 ? t({ ko: '멤버가 없어', en: 'There are no members' }) : t({ ko: '멤버 계정 정보를 불러오는 중이야', en: 'Loading member account details' })}
                   paginationClassName="pt-4"
                   isUpdatingAccountGroup={isUpdatingAccountGroup}
                   isUpdatingAccountPassword={isUpdatingAccountPassword}

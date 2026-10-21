@@ -271,13 +271,14 @@ export function NaiGenerationEditorSections({
                   <PromptToggleField
                     compact
                     tool="nai"
+                    ariaLabelPrefix={`Character ${index + 1}`}
                     positiveValue={character.prompt}
                     negativeValue={character.uc}
                     onPositiveChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
                     onNegativeChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
                     negativeLock={fixedSettings ? {
                       value: '',
-                      hint: t({ ko: '이 모델은 캐릭터 부정 프롬프트를 쓰지 않아.', en: 'This model does not use character negative prompts.' }),
+                      hint: t({ ko: '이 모델은 캐릭터 네거티브 프롬프트를 쓰지 않아.', en: 'This model does not use character negative prompts.' }),
                     } : undefined}
                   />
                 </div>
@@ -373,10 +374,10 @@ export function NaiGenerationEditorSections({
           <NaiControllerInsetBlock className="space-y-4">
             <div className="grid gap-4 @sm:grid-cols-2">
               <FormField label={t({ ko: '강도', en: 'Strength' })}>
-                <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.strength} onValueCommit={(value) => handleNaiFieldChange('strength', value)} />
+                <NumberStepperInput aria-label={t({ ko: '강도', en: 'Strength' })} min={0} max={1} step={0.01} value={naiForm.strength} onValueCommit={(value) => handleNaiFieldChange('strength', value)} />
               </FormField>
               <FormField label={t({ ko: '노이즈', en: 'Noise' })}>
-                <NumberStepperInput min={0} max={1} step={0.01} value={naiForm.noise} onValueCommit={(nextValue) => handleNaiFieldChange('noise', nextValue)} />
+                <NumberStepperInput aria-label={t({ ko: '노이즈', en: 'Noise' })} min={0} max={1} step={0.01} value={naiForm.noise} onValueCommit={(nextValue) => handleNaiFieldChange('noise', nextValue)} />
               </FormField>
             </div>
 
@@ -530,8 +531,8 @@ function NaiPromptPresetControls({ naiForm, onChange }: { naiForm: NAIFormDraft,
         : ucPresetFixed
           ? t({ ko: '이 모델은 Heavy로 고정이야: {text}', en: 'This model always uses Heavy: {text}' }, { text: ucPresetText ?? '' })
           : ucPresetText
-          ? t({ ko: '부정 프롬프트 앞에 붙여: {text}', en: 'Placed before the negative prompt: {text}' }, { text: ucPresetText })
-          : t({ ko: '부정 프롬프트 앞에 붙일 NovelAI 기본 문구', en: 'NovelAI preset text placed before the negative prompt' })}
+          ? t({ ko: '네거티브 프롬프트 앞에 붙여: {text}', en: 'Placed before the negative prompt: {text}' }, { text: ucPresetText })
+          : t({ ko: '네거티브 프롬프트 앞에 붙일 NovelAI 기본 문구', en: 'NovelAI preset text placed before the negative prompt' })}
       >
         <div className="flex items-center gap-2 text-sm">
           <label htmlFor={ucPresetSelectId} className="shrink-0">{t({ ko: 'UC 프리셋', en: 'UC preset' })}</label>
@@ -690,7 +691,7 @@ function NaiSettingsSection({
           <FormField label={t({ ko: '생성 방식', en: 'Action' })}>
             <Select value={naiForm.action} onChange={(event) => handleNaiFieldChange('action', event.target.value)}>
               {NAI_ACTION_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <option key={option.value} value={option.value}>{t(option.label)}</option>
               ))}
             </Select>
           </FormField>
@@ -723,11 +724,11 @@ function NaiSettingsSection({
           )}
 
           <FormField label={t({ ko: '스텝', en: 'Steps' })} hint={fixedHint}>
-            <NumberStepperInput min={1} max={100} value={sampling.steps} disabled={samplingFixed} onValueCommit={(nextValue) => handleNaiFieldChange('steps', nextValue)} />
+            <NumberStepperInput aria-label={t({ ko: '스텝', en: 'Steps' })} min={1} max={100} value={sampling.steps} disabled={samplingFixed} onValueCommit={(nextValue) => handleNaiFieldChange('steps', nextValue)} />
           </FormField>
 
           <FormField label={t({ ko: '요청당 이미지', en: 'Images per request' })}>
-            <NumberStepperInput min={NAI_SAMPLE_COUNT_MIN} max={maxSampleCount} step={1} value={naiForm.samples} onValueCommit={(nextValue) => handleNaiFieldChange('samples', nextValue)} />
+            <NumberStepperInput aria-label={t({ ko: '요청당 이미지', en: 'Images per request' })} min={NAI_SAMPLE_COUNT_MIN} max={maxSampleCount} step={1} value={naiForm.samples} onValueCommit={(nextValue) => handleNaiFieldChange('samples', nextValue)} />
           </FormField>
 
           <NaiSeedField seed={naiForm.seed} onSeedChange={(nextValue) => handleNaiFieldChange('seed', nextValue)} />
@@ -767,7 +768,7 @@ function NaiSettingsSection({
               </FormField>
 
               <FormField label="CFG Scale">
-                <NumberStepperInput min={1} max={20} step={0.1} value={naiForm.scale} onValueCommit={(nextValue) => handleNaiFieldChange('scale', nextValue)} />
+                <NumberStepperInput aria-label="CFG Scale" min={1} max={20} step={0.1} value={naiForm.scale} onValueCommit={(nextValue) => handleNaiFieldChange('scale', nextValue)} />
               </FormField>
 
               <NaiSwitchField

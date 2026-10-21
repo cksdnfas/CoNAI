@@ -248,7 +248,7 @@ export function ModuleWorkflowSchedulesPanel({
           </IconButton>
         </div>
         {schedules.length === 0 ? (
-          <EmptyState title={t({ ko: '자동 실행 없음', en: 'No autoruns' })} />
+          <EmptyState title={t({ ko: '자동 실행이 없어', en: 'No autoruns' })} />
         ) : (
           <div className="border-t border-line">
             {schedules.map((schedule) => (

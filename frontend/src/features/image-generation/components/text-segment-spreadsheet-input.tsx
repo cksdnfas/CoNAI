@@ -24,6 +24,8 @@ type TextSegmentSpreadsheetInputProps = {
   autocompletePromptType?: PromptTypeFilter
   invalid?: boolean
   errorMessageId?: string
+  /** Accessible name of the rows; each row adds its number ("Positive prompt 1"). */
+  ariaLabel?: string
   onChange: (value: string[]) => void
 }
 
@@ -37,6 +39,7 @@ export function TextSegmentSpreadsheetInput({
   autocompletePromptType = 'positive',
   invalid = false,
   errorMessageId,
+  ariaLabel,
   onChange,
 }: TextSegmentSpreadsheetInputProps) {
   const { t } = useI18n()
@@ -93,6 +96,7 @@ export function TextSegmentSpreadsheetInput({
                   autocompletePromptType={autocompletePromptType}
                   invalid={invalid}
                   errorMessageId={errorMessageId}
+                  ariaLabel={ariaLabel ? `${ariaLabel} ${index + 1}` : undefined}
                   className="min-h-[8.5rem] !rounded-none !border-0 !bg-transparent px-3 py-2 focus:!ring-0"
                   onChange={(nextValue) => handleRowChange(index, nextValue)}
                 />

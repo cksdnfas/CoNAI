@@ -7,6 +7,7 @@ import { enrichCompactImageWithFileView, enrichImageWithFileView } from './utils
 import { QueryCacheService } from '../../services/QueryCacheService';
 import { routeParam } from '../routeParam';
 import { normalizeIdPage } from '../../utils/idPage';
+import { EXCLUDE_GROUP_IDS_ERROR, parseExcludedGroupIds } from '../../utils/groupExclusion';
 import {
   buildBatchImageListResponse,
   buildBatchThumbnailLookupResults,
@@ -40,6 +41,18 @@ function resolveCachedVisibleTotal(scopeKey: string): number {
   return total;
 }
 
+/**
+ * The visible total without the media of the gallery's hidden groups: the shared cached count minus a live count of
+ * the hidden groups' visible members, so hiding groups never recounts the whole library.
+ */
+function resolveVisibleTotal(excludeGroupIds: number[]): number {
+  const total = resolveCachedVisibleTotal(VISIBLE_FEED_TOTAL_SCOPE);
+  return excludeGroupIds.length === 0
+    ? total
+    : Math.max(0, total - MediaMetadataModel.countVisibleWithActiveFileInGroups(excludeGroupIds));
+}
+
+/** `exclude_group_ids` applies to the cursor feed and `/count` (the Home gallery); offset pages do not take it. */
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
@@ -59,6 +72,11 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
   try {
     if (isCursorRequest) {
+      const excludeGroupIds = parseExcludedGroupIds(req.query.exclude_group_ids);
+      if (!excludeGroupIds) {
+        return res.status(400).json({ success: false, error: EXCLUDE_GROUP_IDS_ERROR });
+      }
+
       // The cursor path used to bypass QueryCacheService entirely, so every
       // include_total request paid for its own full-library count. The page query
       // never counts now; the total comes from the shared cache instead.
@@ -68,9 +86,10 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
         cursorDate: cursorDate || undefined,
         cursorHash: cursorHash || undefined,
         includeTotal: false,
+        excludeGroupIds,
       });
       const lastItem = result.items.at(-1);
-      const total = includeCursorTotal ? resolveCachedVisibleTotal(VISIBLE_FEED_TOTAL_SCOPE) : result.total;
+      const total = includeCursorTotal ? resolveVisibleTotal(excludeGroupIds) : result.total;
 
       return res.status(200).json(
         buildEnrichedImageListResponse(result.items, total, 0, limit, {
@@ -122,11 +141,16 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  * fill the total in afterwards instead of blocking the first page on a full count.
  * Must stay registered before `/:compositeHash` in the images router chain.
  */
-router.get('/count', asyncHandler(async (_req: Request, res: Response) => {
+router.get('/count', asyncHandler(async (req: Request, res: Response) => {
+  const excludeGroupIds = parseExcludedGroupIds(req.query.exclude_group_ids);
+  if (!excludeGroupIds) {
+    return res.status(400).json({ success: false, error: EXCLUDE_GROUP_IDS_ERROR });
+  }
+
   try {
     return res.json({
       success: true,
-      data: { total: resolveCachedVisibleTotal(VISIBLE_FEED_TOTAL_SCOPE) },
+      data: { total: resolveVisibleTotal(excludeGroupIds) },
     });
   } catch (error) {
     console.error('Get image count error:', error);

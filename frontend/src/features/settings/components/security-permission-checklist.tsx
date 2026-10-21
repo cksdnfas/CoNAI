@@ -40,7 +40,7 @@ export function SecurityPermissionChecklist({ permissionCatalog, groupKey, selec
   }
 
   if (sections.length === 0) {
-    return <EmptyState size="compact" title={t({ ko: '표시할 권한이 아직 없어.', en: 'There are no permissions to show yet.' })} />
+    return <EmptyState size="compact" title={t({ ko: '표시할 권한이 아직 없어', en: 'There are no permissions to show yet' })} />
   }
 
   return (

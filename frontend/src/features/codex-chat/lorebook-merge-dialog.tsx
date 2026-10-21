@@ -207,7 +207,7 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
                   </button>
                 )
               })}
-              {preview.items.length === 0 ? <EmptyState size="compact" title={t({ ko: '옮길 항목이 없어.', en: 'Nothing to merge.' })} /> : null}
+              {preview.items.length === 0 ? <EmptyState size="compact" title={t({ ko: '옮길 항목이 없어', en: 'Nothing to merge' })} /> : null}
             </div>
             {selected && selectedChoice ? (
               <div className="space-y-3">

@@ -43,7 +43,7 @@ export const authResources = {
     "pageAccessCatalog.wallpaperRuntime": "월페이퍼 런타임",
     "pageAccessCatalog.upload": "업로드",
     "pageAccessCatalog.files": "파일 보관함",
-    "pageAccessCatalog.extensions": "확장",
+    "pageAccessCatalog.extensions": "플러그인",
     "pageAccessCatalog.settings": "설정",
   },
   en: {
@@ -84,7 +84,7 @@ export const authResources = {
     "pageAccessCatalog.wallpaperRuntime": "Wallpaper Runtime",
     "pageAccessCatalog.upload": "Upload",
     "pageAccessCatalog.files": "Files",
-    "pageAccessCatalog.extensions": "Extensions",
+    "pageAccessCatalog.extensions": "Plugins",
     "pageAccessCatalog.settings": "Settings",
   },
 } as const satisfies ScopedLocaleResources

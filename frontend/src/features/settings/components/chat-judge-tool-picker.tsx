@@ -136,7 +136,7 @@ function ToolMenu({ groups, byName, tools, onToggle }: { groups: JudgeToolGroup[
             ))}
           </div>
         ))}
-        {options.length === 0 ? <EmptyState size="compact" title={t({ ko: '맞는 도구가 없어.', en: 'No matching tool.' })} /> : null}
+        {options.length === 0 ? <EmptyState size="compact" title={t({ ko: '맞는 도구가 없어', en: 'No matching tool' })} /> : null}
       </div>
       {raw ? (
         <div className="border-t border-line p-1">

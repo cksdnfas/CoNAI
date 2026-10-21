@@ -462,6 +462,7 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 | `list_custom_dropdown_lists` | LoRA, 체크포인트 등 커스텀 드롭다운 목록 조회 |
 | `search_custom_dropdown_items` | 드롭다운 항목 검색 |
 | `search_wildcards` | wildcard 이름, 계층, 루트 목록 검색 |
+| `preview_random_prompt` | 와일드카드·`__tag:`·`__my:`·체인·가중치 범위가 들어간 프롬프트를 생성 화면 미리보기와 같은 해석기로 펼친 예시(최대 10개). 예시마다 따로 뽑으며 실제 생성은 다시 뽑습니다. 권한은 `wildcards.view` |
 | `list_chat_rooms` | 내 채팅·그룹방 목록(ID, 제목, 캐릭터·참가자). 워크플로 노드의 채팅방 칸(`room_id`)에 쓸 ID 확인. 계정에 묶인 키는 그 계정의 방만, 계정이 설정된 뒤 묶이지 않은 키는 빈 목록 |
 
 ## 사용 예시

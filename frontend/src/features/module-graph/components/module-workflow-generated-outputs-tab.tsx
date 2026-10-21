@@ -144,7 +144,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
         </Panel>
       ) : null}
       isEmpty={outputItems.length === 0}
-      empty={<EmptyState icon={ImageOff} title={t({ ko: '이 범위에는 정리할 이미지/영상 생성물이 아직 없어.', en: 'No image/video outputs to manage in this scope yet.' })} />}
+      empty={<EmptyState icon={ImageOff} title={t({ ko: '이 범위에는 정리할 이미지/영상 생성물이 아직 없어', en: 'No image/video outputs to manage in this scope yet' })} />}
     >
       <ImageList
         items={imageItems}

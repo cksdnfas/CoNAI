@@ -151,7 +151,7 @@ function StyleFields({ widgets, patchStyle }: { widgets: WallpaperWidgetInstance
 
       <InspectorHeading>{t({ ko: '글자', en: 'Text' })}</InspectorHeading>
       <InspectorRow label={t({ ko: '글꼴', en: 'Font' })}>
-        <Select value={fontFamily.mixed ? '' : fontFamily.value} onChange={(event) => patchStyle({ fontFamily: event.target.value as WallpaperWidgetStyle['fontFamily'] }, 'fontFamily')}>
+        <Select aria-label={t({ ko: '글꼴', en: 'Font' })} value={fontFamily.mixed ? '' : fontFamily.value} onChange={(event) => patchStyle({ fontFamily: event.target.value as WallpaperWidgetStyle['fontFamily'] }, 'fontFamily')}>
           {fontFamily.mixed ? mixedOption : null}
           <option value="inherit">{t({ ko: '앱 글꼴', en: 'App font' })}</option>
           <option value="sans">{t({ ko: '고딕', en: 'Sans' })}</option>
@@ -186,7 +186,7 @@ function StyleFields({ widgets, patchStyle }: { widgets: WallpaperWidgetInstance
 
       <InspectorHeading>{t({ ko: '등장', en: 'Entrance' })}</InspectorHeading>
       <InspectorRow label={t({ ko: '애니메이션', en: 'Animation' })}>
-        <Select value={entrance.mixed ? '' : entrance.value} onChange={(event) => patchStyle({ entrance: event.target.value as WallpaperWidgetStyle['entrance'] }, 'entrance')}>
+        <Select aria-label={t({ ko: '애니메이션', en: 'Animation' })} value={entrance.mixed ? '' : entrance.value} onChange={(event) => patchStyle({ entrance: event.target.value as WallpaperWidgetStyle['entrance'] }, 'entrance')}>
           {entrance.mixed ? mixedOption : null}
           <option value="none">{t({ ko: '없음', en: 'None' })}</option>
           <option value="fade">{t({ ko: '페이드', en: 'Fade' })}</option>

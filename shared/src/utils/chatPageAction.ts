@@ -94,7 +94,7 @@ const nativeActionPermissions = {
   'group.move': 'images.edit', 'group.delete': 'images.delete',
   // Chat profile editor (settings › chat). Saving goes through the editor's own admin-only API.
   'profile.open_create': null, 'profile.open_edit': null, 'profile.copy': null, 'profile.section': null, 'profile.draft': null, 'profile.save': null, 'profile.assets': 'generation.execute',
-  'library.search': 'images.view', 'library.history': 'images.view', 'library.open': 'images.view', 'library.select': 'images.view', 'files.open': 'files.view', 'files.preview': 'files.view',
+  'library.search': 'images.view', 'library.history': 'images.view', 'library.open': 'images.view', 'library.select': 'images.view', 'library.hide_groups': 'images.view', 'files.open': 'files.view', 'files.preview': 'files.view',
   // File store: names and moves run directly; deletes, restores and document saves use review cards.
   'files.select': 'files.view', 'files.new_folder': 'files.edit', 'files.rename': 'files.edit', 'files.move': 'files.edit', 'files.new_document': 'files.edit', 'files.edit_document': 'files.edit',
   'files.name_save': 'files.edit', 'files.move_save': 'files.edit', 'files.delete': 'files.delete', 'files.restore_version': 'files.edit',

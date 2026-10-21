@@ -109,12 +109,8 @@ const GroupContextView = lazy(async () => ({ default: (await import('./codex-cha
 const CodexChatGallery = lazy(async () => ({ default: (await import('./codex-chat-gallery')).CodexChatGallery }))
 
 const COMPOSER_MAX_HEIGHT_PX = 220
-/** Names longer than this are shortened in the composer hint so it stays on one line in narrow panels. */
+/** Longer names leave the composer hint generic, so it stays on one line in narrow panels without cutting the name. */
 const COMPOSER_HINT_NAME_MAX = 10
-
-function shortHintName(name: string) {
-  return name.length > COMPOSER_HINT_NAME_MAX ? `${name.slice(0, COMPOSER_HINT_NAME_MAX - 1)}…` : name
-}
 /** The chat list screen's scroll, kept while a chat covers it. */
 let chatListScrollTop = 0
 const restoreChatListScroll = (node: HTMLDivElement | null) => { if (node) node.scrollTop = chatListScrollTop }
@@ -713,7 +709,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     ? t({ ko: '채팅 불가 · {line}', en: 'Cannot chat · {line}' }, { line: chatHealthLine(connectionDown, t) })
     : isGroup
     ? t({ ko: '그룹에 메시지', en: 'Message the group' })
-    : profile ? t({ ko: '{name}에게 메시지', en: 'Message {name}' }, { name: shortHintName(profile.name) }) : t({ ko: '메시지', en: 'Message' })
+    : profile && profile.name.length <= COMPOSER_HINT_NAME_MAX ? t({ ko: '{name}에게 메시지', en: 'Message {name}' }, { name: profile.name }) : t({ ko: '메시지 입력', en: 'Type a message' })
 
   // The composer grows with its text, and with its hint when empty, so neither ever scrolls inside a one-line box.
   const resizeComposer = useCallback(() => {

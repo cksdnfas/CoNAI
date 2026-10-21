@@ -506,7 +506,7 @@ export function PostsPage() {
   } else if (listQuery.isError) {
     content = <ErrorState title={t({ ko: '글 목록을 불러오지 못했어.', en: 'Could not load posts.' })} error={listQuery.error} onRetry={() => void listQuery.refetch()} />
   } else if (posts.length === 0) {
-    content = <EmptyState icon={searchOpen && searchQuery ? Search : tab === 'trash' ? Trash2 : Newspaper} title={searchOpen && searchQuery ? t({ ko: '찾은 글이 없어', en: 'No matching posts' }) : tab === 'trash' ? t({ ko: '휴지통이 비었어', en: 'The trash is empty' }) : t({ ko: '아직 글이 없어', en: 'No posts yet' })} />
+    content = <EmptyState icon={searchOpen && searchQuery ? Search : tab === 'trash' ? Trash2 : Newspaper} title={searchOpen && searchQuery ? t({ ko: '찾은 글이 없어', en: 'No matching posts' }) : tab === 'trash' ? t({ ko: '휴지통이 비었어', en: 'The trash is empty' }) : t({ ko: '아직 글이 없어', en: 'No posts yet' })} action={!(searchOpen && searchQuery) && tab !== 'trash' && permissions.canWrite ? <Button size="sm" onClick={() => update({ edit: 'new', post: null })}><PenSquare />{t({ ko: '새 글', en: 'New post' })}</Button> : undefined} />
   } else {
     const listProps = tab === 'trash' ? { posts, categories, onOpen: () => undefined, onTag: filterTag, menu: trashMenu, menuOnClick: true } : { posts, categories, onOpen: openPost, onTag: filterTag }
     content = (

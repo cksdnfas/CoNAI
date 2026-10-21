@@ -199,7 +199,7 @@ export function NaiCharacterPromptsInput({ value, onChange }: NaiCharacterPrompt
             </div>
 
             <label className="space-y-2">
-              <span className="text-sm font-medium text-foreground">Prompt</span>
+              <span className="text-sm font-medium text-foreground">{t({ ko: '포지티브 프롬프트', en: 'Positive Prompt' })}</span>
               <WildcardInlinePickerField
                 tool="nai"
                 multiline

@@ -601,7 +601,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       />
 
       {shouldShowRelatedEmptyState ? (
-        <EmptyState size="compact" title={t({ ko: '유사·중복 이미지 없어', en: 'No similar or duplicate images' })} />
+        <EmptyState size="compact" title={t({ ko: '유사·중복 이미지가 없어', en: 'No similar or duplicate images' })} />
       ) : null}
     </div>
   )

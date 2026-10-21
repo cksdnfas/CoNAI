@@ -131,7 +131,7 @@ export function ExecutionComparisonContextBlock({
       </div>
 
       {visibleRows.length === 0 ? (
-        <EmptyState size="compact" title={t({ ko: '압축 입출력 원장 없음', en: 'No compact input/output ledger yet' })} />
+        <EmptyState size="compact" title={t({ ko: '압축 입출력 원장이 아직 없어', en: 'No compact input/output ledger yet' })} />
       ) : (
         <div>
           {visibleRows.map((row) => (
