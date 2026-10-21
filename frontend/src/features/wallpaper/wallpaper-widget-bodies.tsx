@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { Text } from '@/components/ui/text'
+import { Badge } from '@/components/ui/badge'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { WallpaperFloatingCollageBody } from './wallpaper-floating-collage-widget-body'
@@ -87,13 +88,13 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
     // Em-based off a box-sized font (header + four rows ≈ 15em), so it fills large boxes and still fits the minimum;
     // when it cannot, the last rows clip first.
     return (
-      <div className="flex h-full flex-col gap-[0.55em] overflow-hidden leading-tight [justify-content:safe_center]" style={{ fontSize: 'clamp(9px, min(6cqh, 4cqw), 22px)' }}>
-        <div className="flex shrink-0 items-center justify-between gap-[0.5em] border-b border-border/50 pb-[0.5em]">
+      <div className="flex h-full flex-col overflow-hidden leading-tight [justify-content:safe_center]" style={{ gap: '0.55em', fontSize: 'clamp(9px, min(6cqh, 4cqw), 22px)' }}>
+        <div className="flex shrink-0 items-center justify-between border-b border-border/50" style={{ gap: '0.5em', paddingBottom: '0.5em' }}>
           <div>
-            <Text as="div" variant="overline" className="text-[0.8em]">{t('wallpaper.wallpaper.widget.bodies.running')}</Text>
-            <div className="text-[1.15em] font-semibold text-foreground">{t('wallpaper.wallpaper.widget.bodies.totalactive.tolocalestring.en.us.active', { totalActive: formatNumber(totalActive) })}</div>
+            <Text as="div" variant="overline" style={{ fontSize: '0.8em' }}>{t('wallpaper.wallpaper.widget.bodies.running')}</Text>
+            <div className="font-semibold text-foreground" style={{ fontSize: '1.15em' }}>{t('wallpaper.wallpaper.widget.bodies.totalactive.tolocalestring.en.us.active', { totalActive: formatNumber(totalActive) })}</div>
           </div>
-          <Text as="div" variant="overline" className="text-[0.8em]">
+          <Text as="div" variant="overline" style={{ fontSize: '0.8em' }}>
             {queueSummary.failed > 0 ? t('wallpaper.wallpaper.widget.bodies.needs.attention') : t('wallpaper.wallpaper.widget.bodies.stable')}
           </Text>
         </div>
@@ -101,25 +102,26 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
         {queueItems.map((item) => {
           const ratio = Math.max(0.08, item.value / maxValue)
           return (
-            <div key={item.label} className="shrink-0 space-y-[0.35em]">
-              <div className="flex items-center justify-between gap-[0.75em]">
-                <div className="flex items-center gap-[0.5em]">
-                  <span className="flex size-[1.5em] items-center justify-center rounded-full text-[0.8em] font-semibold text-background" style={{ backgroundColor: item.tone }}>
+            <div key={item.label} className="shrink-0">
+              <div className="flex items-center justify-between" style={{ gap: '0.75em' }}>
+                <div className="flex items-center" style={{ gap: '0.5em' }}>
+                  <span className="flex size-[1.5em] items-center justify-center rounded-full font-semibold text-background" style={{ backgroundColor: item.tone, fontSize: '0.8em' }}>
                     {item.short}
                   </span>
                   <div>
-                    <Text as="div" variant="overline" className="text-[0.8em]">{item.label}</Text>
-                    {item.ageLabel ? <div className="text-[0.8em] text-muted-foreground/85">{item.ageLabel}</div> : null}
+                    <Text as="div" variant="overline" style={{ fontSize: '0.8em' }}>{item.label}</Text>
+                    {item.ageLabel ? <div className="text-muted-foreground/85" style={{ fontSize: '0.8em' }}>{item.ageLabel}</div> : null}
                   </div>
                 </div>
-                <div className={cn('text-[1.15em] font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+                <div className={cn('font-semibold text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)} style={{ fontSize: '1.15em' }}>
                   {formatNumber(item.value)}
                 </div>
               </div>
-              <div className="h-[0.55em] overflow-hidden rounded-full bg-surface-lowest/90">
+              <div className="h-[0.55em] overflow-hidden rounded-full bg-surface-lowest/90" style={{ marginTop: '0.35em' }}>
                 <div
-                  className={cn('h-full rounded-full transition-[width] duration-700 ease-out', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}
+                  className={cn('h-full rounded-full transition duration-700 ease-out', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}
                   style={{
+                    transitionProperty: 'width',
                     width: `${ratio * 100}%`,
                     background: `linear-gradient(90deg, ${item.tone}, color-mix(in srgb, ${item.tone} 68%, white))`,
                     boxShadow: `0 0 18px color-mix(in srgb, ${item.tone} 26%, transparent)`,
@@ -137,8 +139,8 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
     // Each ring takes its half-height cell minus the label lines (--ring); the count inside scales with the ring.
     return (
       <div
-        className="grid h-full grid-cols-2 grid-rows-2 gap-[0.5em] text-center"
-        style={{ fontSize: 'clamp(9px, min(4.2cqh, 3.4cqw), 20px)', ['--ring' as string]: 'max(2.5em, min(calc(50cqh - 3.6em), 30cqw))' }}
+        className="grid h-full grid-cols-2 grid-rows-2 text-center"
+        style={{ gap: '0.5em', fontSize: 'clamp(9px, min(4.2cqh, 3.4cqw), 20px)', ['--ring' as string]: 'max(2.5em, min(calc(50cqh - 3.6em), 30cqw))' }}
       >
         {queueItems.map((item) => {
           const ratio = item.value / maxValue
@@ -154,14 +156,14 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
                 style={{ background: `conic-gradient(${item.tone} 0deg ${degrees}deg, color-mix(in srgb, var(--surface-lowest) 92%, transparent) ${degrees}deg 360deg)` }}
               >
                 <div
-                  className="flex size-[72%] items-center justify-center rounded-full bg-background/92 tabular-nums shadow-[0_0_20px_rgba(0,0,0,0.18)] backdrop-blur-sm"
-                  style={{ fontSize: 'calc(var(--ring) * 0.26)' }}
+                  className="flex size-[72%] items-center justify-center rounded-full bg-background/92 tabular-nums backdrop-blur-sm"
+                  style={{ fontSize: 'calc(var(--ring) * 0.26)', boxShadow: '0 0 20px rgba(0,0,0,0.18)' }}
                 >
                   {formatNumber(item.value)}
                 </div>
               </div>
-              <Text as="div" variant="overline" className="relative mt-[0.4em] text-[0.8em]">{item.label}</Text>
-              {item.ageLabel ? <div className="relative text-[0.8em] text-muted-foreground/85">{item.ageLabel}</div> : null}
+              <Text as="div" variant="overline" className="relative" style={{ marginTop: '0.4em', fontSize: '0.8em' }}>{item.label}</Text>
+              {item.ageLabel ? <div className="relative text-muted-foreground/85" style={{ fontSize: '0.8em' }}>{item.ageLabel}</div> : null}
             </div>
           )
         })}
@@ -170,18 +172,19 @@ function WallpaperQueueStatusBody({ widget }: { widget: Extract<WallpaperWidgetI
   }
 
   return (
-    <div className="grid h-full grid-cols-2 gap-x-[6cqw] gap-y-[6cqh] text-center text-xs sm:text-sm">
+    <div className="grid h-full grid-cols-2 text-center text-xs sm:text-sm" style={{ columnGap: '6cqw', rowGap: '6cqh' }}>
       {queueItems.map((item) => (
-        <div key={item.label} className="flex min-h-0 flex-col justify-center border-t-2 pt-[2cqh]" style={{ borderColor: item.tone }}>
+        <div key={item.label} className="flex min-h-0 flex-col justify-center border-t-2" style={{ borderColor: item.tone, paddingTop: '2cqh' }}>
           <Text as="div" variant="overline">{item.label}</Text>
-          <div className={cn('mt-1 text-[clamp(1.125rem,13cqh,4rem)] font-semibold leading-none tabular-nums text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)}>
+          <div className={cn('mt-1 font-semibold leading-none tabular-nums text-foreground', item.id === 'running' && item.value > 0 ? 'animate-pulse' : undefined)} style={{ fontSize: 'clamp(1.125rem,13cqh,4rem)' }}>
             {formatNumber(item.value)}
           </div>
           {item.ageLabel ? <div className="mt-1 text-2xs text-muted-foreground/85">{item.ageLabel}</div> : null}
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-lowest/90">
             <div
-              className="h-full rounded-full transition-[width] duration-700 ease-out"
+              className="h-full rounded-full transition duration-700 ease-out"
               style={{
+                transitionProperty: 'width',
                 width: `${Math.max(0.12, item.value / maxValue) * 100}%`,
                 background: `linear-gradient(90deg, ${item.tone}, color-mix(in srgb, ${item.tone} 70%, white))`,
               }}
@@ -249,26 +252,27 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
         : t('wallpaper.wallpaper.widget.bodies.idle')
 
   return (
-    <div className="flex h-full flex-col justify-between gap-3 rounded-sm bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_18%,transparent),transparent_46%),linear-gradient(180deg,color-mix(in_srgb,var(--primary)_8%,transparent),transparent_60%)] px-3 py-3">
+    <div className="flex h-full flex-col justify-between gap-3 rounded-sm px-3 py-3" style={{ background: 'radial-gradient(circle at top,color-mix(in srgb,var(--secondary) 18%,transparent),transparent 46%),linear-gradient(180deg,color-mix(in srgb,var(--primary) 8%,transparent),transparent 60%)' }}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <Text as="div" variant="overline">{t('wallpaper.wallpaper.widget.bodies.activity')}</Text>
           <div className="mt-1 flex items-end gap-2">
-            <span className="text-2xl font-semibold tracking-[-0.08em] text-foreground sm:text-3xl">{summary.running + summary.queued}</span>
+            <span className="text-2xl font-semibold text-foreground sm:text-3xl" style={{ letterSpacing: '-0.08em' }}>{summary.running + summary.queued}</span>
             <span className="pb-1 text-xs text-muted-foreground">{t('wallpaper.wallpaper.widget.bodies.active.load')}</span>
           </div>
         </div>
-        <Text as="div" variant="overline" className="rounded-full border border-border/70 bg-background/50 px-2 py-1 text-foreground/92 backdrop-blur-sm">
+        <Badge variant="overlay">
           {activityBadge}
-        </Text>
+        </Badge>
       </div>
 
       <div className="flex min-h-0 flex-1 items-end gap-1 rounded-sm border border-border/60 bg-background/35 px-2 py-2 backdrop-blur-sm">
         {pulseBars.map(({ base, low, high, index }) => (
           <div
             key={index}
-            className="wallpaper-pulse-bar flex-1 rounded-full transition-[height,opacity] duration-200 ease-out"
+            className="wallpaper-pulse-bar flex-1 rounded-full transition duration-200 ease-out"
             style={{
+              transitionProperty: 'height, opacity',
               height: `${Math.round(22 + high * 78)}%`,
               opacity: 0.48 + base * 0.48,
               ['--wp-low' as string]: String((22 + low * 78) / (22 + high * 78)),
@@ -297,9 +301,11 @@ function WallpaperActivityPulseBody({ widget }: { widget: Extract<WallpaperWidge
         ))}
       </div>
 
-      <Text as="div" variant="overline" className="flex items-center justify-between gap-2">
-        <span>{emphasis === 'queue' ? t('wallpaper.wallpaper.widget.bodies.queue.focus') : emphasis === 'results' ? t('wallpaper.wallpaper.widget.bodies.results.focus') : t('wallpaper.wallpaper.widget.bodies.mixed')}</span>
-        <span>{summary.lastUpdated ? formatDateTime(summary.lastUpdated) : t('wallpaper.wallpaper.widget.bodies.not.updated.yet')}</span>
+      <Text as="div" variant="overline">
+        <span className="flex items-center justify-between gap-2">
+          <span>{emphasis === 'queue' ? t('wallpaper.wallpaper.widget.bodies.queue.focus') : emphasis === 'results' ? t('wallpaper.wallpaper.widget.bodies.results.focus') : t('wallpaper.wallpaper.widget.bodies.mixed')}</span>
+          <span>{summary.lastUpdated ? formatDateTime(summary.lastUpdated) : t('wallpaper.wallpaper.widget.bodies.not.updated.yet')}</span>
+        </span>
       </Text>
     </div>
   )
@@ -324,10 +330,10 @@ function WallpaperCalendarBody({ widget }: { widget: Extract<WallpaperWidgetInst
 
   return (
     <div className="flex h-full flex-col" style={{ fontSize: 'max(11px, min(6.5cqh, 5cqw))' }}>
-      <div className="mb-[0.6em] font-semibold">{formatDateTime(now, { year: 'numeric', month: 'long' })}</div>
+      <div className="font-semibold" style={{ marginBottom: '0.6em' }}>{formatDateTime(now, { year: 'numeric', month: 'long' })}</div>
       <div className="grid flex-1 grid-cols-7 text-center" style={{ gridTemplateRows: `auto repeat(${weeks}, minmax(0, 1fr))` }}>
         {weekdays.map((label, index) => (
-          <div key={`w-${index}`} className="pb-[0.4em] text-[0.8em] opacity-50">{label}</div>
+          <div key={`w-${index}`} className="opacity-50" style={{ paddingBottom: '0.4em', fontSize: '0.8em' }}>{label}</div>
         ))}
         {cells.slice(0, weeks * 7).map((day) => {
           const inMonth = day.getMonth() === now.getMonth()

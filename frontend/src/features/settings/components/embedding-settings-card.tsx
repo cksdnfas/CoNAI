@@ -7,7 +7,7 @@ import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { AiStatusPill, type AiStatusTone } from './ai-status-pill'
 import { ChatFilledLabel } from './settings-filled-label'
-import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
+import { SettingsRowsSkeleton } from './settings-rows'
 
 interface EmbeddingSettingsCardProps {
   heading: ReactNode
@@ -110,7 +110,7 @@ export function EmbeddingSettingsCard({ heading, actions, draft, status, onPatch
             onCheckedChange={(checked) => onPatch({ keepModelLoaded: checked })}
             label={<ChatFilledLabel fieldId="embedding.keepModelLoaded">{t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}</ChatFilledLabel>}
           />
-          <SettingRow label={<ChatFilledLabel fieldId="embedding.autoUnloadMinutes">{unloadLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="embedding.autoUnloadMinutes">{unloadLabel}</ChatFilledLabel>} controlWidth="standard">
             <NumberStepperInput min={1} max={1440} variant="settings" aria-label={unloadLabel} disabled={!isEnabled || draft.keepModelLoaded} value={draft.autoUnloadMinutes} onValueCommit={(nextValue) => onPatch({ autoUnloadMinutes: Math.min(1440, Math.max(1, Math.round(Number(nextValue) || 1))) })} />
           </SettingRow>
           <SettingRow

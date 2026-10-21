@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import { Headphones, Pause, Play, RotateCcw, Save, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
+import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { SliderRow } from '@/components/ui/slider-row'
@@ -276,7 +277,7 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
         <canvas ref={canvasRef} aria-hidden className="absolute inset-0 block size-full border-0 border-primary text-foreground/45" />
         <div className={cn('pointer-events-none absolute inset-y-0 border-x-2 border-primary bg-primary/12', selectRegion && 'border-x-4')} style={{ left: `${left}%`, right: `${right}%` }} />
         {playhead !== null && duration > 0 ? <div className="pointer-events-none absolute inset-y-0 w-px bg-foreground" style={{ left: `${(playhead / duration) * 100}%` }} /> : null}
-        {hoverTime !== null && duration > 0 ? <div className="pointer-events-none absolute inset-y-0 border-l border-foreground/40" style={{ left: `${(hoverTime / duration) * 100}%` }}><span className={cn('absolute top-1 rounded-sm bg-popover px-1 font-mono text-2xs text-popover-foreground shadow-sm', hoverTime > duration / 2 ? 'right-1' : 'left-1')}>{number(hoverTime, 2)}s</span></div> : null}
+        {hoverTime !== null && duration > 0 ? <div className="pointer-events-none absolute inset-y-0 border-l border-foreground/40" style={{ left: `${(hoverTime / duration) * 100}%` }}><span className={cn(floatingSurfaceClassName, 'absolute top-1 px-1 font-mono text-2xs text-foreground', hoverTime > duration / 2 ? 'right-1' : 'left-1')}>{number(hoverTime, 2)}s</span></div> : null}
         {duration > 0 ? ([['start', left], ['end', 100 - right]] as const).map(([edge, position]) => (
           <span key={edge} aria-hidden className="absolute inset-y-0 w-6 -translate-x-1/2 cursor-ew-resize" style={{ left: `${position}%` }}>
             <span className="absolute top-1/2 left-1/2 h-6 w-1.5 -translate-1/2 rounded-full bg-primary" />
@@ -287,10 +288,10 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
 
       <div className="grid grid-cols-2 gap-3">
         <Field label={t({ ko: '시작', en: 'Start' })} className="min-w-0">
-          <Input className="min-w-0 font-mono" type="number" step="0.001" min={0} value={number(params.start)} onChange={(event) => set({ start: Number(event.target.value) })} />
+          <Input mono className="min-w-0" type="number" step="0.001" min={0} value={number(params.start)} onChange={(event) => set({ start: Number(event.target.value) })} />
         </Field>
         <Field label={t({ ko: '끝', en: 'End' })} className="min-w-0">
-          <Input className="min-w-0 font-mono" type="number" step="0.001" min={0} value={number(params.end)} onChange={(event) => set({ end: Number(event.target.value) })} />
+          <Input mono className="min-w-0" type="number" step="0.001" min={0} value={number(params.end)} onChange={(event) => set({ end: Number(event.target.value) })} />
         </Field>
       </div>
 
@@ -306,10 +307,10 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
 
       <div className="grid grid-cols-2 gap-3">
         <Field label={t({ ko: '페이드 인', en: 'Fade in' })} className="min-w-0">
-          <Input className="min-w-0 font-mono" type="number" step="0.005" min={0} max={5} value={params.fade_in} onChange={(event) => set({ fade_in: Number(event.target.value) })} />
+          <Input mono className="min-w-0" type="number" step="0.005" min={0} max={5} value={params.fade_in} onChange={(event) => set({ fade_in: Number(event.target.value) })} />
         </Field>
         <Field label={t({ ko: '페이드 아웃', en: 'Fade out' })} className="min-w-0">
-          <Input className="min-w-0 font-mono" type="number" step="0.005" min={0} max={5} value={params.fade_out} onChange={(event) => set({ fade_out: Number(event.target.value) })} />
+          <Input mono className="min-w-0" type="number" step="0.005" min={0} max={5} value={params.fade_out} onChange={(event) => set({ fade_out: Number(event.target.value) })} />
         </Field>
       </div>
       {problem ? <p className="text-xs text-destructive">{problem}</p> : null}

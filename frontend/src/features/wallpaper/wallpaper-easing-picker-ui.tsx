@@ -231,7 +231,7 @@ export function WallpaperSavedEasingPresetsSection({
                     variant="ghost"
                     onClick={() => onTogglePinnedPreset(preset.id)}
                     label={preset.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정: 목록 맨 앞에 둬', en: 'Pin to the front' })}
-                    className={cn('h-6 w-6 p-0', preset.pinned ? 'text-primary' : 'text-muted-foreground')}
+                    active={preset.pinned}
                   >
                     <Star className={cn('h-3.5 w-3.5', preset.pinned ? 'fill-current' : '')} />
                   </IconButton>

@@ -60,7 +60,7 @@ export function WorkflowInputSourceBody({ id, data, visibleOutputPorts }: Module
       {isImage ? (
         <div className="space-y-1.5 px-3 pb-1.5" onMouseDown={stopNodeEvent}>
           {imageSrc ? (
-            <InlineMediaPreview src={imageSrc} alt={sourcePort.label} frameClassName="rounded-[5px] bg-surface-high p-1" mediaClassName="max-h-32 w-full object-contain" />
+            <InlineMediaPreview src={imageSrc} alt={sourcePort.label} frameClassName="rounded-sm bg-surface-high p-1" mediaClassName="max-h-32 w-full object-contain" />
           ) : null}
           <div className="nodrag flex items-center gap-1">
             <ImageAttachmentPickerButton

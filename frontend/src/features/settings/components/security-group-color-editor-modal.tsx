@@ -52,7 +52,7 @@ export function SecurityGroupColorEditorModal({
             <SettingRow
               key={group.groupKey}
               label={(
-                <Badge className="border-0 normal-case tracking-normal" style={getSecurityGroupBadgeStyle(colorValue)}>
+                <Badge casing="sentence" style={getSecurityGroupBadgeStyle(colorValue)}>
                   {getPermissionGroupDisplayName(language, group.groupKey, group.name)}
                 </Badge>
               )}

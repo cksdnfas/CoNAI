@@ -46,8 +46,8 @@ The public workflow route has its own access flow; being inside the shell does n
 ## Layers
 - `src/components/ui/` — design-system primitives (Button, IconButton, Panel, Section, Modal, Input, …). No feature
   knowledge, no API calls. Visual rules live here.
-- `src/components/common/` — shared composites built from `ui` (segmented controls, explorer sidebar, page header,
-  selection bar, tag/prompt result blocks). May know app concepts, not a single feature.
+- `src/components/common/` — shared composites built from `ui` (segmented controls, page-with-sidebar / sidebar
+  column / two-pane layout, media card, page toolbar, selection bar, tag/prompt result blocks). May know app concepts, not a single feature.
 - `src/components/layout/`, `src/components/media/` — app shell and shared media helpers.
 - `src/features/<name>/` — pages, feature components and hooks. Features do import each other today (mostly
   `images`, `search`, `groups`, `auth`); when something is reused widely, move it down to `components/common` or `lib`.

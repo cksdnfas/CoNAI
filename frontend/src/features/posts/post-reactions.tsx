@@ -116,10 +116,11 @@ export function PostReactions({ post, topic, searchContext, commentDraft, setCom
         { value: 'info', label: t({ ko: '문서 정보', en: 'Document' }), count: openIssues + pendingProposals || null },
       ]}
     >
-      <TabsContent value="comments" className="pt-2">
-        <PostComments post={post} draft={commentDraft} setDraft={setCommentDraft} hideHeading />
+      <TabsContent value="comments">
+        <div className="pt-2"><PostComments post={post} draft={commentDraft} setDraft={setCommentDraft} hideHeading /></div>
       </TabsContent>
-      <TabsContent value="info" className="pt-1">
+      <TabsContent value="info">
+        <div className="pt-1">
         <InfoSection title={t({ ko: '평가', en: 'Feedback' })}>
           <PostKnowledgeFeedback post={post} topic={topic} searchContext={searchContext} />
         </InfoSection>
@@ -135,6 +136,7 @@ export function PostReactions({ post, topic, searchContext, commentDraft, setCom
             <PostKnowledgeProposals postId={post.id} bare />
           </InfoSection>
         </> : null}
+        </div>
       </TabsContent>
     </TextTabs>
   )

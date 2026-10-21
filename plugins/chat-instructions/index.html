@@ -1,15 +1,15 @@
 <!doctype html>
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>지시문 규칙</title><link rel="stylesheet" href="conai-plugin.css"><link rel="stylesheet" href="style.css"><script type="module" src="main.js"></script></head>
-<body><main>
+<body><main class="conai-page">
   <div id="editor" class="stack">
     <div class="toolbar">
       <label for="profile">대상</label><select id="profile"><option value="">모든 캐릭터</option></select>
-      <span class="grow"></span>
+      <span class="conai-spacer"></span>
       <button id="cancel" type="button" class="ghost" hidden>취소</button>
       <button id="save" type="button" class="primary">추가</button>
     </div>
     <textarea id="text" aria-label="규칙" rows="3" maxlength="2000" placeholder="예: 대답은 세 문장을 넘기지 마."></textarea>
   </div>
   <p id="status" role="status">연결 중…</p>
-  <ul id="rules" class="list"></ul>
+  <ul id="rules" class="conai-list"></ul>
 </main></body></html>

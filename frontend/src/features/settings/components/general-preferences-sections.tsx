@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsLabelTip } from './settings-label-tip'
-import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
+import { SettingsRowsSkeleton } from './settings-rows'
 
 export type GeneralPreferenceSection = 'basic' | 'appearance' | 'library' | 'safety'
 
@@ -111,7 +111,7 @@ export function GeneralPreferencesSections({
             label={<ChatFilledLabel fieldId="language">{languageOverride
               ? <SettingsLabelTip label={languageLabel} tip={t({ ko: '이 브라우저는 계정 메뉴의 언어 선택이 우선', en: 'This browser uses its account-menu choice' })} />
               : languageLabel}</ChatFilledLabel>}
-            controlClassName={SETTINGS_CONTROL_CLASS}
+            controlWidth="standard"
           >
             <Select
               variant="settings"
@@ -154,8 +154,8 @@ export function GeneralPreferencesSections({
               const Icon = option.icon
               const pressed = headerNavigation[key] ?? true
               return (
+                <span key={key} className={cn('inline-flex cursor-grab active:cursor-grabbing', draggedPage === key && 'opacity-50', dropTargetPage === key && draggedPage !== key && 'ring-2 ring-primary/60')}>
                 <ToggleChip
-                  key={key}
                   pressed={pressed}
                   onClick={() => updateHeaderNavigationItem(key, !pressed)}
                   draggable
@@ -164,12 +164,12 @@ export function GeneralPreferencesSections({
                   onDragOver={(event) => { if (draggedPage) { event.preventDefault(); setDropTargetPage(key) } }}
                   onDragLeave={() => setDropTargetPage((current) => (current === key ? null : current))}
                   onDrop={(event) => { event.preventDefault(); if (draggedPage) moveHeaderPage(draggedPage, key); setDraggedPage(null); setDropTargetPage(null) }}
-                  className={cn('cursor-grab active:cursor-grabbing', draggedPage === key && 'opacity-50', dropTargetPage === key && draggedPage !== key && 'ring-2 ring-primary/60')}
                 >
                   <Icon aria-hidden />
                   {t(option.label)}
                   <ChatFilledMark fieldId={`headerNavigation.${key}`} />
                 </ToggleChip>
+                </span>
               )
             })}
           </SettingRow>
@@ -194,7 +194,7 @@ export function GeneralPreferencesSections({
 
       {visibleSections.has('library') ? (
         <RowGroup heading={t({ ko: '라이브러리 동작', en: 'Library behavior' })} actions={<SectionDirtyBadge dirty={isSectionDirty('library')} />}>
-          <SettingRow label={<ChatFilledLabel fieldId="imageSimilarityCheckMode">{similarityLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="imageSimilarityCheckMode">{similarityLabel}</ChatFilledLabel>} controlWidth="standard">
             <Select
               variant="settings"
               aria-label={similarityLabel}
@@ -221,7 +221,7 @@ export function GeneralPreferencesSections({
             label={<ChatFilledLabel fieldId="deleteProtection.recycleBinRetentionDays">{t({ ko: '휴지통 자동 비우기', en: 'Empty the recycle bin automatically' })}</ChatFilledLabel>}
           />
           {retentionDays > 0 ? (
-            <SettingRow label={<ChatFilledLabel fieldId="deleteProtection.recycleBinRetentionDays">{retentionLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+            <SettingRow label={<ChatFilledLabel fieldId="deleteProtection.recycleBinRetentionDays">{retentionLabel}</ChatFilledLabel>} controlWidth="standard">
               <NumberStepperInput
                 variant="settings"
                 aria-label={retentionLabel}
@@ -238,7 +238,7 @@ export function GeneralPreferencesSections({
               />
             </SettingRow>
           ) : null}
-          <SettingRow label={<ChatFilledLabel fieldId="generationHistoryMaxItems">{historyMaxLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="generationHistoryMaxItems">{historyMaxLabel}</ChatFilledLabel>} controlWidth="standard">
             <NumberStepperInput
               variant="settings"
               aria-label={historyMaxLabel}

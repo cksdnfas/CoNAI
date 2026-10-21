@@ -160,9 +160,51 @@ test('library aggregates serve within the recompute floor, refresh after it, and
     assert.equal(readGroup(), 1)
     sourceVersion = 8
     assert.equal(readGroup(), 2, 'groups changes invalidate immediately (no floor)')
+
+    AggregateCache.clearAll()
+    let capacityComputations = 0
+    const readCapacity = (index: number, ttlMs = 60_000) => AggregateCache.resolve(
+      `rp-capacity-${index}`, () => ++capacityComputations, { scopes: [], ttlMs },
+    )
+    for (let index = 0; index < 500; index++) readCapacity(index)
+    assert.equal(readCapacity(499, 0), 501, 'refresh the newest entry in a full cache')
+    assert.equal(readCapacity(0), 1, 'refreshing an existing key must retain unrelated valid entries')
+    assert.equal(capacityComputations, 501)
+    assert.equal(readCapacity(500), 502, 'a new key still evicts at capacity')
+    assert.equal(readCapacity(0), 503, 'the oldest entry is evicted only when a new key needs its slot')
   } finally {
     Date.now = realNow
     AggregateCache.setVersionSource('groups', null)
+  }
+})
+
+test('a failing invalidation subscriber cannot retain stale media caches or skip other subscribers', async () => {
+  await booted
+  const { QueryCacheService } = await import('../src/services/QueryCacheService')
+  const key = hash(9999)
+  const seen: Array<string | undefined> = []
+  const stopFailing = QueryCacheService.onMetadataInvalidated(() => { throw new Error('subscriber failed') })
+  const stopObserving = QueryCacheService.onMetadataInvalidated((value) => {
+    assert.equal(QueryCacheService.getMetadataCache(key), null, 'metadata is removed before notifying')
+    seen.push(value)
+  })
+  try {
+    QueryCacheService.setMetadataCache(key, { stale: true })
+    QueryCacheService.setThumbnailCache(key, Buffer.from('stale'))
+    assert.doesNotThrow(() => QueryCacheService.invalidateImageCache(key))
+    assert.equal(QueryCacheService.getMetadataCache(key), null)
+    assert.equal(QueryCacheService.getThumbnailCache(key), null)
+    assert.deepEqual(seen, [key])
+
+    QueryCacheService.setMetadataCache(key, { stale: true })
+    QueryCacheService.setThumbnailCache(key, Buffer.from('stale'))
+    QueryCacheService.invalidateImageCache()
+    assert.equal(QueryCacheService.getMetadataCache(key), null)
+    assert.equal(QueryCacheService.getThumbnailCache(key), null)
+    assert.deepEqual(seen, [key, undefined])
+  } finally {
+    stopFailing()
+    stopObserving()
   }
 })
 

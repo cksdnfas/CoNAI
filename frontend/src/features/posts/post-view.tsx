@@ -47,7 +47,7 @@ export function PostView({ post, categories, onTag, onCategory, commentDraft, se
             {path.map((category, index) => (
               <span key={category.id} className="inline-flex items-center gap-1">
                 {index > 0 ? <span aria-hidden>›</span> : null}
-                <Button variant="ghost" size="xs" className="px-1 font-normal text-muted-foreground" onClick={() => onCategory(category.id)}>{category.name}</Button>
+                <Button variant="ghost" size="xs" onClick={() => onCategory(category.id)}>{category.name}</Button>
               </span>
             ))}
           </nav>
@@ -77,7 +77,7 @@ export function PostView({ post, categories, onTag, onCategory, commentDraft, se
       </header>
       <div>
         <PostMediaContext.Provider value={mediaContext}>
-          <PostMarkdown text={post.body} className="text-[0.95rem]" />
+          <PostMarkdown text={post.body} className="text-base" />
         </PostMediaContext.Provider>
         <PostVoteBar key={post.id} post={post} />
       </div>

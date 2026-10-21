@@ -321,7 +321,7 @@ function NewLorebookDialog({ saving, onSave, onClose }: { saving: boolean; onSav
         event.preventDefault()
         if (name.trim()) onSave(name.trim())
       }}>
-        <ModalBody className="space-y-4">
+        <ModalBody>
           <Input autoFocus value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder={t({ ko: '예: 리나 기억', en: 'e.g. Lina memories' })} aria-label={t({ ko: '로어북 이름', en: 'Lorebook name' })} />
           <ModalFooter>
             <Button type="button" variant="secondary" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
@@ -374,7 +374,8 @@ function EntryRow({ entry, onOpen }: { entry: ChatLoreEntry; onOpen?: () => void
       {entry.constant ? <span className="shrink-0 text-2xs font-bold text-primary">{t({ ko: '상시', en: 'Always' })}</span> : null}
     </>
   )
-  const className = 'flex items-center gap-2 border-t border-line py-1.5 pl-5 text-left'
+  // Both sides padded: the clickable row shows a hover wash, so its trailing marks must not touch the edge.
+  const className = 'flex items-center gap-2 border-t border-line py-1.5 pr-2 pl-5 text-left'
   // The entry's text shows in a tooltip, not as a second line.
   const shown = entry.translation?.content ?? entry.content
   const preview = shown ? (shown.length > 240 ? `${shown.slice(0, 240)}…` : shown) : null
@@ -420,7 +421,7 @@ function LoreEntryModal({ target, filePlace, keyLanguage, promoteLabel, saving, 
       onSave={canSave && entry ? () => onSave(entry) : undefined}
       headerActions={entry ? <Switch checked={entry.enabled} onCheckedChange={(enabled) => setDraft((current) => current ? { ...current, enabled } : current)} aria-label={t({ ko: '로어 사용', en: 'Enable lore' })} /> : null}
       description={entry && (entry.source || usage?.turnsAgo !== undefined) ? <div className="flex items-center gap-3 text-xs">
-        {entry.source ? usage?.sourceMessageId ? <Button variant="ghost" size="xs" className="h-auto p-0 text-primary" onClick={() => onSource(entry.source!.threadId, usage.sourceMessageId!)}>{t({ ko: '출처 답변', en: 'Source reply' })}</Button> : <span className="text-muted-foreground/50">{t({ ko: '출처 없음', en: 'Source unavailable' })}</span> : null}
+        {entry.source ? usage?.sourceMessageId ? <Button variant="link" size="xs" onClick={() => onSource(entry.source!.threadId, usage.sourceMessageId!)}>{t({ ko: '출처 답변', en: 'Source reply' })}</Button> : <span className="text-muted-foreground/50">{t({ ko: '출처 없음', en: 'Source unavailable' })}</span> : null}
         {usage?.turnsAgo !== undefined ? <span>{t({ ko: '최근 사용 · {count}턴 전', en: 'Last used · {count} turns ago' }, { count: usage.turnsAgo })}</span> : null}
       </div> : undefined}
     >

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Button } from '@/components/ui/button'
+import { TextTabs } from '@/components/common/text-tabs'
 import { ListRow } from '@/components/ui/list-row'
 import { useI18n } from '@/i18n'
 import { getDanbooruBrowserTags } from '@/lib/api-danbooru-browser'
@@ -141,24 +141,12 @@ export function PromptRandomPalette({ tab, entries, recents, activeIndex, isLoad
 
   return (
     <div className="flex max-h-[inherit] min-h-0 flex-col">
-      <div role="tablist" className="flex shrink-0 gap-1 border-b border-line px-2 pt-1.5">
-        {PROMPT_PALETTE_TABS.map((paletteTab) => (
-          <Button
-            key={paletteTab}
-            type="button"
-            role="tab"
-            size="xs"
-            variant="ghost"
-            aria-selected={tab === paletteTab}
-            className={cn('rounded-b-none border-b-2 border-transparent', tab === paletteTab && 'border-primary text-foreground')}
-            onMouseDown={(event) => {
-              event.preventDefault()
-              onChangeTab(paletteTab)
-            }}
-          >
-            {labels[paletteTab]}
-          </Button>
-        ))}
+      <div className="shrink-0" onMouseDown={(event) => event.preventDefault()}>
+        <TextTabs
+          value={tab}
+          items={PROMPT_PALETTE_TABS.map((paletteTab) => ({ value: paletteTab, label: labels[paletteTab] }))}
+          onChange={onChangeTab}
+        />
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 sm:grid-cols-2">

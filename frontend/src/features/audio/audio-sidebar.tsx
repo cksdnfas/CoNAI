@@ -203,7 +203,7 @@ export function AudioSidebar({
           depth={depth}
           icon={<AudioWaveform className="size-3.5 text-muted-foreground/75" />}
           active={group.id === activeGroupId}
-          className={cn(dropTarget === group.id && 'bg-primary/10')}
+          data-drop-target={dropTarget === group.id ? 'true' : undefined}
           label={group.name}
           count={<EffectCounts group={group} />}
           onClick={() => onSelectGroup(group)}
@@ -240,10 +240,11 @@ export function AudioSidebar({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                variant="subtle"
+                variant="nav"
                 size="lg"
                 aria-label={t({ ko: '프로젝트', en: 'Project' })}
-                className={cn('min-w-0 flex-1 justify-start gap-2 px-3 text-left font-semibold text-foreground has-[>svg]:px-3', dropTarget === 'project' && 'bg-primary/10')}
+                className="min-w-0 flex-1 justify-start text-left"
+                data-drop-target={dropTarget === 'project' ? 'true' : undefined}
                 {...dropProps('project', hasFiles, (event) => onDropFiles({ projectId: project.id }, Array.from(event.dataTransfer.files)))}
               >
                 {project.name === GENERATION_TAB_PROJECT ? <Sparkles className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : null}
@@ -325,7 +326,7 @@ export function AudioSidebar({
               <SidebarItem
                 icon={Inbox}
                 active={inbox.id === activeGroupId}
-                className={cn(dropTarget === inbox.id && 'bg-primary/10')}
+                data-drop-target={dropTarget === inbox.id ? 'true' : undefined}
                 label={t({ ko: '받은 파일', en: 'Inbox' })}
                 count={inbox.candidate_count}
                 onClick={() => onSelectGroup(inbox)}
@@ -349,7 +350,7 @@ export function AudioSidebar({
                     ]}
                   >
                     <SidebarItem
-                      className={cn('font-semibold text-foreground', dropTarget === `folder:${folder.id}` && 'bg-primary/10')}
+                      data-drop-target={dropTarget === `folder:${folder.id}` ? 'true' : undefined}
                       icon={<ChevronRight className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-90')} />}
                       aria-expanded={open}
                       label={(
@@ -381,7 +382,8 @@ export function AudioSidebar({
               <div className="flex items-center gap-0.5">
                 <SidebarItem
                   icon={Plus}
-                  className={cn('min-w-0 flex-1 text-muted-foreground/75', dropTarget === 'loose' && 'bg-primary/10')}
+                  className="min-w-0 flex-1"
+                  data-drop-target={dropTarget === 'loose' ? 'true' : undefined}
                   label={t({ ko: '효과음 추가', en: 'Add effect' })}
                   onClick={() => startDraft({ kind: 'effect', folderId: null })}
                   {...dropProps('loose', hasEffect, (event) => moveDragged(event, null))}

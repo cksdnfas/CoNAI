@@ -122,7 +122,8 @@ export function AuthorNoteBlock({ thread, defaults }: { thread: CodexChatThread;
         onChange={(event) => setDraft(event.target.value)}
         rows={3}
         // Grows with the note (or with the profile's note shown as the hint) instead of scrolling inside three rows.
-        className="max-h-80 min-h-20 text-sm leading-relaxed [field-sizing:content]"
+        autoGrow
+        className="max-h-80 min-h-20"
         placeholder={defaults.note || t({ ko: '작가 노트', en: "Author's note" })}
       />
     </div>
@@ -315,7 +316,9 @@ function SummarySegmentEditor({ threadId, segment, label, muted }: { threadId: n
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         rows={3}
-        className={cn('min-h-0 resize-y text-sm leading-relaxed [field-sizing:content]', muted && 'text-muted-foreground')}
+        autoGrow
+        muted={muted}
+        className="min-h-0 resize-y"
         aria-label={label}
       />
       {dirty ? (
@@ -384,7 +387,7 @@ function SummaryBlock({ thread, segments, summaryOn }: { thread: CodexChatThread
       </div>
       {folded.length > 0 ? (
         <div className="flex flex-col gap-4 pt-4">
-          <Button variant="ghost" size="sm" className="w-fit gap-1 px-1.5 text-muted-foreground" onClick={() => setShowFolded((value) => !value)} aria-expanded={showFolded}>
+          <Button variant="ghost" size="sm" className="w-fit" onClick={() => setShowFolded((value) => !value)} aria-expanded={showFolded}>
             <ChevronDown className={cn('size-4 transition-transform', !showFolded && '-rotate-90')} />
             {t({ ko: '줄거리에 접힌 구간 {count}개', en: '{count} parts folded into the plot' }, { count: folded.length })}
           </Button>

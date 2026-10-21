@@ -121,9 +121,7 @@ export function SelectedExecutionSummary({
       </div>
 
       <div className="space-y-2.5">
-        <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
-          <span>{t({ ko: '출력', en: 'Outputs' })}</span>
-        </Text>
+        <Text as="div" variant="overline">{t({ ko: '출력', en: 'Outputs' })}</Text>
 
         {compactArtifactGroups.length === 0 ? (
           <EmptyState size="compact" title={t({ ko: '표시할 출력 없음', en: 'No outputs to display' })} />

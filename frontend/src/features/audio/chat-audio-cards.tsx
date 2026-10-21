@@ -104,7 +104,7 @@ function ChatAudioCard({ groupId, candidates, waiting, failed }: { groupId: stri
           const seed = candidate.provenance?.seed
           return (
             <div key={candidate.id} className="grid grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-x-3 py-1.5 pr-3 pl-2">
-              <IconButton variant={playing ? 'secondary' : 'ghost'} size="icon-sm" className="rounded-full" label={playing ? t({ ko: '정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} onClick={() => audioPlayer.toggle(candidate.id)}>
+              <IconButton variant={playing ? 'secondary' : 'ghost'} size="icon-sm" label={playing ? t({ ko: '정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} onClick={() => audioPlayer.toggle(candidate.id)}>
                 {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}
               </IconButton>
               <div className="min-w-0">

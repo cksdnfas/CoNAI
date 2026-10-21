@@ -8,6 +8,7 @@ import { Activity, AlarmClock, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Do
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
+import { pageGutterStyle, SidebarColumn } from '@/components/common/sidebar-layout'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
 import { Spinner } from '@/components/ui/loading-state'
@@ -91,6 +92,7 @@ import {
 import { CodexChatAssistantMessage, type ChatSpeaker } from './codex-chat-message'
 import { ChatLiveMessage, ChatSavedMessages } from './chat-transcript'
 import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
 import { CHAT_COMMANDS, ChatCommandList, type ChatCommand } from './chat-commands'
 import { ChatExportDialog, ChatSearchInput, ChatSearchResults } from './chat-search-export'
 import { GROUP_MEMBER_MAX, GroupAvatarStack, GroupInviteDialog, GroupMembersPopover, GroupTurnStatus, MentionList, mentionOptions, type GroupInviteMode, type MentionOption } from './chat-group'
@@ -159,7 +161,7 @@ function ChatBackground({ url, dim, blur, fit }: { url: string; dim: number; blu
 function ComposerPickChip({ icon, label, disabled, onRemove }: { icon: ReactNode; label: string; disabled: boolean; onRemove: () => void }) {
   const { t } = useI18n()
   return (
-    <Button variant="ghost" size="xs" disabled={disabled} onClick={onRemove} className="h-6 gap-1 rounded-full border border-line pl-2 pr-1.5 font-normal text-foreground/85" aria-label={t({ ko: '선택 해제: {label}', en: 'Unpick {label}' }, { label })}>
+    <Button variant="subtle" size="xs" disabled={disabled} onClick={onRemove} aria-label={t({ ko: '선택 해제: {label}', en: 'Unpick {label}' }, { label })}>
       {icon}
       <span className="max-w-48 truncate">{label}</span>
       <X className="size-3 text-muted-foreground" />
@@ -932,8 +934,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     })
   }
   const threadList = (dense: boolean) => <>
-    <div className={dense ? 'px-2 pb-2' : 'px-3 pb-2 pt-3'}><ChatSearchInput value={searchText} onChange={setSearchText} /></div>
-    <div ref={dense ? undefined : restoreChatListScroll} onScroll={dense ? undefined : (event) => { chatListScrollTop = event.currentTarget.scrollTop }} className={cn('min-h-0 flex-1 overflow-y-auto', !dense && 'px-1')}>
+    {/* The page layout's list screen already sits on --page-gutter; only the panel adds its own inset. */}
+    <div className={dense ? 'pb-2' : cn('pb-2 pt-3', layout === 'panel' && 'px-3')}><ChatSearchInput value={searchText} onChange={setSearchText} /></div>
+    <div ref={dense ? undefined : restoreChatListScroll} onScroll={dense ? undefined : (event) => { chatListScrollTop = event.currentTarget.scrollTop }} className={cn('min-h-0 flex-1 overflow-y-auto', !dense && layout === 'panel' && 'px-1')}>
       <ChatThreadList query={searchText} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} drafts={drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />
       {searchText.trim() ? <ChatSearchResults query={searchText} disabled={false} onPick={pickSearchResult} /> : null}
     </div>
@@ -947,7 +950,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     ? group && activeThreadId !== null
       ? (
         <GroupMembersPopover threadId={activeThreadId} group={group} profilesById={profilesById} disabled={isBusy} onInvite={() => setInvite({ kind: 'add', threadId: activeThreadId, memberIds: group.memberIds })}>
-          <Button variant="ghost" size="sm" className="h-8 shrink-0 px-1" aria-label={t({ ko: '참가자', en: 'Members' })}><GroupAvatarStack profiles={memberProfiles} /></Button>
+          <Button variant="ghost" size="sm" className="shrink-0" aria-label={t({ ko: '참가자', en: 'Members' })}><GroupAvatarStack profiles={memberProfiles} /></Button>
         </GroupMembersPopover>
       )
       : <GroupAvatarStack profiles={memberProfiles} />
@@ -971,7 +974,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   const transcript = (
     <ChatBlockChangesContext.Provider value={blockChanges}><ChatChoiceStatesContext.Provider value={choiceStates}><div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={onTranscriptScroll}>
-      <div ref={observeTranscript} className={cn('mx-auto flex flex-col pb-6', layout === 'page' ? cn(CHAT_WIDTH_CLASS[appearance.width], 'px-4 pt-2 sm:px-6') : 'px-4 pt-3')} style={{ ...chatTranscriptStyle(appearance, profile?.style), gap: `${CHAT_MESSAGE_GAP_PX[appearance.messageGap]}px` }}>
+      <div ref={observeTranscript} className={cn('mx-auto flex flex-col pb-6', layout === 'page' ? cn(CHAT_WIDTH_CLASS[appearance.width], 'px-(--page-gutter) pt-2') : 'px-4 pt-3')} style={{ ...chatTranscriptStyle(appearance, profile?.style), gap: `${CHAT_MESSAGE_GAP_PX[appearance.messageGap]}px` }}>
         {visibleMessages.length < messages.length || hasMoreBefore ? <Button variant="ghost" size="sm" disabled={loadingEarlier} onClick={() => void showEarlierMessages()}>{earlierError ? t({ ko: '이전 메시지 다시 불러오기', en: 'Retry earlier messages' }) : t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
         {pendingChat?.greeting?.text ? <div>
           <CodexChatAssistantMessage content={pendingChat.greeting.text} toolCalls={[]} appearance={appearance} speaker={speaker} />
@@ -1026,7 +1029,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       {canManageRoutines ? <DropdownMenuItem onSelect={() => setRoutinesOpen(true)}><AlarmClock />{t({ ko: '루틴', en: 'Routines' })}</DropdownMenuItem> : null}
       <DropdownMenuSeparator />
       {displayThread ? <DropdownMenuItem disabled={!thread || isBusy} onSelect={() => void runCommand('/clear')}><Eraser />{t({ ko: '대화 비우기', en: 'Clear chat' })}</DropdownMenuItem> : null}
-      <DropdownMenuItem disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()} className="text-destructive"><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
+      <DropdownMenuItem variant="destructive" disabled={isBusy || deleteMutation.isPending} onSelect={() => void handleDelete()}><Trash2 />{t({ ko: '삭제', en: 'Delete' })}</DropdownMenuItem>
     </DropdownMenuContent>
   </DropdownMenu></span></ChatAppearancePopover>
   const statusStrip = hasPanel && statusData && !wideStatus ? <ChatStatusStrip data={statusData} activeKey={activeStatusKey} onActiveKey={setStatusKey} open={stripOpen} onOpenChange={setStripPanelOpen} /> : null
@@ -1056,7 +1059,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const draftRecipients = draftMentioned.length ? draftMentioned : draftTarget?.role === 'user' ? draftTarget.routing?.recipients ?? [] : draftQuote?.speakerProfileId ? [draftQuote.speakerProfileId] : []
   const draftRecipientLabel = isGroup ? draftRecipients.map((id) => typeof id === 'number' ? profilesById.get(id)?.name : null).filter(Boolean).join(', ') || profile?.name : profile?.name
   const composer = (
-    <div className={cn('relative w-full shrink-0 pb-4 pt-2', layout === 'page' ? cn('mx-auto px-4 sm:px-6', CHAT_WIDTH_CLASS[appearance.width]) : 'px-3')}>
+    <div className={cn('relative w-full shrink-0 pb-4 pt-2', layout === 'page' ? cn('mx-auto px-(--page-gutter)', CHAT_WIDTH_CLASS[appearance.width]) : 'px-3')}>
       {showCommands ? <ChatCommandList id={commandListId} commands={matchingCommands} selected={selectedCommand} onSelect={pickCommand} /> : null}
       {showMentions ? <MentionList id={mentionListId} options={mentionMatches} selected={selectedMention} onSelect={pickMention} /> : null}
       {turnStatus}
@@ -1067,8 +1070,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       {warning ? <p className="mb-2 flex items-center gap-1.5 text-xs text-warning"><TriangleAlert className="size-3.5 shrink-0" />{warning}</p> : null}
       {summaryFailed ? (
         <Tip content={thread?.summary_error} side="top">
-          <Button variant="ghost" size="xs" onClick={() => setView('context')} className="mb-2 h-auto gap-1.5 px-0 py-0 text-xs font-normal text-warning hover:bg-transparent hover:underline">
-            <TriangleAlert className="size-3.5 shrink-0" />{t({ ko: '요약하지 못했어. 오래된 대화가 빠질 수 있어.', en: 'Summary failed; older turns may be left out.' })}
+          <Button variant="ghost" size="content" onClick={() => setView('context')} className="mb-2">
+            <TriangleAlert className="size-3.5 shrink-0 text-warning" /><Text as="span" variant="caption" tone="warning">{t({ ko: '요약하지 못했어. 오래된 대화가 빠질 수 있어.', en: 'Summary failed; older turns may be left out.' })}</Text>
           </Button>
         </Tip>
       ) : null}
@@ -1102,7 +1105,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           onClose={closeFlagTray}
         />
       ) : null}
-      <div {...fileDrop.dropHandlers} style={narrationColorStyle(profile?.style.roleplay ? profile.style.colors.narration : null)} className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', narrating && caretOnNarration(draft, caret) && 'focus-within:border-[color-mix(in_srgb,var(--chat-rp-narration,var(--secondary-text))_70%,transparent)]', backgroundUrl && 'bg-background/85 backdrop-blur-sm', fileDrop.dragging && 'border-primary focus-within:border-primary')}>
+      <div {...fileDrop.dropHandlers} style={narrationColorStyle(profile?.style.roleplay ? profile.style.colors.narration : null)} className={cn('flex items-end gap-2 rounded-lg border border-line px-3 py-2 focus-within:border-primary/55', narrating && caretOnNarration(draft, caret) && 'focus-within:border-narration-edge', backgroundUrl && 'bg-background/85 backdrop-blur-sm', fileDrop.dragging && 'border-primary focus-within:border-primary')}>
         <ChatAttachButton chat={chat} disabled={isBusy || activeThreadId === null} />
         {!isGroup && profile?.pageAssist ? <ChatPageConnectButton disabled={isBusy} /> : null}
         {flags.length > 0 ? <ChatFlagButton buttonRef={flagButtonRef} count={activeFlagIds.length} open={flagTrayOpen} disabled={!canToggleFlags} onToggle={() => setFlagTrayOpen((open) => !open)} /> : null}
@@ -1126,16 +1129,16 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
         />
         </div>
         {(streamingHere || serverRunning) && !(isGroup && canSend) ? (
-          <IconButton variant="secondary" size="icon-sm" className="rounded-full" onClick={() => activeThreadId !== null && chat.stop(activeThreadId)} label={t({ ko: '중단', en: 'Stop' })}>
+          <IconButton variant="secondary" size="icon-sm" onClick={() => activeThreadId !== null && chat.stop(activeThreadId)} label={t({ ko: '중단', en: 'Stop' })}>
             <Square />
           </IconButton>
         ) : connectionDown && !isCommand ? (
           // Down: the send button checks again instead; it comes back once the connection answers.
-          <IconButton variant="destructive" size="icon-sm" className="rounded-full" onClick={() => healthRecheck.mutate()} disabled={healthRecheck.isPending} label={t({ ko: '다시 확인', en: 'Check again' })}>
+          <IconButton variant="destructive" size="icon-sm" onClick={() => healthRecheck.mutate()} disabled={healthRecheck.isPending} label={t({ ko: '다시 확인', en: 'Check again' })}>
             <RotateCw className={cn(healthRecheck.isPending && 'animate-spin')} />
           </IconButton>
         ) : (
-          <IconButton variant="default" size="icon-sm" className="rounded-full" onClick={handleSend} disabled={!canSend} label={t({ ko: '보내기', en: 'Send' })}>
+          <IconButton variant="default" size="icon-sm" onClick={handleSend} disabled={!canSend} label={t({ ko: '보내기', en: 'Send' })}>
             <ArrowUp />
           </IconButton>
         )}
@@ -1213,16 +1216,19 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     return (
       <div className="flex min-h-0 flex-1">
         {dialogs}
-        <nav aria-label={t({ ko: '채팅 목록', en: 'Chats' })} className="hidden w-60 shrink-0 flex-col gap-1 border-r border-line py-2 pr-3 md:flex">
-          <div className="flex items-center justify-between pb-1 pl-2">
-            <span className="text-xs font-semibold text-muted-foreground">{t({ ko: '채팅', en: 'Chats' })}</span>
-            {newChatButton}
-          </div>
-          {threadList(true)}
-        </nav>
+        {/* The PageWithSidebar column spec; the page root (CodexChatPage) bleeds to the shell edges like PageWithSidebar. */}
+        {hasSideList ? (
+          <SidebarColumn as="nav" label={t({ ko: '채팅 목록', en: 'Chats' })} bodyClassName="flex flex-col gap-1">
+            <div className="flex items-center justify-between pb-1 pl-2">
+              <span className="text-xs font-semibold text-muted-foreground">{t({ ko: '채팅', en: 'Chats' })}</span>
+              {newChatButton}
+            </div>
+            {threadList(true)}
+          </SidebarColumn>
+        ) : null}
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className={cn('flex h-12 shrink-0 items-center gap-1', backButton ? 'pl-1.5' : 'pl-4 sm:pl-6')}>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col pb-(--theme-shell-main-padding-bottom)" style={pageGutterStyle(hasSideList)}>
+          <div className="flex h-12 shrink-0 items-center gap-1 px-(--page-gutter)">
             {showList ? <>{listTitle}{newChatButton}</> : <>
               {backButton}
               {headerAvatar}
@@ -1237,7 +1243,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
             ) : null}
           </div>
           <div ref={statusAreaRef} className="relative flex min-h-0 flex-1 flex-col">
-            {showList ? threadList(false) : <>
+            {showList ? <div className="flex min-h-0 flex-1 flex-col px-(--page-gutter)">{threadList(false)}</div> : <>
               {statusStrip}
               {body}
               {statusFloating}

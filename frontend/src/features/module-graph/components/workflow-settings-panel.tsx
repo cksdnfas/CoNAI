@@ -30,14 +30,14 @@ export function WorkflowSettingsPanel({
   return (
     <div className="space-y-4">
       {showName ? (
-        <Field label={t({ ko: '이름', en: 'Name' })} className="gap-1.5">
+        <Field label={t({ ko: '이름', en: 'Name' })}>
           <Input value={workflowName} onChange={(event) => onWorkflowNameChange(event.target.value)} />
         </Field>
       ) : null}
-      <Field label={t({ ko: '설명', en: 'Description' })} className="gap-1.5">
+      <Field label={t({ ko: '설명', en: 'Description' })}>
         <Textarea value={workflowDescription} rows={3} onChange={(event) => onWorkflowDescriptionChange(event.target.value)} />
       </Field>
-      <FieldGroup label={t({ ko: '저장 폴더', en: 'Folder' })} className="gap-1.5">
+      <FieldGroup label={t({ ko: '저장 폴더', en: 'Folder' })}>
         <WorkflowFolderPicker folders={folders} selectedId={folderId} onChange={onFolderChange} />
       </FieldGroup>
     </div>

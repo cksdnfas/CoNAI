@@ -312,7 +312,7 @@ export function GenerationHistoryPanelView({ feed, serviceType, workflowId, publ
 
             <div className="flex shrink-0 flex-col items-center gap-3 pb-2">
               {historyQuery.isFetchingNextPage ? (
-                <LoadingState variant="inline" className="text-xs" label={t({ ko: '기록 더 불러오는 중…', en: 'Loading more history…' })} />
+                <LoadingState variant="inline" label={t({ ko: '기록 더 불러오는 중…', en: 'Loading more history…' })} />
               ) : null}
 
               {Boolean(historyQuery.hasNextPage) && !historyQuery.isFetchingNextPage && !historyQuery.isFetchNextPageError ? (

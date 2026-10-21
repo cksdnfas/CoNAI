@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { getNaiFixedModelSettings, PROMPT_LEGACY_WILDCARD_PATTERN, PROMPT_RANDOM_TOKEN_PATTERN } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { triggerBlobDownload } from '@/lib/api-client'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
@@ -12,19 +13,37 @@ import {
   buildNaiCharacterPromptPayload,
   buildNaiCharacterReferencePayload,
   buildNaiVibePayload,
+  clampNaiQueueCount,
   clampNaiSampleCount,
   getErrorMessage,
+  getNaiEnhanceIssueLabel,
+  resolveNaiFormEnhance,
+  getNaiVibesUnsupportedMessage,
+  resolveNaiPromptPresets,
+  resolveNaiSamplingSettings,
   shouldUseNaiCharacterPositions,
   supportsNaiTransparentBackground,
+  supportsNaiVibes,
   type NAIFormDraft,
+  type NaiImageSize,
   type NAIVibeDraft,
 } from '../image-generation-shared'
 import { decodeNaiBase64Png } from './nai-generation-panel-helpers'
+
+// Non-global copies: the shared patterns are global, so `test` on them would carry `lastIndex` between calls.
+const PROMPT_RANDOM_TOKEN_TEST = new RegExp(PROMPT_RANDOM_TOKEN_PATTERN.source)
+const PROMPT_LEGACY_WILDCARD_TEST = new RegExp(PROMPT_LEGACY_WILDCARD_PATTERN.source)
+
+/** Whether any of the sent prompts holds random/wildcard syntax, so repeated jobs differ even with a fixed seed. */
+function hasNaiRandomPromptSyntax(prompts: string[]) {
+  return prompts.some((value) => PROMPT_RANDOM_TOKEN_TEST.test(value) || PROMPT_LEGACY_WILDCARD_TEST.test(value))
+}
 
 /** Manage generation and upscale actions for the NAI generation panel. */
 export function useNaiGenerationActions({
   connected,
   naiForm,
+  sourceImageSize,
   supportsCharacterPrompts,
   supportsCharacterReference,
   ensureEncodedVibes,
@@ -35,6 +54,8 @@ export function useNaiGenerationActions({
 }: {
   connected: boolean
   naiForm: NAIFormDraft
+  /** Natural size of the img2img source, for the enhance plan. */
+  sourceImageSize: NaiImageSize | null
   supportsCharacterPrompts: boolean
   supportsCharacterReference: boolean
   ensureEncodedVibes: () => Promise<NAIVibeDraft[] | null>
@@ -83,6 +104,39 @@ export function useNaiGenerationActions({
       return
     }
 
+    if (!supportsNaiVibes(naiForm.model) && naiForm.vibes.length > 0) {
+      showSnackbar({ message: getNaiVibesUnsupportedMessage(t), tone: 'error' })
+      return
+    }
+
+    const enhance = resolveNaiFormEnhance(naiForm, sourceImageSize)
+    if (enhance?.issue) {
+      showSnackbar({
+        message: t({ ko: 'Enhance를 쓸 수 없어: {reason}', en: 'Enhance is unavailable: {reason}' }, { reason: getNaiEnhanceIssueLabel(t, enhance.issue) }),
+        tone: 'error',
+      })
+      return
+    }
+
+    const queueCount = clampNaiQueueCount(naiForm.queueCount)
+    // Only prompts the request uses count: character prompts need model support, and a model with fixed settings drops the negatives.
+    const usesNegatives = getNaiFixedModelSettings(naiForm.model) === null
+    const sentPrompts = [
+      naiForm.prompt,
+      ...(usesNegatives ? [naiForm.negativePrompt] : []),
+      ...(supportsCharacterPrompts ? naiForm.characters.flatMap((character) => usesNegatives ? [character.prompt, character.uc] : [character.prompt]) : []),
+    ]
+    if (queueCount > 1 && naiForm.seed.trim().length > 0 && !hasNaiRandomPromptSyntax(sentPrompts)) {
+      showSnackbar({
+        message: t({
+          ko: '시드가 고정돼 있어서 반복해도 같은 이미지가 나와. 시드를 랜덤으로 바꾸거나 프롬프트에 랜덤 문법을 넣어줘.',
+          en: 'The seed is fixed, so every repeat makes the same image. Switch the seed to random or add random syntax to the prompt.',
+        }),
+        tone: 'error',
+      })
+      return
+    }
+
     // The payload builders drop image-less rows, so the row would look applied while being ignored.
     const emptyVibeCount = naiForm.vibes.filter((vibe) => !vibe.image && vibe.encoded.trim().length === 0).length
     const emptyReferenceCount = naiForm.characterReferences.filter((reference) => !reference.image).length
@@ -105,21 +159,28 @@ export function useNaiGenerationActions({
         return
       }
 
+      const promptPresets = resolveNaiPromptPresets(naiForm)
+      const sampling = resolveNaiSamplingSettings(naiForm)
       setIsNaiGenerating(true)
       const response = await createGenerationQueueJob({
         service_type: 'novelai',
         requested_group_path: targetGroupPath,
         request_summary: `NAI queue job · ${prompt.slice(0, 48)}`,
+        enqueue_count: queueCount,
         request_payload: {
           prompt,
           negative_prompt: negativePrompt || undefined,
+          quality_toggle: promptPresets.qualityToggle,
+          uc_preset: promptPresets.ucPreset,
           model: naiForm.model,
           action: naiForm.action,
-          sampler: naiForm.sampler,
+          sampler: sampling.sampler,
           noise_schedule: naiForm.scheduler,
-          width: Number(naiForm.width),
-          height: Number(naiForm.height),
-          steps: Number(naiForm.steps),
+          // With enhance the server derives the size from the source; send the same plan size.
+          width: enhance?.plan.width ?? Number(naiForm.width),
+          height: enhance?.plan.height ?? Number(naiForm.height),
+          enhance: enhance?.plan.amount,
+          steps: Number(sampling.steps),
           scale: Number(naiForm.scale),
           n_samples: sampleCount,
           seed: naiForm.seed.trim().length > 0 ? Number(naiForm.seed) : undefined,
@@ -154,6 +215,7 @@ export function useNaiGenerationActions({
     onHistoryRefresh,
     queryClient,
     showSnackbar,
+    sourceImageSize,
     supportsCharacterPrompts,
     targetGroupPath,
     supportsCharacterReference,

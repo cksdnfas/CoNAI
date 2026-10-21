@@ -104,7 +104,7 @@ export function ImageListVideoPreview({
       ) : (
         <div
           className={cn(
-            'pointer-events-none absolute inset-0 rounded-[inherit] bg-surface-lowest transition-opacity duration-200',
+            'pointer-events-none absolute inset-0 rounded-sm bg-surface-lowest transition-opacity duration-200',
             shouldMountVideo && hasLoadedFrame ? 'opacity-0' : 'opacity-100',
             shouldMountVideo && !hasLoadedFrame && 'animate-pulse',
           )}

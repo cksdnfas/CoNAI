@@ -156,14 +156,14 @@ function FolderPeek({ folderId }: { folderId: string }) {
   return (
     <div className="flex flex-col pb-1">
       {shown.map((entry) => (
-        <div key={entry.id} className="flex min-h-7 items-center gap-2 pl-[1.625rem] text-sm text-muted-foreground">
+        <div key={entry.id} className="flex min-h-7 items-center gap-2 pl-6.5 text-sm text-muted-foreground">
           {entry.kind === 'folder' ? <Folder className="size-3 shrink-0" aria-hidden /> : <FileText className="size-3 shrink-0" aria-hidden />}
           <span className="min-w-0 truncate text-foreground">{entry.name}{entry.kind === 'folder' ? '/' : ''}</span>
           <span className="ml-auto shrink-0 font-mono text-2xs">{entry.kind === 'file' ? formatFileSize(entry.size) : ''}</span>
         </div>
       ))}
-      {more > 0 ? <div className="pl-[1.625rem] text-xs text-muted-foreground">{t({ ko: '외 {count}개', en: '{count} more' }, { count: more })}</div> : null}
-      {query.isSuccess && entries.length === 0 ? <div className="pl-[1.625rem] text-xs text-muted-foreground">{t({ ko: '비어 있음', en: 'Empty' })}</div> : null}
+      {more > 0 ? <div className="pl-6.5 text-xs text-muted-foreground">{t({ ko: '외 {count}개', en: '{count} more' }, { count: more })}</div> : null}
+      {query.isSuccess && entries.length === 0 ? <div className="pl-6.5 text-xs text-muted-foreground">{t({ ko: '비어 있음', en: 'Empty' })}</div> : null}
     </div>
   )
 }

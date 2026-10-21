@@ -83,13 +83,11 @@ export function UploadDropZone({
     <Panel
       asChild
       tone="none"
-      padding="none"
+      padding="sm"
       radius="md"
       interactive
-      className={cn(
-        'bg-fill',
-        dropZone.isDragActive && 'bg-primary/6 ring-2 ring-primary/50 ring-inset hover:bg-primary/6',
-      )}
+      treatment="drop"
+      data-drag-active={dropZone.isDragActive}
     >
       <button
         type="button"
@@ -99,7 +97,7 @@ export function UploadDropZone({
         onDragEnter={dropZone.handleDragEnter}
         onDragOver={dropZone.handleDragOver}
         onDragLeave={dropZone.handleDragLeave}
-        className="flex min-h-28 w-full items-center justify-center overflow-hidden p-3"
+        className="flex min-h-28 w-full items-center justify-center"
       >
         {children ?? (
           <Tip content={t({ ko: '끌어다 놓거나 눌러서 고르기', en: 'Drop files or click to choose' })}>
@@ -118,7 +116,7 @@ function RowProgress({ percent, tone = 'primary', className }: { percent: number
   return (
     <span className={cn('block h-1 w-44 overflow-hidden rounded-full bg-fill', className)} aria-hidden>
       <span
-        className={cn('block h-full rounded-full transition-[width] duration-200', tone === 'destructive' ? 'bg-destructive' : 'bg-primary')}
+        className={cn('block h-full rounded-full transition-all duration-200', tone === 'destructive' ? 'bg-destructive' : 'bg-primary')}
         style={{ width: `${percent}%` }}
       />
     </span>

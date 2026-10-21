@@ -60,7 +60,7 @@ export function ImageDetailMediaFrame({
         />
       ) : null}
       {shouldRenderPixelPreview && !isPixelPreviewReady ? (
-        <Badge variant="overlay" className="pointer-events-none absolute top-2 right-2 gap-1.5 px-2">
+        <Badge variant="overlay" className="pointer-events-none absolute top-2 right-2">
           <LoaderCircle className="animate-spin" />
           {applyingLabel}
         </Badge>

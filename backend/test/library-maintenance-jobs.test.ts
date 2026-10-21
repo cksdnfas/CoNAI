@@ -454,3 +454,80 @@ test('maintenance routes answer 202 with a job, and a cancelled job stops after 
     await new Promise<void>((resolve) => server.close(() => resolve()))
   }
 })
+
+test('duplicate runtime execution preserves the active owner and cancellation signal', async () => {
+  await booted
+  const { RuntimeJobRunner, RuntimeJobStore, registerRuntimeJobHandlers } = await import('../src/services/runtimeJobs')
+  const { getUserSettingsDb } = await import('../src/database/userSettingsDb')
+  const db = getUserSettingsDb()
+  const row = (id: string) => db.prepare('SELECT * FROM runtime_jobs WHERE job_id = ?').get(id)
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => { release = resolve })
+  let calls = 0
+  let signal: AbortSignal | undefined
+  RuntimeJobRunner.register({
+    kind: 'auto-tag-reset',
+    handler: async (ctx) => {
+      calls++
+      signal = ctx.signal
+      await gate
+      ctx.throwIfCancelled()
+    },
+  })
+  const job = RuntimeJobStore.create({ kind: 'auto-tag-reset' })
+  const first = RuntimeJobRunner.runExisting(job.jobId)
+  try {
+    assert.equal(calls, 1)
+    assert.equal(RuntimeJobRunner.ownsJob(job.jobId), true)
+    const before = row(job.jobId)
+    assert.equal(RuntimeJobStore.markRunning(job.jobId, 'subprocess', { processed: 99 }), false)
+    await RuntimeJobRunner.runExisting(job.jobId)
+    assert.equal(calls, 1)
+    assert.deepEqual(row(job.jobId), before)
+    assert.equal(RuntimeJobRunner.ownsJob(job.jobId), true)
+    RuntimeJobRunner.cancel(job.jobId)
+    assert.equal(signal?.aborted, true, 'duplicate execution must not replace or remove the original controller')
+  } finally {
+    release()
+    await first
+    registerRuntimeJobHandlers()
+  }
+  assert.equal(RuntimeJobStore.get(job.jobId)?.status, 'cancelled')
+  assert.equal(RuntimeJobRunner.ownsJob(job.jobId), false)
+})
+
+test('runtime execution cannot reclaim another worker or terminal jobs, including startup recovery', async () => {
+  await booted
+  const { RuntimeJobRunner, RuntimeJobStore, registerRuntimeJobHandlers } = await import('../src/services/runtimeJobs')
+  const { getUserSettingsDb } = await import('../src/database/userSettingsDb')
+  const db = getUserSettingsDb()
+  let calls = 0
+  RuntimeJobRunner.register({ kind: 'auto-tag-reset', handler: async () => { calls++; return { mutated: true } } })
+  try {
+    for (const state of ['running', 'completed', 'failed', 'cancelled', 'recovered'] as const) {
+      const job = RuntimeJobStore.create({ kind: 'auto-tag-reset' })
+      if (state === 'running') {
+        assert.equal(RuntimeJobStore.markRunning(job.jobId, 'subprocess'), true)
+        db.prepare('UPDATE runtime_jobs SET owner_pid = ? WHERE job_id = ?').run(process.pid + 1, job.jobId)
+      } else if (state === 'completed') {
+        RuntimeJobStore.markCompleted(job.jobId, { original: true })
+      } else if (state === 'failed') {
+        RuntimeJobStore.markFailed(job.jobId, 'handler_error', 'original failure')
+      } else if (state === 'cancelled') {
+        RuntimeJobStore.markCancelled(job.jobId, 'original cancellation')
+      } else {
+        RuntimeJobStore.requestCancel(job.jobId)
+        RuntimeJobStore.recoverInterruptedJobs()
+        assert.equal(RuntimeJobStore.get(job.jobId)?.status, 'cancelled')
+      }
+      const before = db.prepare('SELECT * FROM runtime_jobs WHERE job_id = ?').get(job.jobId)
+      assert.equal(RuntimeJobStore.markRunning(job.jobId, 'all', { processed: 99 }), false)
+      await RuntimeJobRunner.runExisting(job.jobId)
+      assert.equal(calls, 0, state)
+      assert.deepEqual(db.prepare('SELECT * FROM runtime_jobs WHERE job_id = ?').get(job.jobId), before, state)
+      assert.equal(RuntimeJobRunner.ownsJob(job.jobId), false, state)
+    }
+  } finally {
+    registerRuntimeJobHandlers()
+  }
+})

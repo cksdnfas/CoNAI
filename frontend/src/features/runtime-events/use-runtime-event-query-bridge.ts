@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 import type { ChatGenerationFinishedEventPayload, ChatGenerationUpdatedEventPayload, GraphExecutionEventPayload, GraphExecutionProgressEventPayload, HistoryRecordEventPayload, QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
-import { refreshChatGenerationQueries } from './chat-generation-query-updates'
+import { refreshChatGenerationQueries, refreshRuntimeQueryKeys, type ChatGenerationRefresh } from './chat-generation-query-updates'
 import { AUDIO_QUERY_KEY } from '@/lib/api-audio'
 import { CHAT_ROUTINES_QUERY_KEY } from '@/lib/api-chat-routines'
 import { PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
@@ -183,6 +183,13 @@ export function useRuntimeEventQueryBridge() {
   const pendingPostChangesRef = useRef(new Map<number, string>())
   const pendingAudioScopesRef = useRef(new Map<string, string>())
   const pendingGraphProgressIdsRef = useRef(new Set<number>())
+  const pendingGenerationRef = useRef(new Map<string, ChatGenerationRefresh>())
+
+  const flushGeneration = useCallback(() => {
+    const pending = [...pendingGenerationRef.current.values()]
+    pendingGenerationRef.current.clear()
+    if (pending.length) void refreshChatGenerationQueries(queryClient, pending)
+  }, [queryClient])
 
   const flushPendingProgress = useCallback(() => {
     progressFlushTimerRef.current = null
@@ -210,6 +217,10 @@ export function useRuntimeEventQueryBridge() {
       const remainingMaxWaitMs = Math.max(0, firstRequestedAt + INVALIDATE_MAX_WAIT_MS - now)
       const timer = setTimeout(() => {
         timers.delete(prefix)
+        if (prefix === 'chat-generation-refresh') {
+          flushGeneration()
+          return
+        }
         const changes = prefix === POSTS_QUERY_KEY ? new Map(pendingPostChangesRef.current) : null
         if (changes) pendingPostChangesRef.current.clear()
         const audioScopes = prefix === AUDIO_QUERY_KEY ? new Map(pendingAudioScopesRef.current) : null
@@ -221,6 +232,8 @@ export function useRuntimeEventQueryBridge() {
           return
         }
         void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active', predicate: ({ queryKey, state }) => {
+          // Dedicated job snapshots are refreshed by the coalesced generation batch, not twice via this prefix.
+          if (prefix === HISTORY_QUERY_KEY_PREFIX && queryKey[1] === 'codex-chat-job') return false
           if (progressIds) return !progressIds.size || progressIds.has(Number(queryKey[1]))
           if (audioScopes?.size && !audioScopes.has('*')) {
             const kind = queryKey[1]
@@ -236,7 +249,14 @@ export function useRuntimeEventQueryBridge() {
 
       timers.set(prefix, { timer, firstRequestedAt })
     })
-  }, [queryClient])
+  }, [queryClient, flushGeneration])
+
+  const scheduleGeneration = useCallback((entry: ChatGenerationRefresh) => {
+    pendingGenerationRef.current.set(JSON.stringify(entry), entry)
+    // Bound memory even when a burst spans many unrelated jobs.
+    if (pendingGenerationRef.current.size >= 256) flushGeneration()
+    scheduleInvalidate(['chat-generation-refresh'], HISTORY_INVALIDATE_DEBOUNCE_MS)
+  }, [flushGeneration, scheduleInvalidate])
 
   const scheduleAudioInvalidate = useCallback((payload: QueueJobEventPayload) => {
     // Old servers have no scope field: retain their broad refresh until reconnecting to a current server.
@@ -249,6 +269,7 @@ export function useRuntimeEventQueryBridge() {
   useEffect(() => {
     const timers = debounceTimersRef.current
     const pendingProgress = pendingProgressByJobIdRef.current
+    const pendingGeneration = pendingGenerationRef.current
     return () => {
       timers.forEach((pending) => clearTimeout(pending.timer))
       timers.clear()
@@ -257,6 +278,7 @@ export function useRuntimeEventQueryBridge() {
         progressFlushTimerRef.current = null
       }
       pendingProgress.clear()
+      pendingGeneration.clear()
     }
   }, [])
 
@@ -273,6 +295,7 @@ export function useRuntimeEventQueryBridge() {
         scheduleInvalidate([QUEUE_QUERY_KEY_PREFIX], QUEUE_INVALIDATE_DEBOUNCE_MS)
         scheduleAudioInvalidate(queuePayload)
         if (affectsHistorySurface(queuePayload)) {
+          scheduleGeneration({ jobId: queuePayload.job_id })
           scheduleInvalidate([HISTORY_QUERY_KEY_PREFIX], HISTORY_INVALIDATE_DEBOUNCE_MS)
         }
         return
@@ -294,20 +317,25 @@ export function useRuntimeEventQueryBridge() {
       case 'history.record.created':
       case 'history.record.status': {
         const history = envelope.payload as HistoryRecordEventPayload
-        void queryClient.invalidateQueries({ queryKey: ['codex-chat-history', history.history_id], refetchType: 'active' })
-        if (history.composite_hash) {
-          void queryClient.invalidateQueries({ queryKey: ['image-detail', history.composite_hash], refetchType: 'active' })
-        }
+        scheduleGeneration({ historyId: history.history_id, jobId: history.queue_job_id, compositeHash: history.composite_hash })
         scheduleInvalidate([HISTORY_QUERY_KEY_PREFIX], HISTORY_INVALIDATE_DEBOUNCE_MS)
         return
       }
       case 'chat.generation.updated': {
-        void refreshChatGenerationQueries(queryClient, envelope.payload as ChatGenerationUpdatedEventPayload)
+        const result = envelope.payload as ChatGenerationUpdatedEventPayload
+        scheduleGeneration({ threadId: result.threadId, jobId: result.jobId, historyId: result.historyId, compositeHash: result.compositeHash })
         return
       }
       case 'chat.generation.finished': {
         const result = envelope.payload as ChatGenerationFinishedEventPayload
-        void refreshChatGenerationQueries(queryClient, { threadId: result.chat.threadId, jobId: result.jobId, historyId: result.thumbnailHistoryId })
+        scheduleGeneration({ threadId: result.chat.threadId, jobId: result.jobId, historyId: result.thumbnailHistoryId })
+        return
+      }
+      case 'chat.task.updated': {
+        const { threadId } = envelope.payload as { threadId: number }
+        void refreshRuntimeQueryKeys(queryClient, [
+          ['codex-chat-threads'], ['codex-chat-task', threadId], ['codex-chat-thread', threadId],
+        ])
         return
       }
       case 'graph.schedule.changed': {
@@ -389,17 +417,19 @@ export function useRuntimeEventQueryBridge() {
       default:
         return
     }
-  }, [flushPendingProgress, queryClient, scheduleInvalidate, scheduleAudioInvalidate])
+  }, [flushPendingProgress, queryClient, scheduleInvalidate, scheduleAudioInvalidate, scheduleGeneration])
 
   /** 스트림 공백 구간(재연결/reset) 보정: 이 채널이 다루는 모든 표면을 1회 무효화한다. */
-  const resyncAll = useCallback(() => {
-    [
+  const resyncAll = useCallback(async () => {
+    const prefixes = new Set<unknown>([
       QUEUE_QUERY_KEY_PREFIX,
       AUDIO_QUERY_KEY,
       HISTORY_QUERY_KEY_PREFIX,
       'image-detail',
       'codex-chat-history',
       'codex-chat-thread',
+      'codex-chat-task',
+      'codex-chat-threads',
       'codex-chat-media',
       GRAPH_SCHEDULE_QUERY_KEY_PREFIX,
       GRAPH_BROWSE_CONTENT_QUERY_KEY_PREFIX,
@@ -415,8 +445,16 @@ export function useRuntimeEventQueryBridge() {
       'workspaces',
       'file-store',
       'workspace-binding',
-    ].forEach((prefix) => {
-      void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active' })
+    ])
+    // Cancel only observed initial reads: imperative fetchQuery/prefetch callers must keep their promises.
+    await queryClient.cancelQueries({
+      predicate: query => prefixes.has(query.queryKey[0]) && query.isActive()
+        && query.state.fetchStatus === 'fetching' && query.state.data === undefined,
+    })
+    // One cache-wide match avoids repeated scans and overlapping parent/child invalidations.
+    await queryClient.invalidateQueries({
+      predicate: query => prefixes.has(query.queryKey[0]),
+      refetchType: 'active',
     })
   }, [queryClient])
 

@@ -6,9 +6,6 @@ import type { ChatProfileAssetFields, ChatProfileInput } from '@/lib/api-codex-c
 export type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background' | 'toolPresetName' | keyof ChatProfileAssetFields>> & Omit<ChatProfileAssetFields, 'assetVersion' | 'avatarThumbnailUrl'> & { sortOrder: number; background?: string | null }
 export type PatchDraft = (next: Partial<Draft>) => void
 
-/** Long profile fields grow with their text (or their hint when empty) up to a cap, instead of scrolling inside a few rows. */
-export const GROW_TEXTAREA = 'max-h-96 min-h-16 [field-sizing:content]'
-
 export function numberOrNull(value: string) {
   const number = Number(value)
   return value.trim() === '' || !Number.isFinite(number) ? null : number

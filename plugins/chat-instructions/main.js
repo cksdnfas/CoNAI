@@ -13,7 +13,7 @@ function publish() {
 function render() {
   list.replaceChildren(...rules.map((rule) => {
     const item = document.createElement('li')
-    item.className = rule.enabled ? '' : 'off'
+    item.className = rule.enabled ? 'conai-list-row' : 'conai-list-row off'
     const body = document.createElement('div'); body.className = 'body'
     const line = document.createElement('span'); line.className = 'text'; line.textContent = rule.text
     const target = document.createElement('span'); target.className = 'target'; target.textContent = profileName(rule.profileId)

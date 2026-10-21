@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { Activity, Check, ChevronDown, ChevronUp, GripVertical, Minimize2, PanelRight, PanelRightClose, Pencil, PictureInPicture2, RotateCcw, X } from 'lucide-react'
 import type { ChatPortraitSignal } from '@conai/shared'
 import { ChatProfileImage } from './chat-profile-image'
-import { Chip } from '@/components/ui/chip'
+import { Badge } from '@/components/ui/badge'
+import { ListRow } from '@/components/ui/list-row'
 import { chatEmoticonUrl, chatProfileAssetUrl, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
@@ -80,7 +81,7 @@ export function ChatPortrait({ signal, profile }: { signal: ChatPortraitSignal; 
     {signal.source === 'expression' && signal.compositeHash
       ? <ChatProfileImage src={chatEmoticonUrl(profile.id, signal.compositeHash)} className="size-full object-cover object-top" fallback={reference} />
       : signal.source === 'reference' ? reference : avatar}
-    {signal.emotion ? <Chip size="sm" className="absolute bottom-3 left-3 bg-background/70 text-foreground backdrop-blur-sm">{signal.emotion}</Chip> : null}
+    {signal.emotion ? <Badge variant="overlay" size="sm" className="absolute bottom-3 left-3">{signal.emotion}</Badge> : null}
   </div>
 }
 
@@ -152,7 +153,7 @@ function BlockEditor({ data, busy, onSave, onCancel }: { data: Record<string, un
   }
   return (
     <div className="space-y-1.5">
-      <Textarea autoFocus value={text} rows={10} disabled={busy} className="font-mono text-xs" aria-label={t({ ko: '상태 값 (JSON)', en: 'Status values (JSON)' })} aria-invalid={error !== null} onChange={(event) => { setText(event.target.value); setError(null) }} onKeyDown={(event) => {
+      <Textarea autoFocus value={text} rows={10} disabled={busy} mono textSize="xs" aria-label={t({ ko: '상태 값 (JSON)', en: 'Status values (JSON)' })} aria-invalid={error !== null} onChange={(event) => { setText(event.target.value); setError(null) }} onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onCancel() }
         if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void save() }
@@ -189,7 +190,7 @@ export function ChatStatusContent({ data, activeKey, onActiveKey, actions, heade
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto *:shrink-0">
       {data.portrait}
-      <div className={cn('flex min-h-12 shrink-0 flex-wrap items-center gap-1 border-b border-line py-1 pl-4 pr-1', headerClassName)}>
+      <div className={cn('flex min-h-12 shrink-0 flex-wrap items-center gap-1 border-b border-line py-1 pl-4 pr-2', headerClassName)}>
         {headerStart}
         {block ? <BlockTabs blocks={data.blocks} activeKey={block.key} onChange={onActiveKey} className="min-w-0 flex-1 basis-40" /> : <span className="text-sm font-semibold">{data.portraitLabel}</span>}
         <span className="ml-auto flex items-center gap-1">
@@ -355,23 +356,25 @@ export function ChatStatusStrip({ data, activeKey, onActiveKey, open, onOpenChan
   const stripLabel = block?.label && data.blocks.length > 1 ? `${block.label.split(' · ')[0]} · ` : ''
   return (
     <>
-      <Button
-        variant="ghost"
+      <ListRow asChild interactive size="sm" className="h-10 w-full shrink-0">
+      <button type="button"
         aria-expanded={open}
         onClick={() => onOpenChange(!open)}
-        className="h-10 w-full shrink-0 justify-start gap-2 rounded-none border-b border-line pl-3.5 pr-1 text-sm font-normal text-foreground/85"
       >
         <Activity className="size-3.5 shrink-0 text-primary" />
         <span className="min-w-0 flex-1 truncate text-left">{stripLabel}{summary || block?.key || data.portraitLabel}</span>
         <span className="flex size-8 shrink-0 items-center justify-center text-muted-foreground">{open ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}</span>
-      </Button>
+      </button>
+      </ListRow>
       {open ? (
         <div className="absolute inset-x-0 bottom-0 top-10 z-20 flex flex-col">
           <section aria-label={t({ ko: '상태창', en: 'Status panel' })} className="flex max-h-[70%] flex-col border-b border-line bg-background shadow-xl">
             <ChatStatusContent data={data} activeKey={block?.key ?? activeKey} onActiveKey={onActiveKey} headerClassName="min-h-11" />
-            <Button variant="ghost" onClick={() => onOpenChange(false)} aria-label={t({ ko: '상태창 접기', en: 'Fold status panel' })} className="h-10 shrink-0 rounded-none border-t border-line text-muted-foreground"><ChevronUp className="size-4" /></Button>
+            <div className="flex shrink-0 border-t border-line">
+              <Button variant="ghost" size="lg" onClick={() => onOpenChange(false)} aria-label={t({ ko: '상태창 접기', en: 'Fold status panel' })} className="w-full"><ChevronUp className="size-4" /></Button>
+            </div>
           </section>
-          <Button variant="ghost" aria-label={t({ ko: '상태창 접기', en: 'Fold status panel' })} onClick={() => onOpenChange(false)} className="h-auto flex-1 rounded-none bg-background/55 hover:bg-background/55" />
+          <Button variant="scrim" aria-label={t({ ko: '상태창 접기', en: 'Fold status panel' })} onClick={() => onOpenChange(false)} className="h-auto flex-1" />
         </div>
       ) : null}
     </>

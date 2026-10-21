@@ -235,7 +235,7 @@ export function ModuleGraphNodeCustomControls({ data, state }: { data: ModuleGra
           </NodeRow>
           {state.selectedLlmPreset ? (
             <div className="px-2.5 py-0.5">
-              <div className="line-clamp-3 rounded-[13px] bg-surface-high px-3 py-1.5 text-xs leading-[1.45] break-words whitespace-pre-wrap text-muted-foreground">{summarizeLlmPresetContent(state.selectedLlmPreset.content)}</div>
+              <div className="line-clamp-3 rounded-xl bg-surface-high px-3 py-1.5 text-xs leading-normal break-words whitespace-pre-wrap text-muted-foreground">{summarizeLlmPresetContent(state.selectedLlmPreset.content)}</div>
             </div>
           ) : null}
         </>

@@ -212,7 +212,7 @@ export function AutoCollectChipEditor({ initialJsonText, onChange }: AutoCollect
 
             {isSuggestionPanelOpen ? (
               <div className="theme-floating-panel overflow-hidden rounded-sm">
-                <div className="flex items-center gap-2 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
+                <div className="flex items-center gap-2 px-(--theme-panel-padding-x) py-2.5">
                   <div className="min-w-0 flex-1">
                     <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} />
                   </div>

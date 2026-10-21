@@ -135,7 +135,7 @@ function Swatches({ label, colors, current, onPick }: { label: string; colors: s
             type="button"
             title={color.toUpperCase()}
             aria-label={color.toUpperCase()}
-            className={cn('size-5 rounded-[5px] ring-1 ring-line ring-inset focus-visible:outline-2 focus-visible:outline-primary', color.toLowerCase() === current.toLowerCase() ? 'outline-2 outline-offset-1 outline-primary' : null)}
+            className={cn('size-5 rounded-sm ring-1 ring-line ring-inset focus-visible:outline-2 focus-visible:outline-primary', color.toLowerCase() === current.toLowerCase() ? 'outline-2 outline-offset-1 outline-primary' : null)}
             style={{ background: `linear-gradient(${color}, ${color}), ${CHECKERBOARD}` }}
             onClick={() => onPick(color)}
           />
@@ -218,7 +218,7 @@ function ColorPickerPanel({ value, initial, onChange }: { value: string | null; 
           if (moves[event.key]) { event.preventDefault(); update(moves[event.key]) }
         }}
       >
-        <span className="pointer-events-none absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[0_0_0_2px_rgb(255_255_255),0_0_0_3px_rgb(0_0_0/0.4)]" style={{ left: `${hsva.s * 100}%`, top: `${(1 - hsva.v) * 100}%`, background: opaque }} />
+        <span className="pointer-events-none absolute size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white outline outline-offset-2 outline-black/40" style={{ left: `${hsva.s * 100}%`, top: `${(1 - hsva.v) * 100}%`, background: opaque }} />
       </div>
 
       <div className="flex items-center gap-2">
@@ -249,7 +249,7 @@ function ColorPickerPanel({ value, initial, onChange }: { value: string | null; 
             onPointerMove={hue.onPointerMove}
             onKeyDown={barKeys(hsva.h / 360, (next) => update({ h: next * 360 }))}
           >
-            <span className="pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[0_0_0_2px_rgb(255_255_255),0_0_0_3px_rgb(0_0_0/0.4)]" style={{ left: `${(hsva.h / 360) * 100}%`, background: `hsl(${hsva.h} 100% 50%)` }} />
+            <span className="pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white outline outline-offset-2 outline-black/40" style={{ left: `${(hsva.h / 360) * 100}%`, background: `hsl(${hsva.h} 100% 50%)` }} />
           </div>
           <div
             ref={alpha.ref}
@@ -265,7 +265,7 @@ function ColorPickerPanel({ value, initial, onChange }: { value: string | null; 
             onPointerMove={alpha.onPointerMove}
             onKeyDown={barKeys(hsva.a, (next) => update({ a: next }))}
           >
-            <span className="pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[0_0_0_2px_rgb(255_255_255),0_0_0_3px_rgb(0_0_0/0.4)]" style={{ left: `${hsva.a * 100}%`, background: hex }} />
+            <span className="pointer-events-none absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-white outline outline-offset-2 outline-black/40" style={{ left: `${hsva.a * 100}%`, background: hex }} />
           </div>
         </div>
       </div>
@@ -341,11 +341,11 @@ export function WallpaperColorWell({ value, themeVariable, fallback, mixed = fal
         type="button"
         aria-label={label}
         aria-expanded={open}
-        className="h-8 w-10 shrink-0 cursor-pointer rounded-md bg-field p-[3px] focus-visible:outline-2 focus-visible:outline-primary aria-expanded:ring-2 aria-expanded:ring-primary"
+        className="h-8 w-10 shrink-0 cursor-pointer rounded-md bg-field p-0.75 focus-visible:outline-2 focus-visible:outline-primary aria-expanded:ring-2 aria-expanded:ring-primary"
         onClick={() => (open ? close() : setOpen(true))}
       >
         <span
-          className="block size-full rounded-[4px]"
+          className="block size-full rounded-sm"
           style={{
             background: mixed
               ? 'conic-gradient(#e86a5a 0 25%, #4fb4e8 0 50%, #e8c35a 0 75%, #7fd39f 0)'
@@ -353,15 +353,17 @@ export function WallpaperColorWell({ value, themeVariable, fallback, mixed = fal
           }}
         />
       </button>
-      <AnchoredPopup open={open} anchorRef={anchorRef} onClose={close} align="start" className="p-3">
-        <ColorPickerPanel
-          value={mixed ? null : value}
-          initial={shown}
-          onChange={(next) => {
-            changedRef.current = next
-            onChange(next)
-          }}
-        />
+      <AnchoredPopup open={open} anchorRef={anchorRef} onClose={close} align="start">
+        <div className="p-3">
+          <ColorPickerPanel
+            value={mixed ? null : value}
+            initial={shown}
+            onChange={(next) => {
+              changedRef.current = next
+              onChange(next)
+            }}
+          />
+        </div>
       </AnchoredPopup>
     </>
   )

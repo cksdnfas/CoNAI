@@ -283,7 +283,7 @@ export function MiniMaxH3DirectorMediaCard({
       <div className="relative flex min-h-20 max-h-64 w-full items-center justify-center overflow-hidden bg-surface-lowest p-1">
         <MiniMaxDirectorMediaPreview item={item} asset={asset} onSourceDimensionsChange={handleSourceDimensionsChange} />
         <Tip content={aspectRatio}>
-          <Badge data-minimax-aspect-ratio={aspectRatio ?? undefined} className="absolute left-2 top-2 max-w-[calc(100%-4rem)] truncate bg-background/88">{label}</Badge>
+          <Badge variant="overlay" data-minimax-aspect-ratio={aspectRatio ?? undefined} className="absolute left-2 top-2 max-w-[calc(100%-4rem)] truncate">{label}</Badge>
         </Tip>
       </div>
 
@@ -295,10 +295,10 @@ export function MiniMaxH3DirectorMediaCard({
 
       {menuOpen && !disabled ? (
         <div data-minimax-interactive="true" data-surface="high" role="menu" aria-label={menuLabel} className={cn('absolute inset-x-2 top-11 z-20 overflow-hidden p-1', floatingSurfaceClassName)}>
-          <Button type="button" variant="nav" size="sm" role="menuitem" className="text-xs text-foreground" onClick={(event) => { event.stopPropagation(); onRequestReplace() }}>
+          <Button type="button" variant="nav" size="compact" role="menuitem" onClick={(event) => { event.stopPropagation(); onRequestReplace() }}>
             <RefreshCw />{replaceLabel}
           </Button>
-          <Button type="button" variant="nav" size="sm" role="menuitem" className="text-xs text-destructive hover:text-destructive" onClick={(event) => { event.stopPropagation(); onDelete() }}>
+          <Button type="button" variant="destructive-ghost" size="compact" role="menuitem" className="w-full justify-start" onClick={(event) => { event.stopPropagation(); onDelete() }}>
             <Trash2 />{deleteLabel}
           </Button>
         </div>

@@ -83,7 +83,7 @@ export function ChatDiagnosticsSettings() {
         {advanced ? <>
           <SettingsSwitchRow label={t({ ko: '원문 기록', en: 'Capture raw requests' })} checked={diagnostics.captureRaw} disabled={settingsMutation.isPending}
             onCheckedChange={(captureRaw) => settingsMutation.mutate({ diagnostics: { captureRaw } })} />
-          <SettingRow label={t({ ko: '채팅당 보관', en: 'Keep per chat' })} className={!diagnostics.captureRaw ? 'opacity-60' : undefined}>
+          <SettingRow label={t({ ko: '채팅당 보관', en: 'Keep per chat' })}>
             <NumberStepperInput variant="settings" className="w-24" min={1} max={200} precision={0} value={diagnostics.captureLimit}
               aria-label={t({ ko: '채팅당 보관', en: 'Keep per chat' })} disabled={settingsMutation.isPending || !diagnostics.captureRaw}
               onValueCommit={(value) => { const captureLimit = Number(value); if (captureLimit !== diagnostics.captureLimit) settingsMutation.mutate({ diagnostics: { captureLimit } }) }} />

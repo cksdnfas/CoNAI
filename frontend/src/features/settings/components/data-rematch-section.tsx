@@ -198,7 +198,7 @@ export function DataRematchSection() {
         ) : null}
 
         {latestErrors.length > 0 ? (
-          <Alert variant="destructive" className="text-xs">
+          <Alert variant="destructive">
             <div className="col-start-2 min-w-0 space-y-1">
               {latestErrors.map((error) => (
                 <div key={`${error.target}-${error.error}`} className="truncate" title={`${error.target}: ${error.error}`}>

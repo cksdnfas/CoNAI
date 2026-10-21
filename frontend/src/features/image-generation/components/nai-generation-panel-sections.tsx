@@ -10,7 +10,7 @@ import { Progress } from '@/components/ui/progress'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { GenerateActionBar, GenerateActionBarIconButton, type GenerateActionBarVariant } from './generate-action-bar'
+import { GenerateActionBar, GenerateActionBarIconButton, type GenerateActionBarRepeat, type GenerateActionBarVariant } from './generate-action-bar'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { GenerationToolbarStatus } from './generation-toolbar-status'
 import { PromptToggleField } from './prompt-toggle-field'
@@ -30,13 +30,13 @@ function NaiOpusUsage({ percent }: { percent: number }) {
   const label = `Opus ${formatNumber(percent, { maximumFractionDigits: 1 })}%`
 
   return (
-    <Badge variant="outline" className="gap-2 tabular-nums" asChild>
+    <Badge variant="outline" className="tabular-nums" asChild>
       <div>
         <span>{label}</span>
         <Progress
           size="sm"
           value={percent}
-          className="w-10"
+          className="ml-1 w-10"
           aria-label={t({ ko: 'Opus 잔여량', en: 'Opus remaining' })}
           aria-valuetext={label}
         />
@@ -56,7 +56,7 @@ export function NaiConnectionHeader({ connected, tierName, anlasBalance, opusRem
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Heading level={3} as="div" className="truncate">NovelAI</Heading>
           {connected
-            ? <Badge variant="secondary" className="bg-success-soft text-success-soft-foreground">{t('image-generation.components.nai.generation.panel.sections.connected')}</Badge>
+            ? <Badge variant="success">{t('image-generation.components.nai.generation.panel.sections.connected')}</Badge>
             : <Badge variant="outline">{t('image-generation.components.nai.generation.panel.sections.disconnected')}</Badge>}
           {connected && tierName ? <Badge variant="outline">{tierName}</Badge> : null}
           {connected && anlasBalance !== undefined ? <Badge variant="outline">Anlas {formatNumber(anlasBalance)}</Badge> : null}
@@ -125,6 +125,8 @@ interface NaiPromptSectionProps {
   tool?: PromptWildcardTool
   onPromptChange: (value: string) => void
   onNegativePromptChange: (value: string) => void
+  /** The model fixes the negative prompt (V5 Full Medium): shown read-only. */
+  negativeLock?: { value: string; hint: string }
 }
 
 /** Render the primary prompt section for NovelAI generation. */
@@ -134,6 +136,7 @@ export function NaiPromptSection({
   tool = 'nai',
   onPromptChange,
   onNegativePromptChange,
+  negativeLock,
 }: NaiPromptSectionProps) {
   return (
     <PromptToggleField
@@ -142,6 +145,7 @@ export function NaiPromptSection({
       negativeValue={negativePrompt}
       onPositiveChange={onPromptChange}
       onNegativeChange={onNegativePromptChange}
+      negativeLock={negativeLock}
     />
   )
 }
@@ -153,8 +157,13 @@ interface NaiActionSectionProps {
   isGenerating: boolean
   canGenerate: boolean
   generateButtonLabel: string
+  /** Cost of the whole click (per-job estimate × repeat). */
   generateButtonSuffix?: string
+  /** Tooltip for the cost, e.g. that the Max server upscale is not estimated. */
+  generateButtonSuffixHint?: string
   costErrorMessage?: string | null
+  /** Queue jobs per click. */
+  repeat: GenerateActionBarRepeat
   onUpscale: () => void
   onReset: () => void
   onGenerate: () => void
@@ -171,7 +180,9 @@ export function NaiActionSection({
   canGenerate,
   generateButtonLabel,
   generateButtonSuffix,
+  generateButtonSuffixHint,
   costErrorMessage,
+  repeat,
   onUpscale,
   onReset,
   onGenerate,
@@ -189,9 +200,11 @@ export function NaiActionSection({
       variant={variant}
       generateLabel={generateButtonLabel}
       generateSuffix={generateButtonSuffix}
+      generateSuffixHint={generateButtonSuffixHint}
       onGenerate={onGenerate}
       generateDisabled={!canGenerate}
       isGenerating={isGenerating}
+      repeat={repeat}
       onReset={onReset}
       resetLabel={t('image-generation.components.nai.generation.panel.sections.reset')}
       secondaryActions={canUpscale || onSaveChatPreset ? (

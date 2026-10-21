@@ -66,6 +66,7 @@ let consecutiveFailureCount = 0
 let cursor = 0
 let serverBootId: string | null = null
 let hasCompletedFirstConnection = false
+let connectionResynced = false
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let watchdogTimer: ReturnType<typeof setTimeout> | null = null
 let hiddenReleaseTimer: ReturnType<typeof setTimeout> | null = null
@@ -85,6 +86,8 @@ function setStatus(nextStatus: RuntimeStreamStatus) {
 }
 
 function notifyResync(reason: 'reconnected' | 'reset') {
+  if (connectionResynced) return
+  connectionResynced = true
   handlerSets.forEach((handlers) => handlers.onResync(reason))
 }
 
@@ -190,6 +193,7 @@ function openEventSource() {
     withCredentials: true,
   })
   eventSource = source
+  connectionResynced = false
 
   if (streamStatus !== 'degraded') {
     setStatus('connecting')

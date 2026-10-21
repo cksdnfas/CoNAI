@@ -1,6 +1,7 @@
 import sharp from 'sharp'
 import { normalizeBase64ImageData } from '../base64ImageData'
 import { type NAICharacterReference, type NAICharacterPrompt, type NAIMetadataParams } from './metadata'
+import { normalizeNaiWeightSyntax } from './weightSyntax'
 
 export { normalizeBase64ImageData }
 
@@ -46,8 +47,8 @@ function buildCharacterPromptPayload(characters: NAICharacterPrompt[]) {
       }
 
       return {
-        prompt: entry.prompt.trim(),
-        uc: (entry.uc || '').trim(),
+        prompt: normalizeNaiWeightSyntax(entry.prompt.trim()),
+        uc: normalizeNaiWeightSyntax((entry.uc || '').trim()),
         center,
       }
     })
@@ -75,9 +76,10 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
   const isV4Family = metadata.model?.includes('nai-diffusion-4')
   const isV5Family = metadata.model?.includes('nai-diffusion-5')
   const usesStructuredPrompts = isV4Family || isV5Family
-  const effectivePrompt = isV5Family && metadata.transparent_background
+  const effectivePrompt = normalizeNaiWeightSyntax(isV5Family && metadata.transparent_background
     ? buildTransparentBackgroundPrompt(metadata.prompt)
-    : metadata.prompt
+    : metadata.prompt)
+  const negativePrompt = normalizeNaiWeightSyntax(metadata.negative_prompt || '')
   const baseParams: Record<string, unknown> = {
     params_version: isV5Family ? 4 : 3,
     width: metadata.width,
@@ -109,7 +111,7 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
     baseParams.deliberate_euler_ancestral_bug = false
     baseParams.prefer_brownian = true
     baseParams.stream = 'msgpack'
-    baseParams.negative_prompt = metadata.negative_prompt || ''
+    baseParams.negative_prompt = negativePrompt
 
     const characterPrompts = buildCharacterPromptPayload(metadata.characters || [])
     const useCoords = typeof metadata.use_coords === 'boolean' ? metadata.use_coords : characterPrompts.length > 0
@@ -129,7 +131,7 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
     }
     baseParams.v4_negative_prompt = {
       caption: {
-        base_caption: metadata.negative_prompt || '',
+        base_caption: negativePrompt,
         char_captions: characterPrompts.map((entry) => ({
           char_caption: entry.uc,
           centers: [entry.center],
@@ -142,7 +144,11 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
   } else {
     baseParams.params_version = 1
     baseParams.ucPreset = metadata.ucPreset || 0
-    baseParams.negative_prompt = metadata.negative_prompt || ''
+    baseParams.negative_prompt = negativePrompt
+  }
+
+  if (metadata.upscaled_enhance) {
+    baseParams.upscaled_enhance = true
   }
 
   if (metadata.image) {
@@ -165,6 +171,9 @@ export async function buildNaiRequestBody(metadata: NAIMetadataParams) {
   }
 
   if (metadata.vibes && metadata.vibes.length > 0) {
+    if (isV5Family) {
+      throw new Error('Vibe Transfer is not available for NAI Diffusion V5 yet')
+    }
     baseParams.reference_image_multiple = metadata.vibes.map((entry) => entry.encoded)
     baseParams.reference_information_extracted_multiple = metadata.vibes.map((entry) => entry.information_extracted ?? 1)
     baseParams.reference_strength_multiple = metadata.vibes.map((entry) => entry.strength ?? 0.6)

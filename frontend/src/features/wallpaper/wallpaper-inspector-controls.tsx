@@ -23,7 +23,7 @@ export function InspectorRow({ label, children, className }: { label: ReactNode;
 
 /** A small overline that starts a group of rows. */
 export function InspectorHeading({ children }: { children: ReactNode }) {
-  return <Text as="div" variant="overline" className="pt-2">{children}</Text>
+  return <div className="pt-2"><Text as="div" variant="overline">{children}</Text></div>
 }
 
 /** The shared SliderRow with the inspector's label column and a typed readout. */

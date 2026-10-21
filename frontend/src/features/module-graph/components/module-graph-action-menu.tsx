@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { useOverlayBackClose } from '@/components/ui/use-overlay-back-close'
 import { useI18n } from '@/i18n'
-import { cn } from '@/lib/utils'
 import { useViewportPointAnchor } from './use-viewport-point-anchor'
 
 type PaneActionMenuState = {
@@ -32,10 +31,7 @@ function MenuItem({ icon, label, shortcut, danger, disabled, onSelect }: { icon:
       role="menuitem"
       disabled={disabled}
       onClick={onSelect}
-      className={cn(
-        'w-full justify-start gap-2.5 px-2.5 font-normal transition-none [&_svg:not([class*=size-])]:size-3.5',
-        danger ? '' : 'text-foreground [&_svg]:text-muted-foreground',
-      )}
+      className="w-full justify-start"
     >
       {icon}
       <span className="min-w-0 flex-1 truncate text-left">{label}</span>
@@ -95,7 +91,8 @@ export function ModuleGraphActionMenu({
         align="start"
         sideOffset={2}
         collisionPadding={12}
-        className="w-56 p-1"
+        padding="sm"
+        className="w-56"
         role="menu"
         aria-label={state.kind === 'node' ? state.nodeName : t({ ko: '캔버스 메뉴', en: 'Canvas menu' })}
         onOpenAutoFocus={(event) => event.preventDefault()}

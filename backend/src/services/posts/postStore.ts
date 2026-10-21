@@ -380,6 +380,10 @@ export type PostListQuery = {
   kind?: unknown; reviewStatus?: unknown; deleted?: unknown; sort?: unknown; snapshot?: unknown; taskKey?: unknown; taskConditionKey?:unknown;
 };
 
+function validateScopedPostIds(ids: readonly number[]) {
+  if (ids.length > 100 || ids.some(id => !Number.isSafeInteger(id) || id <= 0)) throw new PostError('Invalid post scope.');
+}
+
 export type PostInput = {
   title?: unknown; body?: unknown; categoryId?: unknown; tags?: unknown; status?: unknown; commentMode?: unknown; pinned?: unknown; expectedRevision?: unknown;
   knowledgeSources?: unknown;
@@ -396,6 +400,18 @@ function statusInput(actor: PostActor, value: unknown, fallback: PostStatus): Po
 }
 
 export const PostStore = {
+  /** One live published-source lookup; no bodies, author resolution, search, or per-source queries. */
+  publishedSources(actor: PostActor, ids: readonly number[]) {
+    requireKey(actor, 'posts.view');
+    validateScopedPostIds(ids);
+    if (!ids.length) return [];
+    return db().prepare(`SELECT p.id, p.revision, k.content_version AS contentVersion,
+      COALESCE(k.content_hash, substr(semantic_text_hash(p.body), 8)) AS contentHash
+      FROM posts p LEFT JOIN post_knowledge k ON k.post_id=p.id
+      WHERE p.id IN (${ids.map(() => '?').join(',')}) AND p.status='published' AND k.deleted_at IS NULL`)
+      .all(...ids) as Array<{ id: number; revision: number; contentVersion: number | null; contentHash: string }>;
+  },
+
   async list(actor: PostActor, query: PostListQuery): Promise<PostListResult> {
     requireKey(actor, 'posts.view');
     const offset = query.offset === undefined ? 0 : Number(query.offset);
@@ -405,8 +421,8 @@ export const PostStore = {
     const where: string[] = [];
     const params: unknown[] = [];
     if (query.allowedPostIds !== undefined) {
-      if (!query.allowedPostIds.length || query.allowedPostIds.length > 100 || query.allowedPostIds.some(id => !Number.isSafeInteger(id) || id <= 0)) throw new PostError('Invalid post scope.');
-      where.push(`p.id IN (${query.allowedPostIds.map(() => '?').join(',')}) AND p.status='published'`);
+      validateScopedPostIds(query.allowedPostIds);
+      where.push(query.allowedPostIds.length ? `p.id IN (${query.allowedPostIds.map(() => '?').join(',')}) AND p.status='published'` : '0');
       params.push(...query.allowedPostIds);
     }
     const trashedOnly = query.deleted === 'only';

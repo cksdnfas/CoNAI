@@ -6,6 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
+import { Panel } from '@/components/ui/panel'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -152,7 +153,7 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
                 aria-hidden
                 className={cn('absolute inset-0 grid place-items-center', !selecting && 'hidden')}
               >
-                <span className={cn('grid size-4 place-items-center rounded-[5px] border-[1.5px]', checked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/70')}>
+                <span className={cn('grid size-4 place-items-center rounded-sm border-2', checked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/70')}>
                   {checked ? <Check className="size-3" strokeWidth={3} /> : null}
                 </span>
               </span>
@@ -287,15 +288,15 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
       {archiveShown ? <>{section(archived)}<ChatRoomPageMore page={archivePage} /></> : null}
     </> : null}
     {selecting ? (
-      <div className="sticky bottom-2 z-10 mx-1 mt-2 flex items-center gap-0.5 rounded-lg border border-line bg-surface-high py-1 pl-3 pr-1 shadow-[var(--elevation-2)]">
+      <Panel treatment="floating" padding="toolbar" className="sticky bottom-2 z-10 mx-1 mt-2 flex items-center gap-0.5">
         <span className="min-w-0 flex-1 truncate text-sm font-semibold">{t({ ko: '{count}개 선택', en: '{count} selected' }, { count: formatNumber(pickedIds.length) })}</span>
         <IconButton variant="ghost" size="icon-sm" disabled={bulkBusy} onClick={() => setPicked(new Set(shownIds))} label={t({ ko: '전체 선택', en: 'Select all' })}><CheckCheck /></IconButton>
         <IconButton variant="ghost" size="icon-sm" disabled={bulkBusy} onClick={() => void runBulk(allPickedArchived ? 'unarchive' : 'archive')} label={allPickedArchived ? t({ ko: '보관 해제', en: 'Unarchive' }) : t({ ko: '보관', en: 'Archive' })}>
           {allPickedArchived ? <ArchiveRestore /> : <Archive />}
         </IconButton>
-        <IconButton variant="ghost" size="icon-sm" disabled={bulkBusy} className="text-destructive" onClick={() => setConfirmingDelete(true)} label={t({ ko: '삭제', en: 'Delete' })}><Trash2 /></IconButton>
+        <IconButton variant="destructive-ghost" size="icon-sm" disabled={bulkBusy} onClick={() => setConfirmingDelete(true)} label={t({ ko: '삭제', en: 'Delete' })}><Trash2 /></IconButton>
         <IconButton variant="ghost" size="icon-sm" disabled={bulkBusy} onClick={clearPicks} label={t({ ko: '선택 해제', en: 'Clear selection' })}><X /></IconButton>
-      </div>
+      </Panel>
     ) : null}
     <ChatDeleteDialog open={confirmingDelete} count={pickedIds.length} book={null} pending={bulkBusy} onClose={() => setConfirmingDelete(false)} onConfirm={(choice) => void runBulk('delete', choice.backupDate)} />
     <Modal open={renaming !== null} onClose={() => setRenaming(null)} title={t({ ko: '이름 바꾸기', en: 'Rename' })} widthClassName="max-w-sm">

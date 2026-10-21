@@ -73,7 +73,7 @@ export function AudioProjectDialog({ open, project, onClose, onSaved }: {
   return (
     <Modal open={open} title={project ? t({ ko: '프로젝트 수정', en: 'Edit project' }) : t({ ko: '새 프로젝트', en: 'New project' })} onClose={() => { if (!busy) onClose() }} size="narrow" dirty={dirty} onSave={canSave ? () => void submit() : undefined}>
       <form onSubmit={(event) => void submit(event)}>
-        <ModalBody className="space-y-4">
+        <ModalBody>
           <Field label={t({ ko: '이름', en: 'Name' })}><Input variant="settings" autoFocus value={name} maxLength={120} onChange={(event) => setName(event.target.value)} /></Field>
           <Field label={t({ ko: '설명', en: 'Description' })}><Textarea variant="settings" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
         </ModalBody>
@@ -149,7 +149,7 @@ export function AudioGroupDialog({ open, group, folders, takenLabels, onClose, o
   return (
     <Modal open={open} title={inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : t({ ko: '효과음 수정', en: 'Edit effect' })} onClose={() => { if (!busy) onClose() }} size="narrow" dirty={dirty} onSave={canSave ? () => void submit() : undefined}>
       <form onSubmit={(event) => void submit(event)}>
-        <ModalBody className="space-y-4">
+        <ModalBody>
           <Field label={t({ ko: '이름', en: 'Name' })}><Input variant="settings" autoFocus value={name} maxLength={120} onChange={(event) => setName(event.target.value)} /></Field>
           {!inbox ? (
             <>
@@ -165,7 +165,7 @@ export function AudioGroupDialog({ open, group, folders, takenLabels, onClose, o
                 <div className="flex items-center gap-1">
                   <Input
                     variant="settings"
-                    className="font-mono"
+                    mono
                     value={effectiveLabel}
                     maxLength={120}
                     onChange={(event) => {
@@ -177,7 +177,6 @@ export function AudioGroupDialog({ open, group, folders, takenLabels, onClose, o
                     variant="ghost"
                     size="icon-sm"
                     active={follows}
-                    className={cn(follows && 'text-success')}
                     label={follows ? t({ ko: '이름을 따라가는 중', en: 'Following the name' }) : t({ ko: '이름 따라가기', en: 'Follow the name' })}
                     onClick={() => {
                       if (follows) setLabel(effectiveLabel)
@@ -249,7 +248,7 @@ export function AudioCommentsDialog({ open, group, canEdit, onClose, onChanged }
 
   return (
     <Modal open={open} title={t({ ko: '{name} 코멘트', en: '{name} comments' }, { name: group.name })} onClose={onClose} size="narrow" height="medium">
-      <ModalBody className="space-y-3">
+      <ModalBody spacing="sm">
         <TextTabs value={status} items={tabs} onChange={setStatus} />
         <ul className="divide-y divide-line">
           {items.map((comment) => (
@@ -361,7 +360,7 @@ export function AudioCleanupDialog({ open, group, onClose, onDone }: { open: boo
 
   return (
     <Modal open={open} title={t({ ko: '후보 정리', en: 'Clean up takes' })} onClose={() => { if (!busy) onClose() }} size="narrow">
-      <ModalBody className="space-y-4">
+      <ModalBody>
         <TextTabs value={scope} items={[{ value: 'unselected', label: t({ ko: '미채택만', en: 'Unselected only' }) }, { value: 'all', label: t({ ko: '전체', en: 'Everything' }) }]} onChange={setScope} />
         <p className="text-sm">
           {plan.data
@@ -370,7 +369,7 @@ export function AudioCleanupDialog({ open, group, onClose, onDone }: { open: boo
           {plan.data && plan.data.selected_count > 0 ? <span className="text-destructive"> {t({ ko: '채택본 {count}개 포함', en: 'Includes {count} selected takes' }, { count: plan.data.selected_count })}</span> : null}
         </p>
       </ModalBody>
-      <ModalFooter className="mt-4 border-t border-line pt-3">
+      <ModalFooter separated className="mt-4">
         <Button variant="destructive" disabled={busy || !plan.data || plan.data.count === 0} onClick={() => void run()}><Trash2 />{t({ ko: '정리', en: 'Clean up' })}</Button>
       </ModalFooter>
     </Modal>

@@ -15,7 +15,6 @@ import { UnreadCount } from '@/features/codex-chat/chat-unread-count'
 import { useHomeSearchToggle } from '@/features/home/components/home-search-ui'
 import { useI18n } from '@/i18n'
 import { logoutLocalAccount } from '@/lib/api-auth'
-import { cn } from '@/lib/utils'
 import { LanguageTabs } from './language-switch'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
@@ -163,7 +162,7 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
             ) : null}
           </div>
 
-          {isLanguageOpen ? <LanguageTabs className="pb-1 pl-10.5" /> : null}
+          {isLanguageOpen ? <div className="pb-1 pl-10.5"><LanguageTabs /></div> : null}
 
           {isAnonymousSession || showSearch || menuChat ? <Separator /> : null}
 
@@ -194,7 +193,6 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
               icon={LogIn}
               label={t('loginPage.signIn')}
               onClick={() => runAndClose(() => navigate(`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`))}
-              className="text-primary hover:text-primary [&_svg]:text-primary"
             />
           ) : null}
         </div>
@@ -204,13 +202,12 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
 }
 
 /** One labelled action row; touch has no tooltips, so folded keys get words here. */
-function MenuRow({ icon: Icon, label, end, onClick, onPointerEnter, className }: {
+function MenuRow({ icon: Icon, label, end, onClick, onPointerEnter }: {
   icon: LucideIcon
   label: string
   end?: ReactNode
   onClick: () => void
   onPointerEnter?: () => void
-  className?: string
 }) {
   return (
     <Button
@@ -218,7 +215,7 @@ function MenuRow({ icon: Icon, label, end, onClick, onPointerEnter, className }:
       variant="ghost"
       size="sm"
       role="menuitem"
-      className={cn('w-full justify-start [&_svg]:text-muted-foreground', className)}
+      className="w-full justify-start"
       onClick={onClick}
       onPointerEnter={onPointerEnter}
     >

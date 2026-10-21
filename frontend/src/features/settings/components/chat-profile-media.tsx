@@ -291,7 +291,7 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
         onClick={() => setSelected(entry.link)}
         aria-label={entry.usedIn.join(', ')}
         className={cn(
-          'relative mb-2 block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-sm bg-field outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
+          'relative mb-2 block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-sm bg-field outline-none focus-visible:ring-3 focus-visible:ring-ring/40',
           selected === entry.link && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
         )}
       >
@@ -302,7 +302,7 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
             {entry.kind === 'web' ? <span className="break-all font-mono text-2xs">{hostOf(entry.link)}</span> : null}
           </span>
         ) : entry.kind === 'web' && entry.video ? (
-          <video src={entry.link} muted playsInline preload="metadata" className="block min-h-16 w-full saturate-[.85]" onError={() => markBroken(entry.link)} />
+          <video src={entry.link} muted playsInline preload="metadata" className="block min-h-16 w-full saturate-85" onError={() => markBroken(entry.link)} />
         ) : (
           <img
             src={thumbOf(entry)}
@@ -310,13 +310,13 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
             loading="lazy"
             referrerPolicy="no-referrer"
             style={{ aspectRatio: ratio }}
-            className={cn('block h-auto min-h-16 w-full object-cover', state === 'suspect' && 'bg-[repeating-conic-gradient(var(--checker-a)_0%_25%,var(--checker-b)_0%_50%)] bg-[length:12px_12px] object-contain p-3', state === 'web' && 'saturate-[.85]')}
+            className={cn('block h-auto min-h-16 w-full object-cover', state === 'suspect' && 'bg-checker object-contain p-3', state === 'web' && 'saturate-85')}
             onError={() => markBroken(entry.link)}
           />
         )}
-        {state === 'web' ? <Badge variant="overlay" size="sm" className="absolute top-1.5 left-1.5 font-bold text-info"><Globe />{t({ ko: '웹', en: 'Web' })}</Badge> : null}
-        {state === 'suspect' ? <Badge variant="overlay" size="sm" className="absolute top-1.5 left-1.5 font-bold text-warning"><TriangleAlert />{info?.width}×{info?.height}</Badge> : null}
-        {entry.video || entry.extension === 'gif' ? <Badge variant="overlay" size="sm" className="absolute top-1.5 right-1.5 font-bold">{entry.video ? t({ ko: '영상', en: 'Video' }) : 'GIF'}</Badge> : null}
+        {state === 'web' ? <Badge variant="overlay" size="sm" className="absolute top-1.5 left-1.5"><Globe />{t({ ko: '웹', en: 'Web' })}</Badge> : null}
+        {state === 'suspect' ? <Badge variant="overlay" size="sm" className="absolute top-1.5 left-1.5"><TriangleAlert />{info?.width}×{info?.height}</Badge> : null}
+        {entry.video || entry.extension === 'gif' ? <Badge variant="overlay" size="sm" className="absolute top-1.5 right-1.5">{entry.video ? t({ ko: '영상', en: 'Video' }) : 'GIF'}</Badge> : null}
       </button>
     )
   }
@@ -358,7 +358,7 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
           {state === 'web' ? <IconButton size="icon-sm" variant="ghost" disabled={localize.pending} label={t({ ko: '이것만 받기', en: 'Save this one' })} onClick={() => refetch(current)}><ImageDown /></IconButton> : null}
           {source && (state === 'fail' || state === 'broken' || state === 'suspect') ? <IconButton size="icon-sm" variant="ghost" disabled={localize.pending} label={t({ ko: '다시 받기', en: 'Fetch again' })} onClick={() => refetch(current)}><RefreshCw /></IconButton> : null}
           {current.kind === 'media' && source ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '원래 링크로 되돌리기', en: 'Restore the original link' })} onClick={() => revert(current)}><Undo2 /></IconButton> : null}
-          <IconButton size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive" label={t({ ko: '텍스트에서 빼기', en: 'Remove from the text' })} onClick={() => remove(current)}><Trash2 /></IconButton>
+          <IconButton size="icon-sm" variant="destructive-ghost" label={t({ ko: '텍스트에서 빼기', en: 'Remove from the text' })} onClick={() => remove(current)}><Trash2 /></IconButton>
         </div>
       </div>
     )
@@ -390,7 +390,7 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
               type="button"
               onClick={() => setPickerOpen(true)}
               aria-label={t({ ko: '라이브러리에서 넣기', en: 'Insert from the library' })}
-              className="mb-2 flex aspect-square w-full cursor-pointer break-inside-avoid items-center justify-center rounded-sm bg-field text-muted-foreground outline-none hover:bg-fill hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40"
+              className="mb-2 flex aspect-square w-full cursor-pointer break-inside-avoid items-center justify-center rounded-sm bg-field text-muted-foreground outline-none hover:bg-fill hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
             >
               <Plus className="size-5" />
             </button>

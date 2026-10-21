@@ -36,9 +36,12 @@ const buttonVariants = cva(
         ),
         /** Icon toolbars and inline actions: no fill until hover (translucent wash, reads on any surface). */
         ghost: cn(
-          "text-muted-foreground hover:bg-fill hover:text-foreground aria-expanded:bg-fill aria-expanded:text-foreground",
+          "text-muted-foreground hover:bg-fill hover:text-foreground aria-expanded:bg-fill aria-expanded:text-foreground aria-[current=location]:font-semibold",
           PRESSED_TINT,
         ),
+        /** A key in a SegmentedControl tray; selection is semantic, never a caller-supplied fill. */
+        segment:
+          "text-muted-foreground hover:bg-fill hover:text-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-key aria-pressed:hover:bg-background aria-selected:bg-background aria-selected:text-foreground aria-selected:shadow-key aria-selected:hover:bg-background",
         /**
          * Sidebar / list navigation row (same look as SidebarItem). Mark the current row with data-active="true" or
          * aria-current → subtle fill + 2px primary bar on the left + foreground text.
@@ -48,7 +51,12 @@ const buttonVariants = cva(
           "data-[active=true]:bg-fill data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--primary)]",
           "aria-[current=page]:bg-fill aria-[current=page]:font-medium aria-[current=page]:text-foreground aria-[current=page]:shadow-[inset_2px_0_0_var(--primary)]",
           "aria-[current=true]:bg-fill aria-[current=true]:font-medium aria-[current=true]:text-foreground aria-[current=true]:shadow-[inset_2px_0_0_var(--primary)]",
+          "data-[drop-target=true]:bg-primary/20 data-[drop-target=true]:text-foreground data-[drop-target=true]:ring-2 data-[drop-target=true]:ring-primary/60",
         ),
+        /** Select-style trigger (a button that opens a picker or tree): the field surface and outline of Select / Input. Pair with size="field". */
+        field: "theme-input-surface justify-between border text-left font-normal text-foreground hover:bg-surface-low hover:text-foreground",
+        /** Click-away scrim under a dropped-down panel: dims the content it covers and dismisses the panel when pressed. */
+        scrim: "rounded-none bg-background/55 hover:bg-background/55",
         link: "text-secondary-text underline-offset-4 hover:underline",
         /**
          * Glass icon buttons in the floating app header (search, queue, account). Chrome lives in
@@ -66,9 +74,16 @@ const buttonVariants = cva(
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
         xs: "h-6 gap-1 rounded-sm px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
+        compact: "h-7 gap-1.5 px-2 text-xs has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-3.5",
+        /** Wrapping user-content actions (tags), not a fixed-height toolbar key. */
+        content: "h-auto min-h-6 gap-1 px-2 py-1 text-xs font-normal whitespace-normal break-words text-left",
+        /** Field-height trigger whose label may run to two lines (variant="field"). */
+        field: "h-auto min-h-9 gap-3 px-3 py-2",
         sm: "h-8 gap-1.5 rounded-sm px-3 has-[>svg]:px-2.5",
         lg: "h-10 rounded-sm px-6 has-[>svg]:px-4",
         icon: "size-9",
+        /** Touch-first key in a bottom-docked bar: 44px on phones, `icon` (36px) from sm up. */
+        "icon-touch": "size-11 sm:size-9",
         "icon-xs": "size-6 rounded-sm [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-8 rounded-sm",
         "icon-lg": "size-10 rounded-sm",

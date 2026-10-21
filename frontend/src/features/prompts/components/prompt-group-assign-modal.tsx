@@ -65,7 +65,7 @@ export function PromptGroupAssignModal({
           </Alert>
         ) : null}
 
-        <ModalBody className="space-y-5">
+        <ModalBody spacing="lg">
           <div className="space-y-2">
             <p className="text-sm font-medium text-foreground">{t('prompts.components.prompt.group.assign.modal.target.group')}</p>
             <HierarchyPicker

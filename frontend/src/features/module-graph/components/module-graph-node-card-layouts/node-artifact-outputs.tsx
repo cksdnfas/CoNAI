@@ -60,9 +60,9 @@ export function NodeArtifactOutputs({
                   <Button
                     type="button"
                     variant="ghost"
-                    size="xs"
+                    size="compact"
                     aria-expanded={isExpanded}
-                    className="nodrag nowheel min-h-[28px] w-full justify-between px-1 text-left"
+                    className="nodrag nowheel w-full justify-between text-left"
                     onMouseDown={stopNodeActionEvent}
                     onClick={(event) => {
                       stopNodeActionEvent(event)

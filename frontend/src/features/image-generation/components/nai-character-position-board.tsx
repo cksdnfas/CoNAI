@@ -128,10 +128,10 @@ export function NaiCharacterPositionBoard({
           }))}
         </div>
 
-        <Text as="div" variant="overline" className="pointer-events-none absolute inset-x-0 top-2 grid grid-cols-5 text-center font-medium">
+        <Text as="div" variant="overline" className="pointer-events-none absolute inset-x-0 top-2 grid grid-cols-5 text-center">
           {['A', 'B', 'C', 'D', 'E'].map((label) => <span key={label}>{label}</span>)}
         </Text>
-        <Text as="div" variant="overline" className="pointer-events-none absolute inset-y-0 left-2 grid grid-rows-5 items-center font-medium">
+        <Text as="div" variant="overline" className="pointer-events-none absolute inset-y-0 left-2 grid grid-rows-5 items-center">
           {['1', '2', '3', '4', '5'].map((label) => <span key={label}>{label}</span>)}
         </Text>
 
@@ -149,7 +149,7 @@ export function NaiCharacterPositionBoard({
               key={`character-position-marker-${index}`}
               type="button"
               className={cn(
-                'absolute rounded-sm px-2 py-1 text-xs font-medium shadow-elevation-1 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40',
+                'absolute rounded-sm px-2 py-1 text-xs font-medium shadow-elevation-1 outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/40',
                 isSelected || isDragging
                   ? 'z-20 bg-primary text-primary-foreground'
                   : 'z-10 bg-surface-highest text-foreground hover:bg-surface-bright',

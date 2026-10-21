@@ -162,7 +162,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
   return (
     <div
       className={cn(
-        'rounded-[7px] border bg-surface-container text-foreground shadow-elevation-1 transition-opacity',
+        'rounded-md border bg-surface-container text-foreground shadow-elevation-1 transition-opacity',
         data.disabled === true && 'opacity-55 grayscale',
         dimmedForDrag && 'opacity-30',
       )}
@@ -174,7 +174,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
     >
       <NodeToolbar isVisible={selected && !dragging ? undefined : false} position={Position.Top} offset={8}>
         <div className={cn(floatingSurfaceClassName, 'nodrag flex items-center gap-0.5 rounded-lg p-0.5')}>
-          <IconButton size="icon-xs" variant="ghost" className="text-primary" disabled={!canExecuteGeneration || executionLocked} onClick={() => actions.execute(id, false)} label={t({ ko: '이 노드까지 실행', en: 'Run up to this node' })}>
+          <IconButton size="icon-xs" variant="ghost" disabled={!canExecuteGeneration || executionLocked} onClick={() => actions.execute(id, false)} label={t({ ko: '이 노드까지 실행', en: 'Run up to this node' })}>
             <Play />
           </IconButton>
           <IconButton size="icon-xs" variant="ghost" disabled={!canExecuteGeneration || executionLocked} onClick={() => actions.execute(id, true)} label={t({ ko: '캐시 무시하고 다시 실행', en: 'Rerun, ignoring the cache' })}>
@@ -205,7 +205,7 @@ function ModuleGraphNodeCardComponent({ id, data, selected, dragging }: NodeProp
       </NodeToolbar>
 
       <div className="module-graph-drag-handle flex h-9 items-center gap-2 border-b border-line pr-2.5 pl-3">
-        <span className="grid size-[18px] shrink-0 place-items-center rounded-[5px]" style={{ background: `color-mix(in srgb, ${visual.color} 16%, transparent)`, color: visual.color }} aria-hidden>
+        <span className="grid size-4.5 shrink-0 place-items-center rounded-sm" style={{ background: `color-mix(in srgb, ${visual.color} 16%, transparent)`, color: visual.color }} aria-hidden>
           <KindIcon className="size-3" strokeWidth={2.25} />
         </span>
         {isRenaming ? (

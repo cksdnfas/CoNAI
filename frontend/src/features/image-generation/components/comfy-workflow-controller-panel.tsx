@@ -151,7 +151,7 @@ function WorkflowTargetSelect({
                     role="option"
                     aria-selected={isSelected}
                     data-active={isSelected || undefined}
-                    className="h-auto justify-between gap-3 py-2"
+                    className="justify-between"
                     onClick={() => {
                       onChange(option.value)
                       setIsOpen(false)
@@ -508,7 +508,7 @@ export function ComfyWorkflowControllerPanel({
     <div className="space-y-6">
       {notice}
       {serverRouting && servers.length === 0 ? (
-        <Alert className="py-2 text-xs">
+        <Alert>
           <AlertTitle>{t({ ko: '서버를 먼저 등록해줘.', en: 'Register a server first.' })}</AlertTitle>
         </Alert>
       ) : null}
@@ -546,7 +546,7 @@ export function ComfyWorkflowControllerPanel({
             />
           </GenerationControllerFieldStack>
         ) : (
-          <Alert className="py-2 text-xs">
+          <Alert>
             <AlertTitle>{t({ ko: '노출된 입력 필드 없음', en: 'No exposed input fields' })}</AlertTitle>
           </Alert>
         )}

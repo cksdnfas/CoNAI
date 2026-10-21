@@ -5,11 +5,14 @@ import { NaiCharacterReferencesEditor } from '@/features/image-generation/compon
 import { sortNaiSavedAssets, useNaiSavedAssetPreferences } from '@/features/image-generation/components/nai-assets/nai-saved-asset-preferences'
 import { NaiVibesEditor } from '@/features/image-generation/components/nai-assets/nai-vibes-editor'
 import { buildSelectedImageDraftFromUrl } from '@/features/image-generation/image-generation-drafts'
-import type {
-  NAICharacterReferenceDraft,
-  NAIVibeDraft,
-  SelectedImageDraft,
+import {
+  getNaiVibesUnsupportedMessage,
+  supportsNaiVibes,
+  type NAICharacterReferenceDraft,
+  type NAIVibeDraft,
+  type SelectedImageDraft,
 } from '@/features/image-generation/image-generation-shared'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import {
   getNaiVibeAsset,
@@ -24,6 +27,8 @@ type NaiReusableAssetInputProps = {
   kind: NaiReusableAssetKind
   value: unknown
   onChange: (value: unknown) => void
+  /** Model of the same NAI node when known; a V5 model cannot add vibes and warns about existing rows. */
+  model?: string
 }
 
 /** Node-input rows keep the image as a bare data URL (the graph JSON shape), unlike the form's SelectedImageDraft. */
@@ -175,14 +180,15 @@ function replaceAt<T>(items: T[], index: number, patch: Partial<T>) {
 }
 
 /** Render the shared NAI asset editor + saved-asset picker for vibe and reference JSON inputs. */
-export function NaiReusableAssetInput({ kind, value, onChange }: NaiReusableAssetInputProps) {
+export function NaiReusableAssetInput({ kind, value, onChange, model }: NaiReusableAssetInputProps) {
   return kind === 'vibes'
-    ? <NaiVibeNodeInput value={value} onChange={onChange} />
+    ? <NaiVibeNodeInput value={value} onChange={onChange} model={model} />
     : <NaiCharacterReferenceNodeInput value={value} onChange={onChange} />
 }
 
-function NaiVibeNodeInput({ value, onChange }: Omit<NaiReusableAssetInputProps, 'kind'>) {
+function NaiVibeNodeInput({ value, onChange, model }: Omit<NaiReusableAssetInputProps, 'kind'>) {
   const { t, locale } = useI18n()
+  const supportsVibes = model === undefined || supportsNaiVibes(model)
   const [search, setSearch] = useState('')
   const preferences = useNaiSavedAssetPreferences('conai.nai.vibes')
   const [drafts, updateVibes] = useSerializedDrafts(value, parseNaiVibeDrafts, buildNaiVibeValue, onChange)
@@ -236,27 +242,32 @@ function NaiVibeNodeInput({ value, onChange }: Omit<NaiReusableAssetInputProps, 
   }
 
   return (
-    <NaiVibesEditor
-      vibes={formDrafts}
-      defaultOpen
-      onAddImage={(image) => updateVibes([...drafts, { image: image.dataUrl, encoded: '', strength: '0.6', informationExtracted: '1' }])}
-      onRemove={(index) => updateVibes(drafts.filter((_, draftIndex) => draftIndex !== index))}
-      onImageChange={(index, image) => updateVibes(replaceAt(drafts, index, { image: image?.dataUrl }))}
-      onFieldChange={(index, field, nextValue) => updateVibes(replaceAt(drafts, index, { [field]: nextValue }))}
-      onEncodedChange={(index, encoded) => updateVibes(replaceAt(drafts, index, { encoded }))}
-      library={{
-        assets: filteredSavedVibes,
-        searchValue: search,
-        searchPlaceholder: t({ ko: '이름 / 모델 검색', en: 'Search name / model' }),
-        emptyMessage: t({ ko: '검색 결과가 없거나 저장된 vibe가 없어.', en: 'There are no search results or saved vibes.' }),
-        isLoading: savedVibesQuery.isLoading,
-        onSearchChange: setSearch,
-        onSelect: (asset) => void appendSavedVibe(asset),
-        sort: { value: sort, onChange: preferences.setSort },
-        pinnedIds: preferences.pinnedIdSet,
-        onTogglePin: preferences.togglePin,
-      }}
-    />
+    <>
+      {/* NovelAI rejects vibes on V5 models, so a run with these rows fails. */}
+      {!supportsVibes && drafts.length > 0 ? <Text as="p" variant="caption" tone="warning">{getNaiVibesUnsupportedMessage(t)}</Text> : null}
+      <NaiVibesEditor
+        vibes={formDrafts}
+        supportsVibes={supportsVibes}
+        defaultOpen
+        onAddImage={(image) => updateVibes([...drafts, { image: image.dataUrl, encoded: '', strength: '0.6', informationExtracted: '1' }])}
+        onRemove={(index) => updateVibes(drafts.filter((_, draftIndex) => draftIndex !== index))}
+        onImageChange={(index, image) => updateVibes(replaceAt(drafts, index, { image: image?.dataUrl }))}
+        onFieldChange={(index, field, nextValue) => updateVibes(replaceAt(drafts, index, { [field]: nextValue }))}
+        onEncodedChange={(index, encoded) => updateVibes(replaceAt(drafts, index, { encoded }))}
+        library={{
+          assets: filteredSavedVibes,
+          searchValue: search,
+          searchPlaceholder: t({ ko: '이름 / 모델 검색', en: 'Search name / model' }),
+          emptyMessage: t({ ko: '검색 결과가 없거나 저장된 vibe가 없어.', en: 'There are no search results or saved vibes.' }),
+          isLoading: savedVibesQuery.isLoading,
+          onSearchChange: setSearch,
+          onSelect: (asset) => void appendSavedVibe(asset),
+          sort: { value: sort, onChange: preferences.setSort },
+          pinnedIds: preferences.pinnedIdSet,
+          onTogglePin: preferences.togglePin,
+        }}
+      />
+    </>
   )
 }
 

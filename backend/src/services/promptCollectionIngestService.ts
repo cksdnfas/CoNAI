@@ -1,6 +1,6 @@
 import { PromptCollectionModel } from '../models/PromptCollection';
 import { PromptGroupModel } from '../models/PromptGroup';
-import { isLoRAModel, cleanPromptTerm, parsePromptWithLoRAs, removeLoRAWeight } from '@conai/shared';
+import { removeLoRAWeight, tokenizePrompt, type PromptTerm } from '@conai/shared';
 
 export class PromptCollectionIngestService {
   /**
@@ -90,27 +90,14 @@ export class PromptCollectionIngestService {
     return loraPrompts;
   }
 
-  private static cleanTermPrompts(terms: string[], logLabel: string) {
-    const termPrompts: Array<{ prompt: string; group_id?: number }> = [];
-    for (const term of terms) {
-      const trimmed = term.trim();
-      if (!trimmed || trimmed.length < 2) continue;
-      try {
-        const cleaned = cleanPromptTerm(trimmed);
-        if (cleaned && cleaned.length >= 2) {
-          termPrompts.push({ prompt: cleaned });
-        }
-      } catch (termError) {
-        console.error(`❌ Failed to clean ${logLabel} term "${trimmed}":`, termError);
-      }
-    }
-    return termPrompts;
+  private static termPrompts(terms: PromptTerm[]): Array<{ prompt: string; group_id?: number }> {
+    return terms.filter((term) => term.value.length >= 2).map((term) => ({ prompt: term.value }));
   }
 
   private static async collectPositiveLikePrompt(prompt: string, groupId?: number) {
-    const { loras, terms } = parsePromptWithLoRAs(prompt);
+    const { loras, terms } = tokenizePrompt(prompt);
     const loraPrompts = this.cleanLoRAPrompts(loras, groupId, 'positive');
-    const termPrompts = this.cleanTermPrompts(terms, 'positive');
+    const termPrompts = this.termPrompts(terms);
 
     if (loraPrompts.length > 0) {
       await PromptCollectionModel.batchAddOrIncrement(loraPrompts);
@@ -121,9 +108,9 @@ export class PromptCollectionIngestService {
   }
 
   private static async collectNegativePrompt(prompt: string, groupId?: number) {
-    const { loras, terms } = parsePromptWithLoRAs(prompt);
+    const { loras, terms } = tokenizePrompt(prompt);
     const loraPrompts = this.cleanLoRAPrompts(loras, groupId, 'negative');
-    const termPrompts = this.cleanTermPrompts(terms, 'negative');
+    const termPrompts = this.termPrompts(terms);
 
     if (loraPrompts.length > 0) {
       await PromptCollectionModel.batchAddOrIncrementNegative(loraPrompts);
@@ -147,8 +134,7 @@ export class PromptCollectionIngestService {
       }
 
       if (this.isValidPrompt(characterPromptText)) {
-        const { terms } = parsePromptWithLoRAs(characterPromptText!);
-        const termPrompts = this.cleanTermPrompts(terms, 'character');
+        const termPrompts = this.termPrompts(tokenizePrompt(characterPromptText).terms);
         if (termPrompts.length > 0) {
           await PromptCollectionModel.batchAddOrIncrement(termPrompts);
         }
@@ -182,10 +168,10 @@ export class PromptCollectionIngestService {
   private static imageUsageTerms(prompt: string | null, negativePrompt: string | null, characterPromptText: string | null, autoTags: string | null) {
     const result: Array<{ prompt: string; type: 'positive' | 'negative' | 'auto' }> = [];
     for (const [text, type] of [[prompt, 'positive'], [characterPromptText, 'positive'], [negativePrompt, 'negative']] as const) {
-      if (!text) continue;
-      for (const term of parsePromptWithLoRAs(text).terms) {
-        const cleaned = cleanPromptTerm(term.trim());
-        if (cleaned) result.push({ prompt: cleaned, type });
+      // Same filters as collection, so deletion and undo touch exactly the collected terms.
+      if (!this.isValidPrompt(text)) continue;
+      for (const term of this.termPrompts(tokenizePrompt(text).terms)) {
+        result.push({ prompt: term.prompt, type });
       }
     }
     if (autoTags) {

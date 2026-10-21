@@ -16,7 +16,7 @@ import { POSTS_QUERY_KEY, getPostKnowledgeEvaluationStatus, getPostKnowledgeSear
 import { cn } from '@/lib/utils'
 import { ModelRowOptions } from './chat-model-role-select'
 import { useDefaultJudgeLabel } from './chat-judge-connection-select'
-import { SETTINGS_CONTROL_CLASS, SettingsStatLine } from './settings-rows'
+import { SettingsStatLine } from './settings-rows'
 import { useSettingsAdvanced } from './settings-advanced'
 
 type NumberSettingKey = { [Key in keyof PostsKnowledgeSettings]: PostsKnowledgeSettings[Key] extends number ? Key : never }[keyof PostsKnowledgeSettings]
@@ -84,7 +84,7 @@ export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKno
         <SettingsSwitchRow label={t({ ko: '지식 문서', en: 'Knowledge documents' })} checked={draft.enabled} onCheckedChange={(enabled) => onPatch({ enabled })} />
         <SettingsSwitchRow label={t({ ko: '검색에 평가 반영', en: 'Use feedback in search ranking' })} checked={draft.rankingEnabled} disabled={!draft.enabled} onCheckedChange={(rankingEnabled) => onPatch({ rankingEnabled })} />
         <SettingsSwitchRow label={t({ ko: '쓰고 나면 자동 평가', en: 'Evaluate automatically after use' })} checked={draft.autoEvaluationEnabled} disabled={!draft.enabled} onCheckedChange={(autoEvaluationEnabled) => onPatch({ autoEvaluationEnabled })} />
-        <SettingRow label={t({ ko: '판단 모델', en: 'Judge model' })} controlClassName={cn(SETTINGS_CONTROL_CLASS, 'flex items-center gap-2')}>
+        <SettingRow label={t({ ko: '판단 모델', en: 'Judge model' })} controlWidth="standard">
           {ready !== null ? <span role="img" aria-label={readyLabel} title={readyLabel} className={cn('size-2 shrink-0 rounded-full', ready ? 'bg-success' : 'bg-warning')} /> : null}
           <Select variant="settings" aria-label={t({ ko: '판단 모델', en: 'Judge model' })} value={modelValue} disabled={!models.isSuccess || !draft.enabled} onChange={(event) => {
             const selected = models.data?.find((item) => `slot:${item.id}` === event.target.value)
@@ -96,21 +96,23 @@ export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKno
           </Select>
         </SettingRow>
         <SettingRow label={t({ ko: '검색', en: 'Search' })}><span className="text-sm tabular-nums text-muted-foreground">{searchLabel}</span></SettingRow>
-        {advanced ? <SettingRow label={t({ ko: '평가 비중', en: 'Feedback weights' })} controlClassName="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {advanced ? <SettingRow label={t({ ko: '평가 비중', en: 'Feedback weights' })}>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {WEIGHT_ROWS.map((row) => (
             <label key={row.key} className="inline-flex items-center gap-2 text-sm text-muted-foreground">
               {t(row)}
               <NumberStepperInput className="w-32" min={row.min} max={row.max} step={row.step} variant="settings" aria-label={t({ ko: '{name} 평가 비중', en: '{name} weight' }, { name: t(row) })} value={draft[row.key]} onValueCommit={(value) => onPatch({ [row.key]: Number(value) })} />
             </label>
           ))}
+          </div>
         </SettingRow> : null}
       </RowGroup>
       {advanced ? <Section
         variant="settings"
         heading={t({ ko: '한도', en: 'Limits' })}
         actions={<IconButton size="icon-sm" variant="ghost" label={t({ ko: '기본값으로 (정책 {version})', en: 'Restore defaults (policy {version})' }, { version: draft.policyVersion })} onClick={() => onPatch(DEFAULT_POSTS_KNOWLEDGE_SETTINGS)}><RefreshCw /></IconButton>}
-        bodyClassName="grid gap-x-10 sm:grid-cols-2"
       >
+        <div className="grid gap-x-10 sm:grid-cols-2">
         {ADVANCED_GROUPS.map((group) => (
           <Fragment key={group.ko}>
             <h4 className="col-span-full pb-1 pt-4 text-xs text-muted-foreground first:pt-0">{t(group)}</h4>
@@ -121,6 +123,7 @@ export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKno
             ))}
           </Fragment>
         ))}
+        </div>
       </Section> : null}
     </div>
   )

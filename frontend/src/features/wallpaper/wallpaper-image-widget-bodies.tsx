@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Text } from '@/components/ui/text'
+import { Badge } from '@/components/ui/badge'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
 import { formatDateTime } from '@/features/module-graph/module-graph-shared'
@@ -36,11 +37,13 @@ const WALLPAPER_PUZZLE_GAP = 8
 /** Workflow name over its kind and time, on a gradient at the bottom of a recent-result card. */
 function WallpaperHistoryCardCaption({ title, badge, meta }: { title: ReactNode; badge: ReactNode; meta: ReactNode }) {
   return (
-    <div className="absolute inset-x-0 bottom-0 z-[1] bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_84%,transparent))] p-2">
+    <div className="absolute inset-x-0 bottom-0 z-[1] p-2" style={{ background: 'linear-gradient(180deg,transparent,color-mix(in srgb,var(--background) 84%,transparent))' }}>
       <div className="truncate text-xs font-medium text-white">{title}</div>
-      <Text as="div" variant="overline" className="mt-1 flex items-center justify-between gap-2 text-white/78">
-        <span>{badge}</span>
-        <span className="truncate">{meta}</span>
+      <Text as="div" variant="overline" tone="inherit" className="mt-1" style={{ color: 'rgb(255 255 255 / 0.78)' }}>
+        <span className="flex items-center justify-between gap-2">
+          <span>{badge}</span>
+          <span className="truncate">{meta}</span>
+        </span>
       </Text>
     </div>
   )
@@ -243,9 +246,11 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
               <button
                 key={entry.id}
                 type="button"
-                className="absolute inset-0 block overflow-hidden rounded-xl border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-[opacity,transform,filter,inset]"
+                className="absolute inset-0 block overflow-hidden rounded-xl border border-white/12 bg-surface-high transition"
                 style={{
                   ...cardStyle,
+                  boxShadow: '0 16px 42px rgba(0,0,0,0.34)',
+                  transitionProperty: 'opacity, transform, filter, inset',
                   transitionDuration: `${stackTransitionDurationMs}ms`,
                   transitionTimingFunction: stackTransitionTimingFunction,
                 }}
@@ -266,9 +271,11 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
           return (
             <div
               key={entry.id}
-              className="absolute inset-0 overflow-hidden rounded-xl border border-white/12 bg-surface-high shadow-[0_16px_42px_rgba(0,0,0,0.34)] transition-[opacity,transform,filter,inset]"
+              className="absolute inset-0 overflow-hidden rounded-xl border border-white/12 bg-surface-high transition"
               style={{
                 ...cardStyle,
+                boxShadow: '0 16px 42px rgba(0,0,0,0.34)',
+                transitionProperty: 'opacity, transform, filter, inset',
                 transitionDuration: `${stackTransitionDurationMs}ms`,
                 transitionTimingFunction: stackTransitionTimingFunction,
               }}
@@ -292,7 +299,7 @@ export function WallpaperRecentResultsBody({ widget, mode, onOpenImage }: { widg
         ) : null}
         {recentEntries.map((entry, index) => puzzleRects[index] ? (
           // The surface forces `relative`, so the tile position lives on a wrapper.
-          <div key={entry.id} className="absolute transition-[left,top,width,height] duration-500 ease-out" style={puzzleRects[index]}>
+          <div key={entry.id} className="absolute transition duration-500 ease-out" style={{ ...puzzleRects[index], transitionProperty: 'left, top, width, height' }}>
             <WallpaperPreviewImageSurface
               image={entry.previewImage}
               alt={entry.workflowName}
@@ -528,7 +535,7 @@ export function WallpaperGroupImageViewBody({ widget, mode, onOpenImage }: { wid
 
         // The surface forces `relative`, so a puzzle tile's position lives on a wrapper.
         return puzzleRect ? (
-          <div key={`group-grid-slot-${index}`} className="absolute transition-[left,top,width,height] duration-500 ease-out" style={puzzleRect}>
+          <div key={`group-grid-slot-${index}`} className="absolute transition duration-500 ease-out" style={{ ...puzzleRect, transitionProperty: 'left, top, width, height' }}>
             {movingTile}
           </div>
         ) : (
@@ -567,9 +574,9 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
 
   if (groupId === null) {
     return (
-      <div className="flex h-full items-end rounded-sm border border-border/70 bg-[linear-gradient(135deg,color-mix(in_srgb,var(--secondary)_24%,transparent),transparent_55%),linear-gradient(180deg,transparent,color-mix(in_srgb,var(--primary)_10%,transparent)),var(--surface-low)] p-3">
+      <div className="flex h-full items-end rounded-sm border border-border/70 p-3" style={{ backgroundImage: 'linear-gradient(135deg,color-mix(in srgb,var(--secondary) 24%,transparent),transparent 55%),linear-gradient(180deg,transparent,color-mix(in srgb,var(--primary) 10%,transparent)),var(--surface-low)' }}>
         <div>
-          <Text as="div" variant="overline" className="text-xs text-secondary-text">{t({ ko: '대표 이미지', en: 'Featured image' })}</Text>
+          <div className="text-xs"><Text as="div" variant="overline" tone="secondary" style={{ fontSize: 'inherit' }}>{t({ ko: '대표 이미지', en: 'Featured image' })}</Text></div>
           <div className="text-sm font-medium text-foreground">{t({ ko: '설정에서 쇼케이스용 그룹을 골라.', en: 'Choose a showcase group in settings.' })}</div>
         </div>
       </div>
@@ -610,10 +617,11 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
       imageClassName={cn(
         'h-full w-full rounded-xl ease-out will-change-transform',
         widget.settings.fitMode === 'contain' ? 'object-contain' : widget.settings.fitMode === 'scale-down' ? 'object-scale-down' : 'object-cover',
-        kenBurnsEnabled ? 'wallpaper-ken-burns' : 'transition-transform duration-[1600ms]',
+        kenBurnsEnabled ? 'wallpaper-ken-burns' : 'transition-transform',
       )}
       imageStyle={{
         transform: showcaseTransform,
+        transitionDuration: kenBurnsEnabled ? undefined : '1600ms',
         ...(kenBurnsEnabled ? { ['--wp-duration' as string]: `${Math.max(16, (slideshowInterval / 1000) * 2)}s` } : null),
         transitionTimingFunction: getWallpaperAnimationEasingCss(imageTransitionEasing),
       }}
@@ -621,7 +629,7 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
       onPointerLeave={() => setIsPointerInside(false)}
     >
       {rotationEnabled ? (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-[linear-gradient(180deg,transparent,color-mix(in_srgb,var(--background)_74%,transparent))] px-3 py-2">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 px-3 py-2" style={{ background: 'linear-gradient(180deg,transparent,color-mix(in srgb,var(--background) 74%,transparent))' }}>
           <div className="flex items-center gap-1.5">
             {images.map((image, index) => (
               <span
@@ -633,9 +641,9 @@ export function WallpaperImageShowcaseBody({ widget, mode, onOpenImage }: { widg
               />
             ))}
           </div>
-          <Text as="div" variant="overline" className="rounded-full bg-background/70 px-2 py-0.5 text-foreground/92 backdrop-blur-sm">
+          <Badge variant="overlay" size="sm">
             {kenBurnsEnabled ? t({ ko: '켄 번즈', en: 'Ken Burns' }) : t({ ko: '자동', en: 'Auto' })}
-          </Text>
+          </Badge>
         </div>
       ) : null}
     </WallpaperPreviewImageSurface>

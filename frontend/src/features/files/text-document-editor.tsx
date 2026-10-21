@@ -236,7 +236,7 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
 
   return (
     <Modal open title={file ? file.name : t({ ko: '새 문서', en: 'New document' })} onClose={() => onClose(saved)} widthClassName="max-w-5xl" dirty={dirty && (file !== null || text !== '')} onSave={canSave ? submit : undefined}>
-      <ModalBody className="space-y-3">
+      <ModalBody spacing="sm">
         {file ? null : (
           <div className="flex items-center gap-2">
             <Input variant="settings" autoFocus className="min-w-0 flex-1" aria-label={t({ ko: '파일 이름', en: 'File name' })} value={name} onChange={(event) => setName(event.target.value)} />

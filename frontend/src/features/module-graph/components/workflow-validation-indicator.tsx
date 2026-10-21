@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { AlertTriangle, CheckCircle2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { ListRow } from '@/components/ui/list-row'
 import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useI18n } from '@/i18n'
@@ -39,15 +39,9 @@ export function WorkflowValidationIndicator({
       size={size}
       variant="ghost"
       label={label}
-      className={cn(
-        'relative',
-        tone === 'ready' && 'text-success hover:text-success',
-        tone === 'warning' && 'text-warning hover:text-warning',
-        tone === 'error' && 'text-destructive hover:text-destructive',
-        className,
-      )}
+      className={cn('relative', className)}
     >
-      {tone === 'ready' ? <CheckCircle2 /> : <AlertTriangle />}
+      {tone === 'ready' ? <CheckCircle2 className="text-success" /> : <AlertTriangle className={tone === 'error' ? 'text-destructive' : 'text-warning'} />}
       {count > 0 ? (
         <span
           aria-hidden
@@ -69,21 +63,11 @@ export function WorkflowValidationIndicator({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{button}</PopoverTrigger>
-      <PopoverContent align="start" side="top" className="w-[min(360px,calc(100vw-2rem))] p-1.5">
+      <PopoverContent align="start" side="top" padding="sm" className="w-[min(360px,calc(100vw-2rem))]">
         <div className="max-h-[min(50vh,420px)] overflow-y-auto">
-          {issues.map((issue) => (
-            <Button
-              key={issue.id}
-              type="button"
-              variant="ghost"
-              disabled={!onIssueSelect || !issue.nodeId}
-              onClick={() => {
-                setOpen(false)
-                onIssueSelect?.(issue)
-              }}
-              className="h-auto w-full items-start justify-start gap-2 px-2 py-2 text-left font-normal whitespace-normal disabled:opacity-100"
-            >
-              <AlertTriangle className={cn('mt-0.5 size-4 shrink-0', issue.severity === 'error' ? 'text-destructive' : 'text-warning')} aria-hidden />
+          {issues.map((issue) => {
+            const leading = <AlertTriangle className={cn('mt-0.5 size-4 shrink-0', issue.severity === 'error' ? 'text-destructive' : 'text-warning')} aria-hidden />
+            const text = (
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium text-foreground">
                   {issue.nodeLabel ? <span className="text-muted-foreground">{issue.nodeLabel} · </span> : null}
@@ -91,8 +75,24 @@ export function WorkflowValidationIndicator({
                 </span>
                 {issue.detail ? <span className="mt-0.5 block text-xs text-muted-foreground">{issue.detail}</span> : null}
               </span>
-            </Button>
-          ))}
+            )
+            return onIssueSelect && issue.nodeId ? (
+              <ListRow key={issue.id} asChild interactive className="items-start" leading={leading}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false)
+                    onIssueSelect?.(issue)
+                  }}
+                >
+                  {text}
+                </button>
+              </ListRow>
+            ) : (
+              // eslint-disable-next-line shadcn/no-restyle -- nothing to jump to: a readable plain row, inset like the clickable issue rows
+              <ListRow key={issue.id} className="items-start px-2" leading={leading}>{text}</ListRow>
+            )
+          })}
         </div>
       </PopoverContent>
     </Popover>

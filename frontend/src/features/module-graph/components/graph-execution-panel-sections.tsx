@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { MediaCard } from '@/components/common/media-card'
 import { CodeBlock } from '@/components/ui/code-block'
 import { Text } from '@/components/ui/text'
 import { Modal } from '@/components/ui/modal'
@@ -44,16 +45,14 @@ export function ExecutionOutputGroupCard({
             <Text as="div" variant="title" className="truncate">{group.nodeLabel}</Text>
             {primaryArtifact ? <div className="truncate text-2xs text-muted-foreground">{primaryArtifact.port_key}</div> : null}
           </div>
-          <Badge variant="outline" className="h-6 shrink-0 px-1.5">{t({ ko: '출력 {count}', en: 'Outputs {count}' }, { count: formatNumber(group.artifacts.length) })}</Badge>
+          <Badge variant="outline" size="sm" className="shrink-0">{t({ ko: '출력 {count}', en: 'Outputs {count}' }, { count: formatNumber(group.artifacts.length) })}</Badge>
         </div>
 
         {hasVisualPreview && previewUrl && primaryArtifact ? (
-          <Button
-            type="button"
-            variant="ghost"
+          <MediaCard
             onClick={() => setModalType('image')}
-            className="group relative block h-auto w-full overflow-hidden p-0"
-          >
+            className="group w-full"
+            media={(
             <InlineMediaPreview
               src={previewUrl}
               mimeType={mimeType}
@@ -61,8 +60,9 @@ export function ExecutionOutputGroupCard({
               frameClassName="border-0 bg-transparent p-0"
               mediaClassName="h-[9.5rem] w-full object-contain"
             />
-            <ArtifactPreviewHoverOverlay />
-          </Button>
+            )}
+            overlay={<ArtifactPreviewHoverOverlay />}
+          />
         ) : (
           <Button
             type="button"
@@ -122,13 +122,13 @@ export function ExecutionComparisonContextBlock({
 
   return (
     <div className="space-y-2.5">
-      <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
-        <span>{t({ ko: '비교 맥락', en: 'Compare context' })}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <Text as="span" variant="overline">{t({ ko: '비교 맥락', en: 'Compare context' })}</Text>
         <Badge variant="outline">{t({ ko: '입력 {count}', en: 'Inputs {count}' }, { count: formatNumber(summary.runtimeInputCount) })}</Badge>
         <Badge variant={summary.finalResultCount > 0 ? 'secondary' : 'outline'}>{t({ ko: '최종 {count}', en: 'Final {count}' }, { count: formatNumber(summary.finalResultCount) })}</Badge>
         {summary.issueLogCount > 0 ? <Badge variant="outline">{t({ ko: '경고/오류 {count}', en: 'Warnings/errors {count}' }, { count: formatNumber(summary.issueLogCount) })}</Badge> : null}
         {summary.finalResultWarningCount > 0 ? <Badge variant="outline">{t({ ko: '최종 경고 {count}', en: 'Final warnings {count}' }, { count: formatNumber(summary.finalResultWarningCount) })}</Badge> : null}
-      </Text>
+      </div>
 
       {visibleRows.length === 0 ? (
         <EmptyState size="compact" title={t({ ko: '압축 입출력 원장 없음', en: 'No compact input/output ledger yet' })} />
@@ -179,9 +179,7 @@ export function ExecutionPathDiagnosticsBlock({
 
   return (
     <div className="space-y-2.5">
-      <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
-        <span>{t({ ko: '경로 진단', en: 'Path diagnostics' })}</span>
-      </Text>
+      <Text as="div" variant="overline">{t({ ko: '경로 진단', en: 'Path diagnostics' })}</Text>
       <div>
         {visibleRows.map((row) => (
           <div key={row.id} className="border-b border-line py-2.5 last:border-b-0">

@@ -53,7 +53,7 @@ export function ComfyModuleSaveModal({
       title={t({ ko: 'ComfyUI 모듈 저장', en: 'Save ComfyUI module' })}
       widthClassName="max-w-3xl"
     >
-      <ModalBody className="space-y-5">
+      <ModalBody spacing="lg">
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t({ ko: '저장 방식', en: 'Save mode' })}>
             <Select value={overwriteModuleId ? String(overwriteModuleId) : ''} onChange={(event) => onOverwriteModuleIdChange?.(event.target.value ? Number(event.target.value) : null)}>

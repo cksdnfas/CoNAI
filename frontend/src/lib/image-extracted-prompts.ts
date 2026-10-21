@@ -1,3 +1,4 @@
+import { tokenizePrompt } from '@conai/shared'
 import { shellCatalog } from '@/i18n/resources/shell'
 import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { ImageAiRawNaiParameters, ImageRecord } from '@/types/image'
@@ -161,73 +162,6 @@ function isProcessedPrompt(displayText: string, rawText?: string | null) {
   return Boolean(normalizedDisplay && normalizedRaw && normalizedDisplay !== normalizedRaw)
 }
 
-function isLoraToken(value: string) {
-  const trimmed = value.trim().toLowerCase()
-  return trimmed.startsWith('<lora:') && trimmed.includes('>')
-}
-
-function splitPromptTokens(prompt?: string | null) {
-  const trimmedPrompt = getTrimmedText(prompt)
-  if (!trimmedPrompt) {
-    return { loras: [] as string[], terms: [] as string[] }
-  }
-
-  const loras: string[] = []
-  const terms: string[] = []
-
-  trimmedPrompt
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .forEach((item) => {
-      if (isLoraToken(item)) {
-        loras.push(item)
-        return
-      }
-
-      terms.push(item)
-    })
-
-  return { loras, terms }
-}
-
-const WEIGHT_NUMBER_SOURCE = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)'
-const WEIGHTED_PARENTHESES_PATTERN = new RegExp(`\\(([^()]+(?:[^()]*)?):${WEIGHT_NUMBER_SOURCE}\\)`, 'g')
-const WEIGHTED_SQUARE_BRACKETS_PATTERN = new RegExp(`\\[([^\\[\\]]+(?:[^\\[\\]]*)?):${WEIGHT_NUMBER_SOURCE}\\]`, 'g')
-const WEIGHTED_CURLY_BRACKETS_PATTERN = new RegExp(`\\{([^{}]+(?:[^{}]*)?):${WEIGHT_NUMBER_SOURCE}\\}`, 'g')
-
-function removePromptWeights(term: string) {
-  let cleaned = term
-  let previous = ''
-
-  while (cleaned !== previous) {
-    previous = cleaned
-    cleaned = cleaned
-      .replace(WEIGHTED_PARENTHESES_PATTERN, '$1')
-      .replace(WEIGHTED_SQUARE_BRACKETS_PATTERN, '$1')
-      .replace(WEIGHTED_CURLY_BRACKETS_PATTERN, '$1')
-  }
-
-  return cleaned
-}
-
-function normalizePromptDisplayTerm(term: string) {
-  return term
-    .replace(/\\([()[\]{}])/g, '$1')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function cleanPromptTerm(term: string) {
-  if (!term) {
-    return ''
-  }
-
-  return removePromptWeights(normalizePromptDisplayTerm(term))
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 function removeLoraWeight(value: string) {
   return value.replace(/(<lora:[^:>]+)(?::[^>]+)?>/i, '$1>')
 }
@@ -293,11 +227,9 @@ function dedupePromptActionTerms(values: ExtractedPromptActionTerm[]) {
 }
 
 function getPromptTermItems(prompt?: string | null) {
-  const { terms } = splitPromptTokens(prompt)
-
   return dedupePromptActionTerms(
-    terms
-      .map((term) => toPromptActionTerm(normalizePromptDisplayTerm(term), cleanPromptTerm(term)))
+    tokenizePrompt(prompt).terms
+      .map((term) => toPromptActionTerm(term.display, term.value))
       .filter((term): term is ExtractedPromptActionTerm => Boolean(term)),
   )
 }
@@ -392,8 +324,8 @@ export function getImageLoraModels(image: ImageRecord) {
   const metadataLoraValues = Array.isArray(metadataLoraSource) ? metadataLoraSource : []
   const metadataLoras = metadataLoraValues.map((item) => formatLoraDisplayName(removeLoraWeight(String(item))))
 
-  const positiveLoras = splitPromptTokens(getTrimmedText(image.ai_metadata?.prompts?.prompt) ?? getRawPositivePrompt(image.ai_metadata?.raw_nai_parameters)).loras
-  const negativeLoras = splitPromptTokens(getTrimmedText(image.ai_metadata?.prompts?.negative_prompt) ?? getRawNegativePrompt(image.ai_metadata?.raw_nai_parameters)).loras
+  const positiveLoras = tokenizePrompt(getTrimmedText(image.ai_metadata?.prompts?.prompt) ?? getRawPositivePrompt(image.ai_metadata?.raw_nai_parameters)).loras
+  const negativeLoras = tokenizePrompt(getTrimmedText(image.ai_metadata?.prompts?.negative_prompt) ?? getRawNegativePrompt(image.ai_metadata?.raw_nai_parameters)).loras
 
   return dedupePreservingOrder([
     ...metadataLoras,

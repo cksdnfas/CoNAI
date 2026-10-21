@@ -21,9 +21,9 @@ export function ChatProfileAvatarCrop({ src, initial, onApply, onClose }: {
   const [aspect, setAspect] = useState<number | null>(null)
   const drag = useRef<{ pointerId: number; x: number; y: number; crop: ChatAvatarCrop } | null>(null)
   return <Modal open title={t({ ko: '아바타 자르기', en: 'Crop avatar' })} onClose={onClose} widthClassName="max-w-sm">
-    <ModalBody className="space-y-4">
+    <ModalBody>
       <div role="application" tabIndex={0} aria-label={t({ ko: '자르기 위치: 드래그하거나 방향키로 옮겨', en: 'Crop position: drag or use arrow keys' })}
-        className="relative mx-auto aspect-square w-[280px] max-w-full touch-none cursor-grab overflow-hidden rounded-md bg-surface-high outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 active:cursor-grabbing"
+        className="relative mx-auto aspect-square w-[280px] max-w-full touch-none cursor-grab overflow-hidden rounded-md bg-surface-high outline-none focus-visible:ring-3 focus-visible:ring-ring/40 active:cursor-grabbing"
         onPointerDown={(event) => { if (!aspect) return; event.currentTarget.setPointerCapture(event.pointerId); drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, crop } }}
         onPointerMove={(event) => {
           const start = drag.current

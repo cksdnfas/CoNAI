@@ -68,6 +68,10 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
     if (typeof handler === 'function' && (isChatMcpSource(context.source) || context.requester || context.keyGroup !== undefined)) {
       args[args.length - 1] = async (...input: unknown[]) => {
         try {
+          if (context.research && context.source === 'codex-chat') {
+            context.research.validateSources(context.requester!, context.chatContext!.profileId);
+            if (!context.research.takeTool()) throw new Error('Research tool budget exhausted. Answer only from evidence already returned.');
+          }
           requireMcpToolAccess(context, toolName, input[0] as Record<string, unknown> | undefined);
         }
         catch (error) { return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }] }; }

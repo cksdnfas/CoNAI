@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, Copy, Download, Folder, FolderInput, FolderPlus, MoreHorizontal, PenSquare, Plus, Search, Settings2, Trash2, Upload } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { SearchField } from '@/components/common/search-field'
-import { Button } from '@/components/ui/button'
+import { ListRow } from '@/components/ui/list-row'
 import { Chip } from '@/components/ui/chip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -148,25 +148,25 @@ export function WorkflowListPanel({
       <div
         key={`graph-${graph.id}`}
         data-active={isSelected || undefined}
-        className="flex min-h-9 items-center gap-1 border-b border-line pr-1 data-[active=true]:bg-fill data-[active=true]:shadow-[inset_2px_0_0_var(--primary)]"
+        className="flex min-h-9 items-center gap-1 border-b border-line pr-1 data-[active=true]:bg-fill data-[active=true]:shadow-nav-active"
       >
-        <Button
+        <ListRow asChild interactive size="sm" className="min-w-0 flex-1 self-stretch">
+        <button
           type="button"
-          variant="nav"
           onClick={() => onOpenGraph(graph)}
-          className="h-auto min-w-0 flex-1 gap-2 self-stretch rounded-none py-2 hover:bg-transparent"
           style={{ paddingLeft: `${0.5 + depth * 1.25}rem` }}
         >
           <span className="truncate text-sm font-semibold text-foreground">{graph.name}</span>
           {graph.description && !isPicker ? <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{graph.description}</span> : <span className="flex-1" />}
           {missingFinalResult ? (
-            <Chip size="sm" tone="warning" className="font-semibold">{t({ ko: '결과 미지정', en: 'No result' })}</Chip>
+            <Chip size="sm" tone="warning">{t({ ko: '결과 미지정', en: 'No result' })}</Chip>
           ) : (
             <Tip content={t({ ko: '노드 {nodes} · 연결 {edges}', en: '{nodes} nodes · {edges} links' }, { nodes: formatNumber(graph.node_count), edges: formatNumber(graph.edge_count) })}>
               <span className="shrink-0 font-mono text-2xs text-muted-foreground">{formatNumber(graph.node_count)}</span>
             </Tip>
           )}
-        </Button>
+        </button>
+        </ListRow>
         {!isPicker ? (
           <>
             {onEditGraph ? (
@@ -209,7 +209,7 @@ export function WorkflowListPanel({
       <div key={`folder-${folder.id}`}>
         <div
           data-active={isSelected || undefined}
-          className="flex min-h-9 items-center gap-1 border-b border-line pr-1 data-[active=true]:bg-fill data-[active=true]:shadow-[inset_2px_0_0_var(--primary)]"
+          className="flex min-h-9 items-center gap-1 border-b border-line pr-2 pl-1 data-[active=true]:bg-fill data-[active=true]:shadow-nav-active"
         >
           <IconButton
             size="icon-xs"
@@ -223,18 +223,18 @@ export function WorkflowListPanel({
           >
             {isExpanded ? <ChevronDown /> : <ChevronRight />}
           </IconButton>
-          <Button
+          <ListRow asChild interactive size="sm" className="min-w-0 flex-1 self-stretch">
+          <button
             type="button"
-            variant="nav"
             onClick={() => onSelectFolder(isSelected ? null : folder.id)}
             aria-pressed={isSelected}
-            className="h-auto min-w-0 flex-1 gap-2 self-stretch rounded-none px-0 py-2 hover:bg-transparent"
           >
             <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             <span className="truncate text-sm font-semibold text-muted-foreground">{folder.name}</span>
             <span className="flex-1" />
             <span className="shrink-0 font-mono text-2xs text-muted-foreground">{formatNumber(folderGraphCount.get(folder.id) ?? 0)}</span>
-          </Button>
+          </button>
+          </ListRow>
           {!isPicker && (onFolderSettings || onDeleteFolder) ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

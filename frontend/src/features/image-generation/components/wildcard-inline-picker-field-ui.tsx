@@ -82,26 +82,22 @@ export function renderHighlightedText(text: string, query: string) {
  * Prompt syntax kinds are categorical, mapped onto theme tokens so they stay legible in dark and light themes:
  * wildcard = info, preprocess = warning, comment = success, LoRA / other = primary.
  */
-const PROMPT_SYNTAX_TONE: Record<PromptSyntaxTokenKind, { overlay: string, chip: string, activeChip: string }> = {
+const PROMPT_SYNTAX_TONE: Record<PromptSyntaxTokenKind, { overlay: string, chip: 'info' | 'warning' | 'success' | 'primary' }> = {
   wildcard: {
     overlay: 'bg-info/18 ring-info/25',
-    chip: 'bg-info-soft text-info-soft-foreground hover:bg-info-soft hover:text-info-soft-foreground',
-    activeChip: 'ring-info/70',
+    chip: 'info',
   },
   preprocess: {
     overlay: 'bg-warning/18 ring-warning/25',
-    chip: 'bg-warning-soft text-warning-soft-foreground hover:bg-warning-soft hover:text-warning-soft-foreground',
-    activeChip: 'ring-warning/70',
+    chip: 'warning',
   },
   comment: {
     overlay: 'bg-success/16 ring-success/25',
-    chip: 'bg-success-soft text-success-soft-foreground hover:bg-success-soft hover:text-success-soft-foreground',
-    activeChip: 'ring-success/70',
+    chip: 'success',
   },
   lora: {
     overlay: 'bg-primary/16 ring-primary/25',
-    chip: 'bg-primary/12 text-foreground hover:bg-primary/18 hover:text-foreground',
-    activeChip: 'ring-primary/60',
+    chip: 'primary',
   },
 }
 
@@ -109,14 +105,13 @@ function getPromptSyntaxTone(kind: PromptSyntaxTokenKind) {
   return PROMPT_SYNTAX_TONE[kind] ?? PROMPT_SYNTAX_TONE.lora
 }
 
-function getPromptSyntaxHighlightClass(kind: PromptSyntaxTokenKind) {
-  return cn('rounded-sm ring-1 ring-inset', getPromptSyntaxTone(kind).overlay)
+/** ToggleChip tone of a detected-syntax chip, matching the kind's highlight colour in the prompt. */
+export function getPromptSyntaxChipTone(kind: PromptSyntaxTokenKind) {
+  return getPromptSyntaxTone(kind).chip
 }
 
-/** Classes for a detected-syntax chip rendered as `<Button variant="ghost" size="xs">`: a tonal category fill, ring when active. */
-export function getPromptSyntaxChipClass(kind: PromptSyntaxTokenKind, isActive: boolean) {
-  const tone = getPromptSyntaxTone(kind)
-  return cn('min-w-0 font-normal tracking-normal text-2xs hover:brightness-110', tone.chip, isActive && cn('ring-1 ring-inset', tone.activeChip))
+function getPromptSyntaxHighlightClass(kind: PromptSyntaxTokenKind) {
+  return cn('rounded-sm ring-1 ring-inset', getPromptSyntaxTone(kind).overlay)
 }
 
 export function renderPromptSyntaxOverlay(value: string, tokens: PromptSyntaxToken[]) {
@@ -207,7 +202,7 @@ function PromptRandomTokenChip({ raw, label, className }: { raw: string; label: 
     <span ref={chipRef} className={cn('rounded-sm ring-1 ring-inset [-webkit-box-decoration-break:clone] [box-decoration-break:clone]', className)}>
       <span className="invisible">{raw}</span>
       {box ? (
-        <span className="absolute overflow-hidden px-1 text-[0.85em] text-ellipsis whitespace-nowrap" style={box}>
+        <span className="absolute overflow-hidden px-1 text-xs text-ellipsis whitespace-nowrap" style={box}>
           {label}
         </span>
       ) : null}
@@ -409,7 +404,7 @@ export function PromptSyntaxTokenPopup({ token, tool, position, popupRef, onMous
     >
       <div className="space-y-2.5">
         <div className="space-y-1">
-          <Text as="div" variant="overline" className="font-semibold">{getPromptSyntaxKindLabel(token.kind)}</Text>
+          <Text as="div" variant="overline">{getPromptSyntaxKindLabel(token.kind)}</Text>
           <div className="break-all text-sm font-medium text-foreground">{token.name}</div>
           {token.loraWeight ? <div className="text-xs text-muted-foreground">{t('image-generation.components.wildcard.inline.picker.field.weight.token.loraweight', { weight: token.loraWeight })}</div> : null}
         </div>
@@ -439,9 +434,11 @@ export function PromptSyntaxTokenPopup({ token, tool, position, popupRef, onMous
 
 export function WildcardInlinePickerPopup({
   position,
+  popupRef,
   children,
 }: {
   position: InlinePickerPopupPosition
+  popupRef?: RefObject<HTMLDivElement | null>
   children: ReactNode
 }) {
   if (typeof document === 'undefined') {
@@ -450,6 +447,7 @@ export function WildcardInlinePickerPopup({
 
   return createPortal(
     <div
+      ref={popupRef}
       data-surface="high"
       // Above the token preview (z-popover-nested) and anchored popovers (z-popover).
       className={cn('fixed z-[calc(var(--z-index-popover-nested)+10)] overflow-hidden', floatingSurfaceClassName)}
@@ -466,6 +464,7 @@ export function WildcardInlinePickerPopup({
 
 export function PromptAutocompletePopup({
   position,
+  popupRef,
   suggestions,
   activeIndex = -1,
   activeCharacter,
@@ -474,6 +473,7 @@ export function PromptAutocompletePopup({
   onSelectRelatedTag,
 }: {
   position: InlinePickerPopupPosition
+  popupRef?: RefObject<HTMLDivElement | null>
   suggestions: PromptAutocompleteSuggestion[]
   /** Keyboard-highlighted row; -1 when nothing is highlighted. */
   activeIndex?: number
@@ -543,7 +543,7 @@ export function PromptAutocompletePopup({
   )
 
   return (
-    <WildcardInlinePickerPopup position={position}>
+    <WildcardInlinePickerPopup position={position} popupRef={popupRef}>
       {hasActiveCharacter ? (
         <>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
@@ -572,9 +572,9 @@ export function PromptAutocompletePopup({
                     <Button
                       key={`${activeCharacter.id}:related:${tag.id}`}
                       type="button"
-                      size="xs"
+                      size="content"
                       variant="secondary"
-                      className="max-w-full font-normal"
+                      className="max-w-full"
                       title={tag.translatedName ? `${tag.displayName} [${tag.translatedName}]` : tag.displayName}
                       onMouseDown={(event) => {
                         event.preventDefault()

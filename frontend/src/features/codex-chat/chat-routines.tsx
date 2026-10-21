@@ -155,7 +155,7 @@ export function ChatRoutineRows({ routines, onEdit }: { routines: ChatRoutineVie
             noticeTone={routine.status === 'error_stopped' || routine.lastResult === 'failed' ? 'destructive' : 'warning'}
             details={<>
               <span className="truncate">{roomName}</span>
-              {isGroup ? <Chip size="sm" tone="muted" className="font-semibold">{t({ ko: '그룹 {count}', en: 'Group {count}' }, { count: thread?.member_profile_ids?.length ?? 0 })}</Chip> : null}
+              {isGroup ? <Chip size="sm" tone="muted">{t({ ko: '그룹 {count}', en: 'Group {count}' }, { count: thread?.member_profile_ids?.length ?? 0 })}</Chip> : null}
               {who ? <><span aria-hidden="true">·</span><span className="truncate">{who}</span></> : null}
               {isGroup && routine.chainLimit !== null ? <><span aria-hidden="true">·</span><span>{t({ ko: '이어 부르기 {count}', en: 'Chain {count}' }, { count: routine.chainLimit })}</span></> : null}
               {routine.accountName && routine.accountId !== myAccountId ? <><span aria-hidden="true">·</span><span>{routine.accountName}</span></> : null}

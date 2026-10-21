@@ -73,7 +73,8 @@ export class NovelAIParser {
 
     // Step 1: Convert inline weight syntax value::tag::
     // Split comma-separated terms so each gets individual weight
-    let result = prompt.replace(/(-?[\d.]+)::([^:]+)::/g, (_match, weight, content) => {
+    // The text may contain single colons, e.g. `1.2::artist:name::`.
+    let result = prompt.replace(/(-?[\d.]+)::([\s\S]*?)::/g, (_match, weight, content) => {
       const terms = content.split(',').map((t: string) => t.trim()).filter((t: string) => t);
       return terms.map((t: string) => `(${t}:${weight})`).join(', ');
     });
@@ -287,9 +288,22 @@ export class NovelAIParser {
 
       // Extract model from Source field (top-level data)
       if (topLevelData.Source) {
-        const sourceMatch = topLevelData.Source.match(/NovelAI Diffusion (V[\d.]+)/i);
+        const sourceMatch = topLevelData.Source.match(/NovelAI Diffusion (V[\d.]+)(?:\s+([a-f\d]{8})\b)?/i);
         if (sourceMatch) {
           aiInfo.model = `NovelAI Diffusion ${sourceMatch[1]}`;
+          const hash = sourceMatch[2]?.toUpperCase();
+          if (hash) aiInfo.model_hash = hash;
+          if (sourceMatch[1].toUpperCase() === 'V5' && hash) {
+            // 0ADF9AB7 (Full) and 70AB5786 (Medium) were live-verified; the other hashes are third-party reports.
+            const variants: Record<string, string> = {
+              '0ADF9AB7': 'Full',
+              '657484A5': 'Full',
+              'DB276663': 'Curated',
+              '70AB5786': 'Full Medium',
+              '93F4BD30': 'Full Medium',
+            };
+            if (variants[hash]) aiInfo.model = `NovelAI Diffusion V5 ${variants[hash]}`;
+          }
         }
       }
 

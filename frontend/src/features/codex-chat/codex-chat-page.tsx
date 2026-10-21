@@ -62,7 +62,9 @@ export function CodexChatPage() {
   }
 
   return (
-    <div className="flex h-[calc(100dvh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col">
+    // Same edges as PageWithSidebar: the thread column runs to the shell's sides and bottom; the view puts the bottom
+    // padding back under the chat.
+    <div className="page-bleed flex h-(--shell-content-height) min-h-0 flex-col">
       <CodexChatView
         layout="page"
         onCollapse={() => {

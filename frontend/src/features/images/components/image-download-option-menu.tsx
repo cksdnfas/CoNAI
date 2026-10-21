@@ -39,11 +39,12 @@ export function ImageDownloadOptionMenu({ targetCount, isDownloading = false, fi
               : t('images.components.image.download.option.menu.filtered.thumbnail.download')}
         </Button>
       ) : null}
+      {canDownloadFiltered ? <div className="my-1 border-t border-line" /> : null}
       <Button
         type="button"
         variant="ghost"
         size="sm"
-        className={cn('w-full justify-start', canDownloadFiltered && 'mt-1 border-t border-border/70 pt-2')}
+        className="w-full justify-start"
         onClick={() => void onSelect('original')}
         disabled={isDownloading}
         data-no-select-drag="true"

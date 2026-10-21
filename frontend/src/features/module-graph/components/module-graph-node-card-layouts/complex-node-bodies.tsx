@@ -69,10 +69,11 @@ function DirectorMediaSummary({ nodeId, fieldKey, inputKey, state }: { nodeId: s
         event.stopPropagation()
         actions.editInPanel(nodeId, fieldKey)
       }}
-      className="nodrag h-auto min-w-0 p-0 text-xs font-normal text-muted-foreground transition-none hover:text-foreground"
+      size="xs"
+      className="nodrag min-w-0"
     >
       {frameAsset
-        ? <img src={buildWorkflowInputAssetUrl(frameAsset)} alt="" draggable={false} className="size-5 rounded-[3px] object-cover" />
+        ? <img src={buildWorkflowInputAssetUrl(frameAsset)} alt="" draggable={false} className="size-5 rounded-sm object-cover" />
         : t({ ko: '{count}개', en: '{count}' }, { count })}
     </Button>
   )
@@ -317,7 +318,8 @@ export function PowerLoraSummaryRow({ id, module, field, value }: { id: string; 
           event.stopPropagation()
           actions.editInPanel(id, field.key)
         }}
-        className="nodrag h-auto min-w-0 justify-end p-0 pr-1 text-xs font-normal text-foreground transition-none"
+        size="xs"
+        className="nodrag min-w-0 justify-end"
       >
         <span className="truncate">{summary}</span>
       </Button>

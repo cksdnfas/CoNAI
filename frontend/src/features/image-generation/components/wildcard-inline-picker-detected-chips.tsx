@@ -1,10 +1,9 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { Button } from '@/components/ui/button'
+import { ToggleChip } from '@/components/ui/chip'
 import { useI18n } from '@/i18n'
-import { cn } from '@/lib/utils'
 import { getPromptSyntaxKindLabel, type PromptSyntaxToken } from './prompt-syntax-highlight-helpers'
 import type { PromptAutocompleteSuggestion, PromptDetectedCharacterCandidate } from './use-prompt-inline-autocomplete'
-import { getPromptSyntaxChipClass } from './wildcard-inline-picker-field-ui'
+import { getPromptSyntaxChipTone } from './wildcard-inline-picker-field-ui'
 
 interface DetectedCharacterSummary {
   candidate: PromptDetectedCharacterCandidate
@@ -48,16 +47,15 @@ export function WildcardInlinePickerDetectedChips({
           {detectedTokenSummaries.map((token) => {
             const isActive = token.key === activeDetectedTokenKey
             return (
-              <Button
+              <ToggleChip
                 key={token.key}
                 ref={(node: HTMLButtonElement | null) => {
                   detectedTokenButtonRefs.current.set(token.key, node)
                 }}
                 type="button"
-                variant="ghost"
-                size="xs"
-                aria-pressed={isActive}
-                className={getPromptSyntaxChipClass(token.kind, isActive)}
+                size="sm"
+                tone={getPromptSyntaxChipTone(token.kind)}
+                pressed={isActive}
                 onMouseEnter={() => {
                   onCancelDetectedPopupClose()
                   onSetActiveDetectedTokenKey(token.key)
@@ -80,7 +78,7 @@ export function WildcardInlinePickerDetectedChips({
                 <span className="max-w-[12rem] truncate">{token.kind === 'comment' ? t('image-generation.components.wildcard.inline.picker.field.comment.items', { count: token.count }) : token.rawText}</span>
                 <span className="opacity-75">{getPromptSyntaxKindLabel(token.kind)}</span>
                 {token.count > 1 ? <span className="font-semibold tabular-nums">×{token.count}</span> : null}
-              </Button>
+              </ToggleChip>
             )
           })}
         </div>
@@ -92,16 +90,14 @@ export function WildcardInlinePickerDetectedChips({
           {detectedCharacters.map(({ candidate, suggestion }) => {
             const isActive = candidate.key === activeDetectedCharacterKey
             return (
-              <Button
+              <ToggleChip
                 key={candidate.key}
                 ref={(node: HTMLButtonElement | null) => {
                   detectedCharacterButtonRefs.current.set(candidate.key, node)
                 }}
                 type="button"
-                variant="secondary"
-                size="xs"
-                aria-pressed={isActive}
-                className={cn('min-w-0 font-normal tracking-normal text-2xs', isActive && 'ring-1 ring-inset ring-primary/60')}
+                size="sm"
+                pressed={isActive}
                 onClick={() => {
                   onSetActiveDetectedCharacterKey((current) => current === candidate.key ? null : candidate.key)
                 }}
@@ -109,7 +105,7 @@ export function WildcardInlinePickerDetectedChips({
                 <span className="max-w-[12rem] truncate">{suggestion.label}</span>
                 {suggestion.translatedName ? <span className="max-w-[8rem] truncate text-muted-foreground">{suggestion.translatedName}</span> : null}
                 {suggestion.relatedTags?.length ? <span className="font-semibold tabular-nums text-muted-foreground">{suggestion.relatedTags.length}</span> : null}
-              </Button>
+              </ToggleChip>
             )
           })}
         </div>

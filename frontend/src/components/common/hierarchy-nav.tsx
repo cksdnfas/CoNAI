@@ -32,7 +32,6 @@ interface HierarchyNavProps<T> {
   sortItems?: (left: T, right: T) => number
   renderIcon?: (item: T, state: HierarchyNavItemState) => ReactNode
   isItemSelectable?: (item: T, hasChildren: boolean) => boolean
-  getItemClassName?: (item: T, state: HierarchyNavItemState) => string | undefined
   /** Extra `data-*` attributes for a row (e.g. a drop-target id for delegated drag-and-drop). */
   getItemDataAttributes?: (item: T, state: HierarchyNavItemState) => Record<`data-${string}`, string | undefined>
   onItemPointerEnter?: (item: T, state: HierarchyNavItemState, target: HTMLElement, event: PointerEvent<HTMLElement>) => void
@@ -110,7 +109,6 @@ export function HierarchyNav<T>({
   sortItems,
   renderIcon,
   isItemSelectable,
-  getItemClassName,
   getItemDataAttributes,
   onItemPointerEnter,
   onItemPointerLeave,
@@ -197,7 +195,6 @@ export function HierarchyNav<T>({
             isSelectable: selectable,
           }
           const shouldExpandOnSelect = typeof expandOnSelect === 'function' ? expandOnSelect(item, state) : expandOnSelect ?? expandable
-          const itemClassName = getItemClassName?.(item, state)
           const content = (
             <>
               {renderIcon ? (
@@ -227,7 +224,6 @@ export function HierarchyNav<T>({
                     count={getCount?.(item)}
                     active={isSelected}
                     depth={depth + baseDepth}
-                    className={itemClassName}
                     aria-expanded={hasChildren ? isExpanded : undefined}
                     onClick={() => {
                       if (hasChildren) {
@@ -244,6 +240,7 @@ export function HierarchyNav<T>({
                         type="button"
                         variant="ghost"
                         size="icon-sm"
+                        // eslint-disable-next-line shadcn/no-restyle -- a tree chevron folds rows in place; without this every expanded node keeps ghost's open-popup fill
                         className="aria-expanded:bg-transparent aria-expanded:hover:bg-fill"
                         onClick={() => toggleExpanded(itemId)}
                         aria-expanded={isExpanded}
@@ -271,14 +268,14 @@ export function HierarchyNav<T>({
                         }}
                         data-active={isSelected ? 'true' : undefined}
                         aria-current={isSelected ? 'true' : undefined}
-                        className={cn('min-w-0 flex-1 px-2 has-[>svg]:px-2', itemClassName)}
+                        className="min-w-0 flex-1"
                       >
                         {content}
                       </Button>
                     ) : (
                       <div
                         {...itemEventHandlers}
-                        className={cn('inline-flex h-8 min-w-0 max-w-full flex-1 items-center gap-1.5 rounded-sm px-2 text-sm text-muted-foreground/45', itemClassName)}
+                        className="inline-flex h-8 min-w-0 max-w-full flex-1 items-center gap-1.5 rounded-sm px-2 text-sm text-muted-foreground/45"
                       >
                         {content}
                       </div>
@@ -292,7 +289,7 @@ export function HierarchyNav<T>({
                     onClick={() => onSelect(item)}
                     data-active={isSelected ? 'true' : undefined}
                     aria-current={isSelected ? 'true' : undefined}
-                    className={cn('min-w-0', itemClassName)}
+                    className="min-w-0"
                     style={{ paddingLeft: `${12 + depth * 14}px` }}
                   >
                     {content}

@@ -74,7 +74,9 @@ function GuideFileSelect({ value, onChange }: { value: Pick<ChatPresetPromptingI
         <span className="min-w-0">
           <Select
             variant="settings"
-            className="w-72 max-w-full px-3 font-mono text-xs"
+            mono
+            controlSize="compact"
+            className="w-72 max-w-full"
             value={value.guideFileId ?? ''}
             disabled={unavailable !== null || uploadMutation.isPending}
             aria-invalid={missing}

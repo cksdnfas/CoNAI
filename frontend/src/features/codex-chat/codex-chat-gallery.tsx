@@ -44,7 +44,7 @@ function GalleryTile({ entry, showFoundMark, onOpen }: { entry: GalleryEntry; sh
       <button
         type="button"
         aria-label={t({ ko: '크게 보기', en: 'View larger' })}
-        className="relative block w-full cursor-zoom-in overflow-hidden rounded-sm bg-surface-high outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+        className="relative block w-full cursor-zoom-in overflow-hidden rounded-sm bg-surface-high outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
         style={{ aspectRatio }}
         onClick={onOpen}
         {...hoverPreview.triggerProps}
@@ -147,7 +147,7 @@ export function CodexChatGallery({ threadId, columns }: { threadId: number; colu
         ) : mediaQuery.isError ? (
           <ErrorState title={t({ ko: '이미지를 불러오지 못했어.', en: 'Could not load images.' })} />
         ) : entries.length === 0 ? (
-          <EmptyState className="bg-transparent" icon={ImageIcon} title={t({ ko: '아직 이미지가 없어.', en: 'No images yet.' })} />
+          <EmptyState icon={ImageIcon} title={t({ ko: '아직 이미지가 없어.', en: 'No images yet.' })} />
         ) : (
           sections.map((section) => (
             <section key={section.key}>

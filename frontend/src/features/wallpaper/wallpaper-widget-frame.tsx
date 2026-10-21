@@ -95,9 +95,11 @@ export function WallpaperWidgetFrame({
   const content = (
     <>
       {style.showTitle ? (
-        <Text as="div" variant="overline" className="mb-2 shrink-0 truncate text-xs text-inherit opacity-70">
-          {getWallpaperWidgetDisplayTitle(widget, t)}
-        </Text>
+        <div className="mb-2 shrink-0 truncate text-xs opacity-70">
+          <Text as="div" variant="overline" tone="inherit" className="truncate" style={{ fontSize: 'inherit' }}>
+            {getWallpaperWidgetDisplayTitle(widget, t)}
+          </Text>
+        </div>
       ) : null}
       <div className="relative min-h-0 flex-1" style={{ containerType: 'size' }}>
         <WallpaperWidgetBody widget={widget} mode={mode} onOpenImage={handleOpenImage} />

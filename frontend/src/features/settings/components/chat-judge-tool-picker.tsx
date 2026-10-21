@@ -48,8 +48,8 @@ function ToolChip({ name, byName, struck = false, onRemove }: { name: string; by
     </span>
   )
   return (
-    <Chip size="sm" tone={tone} className={cn(!entry && 'font-mono', struck && 'line-through')} onRemove={onRemove}>
-      <Tip content={tip} side="bottom" align="start"><span>{entry?.label ?? name}</span></Tip>
+    <Chip size="sm" tone={tone} mono={!entry} onRemove={onRemove}>
+      <Tip content={tip} side="bottom" align="start"><span className={struck ? 'line-through' : undefined}>{entry?.label ?? name}</span></Tip>
     </Chip>
   )
 }
@@ -87,7 +87,7 @@ function ToolMenu({ groups, byName, tools, onToggle }: { groups: JudgeToolGroup[
         size="sm"
         leading={<span className="flex size-3.5 text-primary">{chosen ? <Check className="size-3.5" /> : null}</span>}
         trailing={trailing}
-        className={cn('min-h-8 gap-2 rounded-sm border-b-0 text-xs', at === current && 'bg-fill')}
+        selected={at === current}
       >
         <button type="button" role="option" aria-selected={chosen} data-option={at} onMouseMove={() => setActive(at)} onClick={() => onToggle(name)}>
           {label}
@@ -159,7 +159,7 @@ export function JudgeToolPicker({ tools, onChange }: { tools: string[]; onChange
         <PopoverTrigger asChild>
           <IconButton size="icon-sm" variant="ghost" label={t({ ko: '도구 추가', en: 'Add tool' })}><Plus /></IconButton>
         </PopoverTrigger>
-        <PopoverContent align="start" collisionPadding={12} className="flex w-80 flex-col overflow-hidden p-0">
+        <PopoverContent align="start" collisionPadding={12} padding="none" className="flex w-80 flex-col overflow-hidden">
           <ToolMenu groups={groups} byName={byName} tools={tools} onToggle={toggle} />
         </PopoverContent>
       </Popover>

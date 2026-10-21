@@ -50,13 +50,16 @@ import { Section } from '@/components/ui/section'
 import { Select } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { SettingRow } from '@/components/ui/setting-row'
-import { SidebarFooter, SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
+import { SidebarGroupLabel, SidebarItem, SidebarNav } from '@/components/ui/sidebar'
+import { TwoPane } from '@/components/common/sidebar-layout'
+import { MediaCard } from '@/components/common/media-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 import { StatTile } from '@/components/ui/stat-tile'
 import { Switch } from '@/components/ui/switch'
 import { TabsContent } from '@/components/ui/tabs'
 import { TextTabs } from '@/components/common/text-tabs'
+import { FieldTabs } from '@/components/common/field-tabs'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { ToggleRow } from '@/components/ui/toggle-row'
@@ -67,8 +70,8 @@ import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-se
 
 type ThemeChoice = 'app' | 'light' | 'dark'
 
-const BUTTON_VARIANTS = ['default', 'secondary', 'subtle', 'ghost', 'destructive', 'link'] as const
-const BUTTON_SIZES = ['xs', 'sm', 'default', 'lg'] as const
+const BUTTON_VARIANTS = ['default', 'secondary', 'subtle', 'ghost', 'destructive', 'destructive-ghost', 'link'] as const
+const BUTTON_SIZES = ['xs', 'compact', 'sm', 'default', 'lg'] as const
 const ICON_SIZES = ['icon-xs', 'icon-sm', 'icon', 'icon-lg'] as const
 const BADGE_VARIANTS = ['default', 'secondary', 'success', 'warning', 'info', 'destructive', 'outline', 'ghost', 'link'] as const
 const CHIP_TONES = ['default', 'muted', 'primary', 'success', 'warning', 'info', 'destructive'] as const
@@ -144,7 +147,7 @@ function CatalogSection({ id, title, children }: { id: string; title: string; ch
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-2">
-      <Text variant="overline" className="font-semibold">{label}</Text>
+      <Text variant="overline">{label}</Text>
       <div className="flex flex-wrap items-center gap-3">{children}</div>
     </div>
   )
@@ -205,7 +208,7 @@ export function UiCatalogPage() {
       <header className="sticky top-0 z-header border-b border-line bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div>
-            <Heading level={1} className="text-xl">UI catalog</Heading>
+            <Heading level={2} as="h1">UI catalog</Heading>
             <Text variant="caption">Dev-only. Shared components from components/ui and components/common.</Text>
           </div>
           <SegmentedControl
@@ -236,9 +239,12 @@ export function UiCatalogPage() {
             things (save bar, popovers, dialogs, toasts) get a surface and a shadow. Pages with a sidebar use PageWithSidebar (sticky column,
             one hairline, collapse persisted per storageKey, drawer on phones); its column is mocked below.
           </Text>
-          <div className="flex min-h-[26rem] overflow-hidden rounded-sm border border-line">
-            <div className="hidden w-58 shrink-0 flex-col border-r border-line sm:flex">
-              <div className="flex-1 px-2.5 pt-3.5 pb-2">
+          <TwoPane
+            bleed={false}
+            className="min-h-104 overflow-hidden rounded-sm border border-line"
+            sidebarLabel="Catalog sidebar"
+            sidebarFooter="v26.8.9"
+            sidebar={(
                 <SidebarNav aria-label="Catalog sidebar">
                   <SidebarGroupLabel>기본</SidebarGroupLabel>
                   <SidebarItem icon={SlidersHorizontal} label="일반 및 화면" active={flatNav === 'general'} onClick={() => setFlatNav('general')} />
@@ -250,12 +256,13 @@ export function UiCatalogPage() {
                   <SidebarGroupLabel>관리</SidebarGroupLabel>
                   <SidebarItem icon={Server} label="시스템" active={flatNav === 'system'} onClick={() => setFlatNav('system')} />
                 </SidebarNav>
-              </div>
-              <SidebarFooter>v26.8.9</SidebarFooter>
-            </div>
-            <div className="min-w-0 flex-1 px-4 pb-6 sm:px-8">
+            )}
+          >
+            <div className="px-(--page-gutter) pb-6">
+              {/* Not sticky: inside this framed (overflow-hidden) mock, sticky top would offset it over the rows. */}
               <PageToolbar
                 title="일반 및 화면"
+                sticky={false}
                 actions={(
                   <>
                     <IconButton variant="ghost" size="icon-sm" label="정렬"><ArrowDownWideNarrow /></IconButton>
@@ -291,6 +298,8 @@ export function UiCatalogPage() {
                     ))}
                   </SettingRow>
                   <SettingRow label="저장 경로" stacked><Input defaultValue="D:/images/{date}" /></SettingRow>
+                  <SettingRow label="Standard control" controlWidth="standard"><Input defaultValue="Aligned column" /></SettingRow>
+                  <SettingRow label="Wide control" controlWidth="wide"><Input defaultValue="https://example.com" /></SettingRow>
                 </RowGroup>
                 <RowGroup heading="프롬프트" actions={<IconButton variant="ghost" size="icon-xs" label="검색"><Search /></IconButton>}>
                   {[['masterpiece', '812'], ['1girl', '640'], ['silver hair', '233']].map(([term, count]) => (
@@ -306,10 +315,32 @@ export function UiCatalogPage() {
                 </RowGroup>
               </div>
             </div>
-          </div>
+          </TwoPane>
         </CatalogSection>
 
         <CatalogSection id="buttons" title="Button / IconButton">
+          <Row label="Content action (wraps), compact fields, semantic text">
+            <Button variant="subtle" size="content" className="max-w-48">A long user tag that wraps without clipping</Button>
+            <Input controlSize="compact" mono assisted aria-label="Compact seed" defaultValue="12345" className="w-32" />
+            <Select controlSize="compact" mono aria-label="Compact select" className="w-32"><option>12345</option></Select>
+            <Textarea mono textSize="xs" assisted autoGrow aria-label="Code input" defaultValue="seed: 12345" className="w-48" />
+            <Text tone="warning" variant="caption">Warning</Text>
+            <Text mono variant="caption">12345</Text>
+          </Row>
+          <Row label="Field tabs (underline and bare)">
+            <FieldTabs value={catalogTab} onChange={setCatalogTab} items={[{ value: 'one', label: 'One' }, { value: 'two', label: 'Two' }]} />
+            <FieldTabs bare value={catalogTab} onChange={setCatalogTab} items={[{ value: 'one', label: 'One' }, { value: 'two', label: 'Two' }]} />
+          </Row>
+          <Row label="Container treatments and spacing">
+            <Panel treatment="drop" padding="sm">Drop target</Panel>
+            <Panel treatment="drop" data-drag-active padding="sm">Active drop target</Panel>
+            <Panel treatment="floating" padding="toolbar"><IconButton label="Floating action" variant="ghost"><Plus /></IconButton></Panel>
+            <Inset padding="sm"><Text variant="caption">Compact note</Text></Inset>
+            <Skeleton radius="sm" className="h-6 w-24" />
+            <ModalBody spacing="sm"><Text variant="caption">Compact body</Text><ModalFooter separated><Button size="compact">Save</Button></ModalFooter></ModalBody>
+            <Button variant="nav" data-drop-target="true" className="w-48">Navigation drop target</Button>
+            <SidebarItem label="Sidebar drop target" data-drop-target="true" className="w-48" />
+          </Row>
           {BUTTON_VARIANTS.map((variant) => (
             <Row key={variant} label={`variant=${variant}`}>
               {BUTTON_SIZES.map((size) => (
@@ -335,7 +366,7 @@ export function UiCatalogPage() {
           </Row>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Text variant="overline" className="font-semibold">variant=shell (glass app-header keys)</Text>
+              <Text variant="overline">variant=shell (glass app-header keys)</Text>
               <div className="theme-shell-header flex items-center justify-end gap-2 rounded-sm px-3 py-2">
                 <IconButton variant="shell" label="Search"><Search /></IconButton>
                 <IconButton variant="shell" label="Queue (open)" aria-expanded><Inbox /></IconButton>
@@ -343,8 +374,8 @@ export function UiCatalogPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Text variant="overline" className="font-semibold">variant=overlay (controls on photos)</Text>
-              <div className="flex items-start justify-end gap-2 rounded-sm bg-[linear-gradient(135deg,var(--primary),var(--secondary)_45%,var(--surface-bright)_70%,var(--foreground))] p-3">
+              <Text variant="overline">variant=overlay (controls on photos)</Text>
+              <div className="flex items-start justify-end gap-2 rounded-sm bg-linear-135 from-primary via-secondary to-surface-bright p-3">
                 <IconButton size="icon-sm" variant="overlay" label="Close"><X /></IconButton>
                 <IconButton size="icon-sm" variant="overlay" label="Download"><Download /></IconButton>
                 <IconButton size="icon-sm" variant="overlay" active={zoomLocked} onClick={() => setZoomLocked((current) => !current)} label="Lock zoom"><Lock /></IconButton>
@@ -354,7 +385,7 @@ export function UiCatalogPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Text variant="overline" className="font-semibold">variant=nav (data-active on the current row)</Text>
+              <Text variant="overline">variant=nav (data-active on the current row)</Text>
               <Panel tone="low" padding="sm" stack className="gap-0.5">
                 {([['images', 'Images', ImageIcon], ['groups', 'Groups', Folder], ['settings', 'Settings', Settings]] as const).map(([value, label, Icon]) => (
                   <Button key={value} variant="nav" data-active={navItem === value} aria-current={navItem === value ? 'page' : undefined} onClick={() => setNavItem(value)}>
@@ -364,7 +395,7 @@ export function UiCatalogPage() {
               </Panel>
             </div>
             <div className="space-y-2">
-              <Text variant="overline" className="font-semibold">Buttons on each surface tone</Text>
+              <Text variant="overline">Buttons on each surface tone</Text>
               <div className="grid gap-2">
                 {PANEL_TONES.map((tone) => (
                   <Panel key={tone} tone={tone} padding="sm" className="flex flex-wrap items-center gap-2">
@@ -384,6 +415,7 @@ export function UiCatalogPage() {
           <Row label="Badge variants (uppercase status labels; success/warning/info/destructive = soft status fills)">
             {BADGE_VARIANTS.map((variant) => <Badge key={variant} variant={variant}>{variant}</Badge>)}
             <Badge variant="success">연결됨</Badge>
+            <Badge variant="secondary" casing="sentence">User supplied name</Badge>
           </Row>
           <Row label="Chip tones (static, keeps text case — tags, terms, tokens)">
             {CHIP_TONES.map((tone) => <Chip key={tone} tone={tone}>{tone}</Chip>)}
@@ -391,9 +423,10 @@ export function UiCatalogPage() {
             <Chip><Folder />with icon</Chip>
             <Chip tone="primary" onRemove={() => undefined}>#onRemove</Chip>
             <Chip size="sm" tone="success" onRemove={() => undefined}>sm onRemove</Chip>
+            <Chip mono>seed: 12345</Chip>
           </Row>
           <Row label="Badge overlay (on photos; size default / sm / xs) · CountBadge (count or dot on a key)">
-            <span className="relative inline-flex h-16 w-24 items-start justify-end gap-1 overflow-hidden rounded-sm bg-[linear-gradient(135deg,var(--primary),var(--surface-bright))] p-1">
+            <span className="relative inline-flex h-16 w-24 items-start justify-end gap-1 overflow-hidden rounded-sm bg-linear-135 from-primary to-surface-bright p-1">
               <Badge variant="overlay" size="xs">1/4</Badge>
               <Badge variant="overlay" size="sm">GIF</Badge>
             </span>
@@ -460,15 +493,15 @@ export function UiCatalogPage() {
           </Row>
           <div className="grid gap-6 md:grid-cols-3">
             <div className="space-y-2">
-              <Text variant="overline" className="font-semibold">Slider ({slider[0]})</Text>
+              <Text variant="overline">Slider ({slider[0]})</Text>
               <Slider value={slider} onValueChange={setSlider} aria-label="Single value" />
             </div>
             <div className="space-y-2">
-              <Text variant="overline" className="font-semibold">Range ({range.join('–')})</Text>
+              <Text variant="overline">Range ({range.join('–')})</Text>
               <Slider value={range} onValueChange={setRange} thumbLabels={['Minimum', 'Maximum']} />
             </div>
             <div className="space-y-2">
-              <Text variant="overline" className="font-semibold">Disabled</Text>
+              <Text variant="overline">Disabled</Text>
               <Slider defaultValue={[60]} disabled aria-label="Disabled" />
             </div>
           </div>
@@ -599,17 +632,20 @@ export function UiCatalogPage() {
 
         <CatalogSection id="panels" title="Panel / Separator">
           <Text variant="muted">A real box, for things meant to be a surface (drop zone, media card, floating control cluster). tone=none keeps padding and hover with no surface. Never nest boxes.</Text>
-          <Row label="asChild + interactive: a rich clickable card is a real <button> (lint allows it inside Panel asChild)">
-            {(['low', 'container'] as const).map((tone) => (
-              <Panel key={tone} asChild tone={tone} interactive padding="none" className="w-56 overflow-hidden text-left">
-                <button type="button" onClick={() => setSelectedPanel(tone)}>
-                  <div className="h-16 bg-[linear-gradient(135deg,var(--primary),var(--secondary))]" />
-                  <div className="p-3">
-                    <Text variant="title">Template card</Text>
-                    <Text variant="caption">tone={tone}</Text>
-                  </div>
-                </button>
-              </Panel>
+          <Row label="MediaCard (components/common/media-card): the clickable media card. flat = no background in any state (ring on the media); boxed = surface + one padded body">
+            {(['flat', 'boxed'] as const).map((variant) => (
+              <MediaCard
+                key={variant}
+                variant={variant}
+                className="w-56"
+                selected={selectedPanel === variant}
+                onClick={() => setSelectedPanel(variant)}
+                mediaClassName="h-16"
+                media={<span className="block size-full bg-linear-135 from-primary to-secondary" />}
+                overlay={<Badge variant="overlay" size="xs" className="absolute right-1.5 top-1.5">GIF</Badge>}
+                title={`${variant} card`}
+                meta="12"
+              />
             ))}
           </Row>
           <Row label="tone (interactive, click to select)">

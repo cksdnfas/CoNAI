@@ -140,7 +140,7 @@ export function TypedFieldInput({
     const hasRandomOption = resolvedOptions.some((option) => option.value === TYPED_FIELD_RANDOM_OPTION_VALUE)
 
     return (
-      <Select value={toSelectValue(value)} onChange={(event) => onChange(event.target.value)} className={controlClassName} {...invalidProps}>
+      <Select value={toSelectValue(value)} onChange={(event) => onChange(event.target.value)} controlSize={density === 'compact' ? 'compact' : undefined} className={className} {...invalidProps}>
         {renderEmptyOption(emptyOption ?? 'auto', hasRandomOption)}
         {resolvedOptions.map((option) => (
           <option key={option.value} value={option.value} disabled={option.disabled}>
@@ -156,7 +156,8 @@ export function TypedFieldInput({
       <Select
         value={typeof value === 'boolean' ? String(value) : ''}
         onChange={(event) => onChange(event.target.value === '' ? '' : event.target.value === 'true')}
-        className={controlClassName}
+        controlSize={density === 'compact' ? 'compact' : undefined}
+        className={className}
         {...invalidProps}
       >
         {renderEmptyOption(emptyOption ?? 'selectable', false)}
@@ -176,7 +177,8 @@ export function TypedFieldInput({
         value={typeof value === 'number' ? String(value) : typeof value === 'string' ? value : ''}
         onValueCommit={(nextValue) => onChange(numberFormat === 'string' || nextValue === '' ? nextValue : Number(nextValue))}
         placeholder={placeholder}
-        className={controlClassName}
+        controlSize={density === 'compact' ? 'compact' : undefined}
+        className={className}
         {...invalidProps}
       />
     )
@@ -203,7 +205,7 @@ export function TypedFieldInput({
           onSelect={(image) => void onImageChange?.(image)}
         />
         {imageDraft && !imageUploadOnly ? (
-          <Inset className="space-y-2 p-3">
+          <Inset padding="sm" className="space-y-2">
             {/* The file name lives in the preview's tooltip instead of a caption line. */}
             <Tip content={imageDraft.fileName || null}>
               <div>
@@ -282,7 +284,8 @@ export function TypedFieldInput({
       value={toTextValue(value)}
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
-      className={controlClassName}
+      controlSize={density === 'compact' ? 'compact' : undefined}
+      className={className}
       {...invalidProps}
     />
   )

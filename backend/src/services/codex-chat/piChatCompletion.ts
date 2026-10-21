@@ -159,6 +159,7 @@ export async function streamPiChatCompletion(params: {
   onActivity?: () => void
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
   maxToolRounds?: number
+  research?: import('./chatResearch').ChatResearchExecution
 }): Promise<ChatCompletionResult> {
   params.signal.throwIfAborted()
   const session = params.target.piSession
@@ -190,8 +191,8 @@ export async function streamPiChatCompletion(params: {
   if (!model) throw new Error('pi에 모델을 등록하지 못했어.')
   const system = params.messages.filter((message) => message.role === 'system').map((message) => message.content).join('\n\n')
   const settingsManager = pi.SettingsManager.inMemory({
-    compaction: piCompactionSettings(contextWindow),
-    retry: { enabled: true, maxRetries: 2, ...(params.target.timeoutMs != null ? { provider: { timeoutMs: params.target.timeoutMs } } : {}) },
+    compaction: params.research ? { enabled: false } : piCompactionSettings(contextWindow),
+    retry: { enabled: !params.research, maxRetries: params.research ? 0 : 2, ...(params.target.timeoutMs != null ? { provider: { timeoutMs: params.target.timeoutMs } } : {}) },
     enableInstallTelemetry: false,
     cacheWarming: 'off',
     defaultTools: [],
@@ -246,13 +247,33 @@ export async function streamPiChatCompletion(params: {
   let reasoning = ''
   let separate = false
   let compacted = false
+  let budgetStopped = false
   const abort = () => { void agent.abort() }
   params.signal.addEventListener('abort', abort, { once: true })
   const unsubscribe = agent.subscribe((event: AgentSessionEvent) => {
     params.onActivity?.()
-    if (event.type === 'turn_start') round += 1
+    if (event.type === 'turn_start') {
+      if (params.research && round >= params.research.maxTurns) {
+        budgetStopped = true
+        params.research.result.stopReason = 'turn_limit'
+        void agent.abort()
+        return
+      }
+      round += 1
+      params.research?.takeTurn()
+    }
     // Past the budget the tools go (from the next turn, as pi applies it), so the model has to answer in text.
-    if (event.type === 'turn_end' && round >= (params.maxToolRounds ?? 8)) agent.setActiveToolsByName([])
+    if (event.type === 'turn_end' && (params.research
+      ? params.research.finalNativeTurn(Boolean(produced.at(-1)?.content.some(part => part.type === 'toolCall')))
+      : round >= (params.maxToolRounds ?? 8))) agent.setActiveToolsByName([])
+    // A noncompliant provider can still emit tool calls after tools were removed. Stop the native loop too,
+    // rather than advertising a turn cap that only compliant model output would respect.
+    if (event.type === 'turn_end' && params.research && round >= params.research.maxTurns
+      && produced.at(-1)?.content.some(part => part.type === 'toolCall')) {
+      budgetStopped = true
+      params.research.result.stopReason = 'turn_limit'
+      void agent.abort()
+    }
     // Each assistant message's text starts a paragraph of its own (a round's note, then the answer).
     if (event.type === 'message_start' && content && !content.endsWith('\n\n')) separate = true
     if (event.type === 'message_update') {
@@ -284,7 +305,9 @@ export async function streamPiChatCompletion(params: {
     params.signal.throwIfAborted()
     await agent.prompt(input.text, { expandPromptTemplates: false, ...(input.images.length ? { images: input.images } : {}) })
     params.signal.throwIfAborted()
-    const last = produced.at(-1)
+    // Pi may append a synthetic aborted/error message while stopping its loop. A host budget stop retains
+    // the preceding actual answer/evidence; an external cancellation still throws above.
+    const last = budgetStopped ? [...produced].reverse().find(message => message.stopReason !== 'error' && message.stopReason !== 'aborted') : produced.at(-1)
     if (!last) throw new Error('pi가 답변을 만들지 못했어.')
     if (last.stopReason === 'error') throw new Error(`pi 요청에 실패했어: ${last.errorMessage ?? '알 수 없는 오류'}`)
     if (last.stopReason === 'aborted') throw new Error('pi 요청이 중단됐어.')

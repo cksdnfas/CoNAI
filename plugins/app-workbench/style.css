@@ -1,5 +1,5 @@
 /* Layout only; colours, fonts and controls come from conai-plugin.css. */
-body{padding:16px 20px 24px;max-width:1000px}
+body{max-width:1000px}
 #status{color:var(--conai-muted-foreground);font-size:13px}
 section{padding-top:14px;border-top:1px solid var(--conai-line)}
 section+section{margin-top:18px}

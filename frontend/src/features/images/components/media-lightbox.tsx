@@ -322,16 +322,16 @@ function MediaLightboxStage({ item, canViewPrevious, canViewNext, onViewPrevious
       )}
 
       {zoom ? (
-        <Badge variant="overlay" className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 text-xs font-normal tabular-nums">100%</Badge>
+        <Badge variant="overlay" className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 tabular-nums">100%</Badge>
       ) : null}
 
       {canViewPrevious ? (
-        <IconButton variant="overlay" className="absolute left-4 top-1/2 hidden -translate-y-1/2 rounded-full sm:inline-flex" label={t({ ko: '이전', en: 'Previous' })} onClick={(event) => { event.stopPropagation(); onViewPrevious() }}>
+        <IconButton variant="overlay" className="absolute left-4 top-1/2 hidden -translate-y-1/2 sm:inline-flex" label={t({ ko: '이전', en: 'Previous' })} onClick={(event) => { event.stopPropagation(); onViewPrevious() }}>
           <ChevronLeft />
         </IconButton>
       ) : null}
       {canViewNext ? (
-        <IconButton variant="overlay" className="absolute right-4 top-1/2 hidden -translate-y-1/2 rounded-full sm:inline-flex" label={t({ ko: '다음', en: 'Next' })} onClick={(event) => { event.stopPropagation(); onViewNext() }}>
+        <IconButton variant="overlay" className="absolute right-4 top-1/2 hidden -translate-y-1/2 sm:inline-flex" label={t({ ko: '다음', en: 'Next' })} onClick={(event) => { event.stopPropagation(); onViewNext() }}>
           <ChevronRight />
         </IconButton>
       ) : null}

@@ -82,7 +82,7 @@ export function WorkspaceProjectDialog({ open, project, canEdit, onClose, onSave
       dirty={canEdit && dirty}
       onSave={canSave ? () => save.mutate(undefined) : undefined}
     >
-      <ModalBody className="space-y-4">
+      <ModalBody>
         {conflict ? (
           <Alert variant="warning">
             <TriangleAlert />

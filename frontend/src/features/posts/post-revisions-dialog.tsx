@@ -49,7 +49,8 @@ export function PostRevisionsDialog({ post, onClose }: { post: PostDetail; onClo
 
   return (
     <Modal open onClose={onClose} title={t({ ko: '이전 판', en: 'Earlier versions' })} widthClassName="max-w-4xl">
-      <ModalBody className="grid min-h-0 gap-4 md:grid-cols-[14rem_1fr]">
+      <ModalBody spacing="none">
+        <div className="grid min-h-0 gap-4 md:grid-cols-[14rem_1fr]">
         <div className="flex max-h-[60vh] min-w-0 flex-col overflow-y-auto">
           {revisionsQuery.isPending ? <div className="h-24 animate-pulse rounded-sm bg-surface-low" /> : null}
           {revisionsQuery.isError ? <ErrorState size="compact" error={revisionsQuery.error} onRetry={() => void revisionsQuery.refetch()} /> : null}
@@ -78,6 +79,7 @@ export function PostRevisionsDialog({ post, onClose }: { post: PostDetail; onClo
             </>
           ) : null}
         </article>
+        </div>
       </ModalBody>
       <ModalFooter>
         <Button variant="ghost" size="sm" onClick={onClose}>{t({ ko: '닫기', en: 'Close' })}</Button>

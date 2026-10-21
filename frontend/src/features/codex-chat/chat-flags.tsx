@@ -80,15 +80,18 @@ export function ChatFlagButton({ buttonRef, count, open, disabled, onToggle }: {
       ref={buttonRef}
       variant="ghost"
       size="icon-sm"
-      className={cn('relative rounded-full', count > 0 && 'text-primary hover:text-primary', open && 'bg-primary/15 text-primary')}
+      className="relative"
+      active={open}
       aria-expanded={open}
       disabled={disabled}
       onClick={onToggle}
       label={t({ ko: '플래그', en: 'Flags' })}
     >
-      <Flag className={cn('transition-transform duration-300 ease-[cubic-bezier(.2,.9,.3,1.3)]', open && '-rotate-12 scale-110')} />
+      <Flag className={cn('transition-transform duration-300 ease-out motion-reduce:transition-none', count > 0 && 'text-primary', open && '-rotate-12 scale-110')} />
       {count > 0 ? (
-        <CountBadge key={count} size="xs" corner="top-right" count={count} className="animate-chat-flag-badge font-bold motion-reduce:animate-none" />
+        <span key={count} className="pointer-events-none absolute -right-0.5 -top-0.5 inline-flex animate-chat-flag-badge motion-reduce:animate-none">
+          <CountBadge size="xs" count={count} />
+        </span>
       ) : null}
     </IconButton>
   )
@@ -173,7 +176,7 @@ export function ChatFlagTray({ flags, activeIds, open, flagStyle, buttonRef, onT
             className={popChipClassName(pressed, cn('justify-center', round ? 'size-10' : 'h-9 pl-2.5 pr-3.5', className))}
           >
             <span key={taps[flag.id] ?? 0} className={cn('flex items-center gap-1.5', taps[flag.id] && 'animate-chat-flag-tap motion-reduce:animate-none')}>
-              <ChatFlagIcon icon={flag.icon} name={flag.name} className={round ? 'size-[18px] text-[1.1rem]' : undefined} />
+              <ChatFlagIcon icon={flag.icon} name={flag.name} className={round ? 'size-4.5 text-lg' : undefined} />
               {round ? null : <span className="whitespace-nowrap text-sm font-semibold">{flag.name}</span>}
             </span>
           </button>
@@ -208,7 +211,7 @@ export function ChatMessageFlags({ flags }: { flags?: ChatFlagSnapshot[] }) {
     <div className="mt-1 flex flex-wrap justify-end gap-1">
       {flags.map((flag, index) => (
         <Tip key={`${flag.id}-${index}`} content={<span className="whitespace-pre-wrap">{flag.content}</span>}>
-          <span tabIndex={0} className="inline-flex items-center gap-1 rounded-full border border-line px-1.5 text-2xs leading-[18px] text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
+          <span tabIndex={0} className="inline-flex items-center gap-1 rounded-full border border-line px-1.5 text-2xs leading-4.5 text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
             <ChatFlagIcon icon={flag.icon} name={flag.name} className="size-3 text-xs" />
             {flag.name}
           </span>
@@ -227,17 +230,17 @@ function ChatFlagIconPicker({ value, name, onChange }: { value: string; name: st
   const [tab, setTab] = useState<PickerTab>(value && !value.startsWith(LUCIDE_PREFIX) ? 'emoji' : 'icon')
   const [typed, setTyped] = useState('')
   const pick = (icon: string) => { onChange(icon); setOpen(false) }
-  const tile = (selected: boolean) => cn('flex size-9 cursor-pointer items-center justify-center rounded-md outline-none transition-colors hover:bg-surface-high focus-visible:ring-[3px] focus-visible:ring-ring/40', selected && 'bg-primary/15 text-secondary-text ring-1 ring-primary')
+  const tile = (selected: boolean) => cn('flex size-9 cursor-pointer items-center justify-center rounded-md outline-none transition-colors hover:bg-surface-high focus-visible:ring-3 focus-visible:ring-ring/40', selected && 'bg-primary/15 text-secondary-text ring-1 ring-primary')
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         {/* eslint-disable-next-line no-restricted-syntax -- the icon itself is the control, sized like the input beside it */}
-        <button type="button" aria-label={t({ ko: '아이콘 고르기', en: 'Choose icon' })} className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line bg-surface-low text-foreground outline-none transition-colors hover:bg-surface-high focus-visible:ring-[3px] focus-visible:ring-ring/40">
+        <button type="button" aria-label={t({ ko: '아이콘 고르기', en: 'Choose icon' })} className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border border-line bg-surface-low text-foreground outline-none transition-colors hover:bg-surface-high focus-visible:ring-3 focus-visible:ring-ring/40">
           <ChatFlagIcon icon={value} name={name || '?'} className="size-5 text-xl" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[22rem] max-w-[calc(100vw-2rem)] p-0">
+      <PopoverContent align="start" padding="none" className="w-88 max-w-[calc(100vw-2rem)]">
         <TextTabs<PickerTab>
           value={tab}
           items={[{ value: 'icon', label: t({ ko: '아이콘', en: 'Icons' }) }, { value: 'emoji', label: t({ ko: '이모지', en: 'Emoji' }) }]}
@@ -348,7 +351,7 @@ export function ChatFlagEditorModal({ open, flag, onClose }: { open: boolean; fl
       dirty={dirty}
       onSave={canSave ? () => saveMutation.mutate() : undefined}
     >
-      <ModalBody className="space-y-4">
+      <ModalBody>
         <div className="flex items-end gap-3">
           <ChatFlagIconPicker value={draft.icon} name={draft.name} onChange={(icon) => setDraft((current) => ({ ...current, icon }))} />
           <Field label={t({ ko: '이름', en: 'Name' })} className="min-w-0 flex-1">
@@ -436,7 +439,8 @@ export function ChatFlagRows({ flags: allFlags, onEdit }: { flags: ChatFlag[]; o
           onDragOver={(event) => { if (dragId !== null) { event.preventDefault(); setOverId(flag.id) } }}
           onDragLeave={() => setOverId((current) => (current === flag.id ? null : current))}
           onDrop={(event) => { drop(event, flag.id); setDragId(null); setOverId(null) }}
-          className={cn(dragId === flag.id && 'opacity-50', overId === flag.id && dragId !== flag.id && 'bg-primary/8 hover:bg-primary/8')}
+          dimmed={dragId === flag.id}
+          dropTarget={overId === flag.id && dragId !== flag.id}
           leading={(
             <>
               <Tip content={t({ ko: '끌어서 순서 바꾸기', en: 'Drag to reorder' })}>
@@ -464,7 +468,7 @@ export function ChatFlagRows({ flags: allFlags, onEdit }: { flags: ChatFlag[]; o
       {hiddenFlags.map((flag) => (
         <ResourceRow
           key={flag.id}
-          className="opacity-55"
+          dimmed
           leading={(
             <span className="ml-7 flex size-8 shrink-0 items-center justify-center rounded-full bg-surface-high text-foreground">
               <ChatFlagIcon icon={flag.icon} name={flag.name} />
@@ -499,7 +503,7 @@ export function ChatFlagManagerModal({ open, onClose }: { open: boolean; onClose
       >
         <ModalBody>
           {flagsQuery.isSuccess && flags.length === 0 ? (
-            <EmptyState size="compact" className="justify-center px-0 py-4" title={t({ ko: '아직 플래그가 없어.', en: 'No flags yet.' })} />
+            <EmptyState size="compact" className="justify-center" title={t({ ko: '아직 플래그가 없어.', en: 'No flags yet.' })} />
           ) : (
             <ChatFlagRows flags={flags} onEdit={(flag) => setEditor({ flag })} />
           )}

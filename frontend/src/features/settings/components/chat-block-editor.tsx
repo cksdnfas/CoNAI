@@ -183,13 +183,13 @@ function BlockFieldsTable({ rows, onChange }: { rows: FieldRow[]; onChange: (row
               >
                 <div className="grid gap-3 sm:grid-cols-3">
                   <Field label={t({ ko: '필드', en: 'Field' })}>
-                    <Input variant="settings" value={row.name} maxLength={60} className={cn('font-mono', duplicate && 'border-destructive')} aria-invalid={duplicate} onChange={(event) => update(row.id, { name: event.target.value })} />
+                    <Input variant="settings" mono value={row.name} maxLength={60} aria-invalid={duplicate} onChange={(event) => update(row.id, { name: event.target.value })} />
                   </Field>
                   <Field label={t({ ko: '표시 이름', en: 'Display name' })}>
                     <Input variant="settings" value={row.label ?? ''} maxLength={40} placeholder={row.name.trim()} onChange={(event) => update(row.id, { label: event.target.value })} />
                   </Field>
                   <Field label={t({ ko: '시작 값', en: 'Start' })}>
-                    <Input variant="settings" value={row.start} className="font-mono" onChange={(event) => update(row.id, { start: event.target.value })} />
+                    <Input variant="settings" mono value={row.start} onChange={(event) => update(row.id, { start: event.target.value })} />
                   </Field>
                 </div>
                 <div className="border-t border-line">
@@ -238,7 +238,7 @@ function BlockPreview({ block }: { block: ChatDisplayBlock }) {
       <ChatDisplayBlockView block={block} data={data} />
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer select-none">{t({ ko: '모델에 가는 모양', en: 'Sent to the model' })}</summary>
-        <CodeBlock fill={false} className="mt-1 text-muted-foreground">{`${block.key}: ${JSON.stringify(data)}\n말투: ${chatBlockToneText(block.fields, data) || '—'}`}</CodeBlock>
+        <CodeBlock fill={false} className="mt-1">{`${block.key}: ${JSON.stringify(data)}\n말투: ${chatBlockToneText(block.fields, data) || '—'}`}</CodeBlock>
       </details>
     </EditorGroup>
   )
@@ -270,7 +270,7 @@ export function ChatBlockEditor({ block, onChange }: { block: ChatDisplayBlock; 
             value={block.key}
             maxLength={32}
             aria-invalid={keyInvalid}
-            className={cn('font-mono', keyInvalid && 'border-destructive')}
+            mono
             onChange={(event) => update({ key: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
           />
         </Field>
@@ -285,7 +285,7 @@ export function ChatBlockEditor({ block, onChange }: { block: ChatDisplayBlock; 
         <BlockFieldsTable rows={rows} onChange={changeRows} />
       ) : (
         <Field label={t({ ko: '시작 값 (JSON)', en: 'Starting values (JSON)' })} info={t({ ko: 'JSON 객체로 고치면 표로 바뀌어.', en: 'Becomes a table once it is a JSON object.' })}>
-          <Textarea variant="settings" rows={5} className="font-mono text-xs" value={block.example} onChange={(event) => {
+          <Textarea variant="settings" mono textSize="xs" rows={5} value={block.example} onChange={(event) => {
             update({ example: event.target.value })
             const next = rowsOf({ ...block, example: event.target.value })
             if (next) setRows(next)
@@ -295,14 +295,14 @@ export function ChatBlockEditor({ block, onChange }: { block: ChatDisplayBlock; 
       <div className="border-t border-line">
         <CollapsibleRow title={t({ ko: '디자인', en: 'Design' })} info={t({ ko: '비우면 필드 목록으로 보여.', en: 'Empty shows the fields as a list.' })} defaultOpen={designed}>
           <Field label={t({ ko: '한 줄 요약 (접힌 상태창)', en: 'One-line summary (folded panel)' })}>
-            <Input variant="settings" value={block.summary} maxLength={300} className="font-mono" onChange={(event) => update({ summary: event.target.value })} />
+            <Input variant="settings" mono value={block.summary} maxLength={300} onChange={(event) => update({ summary: event.target.value })} />
           </Field>
           <div className="grid gap-3 lg:grid-cols-2">
             <Field label={t({ ko: 'HTML 템플릿', en: 'HTML template' })}>
-              <Textarea variant="settings" rows={9} className="font-mono text-xs" value={block.template} onChange={(event) => update({ template: event.target.value })} />
+              <Textarea variant="settings" mono textSize="xs" rows={9} value={block.template} onChange={(event) => update({ template: event.target.value })} />
             </Field>
             <Field label="CSS">
-              <Textarea variant="settings" rows={9} className="font-mono text-xs" value={block.css} onChange={(event) => update({ css: event.target.value })} />
+              <Textarea variant="settings" mono textSize="xs" rows={9} value={block.css} onChange={(event) => update({ css: event.target.value })} />
             </Field>
           </div>
         </CollapsibleRow>

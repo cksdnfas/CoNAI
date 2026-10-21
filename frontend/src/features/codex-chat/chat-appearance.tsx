@@ -315,7 +315,7 @@ function CompactChoice<T extends string>({ label, value, choices, onChange }: { 
             tabIndex={checked ? 0 : -1}
             onClick={() => onChange(choice.value)}
             className={cn(
-              'h-6 cursor-pointer whitespace-nowrap rounded-sm px-2.5 text-xs font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/40',
+              'h-6 cursor-pointer whitespace-nowrap rounded-sm px-2.5 text-xs font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/40',
               checked ? 'bg-foreground font-semibold text-background' : 'text-muted-foreground hover:text-foreground',
             )}
           >
@@ -545,7 +545,7 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverAnchor asChild>{children}</PopoverAnchor>
-      <PopoverContent align="end" side="bottom" className="relative flex max-h-[calc(100vh-6rem)] w-80 flex-col overflow-hidden p-0"
+      <PopoverContent align="end" side="bottom" padding="none" className="relative flex max-h-[calc(100vh-6rem)] w-80 flex-col overflow-hidden"
         // Focus returning to the menu button as the menu closes must not dismiss it; a click outside or Esc does.
         onFocusOutside={(event) => event.preventDefault()}
         // With the slot overlay open, Esc closes the overlay only (Radix would otherwise dismiss the popover too).
@@ -572,11 +572,11 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
             </span>
           </span>
           <span className="flex shrink-0 items-center gap-0.5">
-            <Button variant="ghost" size="xs" disabled={!dirty || threadId === null} onClick={save} className={cn(dirty && 'text-secondary-text')}>
+            <Button variant="ghost" size="xs" disabled={!dirty || threadId === null} onClick={save}>
               {activeSlot || !dirty ? t({ ko: '저장', en: 'Save' }) : t({ ko: '새 슬롯', en: 'New slot' })}
             </Button>
             <IconButton size="icon-xs" variant="ghost" active={slotsOpen} aria-expanded={slotsOpen} disabled={threadId === null} onClick={() => setSlotsOpen((current) => !current)} label={t({ ko: '슬롯', en: 'Slots' })}>
-              <Layers className={cn('transition-transform duration-300 ease-[cubic-bezier(.2,.9,.3,1.3)] motion-reduce:transition-none', slotsOpen && '-rotate-45 scale-110')} />
+              <Layers className={cn('transition-transform duration-300 ease-out motion-reduce:transition-none', slotsOpen && '-rotate-45 scale-110')} />
             </IconButton>
           </span>
         </div>

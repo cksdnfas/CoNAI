@@ -188,7 +188,7 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
       })() : null}
       {source.changedSince ? <Chip size="sm" tone="warning">{t({ ko: '그 뒤 고침', en: 'Edited since' })}</Chip> : null}
     </div>
-    {source.unavailable ? <p className="text-muted-foreground">{t({ ko: '지금은 없음', en: 'Unavailable now' })}</p> : <p className="whitespace-pre-wrap break-words leading-[1.55]">{selectedTab === 'raw' ? source.promptText ?? source.text : source.text}</p>}
+    {source.unavailable ? <p className="text-muted-foreground">{t({ ko: '지금은 없음', en: 'Unavailable now' })}</p> : <p className="whitespace-pre-wrap break-words leading-relaxed">{selectedTab === 'raw' ? source.promptText ?? source.text : source.text}</p>}
   </div>
   const rows: Array<[string, string]> = [
     [t({ ko: '모델', en: 'Model' }), meta.model ?? '—'],
@@ -223,7 +223,7 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
           <IconButton size="icon-xs" variant="ghost" aria-expanded={open} label={t({ ko: '이 답변에 들어간 문맥', en: 'What this reply was given' })} onClick={() => changeOpen(!open)}><ScanText /></IconButton>
         </span>
       </PopoverAnchor>
-      <PopoverContent align="start" side="top" className={version2 ? 'w-[420px] max-w-[calc(100vw-32px)] p-3' : 'w-72 p-3'}
+      <PopoverContent align="start" side="top" padding="md" className={version2 ? 'w-[420px] max-w-[calc(100vw-32px)]' : 'w-72'}
         // The icon is an anchor, not a trigger: left to Radix, a press on it closes the popup and the click reopens it.
         onInteractOutside={(event) => { if (event.target instanceof Node && anchorRef.current?.contains(event.target)) event.preventDefault() }}>
         {version2 ? <>
@@ -282,7 +282,7 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
                 return selectedTab === 'raw' ? <details key={kind} className="group border-t border-line pt-2 first:border-t-0 first:pt-0"><summary className="flex cursor-pointer items-center gap-1 font-semibold"><ChevronRight className="size-3 transition-transform group-open:rotate-90" />{t(KIND_LABELS[kind])}</summary><div className="space-y-3 pt-2 font-mono">{entries.map((source, index) => <div key={index}>{textBody(source)}</div>)}</div></details> : <section key={kind} className="space-y-2 border-t border-line pt-3 first:border-t-0 first:pt-0"><h4 className="font-semibold">{t(KIND_LABELS[kind])}</h4>{entries.map((source, index) => <div key={index}>{textBody(source)}</div>)}</section>
               })}
               {selectedTab === 'content' && diagnosticsQuery.data.scope === 'content' ? <div className="flex items-center gap-1.5 border-t border-line pt-3 text-muted-foreground"><LockKeyhole className="size-3" />{t({ ko: '시스템 프롬프트·도구 정의', en: 'System prompt · tool definitions' })}</div> : null}
-              {selectedTab === 'raw' && diagnosticsQuery.data.scope === 'prompts' && diagnosticsQuery.data.raw != null ? <details className="group border-t border-line pt-2"><summary className="flex cursor-pointer items-center gap-1 font-semibold"><ChevronRight className="size-3 transition-transform group-open:rotate-90" />{t({ ko: '요청 원문', en: 'Raw request' })}</summary><pre className="whitespace-pre-wrap break-words pt-2 font-mono leading-[1.55]">{JSON.stringify(diagnosticsQuery.data.raw, null, 2)}</pre></details> : null}
+              {selectedTab === 'raw' && diagnosticsQuery.data.scope === 'prompts' && diagnosticsQuery.data.raw != null ? <details className="group border-t border-line pt-2"><summary className="flex cursor-pointer items-center gap-1 font-semibold"><ChevronRight className="size-3 transition-transform group-open:rotate-90" />{t({ ko: '요청 원문', en: 'Raw request' })}</summary><pre className="whitespace-pre-wrap break-words pt-2 font-mono leading-relaxed">{JSON.stringify(diagnosticsQuery.data.raw, null, 2)}</pre></details> : null}
             </> : null}
           </div>
         </> : (

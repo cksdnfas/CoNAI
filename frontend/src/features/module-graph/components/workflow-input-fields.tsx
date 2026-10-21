@@ -87,6 +87,14 @@ export function WorkflowInputFields({
     )
   }
 
+  /** Model of the node behind an input, known here only when that node's model is exposed as well. */
+  const getExposedNodeModel = (nodeId: string) => {
+    const modelInput = inputDefinitions.find((definition) => definition.node_id === nodeId && definition.port_key === 'model')
+    if (!modelInput) return undefined
+    const model = hasMeaningfulValue(inputValues[modelInput.id]) ? inputValues[modelInput.id] : modelInput.default_value
+    return typeof model === 'string' ? model : undefined
+  }
+
   const renderInputControl = (inputDefinition: GraphWorkflowExposedInput, rawValue: unknown, isSelect: boolean) => {
     const onChange = (value: unknown) => onInputValueChange(inputDefinition.id, value)
 
@@ -95,7 +103,7 @@ export function WorkflowInputFields({
     }
 
     if (isNaiVibePort(inputDefinition.port_key, inputDefinition.data_type)) {
-      return <NaiReusableAssetInput kind="vibes" value={rawValue} onChange={onChange} />
+      return <NaiReusableAssetInput kind="vibes" value={rawValue} onChange={onChange} model={getExposedNodeModel(inputDefinition.node_id)} />
     }
 
     if (isNaiCharacterReferencePort(inputDefinition.port_key, inputDefinition.data_type)) {

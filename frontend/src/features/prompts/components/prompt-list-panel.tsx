@@ -92,7 +92,7 @@ export function PromptListPanel({
         {isLoading
           ? Array.from({ length: 10 }).map((_, index) => (
             <div key={index} className="flex min-h-11 items-center border-b border-line px-2 last:border-b-0">
-              <Skeleton className="h-4 w-full max-w-md rounded-sm" />
+              <Skeleton radius="sm" className="h-4 w-full max-w-md" />
             </div>
           ))
           : null}

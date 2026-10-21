@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import { Code, Download, FilePlus, Plus, RefreshCw, Save, Trash2, Upload } from 'lucide-react'
-import type { PluginDraft, PluginPackageReview } from '@conai/shared'
+import type { ChatPageAction, ChatPageData, PluginDraft, PluginPackageReview } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
@@ -20,9 +20,22 @@ import { createRandomUuid } from '@/lib/random-uuid'
 import { getErrorMessage } from '@/lib/error-message'
 import { PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { changePluginDraft, createPluginDraft, deletePluginDraft, downloadPluginPackage, getPluginDraft, installPluginDraft, listPluginDrafts, PLUGIN_DRAFTS_QUERY_KEY, readPluginDraft, reviewPluginDraft, uploadPluginDraftAsset } from '@/lib/api-plugin-authoring'
+import { PluginPackageReviewSummary } from './plugin-package-review-summary'
 
-export function PluginAuthoring() {
+/** Plugin management's own assistant data and actions. A page has one active registration, so the drafts list carries them. */
+export type PluginManagementPage = {
+  localRevision: string; data: Record<string, ChatPageData>; actions: ChatPageAction[]
+  applyAction: (id: string, args: Record<string, ChatPageData>) => Promise<void>
+}
+
+/** This list also lives on the 플러그인 page (/extensions), where the `settings` kind (bound to /settings) doesn't apply. */
+function usePluginPageKind() {
+  return useLocation().pathname === '/settings' ? 'settings' as const : 'page' as const
+}
+
+export function PluginAuthoring({ page }: { page?: PluginManagementPage }) {
   const { t } = useI18n()
+  const kind = usePluginPageKind()
   const cache = useQueryClient()
   const [params, setParams] = useSearchParams()
   const selected = params.get('draft')
@@ -44,16 +57,18 @@ export function PluginAuthoring() {
     try { await operation() } catch (reason) { setError(getErrorMessage(reason, t({ ko: '플러그인 작업에 실패했어.', en: 'Plugin operation failed.' }))) } finally { setBusy(false) }
   }
   useChatPageRegistration(!selected ? {
-    kind: 'settings', title: t({ ko: '플러그인 제작', en: 'Plugin development' }), resourceId: 'plugin-authoring', priority: 15,
-    fields: [], data: { drafts: (drafts.data ?? []).map(item => ({ id: item.id, pluginId: item.pluginId, name: item.name, revision: item.revision })) }, apply: () => {},
+    kind, title: t({ ko: '플러그인 관리', en: 'Plugin management' }), resourceId: 'plugin-authoring', priority: 15, localRevision: page?.localRevision,
+    fields: [], data: { drafts: (drafts.data ?? []).map(item => ({ id: item.id, pluginId: item.pluginId, name: item.name, revision: item.revision })), ...page?.data }, apply: () => {},
     actions: [
       pageAction('plugin_author.open', t({ ko: '초안 열기', en: 'Open draft' }), '', pageObject({ draftId: pageText(32) }, ['draftId'])),
       pageAction('plugin_author.create', t({ ko: '플러그인 초안 만들기', en: 'Create plugin draft' }), 'Create an inactive draft. fromInstalled copies an installed package without its private data.', pageObject({ pluginId: pageText(48), name: pageText(100), fromInstalled: { type: 'boolean' } }, ['pluginId']), 'save'),
       pageAction('plugin_author.refresh', t({ ko: '새로고침', en: 'Refresh' }), ''),
+      ...(page?.actions ?? []),
     ],
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
-      if (id === 'plugin_author.open') open(String(args.draftId))
+      if (id.startsWith('plugin_source.') && page) await page.applyAction(id, args)
+      else if (id === 'plugin_author.open') open(String(args.draftId))
       else if (id === 'plugin_author.create') await create(String(args.pluginId), String(args.name ?? args.pluginId), args.fromInstalled === true)
       else await drafts.refetch()
     },
@@ -68,7 +83,7 @@ export function PluginAuthoring() {
       {drafts.data?.map(item => <ResourceRow key={item.id} leading={<Code />} name={item.name} aside={<span className="text-xs text-muted-foreground">{item.pluginId} · r{item.revision}</span>} onOpen={() => open(item.id)} />)}
     </RowGroup>
     <Modal open={creating} onClose={() => setCreating(false)} title={t({ ko: '새 플러그인', en: 'New plugin' })} size="narrow">
-      <ModalBody className="space-y-3">
+      <ModalBody spacing="sm">
         <Input aria-label={t({ ko: '플러그인 ID', en: 'Plugin ID' })} placeholder="my-plugin" value={pluginId} onChange={event => setPluginId(event.target.value)} />
         <Input aria-label={t({ ko: '플러그인 이름', en: 'Plugin name' })} placeholder={t({ ko: '플러그인 이름', en: 'Plugin name' })} value={name} onChange={event => setName(event.target.value)} />
         {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
@@ -82,6 +97,7 @@ export function PluginAuthoring() {
 
 function PluginDraftEditor({ initial, remoteRevision, onClose }: { initial: PluginDraft; remoteRevision: number; onClose: () => void }) {
   const { t } = useI18n()
+  const pageKind = usePluginPageKind()
   const cache = useQueryClient()
   const confirm = useConfirm()
   const [draft, setDraft] = useState(initial)
@@ -187,7 +203,7 @@ function PluginDraftEditor({ initial, remoteRevision, onClose }: { initial: Plug
     await deletePluginDraft(draft.id, draft.revision); await refresh(); onClose()
   }
   useChatPageRegistration({
-    kind: 'settings', title: t({ ko: '플러그인 소스 편집', en: 'Plugin source editor' }), resourceId: draft.id, priority: 30, dirty,
+    kind: pageKind, title: t({ ko: '플러그인 소스 편집', en: 'Plugin source editor' }), resourceId: draft.id, priority: 30, dirty,
     localRevision: `${draft.revision}:${textRevision}:${busy}`, fields: [],
     data: { draftId: draft.id, pluginId: draft.pluginId, revision: draft.revision, fileCount: draft.files.length, files: draft.files.slice(0, 80).map(file => ({ ...file })),
       selected: document ? { target: document.target, revision: document.revision, excerpt: pageFreeText(document.text.slice(0, 8000)), chars: document.text.length } : null,
@@ -223,7 +239,7 @@ function PluginDraftEditor({ initial, remoteRevision, onClose }: { initial: Plug
     },
   })
   return <Modal open onClose={onClose} dirty={dirty} onSave={busy ? undefined : () => void run(save)} title={`${draft.name} · ${draft.pluginId}`} size="wide" sidePanelInset={CHAT_DOCK_INSET}>
-    <ModalBody className="space-y-3">
+    <ModalBody spacing="sm">
       {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
       {message ? <p role="status" className="text-sm">{message}</p> : null}
       {changedElsewhere ? <p className="text-sm text-warning">{t({ ko: '다른 곳에서 초안을 변경했어. 미저장 내용을 보관한 뒤 최신 소스를 다시 열어줘.', en: 'The draft changed elsewhere. Keep your unsaved text, then reload the latest source.' })}</p> : null}
@@ -248,11 +264,7 @@ function PluginDraftEditor({ initial, remoteRevision, onClose }: { initial: Plug
           {document ? <PlainTextEditor value={document.text} onChange={changeText} fileName={document.target} heightClassName="h-[45vh] min-h-40" /> : null}
         </div>
       </div>
-      {review ? <RowGroup heading={t({ ko: '설치 검토', en: 'Installation review' })}>
-        <p className="py-2 text-sm">{review.name} · {review.version} · {review.size.toLocaleString()} bytes · {review.updated ? t({ ko: '업데이트 · 기존 데이터 유지', en: 'Update · keeps existing data' }) : t({ ko: '신규 설치 · 비활성 상태', en: 'New install · disabled' })}</p>
-        {review.server ? <p className="pb-2 text-sm text-warning">{t(review.enabled ? { ko: '켜진 플러그인의 업데이트야. 적용하면 서버 코드가 다시 실행돼.', en: 'This plugin is enabled. Applying the update restarts its server code.' } : { ko: '서버 모듈이 포함돼 있어. 활성화하면 서버에서 코드가 실행돼.', en: 'Contains a server module. Its code runs on the server when enabled.' })}</p> : null}
-        <div className="max-h-36 overflow-y-auto">{review.files.filter(file => file.change !== 'unchanged').map(file => <ListRow key={file.name} size="sm"><span className="font-mono text-xs">{file.name}</span><span className="ml-auto text-xs">{t(file.change === 'added' ? { ko: '추가', en: 'Added' } : file.change === 'removed' ? { ko: '삭제', en: 'Removed' } : { ko: '수정', en: 'Changed' })}</span></ListRow>)}</div>
-      </RowGroup> : null}
+      {review ? <PluginPackageReviewSummary review={review} /> : null}
     </ModalBody>
     <ModalFooter>
       <IconButton variant="ghost" disabled={busy} label={t({ ko: '초안 삭제', en: 'Delete draft' })} onClick={() => void run(removeDraft)}><Trash2 /></IconButton>

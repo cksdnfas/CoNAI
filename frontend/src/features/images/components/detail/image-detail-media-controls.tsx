@@ -77,27 +77,29 @@ export function ImageDetailAuxiliaryControls({
   return (
     <Panel
       tone="high"
-      padding="none"
-      className="absolute bottom-3 left-3 z-30 flex flex-col items-start gap-1 p-1 shadow-elevation-2"
+      treatment="floating"
+      padding="toolbar"
+      className="absolute bottom-3 left-3 z-30 flex flex-col items-start gap-1"
       onPointerDown={(event) => event.stopPropagation()}
     >
       {canUsePixelPreview ? (
         <div className="relative">
           <IconButton
             {...toolbarButtonProps}
-            className={cn('relative', pixelPreviewMode !== 'off' && 'text-primary')}
+            className="relative"
+            active={pixelPreviewMode !== 'off'}
             onClick={onTogglePixelPreviewPanel}
             aria-expanded={isPixelPreviewPanelOpen}
             label={t({ ko: '필터: {mode}', en: 'Filter: {mode}' }, { mode: pixelPreviewModeLabels[pixelPreviewMode] })}
             tooltipSide="right"
           >
-            <Grid2X2 className="h-4 w-4 stroke-[2.5]" />
+            <Grid2X2 className="h-4 w-4" strokeWidth={2.5} />
             {pixelPreviewMode !== 'off' ? <CountBadge corner="top-right" className="top-1 right-1 size-1.5" /> : null}
           </IconButton>
 
           {isPixelPreviewPanelOpen ? (
-            <Panel tone="high" radius="md" padding="none" className="absolute bottom-full left-0 mb-2 w-72 p-3 text-xs text-foreground shadow-elevation-2">
-              <div className="mb-2 flex items-center justify-between gap-3">
+            <Panel tone="high" treatment="floating" radius="md" padding="sm" className="absolute bottom-full left-0 mb-2 w-72">
+              <div className="mb-2 flex items-center justify-between gap-3 text-xs">
                 <label htmlFor="pixel-preview-enabled" className="font-semibold">{t('images.components.detail.image.detail.media.filter')}</label>
                 <Switch id="pixel-preview-enabled" size="sm" checked={isPixelPreviewEnabled} onCheckedChange={() => onTogglePixelPreviewEnabled()} />
               </div>
@@ -108,7 +110,7 @@ export function ImageDetailAuxiliaryControls({
                   </Button>
                 ))}
               </div>
-              <div className="space-y-2.5">
+              <div className="space-y-2.5 text-xs">
                 <label className="block">
                   <div className="mb-1 flex justify-between text-muted-foreground"><span>{t('images.components.detail.image.detail.media.resolution')}</span><span>{activePixelPreviewSettings.targetLongEdge}px</span></div>
                   <input className="w-full accent-primary" type="range" min={64} max={1024} step={64} value={activePixelPreviewSettings.targetLongEdge} onChange={(event) => onUpdatePixelPreviewSettings({ targetLongEdge: Number(event.currentTarget.value) })} />
@@ -175,47 +177,47 @@ export function ImageDetailTransformControls({
 
   return (
     <div className="absolute bottom-3 right-3 z-30 flex items-end gap-2" onPointerDown={(event) => event.stopPropagation()}>
-      <Panel
-        tone="high"
-        padding="none"
+      <div
         className={cn(
-          'flex flex-wrap items-center gap-1 p-1 text-foreground shadow-elevation-2 transition-all duration-200 ease-out',
+          'transition-all duration-200 ease-out',
           isControlsCollapsed ? 'pointer-events-none translate-x-3 opacity-0' : 'translate-x-0 opacity-100',
         )}
       >
-        {!isDefaultView ? <div className="hidden px-2 text-2xs text-muted-foreground tabular-nums sm:block">{transformSummary}</div> : null}
-        <IconButton
-          {...toolbarButtonProps}
-          active={isWheelZoomEnabled}
-          onClick={onToggleWheelZoomEnabled}
-          label={isWheelZoomEnabled ? t('images.components.detail.image.detail.media.lock.zoom') : t('images.components.detail.image.detail.media.enable.zoom')}
-        >
-          {isWheelZoomEnabled ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-        </IconButton>
-        <IconButton {...toolbarButtonProps} onClick={onZoomOut} label={t('images.components.detail.image.detail.media.zoom.out')} disabled={!canZoomOut}>
-          <ZoomOut className="h-4 w-4" />
-        </IconButton>
-        <IconButton {...toolbarButtonProps} onClick={onZoomIn} label={t('images.components.detail.image.detail.media.zoom.in')} disabled={!canZoomIn}>
-          <ZoomIn className="h-4 w-4" />
-        </IconButton>
-        <IconButton {...toolbarButtonProps} onClick={onRotateLeft} label={t('images.components.detail.image.detail.media.rotate.left')}>
-          <RotateCcw className="h-4 w-4" />
-        </IconButton>
-        <IconButton {...toolbarButtonProps} onClick={onRotateRight} label={t('images.components.detail.image.detail.media.rotate.right')}>
-          <RotateCw className="h-4 w-4" />
-        </IconButton>
-        {!isDefaultView ? (
-          <IconButton {...toolbarButtonProps} onClick={onResetView} label={t('images.components.detail.image.detail.media.reset')}>
-            <Undo2 className="h-4 w-4" />
+        <Panel tone="high" treatment="floating" padding="toolbar" className="flex flex-wrap items-center gap-1">
+          {!isDefaultView ? <div className="hidden px-2 text-2xs text-muted-foreground tabular-nums sm:block">{transformSummary}</div> : null}
+          <IconButton
+            {...toolbarButtonProps}
+            active={isWheelZoomEnabled}
+            onClick={onToggleWheelZoomEnabled}
+            label={isWheelZoomEnabled ? t('images.components.detail.image.detail.media.lock.zoom') : t('images.components.detail.image.detail.media.enable.zoom')}
+          >
+            {isWheelZoomEnabled ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
           </IconButton>
-        ) : null}
-        <IconButton {...toolbarButtonProps} onClick={onToggleControlsCollapsed} label={t('images.components.detail.image.detail.media.collapse.controls')}>
-          <ChevronRight className="h-4 w-4" />
-        </IconButton>
-      </Panel>
+          <IconButton {...toolbarButtonProps} onClick={onZoomOut} label={t('images.components.detail.image.detail.media.zoom.out')} disabled={!canZoomOut}>
+            <ZoomOut className="h-4 w-4" />
+          </IconButton>
+          <IconButton {...toolbarButtonProps} onClick={onZoomIn} label={t('images.components.detail.image.detail.media.zoom.in')} disabled={!canZoomIn}>
+            <ZoomIn className="h-4 w-4" />
+          </IconButton>
+          <IconButton {...toolbarButtonProps} onClick={onRotateLeft} label={t('images.components.detail.image.detail.media.rotate.left')}>
+            <RotateCcw className="h-4 w-4" />
+          </IconButton>
+          <IconButton {...toolbarButtonProps} onClick={onRotateRight} label={t('images.components.detail.image.detail.media.rotate.right')}>
+            <RotateCw className="h-4 w-4" />
+          </IconButton>
+          {!isDefaultView ? (
+            <IconButton {...toolbarButtonProps} onClick={onResetView} label={t('images.components.detail.image.detail.media.reset')}>
+              <Undo2 className="h-4 w-4" />
+            </IconButton>
+          ) : null}
+          <IconButton {...toolbarButtonProps} onClick={onToggleControlsCollapsed} label={t('images.components.detail.image.detail.media.collapse.controls')}>
+            <ChevronRight className="h-4 w-4" />
+          </IconButton>
+        </Panel>
+      </div>
 
       {isControlsCollapsed ? (
-        <Panel tone="high" padding="none" className="p-1 shadow-elevation-2">
+        <Panel tone="high" treatment="floating" padding="toolbar">
           <IconButton {...toolbarButtonProps} onClick={onToggleControlsCollapsed} label={t('images.components.detail.image.detail.media.expand.controls')}>
             <ChevronLeft className="h-4 w-4" />
           </IconButton>

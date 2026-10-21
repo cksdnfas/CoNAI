@@ -45,7 +45,7 @@ export function SearchField({ value, placeholder, onChange, onSubmit, onClear, o
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         aria-label={inputProps['aria-label'] ?? placeholder}
-        className="pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
+        adornments="search"
       />
       {value.length > 0 ? (
         <IconButton

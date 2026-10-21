@@ -118,7 +118,7 @@ export function ModuleWorkflowGeneratedOutputsTab({
 
           <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
             <div className="space-y-2">
-              <Text as="div" variant="overline" className="font-medium">{t({ ko: '대상 폴더', en: 'Target folder' })}</Text>
+              <Text as="div" variant="overline">{t({ ko: '대상 폴더', en: 'Target folder' })}</Text>
               <Select value={copyTargetFolderId} onChange={(event) => onCopyTargetFolderChange(event.target.value)}>
                 <option value="">{t('module-graph.components.module.workflow.generated.outputs.tab.select.folder')}</option>
                 {watchedFolders.map((folder) => (

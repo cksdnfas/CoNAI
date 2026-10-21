@@ -344,7 +344,7 @@ export function SettingsResourceFooterActions({
 
   return (
     <div className="flex flex-wrap justify-between gap-2">
-      <IconButton size="icon-sm" variant="secondary" className="text-destructive" disabled={dangerDisabled} onClick={onDanger} label={dangerLabel}>
+      <IconButton size="icon-sm" variant="destructive-ghost" disabled={dangerDisabled} onClick={onDanger} label={dangerLabel}>
         <Trash2 className="h-4 w-4" />
       </IconButton>
 

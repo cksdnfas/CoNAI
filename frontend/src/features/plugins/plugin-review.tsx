@@ -82,7 +82,7 @@ export function PluginReviewModal({ open, onClose, proposals, requests, initialK
   const working = busy || actions.busy !== null
   return (
     <Modal open={open} onClose={onClose} title={t({ ko: '검토 대기 {count}', en: '{count} awaiting review' }, { count: items.length })} widthClassName="max-w-4xl">
-      <ModalBody className="p-0">
+      <ModalBody spacing="none">
         {current ? (
           <div className="grid min-h-0 md:grid-cols-[14rem_minmax(0,1fr)]">
             <div className="border-b border-line md:border-r md:border-b-0" role="listbox" aria-label={t({ ko: '검토할 항목', en: 'Items to review' })}>

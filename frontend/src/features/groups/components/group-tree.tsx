@@ -5,7 +5,6 @@ import type { ActionMenuEntry } from '@/components/ui/action-menu'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { cn } from '@/lib/utils'
 import { getGroupHierarchyCountDescription, getGroupHierarchyCountLabel, type GroupCountMaps } from '@/features/groups/group-count-utils'
 import type { GroupWithHierarchy } from '@/types/group'
 import { GroupColorDot } from './group-color-dot'
@@ -96,13 +95,10 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
     )
   }, [countMaps, formatNumber, pickedGroupIds, t])
 
-  const getItemClassName = useCallback((group: GroupWithHierarchy) => (
-    dropTargetId === group.id ? cn('bg-primary/20 text-foreground ring-2 ring-primary/60') : undefined
-  ), [dropTargetId])
-
   const getItemDataAttributes = useCallback((group: GroupWithHierarchy) => ({
     [GROUP_DROP_ID_ATTRIBUTE]: String(group.id),
-  }), [])
+    'data-drop-target': dropTargetId === group.id ? 'true' : undefined,
+  }), [dropTargetId])
 
   if (visibleGroups.length === 0 && filterText.trim()) {
     return <EmptyState size="compact" title={t({ ko: '맞는 그룹 없음', en: 'No matching groups' })} />
@@ -120,7 +116,6 @@ export function GroupTree({ groups, countMaps, selectedGroupId, filterText = '',
       getLabel={getLabel}
       sortItems={sortGroupsByName}
       renderIcon={renderGroupIcon}
-      getItemClassName={getItemClassName}
       getItemDataAttributes={getItemDataAttributes}
       getItemMenu={getGroupMenu}
     />

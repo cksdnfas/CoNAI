@@ -11,7 +11,6 @@ import { useImageDeleteUndo } from '@/features/images/use-image-delete-undo'
 import { useI18n } from '@/i18n'
 import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
 import { deleteImagesBulk } from '@/lib/api-images'
-import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 
 interface ImageDeleteActionProps {
@@ -40,8 +39,8 @@ export function ImageDeleteAction({ image, className, variant = 'secondary', onD
     <IconButton
       label={action.label}
       size="icon-sm"
-      variant={variant}
-      className={cn(variant !== 'overlay' && 'text-destructive hover:text-destructive', className)}
+      variant={variant === 'overlay' ? 'overlay' : 'destructive-ghost'}
+      className={className}
       onClick={action.onSelect}
       disabled={action.disabled}
     >

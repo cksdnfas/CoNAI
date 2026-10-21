@@ -108,6 +108,7 @@ export async function streamClaudeChatCompletion(params: {
   onReasoning?: (text: string) => void
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
   maxToolRounds?: number
+  research?: import('./chatResearch').ChatResearchExecution
   /** Claude Code's own tools for this run (web research only); none in a chat. */
   hostTools?: readonly ClaudeHostTool[]
 }): Promise<ChatCompletionResult> {
@@ -213,7 +214,9 @@ export async function streamClaudeChatCompletion(params: {
           if (delta?.type === 'thinking_delta' && typeof delta.thinking === 'string') { reasoning += delta.thinking; params.onReasoning?.(delta.thinking) }
         }
         if (event.type === 'result') result = event
-        if (event.type === 'assistant') finishReason = event.message?.stop_reason === 'max_tokens' ? 'length' : 'stop'
+        if (event.type === 'assistant') {
+          finishReason = event.message?.stop_reason === 'max_tokens' ? 'length' : 'stop'
+        }
       }
       child.stdout.on('data', (chunk) => {
         try {
@@ -235,7 +238,12 @@ export async function streamClaudeChatCompletion(params: {
           if (buffer.trim()) read(buffer.trim())
           if (failure) throw failure
           if (timeout.timedOut) throw new Error('Claude Code 응답 제한 시간을 초과했어.')
-          if (code !== 0 || !verified || !result || result.is_error === true || result.subtype !== 'success') throw new Error('Claude Code 요청에 실패했어. 인증 상태, 모델 및 사용량 한도를 확인해줘.')
+          const turnLimited = params.research && result?.subtype === 'error_max_turns'
+          // Native max-turn receipts can include the denied continuation (2.1.302: maxTurns + 1).
+          // Preserve that receipt rather than clamping it to the configured limit or inventing provider usage.
+          if (params.research) params.research.result.turns = typeof result?.num_turns === 'number' && Number.isSafeInteger(result.num_turns) && result.num_turns >= 0 ? result.num_turns : null
+          if (turnLimited) params.research!.result.stopReason = 'turn_limit'
+          if ((!turnLimited && code !== 0) || !verified || !result || (!turnLimited && (result.is_error === true || result.subtype !== 'success'))) throw new Error('Claude Code 요청에 실패했어. 인증 상태, 모델 및 사용량 한도를 확인해줘.')
           const finalText = typeof result.result === 'string' ? result.result : content
           if (!content && finalText) params.onContent?.(finalText)
           if (session) {

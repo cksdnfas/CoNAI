@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
  * Small controls that live inside node cards. They keep one height (24px) so every node row lines up, never start a
  * node drag or canvas pan, and never scroll the canvas with the wheel.
  */
-export const NODE_CONTROL_CLASS = 'nodrag nowheel h-6 min-w-0 rounded-[5px] bg-surface-high px-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60'
+export const NODE_CONTROL_CLASS = 'nodrag nowheel h-6 min-w-0 rounded-sm bg-surface-high px-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60'
 
 /** Inside a widget pill the pill is the box: controls drop their own fill and sit right-aligned on it. */
 const NODE_WIDGET_CONTROL_CLASS = 'nodrag nowheel h-6 min-w-0 bg-transparent text-right text-xs text-foreground outline-none placeholder:text-muted-foreground/70 focus-visible:underline focus-visible:decoration-muted-foreground/60 disabled:opacity-60 [field-sizing:content]'
@@ -51,7 +51,7 @@ function WidgetStepButton({ direction, label, onStep, disabled }: { direction: -
         event.stopPropagation()
         onStep()
       }}
-      className="nodrag h-6 w-4 shrink-0 rounded-full text-muted-foreground/55 hover:bg-transparent hover:text-foreground disabled:opacity-40"
+      className="nodrag h-6 w-4 shrink-0"
     >
       <Icon className="size-3" strokeWidth={2.5} />
     </IconButton>

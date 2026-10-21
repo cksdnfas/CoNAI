@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Film, ImageIcon, Images, LoaderCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ListRow } from '@/components/ui/list-row'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
 import type { GroupDownloadType, GroupFileCounts } from '@/types/group'
@@ -69,25 +70,26 @@ export function GroupDownloadModal({
       description={description}
       widthClassName="max-w-md"
     >
-      <ModalBody className="space-y-2" role="radiogroup" aria-label={t({ ko: '받을 파일', en: 'Files to download' })}>
+      <ModalBody spacing="none" role="radiogroup" aria-label={t({ ko: '받을 파일', en: 'Files to download' })}>
         {downloadCards.map((card) => {
           const Icon = card.icon
           const availableCount = counts[card.countKey]
           const picked = card.type === activeType
 
           return (
-            <Button
+            <ListRow
               key={card.type}
+              asChild
+              interactive
+              selected={picked}
+              size="lg"
+            >
+              <button
               type="button"
-              variant="ghost"
               role="radio"
               aria-checked={picked}
               onClick={() => setPickedType(card.type)}
               disabled={isLoading || isDownloading || availableCount <= 0}
-              className={cn(
-                'h-auto w-full justify-start gap-3 rounded-lg border-[1.5px] border-transparent bg-field px-3.5 py-2.5 text-left hover:bg-fill disabled:opacity-45',
-                picked && 'border-primary bg-primary/8 hover:bg-primary/12',
-              )}
             >
               <span aria-hidden="true" className={cn('relative size-4.5 shrink-0 rounded-full border-2', picked ? 'border-primary after:absolute after:inset-0.5 after:rounded-full after:bg-primary' : 'border-muted-foreground/60')} />
               <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-surface-high text-foreground">
@@ -95,7 +97,8 @@ export function GroupDownloadModal({
               </span>
               <span className="min-w-0 flex-1 text-sm font-semibold text-foreground">{t(card.titleKey)}</span>
               <span className="shrink-0 text-sm tabular-nums text-muted-foreground">{t({ ko: '{count}개', en: '{count}' }, { count: formatNumber(availableCount) })}</span>
-            </Button>
+              </button>
+            </ListRow>
           )
         })}
       </ModalBody>

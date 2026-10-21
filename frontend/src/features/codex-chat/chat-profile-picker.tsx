@@ -66,7 +66,8 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
   const toggle = (id: number) => setPicked((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id])
 
   return <div className="flex min-h-0 flex-1 flex-col">
-    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+    {/* The chat page puts its header and body on --page-gutter; the panel keeps its own inset. */}
+    <div className={cn('min-h-0 flex-1 overflow-y-auto', layout === 'page' ? 'px-(--page-gutter) py-4 sm:py-6' : 'p-4 sm:p-6')}>
       <div className="mx-auto max-w-4xl">
         <div className="mb-4 flex items-center gap-2">
           <Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t({ ko: '프로필 검색', en: 'Search profiles' })} aria-label={t({ ko: '프로필 검색', en: 'Search profiles' })} className="flex-1" />
@@ -132,14 +133,14 @@ export function ChatProfilePicker({ profiles, threads, layout, disabled, onPick,
                   checked={isPicked}
                   disabled={disabled || blocked}
                   aria-label={t({ ko: '{name} 그룹에 담기', en: 'Add {name} to a group' }, { name: profile.name })}
-                  className="absolute right-3 top-1/2 size-5 -translate-y-1/2 rounded-[5px] before:absolute before:-inset-2.5 before:content-['']"
+                  className="absolute right-3 top-1/2 size-5 -translate-y-1/2 before:absolute before:-inset-2.5 before:content-['']"
                   onCheckedChange={() => toggle(profile.id)}
                 />
               </div>
             </div>
           })}
         </div>
-        {usable.length === 0 ? <EmptyState size="compact" className="px-0 py-6" title={t({ ko: '프로필이 없어.', en: 'No profiles.' })} /> : null}
+        {usable.length === 0 ? <EmptyState size="compact" title={t({ ko: '프로필이 없어.', en: 'No profiles.' })} /> : null}
       </div>
     </div>
 

@@ -209,9 +209,9 @@ export function HomePage() {
         start={hasFeedData ? (
           <div className="flex items-center gap-3 text-sm">
             {/* The one count on Home: the real total ("계산 중" until the deferred count arrives). */}
-            <CountSummary {...feedCountState} unit={COUNT_UNITS.images} className="font-semibold text-foreground" />
+            <CountSummary {...feedCountState} unit={COUNT_UNITS.images} />
             {imagesQuery.isRefetching && !imagesQuery.isFetchingNextPage ? (
-              <LoadingState variant="inline" spinnerSize="sm" label={t({ ko: '새로고침 중…', en: 'Refreshing…' })} className="text-xs text-muted-foreground" />
+              <LoadingState variant="inline" spinnerSize="sm" label={t({ ko: '새로고침 중…', en: 'Refreshing…' })} />
             ) : null}
           </div>
         ) : undefined}
@@ -260,7 +260,7 @@ export function HomePage() {
         <section className="columns-1 gap-4 sm:columns-2 xl:columns-3 2xl:columns-4">
           {Array.from({ length: 8 }).map((_, index) => (
             <div key={index} className="mb-4 break-inside-avoid overflow-hidden rounded-sm">
-              <Skeleton className="min-h-[280px] w-full rounded-sm" />
+              <Skeleton radius="sm" className="min-h-[280px] w-full" />
             </div>
           ))}
         </section>

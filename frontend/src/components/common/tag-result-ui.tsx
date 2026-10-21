@@ -48,7 +48,7 @@ export function TagBundleSection({
     <div className="space-y-2 rounded-sm bg-surface-lowest px-3 py-3">
       {hideLabel && !headerAction ? null : (
         <div className={cn('flex items-center gap-3', hideLabel ? 'justify-end' : 'justify-between')}>
-          {hideLabel ? null : <Text as="div" variant="overline" className="font-semibold">{label}</Text>}
+          {hideLabel ? null : <Text as="div" variant="overline">{label}</Text>}
           {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
         </div>
       )}
@@ -96,7 +96,7 @@ export function ScoreMeterList({
 
   return (
     <div className="space-y-3 rounded-sm bg-surface-lowest px-3 py-3">
-      {hideTitle ? null : <Text as="div" variant="overline" className="font-semibold">{title}</Text>}
+      {hideTitle ? null : <Text as="div" variant="overline">{title}</Text>}
       <div className="space-y-3">
         {entries.map(([label, score]) => {
           const width = Math.max(0, Math.min(score * 100, 100))
@@ -139,7 +139,7 @@ export function CollapsibleScoreMeterList({
   return (
     <div className="space-y-3 rounded-sm bg-surface-lowest px-3 py-3">
       <div className={cn('flex items-center gap-3', hideTitle ? 'justify-end' : 'justify-between')}>
-        {hideTitle ? null : <Text as="div" variant="overline" className="font-semibold">{title}</Text>}
+        {hideTitle ? null : <Text as="div" variant="overline">{title}</Text>}
         <IconButton
           variant="ghost"
           size="icon-xs"
@@ -163,7 +163,7 @@ export function StackedRatingBar({ title, entries }: { title: string; entries: A
 
   return (
     <div className="space-y-3 rounded-sm bg-surface-lowest px-3 py-3">
-      <Text as="div" variant="overline" className="font-semibold">{title}</Text>
+      <Text as="div" variant="overline">{title}</Text>
       <div className="flex h-2.5 overflow-hidden rounded-full bg-surface-low">
         {normalizedEntries.map(([label, score]) => (
           <div

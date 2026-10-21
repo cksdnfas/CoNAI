@@ -326,7 +326,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
   return (
     <>
       {/* eslint-disable-next-line no-restricted-syntax -- the trigger is a whole easing preview card; Button's inline sizing would squash it */}
-      <button type="button" className="block w-full cursor-pointer rounded-sm text-left focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none" onClick={handleOpenPicker}>
+      <button type="button" className="block w-full cursor-pointer rounded-sm text-left focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none" onClick={handleOpenPicker}>
         <WallpaperEasingPreviewCard
           label={pickerLabel}
           description={summary}
@@ -513,7 +513,7 @@ export function WallpaperEasingPicker({ value, fallbackPreset = 'easeOutCubic', 
                     </div>
 
                     <div className="theme-settings-panel rounded-sm bg-surface-container p-3">
-                      <Field label={t({ ko: '프리셋으로 저장', en: 'Save as preset' })} className="gap-2">
+                      <Field label={t({ ko: '프리셋으로 저장', en: 'Save as preset' })}>
                         <div className="flex gap-2">
                           <Input
                             variant="settings"

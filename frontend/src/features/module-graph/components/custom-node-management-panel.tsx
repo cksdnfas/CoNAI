@@ -4,6 +4,7 @@ import { Copy, FlaskConical, FolderOpen, PackagePlus, RefreshCw } from 'lucide-r
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ListRow } from '@/components/ui/list-row'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Heading } from '@/components/ui/heading'
@@ -267,22 +268,22 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <div className="space-y-4">
-          <Section bodyClassName="space-y-3">
+          <Section>
               <PanelCardHeader title={t({ ko: '등록된 커스텀 노드', en: 'Registered custom nodes' })} />
 
               {loadedNodes.length === 0 ? (
                 <EmptyState size="compact" title={t({ ko: '노드 없음', en: 'No nodes' })} />
               ) : (
-                <div className="space-y-2.5">
+                <div>
                   {loadedNodes.map((node) => {
                     const isSelected = selectedTestKey === node.manifest.key
                     return (
-                      <Inset
+                      <ListRow
                         key={node.manifest.key}
-                        data-selected={isSelected}
-                        className={cn('px-3 py-2.5 transition-colors', isSelected && 'bg-primary/12')}
+                        size="lg"
+                        selected={isSelected}
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="flex w-full flex-wrap items-start justify-between gap-3">
                           <div className="min-w-0 space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-medium text-foreground">{node.manifest.name}</span>
@@ -333,14 +334,14 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
                             </IconButton>
                           </div>
                         </div>
-                      </Inset>
+                      </ListRow>
                     )
                   })}
                 </div>
               )}
           </Section>
 
-          <Section bodyClassName="space-y-3">
+          <Section>
               <PanelCardHeader title={t({ ko: '로드 오류', en: 'Load errors' })} />
 
               {loadErrors.length === 0 ? (
@@ -362,7 +363,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
         </div>
 
         <div className="space-y-4">
-          <Section bodyClassName="space-y-3">
+          <Section>
               <PanelCardHeader title={t({ ko: '새 노드 스캐폴드', en: 'New node scaffold' })} />
 
               <div className="grid gap-3">
@@ -406,21 +407,21 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               </div>
           </Section>
 
-          <Section bodyClassName="space-y-3">
+          <Section>
               <PanelCardHeader title={t({ ko: '단건 테스트', en: 'Single test' })} meta={selectedTestNode?.manifest.name} />
 
               {selectedNodeSourceQuery.data ? (
-                <Inset className="space-y-3 p-3">
+                <Inset padding="sm" className="space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-sm font-medium text-foreground">{t({ ko: '소스 정보', en: 'Source info' })}</div>
                     <Badge variant="outline">{selectedNodeSourceQuery.data.sourceHash.slice(0, 12)}</Badge>
                   </div>
                   <div className="grid gap-2.5 md:grid-cols-2">
-                    <StatTile label={t({ ko: '폴더', en: 'Folder' })} value={selectedNodeSourceQuery.data.folderPath} className="bg-surface-container" valueClassName="break-all text-xs font-medium" />
-                    <StatTile label="manifest" value={selectedNodeSourceQuery.data.manifestPath} className="bg-surface-container" valueClassName="break-all text-xs font-medium" />
-                    <StatTile label="entry" value={selectedNodeSourceQuery.data.entryPath} className="bg-surface-container" valueClassName="break-all text-xs font-medium" />
-                    <StatTile label="package.json" value={selectedNodeSourceQuery.data.packageJsonPath ?? t({ ko: '없음', en: 'None' })} className="bg-surface-container" valueClassName="break-all text-xs font-medium" />
-                    <StatTile label="README" value={selectedNodeSourceQuery.data.readmePath ?? t({ ko: '없음', en: 'None' })} className="bg-surface-container md:col-span-2" valueClassName="break-all text-xs font-medium" />
+                    <StatTile label={t({ ko: '폴더', en: 'Folder' })} value={selectedNodeSourceQuery.data.folderPath} valueClassName="break-all" />
+                    <StatTile label="manifest" value={selectedNodeSourceQuery.data.manifestPath} valueClassName="break-all" />
+                    <StatTile label="entry" value={selectedNodeSourceQuery.data.entryPath} valueClassName="break-all" />
+                    <StatTile label="package.json" value={selectedNodeSourceQuery.data.packageJsonPath ?? t({ ko: '없음', en: 'None' })} valueClassName="break-all" />
+                    <StatTile label="README" value={selectedNodeSourceQuery.data.readmePath ?? t({ ko: '없음', en: 'None' })} className="md:col-span-2" valueClassName="break-all" />
                   </div>
                   <div className="flex flex-wrap gap-1">
                     <IconButton size="icon-sm" variant="ghost" label={t({ ko: '폴더 열기', en: 'Open folder' })} onClick={() => void openFolderMutation.mutateAsync(selectedNodeSourceQuery.data.key)} disabled={openFolderMutation.isPending}>
@@ -472,7 +473,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               </Button>
 
               {previewableImageOutputs.length > 0 ? (
-                <Inset className="space-y-2.5 p-3">
+                <Inset padding="sm" className="space-y-2.5">
                   <div className="text-sm font-medium text-foreground">{t({ ko: '이미지 미리보기', en: 'Image preview' })}</div>
                   <div className="grid gap-3 md:grid-cols-2">
                     {previewableImageOutputs.map((output) => (
@@ -501,7 +502,7 @@ export function CustomNodeManagementPanel({ onModulesChanged }: CustomNodeManage
               ) : null}
 
               {testResultData?.logs.length ? (
-                <Inset className="space-y-2 p-3">
+                <Inset padding="sm" className="space-y-2">
                   <div className="text-sm font-medium text-foreground">{t({ ko: '실행 로그', en: 'Execution logs' })}</div>
                   <div className="space-y-1 text-sm text-muted-foreground">
                     {testResultData.logs.map((logItem, index) => (

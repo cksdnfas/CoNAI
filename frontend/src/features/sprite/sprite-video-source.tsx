@@ -165,7 +165,8 @@ export const SpriteVideoSource = forwardRef<SpriteVideoHandle, {
         {picking ? <div className="absolute inset-0 cursor-crosshair" onPointerDown={pick} /> : null}
         {preCrop && !picking ? (
           <div
-            className="absolute cursor-move border-[1.5px] border-primary shadow-[0_0_0_9999px_rgb(0_0_0/0.4)]"
+            // eslint-disable-next-line shadcn/no-arbitrary-values -- The video crop mask shades content outside the selected pixel region, not UI chrome.
+            className="absolute cursor-move border-2 border-primary shadow-[0_0_0_9999px_rgb(0_0_0/0.4)]"
             style={{ left: `${(preCrop.x / info.width) * 100}%`, top: `${(preCrop.y / info.height) * 100}%`, width: `${(preCrop.width / info.width) * 100}%`, height: `${(preCrop.height / info.height) * 100}%` }}
             onPointerDown={startDrag('move')}
           >

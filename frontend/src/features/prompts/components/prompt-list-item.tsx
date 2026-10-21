@@ -44,6 +44,7 @@ export function PromptListItem({ item, groupName, selected = false, active = fal
       <ListRow
         interactive
         selected={selected}
+        // eslint-disable-next-line shadcn/no-restyle -- Selection-controller and CSS hook; removing it breaks marquee selection and its preview.
         className="prompt-list-selectable group relative"
         data-prompt-id={item.id}
         data-active={active ? 'true' : 'false'}
@@ -61,7 +62,7 @@ export function PromptListItem({ item, groupName, selected = false, active = fal
               data-no-select-drag="true"
               onClick={stopAction}
             >
-              <ActionMenuButton entries={entries} size="icon-xs" className="text-muted-foreground" label={t({ ko: '더 보기', en: 'More' })} />
+              <ActionMenuButton entries={entries} size="icon-xs" label={t({ ko: '더 보기', en: 'More' })} />
             </span>
             {active ? <Sparkles className="size-3.5 text-primary" aria-hidden /> : null}
             <Tip content={t({ ko: '사용 {count}회', en: 'Used {count} times' }, { count: formatNumber(item.usage_count) })}>

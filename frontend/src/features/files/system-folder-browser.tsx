@@ -4,6 +4,7 @@ import { ChevronRight, Clock, Download, File, Folder, LayoutGrid, List, Lock, Re
 import type { SystemFolderEntry, SystemFolderRootId } from '@conai/shared'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { PageToolbar } from '@/components/common/page-toolbar'
+import { MediaCard } from '@/components/common/media-card'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { SelectionActionBar, SelectionBarAction } from '@/components/common/selection-action-bar'
 import { Button } from '@/components/ui/button'
@@ -192,7 +193,7 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
   const crumb = (label: string, active: boolean, onClick: () => void, first = false) => (
     <span className="inline-flex min-w-0 items-center">
       {first ? null : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
-      <Button variant="ghost" size="sm" className={cn('max-w-48 px-2', active && 'font-semibold')} onClick={onClick}>
+      <Button variant="ghost" size="sm" className="max-w-48" aria-current={active ? 'location' : undefined} onClick={onClick}>
         <span className="truncate">{label}</span>
       </Button>
     </span>
@@ -228,7 +229,7 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
         <RefreshCw />
       </IconButton>
       {isBin ? (
-        <IconButton variant="ghost" className="text-destructive" label={t({ ko: '휴지통 비우기', en: 'Empty recycle bin' })} onClick={() => void empty()} disabled={busy || entries.length === 0}>
+        <IconButton variant="destructive-ghost" label={t({ ko: '휴지통 비우기', en: 'Empty recycle bin' })} onClick={() => void empty()} disabled={busy || entries.length === 0}>
           <Trash2 />
         </IconButton>
       ) : null}
@@ -247,7 +248,7 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
     </IconButton>
   )
   const deleteButton = (entry: SystemFolderEntry) => (
-    <IconButton variant="ghost" size="icon-sm" className="text-destructive" label={t({ ko: '영구 삭제', en: 'Delete permanently' })} disabled={busy} onClick={() => void removeForever([entry])}>
+    <IconButton variant="destructive-ghost" size="icon-sm" label={t({ ko: '영구 삭제', en: 'Delete permanently' })} disabled={busy} onClick={() => void removeForever([entry])}>
       <Trash2 />
     </IconButton>
   )
@@ -275,17 +276,16 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
         {entries.map((entry) => {
           const isSelected = selected.includes(entry.name)
           return (
-            <div key={entry.path} className="group relative min-w-0">
-              <Button
-                variant="ghost"
+            <div key={entry.path} title={displayName(entry)} className="group relative min-w-0">
+              <MediaCard
                 onClick={() => open(entry)}
-                title={displayName(entry)}
-                className={cn('flex h-auto w-full flex-col items-stretch gap-1.5 whitespace-normal p-1.5 text-left font-normal', isSelected && 'bg-primary/10 hover:bg-primary/15')}
-              >
-                <EntryThumb root={root} entry={entry} className="aspect-square w-full" iconClassName="size-9" />
-                <span className="line-clamp-2 break-all px-0.5 text-xs leading-snug text-foreground">{displayName(entry)}</span>
-                {entry.kind === 'file' ? <span className="px-0.5 text-2xs text-muted-foreground">{formatFileSize(entry.size)}</span> : null}
-              </Button>
+                title={<span className="line-clamp-2 whitespace-normal break-all">{displayName(entry)}</span>}
+                selected={isSelected}
+                className="w-full"
+                mediaClassName="aspect-square w-full"
+                media={<EntryThumb root={root} entry={entry} className="size-full" iconClassName="size-9" />}
+                meta={entry.kind === 'file' ? formatFileSize(entry.size) : undefined}
+              />
               {isBin && entry.kind === 'file' ? (
                 <span className={cn('absolute left-2.5 top-2.5 rounded-sm bg-background/80 p-0.5 transition-opacity', isSelected || selected.length > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
                   <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: displayName(entry) })} checked={isSelected} onCheckedChange={(checked) => toggle(entry.name, checked === true)} />

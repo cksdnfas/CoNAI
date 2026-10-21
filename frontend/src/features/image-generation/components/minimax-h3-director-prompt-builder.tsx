@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
-import { cn } from '@/lib/utils'
 import { FormField } from '../image-generation-shared'
 import {
   buildMiniMaxH3DirectorPrompt,
@@ -106,7 +105,7 @@ export function MiniMaxH3DirectorPromptBuilder({
           value={state.simple_prompt}
           aria-label={t({ ko: '프롬프트', en: 'Prompt' })}
           placeholder={t({ ko: '전체 프롬프트', en: 'Full prompt' })}
-          className={cn(invalid && 'border-destructive')}
+          aria-invalid={invalid}
           onChange={(event) => patchState({ simple_prompt: event.target.value })}
         />)
       ) : state.mode === 'REF2VA' ? (
@@ -121,7 +120,7 @@ export function MiniMaxH3DirectorPromptBuilder({
             <Textarea rows={4} value={state.ref.retention_analysis} placeholder="<Subject 1>: fully_preserved - ..." onChange={(event) => patchRef({ retention_analysis: event.target.value })} />
           </FormField>)}
           {renderPortedField('prompt.detailed_description', <FormField label="detailed_description">
-            <Textarea rows={6} value={state.ref.detailed_description} placeholder="[Shot 1] ... [Shot 2] At 00:04.500, ..." className={cn(invalid && 'border-destructive')} onChange={(event) => patchRef({ detailed_description: event.target.value })} />
+            <Textarea rows={6} value={state.ref.detailed_description} placeholder="[Shot 1] ... [Shot 2] At 00:04.500, ..." aria-invalid={invalid} onChange={(event) => patchRef({ detailed_description: event.target.value })} />
           </FormField>)}
           <div className="grid gap-4 sm:grid-cols-2">
             {renderPortedField('prompt.soundscape', <FormField label="overall_soundscape">
@@ -135,7 +134,7 @@ export function MiniMaxH3DirectorPromptBuilder({
       ) : (
         <div className="grid gap-4">
           {renderPortedField('prompt.imd', <FormField label="integrated_multimodal_description">
-            <Textarea rows={6} value={state.imd} placeholder="[Shot 1] Start your scene description here..." className={cn(invalid && 'border-destructive')} onChange={(event) => patchState({ imd: event.target.value })} />
+            <Textarea rows={6} value={state.imd} placeholder="[Shot 1] Start your scene description here..." aria-invalid={invalid} onChange={(event) => patchState({ imd: event.target.value })} />
           </FormField>)}
           <div className="grid gap-4 sm:grid-cols-2">
             {renderPortedField('prompt.soundscape', <FormField label="overall_soundscape">
@@ -156,7 +155,7 @@ export function MiniMaxH3DirectorPromptBuilder({
       onClose={() => setPreviewOpen(false)}
     >
       <div className="space-y-3">
-        <Textarea rows={18} readOnly value={preview} aria-label={t({ ko: '최종 프롬프트', en: 'Final prompt' })} className="font-mono text-xs" />
+        <Textarea rows={18} readOnly value={preview} aria-label={t({ ko: '최종 프롬프트', en: 'Final prompt' })} mono textSize="xs" />
         <ModalFooter>
           <IconButton variant="secondary" label={t({ ko: '프롬프트 복사', en: 'Copy prompt' })} onClick={() => void navigator.clipboard.writeText(preview).then(
             () => onStatus(t({ ko: '프롬프트를 복사했어.', en: 'Prompt copied.' })),

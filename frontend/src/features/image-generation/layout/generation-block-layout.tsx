@@ -296,7 +296,7 @@ function BlockFrame({ surface, block, columnIndex, index, indicator, dragging, g
           variant="ghost"
           tooltip={false}
           label={t({ ko: '{name} 옮기기', en: 'Move {name}' }, { name: label })}
-          className="cursor-grab text-muted-foreground active:cursor-grabbing"
+          className="cursor-grab active:cursor-grabbing"
           {...gripProps}
         >
           <GripVertical />
@@ -361,7 +361,8 @@ function ColumnDivider({ left, right, total, containerRef, onLive, onCommit }: {
           type="button"
           variant="secondary"
           aria-label={t({ ko: '열 너비 조절 ({left} : {right})', en: 'Resize columns ({left} : {right})' }, { left: percent(left), right: percent(right) })}
-          className="relative mt-48 h-fit w-6 cursor-col-resize flex-col gap-1 rounded-full px-0 py-2"
+          size="content"
+          className="relative mt-48 h-fit w-6 cursor-col-resize flex-col"
           style={{ touchAction: 'none' }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}

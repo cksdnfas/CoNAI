@@ -17,6 +17,8 @@ interface SettingRowProps extends Omit<ComponentProps<'div'>, 'children'> {
   align?: 'center' | 'start'
   /** Put the control under the label at full width (textarea, long path input). */
   stacked?: boolean
+  /** Aligned control column; full width after the row wraps on phones. */
+  controlWidth?: 'standard' | 'wide'
   controlClassName?: string
 }
 
@@ -34,6 +36,7 @@ function SettingRow({
   align = 'center',
   stacked = false,
   className,
+  controlWidth,
   controlClassName,
   ...props
 }: SettingRowProps) {
@@ -66,6 +69,8 @@ function SettingRow({
           className={cn(
             'flex min-w-0 max-w-full items-center gap-2',
             stacked ? 'w-full' : 'ml-auto shrink-0 flex-wrap justify-end',
+            controlWidth === 'standard' && 'w-full sm:w-60',
+            controlWidth === 'wide' && 'w-full sm:w-96',
             controlClassName,
           )}
         >

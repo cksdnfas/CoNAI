@@ -698,18 +698,16 @@ function ComfyAuthoringNodeCard({ id, data }: NodeProps<AuthoringNode>) {
                 key={path}
                 type="button"
                 variant="nav"
-                size="xs"
+                size="compact"
                 data-active={marked || undefined}
                 aria-pressed={marked}
                 aria-current={current || undefined}
                 onClick={() => data.onInputSelect(id, data.title, data.classType, input)}
-                className={cn(
-                  'nodrag nopan h-7 justify-between',
-                  current && 'bg-primary/15 text-secondary-text hover:bg-primary/20 data-[active=true]:bg-primary/15 data-[active=true]:text-secondary-text',
-                  !current && searchHit && 'ring-1 ring-inset ring-primary/45',
-                )}
+                className="nodrag nopan justify-between"
               >
-                <span className="truncate">{input.label}</span>
+                <span className="truncate">
+                  {searchHit ? <mark className="rounded-sm bg-primary/20 px-0.5 text-foreground">{input.label}</mark> : input.label}
+                </span>
                 {marked ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
               </Button>
             )

@@ -21,7 +21,6 @@ import { pageAction, pageChoice, pageNumber, pageFreeText, pageObject, pageText 
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, invalidatePostScope, cancelPostBotRun, createPostCategory, createPostComment, deletePost, deletePostCategory, deletePostComment, getPost, getPostRevision, getPostsSettings, listPostCategories, listPostRevisionSummaries, listPosts, listPostTags, restorePostKnowledge, setPostCommentHidden, updatePost, updatePostCategory, updatePostComment } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
-import { cn } from '@/lib/utils'
 import { PostCategoryDialog } from './post-category-dialog'
 import { flattenCategories, PostEditor } from './post-editor'
 import { EMPTY_COMMENT_DRAFT, type PostCommentDraft } from './post-comments'
@@ -421,11 +420,11 @@ export function PostsPage() {
       </div>
     ) : (
       <nav className="flex min-w-0 flex-wrap items-center gap-1 text-sm" aria-label={t({ ko: '현재 위치', en: 'Current location' })}>
-        <Button variant="ghost" size="sm" className={cn('px-2', !crumbs.length && 'font-semibold')} onClick={() => filterCategory(null)}>{t({ ko: '게시판', en: 'Posts' })}</Button>
+        <Button variant="ghost" size="sm" aria-current={!crumbs.length ? 'location' : undefined} onClick={() => filterCategory(null)}>{t({ ko: '게시판', en: 'Posts' })}</Button>
         {crumbs.map((category, index) => (
           <span key={category.id} className="inline-flex items-center gap-1">
             <span className="text-muted-foreground">›</span>
-            <Button variant="ghost" size="sm" className={cn('max-w-48 px-2', index === crumbs.length - 1 && 'font-semibold')} onClick={() => filterCategory(category.id)}><span className="truncate">{category.name}</span></Button>
+            <Button variant="ghost" size="sm" className="max-w-48" aria-current={index === crumbs.length - 1 ? 'location' : undefined} onClick={() => filterCategory(category.id)}><span className="truncate">{category.name}</span></Button>
           </span>
         ))}
         {tag ? (

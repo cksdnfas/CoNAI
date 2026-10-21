@@ -55,14 +55,14 @@ function lastDays(days: number) {
 function MiniBars({ values, highlight, tone = 'var(--primary)', secondary }: { values: number[]; highlight?: number; tone?: string; secondary?: number[] }) {
   const max = Math.max(1, ...values.map((value, index) => value + (secondary?.[index] ?? 0)))
   return (
-    <div className="flex h-full min-h-0 items-end gap-[3%]">
+    <div className="flex h-full min-h-0 items-end" style={{ gap: '3%' }}>
       {values.map((value, index) => {
         const extra = secondary?.[index] ?? 0
         return (
           <div key={index} className="flex h-full min-w-0 flex-1 flex-col justify-end">
-            {extra > 0 ? <div className="w-full rounded-t-[2px] bg-destructive/70" style={{ height: `${(extra / max) * 100}%` }} /> : null}
+            {extra > 0 ? <div className="w-full rounded-t-xs bg-destructive/70" style={{ height: `${(extra / max) * 100}%` }} /> : null}
             <div
-              className={cn('w-full', extra > 0 ? null : 'rounded-t-[2px]')}
+              className={cn('w-full', extra > 0 ? null : 'rounded-t-xs')}
               style={{
                 height: `${Math.max(value > 0 ? 3 : 1.5, (value / max) * 100)}%`,
                 background: tone,
@@ -96,32 +96,32 @@ export function WallpaperGenerationProgressBody({ widget }: { widget: Extract<Wa
   const rowsEm = Math.max(1, jobs.length) * 3.2 + (showQueueCounts ? 2 : 0)
 
   return (
-    <div className="flex h-full flex-col gap-[0.75em]" style={{ fontSize: `clamp(12px, min(${(100 / rowsEm).toFixed(2)}cqh, 3.6cqw), 26px)` }}>
+    <div className="flex h-full flex-col" style={{ gap: '0.75em', fontSize: `clamp(12px, min(${(100 / rowsEm).toFixed(2)}cqh, 3.6cqw), 26px)` }}>
       {jobs.length === 0 ? (
-        <div className="flex min-h-0 flex-1 items-center gap-[0.75em] opacity-60">
+        <div className="flex min-h-0 flex-1 items-center opacity-60" style={{ gap: '0.75em' }}>
           <span className="size-[0.5em] shrink-0 rounded-full bg-current opacity-50" />
           <span>{t({ ko: '생성 대기 없음', en: 'Nothing generating' })}</span>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-[0.75em] overflow-hidden [justify-content:safe_center]">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden [justify-content:safe_center]" style={{ gap: '0.75em' }}>
           {jobs.map((job) => {
             const percent = job.progress?.percent ?? (job.progress?.value !== null && job.progress?.value !== undefined && job.progress.max ? (job.progress.value / job.progress.max) * 100 : null)
             const label = [SERVICE_LABEL[job.serviceType] ?? job.serviceType, showNodeLabel ? (job.progress?.node_label ?? job.workflowName) : job.workflowName].filter(Boolean).join(' · ')
             const isRunning = job.status === 'running'
             return (
               <div key={job.id} className="min-w-0 shrink-0">
-                <div className="mb-[0.4em] flex items-baseline justify-between gap-[0.75em]">
+                <div className="flex items-baseline justify-between" style={{ marginBottom: '0.4em', gap: '0.75em' }}>
                   <span className="min-w-0 truncate">{label}</span>
-                  <span className="shrink-0 font-mono text-[0.85em] tabular-nums opacity-75">
+                  <span className="shrink-0 font-mono tabular-nums opacity-75" style={{ fontSize: '0.85em' }}>
                     {isRunning
                       ? percent !== null ? `${Math.round(percent)}%` : job.startedAt ? formatElapsed(now - Date.parse(job.startedAt)) : ''
                       : t({ ko: '대기', en: 'Queued' })}
                   </span>
                 </div>
-                <div className="h-[0.4em] overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--foreground)_12%,transparent)]">
+                <div className="h-[0.4em] overflow-hidden rounded-full" style={{ background: 'color-mix(in srgb,var(--foreground) 12%,transparent)' }}>
                   {isRunning ? (
                     percent !== null
-                      ? <div className="h-full rounded-full transition-[width] duration-700 ease-out" style={{ width: `${Math.max(2, percent)}%`, background: SERVICE_COLOR[job.serviceType] }} />
+                      ? <div className="h-full rounded-full transition duration-700 ease-out" style={{ transitionProperty: 'width', width: `${Math.max(2, percent)}%`, background: SERVICE_COLOR[job.serviceType] }} />
                       : <div className="h-full w-1/3 animate-pulse rounded-full" style={{ background: SERVICE_COLOR[job.serviceType] }} />
                   ) : null}
                 </div>
@@ -131,7 +131,7 @@ export function WallpaperGenerationProgressBody({ widget }: { widget: Extract<Wa
         </div>
       )}
       {showQueueCounts ? (
-        <div className="flex shrink-0 gap-[1.2em] text-[0.85em] opacity-70">
+        <div className="flex shrink-0 opacity-70" style={{ gap: '1.2em', fontSize: '0.85em' }}>
           <span>{t({ ko: '실행', en: 'Running' })} <b className="font-semibold tabular-nums">{formatNumber(running)}</b></span>
           <span>{t({ ko: '대기', en: 'Queued' })} <b className="font-semibold tabular-nums">{formatNumber(queued)}</b></span>
         </div>
@@ -165,7 +165,7 @@ export function WallpaperGenerationStatsBody({ widget }: { widget: Extract<Wallp
       <div className="flex h-full flex-col justify-between gap-3">
         <div>
           <div className="text-xs opacity-60">{periodLabel}</div>
-          <div className="font-semibold leading-none tracking-[-0.04em] tabular-nums" style={{ fontSize: 'min(34cqh, 22cqw)' }}>{formatNumber(totals.total)}</div>
+          <div className="font-semibold leading-none tabular-nums" style={{ fontSize: 'min(34cqh, 22cqw)', letterSpacing: '-0.04em' }}>{formatNumber(totals.total)}</div>
         </div>
         <div className="grid grid-cols-5 gap-2">
           {cells.map((cell) => (
@@ -183,7 +183,7 @@ export function WallpaperGenerationStatsBody({ widget }: { widget: Extract<Wallp
     <div className="flex h-full flex-col gap-3">
       <div className="flex shrink-0 items-baseline justify-between gap-3">
         <div className="flex items-baseline gap-2">
-          <span className="font-semibold leading-none tracking-[-0.04em] tabular-nums" style={{ fontSize: 'min(26cqh, 16cqw)' }}>{formatNumber(totals.total)}</span>
+          <span className="font-semibold leading-none tabular-nums" style={{ fontSize: 'min(26cqh, 16cqw)', letterSpacing: '-0.04em' }}>{formatNumber(totals.total)}</span>
           <span className="text-xs opacity-60">{periodLabel}</span>
         </div>
         {totals.failed > 0 ? <span className="text-xs text-destructive">{t({ ko: '실패 {count}', en: '{count} failed' }, { count: formatNumber(totals.failed) })}</span> : null}
@@ -225,7 +225,7 @@ export function WallpaperLlmUsageBody({ widget }: { widget: Extract<WallpaperWid
     <div className="flex h-full flex-col gap-3">
       <div className="flex shrink-0 items-baseline justify-between gap-3">
         <div className="flex items-baseline gap-2">
-          <span className="font-semibold leading-none tracking-[-0.04em] tabular-nums" style={{ fontSize: 'min(22cqh, 15cqw)' }}>{compact(total)}</span>
+          <span className="font-semibold leading-none tabular-nums" style={{ fontSize: 'min(22cqh, 15cqw)', letterSpacing: '-0.04em' }}>{compact(total)}</span>
           <span className="text-xs opacity-60">{metric === 'requests' ? t({ ko: '요청', en: 'requests' }) : t({ ko: '토큰', en: 'tokens' })} · {days === 1 ? t({ ko: '오늘', en: 'today' }) : t({ ko: '{days}일', en: '{days} days' }, { days })}</span>
         </div>
         <span className="text-xs tabular-nums opacity-60">
@@ -240,7 +240,7 @@ export function WallpaperLlmUsageBody({ widget }: { widget: Extract<WallpaperWid
           {modelRows.map((row) => (
             <div key={row.name} className="flex items-center gap-2 text-xs">
               <span className="w-[38%] min-w-0 truncate opacity-80">{row.name}</span>
-              <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--foreground)_12%,transparent)]">
+              <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: 'color-mix(in srgb,var(--foreground) 12%,transparent)' }}>
                 <span className="block h-full rounded-full bg-primary" style={{ width: `${(row.value / modelMax) * 100}%` }} />
               </span>
               <span className="w-12 shrink-0 text-right tabular-nums opacity-70">{compact(row.value)}</span>
@@ -278,21 +278,21 @@ export function WallpaperLibraryStatsBody({ widget }: { widget: Extract<Wallpape
 
   // Small type (caption, legend, chips) is em-based off this size; the headline scales on its own.
   return (
-    <div className="flex h-full flex-col gap-[0.8em] overflow-hidden" style={{ fontSize: 'clamp(11px, min(5.2cqh, 3.4cqw), 24px)' }}>
-      <div className="flex shrink-0 flex-wrap items-baseline gap-x-[0.6em]">
-        <span className="font-semibold leading-none tracking-[-0.04em] tabular-nums" style={{ fontSize: 'clamp(1.5rem, min(24cqh, 16cqw), 10rem)' }}>{formatNumber(stats.total)}</span>
+    <div className="flex h-full flex-col overflow-hidden" style={{ gap: '0.8em', fontSize: 'clamp(11px, min(5.2cqh, 3.4cqw), 24px)' }}>
+      <div className="flex shrink-0 flex-wrap items-baseline" style={{ columnGap: '0.6em' }}>
+        <span className="font-semibold leading-none tabular-nums" style={{ fontSize: 'clamp(1.5rem, min(24cqh, 16cqw), 10rem)', letterSpacing: '-0.04em' }}>{formatNumber(stats.total)}</span>
         <span className="opacity-60">{t({ ko: '이미지 · 캐릭터 태그 {count}장', en: 'images · {count} with character tags' }, { count: formatNumber(stats.characterCount) })}</span>
       </div>
       {widget.settings.showRatings && ratingTotal > 0 ? (
-        <div className="shrink-0 space-y-[0.45em]">
+        <div className="shrink-0">
           <div className="flex h-[clamp(4px,0.45em,12px)] overflow-hidden rounded-full">
             {ratings.map((entry) => <span key={entry.key} style={{ width: `${(entry.value / ratingTotal) * 100}%`, background: RATING_TONE[entry.key] }} />)}
           </div>
-          <div className="flex flex-wrap gap-x-[1em] gap-y-[0.2em] text-[0.85em]">
+          <div className="flex flex-wrap" style={{ marginTop: '0.45em', columnGap: '1em', rowGap: '0.2em', fontSize: '0.85em' }}>
             {ratings.map((entry) => {
               const percent = (entry.value / ratingTotal) * 100
               return (
-                <span key={entry.key} className="flex items-center gap-[0.35em]">
+                <span key={entry.key} className="flex items-center" style={{ gap: '0.35em' }}>
                   <span className="size-[0.6em] shrink-0 rounded-full" style={{ background: RATING_TONE[entry.key] }} />
                   <span className="opacity-70">{t(RATING_LABEL[entry.key])}</span>
                   <span className="tabular-nums opacity-55">{percent > 0 && percent < 1 ? '<1%' : `${Math.round(percent)}%`}</span>
@@ -303,11 +303,11 @@ export function WallpaperLibraryStatsBody({ widget }: { widget: Extract<Wallpape
         </div>
       ) : null}
       {widget.settings.showTopTags ? (
-        <div className="flex min-h-0 flex-wrap content-start gap-[0.4em] overflow-hidden">
+        <div className="flex min-h-0 flex-wrap content-start overflow-hidden" style={{ gap: '0.4em' }}>
           {stats.topTags.slice(0, Math.max(1, widget.settings.tagCount)).map((tag) => (
-            <span key={tag.tag} className="rounded-full bg-[color-mix(in_srgb,var(--foreground)_9%,transparent)] px-[0.65em] py-[0.15em]">
+            <span key={tag.tag} className="rounded-full" style={{ background: 'color-mix(in srgb,var(--foreground) 9%,transparent)', paddingInline: '0.65em', paddingBlock: '0.15em' }}>
               {tag.tag.replace(/_/g, ' ')}
-              <span className="ml-[0.3em] tabular-nums opacity-55">{formatNumber(tag.count, { notation: 'compact' })}</span>
+              <span className="tabular-nums opacity-55" style={{ marginLeft: '0.3em' }}>{formatNumber(tag.count, { notation: 'compact' })}</span>
             </span>
           ))}
         </div>

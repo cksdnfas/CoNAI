@@ -209,7 +209,8 @@ export function PowerLoraLoaderInput({
               step={0.05}
               value={typeof entry.strength === 'number' ? String(entry.strength) : ''}
               aria-label={t('image-generation.components.power.lora.loader.input.value.weight', { label: item.label })}
-              className={cn('text-left', isCompact ? 'h-6 w-11 px-1.5 text-2xs' : 'h-8 w-[72px] px-2')}
+              controlSize="compact"
+              className={cn('text-left', isCompact ? 'w-11' : 'w-18')}
               onValueCommit={(nextValue) => {
                 const parsedStrength = Number(nextValue)
                 onChange({
@@ -224,8 +225,7 @@ export function PowerLoraLoaderInput({
 
             <IconButton
               size={isCompact ? 'icon-xs' : 'icon-sm'}
-              variant="ghost"
-              className="hover:text-destructive"
+              variant="destructive-ghost"
               label={t('image-generation.components.power.lora.loader.input.delete.lora', { label: item.label })}
               onClick={() => handleRemoveLora(item.key)}
             >

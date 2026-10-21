@@ -10,15 +10,14 @@ import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { useI18n } from '@/i18n'
 import type { ChatProfile } from '@/lib/api-codex-chat'
-import { cn } from '@/lib/utils'
-import { GROW_TEXTAREA, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { draftProfileAssetUrl } from './chat-profile-images'
 import { ChatProfileMediaRow, useChatMediaLocalize, useLastTextarea } from './chat-profile-media'
 import { ChatProfilePresetMenu } from './chat-profile-preset-menu'
 import { ChatPromptSectionsEditor } from './chat-profile-sections'
 import { CollapsibleRow } from '@/components/ui/collapsible-row'
-import { ASSIST_FILLED_CLASS, useProfileAssist } from './use-profile-editor-chat-page'
+import { useProfileAssist } from './use-profile-editor-chat-page'
 
 /**
  * Who the profile is: name and tagline (the avatar is changed under Appearance), then the prompt: system prompt,
@@ -67,8 +66,8 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
             </AvatarButton>
           </Tip>
           <div className="min-w-0 flex-1 space-y-2">
-            <Input variant="settings" className={cn(filled('name') && ASSIST_FILLED_CLASS)} value={draft.name} maxLength={60} placeholder={t({ ko: '이름', en: 'Name' })} aria-label={t({ ko: '이름', en: 'Name' })} onChange={(event) => patch({ name: event.target.value })} />
-            <Input variant="settings" className={cn(filled('tagline') && ASSIST_FILLED_CLASS)} value={draft.tagline} maxLength={200} placeholder={t({ ko: '짧은 소개', en: 'Tagline' })} aria-label={t({ ko: '짧은 소개', en: 'Tagline' })} onChange={(event) => patch({ tagline: event.target.value })} />
+            <Input variant="settings" assisted={filled('name')} value={draft.name} maxLength={60} placeholder={t({ ko: '이름', en: 'Name' })} aria-label={t({ ko: '이름', en: 'Name' })} onChange={(event) => patch({ name: event.target.value })} />
+            <Input variant="settings" assisted={filled('tagline')} value={draft.tagline} maxLength={200} placeholder={t({ ko: '짧은 소개', en: 'Tagline' })} aria-label={t({ ko: '짧은 소개', en: 'Tagline' })} onChange={(event) => patch({ tagline: event.target.value })} />
           </div>
         </div>
       </EditorGroup>
@@ -92,18 +91,19 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
         )}
       >
         <Field label={t({ ko: '시스템 프롬프트', en: 'System prompt' })}>
-          <Textarea variant="settings" rows={5} className={cn(GROW_TEXTAREA, filled('systemPrompt') && ASSIST_FILLED_CLASS)} value={draft.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} />
+          <Textarea variant="settings" autoGrow assisted={filled('systemPrompt')} rows={5} value={draft.systemPrompt} onChange={(event) => patch({ systemPrompt: event.target.value })} />
         </Field>
         <ChatPromptSectionsEditor sections={draft.promptSections} onChange={(promptSections) => patch({ promptSections })} />
         <div className="border-t border-line">
           <CollapsibleRow title={t({ ko: '첫 인사말', en: 'Greeting' })} meta={greetingMeta}>
-            <Textarea variant="settings" rows={3} className={cn(GROW_TEXTAREA, filled('greeting') && ASSIST_FILLED_CLASS)} value={draft.greeting} onChange={(event) => patch({ greeting: event.target.value })} aria-label={t({ ko: '첫 인사말', en: 'Greeting' })} />
+            <Textarea variant="settings" autoGrow assisted={filled('greeting')} rows={3} value={draft.greeting} onChange={(event) => patch({ greeting: event.target.value })} aria-label={t({ ko: '첫 인사말', en: 'Greeting' })} />
             {alternates.map((text, index) => (
               <div key={index} className="flex items-start gap-1">
                 <Textarea
                   variant="settings"
                   rows={3}
-                  className={cn('min-w-0 flex-1', GROW_TEXTAREA)}
+                  autoGrow
+                  className="min-w-0 flex-1"
                   value={text}
                   aria-label={t({ ko: '추가 인사말 {n}', en: 'Alternate greeting {n}' }, { n: index + 1 })}
                   onChange={(event) => updateAlternate(index, event.target.value)}
@@ -122,7 +122,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
             info={t({ ko: '모든 채팅에 매 요청 들어가는 장면 지시. 대화 끝쪽에 들어가. 채팅마다 헤더의 컨텍스트에서 따로 쓰면 그쪽이 우선이야.', en: "A scene instruction added to every request in every chat, near the end of the conversation. A note written per chat under Context in the chat header takes precedence." })}
             meta={draft.authorNote.trim() ? null : t({ ko: '없음', en: 'none' })}
           >
-            <Textarea variant="settings" rows={3} className={cn(GROW_TEXTAREA, filled('authorNote') && ASSIST_FILLED_CLASS)} value={draft.authorNote} aria-label={t({ ko: '작가 노트', en: "Author's note" })} onChange={(event) => patch({ authorNote: event.target.value })} />
+            <Textarea variant="settings" autoGrow assisted={filled('authorNote')} rows={3} value={draft.authorNote} aria-label={t({ ko: '작가 노트', en: "Author's note" })} onChange={(event) => patch({ authorNote: event.target.value })} />
           </CollapsibleRow>
           <ChatProfileMediaRow draft={draft} patch={patch} localize={localize} lastTextarea={lastTextarea.ref} open={mediaOpen} onOpenChange={setMediaOpen} />
         </div>

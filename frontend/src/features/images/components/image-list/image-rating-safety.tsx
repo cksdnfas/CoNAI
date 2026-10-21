@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
 import type { RatingTierRecord } from '@/features/search/search-types'
 import type { ImageRecord } from '@/types/image'
 
@@ -12,11 +11,6 @@ export interface ResolvedImageFeedSafety {
 }
 
 const IMAGE_SAFETY_BADGE_COMPACT_RATIO = 0.2
-
-const IMAGE_SAFETY_BADGE_FULL_CLASS = 'border px-1.5 font-semibold uppercase'
-const IMAGE_SAFETY_BADGE_COMPACT_CLASS = 'min-w-5 border font-semibold uppercase'
-const IMAGE_SAFETY_BLUR_BADGE_FULL_CLASS = 'border border-white/18 px-1.5 uppercase text-white/88'
-const IMAGE_SAFETY_BLUR_BADGE_COMPACT_CLASS = 'min-w-5 border border-white/18 uppercase text-white/88'
 
 /** Build a one-character fallback label for very small feed badges. */
 function getCompactSafetyBadgeLabel(label: string) {
@@ -115,55 +109,42 @@ export function ImageRatingSafetyBadge({
   const compactTierLabel = getCompactSafetyBadgeLabel(tier.tier_name)
   const tierLabel = isCompact ? compactTierLabel : tier.tier_name
   const blurLabel = isCompact ? 'B' : 'Blur'
+  // The tier colour is user data, so its tint and frame are inline; an inset ring frames it without adding height.
+  const tierBadgeStyle: CSSProperties | undefined = tier.color
+    ? {
+        color: tier.color,
+        backgroundColor: `color-mix(in srgb, ${tier.color} 18%, rgb(0 0 0 / 84%))`,
+        boxShadow: `inset 0 0 0 1px ${tier.color}`,
+      }
+    : undefined
 
   return (
     <div ref={containerRef} className="relative">
       <div ref={measureRef} aria-hidden className="pointer-events-none absolute left-0 top-0 flex w-max items-center gap-1 whitespace-nowrap opacity-0">
-        <Badge
-          variant="overlay"
-          size="xs"
-          className={IMAGE_SAFETY_BADGE_FULL_CLASS}
-          style={tier.color
-            ? {
-                color: tier.color,
-                borderColor: tier.color,
-                backgroundColor: `color-mix(in srgb, ${tier.color} 18%, rgb(0 0 0 / 84%))`,
-              }
-            : undefined}
-        >
+        <Badge variant="overlay" size="sm" casing="upper" style={tierBadgeStyle}>
           {tier.tier_name}
         </Badge>
         {visibility === 'blur' ? (
-          <Badge variant="overlay" size="xs" className={IMAGE_SAFETY_BLUR_BADGE_FULL_CLASS}>
+          <Badge variant="overlay" size="sm" casing="upper">
             Blur
           </Badge>
         ) : null}
       </div>
-      <div className="image-rating-safety-badges flex flex-wrap items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
         <Badge
           variant="overlay"
-          size="xs"
-          className={cn(
-            'image-rating-safety-badge',
-            isCompact ? IMAGE_SAFETY_BADGE_COMPACT_CLASS : IMAGE_SAFETY_BADGE_FULL_CLASS,
-          )}
-          style={tier.color
-            ? {
-                color: tier.color,
-                borderColor: tier.color,
-                backgroundColor: `color-mix(in srgb, ${tier.color} 18%, rgb(0 0 0 / 84%))`,
-              }
-            : undefined}
+          size={isCompact ? 'xs' : 'sm'}
+          casing="upper"
+          className={isCompact ? 'min-w-5' : undefined}
+          style={tierBadgeStyle}
         >
           {tierLabel}
         </Badge>
         {visibility === 'blur' ? (
           <Badge
-            variant="overlay" size="xs"
-            className={cn(
-              'image-rating-safety-badge',
-              isCompact ? IMAGE_SAFETY_BLUR_BADGE_COMPACT_CLASS : IMAGE_SAFETY_BLUR_BADGE_FULL_CLASS,
-            )}
+            variant="overlay" size={isCompact ? 'xs' : 'sm'}
+            casing="upper"
+            className={isCompact ? 'min-w-5' : undefined}
           >
             {blurLabel}
           </Badge>

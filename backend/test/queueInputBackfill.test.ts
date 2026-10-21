@@ -5,7 +5,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { getUserSettingsDb, initializeUserSettingsDb } from '../src/database/userSettingsDb'
 import { GenerationQueueModel } from '../src/models/GenerationQueue'
-import { externalizeStoredQueuePayloads, isQueueInputRef, resolveQueueInputFilePath } from '../src/services/generation-queue/queueInputStore'
+import { externalizeQueueInputDataUrls, externalizeStoredQueuePayloads, hydrateQueueInputDataUrls, isQueueInputRef, resolveQueueInputFilePath } from '../src/services/generation-queue/queueInputStore'
+import { parseCodexQueuePayload, parseNaiQueuePayload } from '../src/services/generation-queue/queuePayloads'
 
 initializeUserSettingsDb()
 
@@ -40,4 +41,51 @@ test('stored payloads with base64 beside prompt_data are rewritten to references
   const second = externalizeStoredQueuePayloads()
   assert.equal(second.rewritten, 0)
   assert.equal(second.scanned, 0)
+})
+
+test('NovelAI inputs survive externalization and hydration with references claimed by every repeat', () => {
+  const payload = {
+    prompt: '1.5::artist:matrix16::',
+    model: 'nai-diffusion-5-full',
+    action: 'img2img',
+    image: bigDataUrl,
+    character_refs: [{ image: bigDataUrl }],
+    seed: undefined,
+  }
+  const { value } = externalizeQueueInputDataUrls(payload)
+  assert.ok(isQueueInputRef(value.image))
+  assert.deepEqual(hydrateQueueInputDataUrls(value), payload)
+
+  const jobIds = GenerationQueueModel.createMany(Array.from({ length: 32 }, () => ({
+    service_type: 'novelai' as const,
+    request_payload: value,
+  })))
+  const storedJob = GenerationQueueModel.findById(jobIds[0])!
+  const storedPayload = parseNaiQueuePayload(storedJob)
+  assert.deepEqual(hydrateQueueInputDataUrls(storedPayload), JSON.parse(JSON.stringify(payload)))
+  // retryJob preserves the stored payload and creates another row through the same createMany path.
+  const retryId = GenerationQueueModel.create({ service_type: 'novelai', request_payload: storedPayload })
+  const refRows = getUserSettingsDb().prepare(
+    `SELECT job_id FROM generation_queue_input_refs WHERE job_id IN (${[...jobIds, retryId].map(() => '?').join(',')})`,
+  ).all(...jobIds, retryId) as Array<{ job_id: number }>
+  assert.deepEqual(refRows.map((row) => row.job_id).sort((a, b) => a - b), [...jobIds, retryId])
+
+  assert.throws(
+    () => hydrateQueueInputDataUrls({ image: { __ref: 'queue-input', sha256: '0'.repeat(64), bytes: 1, mimeType: 'image/png' } }),
+    /Queue input blob is missing/,
+  )
+})
+
+test('Codex edit inputs rewritten by the startup backfill still reach the executor', () => {
+  const jobId = GenerationQueueModel.create({
+    service_type: 'codex',
+    request_payload: { prompt: 'make it blue', operation: 'infill', image: bigDataUrl, mask: bigDataUrl },
+  } as never)
+  externalizeStoredQueuePayloads()
+
+  const stored = GenerationQueueModel.findById(jobId)!
+  assert.ok(isQueueInputRef(JSON.parse(stored.request_payload).image))
+  const parsed = parseCodexQueuePayload(stored)
+  assert.equal(parsed.image, bigDataUrl)
+  assert.equal(parsed.mask, bigDataUrl)
 })

@@ -77,7 +77,7 @@ export function ChatRoomPicker({ profilesById, value, onChange, disabled, kind }
         media: <ChatRoomFace thread={thread} profilesById={profilesById} />,
         title: <>
           <span className="truncate">{name}</span>
-          {thread.kind === 'group' ? <Chip size="sm" tone="muted" className="font-semibold">{t({ ko: '그룹 {count}', en: 'Group {count}' }, { count: thread.member_profile_ids?.length ?? 0 })}</Chip> : null}
+          {thread.kind === 'group' ? <Chip size="sm" tone="muted">{t({ ko: '그룹 {count}', en: 'Group {count}' }, { count: thread.member_profile_ids?.length ?? 0 })}</Chip> : null}
           {thread.archived ? <span className="shrink-0 text-2xs font-normal text-muted-foreground">{t({ ko: '보관됨', en: 'Archived' })}</span> : null}
         </>,
         subtitle: [people, preview.replace(/\s+/g, ' ')].filter(Boolean).join(' · ') || undefined,

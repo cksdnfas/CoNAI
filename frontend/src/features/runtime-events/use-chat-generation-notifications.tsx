@@ -53,7 +53,7 @@ function ChatGenerationSnackbar({ payload, accountId, message, onOpen }: { paylo
       </div>
       <TooltipProvider>
         <Tip content={t({ ko: '채팅으로 가기', en: 'Go to chat' })}>
-          <a href={`#${CODEX_CHAT_ROUTE}`} onClick={(event) => { event.preventDefault(); onOpen() }} aria-label={t({ ko: '채팅으로 가기', en: 'Go to chat' })} className="shrink-0 rounded-sm p-1 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35">
+          <a href={`#${CODEX_CHAT_ROUTE}`} onClick={(event) => { event.preventDefault(); onOpen() }} aria-label={t({ ko: '채팅으로 가기', en: 'Go to chat' })} className="shrink-0 rounded-sm p-1 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/35">
             <ArrowRight className="size-4" />
           </a>
         </Tip>
@@ -136,8 +136,8 @@ export function useChatGenerationNotifications() {
     return createRuntimeEventStream({
       onEnvelope: (envelope) => handlerRef.current(envelope),
       onStatusChange: () => {},
-      // Replies saved while the stream was down still count as unread.
-      onResync: () => { void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }) },
+      // The shared query bridge owns reconnect refreshes, including unread thread counts.
+      onResync: () => {},
       onSessionExpired: () => {},
     })
   }, [accountId, canUse, queryClient])

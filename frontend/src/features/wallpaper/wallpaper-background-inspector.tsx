@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ImagePlus } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
+import { MediaCard } from '@/components/common/media-card'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { MediaLibraryPicker } from '@/components/media/media-library-picker'
@@ -132,11 +133,14 @@ export function WallpaperBackgroundInspector({ layout, groups, onChangeBackgroun
         {background.kind === 'image' || background.kind === 'video' ? (
           <>
             {background.compositeHash ? (
-              <Button type="button" variant="ghost" className="h-auto w-full overflow-hidden rounded-md p-0" onClick={() => setIsPickerOpen(true)}>
-                <img src={buildApiUrl(`/api/images/${background.compositeHash}/thumbnail`)} alt="" className="aspect-video w-full object-cover" />
-              </Button>
+              <MediaCard
+                className="w-full"
+                aria-label={background.kind === 'video' ? t({ ko: '라이브러리에서 영상 고르기', en: 'Pick a video from the library' }) : t({ ko: '라이브러리에서 이미지 고르기', en: 'Pick an image from the library' })}
+                onClick={() => setIsPickerOpen(true)}
+                media={<img src={buildApiUrl(`/api/images/${background.compositeHash}/thumbnail`)} alt="" className="aspect-video w-full object-cover" />}
+              />
             ) : (
-              <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setIsPickerOpen(true)}>
+              <Button type="button" variant="secondary" className="w-full" onClick={() => setIsPickerOpen(true)}>
                 <ImagePlus className="size-4" />
                 {background.kind === 'video' ? t({ ko: '라이브러리에서 영상 고르기', en: 'Pick a video from the library' }) : t({ ko: '라이브러리에서 이미지 고르기', en: 'Pick an image from the library' })}
               </Button>

@@ -153,7 +153,7 @@ export function ChatLorebookEditorModal({ open, lorebook, kind = 'global', onClo
       dirty={dirty}
       onSave={canSave ? () => saveMutation.mutate() : undefined}
     >
-      <ModalBody className="space-y-4">
+      <ModalBody>
         <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>}>
           <Input variant="settings" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
         </Field>

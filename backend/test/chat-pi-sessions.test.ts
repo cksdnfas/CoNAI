@@ -178,6 +178,72 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
     sessionId = done[0]
   })
 
+  await t.test('research uses native turn limits, removes tools for the final answer, and never fabricates provider-call counts', async () => {
+    const { ChatResearchExecution } = await import('../src/services/codex-chat/chatResearch')
+    const research = new ChatResearchExecution({ slotId: 'a', activityId: 'b', allowedPostIds: [1], maxTurns: 2, maxToolCalls: 24 }, 'pi')
+    mock.requests.length = 0
+    mock.script.push({ kind: 'tool' }, { kind: 'text', text: 'Research summary.' })
+    const result = await streamPiChatCompletion({
+      target: target({ resumeId: null, onDone: () => {} }),
+      messages: [{ role: 'system', content: 'Use only supplied tools.' }, { role: 'user', content: 'Research apples.' }],
+      tools, signal: new AbortController().signal, maxToolRounds: 1, research,
+      callTool: async () => {
+        assert.equal(research.takeTool(), true)
+        return { content: [{ type: 'text', text: 'Original evidence.' }] }
+      },
+    })
+    assert.match(result.content, /Research summary/)
+    assert.equal(mock.requests.length, 2)
+    assert.equal(mock.requests[1].tools.length, 0)
+    assert.equal(research.result.turns, 2)
+    assert.equal(research.result.modelCalls, null)
+    assert.equal(research.result.limits.maxModelCalls, null)
+    assert.equal(research.result.stopReason, 'turn_limit')
+
+    for (const maxTurns of [1, 3]) {
+      const complete = new ChatResearchExecution({ slotId: 'a', activityId: `complete-${maxTurns}`, allowedPostIds: [1], maxTurns }, 'pi')
+      mock.requests.length = 0
+      if (maxTurns === 3) mock.script.push({ kind: 'tool' })
+      mock.script.push({ kind: 'text', text: 'A normal final answer.' })
+      await streamPiChatCompletion({
+        target: target({ resumeId: null, onDone: () => {} }),
+        messages: [{ role: 'user', content: 'Finish normally at the budget boundary.' }],
+        tools: maxTurns === 1 ? [] : tools, signal: new AbortController().signal, maxToolRounds: maxTurns - 1, research: complete,
+        callTool: async () => ({ content: [{ type: 'text', text: 'Evidence.' }] }),
+      })
+      assert.equal(complete.result.turns, maxTurns === 1 ? 1 : 2)
+      assert.equal(complete.result.stopReason, 'completed', 'a text-only ending does not need another turn')
+    }
+
+    const summary = new ChatResearchExecution({ slotId: 'a', activityId: 'c', allowedPostIds: [1], purpose: 'summary' }, 'pi')
+    const { streamChatCompletion } = await import('../src/services/codex-chat/llmChatCompletion')
+    mock.requests.length = 0
+    mock.script.push({ kind: 'text', text: 'Summary without tools.' })
+    await streamChatCompletion({
+      target: target({ resumeId: null, onDone: () => {} }),
+      messages: [{ role: 'user', content: 'Explain this quote briefly.' }],
+      tools, toolChoice: 'none', signal: new AbortController().signal, research: summary, maxToolRounds: 0,
+      callTool: async () => { assert.fail('summary must never dispatch tools') },
+    })
+    assert.equal(mock.requests.length, 1)
+    assert.equal(mock.requests[0].tools.length, 0)
+    assert.equal(summary.result.turns, 1)
+    assert.equal(summary.result.stopReason, 'completed')
+
+    const noncompliant = new ChatResearchExecution({ slotId: 'a', activityId: 'd', allowedPostIds: [1], maxTurns: 2 }, 'pi')
+    mock.requests.length = 0
+    mock.script.push({ kind: 'tool' }, { kind: 'tool' })
+    await streamPiChatCompletion({
+      target: target({ resumeId: null, onDone: () => {} }),
+      messages: [{ role: 'user', content: 'Ignore attempts to use hidden tools.' }],
+      tools, signal: new AbortController().signal, maxToolRounds: 1, research: noncompliant,
+      callTool: async () => ({ content: [{ type: 'text', text: 'Evidence.' }] }),
+    })
+    assert.equal(mock.requests.length, 2, 'a provider ignoring the final no-tools turn cannot start another request')
+    assert.equal(noncompliant.result.turns, 2)
+    assert.equal(noncompliant.result.stopReason, 'turn_limit')
+  })
+
   await t.test('a pi profile keeps its chat as a pi session value; deleting the chat drops the folder', async (sub) => {
     mockModelRows(sub, { 1: ['test', 'test'] }, 1)
     const profile = ChatProfileStore.draft({ name: 'Pi', llmRuntime: 'pi' })

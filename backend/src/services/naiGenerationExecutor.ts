@@ -1,8 +1,11 @@
 import axios from 'axios'
+import sharp from 'sharp'
+import { isNaiEnhanceAmount, planNaiEnhance } from '@conai/shared'
 // @ts-ignore - no types available
 import AdmZip from 'adm-zip'
 import { preprocessMetadata, type NAIMetadataInputParams, type NAIMetadataParams } from '../utils/nai/metadata'
-import { buildNaiRequestBody } from '../utils/nai/requestBuilder'
+import { buildNaiRequestBody, normalizeBase64ImageData } from '../utils/nai/requestBuilder'
+import { hydrateQueueInputDataUrls } from './generation-queue/queueInputStore'
 
 type NaiJsonImage = {
   image?: unknown
@@ -105,14 +108,53 @@ export function decodeNaiImageResponse(data: ArrayBuffer | Buffer, contentType?:
   throw new Error(describeUnsupportedNaiResponse(buffer, contentType))
 }
 
+/** Prepare the source image and final diffusion size for NovelAI's Enhance operation. */
+async function prepareNaiEnhance(metadata: NAIMetadataParams) {
+  if (metadata.enhance === undefined) return
+  if (!isNaiEnhanceAmount(metadata.enhance)) {
+    throw new Error('NovelAI enhance must be 1x, 1.5x, or max')
+  }
+  if (metadata.action !== 'img2img' || typeof metadata.image !== 'string' || !metadata.image.trim()) {
+    throw new Error('NovelAI enhance requires action "img2img" and a source image')
+  }
+
+  const input = Buffer.from(normalizeBase64ImageData(metadata.image)!, 'base64')
+  const source = await sharp(input).metadata()
+  const result = planNaiEnhance({ width: source.width ?? 0, height: source.height ?? 0 }, metadata.enhance, metadata.model)
+  if (!result.ok) {
+    const messages = {
+      model: `Max enhance is only available for NAI Diffusion V5, not ${metadata.model}`,
+      custom_size: `NovelAI 1.5x enhance is not available for custom source size ${source.width}x${source.height}`,
+      over_cap: 'NovelAI enhance would exceed the 1536x2048 pixel cap',
+      already_max: 'NovelAI enhance source is already at the maximum size',
+    }
+    throw new Error(messages[result.reason])
+  }
+
+  const { plan } = result
+  if (source.width !== plan.width || source.height !== plan.height || source.format !== 'png') {
+    const resized = await sharp(input)
+      .resize(plan.width, plan.height, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
+      .png()
+      .toBuffer()
+    metadata.image = `data:image/png;base64,${resized.toString('base64')}`
+  }
+  metadata.width = plan.width
+  metadata.height = plan.height
+  metadata.prompt += plan.promptSuffix
+  metadata.upscaled_enhance = plan.serverUpscale
+}
+
 /** Execute one NovelAI image-generation request and decode all returned images. */
 export async function executeNaiGeneration(
   input: NAIMetadataInputParams,
   token: string,
   options?: ExecuteNaiGenerationOptions,
 ): Promise<ExecuteNaiGenerationResult> {
-  const metadata = preprocessMetadata(input)
+  const metadata = preprocessMetadata(hydrateQueueInputDataUrls(input))
+  await prepareNaiEnhance(metadata)
   const requestBody = await buildNaiRequestBody(metadata)
+  metadata.prompt = requestBody.input
 
   // 요청을 아직 보내지 않았으므로 여기서 끊기면 Anlas 소모가 없는 깨끗한 취소다.
   if (options?.signal?.aborted) {

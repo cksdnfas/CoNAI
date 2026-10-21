@@ -235,7 +235,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
       title={t({ ko: 'LoRA 자동 수집', en: 'LoRA auto-collection' })}
       widthClassName="max-w-3xl"
     >
-      <ModalBody className="space-y-5">
+      <ModalBody spacing="lg">
         {formError ? (
           <Alert variant="destructive">
             <AlertTitle>{t({ ko: '수집 준비 실패', en: 'Collection preparation failed' })}</AlertTitle>
@@ -245,7 +245,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
 
         <input ref={inputRef} type="file" className="hidden" multiple onChange={(event) => void handleFileChange(event)} />
 
-        <Inset className="space-y-3 p-4">
+        <Inset className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" onClick={handlePickFolder} disabled={isSubmitting || isPreparingFiles}>
               <FolderOpen className="h-4 w-4" />

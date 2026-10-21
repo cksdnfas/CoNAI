@@ -206,7 +206,7 @@ function BlockProposalCard({ proposal, threadId }: { proposal: BlockProposal; th
       <div className="py-1"><ChatDisplayBlockView block={block} data={data} /></div>
       {chips.length > 0 ? (
         <div className="flex flex-wrap gap-1">
-          {chips.map((chip) => <Chip key={chip} size="sm" tone="muted" className="font-mono">{chip}</Chip>)}
+          {chips.map((chip) => <Chip key={chip} size="sm" tone="muted" mono>{chip}</Chip>)}
         </div>
       ) : null}
       <Footer saved={saved} savedLink="/settings?section=chat&view=resources" admin={admin}>
@@ -368,7 +368,7 @@ function UpdateRow({ label, before, after }: { label: string; before: string; af
       <div className="min-w-0 space-y-0.5 break-words whitespace-pre-wrap">
         <div className="text-muted-foreground line-through">{cut(before)}</div>
         <div>{cut(after)}</div>
-        {long ? <Button variant="ghost" size="xs" className="-ml-2 h-5 text-primary" onClick={() => setExpanded((current) => !current)}>{expanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}</Button> : null}
+        {long ? <Button variant="link" size="xs" className="-ml-2" onClick={() => setExpanded((current) => !current)}>{expanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}</Button> : null}
       </div>
     </div>
   )

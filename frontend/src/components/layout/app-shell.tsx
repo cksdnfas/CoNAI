@@ -171,7 +171,7 @@ function AppShellLayout() {
                     if (event.currentTarget.getAttribute('src') !== APP_ICON_SRC) event.currentTarget.src = APP_ICON_SRC
                   }}
                 />
-                <span className="hidden text-lg font-bold tracking-[-0.04em] text-foreground sm:inline">{APP_NAME}</span>
+                <span className="hidden text-lg font-bold tracking-tighter text-foreground sm:inline">{APP_NAME}</span>
               </NavLink>
             </Tip>
 
@@ -205,7 +205,7 @@ function AppShellLayout() {
                       onDragStart={(event) => event.preventDefault()}
                       className={cn(
                         // Icon-only; from md the current page also shows its label.
-                        'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm text-muted-foreground transition-colors duration-200 outline-none hover:bg-fill hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 select-none',
+                        'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm text-muted-foreground transition-colors duration-200 outline-none hover:bg-fill hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 select-none',
                         isDraggingNav && 'pointer-events-none',
                         isActive && 'bg-primary/12 text-primary hover:bg-primary/16 hover:text-primary md:w-auto md:px-3',
                       )}

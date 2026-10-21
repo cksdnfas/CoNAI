@@ -13,7 +13,8 @@ import { audioPlayer, useAudioPlayer } from '@/features/audio/audio-player'
 import { useI18n } from '@/i18n'
 import { listAudioCandidates, searchAudioGroups, type AudioGroup } from '@/lib/api-audio'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
-import { AttachToolbar, LoadMoreSentinel, attachKey, type AttachItem } from './post-attach-shared'
+import { TwoPane, TwoPaneToolbar } from '@/components/common/sidebar-layout'
+import { LoadMoreSentinel, attachKey, type AttachItem } from './post-attach-shared'
 
 const PAGE = 50
 
@@ -54,8 +55,8 @@ export function AttachAudioTab({ selected, setSelected }: { selected: AttachItem
     : [...current, { kind: 'audio', key: attachKey.audio(id), id, name }])
 
   return (
-    <div className="-mx-4 flex min-h-0 flex-1 flex-col border-y border-line md:-mx-5">
-      <AttachToolbar>
+    <TwoPane>
+      <TwoPaneToolbar>
         {group ? (
           <>
             <IconButton size="icon-sm" variant="ghost" label={t({ ko: '효과음 목록', en: 'All sounds' })} onClick={() => setGroup(null)}><ArrowLeft /></IconButton>
@@ -64,22 +65,22 @@ export function AttachAudioTab({ selected, setSelected }: { selected: AttachItem
         ) : (
           <SearchField className="min-w-40 flex-1" value={input} onChange={setInput} placeholder={t({ ko: '효과음 이름·설명', en: 'Sound name or description' })} />
         )}
-      </AttachToolbar>
-      <div className="min-h-0 flex-1 overflow-y-auto border-t border-line">
+      </TwoPaneToolbar>
+      <div className="min-h-0 flex-1 overflow-y-auto border-t border-line px-(--page-gutter)">
         {query.isPending ? <div className="flex justify-center py-8"><Spinner label={t({ ko: '불러오는 중', en: 'Loading' })} /></div> : null}
         {query.isError && !query.data ? <ErrorState size="compact" className="mt-2" title={t({ ko: '오디오를 불러오지 못했어.', en: 'Could not load audio.' })} error={query.error} onRetry={() => void query.refetch()} /> : null}
         {group ? takeItems.map((take) => {
           const position = orderByKey.get(attachKey.audio(take.id))
           const playing = player.key === take.id && player.playing
           return (
-            <ListRow key={take.id} selected={Boolean(position)} className="gap-2 px-3"
+            <ListRow key={take.id} selected={Boolean(position)}
               leading={<IconButton size="icon-sm" variant="ghost" label={playing ? t({ ko: '일시정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} onClick={() => audioPlayer.toggle(take.id)}>{playing ? <Pause /> : <Play />}</IconButton>}
               trailing={<span className="flex items-center gap-3"><span className="text-xs tabular-nums text-muted-foreground">{formatDuration(take.file?.duration)}</span><Checkbox className="mx-1" checked={Boolean(position)} onCheckedChange={() => toggle(take.id, take.name)} aria-label={take.name} /></span>}>
-              <Button variant="ghost" size="sm" className="w-full min-w-0 justify-start truncate font-normal" onClick={() => toggle(take.id, take.name)}>{take.name}</Button>
+              <Button variant="ghost" size="sm" className="w-full min-w-0 justify-start truncate" onClick={() => toggle(take.id, take.name)}>{take.name}</Button>
             </ListRow>
           )
         }) : groupItems.map((item) => (
-          <ListRow key={item.id} asChild interactive className="px-3" trailing={<span className="flex items-center gap-2 text-xs tabular-nums text-muted-foreground">{item.candidate_count}<ChevronRight className="size-4" /></span>}>
+          <ListRow key={item.id} asChild interactive trailing={<span className="flex items-center gap-2 text-xs tabular-nums text-muted-foreground">{item.candidate_count}<ChevronRight className="size-4" /></span>}>
             <button type="button" onClick={() => setGroup(item)}>
               <span className="min-w-0 flex-1 truncate">{item.project_name ? <span className="text-muted-foreground">{item.project_name} / </span> : null}{groupName(item)}</span>
             </button>
@@ -89,6 +90,6 @@ export function AttachAudioTab({ selected, setSelected }: { selected: AttachItem
         <LoadMoreSentinel enabled={Boolean(query.hasNextPage) && !query.isFetchingNextPage} onVisible={() => void query.fetchNextPage()} />
         {query.isFetchingNextPage ? <div className="flex justify-center py-3"><Spinner /></div> : null}
       </div>
-    </div>
+    </TwoPane>
   )
 }

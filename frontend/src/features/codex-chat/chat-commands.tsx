@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { Button } from '@/components/ui/button'
 import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
+import { ListRow } from '@/components/ui/list-row'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -25,13 +25,13 @@ export function ComposerSuggestList({ id, label, className, children }: { id: st
 
 /** One option row of ComposerSuggestList; pressing it keeps the composer focused. */
 export function ComposerSuggestOption({ id, selected, onSelect, className, children }: { id: string; selected: boolean; onSelect: () => void; className?: string; children: ReactNode }) {
-  return <Button id={id} role="option" aria-selected={selected} variant="ghost" size="sm" className={cn('w-full justify-start', className, selected && 'bg-fill')} onMouseDown={(event) => event.preventDefault()} onClick={onSelect}>{children}</Button>
+  return <ListRow asChild interactive selected={selected} size="sm" className={className}><button id={id} type="button" role="option" aria-selected={selected} onMouseDown={(event) => event.preventDefault()} onClick={onSelect}>{children}</button></ListRow>
 }
 
 export function ChatCommandList({ commands, selected, onSelect, id }: { commands: readonly ChatCommand[]; selected: number; onSelect: (command: ChatCommand) => void; id: string }) {
   const { t } = useI18n()
   return <ComposerSuggestList id={id} label={t({ ko: '채팅 커맨드', en: 'Chat commands' })} className="right-3">
-    {commands.map((command, index) => <ComposerSuggestOption key={command.name} id={`${id}-${index}`} selected={selected === index} className="gap-4" onSelect={() => onSelect(command)}>
+    {commands.map((command, index) => <ComposerSuggestOption key={command.name} id={`${id}-${index}`} selected={selected === index} onSelect={() => onSelect(command)}>
       <span className="w-20 shrink-0 text-left font-mono text-xs">/{command.name}</span><span className="text-xs">{t(command.label)}</span>
     </ComposerSuggestOption>)}
   </ComposerSuggestList>

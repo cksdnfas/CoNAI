@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { normalizeGroupPathInput, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 import { getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
-import { cn } from '@/lib/utils'
 import type { GroupWithHierarchy } from '@/types/group'
 import { useI18n } from '@/i18n'
 
@@ -51,14 +50,15 @@ interface GenerationTargetGroupControlProps {
   /** localStorage 키(생성 화면 공용, 워크플로우별 등) */
   storageKey: string
   disabled?: boolean
-  className?: string
+  /** `icon-touch` in the bottom-docked (sticky) generate bar. */
+  size?: 'icon' | 'icon-touch'
 }
 
 /** 생성 결과를 넣을 그룹 경로를 고르는 아이콘 버튼. 지정되면 강조색, 경로는 툴팁으로. 그룹 권한이 없으면 렌더링하지 않는다. */
 export function GenerationTargetGroupControl({
   storageKey,
   disabled = false,
-  className,
+  size,
 }: GenerationTargetGroupControlProps) {
   const { t } = useI18n()
   const { canAssignGroup, path, setPath } = useGenerationTargetGroupPath(storageKey)
@@ -79,7 +79,8 @@ export function GenerationTargetGroupControl({
         onClick={() => setOpen(true)}
         disabled={disabled}
         label={label}
-        className={cn(path ? 'text-primary' : undefined, className)}
+        active={Boolean(path)}
+        size={size}
       >
         {path ? <FolderInput /> : <Folder />}
       </IconButton>
@@ -140,7 +141,7 @@ function GenerationTargetGroupModal({
   return (
     <Modal open onClose={onClose} title={t({ ko: '결과 그룹 지정', en: 'Set result group' })} widthClassName="max-w-xl">
       <form onSubmit={handleSubmit}>
-        <ModalBody className="space-y-4">
+        <ModalBody>
           <div className="space-y-2">
             <Field
               label={t({ ko: '그룹 경로', en: 'Group path' })}

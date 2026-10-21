@@ -233,8 +233,8 @@ export function ComfyWorkflowAuthoringModal({
   const serverCheckIndicator = serverCheckSummary ? (
     <Tip content={<div className="space-y-0.5">{serverCheckSummary.lines.map((line) => <div key={line}>{line}</div>)}</div>}>
       {serverCheckSummary.status === 'issues' ? (
-        <IconButton size="icon-sm" variant="ghost" className="shrink-0 text-warning" onClick={focusNextCheckIssue} label={t({ ko: '서버 점검 문제 노드로 이동', en: 'Go to a flagged node' })}>
-          <TriangleAlert />
+        <IconButton size="icon-sm" variant="ghost" className="shrink-0" onClick={focusNextCheckIssue} label={t({ ko: '서버 점검 문제 노드로 이동', en: 'Go to a flagged node' })}>
+          <TriangleAlert className="text-warning" />
         </IconButton>
       ) : (
         <span role="img" aria-label={serverCheckSummary.lines.join(', ')} className="flex size-8 shrink-0 items-center justify-center text-muted-foreground">
@@ -442,7 +442,9 @@ export function ComfyWorkflowAuthoringModal({
               placeholder="ComfyUI API workflow JSON"
               aria-label="Workflow JSON"
               spellCheck={false}
-              className="min-h-0 flex-1 resize-none rounded-none border-0 bg-transparent px-4 py-4 font-mono text-xs focus:ring-0"
+              mono
+              textSize="xs"
+              className="min-h-0 flex-1 resize-none"
             />
             {jsonError ? <div role="alert" className="shrink-0 bg-destructive-soft/40 px-4 py-3 text-xs text-destructive-soft-foreground">{jsonError}</div> : null}
           </div>

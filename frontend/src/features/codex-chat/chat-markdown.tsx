@@ -77,6 +77,7 @@ function CodeBlock({ language, code }: { language: string | null; code: string }
         </IconButton>
       </div>
       {/* Wrapped, not scrolled: chat code blocks are mostly status sheets and notes read on narrow panels. */}
+      {/* eslint-disable-next-line shadcn/no-arbitrary-values -- Prose code scales with the user's chat font size, not the chrome type scale. */}
       <pre className="whitespace-pre-wrap break-words p-3 font-mono text-[0.85em] leading-relaxed"><code>{code}</code></pre>
       {canPreview ? <HtmlPreviewModal open={previewOpen} source={code} onClose={() => setPreviewOpen(false)} /> : null}
     </div>
@@ -152,7 +153,9 @@ const MARKDOWN_COMPONENTS: Components = {
   ul: ({ children }) => <ul className="my-2 list-disc space-y-1 pl-5">{children}</ul>,
   ol: ({ children }) => <ol className="my-2 list-decimal space-y-1 pl-5">{children}</ol>,
   li: ({ children }) => <li className="pl-0.5">{children}</li>,
+  // eslint-disable-next-line shadcn/no-arbitrary-values -- Prose headings retain their ratio to the user's chat font size.
   h1: ({ children }) => <h3 className="mb-2 mt-4 text-[1.15em] font-bold first:mt-0">{children}</h3>,
+  // eslint-disable-next-line shadcn/no-arbitrary-values -- Prose headings retain their ratio to the user's chat font size.
   h2: ({ children }) => <h4 className="mb-2 mt-4 text-[1.08em] font-bold first:mt-0">{children}</h4>,
   h3: ({ children }) => <h5 className="mb-1.5 mt-3 font-semibold first:mt-0">{children}</h5>,
   h4: ({ children }) => <h6 className="mb-1.5 mt-3 font-semibold first:mt-0">{children}</h6>,
@@ -173,6 +176,7 @@ const MARKDOWN_COMPONENTS: Components = {
   },
   code: ({ children, className }: ComponentProps<'code'>) => (
     // Fenced blocks are rendered by `pre`; this is inline code.
+    // eslint-disable-next-line shadcn/no-arbitrary-values -- Inline prose code scales with the user's chat font size.
     <code className={cn('rounded-sm bg-surface-high px-1 py-0.5 font-mono text-[0.85em]', className)}>{children}</code>
   ),
 }

@@ -8,7 +8,7 @@ import { Chip } from '@/components/ui/chip'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
-import { Panel } from '@/components/ui/panel'
+import { ListRow } from '@/components/ui/list-row'
 import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { SearchChipList } from '@/features/search/components/search-chip-list'
@@ -70,7 +70,7 @@ function HomeSearchSuggestionPanel({
 
   return (
     <div className={cn('theme-floating-panel overflow-hidden rounded-sm bg-background/95', className)} style={style}>
-      <div className="flex items-center gap-2 px-[var(--theme-panel-padding-x)] py-[calc(var(--theme-panel-padding-y)_-_0.125rem)]">
+      <div className="flex items-center gap-2 px-(--theme-panel-padding-x) py-2.5">
         <div className="min-w-0 flex-1">
           <SearchScopeTabs searchScope={searchScope} onChange={setSearchScope} scopes={canSearchByMeaning ? SEARCH_SCOPE_TABS_WITH_MEANING : undefined} />
         </div>
@@ -289,7 +289,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                   {historyEntries.map((entry) => (
                     // The whole entry is the hit target (hairline row); the delete key floats at its right edge.
                     <div key={entry.id} className="relative border-b border-line last:border-b-0">
-                      <Panel asChild tone="none" padding="none" interactive className="block w-full rounded-none py-3 pr-12 pl-2 text-left">
+                      <ListRow asChild interactive size="lg">
                         <button
                           type="button"
                           onClick={() => {
@@ -298,7 +298,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                             closeDrawer()
                           }}
                         >
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex min-w-0 flex-1 flex-wrap gap-2 pr-10">
                             {entry.chips.map((chip) => (
                               <Chip key={chip.id}>
                                 <span className="rounded-sm px-1.5 py-0.5 text-2xs font-semibold" style={getSearchScopeStyle(chip.scope)}>
@@ -316,7 +316,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                             ))}
                           </div>
                         </button>
-                      </Panel>
+                      </ListRow>
                       <IconButton size="icon-xs" variant="ghost" className="absolute top-3 right-2" onClick={() => void deleteHistoryEntry(entry.id)} label={t('homeSearchDrawerContent.deleteSearchHistory')}>
                         <X className="h-4 w-4" />
                       </IconButton>

@@ -21,7 +21,7 @@ function PopoverClose(props: React.ComponentProps<typeof PopoverPrimitive.Close>
 }
 
 /** Render a floating panel in a body portal (above modals) on a raised tonal surface. */
-function PopoverContent({ className, align = 'center', sideOffset = 6, onClick, ...props }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+function PopoverContent({ className, padding = 'lg', align = 'center', sideOffset = 6, onClick, ...props }: React.ComponentProps<typeof PopoverPrimitive.Content> & { padding?: 'none' | 'sm' | 'md' | 'lg' }) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
@@ -32,7 +32,8 @@ function PopoverContent({ className, align = 'center', sideOffset = 6, onClick, 
         className={cn(
           floatingSurfaceClassName,
           floatingMotionClassName,
-          'z-floating w-72 max-w-[calc(100vw-2rem)] origin-(--radix-popover-content-transform-origin) p-4 text-sm text-foreground outline-none',
+          'z-floating w-72 max-w-[calc(100vw-2rem)] origin-(--radix-popover-content-transform-origin) text-sm text-foreground outline-none',
+          { none: 'p-0', sm: 'p-2', md: 'p-3', lg: 'p-4' }[padding],
           className,
         )}
         onClick={stopAtPortalEdge(onClick)}

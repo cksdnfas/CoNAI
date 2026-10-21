@@ -12,7 +12,7 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { AppearanceColorControl } from './appearance-tab-editor-shared'
 import { ChatFilledLabel } from './settings-filled-label'
-import { SETTINGS_CONTROL_CLASS, SettingsValidationAlert } from './settings-rows'
+import { SettingsValidationAlert } from './settings-rows'
 
 interface RatingTierSettingsCardProps {
   heading: ReactNode
@@ -122,7 +122,7 @@ export function RatingTierSettingsCard({
                       draggable
                       onDragStart={handleTierDragStart(tier.id)}
                       onDragEnd={handleTierDragEnd}
-                      className="cursor-grab text-muted-foreground"
+                      className="cursor-grab"
                       label={t({ ko: '드래그해서 순서 바꾸기', en: 'Drag to reorder' })}
                     >
                       <GripVertical className="h-4 w-4" />
@@ -158,7 +158,7 @@ export function RatingTierSettingsCard({
 
                 {isExpanded ? (
                   <div className="border-t border-line pb-1 pl-4 sm:pl-14">
-                    <SettingRow label={<ChatFilledLabel fieldId={`ratingTiers.${tier.id}.tier_name`}>{labels.name}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+                    <SettingRow label={<ChatFilledLabel fieldId={`ratingTiers.${tier.id}.tier_name`}>{labels.name}</ChatFilledLabel>} controlWidth="standard">
                       <Input
                         variant="settings"
                         aria-label={labels.name}
@@ -168,7 +168,7 @@ export function RatingTierSettingsCard({
                       />
                     </SettingRow>
 
-                    <SettingRow label={<ChatFilledLabel fieldId={`ratingTiers.${tier.id}.min_score`}>{labels.min}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+                    <SettingRow label={<ChatFilledLabel fieldId={`ratingTiers.${tier.id}.min_score`}>{labels.min}</ChatFilledLabel>} controlWidth="standard">
                       <NumberStepperInput
                         min={0}
                         step={0.1}
@@ -179,7 +179,7 @@ export function RatingTierSettingsCard({
                       />
                     </SettingRow>
 
-                    <SettingRow label={labels.max} controlClassName={SETTINGS_CONTROL_CLASS}>
+                    <SettingRow label={labels.max} controlWidth="standard">
                       {isLast ? (
                         <Input variant="settings" aria-label={labels.max} value="∞" disabled />
                       ) : (
@@ -207,7 +207,7 @@ export function RatingTierSettingsCard({
                       />
                     </SettingRow>
 
-                    <SettingRow label={<ChatFilledLabel fieldId={`ratingTiers.${tier.id}.feed_visibility`}>{labels.feed}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+                    <SettingRow label={<ChatFilledLabel fieldId={`ratingTiers.${tier.id}.feed_visibility`}>{labels.feed}</ChatFilledLabel>} controlWidth="standard">
                       <Select
                         variant="settings"
                         aria-label={labels.feed}

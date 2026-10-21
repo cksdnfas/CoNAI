@@ -169,7 +169,7 @@ export function WallpaperInspectorDisclosure({
   return (
     <div>
       <DisclosureButton open={open} onClick={() => setOpen((current) => !current)}>
-        <Text as="span" variant="overline" className="text-foreground">{title}</Text>
+        <Text as="span" variant="overline" tone="default">{title}</Text>
       </DisclosureButton>
 
       {open ? <div className="space-y-2 pb-2 pt-1">{children}</div> : null}

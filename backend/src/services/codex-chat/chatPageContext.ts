@@ -41,7 +41,7 @@ function requirePageSettingsAccess(requester: McpRequester, path: string, scope:
 }
 
 export function requireChatPageActionAccess(requester: McpRequester, page: Pick<ChatPageSnapshot, 'path'> & Partial<Pick<ChatPageSnapshot, 'resourceId' | 'data' | 'kind'>>, actionId: string, args?: Record<string, unknown>) {
-  if (actionId.startsWith('plugin_author.')) requirePluginAuthor(requester)
+  if (actionId.startsWith('plugin_author.') || actionId.startsWith('plugin_source.')) requirePluginAuthor(requester)
   if (page.path.startsWith('/ext/') && !actionId.startsWith('page.')) {
     requireChatPageAccess(requester, page)
     requirePluginPageAction(page, actionId, args)

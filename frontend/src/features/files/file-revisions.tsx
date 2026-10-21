@@ -68,7 +68,7 @@ export function FileRevisionsPanel({ entry, canRestore, onRestored }: { entry: S
             <div className="truncate text-2xs text-muted-foreground">{writer(list.data?.current.writtenBy ?? null)} · {formatFileSize(entry.size)}</div>
           </div>
           {revisions.map((revision) => (
-            <ListRow key={revision.id} asChild interactive size="sm" selected={chosen === revision.id} className="px-3 last:border-b">
+            <ListRow key={revision.id} asChild interactive size="sm" selected={chosen === revision.id}>
               <button type="button" onClick={() => setSelected(revision.id)}>
                 <span className="flex min-w-0 flex-col">
                   <span className={cn('text-xs font-semibold tabular-nums', chosen === revision.id && 'text-primary')}>{formatDateTime(revision.writtenAt, { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>

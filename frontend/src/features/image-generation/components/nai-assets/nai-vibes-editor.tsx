@@ -5,6 +5,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Section } from '@/components/ui/section'
 import { Textarea } from '@/components/ui/textarea'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { FormField, type NAIVibeDraft, type SelectedImageDraft } from '../../image-generation-shared'
@@ -21,6 +22,8 @@ export type NaiVibeLibraryProps = Omit<NaiSavedAssetBrowserProps, 'items' | 'onS
 
 type NaiVibesEditorProps = {
   vibes: NAIVibeDraft[]
+  /** False disables adding rows; the add button's tooltip says the model has no Vibe Transfer (V5). */
+  supportsVibes?: boolean
   /** Section starts collapsed on the generation page; inline editors (module graph) open it. */
   defaultOpen?: boolean
   description?: ReactNode
@@ -51,6 +54,7 @@ type PickerState = { mode: 'add' } | { mode: 'replace'; index: number } | null
 /** Shared NAI vibe-transfer editor used by the NAI generation form and module-graph inputs: compact rows + one add picker. */
 export function NaiVibesEditor({
   vibes,
+  supportsVibes = true,
   defaultOpen = false,
   description,
   encodesOnSubmit = false,
@@ -96,9 +100,20 @@ export function NaiVibesEditor({
       actions={(
         <>
           <span className="px-1 text-xs tabular-nums text-muted-foreground">{vibes.length}</span>
-          <IconButton size="icon-sm" variant="ghost" onClick={() => setPicker({ mode: 'add' })} label={t('image-generation.components.nai.vibes.section.add.vibe')}>
-            <Plus />
-          </IconButton>
+          {supportsVibes ? (
+            <IconButton size="icon-sm" variant="ghost" onClick={() => setPicker({ mode: 'add' })} label={t('image-generation.components.nai.vibes.section.add.vibe')}>
+              <Plus />
+            </IconButton>
+          ) : (
+            // A disabled button swallows hover, so the span carries the "why" tooltip.
+            <Tip content={t({ ko: 'NovelAI가 V5 모델의 바이브 트랜스퍼를 아직 공개하지 않았어.', en: 'NovelAI has not released Vibe Transfer for V5 models yet.' })}>
+              <span className="inline-flex" tabIndex={0}>
+                <IconButton size="icon-sm" variant="ghost" disabled tooltip={false} label={t('image-generation.components.nai.vibes.section.add.vibe')}>
+                  <Plus />
+                </IconButton>
+              </span>
+            </Tip>
+          )}
           <ImageAttachmentPickerButton
             hideTrigger
             label={t('image-generation.components.nai.vibes.section.add.vibe')}

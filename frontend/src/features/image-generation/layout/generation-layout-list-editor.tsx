@@ -53,7 +53,8 @@ export function GenerationLayoutListEditor({ surface }: { surface: GenerationLay
                       variant="ghost"
                       tooltip={false}
                       label={t({ ko: '{name} 옮기기', en: 'Move {name}' }, { name: label })}
-                      className="size-10 cursor-grab text-muted-foreground active:cursor-grabbing"
+                      size="icon-lg"
+                      className="cursor-grab active:cursor-grabbing"
                       {...drag.gripProps(block)}
                     >
                       <GripVertical />

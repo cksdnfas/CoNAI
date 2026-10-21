@@ -83,6 +83,37 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
   const admin = await connect({ accountId: adminId, accountType: 'admin' })
   const ADMIN_TOOLS = ['post_comment_hide', 'posts_category_create', 'posts_category_update', 'posts_category_delete']
 
+  await t.test('explicit post search checks live published access and source versions in a batch', async () => {
+    const { createHash } = await import('node:crypto')
+    const { KnowledgeStore } = await import('../src/services/posts/knowledgeStore')
+    const { PostStore } = await import('../src/services/posts/postStore')
+    const { actorFromRequester } = await import('../src/services/posts/postActor')
+    const human = { ...actorFromRequester({ accountId: adminId, accountType: 'admin' }, null), origin: 'human' as const }
+    const first = ok(await call(writer, 'posts_create', { title: 'Batch first', body: 'Original body', status: 'published' }))
+    const second = ok(await call(writer, 'posts_create', { title: 'Batch second', body: 'Knowledge body', status: 'published' }))
+    const knowledge = KnowledgeStore.patch(human, second.id, { expectedRevision: second.revision, enabled: true })
+    const draft = ok(await call(writer, 'posts_create', { title: 'Batch draft', body: 'Private body', status: 'draft' }))
+    const args = { post_ids: [first.id, second.id, draft.id, 999999], status: 'published', limit: 50 }
+    const found = ok(await call(writer, 'posts_search', args))
+    assert.equal(found.total, 2)
+    assert.deepEqual(found.posts.map((post: { id: number }) => post.id).sort((a: number, b: number) => a - b), [first.id, second.id])
+    const ordinary = found.posts.find((post: { id: number }) => post.id === first.id)
+    assert.equal(ordinary.revision, first.revision)
+    assert.equal(ordinary.content_version, null)
+    assert.equal(ordinary.content_hash, createHash('sha256').update('Original body').digest('hex'))
+    const known = found.posts.find((post: { id: number }) => post.id === second.id)
+    assert.equal(known.content_version, knowledge.knowledge!.contentVersion)
+    assert.equal(known.content_hash, knowledge.knowledge!.contentHash)
+    const edited = ok(await call(writer, 'posts_update', { post_id: first.id, expected_revision: first.revision, body: 'Changed body' }))
+    const changed = ok(await call(writer, 'posts_search', { post_ids: [first.id], limit: 1 })).posts[0]
+    assert.equal(changed.revision, edited.revision)
+    assert.equal(changed.content_hash, createHash('sha256').update('Changed body').digest('hex'))
+    PostStore.update(human, first.id, { expectedRevision: edited.revision, status: 'hidden' })
+    assert.deepEqual(ok(await call(writer, 'posts_search', { post_ids: [first.id], limit: 1 })).posts, [], 'even the owner cannot use the published-source filter to retrieve hidden quotes')
+    assert.equal((await call(writer, 'posts_search', { ...args, status: 'all' })).isError, true)
+    assert.equal((await call(writer, 'posts_search', { post_ids: [] })).isError, true)
+  })
+
   await t.test('posts: revisions and restore, own comments, tags, delete', async () => {
     const post = ok(await call(writer, 'posts_create', { title: '첫 판', body: '처음 본문', tags: ['일기'] }))
     ok(await call(writer, 'posts_update', { post_id: post.id, expected_revision: 1, title: '둘째 판', body: '두 번째 본문 '.repeat(40) }))

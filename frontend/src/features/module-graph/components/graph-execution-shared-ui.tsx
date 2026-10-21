@@ -66,23 +66,21 @@ export function ExecutionHeaderBadges({
 /** Inputs heading + value grid shared by the inline summary and the detail modal. */
 export function ExecutionInputEntriesList({
   entries,
-  itemClassName,
 }: {
   entries: ReturnType<typeof getExecutionInputEntries>
-  itemClassName: string
 }) {
   const { t, formatNumber } = useI18n()
 
   return (
     <>
-      <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
-        <span>{t({ ko: '입력', en: 'Inputs' })}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <Text as="span" variant="overline">{t({ ko: '입력', en: 'Inputs' })}</Text>
         <Badge variant="outline">{formatNumber(entries.length)}</Badge>
-      </Text>
+      </div>
       <div className="grid gap-2 md:grid-cols-2">
         {entries.map((entry) => (
-          <Inset key={entry.key} className={itemClassName}>
-            <Text as="div" variant="overline" className="font-semibold">{entry.label}</Text>
+          <Inset key={entry.key} padding="sm">
+            <Text as="div" variant="overline">{entry.label}</Text>
             {entry.label !== entry.key ? <div className="mt-0.5 text-2xs text-muted-foreground">{entry.key}</div> : null}
             <div className="mt-1 text-sm text-foreground whitespace-pre-wrap break-all">{formatPrimitiveValue(entry.value, t)}</div>
           </Inset>

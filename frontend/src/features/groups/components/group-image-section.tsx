@@ -173,7 +173,7 @@ export function GroupImageSection({
       {isLoading ? (
         <div className="grid gap-4 md:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} className="h-[260px] w-full rounded-sm" />
+            <Skeleton key={index} radius="sm" className="h-[260px] w-full" />
           ))}
         </div>
       ) : null}

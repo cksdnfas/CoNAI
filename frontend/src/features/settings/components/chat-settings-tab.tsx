@@ -50,7 +50,6 @@ export function ChatSettingsTab() {
     <TextTabs
       value={view}
       onChange={setView}
-      className="gap-6"
       items={[
         { value: 'profiles', label: t({ ko: '프로필', en: 'Profiles' }) },
         { value: 'resources', label: t({ ko: '자원', en: 'Resources' }) },
@@ -58,10 +57,10 @@ export function ChatSettingsTab() {
         ...(isAdmin ? [{ value: 'routines', label: t({ ko: '루틴', en: 'Routines' }) }] : []),
       ]}
     >
-      <TabsContent value="profiles"><ChatSettingsProfiles /></TabsContent>
-      <TabsContent value="resources"><ChatSettingsResources /></TabsContent>
-      <TabsContent value="mine"><ChatSettingsMine /></TabsContent>
-      {isAdmin ? <TabsContent value="routines"><Suspense fallback={null}><ChatSettingsRoutines /></Suspense></TabsContent> : null}
+      <TabsContent value="profiles" className="mt-6"><ChatSettingsProfiles /></TabsContent>
+      <TabsContent value="resources" className="mt-6"><ChatSettingsResources /></TabsContent>
+      <TabsContent value="mine" className="mt-6"><ChatSettingsMine /></TabsContent>
+      {isAdmin ? <TabsContent value="routines" className="mt-6"><Suspense fallback={null}><ChatSettingsRoutines /></Suspense></TabsContent> : null}
     </TextTabs>
   )
 }

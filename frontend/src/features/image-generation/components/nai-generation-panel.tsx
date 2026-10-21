@@ -11,17 +11,26 @@ import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { getNaiCostEstimate, getNaiUserData } from '@/lib/api-image-generation-nai'
 import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
 import {
+  NAI_QUEUE_COUNT_MAX,
+  NAI_QUEUE_COUNT_MIN,
   NAI_SAMPLE_COUNT_MAX,
   NAI_SAMPLE_COUNT_MIN,
+  clampNaiQueueCount,
   clampNaiSampleCount,
   getErrorMessage,
   parseNumberInput,
+  resolveNaiFormEnhance,
   NAI_RESOLUTION_PRESETS,
   buildNaiCharacterPromptPayload,
   buildNaiCharacterReferencePayload,
   buildNaiVibePayload,
+  getNaiVibesUnsupportedMessage,
+  resolveNaiPromptPresets,
+  resolveNaiSamplingSettings,
   supportsNaiTransparentBackground,
+  supportsNaiVibes,
 } from '../image-generation-shared'
+import { getNaiFixedModelSettings, getNaiQualityTags, prependNaiUcPreset } from '@conai/shared'
 import { consumeHistorySettingsLoad, usePendingHistorySettingsLoad } from '../history-settings-load-store'
 import {
   buildNaiFormFromHistoryPayload,
@@ -44,6 +53,7 @@ import { useNaiAuthController } from './use-nai-auth-controller'
 import { useNaiGenerationActions } from './use-nai-generation-actions'
 import { useNaiImageEditorBridge } from './use-nai-image-editor-bridge'
 import { useNaiFormController } from './use-nai-form-controller'
+import { useNaiImageSize } from './nai-generation-panel-helpers'
 import { ChatGenerationPresetSaveModal } from '@/features/settings/components/chat-generation-preset-save-modal'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
@@ -87,6 +97,7 @@ export function NaiGenerationPanel({
     useCharacterPositions,
     resetNaiForm,
     handleNaiFieldChange,
+    handleNaiOptionChange,
     handleResolutionPresetChange,
     handleNaiImageChange,
     handleAddCharacterPrompt,
@@ -102,7 +113,12 @@ export function NaiGenerationPanel({
     handleRemoveCharacterReference,
   } = useNaiFormController({ showSnackbar })
 
-  useNaiChatPage(naiForm, setNaiForm)
+  // Enhance plans from the source's natural size; read it for any source so one assistant patch can switch to img2img and enhance.
+  const sourceImageSize = useNaiImageSize(naiForm.sourceImage?.dataUrl)
+  const naiEnhance = resolveNaiFormEnhance(naiForm, sourceImageSize)
+  const naiEnhancePlan = naiEnhance?.plan ?? null
+
+  useNaiChatPage(naiForm, setNaiForm, sourceImageSize)
 
   const confirm = useConfirm()
   const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
@@ -210,19 +226,24 @@ export function NaiGenerationPanel({
     showSnackbar,
   })
 
+  // Enhance runs at the plan's size, so the estimate uses it too.
+  const naiCostWidth = naiEnhancePlan?.width ?? parseNumberInput(naiForm.width, 1024)
+  const naiCostHeight = naiEnhancePlan?.height ?? parseNumberInput(naiForm.height, 1024)
+  // A model with fixed settings runs its own steps, whatever the form stores.
+  const naiSampling = resolveNaiSamplingSettings(naiForm)
   const naiCostInputs = useMemo(
     () => {
       // 계산기가 모델링하는 img2img strength 만 넘긴다(인페인트/바이브 비용은 검증된 규칙이 없다).
       const strength = parseNumberInput(naiForm.strength, 1)
       return {
-        width: parseNumberInput(naiForm.width, 1024),
-        height: parseNumberInput(naiForm.height, 1024),
-        steps: parseNumberInput(naiForm.steps, 28),
+        width: naiCostWidth,
+        height: naiCostHeight,
+        steps: parseNumberInput(naiSampling.steps, 28),
         n_samples: clampNaiSampleCount(naiForm.samples),
         ...(naiForm.action === 'img2img' && strength > 0 && strength <= 1 ? { strength } : {}),
       }
     },
-    [naiForm.action, naiForm.height, naiForm.samples, naiForm.steps, naiForm.strength, naiForm.width],
+    [naiCostHeight, naiCostWidth, naiForm.action, naiForm.samples, naiSampling.steps, naiForm.strength],
   )
 
   const naiCostQuery = useQuery({
@@ -235,6 +256,7 @@ export function NaiGenerationPanel({
       }),
     enabled:
       connected &&
+      naiEnhance?.issue !== 'size_pending' &&
       naiCostInputs.width > 0 &&
       naiCostInputs.height > 0 &&
       naiCostInputs.steps > 0 &&
@@ -242,6 +264,12 @@ export function NaiGenerationPanel({
   })
 
   const naiCostEstimate = naiCostQuery.isSuccess ? naiCostQuery.data : null
+  // The estimate is per job; one click queues `queueCount` jobs. Opus-free is decided per job, so free stays free,
+  // except Max: its server upscale costs extra, so it is never shown as free.
+  const naiQueueCount = clampNaiQueueCount(naiForm.queueCount)
+  const naiServerUpscale = naiEnhancePlan?.serverUpscale === true
+  const naiFreePerJob = naiCostEstimate?.isOpusFree === true && !naiServerUpscale
+  const naiClickCost = naiCostEstimate && !naiFreePerJob ? naiCostEstimate.estimatedCost * naiQueueCount : 0
   // 잔액/해상도 기준 최대 장수로 입력 상한만 좁힌다(0 이어도 입력은 1 까지 허용).
   const naiMaxSampleCount = naiCostEstimate
     ? Math.min(NAI_SAMPLE_COUNT_MAX, Math.max(NAI_SAMPLE_COUNT_MIN, naiCostEstimate.maxSamples))
@@ -249,10 +277,10 @@ export function NaiGenerationPanel({
   // 예상치라 생성은 막지 않고 버튼 근처에 경고만 보여 준다.
   const naiCostWarningMessage = naiCostEstimate
     ? [
-        !naiCostEstimate.canAfford
+        naiClickCost > (naiUserQuery.data?.anlasBalance ?? 0)
           ? t(
               { ko: 'Anlas 가 부족할 수 있어 (예상 {cost} / 보유 {balance}). 예상치라 생성은 막지 않아.', en: 'You may not have enough Anlas (est. {cost} / balance {balance}). This is an estimate, so generation is not blocked.' },
-              { cost: formatNumber(naiCostEstimate.estimatedCost), balance: formatNumber(naiUserQuery.data?.anlasBalance ?? 0) },
+              { cost: formatNumber(naiClickCost), balance: formatNumber(naiUserQuery.data?.anlasBalance ?? 0) },
             )
           : null,
         naiCostInputs.n_samples > naiMaxSampleCount
@@ -288,6 +316,7 @@ export function NaiGenerationPanel({
   } = useNaiGenerationActions({
     connected,
     naiForm,
+    sourceImageSize,
     supportsCharacterPrompts,
     supportsCharacterReference,
     ensureEncodedVibes,
@@ -315,12 +344,23 @@ export function NaiGenerationPanel({
   const naiGenerateButtonSuffix = !connected || isNaiGenerating
     ? undefined
     : naiCostQuery.isSuccess
-      ? naiCostQuery.data.isOpusFree
+      ? naiFreePerJob
         ? t({ ko: '(무료)', en: '(free)' })
-        : t({ ko: '({cost} Anlas)', en: '({cost} Anlas)' }, { cost: formatNumber(naiCostQuery.data.estimatedCost) })
+        : naiServerUpscale
+          ? t({ ko: '({cost}+ Anlas)', en: '({cost}+ Anlas)' }, { cost: formatNumber(naiClickCost) })
+          : t({ ko: '({cost} Anlas)', en: '({cost} Anlas)' }, { cost: formatNumber(naiClickCost) })
       : naiCostQuery.isPending
         ? t({ ko: '(계산 중…)', en: '(calculating…)' })
         : undefined
+  const naiGenerateButtonSuffixHint = naiGenerateButtonSuffix && naiCostQuery.isSuccess && naiServerUpscale
+    ? t({ ko: 'Max의 서버 업스케일 비용은 예상에 들어 있지 않아.', en: 'The Max server upscale adds a cost that is not in this estimate.' })
+    : undefined
+  const naiRepeat = {
+    value: naiForm.queueCount,
+    min: NAI_QUEUE_COUNT_MIN,
+    max: NAI_QUEUE_COUNT_MAX,
+    onChange: (value: string) => handleNaiOptionChange({ queueCount: value }),
+  }
   const useInlineActionBar = splitPaneScroll || compactActionBar
   const useDrawerCompactChrome = compactActionBar && !splitPaneScroll
   const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null)
@@ -350,22 +390,31 @@ export function NaiGenerationPanel({
   const chatPresetSizeLabel = NAI_RESOLUTION_PRESETS.find((preset) => preset.key === naiForm.resolutionPreset)?.label ?? `${naiForm.width}×${naiForm.height}`
   /** The form as a chat generation preset: the prompt becomes the fixed prefix and the model writes only the scene. */
   const buildChatPreset = async () => {
+    // Checked before encoding: a V5 preset with vibes would fail on every run.
+    if (!supportsNaiVibes(naiForm.model) && naiForm.vibes.length > 0) {
+      showSnackbar({ message: getNaiVibesUnsupportedMessage(t), tone: 'error' })
+      return null
+    }
     const encodedVibes = await ensureEncodedVibes()
     if (!encodedVibes) return null
+    // Chat presets have no preset fields, so the quality tags and UC text go into the fixed prompt text.
+    const promptPresets = resolveNaiPromptPresets(naiForm)
+    // A model with fixed settings drops the typed negative: only its UC preset text remains.
+    const negativePrompt = getNaiFixedModelSettings(naiForm.model) ? '' : normalizeTextSegmentSpreadsheetText(naiForm.negativePrompt).trim()
     return {
       kind: 'nai' as const,
       comfyui: null,
       nai: {
         model: naiForm.model,
-        sampler: naiForm.sampler,
+        sampler: naiSampling.sampler,
         noiseSchedule: naiForm.scheduler,
-        steps: Number(naiForm.steps) || 28,
+        steps: Number(naiSampling.steps) || 28,
         scale: Number(naiForm.scale) || 5,
         varietyPlus: naiForm.varietyPlus,
         transparentBackground: naiForm.transparentBackground && supportsNaiTransparentBackground(naiForm.model),
         promptPrefix: normalizeTextSegmentSpreadsheetText(naiForm.prompt).trim(),
-        promptSuffix: '',
-        negativePrompt: normalizeTextSegmentSpreadsheetText(naiForm.negativePrompt).trim(),
+        promptSuffix: promptPresets.qualityToggle ? (getNaiQualityTags(naiForm.model) ?? '').replace(/^,\s*/, '') : '',
+        negativePrompt: prependNaiUcPreset(naiForm.model, negativePrompt, promptPresets.ucPreset) ?? negativePrompt,
         sizes: [{ label: chatPresetSizeLabel, width: Number(naiForm.width), height: Number(naiForm.height) }],
         characters: supportsCharacterPrompts ? buildNaiCharacterPromptPayload(naiForm.characters) : [],
         useCoords: useCharacterPositions,
@@ -382,7 +431,9 @@ export function NaiGenerationPanel({
     canGenerate: naiForm.prompt.trim().length > 0,
     generateButtonLabel: naiGenerateButtonLabel,
     generateButtonSuffix: naiGenerateButtonSuffix,
+    generateButtonSuffixHint: naiGenerateButtonSuffixHint,
     costErrorMessage: naiCostErrorMessage,
+    repeat: naiRepeat,
     onUpscale: handleUpscale,
     onReset: () => void resetNaiForm(),
     onGenerate: handleNaiGenerate,
@@ -420,6 +471,8 @@ export function NaiGenerationPanel({
     <NaiGenerationEditorSections
       naiForm={naiForm}
       setNaiForm={setNaiForm}
+      sourceImageSize={sourceImageSize}
+      handleNaiOptionChange={handleNaiOptionChange}
       selectedCharacterIndex={selectedCharacterIndex}
       setSelectedCharacterIndex={setSelectedCharacterIndex}
       supportsCharacterPrompts={supportsCharacterPrompts}
@@ -543,7 +596,7 @@ export function NaiGenerationPanel({
       <ChatGenerationPresetSaveModal
         open={isChatPresetModalOpen}
         build={buildChatPreset}
-        summary={t({ ko: '{model} · {size} · 스텝 {steps} · CFG {scale}', en: '{model} · {size} · {steps} steps · CFG {scale}' }, { model: naiForm.model, size: chatPresetSizeLabel, steps: naiForm.steps, scale: naiForm.scale })}
+        summary={t({ ko: '{model} · {size} · 스텝 {steps} · CFG {scale}', en: '{model} · {size} · {steps} steps · CFG {scale}' }, { model: naiForm.model, size: chatPresetSizeLabel, steps: naiSampling.steps, scale: naiForm.scale })}
         onClose={() => setIsChatPresetModalOpen(false)}
       />
 

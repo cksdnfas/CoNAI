@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { MessageCircle, Pause, Play, SkipForward, SquareTerminal } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
@@ -23,7 +23,7 @@ function apiUrl(path: string | null | undefined) {
 
 function TypingDots() {
   return (
-    <span className="inline-flex items-center gap-[0.18em] align-middle" aria-hidden="true">
+    <span className="inline-flex items-center align-middle" style={{ gap: '0.18em' }} aria-hidden="true">
       {[0, 1, 2].map((index) => (
         <span key={index} className="size-[0.32em] rounded-full bg-current" style={{ animation: `wallpaper-typing 1.2s ${index * 0.16}s infinite ease-in-out` }} />
       ))}
@@ -32,16 +32,16 @@ function TypingDots() {
 }
 
 /** A character's face: its avatar, else what the chat shows without one (a terminal for Codex, the first letter). */
-function ChatProfileFace({ profile, className }: { profile: WallpaperChatProfile | null | undefined; className: string }) {
+function ChatProfileFace({ profile, className, style }: { profile: WallpaperChatProfile | null | undefined; className: string; style?: CSSProperties }) {
   const avatar = apiUrl(profile?.avatarThumbnailUrl)
   return (
-    <span className={cn('flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--foreground)_12%,transparent)]', className)}>
+    <span className={cn('flex shrink-0 items-center justify-center overflow-hidden rounded-full', className)} style={{ background: 'color-mix(in srgb,var(--foreground) 12%,transparent)', ...style }}>
       {avatar ? (
         <img src={avatar} alt="" className="h-full w-full object-cover" draggable={false} />
       ) : profile?.engine === 'codex' ? (
         <SquareTerminal className="size-[60%] opacity-80" />
       ) : profile ? (
-        <span className="text-[0.75em] font-semibold opacity-75">{Array.from(profile.name.trim())[0] ?? '?'}</span>
+        <span className="font-semibold opacity-75" style={{ fontSize: '0.75em' }}>{Array.from(profile.name.trim())[0] ?? '?'}</span>
       ) : null}
     </span>
   )
@@ -86,32 +86,32 @@ export function WallpaperCharacterCardBody({ widget }: { widget: Extract<Wallpap
 
   return (
     // Type follows the box (name plus up to three message lines fit the height); the avatar fills it.
-    <div className="relative flex h-full items-center gap-[0.9em] overflow-hidden" style={{ fontSize: 'clamp(12px, min(13cqh, 4.4cqw), 30px)' }}>
+    <div className="relative flex h-full items-center overflow-hidden" style={{ gap: '0.9em', fontSize: 'clamp(12px, min(13cqh, 4.4cqw), 30px)' }}>
       {background ? (
         <>
           <img src={background} alt="" className="absolute inset-0 -z-0 h-full w-full object-cover opacity-45" draggable={false} />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,color-mix(in_srgb,var(--background)_70%,transparent),transparent)]" />
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(90deg,color-mix(in srgb,var(--background) 70%,transparent),transparent)' }} />
         </>
       ) : null}
       {settings.showAvatar ? (
-        <ChatProfileFace profile={profile} className="relative aspect-square h-[min(100cqh,40cqw)] text-[2.2em]" />
+        <ChatProfileFace profile={profile} className="relative aspect-square h-[min(100cqh,40cqw)]" style={{ fontSize: '2.2em' }} />
       ) : null}
       <div className="relative min-w-0 flex-1">
-        <div className="flex items-center gap-[0.5em]">
-          <span className="truncate text-[1.15em] font-semibold">{profile.name}</span>
+        <div className="flex items-center" style={{ gap: '0.5em' }}>
+          <span className="truncate font-semibold" style={{ fontSize: '1.15em' }}>{profile.name}</span>
           {settings.showTyping && running ? (
-            <span className="flex shrink-0 items-center gap-[0.35em] text-[0.8em] text-primary"><TypingDots />{t({ ko: '입력 중', en: 'typing' })}</span>
+            <span className="flex shrink-0 items-center text-primary" style={{ gap: '0.35em', fontSize: '0.8em' }}><TypingDots />{t({ ko: '입력 중', en: 'typing' })}</span>
           ) : null}
           {settings.showUnread && (thread?.unreadCount ?? 0) > 0 ? (
-            <span className="ml-auto shrink-0 rounded-full bg-primary px-[0.45em] text-[0.72em] font-semibold text-primary-foreground tabular-nums">{thread?.unreadCount}</span>
+            <span className="ml-auto shrink-0 rounded-full bg-primary font-semibold text-primary-foreground tabular-nums" style={{ paddingInline: '0.45em', fontSize: '0.72em' }}>{thread?.unreadCount}</span>
           ) : null}
         </div>
         {settings.showLastMessage ? (
-          <div className={cn('mt-[0.25em] leading-snug opacity-75', lineClamp)}>
+          <div className={cn('leading-snug opacity-75', lineClamp)} style={{ marginTop: '0.25em' }}>
             {lastLine || profile.tagline || ''}
           </div>
         ) : profile.tagline ? (
-          <div className="mt-[0.25em] truncate opacity-60">{profile.tagline}</div>
+          <div className="truncate opacity-60" style={{ marginTop: '0.25em' }}>{profile.tagline}</div>
         ) : null}
       </div>
     </div>
@@ -231,7 +231,7 @@ export function WallpaperAudioPlayerBody({ widget }: { widget: Extract<Wallpaper
         ) : (
           <div className="mt-1.5 flex items-center gap-2 text-2xs tabular-nums opacity-65">
             <span>{formatDuration(time.current)}</span>
-            <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--foreground)_14%,transparent)]">
+            <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full" style={{ background: 'color-mix(in srgb,var(--foreground) 14%,transparent)' }}>
               <span className="block h-full rounded-full bg-current" style={{ width: `${ratio * 100}%` }} />
             </span>
             <span>{formatDuration(time.duration || track.duration || 0)}</span>
@@ -260,20 +260,20 @@ export function WallpaperPostTickerBody({ widget }: { widget: Extract<WallpaperW
 
   return (
     <div
-      className="flex h-full flex-col divide-y divide-[color-mix(in_srgb,var(--foreground)_10%,transparent)] overflow-hidden"
+      className="flex h-full flex-col overflow-hidden"
       style={{ fontSize: `clamp(12px, min(${(100 / (posts.length * rowEm)).toFixed(2)}cqh, 3.6cqw), 24px)` }}
     >
-      {posts.map((post) => {
+      {posts.map((post, index) => {
         const cover = widget.settings.showCover ? apiUrl(post.coverUrl) : null
         return (
-          <div key={post.id} className="flex shrink-0 items-center gap-[0.75em] py-[0.5em] first:pt-0 last:pb-0">
-            {cover ? <img src={cover} alt="" className="size-[3.2em] shrink-0 rounded-[0.4em] object-cover" draggable={false} /> : null}
+          <div key={post.id} className="flex shrink-0 items-center border-b last:border-b-0" style={{ gap: '0.75em', paddingTop: index === 0 ? 0 : '0.5em', paddingBottom: index === posts.length - 1 ? 0 : '0.5em', borderColor: 'color-mix(in srgb,var(--foreground) 10%,transparent)' }}>
+            {cover ? <img src={cover} alt="" className="size-[3.2em] shrink-0 object-cover" style={{ borderRadius: '0.4em' }} draggable={false} /> : null}
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium">{post.title || plainText(post.excerpt ?? '')}</div>
-              <div className="mt-[0.15em] flex items-center gap-[0.6em] text-[0.75em] opacity-60">
+              <div className="flex items-center opacity-60" style={{ marginTop: '0.15em', gap: '0.6em', fontSize: '0.75em' }}>
                 <span className="truncate">{post.authorName}</span>
                 <span className="shrink-0">{formatDateTime(post.publishedAt, { month: 'short', day: 'numeric' })}</span>
-                {post.commentCount > 0 ? <span className="flex shrink-0 items-center gap-[0.2em]"><MessageCircle className="size-[1em]" />{post.commentCount}</span> : null}
+                {post.commentCount > 0 ? <span className="flex shrink-0 items-center" style={{ gap: '0.2em' }}><MessageCircle className="size-[1em]" />{post.commentCount}</span> : null}
               </div>
             </div>
           </div>
@@ -295,8 +295,8 @@ export function WallpaperPromptOfDayBody({ widget }: { widget: Extract<Wallpaper
   return (
     <div className="flex h-full items-center overflow-hidden">
       <p
-        className={cn('line-clamp-6 leading-snug', widget.settings.typeface === 'serif' ? "[font-family:'Noto_Serif_KR',ui-serif,Georgia,serif]" : null)}
-        style={{ fontSize: 'max(14px, min(16cqh, 5.5cqw))' }}
+        className="line-clamp-6 leading-snug"
+        style={{ fontSize: 'max(14px, min(16cqh, 5.5cqw))', fontFamily: widget.settings.typeface === 'serif' ? "'Noto Serif KR',ui-serif,Georgia,serif" : undefined }}
       >
         {text}
       </p>

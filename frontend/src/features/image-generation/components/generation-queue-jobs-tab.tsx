@@ -191,7 +191,7 @@ export function GenerationQueueJobsTab({
     <>
       <div className="space-y-2 px-3 pb-1 sm:px-4">
         <div className="flex items-center justify-between gap-3">
-          <Text as="div" variant="overline" className="font-semibold">{t({ ko: '범위', en: 'Scope' })}</Text>
+          <Text as="div" variant="overline">{t({ ko: '범위', en: 'Scope' })}</Text>
           <Badge variant={filteredActiveCount > 0 ? 'secondary' : 'outline'} className="w-fit max-w-full">{t({ ko: '작업 큐 · {count}', en: 'Job Queue · {count}' }, { count: formatNumber(filteredActiveCount) })}</Badge>
         </div>
         <Select value={selectedFilter} onChange={(event) => onFilterChange(event.target.value as QueueFilterValue)} className="h-9 w-full min-w-0">

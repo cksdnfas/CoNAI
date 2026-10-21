@@ -1,4 +1,4 @@
-import type { KeyboardEvent, ReactNode } from 'react'
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tip } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -9,6 +9,8 @@ export type SegmentedControlItem = {
   disabled?: boolean
   /** Accessible name and tooltip for icon-only segments. */
   ariaLabel?: string
+  /** Categorical tone of this key while selected (e.g. each search scope's colour); data-driven, so inline. */
+  activeStyle?: CSSProperties
 }
 
 type SegmentedControlProps = {
@@ -44,7 +46,6 @@ export function SegmentedControl({
 }: SegmentedControlProps) {
   const isTabs = semantics === 'tabs'
   const buttonSize = size === 'xs' ? 'xs' : size === 'sm' ? 'sm' : 'default'
-  const itemBaseClassName = size === 'xs' ? 'px-3 font-semibold' : size === 'sm' ? 'px-3' : 'px-4 font-semibold'
   // Roving tab stop: the active item, or the first enabled one when nothing matches `value`.
   const tabStopValue = items.some((item) => item.value === value && !item.disabled)
     ? value
@@ -96,7 +97,7 @@ export function SegmentedControl({
           <Button
             key={item.value}
             type="button"
-            variant="ghost"
+            variant="segment"
             size={buttonSize}
             data-value={item.value}
             disabled={item.disabled}
@@ -106,13 +107,8 @@ export function SegmentedControl({
             aria-label={item.ariaLabel}
             tabIndex={item.value === tabStopValue ? 0 : -1}
             onClick={() => onChange(item.value)}
-            className={cn(
-              'transition-colors',
-              fullWidth && 'flex-1',
-              itemBaseClassName,
-              // The selected segment sits on the page tone above the tray, like a raised key.
-              isActive && 'bg-background text-foreground shadow-key hover:bg-background hover:text-foreground',
-            )}
+            className={cn(fullWidth && 'flex-1')}
+            style={isActive ? item.activeStyle : undefined}
           >
             {item.label}
           </Button>

@@ -75,7 +75,7 @@ export function MiniMaxH3DirectorPostprocessPanel({ value, hiddenControls = [], 
       ) : null}
 
       {showRtx && value.rtx.enabled ? (
-        <Inset className="space-y-3 px-3">
+        <Inset padding="sm" className="space-y-3">
           <div className="grid gap-3 md:grid-cols-2">
             <ToggleRow checked={value.rtx.denoise} label={t({ ko: '노이즈 제거', en: 'Denoise' })} port={renderInputPort?.('postprocess.rtx.denoise')} onChange={(denoise) => patchRtx({ denoise })} />
             <div className="space-y-1">

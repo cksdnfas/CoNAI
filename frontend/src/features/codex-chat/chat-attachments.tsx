@@ -38,7 +38,7 @@ export function ChatAttachButton({ chat, disabled }: { chat: CodexChatApi; disab
       <DropdownMenu>
         <Tip content={label}>
           <DropdownMenuTrigger asChild>
-            <IconButton variant="ghost" size="icon-sm" className="rounded-full" disabled={isDisabled} label={label} tooltip={false}>
+            <IconButton variant="ghost" size="icon-sm" disabled={isDisabled} label={label} tooltip={false}>
               <Paperclip />
             </IconButton>
           </DropdownMenuTrigger>

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, LogIn, Puzzle, ShieldAlert, ShieldCheck, Sparkles, X, type LucideIcon } from 'lucide-react'
 import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Heading } from '@/components/ui/heading'
@@ -76,22 +76,24 @@ function BlockedRouteNotice({ path, permissionKey, isAnonymous, onDismiss }: { p
   const pageLabel = matchedPage ? t(matchedPage.labelKey) : path
 
   return (
-    <Alert variant="destructive" className="pr-12">
+    <Alert variant="destructive">
       <ShieldAlert />
-      <AlertTitle className="line-clamp-none">
-        {t('accessOverviewPage.blockedTitle', { pageLabel })}
-      </AlertTitle>
-      <AlertDescription>
-        <p>{isAnonymous ? t('accessOverviewPage.blockedHintAnonymous') : t('accessOverviewPage.blockedHintSignedIn')}</p>
-        {isAnonymous ? (
-          <Button asChild size="sm" className="mt-1">
-            <Link to={`/login?next=${encodeURIComponent(path)}`}>
-              <LogIn className="h-4 w-4" />
-              {t('loginPage.signIn')}
-            </Link>
-          </Button>
-        ) : null}
-      </AlertDescription>
+      <div className="col-start-2 min-w-0 space-y-0.5 pr-8">
+        <Text variant="title" tone="inherit">
+          {t('accessOverviewPage.blockedTitle', { pageLabel })}
+        </Text>
+        <AlertDescription>
+          <p>{isAnonymous ? t('accessOverviewPage.blockedHintAnonymous') : t('accessOverviewPage.blockedHintSignedIn')}</p>
+          {isAnonymous ? (
+            <Button asChild size="sm" className="mt-1">
+              <Link to={`/login?next=${encodeURIComponent(path)}`}>
+                <LogIn className="h-4 w-4" />
+                {t('loginPage.signIn')}
+              </Link>
+            </Button>
+          ) : null}
+        </AlertDescription>
+      </div>
       <IconButton
         variant="ghost"
         size="icon-sm"
@@ -153,7 +155,7 @@ export function AccessOverviewPage() {
           {pageItems.length > 0 ? (
             <section className="space-y-2">
               {publicWorkflows.length > 0 || pluginPages.length > 0 ? (
-                <Heading level={3} className="text-sm">{t({ ko: '페이지', en: 'Pages' })}</Heading>
+                <Heading level={3}>{t({ ko: '페이지', en: 'Pages' })}</Heading>
               ) : null}
               <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
                 {pageItems.map(({ path, labelKey, icon }) => (
@@ -170,7 +172,7 @@ export function AccessOverviewPage() {
 
           {pluginPages.length > 0 ? (
             <section className="space-y-2">
-              <Heading level={3} className="text-sm">{t({ ko: '플러그인 페이지', en: 'Plugin pages' })}</Heading>
+              <Heading level={3}>{t({ ko: '플러그인 페이지', en: 'Plugin pages' })}</Heading>
               <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
                 {pluginPages.map((page) => (
                   <AccessEntryCard key={page.id} href={page.to} label={page.title} description={page.pluginName} icon={Puzzle} />
@@ -185,7 +187,7 @@ export function AccessOverviewPage() {
 
           {publicWorkflows.length > 0 ? (
             <section className="space-y-2">
-              <Heading level={3} className="text-sm">{t({ ko: '공용 워크플로우', en: 'Public workflows' })}</Heading>
+              <Heading level={3}>{t({ ko: '공용 워크플로우', en: 'Public workflows' })}</Heading>
               <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
                 {publicWorkflows.map((workflow) => (
                   <AccessEntryCard

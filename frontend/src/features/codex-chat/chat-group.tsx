@@ -71,7 +71,7 @@ function JudgePresetRow({ value, open, disabled, onCommit }: { value: number | n
   return (
     <div className="flex min-h-11 items-center justify-between gap-3 px-2">
       <label htmlFor={id} className="text-sm">{t({ ko: '판단 프리셋', en: 'Judge preset' })}</label>
-      <Select id={id} className="h-8 w-36 text-xs" value={value ?? ''} disabled={disabled} onChange={(event) => onCommit(event.target.value ? Number(event.target.value) : null)}>
+      <Select id={id} controlSize="compact" className="w-36" value={value ?? ''} disabled={disabled} onChange={(event) => onCommit(event.target.value ? Number(event.target.value) : null)}>
         <option value="">{t({ ko: '없음', en: 'None' })}</option>
         {presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
         {value !== null && presetsQuery.isSuccess && !presets.some((preset) => preset.id === value) ? <option value={value} disabled>{t({ ko: '프리셋 #{id}', en: 'Preset #{id}' }, { id: value })}</option> : null}
@@ -118,7 +118,7 @@ export function GroupMembersPopover({ threadId, group, profilesById, disabled, o
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-1.5">
+      <PopoverContent align="start" padding="sm" className="w-80">
         <div className="px-2 pb-1 pt-1.5 text-xs font-semibold text-muted-foreground">{t({ ko: '참가자 {count}', en: 'Members {count}' }, { count: members.length })}</div>
         {members.map((profile) => {
           const representative = profile.id === group.representativeId
@@ -142,7 +142,7 @@ export function GroupMembersPopover({ threadId, group, profilesById, disabled, o
           )
         })}
         <div className="my-1 h-px bg-line" />
-        <Button variant="ghost" size="sm" className="w-full justify-start gap-2.5 px-2 font-normal" disabled={busy || members.length >= GROUP_MEMBER_MAX} onClick={() => { setOpen(false); onInvite() }}>
+        <Button variant="ghost" size="sm" className="w-full justify-start" disabled={busy || members.length >= GROUP_MEMBER_MAX} onClick={() => { setOpen(false); onInvite() }}>
           <UserPlus />{t({ ko: '참가자 초대', en: 'Invite members' })}
         </Button>
         <div className="my-1 h-px bg-line" />
@@ -216,7 +216,7 @@ export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onC
 
   return (
     <Modal open={open} onClose={onClose} title={t({ ko: '참가자 초대', en: 'Invite members' })} widthClassName="max-w-md">
-      <ModalBody className="space-y-4">
+      <ModalBody>
         <div className="max-h-[50vh] overflow-y-auto">
           {base ? (
             <div className="flex min-h-13 items-center gap-3 px-1">
@@ -239,7 +239,7 @@ export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onC
               </label>
             )
           })}
-          {candidates.length === 0 ? <EmptyState size="compact" className="px-0 py-3" title={t({ ko: '초대할 수 있는 프로필이 없어.', en: 'No profiles to invite.' })} /> : null}
+          {candidates.length === 0 ? <EmptyState size="compact" title={t({ ko: '초대할 수 있는 프로필이 없어.', en: 'No profiles to invite.' })} /> : null}
         </div>
         {mode?.kind === 'create' ? (
           <Field label={t({ ko: '방 이름', en: 'Room name' })}>
@@ -279,7 +279,7 @@ export function MentionList({ id, options, selected, onSelect }: { id: string; o
   return (
     <ComposerSuggestList id={id} label={t({ ko: '멘션할 참가자', en: 'Members to mention' })} className="w-64 max-w-[calc(100%-1.5rem)]">
       {options.map((option, index) => (
-        <ComposerSuggestOption key={option.key} id={`${id}-${index}`} selected={selected === index} className="gap-2.5 font-semibold text-foreground" onSelect={() => onSelect(option)}>
+        <ComposerSuggestOption key={option.key} id={`${id}-${index}`} selected={selected === index} onSelect={() => onSelect(option)}>
           {option.profile
             ? <ChatProfileAvatar name={option.profile.name} avatar={option.profile.avatar} profile={option.profile} engine={option.profile.engine} size="sm" />
             : <span className="inline-flex size-6 items-center justify-center rounded-full bg-surface-highest"><Users className="size-3.5" /></span>}

@@ -4,6 +4,7 @@ import { Slot } from 'radix-ui'
 import { X } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { Button } from './button'
 import { IconButton } from './icon-button'
 
 /**
@@ -30,6 +31,7 @@ const chipVariants = cva(
         sm: 'px-1.5 py-0.5 text-2xs [&_svg:not([class*=size-])]:size-3',
         md: 'px-2 py-1 text-xs [&_svg:not([class*=size-])]:size-3.5',
       },
+      mono: { true: 'font-mono tabular-nums', false: '' },
     },
     defaultVariants: {
       tone: 'default',
@@ -64,15 +66,20 @@ function ChipRemoveKey({ size, label, disabled, onRemove }: { size: ChipProps['s
   )
 }
 
+/** A text key inside a chip (e.g. a search operator that cycles on click): ghost wash on hover, keeps the chip's tone. */
+function ChipAction({ className, type = 'button', ...props }: Omit<ComponentProps<typeof Button>, 'variant' | 'size'>) {
+  return <Button type={type} variant="ghost" size="xs" className={cn('px-1.5 font-bold text-current hover:text-current', className)} {...props} />
+}
+
 /** Render a static chip; with `onRemove` it ends in an X key. For a pressable on/off chip use ToggleChip. */
-function Chip({ className, tone, size, asChild = false, onRemove, removeLabel, removeDisabled, children, ...props }: ChipProps) {
+function Chip({ className, tone, size, mono, asChild = false, onRemove, removeLabel, removeDisabled, children, ...props }: ChipProps) {
   const Comp = asChild ? Slot.Root : 'span'
   const removable = Boolean(onRemove) && !asChild
 
   return (
     <Comp
       data-slot="chip"
-      className={cn(chipVariants({ tone, size }), removable && (size === 'sm' ? 'gap-1 pr-0.5' : 'gap-0.5 py-0.5 pr-0.5'), className)}
+      className={cn(chipVariants({ tone, size, mono }), removable && (size === 'sm' ? 'gap-1 pr-0.5' : 'gap-0.5 py-0.5 pr-0.5'), className)}
       {...props}
     >
       {children}
@@ -84,19 +91,27 @@ function Chip({ className, tone, size, asChild = false, onRemove, removeLabel, r
 const toggleChipVariants = cva(
   [
     'inline-flex max-w-full min-w-0 shrink-0 cursor-pointer items-center gap-1.5 rounded-sm font-medium whitespace-nowrap transition-colors outline-none',
-    'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground',
-    'aria-pressed:bg-primary/12 aria-pressed:text-primary aria-pressed:hover:bg-primary/16 aria-pressed:hover:text-primary',
     'focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
     '[&_svg]:pointer-events-none [&_svg]:shrink-0',
   ],
   {
     variants: {
+      tone: {
+        /** Neutral when off, primary tint when pressed. */
+        default: 'bg-foreground/5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground aria-pressed:bg-primary/12 aria-pressed:text-primary aria-pressed:hover:bg-primary/16 aria-pressed:hover:text-primary',
+        /** Categorical tones (e.g. prompt syntax kinds): the category fill stays, pressed adds an inset ring. */
+        primary: 'bg-primary/12 text-foreground hover:bg-primary/18 aria-pressed:ring-1 aria-pressed:ring-inset aria-pressed:ring-primary/60',
+        info: 'bg-info-soft text-info-soft-foreground hover:brightness-110 aria-pressed:ring-1 aria-pressed:ring-inset aria-pressed:ring-info/70',
+        warning: 'bg-warning-soft text-warning-soft-foreground hover:brightness-110 aria-pressed:ring-1 aria-pressed:ring-inset aria-pressed:ring-warning/70',
+        success: 'bg-success-soft text-success-soft-foreground hover:brightness-110 aria-pressed:ring-1 aria-pressed:ring-inset aria-pressed:ring-success/70',
+      },
       size: {
         sm: 'h-6 px-2 text-2xs [&_svg:not([class*=size-])]:size-3',
         md: 'h-8 px-3 text-xs [&_svg:not([class*=size-])]:size-3.5',
       },
     },
     defaultVariants: {
+      tone: 'default',
       size: 'md',
     },
   },
@@ -108,17 +123,17 @@ type ToggleChipProps = Omit<ComponentProps<'button'>, 'aria-pressed'> & VariantP
 }
 
 /** Render a pressable filter / option chip with aria-pressed state (multi-select filters, category toggles). */
-function ToggleChip({ className, size, pressed, type = 'button', ...props }: ToggleChipProps) {
+function ToggleChip({ className, tone, size, pressed, type = 'button', ...props }: ToggleChipProps) {
   return (
     <button
       data-slot="toggle-chip"
       type={type}
       aria-pressed={pressed}
-      className={cn(toggleChipVariants({ size }), className)}
+      className={cn(toggleChipVariants({ tone, size }), className)}
       {...props}
     />
   )
 }
 
-export { Chip, ToggleChip, chipVariants, toggleChipVariants }
+export { Chip, ChipAction, ToggleChip, chipVariants, toggleChipVariants }
 export type { ChipProps, ToggleChipProps }

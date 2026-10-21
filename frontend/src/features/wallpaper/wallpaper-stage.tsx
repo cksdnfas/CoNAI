@@ -158,8 +158,8 @@ function WallpaperImagePreviewOverlay({ image, onClose }: { image: WallpaperWidg
 
   return (
     <div
-      className={cn('absolute inset-0 z-[5000] flex items-center justify-center bg-[color-mix(in_srgb,var(--background)_68%,transparent)] p-6 backdrop-blur-md transition-opacity', visible ? 'opacity-100' : 'opacity-0')}
-      style={{ transitionDuration: `${duration}ms`, transitionTimingFunction: easing }}
+      className={cn('absolute inset-0 z-[5000] flex items-center justify-center p-6 backdrop-blur-md transition-opacity', visible ? 'opacity-100' : 'opacity-0')}
+      style={{ background: 'color-mix(in srgb,var(--background) 68%,transparent)', transitionDuration: `${duration}ms`, transitionTimingFunction: easing }}
       onClick={close}
     >
       {/* eslint-disable-next-line no-restricted-syntax -- wallpaper runtime preview: framed image art */}
@@ -167,9 +167,10 @@ function WallpaperImagePreviewOverlay({ image, onClose }: { image: WallpaperWidg
         type="button"
         aria-label={t({ ko: '이미지 미리보기 닫기', en: 'Close image preview' })}
         onClick={(event) => { event.stopPropagation(); close() }}
-        // eslint-disable-next-line no-restricted-syntax -- glass frame of the wallpaper image preview (artwork styling, not a scrim)
-        className={cn('max-h-full max-w-full overflow-hidden rounded-[24px] border border-white/14 bg-black/14 shadow-[0_16px_40px_rgba(0,0,0,0.18),0_36px_96px_rgba(0,0,0,0.42)] transition-[transform,opacity] will-change-transform', visible ? 'opacity-100' : 'opacity-0')}
+        className={cn('max-h-full max-w-full overflow-hidden rounded-3xl border border-white/14 transition will-change-transform', visible ? 'opacity-100' : 'opacity-0')}
         style={{
+          background: 'rgb(0 0 0 / 0.14)',
+          boxShadow: '0 16px 40px rgba(0,0,0,0.18),0 36px 96px rgba(0,0,0,0.42)',
           transitionDuration: `${duration}ms`,
           transitionTimingFunction: easing,
           transform: visible ? 'none' : `translate3d(0, 20px, 0) scale(${hiddenScale})`,
@@ -736,8 +737,8 @@ export function WallpaperStage({
             return (
               <div
                 key={widget.id}
-                className={cn('absolute outline outline-[1.5px]', widget.locked ? 'outline-muted-foreground' : 'outline-primary')}
-                style={{ left: frame.x * k, top: frame.y * k, width: frame.w * k, height: frame.h * k, transform: widget.rotation ? `rotate(${widget.rotation}deg)` : undefined }}
+                className={cn('absolute outline', widget.locked ? 'outline-muted-foreground' : 'outline-primary')}
+                style={{ outlineWidth: 1.5, left: frame.x * k, top: frame.y * k, width: frame.w * k, height: frame.h * k, transform: widget.rotation ? `rotate(${widget.rotation}deg)` : undefined }}
               />
             )
           })}
@@ -754,7 +755,7 @@ export function WallpaperStage({
             return (
               <div
                 key={handle}
-                className="pointer-events-auto absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-[2px] border border-primary bg-background"
+                className="pointer-events-auto absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-xs border border-primary bg-background"
                 style={{ left: cx, top: cy, cursor: HANDLE_CURSOR[handle] }}
                 onPointerDown={(event) => handleResizePointerDown(event, single, handle)}
               />

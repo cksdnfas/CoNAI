@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
+import { Text } from '@/components/ui/text'
+import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
-import { TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows, joinTextSegmentSpreadsheetRows } from './text-segment-spreadsheet-input'
+import { DEFAULT_PROMPT_TEXTAREA_ROWS, TextSegmentSpreadsheetInput, getTextSegmentSpreadsheetRows, joinTextSegmentSpreadsheetRows } from './text-segment-spreadsheet-input'
 
 type PromptToggleFieldProps = {
   tool: PromptWildcardTool
@@ -19,6 +21,11 @@ type PromptToggleFieldProps = {
   negativePlaceholder?: string
   /** Smaller tab bar for nested editors (one NAI character block). */
   compact?: boolean
+  /**
+   * The model fixes the negative prompt: the negative tab shows the text actually used, read-only (disabled when
+   * nothing is used), with why. The stored negative value is kept for switching back.
+   */
+  negativeLock?: { value: string; hint: string }
 }
 
 /** Return a lightweight prompt segment count using commas and line breaks. */
@@ -63,11 +70,13 @@ export function PromptToggleField({
   positivePlaceholder = '',
   negativePlaceholder = '',
   compact = false,
+  negativeLock,
 }: PromptToggleFieldProps) {
   const { t } = useI18n()
   const [activeTab, setActiveTab] = useState<'positive' | 'negative'>('positive')
   const resolvedPositiveLabel = positiveLabel ?? t('image-generation.components.prompt.toggle.field.positive')
   const resolvedNegativeLabel = negativeLabel ?? t('image-generation.components.prompt.toggle.field.negative')
+  const shownNegativeValue = negativeLock ? negativeLock.value : negativeValue
   const promptValue = activeTab === 'negative' ? negativeValue : positiveValue
 
   return (
@@ -78,19 +87,32 @@ export function PromptToggleField({
         ariaLabel={t({ ko: '프롬프트', en: 'Prompt' })}
         items={[
           { value: 'positive', label: <PromptTabLabel label={resolvedPositiveLabel} value={positiveValue} /> },
-          { value: 'negative', label: <PromptTabLabel label={resolvedNegativeLabel} value={negativeValue} /> },
+          { value: 'negative', label: <PromptTabLabel label={resolvedNegativeLabel} value={shownNegativeValue} /> },
         ]}
         onChange={(value) => setActiveTab(value === 'negative' ? 'negative' : 'positive')}
       />
 
-      <TextSegmentSpreadsheetInput
-        key={activeTab}
-        tool={tool}
-        value={promptValue}
-        placeholder={activeTab === 'negative' ? negativePlaceholder : positivePlaceholder}
-        autocompletePromptType={activeTab}
-        onChange={(nextRows) => (activeTab === 'negative' ? onNegativeChange : onPositiveChange)(joinTextSegmentSpreadsheetRows(nextRows))}
-      />
+      {activeTab === 'negative' && negativeLock ? (
+        <div className="space-y-1">
+          <Textarea
+            readOnly
+            disabled={negativeLock.value.length === 0}
+            aria-label={resolvedNegativeLabel}
+            rows={compact ? 3 : DEFAULT_PROMPT_TEXTAREA_ROWS}
+            value={negativeLock.value}
+          />
+          <Text as="p" variant="caption">{negativeLock.hint}</Text>
+        </div>
+      ) : (
+        <TextSegmentSpreadsheetInput
+          key={activeTab}
+          tool={tool}
+          value={promptValue}
+          placeholder={activeTab === 'negative' ? negativePlaceholder : positivePlaceholder}
+          autocompletePromptType={activeTab}
+          onChange={(nextRows) => (activeTab === 'negative' ? onNegativeChange : onPositiveChange)(joinTextSegmentSpreadsheetRows(nextRows))}
+        />
+      )}
     </div>
   )
 }

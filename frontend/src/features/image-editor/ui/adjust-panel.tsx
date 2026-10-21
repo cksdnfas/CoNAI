@@ -78,7 +78,7 @@ export function AdjustPanel({ engine, snapshot }: { engine: EditorEngine; snapsh
         <Button variant="ghost" size="sm" disabled={!pending} onClick={() => engine.cancelAdjust()}>
           {t({ ko: '초기화', en: 'Reset' })}
         </Button>
-        <Button variant="secondary" size="sm" className="font-bold" disabled={!pending} onClick={() => engine.commitAdjust()}>
+        <Button variant="secondary" size="sm" disabled={!pending} onClick={() => engine.commitAdjust()}>
           {t({ ko: '적용', en: 'Apply' })}
         </Button>
       </div>

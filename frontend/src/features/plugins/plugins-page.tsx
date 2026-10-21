@@ -18,7 +18,6 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { listPlugins, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { getWorkspace } from '@/lib/api-workspaces'
-import { cn } from '@/lib/utils'
 import type { PluginAppRequest } from '@conai/shared'
 import { PluginAppRequestList, usePendingAppRequests, usePluginAppRequests } from './plugin-app-requests'
 import { PluginManagement } from './plugin-management'
@@ -31,13 +30,17 @@ function AppRequestHistory({ open, onClose, pluginName, onReview }: { open: bool
   const { t } = useI18n()
   const [offset, setOffset] = useState(0)
   const requests = usePluginAppRequests(offset)
+  // Read the page once: React Compiler memoized `requests.data?.requests.length` and `requests.data!.nextOffset!` as
+  // plain `requests.data.…` reads during render, which threw before the first page arrived and broke /extensions.
+  const items = requests.data?.requests
+  const nextOffset = requests.data?.nextOffset ?? null
   return (
     <Modal open={open} onClose={onClose} title={t({ ko: '작업 기록', en: 'Operation history' })} size="normal">
-      <ModalBody className="space-y-3">
+      <ModalBody spacing="sm">
         {requests.isPending ? <LoadingState /> : requests.error ? <ErrorState error={requests.error} onRetry={() => void requests.refetch()} /> : null}
-        {requests.data?.requests.length === 0 ? <EmptyState icon={History} title={t({ ko: '아직 작업이 없어', en: 'No operations yet' })} /> : null}
-        <div><PluginAppRequestList requests={requests.data?.requests ?? []} pluginName={pluginName} onReview={onReview} /></div>
-        <ListPager hasPrevious={offset > 0} hasNext={requests.data?.nextOffset != null} onPrevious={() => setOffset(Math.max(0, offset - HISTORY_PAGE))} onNext={() => setOffset(requests.data!.nextOffset!)} />
+        {items?.length === 0 ? <EmptyState icon={History} title={t({ ko: '아직 작업이 없어', en: 'No operations yet' })} /> : null}
+        <div><PluginAppRequestList requests={items ?? []} pluginName={pluginName} onReview={onReview} /></div>
+        <ListPager hasPrevious={offset > 0} hasNext={nextOffset !== null} onPrevious={() => setOffset(Math.max(0, offset - HISTORY_PAGE))} onNext={() => { if (nextOffset !== null) setOffset(nextOffset) }} />
       </ModalBody>
     </Modal>
   )
@@ -118,7 +121,6 @@ export function PluginsPage() {
                 asChild
                 interactive
                 size="lg"
-                className={cn(blocked && 'opacity-50')}
                 leading={<Puzzle className="size-4 text-muted-foreground" aria-hidden />}
                 trailing={<ChevronRight className="size-4" aria-hidden />}
               >

@@ -1,7 +1,7 @@
 import { useQueries } from '@tanstack/react-query'
 import { ImageOff, X } from 'lucide-react'
 import { MediaLibraryPicker, type MediaLibraryPickerProps } from '@/components/media/media-library-picker'
-import { Button } from '@/components/ui/button'
+import { MediaCard } from '@/components/common/media-card'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
@@ -39,9 +39,9 @@ export function ChatMediaAttachments({ items = [], onRemove }: {
     {items.map((item) => {
       const image: ImageRecord | undefined = canViewImages ? visible.get(item.compositeHash) : undefined
       return <div key={item.compositeHash} className="relative flex w-24 flex-col overflow-hidden rounded-sm bg-surface-high">
-        <Button variant="ghost" className="h-20 w-full overflow-hidden p-0" disabled={!image || !viewer} aria-label={item.name} onClick={() => viewer?.openImageView({ compositeHash: item.compositeHash, sourceItems: image ? [image] : [] })}>
-          {image ? <img src={buildApiUrl(`/api/images/${encodeURIComponent(item.compositeHash)}/thumbnail`)} alt={item.name} loading="lazy" className={cn('size-full object-cover', safety.shouldBlurItemPreview(image) && 'blur-md')} /> : <ImageOff className="size-5 text-muted-foreground" />}
-        </Button>
+        <MediaCard className="w-full" mediaClassName="flex h-20 w-full items-center justify-center" disabled={!image || !viewer} aria-label={item.name} onClick={() => viewer?.openImageView({ compositeHash: item.compositeHash, sourceItems: image ? [image] : [] })}
+          media={image ? <img src={buildApiUrl(`/api/images/${encodeURIComponent(item.compositeHash)}/thumbnail`)} alt={item.name} loading="lazy" className={cn('size-full object-cover', safety.shouldBlurItemPreview(image) && 'blur-md')} /> : <ImageOff className="size-5 text-muted-foreground" />}
+        />
         <Tip content={item.name}><span className="truncate px-1 py-1 text-2xs">{item.name}</span></Tip>
         {onRemove ? <IconButton variant="secondary" size="icon-xs" className="absolute right-0.5 top-0.5" label={t({ ko: '첨부 빼기', en: 'Remove attachment' })} onClick={() => onRemove(item.compositeHash)}><X /></IconButton> : null}
       </div>

@@ -106,7 +106,7 @@ export function PromptSidebar({
         onClick={() => onSelectGroup(undefined)}
       />
 
-      {groupsLoading ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="my-0.5 h-8 w-full rounded-sm" />) : null}
+      {groupsLoading ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} radius="sm" className="my-0.5 h-8 w-full" />) : null}
 
       {groupsError ? (
         <Alert variant="destructive" className="mt-2">
@@ -145,7 +145,6 @@ export function PromptGroupActions({ onEditGroup, onDeleteGroup, onMoveGroupUp, 
   return (
     <ActionMenuButton
       size="icon-xs"
-      className="text-muted-foreground"
       label={t({ ko: '그룹 메뉴', en: 'Group menu' })}
       entries={[
         { key: 'up', label: t('prompts.components.prompt.sidebar.move.up'), icon: ChevronUp, disabled: !onMoveGroupUp, onSelect: () => onMoveGroupUp?.() },

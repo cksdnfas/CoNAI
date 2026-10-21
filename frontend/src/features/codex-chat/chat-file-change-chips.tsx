@@ -53,10 +53,10 @@ export function ChatFileChangeChips({ changes, threadId, replyId }: { changes?: 
           <span key={change.fileId} className={cn('inline-flex h-6 max-w-full items-center gap-1.5 rounded-full bg-muted px-2.5 text-xs text-foreground', change.undone && 'line-through opacity-60')}>
             <Icon className="size-3 shrink-0 text-muted-foreground" />
             <Tip content={change.folder === null ? t({ ko: '지워진 파일', en: 'Deleted file' }) : where}>
-              <Button variant="ghost" size="xs" className="h-5 min-w-0 px-0 font-mono text-2xs hover:bg-transparent hover:text-primary" disabled={change.folder === null} onClick={() => void open(change)}><span className="truncate">{change.name}</span></Button>
+              <Button variant="ghost" size="xs" className="min-w-0" disabled={change.folder === null} onClick={() => void open(change)}><span className="truncate font-mono text-2xs">{change.name}</span></Button>
             </Tip>
             {!change.undone && change.folder !== null && threadId !== undefined && replyId
-              ? <IconButton variant="ghost" size="icon-xs" className="-mr-2 size-5 rounded-full text-primary" disabled={undo.isPending} label={change.created ? t({ ko: '만든 파일 지우기', en: 'Remove the file it made' }) : t({ ko: '이 답변 전으로 되돌리기', en: 'Undo to before this reply' })} onClick={() => void run(change)}><Undo2 /></IconButton>
+              ? <IconButton variant="ghost" size="icon-xs" disabled={undo.isPending} label={change.created ? t({ ko: '만든 파일 지우기', en: 'Remove the file it made' }) : t({ ko: '이 답변 전으로 되돌리기', en: 'Undo to before this reply' })} onClick={() => void run(change)}><Undo2 /></IconButton>
               : null}
           </span>
         )

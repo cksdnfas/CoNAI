@@ -78,7 +78,6 @@ export function BackupSourceCard({
   return (
     <Section
       variant="settings"
-      bodyClassName="space-y-5"
       headerClassName="justify-end"
       actions={
         <div className="flex flex-wrap items-center gap-2">

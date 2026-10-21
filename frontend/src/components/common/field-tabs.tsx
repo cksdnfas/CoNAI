@@ -1,12 +1,8 @@
 import type { ReactNode } from 'react'
 import { FieldGroup } from '@/components/ui/field'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { cn } from '@/lib/utils'
 
 export type FieldTabItem<T extends string> = { value: T; label: ReactNode }
-
-const FIELD_TAB_LIST_CLASS = 'flex h-auto w-full justify-start gap-4 rounded-none border-b border-line bg-transparent px-3 pt-2 pb-0'
-const FIELD_TAB_TRIGGER_CLASS = 'relative flex-none rounded-none px-0 pb-1.5 pt-0 text-xs font-semibold text-muted-foreground hover:bg-transparent data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-primary after:opacity-0 data-[state=active]:after:opacity-100'
 
 /**
  * A labelled field whose control is a frame holding several controls (tabs, a picker, inputs). Unlike `Field` it is
@@ -34,9 +30,9 @@ export function FieldTabs<T extends string>({ value, items, onChange, disabled, 
 }) {
   return (
     <Tabs value={value} onValueChange={(next) => onChange(next as T)}>
-      <TabsList aria-label={ariaLabel} className={cn(FIELD_TAB_LIST_CLASS, bare && 'min-h-9 items-center border-b-0 py-0')}>
+      <TabsList aria-label={ariaLabel} variant="field" bare={bare}>
         {items.map((item) => (
-          <TabsTrigger key={item.value} value={item.value} disabled={disabled} className={cn(FIELD_TAB_TRIGGER_CLASS, bare && 'py-1')}>{item.label}</TabsTrigger>
+          <TabsTrigger key={item.value} value={item.value} disabled={disabled} variant="field" bare={bare}>{item.label}</TabsTrigger>
         ))}
       </TabsList>
     </Tabs>

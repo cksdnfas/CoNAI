@@ -42,7 +42,6 @@ export function LlmSettingsTab() {
     <TextTabs
       value={view}
       onChange={setView}
-      className="gap-6"
       items={[
         { value: 'dashboard', label: t({ ko: '계기판', en: 'Dashboard' }) },
         { value: 'connections', label: t({ ko: '연결', en: 'Connections' }) },
@@ -50,10 +49,10 @@ export function LlmSettingsTab() {
         { value: 'log', label: t({ ko: '기록', en: 'Log' }) },
       ]}
     >
-      <TabsContent value="dashboard"><LlmUsageDashboard onOpenJudge={() => setView('log')} /></TabsContent>
-      <TabsContent value="connections"><LlmConnectionsTab /></TabsContent>
-      <TabsContent value="prompts"><LlmPromptPresets /></TabsContent>
-      <TabsContent value="log">
+      <TabsContent value="dashboard" className="mt-6"><LlmUsageDashboard onOpenJudge={() => setView('log')} /></TabsContent>
+      <TabsContent value="connections" className="mt-6"><LlmConnectionsTab /></TabsContent>
+      <TabsContent value="prompts" className="mt-6"><LlmPromptPresets /></TabsContent>
+      <TabsContent value="log" className="mt-6">
         <div className="space-y-8">
           <ChatDiagnosticsSettings />
           <ChatSettingsJudge />

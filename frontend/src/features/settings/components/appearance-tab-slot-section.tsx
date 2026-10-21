@@ -48,9 +48,9 @@ export function AppearanceTabSlotSection({
           <ListRow
             key={slot.id}
             size="lg"
-            className="flex-wrap gap-y-2"
+            className="flex-wrap"
             leading={slotTheme ? (
-              <span aria-hidden className="flex h-6 w-16 overflow-hidden rounded-sm shadow-[inset_0_0_0_1px_var(--line)]">
+              <span aria-hidden className="flex h-6 w-16 overflow-hidden rounded-sm inset-ring inset-ring-line">
                 <span className="flex-1" style={{ backgroundColor: slotSurface?.background }} />
                 <span className="flex-1" style={{ backgroundColor: slotSurface?.surfaceHigh }} />
                 <span className="flex-1" style={{ backgroundColor: slotColors?.primary }} />

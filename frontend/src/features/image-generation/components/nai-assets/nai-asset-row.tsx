@@ -81,7 +81,7 @@ export function NaiAssetRow({
             <MoreHorizontal />
           </IconButton>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-64 space-y-3 p-3">
+        <PopoverContent align="end" padding="md" className="w-64 space-y-3">
           {menuFields ? <div className="space-y-3">{menuFields}</div> : null}
           <div className="-mx-1 grid">
             <PopoverClose asChild>
@@ -104,7 +104,7 @@ export function NaiAssetRow({
               </Tip>
             ) : null}
             <PopoverClose asChild>
-              <Button type="button" variant="ghost" size="sm" className="justify-start text-destructive hover:text-destructive" onClick={onRemove}>
+              <Button type="button" variant="destructive-ghost" size="sm" className="justify-start" onClick={onRemove}>
                 <Trash2 />
                 {t('image-generation.components.nai.common.remove')}
               </Button>

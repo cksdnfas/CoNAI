@@ -101,6 +101,130 @@ ad-hoc classes. Lint guards (`eslint.config.js`, `[ds/*]`) error on raw `<button
 `fixed inset-0` overlays, hex colours, `text-[Npx]` and `bg-black/N` scrims. The live reference is `/#/dev/ui`
 (dev builds only, section `flat`). The guards cover `src/features/**` and `src/components/{common,layout,media}/**`.
 
+`@shadcn/lint` (same `npm run lint`) checks every `src/**/*.{ts,tsx}` file at `error`:
+- `no-restyle` (`allow: ['layout']`): callers place and size a `components/ui` component (margin, width, flex, position,
+  text alignment); the component owns its spacing, typography, colour, shape and effects through variant / size props.
+  If no variant fits, add one to the component, never a className override at the call site.
+- `no-arbitrary-values`: layout sizes may use `calc()` / viewport values; spacing (margins too), type, radius and colour
+  stay on the scale (`p-3.25`, not `p-[13px]`).
+- `no-raw-colors` and `no-unknown-classes`: theme tokens only, and every class must generate CSS. Intentional library /
+  CSS hook classes (`nodrag`, `chat-markdown`, …) are allow-listed in `eslint.config.js`.
+- `require-static-classes`: class strings must stay readable to the linter.
+- `no-inline-styles` is off: editors, canvases and virtual lists compute geometry inline. Use tokens and shared
+  components for presentation.
+
+`components/ui/**` is exempt from restyle, arbitrary-value and static-class checks. There is no bulk-suppression
+baseline: every finding fails `npm run lint`. A genuine exception is an inline
+`eslint-disable-next-line shadcn/<rule> -- <reason>` on that line; never `--suppress-all`.
+
+### Lint migration map (Phase A → feature migration)
+
+The migration started from 1,438 restyle, 266 arbitrary-value and 97 static-class findings across `src`; all are
+now fixed or carry a justified inline disable.
+These are **class findings**, not distinct elements. The largest restyled components were Button (493), IconButton
+(91), Badge (82), Text (77), Inset (60), ModalBody (52), Panel (47), ModalFooter / Chip (44 each), Input (43),
+Textarea (36), Select (33) and Skeleton (32). Repeated classes mostly duplicate defaults: `font-semibold`,
+`gap-2`, `px-*`, `rounded-sm`, `text-xs`, and surface/selection overrides. Remove redundant overrides first.
+Do not turn every observed combination into a new variant. Keep existing API defaults and use these replacements:
+
+| Component / observed pattern | Replacement / decision |
+|---|---|
+| Button `h-7 px-2 text-xs`, `h-7 gap-1.5` | `size="compact"` (28px, 8px horizontal padding, 12px text). Keep only caller width/placement. |
+| Button `h-6 px-2 text-xs` / `h-8 px-3` / `h-9 px-4 py-2` | Existing `size="xs"` / `"sm"` / default. Remove redundant gap/radius/type classes; do not globally shrink `sm` text. |
+| Button `h-auto min-h-6 py-1 whitespace-normal break-words font-normal` on a tag action | `size="content"` with `variant="subtle"`; wraps, unlike toolbar buttons. Static content uses Chip. |
+| Button tray selection `bg-background text-foreground shadow-key` | SegmentedControl; its internal `variant="segment"` derives selection from `aria-pressed` / `aria-selected`. No colour classes at the caller. |
+| Button / IconButton `text-destructive hover:text-destructive` | Existing `variant="destructive-ghost"`; destructive fill → `variant="destructive"`. Muted ghost overrides are redundant. |
+| IconButton `text-primary bg-primary/15`, other selected washes | `active={selected}` on ghost/subtle/secondary; overlay controls use `variant="overlay"`. `active` is a toggle, not a generic success indicator. |
+| IconButton `rounded-full`, Button `rounded-*`, font/gap tweaks | Normalize to existing square/soft-square sizes. Avatar controls use AvatarButton. Do not make a circle variant for incidental drift. |
+| Button breadcrumb `font-semibold` on current location | Ghost + `aria-current="location"`; normal `size="sm"` padding. |
+| Button rich multiline clickable card / row, `p-0`, `rounded-none` | MediaCard / ListRow `asChild interactive`, not a stripped Button. Preserve the media background/padded-caption invariant below. |
+| Badge `normal-case tracking-normal` | `casing="sentence"` when the value is a user name, not a status label. |
+| Badge `px-1.5`, `px-1 py-0`, overlay scrim/white/border combo | Existing `size="sm"` / `"xs"` and `variant="overlay"`. Drop duplicate uppercase/font/border classes. Status colours → existing status variants. |
+| Chip `font-mono tabular-nums` | `mono`; use existing tone and sm/md size. Remove weight/gap drift. Removable chips use `onRemove`, never a hand-placed X. |
+| Text overline `font-semibold`; title `font-semibold` | Remove: already provided. `text-xs` metadata → `variant="caption"`. |
+| Text `text-destructive`, `text-warning`, `text-current` etc. | `tone="destructive"` / `"warning"` / `"inherit"`; also default, muted, primary, secondary, success, info. `mono` for code/numeric copy. |
+| Text / Heading becoming a badge or pill (`bg-* rounded-full px-2`) | Badge / Chip instead. Inline icon+text layout goes in a parent flex row, not an extra Text gap. |
+| Heading `text-xl` with h1 semantics | `level={2} as="h1"`; levels choose appearance, `as` chooses document semantics. Tiny overlines use Text, not Heading. |
+| Input / Select `h-7 px-2 text-xs` | `controlSize="compact"` (native `size` remains the HTML attribute). `font-mono` → `mono`. Do not shrink all settings fields. |
+| Textarea `font-mono text-xs` | `mono textSize="xs"`; default remains sm. Code display without editing → CodeBlock. |
+| Input / Textarea / NumberStepperInput `border-destructive` | `aria-invalid={invalid}` (existing error treatment). NumberStepperInput forwards input variant props, including `mono` / `controlSize`, to its input. |
+| Input `pl-9 pr-9` search adornments | SearchField / ToolbarSearchField. The internal Input uses `adornments="search"`. |
+| Input / Textarea `ASSIST_FILLED_CLASS` | `assisted={filled(fieldId)}` preserves the chat-filled outline without a dynamic imported class. |
+| Textarea imported `GROW_TEXTAREA` | `autoGrow` (content sizing, min-h-16, max-h-96). Keep `rows` as fallback. |
+| SettingRow `controlClassName={SETTINGS_CONTROL_CLASS}` / `SETTINGS_WIDE_CONTROL_CLASS` | `controlWidth="standard"` / `"wide"` (full width on phones, sm:w-60 / sm:w-96). Remove the obsolete import after migrating all usages. |
+| SettingRow `gap-* py-*`, ToggleRow `py-2 font-medium` | Keep standard row density. Put multiple controls in a child flex wrapper; rows remain direct siblings without space-y. |
+| ModalBody `space-y-4` / `space-y-3` / `space-y-5` | Remove / `spacing="sm"` / `spacing="lg"`. `spacing="none"` for a caller-owned grid or split pane; put its gaps on the inner layout. Normalize 1/2 to sm unless the content is really a list of rows (none). |
+| ModalFooter `border-t border-line pt-3` | `separated`; remove caller gap overrides. Use EditorFooter where its action slots already fit. |
+| Panel `rounded-none`, custom px/py; Inset `px-3 py-2` | Panel's existing `radius` / `padding` / `stack`; Inset `padding="sm"` (default md = px-4 py-3). Normalize p-3/py-2.5 compact notes to sm rather than adding a step. |
+| Panel drop border / active tint | `treatment="drop" data-drag-active={active}`; keep padded content. Shared media inputs use MediaFileDropSurface. |
+| Panel floating `p-1 shadow-elevation-2` | `treatment="floating" padding="toolbar"`; positioning and arrangement remain caller-owned. Nonfloating panels must not acquire elevation. |
+| PopoverContent `p-0` / `p-2` / `p-3` / `p-4` | `padding="none"` / `"sm"` / `"md"` / `"lg"` (default). Normalize p-1/1.5 to sm for menus, or use ActionMenu / DropdownMenu. |
+| AnchoredPopup `p-0` | Remove (already unpadded). Put content padding in its existing body composition; do not rebuild its surface. |
+| AnchoredPopup `z-floating` (opened from inside a Modal) | `layer="floating"`; default `popover`. |
+| Button styled as a Select (`theme-input-surface border … justify-between`) opening a picker / tree | `variant="field" size="field"`; caller keeps width only. |
+| Button `bg-background/55 rounded-none` click-away area under a dropped-down panel | `variant="scrim"`; caller sets its size (`h-auto flex-1`). |
+| ResourceRow `opacity-*` (hidden / dragged) and drop-over `bg-primary/8` | `dimmed` and `dropTarget`. |
+| Disabled `ListRow interactive` `disabled:opacity-*` | Remove: an interactive row dims and drops its wash when disabled. A row with nothing to do is a plain (non-interactive) row, not a disabled button. |
+| Ghost Button inside a chip with `text-current` (operator key) | `ChipAction`; it keeps the chip's tone. |
+| Category colours on a pressable chip (`bg-info-soft …`, active ring) | `ToggleChip tone="info" \| "warning" \| "success" \| "primary"`; pressed adds an inset ring. |
+| Per-item colour on the selected SegmentedControl key | Item `activeStyle` (data-driven colour, inline). |
+| Overlay Badge `font-semibold uppercase` (status / tier label on a thumbnail) | `casing="upper"`; a user-defined tier colour stays inline. |
+| Textarea `text-muted-foreground` (de-emphasised editable text) | `muted`. |
+| IconButton `size-11 sm:size-9` (touch-sized key in a bottom-docked bar) | `size="icon-touch"`. |
+| ToggleRow `min-h-11 py-2 sm:min-h-9` (switch row lined up with the inputs of a form grid) | `size="field"` (exactly the field height); label weight goes on the label span. |
+| Chip `font-semibold` (state label) | Bold the content (`<span className="font-semibold">`); the chip keeps its own weight. |
+| `transition-[width]` / `transition-[left,top,…]` on wallpaper art | `transition` plus inline `transitionProperty`; never widen to `transition-all`. |
+| A border in the chat profile's narration colour | `border-narration-edge` (theme colour, resolves the element's `--chat-rp-narration`). |
+| TabsList / TabsTrigger presentation overrides | Features use TextTabs / FieldTabs / SegmentedControl. Common compositions use UI `variant="text"` / `"field"` (`bare` for field-only choices); Tabs `flush` removes the root gap. |
+| Skeleton `rounded-sm` | `radius="sm"`; default md, avatar placeholder `radius="full"`. Remove fill overrides. |
+| ListRow / SidebarItem font, gap, border, selected background tweaks | Use size/interactive/selected or active/depth props. Rows own their hairline and padding. No restyled rounded cards in a row list. |
+| EmptyState px-0/py-3/py-4, LoadingState type tweaks | Existing `size="compact"` and defaults; normalize local spacing. Parent owns placement, not the component's padding. |
+| StatTile body/value type overrides, background fill | Keep the shared overline label/title value scale; `tone="fill"` only for a real filled tile. For inline setting statistics use SettingsStatLine, not a mini card. |
+| Alert status colour/type overrides | Existing status variant, ordinary shared typography. Complex content layout belongs inside AlertDescription; never shrink the whole alert with text-xs. |
+| CodeBlock text colour overrides | Keep its default text; use size/fill/wrap/maxHeight. Status belongs in surrounding Alert or a separate Text. |
+| DropdownMenuItem destructive text | Existing `variant="destructive"`. Radio-item font previews use a styled child span rather than changing the menu item's typography. |
+| Field / FieldGroup gap tweaks, Section body space-y, RowGroup space-y | Remove duplicate defaults. For special content, use an inner layout; never put space between hairline row siblings. |
+| DataTd status text / tabular numerals | Put status Text/Badge inside the cell; use numeric/meta/flush props. DataTh should keep its overline default. |
+
+**Narrow contracts (all with actionable lint messages):**
+- Text, Heading, Badge and Chip allow content wrapping/truncation (`truncate`, `line-clamp-*`, `whitespace-*`,
+  `break-*`) and tabular numerals. Content length is caller-owned; colour, weight and scale are not.
+- Button/IconButton and form controls allow wrapping/truncation, tabular numerals and the exact editor interaction
+  hooks `nodrag`, `nopan`, `nowheel`, `nokey`. Hooks change event routing, not appearance. They do not allow `font-*`,
+  fills, radii or padding. Contracts are last-match-wins, not additive.
+- Panel, Inset, PopoverContent, AnchoredPopup, TabsContent and Alert title/description allow only scale `gap-*` /
+  `space-x-*` / `space-y-*` beyond layout. These containers host caller-owned child arrangements; surface and
+  padding stay in props. Use Panel `stack` for the standard density gap, and never add gaps between row siblings.
+- RowGroup allows `text-resource-*` and `text-warning` for its documented `headingClassName` semantic kind colour.
+  This is not a general typography/colour exception. Keep other colour values in component props.
+
+**Static classes:** the baseline is mostly imported constants, not interpolation (69 SettingRow control widths,
+19 Textarea and 2 Input findings in settings). Use the props above rather than copying presentation constants.
+For genuine conditional layout use `cn('min-w-0', wide ? 'w-96' : 'w-60')`, or a same-file lookup containing full
+class strings / `cva`. Never construct `` `text-${size}` `` or `` `bg-${tone}` ``. Prefer variant props when the
+lookup chooses appearance. The linter has bounded variable resolution; if a computed lookup remains unreadable,
+use an explicit conditional at the JSX site, not a rule disable or an opaque helper. Do not register arbitrary
+class-producing functions as merge functions to hide them.
+
+**Arbitrary values:** there is no feature-wide exception (wallpaper and chat held most of them). Distinguish the editor chrome from the artwork: chrome uses this UI kit; runtime scene coordinates,
+user-authored font metrics, timeline/canvas geometry and crop transforms belong in computed inline styles (already
+allowed), preserving their exact values. Do not round artwork `em` metrics to a UI spacing scale. Static UI values
+use the Tailwind scale: `ring-[3px]` → `ring-3`, `pl-[1.625rem]` → `pl-6.5`, `border-[1.5px]` → `border-1.5`,
+`leading-[18px]` → `leading-4.5`, `line-clamp-[12]` → `line-clamp-12`; fixed radii normalize to sm/md.
+Chat prose uses existing markdown styles; code blocks use CodeBlock. Opacity/transform/filter/shadow lists
+normalize to `transition`, colour lists to `transition-colors`; a width, position or stroke list keeps its narrow
+property list as an inline `transitionProperty` beside `transition` (never widen to `transition-all`, and never add
+animation to a large list). Prefer `motion-reduce:transition-none` where motion
+is needed. Use `shadow-nav-active` for the existing 2px navigation inset and `shadow-toolbar-edge` for the sticky
+toolbar hairline. Token gradients use `bg-linear-* from-* via-* to-*`; checkerboards reuse `bg-checker`.
+Margin, padding, type, colour, radius and effect exceptions must not be smuggled through inline styles.
+
+**Case-by-case, not mechanical:** wallpaper artwork vs editor chrome; image crop/selection handles and inspector
+gradients; rich Button-to-MediaCard/ListRow conversions; semantic warning/success indicators vs toggle state;
+resource-row inactive opacity; Tip numeric content; progress custom tones; and chat prose scale/line-height.
+HierarchyNav drag-target feedback goes through `getItemDataAttributes` (`'data-drop-target': 'true'`), which
+SidebarItem and Button nav style.
+
 ### Flat tokens
 | Token | Tailwind | Use |
 |---|---|---|
@@ -114,11 +238,32 @@ recesses anything**: `data-surface="raised"` has no effect on children. `data-su
 buttons up one tone.
 
 ### Page layout
+- One column spec and one gutter, from tokens in `index.css` (never re-type the classes):
+  | Token | Value | Use |
+  |---|---|---|
+  | `--sidebar-column-width` | 232px | sidebar column width (`PageWithSidebar sidebarWidth` overrides it per page) |
+  | `--sidebar-column-padding-x` / `-top` / `-bottom` | 0.625rem / 0.875rem / 0.5rem | column inner padding; SidebarFooter's left inset |
+  | `--content-gutter` | 2rem | content side gutter beside a column |
+  | `--content-gutter-narrow` | `--theme-shell-inline-padding` | content side gutter where no column can sit beside it (narrow screens; a collapsed desktop column keeps `--content-gutter`) |
+  | `--page-gutter` | set per content column | what toolbars and bodies read (`px-(--page-gutter)`); `pageGutterStyle(besideColumn)` sets it |
+  | `--shell-content-height` | 100dvh − header | full-height pages and sticky columns |
+- `SidebarColumn` (`components/common/sidebar-layout`, `label?`, `footer?`, `className` positioning, `bodyClassName`
+  layout): the column itself — token width and padding, right hairline, own scroll. PageWithSidebar, TwoPane and the
+  chat page render it.
+- `.page-bleed`: a page root with a column cancels the shell's side and bottom padding (column runs edge to edge and
+  full height); its content column puts `pb-(--theme-shell-main-padding-bottom)` back. PageWithSidebar and `/chat`.
 - `PageWithSidebar` (`components/common/page-with-sidebar`): render it as the page root.
-  `storageKey`, `sidebar`, `sidebarLabel`, `sidebarFooter?`, `sidebarWidth?` (232), `toolbar?`, `defaultCollapsed?`.
+  `storageKey`, `sidebar`, `sidebarLabel`, `sidebarFooter?`, `sidebarWidth?` (default token), `toolbar?`, `defaultCollapsed?`.
   Desktop (`useDesktopPageLayout`, 1280px default): sticky column under the header, own scroll, right hairline,
   collapse toggle in its footer, state persisted per key. Narrow: no column; the toolbar button opens a
   `BottomDrawerSheet`. No floating frame, no pin.
+- `/chat` keeps its own full-height layout (list screen on phones, column from 768px) but uses SidebarColumn,
+  `.page-bleed` and the gutter: header row, transcript and composer sit on `--page-gutter`.
+- `TwoPane` / `TwoPaneToolbar` (`components/common/sidebar-layout`): the in-panel split (pickers inside a Modal,
+  catalog mocks). `sidebar?`, `sidebarLabel?`, `sidebarFooter?`, `bleed` (default true: cancels the Modal body padding,
+  hairline above and below; `false` inside a framed block). Column from 640px; the content pane carries `--page-gutter`
+  — put its controls in `TwoPaneToolbar` and give the body `px-(--page-gutter)`. Without `sidebar` it is a single pane
+  with the same edges (posts audio tab). Used by the post attach tabs and `MediaLibraryBrowser`.
 - `SidebarNav` / `SidebarGroupLabel` (`actions?`) / `SidebarItem` (`icon`, `label`, `count?`, `trailing?`, `active`,
   `depth?`, `asChild?`) / `SidebarFooter` (`components/ui/sidebar`). Current row = `bg-fill` + 2px primary bar.
   In the mobile drawer an item click closes the drawer.
@@ -128,7 +273,7 @@ buttons up one tone.
 - Header → content gap: the shell's main starts right under the app header (no extra top padding). The page's first
   row is its PageToolbar (or a 56px row like a tab strip), and that row's height is the gap. Don't add `pt-*` / `-mt-*`
   at a page root, and don't subtract a top gap in `calc(100dvh - header …)` heights.
-- `ExplorerSidebar` is legacy: flat, hairline, floating / pin props are inert. Migrate callers to PageWithSidebar.
+- `ExplorerSidebar` was removed (no callers left); pages with a sidebar use PageWithSidebar.
 
 ### Rows
 - `SettingRow` (`label`, `description?`, `htmlFor?`, `align?` center|start, `stacked?`, `controlClassName?`, children =
@@ -182,7 +327,8 @@ buttons up one tone.
 | Page | `background`, no glow | appearance system sets it at runtime |
 | `Section` (all variants) | flat: heading row + body, no padding / surface | `tone="raised"` = old plinth |
 | `Card` | flat | `tone="raised"` = tonal card + ambient shadow |
-| `Panel` | `tone` `low` (a real box) | `tone="none"` (no surface, hover wash when `interactive`) |
+| `Panel` | `tone` `low` (a real box) | `tone="none"` (no surface, hover wash when `interactive`; keep its padding) |
+| `MediaCard` | `flat`: no background in any state | `variant="boxed"` = surface + padded caption |
 | `Inset` | `surface-low` subtle block | only box in its area; prefer rows / text |
 | `StatTile` | flat overline label + value | `tone="fill"` |
 | `EmptyState` | no box | |
@@ -193,8 +339,20 @@ buttons up one tone.
 | Input / Select / Textarea / ToggleRow | `bg-field`, transparent border | focus: `border-primary/55` + ring |
 | `SegmentedControl` / `TabsList` | `bg-fill` tray, selected = `bg-background` key + `shadow-key`, foreground text | |
 
-Rich clickable cards (preview art + copy, media tiles) are `<Panel asChild interactive><button …/></Panel>`; clickable
-rows are `<ListRow asChild interactive><button …/></ListRow>`.
+### Media card and the background invariant
+- **Anything that can show a background (hover / active / selected) pads its text; a flat card never gets a
+  background.** An unpadded container must not receive `hover:bg-*`, `data-[selected]` tints or an interactive Panel.
+  ListRow pads itself when `interactive` or when `selected` is passed (even `false`).
+- `MediaCard` (`components/common/media-card`) is the one clickable media card: a real `<button>` (or `<a>` with
+  `href`). Slots `media`, `mediaClassName` (frame size: aspect or fixed size), `overlay` (badges over the media,
+  position them yourself), `leading`, `title`, `meta`; `selected`; `className` is grid layout only.
+  - `variant="flat"` (default): media on the page tone, caption flush with the media edge, `pt-2` gap. Never a
+    background: hover dims the media, selection is a primary ring on the media, focus a ring on the media. `inline`
+    puts the media beside the caption (compact strip chips).
+  - `variant="boxed"`: surface card (interactive Panel `low`: hover lift, focus ring, selected tint), caption in one
+    padded body (`--theme-panel-padding-x/y`).
+- Do not hand-build cards with `<Panel asChild interactive padding="none">`; clickable rows are
+  `<ListRow asChild interactive><button …/></ListRow>`.
 
 ### Button variants
 | Variant | Use | Look |
@@ -242,7 +400,7 @@ Do not restyle buttons with `bg-*`, `border`, `rounded-*` or `shadow-*` override
 ### Labels
 Overline-style labels (use `<Text variant="overline">` or the structural component; hand-rolled `tracking-overline`
 is `[ds/overline]`) (Field label, StatTile label, Badge, RowGroup heading, Section `drawer` / `settings` heading,
-anchored-popup label, PageHeader eyebrow, ExplorerSidebar title) are `text-2xs` + `tracking-overline`. `--overline-tracking` is 0.16em for Latin and
+anchored-popup label, PageHeader eyebrow) are `text-2xs` + `tracking-overline`. `--overline-tracking` is 0.16em for Latin and
 0.02em under `html:lang(ko)`, so never hard-code `tracking-[0.1Xem]` or `text-[11px]` on a label. The PageHeader eyebrow
 is a muted overline (no accent colour, no rule line); the RowGroup heading is the one overline with a rule under it.
 

@@ -616,7 +616,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
 
     return (
       <div ref={setModalShellElement} className="image-detail-modal-shell">
-        <div className={cn('image-detail-modal-layout', isModalInfoViewerOpen ? 'info-open' : 'info-collapsed')}>
+        <div className={cn('image-detail-modal-layout', !isModalInfoViewerOpen && 'info-collapsed')}>
           <section className="image-detail-modal-image-pane group/image-pane">
             <div className="image-detail-modal-toolbar">
               <div className="image-detail-modal-toolbar-inner">
@@ -638,6 +638,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               <IconButton
                 size="icon-sm"
                 variant="secondary"
+                // eslint-disable-next-line shadcn/no-restyle -- glass key straddling the image and the info pane; placement and glass live in index.css
                 className="image-detail-modal-info-reopen-desktop"
                 onClick={() => setIsModalInfoViewerOpen(true)}
                 label={modalInfoToggleLabel}
@@ -649,7 +650,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
             <div className="image-detail-modal-stage">
               {imageQuery.isLoading ? (
                 <div className="flex h-full w-full items-center justify-center p-6">
-                  <Skeleton className="h-[min(70vh,52rem)] w-full max-w-5xl rounded-sm bg-white/8" />
+                  <Skeleton radius="sm" className="h-[min(70vh,52rem)] w-full max-w-5xl" />
                 </div>
               ) : null}
 
@@ -677,8 +678,8 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
                     <EmptyState size="compact" title={t({ ko: '유사 검사는 이미지 파일만 돼', en: 'Image files only' })} />
                   ) : isSecondaryContentReady ? relatedImagesContent : (
                     <div className="space-y-4">
-                      <Skeleton className="h-10 w-48 rounded-sm" />
-                      <Skeleton className="h-64 w-full rounded-sm" />
+                      <Skeleton radius="sm" className="h-10 w-48" />
+                      <Skeleton radius="sm" className="h-64 w-full" />
                     </div>
                   )}
                 </div>
@@ -692,6 +693,7 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
               <IconButton
                 size="icon-sm"
                 variant="secondary"
+                // eslint-disable-next-line shadcn/no-restyle -- glass key straddling the image and the info pane; placement and glass live in index.css
                 className="image-detail-modal-info-toggle-desktop"
                 onClick={() => setIsModalInfoViewerOpen(false)}
                 label={modalInfoToggleLabel}
@@ -718,10 +720,10 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
             <div className="image-detail-modal-info-content image-detail-scroll-pane @min-[920px]:px-6 @min-[920px]:pt-5">
               {imageQuery.isLoading ? (
                 <div className="space-y-3">
-                  <Skeleton className="h-6 w-2/3 rounded-sm" />
-                  <Skeleton className="h-4 w-full rounded-sm" />
-                  <Skeleton className="h-4 w-5/6 rounded-sm" />
-                  <Skeleton className="h-4 w-3/4 rounded-sm" />
+                  <Skeleton radius="sm" className="h-6 w-2/3" />
+                  <Skeleton radius="sm" className="h-4 w-full" />
+                  <Skeleton radius="sm" className="h-4 w-5/6" />
+                  <Skeleton radius="sm" className="h-4 w-3/4" />
                 </div>
               ) : null}
 
@@ -745,13 +747,13 @@ export function ImageDetailView({ compositeHash, presentation = 'page', initialI
       {imageQuery.isLoading ? (
         <div className="grid xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="py-6 xl:pr-6">
-            <Skeleton className={cn('w-full rounded-sm', stageHeightClassName)} />
+            <Skeleton radius="sm" className={cn('w-full', stageHeightClassName)} />
           </div>
           <div className={cn(metaColumnClassName, 'space-y-3')}>
-            <Skeleton className="h-6 w-2/3 rounded-sm" />
-            <Skeleton className="h-4 w-full rounded-sm" />
-            <Skeleton className="h-4 w-5/6 rounded-sm" />
-            <Skeleton className="h-4 w-3/4 rounded-sm" />
+            <Skeleton radius="sm" className="h-6 w-2/3" />
+            <Skeleton radius="sm" className="h-4 w-full" />
+            <Skeleton radius="sm" className="h-4 w-5/6" />
+            <Skeleton radius="sm" className="h-4 w-3/4" />
           </div>
         </div>
       ) : null}

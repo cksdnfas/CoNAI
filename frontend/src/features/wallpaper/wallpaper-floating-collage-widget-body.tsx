@@ -314,7 +314,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
   }
 
   return (
-    <div ref={containerRef} className="relative h-full overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_14%,transparent),transparent_42%),var(--surface-low)]">
+    <div ref={containerRef} className="relative h-full overflow-hidden rounded-sm border border-border/70" style={{ backgroundImage: 'radial-gradient(circle at top,color-mix(in srgb,var(--secondary) 14%,transparent),transparent 42%),var(--surface-low)' }}>
       {images.length === 0 ? (
         <WallpaperWidgetNote>{t({ ko: '표시할 콜라주 이미지가 없어.', en: 'There are no collage images to display.' })}</WallpaperWidgetNote>
       ) : null}
@@ -343,10 +343,11 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
           backfaceVisibility: 'hidden' as const,
           transformStyle: 'preserve-3d' as const,
           transitionTimingFunction: getWallpaperAnimationEasingCss(motionEasing),
+          boxShadow: '0 18px 48px rgba(0,0,0,0.30)',
         }
         const mediaClassName = cn('h-full w-full select-none pointer-events-none', fitMode === 'contain' ? 'object-contain' : 'object-cover')
         const cardClassName = cn(
-          'absolute overflow-hidden rounded-2xl border border-white/15 shadow-[0_18px_48px_rgba(0,0,0,0.30)] will-change-transform',
+          'absolute overflow-hidden rounded-2xl border border-white/15 will-change-transform',
           'bg-transparent',
         )
         const easedTransitionProgress = previousImage
@@ -424,7 +425,7 @@ export function WallpaperFloatingCollageBody({ widget, mode, onOpenImage }: { wi
         )
       })}
 
-      {images.length > 0 ? <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_30%,color-mix(in_srgb,var(--background)_22%,transparent))]" /> : null}
+      {images.length > 0 ? <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(circle at center,transparent 30%,color-mix(in srgb,var(--background) 22%,transparent))' }} /> : null}
     </div>
   )
 }

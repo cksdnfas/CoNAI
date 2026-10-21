@@ -64,7 +64,9 @@ export function ChatDeleteDialog({ open, count = 1, book, pending, onConfirm, on
         disabled && 'cursor-not-allowed opacity-50',
       )}
     >
-      <span aria-hidden className={cn('size-3.5 shrink-0 rounded-full border-[1.5px]', checked ? 'border-primary bg-primary shadow-[inset_0_0_0_2.5px_var(--background)]' : 'border-muted-foreground/60')} />
+      <span aria-hidden className={cn('flex size-3.5 shrink-0 items-center justify-center rounded-full border-2', checked ? 'border-primary bg-background' : 'border-muted-foreground/60')}>
+        {checked ? <span className="size-1.5 rounded-full bg-primary" /> : null}
+      </span>
       <span className="min-w-0 flex-1">{label}{extra}</span>
       {trailing}
     </div>

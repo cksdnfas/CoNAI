@@ -652,8 +652,7 @@ export function CodexGenerationPanel({
                 />
                 {codexForm.referenceImage ? (
                   <IconButton
-                    variant="ghost"
-                    className="hover:text-destructive"
+                    variant="destructive-ghost"
                     onClick={() => setCodexForm((current) => ({ ...current, referenceImage: undefined, maskImage: undefined }))}
                     label={codexForm.imageMode === 'edit' ? t({ ko: '원본 이미지 제거', en: 'Remove source image' }) : t({ ko: '참조 이미지 제거', en: 'Remove reference image' })}
                   >
@@ -680,8 +679,7 @@ export function CodexGenerationPanel({
                 />
                 {codexForm.maskImage ? (
                   <IconButton
-                    variant="ghost"
-                    className="hover:text-destructive"
+                    variant="destructive-ghost"
                     onClick={() => handleFieldChange('maskImage', undefined)}
                     label={t({ ko: '마스크 제거', en: 'Remove mask' })}
                   >

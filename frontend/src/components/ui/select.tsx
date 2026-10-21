@@ -12,6 +12,8 @@ const selectVariants = cva(
         detail: 'theme-input-surface h-10 border px-3',
         detailNested: 'theme-input-surface h-10 border px-3',
       },
+      controlSize: { compact: 'h-7 px-2 text-xs' },
+      mono: { true: 'font-mono tabular-nums', false: '' },
     },
     defaultVariants: {
       variant: 'default',
@@ -20,8 +22,8 @@ const selectVariants = cva(
 )
 
 /** Render a reusable native select control with shared surface variants. */
-function Select({ className, variant, ...props }: React.ComponentProps<'select'> & VariantProps<typeof selectVariants>) {
-  return <select data-slot="select" className={cn(selectVariants({ variant }), className)} {...props} />
+function Select({ className, variant, controlSize, mono, ...props }: React.ComponentProps<'select'> & VariantProps<typeof selectVariants>) {
+  return <select data-slot="select" className={cn(selectVariants({ variant, controlSize, mono }), className)} {...props} />
 }
 
 export { Select, selectVariants }

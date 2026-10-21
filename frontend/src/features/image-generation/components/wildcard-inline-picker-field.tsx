@@ -93,6 +93,7 @@ export function WildcardInlinePickerField({
   const closeTimerRef = useRef<number | null>(null)
   const detectedPopupCloseTimerRef = useRef<number | null>(null)
   const detectedPopupRef = useRef<HTMLDivElement | null>(null)
+  const detectedCharacterPopupRef = useRef<HTMLDivElement | null>(null)
   const detectedTokenButtonRefs = useRef(new Map<string, HTMLButtonElement | null>())
   const detectedCharacterButtonRefs = useRef(new Map<string, HTMLButtonElement | null>())
   const [caretPosition, setCaretPosition] = useState(0)
@@ -298,28 +299,29 @@ export function WildcardInlinePickerField({
     }
   }, [activeDetectedCharacterKey, detectedCharacters])
 
+  // 감지 칩 팝업(구문 토큰·캐릭터 연관 태그)은 팝업과 칩 바깥을 누르면 닫는다
   useEffect(() => {
-    if (!activeDetectedTokenKey || typeof document === 'undefined') {
+    if ((!activeDetectedTokenKey && !activeDetectedCharacterKey) || typeof document === 'undefined') {
       return
     }
 
     const handlePointerDown = (event: PointerEvent) => {
-      const popupNode = detectedPopupRef.current
-      const anchor = detectedTokenButtonRefs.current.get(activeDetectedTokenKey)
       const target = event.target as Node | null
+      const isInside = (node: Node | null | undefined) => Boolean(node && target && node.contains(target))
 
-      if ((popupNode && target && popupNode.contains(target)) || (anchor && target && anchor.contains(target))) {
-        return
+      if (activeDetectedTokenKey && !isInside(detectedPopupRef.current) && !isInside(detectedTokenButtonRefs.current.get(activeDetectedTokenKey))) {
+        setActiveDetectedTokenKey(null)
       }
-
-      setActiveDetectedTokenKey(null)
+      if (activeDetectedCharacterKey && !isInside(detectedCharacterPopupRef.current) && !isInside(detectedCharacterButtonRefs.current.get(activeDetectedCharacterKey))) {
+        setActiveDetectedCharacterKey(null)
+      }
     }
 
     document.addEventListener('pointerdown', handlePointerDown, true)
     return () => {
       document.removeEventListener('pointerdown', handlePointerDown, true)
     }
-  }, [activeDetectedTokenKey])
+  }, [activeDetectedCharacterKey, activeDetectedTokenKey])
 
   const syncCaretPosition = (element: HTMLInputElement | HTMLTextAreaElement) => {
     setCaretPosition(element.selectionStart ?? element.value.length)
@@ -397,16 +399,8 @@ export function WildcardInlinePickerField({
       return
     }
 
-    const { nextValue, nextCaretPosition } = buildPromptAutocompleteInsertion(value, tagName, activeDetectedCharacter.candidate, 'append')
-
-    onChange(nextValue)
-    setCaretPosition(nextCaretPosition)
-    setActiveDetectedCharacterKey(null)
-
-    window.requestAnimationFrame(() => {
-      fieldRef.current?.focus()
-      fieldRef.current?.setSelectionRange(nextCaretPosition, nextCaretPosition)
-    })
+    // 팝업을 열어 둔 채 여러 태그를 이어 넣도록 칸으로 포커스를 옮기지 않는다 (옮기면 자동완성 팝업이 겹쳐 뜬다)
+    onChange(buildPromptAutocompleteInsertion(value, tagName, activeDetectedCharacter.candidate, 'append').nextValue)
   }
 
   const applyValueWithCaret = (nextValue: string, nextCaretPosition: number) => {
@@ -758,7 +752,7 @@ export function WildcardInlinePickerField({
             <div key={token.key} className="flex flex-wrap items-center gap-1">
               <span>{t({ ko: `⚠ ${token.name}: 찾을 수 없어 생성할 때 빈 값으로 들어가요.`, en: `⚠ ${token.name}: not found, becomes empty at generation.` })}</span>
               {status.suggestion ? (
-                <Button type="button" size="xs" variant="ghost" className="underline" onClick={() => handleRenameRandomToken(token, status.source, status.suggestion ?? token.name)}>
+                <Button type="button" size="xs" variant="link" onClick={() => handleRenameRandomToken(token, status.source, status.suggestion ?? token.name)}>
                   {t({ ko: `혹시 ${status.suggestion}?`, en: `Did you mean ${status.suggestion}?` })}
                 </Button>
               ) : null}
@@ -821,6 +815,7 @@ export function WildcardInlinePickerField({
       {showDetectedSyntax && activeDetectedCharacter && detectedCharacterPopupPosition ? (
         <PromptAutocompletePopup
           position={detectedCharacterPopupPosition}
+          popupRef={detectedCharacterPopupRef}
           suggestions={[]}
           activeCharacter={activeDetectedCharacter.suggestion}
           isLoading={false}

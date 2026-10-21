@@ -9,7 +9,7 @@ import type { LlmPresetOptionCollections, LlmPresetOptionRecord } from '@/lib/ap
 import type { GraphExecutionArtifactRecord, ModulePortDefinition } from '@/lib/api-module-graph'
 import { hasPowerLoraLoaderEntries, isPowerLoraLoaderUiField } from './power-lora-loader-input'
 import { TechnicalReferenceHint, getModuleGraphPortTypeLabel, hasMeaningfulValue } from './module-graph-field-shared'
-import { compareGraphArtifactsNewestFirst, getModuleNodeDisplayLabel, getVisibleModuleOutputPorts, isAdvancedOutputPortsEnabled, normalizeModulePortDescription, parseHandleId, type ModuleGraphNode } from '../module-graph-shared'
+import { compareGraphArtifactsNewestFirst, getModuleNodeDisplayLabel, getModuleOperationKey, getVisibleModuleOutputPorts, isAdvancedOutputPortsEnabled, normalizeModulePortDescription, parseHandleId, type ModuleGraphNode } from '../module-graph-shared'
 
 export type ResolvedEdgeEndpoint = {
   node: ModuleGraphNode | null
@@ -115,11 +115,31 @@ export function PortHeader({
   )
 }
 
-export function isConfigOnlyNodeField(node: ModuleGraphNode, fieldKey: string) {
-  const uiField = findNodeUiField(node, fieldKey)
+/** Value one node input has when nothing links it: the stored value, else the port / UI-schema default. */
+export function getNodeInputValue(node: ModuleGraphNode, fieldKey: string) {
   const port = (node.data.module.exposed_inputs ?? []).find((inputPort) => inputPort.key === fieldKey)
-  const value = node.data.inputValues?.[fieldKey] ?? port?.default_value ?? uiField?.default_value
-  return isPowerLoraLoaderUiField(uiField) || hasPowerLoraLoaderEntries(value)
+  return node.data.inputValues?.[fieldKey] ?? port?.default_value ?? findNodeUiField(node, fieldKey)?.default_value
+}
+
+/**
+ * Model of a NovelAI node (the built-in system node or a module saved from the NAI tab), or undefined when it is not
+ * NAI or another node links the model (known only at run time).
+ */
+export function getNaiNodeModel(node: ModuleGraphNode) {
+  const { module } = node.data
+  const isNaiNode = module.engine_type === 'nai' || getModuleOperationKey(module) === 'system.generate_image_nai'
+  if (!isNaiNode || node.data.connectedInputKeys?.includes('model')) return undefined
+  // Same order as the server's resolveNodeInputs: a module saved from the NAI tab keeps its model in the fixed values.
+  const model = node.data.inputValues?.model
+    ?? (module.exposed_inputs ?? []).find((port) => port.key === 'model')?.default_value
+    ?? module.internal_fixed_values?.model
+    ?? module.template_defaults?.model
+    ?? findNodeUiField(node, 'model')?.default_value
+  return typeof model === 'string' ? model : undefined
+}
+
+export function isConfigOnlyNodeField(node: ModuleGraphNode, fieldKey: string) {
+  return isPowerLoraLoaderUiField(findNodeUiField(node, fieldKey)) || hasPowerLoraLoaderEntries(getNodeInputValue(node, fieldKey))
 }
 
 export function getEditableNodeInputPorts(node: ModuleGraphNode) {
@@ -165,7 +185,7 @@ export function EdgeEndpointCard({
   const { t } = useI18n()
 
   return (
-    <Panel tone="container" padding="none" className="px-3 py-3">
+    <Panel tone="container" padding="sm">
       <Text as="div" variant="overline">{heading}</Text>
       <div className="mt-2 flex items-center gap-1">
         <div className="text-sm font-medium text-foreground">{endpoint.node ? getModuleNodeDisplayLabel(endpoint.node) : t({ ko: '알 수 없는 노드', en: 'Unknown node' })}</div>

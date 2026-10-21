@@ -5,6 +5,7 @@ import type { PostBotRun, PostComment, PostDetail, PostMentionableProfile } from
 import { Check, CornerDownRight, Eye, EyeOff, MessageSquareReply, Pencil, Send, Trash2, X } from 'lucide-react'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
+import { ListRow } from '@/components/ui/list-row'
 import { ErrorState } from '@/components/ui/error-state'
 import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -37,7 +38,7 @@ export type PostCommentDraft = { top: string; reply: { to: number; text: string 
 export const EMPTY_COMMENT_DRAFT: PostCommentDraft = { top: '', reply: null, edit: null }
 
 /** A one-line box that grows with its text, with its buttons inside (comment, reply and edit boxes). */
-const BOX = 'theme-input-surface flex items-end gap-0.5 rounded-sm border py-1 pr-1 pl-3 transition-[border-color,box-shadow] focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15'
+const BOX = 'theme-input-surface flex items-end gap-0.5 rounded-sm border py-1 pr-1 pl-3 transition focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15'
 const BOX_INPUT = 'max-h-60 min-h-7 flex-1 resize-none bg-transparent py-1 text-sm text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground'
 
 /** A comment box; `@` opens the list of bots the viewer may call. Its text is held by the caller. */
@@ -126,21 +127,22 @@ function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, pla
       {options.length ? (
         <div role="listbox" data-surface="high" className={cn(floatingSurfaceClassName, 'absolute bottom-full left-0 z-20 mb-1 w-72 max-w-full p-1')}>
           {options.map((profile, index) => (
-            <Button
+            <ListRow
               key={profile.id}
-              variant="ghost"
-              role="option"
-              aria-selected={index === highlight}
-              onMouseDown={(event) => { event.preventDefault(); choose(profile) }}
-              onMouseEnter={() => setHighlight(index)}
-              className={cn('h-auto w-full justify-start gap-2 px-2 py-1.5 text-left font-normal', index === highlight && 'bg-fill')}
+              asChild
+              interactive
+              selected={index === highlight}
+              leading={<ChatProfileAvatar name={profile.name} imageUrl={profile.avatarUrl ? buildApiUrl(profile.avatarUrl) : null} avatarCrop={profile.avatarCrop} engine="llm" size="sm" />}
             >
-              <ChatProfileAvatar name={profile.name} imageUrl={profile.avatarUrl ? buildApiUrl(profile.avatarUrl) : null} avatarCrop={profile.avatarCrop} engine="llm" size="sm" />
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate text-sm font-medium">{profile.name}</span>
-                {profile.tagline ? <span className="truncate text-xs text-muted-foreground">{profile.tagline}</span> : null}
-              </span>
-            </Button>
+              <button type="button" role="option" aria-selected={index === highlight}
+                onMouseDown={(event) => { event.preventDefault(); choose(profile) }}
+                onMouseEnter={() => setHighlight(index)}>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-sm font-medium">{profile.name}</span>
+                  {profile.tagline ? <span className="truncate text-xs text-muted-foreground">{profile.tagline}</span> : null}
+                </span>
+              </button>
+            </ListRow>
           ))}
         </div>
       ) : null}
@@ -158,7 +160,7 @@ function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, pla
           className={BOX_INPUT}
         />
         {onDone && parentId ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '답글 닫기', en: 'Close reply' })} onClick={onDone}><X /></IconButton> : null}
-        <IconButton size="icon-sm" variant="ghost" className="text-primary hover:text-primary" label={t({ ko: '등록', en: 'Post' })} disabled={!text.trim() || mutation.isPending} onClick={() => mutation.mutate()}><Send /></IconButton>
+        <IconButton size="icon-sm" variant="ghost" label={t({ ko: '등록', en: 'Post' })} disabled={!text.trim() || mutation.isPending} onClick={() => mutation.mutate()}><Send /></IconButton>
       </div>
     </div>
   )
@@ -257,7 +259,7 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMentio
         id={`comment-${comment.id}`}
         onPointerDown={(event) => { pointerType.current = event.pointerType }}
         onClick={replyOnClick ? (event) => { if (isReplyClick(event) && Date.now() - touchMenuAt.current > 800) onReply() } : undefined}
-        className={cn('grid scroll-mt-20 grid-cols-[2rem_1fr_auto] gap-x-2.5 rounded-sm py-2.5 transition-[background-color] duration-700 [-webkit-touch-callout:none]', reply && 'pl-10', replyOnClick && 'cursor-pointer', comment.status === 'hidden' && 'opacity-60', focused && 'bg-primary/10')}
+        className={cn('grid scroll-mt-20 grid-cols-[2rem_1fr_auto] gap-x-2.5 rounded-sm px-2 py-2.5 transition-colors duration-700 [-webkit-touch-callout:none]', reply && 'pl-10', replyOnClick && 'cursor-pointer', comment.status === 'hidden' && 'opacity-60', focused && 'bg-primary/10')}
       >
         <PostAuthorAvatar author={comment.author} size="md" />
         <div className="flex min-w-0 flex-col gap-1">
@@ -283,13 +285,13 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMentio
                   if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setEditing(null) }
                 }} />
               <IconButton size="icon-sm" variant="ghost" label={t({ ko: '취소', en: 'Cancel' })} onClick={() => setEditing(null)}><X /></IconButton>
-              <IconButton size="icon-sm" variant="ghost" className="text-primary hover:text-primary" label={t({ ko: '저장', en: 'Save' })} disabled={!editing.trim() || save.isPending} onClick={saveEdit}><Check /></IconButton>
+              <IconButton size="icon-sm" variant="ghost" label={t({ ko: '저장', en: 'Save' })} disabled={!editing.trim() || save.isPending} onClick={saveEdit}><Check /></IconButton>
             </div>
           ) : (
             <PostMarkdown text={comment.body} mentions={mentionNames} className="text-sm [&_.post-media]:max-w-xs" />
           )}
         </div>
-        <ActionMenuButton entries={entries} size="icon-xs" className="text-muted-foreground/60" label={t({ ko: '댓글 메뉴', en: 'Comment menu' })} />
+        <ActionMenuButton entries={entries} size="icon-xs" label={t({ ko: '댓글 메뉴', en: 'Comment menu' })} />
       </div>
     </ActionContextMenu>
   )

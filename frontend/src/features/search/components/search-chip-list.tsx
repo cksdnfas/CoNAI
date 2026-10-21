@@ -36,17 +36,17 @@ export function SearchChipList({
 
   return (
     <div className={cn('space-y-2', className)}>
-      {resolvedTitle ? <Text as="div" variant="overline" className="font-semibold">{resolvedTitle}</Text> : null}
+      {resolvedTitle ? <Text as="div" variant="overline">{resolvedTitle}</Text> : null}
       {chips.length === 0 && resolvedEmptyMessage ? <p className="py-2 text-sm text-muted-foreground">{resolvedEmptyMessage}</p> : null}
       {chips.length > 0 ? (
         <div>
           {chips.map((chip) => (
-            <ListRow key={chip.id} className="gap-2">
+            <ListRow key={chip.id}>
               <span className="rounded-sm px-2 py-1 text-2xs font-semibold" style={getSearchScopeStyle(chip.scope)}>
                 {t(SEARCH_SCOPE_LABEL_KEYS[chip.scope])}
               </span>
               {isFixedOperatorChip(chip) ? (
-                <Chip tone="primary" className="font-bold">{t(SEARCH_OPERATOR_LABELS[chip.operator])}</Chip>
+                <Chip tone="primary">{t(SEARCH_OPERATOR_LABELS[chip.operator])}</Chip>
               ) : (
                 <Tip content={[t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator]), t(SEARCH_OPERATOR_CYCLE_HINT)].join('\n')} className="whitespace-pre-line">
                   <Button
@@ -54,7 +54,6 @@ export function SearchChipList({
                     variant="subtle"
                     size="xs"
                     onClick={() => onCycleOperator(chip.id)}
-                    className="bg-primary/10 font-bold text-primary hover:bg-primary/18 hover:text-primary"
                     aria-label={t(
                       { ko: '{label}: {operator}. {hint}', en: '{label}: {operator}. {hint}' },
                       { label: chip.label, operator: t(SEARCH_OPERATOR_DESCRIPTIONS[chip.operator]), hint: t(SEARCH_OPERATOR_CYCLE_HINT) },

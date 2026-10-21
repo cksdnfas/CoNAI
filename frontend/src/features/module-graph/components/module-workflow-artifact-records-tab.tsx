@@ -120,6 +120,7 @@ export function ModuleWorkflowArtifactRecordsTab({
             interactive
             data-selected={isSelected}
             data-image-id={String(artifact.id)}
+            // eslint-disable-next-line shadcn/no-restyle -- Shared image selection uses this DOM hook; it adds no presentation.
             className="image-list-selectable"
             onClick={() => {
               if (shouldSuppressClick()) {

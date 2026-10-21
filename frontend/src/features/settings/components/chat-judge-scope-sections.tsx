@@ -9,7 +9,6 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
-import { GROW_TEXTAREA } from './chat-profile-editor-fields'
 import { useSettingsAdvanced } from './settings-advanced'
 
 export type JudgeScopes = { room: ChatJudgeRoomSettings; context: ChatJudgeContextSettings; fields: ChatJudgeFieldSettings; assets: ChatJudgeAssetSettings }
@@ -52,7 +51,7 @@ function ScopeSwitch({ label, checked, onChange, children }: { label: string; ch
   const advanced = useSettingsAdvanced()
   return (
     <div className="border-b border-line last:border-b-0">
-      <SettingsSwitchRow className="border-b-0" label={label} checked={checked} onCheckedChange={onChange} />
+      <SettingsSwitchRow label={label} checked={checked} onCheckedChange={onChange} />
       {checked && advanced && children ? <div className="space-y-3 pb-4">{children}</div> : null}
     </div>
   )
@@ -73,11 +72,11 @@ export function JudgeRoomPane({ value, onChange }: ScopePaneProps) {
       <div className="border-t border-line">
         <ScopeSwitch label={t({ ko: '답할 사람 고르기', en: 'Pick who answers' })} checked={room.route.enabled} onChange={(enabled) => patchRoom({ route: { ...room.route, enabled } })}>
           <ThresholdField label={t({ ko: '고를 확률', en: 'Pick at' })} value={room.route.minProbability} onChange={(minProbability) => patchRoom({ route: { ...room.route, minProbability } })} />
-          <Textarea variant="settings" className={GROW_TEXTAREA} value={room.route.instructions} maxLength={2000} aria-label={t({ ko: '답할 사람 질문', en: 'Who-answers question' })} placeholder={defaultQuestion} onChange={(event) => patchRoom({ route: { ...room.route, instructions: event.target.value } })} />
+          <Textarea variant="settings" autoGrow value={room.route.instructions} maxLength={2000} aria-label={t({ ko: '답할 사람 질문', en: 'Who-answers question' })} placeholder={defaultQuestion} onChange={(event) => patchRoom({ route: { ...room.route, instructions: event.target.value } })} />
         </ScopeSwitch>
         <ScopeSwitch label={t({ ko: '이어 말하기 판단', en: 'Judge speaking on' })} checked={room.next.enabled} onChange={(enabled) => patchRoom({ next: { ...room.next, enabled } })}>
           <ThresholdField label={t({ ko: '이어갈 확률', en: 'Go on at' })} value={room.next.continueThreshold} onChange={(continueThreshold) => patchRoom({ next: { ...room.next, continueThreshold } })} />
-          <Textarea variant="settings" className={GROW_TEXTAREA} value={room.next.instructions} maxLength={2000} aria-label={t({ ko: '이어 말하기 질문', en: 'Speaking-on question' })} placeholder={defaultQuestion} onChange={(event) => patchRoom({ next: { ...room.next, instructions: event.target.value } })} />
+          <Textarea variant="settings" autoGrow value={room.next.instructions} maxLength={2000} aria-label={t({ ko: '이어 말하기 질문', en: 'Speaking-on question' })} placeholder={defaultQuestion} onChange={(event) => patchRoom({ next: { ...room.next, instructions: event.target.value } })} />
         </ScopeSwitch>
         {room.route.enabled || room.next.enabled ? <WindowRow value={room.window} onChange={(window) => patchRoom({ window })} /> : null}
       </div>

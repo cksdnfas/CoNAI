@@ -1,4 +1,4 @@
-import type { ChatPageField, GenerationLayoutSurface, InstalledPlugin, PluginGenerationActionResult, PluginInstance, PluginWriteProposal } from '@conai/shared'
+import type { ChatPageField, GenerationLayoutSurface, InstalledPlugin, PluginGenerationActionResult, PluginInstallResult, PluginInstance, PluginSourceCheck, PluginSourceInput, PluginSourceReview, PluginWriteProposal } from '@conai/shared'
 import { requestApiData } from './api-request'
 import { buildApiUrl } from './api-url'
 
@@ -13,6 +13,10 @@ export function pluginRequest<T>(suffix: string, method = 'GET', body?: unknown,
 }
 export const PLUGINS_QUERY_KEY = ['plugins'] as const
 export const listPlugins = () => pluginRequest<InstalledPlugin[]>('')
+export const reviewPluginSource = (input: PluginSourceInput) => pluginRequest<PluginSourceReview>('/sources/review', 'POST', input)
+export const installPluginSource = (review: Pick<PluginSourceReview, 'reviewId' | 'digest'>) => pluginRequest<PluginInstallResult>('/sources/install', 'POST', { reviewId: review.reviewId, digest: review.digest })
+export const checkPluginSources = (pluginId?: string) => pluginRequest<PluginSourceCheck[]>('/sources/check', 'POST', pluginId ? { pluginId } : {})
+export const unlinkPluginSource = (pluginId: string) => pluginRequest<void>(`/${encodeURIComponent(pluginId)}/source`, 'DELETE')
 export const openPlugin = (id: string, page: string, files: string[], workspace?: { id: string; write: boolean }) => pluginRequest<PluginInstance>(`/${encodeURIComponent(id)}/pages/${encodeURIComponent(page)}/instances`, 'POST', { files, ...(workspace ? { workspace } : {}) })
 export const proposePluginWrite = (instance: string, value: unknown, signal?: AbortSignal) => pluginRequest<PluginWriteProposal>(`/instances/${instance}/proposals`, 'POST', value, signal)
 /** A plugin's button next to Generate: the screen's form goes to its server module, which may answer with values to fill. */

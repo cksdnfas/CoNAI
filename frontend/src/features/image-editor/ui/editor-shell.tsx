@@ -120,7 +120,7 @@ function ColorSwatch({ label, color, onChange, small = false }: { label: string;
     <Tip content={label} side="right">
       <label className={cn('relative flex shrink-0 cursor-pointer items-center justify-center', small ? 'size-8' : 'size-10')}>
         <span
-          className={cn('block rounded-full shadow-[0_0_0_2px_var(--background),0_0_0_3px_color-mix(in_srgb,var(--foreground)_35%,transparent)]', small ? 'size-4.5' : 'size-5.5')}
+          className={cn('block rounded-full ring-1 ring-foreground/35 ring-offset-2 ring-offset-background', small ? 'size-4.5' : 'size-5.5')}
           style={{ background: color }}
         />
         <input type="color" value={color} aria-label={label} className="absolute inset-0 cursor-pointer opacity-0" onChange={(event) => onChange(event.target.value)} />
@@ -444,7 +444,7 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
   const ready = snapshot.status === 'ready'
 
   const saveButton = (
-    <Button size="sm" className="shrink-0 px-4.5 font-bold" disabled={!ready || saving} onClick={onSave}>
+    <Button size="sm" className="shrink-0" disabled={!ready || saving} onClick={onSave}>
       {saving ? t({ ko: '저장 중…', en: 'Saving…' }) : t({ ko: '저장', en: 'Save' })}
     </Button>
   )
@@ -533,7 +533,7 @@ export function EditorShell({ engine, snapshot, stageRef, rootRef, fileName, mas
                 <Minus className="size-3.5" />
               </IconButton>
               <Tip content={t({ ko: '100% (Ctrl+1)', en: '100% (Ctrl+1)' })}>
-                <Button variant="ghost" size="xs" className="min-w-11 px-1 text-foreground tabular-nums" onClick={() => engine.zoomTo(1)}>
+                <Button variant="ghost" size="xs" className="min-w-11 tabular-nums" onClick={() => engine.zoomTo(1)}>
                   {Math.round(snapshot.zoom * 100)}%
                 </Button>
               </Tip>

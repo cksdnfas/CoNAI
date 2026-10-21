@@ -9,6 +9,8 @@ import { ErrorState } from '@/components/ui/error-state'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { SearchField } from '@/components/common/search-field'
+import { TwoPane, TwoPaneToolbar } from '@/components/common/sidebar-layout'
+import { SidebarItem } from '@/components/ui/sidebar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
@@ -136,10 +138,7 @@ export function MediaLibraryBrowser({
   }
   const side = (
     <div className="space-y-1">
-      <Button variant="nav" size="sm" className="w-full px-2" data-active={groupId === null ? 'true' : undefined} aria-current={groupId === null ? 'true' : undefined} onClick={() => selectGroup(null)}>
-        <Images className="text-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate text-left">{t({ ko: '전체 미디어', en: 'All media' })}</span>
-      </Button>
+      <SidebarItem icon={Images} label={t({ ko: '전체 미디어', en: 'All media' })} active={groupId === null} onClick={() => selectGroup(null)} />
       {groupsQuery.isError ? <ErrorState size="compact" title={t({ ko: '그룹을 불러오지 못했어.', en: 'Could not load groups.' })} error={groupsQuery.error} onRetry={() => void groupsQuery.refetch()} /> : null}
       {groups.length ? <div className="border-t border-line pt-1">
         <GroupTree groups={groups} countMaps={countMaps} selectedGroupId={groupId ?? undefined} onSelectGroup={selectGroup} getGroupMenu={getGroupMenu} pickedGroupIds={pickedGroupIds} />
@@ -150,13 +149,11 @@ export function MediaLibraryBrowser({
   const selectedGroup = groupId !== null ? groups.find((group) => group.id === groupId) : undefined
   if (!canViewImages) return <EmptyState title={t({ ko: '미디어 보기 권한이 필요해.', en: 'Media viewing permission is required.' })} />
   return (
-    <div className="-mx-4 flex min-h-0 flex-1 border-y border-line md:-mx-5">
-      <nav aria-label={t({ ko: '미디어 그룹', en: 'Media groups' })} className="hidden w-60 shrink-0 overflow-y-auto border-r border-line p-2 sm:block">{side}</nav>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-2.5">
+    <TwoPane sidebar={side} sidebarLabel={t({ ko: '미디어 그룹', en: 'Media groups' })}>
+        <TwoPaneToolbar>
           <Popover open={groupOpen} onOpenChange={setGroupOpen}>
             <PopoverTrigger asChild><IconButton className="sm:hidden" variant="ghost" label={t({ ko: '미디어 그룹', en: 'Media groups' })}><FolderTree /></IconButton></PopoverTrigger>
-            <PopoverContent align="start" className="max-h-[60vh] overflow-y-auto p-2">{side}</PopoverContent>
+            <PopoverContent align="start" padding="sm" className="max-h-[60vh] overflow-y-auto">{side}</PopoverContent>
           </Popover>
           <div className="flex min-w-40 flex-1 items-center gap-1">
             <SearchField value={input} onChange={setInput} maxLength={300}
@@ -186,8 +183,8 @@ export function MediaLibraryBrowser({
               {order === 'DESC' ? <ArrowDownWideNarrow /> : <ArrowUpNarrowWide />}
             </IconButton>
           </> : <span className="text-xs tabular-nums text-muted-foreground">{selectedGroup ? formatNumber(getGroupHierarchyTotalCount(selectedGroup, countMaps)) : null}</span>}
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col px-3 pb-2">
+        </TwoPaneToolbar>
+        <div className="flex min-h-0 flex-1 flex-col px-(--page-gutter) pb-2">
           {query.isPending ? <div className="flex flex-1 items-center justify-center"><Spinner label={t({ ko: '불러오는 중', en: 'Loading' })} /></div>
             : query.isError && !items.length ? <ErrorState size="compact" className="mt-2" title={t({ ko: '미디어를 불러오지 못했어.', en: 'Could not load media.' })} error={query.error} onRetry={() => void query.refetch()} />
             : safety.visibleItems.length ? <ImageList
@@ -201,7 +198,6 @@ export function MediaLibraryBrowser({
           {query.isError && items.length > 0 ? <ErrorState size="compact" title={t({ ko: '미디어를 불러오지 못했어.', en: 'Could not load media.' })} error={query.error} onRetry={() => void (query.isFetchNextPageError ? query.fetchNextPage() : query.refetch())} /> : null}
           {!query.isError && query.hasNextPage && !safety.visibleItems.length ? <Button variant="secondary" disabled={query.isFetchingNextPage} onClick={loadMore}>{t({ ko: '더 보기', en: 'Load more' })}</Button> : null}
         </div>
-      </div>
-    </div>
+    </TwoPane>
   )
 }

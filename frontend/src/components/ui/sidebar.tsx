@@ -133,6 +133,7 @@ function SidebarItem({
     'flex min-h-9 w-full min-w-0 items-center gap-2.5 rounded-sm px-2.5 text-left text-sm text-muted-foreground transition-colors outline-none',
     'hover:bg-fill hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50',
     'data-[active=true]:bg-fill data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-[inset_2px_0_0_var(--primary)]',
+    'data-[drop-target=true]:bg-primary/20 data-[drop-target=true]:text-foreground data-[drop-target=true]:ring-2 data-[drop-target=true]:ring-primary/60',
     className,
   )
   const rowStyle = depth > 0 ? { paddingLeft: `calc(0.625rem + ${depth} * 1rem)`, ...style } : style
@@ -169,12 +170,15 @@ function SidebarItem({
   )
 }
 
-/** Bottom row of the sidebar column (version, small actions). PageWithSidebar adds the collapse toggle itself. */
+/**
+ * Bottom row of the sidebar column (version, small actions). PageWithSidebar adds the collapse toggle itself. Left
+ * inset = the column's padding token; the right inset is tighter so a trailing icon key sits near the hairline.
+ */
 function SidebarFooter({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       data-slot="sidebar-footer"
-      className={cn('flex min-h-11 items-center justify-between gap-2 px-2.5 text-2xs text-muted-foreground/75', className)}
+      className={cn('flex min-h-11 items-center justify-between gap-2 pl-(--sidebar-column-padding-x) pr-2 text-2xs text-muted-foreground/75', className)}
       {...props}
     />
   )

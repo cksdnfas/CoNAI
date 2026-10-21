@@ -87,7 +87,7 @@ export function WildcardExplorerSidebarPanel({
         {tabLabel} <span className="ml-1 tabular-nums">{countLabel}</span>
       </SidebarGroupLabel>
 
-      {isLoading ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="my-0.5 h-8 w-full rounded-sm" />) : null}
+      {isLoading ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} radius="sm" className="my-0.5 h-8 w-full" />) : null}
 
       {isError ? (
         <Alert variant="destructive" className="mt-2">

@@ -327,6 +327,7 @@ export async function removePlugin(id: string) {
   const db = pluginDb()
   db.transaction(() => {
     db.prepare('DELETE FROM plugins WHERE id = ?').run(id)
+    db.prepare('DELETE FROM plugin_sources WHERE plugin_id = ?').run(id)
     db.prepare('DELETE FROM plugin_storage WHERE plugin_id = ?').run(id)
     db.prepare("DELETE FROM plugin_app_requests WHERE plugin_id = ? AND status NOT IN ('starting','running')").run(id)
   })()

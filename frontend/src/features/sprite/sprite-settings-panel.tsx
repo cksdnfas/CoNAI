@@ -97,7 +97,7 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
           label={t({ ko: '연속 중복 프레임 빼기', en: 'Drop repeated frames' })}
           checked={form.removeDuplicateFrames}
           onCheckedChange={(checked) => update({ removeDuplicateFrames: checked })}
-          extra={form.removeDuplicateFrames ? <NumberStepperInput className="h-7 w-32 text-xs" value={form.similarityPercent} min={1} max={100} step={0.5} onValueCommit={(value) => update({ similarityPercent: Math.max(1, Math.min(100, Number(value) || 99)) })} aria-label={t({ ko: '유사도 %', en: 'Similarity %' })} /> : undefined}
+          extra={form.removeDuplicateFrames ? <NumberStepperInput controlSize="compact" className="w-32" value={form.similarityPercent} min={1} max={100} step={0.5} onValueCommit={(value) => update({ similarityPercent: Math.max(1, Math.min(100, Number(value) || 99)) })} aria-label={t({ ko: '유사도 %', en: 'Similarity %' })} /> : undefined}
         />
       </SpriteSection>
 
@@ -137,7 +137,7 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
           label={t({ ko: '자동 크롭', en: 'Auto crop' })}
           checked={form.autoCrop}
           onCheckedChange={(checked) => update({ autoCrop: checked })}
-          extra={form.autoCrop ? <NumberStepperInput className="h-7 w-32 text-xs" value={form.alphaThreshold} min={1} max={255} step={1} onValueCommit={(value) => update({ alphaThreshold: Math.max(1, Math.min(255, Number(value) || 20)) })} aria-label={t({ ko: '알파 임계값', en: 'Alpha threshold' })} /> : undefined}
+          extra={form.autoCrop ? <NumberStepperInput controlSize="compact" className="w-32" value={form.alphaThreshold} min={1} max={255} step={1} onValueCommit={(value) => update({ alphaThreshold: Math.max(1, Math.min(255, Number(value) || 20)) })} aria-label={t({ ko: '알파 임계값', en: 'Alpha threshold' })} /> : undefined}
         />
         <SwitchLine
           label={t({ ko: '사전 크롭', en: 'Pre-crop' })}

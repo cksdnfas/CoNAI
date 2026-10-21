@@ -25,7 +25,6 @@ import {
   type AudioWorkflowRole,
 } from '@/lib/api-audio'
 import { getErrorMessage } from '@/lib/error-message'
-import { cn } from '@/lib/utils'
 import {
   AUDIO_SHORTCUT_ACTIONS,
   DEFAULT_AUDIO_SHORTCUTS,
@@ -296,9 +295,10 @@ function ShortcutTab() {
               onClick={() => { setError(null); setCapturing(action) }}
               onBlur={() => setCapturing((current) => (current === action ? null : current))}
               onKeyDown={(event) => { if (capturing === action) capture(action, event) }}
-              className={cn('min-w-16 font-mono', capturing === action && 'text-primary')}
+              data-pressed={capturing === action ? 'true' : undefined}
+              className="min-w-16"
             >
-              {capturing === action ? '…' : shortcutLabel(shortcuts[action])}
+              <span className="font-mono">{capturing === action ? '…' : shortcutLabel(shortcuts[action])}</span>
             </Button>
           </li>
         ))}

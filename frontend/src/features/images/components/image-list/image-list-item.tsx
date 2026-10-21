@@ -212,12 +212,12 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       onKeyDown={handleKeyDown}
     >
       <div className="relative overflow-hidden rounded-sm bg-surface-lowest select-none">
-        <div className={cn('transition duration-300', blurPreview && 'scale-[1.03] blur-2xl saturate-[0.55]')}>
+        <div className={cn('transition duration-300', blurPreview && 'scale-103 blur-2xl saturate-55')}>
           {content}
         </div>
         {blurPreview ? <div className="pointer-events-none absolute inset-0 z-10 bg-backdrop/25" /> : null}
       </div>
-      {renderPersistentOverlay || soundBar ? <div className="image-list-persistent-overlay absolute inset-x-0 bottom-0 z-30 space-y-1 p-2">{soundBar}{renderPersistentOverlay}</div> : null}
+      {renderPersistentOverlay || soundBar ? <div className="absolute inset-x-0 bottom-0 z-30 space-y-1 p-2">{soundBar}{renderPersistentOverlay}</div> : null}
       {quickActions}
       <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
     </div>

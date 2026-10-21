@@ -125,6 +125,7 @@ const TOOL_SCOPES: Record<string, McpHttpScope> = {
   read_plugin_draft: 'configure',
   edit_plugin_draft: 'configure',
   prepare_plugin_install: 'configure',
+  check_plugin_updates: 'configure',
   run_plugin_action: 'read',
   get_plugin_action: 'read',
   cancel_plugin_action: 'read',

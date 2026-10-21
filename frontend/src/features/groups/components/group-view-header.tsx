@@ -83,10 +83,12 @@ export function GroupViewHeader({
 
   const autoCollectChip = isCustomSource && autoCollect ? (
     <Tip content={autoCollectLabel}>
-      <Chip tone={autoCollect.enabled ? 'primary' : 'muted'} tabIndex={0} aria-label={autoCollectLabel} className="outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
-        <Bot />
-        {autoCollect.enabled ? formatNumber(autoCollect.conditionCount) : null}
-      </Chip>
+      <span tabIndex={0} aria-label={autoCollectLabel} className="outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+        <Chip tone={autoCollect.enabled ? 'primary' : 'muted'}>
+          <Bot />
+          {autoCollect.enabled ? formatNumber(autoCollect.conditionCount) : null}
+        </Chip>
+      </span>
     </Tip>
   ) : null
 
@@ -167,13 +169,13 @@ export function GroupViewHeader({
     </div>
   ) : (
     <nav aria-label={t({ ko: '그룹 경로', en: 'Group path' })} className="flex min-w-0 items-center gap-1">
-      <Button type="button" variant="link" size="xs" className="h-auto shrink-0 px-0.5 text-sm font-normal text-muted-foreground" onClick={onOpenRoot}>
+      <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={onOpenRoot}>
         {rootLabel}
       </Button>
       {ancestors.map((item) => (
         <span key={item.id} className="flex min-w-0 items-center gap-1">
           <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <Button type="button" variant="link" size="xs" className="h-auto max-w-40 truncate px-0.5 text-sm font-normal text-muted-foreground" onClick={() => onOpenGroup(item.id)}>
+          <Button type="button" variant="ghost" size="sm" className="max-w-40 truncate" onClick={() => onOpenGroup(item.id)}>
             {item.name}
           </Button>
         </span>

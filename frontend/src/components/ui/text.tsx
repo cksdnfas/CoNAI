@@ -16,6 +16,18 @@ const textVariants = cva('', {
       /** Inline card/row title that is not a document heading. */
       title: 'text-sm font-semibold text-foreground',
     },
+    tone: {
+      default: 'text-foreground',
+      muted: 'text-muted-foreground',
+      primary: 'text-primary',
+      secondary: 'text-secondary-text',
+      destructive: 'text-destructive',
+      success: 'text-success',
+      warning: 'text-warning',
+      info: 'text-info',
+      inherit: 'text-inherit',
+    },
+    mono: { true: 'font-mono tabular-nums', false: '' },
   },
   defaultVariants: {
     variant: 'body',
@@ -30,11 +42,11 @@ type TextProps<T extends TextElement = 'p'> = {
 } & VariantProps<typeof textVariants> & Omit<ComponentPropsWithoutRef<T>, 'as'>
 
 /** Render text in one of the shared type roles. */
-function Text<T extends TextElement = 'p'>({ as, variant, className, ...props }: TextProps<T>) {
+function Text<T extends TextElement = 'p'>({ as, variant, tone, mono, className, ...props }: TextProps<T>) {
   // The element union is too wide for TS to check spread props per tag; `TextProps<T>` already did.
   const Comp = (as ?? 'p') as ElementType<ComponentPropsWithoutRef<'p'>>
 
-  return <Comp data-slot="text" className={cn(textVariants({ variant }), className)} {...(props as ComponentPropsWithoutRef<'p'>)} />
+  return <Comp data-slot="text" className={cn(textVariants({ variant, tone, mono }), className)} {...(props as ComponentPropsWithoutRef<'p'>)} />
 }
 
 export { Text, textVariants }

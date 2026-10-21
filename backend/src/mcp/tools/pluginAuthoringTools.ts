@@ -3,18 +3,29 @@ import type { McpServer } from '@modelcontextprotocol/server'
 import type { McpRequestContext } from '../context'
 import { changePluginDraft, createPluginDraft, listPluginDrafts, pluginDraftChangeSchema, pluginDraftCreateSchema, pluginDraftReadSchema, pluginDraftRevisionSchema, readPluginDraft, requirePluginAuthor, reviewPluginDraft } from '../../services/plugins/pluginAuthoring'
 import { listPlugins } from '../../services/plugins/pluginRegistry'
+import { checkPluginSources, listPluginSources, pluginSourceCheckSchema } from '../../services/plugins/pluginSources'
 
 export function registerPluginAuthoringTools(server: McpServer, context: McpRequestContext) {
-  const output = (operation: () => unknown) => {
+  const output = async (operation: () => unknown) => {
     try {
       requirePluginAuthor(context.requester)
-      return { content: [{ type: 'text' as const, text: JSON.stringify(operation()) }] }
+      return { content: [{ type: 'text' as const, text: JSON.stringify(await operation()) }] }
     } catch (error) { return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] } }
   }
   server.registerTool('list_plugin_drafts', {
-    description: 'List plugin development drafts and installed packages (including disabled) for an administrator. Drafts are inactive source code. Read PLUGIN_DEVELOPMENT with get_app_guide before authoring. Create/edit a draft, then prepare_plugin_install for human review in plugin management.',
+    description: 'List plugin development drafts and installed packages (including disabled) for an administrator. Drafts are inactive source code. Read PLUGIN_DEVELOPMENT with get_app_guide before authoring. Create/edit a draft, then prepare_plugin_install for human review in plugin management. Installed packages linked to a Git repository carry `source` (repository, ref, installed commit, last update check).',
     inputSchema: z.object({}),
-  }, () => output(() => ({ drafts: listPluginDrafts(context.requester!), installed: listPlugins(true).map(({ manifest, enabled }) => ({ id: manifest.id, name: manifest.name, version: manifest.version, enabled })) })))
+  }, () => output(() => {
+    const sources = listPluginSources()
+    return { drafts: listPluginDrafts(context.requester!), installed: listPlugins(true).map(({ manifest, enabled }) => ({ id: manifest.id, name: manifest.name, version: manifest.version, enabled, ...(sources.has(manifest.id) ? { source: sources.get(manifest.id) } : {}) })) }
+  }))
+  server.registerTool('check_plugin_updates', {
+    description: 'Check Git-linked plugins (all, or pluginId) for new commits on their branch/tag. Only resolves commits: never downloads, installs or activates anything. A human reviews and applies Git updates in plugin management (returned url); report updates as needing human review, not as installed.',
+    inputSchema: pluginSourceCheckSchema,
+  }, (input, ctx) => output(async () => {
+    const plugins = await checkPluginSources(input, ctx?.mcpReq?.signal)
+    return { plugins, url: '/#/settings?section=plugins', status: plugins.some(plugin => plugin.source.updateAvailable) ? 'needs_human_review' : 'up_to_date' }
+  }))
   server.registerTool('create_plugin_draft', {
     description: 'Create an inactive plugin source draft with the host SDK, or copy an installed package using fromInstalled:true. Keep requestId for retries. Does not install or execute code; installed private data is never copied. Returns draftId, revision and file list.', inputSchema: pluginDraftCreateSchema,
   }, input => output(() => createPluginDraft(context.requester!, input)))

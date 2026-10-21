@@ -76,15 +76,13 @@ function WildcardItemSection({
       )}
       headingAs="div"
       actions={<span className="text-xs tabular-nums text-muted-foreground">{formatNumber(items.length)}</span>}
-      bodyClassName="pt-2"
     >
       <ListRow
         size="sm"
-        className="text-xs text-muted-foreground/75"
-        leading={<span className="w-8 text-center">{t({ ko: '번호', en: 'No.' })}</span>}
-        trailing={<span className="w-16 text-right">{t({ ko: '가중치', en: 'Weight' })}</span>}
+        leading={<span className="w-8 text-center text-xs text-muted-foreground">{t({ ko: '번호', en: 'No.' })}</span>}
+        trailing={<span className="w-16 text-right text-xs text-muted-foreground">{t({ ko: '가중치', en: 'Weight' })}</span>}
       >
-        {t({ ko: '내용', en: 'Content' })}
+        <span className="text-xs text-muted-foreground">{t({ ko: '내용', en: 'Content' })}</span>
       </ListRow>
       {items.length > 0 ? items.map((item, index) => (
         <ListRow
@@ -94,7 +92,7 @@ function WildcardItemSection({
         >
           <span className="min-w-0 truncate" title={item.content}>{item.content}</span>
         </ListRow>
-      )) : <EmptyState size="compact" className="px-0 py-4" title={t({ ko: '등록된 항목이 없어.', en: 'No registered items.' })} />}
+      )) : <EmptyState size="compact" title={t({ ko: '등록된 항목이 없어.', en: 'No registered items.' })} />}
     </RowGroup>
   )
 }
@@ -197,15 +195,14 @@ export function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
       headingAs="h2"
       heading={t({ ko: '최근 자동 수집 로그', en: 'Recent auto-collection log' })}
       actions={log ? <span className="text-xs tabular-nums text-muted-foreground">{formatNumber(log.totalWildcards)}</span> : undefined}
-      bodyClassName="space-y-6 pt-2"
     >
       {log ? (
-        <>
+        <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatTile label={t({ ko: '시간', en: 'Time' })} value={formatWildcardDateTime(log.timestamp, formatDateTime)} valueClassName="font-normal" />
-            <StatTile label={t({ ko: 'LoRA 가중치', en: 'LoRA weight' })} value={log.loraWeight} valueClassName="font-normal" />
-            <StatTile label={t({ ko: '중복 처리', en: 'Duplicate handling' })} value={log.duplicateHandling} valueClassName="font-normal" />
-            <StatTile label={t({ ko: '생성 항목', en: 'Created items' })} value={formatNumber(log.totalItems)} valueClassName="font-normal" />
+            <StatTile label={t({ ko: '시간', en: 'Time' })} value={formatWildcardDateTime(log.timestamp, formatDateTime)} />
+            <StatTile label={t({ ko: 'LoRA 가중치', en: 'LoRA weight' })} value={log.loraWeight} />
+            <StatTile label={t({ ko: '중복 처리', en: 'Duplicate handling' })} value={log.duplicateHandling} />
+            <StatTile label={t({ ko: '생성 항목', en: 'Created items' })} value={formatNumber(log.totalItems)} />
           </div>
 
           <div>
@@ -229,7 +226,7 @@ export function LoraScanLogCard({ log }: { log: WildcardScanLog | null }) {
             ))}
             {log.wildcards.length > 8 ? <div className="pt-2 text-xs text-muted-foreground">{t({ ko: '외 {count}개 더 있어.', en: '{count} more.' }, { count: formatNumber(log.wildcards.length - 8) })}</div> : null}
           </div>
-        </>
+        </div>
       ) : (
         <EmptyState size="compact" title={t({ ko: '아직 기록된 자동 수집 로그가 없어.', en: 'No auto-collection logs recorded yet.' })} />
       )}

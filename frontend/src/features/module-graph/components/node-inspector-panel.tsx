@@ -11,7 +11,8 @@ import { Panel } from '@/components/ui/panel'
 import { Section } from '@/components/ui/section'
 import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
-import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
+import { getNaiFixedNegativeHint, type SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
+import { getNaiFixedModelSettings } from '@conai/shared'
 import { useI18n, type TranslationInput } from '@/i18n'
 import { getLlmPresetOptions } from '@/lib/api-settings-llm'
 import type { GraphExecutionArtifactRecord, ModuleEngineType, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
@@ -31,6 +32,7 @@ import {
   findNodeUiField,
   getEditableNodeInputPorts,
   getLlmPresetEntries,
+  getNaiNodeModel,
   getLlmPresetTypeOptions,
   getStandaloneNodeUiFields,
   groupNodeOutputArtifacts,
@@ -163,6 +165,16 @@ export function NodeInspectorPanel({
     const missingRequired = Boolean(port.required && !isNodeInputSatisfied(node, port))
     const isHighlightedPort = highlightedPortKey === port.key
     const clearPortValue = () => onNodeValueClear(node.id, port.key)
+    // A NovelAI model with fixed settings (V5 Full Medium) ignores these inputs; the stored values stay for other models.
+    const naiModel = getNaiNodeModel(node)
+    const naiFixedSettings = getNaiFixedModelSettings(naiModel)
+    const fixedByModelHint = !naiFixedSettings
+      ? null
+      : port.key === 'negative_prompt'
+        ? getNaiFixedNegativeHint(t)
+        : port.key === 'steps' || port.key === 'sampler'
+          ? t({ ko: '모델 고정: 이 모델은 스텝 {steps}·{sampler}로 생성해서 이 값은 쓰지 않아.', en: 'Fixed by model: it runs {steps} steps with {sampler}, so this value is not used.' }, { steps: naiFixedSettings.steps, sampler: naiFixedSettings.sampler })
+          : null
     // A thin left accent instead of a tinted card: info for the focused port, warning for a missing required value.
     const cardStyle = isHighlightedPort
       ? ({ boxShadow: 'inset 2px 0 0 var(--info)', paddingLeft: '0.625rem' } as CSSProperties)
@@ -173,6 +185,7 @@ export function NodeInspectorPanel({
       <div key={port.key} data-field-key={port.key} className={MODULE_INPUT_FIELD_ROW_CLASS} style={cardStyle}>
         <PortHeader nodeId={node.id} port={port} hasExplicitValue={hasExplicitValue} missingRequired={missingRequired || isHighlightedPort} onClear={clearPortValue} />
         {children}
+        {fixedByModelHint ? <Text as="p" variant="caption">{fixedByModelHint}</Text> : null}
       </div>
     )
     const changePortValue = (value: unknown) => onNodeValueChange(node.id, port.key, value)
@@ -213,7 +226,7 @@ export function NodeInspectorPanel({
           />
           {selectedPreset ? (
             <div className="mt-2">
-              <Text as="div" variant="overline" className="mb-1 font-semibold">{t({ ko: '선택 내용', en: 'Selected content' })}</Text>
+              <Text as="div" variant="overline" className="mb-1">{t({ ko: '선택 내용', en: 'Selected content' })}</Text>
               <CodeBlock maxHeight="sm">{summarizeLlmPresetContent(selectedPreset.content)}</CodeBlock>
             </div>
           ) : null}
@@ -239,7 +252,7 @@ export function NodeInspectorPanel({
     }
 
     if (isNaiVibePort(port.key, port.data_type)) {
-      return renderPortCard(<NaiReusableAssetInput kind="vibes" value={rawValue} onChange={changePortValue} />)
+      return renderPortCard(<NaiReusableAssetInput kind="vibes" value={rawValue} onChange={changePortValue} model={naiModel} />)
     }
 
     if (isNaiCharacterReferencePort(port.key, port.data_type)) {
@@ -483,7 +496,7 @@ export function NodeInspectorPanel({
                 placeholder={getModuleBaseDisplayName(selectedNode.data.module)}
                 className="min-w-40 flex-1"
               />
-              <Badge variant="outline" className="gap-1"><ProviderIcon provider={selectedNode.data.module.engine_type === 'nai' ? 'novelai' : selectedNode.data.module.engine_type} className="size-3" />{t(MODULE_ENGINE_LABELS[selectedNode.data.module.engine_type] ?? selectedNode.data.module.engine_type)}</Badge>
+              <Badge variant="outline"><ProviderIcon provider={selectedNode.data.module.engine_type === 'nai' ? 'novelai' : selectedNode.data.module.engine_type} className="size-3" />{t(MODULE_ENGINE_LABELS[selectedNode.data.module.engine_type] ?? selectedNode.data.module.engine_type)}</Badge>
               <TechnicalReferenceHint title={`node ${selectedNode.id}`} label={t({ ko: '노드 내부 식별자 보기', en: 'Show internal node identifier' })} />
             </div>
           </div>
@@ -498,7 +511,7 @@ export function NodeInspectorPanel({
           {selectedNodeOutputGroups.length > 0 ? (
           <div className="space-y-2 border-b border-line pb-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Text as="div" variant="overline" className="font-semibold">{t({ ko: '노드 출력', en: 'Node outputs' })}</Text>
+              <Text as="div" variant="overline">{t({ ko: '노드 출력', en: 'Node outputs' })}</Text>
               {selectedExecutionId ? <span className="font-mono text-2xs text-muted-foreground">#{formatNumber(selectedExecutionId)}</span> : null}
             </div>
 
@@ -514,7 +527,7 @@ export function NodeInspectorPanel({
                         variant="ghost"
                         aria-expanded={!isCollapsed}
                         onClick={() => toggleOutputGroup(group.portKey)}
-                        className="h-auto w-full justify-between gap-3 px-3 py-2 text-left"
+                        className="h-auto w-full justify-between text-left"
                       >
                         <span className="flex min-w-0 items-center gap-2">
                           {isCollapsed ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}

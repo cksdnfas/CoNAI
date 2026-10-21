@@ -1,4 +1,4 @@
-import { cleanPromptTerm, findPromptRandomTokens, parsePromptWithLoRAs } from '@conai/shared';
+import { findPromptRandomTokens, tokenizePrompt } from '@conai/shared';
 import { db } from '../database/init';
 import { getPromptCollectionTableName, getPromptGroupTableName, type PromptTableType } from '../utils/promptTables';
 import { buildSqlContainsPattern, escapeSqlLikePattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
@@ -44,8 +44,8 @@ function normalizeTerm(value: string) {
 function extractPromptTerms(prompt: string): string[] {
   const withoutTokens = findPromptRandomTokens(prompt).reduceRight((text, token) => `${text.slice(0, token.start)}${text.slice(token.end)}`, prompt);
   const terms = new Set<string>();
-  for (const term of parsePromptWithLoRAs(withoutTokens).terms) {
-    const cleaned = normalizeTerm(cleanPromptTerm(term.trim()) ?? '');
+  for (const term of tokenizePrompt(withoutTokens).terms) {
+    const cleaned = normalizeTerm(term.value);
     if (cleaned.length >= 2) {
       terms.add(cleaned);
     }

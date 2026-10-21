@@ -8,7 +8,7 @@ import { GenerationTargetGroupControl } from '@/features/groups/components/gener
 import { PluginGenerationActions } from '@/features/plugins/plugin-generation-actions'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { GenerateActionBarIconButton, GenerateActionBarVariantContext, STICKY_ICON_SIZE, type GenerateActionBarVariant } from './generate-action-bar-icon-button'
+import { GenerateActionBarIconButton, GenerateActionBarVariantContext, type GenerateActionBarVariant } from './generate-action-bar-icon-button'
 
 export { GenerateActionBarIconButton, type GenerateActionBarVariant }
 
@@ -28,6 +28,8 @@ export type GenerateActionBarProps = {
   generateLabel: string
   /** Cost next to Generate, such as NAI "(무료)" or "12 Anlas"; shown in the tooltip on narrow sticky bars. */
   generateSuffix?: ReactNode
+  /** Tooltip on the cost suffix (also appended to the Generate tooltip), e.g. what the estimate leaves out. */
+  generateSuffixHint?: string
   onGenerate: () => void
   /** Blocks both the button and the Ctrl/Cmd+Enter shortcut. */
   generateDisabled?: boolean
@@ -130,6 +132,7 @@ export function GenerateActionBar({
   variant = 'inline',
   generateLabel,
   generateSuffix,
+  generateSuffixHint,
   onGenerate,
   generateDisabled = false,
   isGenerating = false,
@@ -167,19 +170,20 @@ export function GenerateActionBar({
   const generateButton = (
     <>
       {generateSuffix && !isGenerating ? (
-        <span className={cn('shrink-0 text-sm font-normal text-muted-foreground', isSticky && 'hidden sm:inline')}>{generateSuffix}</span>
+        <Tip content={generateSuffixHint}>
+          <span className={cn('shrink-0 text-sm font-normal text-muted-foreground', isSticky && 'hidden sm:inline')}>{generateSuffix}</span>
+        </Tip>
       ) : null}
-      <Tip content={<>{`${actionLabel} (${shortcutHint})`}{generateSuffix && !isGenerating ? <> · {generateSuffix}</> : null}</>}>
+      <Tip content={<>{`${actionLabel} (${shortcutHint})`}{generateSuffix && !isGenerating ? <> · {generateSuffix}{generateSuffixHint ? <> · {generateSuffixHint}</> : null}</> : null}</>}>
         <IconButton
           variant="default"
-          size="icon"
-          label={typeof generateSuffix === 'string' && !isGenerating ? `${actionLabel} · ${generateSuffix}` : actionLabel}
+          size={isSticky ? 'icon-touch' : 'icon'}
+          label={typeof generateSuffix === 'string' && !isGenerating ? [actionLabel, generateSuffix, generateSuffixHint].filter(Boolean).join(' · ') : actionLabel}
           tooltip={false}
           onClick={onGenerate}
           disabled={!canGenerate}
           aria-busy={isGenerating || undefined}
           aria-keyshortcuts="Control+Enter Meta+Enter"
-          className={isSticky ? STICKY_ICON_SIZE : undefined}
         >
           {isGenerating ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
         </IconButton>
@@ -219,7 +223,7 @@ export function GenerateActionBar({
     <GenerationTargetGroupControl
       storageKey={targetGroupStorageKey}
       disabled={isGenerating}
-      className={isSticky ? STICKY_ICON_SIZE : undefined}
+      size={isSticky ? 'icon-touch' : 'icon'}
     />
   ) : null
 

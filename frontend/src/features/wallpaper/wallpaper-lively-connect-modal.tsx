@@ -102,17 +102,17 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, initialIss
           <div className="space-y-2">
             <div className="text-xs text-muted-foreground">{t({ ko: '{name} · 월페이퍼 URL', en: '{name} · wallpaper URL' }, { name: issued.name })}</div>
             <div className="flex min-w-0 gap-2">
-              <Input value={issued.url} readOnly className="font-mono text-xs" aria-label={t({ ko: '월페이퍼 URL', en: 'Wallpaper URL' })} onFocus={(event) => event.currentTarget.select()} />
+              <Input value={issued.url} readOnly mono controlSize="compact" aria-label={t({ ko: '월페이퍼 URL', en: 'Wallpaper URL' })} onFocus={(event) => event.currentTarget.select()} />
               <IconButton variant="secondary" size="icon-sm" label={t({ ko: 'URL 복사', en: 'Copy URL' })} onClick={() => void copy(issued.url)}>
                 <ClipboardCopy />
               </IconButton>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" size="sm" className="gap-1.5" title={t({ ko: '설정·오디오·재생 중 곡을 쓰는 Lively 패키지 (zip을 Lively 창에 끌어다 놓기)', en: 'Lively package with settings, audio and now playing (drop the zip on Lively)' })} onClick={() => downloadPackage('lively')}>
+              <Button type="button" variant="secondary" size="sm" title={t({ ko: '설정·오디오·재생 중 곡을 쓰는 Lively 패키지 (zip을 Lively 창에 끌어다 놓기)', en: 'Lively package with settings, audio and now playing (drop the zip on Lively)' })} onClick={() => downloadPackage('lively')}>
                 <Download className="size-4" />
                 Lively
               </Button>
-              <Button type="button" variant="secondary" size="sm" className="gap-1.5" title={t({ ko: 'Wallpaper Engine 웹 프로젝트 (압축을 풀어 myprojects에 넣기)', en: 'Wallpaper Engine web project (unzip into myprojects)' })} onClick={() => downloadPackage('wallpaper-engine')}>
+              <Button type="button" variant="secondary" size="sm" title={t({ ko: 'Wallpaper Engine 웹 프로젝트 (압축을 풀어 myprojects에 넣기)', en: 'Wallpaper Engine web project (unzip into myprojects)' })} onClick={() => downloadPackage('wallpaper-engine')}>
                 <Download className="size-4" />
                 Wallpaper Engine
               </Button>
@@ -135,7 +135,7 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, initialIss
             <option value="">{t({ ko: '활성 월페이퍼 따라가기', en: 'Follow the active one' })}</option>
             {presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
           </Select>
-          <Button type="button" className="gap-1.5" disabled={!name.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
+          <Button type="button" disabled={!name.trim() || createMutation.isPending} onClick={() => createMutation.mutate()}>
             <Plus className="size-4" />
             {t({ ko: '새 키', en: 'New key' })}
           </Button>
@@ -143,7 +143,7 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, initialIss
 
         <RowGroup heading={t({ ko: '발급한 키', en: 'Issued keys' })}>
           {tokens.length === 0 ? (
-            <EmptyState size="compact" className="px-0" title={t({ ko: '아직 발급한 키가 없어.', en: 'No keys yet.' })} />
+            <EmptyState size="compact" title={t({ ko: '아직 발급한 키가 없어.', en: 'No keys yet.' })} />
           ) : tokens.map((token) => {
             const preset = token.presetId ? presetById.get(token.presetId) : null
             return (

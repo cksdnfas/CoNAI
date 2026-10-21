@@ -26,18 +26,21 @@ import { refreshPluginProfileRun, runPluginProfile } from './pluginProfileRun'
 import { requireResearchProfile } from '../codex-chat/chatResearch'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
 
+const DEFAULT_TIMEOUT_MS = 120_000
 const inputSchema = z.object({
   requestId: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_.:-]+$/),
   profileId: z.number().int().positive(), message: z.string().trim().min(1).max(16_000),
   history: z.string().max(32_000).default(''), userName: z.string().trim().min(1).max(100).default('사용자'),
   useLorebooks: z.boolean().default(true), maxTokens: z.number().int().min(1).max(4096).optional(),
-  timeoutMs: z.number().int().min(1000).max(600_000).default(120_000),
+  timeoutMs: z.number().int().min(1000).max(600_000).optional(),
   mode: z.enum(['text', 'profile']).optional(),
   research: z.object({
     slotId: z.string().trim().min(1).max(100), activityId: z.string().trim().min(1).max(100),
     allowedPostIds: z.array(z.number().int().positive()).min(1).max(100),
-    maxModelCalls: z.number().int().min(1).max(8).default(4),
-    maxToolCalls: z.number().int().min(1).max(24).default(8),
+    purpose: z.enum(['research', 'summary']).default('research'),
+    maxModelCalls: z.number().int().min(1).max(32).default(8),
+    maxToolCalls: z.number().int().min(1).max(100).default(24),
+    maxTurns: z.number().int().min(1).max(32).default(8),
   }).strict().optional(),
   translation: z.object({ fields: z.array(z.string().max(120).regex(/^[a-zA-Z][\w]*(?:\.(?:[a-zA-Z][\w]*|\*)){0,4}$/)).min(1).max(20), only: z.boolean().optional(), direction: z.enum(['model', 'display']).optional() }).strict().optional(),
   /** judge: the profile's prompt on its judge model (else the default judge row) instead of its chat model. */
@@ -176,14 +179,16 @@ function registerJob() {
       const startedAt = Date.now()
       const abort = () => controller.abort(ctx.signal.reason)
       ctx.signal.addEventListener('abort', abort, { once: true })
-      const timeout = setTimeout(() => controller.abort(new DOMException('답변 제한 시간을 넘었어.', 'TimeoutError')), input.timeoutMs)
+      // A profile run follows the profile's own engine and connection limits; only an explicit plugin deadline stops it early.
+      const timeoutMs = input.timeoutMs ?? (input.mode === 'profile' && !input.research ? undefined : DEFAULT_TIMEOUT_MS)
+      const timeout = timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(new DOMException('답변 제한 시간을 넘었어.', 'TimeoutError')), timeoutMs)
       const permissionCheck = setInterval(() => {
         try {
           ctx.throwIfCancelled()
           profileAccess(pluginId, requester, input.profileId, digest)
         } catch (error) { controller.abort(error) }
       }, 1000)
-      timeout.unref(); permissionCheck.unref()
+      timeout?.unref(); permissionCheck.unref()
       try {
         ctx.flush({ phase: 'generating', currentLabel: profile.name, total: 1 })
         if (input.mode === 'profile') {
@@ -231,7 +236,7 @@ function registerJob() {
           // Once the original is available, a translation deadline must not discard that successful answer.
           // Explicit cancellation and permission revocation still abort the whole job via controller.
           clearTimeout(timeout)
-          const translationSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(Math.max(1, input.timeoutMs - (Date.now() - startedAt)))])
+          const translationSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(Math.max(1, (input.timeoutMs ?? DEFAULT_TIMEOUT_MS) - (Date.now() - startedAt)))])
           ctx.flush({ phase: 'translating', currentLabel: profile.name, total: 1 })
           const language = profile.translationDisplayLanguage, source = result.json ?? { text }
           // A persona can answer in the display language despite the model-language directive: that answer is the

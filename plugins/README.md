@@ -41,6 +41,19 @@ Administrator direct chats with `configure` scope use `list_plugin_drafts`, `cre
 
 `plugin.draft.changed` uses the existing SSE stream's `plugins` topic, administrator-only delivery and only a draft ID. It invalidates the relevant draft/list queries; unsaved editor text is preserved. Functional execution, external dependencies, npm installation and source bundling are outside package validation. Host upgrades are required for these routes, tools and editor; no plugin manifest API version change is required. Boundary coverage is in `backend/test/plugin-authoring.test.ts` (revision/digest conflicts, retries, binary export/reinstall, private-data/link exclusion, HTTP/MCP permissions and revocation), alongside the existing plugin runtime tests.
 
+### Git repository installs
+
+Administrators can install and update a plugin from a public HTTPS repository on GitHub (github.com), GitLab (gitlab.com or self-hosted) or Gitea/Forgejo (codeberg.org or self-hosted). The host resolves the branch/tag/commit through the host's HTTPS API, downloads the archive of that exact commit (32MiB cap, public addresses only, no `git` binary, no tokens) and builds the package like `scripts/build-plugin.mjs`: only the plugin folder (`path`, empty = repository root, must contain `plugin.json`) is used; dot-files/folders, Markdown and file types a package can't hold are skipped and listed; links, encrypted entries, traversal and oversized files are refused; the host SDK (`conai-plugin.js`/`.css`) replaces any repository copy. The normal package limits and manifest validation below apply. Commit the built, runnable files; no build step runs.
+
+| Route (administrator) | Contract |
+| --- | --- |
+| `POST /api/plugins/sources/review` | `PluginSourceInput` → `PluginSourceReview`; installs nothing; the review lives 10 minutes in memory (at most 8) |
+| `POST /api/plugins/sources/install` | `{reviewId, digest}` → `PluginInstallResult` (201 new / 200 update); the reviewed bytes, refused when the installed package or its enabled state changed since review; a retry after success only ensures the link |
+| `POST /api/plugins/sources/check` | `{pluginId?}` → `PluginSourceCheck[]`; resolves each linked ref to its latest commit, never downloads or installs |
+| `DELETE /api/plugins/:pluginId/source` | Unlink only; the plugin stays |
+
+Administrator plugin lists and install responses carry `InstalledPlugin.source`. A ZIP or editor install over a linked plugin keeps the link and reports `modified: true`; removing the plugin drops it. Updates are never applied automatically; the `check_plugin_updates` MCP tool only checks. Host upgrade required; no SDK or manifest change.
+
 ### Package files
 
 ZIP root contains `plugin.json`, HTML entry points and static assets. See [the working manifest](text-editor/plugin.json) and [SDK](sdk/conai-plugin.js). IDs use lowercase letters, digits and hyphens; versions use `major.minor.patch`. Each page declares `id`, `title`, `entry`, supported filename extensions in `accepts`, and up to 26 actions. An empty `accepts` list permits opening without files and accepts any selected filename; each API still enforces its data type limits. `"menu": false` keeps a page out of the header menu and the plugin launcher (a page that only lives as a layout block).
@@ -78,6 +91,38 @@ Assistant action results on the same extension screen omit unchanged data values
 Connections have a five-minute lease, renewed every minute by the authenticated host, with up to 12 live connections per session. Only live, authorized connections can renew; media bearer URLs cannot renew them. Page exit/reload sends a keepalive DELETE on `pagehide` (except back/forward-cache suspension), and React cleanup also closes normal navigation. Crashed tabs expire even if no close arrives; expired rows do not count against admission and are pruned during later opens/proposals. A tab suspended for over five minutes may need reopening. SDK allows four outstanding requests/streams plus a cancellation slot; the host rate limit is 40 messages/second, and up to four pending proposals per connection. Keep proposal IDs for saved notifications; at most 24 live proposals, including completed retries, are retained per connection. Existing server route limits also apply.
 
 Transient connection-check failures retain the iframe and draft and offer retry. Confirmed 401/403/404/409/410 closes the bridge but retains the document for copying the draft; protocol abuse or unexpected iframe navigation still removes the frame. The text editor's `text-editor.refresh` action preserves the draft, reads the latest revision, and exposes bounded original/draft excerpts for comparison. Saving still requires a new immutable proposal and host Apply. Missing package files no longer block removal/reinstall; every existing directory ancestor is checked for junctions before removal.
+
+### SDK CSS class reference
+
+`conai-plugin.css` also ships classes that mirror the app's shared components, so plugins reuse them instead of hand-rolling layout and widgets. Write layout (grids, widths, order, responsive moves) and plugin-only parts in your own file; do not override the padding, height or background of these classes. The sheet header and [screen style guide](../docs/GUIDE/PLUGIN_DEVELOPMENT.md#화면-스타일과-공용-ui) describe the spacing rules: no root padding on top of the host's gutter, anything that can show a background pads its text, a flat media card never gets a background.
+
+Spacing and size tokens: `--conai-edge` (focus-ring room at the frame edge, not a gutter), `--conai-gutter` (content pane to column hairline, 32px, 24px below 1200px), `--conai-sidebar-width` (232px), `--conai-sidebar-pad-x` / `--conai-sidebar-pad-top`, `--conai-toolbar-height` (56px), `--conai-control-height`, `--conai-field-height`, `--conai-row-height`, `--conai-text-inset`, plus `--conai-radius-md`, `--conai-scrim`, `--conai-key-shadow` and `--conai-float-shadow`. The host does not send these; they keep the SDK values.
+
+Compatibility: each package bundles its own copy of `conai-plugin.css`, so installed plugins change only when rebuilt. When you rebuild an older plugin, check four changes: there is no generic `button.active` / `button.ghost.active` look any more (use `.conai-nav-item` for the current row, `aria-pressed="true"` on a ghost or icon toggle, or the component's own state class); `.list` resets list bullets, margin and padding; `<dialog>` gets the SDK modal defaults (width cap, padding, edge, shadow); `.badge` is 20px tall.
+
+| Class | Purpose | App equivalent |
+| --- | --- | --- |
+| `.conai-page` (`.compact`) | Document page root: room above and below only; `.compact` for small embedded panels | Page content inside the shell gutter |
+| `.conai-app` | Full-height app root (usually `<body>`): header row over a split | Page root |
+| `.conai-header`, `.conai-title`, `.conai-spacer` | One 56px row, no surface; hairline under it inside `.conai-app` | `PageToolbar` |
+| `.conai-split` > `.conai-sidebar` (`.end`) + `.conai-pane` | 232px column with own scroll and hairline, content pane with the gutter only beside a hairline; stacks into one scrolling column below 900px | `PageWithSidebar` |
+| `.conai-nav` > `.conai-nav-item` (`.conai-nav-count`) | Navigation rows; current row (`.active` or `aria-current`) = fill + 2px primary bar | `SidebarNav` / `SidebarItem` |
+| `.conai-overline`, `.conai-group-head` | Overline label; group heading with rule and an actions slot | `Text variant="overline"`, `RowGroup` heading |
+| `.conai-tabs` > `button` | Underlined text tabs; current = `.active` or `aria-selected="true"` | `TextTabs` |
+| `.conai-segmented` (`.full`) > `button` | Fill tray with a raised selected key (`.active`, `aria-pressed` or `aria-selected`) | `SegmentedControl` |
+| `.conai-chips` > `button.conai-chip` | Filter chips; pressed (`.active` or `aria-pressed`) = primary tint | `ToggleChip` |
+| `label.conai-search` > `input[type=search]` | Filled search field; the icon is drawn by the class | `SearchField` |
+| `button.conai-icon-button` (`.sm`, `.overlay`, `.primary`) | Square ghost icon key; `.overlay` sits on images; `aria-pressed` = primary tint | `IconButton` ghost / overlay |
+| `.conai-overlay-badge` (`.tl` `.tr` `.bl` `.br`, `.xs`, `.ok` `.warn` `.destructive`), `.conai-overlay-caption` | Count / kind tag and a name on a photo, on a dark scrim | `Badge variant="overlay"` |
+| `.conai-media-card` (`.boxed`) > `.conai-media` + `.conai-media-body` (`.conai-media-title`, `.conai-media-meta`) | Media card. Flat: no background in any state, hover dims the media, selected (`.active`, `.selected`, `aria-pressed`, `aria-selected`, `aria-current`) rings the media, caption aligned to the media edge. `.boxed`: surface with a padded body, selected rings the card | Media tile, `Panel asChild interactive` |
+| `.conai-list` > `.conai-list-row` (`.sm`, `.interactive`, `.selected`) | Hairline rows; a `<button>`/`<a>`/`.interactive` row pads its text and washes on hover; content `.conai-row-main` > `.conai-row-title` + `.conai-row-meta` | `ListRow` / `ResourceRow` |
+| `dl.conai-kv` | Key-value grid | Detail key-value rows |
+| `.conai-empty` | Quiet empty line, no box | `EmptyState` |
+| `.conai-drawer` (`.end`) + `.conai-backdrop` | Floating side sheet over a backdrop | `BottomDrawerSheet` / floating sheet |
+| `dialog` | Page tone over a scrim, hairline edge, floating shadow | `Modal` |
+| `.badge.dot`, `button.badge` | Status dot; clickable badge | `Badge` |
+
+There is no generic `button.active` look: state classes only style the component classes above. A toggle button outside them uses `aria-pressed="true"`.
 
 ## Browser boundary
 
@@ -269,11 +314,11 @@ if (state.status === 'completed') showReply(state.result.text);
 
 Both browser `api.llm.start` and server `conai.llm.start` accept `mode: 'profile'`. This runs the native chat engine with the profile's tool catalog, tool allowlist, generation presets, hooks, lore, memory and review cards. No extra plugin or profile grant is needed. The initiating account and current profile permissions are checked by the native tool handlers on every call. API LLM, Pi, Claude and Codex follow their normal chat execution paths.
 
-Omit `maxTokens` to use the profile's normal native output budget, including full tool-call arguments; the text-mode default of 512 does not apply. Explicit `maxTokens` remains an integer from 1–4096 and is capped by the profile's configured budget. Each turn resets the room override, so an earlier explicit limit does not constrain later omitted limits. This behavior requires an updated host, not a new SDK; older hosts impose the 512 default even in profile mode. Account checks, tool reviews, cancellation and request-ID replay rules are unchanged.
+Omit `maxTokens` to use the profile's normal native output budget, including full tool-call arguments; the text-mode default of 512 does not apply. Explicit `maxTokens` remains an integer from 1–4096 and is capped by the profile's configured budget. Each turn resets the room override, so an earlier explicit limit does not constrain later omitted limits. This behavior requires an updated host, not a new SDK; older hosts impose the 512 default even in profile mode. Omit `timeoutMs` as well to let the run continue until it completes or `llm.cancel` stops it, under the profile's own engine and connection limits; an explicit `timeoutMs` still applies, and research keeps the 120,000 ms default. One `api.llm.wait` call returns or throws `TimeoutError` within ten minutes, so wait again for longer runs. Account checks, tool reviews, cancellation and request-ID replay rules are unchanged.
 
 ```js
 const job = await api.llm.start({ requestId: crypto.randomUUID(), profileId,
-  mode: 'profile', message: '내 도구로 요청한 작업을 처리하고 실제 결과를 알려줘.', maxTokens: 1024 });
+  mode: 'profile', message: '내 도구로 요청한 작업을 처리하고 실제 결과를 알려줘.' });
 const done = await api.llm.wait(job.jobId);
 if (done.status === 'completed') {
   showReply(done.result.text);
@@ -297,7 +342,7 @@ const job = await api.llm.start({
   message: 'Compare the supplied sources. Distinguish claims from evidence.',
   research: {
     slotId: 'save-1', activityId: 'activity-1',
-    allowedPostIds: [12, 34], maxModelCalls: 4, maxToolCalls: 8
+    allowedPostIds: [12, 34], maxModelCalls: 8, maxTurns: 8, maxToolCalls: 24
   }
 });
 const done = await api.llm.wait(job.jobId);
@@ -314,20 +359,39 @@ if (done.status === 'completed') {
 | --- | --- |
 | `slotId`, `activityId` | Required nonblank strings, 1–100 characters each; both are part of the isolated execution identity. |
 | `allowedPostIds` | Required 1–100 positive integer IDs. Only currently published, accessible posts in this set may be searched/read. No category expansion. |
-| `maxModelCalls` | Integer 1–8, default 4. Bounds actual provider requests, not merely tool rounds. |
-| `maxToolCalls` | Integer 1–24, default 8. Bounds attempted calls, including rejected tool names. |
+| `purpose` | `research` (default) or `summary`. Summary exposes no tools on **every** engine and uses one API call / one Claude or Pi turn; Codex has no native turn cap. |
+| `maxModelCalls` | Integer 1–32, default 8. Direct API only: bounds actual provider requests, not merely tool rounds. Native engines report this effective limit as `null`. |
+| `maxTurns` | Integer 1–32, default 8. Claude/Pi native turns, not provider requests. Direct API and Codex report this effective limit as `null`. |
+| `maxToolCalls` | Integer 1–100, default 24. Bounds host-dispatched tool attempts on every engine; summary's effective limit is zero. Native protocol/schema rejections before dispatch are not counted. |
 
-Each new request uses its own account/plugin/profile/slot/activity/request automation room and **does not import room history**. `history`, if supplied, is explicit caller-provided context, not host-certified evidence. The native stateless persona builder and native headless LLM tool executor are reused. Automatic lore, linked files, semantic memory, judge, translation, instruction hooks and memory updates are omitted; `useLorebooks` does not enable them. Research output is capped at 4096 tokens per provider call (or the lower explicit/profile cap), with the existing `timeoutMs` deadline and native usage accounting. These are call/token/time limits, not a currency guarantee.
+Each new request uses its own account/plugin/profile/slot/activity/request automation room and **does not import room history**. `history`, if supplied, is explicit caller-provided context, not host-certified evidence. The stateless persona builder and existing native executors are reused. Automatic lore, linked files, semantic memory, judge, translation, instruction hooks and memory updates are omitted; `useLorebooks` does not enable them. The existing `timeoutMs` accepts 1,000–600,000 ms (default 120,000; a plugin may choose 300,000). Direct API uses at most 4096 output tokens per request or the lower explicit/profile cap. Native output settings follow their existing transport, not an invented provider-level guarantee; Codex exposes no enforceable output-token cap. Native usage accounting is retained. These are execution limits, not a currency guarantee.
 
-Only **direct API LLM** profiles/connections are supported. Pi, Claude CLI and Codex fail closed before a model request. The host exposes only `posts_search` and `posts_read`, intersected with the account's current permissions and the profile's tool grants; every dispatch rechecks them. Search applies the explicit IDs before totals, ranking and pagination and does not call an embedding model. Read returns bounded original Markdown with its revision. Drafts/hidden/deleted posts, comment reads, attachments, indirect/catalog/plugin tools, web access and mutations are unavailable. Native search may include a visible matching comment snippet within an allowed post; it is not read evidence. Post text is untrusted data and cannot change these limits. Ordinary profile execution and its review cards are unchanged; publishing a result still uses the existing explicit native review/save path outside research.
+**Direct API, Claude Code, Codex and Pi profiles are supported without engine substitution.** API/Claude/Pi use the existing headless LLM dispatcher. Claude retains its restricted CLI, isolated temporary home and strict MCP inventory; Pi uses a fresh private session with only CoNAI custom tools (no extensions/context discovery, retries or compaction during research). Codex uses the existing verified read-only app-server, a fresh private runtime/thread, and an account/research-bound loopback MCP token revoked at completion/cancellation. No shell, direct filesystem, external MCP or mutation tool is enabled. The host exposes only `posts_search` and `posts_read` (neither for summary), intersected with current account permissions and profile grants; every dispatch rechecks them. Search applies explicit IDs before totals, ranking and pagination without an embedding request. Read returns bounded original Markdown and its revision. Drafts/hidden/deleted posts, comment reads, attachments, indirect/catalog/plugin tools and web access remain unavailable. A visible matching comment snippet in scoped search is not read evidence. Post text cannot change these limits. Ordinary profile execution and reviewed publishing outside research are unchanged.
+
+Direct API checks every supplied source before **every provider request** and reserves its final admitted request for prose without tools. All engines check the sources before starting, before returning a result, and on native tool dispatch; in-flight native runs additionally recheck every second and abort on revocation. **Native engines own their internal provider requests:** an atomic check before every internal request cannot be guaranteed, and already-sent content cannot be retracted. Tool attempts beyond the budget never execute. Pi removes tools for the final native turn; Claude uses its native `--max-turns` cap and may return partial text/evidence when that cap is reached rather than promising an extra summary. Codex has no enforceable model-call or turn cap: only host tool and timeout budgets are guaranteed. Use `purpose:'summary'`, not `mode:'text'` or a guessed engine flag, to summarize shared excerpts without tools on any engine. Direct `maxModelCalls:1` remains tool-free for compatibility. Native search/read audit receipts and execution records may still be written; source content is never changed.
+
+For live source checks before displaying cached quotes or results, reuse the native tool instead of an LLM call:
+
+```js
+const result = await conai.tools.call('posts_search', {
+  post_ids: sourceIds, status: 'published', limit: 50, offset: 0
+});
+```
+
+`post_ids` accepts 1–100 positive integer IDs; supplying it permits only published posts (`status:'draft'/'all'` is rejected). Search `limit` is now 1–50 (default 10); check batches of at most 50 IDs or paginate larger sets. The existing `{total, posts, snapshot?, score_version?}` result adds `revision`, `content_version` (`number|null`) and `content_hash` to each published post. The hash is the native knowledge content hash when present, otherwise SHA-256 of the exact original body. These fields are `null` where unavailable on ordinary unscoped non-published search results. Missing/hidden/draft/deleted IDs are omitted, even for an administrator/owner. Research intersects `post_ids` with the host's scope; an empty intersection returns no results. This uses existing account/profile tool permissions and batched SQL, not one source read per polling tick. Permission errors or missing IDs must hide cached quotes and derived results before the plugin returns status; changed revision/hash/version must mark the source stale. Do not serve cached sensitive output while an access check is pending or fails. This filter and version output require an updated host; older hosts must not be treated as enforcing it.
 
 Completed jobs add `profileRun.research: PluginResearchResult`:
 
 ```ts
 {
   slotId: string; activityId: string;
-  modelCalls: number; toolCalls: number;
-  stopReason: 'completed' | 'model_limit' | 'tool_limit';
+  modelCalls: number | null; turns: number | null; toolCalls: number;
+  stopReason: 'completed' | 'model_limit' | 'tool_limit' | 'turn_limit';
+  limits: {
+    runtime: 'direct' | 'claude' | 'pi' | 'codex';
+    maxModelCalls: number | null; maxTurns: number | null; maxToolCalls: number;
+  };
+  evidenceTruncated?: boolean;
   evidence: Array<{
     postId: number; revision: number; contentVersion: number | null;
     offset: number; end: number; excerpt: string;
@@ -335,11 +399,13 @@ Completed jobs add `profileRun.research: PluginResearchResult`:
 }
 ```
 
-Evidence is captured from successfully returned original body slices, never from model text, search summaries, rejected reads or caller history. `offset`/`end` describe the returned half-open UTF-16 interval; `excerpt` is its first at most 400 UTF-16 units. `contentVersion` is the native knowledge version or `null` for ordinary posts. At most 24 reads can contribute evidence. These are historical read snapshots, not current-source validation or independent assessment: reopening a source must check its current visibility/version. Empty evidence remains empty even when the model claims success.
+`modelCalls` is an actual direct-API request count; it is `null` for all native engines, not zero or a fabricated count of outer launches. `turns` uses Claude's reported native turn count or Pi's native turn events; it is `null` for API/Codex (and if Claude omits a valid nonnegative integer count). Claude Code 2.1.302's embedded source reports the attempted continuation in `error_max_turns`, so its receipt can be `maxTurns + 1`; retain the native receipt and `turn_limit` rather than clamping or rejecting the result. This is not a count of paid provider requests. `limits` contains the **effective** enforced limits; `null` means unavailable/not applicable, not unlimited permission. Pi's normal text-only ending is not a turn-limit outcome merely because it lands at the boundary. Callers must display these distinctions and must not sum unknown model counts as zero.
 
-Budget termination can complete the job with partial/empty text and `model_limit`/`tool_limit`; do not label that a completed investigation. Provider failures/timeouts/cancellation keep the existing failed/cancelled envelopes and do not promise a completed result; the native room retains the reply status. Request IDs retain their existing account/plugin-bound idempotency and input-conflict rules, with no automatic replay after interruption/restart. Existing plugin LLM concurrency and profile-busy limits apply. Poll/cancel using the job ID; account/profile checks remain, and fetching a research result also requires current `posts.view`. Rooms remain in the native Automation list and can be deleted there; runtime results use the existing job expiry.
+Evidence is captured from successfully returned original body slices, never from model text, search summaries, rejected reads or caller history. `excerpt` contains the first at most 400 UTF-16 units of the returned body slice. `offset`/`end` describe its exact half-open UTF-16 interval, so `end - offset === excerpt.length`. `contentVersion` is the native knowledge version or `null` for ordinary posts. Evidence retention is bounded to 12 KiB of serialized entries (within the existing 64 KiB job envelope); `evidenceTruncated:true` discloses omitted receipts without fabricating them. These are historical read snapshots, not current-source validation or independent assessment. Empty evidence remains empty even when the model claims success.
 
-Implementation: `shared/src/types/plugin.ts`, `backend/src/services/plugins/pluginLlm.ts`, `pluginProfileRun.ts`, native `codex-chat/llmChatService.ts` and `chatResearch.ts`, MCP `toolAccess.ts`/`postTools.ts`, and scoped SQL in `posts/postStore.ts`. Permanent host regressions are in `backend/test/plugin-server.test.ts` (mocked providers; no real model costs).
+Budget termination can complete the job with partial/empty text and `model_limit`/`tool_limit`/`turn_limit`; do not label that a completed investigation. Provider failures/timeouts/cancellation keep the existing failed/cancelled envelopes and do not promise a completed result; the native room retains the reply status. Request IDs retain their existing account/plugin-bound idempotency and input-conflict rules, with no automatic replay after interruption/restart. Existing plugin LLM concurrency and profile-busy limits apply. Poll/cancel using the job ID; account/profile checks remain, and fetching a research result also requires current `posts.view`. Rooms remain in the native Automation list and can be deleted there; runtime results use the existing job expiry.
+
+Implementation: `shared/src/types/plugin.ts`, `backend/src/services/plugins/pluginLlm.ts`, `backend/src/services/plugins/pluginProfileRun.ts`, native `backend/src/services/codex-chat/llmChatService.ts`, `backend/src/services/codex-chat/codexChatService.ts`, `backend/src/services/codex-chat/chatResearch.ts`, and the existing MCP/post services. Host regressions use `backend/test/plugin-server.test.ts` (mocked API/native processes, real dispatch/permissions/evidence) and `backend/test/chat-pi-sessions.test.ts` (real Pi SDK against a local scripted provider); no real paid requests. This contract requires the updated host; the SDK remains a pass-through, with no API-only fallback.
 
 ### Stateless text compatibility
 
@@ -361,7 +427,7 @@ Requests/results are scoped to **plugin + initiating account**. Profile enableme
 
 Reuse the same `requestId` and identical input to recover an uncertain start response; it returns the original job even if that job failed or was cancelled. Different input or a changed package with that ID is rejected. A deliberate new turn/retry uses a new ID. The existing runtime recovery marks interrupted jobs failed rather than replaying them after restart. Jobs and deduplication have a **24-hour window**; keep needed replies in the plugin database and never automatically resubmit expired requests.
 
-Limits: four simultaneous plugin replies across the instance, additionally constrained by the existing model connection scheduler; no unbounded pending queue. Busy admission returns an error and can be retried with the same ID. Each package retains at most 10,000 request identities within the window. `message` is at most 16,000 characters, `history` 32,000, and `userName` 100. `maxTokens` defaults to 512 (1–4096), further limited by the profile's output limit on engines that support it; Codex's one-shot execution does not enforce this token setting. `timeoutMs` defaults to 120,000 (1,000–600,000), including connection-slot waiting. Returned text is bounded to 8,000 characters with `truncated: true` when shortened. Input prompts are held only in active memory, not stored in job parameters; results use the existing runtime retention. These are execution bounds, not a monetary budget.
+Limits: four simultaneous plugin replies across the instance, additionally constrained by the existing model connection scheduler; no unbounded pending queue. Busy admission returns an error and can be retried with the same ID. Each package retains at most 10,000 request identities within the window. `message` is at most 16,000 characters, `history` 32,000, and `userName` 100. `maxTokens` defaults to 512 (1–4096), further limited by the profile's output limit on engines that support it; Codex's one-shot execution does not enforce this token setting. `timeoutMs` (1,000–600,000) includes connection-slot waiting; omitted, it is 120,000 for text and research and absent for other profile runs. Returned text is bounded to 8,000 characters with `truncated: true` when shortened. Input prompts are held only in active memory, not stored in job parameters; results use the existing runtime retention. These are execution bounds, not a monetary budget.
 
 For assistant automation, register plugin tools with `conai.tools.register` and call the same `conai.llm` methods inside their handlers. Register page state/actions for browser interactions as usual; do not add aquarium-specific tools or UI to the host.
 

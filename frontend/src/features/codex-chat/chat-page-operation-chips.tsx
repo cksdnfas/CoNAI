@@ -52,7 +52,7 @@ export function ChatPageOperationChips({ calls }: { calls: CodexChatToolCall[] }
             <Icon className="size-3 shrink-0" />
             <span className="min-w-0 truncate">{navigate ? destination(operation.label) : operation.label}</span>
             {operation.tier === 'draft' && entry?.undo && entry.state === 'done'
-              ? <IconButton variant="ghost" size="icon-xs" className="-mr-2 size-5 rounded-full text-primary" label={t({ ko: '되돌리기', en: 'Undo' })} onClick={() => undo(operation)}><Undo2 /></IconButton>
+              ? <IconButton variant="ghost" size="icon-xs" label={t({ ko: '되돌리기', en: 'Undo' })} onClick={() => undo(operation)}><Undo2 /></IconButton>
               : null}
           </span>
         )

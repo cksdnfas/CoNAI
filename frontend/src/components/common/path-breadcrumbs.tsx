@@ -11,7 +11,7 @@ export function PathBreadcrumbs({ items, ariaLabel, className }: { items: PathCr
       {items.map((item, index) => (
         <span key={item.key} className="inline-flex min-w-0 items-center">
           {index === 0 ? null : <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />}
-          <Button variant="ghost" size="sm" className={cn('max-w-48 px-2', index === items.length - 1 && 'font-semibold')} aria-current={index === items.length - 1 ? 'location' : undefined} onClick={item.onClick}>
+          <Button variant="ghost" size="sm" className="max-w-48" aria-current={index === items.length - 1 ? 'location' : undefined} onClick={item.onClick}>
             <span className="truncate">{item.label}</span>
           </Button>
         </span>

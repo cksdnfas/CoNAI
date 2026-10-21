@@ -129,7 +129,9 @@ function PromptGroupingOptionsFlyout({ isOpen, options, onToggle, onChange }: Pr
             step={1}
             value={options.classificationDepth}
             onValueCommit={(nextValue) => onChange({ classificationDepth: clampPromptGroupingDepth(Number(nextValue)) })}
-            className="h-8 w-16 rounded-sm border border-transparent bg-field px-2 text-center font-mono text-sm font-semibold text-foreground outline-none transition-colors focus:border-primary/55"
+            controlSize="compact"
+            mono
+            className="w-16 text-center"
           />
         </SettingRow>
 
@@ -477,7 +479,7 @@ export function ImageDetailMetaCard({ image }: ImageDetailMetaCardProps) {
           <ul className="flex flex-wrap gap-1.5">
             {groups.map((group) => (
               <li key={group.id}>
-                <Chip tone="muted" className="text-foreground">
+                <Chip tone="muted">
                   <span className="size-2 shrink-0 rounded-full bg-primary" style={group.color ? { backgroundColor: group.color } : undefined} aria-hidden />
                   {group.name}
                 </Chip>

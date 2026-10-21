@@ -9,7 +9,7 @@ import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SettingsLabelTip } from './settings-label-tip'
 import { VIDEO_OPTIMIZATION_PRESETS } from '../video-optimization-presets'
 import { ChatFilledLabel } from './settings-filled-label'
-import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
+import { SettingsRowsSkeleton } from './settings-rows'
 
 /** Select value shown when CRF/audio no longer match any preset; never sent to the server. */
 const CUSTOM_PRESET_VALUE = 'custom'
@@ -50,7 +50,7 @@ export function VideoOptimizationTab({
             label={<ChatFilledLabel fieldId="videoOptimization.enabled">{t({ ko: '비디오 최적화 사용', en: 'Enable video optimization' })}</ChatFilledLabel>}
           />
 
-          <SettingRow label={<ChatFilledLabel fieldId="videoOptimization.preset">{presetLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="videoOptimization.preset">{presetLabel}</ChatFilledLabel>} controlWidth="standard">
             <Select
               variant="settings"
               aria-label={presetLabel}
@@ -73,7 +73,7 @@ export function VideoOptimizationTab({
             </Select>
           </SettingRow>
 
-          <SettingRow label={<ChatFilledLabel fieldId="videoOptimization.audioBitrateKbps">{audioLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="videoOptimization.audioBitrateKbps">{audioLabel}</ChatFilledLabel>} controlWidth="standard">
             <NumberStepperInput
               disabled={!isEnabled}
               min={32}
@@ -85,7 +85,7 @@ export function VideoOptimizationTab({
             />
           </SettingRow>
 
-          <SettingRow label={<ChatFilledLabel fieldId="videoOptimization.crf">{crfLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="videoOptimization.crf">{crfLabel}</ChatFilledLabel>} controlWidth="standard">
             <NumberStepperInput
               disabled={!isEnabled}
               min={18}

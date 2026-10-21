@@ -179,7 +179,7 @@ export function WallpaperNowPlayingBody({ widget }: { widget: Extract<WallpaperW
   }
 
   const art = showArt ? (
-    <div className={cn('shrink-0 overflow-hidden rounded-lg bg-[color-mix(in_srgb,var(--primary)_28%,transparent)]', layout === 'stack' ? 'aspect-square w-full max-w-[min(100%,60cqh)]' : 'aspect-square h-full max-h-[96cqh]')}>
+    <div className={cn('shrink-0 overflow-hidden rounded-lg', layout === 'stack' ? 'aspect-square w-full max-w-[min(100%,60cqh)]' : 'aspect-square h-full max-h-[96cqh]')} style={{ background: 'color-mix(in srgb,var(--primary) 28%,transparent)' }}>
       {track.thumbnail ? (
         <img src={track.thumbnail} alt="" className="h-full w-full object-cover" draggable={false} />
       ) : (
@@ -190,16 +190,16 @@ export function WallpaperNowPlayingBody({ widget }: { widget: Extract<WallpaperW
 
   return (
     <div
-      className={cn('flex h-full min-w-0', layout === 'stack' ? 'flex-col items-start justify-end gap-[0.5em]' : 'items-center gap-[0.8em]')}
+      className={cn('flex h-full min-w-0', layout === 'stack' ? 'flex-col items-start justify-end' : 'items-center')}
       // Row: three text lines share the height. Stack: the art takes most of it, so lean on the width.
-      style={{ fontSize: layout === 'stack' ? 'clamp(12px, min(7cqh, 6cqw), 30px)' : 'clamp(12px, min(17cqh, 5cqw), 32px)' }}
+      style={{ fontSize: layout === 'stack' ? 'clamp(12px, min(7cqh, 6cqw), 30px)' : 'clamp(12px, min(17cqh, 5cqw), 32px)', gap: layout === 'stack' ? '0.5em' : '0.8em' }}
     >
       {art}
       <div className="min-w-0 flex-1 self-stretch">
         <div className="flex h-full min-w-0 flex-col justify-center">
-          <div className="truncate text-[1.15em] font-semibold">{track.title || t({ ko: '알 수 없는 곡', en: 'Unknown track' })}</div>
+          <div className="truncate font-semibold" style={{ fontSize: '1.15em' }}>{track.title || t({ ko: '알 수 없는 곡', en: 'Unknown track' })}</div>
           {track.artist ? <div className="truncate opacity-70">{track.artist}</div> : null}
-          {track.album ? <div className="truncate text-[0.8em] opacity-50">{track.album}</div> : null}
+          {track.album ? <div className="truncate opacity-50" style={{ fontSize: '0.8em' }}>{track.album}</div> : null}
         </div>
       </div>
     </div>
@@ -220,11 +220,11 @@ function MeterList({ meters, display }: { meters: Meter[]; display: 'bars' | 'ri
     // Rings share the width in one row and take the height left after the label (and network) line.
     return (
       <div
-        className="flex h-full flex-wrap items-center justify-around gap-[0.75em] overflow-hidden [align-content:safe_center]"
-        style={{ fontSize: 'clamp(11px, min(7cqh, 3.2cqw), 20px)' }}
+        className="flex h-full flex-wrap items-center justify-around overflow-hidden [align-content:safe_center]"
+        style={{ gap: '0.75em', fontSize: 'clamp(11px, min(7cqh, 3.2cqw), 20px)' }}
       >
         {meters.map((meter) => (
-          <div key={meter.key} className="flex min-w-0 flex-col items-center gap-[0.25em]">
+          <div key={meter.key} className="flex min-w-0 flex-col items-center" style={{ gap: '0.25em' }}>
             <svg viewBox="0 0 36 36" style={{ width: `min(calc(100cqh - 3.5em), ${(84 / count).toFixed(1)}cqw)`, height: 'auto' }} aria-hidden="true">
               <circle cx="18" cy="18" r="15" fill="none" stroke="currentColor" strokeOpacity="0.15" strokeWidth="3.5" />
               <circle
@@ -237,11 +237,12 @@ function MeterList({ meters, display }: { meters: Meter[]; display: 'bars' | 'ri
                 strokeLinecap="round"
                 strokeDasharray={`${(Math.max(0, Math.min(1, meter.ratio)) * 94.25).toFixed(2)} 94.25`}
                 transform="rotate(-90 18 18)"
-                className="transition-[stroke-dasharray] duration-700"
+                className="transition duration-700"
+                style={{ transitionProperty: 'stroke-dasharray' }}
               />
               <text x="18" y="21" textAnchor="middle" fontSize="9" className="fill-current font-semibold tabular-nums">{Math.round(meter.ratio * 100)}</text>
             </svg>
-            <div className="max-w-[8em] truncate text-[0.85em] opacity-70">{meter.label}</div>
+            <div className="max-w-[8em] truncate opacity-70" style={{ fontSize: '0.85em' }}>{meter.label}</div>
           </div>
         ))}
       </div>
@@ -250,17 +251,17 @@ function MeterList({ meters, display }: { meters: Meter[]; display: 'bars' | 'ri
   // A bar row is about 2.9em with its gap (3.2 leaves room for the network line); later rows clip first.
   return (
     <div
-      className="flex h-full flex-col gap-[0.7em] overflow-hidden [justify-content:safe_center]"
-      style={{ fontSize: `clamp(11px, min(${(100 / (count * 3.2)).toFixed(2)}cqh, 3.4cqw), 22px)` }}
+      className="flex h-full flex-col overflow-hidden [justify-content:safe_center]"
+      style={{ gap: '0.7em', fontSize: `clamp(11px, min(${(100 / (count * 3.2)).toFixed(2)}cqh, 3.4cqw), 22px)` }}
     >
       {meters.map((meter) => (
         <div key={meter.key} className="min-w-0 shrink-0">
-          <div className="flex items-baseline justify-between gap-[0.5em]">
+          <div className="flex items-baseline justify-between" style={{ gap: '0.5em' }}>
             <span className="truncate opacity-75">{meter.label}</span>
             <span className="shrink-0 tabular-nums opacity-60">{meter.detail}</span>
           </div>
-          <div className="mt-[0.3em] h-[0.4em] overflow-hidden rounded-full bg-[color-mix(in_srgb,currentColor_14%,transparent)]">
-            <div className="h-full rounded-full bg-primary transition-[width] duration-700" style={{ width: `${Math.round(Math.max(0, Math.min(1, meter.ratio)) * 100)}%` }} />
+          <div className="h-[0.4em] overflow-hidden rounded-full" style={{ marginTop: '0.3em', background: 'color-mix(in srgb,currentColor 14%,transparent)' }}>
+            <div className="h-full rounded-full bg-primary transition duration-700" style={{ transitionProperty: 'width', width: `${Math.round(Math.max(0, Math.min(1, meter.ratio)) * 100)}%` }} />
           </div>
         </div>
       ))}
@@ -300,7 +301,7 @@ export function WallpaperSystemMonitorBody({ widget }: { widget: Extract<Wallpap
       <div className="flex h-full flex-col gap-2">
         <div className="min-h-0 flex-1"><MeterList meters={meters} display={display} /></div>
         {showNetwork ? (
-          <div className="flex shrink-0 justify-between gap-2 text-[clamp(10px,min(9cqh,3cqw),18px)] tabular-nums opacity-65">
+          <div className="flex shrink-0 justify-between gap-2 tabular-nums opacity-65" style={{ fontSize: 'clamp(10px,min(9cqh,3cqw),18px)' }}>
             <span>↓ {formatRate(system.netDown)}</span>
             <span>↑ {formatRate(system.netUp)}</span>
           </div>
@@ -383,15 +384,15 @@ export function WallpaperQuickRunBody({ widget }: { widget: Extract<WallpaperWid
         type="button"
         onClick={() => void press()}
         disabled={status.tone === 'busy'}
-        className="flex min-h-0 flex-1 items-center justify-center gap-[0.5em] rounded-[0.6em] bg-primary px-[0.9em] font-semibold text-primary-foreground transition-[filter,transform] hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
+        className="flex min-h-0 flex-1 items-center justify-center bg-primary font-semibold text-primary-foreground transition hover:brightness-110 active:scale-98 disabled:opacity-60"
         // The label grows with the button; the status line below keeps its own smaller size.
-        style={{ fontSize: 'clamp(14px, min(32cqh, 8cqw), 44px)' }}
+        style={{ fontSize: 'clamp(14px, min(32cqh, 8cqw), 44px)', gap: '0.5em', borderRadius: '0.6em', paddingInline: '0.9em' }}
       >
         <Play className="size-[1.1em] shrink-0" />
         <span className="truncate">{label}</span>
       </button>
       {status.message ? (
-        <div className={cn('shrink-0 truncate text-center text-[clamp(11px,min(12cqh,3.6cqw),18px)]', status.tone === 'error' ? 'text-destructive' : 'opacity-70')} role="status">{status.message}</div>
+        <div className={cn('shrink-0 truncate text-center', status.tone === 'error' ? 'text-destructive' : 'opacity-70')} style={{ fontSize: 'clamp(11px,min(12cqh,3.6cqw),18px)' }} role="status">{status.message}</div>
       ) : null}
     </div>
   )

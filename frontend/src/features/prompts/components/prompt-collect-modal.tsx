@@ -57,7 +57,7 @@ export function PromptCollectModal({ open, isSubmitting = false, onClose, onSubm
           </Alert>
         ) : null}
 
-        <ModalBody className="space-y-5">
+        <ModalBody spacing="lg">
           <Field label="Positive prompt">
             <Textarea rows={6} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder={t('prompts.components.prompt.collect.modal.enter.the.positive.prompt.here')} />
           </Field>

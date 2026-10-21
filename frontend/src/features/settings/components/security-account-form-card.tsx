@@ -4,7 +4,6 @@ import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingRow } from '@/components/ui/setting-row'
-import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 
 interface SecurityAccountFormCardProps {
   hasCredentials: boolean
@@ -64,7 +63,7 @@ export function SecurityAccountFormCard({
     <RowGroup heading={!hasCredentials ? t({ ko: '관리자 계정', en: 'Admin account' }) : t({ ko: '관리자 계정 변경', en: 'Change admin account' })}>
       {!hasCredentials ? (
         <>
-          <SettingRow label={labels.username} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={labels.username} controlWidth="standard">
             <Input
               variant="settings"
               aria-label={labels.username}
@@ -73,7 +72,7 @@ export function SecurityAccountFormCard({
               autoComplete="username"
             />
           </SettingRow>
-          <SettingRow label={labels.password} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={labels.password} controlWidth="standard">
             <Input
               type="password"
               variant="settings"
@@ -92,7 +91,7 @@ export function SecurityAccountFormCard({
         </>
       ) : (
         <>
-          <SettingRow label={labels.currentPassword} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={labels.currentPassword} controlWidth="standard">
             <Input
               type="password"
               variant="settings"
@@ -102,7 +101,7 @@ export function SecurityAccountFormCard({
               autoComplete="current-password"
             />
           </SettingRow>
-          <SettingRow label={labels.nextUsername} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={labels.nextUsername} controlWidth="standard">
             <Input
               variant="settings"
               aria-label={labels.nextUsername}
@@ -112,7 +111,7 @@ export function SecurityAccountFormCard({
               placeholder={currentUsername ?? labels.nextUsername}
             />
           </SettingRow>
-          <SettingRow label={labels.nextPassword} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={labels.nextPassword} controlWidth="standard">
             <Input
               type="password"
               variant="settings"

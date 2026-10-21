@@ -86,12 +86,12 @@ export function ChatChoiceDock({ card, selected, disabled, onPick, onClose }: { 
         const on = selected.includes(option.label)
         const leading = (
           <span className="flex items-center gap-2.5">
-            <span className={cn('flex size-[1.375rem] items-center justify-center rounded-[5px] font-mono text-xs tabular-nums', on && !card.multiple ? 'bg-primary text-primary-foreground' : 'bg-fill text-muted-foreground')}>{index + 1}</span>
+            <span className={cn('flex size-5.5 items-center justify-center rounded-sm font-mono text-xs tabular-nums', on && !card.multiple ? 'bg-primary text-primary-foreground' : 'bg-fill text-muted-foreground')}>{index + 1}</span>
             {card.multiple ? (on ? <SquareCheck className="size-4 text-primary" /> : <Square className="size-4 text-muted-foreground" />) : null}
           </span>
         )
         return (
-          <ListRow key={option.label} asChild interactive size="sm" leading={leading} className="gap-2.5 rounded-md border-b-0 disabled:cursor-default disabled:opacity-50">
+          <ListRow key={option.label} asChild interactive size="sm" leading={leading}>
             <button type="button" disabled={disabled} aria-pressed={card.multiple ? on : undefined} onClick={() => onPick(option.label)}>
               <span className="flex min-w-0 flex-wrap items-baseline gap-x-2.5">
                 <span className="font-semibold">{option.label}</span>

@@ -2,6 +2,7 @@ import { useMemo, useState, type MouseEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Download, File, FileAudio, FileText, FileVideo, Folder, ImageIcon, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { MediaCard } from '@/components/common/media-card'
 import { CodeBlock } from '@/components/ui/code-block'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -115,8 +116,7 @@ function ArtifactCard({
   }
   const cardBody = (
     <>
-      {isDirectory ? <FolderThumbnail entry={entry} /> : <FileThumbnail entry={entry} />}
-      <div className="mt-2 min-w-0 text-center">
+      <div className="min-w-0 text-center whitespace-normal">
         <div className="line-clamp-2 break-words text-xs font-medium text-foreground" title={entry.name}>{entry.name}</div>
         <div className="mt-1 text-2xs text-muted-foreground">{isDirectory ? t({ ko: '폴더', en: 'Folder' }) : entry.size > 0 ? formatFileSize(entry.size) : '—'}</div>
         <div className="text-2xs text-muted-foreground/80">{formatDateTime(entry.modifiedAt)}</div>
@@ -132,24 +132,29 @@ function ArtifactCard({
       onMouseLeave={() => onHoverPreviewChange(null)}
     >
       {isDirectory || entry.fileUrl ? (
-        <Button
+        <MediaCard
           type="button"
-          variant="ghost"
-          className="h-auto w-full flex-col items-stretch gap-0 p-2 font-normal whitespace-normal"
+          className="w-full"
+          media={isDirectory ? <FolderThumbnail entry={entry} /> : <FileThumbnail entry={entry} />}
+          mediaClassName="h-28 w-full"
+          title={cardBody}
           onClick={() => (isDirectory ? onOpenDirectory(entry.relativePath) : onOpenFile(entry))}
-        >
-          {cardBody}
-        </Button>
+        />
       ) : (
-        <div className="p-2">{cardBody}</div>
+        <div>
+          {isDirectory ? <FolderThumbnail entry={entry} /> : <FileThumbnail entry={entry} />}
+          <div className="pt-2">{cardBody}</div>
+        </div>
       )}
 
       {entry.downloadUrl ? (
-        <Button asChild size="icon-xs" variant="secondary" className="absolute top-3 right-3 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100" aria-label={t({ ko: '{name} 다운로드', en: 'Download {name}' }, { name: entry.name })}>
-          <a href={entry.downloadUrl} download={isDirectory ? `${entry.name}.zip` : entry.name} onClick={(event) => event.stopPropagation()}>
-            <Download className="h-3 w-3" />
-          </a>
-        </Button>
+        <span className="absolute top-3 right-3 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <IconButton asChild size="icon-xs" variant="overlay" label={t({ ko: '{name} 다운로드', en: 'Download {name}' }, { name: entry.name })}>
+            <a href={entry.downloadUrl} download={isDirectory ? `${entry.name}.zip` : entry.name} onClick={(event) => event.stopPropagation()}>
+              <Download className="h-3 w-3" />
+            </a>
+          </IconButton>
+        </span>
       ) : null}
     </div>
   )
@@ -236,9 +241,9 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
                   <Button
                     type="button"
                     variant="ghost"
-                    size="xs"
-                    className="max-w-[12rem] px-1 font-normal"
-                    aria-current={index === breadcrumbs.length - 1 ? 'page' : undefined}
+                    size="sm"
+                    className="max-w-[12rem]"
+                    aria-current={index === breadcrumbs.length - 1 ? 'location' : undefined}
                     onClick={() => setCurrentPath(crumb.path)}
                   >
                     <span className="truncate">{crumb.label}</span>

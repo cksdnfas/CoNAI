@@ -7,6 +7,7 @@ import { getRequesterAccountId, getRequesterAccountType, isAdminRequest } from '
 import { getPlugin, installPlugin, listPlugins, setPluginEnabled, removePlugin, PLUGIN_ZIP_LIMIT } from '../services/plugins/pluginRegistry'
 import { openPluginInstance, requirePluginInstance, renewPluginInstance, closePluginInstance, readPluginFile, proposePluginWrite, approvePluginWrite, applyPluginWrite, dismissPluginWrite, issuePluginMedia } from '../services/plugins/pluginHost'
 import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler'
+import { checkPluginSources, installPluginSource, listPluginSources, reviewPluginSource, unlinkPluginSource } from '../services/plugins/pluginSources'
 import { pluginStorage } from '../services/plugins/pluginStorage'
 import { issuePluginArtifactMedia } from '../services/plugins/pluginArtifactMedia'
 import { issuePluginPreview } from '../services/plugins/pluginPreview'
@@ -81,12 +82,29 @@ router.post('/instances/:instanceId/previews', asyncHandler(async (req, res) => 
 router.put('/instances/:instanceId/previews/:token', asyncHandler(async (req, res) => res.json({ success: true, data: await issuePluginPreview(param(req, 'instanceId'), req.body, caller(req), param(req, 'token')) })))
 /** A package with a server module carries its live state (running, failed, the tools and hooks it registered). */
 const withServer = (plugin: InstalledPlugin): InstalledPlugin => plugin.manifest.server ? { ...plugin, server: pluginServerStatus(plugin.manifest.id) } : plugin
-router.get('/', (req, res) => res.json({ success: true, data: listPlugins(isAdminRequest(req)).map(withServer) }))
+/** Administrator responses only: the plugin's Git link. */
+const withSource = (plugin: InstalledPlugin, sources = listPluginSources(plugin.manifest.id)): InstalledPlugin => {
+  const source = sources.get(plugin.manifest.id)
+  return source ? { ...plugin, source } : plugin
+}
+router.get('/', (req, res) => {
+  const admin = isAdminRequest(req)
+  const sources = admin ? listPluginSources() : null
+  res.json({ success: true, data: listPlugins(admin).map(plugin => withServer(sources ? withSource(plugin, sources) : plugin)) })
+})
 router.post('/install', requireAdmin, multer({ storage: multer.memoryStorage(), limits: { fileSize: PLUGIN_ZIP_LIMIT, files: 1, fields: 0 } }).single('package'), asyncHandler(async (req, res) => {
   if (!req.file) { res.status(400).json({ error: 'ZIP 패키지를 선택해줘.' }); return }
   const result = await installPlugin(req.file.buffer)
-  res.status(result.updated ? 200 : 201).json({ success: true, data: { ...result, plugin: withServer(result.plugin) } })
+  res.status(result.updated ? 200 : 201).json({ success: true, data: { ...result, plugin: withServer(withSource(result.plugin)) } })
 }))
+/** Git installs: review downloads and builds one commit, install applies exactly that review, check only resolves commits. */
+router.post('/sources/review', requireAdmin, cancellableAsyncHandler(async (req, res, signal) => res.json({ success: true, data: await reviewPluginSource(req.body, signal) })))
+router.post('/sources/install', requireAdmin, asyncHandler(async (req, res) => {
+  const result = await installPluginSource(req.body)
+  res.status(result.updated ? 200 : 201).json({ success: true, data: { ...result, plugin: withServer(withSource(result.plugin)) } })
+}))
+router.post('/sources/check', requireAdmin, cancellableAsyncHandler(async (req, res, signal) => res.json({ success: true, data: await checkPluginSources(req.body, signal) })))
+router.delete('/:pluginId/source', requireAdmin, (req, res) => { unlinkPluginSource(param(req, 'pluginId')); res.json({ success: true }) })
 router.put('/:pluginId/enabled', requireAdmin, asyncHandler(async (req, res) => {
   await setPluginEnabled(param(req, 'pluginId'), z.object({ enabled: z.boolean() }).strict().parse(req.body).enabled, getRequesterAccountId(req))
   res.json({ success: true })

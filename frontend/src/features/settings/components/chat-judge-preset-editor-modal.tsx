@@ -30,7 +30,6 @@ import {
 import { CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, listChatProfiles } from '@/lib/api-codex-chat'
 import { ChatRoomPicker } from '@/features/codex-chat/chat-room-picker'
 import { getErrorMessage } from '@/lib/error-message'
-import { GROW_TEXTAREA } from './chat-profile-editor-fields'
 import { JudgeModelSelect, useDefaultJudgeLabel } from './chat-judge-connection-select'
 import { SettingsAdvancedSwitch, useSettingsAdvanced } from './settings-advanced'
 import { ChatJudgeItemPane, itemTestSummary } from './chat-judge-item-editor'
@@ -185,7 +184,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
   const testControls = (
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <div className="w-56 min-w-0 flex-1"><ChatRoomPicker profilesById={profilesById} kind="direct" value={testThreadId === null ? '' : String(testThreadId)} onChange={(value) => setTestThreadId(value ? Number(value) : null)} /></div>
-      <Select variant="settings" className="h-8 w-24 text-xs" aria-label={t({ ko: '최근 메시지 수', en: 'Recent messages' })} value={testTurnCount} onChange={(event) => setTestTurnCount(Number(event.target.value))}>
+      <Select variant="settings" controlSize="compact" className="w-24" aria-label={t({ ko: '최근 메시지 수', en: 'Recent messages' })} value={testTurnCount} onChange={(event) => setTestTurnCount(Number(event.target.value))}>
         {TEST_TURNS.map((count) => <option key={count} value={count}>{t({ ko: '최근 {n}개', en: 'Last {n}' }, { n: count })}</option>)}
       </Select>
       {testMutation.isPending
@@ -353,7 +352,7 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
                 </SettingRow> : null}
               </div>
               {advanced ? <Field label={t({ ko: '후속 지시문', en: 'Follow-up directive' })}>
-                <Textarea variant="settings" className={GROW_TEXTAREA} value={draft.followUp.directive} maxLength={2000} placeholder={t({ ko: '비우면 기본', en: 'Empty: default' })} onChange={(event) => patchFollowUp({ directive: event.target.value })} />
+                <Textarea variant="settings" autoGrow value={draft.followUp.directive} maxLength={2000} placeholder={t({ ko: '비우면 기본', en: 'Empty: default' })} onChange={(event) => patchFollowUp({ directive: event.target.value })} />
               </Field> : null}
             </div>
           </div>

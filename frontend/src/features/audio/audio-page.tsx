@@ -781,11 +781,11 @@ function AudioPageContent() {
                 <Button
                   variant="subtle"
                   size="xs"
-                  className="min-w-0 shrink font-mono font-normal"
+                  className="min-w-0 shrink"
                   disabled={!permissions.canEdit}
                   onClick={() => setDialog('group-edit')}
                 >
-                  <span className="truncate">{group.label}</span>
+                  <span className="truncate font-mono">{group.label}</span>
                 </Button>
               </span>
             </Tip>

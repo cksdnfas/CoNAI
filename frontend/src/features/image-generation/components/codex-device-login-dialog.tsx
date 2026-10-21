@@ -114,7 +114,7 @@ export function CodexDeviceLoginDialog({ open, onClose, onSucceeded }: CodexDevi
         ) : isPending && loginState?.userCode ? (
           <div className="space-y-5">
             <div className="flex items-center justify-center gap-2">
-              <span className="select-all font-mono text-3xl font-semibold tracking-[0.2em] text-foreground">{loginState.userCode}</span>
+              <span className="select-all font-mono text-3xl font-semibold tracking-widest text-foreground">{loginState.userCode}</span>
               <IconButton variant="ghost" size="icon-sm" onClick={() => void handleCopyCode()} label={t({ ko: '코드 복사', en: 'Copy code' })}>
                 <Copy />
               </IconButton>

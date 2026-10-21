@@ -4,6 +4,7 @@ import { Check, Loader2, RotateCcw, Square, X } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useStreamFallbackInterval } from '@/features/runtime-events/use-runtime-event-stream'
 import { Button } from '@/components/ui/button'
+import { ListRow } from '@/components/ui/list-row'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
@@ -118,7 +119,7 @@ export function WorkflowActiveRunCard({
   const elapsed = useElapsedLabel(execution.started_at ?? execution.created_date, true)
 
   return (
-    <div className="space-y-2 rounded-md bg-primary/6 px-3 py-2.5 shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--primary)_25%,transparent)]">
+    <div className="space-y-2 rounded-md bg-primary/6 px-3 py-2.5 ring-1 ring-primary/25 ring-inset">
       <div className="flex items-center gap-2">
         <GraphExecutionStatusPill status={execution.status} />
         <span className="font-mono text-xs text-muted-foreground">
@@ -242,14 +243,13 @@ export function WorkflowRunHistory({
             data-active={selectedExecutionId === execution.id || undefined}
             className="flex min-h-12 items-center gap-3 border-b border-line px-2 data-[active=true]:bg-fill"
           >
-            <Button
+            <ListRow asChild interactive size="sm" className="min-w-0 flex-1 self-stretch">
+            <button
               type="button"
-              variant="nav"
               onClick={() => {
                 onSelectExecution(execution.id)
                 setIsDetailOpen(true)
               }}
-              className="h-auto min-w-0 flex-1 gap-3 self-stretch rounded-none px-0 py-2 hover:bg-transparent"
             >
               <span className="w-10 shrink-0 font-mono text-xs text-muted-foreground">#{execution.id}</span>
               <GraphExecutionStatusPill status={execution.status} className="w-16 justify-center" />
@@ -268,7 +268,8 @@ export function WorkflowRunHistory({
                 )}
               </span>
               <span className="shrink-0 text-right font-mono text-2xs text-muted-foreground">{formatDateTime(execution.created_date)}</span>
-            </Button>
+            </button>
+            </ListRow>
             {isActive ? (
               <IconButton size="icon-xs" variant="ghost" onClick={() => onCancelExecution(execution)} disabled={!canExecuteGeneration || cancellingExecutionId === execution.id || execution.cancel_requested} label={t({ ko: '실행 취소', en: 'Cancel run' })}>
                 <Square />

@@ -189,7 +189,7 @@ export function ComfyWorkflowMarkedFieldEditor({ field, dropdownListNames, canLo
         <IconButton size="icon-sm" variant="ghost" disabled={!canLocate} onClick={onLocate} label={t({ ko: '그래프에서 보기', en: 'Show in graph' })}>
           <LocateFixed />
         </IconButton>
-        <IconButton size="icon-sm" variant="ghost" className="hover:text-destructive" onClick={onRemove} label={t({ ko: '필드 삭제', en: 'Remove field' })}>
+        <IconButton size="icon-sm" variant="destructive-ghost" onClick={onRemove} label={t({ ko: '필드 삭제', en: 'Remove field' })}>
           <Trash2 />
         </IconButton>
       </div>
@@ -273,7 +273,8 @@ export function ComfyWorkflowMarkedFieldEditor({ field, dropdownListNames, canLo
               variant="settings"
               rows={6}
               readOnly
-              className="font-mono text-xs"
+              mono
+              textSize="xs"
               value={field.default_value && typeof field.default_value === 'object' ? JSON.stringify(field.default_value, null, 2) : ''}
             />
           ) : field.type === 'select' && (field.options?.length ?? 0) > 0 ? (
@@ -391,14 +392,14 @@ export function ComfyWorkflowMarkedFieldEditor({ field, dropdownListNames, canLo
       ) : null}
 
       <div>
-        <SettingRow label={t({ ko: '필수', en: 'Required' })} className="min-h-10 py-1.5">
+        <SettingRow label={t({ ko: '필수', en: 'Required' })} className="min-h-10">
           <Switch checked={field.required === true} onCheckedChange={(checked) => onPatch({ required: checked })} aria-label={t({ ko: '필수', en: 'Required' })} />
         </SettingRow>
-        <SettingRow label={t({ ko: '기본으로 접기', en: 'Collapsed by default' })} className="min-h-10 py-1.5">
+        <SettingRow label={t({ ko: '기본으로 접기', en: 'Collapsed by default' })} className="min-h-10">
           <Switch checked={field.default_collapsed === true} onCheckedChange={(checked) => onPatch({ default_collapsed: checked })} aria-label={t({ ko: '기본으로 접기', en: 'Collapsed by default' })} />
         </SettingRow>
         {field.type === 'image' ? (
-          <SettingRow label={t({ ko: '간단 업로드', en: 'Simple upload' })} className="min-h-10 py-1.5">
+          <SettingRow label={t({ ko: '간단 업로드', en: 'Simple upload' })} className="min-h-10">
             <Switch checked={field.simple_upload_only === true} onCheckedChange={(checked) => onPatch({ simple_upload_only: checked })} aria-label={t({ ko: '간단 업로드', en: 'Simple upload' })} />
           </SettingRow>
         ) : null}

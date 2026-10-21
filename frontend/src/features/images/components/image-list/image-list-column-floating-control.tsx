@@ -3,6 +3,7 @@ import { LayoutGrid, RotateCcw } from 'lucide-react'
 import { AnchoredPopup, anchoredPopupBodyClassName } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
+import { Panel } from '@/components/ui/panel'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -64,7 +65,6 @@ export function ImageListColumnFloatingControl({
                   type="button"
                   size="sm"
                   variant={isActive ? 'default' : 'secondary'}
-                  className="px-0"
                   onClick={() => {
                     onChange(option)
                     setIsOpen(false)
@@ -78,21 +78,21 @@ export function ImageListColumnFloatingControl({
         </div>
       </AnchoredPopup>
 
-      <Tip content={resolvedTitle} side="left">
-        {/* ghost keeps the floating glass surface visible underneath; the glass comes from theme-floating-panel. */}
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => setIsOpen((current) => !current)}
-          className="theme-floating-panel pointer-events-auto text-foreground"
-          aria-label={resolvedTitle}
-          aria-haspopup="dialog"
-          aria-expanded={isOpen}
-        >
-          <LayoutGrid className="h-4 w-4" />
-          <span className="text-xs font-semibold leading-none tabular-nums">{value}</span>
-        </Button>
-      </Tip>
+      <Panel treatment="floating" padding="none" className="pointer-events-auto">
+        <Tip content={resolvedTitle} side="left">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setIsOpen((current) => !current)}
+            aria-label={resolvedTitle}
+            aria-haspopup="dialog"
+            aria-expanded={isOpen}
+          >
+            <LayoutGrid className="h-4 w-4" />
+            <span className="text-xs font-semibold leading-none tabular-nums">{value}</span>
+          </Button>
+        </Tip>
+      </Panel>
     </div>
   )
 }

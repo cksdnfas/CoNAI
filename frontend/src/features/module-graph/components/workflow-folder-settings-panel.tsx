@@ -147,7 +147,7 @@ export function WorkflowFolderSettingsPanel({
             ) : null}
           </div>
 
-          <Inset className="space-y-3 p-3">
+          <Inset padding="sm" className="space-y-3">
             <Text as="div" variant="label">{t({ ko: '폴더 생성', en: 'Create folder' })}</Text>
             <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
             <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />
@@ -198,7 +198,7 @@ export function WorkflowFolderSettingsPanel({
             </div>
           ) : null}
 
-          <Inset className="space-y-3 p-3">
+          <Inset padding="sm" className="space-y-3">
             <Text as="div" variant="label">{t({ ko: '폴더 생성', en: 'Create folder' })}</Text>
             <Input value={childFolderName} onChange={(event) => setChildFolderName(event.target.value)} placeholder={t({ ko: '새 폴더 이름', en: 'New folder name' })} />
             <Textarea rows={3} value={childFolderDescription} onChange={(event) => setChildFolderDescription(event.target.value)} placeholder={t({ ko: '설명 (선택)', en: 'Description (optional)' })} />

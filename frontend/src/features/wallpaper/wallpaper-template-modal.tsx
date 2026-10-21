@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { Modal } from '@/components/ui/modal'
-import { Panel } from '@/components/ui/panel'
+import { MediaCard } from '@/components/common/media-card'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { getWallpaperWidgetIcon } from './wallpaper-widget-library-sidebar'
@@ -39,7 +39,7 @@ function TemplateThumbnail({ preview }: { preview: WallpaperTemplatePreview }) {
         return (
           <div
             key={`${widget.type}-${index}`}
-            className="absolute flex items-center justify-center rounded-[3px]"
+            className="absolute flex items-center justify-center rounded-xs"
             style={{ left: `${x * 100}%`, top: `${y * 100}%`, width: `${w * 100}%`, height: `${h * 100}%`, color: `rgb(${ink} / 0.5)`, ...look }}
           >
             <Icon className="size-3.5" />
@@ -63,12 +63,12 @@ export function WallpaperTemplateModal({ open, onClose, onApply }: WallpaperTemp
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {WALLPAPER_TEMPLATES.map((template) => (
           <Tip key={template.id} content={t(template.description)}>
-            <Panel asChild tone="low" padding="none" interactive className="overflow-hidden text-left">
-              <button type="button" onClick={() => onApply(template)}>
-                <TemplateThumbnail preview={getWallpaperTemplatePreview(template.id)} />
-                <div className="px-3 py-2.5 text-sm font-semibold text-foreground">{t(template.name)}</div>
-              </button>
-            </Panel>
+            <MediaCard
+              variant="boxed"
+              onClick={() => onApply(template)}
+              media={<TemplateThumbnail preview={getWallpaperTemplatePreview(template.id)} />}
+              title={t(template.name)}
+            />
           </Tip>
         ))}
       </div>

@@ -111,7 +111,8 @@ export function WorkflowRunnerPanel({
               <Button
                 type="button"
                 variant="ghost"
-                className="h-auto min-w-0 justify-start gap-1 px-1.5 py-1 text-foreground"
+                size="sm"
+                className="min-w-0 justify-start"
                 aria-label={t({ ko: '다른 워크플로 고르기', en: 'Pick another workflow' })}
               >
                 <span className="truncate text-base font-semibold tracking-tight text-foreground">{selectedGraph.name}</span>
@@ -119,7 +120,7 @@ export function WorkflowRunnerPanel({
               </Button>
             </PopoverTrigger>
           </Tip>
-          <PopoverContent align="start" className="flex max-h-[min(60vh,480px)] w-[min(360px,calc(100vw-2rem))] flex-col p-2">
+          <PopoverContent align="start" padding="sm" className="flex max-h-[min(60vh,480px)] w-[min(360px,calc(100vw-2rem))] flex-col">
             <WorkflowListPanel
               variant="picker"
               graphs={graphs}

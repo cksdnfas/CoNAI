@@ -94,8 +94,7 @@ export function ModuleWorkflowPagedResultsSection({
           {canClearAll ? (
             <IconButton
               size="icon-sm"
-              variant="ghost"
-              className="hover:text-destructive"
+              variant="destructive-ghost"
               onClick={onClearAll}
               disabled={isClearing || totalCount === 0}
               label={t({ ko: '전체 비우기', en: 'Clear all' })}

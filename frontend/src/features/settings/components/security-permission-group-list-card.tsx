@@ -55,7 +55,7 @@ export function SecurityPermissionGroupListCard({
               leading={<Shield />}
               name={(
                 <Badge
-                  className="border-0 normal-case tracking-normal"
+                  casing="sentence"
                   style={getSecurityGroupBadgeStyle(getSecurityGroupColor(group.groupKey, groupColors))}
                 >
                   {getPermissionGroupDisplayName(language, group.groupKey, group.name)}

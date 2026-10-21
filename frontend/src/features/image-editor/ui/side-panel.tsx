@@ -14,7 +14,8 @@ export function SidePanel({ engine, snapshot, onImportImage }: { engine: EditorE
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TextTabs<SideTab>
+      <div className="shrink-0 pr-2 pl-4">
+        <TextTabs<SideTab>
         value={tab}
         items={[
           { value: 'layers', label: t({ ko: '레이어', en: 'Layers' }) },
@@ -26,8 +27,9 @@ export function SidePanel({ engine, snapshot, onImportImage }: { engine: EditorE
         }}
         actions={tab === 'layers' ? <LayerActions engine={engine} snapshot={snapshot} onImportImage={onImportImage} /> : null}
         ariaLabel={t({ ko: '패널', en: 'Panel' })}
-        className="h-11 shrink-0 pr-2 pl-4"
-      />
+          className="h-11"
+        />
+      </div>
       {tab === 'layers' ? <LayerPanel engine={engine} snapshot={snapshot} /> : <AdjustPanel engine={engine} snapshot={snapshot} />}
     </div>
   )

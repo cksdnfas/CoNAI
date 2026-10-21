@@ -69,7 +69,7 @@ function HistoryAudioRow({ sound, stage }: { sound: ImageRecordAudio; stage: boo
       <IconButton
         variant={playing ? 'secondary' : 'ghost'}
         size={stage ? 'icon' : 'icon-sm'}
-        className="row-span-2 rounded-full"
+        className="row-span-2"
         label={playing ? t({ ko: '정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })}
         {...stopTile}
         onClick={(event) => { event.stopPropagation(); audioPlayer.toggle(sound.id, { src: sound.src }) }}
@@ -119,7 +119,7 @@ function HistorySoundRow({ sound, floating }: { sound: ImageRecordAudio; floatin
       <IconButton
         variant={playing ? 'secondary' : 'ghost'}
         size="icon-xs"
-        className="shrink-0 rounded-full"
+        className="shrink-0"
         label={playing ? t({ ko: '정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })}
         {...stopTile}
         onClick={(event) => { event.stopPropagation(); audioPlayer.toggle(sound.id, { src: sound.src }) }}

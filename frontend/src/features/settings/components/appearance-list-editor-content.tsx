@@ -8,7 +8,6 @@ import {
   RelatedImageColumnRow,
 } from './appearance-tab-editor-shared'
 import { ChatFilledLabel } from './settings-filled-label'
-import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 import { useI18n } from '@/i18n'
 
 /** Group browser card style and the related-image grid on the detail page. */
@@ -22,7 +21,7 @@ export function AppearanceListRows({
 
   return (
     <>
-      <SettingRow label={<ChatFilledLabel fieldId="appearance.groupExplorerCardStyle">{cardStyleLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.groupExplorerCardStyle">{cardStyleLabel}</ChatFilledLabel>} controlWidth="standard">
         <Select
           variant="settings"
           aria-label={cardStyleLabel}
@@ -51,7 +50,7 @@ export function AppearanceListRows({
         onChange={(value) => onPatchAppearance({ detailRelatedImageColumns: value })}
       />
 
-      <SettingRow label={<ChatFilledLabel fieldId="appearance.detailRelatedImageAspectRatio">{ratioLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.detailRelatedImageAspectRatio">{ratioLabel}</ChatFilledLabel>} controlWidth="standard">
         <Select
           variant="settings"
           aria-label={ratioLabel}

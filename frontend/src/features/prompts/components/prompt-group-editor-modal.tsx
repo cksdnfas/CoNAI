@@ -101,7 +101,7 @@ export function PromptGroupEditorModal({
           </Alert>
         ) : null}
 
-        <ModalBody className="space-y-4">
+        <ModalBody>
           <Field label={t('prompts.components.prompt.group.editor.modal.group.name')}>
             <Input variant="settings" value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder={t('prompts.components.prompt.group.editor.modal.e.g.character.background.lora')} />
           </Field>

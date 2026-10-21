@@ -359,6 +359,7 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
   /** 'none': the tools stay in the request (and the prompt cache) but the model must answer in text. */
   toolChoice?: 'none'
   maxToolRounds?: number
+  research?: import('./chatResearch').ChatResearchExecution
   /** Hang up on a model that starts looping and cut the loop off (finishReason 'repetition', see repetitionGuard). */
   stopLoops?: boolean
 }): Promise<ChatCompletionResult> {

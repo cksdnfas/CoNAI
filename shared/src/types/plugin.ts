@@ -2,6 +2,7 @@ import type { ChatPageAction, ChatPageData, ChatPageSchema } from './chatPageAct
 import type { ChatPageValue } from './chatPage'
 import type { GenerationLayoutSurface } from '../constants/generationLayout'
 import type { WorkspaceOperation } from './workspace'
+import type { PluginPackageReview } from './pluginAuthoring'
 
 /** Legacy manifest metadata; installed plugins use native account permissions instead of capability grants. */
 export type PluginCapability = 'files.read' | 'files.write' | 'files.media' | 'workspace.read' | 'workspace.write' | 'workspace.media' | 'media.process' | 'server'
@@ -45,7 +46,37 @@ export type PluginServerStatus = {
   state: 'off' | 'starting' | 'ready' | 'error'; error: string | null
   tools: Array<{ name: string; description: string }>; hooks: string[]
 }
-export type InstalledPlugin = { manifest: PluginManifest; enabled: boolean; installedAt: string; server?: PluginServerStatus }
+/** Host API serving a public repository: github.com, gitlab.com or self-hosted GitLab, codeberg.org or self-hosted Gitea/Forgejo. */
+export type PluginSourceProvider = 'github' | 'gitlab' | 'gitea'
+/** A public HTTPS repository, a branch/tag/commit (omitted: default branch) and the plugin folder in it ('' or omitted: root). `provider` is required for hosts other than github.com, gitlab.com and codeberg.org. */
+export type PluginSourceInput = { url: string; provider?: PluginSourceProvider; ref?: string; path?: string }
+/** A plugin linked to a Git repository (administrator responses only). A ZIP or editor install over it keeps the link. */
+export type PluginSource = {
+  url: string; provider: PluginSourceProvider; ref: string; path: string
+  /** Commit the last Git install was built from. */
+  commit: string
+  /** The installed package is no longer that Git build: a ZIP or editor install replaced it. */
+  modified: boolean
+  /** The last update check; null until checked. */
+  latestCommit: string | null; checkedAt: string | null; checkError: string | null
+  /** The last check found a commit other than `commit`. */
+  updateAvailable: boolean
+}
+export type InstalledPlugin = { manifest: PluginManifest; enabled: boolean; installedAt: string; server?: PluginServerStatus; source?: PluginSource }
+/** What installing from Git would change. Reviewing installs nothing; apply `reviewId` with `digest` before `expiresAt`. */
+export type PluginSourceReview = {
+  reviewId: string; expiresAt: number
+  source: { url: string; provider: PluginSourceProvider; ref: string; path: string; commit: string }
+  pluginId: string; name: string; version: string; digest: string; baseDigest: string | null
+  updated: boolean; enabled: boolean; server: boolean; size: number
+  files: PluginPackageReview['files']
+  /** Repository files left out of the package (dot-files and folders, Markdown, file types a package can't hold); the first 50. */
+  skipped: string[]
+  /** The link this install replaces when the plugin was linked to another repository, ref or folder; null otherwise. */
+  previousSource: { url: string; ref: string; path: string } | null
+}
+/** One linked plugin after an update check. */
+export type PluginSourceCheck = { pluginId: string; name: string; version: string; source: PluginSource }
 /** `updated`: replaced an installed version in place, keeping data. `reenable`: an unreadable prior installation was recovered disabled. */
 export type PluginInstallResult = { plugin: InstalledPlugin; updated: boolean; reenable: boolean }
 /** One stateless character turn. History and world state belong to the plugin, not a native chat thread. */
@@ -53,13 +84,14 @@ export type PluginLlmInput = {
   requestId: string; profileId: number; message: string; history?: string; userName?: string
   /** profile: native chat execution with the profile's tools and its own plugin/account room. text: stateless compatibility mode. */
   mode?: 'text' | 'profile'
-  /** Opt-in isolated, read-only published-post research; direct API LLM profiles only. */
+  /** Opt-in isolated, read-only published-post research using the selected profile's engine. */
   research?: PluginResearchInput
   /** Text mode only. judge: the profile's prompt on its judge model, else the default judge row (cheap quick calls). */
   model?: 'chat' | 'judge'
   useLorebooks?: boolean
   /** Optional integer 1–4096, capped by the profile. Omitted: text uses 512; profile uses its native budget. */
   maxTokens?: number
+  /** Optional 1,000–600,000 ms. Omitted: text and research use 120,000; profile runs until done or cancelled. */
   timeoutMs?: number
   /** JSON example/schema passed through the native workflow LLM JSON mode. */
   structuredOutput?: string | Record<string, unknown>
@@ -96,11 +128,17 @@ export type PluginProfileRun = {
 }
 export type PluginResearchInput = {
   slotId: string; activityId: string; allowedPostIds: number[]
-  maxModelCalls?: number; maxToolCalls?: number
+  /** Summary keeps the same source checks but exposes no tools on any engine. */
+  purpose?: 'research' | 'summary'
+  maxModelCalls?: number; maxToolCalls?: number; maxTurns?: number
 }
 export type PluginResearchResult = {
-  slotId: string; activityId: string; modelCalls: number; toolCalls: number
-  stopReason: 'completed' | 'model_limit' | 'tool_limit'
+  slotId: string; activityId: string; modelCalls: number | null; toolCalls: number
+  stopReason: 'completed' | 'model_limit' | 'tool_limit' | 'turn_limit'
+  /** Null means the native engine does not expose an enforceable provider-request/turn limit. */
+  limits: { runtime: 'direct' | 'claude' | 'pi' | 'codex'; maxModelCalls: number | null; maxTurns: number | null; maxToolCalls: number }
+  turns: number | null
+  evidenceTruncated?: boolean
   evidence: Array<{ postId: number; revision: number; contentVersion: number | null; offset: number; end: number; excerpt: string }>
 }
 export type PluginInstance = {

@@ -143,15 +143,15 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
   }
 }
 
-const tokens = new Map<string, { requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; generationPresetIds: number[]; generationPresetSnapshot: string; chatContext?: ChatExecutionContext; workspace: ReturnType<typeof chatWorkspace> }>()
+const tokens = new Map<string, { research?: McpHttpAuthentication['research']; requester: McpRequester; scopes: ChatScope[]; toolAllowlist: string[] | null; generationPresetIds: number[]; generationPresetSnapshot: string; chatContext?: ChatExecutionContext; workspace: ReturnType<typeof chatWorkspace> }>()
 
 /**
  * One token per chat app-server process; it lets that process reach `/mcp` as the chatting account with the
  * scopes its profiles were given (processes are keyed by account + scopes).
  */
-export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext) {
+export function issueCodexChatMcpToken(requester: McpRequester, scopes: ChatScope[], toolAllowlist: string[] | null, generationPresetIds: number[] = [], chatContext?: ChatExecutionContext, research?: McpHttpAuthentication['research']) {
   const token = `${CHAT_MCP_TOKEN_PREFIX}${crypto.randomBytes(32).toString('base64url')}`
-  tokens.set(token, { requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext, workspace: chatWorkspace(requester, chatContext?.threadId, chatContext?.profileId) })
+  tokens.set(token, { research, requester: { ...requester }, scopes: [...scopes], toolAllowlist: toolAllowlist ? [...toolAllowlist] : null, generationPresetIds: [...generationPresetIds], generationPresetSnapshot: JSON.stringify(ChatGenerationPresetStore.resolve(generationPresetIds)), chatContext, workspace: research ? null : chatWorkspace(requester, chatContext?.threadId, chatContext?.profileId) })
   return token
 }
 
@@ -194,6 +194,7 @@ export function authenticateCodexChatMcpRequest(req: Request, candidate: string 
     scopes,
     requester,
     source: 'codex-chat',
+    research: grant.research,
     workspace: grant.workspace,
     toolAllowlist: grant.toolAllowlist,
     generationPresetIds: grant.generationPresetIds,

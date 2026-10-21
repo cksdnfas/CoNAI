@@ -129,7 +129,7 @@ export function ImageBatchResizeAction({ compositeHashes, referenceSize }: Image
         widthClassName="max-w-md"
       >
         <form onSubmit={handleSubmit}>
-          <ModalBody className="space-y-4">
+          <ModalBody>
             {error ? (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>

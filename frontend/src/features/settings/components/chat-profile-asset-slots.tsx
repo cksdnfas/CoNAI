@@ -82,7 +82,7 @@ export function AssetPresetPicker({ runs, showExpressionMenu = false }: { runs: 
           <span className="inline-flex text-warning" tabIndex={0} aria-label={warning}><AlertTriangle className="size-4" /></span>
         </Tip>
       ) : null}
-      <Select variant="settings" className="h-8 w-auto max-w-56 text-xs" aria-label={t({ ko: '생성 프리셋', en: 'Generation preset' })} value={preset?.id ?? ''} disabled={!presets.length} onChange={(event) => runs.choosePreset(Number(event.target.value))}>
+      <Select variant="settings" controlSize="compact" className="w-auto max-w-56" aria-label={t({ ko: '생성 프리셋', en: 'Generation preset' })} value={preset?.id ?? ''} disabled={!presets.length} onChange={(event) => runs.choosePreset(Number(event.target.value))}>
         {!preset ? <option value="">{t({ ko: '생성 프리셋', en: 'Generation preset' })}</option> : null}
         {presets.map((entry) => (
           <option key={entry.id} value={entry.id} disabled={!entry.assetSupport?.mode}>
@@ -238,7 +238,7 @@ export function ExpressionSlots({ runs, characterName, profileId, referenceHash,
                 {hash ? <div className="pointer-events-none size-full">{images.render(hash)}</div> : null}
                 {working ? <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/50"><Spinner /></span> : null}
                 {!working && state.failed ? <span className="pointer-events-none absolute left-1 top-1 text-warning"><AlertTriangle className="size-4" /></span> : null}
-                {state.candidates.length > 1 ? <Badge variant="overlay" size="xs" className="pointer-events-none absolute top-1 right-1 font-bold tabular-nums">{state.candidates.length}</Badge> : null}
+                {state.candidates.length > 1 ? <Badge variant="overlay" size="xs" className="pointer-events-none absolute top-1 right-1 tabular-nums">{state.candidates.length}</Badge> : null}
                 {!hash && !working ? (
                   <span className="pointer-events-none absolute inset-0 flex items-center justify-center [&>*]:pointer-events-auto">
                     <IconButton size="icon-sm" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(name)} label={generateLabel} onClick={() => void runs.start({ kind: 'expressions', names: [name] }, true)}><Sparkles /></IconButton>

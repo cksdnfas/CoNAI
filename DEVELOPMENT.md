@@ -138,7 +138,11 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 워크플로 진행 카드는 노드 시작·완료·실패 로그가 기록될 때 발행되는 `graph.execution.progress`로 `/api/graph-workflows/executions/:id/progress`를 다시 읽고, 스트림이 끊기면 3초 폴링으로 돌아간다. 실행 상태 SSE는 해당 워크플로 목록·실행 조회를 갱신한다. 플러그인 서버 상태는 `plugin.server.changed`(식별자 없음), 채팅 루틴은 `chat.routine.changed`(관리자 한정), 지식 평가 요청 상태는 `posts.changed`(kind `run`)로 갱신하고 기존 폴링은 폴백으로만 남긴다. `posts.changed`는 변경된 글의 상세 캐시와 공용 목록을 갱신한다. SSE 구독자의 미전송 버퍼가 256KB를 넘으면 연결을 닫고 기존 재연결·재생 경로로 복구한다.
 
+`chat.task.updated`는 공용 이벤트 브리지가 작업·채팅 상세·목록을 갱신하며, 변경 전 시작된 최초 조회도 취소하고 다시 읽는다. 연결 복구 시 작업 상태를 포함해 재조회하고 한 연결의 `hello`·`reset`은 재동기화를 한 번만 요청한다. 생성 이력과 채팅 생성 이벤트는 200ms 디바운스·기존 최대 대기 시간 안에서 묶어 대상별로 갱신하며, 대기 항목이 256개에 도달하면 즉시 비운다. 화면 종료 시 남은 갱신 타이머와 대기 항목을 정리한다.
+
 워크플로 실행 이력의 더 보기는 20개 단위 offset 조회를 이어 붙인다. 서버의 요청당 200개 제한을 전체 이력 제한으로 사용하지 않으며, 목록 갱신 중 다음 페이지 요청을 겹치지 않는다. 선택한 실행 상태의 폴링은 SSE가 살아 있으면 중지하고 연결이 끊기면 재개한다. `files.changed`의 파일함 재조회는 400ms 지연·최대 2.5초 대기로 병합한다.
+
+`RuntimeJobRunner`는 `RuntimeJobStore.markRunning`의 원자적 `queued → running` 전환에 성공한 실행만 핸들러·로컬 취소 제어·하트비트를 시작한다. 이미 실행 중이거나 종료된 작업을 다시 실행하려는 요청은 기존 작업 행과 실행 소유권을 바꾸지 않는다.
 
 큐 상태 이벤트의 `audio_scopes`는 실제 오디오 주문·결과가 속한 그룹과 프로젝트만 지정한다. 빈 배열은 오디오 갱신을 생략하며, 일반 ComfyUI 작업의 오디오 결과도 포함한다. 오디오 전체 검색은 `/api/audio/groups` 한 번으로 조회하고 `list_audio_groups`의 `project_id` 생략도 같은 서비스를 사용한다. SQL 검색은 기존 JavaScript의 유니코드 소문자·부분 문자열 비교를 유지한다. 주문 목록은 작업·큐 상태·결과를 목록 단위로 읽으며, 상태가 달라진 작업만 캐시에 기록한다.
 
@@ -174,6 +178,8 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 ## 선택 설치 확장
 
+Git 저장소 설치·업데이트는 `pluginSources.ts`가 담당한다. 호스트 HTTPS API(GitHub·GitLab·Gitea/Forgejo)로 ref를 커밋으로 해석하고 그 커밋의 압축 파일을 공개 주소 전용 `download`(`chatCardAssets.ts`)로 받아 플러그인 폴더를 `packagePluginAssets`·`sdkAssets`로 패키징한다. 검토는 메모리에 보관하고 적용은 `installPlugin` 하나로 실행하며, 연결은 `pluginDb()`의 `plugin_sources` 표(설치 digest와 비교해 `modified` 계산)에 둔다. 라우트는 `plugins.routes.ts`의 `/sources/*`·`/:pluginId/source`, MCP는 `check_plugin_updates`(확인만), 회귀는 `backend/test/plugin-sources.test.ts`다. 화면은 `plugin-management.tsx`와 `plugin-source-install.tsx`이며, `plugin_source.*` 페이지 작업은 한 페이지에 활성 등록이 하나뿐이라 `plugin-authoring.tsx`의 초안 목록 등록에 합쳐 제공한다. 관리 목록은 `/extensions`에도 있으므로 `plugin_author.*`·`plugin_source.*`는 `/settings`·`/extensions`에서 허용하고, `/extensions`에서는 `/settings` 전용인 `settings` 대신 `page` 종류로 등록한다.
+
 앱 내부 제작은 `pluginAuthoring.ts`의 비실행 초안·파일 리비전·검증·패키징 서비스, `plugin-authoring.routes.ts`의 관리자 HTTP, `pluginAuthoringTools.ts`의 관리자 1:1 채팅 도구, `plugin-authoring.tsx`의 편집기를 사용한다. `shared/src/types/pluginAuthoring.ts`가 응답 계약이다. `plugin_author.*` 페이지 작업은 현재 편집기 초안·저장·설치 검토에 연결한다. 실제 적용은 검토 리비전/해시와 기존 설치 digest를 검사한 뒤 `installPlugin`으로 실행하고, ZIP 내보내기는 패키지 자산만 읽는다. `plugin.draft.changed`는 기존 SSE에서 관리자에게 초안 ID만 보내 관련 목록을 갱신한다. SDK는 백엔드 빌드의 `copy:plugin-sdk`와 portable/SEA 복사 경로로 배포한다. 중요한 경계는 `backend/test/plugin-authoring.test.ts`에서 검증하며 세부 한도와 호출 계약은 SDK 문서의 In-app authoring and distribution을 참고한다.
 
 제작 순서·연결 선택·공용 확장 기록은 [플러그인 제작 가이드](docs/GUIDE/PLUGIN_DEVELOPMENT.md)를 따른다. 플러그인 작업으로 메인 연결을 추가·변경하면 해당 가이드의 공용 연결 목록과 SDK 계약을 같은 작업에서 갱신한다.
@@ -192,7 +198,9 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 공개 `plugins/`에는 SDK와 `text-editor`·`app-workbench`·`chat-instructions` 개발 예제를 둔다. 개인 플러그인과 전용 테스트·문서는 Git/Docker에서 제외한 `local-plugins/`에 보관한다. `node scripts/build-plugin.mjs --local <이름>`으로 `build-output/local-plugins/`에 개인 ZIP을 만들며, 공용 테스트는 개인 소스에 의존하지 않는다.
 
-`mode: profile`의 선택적 `research`는 `shared/src/types/plugin.ts`의 `PluginResearchInput`/`PluginResearchResult` 계약이다. `pluginLlm.ts`가 입력·엔진·게시판 권한을 확인하고 `pluginProfileRun.ts`가 계정/플러그인/프로필/슬롯/활동/요청별 방과 기존 reply registry를 연결한다. 문맥은 `buildChatProfileReplyMessages(useLorebooks:false)`로 만들고 기존 `llmChatService.generateLlmGroupReply`의 같은 실행 루프를 사용한다. `chatResearch.ts`의 호스트 전용 상태가 실제 모델 요청·도구 시도를 제한하고, MCP `toolAccess.ts`/`server.ts`는 간접 도구까지 차단한다. `postStore.ts`의 내부 `allowedPostIds`는 검색 SQL/총수/스냅샷을 제한하고 임베딩 모델을 사용하지 않는다. `postTools.ts`는 공개 원문 범위와 실제 읽기 구간의 버전·발췌 증거를 반환한다. 기존 jobs·취소·권한·만료를 재사용하며 일반 profile 모드와 저장 검토는 바뀌지 않는다. 직접 API LLM만 지원하며 기타 엔진은 거절한다. 상세·호환성은 [SDK 조사 계약](plugins/README.md#isolated-read-only-post-research), 공개 회귀는 `backend/test/plugin-server.test.ts`를 참조한다.
+조사 상태·요약의 라이브 자료 경계는 `PostStore.publishedSources`의 단일 배치 조회를 사용한다. `ChatResearchExecution.validateSources`는 API 제공자 요청 직전, 네이티브 실행 시작·도구 호출·완료와 실행 중 1초마다 모든 지정 ID를 확인한다. 네이티브 내부 요청 직전의 원자적 확인은 보장하지 않는다. `finalModelRound`는 API 마지막 호출을 텍스트 전용으로 만들고 `purpose:'summary'`는 모든 엔진의 도구를 제거한다. 기존 `posts_search`의 `post_ids`(1–100, published 전용)와 페이지 한도 50은 같은 SQL을 사용하며 `revision`·`content_version`·`content_hash`를 반환한다. 플러그인은 상태 반환 전에 현재 자료로 인용/결과 접근과 변경 여부를 검사한다. 회귀는 `backend/test/plugin-server.test.ts`와 `backend/test/mcp-posts-files-tools.test.ts`에 둔다.
+
+`mode: profile`의 선택적 `research`는 `shared/src/types/plugin.ts`의 `PluginResearchInput`/`PluginResearchResult` 계약이다. `backend/src/services/plugins/pluginLlm.ts`가 입력·엔진·권한을 확인하고 `backend/src/services/plugins/pluginProfileRun.ts`가 계정/플러그인/프로필/슬롯/활동/요청별 방과 reply registry를 연결한다. `buildChatProfileReplyMessages(useLorebooks:false)` 문맥으로 기존 `llmChatService.generateLlmGroupReply`의 API/Claude/Pi 실행기를 사용하며 Pi는 새 private session만 사용한다. Codex는 `codexChatService.runCodexResearchReply`가 기존 app-server 시작·설정 검증·알림·사용량 처리를 공유하고 `codexChatAccess`→MCP 인증에 호스트 전용 research capability를 연결한다. 임시 홈/토큰은 종료·취소 시 정리하고 셸·외부 도구·파일 변경은 열지 않는다. API 요청 1–32(기본 8), Claude/Pi 턴 1–32(기본 8), 모든 엔진 도구 1–100(기본 24), 기존 timeout 최대 600초다. `modelCalls:null`은 네이티브 내부 호출 수 미관측, `turns:null`은 API/Codex 턴 수 미관측이며 `limits`는 실제 적용 상한만 반환한다. Codex 모델/턴/출력 토큰 상한은 지원하지 않는다. MCP 범위·게시글 SQL·실제 원문 증거·jobs 멱등/취소/권한은 그대로 재사용한다. 상세는 [SDK 조사 계약](plugins/README.md#isolated-read-only-post-research), 공개 회귀는 `backend/test/plugin-server.test.ts`와 `backend/test/chat-pi-sessions.test.ts`를 참조한다.
 
 `pluginLlm.ts`의 `mode: profile`은 `pluginProfileRun.ts` → `ensureAutomationRoom` / `wakeChatRoom` → 기존 채팅 엔진으로 실행한다. 플러그인·계정·프로필별 전용 대화에서 프로필의 도구 카탈로그·권한·생성 프리셋·검토를 재사용하며 별도 도구 실행 루프를 만들지 않는다. `profileRun`은 실제 메시지의 도구 결과를 크기 제한 안에서 반환하고, 재조회 시 `attachJobResults`로 지연 생성 결과를 갱신한다. 대화는 자동화 목록의 `plugin` 종류로 남고 SDK `navigation.openChat`으로 연다. 기존 생략/`text` 모드는 상태 없는 답변 계약을 유지한다. `plugin-server.test.ts`에서 모델 도구 호출 → 실제 파일 작업 → 모델 결과 재입력, 권한 회수·계정 격리·멱등·취소를 검증한다.
 

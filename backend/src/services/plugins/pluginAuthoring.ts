@@ -101,7 +101,13 @@ export function packagePluginAssets(assets: Map<string, Buffer>) {
   const { manifest } = unpackPlugin(bytes)
   return { bytes, manifest, digest: hash(bytes), filename: `${manifest.id}-${manifest.version}.zip` }
 }
-function sdkAssets() {
+/** Per-file changes from the installed package (`previous`) to a new one, for draft and Git reviews. */
+export function packageFileChanges(next: Map<string, Buffer>, previous: Map<string, Buffer>): PluginPackageReview['files'] {
+  return [...new Set([...next.keys(), ...previous.keys()])].sort().map(name => ({ name, size: next.get(name)?.length ?? 0,
+    change: !next.has(name) ? 'removed' : !previous.has(name) ? 'added' : next.get(name)!.equals(previous.get(name)!) ? 'unchanged' : 'changed' }))
+}
+/** The host's SDK copy that every built package carries. */
+export function sdkAssets() {
   const candidates = [
     path.join(__dirname, 'plugin-sdk'),
     path.join(__dirname, '../../../../plugin-sdk'),
@@ -142,8 +148,8 @@ export function createPluginDraft(requester: McpRequester, value: z.input<typeof
       const manifest = parsePluginManifest({ apiVersion: 1, id: input.pluginId, name, version: '1.0.0', description: '', pages: [{ id: 'main', title: name, entry: 'index.html', accepts: [], actions: [] }] })
       assets = sdkAssets()
       assets.set('plugin.json', Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`))
-      assets.set('index.html', Buffer.from('<!doctype html>\n<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="conai-plugin.css"><link rel="stylesheet" href="style.css"></head><body><main><h1 id="title"></h1><p>플러그인을 만들 준비가 됐어.</p></main><script type="module" src="app.js"></script></body></html>\n'))
-      assets.set('style.css', Buffer.from('main { padding: 16px; }\n'))
+      assets.set('index.html', Buffer.from('<!doctype html>\n<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="conai-plugin.css"><link rel="stylesheet" href="style.css"></head><body><main class="conai-page"><h1 id="title"></h1><p>플러그인을 만들 준비가 됐어.</p></main><script type="module" src="app.js"></script></body></html>\n'))
+      assets.set('style.css', Buffer.from('/* Layout only. Page spacing and widgets come from conai-plugin.css (class reference: plugins/README.md). */\n'))
       assets.set('app.js', Buffer.from(`import { connectPlugin } from './conai-plugin.js'\nconst api = await connectPlugin({})\ndocument.querySelector('#title').textContent = ${JSON.stringify(name)}\napi.publish({ dirty: false, data: { ready: true } })\n`))
     }
     db().prepare('INSERT INTO plugin_drafts(id,plugin_id,name,base_digest,created_input) VALUES(?,?,?,?,?)').run(id, input.pluginId, name, baseDigest, fingerprint)
@@ -246,8 +252,7 @@ export function reviewPluginDraft(requester: McpRequester, id: string, expectedR
   return {
     draftId: id, revision: expectedRevision, pluginId: built.manifest.id, name: built.manifest.name, version: built.manifest.version,
     digest: built.digest, baseDigest: built.current.base_digest, updated: !!installed, enabled: !!installed?.enabled, server: !!built.manifest.server, size: built.bytes.length,
-    files: [...new Set([...built.assets.keys(), ...previous.keys()])].sort().map(name => ({ name, size: built.assets.get(name)?.length ?? 0,
-      change: !built.assets.has(name) ? 'removed' : !previous.has(name) ? 'added' : built.assets.get(name)!.equals(previous.get(name)!) ? 'unchanged' : 'changed' })),
+    files: packageFileChanges(built.assets, previous),
   }
 }
 /** Only the authenticated host route calls this. AI tools prepare a review, never install executable code. */

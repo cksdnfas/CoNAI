@@ -124,7 +124,7 @@ function ChatImageThumb({ image, size, onOpen }: { image: ImageRecord; size: Thu
         aria-label={t({ ko: '크게 보기', en: 'View larger' })}
         // Until the image is drawn the button is the placeholder box: same footprint, spinner on top.
         className={cn(
-          'relative shrink-0 overflow-hidden rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40',
+          'relative shrink-0 overflow-hidden rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40',
           fillsWidth(size) && 'w-full',
           drawn ? 'cursor-zoom-in' : cn('cursor-default bg-surface-high text-muted-foreground', placeholder.className),
         )}
@@ -170,6 +170,8 @@ function ChatFoundTile({ image, onOpen }: { image: ImageRecord; onOpen: () => vo
   const { t } = useI18n()
   const thumbnailUrl = image.thumbnail_url ?? ''
   const isVideo = image.mime_type?.startsWith('video/') === true
+  // 썸네일이 아직 준비되지 않았으면 깨진 이미지 대신 스피너를 보이고 다시 시도한다
+  const retried = useRetriedThumbnail(thumbnailUrl)
   const hoverPreview = useMediaHoverPreview(thumbnailUrl ? { src: thumbnailUrl, fullSrc: isVideo ? null : image.image_url, videoSrc: isVideo ? image.image_url : null } : null)
 
   return (
@@ -178,14 +180,29 @@ function ChatFoundTile({ image, onOpen }: { image: ImageRecord; onOpen: () => vo
       <button
         type="button"
         aria-label={t({ ko: '크게 보기', en: 'View larger' })}
-        className="relative block aspect-square w-full cursor-zoom-in overflow-hidden rounded-sm bg-surface-high outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+        className="relative block aspect-square w-full cursor-zoom-in overflow-hidden rounded-sm bg-surface-high outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
         onClick={onOpen}
         {...hoverPreview.triggerProps}
       >
         {isVideo ? (
           <ImagePreviewMedia image={image} className="block size-full object-cover" />
         ) : (
-          <img src={thumbnailUrl} alt="" loading="lazy" draggable={false} className="block size-full object-cover" />
+          <>
+            <img
+              src={retried.src}
+              alt=""
+              loading="lazy"
+              draggable={false}
+              onError={retried.onError}
+              onLoad={retried.onLoad}
+              className={cn('block size-full object-cover transition-opacity duration-300 ease-out', retried.loaded ? 'opacity-100' : 'opacity-0')}
+            />
+            {!retried.loaded && (
+              <span className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+                {retried.failed ? <ImageOff className="size-5" /> : <Spinner size="md" />}
+              </span>
+            )}
+          </>
         )}
         {hoverPreview.inPlace && <MediaHoverExpandCue />}
       </button>
@@ -399,7 +416,6 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
         <Button
           variant="ghost"
           size="xs"
-          className="gap-1 px-1.5 font-normal text-muted-foreground"
           aria-label={t({ ko: '사용한 도구 {count}개', en: '{count} tool calls' }, { count: calls.length })}
           onPointerEnter={hoverTo(true)}
           onPointerLeave={hoverTo(false)}
@@ -411,7 +427,8 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-auto min-w-48 max-w-[min(22rem,90vw)] p-1.5"
+        padding="sm"
+        className="w-auto min-w-48 max-w-[min(22rem,90vw)]"
         onOpenAutoFocus={(event) => event.preventDefault()}
         onPointerEnter={hoverTo(true)}
         onPointerLeave={hoverTo(false)}
@@ -669,7 +686,7 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="text-xs text-muted-foreground">
-      <Button variant="ghost" size="xs" className="-ml-2 gap-1 text-muted-foreground" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+      <Button variant="ghost" size="xs" className="-ml-2" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
         <ChevronRight className={cn('transition-transform', open && 'rotate-90')} />
         {active ? t({ ko: '생각하는 중…', en: 'Thinking…' }) : t({ ko: '생각한 과정', en: 'Reasoning' })}
       </Button>
@@ -780,7 +797,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
       {status === 'failed' ? <div className="flex flex-wrap items-center gap-2">
         <ChatErrorChip error={error ?? null} />
-        {onRetry ? <Button type="button" variant="ghost" size="xs" className="text-primary" onClick={onRetry}><RefreshCw />{t({ ko: '다시 시도', en: 'Try again' })}</Button> : null}
+        {onRetry ? <Button type="button" variant="link" size="xs" onClick={onRetry}><RefreshCw />{t({ ko: '다시 시도', en: 'Try again' })}</Button> : null}
       </div> : null}
       {truncated ? (
         <Tip content={t({ ko: '최대 출력 토큰에 닿아서 답변이 여기서 끊겼어. 헤더의 컨텍스트에서 한도를 올릴 수 있어.', en: 'The reply hit the max output tokens. Raise the cap under Context in the chat header.' })} side="bottom" align="start">

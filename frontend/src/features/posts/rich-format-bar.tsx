@@ -47,12 +47,12 @@ export function RichFormatBar({ state, disabled, onFormat, stickyTop }: {
       style={stickyTop ? { top: stickyTop } : undefined}
       className={cn(
         'flex min-w-0 items-center gap-0.5 scroll-x theme-nav-scroll border-b border-line px-2 py-1',
-        stickyTop && 'sticky z-10 rounded-t-sm [background:linear-gradient(var(--field),var(--field)),var(--background)]',
+        stickyTop && 'sticky z-10 rounded-t-sm bg-background bg-linear-to-r from-field to-field',
       )}
     >
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild disabled={disabled}>
-          <Button variant="ghost" size="sm" aria-label={t({ ko: '문단 형식: {format}', en: 'Block format: {format}' }, { format: headingLabel(state.heading) })} className="w-24 shrink-0 justify-between px-2 font-semibold" onMouseDown={(event) => { if (event.button === 0) event.preventDefault() }}>
+          <Button variant="ghost" size="sm" aria-label={t({ ko: '문단 형식: {format}', en: 'Block format: {format}' }, { format: headingLabel(state.heading) })} className="w-24 shrink-0 justify-between" onMouseDown={(event) => { if (event.button === 0) event.preventDefault() }}>
             <span className="truncate">{headingLabel(state.heading)}</span>
             <ChevronDown className="size-4 text-muted-foreground" />
           </Button>
@@ -60,9 +60,9 @@ export function RichFormatBar({ state, disabled, onFormat, stickyTop }: {
         <DropdownMenuContent align="start" onCloseAutoFocus={(event) => event.preventDefault()}>
           <DropdownMenuRadioGroup value={String(state.heading ?? 0)} onValueChange={(value) => onFormat({ heading: Number(value) || null })}>
             {[0, ...HEADING_LEVELS].map((level) => (
-              <DropdownMenuRadioItem key={level} value={String(level)} className={cn(level === 1 && 'text-lg font-bold', level === 2 && 'text-base font-bold', level >= 3 && 'font-semibold')}>
-                {headingLabel(level || null)}
-                <DropdownMenuShortcut className="pl-4 font-normal">{formatShortcut(`Mod+Alt+${level}`)}</DropdownMenuShortcut>
+              <DropdownMenuRadioItem key={level} value={String(level)}>
+                <span className={cn(level === 1 && 'text-lg font-bold', level === 2 && 'text-base font-bold', level >= 3 && 'font-semibold')}>{headingLabel(level || null)}</span>
+                <span className="ml-auto pl-4"><DropdownMenuShortcut>{formatShortcut(`Mod+Alt+${level}`)}</DropdownMenuShortcut></span>
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>

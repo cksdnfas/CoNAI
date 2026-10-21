@@ -36,6 +36,16 @@ export class QueryCacheService {
     this.metadataInvalidationListeners.add(listener);
     return () => { this.metadataInvalidationListeners.delete(listener); };
   }
+
+  private static notifyMetadataInvalidated(hash?: string): void {
+    this.metadataInvalidationListeners.forEach((listener) => {
+      try {
+        listener(hash);
+      } catch (error) {
+        logger.warn('⚠️ Metadata invalidation listener error:', error instanceof Error ? error.message : error);
+      }
+    });
+  }
   private static galleryCache: InstanceType<typeof LRUCache>;
   private static galleryTotalCache: InstanceType<typeof LRUCache>;
   private static metadataCache: InstanceType<typeof LRUCache>;
@@ -231,17 +241,13 @@ export class QueryCacheService {
   }
 
   static invalidateMetadataCache(compositeHash: string): void {
-    this.metadataInvalidationListeners.forEach((listener) => listener(compositeHash));
     try {
-      if (!this.metadataCache) {
-        return;
-      }
-
       const key = `metadata:${compositeHash}`;
-      this.metadataCache.delete(key);
+      this.metadataCache?.delete(key);
     } catch (error) {
       console.warn('⚠️ Metadata cache invalidate error:', error instanceof Error ? error.message : error);
     }
+    this.notifyMetadataInvalidated(compositeHash);
   }
 
   static getThumbnailCache(compositeHash: string): Buffer | null {
@@ -291,7 +297,7 @@ export class QueryCacheService {
         this.invalidateGalleryCache();
         this.metadataCache.clear();
         this.thumbnailCache.clear();
-        this.metadataInvalidationListeners.forEach((listener) => listener());
+        this.notifyMetadataInvalidated();
         logger.debug('🗑️ All image caches invalidated (bulk operation)');
       } else {
         // One image can move or disappear from any page and any supported sort.

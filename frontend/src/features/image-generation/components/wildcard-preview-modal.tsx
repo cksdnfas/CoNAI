@@ -118,9 +118,9 @@ export function WildcardPreviewModal({
 
             <div className="space-y-2">
               {parseResult.results.map((result, index) => (
-                <Inset key={`${index}:${result}`} className="p-3 text-sm text-muted-foreground">
+                <Inset key={`${index}:${result}`} padding="sm">
                   <div className="flex items-center justify-between gap-3">
-                    <Text as="div" variant="overline" className="font-semibold">{t({ ko: '샘플 {count}', en: 'Sample {count}' }, { count: index + 1 })}</Text>
+                    <Text as="div" variant="overline">{t({ ko: '샘플 {count}', en: 'Sample {count}' }, { count: index + 1 })}</Text>
                     <IconButton size="icon-sm" variant="ghost" onClick={() => onCopyResult(result, t({ ko: '프리뷰 결과 {count}', en: 'Preview result {count}' }, { count: index + 1 }))} label={t({ ko: '복사', en: 'Copy' })}>
                       <Copy className="h-4 w-4" />
                     </IconButton>

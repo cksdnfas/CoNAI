@@ -16,7 +16,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import { useSettingsAdvanced } from './settings-advanced'
 import { cn } from '@/lib/utils'
-import { GROW_TEXTAREA } from './chat-profile-editor-fields'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { formatProbability, JudgeProbabilityBar, JudgeVerdictChip } from './chat-judge-parts'
 import { JudgeToolPicker, JudgeWithheldTools } from './chat-judge-tool-picker'
@@ -55,7 +54,7 @@ function ChoiceOptions({ item, onChange }: { item: ChatJudgeItem; onChange: (pat
     <div className="space-y-1.5">
       {item.options.map((option, index) => (
         <div key={index} className="grid grid-cols-[8rem_minmax(0,1fr)_auto_auto] items-center gap-2">
-          <Input variant="settings" className="font-mono" aria-label={t({ ko: '선택지 이름', en: 'Option label' })} value={option.label} maxLength={40} onChange={(event) => update(index, { label: event.target.value })} />
+          <Input variant="settings" mono aria-label={t({ ko: '선택지 이름', en: 'Option label' })} value={option.label} maxLength={40} onChange={(event) => update(index, { label: event.target.value })} />
           <Input variant="settings" aria-label={t({ ko: '선택지 설명', en: 'Option description' })} value={option.description} onChange={(event) => update(index, { description: event.target.value })} />
           <ToggleChip size="sm" pressed={option.yes} onClick={() => update(index, { yes: !option.yes })}>{t({ ko: '예로 셈', en: 'Counts as yes' })}</ToggleChip>
           <IconButton size="icon-sm" variant="ghost" onClick={() => onChange({ options: item.options.filter((_, at) => at !== index) })} label={t({ ko: '선택지 삭제', en: 'Remove option' })}><Trash2 /></IconButton>
@@ -136,15 +135,15 @@ export function ChatJudgeItemPane({ item, onChange, onRemove, testTurns }: {
           </Field> : null}
         </div>
         <Field label={t({ ko: '질문', en: 'Question' })}>
-          <Textarea variant="settings" className={cn(GROW_TEXTAREA, 'font-mono text-xs')} value={item.instructions} maxLength={2000} placeholder="Did the user …?" onChange={(event) => onChange({ instructions: event.target.value })} />
+          <Textarea variant="settings" autoGrow mono textSize="xs" value={item.instructions} maxLength={2000} placeholder="Did the user …?" onChange={(event) => onChange({ instructions: event.target.value })} />
         </Field>
         {item.kind === 'noul' ? (advanced ? (
           <div className="grid gap-3 md:grid-cols-2">
             <Field label={t({ ko: '예 기준', en: 'Yes looks like' })}>
-              <Textarea variant="settings" className={GROW_TEXTAREA} value={item.criteria.yes} maxLength={600} onChange={(event) => onChange({ criteria: { ...item.criteria, yes: event.target.value } })} />
+              <Textarea variant="settings" autoGrow value={item.criteria.yes} maxLength={600} onChange={(event) => onChange({ criteria: { ...item.criteria, yes: event.target.value } })} />
             </Field>
             <Field label={t({ ko: '아니오 기준', en: 'No looks like' })}>
-              <Textarea variant="settings" className={GROW_TEXTAREA} value={item.criteria.no} maxLength={600} onChange={(event) => onChange({ criteria: { ...item.criteria, no: event.target.value } })} />
+              <Textarea variant="settings" autoGrow value={item.criteria.no} maxLength={600} onChange={(event) => onChange({ criteria: { ...item.criteria, no: event.target.value } })} />
             </Field>
           </div>
         ) : null) : (
@@ -186,7 +185,7 @@ export function ChatJudgeItemPane({ item, onChange, onRemove, testTurns }: {
             <>
               <SettingRow label={t({ ko: '예일 때', en: 'On yes' })} align="start" controlClassName="w-full sm:w-80 flex-col items-stretch">
                 <JudgeToolPicker tools={item.tools} onChange={(tools) => onChange({ tools })} />
-                <Textarea variant="settings" className={GROW_TEXTAREA} value={item.directive} maxLength={2000} aria-label={t({ ko: '지시문', en: 'Directive' })} placeholder={t({ ko: '대화 모델에게 붙일 지시문', en: 'Directive for the chat model' })} onChange={(event) => onChange({ directive: event.target.value })} />
+                <Textarea variant="settings" autoGrow value={item.directive} maxLength={2000} aria-label={t({ ko: '지시문', en: 'Directive' })} placeholder={t({ ko: '대화 모델에게 붙일 지시문', en: 'Directive for the chat model' })} onChange={(event) => onChange({ directive: event.target.value })} />
               </SettingRow>
               <SettingRow label={t({ ko: '아니오일 때', en: 'On no' })}>
                 {item.tools.length > 0

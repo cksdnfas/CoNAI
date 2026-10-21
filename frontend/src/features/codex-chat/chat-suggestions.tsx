@@ -99,7 +99,7 @@ export function ChatSuggestButton({ buttonRef, open, loading, disabled, onToggle
       ref={buttonRef}
       variant="ghost"
       size="icon-sm"
-      className={cn('rounded-full text-primary hover:text-primary', open && 'bg-primary/15')}
+      active={open}
       aria-expanded={open}
       disabled={disabled}
       onClick={onToggle}

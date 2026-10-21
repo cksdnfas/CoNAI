@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, Circle, CircleCheck, CircleDot, CircleMinus, CircleStop, Pause, Play, Users } from 'lucide-react'
 import { CHAT_TASK_DEFAULT_BUDGET, CHAT_TASK_LIMITS, type ChatProposal, type ChatRoutineRouting, type ChatTask, type ChatTaskAssignee, type ChatTaskRouting, type ChatTaskStep, type ChatTaskSummary } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { DisclosureButton } from '@/components/ui/disclosure-button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/loading-state'
@@ -14,9 +15,8 @@ import { useI18n } from '@/i18n'
 import { approveChatTaskPlan, CHAT_PROFILES_QUERY_KEY, chatTaskQueryKey, dismissChatProposal, getChatTask, listChatProfiles, setChatTaskState } from '@/lib/api-codex-chat'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
-import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-chat-context'
+import { codexChatThreadQueryKey } from './codex-chat-context'
 import { getErrorMessage } from '@/lib/error-message'
-import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
 import { cn } from '@/lib/utils'
 import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-event-stream'
 import { resolveStreamFallbackInterval } from '@/features/runtime-events/runtime-event-fallback'
@@ -26,25 +26,10 @@ const LIVE = new Set<ChatTask['status']>(['running', 'waiting', 'paused'])
 
 /**
  * The chat's newest task, refreshed when the server announces a change; polled every few seconds while it is live only
- * when the event stream is down. Several parts of one screen use it, so a refresh already on its way is joined, not
- * cancelled and sent again.
+ * when the event stream is down. The shared runtime bridge owns event refreshes.
  */
 export function useChatTask(threadId: number | null) {
-  const queryClient = useQueryClient()
   const { status: streamStatus } = useRuntimeEventStream()
-  useEffect(() => {
-    return createRuntimeEventStream({
-      onEnvelope: (envelope) => {
-        if (envelope.name !== 'chat.task.updated') return
-        // Every task change moves the progress ring of its chat in the list.
-        void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }, { cancelRefetch: false })
-        if ((envelope.payload as { threadId?: number })?.threadId !== threadId) return
-        void queryClient.invalidateQueries({ queryKey: chatTaskQueryKey(threadId) }, { cancelRefetch: false })
-        void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) }, { cancelRefetch: false })
-      },
-      onStatusChange: () => {}, onResync: () => {}, onSessionExpired: () => {},
-    })
-  }, [queryClient, threadId])
   return useQuery({
     queryKey: chatTaskQueryKey(threadId),
     queryFn: () => getChatTask(threadId as number),
@@ -78,7 +63,7 @@ function useWaitLabel() {
 function StateChip({ task }: { task: ChatTask }) {
   const label = useWaitLabel()(task)
   const tone = task.status === 'running' ? 'primary' : task.status === 'waiting' || task.status === 'paused' ? 'warning' : 'muted'
-  const chip = <Chip size="sm" tone={tone} className="font-semibold">{label}</Chip>
+  const chip = <Chip size="sm" tone={tone}><span className="font-semibold">{label}</span></Chip>
   return task.reason ? <Tip content={task.reason}>{chip}</Tip> : chip
 }
 
@@ -114,7 +99,7 @@ function StepList({ steps, current, task }: { steps: Array<{ title: string; stat
         <li key={index} className={cn('grid items-center gap-2 py-0.5 text-sm', assigned ? 'grid-cols-[1rem_minmax(0,1fr)_auto_auto]' : 'grid-cols-[1rem_minmax(0,1fr)_auto]', step.status === 'done' && 'text-muted-foreground', index === current && 'font-semibold')}>
           <StepIcon status={step.status} current={index === current} />
           <span className="min-w-0 truncate" title={step.note}>{step.title}</span>
-          {index === current && task && task.status !== 'running' ? <StateChip task={task} /> : step.approval && step.status === 'todo' ? <Chip size="sm" tone="warning" className="font-semibold">{t({ ko: '승인', en: 'Approval' })}</Chip> : <span />}
+          {index === current && task && task.status !== 'running' ? <StateChip task={task} /> : step.approval && step.status === 'todo' ? <Chip size="sm" tone="warning"><span className="font-semibold">{t({ ko: '승인', en: 'Approval' })}</span></Chip> : <span />}
           {assigned ? step.assignee !== undefined ? <Assignee assignee={step.assignee} /> : <span /> : null}
         </li>
       ))}
@@ -139,12 +124,13 @@ export function TaskPlanCard({ proposal, threadId }: { proposal: PlanProposal; t
   const [unfolded, setUnfolded] = useState(false)
   // A decided plan folds to one line; the live steps are on the bar above the composer.
   if (state !== 'open' && !unfolded) return (
-    <Button variant="ghost" size="xs" className="h-auto max-w-full justify-start gap-2 px-0 py-1 font-normal text-muted-foreground hover:bg-transparent hover:text-foreground" onClick={() => setUnfolded(true)} aria-expanded={false}>
-      <ChevronDown />
-      <span className="shrink-0 font-semibold">{t({ ko: '작업 플랜', en: 'Task plan' })}</span>
-      <span className="min-w-0 truncate">{proposal.goal}</span>
-      <span className="shrink-0">· {t({ ko: '{count}단계', en: '{count} steps' }, { count: proposal.steps.length })} · {state === 'approved' ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '무시함', en: 'Dismissed' })}</span>
-    </Button>
+    <DisclosureButton open={false} onClick={() => setUnfolded(true)}>
+      <span className="flex min-w-0 items-center gap-2 text-xs">
+        <span className="shrink-0 font-semibold">{t({ ko: '작업 플랜', en: 'Task plan' })}</span>
+        <span className="min-w-0 truncate">{proposal.goal}</span>
+        <span className="shrink-0">· {t({ ko: '{count}단계', en: '{count} steps' }, { count: proposal.steps.length })} · {state === 'approved' ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '무시함', en: 'Dismissed' })}</span>
+      </span>
+    </DisclosureButton>
   )
   return (
     <ProposalFrame>
@@ -227,7 +213,7 @@ export function ChatTaskStrip({ threadId }: { threadId: number }) {
         {index >= 0 && task.steps[index].assignee !== undefined ? <Assignee assignee={task.steps[index].assignee} compact /> : null}
         <span className="min-w-0 truncate font-semibold">{index >= 0 ? task.steps[index].title : task.goal}</span>
         <StateChip task={task} />
-        <span className="h-0.5 min-w-10 flex-1 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary transition-[width]" style={{ width: `${Math.round((done / Math.max(1, task.steps.length)) * 100)}%` }} /></span>
+        <span className="h-0.5 min-w-10 flex-1 overflow-hidden rounded-full bg-muted"><span className="block h-full bg-primary transition" style={{ transitionProperty: 'width', width: `${Math.round((done / Math.max(1, task.steps.length)) * 100)}%` }} /></span>
         <span className="shrink-0 font-mono text-muted-foreground tabular-nums">{done}/{task.steps.length}</span>
         <IconButton size="icon-xs" variant="ghost" aria-expanded={stepsOpen} label={stepsOpen ? t({ ko: '단계 접기', en: 'Hide steps' }) : t({ ko: '단계 보기', en: 'Show steps' })} onClick={() => setStepsOpen((current) => !current)}>{stepsOpen ? <ChevronDown /> : <ChevronUp />}</IconButton>
         {canResume

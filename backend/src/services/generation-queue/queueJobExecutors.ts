@@ -557,6 +557,10 @@ async function executeNovelAiJob(job: GenerationQueueJobRecord, context: QueueJo
 
     const historyIds: number[] = []
     const processPromises: Promise<void>[] = []
+    // Enhance asked NovelAI for a bigger image; the "resize before saving" cap would shrink it right back.
+    const imageSaveOptions = metadata.enhance !== undefined && payload.imageSaveOptions
+      ? { ...payload.imageSaveOptions, resizeEnabled: false }
+      : payload.imageSaveOptions
 
     for (let index = 0; index < imageBuffers.length; index += 1) {
       let historyId: number
@@ -582,7 +586,7 @@ async function executeNovelAiJob(job: GenerationQueueJobRecord, context: QueueJo
 
       historyIds.push(historyId)
       processPromises.push(
-        GenerationHistoryService.processAndUploadImage(historyId, imageBuffers[index], 'novelai', payload.imageSaveOptions),
+        GenerationHistoryService.processAndUploadImage(historyId, imageBuffers[index], 'novelai', imageSaveOptions),
       )
     }
 

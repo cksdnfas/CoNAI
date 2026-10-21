@@ -2,7 +2,7 @@ import { useEffect, type KeyboardEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AudioLines, ChevronLeft, ChevronRight, History, ImageIcon, Info, Maximize2 } from 'lucide-react'
 import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
-import { Button } from '@/components/ui/button'
+import { MediaCard } from '@/components/common/media-card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
@@ -114,11 +114,11 @@ function StageMetaInfo({ image }: { image: ImageRecord }) {
 
   const summary = parts.join('\n')
   return (
-    <Tip content={summary} side="left" className="whitespace-pre-line tabular-nums">
+    <Tip content={<span className="whitespace-pre-line tabular-nums">{summary}</span>} side="left">
       <span
         tabIndex={0}
         aria-label={`${t({ ko: '생성 설정', en: 'Generation settings' })}: ${parts.join(', ')}`}
-        className="inline-flex size-8 shrink-0 cursor-help items-center justify-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40"
+        className="inline-flex size-8 shrink-0 cursor-help items-center justify-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40"
       >
         <Info className="size-4" />
       </span>
@@ -256,22 +256,20 @@ export function GenerationResultStage({
             const id = String(item.id)
             const isActive = id === selectedId
             return (
-              <Button
+              <MediaCard
                 key={id}
                 type="button"
-                variant="ghost"
                 role="option"
                 aria-selected={isActive}
                 tabIndex={isActive || (selectedId === null && item === items[0]) ? 0 : -1}
                 data-stage-id={id}
                 onClick={() => onSelect(id)}
                 draggable={false}
-                className={cn(
-                  'relative h-16 w-auto shrink-0 overflow-hidden rounded-sm p-0 opacity-70 hover:opacity-100 sm:h-20',
-                  isDragging && 'pointer-events-none',
-                  isActive && 'opacity-100 ring-2 ring-primary ring-offset-2 ring-offset-background',
-                )}
-              >
+                selected={isActive}
+                className={cn('relative w-auto shrink-0', isDragging && 'pointer-events-none')}
+                mediaClassName="h-16 sm:h-20"
+                media={
+                  <>
                 {item.audio?.length && !item.composite_hash ? (
                   <span className="flex aspect-square h-full items-center justify-center bg-surface-low text-muted-foreground">
                     <AudioLines className="size-6" />
@@ -287,11 +285,13 @@ export function GenerationResultStage({
                   />
                 )}
                 {item.audio?.length && item.composite_hash ? (
-                  <Badge variant="overlay" className="absolute right-1 bottom-1 p-0.5">
+                  <Badge variant="overlay" size="xs" className="absolute right-1 bottom-1">
                     <AudioLines />
                   </Badge>
                 ) : null}
-              </Button>
+                  </>
+                }
+              />
             )
           })}
         </div>
@@ -334,19 +334,19 @@ export function GenerationResultStage({
                 src={selected.image_url ?? undefined}
                 poster={selected.thumbnail_url ?? undefined}
                 controls
-                className={cn('max-w-full object-contain', compact ? 'max-h-[62vh]' : 'max-h-full', isBlurred && 'blur-2xl saturate-[0.55]')}
+                className={cn('max-w-full object-contain', compact ? 'max-h-[62vh]' : 'max-h-full', isBlurred && 'blur-2xl saturate-55')}
               />
             ) : (
               <img
                 key={selectedId}
                 src={selected.image_url ?? selected.thumbnail_url ?? undefined}
                 alt=""
-                className={cn('bg-checker max-w-full object-contain', compact ? 'max-h-[62vh]' : 'max-h-full', isBlurred && 'blur-2xl saturate-[0.55]')}
+                className={cn('bg-checker max-w-full object-contain', compact ? 'max-h-[62vh]' : 'max-h-full', isBlurred && 'blur-2xl saturate-55')}
               />
             )
           ) : activeJob ? null : (
             <EmptyState
-              className="h-full bg-transparent"
+              className="h-full"
               icon={ImageIcon}
               title={t('image-generation.components.generation.history.panel.no.generation.results.to.display.yet')}
             />

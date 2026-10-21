@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import { Panel } from '@/components/ui/panel'
-import { cn } from '@/lib/utils'
 
 /** The blank page while the auth status loads. */
 export function AuthScreenPlaceholder() {
@@ -14,5 +13,5 @@ export function AuthScreen({ children }: { children: ReactNode }) {
 
 /** The floating card in that column. */
 export function AuthPanel({ className, children }: { className?: string; children: ReactNode }) {
-  return <Panel tone="none" padding="lg" className={cn('theme-floating-panel rounded-md', className)}>{children}</Panel>
+  return <Panel tone="none" treatment="floating" padding="lg" radius="md" className={className}>{children}</Panel>
 }

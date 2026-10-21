@@ -103,7 +103,8 @@ export function RelatedImageGallerySection({
           {Array.from({ length: skeletonCount }).map((_, index) => (
             <Skeleton
               key={index}
-              className="w-full rounded-sm"
+              radius="sm"
+              className="w-full"
               style={cardAspectRatioValue ? { aspectRatio: cardAspectRatioValue } : { aspectRatio: '1 / 1', minHeight: 220 }}
             />
           ))}

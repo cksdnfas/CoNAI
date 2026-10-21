@@ -29,7 +29,7 @@ function LayerThumb({ engine, layer }: { engine: EditorEngine; layer: EditorLaye
         height={72}
         aria-hidden="true"
         className={cn(
-          'size-9 rounded-xs bg-[repeating-conic-gradient(var(--surface-high)_0_25%,var(--surface-highest)_0_50%)] bg-[length:12px_12px]',
+          'bg-checker size-9 rounded-xs',
           layer.kind === 'floating' && 'outline outline-1 outline-dashed outline-outline-subtle',
         )}
       />
@@ -86,7 +86,8 @@ function LayerRow({
           autoFocus
           defaultValue={layer.name}
           aria-label={t({ ko: '레이어 이름', en: 'Layer name' })}
-          className="h-8 min-w-0 flex-1 px-2"
+          controlSize="compact"
+          className="min-w-0 flex-1"
           onClick={(event) => event.stopPropagation()}
           onBlur={(event) => {
             engine.renameLayer(layer.id, event.target.value)
@@ -229,8 +230,8 @@ export function LayerPanel({ engine, snapshot }: { engine: EditorEngine; snapsho
       </div>
 
       {active && !maskActive ? (
-        <SliderRow
-          className="shrink-0 border-t border-line px-4 py-3.5"
+        <div className="shrink-0 border-t border-line px-4 py-3.5">
+          <SliderRow
           label={t({ ko: '불투명도', en: 'Opacity' })}
           ariaLabel={t({ ko: '레이어 불투명도', en: 'Layer opacity' })}
           min={0}
@@ -246,7 +247,8 @@ export function LayerPanel({ engine, snapshot }: { engine: EditorEngine; snapsho
             opacityStartRef.current = null
             if (from !== null) engine.commitLayerOpacity(active.id, from)
           }}
-        />
+          />
+        </div>
       ) : null}
     </div>
   )

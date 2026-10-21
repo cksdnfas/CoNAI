@@ -68,7 +68,7 @@ export function ChatLoreKeyFillDialog({ open, language, entries, onApply, onClos
 
   return (
     <Modal open={open} onClose={onClose} title={t({ ko: '{language} 키 채우기', en: 'Fill {language} keywords' }, { language: label })} size="normal" height="medium">
-      <ModalBody className="space-y-1">
+      <ModalBody spacing="none">
         {fillMutation.isPending ? <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Spinner className="size-4" />{t({ ko: '{count}개 항목의 키를 만드는 중', en: 'Writing keywords for {count} entries' }, { count: entries.length })}</div> : null}
         {!fillMutation.isPending && ready.length === 0 && failed.length === 0 ? (
           <div className="divide-y divide-line">
@@ -91,12 +91,12 @@ export function ChatLoreKeyFillDialog({ open, language, entries, onApply, onClos
           </div>
         ) : null}
       </ModalBody>
-      <ModalFooter className="mt-4 gap-1 border-t border-line pt-3">
+      <ModalFooter separated className="mt-4">
         <IconButton size="icon-sm" variant="ghost" disabled={profileId === null || entries.length === 0 || fillMutation.isPending} onClick={() => fillMutation.mutate()} label={t({ ko: '{name}에게 맡기기', en: 'Ask {name}' }, { name: profiles.find((profile) => profile.id === profileId)?.name ?? '' })}>
           {fillMutation.isPending ? <Spinner className="size-3.5" /> : <Sparkles />}
         </IconButton>
         {profiles.length > 1 ? (
-          <Select variant="settings" className="h-8 w-40 text-xs" value={profileId === null ? '' : String(profileId)} onChange={(event) => setProfileId(Number(event.target.value))} aria-label={t({ ko: '맡길 프로필', en: 'Profile to ask' })}>
+          <Select variant="settings" controlSize="compact" className="w-40" value={profileId === null ? '' : String(profileId)} onChange={(event) => setProfileId(Number(event.target.value))} aria-label={t({ ko: '맡길 프로필', en: 'Profile to ask' })}>
             {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
           </Select>
         ) : null}

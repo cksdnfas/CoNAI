@@ -4,6 +4,7 @@ import { PageSidebarContext, SidebarFooter, type PageSidebarContextValue } from 
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { PageToolbar, SidebarToggle } from './page-toolbar'
+import { pageGutterStyle, SidebarColumn } from './sidebar-layout'
 
 interface PageWithSidebarProps {
   /** Persists the collapsed state (`conai:sidebar-collapsed:<storageKey>`). One key per page. */
@@ -14,7 +15,7 @@ interface PageWithSidebarProps {
   sidebarFooter?: ReactNode
   /** Accessible name of the sidebar; also the mobile drawer title. */
   sidebarLabel: string
-  /** Column width in px on desktop. */
+  /** Column width in px on desktop; default `--sidebar-column-width` (232px). */
   sidebarWidth?: number
   /** The page's PageToolbar. It gets the sidebar toggle automatically when the sidebar is hidden. */
   toolbar?: ReactNode
@@ -55,7 +56,7 @@ export function PageWithSidebar({
   sidebar,
   sidebarFooter,
   sidebarLabel,
-  sidebarWidth = 232,
+  sidebarWidth,
   toolbar,
   defaultCollapsed = false,
   className,
@@ -86,36 +87,30 @@ export function PageWithSidebar({
     <PageSidebarContext.Provider value={contextValue}>
       <div
         data-slot="page-with-sidebar"
-        className={cn(
-          // Cancel the shell's side and bottom padding so the column runs the full height; the content column puts the
-          // same spacing back.
-          '-mx-(--theme-shell-inline-padding) -mb-(--theme-shell-main-padding-bottom) flex min-h-[calc(100dvh-var(--theme-shell-header-height))]',
-          className,
-        )}
-        style={{ '--page-sidebar-width': `${sidebarWidth}px` } as CSSProperties}
+        // page-bleed: the column runs the full height and edge; the content column puts the bottom padding back.
+        className={cn('page-bleed flex min-h-(--shell-content-height)', className)}
+        style={sidebarWidth ? { '--sidebar-column-width': `${sidebarWidth}px` } as CSSProperties : undefined}
       >
         {showColumn ? (
-          <aside
-            aria-label={sidebarLabel}
-            data-slot="page-sidebar"
-            className="sticky top-(--theme-shell-header-height) flex h-[calc(100dvh-var(--theme-shell-header-height))] w-(--page-sidebar-width) shrink-0 flex-col self-start border-r border-line"
+          <SidebarColumn
+            label={sidebarLabel}
+            className="sticky top-(--theme-shell-header-height) h-(--shell-content-height) self-start"
+            footer={(
+              <SidebarFooter>
+                <div className="flex min-w-0 items-center gap-2">{sidebarFooter}</div>
+                <SidebarToggle />
+              </SidebarFooter>
+            )}
           >
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2.5 pt-3.5 pb-2">{sidebar}</div>
-            <SidebarFooter className="px-2.5 pr-2">
-              <div className="flex min-w-0 items-center gap-2">{sidebarFooter}</div>
-              <SidebarToggle />
-            </SidebarFooter>
-          </aside>
+            {sidebar}
+          </SidebarColumn>
         ) : null}
 
         <div
           data-slot="page-with-sidebar-content"
-          className={cn(
-            'min-w-0 flex-1 px-(--page-gutter) pb-(--theme-shell-main-padding-bottom)',
-            // The sticky PageToolbar bleeds its background across this gutter.
-            isDesktop ? '[--page-gutter:2rem]' : '[--page-gutter:var(--theme-shell-inline-padding)]',
-            contentClassName,
-          )}
+          // The sticky PageToolbar bleeds its background across this gutter.
+          className={cn('min-w-0 flex-1 px-(--page-gutter) pb-(--theme-shell-main-padding-bottom)', contentClassName)}
+          style={pageGutterStyle(isDesktop)}
         >
           {toolbar ?? <PageToolbar />}
           {children}

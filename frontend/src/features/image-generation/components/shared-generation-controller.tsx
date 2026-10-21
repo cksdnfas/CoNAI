@@ -40,7 +40,7 @@ export function CompactGenerationControllerActionBar({
             size={isExpanded ? 'icon-sm' : 'sm'}
             className={cn(
               'shrink-0',
-              isExpanded ? 'w-10 px-0' : 'min-w-0 max-w-[min(16rem,calc(100vw-1.5rem))] px-3',
+              isExpanded ? 'w-10' : 'min-w-0 max-w-[min(16rem,calc(100vw-1.5rem))]',
             )}
             onClick={onToggle}
             aria-label={isExpanded ? expandedLabel : collapsedLabel}

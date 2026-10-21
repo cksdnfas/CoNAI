@@ -65,7 +65,7 @@ export function ChatProfileAssetInput({ characterName, onChange, onBusyChange, e
       {extraInputs ? <>
         <Popover open={urlOpen} onOpenChange={setUrlOpen}>
           <PopoverTrigger asChild><IconButton size="icon-sm" variant="ghost" disabled={disabled} label={t({ ko: 'URL로 가져오기', en: 'Import from URL' })}><Link /></IconButton></PopoverTrigger>
-          <PopoverContent align="start" className="p-2">
+          <PopoverContent align="start" padding="sm">
             <form className="flex items-center gap-1" onSubmit={(event) => {
               event.preventDefault()
               if (!url.trim() || disabled) return

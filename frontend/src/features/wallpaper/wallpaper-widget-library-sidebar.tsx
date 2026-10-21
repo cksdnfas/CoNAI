@@ -186,22 +186,23 @@ function LayerList({ widgets, selectedIds, onSelect, onReorder, onToggleHidden, 
             }}
             onDragEnd={endDrag}
           >
-            <SidebarItem
-              className={cn('min-w-0 flex-1', widget.hidden ? 'opacity-50' : null)}
-              icon={getWallpaperWidgetIcon(widget.type)}
-              label={getWallpaperWidgetDisplayTitle(widget, t)}
-              active={isSelected}
-              onClick={(event) => {
-                event.preventDefault()
-                onSelect(event.shiftKey || event.ctrlKey || event.metaKey
-                  ? (isSelected ? selectedIds.filter((id) => id !== widget.id) : [...selectedIds, widget.id])
-                  : [widget.id])
-              }}
-            />
-            <IconButton variant="ghost" size="icon-xs" label={widget.hidden ? t({ ko: '보이기', en: 'Show' }) : t({ ko: '숨기기', en: 'Hide' })} onClick={() => onToggleHidden(widget)} className={widget.hidden ? undefined : 'text-muted-foreground'}>
+            <div className={cn('min-w-0 flex-1', widget.hidden ? 'opacity-50' : null)}>
+              <SidebarItem
+                icon={getWallpaperWidgetIcon(widget.type)}
+                label={getWallpaperWidgetDisplayTitle(widget, t)}
+                active={isSelected}
+                onClick={(event) => {
+                  event.preventDefault()
+                  onSelect(event.shiftKey || event.ctrlKey || event.metaKey
+                    ? (isSelected ? selectedIds.filter((id) => id !== widget.id) : [...selectedIds, widget.id])
+                    : [widget.id])
+                }}
+              />
+            </div>
+            <IconButton variant="ghost" size="icon-xs" label={widget.hidden ? t({ ko: '보이기', en: 'Show' }) : t({ ko: '숨기기', en: 'Hide' })} onClick={() => onToggleHidden(widget)}>
               {widget.hidden ? <EyeOff /> : <Eye />}
             </IconButton>
-            <IconButton variant="ghost" size="icon-xs" label={widget.locked ? t({ ko: '잠금 해제', en: 'Unlock' }) : t({ ko: '잠금', en: 'Lock' })} onClick={() => onToggleLocked(widget)} className={widget.locked ? undefined : 'text-muted-foreground'}>
+            <IconButton variant="ghost" size="icon-xs" label={widget.locked ? t({ ko: '잠금 해제', en: 'Unlock' }) : t({ ko: '잠금', en: 'Lock' })} onClick={() => onToggleLocked(widget)}>
               {widget.locked ? <Lock /> : <LockOpen />}
             </IconButton>
           </div>

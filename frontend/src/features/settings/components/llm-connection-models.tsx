@@ -33,7 +33,7 @@ import { CONTENT_EVALUATION_QUERY_KEY } from '@/lib/api-content-evaluation'
 import { POSTS_QUERY_KEY } from '@/lib/api-posts'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { ConnectionModelSelect, GROW_TEXTAREA } from './chat-profile-editor-fields'
+import { ConnectionModelSelect } from './chat-profile-editor-fields'
 import { ContentRatingSelect } from './content-rating-select'
 
 const EMPTY_MODELS: string[] = []
@@ -109,13 +109,12 @@ export function ConnectionModelRow({ slot, workflowNodes, onOpen }: {
   const uses = slotUseCount(slot, workflowNodes)
 
   return (
-    <ResourceRow
-      className="pl-10 before:left-10"
+    <div className="pl-8"><ResourceRow
       name={<span className="font-mono text-xs font-normal">{slot.model}</span>}
       extra={uses === 0 ? <ResourceRowStatus>{t({ ko: '사용처 없음', en: 'Not used' })}</ResourceRowStatus> : null}
       aside={uses > 0 ? <ResourceRowStat icon={Link2} tip={<span className="whitespace-pre-line">{lines.join('\n')}</span>}>{uses}</ResourceRowStat> : null}
       onOpen={() => onOpen(slot)}
-    />
+    /></div>
   )
 }
 
@@ -193,7 +192,7 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
         ) : null}
       </ModalBody>
       {/* EditorFooter's shape; the delete keeps its own tooltip listing what uses the model. */}
-      <ModalFooter className="mt-4 gap-1 border-t border-line pt-3">
+      <ModalFooter separated className="mt-4">
         <Tip content={used ? <span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어서 지울 수 없어', en: 'In use, so it cannot be deleted' })}\n${lines.join('\n')}`}</span> : null}>
           <span>
             <IconButton size="icon-sm" variant="destructive-ghost" disabled={used || busy} onClick={() => deleteMutation.mutate()} label={t({ ko: '모델 삭제', en: 'Delete model' })}>
@@ -357,7 +356,7 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
       dirty={changed}
       onSave={save}
     >
-      <ModalBody className="space-y-3">
+      <ModalBody spacing="sm">
         {key === null ? (
           <Field label={t({ ko: '이름', en: 'Name' })}>
             <Input variant="settings" value={name} maxLength={40} onChange={(event) => setName(event.target.value)} />
@@ -378,7 +377,7 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
         </Field>
         {key !== null ? (
           <Field label={t({ ko: '기본 프롬프트', en: 'Default prompt' })} info={promptInfo[key]}>
-            <Textarea variant="settings" rows={4} className={GROW_TEXTAREA} value={prompt} onChange={(event) => setPrompt(event.target.value)} />
+            <Textarea variant="settings" autoGrow rows={4} value={prompt} onChange={(event) => setPrompt(event.target.value)} />
           </Field>
         ) : null}
         {key !== 'judge' || (targetId !== null && slots.find((entry) => entry.id === targetId)?.providerType !== 'decision_typesafe') ? (
@@ -395,7 +394,7 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
           </Field>
         ) : null}
       </ModalBody>
-      <ModalFooter className="mt-4 gap-1 border-t border-line pt-3">
+      <ModalFooter separated className="mt-4">
         {slot && key === null ? (
           <Tip content={used ? <span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어서 지울 수 없어', en: 'In use, so it cannot be deleted' })}\n${lines.join('\n')}`}</span> : null}>
             <span>
@@ -463,7 +462,6 @@ export function ConnectionModelChecklist({ value, listed, saved, loading, onRefr
           <ListRow
             key={model}
             size="sm"
-            className="gap-2.5 px-1"
             leading={<Checkbox id={id} checked={checked} disabled={holds > 0} onCheckedChange={(next) => toggle(model, next === true)} />}
             trailing={holds > 0 ? (
               <Tip content={t({ ko: '쓰는 곳이 있어서 뺄 수 없어', en: 'In use, so it stays' })}>
@@ -478,7 +476,7 @@ export function ConnectionModelChecklist({ value, listed, saved, loading, onRefr
       <div className="flex items-center gap-2 pt-2">
         <Input
           variant="settings"
-          className={typed ? 'font-mono' : undefined}
+          mono={Boolean(typed)}
           value={typed}
           placeholder={t({ ko: '목록에 없는 모델 ID', en: 'Model id not in the list' })}
           onChange={(event) => setTyped(event.target.value)}

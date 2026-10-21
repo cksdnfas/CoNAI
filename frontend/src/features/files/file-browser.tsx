@@ -19,6 +19,7 @@ import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
+import { ListRow } from '@/components/ui/list-row'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { SidebarNav } from '@/components/ui/sidebar'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -84,16 +85,20 @@ function SearchHits({ hits, terms, truncated, search, onOpen, onRetry, retrying 
       <ul className="divide-y divide-line">
         {hits.map(({ entry, path, snippet, location, extractionState }) => (
           <li key={entry.id}>
-            <Button variant="ghost" className="h-auto w-full flex-col items-stretch gap-1 whitespace-normal py-2 text-left font-normal" onClick={() => onOpen(entry)}>
-              <span className="flex min-w-0 items-center gap-2">
-                <EntryIcon entry={entry} />
-                <span className="min-w-0 truncate text-sm text-foreground"><HighlightText text={entry.name} terms={terms} /></span>
-                <span className="min-w-0 shrink truncate text-xs text-muted-foreground">{path}</span>
-              </span>
-              {location ? <span className="pl-6 text-xs text-muted-foreground">{location}</span> : null}
-              {extractionState && ['partial', 'empty', 'error', 'unsupported'].includes(extractionState) ? <span className="pl-6 text-xs text-muted-foreground">{t({ ko: '본문 전체를 검색하지 못한 파일', en: 'Full content was not searched' })}</span> : null}
-              {snippet ? <span className="line-clamp-2 break-all pl-6 text-xs leading-relaxed text-muted-foreground"><HighlightText text={snippet} terms={terms} /></span> : null}
-            </Button>
+            <ListRow asChild interactive size="lg">
+              <button type="button" onClick={() => onOpen(entry)}>
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <EntryIcon entry={entry} />
+                    <span className="min-w-0 truncate text-sm text-foreground"><HighlightText text={entry.name} terms={terms} /></span>
+                    <span className="min-w-0 shrink truncate text-xs text-muted-foreground">{path}</span>
+                  </span>
+                  {location ? <span className="pl-6 text-xs text-muted-foreground">{location}</span> : null}
+                  {extractionState && ['partial', 'empty', 'error', 'unsupported'].includes(extractionState) ? <span className="pl-6 text-xs text-muted-foreground">{t({ ko: '본문 전체를 검색하지 못한 파일', en: 'Full content was not searched' })}</span> : null}
+                  {snippet ? <span className="line-clamp-2 break-all pl-6 text-xs leading-relaxed text-muted-foreground"><HighlightText text={snippet} terms={terms} /></span> : null}
+                </span>
+              </button>
+            </ListRow>
             {extractionState && ['partial', 'empty', 'error'].includes(extractionState) ? <Button size="sm" variant="ghost" disabled={retrying} onClick={() => onRetry(entry.id)}>{t({ ko: '다시 추출', en: 'Retry extraction' })}</Button> : null}
           </li>
         ))}
@@ -453,7 +458,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     <>
       {isPicker ? (
         <>
-          <ModalBody className="space-y-3">
+          <ModalBody spacing="sm">
             <div className="flex items-center gap-1">
               <div className="min-w-0 flex-1">{breadcrumbs}</div>
               {actions}

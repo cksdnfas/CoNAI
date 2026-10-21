@@ -44,7 +44,8 @@ export function WildcardInlinePickerPopupContent({
         type="button"
         variant="nav"
         data-active={isActive || undefined}
-        className="h-auto items-start justify-between gap-3 px-3 py-2 whitespace-normal"
+        size="content"
+        className="items-start justify-between whitespace-normal"
         onMouseDown={(event) => {
           event.preventDefault()
           onInsertPreprocess(record.name)
@@ -73,7 +74,7 @@ export function WildcardInlinePickerPopupContent({
     <>
       <div className="space-y-2 px-3 pt-2.5 pb-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Text as="div" variant="overline" className="font-semibold">{t({ ko: '전처리', en: 'Preprocess' })}</Text>
+          <Text as="div" variant="overline">{t({ ko: '전처리', en: 'Preprocess' })}</Text>
           <Badge variant="outline">{activeListSuggestions.length}</Badge>
         </div>
       </div>

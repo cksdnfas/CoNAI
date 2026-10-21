@@ -118,7 +118,7 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
       dirty={dirty}
       onSave={canSave ? () => saveMutation.mutate() : undefined}
     >
-      <ModalBody className="space-y-4">
+      <ModalBody>
         <div className="grid gap-3 md:grid-cols-2">
           <Field label={t({ ko: '이름', en: 'Name' })}>
             <Input variant="settings" value={draft.name} maxLength={80} autoFocus onChange={(event) => setDraft({ ...draft, name: event.target.value })} />

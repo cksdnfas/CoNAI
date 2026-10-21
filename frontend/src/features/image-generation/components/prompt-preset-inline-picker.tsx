@@ -76,7 +76,7 @@ export function PromptPresetInlinePicker({
   if (!canViewPrompts) return null
 
   return (
-    <AnchoredPopup open={open} anchorRef={anchorRef} onClose={onClose} align="end" side="bottom" className="w-[min(28rem,calc(100vw-1.5rem))] overflow-hidden p-0" closeOnBack>
+    <AnchoredPopup open={open} anchorRef={anchorRef} onClose={onClose} align="end" side="bottom" className="w-[min(28rem,calc(100vw-1.5rem))] overflow-hidden" closeOnBack>
       <div className={cn(anchoredPopupHeaderClassName, 'flex items-center justify-between gap-3')}>
         <div>
           <div className={anchoredPopupLabelClassName}>{t('image-generation.components.prompt.preset.inline.picker.preset')}</div>

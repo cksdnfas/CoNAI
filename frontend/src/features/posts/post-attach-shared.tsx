@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef } from 'react'
 import { postLink } from '@conai/shared'
 import { cn } from '@/lib/utils'
 import { fileExtension } from '@/lib/file-extension'
@@ -51,21 +51,6 @@ export function LoadMoreSentinel({ enabled, onVisible, rootMargin = '240px' }: {
   // Re-enabling after a page lands while the sentinel is still in view asks for the next one.
   useEffect(() => { if (enabled && view.visible) callback.current() }, [enabled, view.visible])
   return <div ref={ref} aria-hidden className="h-px w-full shrink-0" />
-}
-
-/** The picker's two panes: a tree on the left, the list on the right, each scrolling on its own. */
-export function AttachPanes({ side, children }: { side: ReactNode; children: ReactNode }) {
-  return (
-    <div className="-mx-4 flex min-h-0 flex-1 border-y border-line md:-mx-5">
-      <nav className="hidden w-60 shrink-0 overflow-y-auto border-r border-line p-2 sm:block">{side}</nav>
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
-    </div>
-  )
-}
-
-/** The list pane's one-row toolbar. */
-export function AttachToolbar({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn('flex shrink-0 flex-wrap items-center gap-2 px-3 py-2.5', className)}>{children}</div>
 }
 
 /** A list row's pick slot: an empty ring, or the pick's order number once picked. */

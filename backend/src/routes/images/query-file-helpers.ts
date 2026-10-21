@@ -386,11 +386,16 @@ async function prepareBatchDownloadArchive(
       ? resolved.extension || '.webp'
       : (parsedName.ext || resolved.extension || '.bin');
     const candidateName = `${baseName}${extension}`;
-    const duplicateCount = usedNames.get(candidateName) || 0;
-    usedNames.set(candidateName, duplicateCount + 1);
-    const finalName = duplicateCount === 0
+    let duplicateCount = usedNames.get(candidateName) || 0;
+    let finalName = duplicateCount === 0
       ? candidateName
       : `${baseName}-${duplicateCount}${extension}`;
+    while (usedNames.has(finalName)) {
+      duplicateCount += 1;
+      finalName = `${baseName}-${duplicateCount}${extension}`;
+    }
+    usedNames.set(candidateName, duplicateCount + 1);
+    usedNames.set(finalName, 1);
 
     entries.push({ filePath: resolved.filePath, name: finalName });
   }

@@ -63,7 +63,7 @@ export function ChatGenerationPresetSaveModal({ open, build, summary, onClose }:
       dirty={name.trim().length > 0 || instruction.trim().length > 0}
       onSave={canSave ? () => saveMutation.mutate() : undefined}
     >
-      <ModalBody className="space-y-4">
+      <ModalBody>
         <div className="text-xs text-muted-foreground">{summary}</div>
         <Field label={t({ ko: '이름', en: 'Name' })}>
           <Input variant="settings" value={name} maxLength={80} autoFocus onChange={(event) => setName(event.target.value)} />

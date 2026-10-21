@@ -153,7 +153,7 @@ export function ChatThumbOverlay({ children, actions, className }: { children: R
     >
       {children}
       <div className={cn(
-        'pointer-events-none absolute right-1 top-1 flex translate-y-1 scale-95 gap-1 opacity-0 transition-[opacity,transform] duration-200 ease-out group-hover/thumb:pointer-events-auto group-hover/thumb:translate-y-0 group-hover/thumb:scale-100 group-hover/thumb:opacity-100 group-focus-within/thumb:pointer-events-auto group-focus-within/thumb:translate-y-0 group-focus-within/thumb:scale-100 group-focus-within/thumb:opacity-100 motion-reduce:transition-none',
+        'pointer-events-none absolute right-1 top-1 flex translate-y-1 scale-95 gap-1 opacity-0 transition duration-200 ease-out group-hover/thumb:pointer-events-auto group-hover/thumb:translate-y-0 group-hover/thumb:scale-100 group-hover/thumb:opacity-100 group-focus-within/thumb:pointer-events-auto group-focus-within/thumb:translate-y-0 group-focus-within/thumb:scale-100 group-focus-within/thumb:opacity-100 motion-reduce:transition-none',
         pinned && 'pointer-events-auto translate-y-0 scale-100 opacity-100',
       )}>
         {actions}
@@ -187,7 +187,7 @@ function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAt
       <IconButton
         variant="subtle"
         size="icon-sm"
-        className="relative overflow-hidden p-0"
+        className="relative overflow-hidden"
         label={canJump
           ? t({ ko: '참조 이미지: 이 이미지가 나온 메시지로 이동', en: 'Referenced image: go to the message with this image' })
           : t({ ko: '참조 이미지: {name}', en: 'Referenced image: {name}' }, { name: item.name })}
@@ -198,7 +198,7 @@ function ChatReferenceChip({ item, sourceMessageId, media }: { item: ChatMediaAt
         {canViewImages && !thumbnailFailed
           ? <img src={thumbnailUrl} alt="" loading="lazy" draggable={false} className="size-full object-cover" onError={() => setThumbnailFailed(true)} />
           : <ImageIcon className="size-3.5 shrink-0" />}
-        {isVideo ? <Play className="absolute bottom-0.5 right-0.5 size-2.5 fill-white text-white drop-shadow-[0_0_2px_rgb(0_0_0/0.8)]" /> : null}
+        {isVideo ? <span className="absolute bottom-0.5 right-0.5 rounded-sm bg-backdrop/50"><Play className="size-2.5 fill-white text-white" /></span> : null}
       </IconButton>
       {hoverPreview.preview}
     </>
@@ -229,8 +229,8 @@ export function ChatReferenceChips({ items = [], threadId }: { items?: ChatMedia
     <div className="mt-1 flex flex-wrap justify-end gap-1">
       {shown.map((item) => <ChatReferenceChip key={item.compositeHash} item={item} sourceMessageId={messageIdByHash.get(item.compositeHash)} media={mediaQuery.data?.find((media) => media.compositeHash === item.compositeHash)} />)}
       {collapsed ? (
-        <IconButton variant="subtle" size="icon-sm" className="text-xs tabular-nums" label={t({ ko: '참조 이미지 {count}개 더 보기', en: 'Show {count} more referenced images' }, { count: items.length - shown.length })} onClick={() => setExpanded(true)}>
-          +{items.length - shown.length}
+        <IconButton variant="subtle" size="icon-sm" label={t({ ko: '참조 이미지 {count}개 더 보기', en: 'Show {count} more referenced images' }, { count: items.length - shown.length })} onClick={() => setExpanded(true)}>
+          <span className="text-xs tabular-nums">+{items.length - shown.length}</span>
         </IconButton>
       ) : null}
     </div>

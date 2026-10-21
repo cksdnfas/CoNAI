@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { Panel } from '@/components/ui/panel'
+import { Tip } from '@/components/ui/tooltip'
+import { MediaCard } from '@/components/common/media-card'
 import { useI18n } from '@/i18n'
 import type { ModuleDefinitionRecord, ModulePortDataType, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import type { TypedFieldOption } from '@/features/shared-fields/typed-field-input'
@@ -17,9 +20,6 @@ type Translate = ReturnType<typeof useI18n>['t']
 
 /** Keeps a block widget's connection point level with its name line instead of the block's middle. */
 export const NODE_BLOCK_HANDLE_CLASS = 'top-[14px]!'
-
-/** A block widget: the same fill as a pill, rounded to match, holding a name line and up to three lines of text. */
-const NODE_BLOCK_CLASS = 'nodrag block h-auto w-full rounded-[13px] bg-surface-high px-3 pt-1 pb-1.5 text-left text-xs leading-normal font-normal tracking-normal whitespace-normal text-foreground transition-none hover:bg-surface-highest hover:text-foreground'
 
 export function NodeRowDivider() {
   return <div className="my-1 h-px bg-line" aria-hidden />
@@ -194,20 +194,21 @@ export function NodeWidgetBlock({
   return (
     <div className={cn('module-graph-widget-row relative px-2.5 py-0.5', className)}>
       {handle}
-      <Button
-        type="button"
-        variant="subtle"
-        title={t({ ko: '패널에서 고치기', en: 'Edit in the panel' })}
-        onMouseDown={stopNodeEvent}
-        onClick={(event) => {
-          event.stopPropagation()
-          actions.editInPanel(nodeId, fieldKey)
-        }}
-        className={NODE_BLOCK_CLASS}
-      >
-        <RowLabel label={label} labelTitle={labelTitle} required={required} missing={missing} className={cn('block text-2xs', !missing && 'text-muted-foreground')} />
-        <span className={cn('line-clamp-3 break-words whitespace-pre-wrap', !text && 'text-muted-foreground/70')}>{text || placeholder}</span>
-      </Button>
+      <Panel asChild interactive tone="high" padding="sm">
+        <button
+          type="button"
+          title={t({ ko: '패널에서 고치기', en: 'Edit in the panel' })}
+          onMouseDown={stopNodeEvent}
+          onClick={(event) => {
+            event.stopPropagation()
+            actions.editInPanel(nodeId, fieldKey)
+          }}
+          className="nodrag block w-full text-left text-xs leading-normal whitespace-normal"
+        >
+          <RowLabel label={label} labelTitle={labelTitle} required={required} missing={missing} className={cn('block text-2xs', !missing && 'text-muted-foreground')} />
+          <span className={cn('line-clamp-3 break-words whitespace-pre-wrap', !text && 'text-muted-foreground/70')}>{text || placeholder}</span>
+        </button>
+      </Panel>
     </div>
   )
 }
@@ -217,19 +218,20 @@ export function NodeValuePreview({ nodeId, fieldKey, text, placeholder }: { node
   const actions = useModuleGraphNodeActions()
   const { t } = useI18n()
   return (
-    <Button
-      type="button"
-      variant="subtle"
-      title={t({ ko: '패널에서 고치기', en: 'Edit in the panel' })}
-      onMouseDown={stopNodeEvent}
-      onClick={(event) => {
-        event.stopPropagation()
-        actions.editInPanel(nodeId, fieldKey)
-      }}
-      className={cn(NODE_BLOCK_CLASS, 'mb-1.5 py-1.5')}
-    >
-      <span className={cn('line-clamp-3 break-words whitespace-pre-wrap', !text && 'text-muted-foreground/70')}>{text || placeholder}</span>
-    </Button>
+    <Panel asChild interactive tone="high" padding="sm">
+      <button
+        type="button"
+        title={t({ ko: '패널에서 고치기', en: 'Edit in the panel' })}
+        onMouseDown={stopNodeEvent}
+        onClick={(event) => {
+          event.stopPropagation()
+          actions.editInPanel(nodeId, fieldKey)
+        }}
+        className="nodrag mb-1.5 block w-full text-left text-xs leading-normal whitespace-normal"
+      >
+        <span className={cn('line-clamp-3 break-words whitespace-pre-wrap', !text && 'text-muted-foreground/70')}>{text || placeholder}</span>
+      </button>
+    </Panel>
   )
 }
 
@@ -238,19 +240,18 @@ export function NodeImagePreview({ nodeId, fieldKey, src, alt }: { nodeId: strin
   const actions = useModuleGraphNodeActions()
   const { t } = useI18n()
   return (
-    <Button
-      type="button"
-      variant="subtle"
-      title={t({ ko: '패널에서 고치기', en: 'Edit in the panel' })}
-      onMouseDown={stopNodeEvent}
-      onClick={(event) => {
-        event.stopPropagation()
-        actions.editInPanel(nodeId, fieldKey)
-      }}
-      className="nodrag mb-1.5 block h-auto w-full rounded-[5px] p-1 transition-none"
-    >
-      <img src={src} alt={alt} draggable={false} className="mx-auto max-h-24 w-auto rounded-[3px] object-contain" />
-    </Button>
+    <Tip content={t({ ko: '패널에서 고치기', en: 'Edit in the panel' })}>
+      <MediaCard
+        aria-label={t({ ko: '패널에서 고치기', en: 'Edit in the panel' })}
+        onMouseDown={stopNodeEvent}
+        onClick={(event) => {
+          event.stopPropagation()
+          actions.editInPanel(nodeId, fieldKey)
+        }}
+        className="nodrag mb-1.5 w-full"
+        media={<img src={src} alt={alt} draggable={false} className="mx-auto max-h-24 w-auto rounded-sm object-contain" />}
+      />
+    </Tip>
   )
 }
 
@@ -406,7 +407,8 @@ export function useNodeValueEditor({
         event.stopPropagation()
         actions.editInPanel(nodeId, valueKey)
       }}
-      className="nodrag h-auto min-w-0 justify-end p-0 pr-1 text-xs font-normal text-muted-foreground transition-none hover:text-foreground"
+      size="xs"
+      className="nodrag min-w-0 justify-end"
     >
       <span className="truncate">{preview || t({ ko: '패널에서 설정', en: 'Set in panel' })}</span>
     </Button>,

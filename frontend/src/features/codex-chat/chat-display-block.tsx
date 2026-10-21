@@ -511,10 +511,10 @@ export function BlockChangeChips({ blockKey, data }: { blockKey: string; data: R
       {texts.map((text, index) => (
         <Button
           key={`${index}-${text}`}
-          variant="ghost"
+          variant="subtle"
           size="xs"
           onClick={() => context?.open(blockKey, messageId)}
-          className="h-6 max-w-full rounded-full bg-foreground/6 px-2.5 font-normal text-foreground/80 hover:bg-foreground/10"
+          className="max-w-full"
         >
           {index === 0 ? <Activity className="size-3 shrink-0 opacity-70" /> : null}
           <span className="truncate">{text}</span>

@@ -93,7 +93,7 @@ function EmoticonTile({ entry, duplicate, saving, onSave }: {
       placeholder={entry.explicit ? '' : entry.keywords.join(', ')}
       aria-label={t({ ko: '키워드', en: 'Keywords' })}
       aria-invalid={duplicate.length > 0}
-      className={cn('h-8 px-2 text-xs', duplicate.length > 0 && 'border-destructive')}
+      controlSize="compact"
     />
   )
 

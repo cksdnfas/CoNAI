@@ -18,7 +18,7 @@ import { CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage, type ClaudeMo
 import { ClaudeEffortSelect, ClaudeModelSelect } from './claude-model-select'
 import { JudgeModelSelect, useDefaultJudgeLabel, useModelLabel } from './chat-judge-connection-select'
 import { applyRoleChoice, ModelRoleSelect, roleChoice, slotCeiling, type SuggestWriters } from './chat-model-role-select'
-import { GROW_TEXTAREA, numberOrNull, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { numberOrNull, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { SwitchLine } from '@/components/ui/switch-line'
 import { ContentRatingSelect, useCeilingLabel } from './content-rating-select'
 import { EditorGroup } from '@/components/ui/editor-group'
@@ -232,7 +232,9 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
                 <Textarea
                   variant="settings"
                   rows={4}
-                  className={cn('font-mono text-xs', GROW_TEXTAREA, extraParamsError && 'border-destructive')}
+                  autoGrow
+                  mono
+                  textSize="xs"
                   value={draft.extraParams}
                   placeholder={'{\n  "chat_template_kwargs": { "enable_thinking": true }\n}'}
                   onChange={(event) => patch({ extraParams: event.target.value })}
@@ -286,7 +288,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
                     <NumberStepperInput variant="settings" step={1} min={1} max={200} value={draft.summaryTriggerTurns} onValueCommit={(value) => patch({ summaryTriggerTurns: numberOrNull(value) ?? draft.summaryTriggerTurns })} />
                   </Field>
                   <Field label={t({ ko: '요약 프롬프트', en: 'Summary prompt' })}>
-                    <Textarea variant="settings" rows={4} className={GROW_TEXTAREA} value={draft.summaryPrompt} placeholder={defaults?.summaryPrompt} onChange={(event) => patch({ summaryPrompt: event.target.value })} />
+                    <Textarea variant="settings" autoGrow rows={4} value={draft.summaryPrompt} placeholder={defaults?.summaryPrompt} onChange={(event) => patch({ summaryPrompt: event.target.value })} />
                   </Field>
                 </>
               ) : null}
@@ -307,7 +309,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
                   label={t({ ko: '번역 지시', en: 'Translation notes' })}
                   info={t({ ko: '답변을 표시 언어로 옮길 때 번역 모델이 따르는 메모. 말투, 호칭, 고유명사 번역표 등. {{char}}·{{user}}는 이름으로 바뀌어. 캐릭터 이름은 비워도 알려 줘. 내 메시지 번역에는 쓰지 않아.', en: 'Notes the translation model follows when it puts replies into the display language: voice, forms of address, a glossary. {{char}} and {{user}} become the names. The character’s name is passed even when empty. Not used for your own messages.' })}
                 >
-                  <Textarea variant="settings" rows={3} className={GROW_TEXTAREA} maxLength={4000} value={draft.translationInstructions} placeholder={t({ ko: '말투 · 호칭 · 고유명사', en: 'Voice · address · names' })} onChange={(event) => patch({ translationInstructions: event.target.value })} />
+                  <Textarea variant="settings" autoGrow rows={3} maxLength={4000} value={draft.translationInstructions} placeholder={t({ ko: '말투 · 호칭 · 고유명사', en: 'Voice · address · names' })} onChange={(event) => patch({ translationInstructions: event.target.value })} />
                 </Field>
               </>
             ) : null}

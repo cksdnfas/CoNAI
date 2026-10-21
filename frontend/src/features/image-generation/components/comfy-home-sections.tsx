@@ -30,7 +30,7 @@ function SectionLabel({ icon, children }: { icon: ReactNode; children: ReactNode
 
 function EmptyListRow() {
   const { t } = useI18n()
-  return <EmptyState size="compact" className="px-0 py-3" title={t({ ko: '없음', en: 'None' })} />
+  return <EmptyState size="compact" title={t({ ko: '없음', en: 'None' })} />
 }
 
 type WorkflowListSectionProps = {
@@ -87,7 +87,7 @@ export function ComfyWorkflowListSection({
                 variant="nav"
                 onClick={() => onSelectWorkflow(workflow.id)}
                 aria-current={isSelected || undefined}
-                className="-mx-2 h-auto min-w-0 flex-1 justify-start gap-2.5 px-2 py-2"
+                className="min-w-0 flex-1"
               >
                 <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ backgroundColor: workflow.color || 'var(--color-primary)' }} />
                 <Tip content={workflow.description || null} align="start">
@@ -289,7 +289,7 @@ function CustomDropdownListEditorModal({ open, isSubmitting = false, initialList
 
   return (
     <Modal open={open} onClose={onClose} title={readOnly ? t({ ko: '드롭다운 목록 상세', en: 'Dropdown list details' }) : initialList ? t({ ko: '커스텀 드롭다운 수정', en: 'Edit custom dropdown' }) : t({ ko: '커스텀 드롭다운 목록', en: 'Custom dropdown list' })} widthClassName="max-w-2xl">
-      <ModalBody className="space-y-5">
+      <ModalBody spacing="lg">
         <Field label={t({ ko: '목록 이름', en: 'List name' })}>
           <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t({ ko: '목록 이름', en: 'List name' })} readOnly={readOnly} />
         </Field>
@@ -344,7 +344,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
 
   return (
     <Modal open={open} onClose={onClose} title={t({ ko: 'ComfyUI 자동수집', en: 'ComfyUI auto collect' })} widthClassName="max-w-3xl">
-      <ModalBody className="space-y-5">
+      <ModalBody spacing="lg">
         <Field label={t({ ko: 'API 목록', en: 'API paths' })} info={t({ ko: '대표 ComfyUI 서버에서 수집해. 통합·개별 목록과 하위 폴더 통합은 항상 적용돼.', en: 'Collected from the default ComfyUI server; merged and separate lists and subfolder merging always apply.' })}>
           <Textarea
             variant="settings"

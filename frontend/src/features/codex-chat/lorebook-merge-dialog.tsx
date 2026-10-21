@@ -207,7 +207,7 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
                   </button>
                 )
               })}
-              {preview.items.length === 0 ? <EmptyState size="compact" className="px-0 py-2" title={t({ ko: '옮길 항목이 없어.', en: 'Nothing to merge.' })} /> : null}
+              {preview.items.length === 0 ? <EmptyState size="compact" title={t({ ko: '옮길 항목이 없어.', en: 'Nothing to merge.' })} /> : null}
             </div>
             {selected && selectedChoice ? (
               <div className="space-y-3">
@@ -249,7 +249,7 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
           </>
         ) : null}
       </ModalBody>
-      <ModalFooter className="mt-4 gap-1 border-t border-line pt-3">
+      <ModalFooter separated className="mt-4">
         {duplicates.length > 0 && profiles.length > 0 ? (
           <>
             <IconButton size="icon-sm" variant="ghost" disabled={profileId === null || draftMutation.isPending || mergeMutation.isPending} onClick={() => draftMutation.mutate()} label={t({ ko: '{name}에게 맡기기', en: 'Ask {name}' }, { name: draftProfile?.name ?? '' })}>
@@ -257,7 +257,7 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
             </IconButton>
             <IconButton variant="ghost" size="icon-sm" active={instructionOpen} onClick={() => setInstructionOpen((open) => !open)} label={t({ ko: '지시 고치기', en: 'Edit instruction' })}><Pencil /></IconButton>
             {profiles.length > 1 ? (
-              <Select variant="settings" className="h-8 w-40 text-xs" value={profileId === null ? '' : String(profileId)} onChange={(event) => setProfileId(Number(event.target.value))} aria-label={t({ ko: '맡길 프로필', en: 'Profile to ask' })}>
+              <Select variant="settings" controlSize="compact" className="w-40" value={profileId === null ? '' : String(profileId)} onChange={(event) => setProfileId(Number(event.target.value))} aria-label={t({ ko: '맡길 프로필', en: 'Profile to ask' })}>
                 {profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name}</option>)}
               </Select>
             ) : null}
@@ -276,10 +276,10 @@ function MergeBody({ sourceId, targetId: fixedTargetId, entryIds, deleteSource, 
 function ComparePane({ label, extra, text }: { label: string; extra?: string; text: string }) {
   return (
     <div className="min-w-0 border-t border-line pt-2 text-sm">
-      <Text as="div" variant="overline" className="mb-1 flex items-center justify-between gap-2">
-        <span className="min-w-0 truncate">{label}</span>
-        {extra ? <span className="shrink-0">{extra}</span> : null}
-      </Text>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <Text as="span" variant="overline" className="min-w-0 truncate">{label}</Text>
+        {extra ? <Text as="span" variant="overline" className="shrink-0">{extra}</Text> : null}
+      </div>
       <div className="leading-relaxed whitespace-pre-wrap text-foreground/85">{text}</div>
     </div>
   )

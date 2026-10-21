@@ -5,7 +5,7 @@ import { Tip } from './tooltip'
 type IconButtonProps = Omit<React.ComponentProps<typeof Button>, 'size' | 'aria-label'> & {
   /** Accessible name, also shown as the tooltip. Required: an icon alone has no text. */
   label: string
-  size?: 'icon' | 'icon-xs' | 'icon-sm' | 'icon-lg'
+  size?: 'icon' | 'icon-xs' | 'icon-sm' | 'icon-lg' | 'icon-touch'
   /** Set false to keep the aria-label but skip the tooltip (e.g. when a visible caption sits next to it). */
   tooltip?: boolean
   tooltipSide?: React.ComponentProps<typeof Tip>['side']

@@ -181,10 +181,13 @@ function createJobContext<TParams>(jobId: string, params: TParams, controller: A
 
 /** Run one registered handler to completion inside this process. */
 async function executeJob(job: RuntimeJobRecord, registered: RegisteredHandler, params: unknown): Promise<void> {
+  if (!RuntimeJobStore.markRunning(job.jobId, resolveOwnerRole())) {
+    return
+  }
+
   const controller = new AbortController()
   localControllers.set(job.jobId, controller)
 
-  RuntimeJobStore.markRunning(job.jobId, resolveOwnerRole())
   emitJobHint(RuntimeJobStore.get(job.jobId))
 
   // 항목 하나가 120초를 넘겨도 스위퍼가 잡을 죽이지 않도록 별도 타이머로 하트비트를 찍는다.

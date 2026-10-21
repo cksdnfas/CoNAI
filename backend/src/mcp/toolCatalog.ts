@@ -54,7 +54,7 @@ const CONTENTS_PRIMARY_TOOLS = new Set([
   'list_audio_projects', 'list_audio_groups', 'list_audio_candidates', 'order_audio',
   'get_chat_setup_guide', 'propose_chat_profile', 'propose_profile_update',
   'extract_sprite_sheet', 'extract_sprite_sheets_batch',
-  'list_plugin_drafts', 'create_plugin_draft', 'edit_plugin_draft', 'prepare_plugin_install',
+  'list_plugin_drafts', 'create_plugin_draft', 'edit_plugin_draft', 'prepare_plugin_install', 'check_plugin_updates',
 ]);
 const CONTENTS_WHOLE_CATEGORY = 4;
 

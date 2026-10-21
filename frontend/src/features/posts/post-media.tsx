@@ -150,7 +150,7 @@ export function AudioEmbed({ candidateId, caption }: { candidateId: string; capt
   const progress = player.key === candidateId && player.duration > 0 ? player.currentTime / player.duration : undefined
   return (
     <div className="my-3 flex items-center gap-3 border-y border-line py-2.5">
-      <IconButton variant="secondary" size="icon" className="rounded-full" disabled={!candidate} label={playing ? t({ ko: '일시정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} onClick={() => audioPlayer.toggle(candidateId)}>
+      <IconButton variant="secondary" size="icon" disabled={!candidate} label={playing ? t({ ko: '일시정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} onClick={() => audioPlayer.toggle(candidateId)}>
         {playing ? <Pause /> : <Play />}
       </IconButton>
       <div className="flex min-w-0 flex-1 flex-col gap-1">

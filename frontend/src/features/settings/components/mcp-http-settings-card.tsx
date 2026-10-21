@@ -23,7 +23,7 @@ import { listAuthPermissionGroups } from '@/lib/api-auth'
 import { IconButton } from '@/components/ui/icon-button'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { InstantApplyHint } from './settings-section-status'
-import { SETTINGS_WIDE_CONTROL_CLASS, SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
+import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 
 const QUERY_KEY = ['mcp-http-settings'] as const
 
@@ -77,8 +77,8 @@ export function McpHttpSettingsCard() {
               onCheckedChange={(checked) => enabled.mutate(checked)}
               label={t({ ko: 'HTTP MCP 사용', en: 'Enable HTTP MCP' })}
             />
-            <SettingRow label={endpointLabel} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
-              <Input variant="settings" readOnly value={endpoint} className="min-w-0 flex-1 font-mono" aria-label={endpointLabel} />
+            <SettingRow label={endpointLabel} controlWidth="wide">
+              <Input variant="settings" mono readOnly value={endpoint} className="min-w-0 flex-1" aria-label={endpointLabel} />
               <IconButton size="icon-sm" variant="ghost" onClick={() => void copy(endpoint)} label={t({ ko: 'MCP 주소 복사', en: 'Copy MCP URL' })}><Copy /></IconButton>
             </SettingRow>
           </>
@@ -102,7 +102,7 @@ export function McpHttpSettingsCard() {
               <div key={key.id} className="space-y-2 border-b border-line py-3 last:border-b-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="min-w-0 truncate text-sm font-medium text-foreground sm:w-40">{key.name}</span>
-                  <Input variant="settings" type={visible ? 'text' : 'password'} readOnly value={key.apiKey} className="min-w-0 flex-1 basis-48 font-mono" aria-label={t({ ko: 'API 키', en: 'API key' })} />
+                  <Input variant="settings" mono type={visible ? 'text' : 'password'} readOnly value={key.apiKey} className="min-w-0 flex-1 basis-48" aria-label={t({ ko: 'API 키', en: 'API key' })} />
                   <div className="flex shrink-0 items-center gap-0.5">
                     <IconButton size="icon-sm" variant="ghost" onClick={() => setVisibleKeys((current) => {
                       const next = new Set(current)

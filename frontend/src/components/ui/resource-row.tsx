@@ -18,6 +18,10 @@ interface ResourceRowProps extends Omit<ComponentProps<'div'>, 'title'> {
   /** Opens the editor: the whole row is clickable and ends in a pencil. */
   onOpen?: () => void
   openLabel?: string
+  /** Hidden / inactive thing, or the row being dragged: the whole row dims. */
+  dimmed?: boolean
+  /** A dragged row would drop here: primary wash. */
+  dropTarget?: boolean
 }
 
 /**
@@ -25,7 +29,7 @@ interface ResourceRowProps extends Omit<ComponentProps<'div'>, 'title'> {
  * controls, edit. Hairline between rows at content width, hover wash a little wider. Stack rows directly (no
  * `space-y-*`) in a `RowGroup`.
  */
-function ResourceRow({ leading, name, extra, aside, trailing, onOpen, openLabel, className, children, onClick, ...props }: ResourceRowProps) {
+function ResourceRow({ leading, name, extra, aside, trailing, onOpen, openLabel, dimmed = false, dropTarget = false, className, children, onClick, ...props }: ResourceRowProps) {
   const { t } = useI18n()
   const stop = (event: MouseEvent) => event.stopPropagation()
 
@@ -36,6 +40,8 @@ function ResourceRow({ leading, name, extra, aside, trailing, onOpen, openLabel,
         'group relative -mx-2 flex min-h-11 items-center gap-3 rounded-sm px-2 py-1.5 transition-colors',
         'before:pointer-events-none before:absolute before:inset-x-2 before:top-0 before:border-t before:border-line first:before:hidden',
         onOpen && 'cursor-pointer hover:bg-fill',
+        dimmed && 'opacity-55',
+        dropTarget && 'bg-primary/8 hover:bg-primary/8',
         className,
       )}
       onClick={(event) => {

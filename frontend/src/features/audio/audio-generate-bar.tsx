@@ -251,7 +251,7 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
       <Popover open={chipOpen} onOpenChange={setChipOpen}>
         <Tip content={t({ ko: '{detail}\n눌러서 워크플로·서버 고르기', en: '{detail}\nClick to pick the workflow and server' }, { detail: workflowDetail })} className="whitespace-pre-line">
           <PopoverTrigger asChild>
-            <Button type="button" variant="ghost" size="xs" className="max-w-full min-w-0 gap-1.5 font-normal text-foreground">
+            <Button type="button" variant="ghost" size="xs" className="max-w-full min-w-0">
               <span className={cn('size-1.5 shrink-0 rounded-full', readiness.kind === 'ready' ? 'bg-success' : readiness.blocked ? 'bg-destructive' : 'bg-warning')} aria-hidden />
               <span className="min-w-0 truncate">{workflow?.name}</span>
               <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -316,21 +316,21 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
             invalid={secondsOver}
             value={<>{prefs.seconds}<span className="text-muted-foreground">{t({ ko: '초', en: 's' })}</span></>}
           >
-            <NumberStepperInput autoFocus className="h-8 w-32 font-mono" min={0.1} max={secondsMax ?? undefined} precision={1} aria-label={t({ ko: '길이(초)', en: 'Length (s)' })} value={prefs.seconds} aria-invalid={secondsOver || undefined} onValueCommit={(value) => set({ seconds: value })} />
+            <NumberStepperInput autoFocus mono controlSize="compact" className="w-32" min={0.1} max={secondsMax ?? undefined} precision={1} aria-label={t({ ko: '길이(초)', en: 'Length (s)' })} value={prefs.seconds} aria-invalid={secondsOver || undefined} onValueCommit={(value) => set({ seconds: value })} />
           </ParamChip>
           <ParamChip
             tip={t({ ko: '개수: 한 번에 만들 후보 수 (1–50)', en: 'Count: candidates per run (1–50)' })}
             ariaLabel={t({ ko: '개수 {value}', en: 'Count {value}' }, { value: prefs.count })}
             value={<><span className="text-muted-foreground">×</span>{prefs.count}</>}
           >
-            <NumberStepperInput autoFocus className="h-8 w-32 font-mono" min={1} max={50} precision={0} aria-label={t({ ko: '개수', en: 'Count' })} value={prefs.count} onValueCommit={(value) => set({ count: value })} />
+            <NumberStepperInput autoFocus mono controlSize="compact" className="w-32" min={1} max={50} precision={0} aria-label={t({ ko: '개수', en: 'Count' })} value={prefs.count} onValueCommit={(value) => set({ count: value })} />
           </ParamChip>
           <ParamChip
             tip={t({ ko: 'seed: 비워두면 매번 랜덤', en: 'Seed: leave empty for a random one each time' })}
             ariaLabel={seedText ? `seed ${seedText}` : t({ ko: 'seed 랜덤', en: 'seed: random' })}
             value={<><Dices className="size-3.5 text-muted-foreground" />{seedText ? <span className="max-w-20 truncate">{seedText}</span> : null}</>}
           >
-            <Input autoFocus className="h-8 w-36 font-mono" inputMode="numeric" aria-label="seed" placeholder={t({ ko: 'seed 랜덤', en: 'seed: random' })} value={prefs.seed} onChange={(event) => set({ seed: event.target.value })} />
+            <Input autoFocus mono controlSize="compact" className="w-36" inputMode="numeric" aria-label="seed" placeholder={t({ ko: 'seed 랜덤', en: 'seed: random' })} value={prefs.seed} onChange={(event) => set({ seed: event.target.value })} />
           </ParamChip>
           <div className="flex min-w-0 flex-1 items-center gap-1">
             {chip}
@@ -351,12 +351,12 @@ function ParamChip({ tip, ariaLabel, invalid = false, value, children }: { tip: 
     <Popover>
       <Tip content={tip}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="ghost" size="xs" aria-label={ariaLabel} aria-invalid={invalid || undefined} className={cn('shrink-0 gap-0.5 font-mono font-normal tabular-nums', invalid && 'text-destructive')}>
-            {value}
+          <Button type="button" variant={invalid ? 'destructive-ghost' : 'ghost'} size="xs" aria-label={ariaLabel} aria-invalid={invalid || undefined} className="shrink-0 tabular-nums">
+            <span className="inline-flex items-center gap-0.5 font-mono">{value}</span>
           </Button>
         </PopoverTrigger>
       </Tip>
-      <PopoverContent align="start" className="w-auto p-2">
+      <PopoverContent align="start" padding="sm" className="w-auto">
         {children}
       </PopoverContent>
     </Popover>
@@ -365,7 +365,7 @@ function ParamChip({ tip, ariaLabel, invalid = false, value, children }: { tip: 
 
 function StatusChip({ tone = 'idle', icon, children }: { tone?: 'idle' | 'warn' | 'bad'; icon?: ReactNode; children: ReactNode }) {
   return (
-    <Chip tone="muted" className="h-6 shrink gap-1.5 px-2">
+    <Chip tone="muted" className="h-6 shrink">
       {icon ?? <span className={cn('size-1.5 shrink-0 rounded-full', tone === 'bad' ? 'bg-destructive' : tone === 'warn' ? 'bg-warning' : 'bg-muted-foreground/50')} aria-hidden />}
       <span className="truncate">{children}</span>
     </Chip>

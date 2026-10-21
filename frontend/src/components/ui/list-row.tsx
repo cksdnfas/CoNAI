@@ -10,9 +10,12 @@ const listRowVariants = cva('flex min-w-0 items-center gap-3 border-b border-lin
       md: 'min-h-11 py-1.5',
       lg: 'min-h-14 py-2',
     },
-    /** Hover wash + focus ring + pointer. Rows gain a little inline padding so the wash does not touch the text. */
+    /**
+     * Hover wash + focus ring + pointer; a disabled row dims and drops the wash. Rows gain a little inline padding so
+     * the wash does not touch the text.
+     */
     interactive: {
-      true: 'w-full cursor-pointer px-2 text-left transition-colors outline-none hover:bg-fill focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40',
+      true: 'w-full cursor-pointer px-2 text-left transition-colors outline-none hover:bg-fill focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent',
       false: '',
     },
   },
@@ -27,7 +30,7 @@ interface ListRowProps extends ComponentProps<'div'>, VariantProps<typeof listRo
   leading?: ReactNode
   /** Count, status, row actions… (does not shrink, right aligned). */
   trailing?: ReactNode
-  /** Current / selected row: subtle primary wash (also sets data-selected). */
+  /** Current / selected row: subtle primary wash (also sets data-selected). Passing it (even `false`) pads the row. */
   selected?: boolean
   /**
    * Render the single child element (a `<button>`, `<a>`, router `Link`, `<li>`) as the row. Its own children become
@@ -43,6 +46,8 @@ interface ListRowProps extends ComponentProps<'div'>, VariantProps<typeof listRo
 function ListRow({ leading, trailing, selected, size, interactive, asChild = false, className, children, ...props }: ListRowProps) {
   const rowClassName = cn(
     listRowVariants({ size, interactive }),
+    // A selectable row (selected passed, true or false) can show the wash, so it pads its text like an interactive one.
+    selected !== undefined && 'px-2',
     selected && 'bg-primary/8 hover:bg-primary/12',
     className,
   )

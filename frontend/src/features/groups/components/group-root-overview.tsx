@@ -1,7 +1,7 @@
 import { Bot, FolderOpen } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
-import { Panel } from '@/components/ui/panel'
+import { MediaCard } from '@/components/common/media-card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -40,7 +40,7 @@ export function GroupRootOverview({
     <section className="space-y-4">
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="aspect-[4/3] w-full rounded-sm" />)}
+          {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="aspect-4/3 w-full" />)}
         </div>
       ) : null}
 
@@ -57,27 +57,23 @@ export function GroupRootOverview({
           {groups.map((group) => {
             const totalCount = getGroupHierarchyTotalCount(group, countMaps)
             return (
-              <Panel key={group.id} asChild tone="none" padding="none" interactive className="group block w-full text-left hover:bg-transparent">
-                <button type="button" onClick={() => onOpenGroup(group.id)}>
-                  <GroupCoverMosaic
-                    groupId={group.id}
-                    sourceKey={sourceKey}
-                    imageCount={totalCount}
-                    loadPreviewImages={loadPreviewImages}
-                    className="aspect-[4/3] w-full rounded-sm transition-opacity group-hover:opacity-90"
-                  />
-                  <div className="flex items-center gap-2 pt-2">
-                    <GroupColorDot color={group.color} size="md" />
-                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{group.name}</span>
-                    {group.auto_collect_enabled ? (
-                      <Tip content={t({ ko: '자동수집 켜짐', en: 'Auto-collect on' })}>
-                        <Bot className="size-3.5 shrink-0 text-primary" aria-label={t({ ko: '자동수집 켜짐', en: 'Auto-collect on' })} />
-                      </Tip>
-                    ) : null}
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatNumber(totalCount)}</span>
-                  </div>
-                </button>
-              </Panel>
+              <MediaCard
+                key={group.id}
+                className="w-full"
+                onClick={() => onOpenGroup(group.id)}
+                mediaClassName="aspect-4/3 w-full"
+                media={<GroupCoverMosaic groupId={group.id} sourceKey={sourceKey} imageCount={totalCount} loadPreviewImages={loadPreviewImages} className="size-full" />}
+                leading={<GroupColorDot color={group.color} size="md" />}
+                title={group.name}
+                meta={<>
+                  {group.auto_collect_enabled ? (
+                    <Tip content={t({ ko: '자동수집 켜짐', en: 'Auto-collect on' })}>
+                      <Bot className="size-3.5 shrink-0 text-primary" aria-label={t({ ko: '자동수집 켜짐', en: 'Auto-collect on' })} />
+                    </Tip>
+                  ) : null}
+                  {formatNumber(totalCount)}
+                </>}
+              />
             )
           })}
         </div>

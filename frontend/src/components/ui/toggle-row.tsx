@@ -8,6 +8,11 @@ const toggleRowVariants = cva('flex items-center gap-3 rounded-sm text-sm text-f
       settings: 'theme-settings-panel theme-input-surface',
       detail: 'theme-input-surface border px-3 py-2.5',
     },
+    /** `field`: the height of the inputs beside it in a form grid (44px on phones, 36px from sm). */
+    size: {
+      default: '',
+      field: 'min-h-11 py-1.5 sm:min-h-9',
+    },
   },
   defaultVariants: {
     variant: 'settings',
@@ -19,9 +24,9 @@ interface ToggleRowProps extends ComponentProps<'label'>, VariantProps<typeof to
 }
 
 /** Render a reusable checkbox-like row container with shared surface variants. */
-function ToggleRow({ children, className, variant, ...props }: ToggleRowProps) {
+function ToggleRow({ children, className, variant, size, ...props }: ToggleRowProps) {
   return (
-    <label data-slot="toggle-row" className={cn(toggleRowVariants({ variant }), className)} {...props}>
+    <label data-slot="toggle-row" className={cn(toggleRowVariants({ variant, size }), className)} {...props}>
       {children}
     </label>
   )

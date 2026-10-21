@@ -5,23 +5,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
-/**
- * Width of a select / number / short text control on the right of a SettingRow. Full width once the row wraps on
- * phones, a fixed column on wider screens so the controls of one group line up.
- */
-export const SETTINGS_CONTROL_CLASS = 'w-full sm:w-60'
-
-/** Wider right-side control (paths, URLs, templates). */
-export const SETTINGS_WIDE_CONTROL_CLASS = 'w-full sm:w-96'
-
 /** Placeholder rows while a settings group loads (keeps the hairline rhythm instead of one big block). */
 export function SettingsRowsSkeleton({ rows = 3 }: { rows?: number }) {
   return (
     <div>
       {Array.from({ length: rows }).map((_, index) => (
         <div key={index} className="flex min-h-13 items-center justify-between gap-6 border-b border-line py-2.5 last:border-b-0">
-          <Skeleton className="h-4 w-40 rounded-sm" />
-          <Skeleton className="h-8 w-40 rounded-sm" />
+          <Skeleton radius="sm" className="h-4 w-40" />
+          <Skeleton radius="sm" className="h-8 w-40" />
         </div>
       ))}
     </div>
@@ -67,7 +58,7 @@ export function SettingsStatLine({ items, className }: { items: SettingsStatItem
 
 /** Muted one-line message in place of an empty list (no box), flush with the rows' text. */
 export function SettingsEmptyRow({ children }: { children: ReactNode }) {
-  return <EmptyState size="compact" title={children} className="px-0 py-4" />
+  return <EmptyState size="compact" title={children} />
 }
 
 /** What blocks saving a settings group, listed above its rows. Nothing when the list is empty. */

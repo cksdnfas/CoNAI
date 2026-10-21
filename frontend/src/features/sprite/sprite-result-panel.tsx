@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { AlertTriangle, Crop, Download, Expand, LayoutGrid, Loader2, Pause, Play, Save, Scan } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { MediaCard } from '@/components/common/media-card'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -165,27 +166,27 @@ function FramePlayer({ build, crop, editingCrop, onCropChange }: { build: Sprite
           value={index}
           onChange={(event) => { setPlaying(false); setIndex(Number(event.target.value)) }}
           aria-label={t({ ko: '프레임 위치', en: 'Frame position' })}
-          className="h-1 min-w-0 flex-1 cursor-pointer accent-[var(--primary)]"
+          className="h-1 min-w-0 flex-1 cursor-pointer accent-primary"
         />
         <span className="tabular-nums">{index + 1} / {count}</span>
-        <Select className="h-7 w-20 px-2 font-mono text-xs" value={fps} onChange={(event) => setFps(Number(event.target.value))} aria-label={t({ ko: '재생 속도', en: 'Playback speed' })}>
+        <Select mono controlSize="compact" className="w-20" value={fps} onChange={(event) => setFps(Number(event.target.value))} aria-label={t({ ko: '재생 속도', en: 'Playback speed' })}>
           {FPS_OPTIONS.map((value) => <option key={value} value={value}>{value}fps</option>)}
         </Select>
-        <Select className="h-7 w-20 px-2 font-mono text-xs" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} aria-label={t({ ko: '확대', en: 'Zoom' })}>
+        <Select mono controlSize="compact" className="w-20" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} aria-label={t({ ko: '확대', en: 'Zoom' })}>
           {FRAME_ZOOMS.map((value) => <option key={value} value={value}>{value}%</option>)}
         </Select>
       </div>
       <div className="scroll-x flex gap-1 pb-1">
         {urls.map((url, frame) => (
-          <Button
+          <MediaCard
             key={url}
-            variant="ghost"
             onClick={() => { setPlaying(false); setIndex(frame) }}
             aria-label={t({ ko: '프레임 {index}', en: 'Frame {index}' }, { index: frame + 1 })}
-            className={cn('bg-checker size-12 shrink-0 p-0', frame === index && 'ring-2 ring-primary')}
-          >
-            <img src={spriteFrameUrl(build.buildId, frame, 96)} alt="" loading="lazy" className="max-h-11 max-w-11 object-contain" />
-          </Button>
+            className="shrink-0"
+            selected={frame === index}
+            mediaClassName="size-12"
+            media={<span className="bg-checker flex size-full items-center justify-center"><img src={spriteFrameUrl(build.buildId, frame, 96)} alt="" loading="lazy" className="max-h-11 max-w-11 object-contain" /></span>}
+          />
         ))}
       </div>
     </div>
@@ -228,7 +229,8 @@ function CropBox({ rect, scale, frameWidth, frameHeight, onChange }: { rect: Spr
     window.addEventListener('pointerup', up)
   }
   return (
-    <div className="pointer-events-none absolute border-[1.5px] border-primary shadow-[0_0_0_9999px_rgb(0_0_0/0.35)]" style={{ left: rect.x * scale, top: rect.y * scale, width: rect.width * scale, height: rect.height * scale }}>
+    // eslint-disable-next-line shadcn/no-arbitrary-values -- Canvas crop mask dims pixels outside the exact content selection, not UI chrome.
+    <div className="pointer-events-none absolute border-2 border-primary shadow-[0_0_0_9999px_rgb(0_0_0/0.35)]" style={{ left: rect.x * scale, top: rect.y * scale, width: rect.width * scale, height: rect.height * scale }}>
       {([[-1, -1], [1, -1], [-1, 1], [1, 1]] as const).map(([sx, sy]) => (
         <span
           key={`${sx}${sy}`}
@@ -250,7 +252,7 @@ function SheetView({ buildId, render }: { buildId: string; render: SpriteRender 
         <img src={url} alt={t({ ko: '스프라이트 시트', en: 'Sprite sheet' })} className="max-w-none" style={{ zoom: zoom / 100, imageRendering: zoom > 100 ? 'pixelated' : 'auto' }} />
       </div>
       <div className="flex justify-end">
-        <Select className="h-7 w-20 px-2 font-mono text-xs" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} aria-label={t({ ko: '확대', en: 'Zoom' })}>
+        <Select mono controlSize="compact" className="w-20" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} aria-label={t({ ko: '확대', en: 'Zoom' })}>
           {SHEET_ZOOMS.map((value) => <option key={value} value={value}>{value}%</option>)}
         </Select>
       </div>
@@ -292,5 +294,5 @@ function DownloadPopover({ buildId, output, onOutputChange, render, crop, disabl
 export function HexInput({ value, onCommit, label }: { value: string; onCommit: (value: string) => void; label: string }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
-  return <Input className="h-8 w-24 font-mono text-xs" value={draft} aria-label={label} onChange={(event) => setDraft(event.target.value)} onBlur={() => onCommit(draft)} onKeyDown={(event) => { if (event.key === 'Enter') onCommit(draft) }} />
+  return <Input mono controlSize="compact" className="w-24" value={draft} aria-label={label} onChange={(event) => setDraft(event.target.value)} onBlur={() => onCommit(draft)} onKeyDown={(event) => { if (event.key === 'Enter') onCommit(draft) }} />
 }

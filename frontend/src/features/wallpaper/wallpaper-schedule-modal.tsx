@@ -110,7 +110,6 @@ export function WallpaperScheduleModal({ onClose, presets, schedule }: Wallpaper
             type="button"
             variant="ghost"
             size="sm"
-            className="gap-1.5"
             title={t({ ko: '겹치면 위쪽이 이겨. 키나 링크로 고정한 월페이퍼는 그대로야.', en: 'The upper window wins on overlap. Wallpapers pinned by a key or link stay put.' })}
             disabled={presets.length === 0 || entries.length >= MAX_ENTRIES}
             onClick={addEntry}
@@ -120,7 +119,7 @@ export function WallpaperScheduleModal({ onClose, presets, schedule }: Wallpaper
           </Button>
         </div>
       </div>
-      <ModalFooter className="mt-4 border-t border-line pt-3">
+      <ModalFooter separated className="mt-4">
         <Button type="button" variant="ghost" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
         <Button type="button" disabled={!dirty || saveMutation.isPending} onClick={() => saveMutation.mutate()}>{t({ ko: '저장', en: 'Save' })}</Button>
       </ModalFooter>

@@ -1,26 +1,38 @@
 import { useId, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import { Brush, Dices, Plus, Trash2 } from 'lucide-react'
+import { getNaiFixedModelSettings, getNaiQualityTags, getNaiUcPresetIds, getNaiUcPresetText, NAI_ENHANCE_AMOUNTS, type NaiEnhanceAmount, type NaiUcPresetId } from '@conai/shared'
 import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { DisclosureButton } from '@/components/ui/disclosure-button'
 import { IconButton } from '@/components/ui/icon-button'
+import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { Text } from '@/components/ui/text'
 import { ToggleRow } from '@/components/ui/toggle-row'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import {
   FormField,
+  getNaiEnhanceIssueLabel,
+  getNaiFixedNegativeHint,
   NAI_ACTION_OPTIONS,
+  NAI_ENHANCE_SETTINGS,
   NAI_MODEL_OPTIONS,
   NAI_RESOLUTION_PRESETS,
   NAI_SAMPLE_COUNT_MAX,
   NAI_SAMPLE_COUNT_MIN,
   NAI_SAMPLER_OPTIONS,
   NAI_SCHEDULER_OPTIONS,
+  planNaiFormEnhance,
+  resolveNaiFormEnhance,
+  resolveNaiPromptPresets,
+  resolveNaiSamplingSettings,
   supportsNaiTransparentBackground,
+  supportsNaiVibes,
   type NAIFormDraft,
+  type NaiImageSize,
   type SelectedImageDraft,
 } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
@@ -36,10 +48,14 @@ import { ResolutionPicker, type DimensionBounds } from './resolution-picker'
 /** The NAI form sections as separately placeable blocks. */
 export type NaiEditorBlockNodes = Record<'prompt' | 'characters' | 'settings' | 'images' | 'references' | 'vibes', ReactNode>
 
+type NaiOptionChange = (patch: Partial<Pick<NAIFormDraft, 'qualityToggle' | 'ucPreset' | 'enhance'>>) => void
+
 /** Render the main editable NAI form sections while the parent panel handles data wiring and modals. */
 export function NaiGenerationEditorSections({
   naiForm,
   setNaiForm,
+  sourceImageSize,
+  handleNaiOptionChange,
   selectedCharacterIndex,
   setSelectedCharacterIndex,
   supportsCharacterPrompts,
@@ -86,6 +102,9 @@ export function NaiGenerationEditorSections({
 }: {
   naiForm: NAIFormDraft
   setNaiForm: Dispatch<SetStateAction<NAIFormDraft>>
+  /** Natural size of the img2img source image (enhance plan); null while unknown. */
+  sourceImageSize: NaiImageSize | null
+  handleNaiOptionChange: NaiOptionChange
   selectedCharacterIndex: number | null
   setSelectedCharacterIndex: Dispatch<SetStateAction<number | null>>
   supportsCharacterPrompts: boolean
@@ -134,14 +153,24 @@ export function NaiGenerationEditorSections({
 }) {
   const { t } = useI18n()
   const hasCharacters = naiForm.characters.length > 0
+  const enhance = resolveNaiFormEnhance(naiForm, sourceImageSize)
+  // A model with fixed settings (V5 Full Medium) uses only its UC preset text; the typed negatives are not used.
+  const fixedSettings = getNaiFixedModelSettings(naiForm.model)
 
   const prompt = (
-    <NaiPromptSection
-      prompt={naiForm.prompt}
-      negativePrompt={naiForm.negativePrompt}
-      onPromptChange={(value) => handleNaiFieldChange('prompt', value)}
-      onNegativePromptChange={(value) => handleNaiFieldChange('negativePrompt', value)}
-    />
+    <div className="min-w-0 space-y-3">
+      <NaiPromptSection
+        prompt={naiForm.prompt}
+        negativePrompt={naiForm.negativePrompt}
+        onPromptChange={(value) => handleNaiFieldChange('prompt', value)}
+        onNegativePromptChange={(value) => handleNaiFieldChange('negativePrompt', value)}
+        negativeLock={fixedSettings ? {
+          value: getNaiUcPresetText(naiForm.model, fixedSettings.ucPreset) ?? '',
+          hint: getNaiFixedNegativeHint(t),
+        } : undefined}
+      />
+      <NaiPromptPresetControls naiForm={naiForm} onChange={handleNaiOptionChange} />
+    </div>
   )
 
   const characters = (
@@ -221,7 +250,7 @@ export function NaiGenerationEditorSections({
                 <div
                   key={`nai-character-${index}`}
                   data-selected={index === selectedCharacterIndex || undefined}
-                  className="space-y-2 py-3 pl-3 transition-shadow data-[selected=true]:shadow-[inset_2px_0_0_var(--primary)]"
+                  className="space-y-2 py-3 pl-3 transition-shadow data-[selected=true]:shadow-nav-active"
                   onClick={() => setSelectedCharacterIndex(index)}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -246,6 +275,10 @@ export function NaiGenerationEditorSections({
                     negativeValue={character.uc}
                     onPositiveChange={(value) => handleCharacterPromptChange(index, 'prompt', value)}
                     onNegativeChange={(value) => handleCharacterPromptChange(index, 'uc', value)}
+                    negativeLock={fixedSettings ? {
+                      value: '',
+                      hint: t({ ko: '이 모델은 캐릭터 부정 프롬프트를 쓰지 않아.', en: 'This model does not use character negative prompts.' }),
+                    } : undefined}
                   />
                 </div>
               ))}
@@ -260,6 +293,7 @@ export function NaiGenerationEditorSections({
     <NaiSettingsSection
       naiForm={naiForm}
       setNaiForm={setNaiForm}
+      enhance={enhance}
       maxSampleCount={maxSampleCount}
       handleNaiFieldChange={handleNaiFieldChange}
       handleResolutionPresetChange={handleResolutionPresetChange}
@@ -292,8 +326,7 @@ export function NaiGenerationEditorSections({
                       <Brush />
                     </IconButton>
                     <IconButton
-                      variant="ghost"
-                      className="hover:text-destructive"
+                      variant="destructive-ghost"
                       onClick={() => void handleNaiImageChange('sourceImage')}
                       label={t({ ko: '원본 이미지 제거', en: 'Remove source image' })}
                     >
@@ -305,6 +338,10 @@ export function NaiGenerationEditorSections({
               {naiForm.sourceImage ? <NaiSelectedImageCard image={naiForm.sourceImage} alt="NAI source" /> : null}
             </div>
           </FormField>
+
+          {naiForm.action === 'img2img' && naiForm.sourceImage ? (
+            <NaiEnhanceField naiForm={naiForm} sourceImageSize={sourceImageSize} onChange={handleNaiOptionChange} />
+          ) : null}
 
           {naiForm.action === 'infill' ? (
             <FormField label={t({ ko: '마스크 이미지', en: 'Mask Image' })}>
@@ -320,8 +357,7 @@ export function NaiGenerationEditorSections({
                   />
                   {naiForm.maskImage ? (
                     <IconButton
-                      variant="ghost"
-                      className="hover:text-destructive"
+                      variant="destructive-ghost"
                       onClick={() => void handleNaiImageChange('maskImage')}
                       label={t({ ko: '마스크 이미지 제거', en: 'Remove mask image' })}
                     >
@@ -379,6 +415,7 @@ export function NaiGenerationEditorSections({
   const vibes = (
     <NaiVibesEditor
       vibes={naiForm.vibes}
+      supportsVibes={supportsNaiVibes(naiForm.model)}
       encodesOnSubmit
       onAddImage={handleAddVibe}
       onRemove={handleRemoveVibe}
@@ -453,10 +490,99 @@ function rollNaiSeed() {
 /** Render one on/off setting as a label + Switch row that lines up with the grid's form fields. */
 function NaiSwitchField({ label, checked, onCheckedChange }: { label: string, checked: boolean, onCheckedChange: (checked: boolean) => void }) {
   return (
-    <ToggleRow variant="detail" className="min-h-11 justify-between self-end py-2 font-medium sm:min-h-9">
-      <span className="min-w-0 truncate">{label}</span>
+    <ToggleRow variant="detail" size="field" className="justify-between self-end">
+      <span className="min-w-0 truncate font-medium">{label}</span>
       <Switch checked={checked} onCheckedChange={onCheckedChange} />
     </ToggleRow>
+  )
+}
+
+const NAI_UC_PRESET_LABELS: Record<Exclude<NaiUcPresetId, 'none'>, string> = { heavy: 'Heavy', light: 'Light', human_focus: 'Human Focus' }
+const NAI_ENHANCE_AMOUNT_LABELS: Record<NaiEnhanceAmount, string> = { '1x': '1x', '1.5x': '1.5x', max: 'Max' }
+
+/** Quality tags switch and UC preset select under the prompt; disabled for models without presets (V3). */
+function NaiPromptPresetControls({ naiForm, onChange }: { naiForm: NAIFormDraft, onChange: NaiOptionChange }) {
+  const { t } = useI18n()
+  const ucPresetSelectId = useId()
+  const qualityTags = getNaiQualityTags(naiForm.model)
+  const ucPresetIds = getNaiUcPresetIds(naiForm.model)
+  const ucPresetFixed = getNaiFixedModelSettings(naiForm.model) !== null
+  const presets = resolveNaiPromptPresets(naiForm)
+  const ucPresetText = getNaiUcPresetText(naiForm.model, presets.ucPreset)
+  const unsupportedHint = t({ ko: '이 모델은 품질 태그·UC 프리셋이 없어.', en: 'This model has no quality tags or UC presets.' })
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+      <Tip content={qualityTags
+        ? t({ ko: '프롬프트 뒤에 붙여: {tags}', en: 'Appended to the prompt: {tags}' }, { tags: qualityTags.replace(/^,\s*/, '') })
+        : unsupportedHint}
+      >
+        <SwitchLine
+          placement="start"
+          label={t({ ko: '품질 태그', en: 'Quality tags' })}
+          checked={presets.qualityToggle}
+          disabled={!qualityTags}
+          onCheckedChange={(checked) => onChange({ qualityToggle: checked })}
+        />
+      </Tip>
+      <Tip content={ucPresetIds.length <= 1
+        ? unsupportedHint
+        : ucPresetFixed
+          ? t({ ko: '이 모델은 Heavy로 고정이야: {text}', en: 'This model always uses Heavy: {text}' }, { text: ucPresetText ?? '' })
+          : ucPresetText
+          ? t({ ko: '부정 프롬프트 앞에 붙여: {text}', en: 'Placed before the negative prompt: {text}' }, { text: ucPresetText })
+          : t({ ko: '부정 프롬프트 앞에 붙일 NovelAI 기본 문구', en: 'NovelAI preset text placed before the negative prompt' })}
+      >
+        <div className="flex items-center gap-2 text-sm">
+          <label htmlFor={ucPresetSelectId} className="shrink-0">{t({ ko: 'UC 프리셋', en: 'UC preset' })}</label>
+          <Select
+            id={ucPresetSelectId}
+            className="w-auto"
+            value={presets.ucPreset}
+            disabled={ucPresetIds.length <= 1 || ucPresetFixed}
+            onChange={(event) => {
+              const ucPreset = ucPresetIds.find((id) => id === event.target.value)
+              if (ucPreset) onChange({ ucPreset })
+            }}
+          >
+            {ucPresetIds.map((id) => (
+              <option key={id} value={id}>{id === 'none' ? t({ ko: '없음', en: 'None' }) : NAI_UC_PRESET_LABELS[id]}</option>
+            ))}
+          </Select>
+        </div>
+      </Tip>
+    </div>
+  )
+}
+
+/** Enhance amount for the img2img source: unavailable amounts are disabled with their reason, the hint previews the size. */
+function NaiEnhanceField({ naiForm, sourceImageSize, onChange }: { naiForm: NAIFormDraft, sourceImageSize: NaiImageSize | null, onChange: NaiOptionChange }) {
+  const { t } = useI18n()
+  const active = resolveNaiFormEnhance(naiForm, sourceImageSize)
+  const hint = active?.plan && sourceImageSize
+    ? `${sourceImageSize.width}×${sourceImageSize.height} → ${active.plan.outputWidth}×${active.plan.outputHeight}`
+    : active?.issue ? getNaiEnhanceIssueLabel(t, active.issue) : undefined
+
+  return (
+    <FormField label={t({ ko: '인핸스', en: 'Enhance' })} hint={hint}>
+      <Select
+        value={naiForm.enhance}
+        onChange={(event) => {
+          const enhance = NAI_ENHANCE_SETTINGS.find((setting) => setting === event.target.value)
+          if (enhance) onChange({ enhance })
+        }}
+      >
+        <option value="off">{t({ ko: '끔', en: 'Off' })}</option>
+        {NAI_ENHANCE_AMOUNTS.map((amount) => {
+          const { issue } = planNaiFormEnhance(naiForm, sourceImageSize, amount)
+          return (
+            <option key={amount} value={amount} disabled={Boolean(issue)}>
+              {issue ? `${NAI_ENHANCE_AMOUNT_LABELS[amount]} · ${getNaiEnhanceIssueLabel(t, issue)}` : NAI_ENHANCE_AMOUNT_LABELS[amount]}
+            </option>
+          )
+        })}
+      </Select>
+    </FormField>
   )
 }
 
@@ -515,12 +641,15 @@ function NaiSeedField({ seed, onSeedChange }: { seed: string, onSeedChange: (val
 function NaiSettingsSection({
   naiForm,
   setNaiForm,
+  enhance,
   maxSampleCount,
   handleNaiFieldChange,
   handleResolutionPresetChange,
 }: {
   naiForm: NAIFormDraft
   setNaiForm: Dispatch<SetStateAction<NAIFormDraft>>
+  /** Active enhance: the size follows its plan and is shown read-only. */
+  enhance: ReturnType<typeof resolveNaiFormEnhance>
   maxSampleCount: number
   handleNaiFieldChange: (field: NaiFieldName, value: string) => void
   handleResolutionPresetChange: (presetKey: string) => void
@@ -534,7 +663,11 @@ function NaiSettingsSection({
     setIsAdvancedOpen(nextOpen)
   }
 
-  const samplerLabel = NAI_SAMPLER_OPTIONS.find((option) => option.value === naiForm.sampler)?.label ?? naiForm.sampler
+  // A model with fixed settings shows its steps / sampler; the stored values stay for switching back.
+  const samplingFixed = getNaiFixedModelSettings(naiForm.model) !== null
+  const sampling = resolveNaiSamplingSettings(naiForm)
+  const fixedHint = samplingFixed ? t({ ko: '모델 고정', en: 'Fixed by model' }) : undefined
+  const samplerLabel = NAI_SAMPLER_OPTIONS.find((option) => option.value === sampling.sampler)?.label ?? sampling.sampler
   const schedulerLabel = NAI_SCHEDULER_OPTIONS.find((option) => option.value === naiForm.scheduler)?.label ?? naiForm.scheduler
   const advancedSummary = [samplerLabel, schedulerLabel, `CFG ${naiForm.scale}`, naiForm.varietyPlus ? 'Variety+' : null]
     .filter(Boolean)
@@ -564,23 +697,33 @@ function NaiSettingsSection({
         </div>
 
         <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-4">
-          <ResolutionPicker
-            mode="preset"
-            preset={naiForm.resolutionPreset}
-            presets={[
-              ...NAI_RESOLUTION_PRESETS.map((preset) => ({ value: preset.key, label: preset.label })),
-              { value: 'custom', label: t({ ko: '사용자 지정', en: 'Custom' }) },
-            ]}
-            onPresetChange={handleResolutionPresetChange}
-            width={naiForm.width}
-            height={naiForm.height}
-            bounds={NAI_DIMENSION_BOUNDS}
-            onWidthCommit={(nextValue) => handleNaiFieldChange('width', nextValue)}
-            onHeightCommit={(nextValue) => handleNaiFieldChange('height', nextValue)}
-          />
+          {enhance ? (
+            <FormField label={t({ ko: '크기', en: 'Size' })} hint={t({ ko: '인핸스가 원본으로 정해', en: 'Set by enhance' })}>
+              <Input
+                readOnly
+                disabled
+                value={enhance.plan ? `${enhance.plan.width}×${enhance.plan.height}` : getNaiEnhanceIssueLabel(t, enhance.issue)}
+              />
+            </FormField>
+          ) : (
+            <ResolutionPicker
+              mode="preset"
+              preset={naiForm.resolutionPreset}
+              presets={[
+                ...NAI_RESOLUTION_PRESETS.map((preset) => ({ value: preset.key, label: preset.label })),
+                { value: 'custom', label: t({ ko: '사용자 지정', en: 'Custom' }) },
+              ]}
+              onPresetChange={handleResolutionPresetChange}
+              width={naiForm.width}
+              height={naiForm.height}
+              bounds={NAI_DIMENSION_BOUNDS}
+              onWidthCommit={(nextValue) => handleNaiFieldChange('width', nextValue)}
+              onHeightCommit={(nextValue) => handleNaiFieldChange('height', nextValue)}
+            />
+          )}
 
-          <FormField label={t({ ko: '스텝', en: 'Steps' })}>
-            <NumberStepperInput min={1} max={100} value={naiForm.steps} onValueCommit={(nextValue) => handleNaiFieldChange('steps', nextValue)} />
+          <FormField label={t({ ko: '스텝', en: 'Steps' })} hint={fixedHint}>
+            <NumberStepperInput min={1} max={100} value={sampling.steps} disabled={samplingFixed} onValueCommit={(nextValue) => handleNaiFieldChange('steps', nextValue)} />
           </FormField>
 
           <FormField label={t({ ko: '요청당 이미지', en: 'Images per request' })}>
@@ -601,14 +744,14 @@ function NaiSettingsSection({
         <div>
           <Tip content={isAdvancedOpen ? null : advancedSummary} side="top" align="start">
             <DisclosureButton open={isAdvancedOpen} aria-controls={advancedRegionId} onClick={toggleAdvancedOpen}>
-              <Text as="span" variant="overline" className="shrink-0 text-current">{t({ ko: '고급', en: 'Advanced' })}</Text>
+              <Text as="span" variant="overline" tone="inherit" className="shrink-0">{t({ ko: '고급', en: 'Advanced' })}</Text>
             </DisclosureButton>
           </Tip>
 
           {isAdvancedOpen ? (
             <div id={advancedRegionId} className="mt-3 grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-4">
-              <FormField label={t({ ko: '샘플러', en: 'Sampler' })}>
-                <Select value={naiForm.sampler} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
+              <FormField label={t({ ko: '샘플러', en: 'Sampler' })} hint={fixedHint}>
+                <Select value={sampling.sampler} disabled={samplingFixed} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
                   {NAI_SAMPLER_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}

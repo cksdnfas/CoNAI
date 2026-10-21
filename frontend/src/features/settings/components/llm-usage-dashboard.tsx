@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
+import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { useI18n } from '@/i18n'
@@ -331,7 +332,7 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
                         <DataTd numeric>{formatNumber(model.requests)}</DataTd>
                         <DataTd numeric>{tokenCell(model.inputTokens)}</DataTd>
                         <DataTd numeric>{tokenCell(model.outputTokens)}</DataTd>
-                        <DataTd numeric className={cn(model.failed > 0 && 'text-destructive')}>{formatNumber(model.failed)}</DataTd>
+                        <DataTd numeric><Text as="span" tone={model.failed > 0 ? 'destructive' : 'default'}>{formatNumber(model.failed)}</Text></DataTd>
                         <DataTd numeric>{seconds(model.averageLatencyMs)}</DataTd>
                         <DataTd>
                           <span className="flex items-center gap-2">

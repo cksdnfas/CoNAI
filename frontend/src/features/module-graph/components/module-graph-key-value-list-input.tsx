@@ -90,7 +90,6 @@ export function ModuleGraphKeyValueListInput({
   const { t } = useI18n()
   const entries = normalizeKeyValueEntries(value)
   const visibleEntries = entries.length > 0 ? entries : [{ key: '', value: '' }]
-  const inputClassName = compact ? 'h-7 text-2xs' : undefined
   const rowClassName = compact
     ? 'grid grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto] gap-1'
     : 'grid gap-2 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_auto]'
@@ -140,13 +139,13 @@ export function ModuleGraphKeyValueListInput({
                 value={entry.key}
                 onChange={(event) => updateEntry(index, { ...entry, key: event.target.value })}
                 placeholder={t({ ko: '키', en: 'Key' })}
-                className={inputClassName}
+                controlSize={compact ? 'compact' : undefined}
               />
               <Input
                 value={connected ? t({ ko: '연결됨', en: 'Linked' }) : entry.value}
                 onChange={(event) => updateEntry(index, { ...entry, value: event.target.value })}
                 placeholder={t({ ko: '값', en: 'Value' })}
-                className={inputClassName}
+                controlSize={compact ? 'compact' : undefined}
                 disabled={connected}
               />
               <IconButton size="icon-sm" variant="ghost" className={compact ? 'h-7 w-7' : undefined} onClick={() => removeEntry(index)} label={t({ ko: '삭제', en: 'Remove' })}>

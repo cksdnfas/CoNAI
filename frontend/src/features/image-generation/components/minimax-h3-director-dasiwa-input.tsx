@@ -8,7 +8,9 @@ import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { Panel } from '@/components/ui/panel'
 import { Select } from '@/components/ui/select'
+import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -583,11 +585,16 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
     return (
       <div key={`frame-slot-${slot}`} className="space-y-1">
         {inputKey ? renderInputPort?.(inputKey) : null}
-        <Button
+        <Panel
+          asChild
+          interactive={!isUploading}
+          padding="md"
+          className="min-h-24 w-full min-w-0"
+        >
+        <button
           type="button"
-          variant="subtle"
           disabled={isUploading}
-          className="h-auto min-h-24 w-full min-w-0 flex-col gap-2 px-3 text-xs whitespace-normal"
+          className="flex flex-col items-center justify-center gap-2 text-xs whitespace-normal"
           onClick={() => {
             requestedFrameSlotRef.current = slot
             visualInputRef.current?.click()
@@ -597,7 +604,8 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         >
           <ImagePlus className="size-5 text-muted-foreground" />
           <span className="font-medium text-foreground">{label}</span>
-        </Button>
+        </button>
+        </Panel>
       </div>
     )
   }
@@ -638,7 +646,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
   )
   const renderDropZone = (label: string, icon: ReactNode, onClick: () => void, disabled?: boolean) => (
     <Tip content={label}>
-      <Button type="button" variant="subtle" aria-label={label} disabled={disabled} className="h-10 w-full text-muted-foreground" onClick={onClick}>
+      <Button type="button" variant="subtle" aria-label={label} disabled={disabled} className="h-10 w-full" onClick={onClick}>
         {icon}
       </Button>
     </Tip>
@@ -724,7 +732,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                   max={Math.min(MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS, numericBounds?.duration?.max ?? MINIMAX_H3_DIRECTOR_DURATION_MAX_SECONDS)}
                   step={1}
                   value={durationValue}
-                  className={cn(invalidFields.has('duration') && 'border-destructive')}
+                  aria-invalid={invalidFields.has('duration')}
                   onValueCommit={(nextValue) => {
                     const duration = Number(nextValue)
                     emit({ duration }, undefined, assets, { ...builderState, duration })
@@ -743,7 +751,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
                   max={Math.min(MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX, numericBounds?.frame_rate?.max ?? MINIMAX_H3_DIRECTOR_FRAME_RATE_MAX)}
                   step={0.01}
                   value={frameRateValue}
-                  className={cn(invalidFields.has('frame_rate') && 'border-destructive')}
+                  aria-invalid={invalidFields.has('frame_rate')}
                   onValueCommit={(nextValue) => emit({ frame_rate: Number(nextValue) })}
                 />
               </FormField>
@@ -781,7 +789,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
               {issues.slice(0, 6).map((issue) => (
                 <li key={`${issue.code}-${issue.itemId ?? issue.field ?? ''}`}>
                   {issue.itemId ? (
-                    <Button type="button" variant="link" size="xs" className="h-auto p-0 text-left whitespace-normal text-current" onClick={(event) => { event.stopPropagation(); setMenuItemId(issue.itemId ?? null) }}>
+                    <Button type="button" variant="link" size="content" className="text-left whitespace-normal" onClick={(event) => { event.stopPropagation(); setMenuItemId(issue.itemId ?? null) }}>
                       {t({ ko: issue.ko, en: issue.en })}
                     </Button>
                   ) : t({ ko: issue.ko, en: issue.en })}
@@ -917,7 +925,7 @@ export function MiniMaxH3DirectorDasiwaInput({ value, visibleFields, hiddenContr
         />
       ) : null}
 
-      {status ? <Inset role="status" className="px-3 py-2 text-xs text-muted-foreground">{status}</Inset> : null}
+      {status ? <Inset role="status" padding="sm"><Text variant="caption">{status}</Text></Inset> : null}
 
     </div>
   )

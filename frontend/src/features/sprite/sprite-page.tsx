@@ -49,7 +49,6 @@ export function SpritePage() {
         value={tab}
         onChange={setTab}
         ariaLabel={t({ ko: '스프라이트 메뉴', en: 'Sprite sections' })}
-        className="gap-5"
         stripClassName="min-h-14 pt-2"
         actions={(
           <div className="flex items-center gap-1">

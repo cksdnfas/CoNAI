@@ -7,7 +7,6 @@ import type { AppearanceSettings } from '@conai/shared'
 import type { AppearanceTabColorValues } from './appearance-tab.types'
 import { SettingRow } from '@/components/ui/setting-row'
 import { ChatFilledLabel } from './settings-filled-label'
-import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 import { useI18n, type TranslationInput } from '@/i18n'
 
 export interface AppearanceTabEditorSectionProps {
@@ -211,7 +210,7 @@ export function RelatedImageColumnRow({
   onChange: (value: number) => void
 }) {
   return (
-    <SettingRow label={fieldId ? <ChatFilledLabel fieldId={fieldId}>{label}</ChatFilledLabel> : label} controlClassName={SETTINGS_CONTROL_CLASS}>
+    <SettingRow label={fieldId ? <ChatFilledLabel fieldId={fieldId}>{label}</ChatFilledLabel> : label} controlWidth="standard">
       <NumberStepperInput
         min={1}
         max={6}
@@ -311,7 +310,7 @@ export function AppearanceColorControl({
         onChange={(event) => onChangeColor(event.target.value)}
         className="h-9 w-10 shrink-0 cursor-pointer rounded-sm bg-field p-1"
       />
-      <Input variant="settings" type="text" className="w-32 font-mono" value={textValue} aria-label={ariaLabel} onChange={(event) => onChangeText(event.target.value)} placeholder={placeholder} />
+      <Input variant="settings" mono type="text" className="w-32" value={textValue} aria-label={ariaLabel} onChange={(event) => onChangeText(event.target.value)} placeholder={placeholder} />
     </div>
   )
 }

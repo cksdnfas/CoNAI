@@ -154,7 +154,7 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
       </div>
 
       {preview ? (
-        <ModalFooter className="mt-4 gap-1 border-t border-line pt-3">
+        <ModalFooter separated className="mt-4">
           <span className="flex-1" />
           <Button type="button" onClick={() => applyMutation.mutate()} disabled={applyMutation.isPending || !isDanbooruDbAvailable || preview.totals.matchedPrompts === 0}>
             <WandSparkles className="h-4 w-4" />

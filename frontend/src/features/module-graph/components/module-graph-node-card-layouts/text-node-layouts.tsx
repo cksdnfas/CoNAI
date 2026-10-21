@@ -80,7 +80,7 @@ export function TextTransformNodeLayout(props: ModuleGraphNodeLayoutProps) {
                 event.stopPropagation()
                 setShowFlags((current) => !current)
               }}
-              className="nodrag text-2xs font-normal"
+              className="nodrag"
             >
               <ChevronDown className={cn('transition-transform', !showFlags && '-rotate-90')} />
               {t({ ko: '플래그', en: 'Flags' })}

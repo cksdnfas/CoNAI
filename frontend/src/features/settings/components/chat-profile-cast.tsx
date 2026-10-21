@@ -32,7 +32,6 @@ function CastRow({ member, onChange, onDelete }: { member: ChatCastMember; onCha
 
   return (
     <ListRow
-      className="gap-2"
       leading={(
         <Tip content={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
           <AvatarButton onClick={() => fileInputRef.current?.click()} aria-label={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>

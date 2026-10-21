@@ -8,7 +8,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { CHAT_DOCK_INSET } from './use-settings-editor-chat-page'
-import { Panel } from '@/components/ui/panel'
+import { MediaCard } from '@/components/common/media-card'
 import { Select } from '@/components/ui/select'
 import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -217,6 +217,7 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
   const selected = batch?.slots.filter((slot) => slot.kind !== 'full' && slot.chosenHash && slot.attempts.some((attempt) => attempt.candidates.some((candidate) => candidate.compositeHash === slot.chosenHash))).length ?? 0
   const complete = batch?.slots.filter((slot) => terminal(slot.status)).length ?? 0
   const displayedPresetId = batch?.presetId ?? presetId
+  // eslint-disable-next-line shadcn/no-restyle -- on phones this dialog is a full-screen sheet, so it drops the card radius
   return <Modal open onClose={onClose} widthClassName="max-w-5xl max-sm:fixed max-sm:inset-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:rounded-none" height="tall" sidePanelInset={CHAT_DOCK_INSET} title={<>{t({ ko: '자산 만들기', en: 'Create assets' })}<span className="ml-3 text-sm font-normal text-muted-foreground">{savedProfile?.name ?? profile?.name}</span></>}>
     <ModalBody>
       <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-line pb-3">
@@ -265,7 +266,7 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
           const reviewReference = reviewAttempt?.referenceHash ?? batch?.slots.find((slot) => slot.kind === 'reference')?.chosenHash ?? batch?.snapshot.referenceHash
           const working = slot?.attempts.some(activeAttempt)
           const referenceBlocked = slot?.kind !== 'reference' && batch?.slots.some((slot) => slot.kind === 'reference' && !slot.chosenHash)
-          const dimensions = entry.kind === 'background' ? 'h-[135px] w-[240px]' : 'h-[150px] w-[112px]'
+          const dimensions = entry.kind === 'background' ? 'h-33.75 w-60' : 'h-37.5 w-28'
           return <section key={entry.slotKey} className="py-3">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <Tip content={entry.kind === 'full' ? t({ ko: '전신은 후보 그룹에 보관해', en: 'Full-body images stay in the candidates group' }) : null}><span className="w-16 shrink-0 text-sm font-semibold">{entry.slotKey}</span></Tip><ReviewChips review={chosen?.review ?? latest?.review} /><span className="flex-1" />
@@ -279,10 +280,18 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
                 const imageQuery = images[hashes.indexOf(candidate.compositeHash)]
                 const loading = imageQuery?.isPending
                 const selected = slot?.chosenHash === candidate.compositeHash
-                return <Tip key={`${candidate.historyId}:${index}`} content={image ? t({ ko: '클릭해서 고르기 · 더블클릭해서 크게 보기', en: 'Click to choose · Double-click to view' }) : t({ ko: '이미지를 다시 불러오기', en: 'Reload image' })}><Panel asChild interactive tone="none" padding="none"><button type="button" disabled={create.isPending || apply.isPending || (!image && loading)} aria-pressed={selected} aria-label={t({ ko: '{name} 후보 {index} 고르기', en: 'Choose {name} candidate {index}' }, { name: entry.slotKey, index: index + 1 })} onClick={() => { if (!image) { void imageQuery?.refetch(); return } if (!busy) slotMutation.mutate({ slotKey: entry.slotKey, action: 'choose', hash: candidate.compositeHash }) }} onDoubleClick={() => { const index = safety.visibleItems.findIndex((image) => image.composite_hash === candidate.compositeHash); if (index >= 0) setLightboxIndex(index) }} className={cn('relative shrink-0 overflow-hidden rounded-md bg-foreground/5 outline-none focus-visible:ring-2 focus-visible:ring-ring', dimensions, selected && 'ring-2 ring-primary ring-offset-2 ring-offset-background')}>
-                  {image ? <><ChatProfileImage src={libraryThumbnailUrl(candidate.compositeHash)} className={safety.shouldBlurItemPreview(image) ? 'blur-lg' : undefined} />{safety.renderItemPersistentOverlay(image)}</> : <span className="flex h-full items-center justify-center text-muted-foreground">{loading ? <Spinner /> : <ImageOff />}</span>}
-                  {selected ? <ChosenCheckBadge /> : null}
-                </button></Panel></Tip>
+                return <Tip key={`${candidate.historyId}:${index}`} content={image ? t({ ko: '클릭해서 고르기 · 더블클릭해서 크게 보기', en: 'Click to choose · Double-click to view' }) : t({ ko: '이미지를 다시 불러오기', en: 'Reload image' })}><MediaCard
+                  className="shrink-0"
+                  mediaClassName={dimensions}
+                  selected={selected}
+                  disabled={create.isPending || apply.isPending || (!image && loading)}
+                  aria-pressed={selected}
+                  aria-label={t({ ko: '{name} 후보 {index} 고르기', en: 'Choose {name} candidate {index}' }, { name: entry.slotKey, index: index + 1 })}
+                  onClick={() => { if (!image) { void imageQuery?.refetch(); return } if (!busy) slotMutation.mutate({ slotKey: entry.slotKey, action: 'choose', hash: candidate.compositeHash }) }}
+                  onDoubleClick={() => { const index = safety.visibleItems.findIndex((image) => image.composite_hash === candidate.compositeHash); if (index >= 0) setLightboxIndex(index) }}
+                  media={image ? <><ChatProfileImage src={libraryThumbnailUrl(candidate.compositeHash)} className={safety.shouldBlurItemPreview(image) ? 'blur-lg' : undefined} />{safety.renderItemPersistentOverlay(image)}</> : <span className="flex h-full items-center justify-center text-muted-foreground">{loading ? <Spinner /> : <ImageOff />}</span>}
+                  overlay={selected ? <ChosenCheckBadge /> : null}
+                /></Tip>
               })}
               {slot?.attempts.filter((attempt) => activeAttempt(attempt) || attempt.status === 'failed' || attempt.status === 'cancelled' || !attempt.candidates.length).map((attempt) => <div key={attempt.jobId} title={attempt.failureCode ?? attempt.status} className={cn('flex shrink-0 flex-col items-center justify-center gap-2 rounded-md border border-dashed border-line text-xs text-muted-foreground', dimensions)}>{activeAttempt(attempt) ? attempt.status === 'queued' ? null : <Spinner /> : <AlertTriangle className="size-5 text-warning" />}{activeAttempt(attempt) ? attempt.cancelRequested ? t({ ko: '취소 중', en: 'Cancelling' }) : attempt.status === 'queued' ? t({ ko: '대기', en: 'Waiting' }) : t({ ko: '만드는 중', en: 'Creating' }) : attempt.status === 'cancelled' ? t({ ko: '취소됨', en: 'Cancelled' }) : t({ ko: '실패', en: 'Failed' })}</div>)}
               {!slot?.attempts.length ? <div title={referenceBlocked ? t({ ko: '기준 이미지를 먼저 골라줘', en: 'Choose the reference first' }) : undefined} className={cn('flex shrink-0 items-center justify-center rounded-md border border-dashed border-line text-xs text-muted-foreground', dimensions)}>{slot?.status === 'blocked' ? t({ ko: '차단됨', en: 'Blocked' }) : null}</div> : null}
@@ -291,7 +300,7 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
         })}
       </div>
     </ModalBody>
-    <ModalFooter className="mt-4 border-t border-line pt-3"><Button size="sm" disabled={!selected || busy} onClick={() => apply.mutate()}>{apply.isPending ? <Spinner /> : <Check />}{t({ ko: '적용 {count}', en: 'Apply {count}' }, { count: selected })}</Button></ModalFooter>
+    <ModalFooter separated className="mt-4"><Button size="sm" disabled={!selected || busy} onClick={() => apply.mutate()}>{apply.isPending ? <Spinner /> : <Check />}{t({ ko: '적용 {count}', en: 'Apply {count}' }, { count: selected })}</Button></ModalFooter>
     <MediaLightbox items={safety.visibleItems} index={lightboxIndex} onIndexChange={setLightboxIndex} onClose={() => setLightboxIndex(null)} />
   </Modal>
 }

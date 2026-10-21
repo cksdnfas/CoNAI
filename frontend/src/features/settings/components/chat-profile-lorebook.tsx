@@ -81,7 +81,8 @@ function LoreFileField({ place, value, onChange }: { place: LoreFilePlace; value
           <span className="min-w-0 flex-1">
             <Select
               variant="settings"
-              className="font-mono text-xs"
+              mono
+              controlSize="compact"
               value={value ?? ''}
               disabled={disabledTip !== null || uploadMutation.isPending}
               onChange={(event) => {
@@ -144,7 +145,7 @@ function LanguageKeywordRows({ language, base, local, onBase, onLocal, addLabel 
   if (!language) return <KeywordChips keys={base} onChange={onBase} addLabel={addLabel} />
   const tag = loreKeyLanguageTag(language)
   const row = (label: string, chips: ReactNode) => <div className="flex min-w-0 items-start gap-2">
-    <Text as="span" variant="overline" className="w-7 shrink-0 pt-2.5">{label}</Text>
+    <div className="w-7 shrink-0 pt-2.5"><Text as="span" variant="overline">{label}</Text></div>
     <div className="min-w-0 flex-1">{chips}</div>
   </div>
   return <div className="flex flex-col gap-2">
@@ -224,7 +225,7 @@ export function ChatLoreEntryFields({ entry, onChange, filePlace, keyLanguage = 
       <Text as="div" variant="overline">{t({ ko: '시간 조건', en: 'Timing' })}</Text>
       <div className="grid grid-cols-4 gap-2">
         {([{ key: 'sticky', label: { ko: '유지', en: 'Sticky' } }, { key: 'cooldown', label: { ko: '쿨다운', en: 'Cooldown' } }, { key: 'delay', label: { ko: '지연', en: 'Delay' } }] as const).map(({ key, label }) => <Field key={key} label={t(label)} className="min-w-0">
-          <NumberStepperInput variant="settings" min={0} max={Number.MAX_SAFE_INTEGER} precision={0} value={entry[key] ?? 0} className={`min-w-0 [&_button]:min-w-7 ${(entry[key] ?? 0) === 0 ? '[&_input]:text-muted-foreground' : ''}`} aria-label={t(label)} onValueCommit={(value) => onChange({ [key]: Number(value) || 0 })} />
+          <NumberStepperInput variant="settings" min={0} max={Number.MAX_SAFE_INTEGER} precision={0} value={entry[key] ?? 0} className="min-w-0" aria-label={t(label)} onValueCommit={(value) => onChange({ [key]: Number(value) || 0 })} />
         </Field>)}
         <Field label={t({ ko: '그룹', en: 'Group' })} className="min-w-0"><Input variant="settings" value={entry.group ?? ''} maxLength={100} onChange={(event) => onChange({ group: event.target.value })} /></Field>
       </div>

@@ -63,7 +63,7 @@ export function PostCategoryDialog({ category, parentId, categories, onClose, on
   return (
     <Modal open title={category ? t({ ko: '카테고리 고치기', en: 'Edit category' }) : t({ ko: '새 카테고리', en: 'New category' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
       <form onSubmit={(event) => { event.preventDefault(); if (name.trim() && !busy) save.mutate() }}>
-        <ModalBody className="space-y-3">
+        <ModalBody spacing="sm">
           <Input variant="settings" autoFocus value={name} onChange={(event) => setName(event.target.value)} aria-label={t({ ko: '이름', en: 'Name' })} placeholder={t({ ko: '이름', en: 'Name' })} />
           <Select variant="settings" aria-label={t({ ko: '상위 카테고리', en: 'Parent category' })} value={parent ?? ''} onChange={(event) => setParent(event.target.value ? Number(event.target.value) : null)}>
             <option value="">{t({ ko: '최상위', en: 'Top level' })}</option>

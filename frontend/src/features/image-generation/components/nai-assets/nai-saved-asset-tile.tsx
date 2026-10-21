@@ -73,7 +73,7 @@ export function NaiSavedAssetTile({
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={handleKeyDown}
-      className="group relative isolate mb-3 block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+      className="group relative isolate mb-3 block w-full cursor-pointer break-inside-avoid overflow-hidden rounded-sm text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
     >
       {previewImage && previewState === 'ready' ? (
         <ImagePreviewMedia

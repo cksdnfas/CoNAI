@@ -86,7 +86,8 @@ export function SecurityAccountManagementList({
                 {account.groupKeys.map((groupKey) => (
                   <Badge
                     key={groupKey}
-                    className="shrink-0 border-0 normal-case tracking-normal"
+                    casing="sentence"
+                    className="shrink-0"
                     style={getSecurityGroupBadgeStyle(getSecurityGroupColor(groupKey, groupColors))}
                   >
                     {getPermissionGroupDisplayName(language, groupKey, groupLabels[groupKey] ?? groupKey)}

@@ -57,7 +57,7 @@ function previewWouldEnlarge(anchor: DOMRect) {
  */
 export function MediaHoverExpandCue() {
   return (
-    <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center backdrop-blur-[2px] backdrop-brightness-90 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+    <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center backdrop-blur-xs backdrop-brightness-90 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
       <span className="flex size-10 items-center justify-center rounded-full bg-backdrop text-white">
         <Maximize2 className="size-5" />
       </span>
@@ -83,6 +83,7 @@ function MediaHoverPreviewCard({ anchor, source }: { anchor: DOMRect; source: Me
     poster.src = source.src
     return () => {
       poster.onload = null
+      poster.removeAttribute('src')
     }
   }, [source.src, videoSrc])
 
@@ -96,6 +97,7 @@ function MediaHoverPreviewCard({ anchor, source }: { anchor: DOMRect; source: Me
     image.src = fullSrc
     return () => {
       image.onload = null
+      image.removeAttribute('src')
     }
   }, [fullSrc])
 

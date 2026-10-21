@@ -14,7 +14,7 @@ import { useI18n, type TranslationInput } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { AiStatusPill } from './ai-status-pill'
 import { ChatFilledLabel } from './settings-filled-label'
-import { SETTINGS_CONTROL_CLASS, SETTINGS_WIDE_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
+import { SettingsRowsSkeleton } from './settings-rows'
 
 interface AiRuntimeSettingsCardProps {
   heading: ReactNode
@@ -136,7 +136,6 @@ export function AiRuntimeSettingsCard({
           <IconButton
             size="icon-sm"
             variant="ghost"
-            className="text-primary"
             label={active ? t({ ko: '다시 설치', en: 'Reinstall' }) : t({ ko: '설치', en: 'Install' })}
             disabled={!status?.installSupported || !draft || blocked || isInstallPending}
             onClick={() => draft && onInstall(draft.torchBackend)}
@@ -155,7 +154,7 @@ export function AiRuntimeSettingsCard({
     <RowGroup heading={heading} actions={headingActions}>
       {draft && status ? (
         <>
-          <SettingRow label={t({ ko: '상태', en: 'Status' })} controlClassName="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          <SettingRow label={t({ ko: '상태', en: 'Status' })}>
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">{stateCell()}</div>
           </SettingRow>
 
@@ -175,14 +174,14 @@ export function AiRuntimeSettingsCard({
                 </>
               ) : null}
               {logOpen || failed ? (
-                <CodeBlock size="2xs" maxHeight="xs" className="text-muted-foreground">
+                <CodeBlock size="2xs" maxHeight="xs">
                   {[...log.slice(-12), ...(failed && install?.error ? [install.error] : [])].join('\n')}
                 </CodeBlock>
               ) : null}
             </div>
           ) : null}
 
-          <SettingRow label={t({ ko: 'GPU', en: 'GPU' })} controlClassName="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          <SettingRow label={t({ ko: 'GPU', en: 'GPU' })}>
             {gpu ? (
               <div className="flex min-w-0 flex-wrap items-baseline justify-end gap-x-2 text-sm">
                 <span>{gpu.name}{status.gpus.length > 1 ? ` +${status.gpus.length - 1}` : ''}</span>
@@ -198,7 +197,7 @@ export function AiRuntimeSettingsCard({
             info={blocked
               ? t({ ko: '이 GPU는 CUDA 13이 필요한데 드라이버가 낮아. 드라이버를 580 이상으로 올려줘.', en: 'This GPU needs CUDA 13 and the driver is too old. Update the driver to 580 or newer.' })
               : t({ ko: '자동은 GPU 세대와 드라이버를 보고 골라. 바꾼 빌드는 설치해야 적용돼.', en: 'Auto picks from the GPU generation and driver. A changed build applies after installing.' })}
-            controlClassName={SETTINGS_CONTROL_CLASS}
+            controlWidth="standard"
           >
             <Select variant="settings" aria-label={labels.build} value={draft.torchBackend} disabled={installing} onChange={(event) => onPatch({ torchBackend: event.target.value as AiTorchBackendPreference })}>
               <option value="auto">{t({ ko: '자동', en: 'Auto' })} ({backendLabel(status.effectiveBackend, t).split(' · ')[0]})</option>
@@ -211,7 +210,7 @@ export function AiRuntimeSettingsCard({
           <SettingRow
             label={<ChatFilledLabel fieldId="aiRuntime.pythonSource">{labels.python}</ChatFilledLabel>}
             info={t({ ko: '직접 지정하면 앱이 설치한 환경 대신 그 Python을 써.', en: 'A custom Python is used instead of the app-installed environment.' })}
-            controlClassName={SETTINGS_CONTROL_CLASS}
+            controlWidth="standard"
           >
             <Select variant="settings" aria-label={labels.python} value={draft.pythonSource} onChange={(event) => onPatch({ pythonSource: event.target.value as AiRuntimeSettings['pythonSource'] })}>
               <option value="auto">{t({ ko: '앱이 설치한 환경', en: 'App-installed environment' })}</option>
@@ -220,15 +219,15 @@ export function AiRuntimeSettingsCard({
           </SettingRow>
 
           {draft.pythonSource === 'custom' ? (
-            <SettingRow label={labels.pythonPath} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
-              <Input variant="settings" aria-label={labels.pythonPath} className="min-w-0 flex-1 font-mono" value={draft.customPythonPath} placeholder="python" onChange={(event) => onPatch({ customPythonPath: event.target.value })} />
+            <SettingRow label={labels.pythonPath} controlWidth="wide">
+              <Input variant="settings" mono aria-label={labels.pythonPath} className="min-w-0 flex-1" value={draft.customPythonPath} placeholder="python" onChange={(event) => onPatch({ customPythonPath: event.target.value })} />
             </SettingRow>
           ) : null}
 
           <SettingRow
             label={<ChatFilledLabel fieldId="aiRuntime.cpuThreads">{labels.threads}</ChatFilledLabel>}
             info={t({ ko: '모델 프로세스 하나가 쓰는 CPU 스레드. 0이면 코어 절반(최대 8).', en: 'CPU threads per model process. 0 = half the cores (at most 8).' })}
-            controlClassName={SETTINGS_CONTROL_CLASS}
+            controlWidth="standard"
           >
             <NumberStepperInput min={0} max={256} variant="settings" aria-label={labels.threads} value={draft.cpuThreads} onValueCommit={(nextValue) => onPatch({ cpuThreads: Math.max(0, Math.round(Number(nextValue) || 0)) })} />
           </SettingRow>

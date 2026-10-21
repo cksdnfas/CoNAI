@@ -413,11 +413,11 @@ function WildcardItemDraftEditor({
             <Plus className="h-4 w-4" />
           </IconButton>
 
-          <AnchoredPopup open={templateMenuOpen} anchorRef={templateMenuAnchorRef} onClose={() => setTemplateMenuOpen(false)} align="end" side="bottom" className="z-floating" closeOnBack>
+          <AnchoredPopup open={templateMenuOpen} anchorRef={templateMenuAnchorRef} onClose={() => setTemplateMenuOpen(false)} align="end" side="bottom" layer="floating" closeOnBack>
             <WildcardJsonFormatMenu simpleLabel={t(wildcardEditorKey('simple.format'))} fullLabel={t(wildcardEditorKey('full.format'))} onSelect={handleDownloadTemplate} />
           </AnchoredPopup>
 
-          <AnchoredPopup open={exportMenuOpen} anchorRef={exportMenuAnchorRef} onClose={() => setExportMenuOpen(false)} align="end" side="bottom" className="z-floating" closeOnBack>
+          <AnchoredPopup open={exportMenuOpen} anchorRef={exportMenuAnchorRef} onClose={() => setExportMenuOpen(false)} align="end" side="bottom" layer="floating" closeOnBack>
             <WildcardJsonFormatMenu
               simpleLabel={t(wildcardEditorKey('export.tool'), { tool: activeToolLabel })}
               fullLabel={t(wildcardEditorKey('export.all'))}
@@ -442,7 +442,7 @@ function WildcardItemDraftEditor({
             min={0.1}
             step={0.1}
 
-            className="h-10 px-3 text-center"
+            className="h-10 text-center"
             value={draft.weight}
             onValueCommit={(value) => handleChangeDraft(draft.id, 'weight', value)}
             placeholder="1"
@@ -688,7 +688,7 @@ export function WildcardEditorModal({
           </Alert>
         ) : null}
 
-        <ModalBody className="space-y-5">
+        <ModalBody spacing="lg">
           <div className={isChainTab ? 'grid gap-4 md:grid-cols-2' : undefined}>
             <Field label={t(wildcardEditorKey('name'))}>
               <Input variant="settings" value={name} onChange={(event) => setName(event.target.value)} placeholder={t(wildcardEditorKey('e.g.character.pose'))} />

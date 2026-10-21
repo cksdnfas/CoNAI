@@ -63,6 +63,47 @@ test('media previews release resources and ignore cancelled work', async (t) => 
     t.diagnostic('60 visible files, replace 1: 1 URL created and 1 released; 59 reused')
   })
 
+  await t.test('closing hover previews releases pending original and poster image loads', async (t) => {
+    const { useMediaHoverPreview } = await import('../src/components/common/media-hover-preview')
+    const matchMedia = Object.getOwnPropertyDescriptor(dom.window, 'matchMedia')
+    Object.defineProperty(dom.window, 'matchMedia', { configurable: true, value: () => ({ matches: true }) })
+    t.after(() => {
+      if (matchMedia) Object.defineProperty(dom.window, 'matchMedia', matchMedia)
+      else Reflect.deleteProperty(dom.window, 'matchMedia')
+    })
+    let open!: () => void
+    let hide!: () => void
+    let reveal!: () => void
+    t.mock.method(dom.window, 'setTimeout', (run: () => void) => { reveal = run; return 1 })
+    t.mock.method(dom.window, 'clearTimeout', () => {})
+    const target = document.createElement('div')
+    document.body.appendChild(target)
+    t.after(() => target.remove())
+    t.mock.method(target, 'getBoundingClientRect', () => new dom.window.DOMRect(20, 20, 40, 40))
+    function Reader({ video }: { video: boolean }) {
+      const preview = useMediaHoverPreview(video
+        ? { src: '/poster', videoSrc: '/video' }
+        : { src: '/thumbnail', fullSrc: '/original' })
+      useEffect(() => {
+        open = () => preview.triggerProps.onPointerEnter({
+          pointerType: 'mouse', currentTarget: target,
+        } as Parameters<typeof preview.triggerProps.onPointerEnter>[0])
+        hide = preview.hide
+      }, [preview])
+      return preview.preview
+    }
+    for (const video of [false, true]) {
+      await act(async () => root.render(createElement(Reader, { video })))
+      await act(async () => { open(); reveal() })
+      const pendingImage = loaders.at(-1)!
+      assert.equal(pendingImage.src, video ? '/poster' : '/original')
+      await act(async () => hide())
+      assert.equal(pendingImage.onload, null, 'closed previews cannot update from late image loads')
+      assert.equal(pendingImage.src, '', 'closed previews release the pending image source')
+    }
+    await act(async () => root.render(null))
+  })
+
   await t.test('audio state follows the current playback, including late failures and queued events', async (t) => {
     const requests: Array<{ resolve: () => void; reject: (error: Error) => void }> = []
     const audios: ControlledAudio[] = []

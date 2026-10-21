@@ -379,7 +379,7 @@ export function GroupPage() {
             />
           ) : null}
 
-          {selectedGroupId && selectedGroupQuery.isLoading ? <Skeleton className="h-20 w-full rounded-sm" /> : null}
+          {selectedGroupId && selectedGroupQuery.isLoading ? <Skeleton radius="sm" className="h-20 w-full" /> : null}
 
           {selectedGroupId && selectedGroupQuery.isError ? (
             <ErrorState

@@ -103,13 +103,13 @@ export class AggregateCache {
     }
 
     const value = compute();
+    this.entries.delete(key);
     if (this.entries.size >= MAX_ENTRIES) {
       const oldestKey = this.entries.keys().next().value;
       if (oldestKey !== undefined) {
         this.entries.delete(oldestKey);
       }
     }
-    this.entries.delete(key);
     this.entries.set(key, { value, computedAt: now, versions: current });
     return value;
   }

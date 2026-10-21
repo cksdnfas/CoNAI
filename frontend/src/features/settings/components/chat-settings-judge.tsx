@@ -7,6 +7,7 @@ import { CodeBlock } from '@/components/ui/code-block'
 import { IconButton } from '@/components/ui/icon-button'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import { Text } from '@/components/ui/text'
 import { DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
@@ -75,9 +76,9 @@ function StatsTable({ stats, presetNames }: { stats: ChatJudgeItemStats[]; prese
             <DataTd numeric>{formatNumber(entry.runs)}</DataTd>
             <DataTd numeric>{percent(entry.runs > 0 ? entry.yes / entry.runs : null)}</DataTd>
             <DataTd numeric>{formatProbability(entry.averageProbability)}</DataTd>
-            <DataTd numeric className={cn(unsure > UNSURE_WARN && 'text-warning')}>{percent(entry.runs > 0 ? unsure : null)}</DataTd>
-            <DataTd numeric className={cn(entry.failed > 0 && 'text-destructive')}>{formatNumber(entry.failed)}</DataTd>
-            <DataTd className="tabular-nums"><StatsOutcome stats={entry} /></DataTd>
+            <DataTd numeric><Text as="span" tone={unsure > UNSURE_WARN ? 'warning' : 'default'}>{percent(entry.runs > 0 ? unsure : null)}</Text></DataTd>
+            <DataTd numeric><Text as="span" tone={entry.failed > 0 ? 'destructive' : 'default'}>{formatNumber(entry.failed)}</Text></DataTd>
+            <DataTd><span className="tabular-nums"><StatsOutcome stats={entry} /></span></DataTd>
             <DataTd numeric>{entry.averageTokens === null ? '—' : formatNumber(Math.round(entry.averageTokens))}</DataTd>
             <DataTd numeric>{entry.averageLatencyMs === null ? '—' : `${formatNumber(entry.averageLatencyMs / 1000, { maximumFractionDigits: 2 })}s`}</DataTd>
           </DataTr>
@@ -93,7 +94,7 @@ function LogRow({ run }: { run: ChatJudgeLogRun }) {
   return (
     <div className="border-t border-line first:border-t-0">
       {/* eslint-disable-next-line no-restricted-syntax -- a full-width disclosure row; Button would pad and centre it */}
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="grid w-full cursor-pointer grid-cols-[1rem_7.5rem_minmax(8rem,12rem)_minmax(0,1fr)_auto] items-center gap-3 rounded-sm py-2.5 text-left text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="grid w-full cursor-pointer grid-cols-[1rem_7.5rem_minmax(8rem,12rem)_minmax(0,1fr)_auto] items-center gap-3 rounded-sm py-2.5 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
         <ChevronRight className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-90')} />
         <span className="tabular-nums text-xs text-muted-foreground">{formatDateTime(parseServerDate(run.createdAt), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
         <span className="min-w-0">

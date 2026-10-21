@@ -8,7 +8,6 @@ import { Modal } from '@/components/ui/modal'
 import { InlineMediaPreview } from '@/features/images/components/inline-media-preview'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionFinalResultRecord, GraphWorkflowRecord } from '@/lib/api-module-graph'
-import { cn } from '@/lib/utils'
 import {
   getArtifactPreviewUrl,
   hasGraphArtifactVisualPreview,
@@ -129,22 +128,22 @@ export function GraphExecutionDetailModal({
         </div>
         ) : null}
 
-        {tab === 'inputs' ? <ExecutionInputEntriesList entries={executionInputEntries} itemClassName="p-3" /> : null}
+        {tab === 'inputs' ? <ExecutionInputEntriesList entries={executionInputEntries} /> : null}
 
         {tab === 'logs' ? (
         <>
         <div className="space-y-2">
-          <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
-            <span>{t({ ko: '아티팩트', en: 'Artifacts' })}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Text as="span" variant="overline">{t({ ko: '아티팩트', en: 'Artifacts' })}</Text>
             <Badge variant="outline">{executionDetail.artifacts.length}</Badge>
-          </Text>
+          </div>
           {executionDetail.artifacts.map((artifact) => {
             const previewUrl = getArtifactPreviewUrl(artifact)
             const mimeType = resolveGraphArtifactMimeType(artifact)
             const parsedMetadata = parseMetadataValue(artifact.metadata)
 
             return (
-              <Inset key={artifact.id} className="px-3 py-2.5">
+              <Inset key={artifact.id} padding="sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -177,17 +176,17 @@ export function GraphExecutionDetailModal({
         </div>
 
         <div className="space-y-2">
-          <Text as="div" variant="overline" className="flex flex-wrap items-center gap-2 font-semibold">
-            <span>{t({ ko: '로그', en: 'Logs' })}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <Text as="span" variant="overline">{t({ ko: '로그', en: 'Logs' })}</Text>
             <Badge variant="outline">{executionDetail.logs.length}</Badge>
-          </Text>
+          </div>
           {executionDetail.logs.length === 0 ? (
             <EmptyState size="compact" title={t({ ko: '로그 없음', en: 'No logs' })} />
           ) : (
             executionDetail.logs.map((log) => {
               const parsedDetails = parseMetadataValue(log.details)
               return (
-                <Inset key={log.id} data-level={log.level} className={cn('px-3 py-2.5', log.level === 'error' && 'bg-destructive-soft/45', log.level === 'warn' && 'bg-warning-soft/45')}>
+                <Alert key={log.id} data-level={log.level} variant={log.level === 'error' ? 'destructive' : log.level === 'warn' ? 'warning' : 'default'}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge variant={getGraphExecutionLogLevelBadgeVariant(log.level)}>{getGraphExecutionLogLevelLabel(log.level, t)}</Badge>
@@ -200,7 +199,7 @@ export function GraphExecutionDetailModal({
                   {parsedDetails ? (
                     <CodeBlock size="2xs" wrap={false} className="mt-2">{typeof parsedDetails === 'string' ? parsedDetails : JSON.stringify(parsedDetails, null, 2)}</CodeBlock>
                   ) : null}
-                </Inset>
+                </Alert>
               )
             })
           )}

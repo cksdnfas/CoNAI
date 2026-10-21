@@ -313,13 +313,13 @@ function Modal({ open, title, description, headerContent, headerActions, leading
 }
 
 /** Render the compact vertical stack used for dense modal content. */
-function ModalBody({ className, ...props }: ComponentProps<'div'>) {
-  return <div data-slot="modal-body" className={cn('space-y-4', className)} {...props} />
+function ModalBody({ className, spacing = 'md', ...props }: ComponentProps<'div'> & { spacing?: 'none' | 'sm' | 'md' | 'lg' }) {
+  return <div data-slot="modal-body" className={cn({ none: '', sm: 'space-y-3', md: 'space-y-4', lg: 'space-y-5' }[spacing], className)} {...props} />
 }
 
 /** Render the modal footer row for primary and secondary actions. */
-function ModalFooter({ className, ...props }: ComponentProps<'div'>) {
-  return <div data-slot="modal-footer" className={cn('flex flex-wrap items-center justify-end gap-2 pt-2', className)} {...props} />
+function ModalFooter({ className, separated = false, ...props }: ComponentProps<'div'> & { separated?: boolean }) {
+  return <div data-slot="modal-footer" className={cn('flex flex-wrap items-center justify-end gap-2', separated ? 'border-t border-line pt-3' : 'pt-2', className)} {...props} />
 }
 
 export { Modal, ModalBody, ModalFooter, useModalRequestClose }

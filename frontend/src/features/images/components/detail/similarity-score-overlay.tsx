@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Badge } from '@/components/ui/badge'
+import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { PromptSimilarImage, SimilarImage } from '@/types/similarity'
@@ -49,12 +50,12 @@ const MATCH_TYPE_LABELS: Record<SimilarImage['matchType'], { ko: string; en: str
 }
 
 /** Map score bands onto the shared similarity badge palette. */
-function getSimilarityBadgeClassName(similarity: number) {
-  if (similarity >= 92) return 'bg-success text-success-foreground'
-  if (similarity >= 82) return 'bg-info text-info-foreground'
-  if (similarity >= 68) return 'bg-surface-bright text-foreground'
-  if (similarity >= 52) return 'bg-warning text-warning-foreground'
-  return 'bg-destructive text-destructive-foreground'
+function getSimilarityTone(similarity: number) {
+  if (similarity >= 92) return 'success'
+  if (similarity >= 82) return 'info'
+  if (similarity >= 68) return 'inherit'
+  if (similarity >= 52) return 'warning'
+  return 'destructive'
 }
 
 /** Render the shared similarity score badge + popup shell used across image/text similarity cards. */
@@ -82,11 +83,8 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows, neutral
         onClick={(event) => event.stopPropagation()}
       >
         <Badge
-          variant="secondary"
-          className={cn(
-            'max-w-full shadow-elevation-1 tracking-normal normal-case',
-            neutral ? 'bg-surface-bright text-foreground' : getSimilarityBadgeClassName(badgeValue),
-          )}
+          variant="overlay"
+          className="max-w-full"
           onMouseEnter={handleAnchorEnter}
           onMouseMove={() => {
             if (isDismissed) {
@@ -95,7 +93,9 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows, neutral
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          {formatSimilarityPercent(badgeValue)}
+          <Text as="span" variant="caption" tone={neutral ? 'inherit' : getSimilarityTone(badgeValue)}>
+            {formatSimilarityPercent(badgeValue)}
+          </Text>
         </Badge>
 
         <AnchoredPopup
@@ -103,7 +103,7 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows, neutral
           anchorRef={anchorRef}
           align="start"
           side="bottom"
-          className="w-[min(240px,calc(100vw-1.5rem))] p-3 text-2xs"
+          className="w-[min(240px,calc(100vw-1.5rem))]"
           surfaceProps={{
             onMouseEnter: () => {
               setIsPopupHovered(true)
@@ -116,35 +116,37 @@ function SimilarityScoreOverlayCard({ badgeValue, popupBadgeLabel, rows, neutral
             },
           }}
         >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-semibold text-foreground">
-              {t({ ko: '유사도 {percent}', en: '{percent} similar' }, { percent: formatSimilarityPercent(badgeValue) })}
-            </span>
-            {popupBadgeLabel ? <Badge variant="outline" className="px-2 py-0.5 tracking-normal normal-case">{popupBadgeLabel}</Badge> : null}
-          </div>
-          {neutral ? null : <p className="mt-0.5 text-muted-foreground">{getSimilarityBandLabel(badgeValue, t)}</p>}
+          <div className="p-3 text-2xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-foreground">
+                {t({ ko: '유사도 {percent}', en: '{percent} similar' }, { percent: formatSimilarityPercent(badgeValue) })}
+              </span>
+              {popupBadgeLabel ? <Badge variant="outline" casing="sentence" size="sm">{popupBadgeLabel}</Badge> : null}
+            </div>
+            {neutral ? null : <p className="mt-0.5 text-muted-foreground">{getSimilarityBandLabel(badgeValue, t)}</p>}
 
-          {rows.length > 0 ? (
-            <details className="mt-2" onClick={(event) => event.stopPropagation()}>
-              <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">
-                {t('images.components.detail.similarity.score.overlay.score.details')}
-              </summary>
-              <div className="mt-1.5 grid gap-1.5">
-                {rows.map((row) => (
-                  <div key={row.key} className="flex items-start justify-between gap-2 leading-4">
-                    <span className="text-muted-foreground">{row.label}</span>
-                    <span className={cn(
-                      'text-right font-mono text-foreground',
-                      row.tone === 'success' && 'text-success',
-                      row.tone === 'danger' && 'text-destructive',
-                    )}>
-                      {row.value}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </details>
-          ) : null}
+            {rows.length > 0 ? (
+              <details className="mt-2" onClick={(event) => event.stopPropagation()}>
+                <summary className="cursor-pointer select-none text-muted-foreground hover:text-foreground">
+                  {t('images.components.detail.similarity.score.overlay.score.details')}
+                </summary>
+                <div className="mt-1.5 grid gap-1.5">
+                  {rows.map((row) => (
+                    <div key={row.key} className="flex items-start justify-between gap-2 leading-4">
+                      <span className="text-muted-foreground">{row.label}</span>
+                      <span className={cn(
+                        'text-right font-mono text-foreground',
+                        row.tone === 'success' && 'text-success',
+                        row.tone === 'danger' && 'text-destructive',
+                      )}>
+                        {row.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+          </div>
         </AnchoredPopup>
       </div>
     </div>

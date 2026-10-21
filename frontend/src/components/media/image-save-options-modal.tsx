@@ -41,7 +41,7 @@ export function ImageSaveOptionsModal({
 
   return (
     <Modal open={open} onClose={onClose} title={title ?? t('imageSaveOptionsModal.saveImage')} widthClassName="max-w-2xl">
-      <ModalBody className="space-y-5">
+      <ModalBody spacing="lg">
         <div className="flex flex-wrap gap-2">
           {sourceInfo ? (
             <>

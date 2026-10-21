@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CopyCheck, Download, LayoutGrid, Loader2, Save, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { MediaCard } from '@/components/common/media-card'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -126,7 +126,6 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
               <ListRow
                 key={sheet.hash}
                 selected={sheet.hash === selected}
-                className="px-2"
                 trailing={<>
                   <Tip content={problem ? t({ ko: '확인 필요: 격자나 프레임 수를 봐줘', en: 'Needs a check: grid or frame count' }) : t({ ko: '준비됨', en: 'Ready' })}>
                     <span className="inline-flex size-6 items-center justify-center" role="img" aria-label={problem ? t({ ko: '확인 필요', en: 'Needs a check' }) : t({ ko: '준비됨', en: 'Ready' })}>
@@ -136,15 +135,19 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
                   <IconButton size="icon-xs" variant="ghost" label={t({ ko: '빼기', en: 'Remove' })} onClick={() => { setSheets(sheets.filter((item) => item.hash !== sheet.hash)); if (selected === sheet.hash) setSelected(null) }}><X /></IconButton>
                 </>}
               >
-                <Button variant="ghost" className="h-auto min-w-0 flex-1 justify-start gap-3 px-0 py-0.5 text-left font-normal hover:bg-transparent" onClick={() => setSelected(sheet.hash)}>
-                  <span className="bg-checker size-9 shrink-0 overflow-hidden rounded-sm"><img src={libraryThumbnailUrl(sheet.hash)} alt="" loading="lazy" className="size-full object-contain" /></span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{sheet.name}</span>
-                    <span className="block truncate font-mono text-xs text-muted-foreground">
+                <MediaCard
+                  inline
+                  className="min-w-0 flex-1"
+                  onClick={() => setSelected(sheet.hash)}
+                  mediaClassName="size-9 shrink-0"
+                  media={<span className="bg-checker block size-full"><img src={libraryThumbnailUrl(sheet.hash)} alt="" loading="lazy" className="size-full object-contain" /></span>}
+                  title={<span className="block min-w-0">
+                    <span className="block truncate">{sheet.name}</span>
+                    <span className="block truncate font-mono text-xs font-normal text-muted-foreground">
                       {sheet.options.columns}×{sheet.options.rows} · {t({ ko: '{count}컷', en: '{count} frames' }, { count: sheet.options.frameCount })}
                     </span>
-                  </span>
-                </Button>
+                  </span>}
+                />
               </ListRow>
             )
           })}

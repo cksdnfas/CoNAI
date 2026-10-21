@@ -12,6 +12,11 @@ const inputVariants = cva(
         detail: 'theme-input-surface h-10 border px-3',
         detailNested: 'theme-input-surface h-10 border px-3',
       },
+      controlSize: { compact: 'h-7 px-2 text-xs' },
+      mono: { true: 'font-mono tabular-nums', false: '' },
+      /** Space for SearchField's leading icon and trailing clear key. */
+      adornments: { search: 'pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden' },
+      assisted: { true: 'ring-1 ring-primary/50', false: '' },
     },
     defaultVariants: {
       variant: 'default',
@@ -20,8 +25,8 @@ const inputVariants = cva(
 )
 
 /** Render a reusable text-like input control with shared surface variants. */
-function Input({ className, variant, type = 'text', ...props }: React.ComponentProps<'input'> & VariantProps<typeof inputVariants>) {
-  return <input type={type} data-slot="input" className={cn(inputVariants({ variant }), className)} {...props} />
+function Input({ className, variant, controlSize, mono, adornments, assisted, type = 'text', ...props }: React.ComponentProps<'input'> & VariantProps<typeof inputVariants>) {
+  return <input type={type} data-slot="input" className={cn(inputVariants({ variant, controlSize, mono, adornments, assisted }), className)} {...props} />
 }
 
 export { Input, inputVariants }

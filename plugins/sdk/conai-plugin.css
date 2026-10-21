@@ -1,9 +1,19 @@
 /*
- * CoNAI plugin base styles (SDK v1). Link it before your own stylesheet:
- *   <link rel="stylesheet" href="conai-plugin.css">
+ * CoNAI plugin base styles and style kit (SDK v1). Link it before your own stylesheet:
+ *   <link rel="stylesheet" href="conai-plugin.css"><link rel="stylesheet" href="style.css">
  * The host sends its current theme when it connects (see conai-plugin.js), so these variables follow the app's
  * appearance settings; the values below are the app's dark defaults for an older host or before connecting.
  * Flat look: one page tone, hairline rows, one field fill, solid colour only on the single main action.
+ * The `.conai-*` classes below mirror the app's shared components (class reference: plugins/README.md).
+ *
+ * Spacing rules; keep them in your own CSS too:
+ * 1. The host already places the frame inside its content gutter. The plugin root adds no second gutter: use
+ *    .conai-page or .conai-app instead of `body { padding: 16px }`. --conai-edge is only room for focus rings.
+ * 2. Anything that can show a background (hover, active, selected, a fill or a surface) pads its text on every side
+ *    that background reaches. Text never sits flush against a filled edge.
+ * 3. A flat media card never gets a background in any state: selection is a ring on the media and the caption lines
+ *    up with the media edge under a fixed gap. Use .boxed when the card needs a surface; its body is padded.
+ * 4. Use these components as they are. Size or place them from your layout; do not restyle their padding.
  */
 :root {
   --conai-background: #131313;
@@ -21,6 +31,22 @@
   --conai-font-sans: "Manrope", "Pretendard", "Noto Sans KR", system-ui, sans-serif;
   --conai-font-mono: ui-monospace, Consolas, monospace;
   --conai-radius: 4px;
+  --conai-radius-md: 6px;
+  /* Not sent by the host: image scrims stay dark in both themes, shadows follow data-theme below. */
+  --conai-scrim: rgba(0, 0, 0, .62);
+  --conai-key-shadow: 0 1px 0 rgba(255, 255, 255, .04), 0 2px 8px rgba(0, 0, 0, .35);
+  --conai-float-shadow: 0 16px 48px rgba(0, 0, 0, .45);
+  /* Spacing and sizes. */
+  --conai-edge: 4px;              /* room for focus rings at the frame edge; not a gutter */
+  --conai-gutter: 32px;           /* content pane <-> column hairline (PageWithSidebar); 24px below 1200px */
+  --conai-sidebar-width: 232px;   /* PageWithSidebar column */
+  --conai-sidebar-pad-x: 10px;
+  --conai-sidebar-pad-top: 14px;
+  --conai-toolbar-height: 56px;   /* PageToolbar row */
+  --conai-control-height: 32px;   /* buttons */
+  --conai-field-height: 34px;     /* inputs, selects */
+  --conai-row-height: 44px;       /* list rows */
+  --conai-text-inset: 8px;        /* least text padding inside anything that can show a background */
   color-scheme: dark;
   background: var(--conai-background);
   color: var(--conai-foreground);
@@ -28,6 +54,11 @@
   scrollbar-color: color-mix(in srgb, var(--conai-foreground) 18%, transparent) transparent;
   scrollbar-width: thin;
 }
+:root[data-theme=light] {
+  --conai-key-shadow: 0 1px 2px rgba(107, 81, 70, .16), 0 2px 6px rgba(107, 81, 70, .1);
+  --conai-float-shadow: 0 16px 40px rgba(107, 81, 70, .2);
+}
+@media (max-width: 1199px) { :root { --conai-gutter: 24px } }
 *, *::before, *::after { box-sizing: border-box }
 body { margin: 0; background: var(--conai-background); color: var(--conai-foreground) }
 [hidden] { display: none !important }
@@ -48,7 +79,7 @@ label > input:not([type=checkbox]):not([type=radio]):not([type=range]), label > 
 input, select, textarea, button { font: inherit; font-size: 13px; color: inherit; border-radius: var(--conai-radius) }
 input, select, textarea { font-weight: 400 }
 input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea {
-  background: var(--conai-field); border: 1px solid transparent; padding: 7px 10px; min-height: 34px; outline: none;
+  background: var(--conai-field); border: 1px solid transparent; padding: 7px 10px; min-height: var(--conai-field-height); outline: none;
 }
 textarea { resize: vertical; line-height: 1.6 }
 input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--conai-muted-foreground) 70%, transparent) }
@@ -59,18 +90,20 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(--conai-primary) }
 select option { background: var(--conai-surface-high); color: var(--conai-foreground) }
 
-/* Buttons: neutral by default, .primary for the one main action, .ghost for inline/icon actions. */
+/* Buttons: neutral by default, .primary for the one main action, .ghost for inline/icon actions.
+   A toggle button shows its state with aria-pressed="true" (primary tint). There is no generic button.active look:
+   the current-row look belongs to .conai-nav-item, and tabs, segments, chips and cards style their own state. */
 button {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 0 12px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--conai-control-height); padding: 0 12px;
   background: var(--conai-surface-high); border: 0; font-weight: 600; cursor: pointer; white-space: nowrap;
 }
 button:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-surface-high) 80%, var(--conai-foreground) 20%) }
 button.primary { background: var(--conai-primary); color: var(--conai-primary-foreground) }
 button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-primary) 88%, #fff 12%) }
 button.ghost { background: transparent }
-button.ghost:hover:not(:disabled), button.ghost.active { background: var(--conai-fill) }
+button.ghost:hover:not(:disabled) { background: var(--conai-fill) }
 button.destructive { background: color-mix(in srgb, var(--conai-destructive) 16%, transparent); color: var(--conai-destructive) }
-button.active { background: var(--conai-fill); box-shadow: inset 2px 0 0 var(--conai-primary) }
+button:is(.ghost, .conai-icon-button)[aria-pressed=true], button:is(.ghost, .conai-icon-button)[aria-pressed=true]:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-primary) 12%, transparent); color: var(--conai-primary) }
 button:disabled { opacity: .45; cursor: default }
 button:focus-visible { outline: 2px solid color-mix(in srgb, var(--conai-primary) 55%, transparent); outline-offset: 2px }
 
@@ -79,14 +112,18 @@ button:focus-visible { outline: 2px solid color-mix(in srgb, var(--conai-primary
 .stack { display: flex; flex-direction: column; gap: 12px }
 .row { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 4px 0; border-bottom: 1px solid var(--conai-line) }
 .row:last-child { border-bottom: 0 }
+.list { list-style: none; margin: 0; padding: 0 }
 .list > * + * { border-top: 1px solid var(--conai-line) }
 section + section { margin-top: 24px }
 
-/* Status chips. */
-.badge { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 3px; font-size: 11px; font-weight: 600; background: var(--conai-fill); color: var(--conai-muted-foreground) }
-.badge.ok { background: color-mix(in srgb, var(--conai-success) 16%, transparent); color: var(--conai-success) }
-.badge.warn { background: color-mix(in srgb, var(--conai-warning) 16%, transparent); color: var(--conai-warning) }
-.badge.destructive { background: color-mix(in srgb, var(--conai-destructive) 16%, transparent); color: var(--conai-destructive) }
+/* Status chips. .dot adds a status dot; a clickable badge is a button.badge. */
+.badge { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 3px; font-size: 11px; font-weight: 600; white-space: nowrap; background: var(--conai-fill); color: var(--conai-muted-foreground) }
+.badge.dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor }
+button.badge { min-height: 24px; height: 24px; padding: 0 8px }
+/* A clickable status badge keeps its tint on hover. */
+.badge.ok, button.badge.ok:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-success) 16%, transparent); color: var(--conai-success) }
+.badge.warn, button.badge.warn:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-warning) 16%, transparent); color: var(--conai-warning) }
+.badge.destructive, button.badge.destructive:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-destructive) 16%, transparent); color: var(--conai-destructive) }
 
 /* Tables: overline header, hairline rows. */
 table { border-collapse: collapse; width: 100% }
@@ -103,3 +140,205 @@ details[open] > summary { margin-bottom: 8px }
 
 video, audio { max-width: 100%; border-radius: var(--conai-radius) }
 [role=status]:empty { display: none }
+
+/* Modal: page tone over a scrim, neutral hairline edge, floating shadow. */
+dialog {
+  max-width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 20px 22px; overflow: auto;
+  background: var(--conai-background); color: var(--conai-foreground); border: 1px solid var(--conai-line);
+  border-radius: var(--conai-radius-md); box-shadow: var(--conai-float-shadow);
+}
+/* Older Chromium does not pass custom properties to ::backdrop; the fallback keeps the scrim there. */
+dialog::backdrop { background: var(--conai-scrim, rgba(0, 0, 0, .62)) }
+
+/* ---------- Page layout ---------- */
+
+/* Document page root (a form, a list, an editor): room above and below only; the host's gutter is the side margin.
+   .compact for small embedded panels. */
+.conai-page { padding: 14px var(--conai-edge) 24px }
+.conai-page.compact { padding: var(--conai-edge) }
+
+/* Full-height app root (usually <body>): a .conai-header row over a .conai-split. */
+.conai-app { display: flex; flex-direction: column; height: 100vh; min-height: 0; overflow: hidden }
+
+/* PageToolbar: one 56px row, no surface; title, then controls, then actions after a .conai-spacer.
+   Inside .conai-app it draws the hairline above the columns. */
+.conai-header { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: var(--conai-toolbar-height); padding: 8px var(--conai-edge) }
+.conai-app > .conai-header { border-bottom: 1px solid var(--conai-line) }
+.conai-title { min-width: 0; margin: 0; overflow: hidden; font-size: 16px; font-weight: 700; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap }
+.conai-spacer { flex: 1 }
+
+/* PageWithSidebar: .conai-sidebar column (232px, own scroll, hairline) | .conai-pane content. A pane gets the gutter
+   only on a side where it meets a column hairline, never at the frame edge. .conai-sidebar.end is a column on the
+   right. Below 900px the split stacks into one scrolling column without hairlines or gutters. */
+.conai-split { display: flex; flex: 1; min-width: 0; min-height: 0 }
+.conai-sidebar {
+  display: flex; flex: none; flex-direction: column; gap: 12px; width: var(--conai-sidebar-width); min-height: 0; overflow-y: auto;
+  padding: var(--conai-sidebar-pad-top) var(--conai-sidebar-pad-x) 8px; border-right: 1px solid var(--conai-line);
+}
+.conai-sidebar.end { border-right: 0; border-left: 1px solid var(--conai-line) }
+.conai-pane { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 14px var(--conai-gutter) 24px }
+.conai-pane:first-child { padding-left: var(--conai-edge) }
+.conai-pane:last-child { padding-right: var(--conai-edge) }
+@media (max-width: 899px) {
+  .conai-split { flex-direction: column; overflow-y: auto }
+  .conai-split > :is(.conai-sidebar, .conai-pane) { flex: none; width: auto; overflow: visible; border: 0; padding-inline: var(--conai-edge) }
+}
+
+/* ---------- Labels ---------- */
+
+/* Overline label (field / sidebar group caption). .conai-group-head is the RowGroup heading: overline over a rule,
+   with room for small actions at the end. */
+.conai-overline, .conai-group-head { font-size: 11px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--conai-muted-foreground) }
+:is(.conai-overline, .conai-group-head):lang(ko) { letter-spacing: .02em }
+.conai-group-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; margin: 0 0 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--conai-foreground) 15%, transparent);
+}
+
+/* ---------- Navigation ---------- */
+
+/* SidebarItem rows in a .conai-nav. Current row (.active or aria-current) = fill + 2px primary bar. */
+.conai-nav { display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+.conai-nav > .conai-overline { padding: 12px var(--conai-sidebar-pad-x) 4px }
+.conai-nav > .conai-overline:first-child { padding-top: 2px }
+.conai-nav-item {
+  display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; min-width: 0; min-height: 36px; padding: 0 10px;
+  background: transparent; color: var(--conai-muted-foreground); font-weight: 400; text-align: left;
+}
+.conai-nav-item:hover:not(:disabled) { background: var(--conai-fill); color: var(--conai-foreground) }
+.conai-nav-item:is(.active, [aria-current]:not([aria-current=false])) { background: var(--conai-fill); color: var(--conai-foreground); font-weight: 500; box-shadow: inset 2px 0 0 var(--conai-primary) }
+.conai-nav-count { margin-left: auto; font-size: 12px; color: var(--conai-muted-foreground); font-variant-numeric: tabular-nums }
+
+/* TextTabs: underlined text tabs on one hairline; the current tab is .active or aria-selected="true". Tabs never
+   show a background, so they need no inline padding. */
+.conai-tabs { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 20px; min-width: 0; border-bottom: 1px solid var(--conai-line) }
+.conai-tabs > button { position: relative; min-height: 36px; padding: 0; border-radius: 0; background: transparent; color: var(--conai-muted-foreground) }
+.conai-tabs > button:hover:not(:disabled) { background: transparent; color: var(--conai-foreground) }
+.conai-tabs > button::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--conai-primary); opacity: 0 }
+.conai-tabs > button:is(.active, [aria-selected=true]) { color: var(--conai-foreground) }
+.conai-tabs > button:is(.active, [aria-selected=true])::after { opacity: 1 }
+
+/* SegmentedControl: fill tray; the selected segment (.active, aria-pressed or aria-selected) is a raised key.
+   .full stretches the tray and its segments. */
+.conai-segmented { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: var(--conai-radius-md); background: var(--conai-fill) }
+.conai-segmented.full { display: flex }
+.conai-segmented.full > * { flex: 1 }
+.conai-segmented > button { min-height: 28px; padding: 0 12px; background: transparent; color: var(--conai-muted-foreground); font-size: 12px }
+.conai-segmented > button:not(.active, [aria-pressed=true], [aria-selected=true]):hover:not(:disabled) { background: var(--conai-fill); color: var(--conai-foreground) }
+.conai-segmented > button:is(.active, [aria-pressed=true], [aria-selected=true]) { background: var(--conai-background); color: var(--conai-foreground); box-shadow: var(--conai-key-shadow) }
+
+/* ToggleChip filters in a .conai-chips row: muted wash; pressed (.active or aria-pressed) = primary tint. */
+.conai-chips { display: flex; flex-wrap: wrap; gap: 6px }
+.conai-chip { min-height: 26px; padding: 0 10px; background: color-mix(in srgb, var(--conai-foreground) 5%, transparent); color: var(--conai-muted-foreground); font-size: 12px; font-weight: 500 }
+.conai-chip:not(.active, [aria-pressed=true]):hover:not(:disabled) { background: color-mix(in srgb, var(--conai-foreground) 10%, transparent); color: var(--conai-foreground) }
+button.conai-chip:is(.active, [aria-pressed=true]) { background: color-mix(in srgb, var(--conai-primary) 12%, transparent); color: var(--conai-primary) }
+
+/* ---------- Controls ---------- */
+
+/* SearchField: one filled field with a leading search icon drawn here. <label class="conai-search"><input type="search"></label> */
+.conai-search {
+  display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; padding-left: 10px; border: 1px solid transparent;
+  border-radius: var(--conai-radius); background: var(--conai-field); color: var(--conai-muted-foreground); font-size: 13px; font-weight: 400;
+}
+.conai-search::before {
+  content: ""; flex: none; width: 16px; height: 16px; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-4-4'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.conai-search:focus-within { border-color: color-mix(in srgb, var(--conai-primary) 55%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--conai-primary) 14%, transparent) }
+.conai-search > input:not([type=checkbox]):not([type=radio]):not([type=range]) { display: block; flex: 1; width: auto; min-width: 0; margin: 0; padding-left: 0; border: 0; background: transparent }
+.conai-search > input:focus-visible { box-shadow: none }
+
+/* IconButton: square ghost key for one icon (give it aria-label and title). .sm = 26px, .overlay sits on images,
+   add .primary for the main action. */
+.conai-icon-button { flex: none; width: var(--conai-control-height); min-height: var(--conai-control-height); padding: 0 }
+.conai-icon-button:not(.primary, .destructive) { background: transparent }
+.conai-icon-button:not(.primary, .destructive):hover:not(:disabled) { background: var(--conai-fill) }
+.conai-icon-button.sm { width: 26px; min-height: 26px }
+.conai-icon-button > svg { flex: none; width: 16px; height: 16px }
+.conai-icon-button.overlay { width: 26px; min-height: 26px; background: var(--conai-scrim); color: #fff; backdrop-filter: blur(6px) }
+.conai-icon-button.overlay:hover:not(:disabled) { background: rgba(0, 0, 0, .8) }
+
+/* ---------- Media ---------- */
+
+/* Badge overlay: counts and kind tags on a photo. Corner it with .tl .tr .bl .br inside a .conai-media. .xs = 18px. */
+.conai-overlay-badge {
+  display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: var(--conai-radius);
+  background: var(--conai-scrim); color: #fff; font-size: 11px; font-weight: 500; line-height: 1; white-space: nowrap; backdrop-filter: blur(4px);
+}
+.conai-overlay-badge.xs { height: 18px; padding: 0 5px; font-size: 10px }
+.conai-overlay-badge > svg { width: 12px; height: 12px }
+.conai-overlay-badge:is(.tl, .tr, .bl, .br) { position: absolute; z-index: 1 }
+.conai-overlay-badge.tl { top: 6px; left: 6px }
+.conai-overlay-badge.tr { top: 6px; right: 6px }
+.conai-overlay-badge.bl { bottom: 6px; left: 6px }
+.conai-overlay-badge.br { right: 6px; bottom: 6px }
+.conai-overlay-badge.ok { color: var(--conai-success) }
+.conai-overlay-badge.warn { color: var(--conai-warning) }
+.conai-overlay-badge.destructive { color: var(--conai-destructive) }
+/* A name over the bottom of a photo, on a scrim gradient. */
+.conai-overlay-caption {
+  position: absolute; right: 0; bottom: 0; left: 0; z-index: 1; padding: 20px 8px 6px; overflow: hidden;
+  background: linear-gradient(transparent, var(--conai-scrim)); color: #fff; font-size: 11px; font-weight: 500; text-align: left; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Media card: .conai-media (photo box: img/video fills it, overlays corner on it) over an optional .conai-media-body
+   (.conai-media-title, .conai-media-meta). Flat by default: no background in any state; hover dims the media;
+   selected (.active, .selected, aria-pressed, aria-selected, aria-current) rings the media. .boxed = surface card with
+   a padded body; selected rings the card. */
+.conai-media { position: relative; display: block; overflow: hidden; border-radius: var(--conai-radius); background: var(--conai-field) }
+.conai-media > img, .conai-media > video { display: block; width: 100%; height: 100%; border-radius: 0; object-fit: cover }
+.conai-media::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; transition: background-color .15s }
+.conai-media-card {
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 0; min-width: 0; min-height: 0; padding: 0;
+  background: transparent; color: inherit; font-weight: 400; text-align: left; white-space: normal;
+}
+.conai-media-card:hover:not(:disabled) { background: transparent }
+.conai-media-card:not(.boxed):hover:not(:disabled) > .conai-media::after { background: rgba(0, 0, 0, .14) }
+.conai-media-card:not(.boxed):is(.active, .selected, [aria-pressed=true], [aria-selected=true], [aria-current]:not([aria-current=false])) > .conai-media::after { box-shadow: inset 0 0 0 2px var(--conai-primary) }
+.conai-media-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-top: 8px }
+.conai-media-title { overflow: hidden; color: var(--conai-foreground); font-size: 12px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap }
+.conai-media-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; color: var(--conai-muted-foreground); font-size: 11px; font-variant-numeric: tabular-nums }
+.conai-media-card.boxed { overflow: hidden; border-radius: var(--conai-radius-md); background: var(--conai-field) }
+.conai-media-card.boxed:hover:not(:disabled) { background: color-mix(in srgb, var(--conai-foreground) 9%, transparent) }
+.conai-media-card.boxed > .conai-media { border-radius: 0 }
+.conai-media-card.boxed > .conai-media-body { padding: 8px 10px 10px }
+.conai-media-card.boxed:is(.active, .selected, [aria-pressed=true], [aria-selected=true], [aria-current]:not([aria-current=false])) { outline: 2px solid var(--conai-primary); outline-offset: -2px }
+
+/* ---------- Rows and lists ---------- */
+
+/* ListRow / ResourceRow: hairline rows (none under the last), put directly in a .conai-list without gaps. A
+   <button>/<a> row or .interactive pads its text and washes on hover; .selected / aria-selected = primary wash.
+   Content: optional leading thumb/icon, .conai-row-main (.conai-row-title over .conai-row-meta), trailing actions. */
+.conai-list { min-width: 0; margin: 0; padding: 0; list-style: none }
+.conai-list-row { display: flex; align-items: center; gap: 12px; min-width: 0; min-height: var(--conai-row-height); padding: 6px 0; border-bottom: 1px solid var(--conai-line) }
+.conai-list-row:last-child { border-bottom: 0 }
+.conai-list-row.sm { min-height: 36px; padding-block: 4px }
+.conai-list-row:is(button, a, .interactive) {
+  justify-content: flex-start; width: 100%; padding-inline: var(--conai-text-inset); border-radius: 0; background: transparent;
+  color: inherit; font-weight: 400; text-align: left; text-decoration: none; white-space: normal; cursor: pointer;
+}
+.conai-list-row:is(button, a, .interactive):hover:not(:disabled) { background: var(--conai-fill) }
+.conai-list-row:is(button, a, .interactive):is(.selected, [aria-selected=true]) { background: color-mix(in srgb, var(--conai-primary) 8%, transparent) }
+.conai-list-row:is(button, a, .interactive):is(.selected, [aria-selected=true]):hover:not(:disabled) { background: color-mix(in srgb, var(--conai-primary) 12%, transparent) }
+.conai-row-main { display: flex; flex: 1; flex-direction: column; gap: 1px; min-width: 0 }
+.conai-row-title { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap }
+.conai-row-meta { overflow: hidden; color: var(--conai-muted-foreground); font-size: 12px; text-overflow: ellipsis; white-space: nowrap }
+
+/* Key-value list: <dl class="conai-kv"><dt>…</dt><dd>…</dd></dl>. */
+.conai-kv { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px 16px; margin: 0; font-size: 13px }
+.conai-kv dt { color: var(--conai-muted-foreground) }
+.conai-kv dd { min-width: 0; margin: 0; overflow-wrap: anywhere }
+
+/* EmptyState: one quiet line where a list or grid has nothing to show; no box. */
+.conai-empty { grid-column: 1 / -1; padding: 24px 8px; color: var(--conai-muted-foreground); font-size: 13px; text-align: center }
+
+/* ---------- Floating ---------- */
+
+/* Floating drawer (side sheet) over a .conai-backdrop: surface + shadow because it floats. .end opens on the right. */
+.conai-backdrop { position: fixed; inset: 0; z-index: 20; background: color-mix(in srgb, var(--conai-background) 55%, transparent) }
+.conai-drawer {
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 21; display: flex; flex-direction: column; gap: 12px; width: min(360px, 100vw);
+  padding: 14px 12px; background: var(--conai-surface-high); border-right: 1px solid var(--conai-line); box-shadow: var(--conai-float-shadow);
+}
+.conai-drawer.end { right: 0; left: auto; border-right: 0; border-left: 1px solid var(--conai-line) }

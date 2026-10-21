@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { MediaCard } from '@/components/common/media-card'
 import { Inset } from '@/components/ui/inset'
 import { Modal } from '@/components/ui/modal'
 import { Text } from '@/components/ui/text'
@@ -32,7 +32,7 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
   const hasVisualPreview = hasGraphArtifactVisualPreview(artifact)
 
   const visualPreview = hasVisualPreview && previewUrl ? (
-    <Button type="button" variant="ghost" onClick={() => setIsImageModalOpen(true)} className="group relative block h-auto max-w-full overflow-hidden p-0">
+    <MediaCard onClick={() => setIsImageModalOpen(true)} className="group max-w-full" media={(
       <InlineMediaPreview
         src={previewUrl}
         mimeType={mimeType}
@@ -41,13 +41,16 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
         mediaClassName={cn(compact ? 'max-h-52 max-w-full w-auto object-contain' : 'max-h-52 w-full object-contain')}
         fitToMedia={compact}
       />
+    )} overlay={(
+      <>
       <ArtifactPreviewHoverOverlay />
       {overlayLabel ? (
-        <Badge variant="overlay" className="pointer-events-none absolute top-2 left-2 max-w-[calc(100%-1rem)] px-2">
+        <Badge variant="overlay" className="pointer-events-none absolute top-2 left-2 max-w-[calc(100%-1rem)]">
           <span className="truncate">{overlayLabel}</span>
         </Badge>
       ) : null}
-    </Button>
+      </>
+    )} />
   ) : null
 
   const imageModal = previewUrl ? (
@@ -79,10 +82,10 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
 
     return (
       <>
-        <Inset className="space-y-2 p-3">
-          {!hideTitle ? <Text as="div" variant="overline" className="font-semibold">{displayTitle}</Text> : null}
+        <Inset padding="sm" className="space-y-2">
+          {!hideTitle ? <Text as="div" variant="overline">{displayTitle}</Text> : null}
           {visualPreview}
-          {!hasVisualPreview && overlayLabel ? <Text as="div" variant="overline" className="font-semibold">{overlayLabel}</Text> : null}
+          {!hasVisualPreview && overlayLabel ? <Text as="div" variant="overline">{overlayLabel}</Text> : null}
           {!previewUrl && summaryText ? <div className="text-sm leading-6 text-foreground whitespace-pre-wrap break-all">{summaryText}</div> : null}
         </Inset>
         {imageModal}
@@ -92,7 +95,7 @@ export function ExecutionArtifactCard({ artifact, compact = false, title, hideTi
 
   return (
     <>
-      <Inset className={cn('p-3', compact ? 'space-y-2' : 'space-y-2.5')}>
+      <Inset padding="sm" className={cn(compact ? 'space-y-2' : 'space-y-2.5')}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5">

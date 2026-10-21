@@ -543,7 +543,9 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         wrapUp = true
       }
       // The last round keeps the same tool list (and so the cached prompt) and tells the model to answer in text.
-      const lastRound = wrapUp || round > profile.maxToolRounds
+      const researchFinal = turn.research?.finalModelRound() ?? false
+      const lastRound = wrapUp || (!turn.research && round > profile.maxToolRounds) || researchFinal
+      if (turn.research && lastRound) tools = []
       // The cap goes out cut to the room this round's prompt leaves.
       target.generation = { ...target.generation, maxTokens: replyCapFor(profile, messages, tools, replyCap) }
       const rawEstimate = round === 1 ? rawMessagesEstimate(messages, tools) : 0
@@ -577,10 +579,16 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           retry: !turn.reaction && !turn.research,
           canRetry: () => turn.text.length === (turn.continuing?.length ?? 0) && turn.reasoning.length === 0,
           stopLoops: true,
-          maxToolRounds: profile.maxToolRounds,
+          maxToolRounds: turn.research ? turn.research.maxTurns - 1 : profile.maxToolRounds,
+          research: turn.research,
           usage: { purpose: 'chat', profileId: profile.id, threadId: turn.threadId, replyId: chatContext?.replyId, round: target.transport ? null : round },
           callTool: bridge ? async (name, args, id) => {
             requireProfileAccess(requester, profile)
+            if (turn.research) {
+              requireRequesterPermission(requester, 'posts.view')
+              turn.research.validateSources(requester, profile.id)
+              if (!turn.research.takeTool()) return { isError: true, content: [{ type: 'text', text: 'Research tool budget exhausted. Answer only from evidence already returned.' }] }
+            }
             const target = unwrapCatalogCall(name, args).tool
             if (blocked.has(target)) return { isError: true, content: [{ type: 'text', text: `${target} is not available in this reply.` }] }
             return (await runToolCall(turn, bridge, { id, function: { name, arguments: JSON.stringify(args) } }, profile.toolOutputLimit, [])).nativeResult
@@ -589,6 +597,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
             if (turn.research) {
               requireProfileAccess(requester, profile)
               requireRequesterPermission(requester, 'posts.view')
+              turn.research.validateSources(requester, profile.id)
               turn.research.takeModel()
             }
             turn.requestSent = true
@@ -629,7 +638,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       }
       previousRound = settleRestatement(turn, previousRound, roundStart)
       if (!bridge || tools.length === 0 || lastRound || result.toolCalls.length === 0) {
-        if (turn.research && lastRound && result.toolCalls.length > 0) turn.research.result.stopReason = 'model_limit'
+        if (turn.research && lastRound && result.toolCalls.length > 0 && turn.research.result.stopReason === 'completed') turn.research.result.stopReason = 'model_limit'
         turn.finishReason = result.finishReason
         // Nothing to show at all (thinking ate the cap, or the model said nothing) is a failure the reader can retry.
         if (!turn.reaction && !turn.order && turn.continuing === undefined && turn.toolCalls.size === 0 && !replyContent(turn.text)) {
@@ -644,7 +653,10 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         if (turn.controller.signal.aborted) {
           return
         }
-        if (turn.research && !turn.research.takeTool()) return
+        if (turn.research && !turn.research.takeTool()) {
+          messages.push({ role: 'tool', tool_call_id: call.id, content: 'Research tool budget exhausted. Summarize only the evidence already returned.' })
+          continue
+        }
         const target = calledTool(call.function.name, call.function.arguments)
         messages.push({ role: 'tool', tool_call_id: call.id, content: permitted(call.function.name) && permitted(target)
           ? (await runToolCall(turn, bridge, call, profile.toolOutputLimit, images)).text

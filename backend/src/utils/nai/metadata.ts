@@ -1,6 +1,15 @@
 /**
  * NovelAI metadata normalization helpers shared by direct generation and graph execution.
  */
+import {
+  appendNaiQualityTags,
+  getNaiFixedModelSettings,
+  isNaiUcPresetId,
+  NAI_ENHANCE_DEFAULT_STRENGTH,
+  prependNaiUcPreset,
+  type NaiEnhanceAmount,
+  type NaiUcPresetId,
+} from '@conai/shared'
 import { WildcardService, type WildcardPromptKind } from '../../services/wildcardService'
 import { stripPromptPresetComments } from '../promptComments'
 
@@ -27,6 +36,11 @@ export interface NAICharacterReference {
 export interface NAIMetadataParams {
   prompt: string
   negative_prompt?: string
+  quality_toggle?: boolean
+  uc_preset?: NaiUcPresetId
+  enhance?: NaiEnhanceAmount
+  /** Set by the validated enhance plan, never taken directly from the input. */
+  upscaled_enhance?: boolean
   model?: string
   action?: 'generate' | 'img2img' | 'infill' | string
   width?: number
@@ -63,7 +77,7 @@ export interface NAIMetadataParams {
   groupId?: number
 }
 
-export interface NAIMetadataInputParams extends Omit<NAIMetadataParams, 'characters' | 'vibes' | 'character_refs'> {
+export interface NAIMetadataInputParams extends Omit<NAIMetadataParams, 'characters' | 'vibes' | 'character_refs' | 'upscaled_enhance'> {
   characters?: NAICharacterPrompt[] | string
   vibes?: NAIVibeTransfer[] | string
   character_refs?: NAICharacterReference[] | string
@@ -215,9 +229,40 @@ export function preprocessMetadata(params: NAIMetadataInputParams): NAIMetadataP
     characters: normalizeCharacters(params.characters),
     vibes: normalizeVibes(params.vibes),
     character_refs: normalizeCharacterReferences(params.character_refs),
+    // MCP/LLM callers may send null for "not set".
+    quality_toggle: params.quality_toggle ?? undefined,
+    uc_preset: params.uc_preset ?? undefined,
+    enhance: params.enhance ?? undefined,
+    upscaled_enhance: false,
   }
 
   metadata.model = metadata.model || 'nai-diffusion-4-5-curated'
+  // Models whose settings the web UI fixes (V5 Full Medium): the fixed UC preset replaces every user negative.
+  const fixedSettings = getNaiFixedModelSettings(metadata.model)
+  if (fixedSettings) {
+    metadata.steps = fixedSettings.steps
+    metadata.sampler = fixedSettings.sampler
+    metadata.cfg_rescale = fixedSettings.cfgRescale
+    metadata.uc_preset = fixedSettings.ucPreset
+    metadata.negative_prompt = ''
+    metadata.characters = metadata.characters?.map((character) => ({ ...character, uc: '' }))
+  }
+  if (metadata.quality_toggle !== undefined && typeof metadata.quality_toggle !== 'boolean') {
+    throw new Error('NovelAI quality_toggle must be a boolean')
+  }
+  if (metadata.uc_preset !== undefined && !isNaiUcPresetId(metadata.uc_preset)) {
+    throw new Error('NovelAI uc_preset must be none, heavy, light, or human_focus')
+  }
+  const prompt = appendNaiQualityTags(metadata.model, metadata.prompt, metadata.quality_toggle === true)
+  if (prompt === null) {
+    throw new Error(`Quality tags are not available for NovelAI model ${metadata.model}`)
+  }
+  const negativePrompt = prependNaiUcPreset(metadata.model, metadata.negative_prompt ?? '', metadata.uc_preset ?? 'none')
+  if (negativePrompt === null) {
+    throw new Error(`UC preset "${metadata.uc_preset}" is not available for NovelAI model ${metadata.model}`)
+  }
+  metadata.prompt = prompt
+  metadata.negative_prompt = negativePrompt
   metadata.action = metadata.action || 'generate'
   metadata.width = metadata.width || 1024
   metadata.height = metadata.height || 1024
@@ -232,7 +277,7 @@ export function preprocessMetadata(params: NAIMetadataInputParams): NAIMetadataP
   metadata.noise_schedule = metadata.noise_schedule || 'karras'
 
   if (metadata.action === 'img2img' || metadata.action === 'infill') {
-    metadata.strength = metadata.strength || 0.3
+    metadata.strength = metadata.strength || (metadata.enhance !== undefined ? NAI_ENHANCE_DEFAULT_STRENGTH : 0.3)
     metadata.noise = metadata.noise || 0
     metadata.extra_noise_seed = metadata.extra_noise_seed || Math.floor(Math.random() * 4294967288)
   }

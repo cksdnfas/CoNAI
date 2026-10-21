@@ -91,7 +91,7 @@ export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange,
                 aria-label={t({ ko: '배경 고르기', en: 'Pick a background' })}
                 disabled={busy}
                 onClick={() => fileInputRef.current?.click()}
-                className="flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-cover bg-center text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40"
+                className="flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-md border border-dashed border-line bg-cover bg-center text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/40"
               >
                 <ChatProfileImage src={backgroundUrl} fallback={<ImagePlus className="size-5" />} />
               </button>

@@ -239,12 +239,12 @@ export function ImageMetadataEditPage() {
       {imageQuery.isLoading ? (
         <div className={gridClassName}>
           <div className={cn('py-6', isDesktopPageLayout && 'pr-6')}>
-            <Skeleton className="h-[max(420px,60vh)] w-full rounded-sm" />
+            <Skeleton radius="sm" className="h-[max(420px,60vh)] w-full" />
           </div>
           <div className={cn(fieldColumnClassName, 'space-y-3')}>
-            <Skeleton className="h-9 w-full rounded-sm" />
-            <Skeleton className="h-28 w-full rounded-sm" />
-            <Skeleton className="h-24 w-full rounded-sm" />
+            <Skeleton radius="sm" className="h-9 w-full" />
+            <Skeleton radius="sm" className="h-28 w-full" />
+            <Skeleton radius="sm" className="h-24 w-full" />
           </div>
         </div>
       ) : null}

@@ -135,7 +135,6 @@ export function SpriteQueue({ hashes, selected, statuses, locked, onSelect, onCh
                   asChild
                   interactive
                   selected={hash === selected}
-                  className="gap-2.5 rounded-sm"
                   leading={<img src={libraryThumbnailUrl(hash)} alt="" loading="lazy" className="size-11 rounded-sm object-cover" />}
                   trailing={<QueueStatus status={status} />}
                 >
@@ -175,9 +174,9 @@ export function SpriteQueue({ hashes, selected, statuses, locked, onSelect, onCh
 function QueueStatus({ status }: { status?: SpriteBatchItem }) {
   const { t } = useI18n()
   if (!status) return null
-  if (status.status === 'done') return <Chip size="sm" tone="success" className="gap-1 font-medium"><Check className="size-3" />{t({ ko: '완료', en: 'Done' })}</Chip>
-  if (status.status === 'failed') return <Chip size="sm" tone="destructive" className="gap-1 font-medium">{t({ ko: '실패', en: 'Failed' })}</Chip>
-  if (status.status === 'running') return <Chip size="sm" tone="primary" className="gap-1 font-medium"><Loader2 className="size-3 animate-spin" />{t({ ko: '진행', en: 'Running' })}</Chip>
-  if (status.status === 'skipped') return <Chip size="sm" tone="muted" className="gap-1 font-medium">{t({ ko: '건너뜀', en: 'Skipped' })}</Chip>
-  return <Chip size="sm" tone="muted" className="gap-1 font-medium">{t({ ko: '대기', en: 'Waiting' })}</Chip>
+  if (status.status === 'done') return <Chip size="sm" tone="success"><Check className="size-3" />{t({ ko: '완료', en: 'Done' })}</Chip>
+  if (status.status === 'failed') return <Chip size="sm" tone="destructive">{t({ ko: '실패', en: 'Failed' })}</Chip>
+  if (status.status === 'running') return <Chip size="sm" tone="primary"><Loader2 className="size-3 animate-spin" />{t({ ko: '진행', en: 'Running' })}</Chip>
+  if (status.status === 'skipped') return <Chip size="sm" tone="muted">{t({ ko: '건너뜀', en: 'Skipped' })}</Chip>
+  return <Chip size="sm" tone="muted">{t({ ko: '대기', en: 'Waiting' })}</Chip>
 }

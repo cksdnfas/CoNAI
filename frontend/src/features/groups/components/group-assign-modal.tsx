@@ -128,7 +128,7 @@ export function GroupAssignModal({
       widthClassName="max-w-md"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
-        <ModalBody className="space-y-3">
+        <ModalBody spacing="sm">
           {formError ? (
             <Alert variant="destructive">
               <AlertTitle>{t('groups.components.group.assign.modal.confirmation.required')}</AlertTitle>
@@ -146,7 +146,8 @@ export function GroupAssignModal({
                     type="button"
                     variant="secondary"
                     size="sm"
-                    className="max-w-48 rounded-full aria-pressed:bg-primary/12 aria-pressed:text-primary"
+                    className="max-w-48"
+                    data-pressed={group.id === selectedGroupId ? 'true' : undefined}
                     aria-pressed={group.id === selectedGroupId}
                     onClick={() => setSelectedGroupId(group.id)}
                   >

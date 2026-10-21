@@ -3,6 +3,7 @@ import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markd
 import { Link } from 'react-router-dom'
 import remarkGfm from 'remark-gfm'
 import { proseTableClassNames } from '@/components/ui/data-table'
+import { CodeBlock } from '@/components/ui/code-block'
 import { rehypeMentions } from '@/features/codex-chat/chat-mentions'
 import { cn } from '@/lib/utils'
 import { AudioEmbed, FileEmbed, GroupEmbed, LibraryMedia, MediaGallery, PostCardEmbed } from './post-media'
@@ -89,8 +90,8 @@ const COMPONENTS: Components = {
   table: ({ children }) => <div className={cn('my-3', proseTableClassNames.wrapper)}><table className={proseTableClassNames.table}>{children}</table></div>,
   th: ({ children }) => <th className={proseTableClassNames.th}>{children}</th>,
   td: ({ children }) => <td className={proseTableClassNames.td}>{children}</td>,
-  pre: ({ children }) => <pre className="my-3 scroll-x rounded-sm bg-surface-low p-3 font-mono text-[0.85em] leading-relaxed">{children}</pre>,
-  code: ({ children, className }: ComponentProps<'code'>) => <code className={cn(className ? '' : 'rounded-sm bg-surface-high px-1 py-0.5', 'font-mono text-[0.9em]', className)}>{children}</code>,
+  pre: ({ children }) => <CodeBlock wrap={false} className="my-3">{children}</CodeBlock>,
+  code: ({ children, className }: ComponentProps<'code'>) => <code className={cn(className ? '' : 'rounded-sm bg-surface-high px-1 py-0.5', 'font-mono text-xs', className)}>{children}</code>,
 }
 
 /**

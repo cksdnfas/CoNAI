@@ -143,6 +143,7 @@ export function ModuleWorkflowEditorView({
   }
 
   const dockTabs = (
+    <div className="px-4 pt-2">
     <TextTabs
       value={dockTab}
       onChange={setDockTab}
@@ -157,8 +158,8 @@ export function ModuleWorkflowEditorView({
           {isWideLayout ? <PanelRight /> : <X />}
         </IconButton>
       )}
-      className="px-4 pt-2"
     />
+    </div>
   )
   const dockBody = (
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
@@ -224,7 +225,7 @@ export function ModuleWorkflowEditorView({
             <ActionMenuButton entries={moreEntries} label={t({ ko: '더 보기', en: 'More' })} />
           </span>
         </PopoverAnchor>
-        <PopoverContent align="end" className="w-80 p-3"
+        <PopoverContent align="end" padding="md" className="w-80"
           // Focus returning to the menu button as the menu closes must not dismiss it; a click outside or Esc does.
           onFocusOutside={(event) => event.preventDefault()}>
           {settingsPanel}
@@ -260,6 +261,7 @@ export function ModuleWorkflowEditorView({
         <div className="relative min-h-0 flex-1">
           {graphCanvas}
           {isDockOpen ? (
+            // eslint-disable-next-line shadcn/no-arbitrary-values -- Device safe-area inset keeps the editor dock clear of the home indicator.
             <div className="absolute inset-x-0 bottom-0 flex max-h-[55%] min-h-[40%] flex-col rounded-t-lg bg-surface-container shadow-elevation-2 pb-[env(safe-area-inset-bottom)]">
               <div className="mx-auto mt-1.5 h-1 w-9 shrink-0 rounded-full bg-foreground/20" aria-hidden />
               {dockTabs}

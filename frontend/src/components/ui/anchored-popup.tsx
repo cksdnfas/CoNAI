@@ -24,6 +24,8 @@ interface AnchoredPopupProps {
   viewportPadding?: number
   className?: string
   closeOnBack?: boolean
+  /** Stacking layer: `floating` when the popup opens from inside a Modal (above the modal layer). */
+  layer?: 'popover' | 'floating'
   surfaceProps?: Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className'>
   children: ReactNode
 }
@@ -44,6 +46,7 @@ export function AnchoredPopup({
   viewportPadding = 12,
   className,
   closeOnBack = true,
+  layer = 'popover',
   surfaceProps,
   children,
 }: AnchoredPopupProps) {
@@ -140,7 +143,7 @@ export function AnchoredPopup({
   return createPortal(
     <div
       ref={panelRef}
-      className={cn(anchoredPopupSurfaceClassName, 'z-popover overflow-y-auto overscroll-contain', className)}
+      className={cn(anchoredPopupSurfaceClassName, layer === 'floating' ? 'z-floating' : 'z-popover', 'overflow-y-auto overscroll-contain', className)}
       style={{
         position: 'fixed',
         top: position?.top ?? -9999,

@@ -235,7 +235,7 @@ export function WorkflowFinalResultsSection({
 
   return (
     <div className="space-y-2.5">
-      <Text as="div" variant="overline" className="font-semibold">{t({ ko: '결과물', en: 'Results' })}</Text>
+      <Text as="div" variant="overline">{t({ ko: '결과물', en: 'Results' })}</Text>
 
       {resolvedEntries.length === 0 ? (
         <EmptyState size="compact" title={resolvedEmptyLabel} />
@@ -265,7 +265,7 @@ export function WorkflowFinalResultsSection({
                 const overlayText = [entry.overlayLabel, entry.sourceNodeLabel, entry.sourcePortLabel, entry.artifact.artifact_type].filter(Boolean).join(' · ')
 
                 return (
-                  <Badge variant="overlay" className="pointer-events-none min-w-0 flex-wrap justify-start gap-1.5 px-2 font-normal" title={overlayText} aria-label={overlayText}>
+                  <Badge variant="overlay" className="pointer-events-none min-w-0 flex-wrap justify-start" title={overlayText} aria-label={overlayText}>
                     {entry.overlayLabel ? <span className="truncate font-medium">{entry.overlayLabel}</span> : null}
                     {entry.sourceNodeLabel ? <span className="truncate text-white/90">{entry.sourceNodeLabel}</span> : null}
                     {entry.sourcePortLabel ? <span className="truncate text-white/80">{entry.sourcePortLabel}</span> : null}

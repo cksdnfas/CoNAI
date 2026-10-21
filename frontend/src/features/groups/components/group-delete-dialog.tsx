@@ -44,7 +44,7 @@ export function GroupDeleteDialog({ open, targets, allGroups, isDeleting = false
         : t({ ko: '그룹 {count}개 삭제', en: 'Delete {count} groups' }, { count: formatNumber(targets.length) })}
       description={t({ ko: '이미지 파일은 유지', en: 'Image files are kept' })}
     >
-      <ModalBody className="space-y-3">
+      <ModalBody spacing="sm">
         <div className="flex flex-wrap gap-1.5">
           {targets.slice(0, NAME_PREVIEW_LIMIT).map((group) => (
             <Chip key={group.id} tone="muted">
@@ -68,7 +68,7 @@ export function GroupDeleteDialog({ open, targets, allGroups, isDeleting = false
       </ModalBody>
 
       <GroupModalFooter busy={isDeleting}>
-        <Button type="button" variant="destructive" className="font-semibold" onClick={() => onConfirm(cascade)} disabled={isDeleting || targets.length === 0}>
+        <Button type="button" variant="destructive" onClick={() => onConfirm(cascade)} disabled={isDeleting || targets.length === 0}>
           {isDeleting ? <LoaderCircle className="animate-spin" /> : null}
           {single
             ? t({ ko: '삭제', en: 'Delete' })

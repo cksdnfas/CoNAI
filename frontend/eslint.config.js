@@ -3,6 +3,7 @@ import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
+import { plugin as shadcn } from '@shadcn/lint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 const NATIVE_DIALOGS = [
@@ -61,6 +62,71 @@ const TOKEN_GUARDS = [
 
 export default defineConfig([
   globalIgnores(['dist']),
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: { shadcn },
+    // Theme discovery uses components.json → tailwind.css (src/index.css).
+    settings: { shadcn: { ui: '@/components/ui', note: 'See frontend/DESIGN_PRESET.md for the design-system contract.' } },
+    rules: {
+      'shadcn/no-unknown-classes': ['error', { allow: [
+        // Interaction markers consumed by React Flow / keyboard and drag handlers.
+        'nodrag', 'nopan', 'nowheel', 'nokey', 'comfy-authoring-drag-handle', 'module-graph-drag-handle',
+        // CSS / DOM hooks; post-rich-editor and video-player styles are feature-local imports.
+        'chat-markdown', 'post-media', 'post-rich-editor', 'wp-hit',
+        'conai-video-player', 'conai-video-player__mount',
+        // Plain selector in index.css, not a Tailwind color token.
+        'bg-checker',
+      ] }],
+      'shadcn/no-raw-colors': ['error', { allow: ['bg-checker'] }],
+      'shadcn/no-restyle': ['error', {
+        allow: ['layout'],
+        contracts: [
+          {
+            pattern: '^(Text|Heading|Badge|Chip)$',
+            allow: ['layout', 'truncate', 'line-clamp-*', 'whitespace-*', 'break-*', 'tabular-nums'],
+            message: 'Callers own content wrapping/truncation, not appearance. Use {{component}} variant, tone or size props; see the migration map in frontend/DESIGN_PRESET.md.',
+          },
+          {
+            pattern: '^(Panel|Inset|PopoverContent|AnchoredPopup|TabsContent|AlertDescription|AlertTitle)$',
+            allow: ['layout', 'gap-*', 'space-x-*', 'space-y-*'],
+            message: 'The caller arranges children with scale gaps; {{component}} owns its surface and padding. Use padding/treatment props or an inner content layout, not appearance overrides.',
+          },
+          {
+            pattern: '^RowGroup$',
+            allow: ['layout', 'text-resource-*', 'text-warning'],
+            message: 'RowGroup headingClassName may identify a resource kind or warning. Keep heading typography and row spacing in RowGroup; rows must remain direct siblings.',
+          },
+          {
+            pattern: '^(Button|IconButton|Input|Textarea|Select|Switch|NumberStepperInput)$',
+            // Exact marker class names (the plugin notes that on each run; that is the intent).
+            allow: ['layout', 'truncate', 'line-clamp-*', 'whitespace-*', 'break-*', 'tabular-nums', 'nodrag', 'nopan', 'nowheel', 'nokey'],
+            message: 'Interaction markers are permitted for graph/editor controls; presentation belongs to {{component}} variant/size/mono props. Use aria-invalid for invalid fields.',
+          },
+        ],
+        message: {
+          spacing: 'Use {{component}} size props ({{sizes|see component source}}), not spacing overrides. See frontend/DESIGN_PRESET.md.',
+          default: 'Use {{component}} variant props ({{variants|see component source}}), not appearance overrides. See frontend/DESIGN_PRESET.md.',
+        },
+      }],
+      // Layout sizes may need calc() / viewport values; spacing (margins included), type, radius and colour stay on the scale.
+      'shadcn/no-arbitrary-values': ['error', {
+        allow: ['layout'],
+        deny: ['m-*', 'mx-*', 'my-*', 'mt-*', 'mr-*', 'mb-*', 'ml-*', 'ms-*', 'me-*'],
+      }],
+      'shadcn/require-static-classes': 'error',
+      // Editors, canvas previews and virtualized views legitimately compute style objects and geometry.
+      // A global ban cannot distinguish those from presentation without broad, misleading exceptions.
+      'shadcn/no-inline-styles': 'off',
+    },
+  },
+  {
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'shadcn/no-restyle': 'off',
+      'shadcn/no-arbitrary-values': 'off',
+      'shadcn/require-static-classes': 'off',
+    },
+  },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

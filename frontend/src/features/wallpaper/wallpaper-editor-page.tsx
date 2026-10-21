@@ -41,7 +41,6 @@ import {
   Scissors,
   Search,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -241,7 +240,7 @@ type EditorMenuItem = 'separator' | {
 /** Rows of a canvas menu (right click, zoom): icon, label and the matching shortcut. */
 function EditorMenuItems({ items, onDone }: { items: EditorMenuItem[]; onDone: () => void }) {
   return (
-    <div role="menu" className="flex flex-col">
+    <div role="menu" className="flex flex-col p-2">
       {items.map((item, index) => (item === 'separator' ? (
         <div key={`separator-${index}`} role="separator" className="mx-1 my-1 h-px bg-line" />
       ) : (
@@ -250,8 +249,9 @@ function EditorMenuItems({ items, onDone }: { items: EditorMenuItem[]; onDone: (
           type="button"
           role="menuitem"
           variant={item.destructive ? 'destructive-ghost' : 'nav'}
+          size="sm"
           disabled={item.disabled}
-          className={cn('h-8 w-full justify-start gap-3 font-normal', !item.destructive && 'text-foreground')}
+          className="w-full justify-start"
           onClick={() => {
             onDone()
             item.action()
@@ -476,8 +476,8 @@ export function WallpaperEditorPage() {
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-7 shrink-0 px-2"
+            size="compact"
+            className="shrink-0"
             onClick={() => {
               setActivePresetId(beforePresetId)
               resetLayoutPreset(before)
@@ -989,14 +989,14 @@ export function WallpaperEditorPage() {
               ref={zoomMenuAnchorRef}
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-8 min-w-12 px-1 font-mono text-xs tabular-nums"
+              size="compact"
+              className="min-w-12 tabular-nums"
               aria-expanded={isZoomMenuOpen}
               onClick={() => { setZoomDraft(String(zoomPercent)); setIsZoomMenuOpen((current) => !current) }}
               aria-label={t({ ko: '확대 비율', en: 'Zoom level' })}
               title={t({ ko: '확대 비율 (Ctrl+휠로 확대, Space+드래그로 이동)', en: 'Zoom level (Ctrl+wheel to zoom, Space+drag to pan)' })}
             >
-              {zoomPercent}%
+              <span className="font-mono">{zoomPercent}%</span>
             </Button>
             <IconButton variant="ghost" size="icon-sm" onClick={() => stepZoom(1)} label={t({ ko: '확대', en: 'Zoom in' })}>
               <ZoomIn />
@@ -1093,7 +1093,7 @@ export function WallpaperEditorPage() {
           open={isWorkspaceMenuOpen}
           anchorRef={workspaceMenuAnchorRef}
           onClose={() => setIsWorkspaceMenuOpen(false)}
-          className="w-64 p-2"
+          className="w-64"
         >
           <EditorMenuItems
             items={[
@@ -1128,10 +1128,10 @@ export function WallpaperEditorPage() {
           anchorRef={zoomMenuAnchorRef}
           onClose={() => setIsZoomMenuOpen(false)}
           align="center"
-          className="w-56 p-2"
+          className="w-56"
         >
           <form
-            className="flex items-center gap-2 px-1 pb-2"
+            className="flex items-center gap-2 px-3 pt-2"
             onSubmit={(event) => {
               event.preventDefault()
               const percent = Number(zoomDraft)
@@ -1142,7 +1142,8 @@ export function WallpaperEditorPage() {
             <Input
               inputMode="numeric"
               aria-label={t({ ko: '확대 비율', en: 'Zoom level' })}
-              className="h-8 font-mono text-xs"
+              mono
+              controlSize="compact"
               value={zoomDraft}
               onChange={(event) => setZoomDraft(event.target.value)}
             />
@@ -1167,7 +1168,7 @@ export function WallpaperEditorPage() {
           onClose={() => setContextMenu(null)}
           align="start"
           sideOffset={2}
-          className="w-64 p-1.5"
+          className="w-64"
         >
           {contextMenu?.widgetId ? (
             <EditorMenuItems
@@ -1245,7 +1246,7 @@ export function WallpaperEditorPage() {
           <WallpaperColorPaletteContext.Provider value={layoutPalette}>
             <aside
               aria-label={t({ ko: '위젯 설정', en: 'Widget settings' })}
-              className="min-w-0 self-start xl:sticky xl:top-(--theme-shell-header-height) xl:max-h-[calc(100dvh-var(--theme-shell-header-height))] xl:overflow-x-hidden xl:overflow-y-auto xl:[scrollbar-gutter:stable] xl:[scrollbar-width:thin] xl:[scrollbar-color:color-mix(in_srgb,var(--foreground)_22%,transparent)_transparent] xl:border-l xl:border-line xl:pt-2 xl:pb-6 xl:pl-6 xl:pr-4"
+              className="min-w-0 self-start xl:sticky xl:top-(--theme-shell-header-height) xl:max-h-[calc(100dvh-var(--theme-shell-header-height))] xl:overflow-x-hidden xl:overflow-y-auto xl:[scrollbar-gutter:stable] xl:[scrollbar-width:thin] xl:border-l xl:border-line xl:pt-2 xl:pb-6 xl:pl-6 xl:pr-4"
             >
               {selectedWidgets.length > 0 ? (
                 <WallpaperWidgetInspector

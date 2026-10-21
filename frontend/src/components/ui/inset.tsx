@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils'
  * box in its area: never put an Inset inside a Panel / raised Section, and prefer plain text or rows for key/value
  * summaries. Nesting no longer recesses it.
  */
-function Inset({ className, ...props }: ComponentProps<'div'>) {
-  return <div data-slot="inset" className={cn('ui-tone-plinth rounded-sm px-4 py-3', className)} {...props} />
+function Inset({ className, padding = 'md', ...props }: ComponentProps<'div'> & { padding?: 'sm' | 'md' }) {
+  return <div data-slot="inset" className={cn('ui-tone-plinth rounded-sm', padding === 'sm' ? 'px-3 py-2' : 'px-4 py-3', className)} {...props} />
 }
 
 export { Inset }

@@ -196,7 +196,7 @@ export function TableLoading({ columns = 3 }: { columns?: number }) {
     <div>
       {Array.from({ length: 8 }).map((_, index) => (
         <div key={`${columns}-${index}`} className="flex min-h-11 items-center border-b border-line last:border-b-0">
-          <Skeleton className="h-4 w-full max-w-md rounded-sm" />
+          <Skeleton radius="sm" className="h-4 w-full max-w-md" />
         </div>
       ))}
     </div>
@@ -273,7 +273,7 @@ export function CharacterRelatedTagOptionsPopup({
   const { t } = useI18n()
 
   return (
-    <AnchoredPopup open={open} anchorRef={anchorRef} onClose={onClose} align="end" side="bottom" className="w-[320px] p-0">
+    <AnchoredPopup open={open} anchorRef={anchorRef} onClose={onClose} align="end" side="bottom" className="w-80">
       <div className={anchoredPopupHeaderClassName}>
         <div className={anchoredPopupLabelClassName}>{t({ ko: 'Related tags 표시 옵션', en: 'Related tags display options' })}</div>
       </div>
@@ -366,7 +366,7 @@ export function CharacterImageCell({ item }: { item: DanbooruBrowserCharacterRec
       {/* eslint-disable-next-line no-restricted-syntax -- the thumbnail itself is the control (cycles images); Button padding/height would crop it */}
       <button
         type="button"
-        className="relative h-24 w-[72px] cursor-pointer overflow-hidden rounded-sm bg-transparent focus-visible:ring-[3px] focus-visible:ring-ring/40 focus-visible:outline-none"
+        className="relative h-24 w-18 cursor-pointer overflow-hidden rounded-sm bg-transparent focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none"
         onClick={() => setImageIndex((current) => (current + 1) % images.length)}
         {...hoverPreview.triggerProps}
         title={item.name}
@@ -392,11 +392,11 @@ export function RelatedTagsTranslationModal({ item, onClose }: { item: DanbooruB
       <ModalBody>
         <section className="space-y-1.5">
           <Text as="div" variant="overline">{t({ ko: '원문', en: 'Original' })}</Text>
-          <Inset className="whitespace-pre-wrap break-words px-3 text-sm text-foreground">{originalText || '—'}</Inset>
+          <Inset padding="sm"><Text className="whitespace-pre-wrap break-words">{originalText || '—'}</Text></Inset>
         </section>
         <section className="space-y-1.5">
           <Text as="div" variant="overline">{t({ ko: '한국어', en: 'Korean' })}</Text>
-          <Inset className="whitespace-pre-wrap break-words px-3 text-sm text-foreground">{translatedText || '—'}</Inset>
+          <Inset padding="sm"><Text className="whitespace-pre-wrap break-words">{translatedText || '—'}</Text></Inset>
         </section>
       </ModalBody>
     </Modal>

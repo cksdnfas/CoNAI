@@ -16,7 +16,6 @@ import {
   getThemeModeLabel,
 } from './appearance-tab-editor-shared'
 import { ChatFilledLabel } from './settings-filled-label'
-import { SETTINGS_CONTROL_CLASS } from './settings-rows'
 import { useI18n } from '@/i18n'
 
 /** One round colour swatch; the chosen one gets a ring. */
@@ -26,7 +25,7 @@ function Swatch({ active, label, onClick, style, children }: { active: boolean; 
       <span
         aria-hidden
         className={cn(
-          'flex size-5 items-center justify-center rounded-full text-white shadow-[inset_0_0_0_1px_rgb(0_0_0/0.12)] transition-shadow',
+          'flex size-5 items-center justify-center rounded-full text-white inset-ring inset-ring-foreground/10 transition-shadow',
           active && 'ring-2 ring-primary ring-offset-2 ring-offset-background',
         )}
         style={style}
@@ -64,7 +63,7 @@ export function AppearanceThemeRows({
         />
       </SettingRow>
 
-      <SettingRow label={<ChatFilledLabel fieldId="appearance.accentPreset">{t({ ko: '강조색', en: 'Accent' })}</ChatFilledLabel>} controlClassName="gap-1">
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.accentPreset">{t({ ko: '강조색', en: 'Accent' })}</ChatFilledLabel>}>
         {Object.entries(APPEARANCE_PRESETS).map(([presetKey, preset]) => (
           <Swatch
             key={presetKey}
@@ -107,7 +106,7 @@ export function AppearanceThemeRows({
         </>
       ) : null}
 
-      <SettingRow label={<ChatFilledLabel fieldId="appearance.surfacePreset">{t({ ko: '표면', en: 'Surfaces' })}</ChatFilledLabel>} controlClassName="gap-1">
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.surfacePreset">{t({ ko: '표면', en: 'Surfaces' })}</ChatFilledLabel>}>
         {Object.entries(SURFACE_PRESETS).map(([presetKey, preset]) => {
           const palette = preset.modes[paletteMode]
           return (
@@ -180,7 +179,7 @@ export function AppearanceThemeRows({
         </>
       ) : null}
 
-      <SettingRow label={<ChatFilledLabel fieldId="appearance.density">{densityLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+      <SettingRow label={<ChatFilledLabel fieldId="appearance.density">{densityLabel}</ChatFilledLabel>} controlWidth="standard">
         <Select
           variant="settings"
           aria-label={densityLabel}

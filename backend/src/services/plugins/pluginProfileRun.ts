@@ -11,6 +11,9 @@ import { buildChatProfileReplyMessages } from '../codex-chat/chatProfileReply'
 import { beginDirectReply } from '../codex-chat/chatReplies'
 import { generateLlmGroupReply } from '../codex-chat/llmChatService'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
+import fs from 'node:fs'
+import path from 'node:path'
+import { piChatPrivateRoot } from '../codex-chat/piChatCompletion'
 
 const running = new Set<string>()
 
@@ -49,30 +52,64 @@ export async function runPluginProfile(params: {
   try {
     signal.throwIfAborted()
     if (input.research) {
-      requireResearchProfile(profile)
+      const runtime = requireResearchProfile(profile)
       requireRequesterPermission(requester, 'posts.view')
-      const research = new ChatResearchExecution(input.research)
+      const research = new ChatResearchExecution(input.research, runtime)
       const roomKey = `${key}:research:${sha256(JSON.stringify([input.research.slotId, input.research.activityId, input.requestId]))}`
       const room = await ensureAutomationRoom(requester, profile.id, roomKey, `${pluginName} · ${profile.name} · Research`)
       signal.throwIfAborted()
       const userId = CodexChatStore.addMessage({ thread_id: room.id, role: 'user', content: input.message, display_content: null, tool_calls: [], status: 'completed', error: null })
-      const delivery = beginDirectReply(room, profile.id, [], CodexChatStore.findMessage(room.id, userId), signal, () => {})
+      const delivery = beginDirectReply(room, profile.id, [], CodexChatStore.findMessage(room.id, userId) ?? null, signal, () => {})
+      let piDir: string | undefined
+      const validate = () => {
+        requireRequesterPermission(requester, 'posts.view')
+        research.validateSources(requester, profile.id)
+      }
+      const controller = new AbortController()
+      const runSignal = AbortSignal.any([signal, controller.signal])
+      // Native engines own internal provider requests: also stop an in-flight run on source revocation.
+      const accessTimer = runtime !== 'direct' ? setInterval(() => {
+        try { validate() } catch (error) { controller.abort(error) }
+      }, 1000) : undefined
+      accessTimer?.unref()
       try {
         // The native headless reply executor owns tool rounds, usage, permissions and provider cancellation.
         // Only the stateless persona builder supplies context: no room history, hooks, memory, lore or files.
-        const reply = await generateLlmGroupReply({
-          requester, profile, threadId: room.id, chatContext: delivery.context, signal, research, emit: () => {},
+        // Direct API already checks immediately before every request, without an extra preflight query.
+        if (runtime !== 'direct') validate()
+        const messages = buildChatProfileReplyMessages({
+          profile, message: input.message, history: input.history ?? null, userName: input.userName ?? null, useLorebooks: false,
+        })
+        if (runtime === 'pi') {
+          const root = piChatPrivateRoot()
+          fs.mkdirSync(root, { recursive: true, mode: 0o700 })
+          piDir = fs.mkdtempSync(path.join(root, 'research-'))
+        }
+        const reply = runtime === 'codex' ? await (await import('../codex-chat/codexChatService')).runCodexResearchReply({
+          requester, profile, chatContext: delivery.context, research, messages, signal: runSignal,
+        }) : await generateLlmGroupReply({
+          requester, profile, threadId: room.id, chatContext: delivery.context, signal: runSignal, research, emit: () => {},
           generation: { maxTokens: Math.min(input.maxTokens ?? 4096, profile.maxTokens ?? 4096) },
-          buildMessages: () => buildChatProfileReplyMessages({
-            profile, message: input.message, history: input.history ?? null, userName: input.userName ?? null, useLorebooks: false,
-          }),
+          buildMessages: (_tools, _onMeta, _judged, useSession) => {
+            if (piDir) {
+              useSession({ runtime: 'pi', dir: piDir, resumeId: null, onDone: () => {} })
+              // Pi accepts only the latest user input. Keep explicit caller history, without loading any old session.
+              return [...messages.filter(message => message.role === 'system'), { role: 'user', content: JSON.stringify(messages.filter(message => message.role !== 'system')) }]
+            }
+            return messages
+          },
         })
         const messageId = CodexChatStore.addMessage({ thread_id: room.id, role: 'assistant', ...reply, display_content: null, routing: delivery.routing })
-        signal.throwIfAborted()
+        runSignal.throwIfAborted()
         if (reply.status !== 'completed') throw new PluginError(`Research failed (chat ${room.id}): ${reply.error ?? reply.status}`, 502)
+        validate()
         const profileRun = refreshPluginProfileRun({ threadId: room.id, messageIds: [messageId], tools: [], toolsTruncated: false, research: research.result }, requester)
         return { text: reply.content.slice(0, 4000), truncated: reply.content.length > 4000, model: resolveProfileModel(profile, 'chat')?.model ?? '', engine: profile.engine, profileRun }
-      } finally { delivery.close() }
+      } finally {
+        if (accessTimer) clearInterval(accessTimer)
+        if (piDir) fs.rmSync(piDir, { recursive: true, force: true })
+        delivery.close()
+      }
     }
     const room = await ensureAutomationRoom(requester, profile.id, key, `${pluginName} · ${profile.name}`)
     signal.throwIfAborted()

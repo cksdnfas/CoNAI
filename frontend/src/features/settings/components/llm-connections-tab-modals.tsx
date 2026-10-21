@@ -50,7 +50,6 @@ import {
   type LlmThinkingSwitch,
   LLM_THINKING_SWITCHES,
 } from './llm-connections-tab-utils'
-import { cn } from '@/lib/utils'
 import { SegmentedControl } from '@/components/common/segmented-control'
 
 /** A connection (server) row; its models are listed under it. */
@@ -269,7 +268,9 @@ function LlmConnectionFormFields({
               ) : t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })}>
                 <Select
                   variant="settings"
-                  className={cn('w-56 font-mono text-xs', thinkingChanged && 'ring-1 ring-primary')}
+                  className="w-56"
+                  mono
+                  controlSize="compact"
                   aria-label={t({ ko: '생각 끄는 방법', en: 'Turning thinking off' })}
                   value={draft.thinkingSwitch}
                   onChange={(event) => onChange({ thinkingSwitch: event.target.value as LlmThinkingSwitch })}
@@ -322,7 +323,8 @@ function LlmPresetFormFields({
           value={draft.content}
           onChange={(event) => onChange({ content: event.target.value })}
           placeholder={t(section.placeholder)}
-          className={section.mono ? 'font-mono text-xs' : undefined}
+          mono={section.mono}
+          textSize={section.mono ? 'xs' : 'sm'}
         />
       </Field>
     </div>

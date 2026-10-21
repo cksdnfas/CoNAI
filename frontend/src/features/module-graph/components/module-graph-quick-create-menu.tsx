@@ -221,7 +221,8 @@ export function ModuleGraphQuickCreateMenu({
         align={align}
         sideOffset={0}
         collisionPadding={12}
-        className="flex max-h-[min(30rem,var(--radix-popover-content-available-height))] w-[320px] max-w-[calc(100vw-24px)] flex-col overflow-hidden p-0"
+        padding="none"
+        className="flex max-h-[min(30rem,var(--radix-popover-content-available-height))] w-80 max-w-[calc(100vw-24px)] flex-col overflow-hidden"
         aria-label={t({ ko: '노드 추가', en: 'Add node' })}
         onOpenAutoFocus={(event) => {
           event.preventDefault()
@@ -253,7 +254,7 @@ export function ModuleGraphQuickCreateMenu({
             aria-label={t({ ko: '노드 검색', en: 'Search nodes' })}
             className="h-full min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/70"
           />
-          <kbd className="shrink-0 rounded-[4px] border border-line px-1 font-mono text-2xs text-muted-foreground">Esc</kbd>
+          <kbd className="shrink-0 rounded-sm border border-line px-1 font-mono text-2xs text-muted-foreground">Esc</kbd>
         </div>
 
         <div ref={listRef} role="listbox" aria-label={t({ ko: '노드', en: 'Nodes' })} className="min-h-0 flex-1 overflow-y-auto py-1">
@@ -282,9 +283,8 @@ export function ModuleGraphQuickCreateMenu({
                     title={row.module.description || undefined}
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={() => select(row)}
-                    className="gap-2.5 rounded-none px-3.5 text-foreground transition-none"
                   >
-                    <span className="grid size-[18px] shrink-0 place-items-center rounded-[5px]" style={{ background: `color-mix(in srgb, ${visual.color} 16%, transparent)`, color: visual.color }} aria-hidden>
+                    <span className="grid size-4.5 shrink-0 place-items-center rounded-sm" style={{ background: `color-mix(in srgb, ${visual.color} 16%, transparent)`, color: visual.color }} aria-hidden>
                       <Icon className="size-3" strokeWidth={2.25} />
                     </span>
                     <span className="min-w-0 flex-1 truncate">{row.label}</span>

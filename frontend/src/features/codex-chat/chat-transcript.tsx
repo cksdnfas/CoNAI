@@ -178,7 +178,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
       </> : null}
       {hasMenu ? <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <Tip content={t({ ko: '더 보기', en: 'More' })}><DropdownMenuTrigger asChild>
-          <IconButton size="icon-xs" variant="ghost" tooltip={false} className={cn(menuOpen && 'text-primary')} label={t({ ko: '더 보기', en: 'More' })}><Ellipsis /></IconButton>
+          <IconButton size="icon-xs" variant="ghost" tooltip={false} active={menuOpen} label={t({ ko: '더 보기', en: 'More' })}><Ellipsis /></IconButton>
         </DropdownMenuTrigger></Tip>
         <DropdownMenuContent align={isUser ? 'end' : 'start'} className="min-w-44" onCloseAutoFocus={(event) => { if (keepMenuFocusRef.current) { event.preventDefault(); keepMenuFocusRef.current = false } }}>
           {translated ? <DropdownMenuItem onSelect={() => setShowOriginal((current) => !current)}><Languages />{showOriginal ? t({ ko: '번역 보기', en: 'Show translation' }) : t({ ko: '원문 보기', en: 'Show original' })}</DropdownMenuItem> : null}

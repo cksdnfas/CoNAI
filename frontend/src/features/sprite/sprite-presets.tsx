@@ -149,7 +149,7 @@ function PresetNameDialog({ onClose, onSave }: { onClose: () => void; onSave: (n
   return (
     <Modal open onClose={onClose} title={t({ ko: '새 프리셋', en: 'New preset' })} widthClassName="max-w-md">
       <form onSubmit={(event) => void submit(event)}>
-        <ModalBody className="space-y-4">
+        <ModalBody>
           <Input autoFocus value={name} maxLength={80} onChange={(event) => setName(event.target.value)} placeholder={t({ ko: '예: 게임A · 걷기', en: 'e.g. Game A · walk' })} aria-label={t({ ko: '프리셋 이름', en: 'Preset name' })} />
           <ModalFooter>
             <Button type="button" variant="secondary" onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>

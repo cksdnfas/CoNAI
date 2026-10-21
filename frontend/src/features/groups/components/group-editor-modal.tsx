@@ -182,7 +182,7 @@ export function GroupEditorModal({
       onSave={canSave ? () => formRef.current?.requestSubmit() : undefined}
     >
       <form ref={formRef} onSubmit={(event) => void handleSubmit(event)}>
-        <ModalBody className="space-y-4">
+        <ModalBody>
           {formError ? (
             <Alert variant="destructive">
               <AlertTitle>{t('groups.components.group.editor.modal.check.your.input')}</AlertTitle>
@@ -197,7 +197,6 @@ export function GroupEditorModal({
               aria-label={t('groups.components.group.editor.modal.group.name')}
               placeholder={t('groups.components.group.editor.modal.e.g.concept.art.characters.favorites')}
               autoFocus={mode === 'create'}
-              className="h-11 rounded-lg text-base font-semibold"
             />
             {showDetails ? (
               <textarea

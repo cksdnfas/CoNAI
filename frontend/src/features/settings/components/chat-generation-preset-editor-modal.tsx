@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Download, Trash2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -15,7 +16,17 @@ import { SettingRow } from '@/components/ui/setting-row'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
-import { NAI_MODEL_OPTIONS, NAI_RESOLUTION_PRESETS, NAI_SAMPLER_OPTIONS, NAI_SCHEDULER_OPTIONS } from '@/features/image-generation/image-generation-shared'
+import {
+  getNaiFixedFieldsError,
+  getNaiFixedNegativeHint,
+  getNaiVibesUnsupportedMessage,
+  NAI_FIXED_MODEL_FIELD_HINT,
+  NAI_MODEL_OPTIONS,
+  NAI_RESOLUTION_PRESETS,
+  NAI_SAMPLER_OPTIONS,
+  NAI_SCHEDULER_OPTIONS,
+  supportsNaiVibes,
+} from '@/features/image-generation/image-generation-shared'
 import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
@@ -38,7 +49,7 @@ import { downloadChatGenerationPresetFile } from './chat-generation-preset-file'
 import { EMPTY_PROMPTING, PresetPromptingFields, promptingInputOf } from './chat-generation-preset-prompting'
 import { CHAT_DOCK_INSET, useSettingsEditorChatPage } from './use-settings-editor-chat-page'
 import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
-import type { ChatPageField, ChatPageValue } from '@conai/shared'
+import { getNaiFixedModelSettings, getNaiUcPresetText, type ChatPageField, type ChatPageValue } from '@conai/shared'
 
 export const EMPTY_NAI_PRESET: ChatNaiPresetConfig = {
   model: 'nai-diffusion-4-5-curated',
@@ -90,32 +101,35 @@ function NaiPresetFields({ config, onChange }: { config: ChatNaiPresetConfig; on
     config.characterRefs.length > 0 ? t({ ko: '캐릭터 레퍼런스 {count}개', en: '{count} character references' }, { count: config.characterRefs.length }) : null,
     config.characters.length > 0 ? t({ ko: '고정 캐릭터 프롬프트 {count}개', en: '{count} fixed character prompts' }, { count: config.characters.length }) : null,
   ].filter(Boolean)
+  // A model with fixed settings (V5 Full Medium) shows the values it uses; the stored ones stay for switching back.
+  const fixedSettings = getNaiFixedModelSettings(config.model)
+  const fixedInfo = fixedSettings ? t({ ko: '모델 고정', en: 'Fixed by model' }) : undefined
 
   return (
     <div className="space-y-4">
       <EditorGroup label={t({ ko: '생성 설정', en: 'Generation' })}>
         <div className="grid gap-3 md:grid-cols-2">
           <Field className="md:col-span-2" label={<ChatFilledLabel fieldId="model">{t({ ko: '모델', en: 'Model' })}</ChatFilledLabel>}>
-            <Select variant="settings" className="px-3" value={config.model} onChange={(event) => patch({ model: event.target.value })}>
+            <Select variant="settings" value={config.model} onChange={(event) => patch({ model: event.target.value })}>
               {NAI_MODEL_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               {NAI_MODEL_OPTIONS.some((option) => option.value === config.model) ? null : <option value={config.model}>{config.model}</option>}
             </Select>
           </Field>
-          <Field label={<ChatFilledLabel fieldId="sampler">{t({ ko: '샘플러', en: 'Sampler' })}</ChatFilledLabel>}>
-            <Select variant="settings" className="px-3" value={config.sampler} onChange={(event) => patch({ sampler: event.target.value })}>
+          <Field label={<ChatFilledLabel fieldId="sampler">{t({ ko: '샘플러', en: 'Sampler' })}</ChatFilledLabel>} info={fixedInfo}>
+            <Select variant="settings" value={fixedSettings?.sampler ?? config.sampler} disabled={fixedSettings !== null} onChange={(event) => patch({ sampler: event.target.value })}>
               {NAI_SAMPLER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               {NAI_SAMPLER_OPTIONS.some((option) => option.value === config.sampler) ? null : <option value={config.sampler}>{config.sampler}</option>}
             </Select>
           </Field>
           <Field label={<ChatFilledLabel fieldId="noiseSchedule">{t({ ko: '스케줄러', en: 'Scheduler' })}</ChatFilledLabel>}>
-            <Select variant="settings" className="px-3" value={config.noiseSchedule} onChange={(event) => patch({ noiseSchedule: event.target.value })}>
+            <Select variant="settings" value={config.noiseSchedule} onChange={(event) => patch({ noiseSchedule: event.target.value })}>
               {NAI_SCHEDULER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </Select>
           </Field>
         </div>
         <div className="border-t border-line">
-          <SettingRow label={<ChatFilledLabel fieldId="steps">{t({ ko: '스텝', en: 'Steps' })}</ChatFilledLabel>}>
-            <NumberStepperInput variant="settings" className="w-32" step={1} min={1} max={50} value={config.steps} onValueCommit={(value) => patch({ steps: numberOrKeep(value, config.steps) })} aria-label={t({ ko: '스텝', en: 'Steps' })} />
+          <SettingRow label={<ChatFilledLabel fieldId="steps">{t({ ko: '스텝', en: 'Steps' })}</ChatFilledLabel>} info={fixedInfo}>
+            <NumberStepperInput variant="settings" className="w-32" step={1} min={1} max={50} value={fixedSettings?.steps ?? config.steps} disabled={fixedSettings !== null} onValueCommit={(value) => patch({ steps: numberOrKeep(value, config.steps) })} aria-label={t({ ko: '스텝', en: 'Steps' })} />
           </SettingRow>
           <SettingRow label={<ChatFilledLabel fieldId="scale">{t({ ko: 'CFG', en: 'CFG scale' })}</ChatFilledLabel>}>
             <NumberStepperInput variant="settings" className="w-32" step={0.5} min={0} max={30} value={config.scale} onValueCommit={(value) => patch({ scale: numberOrKeep(value, config.scale) })} aria-label="CFG" />
@@ -140,7 +154,14 @@ function NaiPresetFields({ config, onChange }: { config: ChatNaiPresetConfig; on
           <Textarea variant="settings" rows={2} value={config.promptSuffix} onChange={(event) => patch({ promptSuffix: event.target.value })} />
         </Field>
         <Field label={<ChatFilledLabel fieldId="negativePrompt">{t({ ko: '네거티브', en: 'Negative prompt' })}</ChatFilledLabel>}>
-          <Textarea variant="settings" rows={3} value={config.negativePrompt} onChange={(event) => patch({ negativePrompt: event.target.value })} />
+          {fixedSettings ? (
+            <>
+              <Textarea variant="settings" rows={3} readOnly value={getNaiUcPresetText(config.model, fixedSettings.ucPreset) ?? ''} />
+              <Text as="span" variant="caption">{getNaiFixedNegativeHint(t)}</Text>
+            </>
+          ) : (
+            <Textarea variant="settings" rows={3} value={config.negativePrompt} onChange={(event) => patch({ negativePrompt: event.target.value })} />
+          )}
         </Field>
       </EditorGroup>
       {assetNote.length > 0 ? (
@@ -149,6 +170,13 @@ function NaiPresetFields({ config, onChange }: { config: ChatNaiPresetConfig; on
             <span className="text-muted-foreground">{assetNote.join(' · ')}</span>
             <IconButton size="icon-sm" variant="ghost" onClick={() => patch({ vibes: [], characterRefs: [], characters: [] })} label={t({ ko: '자산 비우기', en: 'Clear assets' })}><Trash2 /></IconButton>
           </div>
+          {!supportsNaiVibes(config.model) && config.vibes.length > 0 ? (
+            <div className="flex items-center justify-between gap-3">
+              <Text as="p" variant="caption" tone="warning">{getNaiVibesUnsupportedMessage(t)}</Text>
+              {/* Clears only the vibes: V5 keeps the characters and the "Clear assets" button would drop them too. */}
+              <Button size="xs" variant="secondary" onClick={() => patch({ vibes: [] })}>{t({ ko: '바이브만 지우기', en: 'Remove vibes only' })}</Button>
+            </div>
+          ) : null}
         </EditorGroup>
       ) : null}
     </div>
@@ -177,7 +205,7 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
   return (
     <div className="space-y-4">
       <EditorGroup label={t({ ko: '워크플로', en: 'Workflow' })}>
-        <Select variant="settings" className="px-3" value={String(config.workflowId || '')} onChange={(event) => patch({ workflowId: Number(event.target.value) || 0, fixedInputs: {}, exposedFieldIds: [], referenceField: null, promptField: null })}>
+        <Select variant="settings" value={String(config.workflowId || '')} onChange={(event) => patch({ workflowId: Number(event.target.value) || 0, fixedInputs: {}, exposedFieldIds: [], referenceField: null, promptField: null })}>
           <option value="">{t({ ko: '워크플로 선택', en: 'Pick a workflow' })}</option>
           {workflows.map((entry) => <option key={entry.id} value={String(entry.id)}>{entry.name}</option>)}
         </Select>
@@ -188,7 +216,7 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
           <div className="grid grid-cols-[auto_1fr_minmax(0,1.2fr)] items-center gap-x-3 gap-y-2 text-sm">
             <Text as="span" variant="overline">{t({ ko: '모델이 작성', en: 'Model fills' })}</Text>
             <Text as="span" variant="overline">{t({ ko: '필드', en: 'Field' })}</Text>
-            <Text as="span" variant="overline" className="flex items-center gap-1">{t({ ko: '고정 값', en: 'Fixed value' })}<FieldInfo>{t({ ko: '비우면 워크플로 기본값', en: 'Empty: the workflow default' })}</FieldInfo></Text>
+            <div className="flex items-center gap-1"><Text as="span" variant="overline">{t({ ko: '고정 값', en: 'Fixed value' })}</Text><FieldInfo>{t({ ko: '비우면 워크플로 기본값', en: 'Empty: the workflow default' })}</FieldInfo></div>
             {fields.map((field) => {
               const exposed = config.exposedFieldIds.includes(field.id)
               const fixed = config.fixedInputs[field.id]
@@ -203,7 +231,7 @@ function ComfyPresetFields({ config, onChange }: { config: ChatComfyPresetConfig
                   {exposed ? (
                     <span className="text-xs text-muted-foreground">{t({ ko: '모델이 채움', en: 'Filled by the model' })}</span>
                   ) : field.type === 'select' && field.options ? (
-                    <Select variant="settings" className="h-9 px-3" value={typeof fixed === 'string' ? fixed : ''} onChange={(event) => setFixed(field, event.target.value)}>
+                    <Select variant="settings" value={typeof fixed === 'string' ? fixed : ''} onChange={(event) => setFixed(field, event.target.value)}>
                       <option value="">{t({ ko: '기본값', en: 'Default' })}</option>
                       {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
                     </Select>
@@ -245,7 +273,7 @@ function ComfyAssetFieldPicks({ config, fields, onChange }: { config: ChatComfyP
       <div className="grid gap-3 md:grid-cols-2">
         {askReference ? (
           <Field label={t({ ko: '기준 이미지 필드', en: 'Reference image field' })}>
-            <Select variant="settings" className="px-3" value={config.referenceField ?? ''} onChange={(event) => onChange({ referenceField: event.target.value || null })}>
+            <Select variant="settings" value={config.referenceField ?? ''} onChange={(event) => onChange({ referenceField: event.target.value || null })}>
               <option value="">{images.length === 1 ? t({ ko: '자동 · {label}', en: 'Auto · {label}' }, { label: images[0].label }) : t({ ko: '없음 (외형 설명만)', en: 'None (appearance only)' })}</option>
               {images.map((field) => <option key={field.id} value={field.id}>{field.label}</option>)}
             </Select>
@@ -253,7 +281,7 @@ function ComfyAssetFieldPicks({ config, fields, onChange }: { config: ChatComfyP
         ) : null}
         {askPrompt ? (
           <Field label={t({ ko: '프롬프트 필드', en: 'Prompt field' })}>
-            <Select variant="settings" className="px-3" value={config.promptField ?? ''} onChange={(event) => onChange({ promptField: event.target.value || null })}>
+            <Select variant="settings" value={config.promptField ?? ''} onChange={(event) => onChange({ promptField: event.target.value || null })}>
               <option value="">{promptClear ? t({ ko: '자동', en: 'Auto' }) : t({ ko: '고르기', en: 'Choose' })}</option>
               {texts.map((field) => <option key={field.id} value={field.id}>{field.label}</option>)}
             </Select>
@@ -290,8 +318,13 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
       queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
     ])
   }
+  // Every save path (button, shortcut, page assistant) stops here: a V5 preset with vibes would fail on every run.
+  const naiVibesProblem = draft.kind === 'nai' && draft.nai && !supportsNaiVibes(draft.nai.model) && draft.nai.vibes.length > 0 ? getNaiVibesUnsupportedMessage(t) : null
   const saveMutation = useMutation({
-    mutationFn: () => (preset ? updateChatGenerationPreset(preset.id, draft) : createChatGenerationPreset(draft)),
+    mutationFn: async () => {
+      if (naiVibesProblem) throw new Error(naiVibesProblem)
+      return preset ? updateChatGenerationPreset(preset.id, draft) : createChatGenerationPreset(draft)
+    },
     onSuccess: async () => {
       await refresh()
       onClose()
@@ -340,7 +373,7 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
       dirty={dirty}
       onSave={canSave ? () => saveMutation.mutate() : undefined}
     >
-      <ModalBody className="space-y-4">
+      <ModalBody>
         <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
           <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '이름', en: 'Name' })}</ChatFilledLabel>}>
             <Input variant="settings" value={draft.name} maxLength={80} autoFocus onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
@@ -352,7 +385,7 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
             {preset ? (
               <div className="flex h-10 items-center"><Chip size="sm" tone="muted">{kindLabel[draft.kind]}</Chip></div>
             ) : (
-              <Select variant="settings" className="px-3" value={draft.kind} onChange={(event) => setDraft({ ...emptyDraft(event.target.value as 'nai' | 'comfyui'), name: draft.name, instruction: draft.instruction, prompting: draft.prompting })}>
+              <Select variant="settings" value={draft.kind} onChange={(event) => setDraft({ ...emptyDraft(event.target.value as 'nai' | 'comfyui'), name: draft.name, instruction: draft.instruction, prompting: draft.prompting })}>
                 <option value="nai">NovelAI</option>
                 <option value="comfyui">ComfyUI</option>
               </Select>
@@ -385,6 +418,8 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
 
 /** NAI settings a connected chat may fill; the vibes, references and fixed characters stay with the panel import. */
 const NAI_TEXT_KEYS = ['promptPrefix', 'promptSuffix', 'negativePrompt'] as const
+/** Settings a model with fixed settings (V5 Full Medium) decides itself; the chat may read but not change them. */
+const NAI_FIXED_MODEL_KEYS = ['steps', 'sampler', 'negativePrompt'] as const
 
 /** Registers the open generation preset editor with a connected chat: it fills the draft, and asks to save with a card. */
 function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, save }: {
@@ -399,6 +434,9 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
   const workflowsQuery = useQuery({ queryKey: ['generation-workflows', 'chat-generation-preset'], queryFn: () => getGenerationWorkflows(true), staleTime: 60_000, enabled: open && draft.kind === 'comfyui' })
   const nai = draft.nai
   const prompting = draft.prompting ?? EMPTY_PROMPTING
+  // Fields show what the preset runs with: a model with fixed settings overrides steps, sampler and the negative.
+  const fixedSettings = getNaiFixedModelSettings(nai?.model)
+  const fixedField = fixedSettings ? { editable: false as const, hint: NAI_FIXED_MODEL_FIELD_HINT } : {}
   const fields: ChatPageField[] = [
     { id: 'name', label: t({ ko: '이름', en: 'Name' }), type: 'text', value: draft.name },
     { id: 'instruction', label: t({ ko: '용도 (모델에게 보여줌)', en: 'Purpose (shown to the model)' }), type: 'text', value: draft.instruction },
@@ -408,15 +446,15 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
     { id: 'previousImages', label: t({ ko: '이전 이미지 참고 장수', en: 'Earlier pictures shown' }), type: 'number', value: prompting.previousImages, min: 0, max: 4, integer: true },
     ...(draft.kind === 'nai' && nai ? [
       { id: 'model', label: t({ ko: '모델', en: 'Model' }), type: 'select' as const, value: nai.model, options: [...new Set([...NAI_MODEL_OPTIONS.map((option) => option.value), nai.model])] },
-      { id: 'sampler', label: t({ ko: '샘플러', en: 'Sampler' }), type: 'select' as const, value: nai.sampler, options: [...new Set([...NAI_SAMPLER_OPTIONS.map((option) => option.value), nai.sampler])] },
+      { id: 'sampler', label: t({ ko: '샘플러', en: 'Sampler' }), type: 'select' as const, value: fixedSettings?.sampler ?? nai.sampler, options: [...new Set([...NAI_SAMPLER_OPTIONS.map((option) => option.value), nai.sampler])], ...fixedField },
       { id: 'noiseSchedule', label: t({ ko: '스케줄러', en: 'Scheduler' }), type: 'select' as const, value: nai.noiseSchedule, options: [...new Set([...NAI_SCHEDULER_OPTIONS.map((option) => option.value), nai.noiseSchedule])] },
-      { id: 'steps', label: t({ ko: '스텝', en: 'Steps' }), type: 'number' as const, value: nai.steps, min: 1, max: 50, integer: true },
+      { id: 'steps', label: t({ ko: '스텝', en: 'Steps' }), type: 'number' as const, value: fixedSettings?.steps ?? nai.steps, min: 1, max: 50, integer: true, ...fixedField },
       { id: 'scale', label: 'CFG', type: 'number' as const, value: nai.scale, min: 0, max: 30 },
       { id: 'varietyPlus', label: 'Variety+', type: 'boolean' as const, value: nai.varietyPlus },
       { id: 'transparentBackground', label: t({ ko: '투명 배경', en: 'Transparent background' }), type: 'boolean' as const, value: nai.transparentBackground },
       { id: 'promptPrefix', label: t({ ko: '고정 프롬프트 앞부분 (퀄리티·작가·화풍)', en: 'Fixed prompt before the scene (quality, artist, style)' }), type: 'text' as const, value: nai.promptPrefix },
       { id: 'promptSuffix', label: t({ ko: '고정 프롬프트 뒷부분', en: 'Fixed prompt after the scene' }), type: 'text' as const, value: nai.promptSuffix },
-      { id: 'negativePrompt', label: t({ ko: '네거티브', en: 'Negative prompt' }), type: 'text' as const, value: nai.negativePrompt },
+      { id: 'negativePrompt', label: t({ ko: '네거티브', en: 'Negative prompt' }), type: 'text' as const, value: fixedSettings ? getNaiUcPresetText(nai.model, fixedSettings.ucPreset) ?? '' : nai.negativePrompt, ...fixedField },
     ] : []),
     ...(draft.kind === 'comfyui' && draft.comfyui && workflowsQuery.data?.length ? [
       { id: 'workflowId', label: t({ ko: 'ComfyUI 워크플로', en: 'ComfyUI workflow' }), type: 'select' as const, value: draft.comfyui.workflowId ? String(draft.comfyui.workflowId) : '', options: ['', ...workflowsQuery.data.map((entry) => String(entry.id))] },
@@ -432,29 +470,35 @@ function useGenerationPresetChatPage({ open, preset, draft, setDraft, dirty, sav
       selected: { name: draft.name, kind: draft.kind, instruction: draft.instruction },
     },
     save,
-    apply: (patch: Record<string, ChatPageValue>) => setDraft((current) => {
-      let next = { ...current }
-      if (patch.kind !== undefined && !preset && patch.kind !== next.kind) next = { ...emptyDraft(patch.kind as 'nai' | 'comfyui'), name: next.name, instruction: next.instruction, prompting: next.prompting }
-      if (patch.name !== undefined) next.name = String(patch.name)
-      if (patch.timing !== undefined || patch.guide !== undefined || patch.previousImages !== undefined) {
-        const current = next.prompting ?? EMPTY_PROMPTING
-        next.prompting = {
-          ...current,
-          ...(patch.timing !== undefined ? { timing: patch.timing === 'after' ? 'after' as const : 'inline' as const } : {}),
-          ...(patch.guide !== undefined ? { guide: String(patch.guide) } : {}),
-          ...(patch.previousImages !== undefined ? { previousImages: Math.min(4, Math.max(0, Math.round(Number(patch.previousImages)) || 0)) } : {}),
+    apply: (patch: Record<string, ChatPageValue>) => {
+      // Checked before the update, also when this patch picks the model: such a model decides these settings.
+      const targetFixedSettings = getNaiFixedModelSettings(patch.model !== undefined ? String(patch.model) : nai?.model)
+      const lockedFields = targetFixedSettings ? NAI_FIXED_MODEL_KEYS.filter((key) => patch[key] !== undefined) : []
+      if (targetFixedSettings && lockedFields.length > 0) throw new Error(getNaiFixedFieldsError(t, lockedFields, targetFixedSettings))
+      setDraft((current) => {
+        let next = { ...current }
+        if (patch.kind !== undefined && !preset && patch.kind !== next.kind) next = { ...emptyDraft(patch.kind as 'nai' | 'comfyui'), name: next.name, instruction: next.instruction, prompting: next.prompting }
+        if (patch.name !== undefined) next.name = String(patch.name)
+        if (patch.timing !== undefined || patch.guide !== undefined || patch.previousImages !== undefined) {
+          const current = next.prompting ?? EMPTY_PROMPTING
+          next.prompting = {
+            ...current,
+            ...(patch.timing !== undefined ? { timing: patch.timing === 'after' ? 'after' as const : 'inline' as const } : {}),
+            ...(patch.guide !== undefined ? { guide: String(patch.guide) } : {}),
+            ...(patch.previousImages !== undefined ? { previousImages: Math.min(4, Math.max(0, Math.round(Number(patch.previousImages)) || 0)) } : {}),
+          }
         }
-      }
-      if (patch.instruction !== undefined) next.instruction = String(patch.instruction)
-      if (next.nai) {
-        const naiPatch: Partial<ChatNaiPresetConfig> = {}
-        for (const key of ['model', 'sampler', 'noiseSchedule', ...NAI_TEXT_KEYS] as const) if (patch[key] !== undefined) naiPatch[key] = String(patch[key])
-        for (const key of ['steps', 'scale'] as const) if (patch[key] !== undefined) naiPatch[key] = Number(patch[key])
-        for (const key of ['varietyPlus', 'transparentBackground'] as const) if (patch[key] !== undefined) naiPatch[key] = Boolean(patch[key])
-        next = { ...next, nai: { ...next.nai, ...naiPatch } }
-      }
-      if (next.comfyui && patch.workflowId !== undefined) next = { ...next, comfyui: { ...next.comfyui, workflowId: Number(patch.workflowId) || 0, fixedInputs: {}, exposedFieldIds: [], referenceField: null, promptField: null } }
-      return next
-    }),
+        if (patch.instruction !== undefined) next.instruction = String(patch.instruction)
+        if (next.nai) {
+          const naiPatch: Partial<ChatNaiPresetConfig> = {}
+          for (const key of ['model', 'sampler', 'noiseSchedule', ...NAI_TEXT_KEYS] as const) if (patch[key] !== undefined) naiPatch[key] = String(patch[key])
+          for (const key of ['steps', 'scale'] as const) if (patch[key] !== undefined) naiPatch[key] = Number(patch[key])
+          for (const key of ['varietyPlus', 'transparentBackground'] as const) if (patch[key] !== undefined) naiPatch[key] = Boolean(patch[key])
+          next = { ...next, nai: { ...next.nai, ...naiPatch } }
+        }
+        if (next.comfyui && patch.workflowId !== undefined) next = { ...next, comfyui: { ...next.comfyui, workflowId: Number(patch.workflowId) || 0, fixedInputs: {}, exposedFieldIds: [], referenceField: null, promptField: null } }
+        return next
+      })
+    },
   })
 }

@@ -45,10 +45,8 @@ export function MediaFileDropSurface({
         tone="lowest"
         padding="none"
         interactive
-        className={cn(
-          'overflow-hidden border-2 border-dashed',
-          active ? 'border-primary bg-primary/6 hover:bg-primary/6' : 'border-outline-input hover:border-primary/30',
-        )}
+        treatment="drop"
+        data-drag-active={active}
       >
         <button
           type="button"
@@ -71,7 +69,7 @@ export function MediaFileDropSurface({
       </Panel>
 
       {actions ? (
-        <Panel tone="high" padding="none" className="absolute right-3 top-3 z-10 flex items-center gap-1 p-1 shadow-elevation-2">
+        <Panel treatment="floating" padding="toolbar" className="absolute right-3 top-3 z-10 flex items-center gap-1">
           {actions}
         </Panel>
       ) : null}

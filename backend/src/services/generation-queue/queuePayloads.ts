@@ -5,6 +5,7 @@ import type { AIMetadata } from '../metadata/types'
 import type { NAIMetadataInputParams } from '../../utils/nai/metadata'
 import type { GenerationQueueJobRecord } from '../../types/generationQueue'
 import type { CodexGenerationPayload } from '../codexGenerationExecutor'
+import { hydrateQueueInputDataUrls } from './queueInputStore'
 
 export function parseStoredRequestPayload(record: GenerationQueueJobRecord) {
   try {
@@ -60,7 +61,8 @@ function parseCodexWildcardText(value: unknown, promptKind: WildcardPromptKind =
 }
 
 export function parseCodexQueuePayload(record: GenerationQueueJobRecord) {
-  const payload = parseStoredRequestPayload(record)
+  // Image inputs may be stored references (enqueue, or the startup backfill rewriting older rows); Codex reads strings.
+  const payload = hydrateQueueInputDataUrls(parseStoredRequestPayload(record))
   const prompt = parseCodexWildcardText(payload.prompt)
   if (!prompt) {
     throw new Error(`Queue job ${record.id} is missing string request_payload.prompt for Codex execution`)

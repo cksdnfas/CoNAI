@@ -100,7 +100,7 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
               <span className="relative size-7 overflow-hidden rounded-sm border border-line" style={{ background: options.backgroundColor }}>
                 <input type="color" className="absolute inset-0 cursor-pointer opacity-0" value={options.backgroundColor} aria-label={t({ ko: '배경색', en: 'Background colour' })} onChange={(event) => setOptions({ ...options, backgroundColor: event.target.value.toUpperCase() })} />
               </span>
-              <Input className="h-8 w-24 font-mono text-xs" value={options.backgroundColor} aria-label={t({ ko: '배경색 코드', en: 'Background colour code' })} onChange={(event) => setOptions({ ...options, backgroundColor: event.target.value })} />
+              <Input mono controlSize="compact" className="w-24" value={options.backgroundColor} aria-label={t({ ko: '배경색 코드', en: 'Background colour code' })} onChange={(event) => setOptions({ ...options, backgroundColor: event.target.value })} />
             </label>
           ) : null}
         </div>
@@ -173,7 +173,7 @@ function AnimationPreview({ sheet, options, cellWidth, cellHeight }: { sheet: Sh
         <IconButton size="icon-xs" variant="ghost" label={playing ? t({ ko: '일시정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} onClick={() => setPlaying(!playing)}>
           {playing ? <Pause className="fill-current" /> : <Play className="fill-current" />}
         </IconButton>
-        <input type="range" min={0} max={Math.max(0, options.frameCount - 1)} value={frame % Math.max(1, options.frameCount)} onChange={(event) => { setPlaying(false); setFrame(Number(event.target.value)) }} aria-label={t({ ko: '프레임 위치', en: 'Frame position' })} className="h-1 min-w-0 flex-1 cursor-pointer accent-[var(--primary)]" />
+        <input type="range" min={0} max={Math.max(0, options.frameCount - 1)} value={frame % Math.max(1, options.frameCount)} onChange={(event) => { setPlaying(false); setFrame(Number(event.target.value)) }} aria-label={t({ ko: '프레임 위치', en: 'Frame position' })} className="h-1 min-w-0 flex-1 cursor-pointer accent-primary" />
         <span className="tabular-nums">{(frame % Math.max(1, options.frameCount)) + 1} / {options.frameCount}</span>
       </div>
     </div>

@@ -102,7 +102,7 @@ export function ContentEvaluationSettingsRows({ draft, onPatch, isSaving, dirty,
     <div className="space-y-8">
       <RowGroup>
         {leadingRows}
-        <SettingRow label={<ChatFilledLabel fieldId="modelSlotId">{t({ ko: '판단 모델', en: 'Judge model' })}</ChatFilledLabel>} controlClassName="flex items-center gap-2">
+        <SettingRow label={<ChatFilledLabel fieldId="modelSlotId">{t({ ko: '판단 모델', en: 'Judge model' })}</ChatFilledLabel>}>
           {modelState ? <span role="img" aria-label={modelState} title={modelState} className={cn('size-2 shrink-0 rounded-full', draft.modelReady ? 'bg-success' : 'bg-warning')} /> : null}
           <JudgeModelSelect enabled slotId={draft.modelSlotId} emptyLabel={defaultJudgeLabel} ariaLabel={t({ ko: '주제 관련도 판단 모델', en: 'Topic relevance judge model' })} onChange={modelSlotId => onPatch({ modelSlotId })} />
         </SettingRow>

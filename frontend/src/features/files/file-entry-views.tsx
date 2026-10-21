@@ -1,4 +1,5 @@
 import { useRef, type DragEvent, type ReactNode } from 'react'
+import { MediaCard } from '@/components/common/media-card'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -69,17 +70,16 @@ export function FileEntryView({ items, mode, selected, onToggle, onSelectAll, ca
           const selectable = canSelect(item)
           return (
             <ActionContextMenu key={item.id} entries={menu?.(item) ?? []} onOpenChange={menuOpenChange}>
-              <div {...dragProps(item)} className="group relative min-w-0 [-webkit-touch-callout:none]">
-                <Button
-                  variant="ghost"
+              <div {...dragProps(item)} title={item.name} className="group relative min-w-0 [-webkit-touch-callout:none]">
+                <MediaCard
                   onClick={() => open(item)}
-                  title={item.name}
-                  className={cn('flex h-auto w-full flex-col items-stretch gap-1.5 whitespace-normal p-1.5 text-left font-normal', isSelected && 'bg-primary/10 hover:bg-primary/15')}
-                >
-                  <span className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-sm bg-surface-low">{item.face}</span>
-                  <span className="line-clamp-2 break-all px-0.5 text-xs leading-snug text-foreground">{item.name}</span>
-                  {item.folder ? null : <span className="px-0.5 text-2xs text-muted-foreground">{formatSize(item.size)}</span>}
-                </Button>
+                  title={<span className="line-clamp-2 whitespace-normal break-all">{item.name}</span>}
+                  selected={isSelected}
+                  className="w-full"
+                  mediaClassName="aspect-square w-full"
+                  media={<span className="flex size-full items-center justify-center">{item.face}</span>}
+                  meta={item.folder ? undefined : formatSize(item.size)}
+                />
                 {selectable ? (
                   <span className={cn('absolute left-2.5 top-2.5 rounded-sm bg-background/80 p-0.5 transition-opacity', isSelected || selected.length > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
                     <Checkbox aria-label={t({ ko: '{name} 선택', en: 'Select {name}' }, { name: item.name })} checked={isSelected} onCheckedChange={(checked) => onToggle(item.id, checked === true)} />
@@ -129,7 +129,7 @@ export function FileEntryView({ items, mode, selected, onToggle, onSelectAll, ca
               <DataTd meta flush className="text-right">{item.folder ? '' : formatSize(item.size)}</DataTd>
               {menu ? (
                 <DataTd flush>
-                  <ActionMenuButton entries={entries} className="text-muted-foreground" label={t({ ko: '더 보기', en: 'More' })} />
+                  <ActionMenuButton entries={entries} label={t({ ko: '더 보기', en: 'More' })} />
                 </DataTd>
               ) : null}
             </DataTr>

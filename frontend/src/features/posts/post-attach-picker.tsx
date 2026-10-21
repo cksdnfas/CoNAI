@@ -5,6 +5,7 @@ import { CountBadge } from '@/components/ui/count-badge'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { TextTabs, type TextTabItem } from '@/components/common/text-tabs'
+import { MediaCard } from '@/components/common/media-card'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-url'
@@ -36,12 +37,13 @@ function TrayThumb({ item, position, onRemove }: { item: AttachItem; position: n
   else body = <FileText className="size-4" />
   return (
     <Tip content={t({ ko: '{name} 빼기', en: 'Remove {name}' }, { name: label })}>
-      <Button variant="ghost" onClick={onRemove} aria-label={t({ ko: '{name} 빼기', en: 'Remove {name}' }, { name: label })}
-        className="relative size-10 shrink-0 rounded-sm bg-surface-high p-0 text-muted-foreground has-[>svg]:px-0">
-        <span className="flex size-full items-center justify-center overflow-hidden rounded-sm">{body}</span>
-        <CountBadge corner="top-right" count={position} className="-top-1 -right-1 font-bold" />
-        {item.kind === 'group' && !failed ? <FolderTree className="absolute bottom-0.5 left-0.5 size-3 text-white drop-shadow" /> : null}
-      </Button>
+      <span className="relative size-10 shrink-0">
+        <MediaCard onClick={onRemove} aria-label={t({ ko: '{name} 빼기', en: 'Remove {name}' }, { name: label })}
+          className="size-10" mediaClassName="size-full"
+          media={<span className="flex size-full items-center justify-center text-muted-foreground">{body}</span>}
+          overlay={item.kind === 'group' && !failed ? <FolderTree className="absolute bottom-0.5 left-0.5 size-3 text-white drop-shadow" /> : undefined} />
+        <CountBadge corner="top-right" count={position} className="-top-1 -right-1" />
+      </span>
     </Tip>
   )
 }
@@ -78,7 +80,7 @@ export function PostAttachPicker({ initialTab, onClose, onInsert }: { initialTab
         : tab === 'audio' ? <AttachAudioTab selected={selected} setSelected={setSelected} />
         : tab === 'file' ? <AttachFilesTab selected={selected} setSelected={setSelected} />
         : <AttachPostsTab selected={selected} setSelected={setSelected} postStyle={postStyle} onPostStyleChange={setPostStyle} />}
-      <ModalFooter className="flex-nowrap justify-start gap-3 pt-3">
+      <ModalFooter className="flex-nowrap justify-start">
         <div className={cn('flex min-w-0 flex-1 items-center gap-2.5 scroll-x py-1 pr-1', !selected.length && 'hidden')}>
           {selected.map((item, index) => <TrayThumb key={item.key} item={item} position={index + 1} onRemove={() => setSelected((current) => current.filter((entry) => entry.key !== item.key))} />)}
         </div>

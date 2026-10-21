@@ -47,9 +47,6 @@ const brief = (value: string) => (value.length > 300 ? `${value.slice(0, 300)}â€
 /** Which draft keys still hold what the chat filled; a manual edit clears the mark. */
 export const ProfileAssistContext = createContext<{ filled: (key: keyof Draft) => boolean; sectionFilled: (section: ProfileEditorSection) => boolean }>({ filled: () => false, sectionFilled: () => false })
 export const useProfileAssist = () => useContext(ProfileAssistContext)
-/** The outline a field gets while it holds the chat's value. */
-export const ASSIST_FILLED_CLASS = 'ring-1 ring-primary/50'
-
 /**
  * Registers the open profile editor with a connected chat: it reads the draft, fills it (draft: nothing is saved),
  * switches sections, and asks to save or generate images through review cards.

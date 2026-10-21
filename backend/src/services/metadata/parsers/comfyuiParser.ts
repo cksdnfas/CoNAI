@@ -402,35 +402,49 @@ export class ComfyUIParser {
     return value !== undefined && value !== null && value !== '';
   }
 
-  private static normalizePromptPart(value: unknown): string | null {
-    if (typeof value !== 'string') {
-      return null;
-    }
-
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
+  private static resolveInputString(workflow: any, inputs: any, key: string, visited: Set<string>): string {
+    return this.resolveStringValue(workflow, inputs?.[key], new Set(visited)) ?? '';
   }
 
-  private static joinPromptParts(parts: string[]): string | undefined {
-    const uniqueParts = Array.from(new Set(parts.map((part) => part.trim()).filter((part) => part.length > 0)));
-    return uniqueParts.length > 0 ? uniqueParts.join(', ') : undefined;
-  }
+  /**
+   * Same output as ComfyUI-Custom-Scripts `StringFunction.exec`: `append` joins the non-empty texts
+   * (with ", " only when tidy_tags is yes), `replace` replaces text_b (or /regex/) in text_a with text_c.
+   */
+  private static resolveStringFunctionNode(workflow: any, inputs: any, visited: Set<string>): string {
+    const textA = this.resolveInputString(workflow, inputs, 'text_a', visited);
+    const textB = this.resolveInputString(workflow, inputs, 'text_b', visited);
+    const textC = this.resolveInputString(workflow, inputs, 'text_c', visited);
+    const tidyTags = this.resolveInputString(workflow, inputs, 'tidy_tags', visited) === 'yes';
+    let result: string;
 
-  private static resolveStringFunctionNode(workflow: any, inputs: any, visited: Set<string>): unknown {
-    const textKeys = Object.keys(inputs || {})
-      .filter((key) => key === 'text' || /^text_[a-z0-9]+$/i.test(key))
-      .sort((left, right) => left.localeCompare(right, undefined, { numeric: true }));
-    const parts: string[] = [];
-
-    for (const key of textKeys) {
-      const resolved = this.resolveValue(workflow, inputs[key], new Set(visited));
-      const normalized = this.normalizePromptPart(resolved);
-      if (normalized) {
-        parts.push(normalized);
+    if (this.resolveInputString(workflow, inputs, 'action', visited) === 'replace') {
+      if (textB.startsWith('/') && textB.endsWith('/')) {
+        try {
+          result = textA.replace(new RegExp(textB.slice(1, -1), 'g'), () => textC);
+        } catch {
+          result = textA;
+        }
+      } else {
+        // Python's str.replace with an empty search inserts text_c around every character.
+        result = textB ? textA.split(textB).join(textC) : textA.replace(/(?:)/gu, () => textC);
       }
+    } else {
+      result = [textA, textB, textC].filter(Boolean).join(tidyTags ? ', ' : '');
     }
 
-    return this.joinPromptParts(parts);
+    if (tidyTags) {
+      result = result.replace(/\s{2,}/g, ' ').split(' ,').join(',').replace(/,{2,}/g, ',').trim();
+    }
+
+    return result;
+  }
+
+  /** Core ComfyUI `StringConcatenate`: `delimiter.join((string_a, string_b))`. */
+  private static resolveStringConcatenateNode(workflow: any, inputs: any, visited: Set<string>): string {
+    return [
+      this.resolveInputString(workflow, inputs, 'string_a', visited),
+      this.resolveInputString(workflow, inputs, 'string_b', visited),
+    ].join(this.resolveInputString(workflow, inputs, 'delimiter', visited));
   }
 
   private static resolveStringSwitchNode(workflow: any, inputs: any, visited: Set<string>): unknown {
@@ -499,6 +513,10 @@ export class ComfyUIParser {
 
     if (classType === 'StringFunction|pysssss') {
       return this.resolveStringFunctionNode(workflow, inputs, visited);
+    }
+
+    if (classType === 'StringConcatenate') {
+      return this.resolveStringConcatenateNode(workflow, inputs, visited);
     }
 
     if (normalizedClassType.includes('string switch')) {

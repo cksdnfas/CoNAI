@@ -31,7 +31,7 @@ export function ModuleGraphWorkflowSetupFolderPanel({
   const { t } = useI18n()
 
   return (
-    <FieldGroup label={t({ ko: '저장 폴더', en: 'Save folder' })} className="gap-3">
+    <FieldGroup label={t({ ko: '저장 폴더', en: 'Save folder' })}>
 
       <WorkflowFolderPicker
         folders={folders}

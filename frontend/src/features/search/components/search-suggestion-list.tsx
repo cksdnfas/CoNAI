@@ -1,7 +1,7 @@
 import { SEARCH_AI_TOOL_OPTIONS } from '@/features/search/search-constants'
 import type { PromptCollectionItem } from '@/types/prompt'
 import type { RatingTierRecord, SearchAiToolGroup, SearchMetadataSuggestion, SearchScope } from '@/features/search/search-types'
-import { Button } from '@/components/ui/button'
+import { ListRow } from '@/components/ui/list-row'
 import { Spinner } from '@/components/ui/loading-state'
 import { useI18n } from '@/i18n'
 
@@ -23,9 +23,6 @@ interface SearchSuggestionListProps {
   onSelectAIToolSuggestion: (tool: SearchAiToolGroup) => void
 }
 
-/** Edge-to-edge list row: nav tone and hover, with the trailing count pushed right. */
-const suggestionRowClassName = 'h-auto justify-between gap-4 rounded-none px-4 py-3'
-
 /** Loading row: a centred spinner, its text only for assistive tech. */
 function SuggestionLoadingRow({ label }: { label: string }) {
   return (
@@ -37,9 +34,11 @@ function SuggestionLoadingRow({ label }: { label: string }) {
 
 function SuggestionActionRow({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <Button type="button" onClick={onClick} variant="nav" className={suggestionRowClassName}>
-      <span className="truncate text-sm text-foreground">{label}</span>
-    </Button>
+    <ListRow asChild interactive size="lg">
+      <button type="button" onClick={onClick}>
+        <span className="truncate text-sm text-foreground">{label}</span>
+      </button>
+    </ListRow>
   )
 }
 
@@ -72,15 +71,17 @@ export function SearchSuggestionList({
         {suggestionsLoading ? <SuggestionLoadingRow label={t('search.components.search.suggestion.list.loading.suggestions')} /> : null}
         {!suggestionsLoading && promptSuggestions.length > 0
           ? promptSuggestions.map((item) => (
-              <Button
+              <ListRow
                 key={`${item.type}-${item.id}`}
-                type="button"
-                onClick={() => onSelectSuggestion(item)}
-                variant="nav" className={suggestionRowClassName}
+                asChild
+                interactive
+                size="lg"
+                trailing={<span className="text-sm">{formatNumber(item.usage_count)}</span>}
               >
-                <span className="truncate text-sm text-secondary-text">{item.prompt}</span>
-                <span className="shrink-0 text-sm text-muted-foreground">{formatNumber(item.usage_count)}</span>
-              </Button>
+                <button type="button" onClick={() => onSelectSuggestion(item)}>
+                  <span className="truncate text-sm text-secondary-text">{item.prompt}</span>
+                </button>
+              </ListRow>
             ))
           : null}
       </>
@@ -93,19 +94,19 @@ export function SearchSuggestionList({
         {ratingTiersLoading ? <SuggestionLoadingRow label={t('search.components.search.suggestion.list.loading.rating.tiers')} /> : null}
         {!ratingTiersLoading && filteredRatingTiers.length > 0
           ? filteredRatingTiers.map((tier) => (
-              <Button
+              <ListRow
                 key={tier.id}
-                type="button"
-                onClick={() => onSelectRatingTier(tier)}
-                variant="nav" className={suggestionRowClassName}
+                asChild
+                interactive
+                size="lg"
+                trailing={<span className="text-sm">{tier.min_score}~{tier.max_score === null ? '∞' : tier.max_score}</span>}
               >
-                <span className="text-sm font-semibold" style={tier.color ? { color: tier.color } : undefined}>
-                  {tier.tier_name}
-                </span>
-                <span className="shrink-0 text-sm text-muted-foreground">
-                  {tier.min_score}~{tier.max_score === null ? '∞' : tier.max_score}
-                </span>
-              </Button>
+                <button type="button" onClick={() => onSelectRatingTier(tier)}>
+                  <span className="text-sm font-semibold" style={tier.color ? { color: tier.color } : undefined}>
+                    {tier.tier_name}
+                  </span>
+                </button>
+              </ListRow>
             ))
           : null}
       </>
@@ -138,15 +139,17 @@ export function SearchSuggestionList({
       {metadataLoading ? <SuggestionLoadingRow label={t({ ko: '{metadataLabel} 추천을 불러오는 중…', en: 'Loading {metadataLabel} suggestions…' }, { metadataLabel })} /> : null}
       {!metadataLoading && metadataSuggestions.length > 0
         ? metadataSuggestions.map((item) => (
-            <Button
+            <ListRow
               key={item.value}
-              type="button"
-              onClick={() => onSelectMetadataSuggestion(item.value)}
-              variant="nav" className={suggestionRowClassName}
+              asChild
+              interactive
+              size="lg"
+              trailing={<span className="text-sm">{formatNumber(item.count)}</span>}
             >
-              <span className="truncate text-sm text-secondary-text">{item.value}</span>
-              <span className="shrink-0 text-sm text-muted-foreground">{formatNumber(item.count)}</span>
-            </Button>
+              <button type="button" onClick={() => onSelectMetadataSuggestion(item.value)}>
+                <span className="truncate text-sm text-secondary-text">{item.value}</span>
+              </button>
+            </ListRow>
           ))
         : null}
     </>

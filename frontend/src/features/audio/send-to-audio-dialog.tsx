@@ -73,7 +73,7 @@ export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: strin
 
   return (
     <Modal open={open} title={t({ ko: '오디오로 보내기', en: 'Send to Audio' })} onClose={() => { if (!busy) onClose() }} size="narrow">
-      <ModalBody className="space-y-4">
+      <ModalBody>
         <Field label={t({ ko: '프로젝트', en: 'Project' })}>
           <Select variant="settings" value={projectId} disabled={!projectItems.length} onChange={(event) => setProjectId(event.target.value)}>
             {!projectItems.length ? <option value="">—</option> : null}
@@ -89,7 +89,7 @@ export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: strin
           {groups.hasNextPage ? <Button variant="ghost" size="sm" disabled={groups.isFetching} onClick={() => void groups.fetchNextPage()}>{t({ ko: '효과음 더 불러오기', en: 'Load more effects' })}</Button> : null}
         </Field>
       </ModalBody>
-      <ModalFooter className="mt-4 border-t border-line pt-3">
+      <ModalFooter separated className="mt-4">
         <Tip content={projects.isSuccess && projectItems.length === 0 ? t({ ko: '오디오 탭에서 프로젝트를 먼저 만들어줘.', en: 'Create a project in the Audio tab first.' }) : null}>
           <span className="inline-flex" tabIndex={projects.isSuccess && projectItems.length === 0 ? 0 : undefined}>
             <Button disabled={busy || !projectId} onClick={() => void send()}><AudioLines />{t({ ko: '{count}개 보내기', en: 'Send {count}' }, { count: files?.length ?? 0 })}</Button>

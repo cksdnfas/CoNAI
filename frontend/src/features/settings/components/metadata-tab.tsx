@@ -7,7 +7,7 @@ import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { ChatFilledLabel } from './settings-filled-label'
-import { SETTINGS_CONTROL_CLASS, SettingsRowsSkeleton } from './settings-rows'
+import { SettingsRowsSkeleton } from './settings-rows'
 
 interface MetadataTabProps {
   metadataDraft: MetadataExtractionSettings | null
@@ -32,7 +32,7 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: Meta
             label={<ChatFilledLabel fieldId="metadata.enableSecondaryExtraction">{t({ ko: 'PNG 숨은 생성 정보 찾기', en: 'Look for hidden generation info in PNGs' })}</ChatFilledLabel>}
           />
 
-          <SettingRow label={<ChatFilledLabel fieldId="metadata.stealthScanMode">{scanModeLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="metadata.stealthScanMode">{scanModeLabel}</ChatFilledLabel>} controlWidth="standard">
             <Select variant="settings" aria-label={scanModeLabel} value={metadataDraft.stealthScanMode} disabled={!isStealthEnabled} onChange={(event) => onPatchMetadata({ stealthScanMode: event.target.value as MetadataExtractionSettings['stealthScanMode'] })}>
               <option value="fast">{t({ ko: '빠르게 (못 찾으면 전체 검사)', en: 'Fast (falls back to full)' })}</option>
               <option value="full">{t({ ko: '전체 검사 (느림)', en: 'Full (slower)' })}</option>
@@ -40,11 +40,11 @@ export function MetadataTab({ metadataDraft, onPatchMetadata, hasChanges }: Meta
             </Select>
           </SettingRow>
 
-          <SettingRow label={<ChatFilledLabel fieldId="metadata.stealthMaxFileSizeMB">{maxFileSizeLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="metadata.stealthMaxFileSizeMB">{maxFileSizeLabel}</ChatFilledLabel>} controlWidth="standard">
             <NumberStepperInput min={1} variant="settings" aria-label={maxFileSizeLabel} disabled={!isStealthEnabled} value={metadataDraft.stealthMaxFileSizeMB} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxFileSizeMB: Number(nextValue) || 1 })} />
           </SettingRow>
 
-          <SettingRow label={<ChatFilledLabel fieldId="metadata.stealthMaxResolutionMP">{maxResolutionLabel}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="metadata.stealthMaxResolutionMP">{maxResolutionLabel}</ChatFilledLabel>} controlWidth="standard">
             <NumberStepperInput min={1} variant="settings" aria-label={maxResolutionLabel} disabled={!isStealthEnabled} value={metadataDraft.stealthMaxResolutionMP} onValueCommit={(nextValue) => onPatchMetadata({ stealthMaxResolutionMP: Number(nextValue) || 1 })} />
           </SettingRow>
 

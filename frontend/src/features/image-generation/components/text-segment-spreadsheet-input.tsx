@@ -74,7 +74,7 @@ export function TextSegmentSpreadsheetInput({
       {/* One field fill around every row; the row actions sit on the same fill, rows split by a hairline. */}
       <div
         className={cn(
-          'theme-input-surface overflow-hidden rounded-sm border transition-[border-color,box-shadow] focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15',
+          'theme-input-surface overflow-hidden rounded-sm border transition focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15',
           invalid && 'border-destructive/70 focus-within:border-destructive/70 focus-within:ring-destructive/20',
         )}
       >
@@ -114,8 +114,8 @@ export function TextSegmentSpreadsheetInput({
                 </IconButton>
                 <IconButton
                   size="icon-sm"
-                  variant="ghost"
-                  className="mt-auto hover:text-destructive"
+                  variant="destructive-ghost"
+                  className="mt-auto"
                   onClick={() => handleRemoveRow(index)}
                   label={t('image-generation.components.text.segment.spreadsheet.input.delete.prompt.row', { row: index + 1 })}
                   tooltipSide="left"

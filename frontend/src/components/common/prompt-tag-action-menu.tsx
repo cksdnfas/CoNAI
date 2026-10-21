@@ -64,8 +64,8 @@ export function PromptTagActionMenu({
           ref={anchorRef}
           type="button"
           variant="subtle"
-          size="xs"
-          className={cn(tagChipClassName, className)}
+          size="content"
+          className={className}
           onClick={(event) => {
             event.stopPropagation()
             setOpen((current) => !current)
@@ -78,14 +78,13 @@ export function PromptTagActionMenu({
         </Button>
       </Tip>
 
-      <AnchoredPopup open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} align="start" side="bottom" className="w-[min(15rem,calc(100vw-1.5rem))] p-0">
+      <AnchoredPopup open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} align="start" side="bottom" className="w-[min(15rem,calc(100vw-1.5rem))]">
         <div className={cn(anchoredPopupBodyClassName, 'space-y-1 p-1.5')} role="menu" aria-label={t({ ko: '{tag} 태그 작업', en: '{tag} tag actions' }, { tag })}>
           {onAddSearchFilter ? (
             <Button
               type="button"
               variant="nav"
-              size="sm"
-              className="text-xs"
+              size="compact"
               role="menuitem"
               onClick={(event) => {
                 event.stopPropagation()
@@ -101,8 +100,7 @@ export function PromptTagActionMenu({
             <Button
               type="button"
               variant="nav"
-              size="sm"
-              className="text-xs"
+              size="compact"
               role="menuitem"
               onClick={(event) => {
                 event.stopPropagation()

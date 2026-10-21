@@ -99,7 +99,7 @@ export function KeyValueEntryRows({
             event.stopPropagation()
             save([...entries, createEntry ? createEntry(entries) : { key: '', value: '' }])
           }}
-          className="nodrag text-2xs font-normal"
+          className="nodrag"
         >
           <Plus />
           {t({ ko: '항목 추가', en: 'Add item' })}

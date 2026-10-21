@@ -24,7 +24,7 @@ function ArtifactTextPreviewCard({
     <div className="px-1 py-1 text-2xs leading-4 text-foreground">
       <div className="max-h-[6.25rem] overflow-hidden whitespace-pre-wrap break-words [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:5]">{preview}</div>
       {canOpen ? (
-        <Button type="button" variant="ghost" size="xs" className="mt-1 h-5 px-1 text-2xs" onMouseDown={stopArtifactPreviewActionEvent} onClick={onOpen}>
+        <Button type="button" variant="ghost" size="xs" className="mt-1" onMouseDown={stopArtifactPreviewActionEvent} onClick={onOpen}>
           open
         </Button>
       ) : null}

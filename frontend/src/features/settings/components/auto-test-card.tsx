@@ -14,7 +14,6 @@ import type { ImageRecord } from '@/types/image'
 import { formatFileSize } from '@/lib/format-size'
 import { EnhancedVideoPlayer } from '@/features/images/components/detail/enhanced-video-player'
 import { SettingRow } from '@/components/ui/setting-row'
-import { SETTINGS_WIDE_CONTROL_CLASS } from './settings-rows'
 import { Section } from '@/components/ui/section'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
@@ -90,10 +89,11 @@ export function AutoTestCard({
 
   return (
     <Section variant="settings" heading={heading} collapsible defaultOpen={false}>
-      <SettingRow label={t({ ko: '이미지 해시', en: 'Image hash' })} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
+      <SettingRow label={t({ ko: '이미지 해시', en: 'Image hash' })} controlWidth="wide">
         <Input
           variant="settings"
-          className="min-w-0 flex-1 font-mono"
+          mono
+          className="min-w-0 flex-1"
           aria-label={t({ ko: '이미지 해시', en: 'Image hash' })}
           value={autoTestHashInput}
           onChange={handleHashInputChange}

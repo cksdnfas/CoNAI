@@ -32,6 +32,12 @@ const badgeVariants = cva(
         /** 16px tall: overlay counts on small thumbnails. */
         xs: "px-1 py-0 leading-4",
       },
+      /** Preserve user-provided names rather than treating them as status overlines. */
+      casing: {
+        sentence: "tracking-normal normal-case",
+        /** Short status label on an overlay badge (rating tier): uppercase semibold, keeps the overlay's tracking. */
+        upper: "font-semibold uppercase",
+      },
     },
     defaultVariants: {
       variant: "default",
@@ -44,6 +50,7 @@ function Badge({
   className,
   variant = "default",
   size = "default",
+  casing,
   asChild = false,
   ...props
 }: React.ComponentProps<"span"> &
@@ -54,7 +61,7 @@ function Badge({
     <Comp
       data-slot="badge"
       data-variant={variant}
-      className={cn(badgeVariants({ variant, size }), className)}
+      className={cn(badgeVariants({ variant, size, casing }), className)}
       {...props}
     />
   )

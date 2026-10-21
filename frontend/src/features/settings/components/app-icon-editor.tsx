@@ -130,12 +130,12 @@ export function AppIconEditor({ source, isSaving, onRegister, onClose }: {
   const disabled = !image || isSaving
   return (
     <Modal open title={title} onClose={() => { if (!savingRef.current && !isSaving) onClose() }} onSave={disabled ? undefined : register} widthClassName="max-w-md" sidePanelInset={CHAT_DOCK_INSET}>
-      <ModalBody className="space-y-4">
+      <ModalBody>
         <div className="text-sm text-muted-foreground">{t({ ko: '드래그해서 위치를 맞춰줘. 체크무늬는 투명 영역이야.', en: 'Drag to position the image. The checkerboard shows transparent areas.' })}</div>
         <div
           role="application" tabIndex={disabled ? -1 : 0}
           aria-label={t({ ko: '자르기 영역: 드래그하거나 방향키로 위치 이동', en: 'Crop area: drag or use arrow keys to move' })}
-          className="bg-checker relative mx-auto aspect-square w-72 max-w-full touch-none overflow-hidden rounded-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 cursor-grab active:cursor-grabbing"
+          className="bg-checker relative mx-auto aspect-square w-72 max-w-full touch-none overflow-hidden rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40 cursor-grab active:cursor-grabbing"
           onPointerDown={(event) => {
             if (disabled || event.button !== 0) return
             event.currentTarget.setPointerCapture(event.pointerId)

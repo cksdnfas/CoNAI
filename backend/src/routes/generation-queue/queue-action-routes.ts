@@ -310,6 +310,11 @@ export function createGenerationQueueActionRoutes() {
 
     }
 
+    // Their executors hydrate stored references back into data URLs, so copies share one stored input.
+    if (service_type === 'novelai' || service_type === 'codex') {
+      normalizedRequestPayload = externalizeQueueInputDataUrls(normalizedRequestPayload).value
+    }
+
     const requesterAccountId = getRequesterAccountId(req)
 
     // 경로는 없는 그룹을 만들기 때문에 다른 검증을 모두 통과한 뒤에 해석한다.

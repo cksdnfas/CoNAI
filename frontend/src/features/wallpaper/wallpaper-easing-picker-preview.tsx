@@ -184,12 +184,14 @@ export function WallpaperEasingGraphPreview({ easing, className }: { easing: Wal
         y1={graph.horizontalGuideY}
         x2={graph.width - WALLPAPER_EASING_PREVIEW_GRAPH_PADDING_X}
         y2={graph.horizontalGuideY}
-        stroke="color-mix(in srgb, var(--border) 72%, transparent)"
+        stroke="var(--border)"
+        strokeOpacity={0.72}
         strokeWidth="1"
       />
       <path
         d={graph.baselinePath}
-        stroke="color-mix(in srgb, var(--muted-foreground) 46%, transparent)"
+        stroke="var(--muted-foreground)"
+        strokeOpacity={0.46}
         strokeWidth="1.5"
         strokeDasharray="4 4"
         fill="none"
@@ -369,7 +371,7 @@ export function WallpaperEasingGraph({
       <svg
         ref={graphRef}
         viewBox={`0 0 ${GRAPH_VIEWBOX_SIZE} ${GRAPH_VIEWBOX_SIZE}`}
-        className="h-[352px] w-full rounded-sm border border-border bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--primary)_10%,transparent),transparent_45%),var(--surface-low)]"
+        className="h-[352px] w-full rounded-sm border border-border"
         tabIndex={0}
         onDoubleClick={handleGraphDoubleClick}
         onKeyDown={(event) => {
@@ -402,8 +404,8 @@ export function WallpaperEasingGraph({
           const y = GRAPH_PADDING + (line * GRAPH_SIZE)
           return (
             <g key={line}>
-              <line x1={x} y1={GRAPH_PADDING} x2={x} y2={GRAPH_PADDING + GRAPH_SIZE} stroke="color-mix(in srgb, var(--border) 72%, transparent)" strokeWidth="1" />
-              <line x1={GRAPH_PADDING} y1={y} x2={GRAPH_PADDING + GRAPH_SIZE} y2={y} stroke="color-mix(in srgb, var(--border) 72%, transparent)" strokeWidth="1" />
+              <line x1={x} y1={GRAPH_PADDING} x2={x} y2={GRAPH_PADDING + GRAPH_SIZE} stroke="var(--border)" strokeOpacity={0.72} strokeWidth="1" />
+              <line x1={GRAPH_PADDING} y1={y} x2={GRAPH_PADDING + GRAPH_SIZE} y2={y} stroke="var(--border)" strokeOpacity={0.72} strokeWidth="1" />
             </g>
           )
         })}
@@ -412,7 +414,7 @@ export function WallpaperEasingGraph({
         <text x={GRAPH_PADDING} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-2xs">{t({ ko: '눌림', en: 'Press' })}</text>
         <text x={GRAPH_SIZE + GRAPH_PADDING - 14} y={GRAPH_SIZE + (GRAPH_PADDING * 2) - 8} className="fill-muted-foreground text-2xs">{t({ ko: '시간', en: 'Time' })}</text>
 
-        <path d={`M ${mapWallpaperEasingGraphX(0)} ${mapWallpaperEasingGraphY(0)} L ${mapWallpaperEasingGraphX(1)} ${mapWallpaperEasingGraphY(1)}`} stroke="color-mix(in srgb, var(--muted-foreground) 48%, transparent)" strokeDasharray="5 6" strokeWidth="1.5" fill="none" />
+        <path d={`M ${mapWallpaperEasingGraphX(0)} ${mapWallpaperEasingGraphY(0)} L ${mapWallpaperEasingGraphX(1)} ${mapWallpaperEasingGraphY(1)}`} stroke="var(--muted-foreground)" strokeOpacity={0.48} strokeDasharray="5 6" strokeWidth="1.5" fill="none" />
         <path d={path} stroke="var(--primary)" strokeWidth="4" fill="none" />
 
         {normalizedPoints.map((point, index) => {
@@ -585,15 +587,17 @@ function WallpaperEasingPreview({ easing, kind, config }: { easing: WallpaperAni
       </div>
 
       <div className={cn(
-        'relative overflow-hidden rounded-sm border border-border/70 bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--secondary)_12%,transparent),transparent_45%),var(--background)]',
+        'relative overflow-hidden rounded-sm border border-border/70',
         showCombinedMotionPreview ? 'h-44' : 'h-28',
       )}>
+        {/* These cards and the moving dot preview wallpaper artwork, not editor controls. */}
         {kind === 'hover' ? (
           <div className="absolute inset-x-0 top-0 flex h-[64%] items-center justify-center">
             <div className="relative h-16 w-24">
               <div
                 ref={hoverCardRef}
-                className="absolute inset-0 rounded-xl border border-white/15 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--primary)_20%,transparent),color-mix(in_srgb,var(--secondary)_18%,transparent)),var(--surface-high)] shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
+                className="absolute inset-0 rounded-xl border border-white/15"
+                style={{ backgroundImage: 'linear-gradient(145deg,color-mix(in srgb,var(--primary) 20%,transparent),color-mix(in srgb,var(--secondary) 18%,transparent)),var(--surface-high)', boxShadow: '0 10px 24px rgba(0,0,0,0.18)' }}
               />
             </div>
           </div>
@@ -604,12 +608,13 @@ function WallpaperEasingPreview({ easing, kind, config }: { easing: WallpaperAni
             <div className="relative h-16 w-24">
               <div
                 ref={transitionOutgoingRef}
-                className="absolute inset-0 rounded-xl border border-white/12 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--muted)_18%,transparent),transparent),var(--surface-low)] shadow-[0_12px_28px_rgba(0,0,0,0.16)]"
+                className="absolute inset-0 rounded-xl border border-white/12"
+                style={{ backgroundImage: 'linear-gradient(145deg,color-mix(in srgb,var(--muted) 18%,transparent),transparent),var(--surface-low)', boxShadow: '0 12px 28px rgba(0,0,0,0.16)' }}
               />
               <div
                 ref={transitionIncomingRef}
-                className="absolute inset-0 rounded-xl border border-white/15 bg-[linear-gradient(145deg,color-mix(in_srgb,var(--primary)_22%,transparent),color-mix(in_srgb,var(--secondary)_16%,transparent)),var(--surface-high)] shadow-[0_12px_34px_rgba(0,0,0,0.22)]"
-                style={{ opacity: 0 }}
+                className="absolute inset-0 rounded-xl border border-white/15"
+                style={{ opacity: 0, backgroundImage: 'linear-gradient(145deg,color-mix(in srgb,var(--primary) 22%,transparent),color-mix(in srgb,var(--secondary) 16%,transparent)),var(--surface-high)', boxShadow: '0 12px 34px rgba(0,0,0,0.22)' }}
               />
             </div>
           </div>
@@ -620,8 +625,8 @@ function WallpaperEasingPreview({ easing, kind, config }: { easing: WallpaperAni
             <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-border/70" />
             <div
               ref={motionDotRef}
-              className="absolute left-0 top-1/2 h-6 w-6 rounded-full border border-primary/60 bg-primary shadow-[0_0_22px_color-mix(in_srgb,var(--primary)_32%,transparent)]"
-              style={{ transform: 'translate(0px, -50%)' }}
+              className="absolute left-0 top-1/2 h-6 w-6 rounded-full border border-primary/60 bg-primary"
+              style={{ transform: 'translate(0px, -50%)', boxShadow: '0 0 22px color-mix(in srgb,var(--primary) 32%,transparent)' }}
             />
           </div>
         </div>

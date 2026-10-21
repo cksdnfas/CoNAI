@@ -140,7 +140,7 @@ function AudienceMenu({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
     <DropdownMenu>
       <Tip content={t({ ko: '사용 대상', en: 'Who can use it' })}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="sm" className="max-w-40 gap-1.5 text-muted-foreground" aria-label={t({ ko: '사용 대상: {who}', en: 'Who can use it: {who}' }, { who: summary })}>
+          <Button variant="ghost" size="sm" className="max-w-40" aria-label={t({ ko: '사용 대상: {who}', en: 'Who can use it: {who}' }, { who: summary })}>
             <Users />
             <span className="truncate max-sm:hidden">{summary}</span>
           </Button>
@@ -389,7 +389,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
         </div>
       </div>
       </ProfileAssistContext.Provider>
-      <ModalFooter className="mt-4 border-t border-line pt-3">
+      <ModalFooter separated className="mt-4">
         {profile ? (
           <IconButton size="icon-sm" variant="destructive" onClick={() => void handleDelete()} disabled={deleteMutation.isPending} label={t({ ko: '삭제', en: 'Delete' })}>
             <Trash2 />

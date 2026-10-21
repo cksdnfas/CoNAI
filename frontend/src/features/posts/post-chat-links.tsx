@@ -58,11 +58,11 @@ export function PostAuthorChip({ author, source = null, avatarSize = 'md', showA
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="link" size="xs" className={cn('h-auto min-w-0 justify-start gap-1.5 p-0 text-sm font-normal', className)}>
+        <Button variant="link" size="sm" className={cn('min-w-0 justify-start', className)}>
           {face}{name}{bot ? <BotBadge /> : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-2">
+      <PopoverContent align="start" padding="sm" className="w-64">
         <div className="flex items-center gap-2.5 px-1.5 pt-1 pb-2">
           <PostAuthorAvatar author={author} size="lg" />
           <div className="flex min-w-0 flex-col">
@@ -86,7 +86,7 @@ export function PostAuthorChip({ author, source = null, avatarSize = 'md', showA
 
 function MenuButton({ icon: Icon, onClick, children }: { icon: typeof MessageSquare; onClick: () => void; children: ReactNode }) {
   return (
-    <Button variant="ghost" size="sm" className="h-8 justify-start gap-2 px-2 font-normal" onClick={onClick}>
+    <Button variant="ghost" size="sm" className="justify-start" onClick={onClick}>
       <Icon className="text-muted-foreground" />{children}
     </Button>
   )

@@ -13,7 +13,7 @@ export function InstantApplyHint({ className }: { className?: string }) {
       <span
         tabIndex={0}
         aria-label={t({ ko: '즉시 적용', en: 'Applies instantly' })}
-        className={cn('inline-flex items-center rounded-sm p-0.5 text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40', className)}
+        className={cn('inline-flex items-center rounded-sm p-0.5 text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/40', className)}
       >
         <Zap className="h-3.5 w-3.5" />
       </span>
@@ -30,7 +30,7 @@ export function SectionDirtyBadge({ dirty }: { dirty: boolean }) {
   }
 
   return (
-    <Chip size="sm" tone="primary" className="gap-1 font-medium">
+    <Chip size="sm" tone="primary">
       <PencilLine />
       {t({ ko: '변경됨', en: 'Edited' })}
     </Chip>

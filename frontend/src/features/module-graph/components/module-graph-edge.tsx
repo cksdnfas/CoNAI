@@ -39,7 +39,6 @@ function ModuleGraphEdgeComponent({
                 event.stopPropagation()
                 void deleteElements({ edges: [{ id }] })
               }}
-              className="rounded-full shadow-elevation-2 hover:bg-destructive hover:text-destructive-foreground"
             >
               <X />
             </IconButton>

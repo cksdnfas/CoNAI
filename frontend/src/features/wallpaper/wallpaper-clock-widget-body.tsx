@@ -90,7 +90,7 @@ export function WallpaperClockWidgetBody({ widget }: { widget: ClockWidget }) {
 
   if (style === 'analog') {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-[4cqh]">
+      <div className="flex h-full flex-col items-center justify-center" style={{ gap: '4cqh' }}>
         <div className="flex min-h-0 w-full flex-1 items-center justify-center">
           <AnalogFace now={now} showSeconds={showSeconds} />
         </div>
@@ -101,17 +101,17 @@ export function WallpaperClockWidgetBody({ widget }: { widget: ClockWidget }) {
 
   if (style === 'split') {
     const tile = (value: string) => (
-      <span className="flex items-center justify-center rounded-[0.12em] bg-[color-mix(in_srgb,var(--foreground)_9%,transparent)] px-[0.12em] tabular-nums">
+      <span className="flex items-center justify-center tabular-nums" style={{ borderRadius: '0.12em', background: 'color-mix(in srgb,var(--foreground) 9%,transparent)', paddingInline: '0.12em' }}>
         {value}
       </span>
     )
     return (
-      <div className="flex h-full flex-col justify-center gap-[3cqh]" style={{ alignItems: FLEX_ALIGN[widget.style.textAlign] }}>
-        <div className="flex items-stretch gap-[0.08em] font-semibold leading-none tracking-[-0.03em]" style={{ fontSize: `min(${showDate ? 56 : 72}cqh, ${showSeconds ? 16 : 23}cqw)` }}>
+      <div className="flex h-full flex-col justify-center" style={{ alignItems: FLEX_ALIGN[widget.style.textAlign], gap: '3cqh' }}>
+        <div className="flex items-stretch font-semibold leading-none" style={{ gap: '0.08em', letterSpacing: '-0.03em', fontSize: `min(${showDate ? 56 : 72}cqh, ${showSeconds ? 16 : 23}cqw)` }}>
           {tile(pad(hours))}
           {tile(mm)}
           {showSeconds ? tile(ss) : null}
-          {period ? <span className="self-end pb-[0.1em] text-[0.24em] font-medium opacity-70">{period}</span> : null}
+          {period ? <span className="self-end font-medium opacity-70" style={{ paddingBottom: '0.1em', fontSize: '0.24em' }}>{period}</span> : null}
         </div>
         {showDate ? <div className="opacity-70" style={{ fontSize: dateSize }}>{dateLabel}</div> : null}
       </div>
@@ -119,10 +119,10 @@ export function WallpaperClockWidgetBody({ widget }: { widget: ClockWidget }) {
   }
 
   const timeClass = {
-    clean: 'font-extralight tracking-[-0.05em]',
-    serif: "font-normal tracking-[-0.02em] [font-family:'Noto_Serif_KR',ui-serif,Georgia,serif]",
-    glow: 'font-light tracking-[-0.04em]',
-    mono: 'font-mono font-medium tracking-[-0.02em]',
+    clean: 'font-extralight',
+    serif: 'font-normal',
+    glow: 'font-light',
+    mono: 'font-mono font-medium',
   }[style]
   const glow = style === 'glow'
     ? { textShadow: '0 0 0.18em color-mix(in srgb, var(--primary) 70%, transparent), 0 0 0.55em color-mix(in srgb, var(--primary) 35%, transparent)' }
@@ -130,17 +130,17 @@ export function WallpaperClockWidgetBody({ widget }: { widget: ClockWidget }) {
 
   return (
     <div className="flex h-full flex-col justify-center">
-      <div className={`whitespace-nowrap leading-[0.92] tabular-nums ${timeClass}`} style={{ fontSize: timeSize, ...glow }}>
+      <div className={`whitespace-nowrap tabular-nums ${timeClass}`} style={{ fontSize: timeSize, lineHeight: 0.92, letterSpacing: style === 'clean' ? '-0.05em' : style === 'glow' ? '-0.04em' : '-0.02em', fontFamily: style === 'serif' ? "'Noto Serif KR',ui-serif,Georgia,serif" : undefined, ...glow }}>
         {hh}
         <span className={style === 'mono' ? 'animate-pulse' : 'opacity-60'}>:</span>
         {mm}
         {showSeconds ? <span className="opacity-55">{style === 'mono' ? ':' : ' '}{ss}</span> : null}
-        {period ? <span className="ml-[0.15em] text-[0.26em] font-medium tracking-normal opacity-70">{period}</span> : null}
+        {period ? <span className="font-medium tracking-normal opacity-70" style={{ marginLeft: '0.15em', fontSize: '0.26em' }}>{period}</span> : null}
       </div>
       {showDate ? (
         <div
-          className={style === 'serif' ? 'mt-[0.4em] italic opacity-75' : style === 'mono' ? 'mt-[0.5em] font-mono uppercase tracking-[0.12em] opacity-60' : 'mt-[0.5em] opacity-70'}
-          style={{ fontSize: dateSize }}
+          className={style === 'serif' ? 'italic opacity-75' : style === 'mono' ? 'font-mono uppercase opacity-60' : 'opacity-70'}
+          style={{ fontSize: dateSize, marginTop: style === 'serif' ? '0.4em' : '0.5em', letterSpacing: style === 'mono' ? '0.12em' : undefined }}
         >
           {dateLabel}
         </div>

@@ -319,11 +319,12 @@ export class RuntimeJobStore {
     return row ? mapRow(row) : null
   }
 
-  static markRunning(jobId: string, ownerRole: RuntimeJobOwnerRole, patch?: RuntimeJobProgressPatch): void {
+  /** Atomically claim a queued job; a failed claim leaves the row unchanged. */
+  static markRunning(jobId: string, ownerRole: RuntimeJobOwnerRole, patch?: RuntimeJobProgressPatch): boolean {
     const db = getUserSettingsDb()
     const { clauses, values } = buildProgressAssignments(patch)
 
-    db.prepare(`
+    const claimed = db.prepare(`
       UPDATE runtime_jobs
       SET status = 'running',
           owner_role = ?,
@@ -335,6 +336,7 @@ export class RuntimeJobStore {
       WHERE job_id = ?
         AND status = 'queued'
     `).run(ownerRole, process.pid, ...values, jobId)
+    return claimed.changes === 1
   }
 
   /**

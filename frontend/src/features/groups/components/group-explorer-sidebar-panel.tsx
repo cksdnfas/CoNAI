@@ -138,7 +138,7 @@ export function GroupExplorerSidebarPanel({
       {isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, index) => (
-            <Skeleton key={index} className="h-9 w-full rounded-sm" />
+            <Skeleton key={index} radius="sm" className="h-9 w-full" />
           ))}
         </div>
       ) : null}

@@ -11,7 +11,7 @@ import { useI18n, type TranslationInput } from '@/i18n'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { ChatFilledLabel } from './settings-filled-label'
-import { SETTINGS_CONTROL_CLASS, SETTINGS_WIDE_CONTROL_CLASS, SettingsRowsSkeleton, SettingsStatLine } from './settings-rows'
+import { SettingsRowsSkeleton, SettingsStatLine } from './settings-rows'
 
 interface KaloscopeSettingsCardProps {
   heading: ReactNode
@@ -83,7 +83,7 @@ export function KaloscopeSettingsCard({
             <span className="text-sm">3.0 preview</span>
           </SettingRow>
 
-          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.device">{labels.device}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.device">{labels.device}</ChatFilledLabel>} controlWidth="standard">
             <Select variant="settings" aria-label={labels.device} value={kaloscopeDraft.device} disabled={!isEnabled} onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}>
               <option value="auto">{t({ ko: '자동 (GPU 우선)', en: 'Auto (GPU if available)' })}</option>
               <option value="cpu">{t({ ko: 'CPU (느림, GPU 불필요)', en: 'CPU (slower, no GPU needed)' })}</option>
@@ -91,7 +91,7 @@ export function KaloscopeSettingsCard({
             </Select>
           </SettingRow>
 
-          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.topK">{labels.topK}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.topK">{labels.topK}</ChatFilledLabel>} controlWidth="standard">
             <NumberStepperInput min={1} max={200} variant="settings" aria-label={labels.topK} disabled={!isEnabled} value={kaloscopeDraft.topK} onValueCommit={(nextValue) => onPatchKaloscope({ topK: Number(nextValue) || 1 })} />
           </SettingRow>
 
@@ -108,10 +108,9 @@ export function KaloscopeSettingsCard({
             info={outdated > 0 && !canRequeue
               ? t({ ko: 'v2로 뽑은 작가를 3.0으로 다시 뽑아. Kaloscope와 새 이미지 자동 처리를 켜고 저장해야 돌아가.', en: 'Extracts v2 artist results again with 3.0. Needs Kaloscope and automatic processing on (saved).' })
               : t({ ko: 'v2로 뽑은 작가를 3.0으로 다시 뽑아.', en: 'Extracts v2 artist results again with 3.0.' })}
-            controlClassName="flex min-w-0 items-center justify-end gap-2"
           >
             <span className="font-mono text-xs text-muted-foreground tabular-nums">{t({ ko: '{count}장', en: '{count} items' }, { count: outdated.toLocaleString() })}</span>
-            <IconButton size="icon-sm" variant="ghost" className="text-primary" label={t({ ko: '다시 추출', en: 'Re-extract' })} disabled={!canRequeue || isRequeueingOutdated} onClick={onRequeueOutdated}>
+            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '다시 추출', en: 'Re-extract' })} disabled={!canRequeue || isRequeueingOutdated} onClick={onRequeueOutdated}>
               <RefreshCw className="h-4 w-4" />
             </IconButton>
           </SettingRow>
@@ -123,7 +122,7 @@ export function KaloscopeSettingsCard({
             label={<ChatFilledLabel fieldId="kaloscope.keepModelLoaded">{t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}</ChatFilledLabel>}
           />
 
-          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.autoUnloadMinutes">{labels.unload}</ChatFilledLabel>} controlClassName={SETTINGS_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.autoUnloadMinutes">{labels.unload}</ChatFilledLabel>} controlWidth="standard">
             <NumberStepperInput
               min={1}
               variant="settings"
@@ -134,7 +133,7 @@ export function KaloscopeSettingsCard({
             />
           </SettingRow>
 
-          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.artistLinkUrlTemplate">{labels.artistLink}</ChatFilledLabel>} controlClassName={SETTINGS_WIDE_CONTROL_CLASS}>
+          <SettingRow label={<ChatFilledLabel fieldId="kaloscope.artistLinkUrlTemplate">{labels.artistLink}</ChatFilledLabel>} controlWidth="wide">
             <Input
               variant="settings"
               aria-label={labels.artistLink}

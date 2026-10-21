@@ -190,6 +190,24 @@ export function externalizeQueueInputDataUrls<T>(value: T): { value: T; refs: Qu
   return { value: walk(value, 0) as T, refs }
 }
 
+/** Restore stored inputs before a string-only provider (NovelAI) normalizes its payload. */
+export function hydrateQueueInputDataUrls<T>(value: T): T {
+  const walk = (node: unknown, depth: number): unknown => {
+    if (depth > MAX_PAYLOAD_WALK_DEPTH) return node
+    if (isQueueInputRef(node)) {
+      const filePath = resolveQueueInputFilePath(node)
+      if (!filePath) {
+        throw new Error(`Queue input blob is missing (${node.sha256}); reattach the source image and enqueue again`)
+      }
+      return `data:${node.mimeType ?? ''};base64,${fs.readFileSync(filePath).toString('base64')}`
+    }
+    if (Array.isArray(node)) return node.map((entry) => walk(entry, depth + 1))
+    if (!isPlainObject(node)) return node
+    return Object.fromEntries(Object.entries(node).map(([key, entry]) => [key, walk(entry, depth + 1)]))
+  }
+  return walk(value, 0) as T
+}
+
 /** Collect every stored reference inside one payload object. */
 export function collectQueueInputRefs(value: unknown): QueueInputRef[] {
   const refs: QueueInputRef[] = []

@@ -13,7 +13,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
 import type { ChatPromptSection } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
-import { GROW_TEXTAREA } from './chat-profile-editor-fields'
 
 function newSection(): ChatPromptSection {
   return { id: `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title: '', content: '', kind: 'text', enabled: true }
@@ -90,13 +89,13 @@ export function ChatPromptSectionsEditor({ sections, onChange }: { sections: Cha
                   ref={(element) => { if (element) textareas.current.set(section.id, element); else textareas.current.delete(section.id) }}
                   variant="settings"
                   rows={section.kind === 'dialogue' ? 6 : 5}
-                  className={GROW_TEXTAREA}
+                  autoGrow
                   value={section.content}
                   onChange={(event) => update(section.id, { content: event.target.value })}
                   onBlur={() => setWarnings((current) => ({ ...current, [section.id]: unknownChatMacros(section.content) }))}
                   placeholder={section.kind === 'dialogue' ? '사용자: 오늘 뭐 그릴까?\n{{char}}: 노을 지는 바닷가 어때?' : undefined}
                 />
-                {warnings[section.id]?.length ? <p className="text-xs text-yellow-500">{t({ ko: '⚠ 모르는 변수 {variables}', en: '⚠ Unknown variables {variables}' }, { variables: warnings[section.id].join(', ') })}</p> : null}
+                {warnings[section.id]?.length ? <p className="text-xs text-warning">{t({ ko: '⚠ 모르는 변수 {variables}', en: '⚠ Unknown variables {variables}' }, { variables: warnings[section.id].join(', ') })}</p> : null}
               </Field>
             </CollapsibleRow>
           ))}

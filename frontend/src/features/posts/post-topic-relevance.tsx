@@ -135,7 +135,7 @@ export function PostTopicChips({ topic, divider = true }: { topic: PostTopicEval
         <Tip content={tip}>
           <span className={cn('inline-flex flex-wrap items-center gap-1', stale && 'opacity-50')} aria-label={t({ ko: '주제 관련도', en: 'Topic relevance' })} tabIndex={0}>
             {items.map(item => (
-              <Chip key={item.topicId} tone="muted" className="relative gap-1 overflow-hidden pt-0.5 pb-1 text-foreground">
+              <Chip key={item.topicId} tone="default" className="relative overflow-hidden">
                 <span className="truncate">{item.name}</span>
                 <span className="tabular-nums text-muted-foreground">{item.score}</span>
                 <span aria-hidden className="absolute bottom-0 left-0 h-0.5 bg-primary/70" style={{ width: `${item.score}%` }} />
@@ -144,7 +144,7 @@ export function PostTopicChips({ topic, divider = true }: { topic: PostTopicEval
           </span>
         </Tip>
       ) : null}
-      {waiting ? <Chip tone="muted" className="py-0.5">{t({ ko: '평가 중', en: 'Evaluating' })}</Chip> : null}
+      {waiting ? <Chip tone="muted">{t({ ko: '평가 중', en: 'Evaluating' })}</Chip> : null}
     </>
   )
 }
@@ -158,7 +158,7 @@ function TopicRow({ item }: { item: TopicRelevanceItem }) {
         <span className="text-xs text-muted-foreground">{t(item.answerStatus === 'missing' ? { ko: '응답 없음', en: 'No answer' } : LEVELS[item.level])}</span>
         <span className="ml-auto shrink-0 tabular-nums">{item.score === null ? '—' : item.score}</span>
       </div>
-      {item.score !== null ? <Progress size="sm" value={item.score} indicatorClassName="bg-primary/70" aria-label={t({ ko: '{name} 관련도', en: '{name} relevance' }, { name: item.name })} /> : null}
+      {item.score !== null ? <Progress size="sm" value={item.score} aria-label={t({ ko: '{name} 관련도', en: '{name} relevance' }, { name: item.name })} /> : null}
     </div>
   )
 }

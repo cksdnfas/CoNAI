@@ -175,7 +175,7 @@ function HiddenBlocksButton({ preset }: { preset: GenerationLayoutPreset }) {
           <Plus />
         </IconButton>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 p-1">
+      <PopoverContent align="end" padding="sm" className="w-64">
         {preset.hidden.map((block) => (
           <div key={block} className="flex h-11 items-center gap-2 rounded-sm pr-1 pl-3 hover:bg-fill">
             <span className="min-w-0 flex-1 truncate text-sm font-medium">{blockLabel(block)}</span>

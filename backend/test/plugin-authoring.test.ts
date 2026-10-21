@@ -151,7 +151,7 @@ test('plugin authoring keeps executable installation behind administrator review
     const threadId = CodexChatStore.createThread(accountId, 'Author', 'llm', profile.id)
     const context: ChatExecutionContext = { threadId, profileId: profile.id, kind: 'direct', replyId: 'author-reply' }
     const release = registerChatReply(context, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
-    const names = ['list_plugin_drafts', 'create_plugin_draft', 'read_plugin_draft', 'edit_plugin_draft', 'prepare_plugin_install']
+    const names = ['list_plugin_drafts', 'create_plugin_draft', 'read_plugin_draft', 'edit_plugin_draft', 'prepare_plugin_install', 'check_plugin_updates']
     const bridge = await openChatMcpBridge(admin, ['configure'], names, { chatContext: context })
     const call = async (name: string, args: Record<string, unknown>) => {
       const result = await bridge.call(name, args)
@@ -169,6 +169,12 @@ test('plugin authoring keeps executable installation behind administrator review
       assert.equal(shared.chatPageActionTier('plugin_author.install'), 'commit')
       assert.equal(shared.chatPageActionTier('plugin_author.edit'), 'draft')
       assert.equal(shared.chatPageActionAllowed('/ext/author-test/main', 'plugin_author.install'), false)
+      // Plugin management also lives on /extensions, captured as a plain `page`; other pages never offer these actions.
+      assert.equal(shared.chatPageActionAllowed('/extensions', 'plugin_author.install'), true)
+      assert.equal(shared.chatPageActionAllowed('/extensions', 'plugin_source.install'), true)
+      assert.equal(shared.chatPageActionAllowed('/files', 'plugin_source.review'), false)
+      assert.equal(shared.normalizeChatPageSnapshot({ instanceId: 'instance-0001', connectionId: 'connection-0001', revision: 'revision-0001', path: '/extensions', kind: 'page', title: 'Plugins', resourceId: 'plugin-authoring', fields: [],
+        actions: [{ id: 'plugin_source.check', label: 'Check', description: '', effect: 'draft', schema: { type: 'object', properties: {}, required: [] } }] }).actions?.[0].id, 'plugin_source.check')
       for (const name of names) {
         assert.equal(pluginAppToolScope(name), null)
         assert.equal(isContextToolAllowed({ scopes: ['configure'], source: 'plugin', requester: admin }, name), false)

@@ -1,3 +1,4 @@
+import { isNaiEnhanceAmount, isNaiUcPresetId } from '@conai/shared'
 import type { ConfirmFn } from '@/components/ui/confirm-dialog'
 import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { WorkflowMarkedField } from '@/lib/api-image-generation-types'
@@ -83,6 +84,9 @@ export function buildNaiFormFromHistoryPayload(payload: Record<string, unknown>,
     ...current,
     prompt: readText(payload.prompt) ?? '',
     negativePrompt: readText(payload.negative_prompt) ?? '',
+    qualityToggle: payload.quality_toggle === true,
+    ucPreset: isNaiUcPresetId(payload.uc_preset) ? payload.uc_preset : DEFAULT_NAI_FORM.ucPreset,
+    enhance: action === 'img2img' && isNaiEnhanceAmount(payload.enhance) ? payload.enhance : DEFAULT_NAI_FORM.enhance,
     model,
     // The kept vibes were encoded for the current model; re-encode on submit when it changes.
     vibes: model === current.model ? current.vibes : current.vibes.map((vibe) => (vibe.image ? { ...vibe, encoded: '' } : vibe)),

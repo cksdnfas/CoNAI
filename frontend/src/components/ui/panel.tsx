@@ -2,6 +2,7 @@ import type { ComponentProps } from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { Slot } from 'radix-ui'
 import { cn } from '@/lib/utils'
+import { floatingSurfaceClassName } from './floating-surface'
 
 /**
  * Tonal block surface: separation by tone, never by outline. Padding follows the density tokens
@@ -24,6 +25,7 @@ const panelVariants = cva('min-w-0', {
     },
     padding: {
       none: '',
+      toolbar: 'p-1',
       sm: 'px-[calc(var(--theme-panel-padding-x)*0.75)] py-[calc(var(--theme-panel-padding-y)*0.66)]',
       md: 'px-(--theme-panel-padding-x) py-(--theme-panel-padding-y)',
       lg: 'px-[calc(var(--theme-panel-padding-x)*1.5)] py-[calc(var(--theme-panel-padding-y)*1.5)]',
@@ -42,6 +44,11 @@ const panelVariants = cva('min-w-0', {
     interactive: {
       true: 'cursor-pointer transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 data-[selected=true]:bg-primary/12 aria-selected:bg-primary/12',
       false: '',
+    },
+    /** Drop affordance and floating action clusters are shared treatments, not caller borders/shadows. */
+    treatment: {
+      drop: 'overflow-hidden border-2 border-dashed border-outline-input hover:border-primary/30 data-[drag-active=true]:border-primary data-[drag-active=true]:bg-primary/6 data-[drag-active=true]:hover:bg-primary/6',
+      floating: floatingSurfaceClassName,
     },
   },
   compoundVariants: [
@@ -77,14 +84,14 @@ type PanelProps = ComponentProps<'div'> & VariantProps<typeof panelVariants> & {
 }
 
 /** Render a tonal panel: the building block for ad-hoc boxes that are not a full Section. */
-function Panel({ className, tone, padding, radius, stack, interactive, asChild = false, ...props }: PanelProps) {
+function Panel({ className, tone, padding, radius, stack, interactive, treatment, asChild = false, ...props }: PanelProps) {
   const Comp = asChild ? Slot.Root : 'div'
 
   return (
     <Comp
       data-slot="panel"
-      data-surface={PANEL_SURFACE[tone ?? 'low']}
-      className={cn(panelVariants({ tone, padding, radius, stack, interactive }), className)}
+      data-surface={treatment === 'floating' ? 'high' : PANEL_SURFACE[tone ?? 'low']}
+      className={cn(panelVariants({ tone, padding, radius, stack, interactive, treatment }), className)}
       {...props}
     />
   )

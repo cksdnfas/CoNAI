@@ -55,6 +55,7 @@ router.post('/mcp', async (req: Request, res: Response) => {
       generationPresetIds: auth?.generationPresetIds ?? [],
       generationPresetSnapshot: auth?.generationPresetSnapshot,
       chatContext: auth?.chatContext,
+      research: auth?.research,
       workspace: auth?.workspace,
     };
     const handler = createMcpHandler(() => createMcpServer(context), {

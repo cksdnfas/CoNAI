@@ -255,7 +255,7 @@ export function PromptDanbooruBrowserPanel({ toolbarProps }: { toolbarProps: Pro
   const sidebar = (
     <SidebarNav>
       <SidebarGroupLabel>Danbooru DB</SidebarGroupLabel>
-      {summaryQuery.isLoading ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="my-0.5 h-8 w-full rounded-sm" />) : null}
+      {summaryQuery.isLoading ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} radius="sm" className="my-0.5 h-8 w-full" />) : null}
       {summaryQuery.isError ? (
         <Alert variant="destructive" className="mt-2">
           <AlertTitle>{t({ ko: 'DB 요약 로드 실패', en: 'Failed to load DB summary' })}</AlertTitle>

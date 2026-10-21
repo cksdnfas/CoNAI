@@ -349,8 +349,9 @@ export function PathOptionTreeSelect({ value, options, placeholder, refreshLabel
         <Tip content={!isOpen && value ? value : null} align="start">
           <Button
             type="button"
-            variant="ghost"
-            className="theme-input-surface h-auto min-h-9 min-w-0 flex-1 justify-between gap-3 border px-3 py-2 text-left font-normal text-foreground hover:bg-surface-low hover:text-foreground"
+            variant="field"
+            size="field"
+            className="min-w-0 flex-1"
             onClick={() => setIsOpen((current) => !current)}
             aria-haspopup="tree"
             aria-expanded={isOpen}

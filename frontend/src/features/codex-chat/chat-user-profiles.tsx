@@ -124,7 +124,7 @@ export function ChatUserProfileEditorModal({ open, profile, onClose }: { open: b
       dirty={dirty}
       onSave={canSave ? () => saveMutation.mutate() : undefined}
     >
-      <ModalBody className="space-y-4">
+      <ModalBody>
         <div className="flex items-end gap-3">
           <AvatarButton onClick={() => fileInputRef.current?.click()} aria-label={t({ ko: '아바타 바꾸기', en: 'Change avatar' })}>
             <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} engine="llm" size="xl" />
@@ -222,7 +222,7 @@ export function ChatUserProfileManagerModal({ open, onClose }: { open: boolean; 
       >
         <ModalBody>
           {profilesQuery.isSuccess && profiles.length === 0 ? (
-            <EmptyState size="compact" className="justify-center px-0 py-4" title={t({ ko: '아직 사용자 프로필이 없어.', en: 'No user profiles yet.' })} />
+            <EmptyState size="compact" className="justify-center" title={t({ ko: '아직 사용자 프로필이 없어.', en: 'No user profiles yet.' })} />
           ) : (
             <ChatUserProfileRows profiles={profiles} onEdit={(profile) => setEditor({ profile })} />
           )}
@@ -243,7 +243,7 @@ export function ChatUserProfilePickModal({ open, profiles, onPick, onClose }: {
   const { t } = useI18n()
   return (
     <Modal open={open} onClose={onClose} title={t({ ko: '누구로 참여할까?', en: 'Who are you in this chat?' })} widthClassName="max-w-sm">
-      <ModalBody className="pb-2">
+      <ModalBody spacing="none">
         {profiles.map((profile) => (
           <ListRow key={profile.id} asChild interactive>
             <button type="button" className="w-full gap-3 text-left" onClick={() => onPick(profile.id)}>

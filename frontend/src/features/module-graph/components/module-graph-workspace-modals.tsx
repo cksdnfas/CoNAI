@@ -99,7 +99,7 @@ export function ModuleGraphWorkspaceModals({
         <p className="text-sm text-foreground">
           {folderDeleteTarget ? t({ ko: '"{name}" 폴더를 어떻게 삭제할지 골라줘.', en: 'Choose how to delete the "{name}" folder.' }, { name: folderDeleteTarget.name }) : null}
         </p>
-        <ModalFooter className="mt-4 border-t border-line pt-3">
+        <ModalFooter separated className="mt-4">
           <Tip content={t({ ko: '안의 항목은 상위 폴더로 옮겨', en: 'Contents move up a level' })}>
             <Button type="button" variant="secondary" onClick={() => onConfirmDeleteFolder('move_children')}>
               {t({ ko: '폴더만 삭제', en: 'Delete folder only' })}

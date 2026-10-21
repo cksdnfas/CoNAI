@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { NAI_ENHANCE_DEFAULT_NOISE, NAI_ENHANCE_DEFAULT_STRENGTH } from '@conai/shared'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import {
   canUseNaiCharacterPositions,
+  clampNaiQueueCount,
   clampNaiSampleCount,
   DEFAULT_NAI_FORM,
   EMPTY_NAI_CHARACTER_PROMPT,
@@ -32,6 +34,14 @@ export function applyNaiFormPatch(current: NAIFormDraft, patch: Partial<NAIFormD
   }
   if (patch.width !== undefined || patch.height !== undefined) {
     nextForm.resolutionPreset = resolveNaiResolutionPreset(nextForm.width, nextForm.height)
+  }
+  if (patch.queueCount !== undefined) {
+    nextForm.queueCount = String(clampNaiQueueCount(patch.queueCount))
+  }
+  // Turning enhance on starts from the web UI's enhance strength/noise; later edits are kept.
+  if (patch.enhance !== undefined && patch.enhance !== 'off' && current.enhance === 'off') {
+    nextForm.strength = patch.strength ?? String(NAI_ENHANCE_DEFAULT_STRENGTH)
+    nextForm.noise = patch.noise ?? String(NAI_ENHANCE_DEFAULT_NOISE)
   }
   return nextForm
 }
@@ -153,6 +163,11 @@ export function useNaiFormController({
     }
 
     setNaiForm((current) => applyNaiFormPatch(current, { [field]: value }))
+  }
+
+  /** Apply the prompt-preset, repeat and enhance options through the shared patch rules. */
+  const handleNaiOptionChange = (patch: Partial<Pick<NAIFormDraft, 'qualityToggle' | 'ucPreset' | 'queueCount' | 'enhance'>>) => {
+    setNaiForm((current) => applyNaiFormPatch(current, patch))
   }
 
   /** Apply one resolution preset to width/height, or fall back to custom when unknown. */
@@ -337,6 +352,7 @@ export function useNaiFormController({
     useCharacterPositions,
     resetNaiForm,
     handleNaiFieldChange,
+    handleNaiOptionChange,
     handleResolutionPresetChange,
     handleNaiImageChange,
     handleAddCharacterPrompt,

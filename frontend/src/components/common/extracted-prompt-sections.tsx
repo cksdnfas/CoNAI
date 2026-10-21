@@ -182,7 +182,7 @@ function ExtractedPromptCard({ item, variant = 'card', onAddSearchFilter }: Extr
 
         <div className="ml-auto flex items-center gap-2">
           {(item.badges ?? []).map((badge) => (
-            <Badge key={`${item.id}:${badge}`} variant={badge === '그룹' ? 'default' : 'secondary'} className="tracking-normal normal-case" style={getPromptBadgeStyle(badge)}>
+            <Badge key={`${item.id}:${badge}`} variant={badge === '그룹' ? 'default' : 'secondary'} casing="sentence" style={getPromptBadgeStyle(badge)}>
               {badge === '그룹' ? t({ ko: '그룹', en: 'Group' }) : badge}
             </Badge>
           ))}

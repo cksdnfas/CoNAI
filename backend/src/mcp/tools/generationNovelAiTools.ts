@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { NAI_UC_PRESET_IDS } from '@conai/shared';
 import { getToken } from '../../utils/nai/auth';
 import { mcpGroupPathSchema } from './mcpTargetGroup';
 import { enqueueMcpGenerationJob, waitForMcpGenerationJob } from './generationJobTools';
@@ -16,9 +17,12 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
     { description: 'Generate with NovelAI and wait up to 3 minutes for the result. It queues the same job as submit_generation_job(service_type="novelai"); prefer that with wait_generation_job.', inputSchema: z.object({
       prompt: z.string().describe('Positive prompt for image generation'),
       negative_prompt: z.string().default('').describe('Negative prompt'),
+      quality_toggle: z.boolean().default(false).describe('Append the selected model quality tags to the positive prompt'),
+      uc_preset: z.enum(NAI_UC_PRESET_IDS).default('none').describe('Prepend the selected model Undesired Content preset to the negative prompt'),
       model: z.enum([
         'nai-diffusion-5-curated',
         'nai-diffusion-5-full',
+        'nai-diffusion-5-full-medium',
         'nai-diffusion-4-5-curated',
         'nai-diffusion-4-5-full',
         'nai-diffusion-4-curated-preview',
@@ -35,7 +39,7 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
       group_id: z.number().int().optional().describe('Optional group ID to assign generated images to'),
       group_path: mcpGroupPathSchema,
     }) },
-    async ({ prompt, negative_prompt, model, width, height, steps, scale, sampler, seed, n_samples, transparent_background, group_id, group_path }) => {
+    async ({ prompt, negative_prompt, quality_toggle, uc_preset, model, width, height, steps, scale, sampler, seed, n_samples, transparent_background, group_id, group_path }) => {
       try {
         assertChatNaiSampleCount(context, n_samples);
         if (!getToken()) {
@@ -49,6 +53,8 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
         const request = {
           prompt,
           negative_prompt,
+          quality_toggle,
+          uc_preset,
           model,
           width,
           height,

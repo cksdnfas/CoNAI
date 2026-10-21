@@ -80,7 +80,8 @@ export function ComfyWorkflowAuthoringSettings({ draft, roleLimitGroups, onPatch
                 <Input
                   id="comfy-workflow-artifact-root"
                   variant="settings"
-                  className="font-mono text-xs"
+                  mono
+                  controlSize="compact"
                   value={draft.artifactRootPath}
                   onChange={(event) => onPatch({ artifactRootPath: event.target.value })}
                   placeholder="runtime/artifacts/comfy-workflows/<workflow>"
@@ -102,7 +103,9 @@ export function ComfyWorkflowAuthoringSettings({ draft, roleLimitGroups, onPatch
                   <Input
                     id="comfy-workflow-public-slug"
                     variant="settings"
-                    className="min-w-0 font-mono text-xs"
+                    mono
+                    controlSize="compact"
+                    className="min-w-0"
                     value={draft.publicSlug}
                     onChange={(event) => onPatch({ publicSlug: slugifyPublicWorkflow(event.target.value) })}
                     placeholder="character-poster"

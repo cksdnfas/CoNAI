@@ -33,7 +33,7 @@ export function ChatProfilePreviewModal({ open, draft, onClose }: { open: boolea
 
   return (
     <Modal open={open} onClose={onClose} title={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })} size="normal" sidePanelInset={CHAT_DOCK_INSET}>
-      <ModalBody className="space-y-4">
+      <ModalBody>
         {previewQuery.isPending ? <LoadingState variant="inline" /> : null}
         {previewQuery.isError ? <p className="text-sm text-destructive">{getErrorMessage(previewQuery.error, t({ ko: '미리보기를 만들지 못했어.', en: 'Could not build the preview.' }))}</p> : null}
         {preview ? (

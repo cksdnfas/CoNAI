@@ -1,6 +1,8 @@
 import { Badge } from '@/components/ui/badge'
 import { Inset } from '@/components/ui/inset'
 import { StatTile } from '@/components/ui/stat-tile'
+import { ListRow } from '@/components/ui/list-row'
+import { Text } from '@/components/ui/text'
 import { Section } from '@/components/ui/section'
 import type { PromptCollectionItem, PromptGroupRecord, PromptStatistics, PromptTypeFilter } from '@/types/prompt'
 import { useI18n } from '@/i18n'
@@ -31,40 +33,36 @@ export function PromptSummaryPanel({ promptType, statistics, topPrompts = [], gr
           <StatTile
             label={t({ ko: '현재 유형 전체', en: 'Current type total' })}
             value={formatNumber(getPromptTypeTotal(promptType, statistics))}
-            valueClassName="text-2xl"
           />
           <StatTile
             label={t({ ko: '전체 포지티브', en: 'All positive' })}
             value={formatNumber(statistics?.total_prompts ?? 0)}
-            valueClassName="text-2xl"
           />
           <StatTile
             label={t({ ko: '전체 네거티브 / 자동', en: 'All negative / auto' })}
             value={`${formatNumber(statistics?.total_negative_prompts ?? 0)} / ${formatNumber(statistics?.total_auto_prompts ?? 0)}`}
-            valueClassName="text-2xl"
           />
         </div>
       </Section>
 
       <Section variant="settings" heading={t({ ko: '상위 그룹', en: 'Top groups' })}>
-        <div className="space-y-2">
+        <div>
           {topGroups.length > 0 ? topGroups.map((group) => (
-            <Inset key={group.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+            <ListRow key={group.id} trailing={<Badge variant="secondary">{formatNumber(group.prompt_count ?? 0)}</Badge>}>
               <span className="min-w-0 truncate text-foreground">{group.group_name}</span>
-              <Badge variant="secondary">{formatNumber(group.prompt_count ?? 0)}</Badge>
-            </Inset>
-          )) : <Inset className="px-3 py-4 text-sm text-muted-foreground">{t('prompts.components.prompt.summary.panel.no.group.statistics.to.show')}</Inset>}
+            </ListRow>
+          )) : <Inset padding="sm"><Text variant="muted">{t('prompts.components.prompt.summary.panel.no.group.statistics.to.show')}</Text></Inset>}
         </div>
       </Section>
 
       <Section variant="settings" heading={t({ ko: '상위 프롬프트', en: 'Top prompts' })} className="xl:col-span-2">
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {topPrompts.length > 0 ? topPrompts.slice(0, 9).map((item) => (
-            <Inset key={`${item.type}-${item.id}`} className="px-3 py-2">
+            <Inset key={`${item.type}-${item.id}`} padding="sm">
               <div className="truncate text-sm font-medium text-foreground">{item.prompt}</div>
               <div className="mt-1 text-xs text-muted-foreground">{t({ ko: '사용량 {count}', en: 'usage {count}' }, { count: formatNumber(item.usage_count) })}</div>
             </Inset>
-          )) : <Inset className="px-3 py-4 text-sm text-muted-foreground md:col-span-2 xl:col-span-3">{t('prompts.components.prompt.summary.panel.no.top.prompts.to.show')}</Inset>}
+          )) : <Inset padding="sm" className="md:col-span-2 xl:col-span-3"><Text variant="muted">{t('prompts.components.prompt.summary.panel.no.top.prompts.to.show')}</Text></Inset>}
         </div>
       </Section>
     </div>

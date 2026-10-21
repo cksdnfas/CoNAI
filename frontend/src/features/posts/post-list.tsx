@@ -90,7 +90,7 @@ export function PostFeed({ posts, categories, onOpen, onTag, menu, menuOnClick =
         return (
           <ActionContextMenu key={post.id} entries={menu?.(post) ?? []} openOnClick={menuOnClick}>
             <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }}
-              className={cn('grid cursor-pointer gap-4 border-b border-line py-4 outline-none first:pt-1 focus-visible:bg-fill', cover && 'sm:grid-cols-[9rem_1fr]')}>
+              className={cn('grid cursor-pointer gap-4 border-b border-line py-4 outline-none first:pt-1 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40', cover && 'sm:grid-cols-[9rem_1fr]')}>
               {cover ? <img src={cover} alt="" loading="lazy" className="aspect-[4/3] w-full rounded-sm bg-surface-low object-cover sm:w-36" /> : null}
               <div className="flex min-w-0 flex-col gap-1.5">
                 <PostTitle post={post} className="truncate text-base" />
@@ -232,7 +232,7 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible, loadMedia }: Omi
           </div>
         ) : (
           <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }} className="flex min-h-0 flex-1 cursor-pointer items-center rounded-sm bg-surface-low p-6 text-lg leading-relaxed">
-            <span className="line-clamp-[12]">{post.excerpt || post.title}</span>
+            <span className="line-clamp-12">{post.excerpt || post.title}</span>
           </div>
         )}
         <div className="flex flex-col gap-1">

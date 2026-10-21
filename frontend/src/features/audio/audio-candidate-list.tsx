@@ -163,7 +163,7 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
         className={cn(
           onCheck ? CHECK_ROW_GRID : ROW_GRID,
           'group min-h-14 cursor-pointer border-b border-line py-2 pr-1 transition-colors [-webkit-touch-callout:none] hover:bg-fill/60',
-          selected && 'bg-fill shadow-[inset_2px_0_0_var(--primary)] hover:bg-fill',
+          selected && 'bg-fill shadow-nav-active hover:bg-fill',
         )}
         style={depth > 0 ? { paddingLeft: `${depth * 1.5}rem` } : undefined}
       >
@@ -178,7 +178,6 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
         <IconButton
           variant={playing ? 'secondary' : 'ghost'}
           size="icon-sm"
-          className="rounded-full"
           label={`${playing ? t({ ko: '정지', en: 'Pause' }) : t({ ko: '재생', en: 'Play' })} (${shortcutLabel(shortcuts.play)})`}
           onClick={(event) => { event.stopPropagation(); onPlay() }}
         >
@@ -211,10 +210,10 @@ export function AudioCandidateRow({ row, selected, canEdit, onSelect, onPlay, on
             <IconButton
               variant="ghost"
               size="icon-sm"
-              className={cn('hidden @xl:inline-flex', candidate.review === 'selected' && 'text-success')}
+              className="hidden @xl:inline-flex"
               label={`${t({ ko: '채택', en: 'Adopt' })} (${shortcutLabel(shortcuts.select)})`}
               onClick={(event) => { event.stopPropagation(); onReview(candidate.review === 'selected' ? 'pending' : 'selected') }}
-            ><Check /></IconButton>
+            ><Check className={candidate.review === 'selected' ? 'text-success' : undefined} /></IconButton>
           ) : null}
           <span className="contents" onClick={(event) => event.stopPropagation()}>
             <ActionMenuButton entries={entries} label={t({ ko: '더 보기', en: 'More' })} />

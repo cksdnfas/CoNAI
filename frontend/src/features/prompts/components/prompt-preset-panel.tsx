@@ -178,7 +178,7 @@ function PromptPresetEditorModal({
       onClose={onClose}
     >
       <form ref={formRef} onSubmit={(event) => void handleSubmit(event)}>
-        <ModalBody className="space-y-5">
+        <ModalBody spacing="lg">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="space-y-4">
               <Field label={t('prompts.components.prompt.preset.panel.name')}>
@@ -347,7 +347,7 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
       >
         {t('prompts.components.prompt.preset.panel.presets')}
       </SidebarGroupLabel>
-      {presetsQuery.isLoading ? Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="my-0.5 h-8 w-full rounded-sm" />) : null}
+      {presetsQuery.isLoading ? Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} radius="sm" className="my-0.5 h-8 w-full" />) : null}
       {!presetsQuery.isLoading && entries.length > 0 ? (
         <SidebarTree
           items={entries.map((entry) => entry.preset)}
@@ -394,12 +394,12 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
               )}
             >
               {selectedPreset.description ? <p className="pb-2 text-sm text-muted-foreground">{selectedPreset.description}</p> : null}
-              <ListRow size="sm" className="text-xs text-muted-foreground/75" leading={<span className="w-8 text-center">{t('prompts.components.prompt.preset.panel.number')}</span>}>
-                <span className="w-2/5 min-w-0 shrink-0">{t('prompts.components.prompt.preset.panel.description')}</span>
-                <span className="min-w-0 flex-1">{t('prompts.components.prompt.preset.panel.value')}</span>
+              <ListRow size="sm" leading={<span className="w-8 text-center text-xs text-muted-foreground">{t('prompts.components.prompt.preset.panel.number')}</span>}>
+                <span className="w-2/5 min-w-0 shrink-0 text-xs text-muted-foreground">{t('prompts.components.prompt.preset.panel.description')}</span>
+                <span className="min-w-0 flex-1 text-xs text-muted-foreground">{t('prompts.components.prompt.preset.panel.value')}</span>
               </ListRow>
               {(selectedPreset.items ?? []).map((item, index) => (
-                <ListRow key={item.id} className="items-start py-2.5" leading={<span className="w-8 text-center text-xs tabular-nums text-muted-foreground">{index + 1}</span>}>
+                <ListRow key={item.id} className="items-start" leading={<span className="w-8 text-center text-xs tabular-nums text-muted-foreground">{index + 1}</span>}>
                   <span className="w-2/5 min-w-0 shrink-0 break-words">{item.description}</span>
                   <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-foreground/90">{item.value}</span>
                 </ListRow>
@@ -414,7 +414,7 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
                 </IconButton>
               )}
             >
-              <CodeBlock maxHeight="md" className="text-foreground/90">{insertionPreview || t('prompts.components.prompt.preset.panel.no.value.to.insert')}</CodeBlock>
+              <CodeBlock maxHeight="md">{insertionPreview || t('prompts.components.prompt.preset.panel.no.value.to.insert')}</CodeBlock>
             </RowGroup>
           </div>
         ) : (

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { SEARCH_SCOPE_LABEL_KEYS, SEARCH_SCOPE_TABS } from '@/features/search/search-constants'
 import { getSearchScopeStyle } from '@/features/search/search-utils'
 import type { SearchScope } from '@/features/search/search-types'
-import { Button } from '@/components/ui/button'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 
@@ -69,7 +69,7 @@ export function SearchScopeTabs({ searchScope, onChange, scopes = DEFAULT_SCOPES
       return
     }
 
-    const activeButton = element.querySelector<HTMLButtonElement>(`button[data-scope="${searchScope}"]`)
+    const activeButton = element.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
     activeButton?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' })
   }, [searchScope])
 
@@ -93,9 +93,9 @@ export function SearchScopeTabs({ searchScope, onChange, scopes = DEFAULT_SCOPES
       {canScrollLeft ? (
         <IconButton
           size="icon-sm"
-          variant="ghost"
+          variant="secondary"
           onClick={() => scrollRef.current?.scrollBy({ left: -160, behavior: 'smooth' })}
-          className="absolute left-0 top-1/2 z-10 -translate-y-1/2 bg-gradient-to-r from-background via-background/95 to-transparent"
+          className="absolute left-0 top-1/2 z-10 -translate-y-1/2"
           label={t('search.components.search.scope.tabs.previous.filter.item')}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -105,9 +105,9 @@ export function SearchScopeTabs({ searchScope, onChange, scopes = DEFAULT_SCOPES
       {canScrollRight ? (
         <IconButton
           size="icon-sm"
-          variant="ghost"
+          variant="secondary"
           onClick={() => scrollRef.current?.scrollBy({ left: 160, behavior: 'smooth' })}
-          className="absolute right-0 top-1/2 z-10 -translate-y-1/2 bg-gradient-to-l from-background via-background/95 to-transparent"
+          className="absolute right-0 top-1/2 z-10 -translate-y-1/2"
           label={t('search.components.search.scope.tabs.next.filter.item')}
         >
           <ChevronRight className="h-4 w-4" />
@@ -168,27 +168,18 @@ export function SearchScopeTabs({ searchScope, onChange, scopes = DEFAULT_SCOPES
           finishDrag()
         }}
       >
-        <div className="inline-flex min-w-full items-center gap-1 rounded-sm bg-surface-low p-1 pr-9">
-          {scopes.map((scope) => (
-            <Button
-              key={scope}
-              data-scope={scope}
-              type="button"
-              variant="ghost"
-              size="xs"
-              aria-pressed={searchScope === scope}
-              onClick={() => {
-                if (suppressClickRef.current) {
-                  return
-                }
-                onChange(scope)
-              }}
-              className={cn('px-3 font-semibold select-none', searchScope === scope && 'shadow-elevation-1')}
-              style={searchScope === scope ? getSearchScopeStyle(scope) : undefined}
-            >
-              {t(SEARCH_SCOPE_LABEL_KEYS[scope])}
-            </Button>
-          ))}
+        <div className="min-w-full pr-9">
+          <SegmentedControl
+            value={searchScope}
+            items={scopes.map((scope) => ({ value: scope, label: t(SEARCH_SCOPE_LABEL_KEYS[scope]), activeStyle: getSearchScopeStyle(scope) }))}
+            size="xs"
+            className="flex-nowrap"
+            onChange={(scope) => {
+              if (!suppressClickRef.current) {
+                onChange(scope as SearchScope)
+              }
+            }}
+          />
         </div>
       </div>
     </div>

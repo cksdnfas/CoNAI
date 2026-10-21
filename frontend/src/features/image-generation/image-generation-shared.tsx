@@ -1,4 +1,17 @@
 import type { ReactNode } from 'react'
+import {
+  getNaiFixedModelSettings,
+  getNaiQualityTags,
+  getNaiUcPresetIds,
+  NAI_ENHANCE_AMOUNTS,
+  planNaiEnhance,
+  type NaiEnhanceAmount,
+  type NaiEnhancePlan,
+  type NaiEnhanceUnavailableReason,
+  type NaiFixedModelSettings,
+  type NaiUcPresetId,
+} from '@conai/shared'
+import type { TranslationInput, TranslationParams } from '@/i18n'
 import { normalizeTextSegmentSpreadsheetText } from './components/prompt-text-segment-helpers'
 import type {
   ComfyUIServerConnectionStatus,
@@ -85,9 +98,20 @@ export const NAI_RESOLUTION_PRESETS: NAIResolutionPreset[] = [
   { key: 'square-1024', label: 'Square 1024×1024', width: 1024, height: 1024 },
 ]
 
+/** Enhance setting of the img2img form: off or one NovelAI upscale amount. */
+export type NaiEnhanceSetting = 'off' | NaiEnhanceAmount
+export const NAI_ENHANCE_SETTINGS: readonly NaiEnhanceSetting[] = ['off', ...NAI_ENHANCE_AMOUNTS]
+
 export type NAIFormDraft = {
   prompt: string
   negativePrompt: string
+  /** Append the model's quality tags to the prompt (server side). */
+  qualityToggle: boolean
+  /** Undesired Content preset placed before the negative prompt (server side). */
+  ucPreset: NaiUcPresetId
+  /** Queue jobs per Generate click (`enqueue_count`). */
+  queueCount: string
+  enhance: NaiEnhanceSetting
   model: string
   action: 'generate' | 'img2img' | 'infill'
   sampler: string
@@ -145,6 +169,7 @@ export type ModuleFieldOption = {
 export const NAI_MODEL_OPTIONS = [
   { value: 'nai-diffusion-5-curated', label: 'NAI Diffusion V5 Curated' },
   { value: 'nai-diffusion-5-full', label: 'NAI Diffusion V5 Full' },
+  { value: 'nai-diffusion-5-full-medium', label: 'NAI Diffusion V5 Full Medium (Economy)' },
   { value: 'nai-diffusion-4-5-curated', label: 'NAI Diffusion 4.5 Curated' },
   { value: 'nai-diffusion-4-5-full', label: 'NAI Diffusion 4.5 Full' },
   { value: 'nai-diffusion-4-curated-preview', label: 'NAI Diffusion 4 Curated' },
@@ -193,6 +218,11 @@ export const EMPTY_NAI_CHARACTER_REFERENCE: NAICharacterReferenceDraft = {
 export const DEFAULT_NAI_FORM: NAIFormDraft = {
   prompt: '',
   negativePrompt: '',
+  // Off/none so existing prompts do not change for current users.
+  qualityToggle: false,
+  ucPreset: 'none',
+  queueCount: '1',
+  enhance: 'off',
   model: 'nai-diffusion-4-5-curated',
   action: 'generate',
   sampler: 'k_euler',
@@ -273,6 +303,16 @@ export function clampNaiSampleCount(value: string | number, fallback = NAI_SAMPL
   return Math.min(NAI_SAMPLE_COUNT_MAX, Math.max(NAI_SAMPLE_COUNT_MIN, integerValue))
 }
 
+/** Repeat (queue jobs per click) range; the server caps `enqueue_count` at 32 as well. */
+export const NAI_QUEUE_COUNT_MIN = 1
+export const NAI_QUEUE_COUNT_MAX = 32
+
+/** Clamp the NAI repeat count into the supported integer range. */
+export function clampNaiQueueCount(value: string | number) {
+  const parsed = Math.trunc(Number(value))
+  return Number.isFinite(parsed) ? Math.min(NAI_QUEUE_COUNT_MAX, Math.max(NAI_QUEUE_COUNT_MIN, parsed)) : NAI_QUEUE_COUNT_MIN
+}
+
 /** Toggle a string item inside a selection array. */
 export function toggleSelectionItem(items: string[], value: string) {
   return items.includes(value) ? items.filter((item) => item !== value) : [...items, value]
@@ -324,6 +364,94 @@ export function supportsNaiTransparentBackground(model: string) {
 /** Check whether the selected NAI model supports 4.5-only character references. */
 export function supportsNaiCharacterReferences(model: string) {
   return model.includes('nai-diffusion-4-5')
+}
+
+/** Check whether the selected NAI model supports Vibe Transfer; NovelAI has not released it for V5. */
+export function supportsNaiVibes(model: string) {
+  return !model.includes('nai-diffusion-5')
+}
+
+/**
+ * Quality tags / UC preset the model can use: unsupported values fall back to off / none, and a model with fixed
+ * settings (V5 Full Medium) forces its UC preset (shown and sent; the stored value stays for switching back).
+ */
+export function resolveNaiPromptPresets(form: Pick<NAIFormDraft, 'model' | 'qualityToggle' | 'ucPreset'>) {
+  return {
+    qualityToggle: form.qualityToggle && getNaiQualityTags(form.model) !== null,
+    ucPreset: getNaiFixedModelSettings(form.model)?.ucPreset ?? (getNaiUcPresetIds(form.model).includes(form.ucPreset) ? form.ucPreset : 'none' as const),
+  }
+}
+
+/** Steps / sampler the request uses: a model with fixed settings overrides the stored values, which stay for switching back. */
+export function resolveNaiSamplingSettings(form: Pick<NAIFormDraft, 'model' | 'steps' | 'sampler'>) {
+  const fixed = getNaiFixedModelSettings(form.model)
+  return fixed ? { steps: String(fixed.steps), sampler: fixed.sampler } : { steps: form.steps, sampler: form.sampler }
+}
+
+/** Why a V5 model cannot take vibes (submit, chat preset save, module-graph vibe inputs). */
+export function getNaiVibesUnsupportedMessage(t: (input: TranslationInput) => string) {
+  return t({
+    ko: 'NovelAI가 V5 모델의 바이브 트랜스퍼를 아직 공개하지 않았어. 바이브를 지우거나 다른 모델을 골라줘.',
+    en: 'NovelAI has not released Vibe Transfer for V5 models yet. Remove the vibes or pick another model.',
+  })
+}
+
+/** Why the negative prompt is read-only on a model with fixed settings (NAI tab, chat preset editor). */
+export function getNaiFixedNegativeHint(t: (input: TranslationInput) => string) {
+  return t({
+    ko: '이 모델은 고정된 Heavy UC만 써. 빼고 싶은 요소는 프롬프트에 -2::hat:: 처럼 음수 가중치로 넣어줘.',
+    en: 'This model always uses the fixed Heavy UC. Put unwanted elements in the prompt as negative weights, e.g. -2::hat::.',
+  })
+}
+
+/** Page-assistant hint on an input a model with fixed settings decides; the value shown is the one used. */
+export const NAI_FIXED_MODEL_FIELD_HINT = 'Fixed by the selected model (NAI Diffusion V5 Full Medium); the value shown is what it uses. To set it, first change the model in a separate change. Put unwanted elements in the prompt as negative weights like -2::hat::.'
+
+/** Page-assistant refusal for a patch to inputs a model with fixed settings decides. */
+export function getNaiFixedFieldsError(t: (input: TranslationInput, params?: TranslationParams) => string, fields: readonly string[], settings: NaiFixedModelSettings) {
+  return t({
+    ko: '{fields}: 선택한 모델은 스텝 {steps}·{sampler}·Heavy UC로 고정이라 바꿀 수 없어. 빼고 싶은 요소는 프롬프트에 -2::hat:: 처럼 음수 가중치로 넣어줘.',
+    en: '{fields}: the selected model fixes {steps} steps, {sampler} and the Heavy UC, so these cannot change. Put unwanted elements in the prompt as negative weights like -2::hat::.',
+  }, { fields: fields.join(', '), steps: settings.steps, sampler: settings.sampler })
+}
+
+export type NaiImageSize = { width: number; height: number }
+
+/** Why the form cannot enhance: not img2img, no source image, source size still loading, or the planner's reason. */
+export type NaiEnhanceIssue = 'action' | 'source' | 'size_pending' | NaiEnhanceUnavailableReason
+
+export type NaiFormEnhancePlan = { plan: NaiEnhancePlan; issue?: undefined } | { plan?: undefined; issue: NaiEnhanceIssue }
+
+/** Plan one enhance amount for the form's img2img source image (natural size). */
+export function planNaiFormEnhance(
+  form: Pick<NAIFormDraft, 'action' | 'model' | 'sourceImage'>,
+  sourceSize: NaiImageSize | null,
+  amount: NaiEnhanceAmount,
+): NaiFormEnhancePlan {
+  if (form.action !== 'img2img') return { issue: 'action' }
+  if (!form.sourceImage) return { issue: 'source' }
+  if (!sourceSize) return { issue: 'size_pending' }
+  const result = planNaiEnhance(sourceSize, amount, form.model)
+  return result.ok ? { plan: result.plan } : { issue: result.reason }
+}
+
+/** The form's active enhance; null when it is off or the request is not img2img with a source (then it is not sent). */
+export function resolveNaiFormEnhance(form: Pick<NAIFormDraft, 'action' | 'enhance' | 'model' | 'sourceImage'>, sourceSize: NaiImageSize | null) {
+  if (form.enhance === 'off' || form.action !== 'img2img' || !form.sourceImage) return null
+  return planNaiFormEnhance(form, sourceSize, form.enhance)
+}
+
+/** Short reason text for an enhance issue (option labels, field hint, submit and assistant errors). */
+export function getNaiEnhanceIssueLabel(t: (input: TranslationInput) => string, issue: NaiEnhanceIssue) {
+  switch (issue) {
+    case 'action': return t({ ko: 'img2img에서만 가능', en: 'img2img only' })
+    case 'source': return t({ ko: '원본 이미지 필요', en: 'Source image required' })
+    case 'size_pending': return t({ ko: '원본 크기 확인 중', en: 'Reading the source size' })
+    case 'model': return t({ ko: 'V5 모델 전용', en: 'V5 models only' })
+    case 'custom_size': return t({ ko: 'NovelAI 표준 크기만 가능', en: 'NovelAI standard sizes only' })
+    case 'over_cap': return t({ ko: '결과가 최대 크기(약 3.1MP) 초과', en: 'Result would exceed the ~3.1MP cap' })
+    case 'already_max': return t({ ko: '원본이 이미 최대 크기', en: 'Source is already at the cap' })
+  }
 }
 
 /** Resolve the resolution preset key for a width/height pair. */

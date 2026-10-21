@@ -37,7 +37,7 @@ export function ComfyServerRegistrationModal({
 
   return (
     <Modal open={open} onClose={onClose} title={title} widthClassName="max-w-2xl">
-      <ModalBody className="space-y-5">
+      <ModalBody spacing="lg">
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t({ ko: '서버 이름', en: 'Server name' })}>
             <Input variant="settings" value={form.name} onChange={(event) => onFieldChange('name', event.target.value)} placeholder="Local ComfyUI" />

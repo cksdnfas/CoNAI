@@ -15,7 +15,6 @@ import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { POSTS_QUERY_KEY, invalidatePostScope, cancelPostVote, getPostQuality, getPostsSettings, reviewPost, updatePostKnowledge, votePost } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
-import { cn } from '@/lib/utils'
 import { KnowledgeSourcesEditor } from './post-knowledge-sources'
 import { usePostPermissions } from './use-post-permissions'
 
@@ -93,8 +92,6 @@ function voteCount(value: number) {
   return rounded === 0 && value > 0 ? Number(value.toFixed(1)) : rounded
 }
 
-const PILL = 'h-9 gap-2 rounded-full px-4 text-sm tabular-nums'
-
 /** 👍 / 👎 at the end of a knowledge document's body; every other document action is in the post's ⋯ menu. */
 export function PostVoteBar({ post }: { post: PostDetail }) {
   const { t } = useI18n()
@@ -136,9 +133,9 @@ export function PostVoteBar({ post }: { post: PostDetail }) {
       ) : <>
         <Tip content={noPermission}>
           <span className="inline-flex">
-            <Button variant="ghost" disabled={!canVote} aria-pressed={own === 'up'} onClick={pressUp}
+            <Button variant="subtle" disabled={!canVote} aria-pressed={own === 'up'} onClick={pressUp}
               aria-label={t({ ko: '추천 {score}', en: 'Recommend, {score}' }, { score: stats ? Number(stats.up.toFixed(2)) : 0 })}
-              className={cn(PILL, own === 'up' ? 'bg-primary/15 text-primary hover:bg-primary/20 hover:text-primary' : 'bg-surface-low')}>
+              className="tabular-nums">
               <ThumbsUp />{stats ? voteCount(stats.up) : null}
             </Button>
           </span>
@@ -147,15 +144,15 @@ export function PostVoteBar({ post }: { post: PostDetail }) {
           <Tip content={noPermission}>
             <span className="inline-flex">
               <PopoverAnchor asChild>
-                <Button variant="ghost" disabled={!canVote} aria-pressed={own === 'down'} aria-haspopup="dialog" onClick={pressDown}
+                <Button variant="subtle" disabled={!canVote} aria-pressed={own === 'down'} aria-haspopup="dialog" onClick={pressDown}
                   aria-label={t({ ko: '비추천 {score}', en: 'Do not recommend, {score}' }, { score: stats ? Number(stats.down.toFixed(2)) : 0 })}
-                  className={cn(PILL, own === 'down' ? 'bg-info-soft text-info-soft-foreground hover:bg-info-soft hover:text-info-soft-foreground' : 'bg-surface-low')}>
+                  className="tabular-nums">
                   <ThumbsDown />{stats ? voteCount(stats.down) : null}
                 </Button>
               </PopoverAnchor>
             </span>
           </Tip>
-          <PopoverContent align="center" className="w-80 space-y-3 p-3" aria-label={t({ ko: '비추천 이유', en: 'Reason for not recommending' })}>
+          <PopoverContent align="center" padding="md" className="w-80 space-y-3" aria-label={t({ ko: '비추천 이유', en: 'Reason for not recommending' })}>
             <div className="flex flex-wrap gap-1.5">
               {DOWN_REASONS.map((item) => (
                 <ToggleChip key={item.value} pressed={reasonCode === item.value} onClick={() => setReasonCode(reasonCode === item.value ? null : item.value)}>

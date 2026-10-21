@@ -133,7 +133,7 @@ export function SecurityAccountEditorModal({
           {account.groupKeys.map((groupKey) => (
             <Badge
               key={groupKey}
-              className="border-0 normal-case tracking-normal"
+              casing="sentence"
               style={getSecurityGroupBadgeStyle(getSecurityGroupColor(groupKey, groupColors))}
             >
               {getPermissionGroupDisplayName(language, groupKey, groupLabels[groupKey] ?? groupKey)}
@@ -186,7 +186,7 @@ export function SecurityAccountEditorModal({
                 {customMemberships.map((groupKey) => (
                   <Badge
                     key={groupKey}
-                    className="border-0 normal-case tracking-normal"
+                    casing="sentence"
                     style={getSecurityGroupBadgeStyle(getSecurityGroupColor(groupKey, groupColors))}
                   >
                     {getPermissionGroupDisplayName(language, groupKey, groupLabels[groupKey] ?? groupKey)}

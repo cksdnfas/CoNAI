@@ -101,8 +101,8 @@ export function PromptRandomTokenEditor({ token, status, tool, promptType, canPr
             <Button
               type="button"
               size="xs"
-              variant="ghost"
-              className="ml-1 underline"
+              variant="link"
+              className="ml-1"
               onMouseDown={(event) => {
                 event.preventDefault()
                 onRename(status.suggestion ?? token.name)

@@ -133,7 +133,8 @@ export function useWildcardInlinePopupPositions({
       window.removeEventListener('resize', updatePosition)
       window.removeEventListener('scroll', updatePosition, true)
     }
-  }, [activeDetectedCharacterKey, detectedCharacterButtonRefs])
+    // 열어 둔 채 태그를 넣어 칸 높이가 바뀌면 칩을 따라 다시 맞춘다
+  }, [activeDetectedCharacterKey, detectedCharacterButtonRefs, value])
 
   useEffect(() => {
     if (!isPopupOpen || typeof window === 'undefined') {

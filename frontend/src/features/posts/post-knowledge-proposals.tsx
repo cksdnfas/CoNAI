@@ -53,8 +53,8 @@ export function KnowledgeProposalEditor({ post, mode, onClose }: { post: PostDet
       <ModalBody>
         <Field label={t({ ko: '제목', en: 'Title' })}><Input maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
         {similar.data?.items.some((item) => item.id !== post.id) ? <Section heading={t({ ko: '기존 문서 확인', en: 'Check existing documents' })}><div className="flex flex-wrap gap-3">{similar.data.items.filter((item) => item.id !== post.id).map((item) => <Link key={item.id} to={postRoute({ postId: item.id, commentId: null })} target="_blank" className="text-sm text-secondary-text hover:underline">{item.title}</Link>)}</div></Section> : null}
-        <Field label={t({ ko: '제안 본문 (Markdown)', en: 'Proposed text (Markdown)' })}><Textarea rows={16} maxLength={200000} className="font-mono" value={body} onChange={(event) => setBody(event.target.value)} /></Field>
-        {mode === 'create' && comments.comments.some((comment) => comment.status === 'visible') ? <Section heading={t({ ko: '참고할 댓글', en: 'Comments to cite' })} bodyClassName="space-y-0"><div>{comments.comments.filter((comment) => comment.status === 'visible').map((comment) => <label key={comment.id} className="flex cursor-pointer items-start gap-3 border-b border-line py-3 last:border-0"><Checkbox checked={selectedComments.includes(comment.id)} onCheckedChange={(checked) => setSelectedComments((current) => checked ? [...current, comment.id] : current.filter((id) => id !== comment.id))} /><span className="min-w-0 flex-1"><span className="text-xs text-muted-foreground">#{comment.id} · {comment.author.name}</span><span className="mt-1 block line-clamp-3 whitespace-pre-wrap text-sm">{comment.body}</span></span></label>)}</div>
+        <Field label={t({ ko: '제안 본문 (Markdown)', en: 'Proposed text (Markdown)' })}><Textarea rows={16} maxLength={200000} mono value={body} onChange={(event) => setBody(event.target.value)} /></Field>
+        {mode === 'create' && comments.comments.some((comment) => comment.status === 'visible') ? <Section heading={t({ ko: '참고할 댓글', en: 'Comments to cite' })}><div>{comments.comments.filter((comment) => comment.status === 'visible').map((comment) => <label key={comment.id} className="flex cursor-pointer items-start gap-3 border-b border-line py-3 last:border-0"><Checkbox checked={selectedComments.includes(comment.id)} onCheckedChange={(checked) => setSelectedComments((current) => checked ? [...current, comment.id] : current.filter((id) => id !== comment.id))} /><span className="min-w-0 flex-1"><span className="text-xs text-muted-foreground">#{comment.id} · {comment.author.name}</span><span className="mt-1 block line-clamp-3 whitespace-pre-wrap text-sm">{comment.body}</span></span></label>)}</div>
           {comments.hasMore ? <Button variant="ghost" disabled={comments.isLoadingMore} onClick={() => void comments.loadMore().catch(() => undefined)}>{t({ ko: '이전 댓글 더 보기', en: 'Load earlier comments' })}</Button> : null}
           {[...comments.moreReplies].filter(([, cursor]) => cursor).map(([parentId]) => <Button key={parentId} variant="ghost" disabled={comments.loadingReplies.has(parentId)} onClick={() => void comments.loadMoreReplies(parentId).catch(() => undefined)}>{t({ ko: '#{id} 이전 답글 더 보기', en: 'Load earlier replies to #{id}' }, { id: parentId })}</Button>)}
         </Section> : null}
@@ -145,7 +145,7 @@ export function PostKnowledgeProposals({ postId, standalone = false, bare = fals
     )
   }
   return (
-    <Section heading={t({ ko: '검토할 변경 제안', en: 'Pending change proposals' })} bodyClassName="space-y-0">
+    <Section heading={t({ ko: '검토할 변경 제안', en: 'Pending change proposals' })}>
       {body}
     </Section>
   )
