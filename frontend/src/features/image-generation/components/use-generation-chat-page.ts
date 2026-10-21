@@ -16,8 +16,8 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
   const presets = useChatPresetInsertion(['prompt', 'negativePrompt'])
   const commit = useChatDraftTransaction(form, setForm)
   const fields: ChatPageField[] = [
-    { id: 'prompt', label: t({ ko: '프롬프트', en: 'Prompt' }), type: 'text', value: form.prompt },
-    { id: 'negativePrompt', label: t({ ko: '부정 프롬프트', en: 'Negative prompt' }), type: 'text', value: form.negativePrompt },
+    { id: 'prompt', label: t({ ko: '긍정 프롬프트 (포지티브)', en: 'Positive prompt' }), type: 'text', value: form.prompt },
+    { id: 'negativePrompt', label: t({ ko: '부정 프롬프트 (네거티브)', en: 'Negative prompt' }), type: 'text', value: form.negativePrompt },
     { id: 'model', label: t({ ko: '모델', en: 'Model' }), type: 'select', value: form.model, options: NAI_MODEL_OPTIONS.map((item) => item.value) },
     { id: 'sampler', label: t({ ko: '샘플러', en: 'Sampler' }), type: 'select', value: form.sampler, options: NAI_SAMPLER_OPTIONS.map((item) => item.value) },
     { id: 'scheduler', label: t({ ko: '스케줄러', en: 'Scheduler' }), type: 'select', value: form.scheduler, options: NAI_SCHEDULER_OPTIONS.map((item) => item.value) },

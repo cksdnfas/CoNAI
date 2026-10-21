@@ -417,7 +417,7 @@ function PageNavigationRegistration({ title }: { title: string }) {
     return [item.path, ...(views ? views.values.map((value) => `${item.path}?${views.param}=${value}`) : []), ...(NESTED_VIEWS[item.path] ?? [])]
   })
   const actions = destinations.length ? [pageAction('page.navigate', t({ ko: '내부 페이지 이동', en: 'Navigate within CoNAI' }), t({ ko: '접근 가능한 CoNAI 페이지나 그 탭으로 이동해. 설정은 ?section=, 다른 페이지는 ?tab= 이 탭이야.', en: 'Open an accessible CoNAI page or one of its tabs. Settings sections use ?section=, other pages ?tab=.' }), pageObject({ to: pageChoice(destinations) }, ['to']))] : []
-  if (settings.scopes.length && !settings.scope) actions.push(pageAction('page.settings_open', t({ ko: '현재 페이지 설정 열기', en: 'Open current page settings' }), '', pageObject({ scope: pageChoice(settings.scopes) }, ['scope'])))
+  if (settings.scopes.length && !settings.scope) actions.push(pageAction('page.settings_open', t({ ko: '현재 페이지 설정 열기', en: 'Open current page settings' }), t({ ko: '이 페이지에 적용되는 앱 공용 설정 창(저장 형식, 생성 속도 제한, 화면 테마 등)을 열어. 화면의 입력 칸(프롬프트 등)은 여기서 바꾸지 말고 page_fill로 채워.', en: 'Open the app-wide settings that apply to this page (save format, generation throttle, appearance, etc.). Never use it to change the screen\'s own inputs such as prompts; fill those with page_fill.' }), pageObject({ scope: pageChoice(settings.scopes) }, ['scope'])))
   useChatPageRegistration({ kind: 'page', title, resourceId: null, priority: NAVIGATION_PRIORITY, fields: [], actions, apply: () => {}, applyAction: (id, args, assertCurrent) => { assertCurrent(); if (id === 'page.settings_open') settings.open(args.scope as PageSettingsScopeId); else void navigate(String(args.to)) } })
   return null
 }
