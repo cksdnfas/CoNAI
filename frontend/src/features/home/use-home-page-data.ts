@@ -22,6 +22,7 @@ import { removeBulkDeletedImagesFromListCaches } from '@/features/images/image-l
 import { useImageDeleteUndo } from '@/features/images/use-image-delete-undo'
 import { deleteImagesBulk, downloadImageSelection, getImages, getImagesCount, searchImagesComplex } from '@/lib/api-images'
 import { formatGroupBulkAddNotice } from '@/features/groups/group-bulk-result-messages'
+import { collectGroupSubtreeIds } from '@/features/groups/group-option-utils'
 import { countStateFromQuery, type CountState } from '@/lib/count-display'
 
 interface UseHomePageDataOptions {
@@ -198,7 +199,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
       // Images just added to a hidden group leave the gallery: drop them from the loaded pages instead of reloading
       // every page. Failed adds are not named per image, so then the feed is fetched again.
       const feedKey = ['home-images', searchResetKey, hiddenGroupsKey]
-      const leavesFeed = excludeGroupIds.includes(groupId)
+      const leavesFeed = collectGroupSubtreeIds(groupsQuery.data ?? [], excludeGroupIds).has(groupId)
       if (leavesFeed && !result.errors?.length) {
         const added = new Set(compositeHashes)
         queryClient.setQueryData<InfiniteData<ImageListPayload>>(feedKey, (data) => data && {

@@ -12,6 +12,7 @@ import { Text } from '@/components/ui/text'
 import { GroupColorDot } from '@/features/groups/components/group-color-dot'
 import { filterGroupsByName } from '@/features/groups/components/group-tree'
 import { buildGroupCountMaps, getGroupHierarchyCountLabel } from '@/features/groups/group-count-utils'
+import { collectDescendantGroupIds, collectGroupSubtreeIds } from '@/features/groups/group-option-utils'
 import { HOME_HIDDEN_GROUPS_LIMIT } from '@/features/home/home-hidden-groups'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -39,20 +40,25 @@ function sortGroupsByName(left: GroupWithHierarchy, right: GroupWithHierarchy) {
   return left.name.localeCompare(right.name)
 }
 
+/** Ticked, hidden along with a ticked parent, or not hidden. */
+type RowCheckState = 'on' | 'inherited' | 'off'
+
 /**
  * The checkbox look (components/ui/checkbox) drawn inside a tree row: the row itself is the button, and a real
- * Checkbox would nest a second button in it.
+ * Checkbox would nest a second button in it. A lighter tick marks a group hidden through its parent.
  */
-function RowCheckMark({ checked }: { checked: boolean }) {
+function RowCheckMark({ state }: { state: RowCheckState }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
         'flex size-4 items-center justify-center rounded-sm border',
-        checked ? 'border-primary bg-primary' : 'border-muted-foreground/55',
+        state === 'on' && 'border-primary bg-primary',
+        state === 'inherited' && 'border-primary/40 bg-primary/40',
+        state === 'off' && 'border-muted-foreground/55',
       )}
     >
-      {checked ? <Check className="size-3.5 text-primary-foreground" strokeWidth={3} /> : null}
+      {state !== 'off' ? <Check className="size-3.5 text-primary-foreground" strokeWidth={3} /> : null}
     </span>
   )
 }
@@ -115,9 +121,23 @@ function HiddenGroupsPanel({ groups, groupsStatus, hiddenGroupIds, onHiddenGroup
   const [hiddenAncestorIds] = useState(() => collectAncestorIds(groupById, hiddenIds))
   const { visibleGroups, expandedIds } = filterGroupsByName(groups, filterText)
 
-  const toggle = (group: GroupWithHierarchy) => onHiddenGroupIdsChange(
-    hidden.has(group.id) ? hiddenIds.filter((id) => id !== group.id) : [...hiddenIds, group.id],
-  )
+  // A ticked group hides everything under it (the server walks the same tree), so those rows follow their parent.
+  const coveredIds = collectGroupSubtreeIds(groups, hiddenIds)
+  const checkState = (groupId: number): RowCheckState => (hidden.has(groupId) ? 'on' : coveredIds.has(groupId) ? 'inherited' : 'off')
+
+  const toggle = (group: GroupWithHierarchy) => {
+    // A row hidden through its parent follows the parent; untick the parent to change it.
+    if (checkState(group.id) === 'inherited') {
+      return
+    }
+    if (hidden.has(group.id)) {
+      onHiddenGroupIdsChange(hiddenIds.filter((id) => id !== group.id))
+      return
+    }
+    // Ticking a parent folds its already ticked subgroups into it, so unticking it later shows the whole branch again.
+    const descendantIds = collectDescendantGroupIds(groups, group.id)
+    onHiddenGroupIdsChange([...hiddenIds.filter((id) => !descendantIds.has(id)), group.id])
+  }
 
   let body
   if (groupsStatus === 'pending') {
@@ -136,19 +156,24 @@ function HiddenGroupsPanel({ groups, groupsStatus, hiddenGroupIds, onHiddenGroup
         expandOnSelect={false}
         defaultExpandedIds={filterText.trim() ? expandedIds : hiddenAncestorIds}
         onSelect={toggle}
-        isItemSelectable={(group) => enabled && (hidden.has(group.id) || !atLimit)}
+        // Rows stay buttons (an unselectable row is drawn with other padding and would break the indent line).
+        isItemSelectable={(group) => checkState(group.id) !== 'off' || !atLimit}
         getId={getGroupId}
         getParentId={getGroupParentId}
         sortItems={sortGroupsByName}
-        renderIcon={(group) => <RowCheckMark checked={hidden.has(group.id)} />}
-        getLabel={(group) => (
-          <span className="flex min-w-0 items-center gap-2">
-            <GroupColorDot color={group.color} />
-            <span className="min-w-0 flex-1 truncate">{group.name}</span>
-            {hidden.has(group.id) ? <span className="sr-only">{t({ ko: '숨김', en: 'Hidden' })}</span> : null}
-            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{getGroupHierarchyCountLabel(group, countMaps, formatNumber)}</span>
-          </span>
-        )}
+        renderIcon={(group) => <RowCheckMark state={checkState(group.id)} />}
+        getLabel={(group) => {
+          const state = checkState(group.id)
+          return (
+            <span className="flex min-w-0 items-center gap-2">
+              <GroupColorDot color={group.color} />
+              <span className={cn('min-w-0 flex-1 truncate', state === 'inherited' && 'text-muted-foreground')}>{group.name}</span>
+              {state === 'on' ? <span className="sr-only">{t({ ko: '숨김', en: 'Hidden' })}</span> : null}
+              {state === 'inherited' ? <span className="sr-only">{t({ ko: '상위 그룹과 함께 숨김', en: 'Hidden with its parent group' })}</span> : null}
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{getGroupHierarchyCountLabel(group, countMaps, formatNumber)}</span>
+            </span>
+          )
+        }}
       />
     )
   }
@@ -164,7 +189,7 @@ function HiddenGroupsPanel({ groups, groupsStatus, hiddenGroupIds, onHiddenGroup
           <SearchField value={filterText} onChange={setFilterText} placeholder={t({ ko: '그룹 검색', en: 'Search groups' })} />
         </div>
       ) : null}
-      {/* Off: the ticked groups stay, dimmed, until hiding is switched back on. */}
+      {/* Off: the ticked groups stay (and can still be changed), dimmed, until hiding is switched back on. */}
       <div className={cn('max-h-80 overflow-y-auto p-1', !enabled && 'opacity-50')}>{body}</div>
     </>
   )

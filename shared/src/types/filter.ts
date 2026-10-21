@@ -91,7 +91,7 @@ export interface ComplexSearchRequest {
   model_name?: string;
   start_date?: string;
   end_date?: string;
-  // Leave out media in these custom groups (the Home gallery's hidden groups)
+  // Leave out media in these custom groups and their subgroups (the Home gallery's hidden groups)
   exclude_group_ids?: number[];
 
   // Pagination
