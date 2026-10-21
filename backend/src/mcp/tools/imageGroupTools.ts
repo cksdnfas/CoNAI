@@ -418,16 +418,21 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
 
   server.registerTool(
     'move_image_groups',
-    { description: 'Move custom image groups under another existing group, or to the top level when both parent fields are omitted. Images and subgroups move along. Sibling names must stay unique and the hierarchy stays within 5 levels; any invalid move cancels the whole batch.', inputSchema: z.object({
+    { description: 'Move custom image groups under another existing group, or to the top level when both parent fields are omitted. Selected descendants travel once with selected ancestors; moved counts independently moved selection roots. Images and subgroups move along. Ancestor-target merges are refused. Sibling names stay unique and the hierarchy stays within 5 levels; any invalid move cancels the whole batch.', inputSchema: z.object({
       group_ids: groupIdsSchema,
       parent_id: z.number().int().positive().optional().describe('Existing target parent group ID'),
       parent_path: existingGroupPathSchema.describe("Existing target parent group path, e.g. 'Characters'. Never creates the parent."),
+      preview: z.boolean().optional().describe('Preview without saving; returns every recursive conflict and merge_token. Destination settings stay; source description/color/auto-collect/emoticon settings are lost. Ask explicit approval for these exact conflicts before passing merge_token.'),
+      merge_token: z.string().regex(/^[a-f0-9]{64}$/).optional().describe('Token from the approved exact preview; changed conflicts or memberships require a new preview and approval. Never infer merge approval.'),
     }) },
-    async ({ group_ids, parent_id, parent_path }) => {
+    async ({ group_ids, parent_id, parent_path, preview, merge_token }) => {
       try {
         const parentId = resolveParentGroup(parent_id, parent_path);
-        const { moved } = moveCustomGroups(group_ids, parentId, requesterAccountId);
-        return textResult({ moved, groups: [...new Set(group_ids)].map((id) => ({ group_id: id, path: GroupPathService.getPathLabel(id) })) });
+        const result = moveCustomGroups(group_ids, parentId, requesterAccountId, { preview, merge_token });
+        return textResult({ ...result, groups: [...new Set(group_ids)].map(id => {
+          const target = preview ? id : result.merged[id] ?? id;
+          return { group_id: target, path: GroupPathService.getPathLabel(target) };
+        }) });
       } catch (error) {
         return errorResult('Failed to move image groups', error);
       }

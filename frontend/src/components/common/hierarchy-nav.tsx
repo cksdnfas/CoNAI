@@ -200,7 +200,11 @@ export function HierarchyNav<T>({
           const itemClassName = getItemClassName?.(item, state)
           const content = (
             <>
-              {renderIcon ? renderIcon(item, state) : null}
+              {renderIcon ? (
+                <span className="flex size-4 shrink-0 items-center justify-center">
+                  {renderIcon(item, state)}
+                </span>
+              ) : null}
               <div className="min-w-0 flex-1">{getLabel(item)}</div>
             </>
           )
@@ -234,12 +238,13 @@ export function HierarchyNav<T>({
                     }}
                   />
                 ) : expandable ? (
-                  <div className="flex items-center gap-1 [-webkit-touch-callout:none]" style={{ paddingLeft: `${depth * 14}px` }}>
+                  <div className="flex min-w-0 items-center gap-1 [-webkit-touch-callout:none]" style={{ paddingLeft: `${depth * 14}px` }}>
                     {hasChildren ? (
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon-sm"
+                        className="aria-expanded:bg-transparent aria-expanded:hover:bg-fill"
                         onClick={() => toggleExpanded(itemId)}
                         aria-expanded={isExpanded}
                         aria-label={isExpanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '펼치기', en: 'Expand' })}
@@ -273,7 +278,7 @@ export function HierarchyNav<T>({
                     ) : (
                       <div
                         {...itemEventHandlers}
-                        className={cn('inline-flex max-w-full flex-1 items-center gap-2 rounded-sm px-2 py-2 text-sm text-muted-foreground/45', itemClassName)}
+                        className={cn('inline-flex h-8 min-w-0 max-w-full flex-1 items-center gap-1.5 rounded-sm px-2 text-sm text-muted-foreground/45', itemClassName)}
                       >
                         {content}
                       </div>
@@ -299,7 +304,7 @@ export function HierarchyNav<T>({
             </Row>
           )
         })
-    return variant === 'sidebar' ? <>{rows}</> : <div className={cn('space-y-1', depth === 0 && className)}>{rows}</div>
+    return variant === 'sidebar' ? <>{rows}</> : <div className={depth === 0 ? className : undefined}>{rows}</div>
   }
 
   return <>{renderNodes(null, 0)}</>

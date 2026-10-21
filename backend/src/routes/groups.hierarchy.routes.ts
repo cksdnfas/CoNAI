@@ -4,6 +4,8 @@ import { GroupModel } from '../models/Group';
 import { GroupMoveRequest, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { getGroupHierarchyService } from '../services/groupHierarchyService';
+import { moveCustomGroups, GroupMutationError } from '../services/groupMutationService';
+import { getRequesterAccountId } from './requester-session-helpers';
 import {
   GROUP_NAME_CONFLICT_MESSAGE,
   GroupPathError,
@@ -52,23 +54,10 @@ router.get('/:id/breadcrumb', asyncHandler(async (req: Request, res: Response) =
 router.post('/:id/move', asyncHandler(async (req: Request, res: Response) => {
   try {
     const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
-    const { parent_id } = req.body as GroupMoveRequest;
-
-    const hierarchyService = getGroupHierarchyService();
-    const validation = hierarchyService.validateHierarchy(id, parent_id);
-
-    if (!validation.valid) {
-      return res.status(400).json(errorResponse(validation.error || 'Invalid hierarchy'));
-    }
-
-    const updated = await GroupModel.update(id, { parent_id });
-
-    if (!updated) {
-      return res.status(404).json(errorResponse('Group not found'));
-    }
-
-    return res.json(successResponse({ message: 'Group moved successfully' }));
+    const { parent_id, preview, merge_token, edit } = req.body as GroupMoveRequest;
+    return res.json(successResponse({ message: 'Group moved successfully', ...moveCustomGroups([id], parent_id ?? null, getRequesterAccountId(req), { preview: preview === true, merge_token, edit }) }));
   } catch (error) {
+    if (error instanceof GroupMutationError) return res.status(400).json(errorResponse(error.message));
     if (isGroupNameConflictError(error)) {
       return res.status(400).json(errorResponse(GROUP_NAME_CONFLICT_MESSAGE));
     }

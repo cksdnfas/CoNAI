@@ -1,4 +1,5 @@
 import { db } from '../database/init';
+import type { Database } from 'better-sqlite3';
 import { GroupRecord, ImageGroupRecord, GroupCreateData, GroupUpdateData, GroupWithStats, AutoCollectCondition } from '@conai/shared';
 import { ImageMetadataRecord, ImageWithFileView } from '../types/image';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
@@ -111,7 +112,7 @@ export class GroupModel {
   /**
    * 그룹 업데이트
    */
-  static update(id: number, groupData: GroupUpdateData): boolean {
+  static update(id: number, groupData: GroupUpdateData, database: Database = db): boolean {
     // undefined 값 제거 및 데이터 변환
     const updates = filterDefined({
       name: groupData.name,
@@ -135,7 +136,7 @@ export class GroupModel {
     }
 
     const { sql, values } = buildUpdateQuery('groups', updates, { id });
-    const info = db.prepare(sql).run(...values);
+    const info = database.prepare(sql).run(...values);
     return info.changes > 0;
   }
 

@@ -117,8 +117,8 @@ router.post('/bulk-delete', asyncHandler(async (req: Request, res: Response) => 
 
 router.post('/bulk-move', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { ids, parent_id } = req.body ?? {};
-    return res.json(successResponse(moveCustomGroups(ids, parent_id ?? null, getRequesterAccountId(req))));
+    const { ids, parent_id, preview, merge_token, edit } = req.body ?? {};
+    return res.json(successResponse(moveCustomGroups(ids, parent_id ?? null, getRequesterAccountId(req), { preview: preview === true, merge_token, edit })));
   } catch (error) {
     if (error instanceof GroupMutationError) {
       return sendRouteBadRequest(res, error.message);

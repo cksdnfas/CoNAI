@@ -242,6 +242,7 @@ export function requireMcpToolAccess(context: McpRequestContext, toolName: strin
       throw new Error('Administrator access required: only administrators can switch the live wallpaper or save its schedule, as in the wallpaper editor. list_wallpapers still reads the current state.');
     }
     if (toolName === 'resolve_image_group_path') requireContextPermission(context, params.create === false ? 'images.view' : 'images.edit');
+    if (toolName === 'move_image_groups' && params.preview !== true && params.merge_token) requireContextPermission(context, 'images.delete');
     if (toolName === 'add_images_to_group' || getMcpToolScope(toolName) === 'generate' || isChatGenerationTool(toolName)) {
       if (params.group_id || params.group_path) requireContextPermission(context, 'images.edit');
     }

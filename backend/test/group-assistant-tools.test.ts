@@ -59,6 +59,151 @@ test('group assistant tools: rules, page actions and MCP group create/update/run
     return { isError: Boolean(result.isError), text, data: result.isError ? null : JSON.parse(text) }
   }
 
+  await t.test('recursive root merges deduplicate resources, require exact preview and roll back conflicts', async () => {
+    const { GroupModel } = await import('../src/models/Group')
+    const { moveCustomGroups } = await import('../src/services/groupMutationService')
+    const container = GroupModel.create({ name: 'Merge container' })
+    const destination = GroupModel.create({ name: 'Merge root', emoticon_enabled: true })
+    const source = GroupModel.create({ name: 'merge ROOT', parent_id: container })
+    const child = GroupModel.create({ name: 'Child', parent_id: source })
+    const targetChild = GroupModel.create({ name: 'child', parent_id: destination })
+    const unique = GroupModel.create({ name: 'Unique', parent_id: source })
+    const insert = main.db.prepare('INSERT INTO group_resources(group_id,resource_key,reference,label) VALUES(?,?,?,?)')
+    for (const id of [source, destination]) insert.run(id, 'files:abc', '{"source":"files","fileId":"abc","label":"A"}', 'A')
+    const hash = 'a'.repeat(32)
+    main.db.prepare('INSERT INTO media_metadata(composite_hash) VALUES(?)').run(hash)
+    const membership = main.db.prepare('INSERT INTO image_groups(group_id,composite_hash,collection_type,emote_keywords) VALUES(?,?,?,?)')
+    membership.run(source, hash, 'manual', '["happy"]')
+    membership.run(destination, hash, 'auto', '["smile"]')
+    assert.throws(() => moveCustomGroups([source], null, null), /preview/)
+    const preview = moveCustomGroups([source, child], null, null, { preview: true })
+    assert.equal(preview.moved, 1, 'selected descendants travel with their selected ancestor')
+    assert.equal(preview.conflicts.length, 2)
+    assert.ok(GroupModel.findById(source), 'preview must not persist')
+    GroupModel.update(destination, { description: 'changed after preview' })
+    assert.throws(() => moveCustomGroups([source], null, null, { merge_token: preview.merge_token! }), /stale/)
+    assert.equal(GroupModel.findById(child)?.parent_id, source, 'stale execution rolls back recursively')
+    const fresh = moveCustomGroups([source], null, null, { preview: true })
+    const result = moveCustomGroups([source], null, null, { merge_token: fresh.merge_token! })
+    assert.equal(result.merged[source], destination)
+    assert.equal(result.merged[child], targetChild)
+    assert.equal(GroupModel.findById(source), null)
+    assert.deepEqual(main.db.prepare("PRAGMA foreign_key_check('image_groups')").all(), [])
+    assert.equal((main.db.prepare('SELECT COUNT(*) AS n FROM image_groups WHERE group_id=?').get(source) as { n: number }).n, 0)
+    assert.equal(GroupModel.findById(unique)?.parent_id, destination)
+    assert.equal((main.db.prepare('SELECT COUNT(*) AS n FROM group_resources WHERE group_id=?').get(destination) as { n: number }).n, 1)
+    const memberships = main.db.prepare('SELECT collection_type,emote_keywords FROM image_groups WHERE group_id=?').all(destination) as { collection_type: string; emote_keywords: string }[]
+    assert.equal(memberships.length, 1)
+    assert.equal(memberships[0].collection_type, 'manual')
+    assert.deepEqual(JSON.parse(memberships[0].emote_keywords), ['smile', 'happy'])
+    assert.throws(() => moveCustomGroups([destination], unique, null), /Circular/)
+
+    const otherParent = GroupModel.create({ name: 'Other merge container' })
+    const otherSource = GroupModel.create({ name: 'Merge root', parent_id: otherParent })
+    const batchSource = GroupModel.create({ name: 'Merge root', parent_id: container })
+    const batchPreview = moveCustomGroups([batchSource, otherSource], null, null, { preview: true })
+    assert.equal(batchPreview.conflicts.length, 2)
+    assert.equal(moveCustomGroups([batchSource, otherSource], null, null, { merge_token: batchPreview.merge_token! }).moved, 2)
+
+    const collisionSource = GroupModel.create({ name: 'Merge root', parent_id: container })
+    const secondHash = 'b'.repeat(32)
+    main.db.prepare('INSERT INTO media_metadata(composite_hash) VALUES(?)').run(secondHash)
+    membership.run(collisionSource, secondHash, 'manual', '["happy"]')
+    assert.throws(() => moveCustomGroups([collisionSource], null, null, { preview: true }), /multiple media/)
+    assert.ok(GroupModel.findById(collisionSource))
+    assert.equal((main.db.prepare('SELECT COUNT(*) AS n FROM image_groups WHERE group_id=?').get(destination) as { n: number }).n, 1)
+    user.getUserSettingsDb().prepare('INSERT INTO runtime_jobs(job_id,kind,params) VALUES(?,?,?)')
+      .run('merge-reference-test', 'group-auto-collect', JSON.stringify({ groupId: collisionSource }))
+    assert.throws(() => moveCustomGroups([collisionSource], null, null, { preview: true }), /referenced/)
+  })
+
+  await t.test('ancestor/descendant merge chains reject without losing child media or resources', async () => {
+    const { GroupModel } = await import('../src/models/Group')
+    const { moveCustomGroups } = await import('../src/services/groupMutationService')
+    const top = GroupModel.create({ name: 'Ancestor chain' })
+    const source = GroupModel.create({ name: 'Ancestor chain', parent_id: top })
+    const child = GroupModel.create({ name: 'Ancestor chain', parent_id: source })
+    const hash = 'c'.repeat(32)
+    main.db.prepare('INSERT INTO media_metadata(composite_hash) VALUES(?)').run(hash)
+    main.db.prepare('INSERT INTO image_groups(group_id,composite_hash) VALUES(?,?)').run(child, hash)
+    main.db.prepare('INSERT INTO group_resources(group_id,resource_key,reference,label) VALUES(?,?,?,?)')
+      .run(child, 'files:chain', '{"source":"files","fileId":"chain","label":"chain"}', 'chain')
+    assert.throws(() => moveCustomGroups([source], null, null, { preview: true }), /ancestor/)
+    assert.throws(() => moveCustomGroups([source], null, null, { merge_token: '0'.repeat(64) }), /ancestor/)
+    assert.throws(() => moveCustomGroups([top], child, null, { preview: true }), /Circular/)
+    assert.equal(GroupModel.findById(source)?.parent_id, top)
+    assert.equal(GroupModel.findById(child)?.parent_id, source)
+    assert.ok(main.db.prepare('SELECT 1 FROM image_groups WHERE group_id=? AND composite_hash=?').get(child, hash))
+    assert.ok(main.db.prepare('SELECT 1 FROM group_resources WHERE group_id=?').get(child))
+  })
+
+  await t.test('merge preserves stored keyword semantics and auto contributions survive the next rematch', async () => {
+    const { GroupModel, ImageGroupModel } = await import('../src/models/Group')
+    const { moveCustomGroups } = await import('../src/services/groupMutationService')
+    const container = GroupModel.create({ name: 'Keyword container' })
+    const destination = GroupModel.create({ name: 'Keyword target', emoticon_enabled: true })
+    const source = GroupModel.create({ name: 'Keyword target', parent_id: container })
+    user.getUserSettingsDb().prepare("INSERT INTO llm_chat_profiles(name,chat_style) VALUES('Malformed stored style','not json')").run()
+    const folder = Number(main.db.prepare("INSERT INTO watched_folders(folder_path,folder_name) VALUES('/merge-keywords','merge-keywords')").run().lastInsertRowid)
+    const hashes = [11, 12, 13, 14, 15, 16, 17].map(n => n.toString(16).padStart(32, '0'))
+    for (const hash of hashes) {
+      main.db.prepare('INSERT INTO media_metadata(composite_hash) VALUES(?)').run(hash)
+      main.db.prepare("INSERT INTO image_files(composite_hash,original_file_path,folder_id,file_status,file_size,mime_type) VALUES(?,?,?,'active',1,'image/png')")
+        .run(hash, `/merge-keywords/${hash}/same.png`, folder)
+    }
+    const add = main.db.prepare('INSERT INTO image_groups(group_id,composite_hash,collection_type,emote_keywords) VALUES(?,?,?,?)')
+    add.run(destination, hashes[0], 'manual', null)
+    add.run(destination, hashes[1], 'manual', null)
+    add.run(source, hashes[2], 'auto', null)
+    add.run(source, hashes[0], 'auto', '[]')
+    add.run(destination, hashes[3], 'auto', '[ "keep" ]')
+    add.run(source, hashes[3], 'auto', '["KEEP"]')
+    add.run(destination, hashes[4], 'auto', '["OLD"]')
+    add.run(source, hashes[4], 'auto', '["new","old"]')
+    add.run(destination, hashes[5], 'auto', '[]')
+    const preview = moveCustomGroups([source], null, null, { preview: true })
+    moveCustomGroups([source], null, null, { merge_token: preview.merge_token! })
+    const keyword = (hash: string) => (main.db.prepare('SELECT emote_keywords FROM image_groups WHERE group_id=? AND composite_hash=?').get(destination, hash) as { emote_keywords: string | null }).emote_keywords
+    assert.equal(keyword(hashes[0]), null)
+    assert.equal(keyword(hashes[1]), null)
+    assert.equal(keyword(hashes[2]), null, 'copied fallback must stay a fallback')
+    assert.equal(keyword(hashes[3]), '[ "keep" ]', 'equivalent contributed words must not rewrite stored target words')
+    assert.deepEqual(JSON.parse(keyword(hashes[4])!), ['OLD', 'new'])
+    const rematch = await ImageGroupModel.replaceAutoCollectedImagesStaged(destination, () => {})
+    assert.equal(rematch.removedCount, 1, 'only unrelated target auto membership is removed')
+    for (const hash of [hashes[2], hashes[3], hashes[4]]) {
+      assert.equal((main.db.prepare('SELECT collection_type FROM image_groups WHERE group_id=? AND composite_hash=?').get(destination, hash) as { collection_type: string }).collection_type, 'manual')
+    }
+    const badSource = GroupModel.create({ name: 'Keyword target', parent_id: container })
+    add.run(badSource, hashes[6], 'auto', '["same"]')
+    assert.throws(() => moveCustomGroups([badSource], null, null, { preview: true }), /multiple media/)
+    assert.ok(GroupModel.findById(badSource))
+  })
+
+  await t.test('move/edit previews, cancellation and stale execution never partially save fields', async () => {
+    const { GroupModel } = await import('../src/models/Group')
+    const { moveCustomGroups } = await import('../src/services/groupMutationService')
+    const container = GroupModel.create({ name: 'Editor container' })
+    const destination = GroupModel.create({ name: 'Editor target', description: 'destination settings' })
+    const source = GroupModel.create({ name: 'Editor source', parent_id: container, description: 'original' })
+    const options = { edit: { name: 'Editor target', description: 'draft edit' } }
+    const preview = moveCustomGroups([source], null, null, { ...options, preview: true })
+    assert.equal(GroupModel.findById(source)?.description, 'original')
+    assert.equal(GroupModel.findById(source)?.name, 'Editor source')
+    assert.equal(preview.conflicts[0].source_path, 'Editor container/Editor target')
+    GroupModel.update(destination, { description: 'concurrent change' })
+    assert.throws(() => moveCustomGroups([source], null, null, { ...options, merge_token: preview.merge_token! }), /stale/)
+    assert.equal(GroupModel.findById(source)?.description, 'original')
+    assert.equal(GroupModel.findById(source)?.parent_id, container)
+    const fresh = moveCustomGroups([source], null, null, { ...options, preview: true })
+    moveCustomGroups([source], null, null, { ...options, merge_token: fresh.merge_token! })
+    assert.equal(GroupModel.findById(destination)?.description, 'concurrent change', 'source edit must not overwrite destination settings')
+    const plain = GroupModel.create({ name: 'Editor ordinary', description: 'before' })
+    moveCustomGroups([plain], container, null, { edit: { description: 'after' } })
+    assert.equal(GroupModel.findById(plain)?.description, 'after')
+    assert.equal(GroupModel.findById(plain)?.parent_id, container)
+  })
+
   await t.test('rules build the chip-mode filter and read back', async () => {
     const { buildGroupAutoCollectFilter, readGroupAutoCollectRules } = await import('@conai/shared')
     const filter = buildGroupAutoCollectFilter([
@@ -101,9 +246,11 @@ test('group assistant tools: rules, page actions and MCP group create/update/run
   await t.test('group routes keep their responses after moving onto the shared service', async () => {
     const express = (await import('express')).default
     const { groupMutationRoutes } = await import('../src/routes/groups.mutation.routes')
+    const { groupHierarchyRoutes } = await import('../src/routes/groups.hierarchy.routes')
     const app = express()
     app.use(express.json())
     app.use('/api/groups', groupMutationRoutes)
+    app.use('/api/groups', groupHierarchyRoutes)
     const listener = app.listen(0)
     try {
       const base = `http://127.0.0.1:${(listener.address() as { port: number }).port}/api/groups`
@@ -127,6 +274,13 @@ test('group assistant tools: rules, page actions and MCP group create/update/run
       const { GroupModel } = await import('../src/models/Group')
       const parent = (await send('POST', base, { name: 'Bulk parent' })).body.data!.id!
       const child = (await send('POST', base, { name: 'Bulk child', parent_id: parent })).body.data!.id!
+      assert.equal((await send('POST', `${base}/${child}/move`, { parent_id: null, edit: { description: 'atomic route edit' }, preview: true })).status, 200)
+      assert.equal(GroupModel.findById(child)?.parent_id, parent)
+      assert.equal(GroupModel.findById(child)?.description, null)
+      assert.equal((await send('POST', `${base}/${child}/move`, { parent_id: null, edit: { description: 'atomic route edit' } })).status, 200)
+      assert.equal(GroupModel.findById(child)?.parent_id, null)
+      assert.equal(GroupModel.findById(child)?.description, 'atomic route edit')
+      assert.equal((await send('POST', `${base}/${child}/move`, { parent_id: parent })).status, 200)
       const other = (await send('POST', base, { name: 'Bulk other' })).body.data!.id!
       const loose = (await send('POST', base, { name: 'Bulk loose' })).body.data!.id!
       assert.equal((await send('POST', `${base}/bulk-move`, { ids: [other], parent_id: child })).status, 200)
@@ -195,6 +349,18 @@ test('group assistant tools: rules, page actions and MCP group create/update/run
 
     assert.equal((await call('update_image_group', { group_id: parent.data.group_id, auto_collect_enabled: true })).isError, true, 'enabling needs rules')
     assert.equal((await call('update_image_group', { group_id: parent.data.group_id })).isError, true, 'nothing to update')
+  })
+
+  await t.test('MCP merge preview reports coherent current source IDs and paths', async () => {
+    await call('create_image_group', { name: 'Preview container' })
+    const destination = await call('create_image_group', { name: 'Preview collision' })
+    const source = await call('create_image_group', { name: 'Preview collision', parent_path: 'Preview container' })
+    const preview = await call('move_image_groups', { group_ids: [source.data.group_id], preview: true })
+    assert.equal(preview.isError, false, preview.text)
+    assert.equal(preview.data.conflicts[0].destination_id, destination.data.group_id)
+    assert.equal(preview.data.groups[0].group_id, source.data.group_id)
+    assert.equal(preview.data.groups[0].path, 'Preview container/Preview collision')
+    assert.equal((await call('get_image_group', { group_id: preview.data.groups[0].group_id })).data.path, preview.data.groups[0].path)
   })
 
   await t.test('MCP moves groups and deletes them only by their confirmed names', async () => {

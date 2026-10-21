@@ -18,6 +18,11 @@ router.use((req, res, next) => {
     allowImagesView(req, res, next);
   } else {
     const deletesGroups = (req.method === 'DELETE' && /^\/[^/]+$/.test(req.path)) || (req.method === 'POST' && req.path === '/bulk-delete');
+    const mergesGroups = req.method === 'POST' && (req.path === '/bulk-move' || /^\/[^/]+\/move$/.test(req.path)) && req.body?.preview !== true && Boolean(req.body?.merge_token);
+    if (mergesGroups) {
+      requirePermission('images.edit')(req, res, () => requirePermission('images.delete')(req, res, next));
+      return;
+    }
     const permission = deletesGroups ? 'images.delete' : 'images.edit';
     requirePermission(permission)(req, res, next);
   }

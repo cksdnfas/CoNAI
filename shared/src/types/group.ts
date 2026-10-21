@@ -150,4 +150,20 @@ export interface HierarchyValidation {
  */
 export interface GroupMoveRequest {
   parent_id: number | null;
+  preview?: boolean;
+  merge_token?: string;
+  edit?: GroupUpdateData;
+}
+
+export interface GroupMoveOptions {
+  preview?: boolean;
+  merge_token?: string;
+  edit?: GroupUpdateData;
+}
+
+export interface GroupMoveResult {
+  moved: number;
+  conflicts: Array<{ source_id: number; source_name: string; source_path: string; destination_id: number; destination_name: string; destination_path: string }>;
+  merged: Record<number, number>;
+  merge_token: string | null;
 }

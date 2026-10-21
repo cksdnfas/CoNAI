@@ -1,11 +1,12 @@
 import type { AutoCollectCondition, ComplexFilter, GroupCreateData, GroupUpdateData } from '@conai/shared';
-import { db } from '../database/init';
 import { GroupModel } from '../models/Group';
 import { AutoCollectionService } from './autoCollectionService';
 import { ComplexFilterService } from './complexFilterService';
 import { getGroupHierarchyService } from './groupHierarchyService';
 import { GROUP_NAME_CONFLICT_MESSAGE, isGroupNameConflictError } from './groupPathService';
 import { GroupRematchJobService, type GroupRematchJobRecord } from './groupRematchJobService';
+import { executeGroupMove, GroupMoveError } from './groupMoveService';
+import type { GroupMoveOptions } from '@conai/shared';
 
 /** A request the caller can fix; routes answer 400, MCP tools report the message. */
 export class GroupMutationError extends Error {}
@@ -95,16 +96,24 @@ export function deleteCustomGroups(ids: unknown, cascade: boolean) {
 }
 
 /** Move several custom groups under one parent (null: top level); any invalid move cancels the whole batch. */
-export function moveCustomGroups(ids: unknown, parentId: number | null, requestedByAccountId: number | null) {
+export function moveCustomGroups(ids: unknown, parentId: number | null, _requestedByAccountId: number | null, options: GroupMoveOptions = {}) {
   const groupIds = requireGroupIds(ids);
+  if (options.edit) {
+    if (groupIds.length !== 1 || typeof options.edit !== 'object' || Array.isArray(options.edit) || options.edit.parent_id !== undefined) throw new GroupMutationError('Move edit requires one group and no nested parent_id');
+    if (options.edit.name !== undefined && (typeof options.edit.name !== 'string' || !options.edit.name.trim())) throw new GroupMutationError('Group name is required');
+    requireValidAutoCollect(options.edit.auto_collect_enabled, options.edit.auto_collect_conditions);
+    const { name, description, color, auto_collect_enabled, auto_collect_conditions, emoticon_enabled } = options.edit;
+    options = { ...options, edit: { name: name?.trim(), description, color, auto_collect_enabled, auto_collect_conditions, emoticon_enabled } };
+  }
   if (parentId !== null && (!Number.isInteger(parentId) || parentId <= 0 || !GroupModel.findById(parentId))) {
     throw new GroupMutationError('Target parent group not found');
   }
-  return db.transaction(() => {
-    for (const id of groupIds) {
-      if (!GroupModel.findById(id)) throw new GroupMutationError(`Group ${id} not found`);
-      updateCustomGroup(id, { parent_id: parentId }, requestedByAccountId);
-    }
-    return { moved: groupIds.length };
-  })();
+  try {
+    const result = executeGroupMove(groupIds, parentId, options);
+    if (!options.preview && options.edit?.auto_collect_enabled && options.edit.auto_collect_conditions && !result.merged[groupIds[0]]) startAutoCollect(groupIds[0], _requestedByAccountId, 'after group move/edit');
+    return result;
+  } catch (error) {
+    if (error instanceof GroupMoveError) throw new GroupMutationError(error.message);
+    rethrowNameConflict(error);
+  }
 }

@@ -1,4 +1,5 @@
 import { buildApiUrl, fetchJson } from '@/lib/api-client'
+import type { GroupMoveOptions, GroupMoveResult } from '@conai/shared'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { resolveGroupRematchJobResponse } from '@/lib/api-group-rematch-jobs'
 import { getDownloadFileName, prepareDownloadTarget, readDownloadBlob, saveDownloadBlob } from '@/lib/download-utils'
@@ -168,13 +169,13 @@ export async function deleteGroups(groupIds: number[], options?: { cascade?: boo
 }
 
 /** Move groups under one parent (`null`: top level); an invalid move cancels the whole batch. */
-export async function moveGroups(groupIds: number[], parentId: number | null) {
-  const response = await fetchJson<ApiResponse<{ moved: number }>>('/api/groups/bulk-move', {
+export async function moveGroups(groupIds: number[], parentId: number | null, options: GroupMoveOptions = {}) {
+  const response = await fetchJson<ApiResponse<GroupMoveResult>>('/api/groups/bulk-move', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ ids: groupIds, parent_id: parentId }),
+    body: JSON.stringify({ ids: groupIds, parent_id: parentId, ...options }),
   })
 
   if (!response.success) {

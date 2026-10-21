@@ -1,6 +1,8 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { createElement, useState } from 'react'
+import type { GroupMoveOptions } from '@conai/shared'
+import { GroupMergeConfirmationDetails } from './components/group-merge-confirmation-details'
 import { downloadAutoFolderGroupArchive, rebuildAutoFolderGroups } from '@/lib/api-auto-folder-groups'
 import {
   addImagesToGroup,
@@ -93,11 +95,20 @@ export function useGroupPageActions({
   })
 
   const updateGroupMutation = useMutation({
-    mutationFn: ({ groupId: targetGroupId, input }: { groupId: number; input: GroupMutationInput }) => updateGroup(targetGroupId, input),
-    onSuccess: async () => {
+    mutationFn: async ({ groupId: targetGroupId, input }: { groupId: number; input: GroupMutationInput }) => {
+      const current = allGroups.find(g => g.id === targetGroupId)
+      if (input.parent_id !== undefined && input.parent_id !== (current?.parent_id ?? null)) {
+        const { parent_id, ...edit } = input
+        return confirmAndMove([targetGroupId], parent_id, edit as GroupMoveOptions['edit'])
+      }
+      return updateGroup(targetGroupId, input)
+    },
+    onSuccess: async (result) => {
       setEditorState(null)
+      const merged: Record<number, number> = 'merged' in result ? result.merged : {}
+      if (selectedGroupId && merged[selectedGroupId]) navigate(`/groups/${merged[selectedGroupId]}?tab=custom`)
       showSnackbar({ message: t('groups.use.group.page.actions.custom.group.settings.saved'), tone: 'info' })
-      await refreshCustomGroupQueries()
+      await refreshCustomGroupQueries({ skipGroupIds: new Set(Object.keys(merged).map(Number)) })
     },
     onError: (error) => {
       showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.custom.groups.save.failed'), tone: 'error' })
@@ -130,13 +141,28 @@ export function useGroupPageActions({
     },
   })
 
+  const confirmAndMove = async (ids: number[], parentId: number | null, edit?: GroupMoveOptions['edit']) => {
+      const preview = await moveGroups(ids, parentId, { preview: true, edit })
+      if (preview.conflicts.length) {
+        if (!canDeleteImages) throw new Error(t({ ko: '그룹 합치기에는 삭제 권한도 필요해.', en: 'Merging groups also requires delete permission.' }))
+        const approved = await confirm({
+          title: t({ ko: '같은 이름의 그룹 합치기', en: 'Merge same-name groups' }),
+          description: createElement(GroupMergeConfirmationDetails, { conflicts: preview.conflicts }),
+          confirmLabel: t({ ko: '합치고 옮기기', en: 'Merge and move' }),
+          tone: 'destructive',
+        })
+        if (!approved) throw new Error(t({ ko: '합치기를 취소했어.', en: 'Merge cancelled.' }))
+      }
+      return moveGroups(ids, parentId, { merge_token: preview.merge_token ?? undefined, edit })
+  }
   const moveGroupsMutation = useMutation({
-    mutationFn: ({ ids, parentId }: { ids: number[]; parentId: number | null }) => moveGroups(ids, parentId),
+    mutationFn: ({ ids, parentId }: { ids: number[]; parentId: number | null }) => confirmAndMove(ids, parentId),
     onSuccess: async (result) => {
       setGroupDialog(null)
       setManagedGroupIds([])
+      if (selectedGroupId && result.merged[selectedGroupId]) navigate(`/groups/${result.merged[selectedGroupId]}?tab=custom`)
       showSnackbar({ message: t({ ko: '그룹 {count}개를 옮겼어.', en: '{count} groups moved.' }, { count: formatNumber(result.moved) }), tone: 'info' })
-      await refreshCustomGroupQueries()
+      await refreshCustomGroupQueries({ skipGroupIds: new Set(Object.keys(result.merged).map(Number)) })
     },
     onError: (error) => {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '그룹을 옮기지 못했어.', en: 'Failed to move the groups.' }), tone: 'error' })

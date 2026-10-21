@@ -133,6 +133,45 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
   const group = AuthPermissionGroup.createCustomGroup({ name: 'image-reader', permissionKeys: ['images.view'] })
   const accountId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('reader', 'unused', 'guest')").run().lastInsertRowid)
   AuthPermissionGroup.addAccountMembership(group.id, accountId)
+  await t.test('group merge needs edit AND delete; ordinary moves and deletes keep independent grants', async () => {
+    const { GroupModel } = await import('../src/models/Group')
+    const { moveCustomGroups } = await import('../src/services/groupMutationService')
+    const send = async (url: string, body: unknown, method = 'POST') => {
+      const response = await fetch(origin + url, { method, headers: { 'x-test-account': String(accountId), 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      await response.arrayBuffer()
+      return response.status
+    }
+    try {
+      for (const bulk of [false, true]) {
+        const parent = GroupModel.create({ name: `Permission merge container ${bulk}` })
+        const destination = GroupModel.create({ name: `Permission merge target ${bulk}` })
+        const source = GroupModel.create({ name: `Permission merge target ${bulk}`, parent_id: parent })
+        const preview = moveCustomGroups([source], null, null, { preview: true })
+        const url = bulk ? '/api/groups/bulk-move' : `/api/groups/${source}/move`
+        const body = { ids: [source], parent_id: null, merge_token: preview.merge_token }
+        for (const permissionKeys of [[], ['images.edit'], ['images.delete']]) {
+          AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys })
+          assert.equal(await send(url, body), 403, `${url}: ${permissionKeys.join(',') || 'no permissions'} cannot merge`)
+          assert.equal(GroupModel.findById(source)?.parent_id, parent)
+        }
+        AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.edit', 'images.delete'] })
+        assert.equal(await send(url, body), 200)
+        assert.equal(GroupModel.findById(source), null)
+        assert.ok(GroupModel.findById(destination))
+      }
+      const movable = GroupModel.create({ name: 'Edit-only movable' })
+      const parent = GroupModel.create({ name: 'Edit-only destination' })
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.edit'] })
+      assert.equal(await send(`/api/groups/${movable}/move`, { parent_id: parent }), 200)
+      assert.equal(await send(`/api/groups/${movable}`, {}, 'DELETE'), 403)
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.delete'] })
+      assert.equal(await send(`/api/groups/${movable}`, {}, 'DELETE'), 200)
+      const bulkDeleted = GroupModel.create({ name: 'Delete-only bulk target' })
+      assert.equal(await send('/api/groups/bulk-delete', { ids: [bulkDeleted] }), 200)
+    } finally {
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
+    }
+  })
   await t.test('CLI sign-in management is admin-only and Claude tool grants are independent and revocable', async () => {
     for (const agent of ['codex', 'claude']) {
       assert.equal(await status(`/api/settings/agent-cli/${agent}/login`), 403)

@@ -139,7 +139,11 @@ export function GroupEditorModal({
     }
 
     setFormError(null)
-    await onSubmit(input)
+    try {
+      await onSubmit(input)
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : String(error))
+    }
   }
 
   // Auto-collect conditions are left out: the chip editor re-serialises them, so comparing would flag untouched groups.

@@ -27,8 +27,8 @@ export interface ValidationResult {
 export class GroupHierarchyService {
   private db: Database;
 
-  constructor() {
-    this.db = db;
+  constructor(database: Database = db) {
+    this.db = database;
   }
 
   /**
