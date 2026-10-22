@@ -4,7 +4,7 @@ import { resolveChatAccess } from './codexChatAccess'
 import { modelLanguageGuidance, replyTranslationPrompt, userTranslationPrompt } from './chatTranslation'
 import { contextContentText, contextHash, contextSections, contextSource, limitContextMeta, loreDiagnostics, markContextMessage, markContextParts, contextKindOf, contextPartsOf, type ChatDiagnosticsFields, type ChatContextSectionKind, type ContextSource } from './chatContextDiagnostics'
 import { buildReplyContext } from './chatReplyContext'
-import { isCodexChatCreationTool, stripEchoedAddresses, type WorkspaceText } from '@conai/shared'
+import { bothSidesSpeak, isCodexChatCreationTool, splitExampleDialogue, stripEchoedAddresses, type WorkspaceText } from '@conai/shared'
 import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
 import { CHAT_ROOM_TOOLS, isChatOwnTool } from '../../mcp/context'
 import { CATALOG_OPEN_TOOL } from '../../mcp/toolCatalog'
@@ -49,6 +49,12 @@ export function replyReserveFor(contextTokens: number | null, maxTokens: number 
 }
 
 const EXAMPLE_NOTE = '바로 뒤에 이어지는 첫 user/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니야. 실제 대화는 그 다음부터야.'
+
+/** With seeded turns right behind the examples, the note counts the examples so the model knows where they end. */
+function exampleNote(examples: number, seeded: number) {
+  if (examples === 0) return ''
+  return seeded > 0 ? `바로 뒤에 이어지는 첫 ${examples}개 user/assistant 메시지는 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니��. 그 다음 메시지부터는 실제로 나눈 대화야.` : EXAMPLE_NOTE
+}
 
 /**
  * How to generate: free-form through the queue, or through the profile's generation presets only.
@@ -122,44 +128,22 @@ export function stripThinking(text: string) {
 
 export { fillCharacterPlaceholders }
 
-const USER_SPEAKERS = /^(?:\{\{\s*user\s*\}\}|user|사용자|유저|나)\s*[:：]\s?/i
-const ASSISTANT_SPEAKERS = /^(?:\{\{\s*char\s*\}\}|char|assistant|ai|캐릭터)\s*[:：]\s?/i
-
-/**
- * Example dialogue as user/assistant turns: each `사용자:` / `{{user}}:` or `{{char}}:` / `<name>:` line starts an
- * utterance and unlabelled lines continue it (`<START>` separators are dropped). Null unless both sides speak.
- */
+/** Example dialogue as user/assistant turns (`splitExampleDialogue`, placeholders filled). Null unless both sides speak. */
 export function parseExampleDialogue(content: string, profile: ChatProfile, user?: ChatUserPersona | null): ChatCompletionMessage[] | null {
-  const namePattern = new RegExp(`^${profile.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[:：]\\s?`)
-  const turns: Array<{ role: 'user' | 'assistant'; lines: string[] }> = []
-  for (const rawLine of content.split(/\r?\n/)) {
-    const line = rawLine.trimEnd()
-    if (/^\s*<start>\s*$/i.test(line)) continue
-    const role = USER_SPEAKERS.test(line) ? 'user' : ASSISTANT_SPEAKERS.test(line) || namePattern.test(line) ? 'assistant' : null
-    if (role) {
-      const text = line.replace(role === 'user' ? USER_SPEAKERS : ASSISTANT_SPEAKERS.test(line) ? ASSISTANT_SPEAKERS : namePattern, '')
-      const last = turns.at(-1)
-      if (last?.role === role) last.lines.push(text)
-      else turns.push({ role, lines: [text] })
-    } else if (turns.length > 0 && line.trim()) {
-      turns[turns.length - 1].lines.push(line)
-    }
-  }
-  if (!turns.some((turn) => turn.role === 'user') || !turns.some((turn) => turn.role === 'assistant')) {
-    return null
-  }
-  return turns.map((turn) => ({ role: turn.role, content: fillCharacterPlaceholders(turn.lines.join('\n').trim(), profile, user) }))
+  const { turns } = splitExampleDialogue(content, profile.name)
+  return bothSidesSpeak(turns) ? turns.map((turn) => ({ role: turn.role, content: fillCharacterPlaceholders(turn.text, profile, user) })) : null
 }
 
 /**
  * The system prompt and the enabled text sections (each under its title) as one block. Dialogue sections join it
- * as text only when `dialogueAsText` (Codex) or when their lines carry no speaker labels.
+ * as text, after the text sections, only when `dialogueAsText` (Codex) or when their lines carry no speaker labels.
  */
 export function buildPersonaPrompt(profile: ChatProfile, options: { dialogueAsText?: boolean; user?: ChatUserPersona | null; onPart?: (kind: ChatContextSectionKind, text: string) => void } = {}) {
   const blocks = [profile.systemPrompt]
   if (profile.systemPrompt) options.onPart?.('system-prompt', fillCharacterPlaceholders(profile.systemPrompt, profile, options.user))
-  for (const section of profile.promptSections) {
-    if (!section.enabled || !section.content.trim() || section.kind === 'post') continue
+  const sections = [...profile.promptSections.filter((section) => section.kind === 'text'), ...profile.promptSections.filter((section) => section.kind === 'dialogue')]
+  for (const section of sections) {
+    if (!section.enabled || !section.content.trim()) continue
     if (section.kind === 'dialogue' && !options.dialogueAsText && parseExampleDialogue(section.content, profile, options.user)) continue
     // The chat's user profile describes the user; an old profile's own user persona gives way to it.
     if (section.id === 'legacy-persona' && options.user?.persona) continue
@@ -178,12 +162,19 @@ export function postHistoryText(profile: ChatProfile, user?: ChatUserPersona | n
   return text ? fillCharacterPlaceholders(text, profile, user) : ''
 }
 
-/** Example turns from dialogue sections, sent right after the system messages. */
-function buildExampleMessages(profile: ChatProfile, user?: ChatUserPersona | null): ChatCompletionMessage[] {
+/** Turns of dialogue sections marked as history; the profile preview labels them apart from examples. */
+const seededMessages = new WeakSet<object>()
+export const isSeededMessage = (message: object) => seededMessages.has(message)
+
+/** Turns from dialogue sections, sent right after the system messages: the examples, or (`asHistory`) the seeded turns. */
+function buildExampleMessages(profile: ChatProfile, user: ChatUserPersona | null | undefined, asHistory: boolean): ChatCompletionMessage[] {
   return profile.promptSections
-    .filter((section) => section.enabled && section.kind === 'dialogue')
+    .filter((section) => section.enabled && section.kind === 'dialogue' && (section.asHistory === true) === asHistory)
     .flatMap((section) => parseExampleDialogue(section.content, profile, user) ?? [])
-    .map((message) => markContextMessage(message, 'example'))
+    .map((message) => {
+      if (asHistory) seededMessages.add(message)
+      return markContextMessage(message, 'example')
+    })
 }
 
 /** A turn starts at a user message; a greeting before the first user message is a turn of its own. */
@@ -369,16 +360,19 @@ export function rejectedLoreFor(threadId: number | null | undefined, tools: Read
 
 /**
  * Everything before the real conversation: one system message — the system prompt first (stable, so servers can reuse
- * the cached prefix), then the lore index with the "always on" entries and the rolling summary — then example turns. Chat templates often allow
- * system messages only at the start, so the note that the examples are not real lives in the system prompt rather
- * than around them. `lore` defaults to the profile's global books with no chat (a preview).
+ * the cached prefix), then the lore index with the "always on" entries and the rolling summary — then example turns,
+ * then the turns of dialogue sections marked as history. Chat templates often allow system messages only at the start,
+ * so the note that the examples are not real lives in the system prompt rather than around them; it covers only the
+ * examples, which come first. `lore` defaults to the profile's global books with no chat (a preview).
  */
 export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, lore: Pick<ChatLore, 'index' | 'constant'> = selectChatLore(profile), user: ChatUserPersona | null = null) {
-  const examples = buildExampleMessages(profile, user)
+  const examples = buildExampleMessages(profile, user, false)
+  const seeded = buildExampleMessages(profile, user, true)
+  const note = exampleNote(examples.length, seeded.length)
   const personaParts: Array<{ kind: ChatContextSectionKind; text: string }> = []
   const systemPrompt = [
     buildPersonaPrompt(profile, { user, onPart: (kind, text) => personaParts.push({ kind, text }) }),
-    examples.length > 0 ? EXAMPLE_NOTE : '',
+    note,
     withTools ? toolGuidance(profile.generationPresetIds.length > 0) : '',
     REPLY_FORMAT_GUIDANCE,
     REPLY_GUIDANCE,
@@ -396,12 +390,12 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
   const system = [systemPrompt, memory].filter(Boolean).join('\n\n')
   const result: ChatCompletionMessage[] = system ? [markContextParts({ role: 'system', content: system }, [
     ...personaParts,
-    { kind: 'guidance', text: [examples.length > 0 ? EXAMPLE_NOTE : '', fixedContextGuidance(profile, withTools)].filter(Boolean).join('\n\n') },
+    { kind: 'guidance', text: [note, fixedContextGuidance(profile, withTools)].filter(Boolean).join('\n\n') },
     { kind: 'lore-index', text: lore.index },
     { kind: 'constant-lore', text: lore.constant ? `## 상시 항목\n${lore.constant}` : '' },
     { kind: 'summary', text: config.summaryEnabled && thread?.summary?.trim() ? `## 지금까지의 대화 요약\n${thread.summary.trim()}` : '' },
   ])] : []
-  return [...result, ...examples]
+  return [...result, ...examples, ...seeded]
 }
 
 /** The display block state of a chat as the model reads it ('' without blocks). `speakerId`: a room member's own. */

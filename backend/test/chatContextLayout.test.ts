@@ -189,6 +189,24 @@ test('a request is: one system message (persona, then lore index + always-on ent
   assert.equal(result[5].content, '[message_id=5; from=user]\n같이 갈까?\n\n[사용자 지시: 이번 메시지에 적용]\n- 짧게 답해')
 })
 
+test('dialogue marked as history follows the examples without the example note; unlabelled dialogue joins after the text sections', () => {
+  const thread = { id: 7, summary: null, summary_until_message_id: null } as CodexChatThreadRecord
+  const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '' }
+  const seeded = { id: 'seed', title: '지난 대화', content: '사용자: 어제 바다 갔지?\n카이: 응, 노을 봤어', kind: 'dialogue', enabled: true, asHistory: true }
+  const run = (promptSections: unknown[]) => buildChatMessages({ profile: { ...profile, promptSections } as unknown as ChatProfile, thread, messages: [record(1, 'user', '오늘은?')], config, tools: [], books: [] })
+
+  const both = run([seeded, ...profile.promptSections])
+  assert.deepEqual(both.slice(1, 5).map((message) => message.content), ['안녕', '반가워', '어제 바다 갔지?', '응, 노을 봤어'])
+  assert.match(String(both[0].content), /첫 2개 user\/assistant 메시지는 말투와 형식을 보여주는 예시일 뿐/, 'the note says where the examples end')
+  assert.match(String(run(profile.promptSections)[0].content), /첫 user\/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐/)
+  const onlySeeded = run([seeded])
+  assert.doesNotMatch(String(onlySeeded[0].content), /예시일 뿐/)
+  assert.deepEqual(onlySeeded.slice(1, 3).map((message) => message.content), ['어제 바다 갔지?', '응, 노을 봤어'])
+
+  const system = String(run([{ id: 'memo', title: '말투', content: '짧게 말해.', kind: 'dialogue', enabled: true }, { id: 'world', title: '세계', content: '항구 도시.', kind: 'text', enabled: true }])[0].content)
+  assert.ok(system.indexOf('## 세계') < system.indexOf('## 말투'))
+})
+
 test("a keyword entry of an attached book goes into [참고 설정] at the lore depth, not into the system messages", () => {
   const thread = { id: 9, summary: null, summary_until_message_id: null, context_turns: null, summary_enabled: null } as unknown as CodexChatThreadRecord
   const messages = [record(1, 'user', '먹물 봤어?'), record(2, 'assistant', '아니'), record(3, 'user', '찾아보자')]

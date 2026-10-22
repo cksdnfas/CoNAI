@@ -6,6 +6,7 @@ import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageRecord, 
 import type { ChatProfile, ModelSlot } from '@/lib/api-codex-chat'
 import type { Draft } from './chat-profile-editor-fields'
 import { BACKGROUND_SLOT, REFERENCE_SLOT, type ProfileAssetRuns } from './chat-profile-asset-runs'
+import { newPromptSectionId } from './chat-profile-sections'
 
 export type ProfileEditorSection = 'character' | 'appearance' | 'model' | 'memory' | 'tools' | 'look'
 
@@ -30,11 +31,26 @@ const ZERO_CLEARS = new Set<DraftKey>(['summarySlotId', 'translationSlotId', 'su
 const LANGUAGES = CHAT_TRANSLATION_LANGUAGES.map((language) => language.id)
 
 /** A filled page value as the draft holds it: 0 (or −1 for temperature) for "unset", linked files with their write flag. */
-function draftValue(key: DraftKey, value: ChatPageData): unknown {
+function draftValue(key: DraftKey, value: ChatPageData, current: Draft): unknown {
   if (ZERO_CLEARS.has(key) && value === 0) return null
   if (key === 'temperature' && typeof value === 'number' && value < 0) return null
   if (key === 'linkedFiles' && Array.isArray(value)) return value.map((entry) => ({ id: String((entry as Record<string, unknown>).id), write: (entry as Record<string, unknown>).write === true }))
-  if (key === 'promptSections' && Array.isArray(value)) return value.map((entry) => ({ ...(entry as Record<string, unknown>), enabled: (entry as Record<string, unknown>).enabled !== false }))
+  if (key === 'promptSections' && Array.isArray(value)) {
+    // The whole array is resent to change one section: an entry keeps what it leaves out from the section with its id,
+    // and content that is still the cut read-out keeps the full text. A repeated id gets a new one.
+    const byId = new Map(current.promptSections.map((section) => [section.id, section]))
+    const seen = new Set<string>()
+    return value.map((entry) => {
+      const section = entry as Record<string, unknown>
+      const id = typeof section.id === 'string' && section.id && !seen.has(section.id) ? section.id : newPromptSectionId()
+      seen.add(id)
+      const existing = byId.get(id)
+      const kind = section.kind === 'text' || section.kind === 'dialogue' || section.kind === 'post' ? section.kind : existing?.kind ?? 'text'
+      const content = existing && section.content === cut(existing.content) ? existing.content : section.content
+      const asHistory = kind === 'dialogue' && (typeof section.asHistory === 'boolean' ? section.asHistory : existing?.asHistory === true)
+      return { ...section, id, kind, content, asHistory, enabled: section.enabled !== false }
+    })
+  }
   return value
 }
 
@@ -90,7 +106,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
   const ids = <T extends { id: number }>(items: T[] | undefined) => (items ?? []).map((item) => item.id)
   const draftSchema = pageObject({
     name: pageText(60), tagline: pageText(200), systemPrompt: pageText(20000),
-    promptSections: pageArray(pageObject({ title: pageText(80), content: pageText(20000), enabled: { type: 'boolean' } }, ['title', 'content']), 30),
+    promptSections: pageArray(pageObject({ id: pageText(100), title: pageText(80), content: pageText(20000), kind: pageChoice(['text', 'dialogue', 'post']), asHistory: { type: 'boolean' }, enabled: { type: 'boolean' } }, ['title', 'content']), 30),
     greeting: pageText(20000), alternateGreetings: pageArray(pageText(20000), 100), authorNote: pageText(4000), appearance: pageText(20000),
     engine: pageChoice(['llm', 'codex', 'claude']),
     ...(slots.length ? { modelSlotId: pageChoice(slots.map((slot) => slot.id)) } : {}),
@@ -137,7 +153,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       section,
       profile: {
         saved: Boolean(profile), id: profile?.id ?? null, name: draft.name, tagline: draft.tagline, systemPrompt: cut(draft.systemPrompt),
-        promptSections: draft.promptSections.map((entry) => ({ title: entry.title, content: cut(entry.content), enabled: entry.enabled !== false })),
+        promptSections: draft.promptSections.map((entry) => ({ id: entry.id, title: entry.title, content: cut(entry.content), kind: entry.kind, asHistory: entry.asHistory === true, enabled: entry.enabled !== false })),
         greeting: cut(draft.greeting), alternateGreetings: draft.alternateGreetings.map(cut), authorNote: draft.authorNote, appearance: cut(draft.appearance ?? ''),
         engine: draft.engine, modelSlotId: draft.modelSlotId, lorebookIds: draft.lorebookIds, blockIds: draft.blockIds, isEnabled: draft.isEnabled,
         temperature: draft.temperature, maxTokens: draft.maxTokens, visionEnabled: draft.visionEnabled, contentRatingMode: draft.contentRatingMode, contentRatingTierId: draft.contentRatingTierId,
@@ -182,7 +198,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       if (!keys.length) throw new Error('채울 항목이 없어.')
       const before = draftRef.current
       const next: Partial<Draft> = {}
-      for (const key of keys) (next as Record<string, unknown>)[key] = draftValue(key, input[key])
+      for (const key of keys) (next as Record<string, unknown>)[key] = draftValue(key, input[key], before)
       // The editor's own pairings: no judge preset leaves no judge model; a suggesting chat profile replaces a user profile.
       if (keys.includes('judgePresetId') && next.judgePresetId === null && !keys.includes('judgeSlotId')) { next.judgeSlotId = null; keys.push('judgeSlotId') }
       const extra: Partial<Draft> = keys.includes('suggestProfileId') && next.suggestProfileId != null ? { suggestUserProfileId: null } : {}

@@ -139,7 +139,7 @@ function profileGuide() {
     'Fields (propose_chat_profile):',
     `- name (required, max ${limits.name}), tagline (max ${limits.tagline}, one-line intro shown on the profile card).`,
     `- system_prompt (max ${limits.text}): instructions every chat starts with. Use {{char}} for the profile name and {{user}} for the user's persona name.`,
-    `- prompt_sections (max ${limits.sections}): [{ "title": "World", "content": "...", "enabled": true }]. Title max ${limits.sectionTitle}, content max ${limits.text}. Plain sections are appended after the system prompt as "## title". Optional kind "dialogue" marks example conversation (lines starting with {{user}}: / {{char}}: become real turns).`,
+    `- prompt_sections (max ${limits.sections}): [{ "title": "World", "content": "...", "enabled": true }]. Title max ${limits.sectionTitle}, content max ${limits.text}. Plain sections are appended after the system prompt as "## title". Optional kind "dialogue" marks example conversation (lines starting with {{user}}: / {{char}}: become real turns); add "asHistory": true to send those turns as conversation already held instead of as examples. Kind "post" goes after the latest message (a character card's post-history instructions).`,
     `- greeting (max ${limits.text}) and alternate_greetings (max ${limits.alternateGreetings}): the first message of a new chat is picked at random among them.`,
     `- author_note (max ${limits.authorNote}): scene direction added near the end of every request.`,
     `- appearance (max ${limits.text}): the character's look as image-prompt tags (hair, eyes, outfit…). Character image generation puts it in front of every asset prompt.`,
@@ -355,7 +355,7 @@ function proposerFileOwner(context: McpRequestContext): string | null {
 }
 
 function withoutSectionIds(value: unknown) {
-  return Array.isArray(value) ? value.map((section) => ({ title: section.title, content: section.content, kind: section.kind, enabled: section.enabled })) : value;
+  return Array.isArray(value) ? value.map((section) => ({ title: section.title, content: section.content, kind: section.kind, enabled: section.enabled, asHistory: section.asHistory === true })) : value;
 }
 
 function sameValue(key: ProposableKey, a: unknown, b: unknown) {
@@ -683,7 +683,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
       name: z.string(),
       tagline: z.string().optional(),
       system_prompt: z.string(),
-      prompt_sections: z.array(z.object({ title: z.string(), content: z.string(), enabled: z.boolean().optional(), kind: z.enum(['text', 'dialogue']).optional() })).optional(),
+      prompt_sections: z.array(z.object({ title: z.string(), content: z.string(), enabled: z.boolean().optional(), kind: z.enum(['text', 'dialogue', 'post']).optional(), asHistory: z.boolean().optional() })).optional(),
       greeting: z.string().optional(),
       alternate_greetings: z.array(z.string()).optional(),
       author_note: z.string().optional(),

@@ -62,6 +62,8 @@ export type ChatPromptSection = {
    */
   kind: 'text' | 'dialogue' | 'post'
   enabled: boolean
+  /** `dialogue` only: the turns go out as conversation already held, without the note that they are only examples. */
+  asHistory?: boolean
 }
 
 export const DEFAULT_CHAT_SUMMARY_PROMPT = [
@@ -372,12 +374,14 @@ export function normalizeSections(value: unknown): ChatPromptSection[] {
     const title = text(record.title, SECTION_TITLE_MAX_LENGTH)
     const content = text(record.content, TEXT_MAX_LENGTH)
     if (!title && !content) return []
+    const kind = record.kind === 'dialogue' || record.kind === 'post' ? record.kind : 'text' as const
     return [{
       id: text(record.id, 40) || `s${index}-${Date.now().toString(36)}`,
       title,
       content,
-      kind: record.kind === 'dialogue' || record.kind === 'post' ? record.kind : 'text' as const,
+      kind,
       enabled: record.enabled !== false,
+      ...(kind === 'dialogue' && record.asHistory === true ? { asHistory: true } : {}),
     }]
   })
 }

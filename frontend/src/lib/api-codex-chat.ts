@@ -399,6 +399,7 @@ export interface ChatPromptSection {
   content: string
   /** `post`: goes after the latest message (a card's post-history instructions). */
   kind: 'text' | 'dialogue' | 'post'
+  asHistory?: boolean
   enabled: boolean
 }
 
@@ -1399,7 +1400,7 @@ export interface ChatToolInfo {
 
 export interface ChatProfilePreview {
   engine: ChatEngine
-  messages: Array<{ role: string; content: string | null }>
+  messages: Array<{ role: string; content: string | null; seeded?: boolean }>
   tools: string[]
   tokens: { prompt: number; tools: number; total: number }
   contextTokens: number | null
