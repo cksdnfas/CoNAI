@@ -53,7 +53,7 @@ const EXAMPLE_NOTE = '바로 뒤에 이어지는 첫 user/assistant 대화들은
 /** With seeded turns right behind the examples, the note counts the examples so the model knows where they end. */
 function exampleNote(examples: number, seeded: number) {
   if (examples === 0) return ''
-  return seeded > 0 ? `바로 뒤에 이어지는 첫 ${examples}개 user/assistant 메시지는 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니��. 그 다음 메시지부터는 실제로 나눈 대화야.` : EXAMPLE_NOTE
+  return seeded > 0 ? `바로 뒤에 이어지는 첫 ${examples}개 user/assistant 메시지는 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니야. 그 다음 메시지부터는 실제로 나눈 대화야.` : EXAMPLE_NOTE
 }
 
 /**
