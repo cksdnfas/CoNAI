@@ -1,5 +1,7 @@
 import { buildApiUrl, fetchJson } from './api-client'
 
+export const EXTERNAL_API_PROVIDERS_QUERY_KEY = ['external-api-providers'] as const
+
 /** `decision_typesafe`: a TypeSafe decision model (Jev) for chat judge presets. */
 export type ExternalApiProviderType = 'general' | 'llm_openai_compatible' | 'llm_ollama' | 'decision_typesafe'
 
@@ -28,15 +30,6 @@ export interface ExternalApiProviderUpsertInput {
   is_enabled?: boolean
 }
 
-export interface ExternalApiLlmOptionRecord {
-  provider_name: string
-  display_name: string
-  provider_type: Extract<ExternalApiProviderType, 'llm_openai_compatible' | 'llm_ollama'>
-  default_model?: string | null
-  default_temperature?: number | null
-  default_max_tokens?: number | null
-}
-
 type ExternalApiProvidersResponse = {
   success: boolean
   data: ExternalApiProviderRecord[]
@@ -56,18 +49,8 @@ type ExternalApiConnectionTestResponse = {
   thinking?: { model: string; current: 'none' | 'reasoning_effort' | 'enable_thinking'; found: 'none' | 'reasoning_effort' | 'enable_thinking' | null }
 }
 
-type ExternalApiLlmOptionsResponse = {
-  success: boolean
-  data: ExternalApiLlmOptionRecord[]
-}
-
 export async function getExternalApiProviders() {
   const response = await fetchJson<ExternalApiProvidersResponse>('/api/external-api/providers')
-  return Array.isArray(response.data) ? response.data : []
-}
-
-export async function getExternalApiLlmOptions() {
-  const response = await fetchJson<ExternalApiLlmOptionsResponse>('/api/external-api/llm-options')
   return Array.isArray(response.data) ? response.data : []
 }
 

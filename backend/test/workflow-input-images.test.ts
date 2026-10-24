@@ -69,6 +69,15 @@ test('workflow input images: data URLs go into the library once and come back as
   assert.deepEqual(inputs.image, ref, 'the caller inputs are left alone')
 
   assert.equal(await materializeLibraryImageInputs('comfyui', ports, inputs), inputs, 'ComfyUI uploads the library file itself')
+  const referencePorts = [{ key: 'references', label: 'References', direction: 'input' as const, data_type: 'json' as const }]
+  const references = [{ role: 'item', label: 'first', data_url: ref }, { role: 'style', data_url: ref }]
+  for (const engine of ['codex', 'system']) {
+    const result = await materializeLibraryImageInputs(engine, referencePorts, { references })
+    assert.deepEqual(result.references, [
+      { role: 'item', label: 'first', data_url: forNai.image }, { role: 'style', data_url: forNai.image },
+    ])
+    assert.deepEqual(references[0].data_url, ref)
+  }
 
   await assert.rejects(ingestWorkflowInputImage('data:image/png;base64,'), WorkflowInputImageError)
   await assert.rejects(ingestWorkflowInputImage(`data:image/png;base64,${Buffer.from('<html></html>').toString('base64')}`), WorkflowInputImageError)

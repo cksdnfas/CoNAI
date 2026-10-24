@@ -1,5 +1,11 @@
 # 워크플로우 편집
 
+## Codex 역할 참조 입력
+
+`Codex 이미지 생성` 노드는 기존 `image`/`mask` 포트와 `operation:auto` 추론을 유지합니다. 추가 `references` JSON 포트는 순서 있는 `[{role, label?, data_url}]`를 받습니다. `role`은 `reference|style|material|scale|item`, `label`은 최대 128자입니다. `data_url`은 PNG/JPEG/WebP base64 data URL 또는 라이브러리 선택 `{ "composite_hash": "…" }`를 사용할 수 있습니다. 라이브러리 선택은 실행 시 파일로 해석되고 큐 저장 전에 큰 바이트가 별도 입력 저장소로 분리됩니다.
+
+`preserve`의 빈 값은 기존 동작, `strict`는 원본과 같은 크기의 PNG 마스크가 있는 infill 전용입니다. 생성 크기 불일치를 거부하고 검정 보호 영역을 원본 픽셀로 유지한 PNG를 저장·검사합니다. 원본/마스크/참조 합계 5장, 파일당 10 MiB·합계 32 MiB, 최대 한 변 4096px입니다. MCP·웹·그래프는 같은 검증을 거칩니다. 해상도는 요청값이며 일반 생성 크기는 달라질 수 있습니다. 전체 계약은 [Codex 생성](./CODEX_GENERATION.md)을 참고합니다.
+
 워크플로우 탭은 모듈 그래프로 생성·처리 흐름을 만들고, 저장하고, 실행 결과를 관리하는 화면입니다. ComfyUI, NAI, Codex, LLM, 커스텀 노드 같은 작업을 노드로 이어 붙여 반복 가능한 파이프라인으로 씁니다.
 
 ## 위치

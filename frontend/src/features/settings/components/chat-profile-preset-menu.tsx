@@ -4,19 +4,20 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { getLlmPresetOptions, type LlmPresetOptionRecord } from '@/lib/api-settings-llm'
+import { LLM_PRESET_OPTIONS_QUERY_KEY, getLlmPresetOptions, type LlmPresetOptionRecord } from '@/lib/api-settings-llm'
 
 /**
  * The LLM presets (Settings → LLM) inside the profile editor: a system prompt preset fills the system prompt, a prompt
  * preset is added as a section of its own.
  */
-export function ChatProfilePresetMenu({ open, onSystemPrompt, onSection }: {
+export function ChatProfilePresetMenu({ open, canAddSection = true, onSystemPrompt, onSection }: {
   open: boolean
+  canAddSection?: boolean
   onSystemPrompt: (preset: LlmPresetOptionRecord) => void
   onSection: (preset: LlmPresetOptionRecord) => void
 }) {
   const { t } = useI18n()
-  const presetsQuery = useQuery({ queryKey: ['llm-preset-options', 'chat-profile-editor'], queryFn: getLlmPresetOptions, enabled: open, staleTime: 30_000 })
+  const presetsQuery = useQuery({ queryKey: LLM_PRESET_OPTIONS_QUERY_KEY, queryFn: getLlmPresetOptions, enabled: open, staleTime: 30_000 })
   const systemPresets = presetsQuery.data?.systemPromptPresets ?? []
   const promptPresets = presetsQuery.data?.promptPresets ?? []
   const label = t({ ko: '프리셋 불러오기', en: 'Load a preset' })
@@ -41,7 +42,7 @@ export function ChatProfilePresetMenu({ open, onSystemPrompt, onSection }: {
         {promptPresets.length > 0 ? (
           <>
             <DropdownMenuLabel>{t({ ko: '섹션으로 추가', en: 'Add as a section' })}</DropdownMenuLabel>
-            {promptPresets.map((preset) => <DropdownMenuItem key={preset.id} onSelect={() => onSection(preset)}>{preset.name}</DropdownMenuItem>)}
+            {promptPresets.map((preset) => <DropdownMenuItem key={preset.id} disabled={!canAddSection} onSelect={() => onSection(preset)}>{preset.name}</DropdownMenuItem>)}
           </>
         ) : null}
       </DropdownMenuContent>

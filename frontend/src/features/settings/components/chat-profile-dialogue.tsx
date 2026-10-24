@@ -1,4 +1,5 @@
 import { useRef, type ReactNode } from 'react'
+import { CHAT_PROFILE_TEXT_LIMITS } from '@conai/shared'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -70,7 +71,7 @@ export function PromptBubbleEditor({ text, label, placeholder, assisted = false,
     <BubbleRow {...speaker} wide>
       <PromptEditFrame onClose={onClose}>
         <div className="space-y-2">
-          <Textarea ref={textarea} variant="settings" autoGrow autoFocus rows={2} assisted={assisted} value={text} placeholder={placeholder} aria-label={label} onChange={(event) => onTextChange(event.target.value)} />
+          <Textarea ref={textarea} variant="settings" autoGrow autoFocus rows={2} assisted={assisted} value={text} maxLength={CHAT_PROFILE_TEXT_LIMITS.text} placeholder={placeholder} aria-label={label} onChange={(event) => onTextChange(event.target.value)} />
           <div className="flex flex-wrap items-center gap-0.5">
             {lead}
             <span className="flex-1" />

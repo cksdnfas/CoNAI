@@ -9,6 +9,7 @@ import { useI18n } from '@/i18n'
 import { previewChatProfile, type ChatProfileInput } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
+import { CHAT_PROFILE_DEFAULTS } from '@conai/shared'
 
 const ROLE_LABELS: Record<string, { ko: string; en: string }> = {
   system: { ko: '시스템', en: 'System' },
@@ -47,7 +48,7 @@ export function ChatProfilePreviewModal({ open, draft, onClose }: { open: boolea
                   <FieldInfo>
                     {preview.engine === 'codex'
                       ? t({ ko: 'Codex에는 이 지시문이 넘어가고, 대화 기억은 Codex가 직접 관리해. 토큰 수는 추정치야.', en: 'Codex receives these instructions and manages the conversation itself. Token counts are estimates.' })
-                      : t({ ko: '실제 요청에서는 이 뒤에 요약(켜져 있으면)과 최근 대화가 붙고, 키워드로 걸린 로어는 끝에서 {depth}턴 앞의 메시지에 들어가. 토큰 수는 추정치이고, 대화를 하면 서버가 알려준 사용량으로 보정돼.', en: 'Real requests add the summary (when on) and recent turns after this; keyword lore goes into the message {depth} turns before the end. Counts are estimates, calibrated from real usage once you chat.' }, { depth: draft.loreDepth ?? 4 })}
+                      : t({ ko: '실제 요청에서는 이 뒤에 요약(켜져 있으면)과 최근 대화가 붙고, 키워드로 걸린 로어는 끝에서 {depth}턴 앞의 메시지에 들어가. 토큰 수는 추정치이고, 대화를 하면 서버가 알려준 사용량으로 보정돼.', en: 'Real requests add the summary (when on) and recent turns after this; keyword lore goes into the message {depth} turns before the end. Counts are estimates, calibrated from real usage once you chat.' }, { depth: draft.loreDepth ?? CHAT_PROFILE_DEFAULTS.loreDepth })}
                   </FieldInfo>
                 </dt><dd className={cn('tabular-nums font-semibold', overBudget && 'text-destructive')}>≈ {formatNumber(preview.tokens.total)}</dd></div>
               <div><dt className="text-xs text-muted-foreground">{t({ ko: '컨텍스트 길이', en: 'Context length' })}</dt><dd className="tabular-nums">{budget !== null ? formatNumber(budget) : t({ ko: '제한 없음', en: 'No limit' })}</dd></div>

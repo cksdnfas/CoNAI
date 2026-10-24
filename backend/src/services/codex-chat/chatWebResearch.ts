@@ -153,7 +153,6 @@ async function researchWithClaude(question: string, model: string | null, signal
     tools: [],
     hostTools: ['WebSearch'],
     signal: signal ?? new AbortController().signal,
-    maxToolRounds: 12,
   })
   const text = result.content.trim()
   if (!text) throw new WebResearchError('Claude Code 웹 검색이 빈 답을 돌려줬어.')

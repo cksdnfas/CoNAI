@@ -675,15 +675,15 @@ export const CodexChatStore = {
   },
 
   /** The model's (English) text of a user message translated after it was stored; the reader keeps their own words. */
-  setUserMessageTranslation(threadId: number, messageId: number, content: string, displayContent: string) {
-    getUserSettingsDb().prepare("UPDATE codex_chat_messages SET content = ?, display_content = ? WHERE thread_id = ? AND id = ? AND role = 'user'").run(content, displayContent, threadId, messageId)
+  setUserMessageTranslation(threadId: number, messageId: number, content: string, displayContent: string | null, flags?: ChatFlagSnapshot[], error: string | null = null) {
+    getUserSettingsDb().prepare("UPDATE codex_chat_messages SET content = ?, display_content = COALESCE(?, display_content), flags = COALESCE(?, flags), error = ? WHERE thread_id = ? AND id = ? AND role = 'user'").run(content, displayContent, flags ? JSON.stringify(flags) : null, error, threadId, messageId)
     notifySemanticChange('message')
   },
 
-  editUserMessage(threadId: number, messageId: number, content: string, displayContent: string | null = null) {
+  editUserMessage(threadId: number, messageId: number, content: string, displayContent: string | null = null, flags?: ChatFlagSnapshot[], error: string | null = null) {
     const db = getUserSettingsDb()
     db.transaction(() => {
-      const updated = db.prepare("UPDATE codex_chat_messages SET content = ?, display_content = ? WHERE thread_id = ? AND id = ? AND role = 'user'").run(content, displayContent, threadId, messageId)
+      const updated = db.prepare("UPDATE codex_chat_messages SET content = ?, display_content = ?, flags = COALESCE(?, flags), error = ? WHERE thread_id = ? AND id = ? AND role = 'user'").run(content, displayContent, flags ? JSON.stringify(flags) : null, error, threadId, messageId)
       if (!updated.changes) throw new Error('User message not found')
       removeMessagesAfter(threadId, messageId)
       invalidateContext(threadId, messageId)

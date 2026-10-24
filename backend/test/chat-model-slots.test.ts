@@ -26,7 +26,7 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
   const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
   const { ChatProfileStore, ChatProfileError, profileGenerationOptions } = await import('../src/services/codex-chat/chatProfiles')
   const { ChatJudgePresetStore } = await import('../src/services/codex-chat/chatJudgePresets')
-  const { ModelSlotStore, modelReferencesOfConnection, deleteModelsOfConnection, primaryModelOf } = await import('../src/services/codex-chat/modelSlots')
+  const { ModelSlotStore, assertConnectionTypeChange, modelReferencesOfConnection, deleteModelsOfConnection, primaryModelOf } = await import('../src/services/codex-chat/modelSlots')
   const { resolveProfileModel, hasTranslation, modelLabelOf } = await import('../src/services/codex-chat/chatModelRoles')
   const { buildModelUsage } = await import('../src/services/codex-chat/modelUsage')
   const { migrateLlmModelRows } = await import('../src/database/llmModelRowsMigration')
@@ -37,6 +37,28 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
   }
   const rowOf = (providerName: string, model: string) => ModelSlotStore.ensure(providerName, model, { create: false })
   const configOf = (name: string) => JSON.parse((db.prepare('SELECT additional_config FROM external_api_providers WHERE provider_name = ?').get(name) as { additional_config: string }).additional_config)
+
+  await t.test('profile validation never persists legacy model rows or truncated JSON on failure', () => {
+    const before = db.prepare('SELECT * FROM llm_model_slots ORDER BY id').all()
+    const oversized = JSON.stringify({ custom: 'x'.repeat(20_000) })
+    assert.throws(() => ChatProfileStore.create({ name: 'invalid JSON size', providerName: 'conn-a', model: 'must-not-exist', extraParams: oversized }), /20000/)
+    assert.throws(() => ChatProfileStore.create({ name: 'invalid late field', providerName: 'conn-a', model: 'must-not-exist', judgePresetId: 999999 }), /판단 프리셋/)
+    assert.deepEqual(db.prepare('SELECT * FROM llm_model_slots ORDER BY id').all(), before)
+    const draft = ChatProfileStore.draft({ name: 'draft', providerName: 'conn-a', model: 'draft-only' })
+    assert.equal(draft.name, 'draft')
+    assert.deepEqual(db.prepare('SELECT * FROM llm_model_slots ORDER BY id').all(), before, 'drafts do not create rows')
+    const profile = ChatProfileStore.create({ name: 'atomic profile', providerName: 'conn-a', extraParams: '{"custom":true}' })
+    assert.throws(() => ChatProfileStore.update(profile.id, { providerName: 'conn-a', model: 'failed-update', extraParams: oversized }), /20000/)
+    assert.equal(ChatProfileStore.find(profile.id)!.extraParams, '{"custom":true}')
+    assert.equal(rowOf('conn-a', 'failed-update'), null)
+    assert.throws(() => ChatProfileStore.update(profile.id, { temperature: true as never }), /온도.*숫자/)
+    assert.throws(() => ChatProfileStore.update(profile.id, { summaryEnabled: 'false' as never }), /요약 사용.*참 또는 거짓/)
+    assert.throws(() => ChatProfileStore.update(profile.id, { contextTurns: null as never }), /대화 문맥 턴 수.*숫자/)
+    const updated = ChatProfileStore.update(profile.id, { providerName: 'conn-a', model: 'successful-update' })!
+    assert.equal(updated.modelSlotId, rowOf('conn-a', 'successful-update'))
+    ChatProfileStore.delete(profile.id)
+    ModelSlotStore.delete(updated.modelSlotId!)
+  })
 
   await t.test('a connection saved with a default model gets it as its first row and keeps no model key', () => {
     assert.ok(rowOf('conn-a', 'conn-a-default'))
@@ -53,6 +75,30 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
     assert.ok(rowOf('conn-b', 'conn-b-second'), 'an update with a default model adds it too')
     assert.deepEqual(configOf('conn-b'), {})
     assert.equal(primaryModelOf('conn-b'), 'conn-b-default')
+  })
+
+  await t.test('untouched legacy values survive partial saves; new oversized text is refused', () => {
+    const profile = ChatProfileStore.create({ name: 'legacy text', providerName: 'conn-a', systemPrompt: 'full prompt' })
+    const authorNote = 'x'.repeat(5000)
+    const extraParams = 'invalid legacy JSON'
+    db.prepare('UPDATE llm_chat_profiles SET author_note = ?, extra_params = ? WHERE id = ?').run(authorNote, extraParams, profile.id)
+    const updated = ChatProfileStore.update(profile.id, { isEnabled: false })!
+    assert.equal(updated.authorNote, authorNote)
+    assert.equal(updated.extraParams, extraParams)
+    assert.throws(() => ChatProfileStore.update(profile.id, { authorNote }), /작가 노트.*4000/)
+    assert.throws(() => ChatProfileStore.draft({ name: '', engine: 'codex' }), /프로필 이름: 비워 둘 수 없어/)
+    ChatProfileStore.mapDirectory(() => {
+      assert.equal(ChatProfileStore.find(profile.id)!.systemPrompt, 'full prompt', 'directory serialization cannot replace full find() results')
+    })
+    ChatProfileStore.delete(profile.id)
+  })
+
+  await t.test('a pending legacy judge pair cannot replace the required chat model', () => {
+    const defaultTarget = t.mock.method(ModelSlotStore, 'defaultTarget', () => null)
+    try {
+      assert.throws(() => ChatProfileStore.create({ name: 'judge only', judgeProviderName: 'jev', judgeModel: 'pending-judge' }), /모델을 골라줘/)
+      assert.equal(rowOf('jev', 'pending-judge'), null)
+    } finally { defaultTarget.mock.restore() }
   })
 
   await t.test('Claude profiles persist their engine without an API connection and use the Claude transport', () => {
@@ -103,6 +149,21 @@ test('model rows: connection ▸ models, legacy pairs, resolution, sync, deletio
     assert.throws(() => ModelSlotStore.setDefault(jevRow), /LLM 연결의 모델만/)
     assert.throws(() => ChatJudgePresetStore.create({ name: 'p', items: [], escalationSlotId: jevRow }), /판단에 쓸 수 없는|채팅에 쓸 수 없어/)
     ChatProfileStore.delete(judged.id)
+  })
+
+  await t.test('shared route/provider changes preserve chat consumers while judge-only TypeSafe remains valid', () => {
+    const model = ModelSlotStore.ensure('conn-b', 'guarded-route')!
+    const route = ModelSlotStore.createRoute({ name: 'guarded', targetSlotId: model })!
+    const profile = ChatProfileStore.create({ name: 'route consumer', modelSlotId: route.id })
+    const typesafe = rowOf('jev', 'jev-latest')!
+    assert.throws(() => ModelSlotStore.updateRoute(route.id, { targetSlotId: typesafe }), /route consumer/)
+    assert.throws(() => assertConnectionTypeChange('conn-b', 'decision_typesafe'), /route consumer/)
+    assert.equal(ModelSlotStore.target(route.id)!.id, model)
+    ChatProfileStore.update(profile.id, { modelSlotId: null, judgeSlotId: route.id })
+    assert.equal(ModelSlotStore.updateRoute(route.id, { targetSlotId: typesafe })!.model, 'jev-latest')
+    ChatProfileStore.delete(profile.id)
+    ModelSlotStore.delete(route.id)
+    ModelSlotStore.delete(model)
   })
 
   await t.test('resolution: the role\'s row, else the chat model (summary, suggestions) or nothing (translation); chat falls back to the default', () => {

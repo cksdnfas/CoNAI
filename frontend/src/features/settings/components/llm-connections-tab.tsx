@@ -1,10 +1,10 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plug, Plus } from 'lucide-react'
 import { MODEL_SLOTS_QUERY_KEY, MODEL_USAGE_QUERY_KEY, getModelUsage, listModelSlots, updateModelRoute } from '@/lib/api-codex-chat'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { getExternalApiProviders } from '@/lib/api-external-api'
+import { EXTERNAL_API_PROVIDERS_QUERY_KEY, getExternalApiProviders } from '@/lib/api-external-api'
 import { useI18n } from '@/i18n'
 import { RowGroup } from '@/components/ui/row-group'
 import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
@@ -13,7 +13,7 @@ import { AgentCliSettings } from './agent-cli-settings'
 import { ExternalMcpSettings } from './external-mcp-settings'
 import { useLlmConnectionsChatPage, type ExternalMcpDraftSeed } from './use-llm-connections-chat-page'
 import { LlmConnectionEditorModal, LlmConnectionListItem } from './llm-connections-tab-modals'
-import { ConnectionModelEditorModal, ConnectionModelRow, ModelRouteEditorModal, ModelRouteRow, useRefreshModelRows, type ModelRouteModalState } from './llm-connection-models'
+import { ConnectionModelEditorModal, ConnectionModelRow, ModelRouteEditorModal, ModelRouteRow, modelAffectsJudge, useRefreshModelRows, type ModelRouteModalState } from './llm-connection-models'
 import type { LlmConnectionModalState } from './llm-connections-tab-utils'
 
 /**
@@ -34,31 +34,27 @@ export function LlmConnectionsTab() {
   const usageQuery = useQuery({ queryKey: MODEL_USAGE_QUERY_KEY, queryFn: getModelUsage })
   const pointRouteMutation = useMutation({
     mutationFn: ({ routeId, targetSlotId }: { routeId: number; targetSlotId: number | null }) => updateModelRoute(routeId, { targetSlotId }),
-    onSuccess: () => refreshModelRows(),
+    onSuccess: (_result, { routeId }) => refreshModelRows({ judgeChanged: modelAffectsJudge(slotsQuery.data?.find((slot) => slot.id === routeId)) }),
     onError: (error) => {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '대표모델을 바꾸지 못했어.', en: 'Could not change the representative model.' }), tone: 'error' })
     },
   })
 
   const providersQuery = useQuery({
-    queryKey: ['external-api-providers', 'settings-llm-connections'],
+    queryKey: EXTERNAL_API_PROVIDERS_QUERY_KEY,
     queryFn: getExternalApiProviders,
   })
 
   const refreshProviders = async () => {
+    const providerName = connectionModalState?.mode === 'edit' ? connectionModalState.provider.provider_name : null
+    const judgeChanged = (slotsQuery.data ?? []).some((slot) => slot.providerName === providerName && modelAffectsJudge(slot, slotsQuery.data))
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['external-api-providers'] }),
-      queryClient.invalidateQueries({ queryKey: ['external-api-llm-options'] }),
-      queryClient.invalidateQueries({ queryKey: ['module-definitions'] }),
-      queryClient.invalidateQueries({ queryKey: MODEL_USAGE_QUERY_KEY }),
-      refreshModelRows(),
+      queryClient.invalidateQueries({ queryKey: EXTERNAL_API_PROVIDERS_QUERY_KEY }),
+      refreshModelRows({ judgeChanged }),
     ])
   }
 
-  const llmProviders = useMemo(
-    () => (providersQuery.data ?? []).filter((provider) => provider.provider_type === 'llm_openai_compatible' || provider.provider_type === 'llm_ollama' || provider.provider_type === 'decision_typesafe'),
-    [providersQuery.data],
-  )
+  const llmProviders = (providersQuery.data ?? []).filter((provider) => provider.provider_type === 'llm_openai_compatible' || provider.provider_type === 'llm_ollama' || provider.provider_type === 'decision_typesafe')
 
   const slots = slotsQuery.data ?? []
   const models = slots.filter((slot) => slot.kind === 'model')

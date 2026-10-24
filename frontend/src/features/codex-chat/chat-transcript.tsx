@@ -154,8 +154,9 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
     if (window.getSelection()?.toString()) return
     setBarOpen(!showBar)
   }
-  if (isUser && message.routing?.task) return <div data-message-id={message.id}><ChatTaskEventLine routing={message.routing.task} /></div>
-  if (isUser && message.routing?.routine) return <div data-message-id={message.id}><ChatRoutineEventLine routing={message.routing.routine} text={message.display_content ?? message.content} /></div>
+  const inputNotice = isUser && message.error ? <p role="status" className="mt-1 text-xs text-muted-foreground">{message.error}</p> : null
+  if (isUser && message.routing?.task) return <div data-message-id={message.id}><ChatTaskEventLine routing={message.routing.task} />{inputNotice}</div>
+  if (isUser && message.routing?.routine) return <div data-message-id={message.id}><ChatRoutineEventLine routing={message.routing.routine} text={message.display_content ?? message.content} />{inputNotice}</div>
   return <div data-message-id={message.id} onClick={toggleBar} className={cn('group/message -mx-2 rounded-md px-2 transition-colors duration-500', flash && 'bg-primary/10')}>
     {isUser
       ? <>{actions.editingId === message.id
@@ -166,6 +167,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
         : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} fileChanges={message.fileChanges} replyId={message.routing?.replyId} onRetry={lastReply && actions.canRewrite && !actions.busy ? () => actions.onRegenerate(message.id) : undefined} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
     {/* A folded bar takes no room but stays in the tab order, and shows while a key lands on one of its buttons.
         Reply, regenerate and the answer switch stay on the bar; edits and the rarer actions sit under ⋯ with their names. */}
+    {inputNotice}
     <div data-message-bar className={cn('mt-1 flex flex-wrap items-center gap-x-1', isUser && 'justify-end', !showBar && 'sr-only focus-within:not-sr-only')}>
       <IconButton size="icon-xs" variant="ghost" label={t({ ko: '답장', en: 'Reply' })} onClick={() => actions.onReply(message)}><Reply /></IconButton>
       {showRewriteTools && !isUser ? <>

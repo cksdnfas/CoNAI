@@ -1,6 +1,8 @@
 import type { AppSettings, LlmSettings } from '@conai/shared'
 import { fetchApiData } from '@/lib/api-client'
 
+export const LLM_PRESET_OPTIONS_QUERY_KEY = ['llm-preset-options'] as const
+
 export interface LlmPresetOptionRecord {
   id: string
   name: string

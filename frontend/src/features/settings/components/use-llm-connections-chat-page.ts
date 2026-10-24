@@ -1,18 +1,18 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { AgentCliName, ChatPageData, LlmPresetRecord, LlmSettings } from '@conai/shared'
+import type { AgentCliName, ChatPageData, LlmSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration, type WorkflowUndo } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
-import { getAgentCliStatus, getAgentCliUsage } from '@/lib/api-agent-cli'
 import type { ModelSlot } from '@/lib/api-codex-chat'
 import type { ExternalApiProviderRecord } from '@/lib/api-external-api'
 import {
   EXTERNAL_MCP_QUERY_KEY, deleteExternalMcpServer, listExternalMcpServers, patchExternalMcpServer, refreshExternalMcpServer, updateExternalMcpServer,
   type ExternalMcpScope, type ExternalMcpServer, type ExternalMcpTransport,
 } from '@/lib/api-external-mcp'
-import { updateLlmSettings } from '@/lib/api-settings-llm'
 import { chatPageText } from '../settings-chat-actions'
-import { buildPresetId, LLM_PRESET_SECTIONS, normalizePresetJson } from './llm-connections-tab-utils'
+import { buildPresetId, LLM_PRESET_SECTIONS } from './llm-connections-tab-utils'
+import { useLlmPresetMutations } from './llm-prompt-preset-mutations'
+import { useAgentCliQueries } from './llm-agent-cli-queries'
 
 type LlmPresetKind = (typeof LLM_PRESET_SECTIONS)[number]['key']
 /** Non-secret fields of a new outside MCP server; the address, command and secrets stay the person's to type. */
@@ -23,14 +23,12 @@ const SCOPES: ExternalMcpScope[] = ['read', 'organize', 'configure']
 
 /** Codex / Claude Code sign-in and subscription limits as one short line each, from the queries the LLM tab already keeps. */
 export function useAgentCliChatData(): ChatPageData {
-  const codex = useQuery({ queryKey: ['agent-cli-status', 'codex'], queryFn: () => getAgentCliStatus('codex'), retry: false, staleTime: 30_000 })
-  const claude = useQuery({ queryKey: ['agent-cli-status', 'claude'], queryFn: () => getAgentCliStatus('claude'), retry: false, staleTime: 30_000 })
-  const statuses = { codex: codex.data, claude: claude.data }
-  const codexUsage = useQuery({ queryKey: ['agent-cli-usage', 'codex'], queryFn: () => getAgentCliUsage('codex'), enabled: codex.data?.authenticated === true, retry: false, staleTime: 300_000 })
-  const claudeUsage = useQuery({ queryKey: ['agent-cli-usage', 'claude'], queryFn: () => getAgentCliUsage('claude'), enabled: claude.data?.authenticated === true, retry: false, staleTime: 300_000 })
-  const usages = { codex: codexUsage.data, claude: claudeUsage.data }
+  const codex = useAgentCliQueries('codex')
+  const claude = useAgentCliQueries('claude')
+  const statuses = { codex: codex.status.data, claude: claude.status.data }
+  const usages = { codex: codex.usage.data, claude: claude.usage.data }
   // pi chats' agent runtime: no sign-in, only whether it is there and loads.
-  const pi = useQuery({ queryKey: ['agent-cli-status', 'pi'], queryFn: () => getAgentCliStatus('pi'), retry: false, staleTime: 30_000 }).data
+  const pi = useAgentCliQueries('pi').status.data
   return {
     ...Object.fromEntries(AGENTS.map((agent) => {
       const status = statuses[agent]
@@ -168,34 +166,26 @@ export function useLlmConnectionsChatPage({ providers, slots, onPointRoute, onDr
 /** Settings › LLM › 프롬프트 for a connected chat: the workflow text presets of each kind, and saving or deleting one. */
 export function useLlmPromptPresetsChatPage(presets: Pick<LlmSettings, LlmPresetKind>) {
   const { t } = useI18n()
-  const queryClient = useQueryClient()
+  const { saveMutation, deleteMutation } = useLlmPresetMutations(presets, { reportErrors: false })
   const presetKinds = LLM_PRESET_SECTIONS.map((section) => section.key)
   const data: Record<string, ChatPageData> = Object.fromEntries(presetKinds.map((kind) => [kind, presets[kind].map((preset) => ({ id: preset.id, name: preset.name, content: chatPageText(preset.content, 300) }))]))
 
   const savePreset = async (args: Record<string, ChatPageData>) => {
     const kind = args.kind as LlmPresetKind
-    const section = LLM_PRESET_SECTIONS.find((entry) => entry.key === kind)
     const current = presets[kind]
     const existing = typeof args.id === 'string' && args.id ? current.find((preset) => preset.id === args.id) : undefined
     if (typeof args.id === 'string' && args.id && !existing) throw new Error('목록에 없는 프리셋이야.')
-    let next: LlmPresetRecord[]
     if (args.operation === 'delete') {
       if (!existing) throw new Error('지울 프리셋의 id가 필요해.')
-      next = current.filter((preset) => preset.id !== existing.id)
+      await deleteMutation.mutateAsync({ kind, id: existing.id })
     } else {
-      const name = (typeof args.name === 'string' ? args.name : existing?.name ?? '').trim()
-      let content = typeof args.content === 'string' ? args.content : existing?.content ?? ''
-      if (!name || !content.trim()) throw new Error('프리셋 이름과 내용이 필요해.')
-      if (section?.expectsJson) {
-        try { content = normalizePresetJson(content) } catch { throw new Error('구조화 출력 프리셋의 내용은 JSON이어야 해.') }
-      }
-      if (current.some((preset) => preset.id !== existing?.id && preset.name.trim().toLowerCase() === name.toLowerCase())) throw new Error(`같은 이름의 프리셋이 이미 있어: ${name}`)
-      const now = new Date().toISOString()
-      const record: LlmPresetRecord = { id: existing?.id ?? buildPresetId(), name, content, createdAt: existing?.createdAt ?? now, updatedAt: now }
-      next = existing ? current.map((preset) => (preset.id === existing.id ? record : preset)) : [...current, record]
+      await saveMutation.mutateAsync({ kind, draft: {
+        id: existing?.id ?? buildPresetId(),
+        name: typeof args.name === 'string' ? args.name : existing?.name ?? '',
+        content: typeof args.content === 'string' ? args.content : existing?.content ?? '',
+        createdAt: existing?.createdAt ?? null,
+      } })
     }
-    queryClient.setQueryData(['app-settings'], await updateLlmSettings({ [kind]: next } as Partial<LlmSettings>))
-    void queryClient.invalidateQueries({ queryKey: ['llm-preset-options'] })
   }
 
   useChatPageRegistration({

@@ -147,12 +147,14 @@ function count(map: Map<number, number>, key: number | null) {
 }
 
 /** Every reference to every row, read once per listing. */
-function collectUsage(): Usage {
+function collectUsage(ids?: number[]): Usage {
   const db = getUserSettingsDb()
   const usage: Usage = { profiles: new Map(), judgePresets: new Map(), userProfiles: new Map(), chats: new Map(), contentEvaluations: new Map() }
+  if (ids?.length === 0) return usage
+  const selected = (column: string) => ids ? `${column} IN (${ids.join(',') || 'NULL'})` : `${column} IS NOT NULL`
   const profiles = db.prepare(`
     SELECT id, name, engine, model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, judge_slot_id FROM llm_chat_profiles
-    WHERE model_slot_id IS NOT NULL OR summary_slot_id IS NOT NULL OR translation_slot_id IS NOT NULL OR suggest_slot_id IS NOT NULL OR judge_slot_id IS NOT NULL
+    WHERE ${['model_slot_id', 'summary_slot_id', 'translation_slot_id', 'suggest_slot_id', 'judge_slot_id'].map(selected).join(' OR ')}
     ORDER BY sort_order ASC, id ASC
   `).all() as ProfileUseRow[]
   for (const profile of profiles) {
@@ -164,20 +166,26 @@ function collectUsage(): Usage {
     add(profile.judge_slot_id, 'judge')
     for (const [slotId, roles] of bySlot) push(usage.profiles, slotId, { id: profile.id, name: profile.name, roles })
   }
-  const presets = db.prepare('SELECT id, name, model_slot_id, escalation_slot_id FROM chat_judge_presets ORDER BY name COLLATE NOCASE ASC, id ASC').all() as Array<{ id: number; name: string; model_slot_id: number | null; escalation_slot_id: number | null }>
+  const presets = db.prepare(`SELECT id, name, model_slot_id, escalation_slot_id FROM chat_judge_presets WHERE ${selected('model_slot_id')} OR ${selected('escalation_slot_id')} ORDER BY name COLLATE NOCASE ASC, id ASC`).all() as Array<{ id: number; name: string; model_slot_id: number | null; escalation_slot_id: number | null }>
   for (const preset of presets) {
     push(usage.judgePresets, preset.model_slot_id, { id: preset.id, name: preset.name })
     if (preset.escalation_slot_id !== preset.model_slot_id) push(usage.judgePresets, preset.escalation_slot_id, { id: preset.id, name: preset.name })
   }
-  for (const row of db.prepare('SELECT model_slot_id FROM chat_user_profiles WHERE model_slot_id IS NOT NULL').all() as Array<{ model_slot_id: number }>) count(usage.userProfiles, row.model_slot_id)
-  for (const row of db.prepare('SELECT reaction_model_slot_id FROM codex_chat_threads WHERE reaction_model_slot_id IS NOT NULL').all() as Array<{ reaction_model_slot_id: number }>) count(usage.chats, row.reaction_model_slot_id)
-  for (const row of db.prepare('SELECT model_slot_id FROM content_evaluation_settings WHERE model_slot_id IS NOT NULL').all() as Array<{model_slot_id:number}>) count(usage.contentEvaluations,row.model_slot_id)
+  for (const [table, column, counts] of [
+    ['chat_user_profiles', 'model_slot_id', usage.userProfiles],
+    ['codex_chat_threads', 'reaction_model_slot_id', usage.chats],
+    ['content_evaluation_settings', 'model_slot_id', usage.contentEvaluations],
+  ] as const) {
+    for (const row of db.prepare(`SELECT ${column} AS id, COUNT(*) AS count FROM ${table} WHERE ${selected(column)} GROUP BY ${column}`).all() as Array<{ id: number; count: number }>) counts.set(row.id, row.count)
+  }
   // Board knowledge evaluations keep their judge in the posts settings file.
   count(usage.contentEvaluations, loadPostsSettings().knowledge.judgeSlotId)
   return usage
 }
 
 function connectionOf(providerName: string) {
+  const cached = readSnapshot?.connections.get(providerName)
+  if (cached) return cached
   const provider = ExternalApiProvider.findByName(providerName)
   return { label: provider?.display_name || providerName, type: provider?.provider_type ?? null }
 }
@@ -202,6 +210,7 @@ function followsChatRow(row: Pick<SlotRow, 'is_route' | 'route_key' | 'target_sl
 
 /** The built-in route of a part (created by the schema; null only on a database that skipped it). */
 function routeRow(key: RouteKey) {
+  if (readSnapshot) return readSnapshot.routes.get(key)
   return getUserSettingsDb().prepare('SELECT * FROM llm_model_slots WHERE is_route = 1 AND route_key = ? ORDER BY id ASC LIMIT 1').get(key) as SlotRow | undefined
 }
 
@@ -214,7 +223,13 @@ function reachedId(row: SlotRow, rows?: Map<number, SlotRow>): number | null {
   return target && target.is_route !== 1 ? target.id : null
 }
 
-function toSlot(row: SlotRow, rows: Map<number, SlotRow>, usage: Usage, connections: Map<string, { label: string; type: string | null }>): ModelSlot {
+function reverseRoutes(rows: Map<number, SlotRow>) {
+  const routes = new Map<number, ModelSlot['routes']>()
+  for (const row of rows.values()) if (row.is_route === 1) push(routes, row.target_slot_id, { id: row.id, name: routeNameOf(row), key: routeKeyOf(row) })
+  return routes
+}
+
+function toSlot(row: SlotRow, rows: Map<number, SlotRow>, usage: Usage, connections: Map<string, { label: string; type: string | null }>, routes: Map<number, ModelSlot['routes']>): ModelSlot {
   const isRoute = row.is_route === 1
   const reachedRowId = reachedId(row, rows)
   const reached = reachedRowId === null ? null : rows.get(reachedRowId) ?? null
@@ -240,7 +255,7 @@ function toSlot(row: SlotRow, rows: Map<number, SlotRow>, usage: Usage, connecti
     followsChat: followsChatRow(row),
     prompt: key ? row.prompt ?? '' : '',
     contentRatingTierId: row.content_rating_tier_id ?? null,
-    routes: isRoute ? [] : [...rows.values()].filter((entry) => entry.is_route === 1 && entry.target_slot_id === row.id).map((entry) => ({ id: entry.id, name: routeNameOf(entry), key: routeKeyOf(entry) })),
+    routes: isRoute ? [] : routes.get(row.id) ?? [],
     profiles: usage.profiles.get(row.id) ?? [],
     judgePresets: usage.judgePresets.get(row.id) ?? [],
     userProfiles: usage.userProfiles.get(row.id) ?? 0,
@@ -336,6 +351,8 @@ function allRows() {
   return new Map(rows.map((row) => [row.id, row]))
 }
 
+let readSnapshot: { rows: Map<number, SlotRow>; routes: Map<RouteKey, SlotRow>; connections: Map<string, { label: string; type: string | null }> } | null = null
+
 /** Routes first (built-in ones in part order, then named ones), then the models in list order. */
 function listOrder(a: SlotRow, b: SlotRow) {
   if (a.is_route !== b.is_route) return b.is_route - a.is_route
@@ -392,19 +409,72 @@ function publishJudgeChange() {
   publishRuntimeEvent({ name: 'posts.changed', topic: 'posts', visibility: 'all', payload: { postId: null, kind: 'post' } })
 }
 
+/** Changing a shared target must not turn a live chat role into a decision-only (or non-model) connection. */
+function assertConsumerKinds(ids: number[], type: string) {
+  if (LLM_CONNECTION_TYPES.includes(type) || !ids.length) return
+  const db = getUserSettingsDb()
+  const inIds = ids.join(',')
+  const judgeAllowed = MODEL_CONNECTION_TYPES.includes(type)
+  const uses: string[] = []
+  const columns = [...Object.values(ROLE_SLOT_COLUMNS), ...(!judgeAllowed ? ['judge_slot_id'] : [])]
+  for (const row of db.prepare(`SELECT name FROM llm_chat_profiles WHERE ${columns.map((column) => `${column} IN (${inIds})`).join(' OR ')}`).all() as Array<{ name: string }>) uses.push(row.name)
+  for (const row of db.prepare(`SELECT id, name FROM chat_user_profiles WHERE model_slot_id IN (${inIds})`).all() as Array<{ id: number; name: string }>) uses.push(`사용자 프로필 ${row.name} (#${row.id})`)
+  for (const row of db.prepare(`SELECT id FROM codex_chat_threads WHERE reaction_model_slot_id IN (${inIds})`).all() as Array<{ id: number }>) uses.push(`채팅 반응 #${row.id}`)
+  for (const row of db.prepare(`SELECT name FROM chat_judge_presets WHERE escalation_slot_id IN (${inIds}) ${judgeAllowed ? '' : `OR model_slot_id IN (${inIds})`}`).all() as Array<{ name: string }>) uses.push(`판단 프리셋 ${row.name}`)
+  const routes = db.prepare(`SELECT * FROM llm_model_slots WHERE id IN (${inIds}) AND is_route = 1`).all() as SlotRow[]
+  for (const row of routes) if (routeKeyOf(row) && (!judgeAllowed || routeKeyOf(row) !== 'judge')) uses.push(`대표모델 ${routeNameOf(row)}`)
+  if (!judgeAllowed) {
+    if (db.prepare(`SELECT 1 FROM content_evaluation_settings WHERE model_slot_id IN (${inIds}) LIMIT 1`).get()
+      || ids.includes(loadPostsSettings().knowledge.judgeSlotId ?? 0)) uses.push('콘텐츠 평가')
+  }
+  if (uses.length) throw new ChatProfileError(`이 연결 종류는 현재 사용하는 곳과 호환되지 않아: ${[...new Set(uses)].join(', ')}`)
+}
+
+export function assertConnectionTypeChange(providerName: string, type: string) {
+  if (ExternalApiProvider.findByName(providerName)?.provider_type === type) return
+  const rows = allRows()
+  const ids = [...rows.values()].filter((row) => {
+    const id = reachedId(row, rows)
+    return id !== null && rows.get(id)?.provider_name === providerName
+  }).map((row) => row.id)
+  assertConsumerKinds(ids, type)
+}
+
 export const ModelSlotStore = {
-  /** Routes, then the connections' models. */
-  list() {
+  /** A request-local, synchronous read batch; never retained across writes or async work. */
+  withReadSnapshot<T>(read: () => T): T {
+    if (readSnapshot) return read()
     const rows = allRows()
-    const usage = collectUsage()
+    const connections = getUserSettingsDb().prepare('SELECT provider_name, display_name, provider_type FROM external_api_providers').all() as Array<{ provider_name: string; display_name: string; provider_type: string }>
+    const routes = new Map<RouteKey, SlotRow>()
+    for (const row of [...rows.values()].sort((a, b) => a.id - b.id)) {
+      const key = routeKeyOf(row)
+      if (key && !routes.has(key)) routes.set(key, row)
+    }
+    readSnapshot = {
+      rows,
+      routes,
+      connections: new Map(connections.map((provider) => [provider.provider_name, { label: provider.display_name || provider.provider_name, type: provider.provider_type }])),
+    }
+    try { return read() } finally { readSnapshot = null }
+  },
+  /** Routes, then the connections' models. */
+  list(options: { usage?: boolean } = {}) {
+    const rows = allRows()
+    const usage = collectUsage(options.usage === false ? [] : undefined)
     const connections = new Map<string, { label: string; type: string | null }>()
-    return [...rows.values()].sort(listOrder).map((row) => toSlot(row, rows, usage, connections))
+    const routes = reverseRoutes(rows)
+    return [...rows.values()].sort(listOrder).map((row) => toSlot(row, rows, usage, connections, routes))
   },
 
   find(slotId: number) {
-    const rows = allRows()
-    const row = rows.get(slotId)
-    return row ? toSlot(row, rows, collectUsage(), new Map()) : null
+    const db = getUserSettingsDb()
+    const row = db.prepare('SELECT * FROM llm_model_slots WHERE id = ?').get(slotId) as SlotRow | undefined
+    if (!row) return null
+    const target = reachedId(row)
+    const related = db.prepare('SELECT * FROM llm_model_slots WHERE id = ? OR id = ? OR target_slot_id = ? OR route_key = ?').all(slotId, target, slotId, 'chat') as SlotRow[]
+    const rows = new Map(related.map((entry) => [entry.id, entry]))
+    return toSlot(row, rows, collectUsage([row.id]), new Map(), reverseRoutes(rows))
   },
 
   /** The built-in chat route. */
@@ -426,6 +496,10 @@ export const ModelSlotStore = {
   /** Whether the row is a summary / suggestion route with no target, which follows whatever the chat role uses. */
   followsChat(slotId: number | null | undefined): boolean {
     if (slotId === null || slotId === undefined) return false
+    if (readSnapshot) {
+      const row = readSnapshot.rows.get(slotId)
+      return row ? followsChatRow(row) : false
+    }
     const row = getUserSettingsDb().prepare('SELECT is_route, route_key, target_slot_id FROM llm_model_slots WHERE id = ?').get(slotId) as Pick<SlotRow, 'is_route' | 'route_key' | 'target_slot_id'> | undefined
     return row ? followsChatRow(row) : false
   },
@@ -433,6 +507,13 @@ export const ModelSlotStore = {
   /** The connection + model a row reaches, without its usage (the request-time lookup); null when it reaches none. */
   target(slotId: number | null | undefined): ModelTarget | null {
     if (slotId === null || slotId === undefined) return null
+    if (readSnapshot) {
+      const row = readSnapshot.rows.get(slotId)
+      if (!row) return null
+      const targetId = row.is_route !== 1 ? row.id : followsChatRow(row) ? readSnapshot.routes.get('chat')?.target_slot_id : row.target_slot_id
+      const target = targetId == null ? null : readSnapshot.rows.get(targetId)
+      return target && target.is_route !== 1 ? plainTarget(target, row.is_route === 1 ? row.id : null) : null
+    }
     const row = getUserSettingsDb().prepare('SELECT * FROM llm_model_slots WHERE id = ?').get(slotId) as SlotRow | undefined
     if (!row) return null
     if (row.is_route !== 1) return plainTarget(row, null)
@@ -496,8 +577,10 @@ export const ModelSlotStore = {
    * An empty model means the connection's primary model. Callers that still send a connection + model pair (old
    * clients, MCP, card import) land on a row this way.
    */
-  ensure(providerName: unknown, model: unknown, options: { create?: boolean } = {}): number | null {
+  ensure(providerName: unknown, model: unknown, options: { create?: boolean; kinds?: readonly string[] } = {}): number | null {
     const connection = modelConnectionName(providerName)
+    const type = ExternalApiProvider.findByName(connection)!.provider_type
+    if (options.kinds && !options.kinds.includes(type)) throw new ChatProfileError('판단 모델은 채팅에 쓸 수 없어. LLM 연결의 모델을 골라줘.')
     // A TypeSafe connection with no model of its own asks TypeSafe's default model.
     const fallback = () => primaryModelOf(connection) ?? (ExternalApiProvider.findByName(connection)?.provider_type === 'decision_typesafe' ? TYPESAFE_DEFAULT_MODEL : null)
     const name = typeof model === 'string' && model.trim() ? modelName(model) : fallback()
@@ -509,7 +592,14 @@ export const ModelSlotStore = {
 
   /** Model rows of one connection, in list order. */
   ofConnection(providerName: string) {
-    return ModelSlotStore.list().filter((slot) => slot.kind === 'model' && slot.providerName === providerName)
+    const related = getUserSettingsDb().prepare(`SELECT * FROM llm_model_slots WHERE provider_name = ? OR target_slot_id IN
+      (SELECT id FROM llm_model_slots WHERE provider_name = ? AND is_route = 0)`).all(providerName, providerName) as SlotRow[]
+    const rows = new Map(related.map((row) => [row.id, row]))
+    const models = related.filter((row) => row.is_route !== 1 && row.provider_name === providerName).sort(listOrder)
+    const usage = collectUsage(models.map((row) => row.id))
+    const routes = reverseRoutes(rows)
+    const connections = new Map<string, { label: string; type: string | null }>()
+    return models.map((row) => toSlot(row, rows, usage, connections, routes))
   },
 
   /**
@@ -609,6 +699,10 @@ export const ModelSlotStore = {
       if (input.name !== undefined && key === null) db.prepare('UPDATE llm_model_slots SET route_name = ? WHERE id = ?').run(routeName(input.name, routeId), routeId)
       if (input.targetSlotId !== undefined) {
         const target = routeTarget(input.targetSlotId, key)
+        if (target !== null) {
+          const provider = ModelSlotStore.target(target)?.providerName
+          if (provider) assertConsumerKinds([routeId], ExternalApiProvider.findByName(provider)!.provider_type)
+        }
         if (key) pointRoute(key, target)
         else db.prepare('UPDATE llm_model_slots SET target_slot_id = ? WHERE id = ?').run(target, routeId)
       }

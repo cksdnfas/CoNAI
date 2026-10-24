@@ -140,13 +140,21 @@ export type PluginResearchInput = {
   slotId: string; activityId: string; allowedPostIds: number[]
   /** Summary keeps the same source checks but exposes no tools on any engine. */
   purpose?: 'research' | 'summary'
-  maxModelCalls?: number; maxToolCalls?: number; maxTurns?: number
+  /** @deprecated Accepted and ignored: research follows the app-wide tool round limit (Settings › 채팅 › 자원 › 도구 사용). */
+  maxModelCalls?: number
+  /** @deprecated Accepted and ignored, as maxModelCalls. */
+  maxToolCalls?: number
+  /** @deprecated Accepted and ignored, as maxModelCalls. */
+  maxTurns?: number
 }
 export type PluginResearchResult = {
   slotId: string; activityId: string; modelCalls: number | null; toolCalls: number
-  stopReason: 'completed' | 'model_limit' | 'tool_limit' | 'turn_limit'
-  /** Null means the native engine does not expose an enforceable provider-request/turn limit. */
-  limits: { runtime: 'direct' | 'claude' | 'pi' | 'codex'; maxModelCalls: number | null; maxTurns: number | null; maxToolCalls: number }
+  stopReason: 'completed' | 'model_limit' | 'turn_limit'
+  /**
+   * The limits the run had. Null means the engine does not expose an enforceable provider-request/turn limit;
+   * maxToolCalls is null outside a summary (no per-call cap; rounds bound the run) and 0 for a summary.
+   */
+  limits: { runtime: 'direct' | 'claude' | 'pi' | 'codex'; maxModelCalls: number | null; maxTurns: number | null; maxToolCalls: number | null }
   turns: number | null
   evidenceTruncated?: boolean
   evidence: Array<{ postId: number; revision: number; contentVersion: number | null; offset: number; end: number; excerpt: string }>

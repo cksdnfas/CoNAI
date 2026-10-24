@@ -33,6 +33,7 @@ import {
   normalizeGenerationHistoryMaxItems,
 } from '../constants/generationHistory';
 import { writeJsonFileAtomic } from '../utils/jsonFile';
+import { normalizeLlmPresetRecord } from './llmPresetNormalization';
 
 export const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
 
@@ -235,79 +236,11 @@ function normalizeAppearancePresetSlots(rawSlots: unknown): AppearancePresetSlot
   });
 }
 
-function normalizeStructuredOutputJson(value: unknown): string {
-  if (typeof value !== 'string') {
-    return '';
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return '';
-  }
-
-  try {
-    return JSON.stringify(JSON.parse(trimmed), null, 2);
-  } catch {
-    return '';
-  }
-}
-
-function normalizeIsoDateString(value: unknown): string | null {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const parsed = Date.parse(trimmed);
-  if (!Number.isFinite(parsed)) {
-    return null;
-  }
-
-  return new Date(parsed).toISOString();
-}
-
 type LlmPresetValueType = 'text' | 'json';
 type LlmPresetContentKey = 'content' | 'systemPrompt' | 'prompt' | 'structuredOutputJson';
 
-function normalizeLlmPresetContent(value: unknown, valueType: LlmPresetValueType): string {
-  if (valueType === 'json') {
-    return normalizeStructuredOutputJson(value);
-  }
-
-  if (typeof value !== 'string') {
-    return '';
-  }
-
-  return value.trim().length > 0 ? value : '';
-}
-
 function normalizeLlmPreset(rawPreset: unknown, valueType: LlmPresetValueType = 'text', contentKey: LlmPresetContentKey = 'content'): LlmPresetRecord | null {
-  if (!rawPreset || typeof rawPreset !== 'object') {
-    return null;
-  }
-
-  const record = rawPreset as Record<string, unknown>;
-  const id = typeof record.id === 'string' ? record.id.trim() : '';
-  const name = typeof record.name === 'string' ? record.name.trim() : '';
-  const content = normalizeLlmPresetContent(record[contentKey], valueType);
-  if (!id || !name || !content) {
-    return null;
-  }
-
-  const createdAt = normalizeIsoDateString(record.createdAt) ?? new Date().toISOString();
-  const updatedAt = normalizeIsoDateString(record.updatedAt) ?? createdAt;
-
-  return {
-    id,
-    name,
-    content,
-    createdAt,
-    updatedAt,
-  };
+  return normalizeLlmPresetRecord(rawPreset, { mode: 'tolerant-migration', valueType, contentKey });
 }
 
 function mergeLlmPresetCollections(...collections: LlmPresetRecord[][]): LlmPresetRecord[] {

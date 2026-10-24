@@ -89,11 +89,16 @@ export const ChatProposalStore = {
   },
 
   /** Saved, and no longer set aside. */
-  markSaved(id: number, savedId: number | null): ChatProposal | null {
+  markSaved(id: number, savedId: number | null, options: { notify?: boolean } = {}): ChatProposal | null {
     const changed = table().prepare('UPDATE chat_proposals SET saved = 1, saved_id = ?, dismissed = 0 WHERE id = ?').run(savedId, id).changes
     const proposal = changed > 0 ? ChatProposalStore.find(id) : null
-    resolved(id, proposal)
+    if (options.notify !== false) resolved(id, proposal)
     return proposal
+  },
+
+  /** Transaction owners call this only after committing a saved marker. */
+  notifySaved(proposal: ChatProposal) {
+    resolved(proposal.id, proposal)
   },
 
   /** A saved lore entry was undone: it counts as set aside from then on (not proposed again, not saved in the stats). */

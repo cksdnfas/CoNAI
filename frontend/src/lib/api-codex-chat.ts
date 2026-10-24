@@ -110,16 +110,19 @@ export interface ChatDiagnostics {
   raw?: unknown
 }
 
-/** `loreKeyLanguage`: the one language besides English every lorebook's keywords are kept in (`ko`, `ja`, `zh` or a typed name); null: English only. */
 /** Who answers the chats' web_search tool: a Codex or Claude Code run with only its web search (model null: its default). */
 export type WebResearchSettings = { engine: 'off' | 'codex' | 'claude'; model: string | null; dailyLimit: number | null }
-export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean; loreKeyLanguage: string | null; webResearch: WebResearchSettings; piCodemode: boolean }
+/** `toolRoundLimit`: the one tool limit, model ↔ tool round trips per reply for every profile, engine and plugin run (1–200). */
+export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean; loreKeyLanguage: string | null; webResearch: WebResearchSettings; piCodemode: boolean; toolRoundLimit: number }
+export { TOOL_ROUND_LIMITS } from '@conai/shared'
 
 export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize', 'configure']
 export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
+export const CHAT_PROFILE_DEFAULTS_QUERY_KEY = ['codex-chat-profile-defaults'] as const
 export const CHAT_ADMIN_PROFILES_QUERY_KEY = ['codex-chat-admin-profiles'] as const
 export const CHAT_ADMIN_SETTINGS_QUERY_KEY = ['codex-chat-admin-settings'] as const
 export const CHAT_LOREBOOKS_QUERY_KEY = ['codex-chat-lorebooks'] as const
+export const CHAT_LOREBOOK_SUMMARIES_QUERY_KEY = [...CHAT_LOREBOOKS_QUERY_KEY, 'summary'] as const
 export const CHAT_BLOCKS_QUERY_KEY = ['codex-chat-blocks'] as const
 export const CHAT_TOOL_PRESETS_QUERY_KEY = ['codex-chat-tool-presets'] as const
 export const CHAT_GENERATION_PRESETS_QUERY_KEY = ['codex-chat-generation-presets'] as const
@@ -471,6 +474,13 @@ export interface OwnedChatLorebook extends ChatLorebook {
   entryCount?: number
 }
 
+export type ChatLorebookSummary = Omit<ChatLorebook, 'entries'> & { entryCount: number }
+
+/** Linkable lorebooks without their entry bodies; the parent key also covers existing lorebook invalidations. */
+export function listChatLorebookSummaries() {
+  return requestApiData<ChatLorebookSummary[]>('/api/codex-chat/lorebooks?summary=1')
+}
+
 /** A book the chat's requests attach besides its own: linked to this chat, or brought by the profile (a room: members). */
 export interface ThreadLoreBook {
   id: number
@@ -706,7 +716,6 @@ export interface ChatProfile extends ChatProfileAssetFields {
   suggestUserProfileId: number | null
   /** Read-only: as a suggestion writer, its model is set and its connection works. */
   suggestWriterReady?: boolean
-  maxToolRounds: number
   /** LLM: the model can look at images (view_images). */
   visionEnabled: boolean
   /** Ceiling on the rating of media the model is shown: its model row's, or `contentRatingTierId` (Codex / Claude Code: always its own). */
@@ -729,7 +738,6 @@ export interface ChatProfile extends ChatProfileAssetFields {
   updatedDate: string
 }
 
-/** `background`: a new image (data URL), null to remove it, left out to keep the current one. */
 /** What a card import kept as it was, kept in another form, and left out. */
 export interface ChatCardImportReport {
   kept: string[]
@@ -737,20 +745,19 @@ export interface ChatCardImportReport {
   dropped: string[]
 }
 
+/** `background`: a new image (data URL), null to remove it, left out to keep the current one. */
 export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl'>> & { background?: string | null }
 
 export interface ChatProfileDefaults {
   /** The chat representative model's default prompt: a new profile starts with it. */
-  systemPrompt?: string
+  systemPrompt: string
   loreScanDepth: number
   loreTokenBudget: number
   loreDepth: number
-  loreRecursionDepth?: number
+  loreRecursionDepth: number
   contextTurns: number
   summaryTriggerTurns: number
-  maxToolRounds: number
   toolOutputLimit: number
-  /** Codex profiles: compaction limit when `contextTokens` is empty, and the lowest one allowed. */
   summaryPrompt: string
   scopes: ChatScope[]
   style: ChatStyle
@@ -976,7 +983,7 @@ export function getChatAdminSettings() {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { cache: 'no-store' })
 }
 
-export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings>; piCodemode?: boolean }) {
+export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings>; piCodemode?: boolean; toolRoundLimit?: number }) {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

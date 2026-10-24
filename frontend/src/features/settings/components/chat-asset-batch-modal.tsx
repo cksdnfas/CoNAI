@@ -17,7 +17,7 @@ import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
 import { MediaLightbox } from '@/features/images/components/media-lightbox'
 import { useImageFeedSafety } from '@/features/images/components/image-list/use-image-feed-safety'
 import { useI18n } from '@/i18n'
-import { MODEL_SLOTS_QUERY_KEY, listModelSlots, reviewChatAssetVision, applyChatAssetBatch, cancelChatAssetSlot, chatAssetBatchQueryKey, chatProfileEmoticonsQueryKey, CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_GENERATION_PRESETS_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, chooseChatAssetSlot, createChatAssetBatch, getChatAssetBatch, listChatAdminProfiles, listChatGenerationPresets, regenerateChatAssetSlot, type ChatAssetApplyResult, type ChatAssetBatch, type ChatAssetBatchInput, type ChatAssetReview, type ChatProfile } from '@/lib/api-codex-chat'
+import { MODEL_SLOTS_QUERY_KEY, listModelSlots, reviewChatAssetVision, applyChatAssetBatch, cancelChatAssetSlot, chatAssetBatchQueryKey, CHAT_GENERATION_PRESETS_QUERY_KEY, chooseChatAssetSlot, createChatAssetBatch, getChatAssetBatch, listChatGenerationPresets, regenerateChatAssetSlot, type ChatAssetBatch, type ChatAssetBatchInput, type ChatAssetReview, type ChatProfile } from '@/lib/api-codex-chat'
 import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import { getPromptPresets } from '@/lib/api-prompt-presets'
@@ -27,6 +27,7 @@ import { createRandomUuid } from '@/lib/random-uuid'
 import { cn } from '@/lib/utils'
 import { ChatAssetSubmissionError } from '@/lib/api-codex-chat'
 import { chatModelRows, ModelRowOptions } from './chat-model-role-select'
+import { refreshProfileAssets } from './chat-profile-asset-runs'
 
 const terminal = (status: string) => ['completed', 'failed', 'cancelled'].includes(status)
 const activeAttempt = (attempt: ChatAssetBatch['slots'][number]['attempts'][number]) => !terminal(attempt.status)
@@ -78,13 +79,12 @@ export function SlotVisionReview({ profileId, batchId, slotKey, hash, referenceH
 }
 
 /** Queue-authoritative slots; the same surface opens from the editor and an approved proposal. */
-export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = false, onBatchChange, onPrepare, onApplied, onClose }: {
+export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = false, onBatchChange, onPrepare, onClose }: {
   profile: Pick<ChatProfile, 'id' | 'name' | 'referenceHash'> | null
   initialBatchId?: number | null
   referenceOnly?: boolean
   onBatchChange?: (id: number) => void
   onPrepare?: () => Promise<ChatProfile>
-  onApplied?: (result: ChatAssetApplyResult, batch: ChatAssetBatch, profile?: ChatProfile) => void
   onClose: () => void
 }) {
   const { t } = useI18n()
@@ -184,19 +184,9 @@ export function ChatAssetBatchModal({ profile, initialBatchId, referenceOnly = f
     onMutate: () => queryClient.cancelQueries({ queryKey }),
     mutationFn: () => applyChatAssetBatch(profileId, batchId!),
     onSuccess: async (result) => {
-      onApplied?.(result, batch!)
       showSnackbar({ message: t({ ko: '자산을 적용했어.', en: 'Assets applied.' }), tone: 'info' })
-      const profiles = await listChatAdminProfiles()
-      const updated = profiles.find((entry) => entry.id === profileId)
-      if (updated) { setSavedProfile(updated); onApplied?.(result, batch!, updated) }
-      queryClient.setQueryData(CHAT_ADMIN_PROFILES_QUERY_KEY, profiles)
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
-        queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all'] }),
-        queryClient.invalidateQueries({ queryKey: ['chat-asset-candidates'] }),
-        queryClient.invalidateQueries({ queryKey: ['group-emoticons'] }),
-        queryClient.invalidateQueries({ queryKey: chatProfileEmoticonsQueryKey(profileId) }),
-      ])
+      const updated = await refreshProfileAssets(queryClient, profileId, [result.applied], batchId!)
+      if (updated) setSavedProfile(updated)
     }, onError,
   })
   const isRunning = running(batch)

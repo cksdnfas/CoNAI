@@ -12,7 +12,7 @@ import type { ChatMcpToolResult } from './chatMcpBridge'
 import type { ClaudeChatSession } from './claudeChatCompletion'
 import type { ChatCompletionMessage, ChatCompletionResult, ChatCompletionTarget, ChatCompletionTool } from './llmChatCompletion'
 import { CATALOG_RUN_TOOL } from '../../mcp/toolCatalog'
-import { loadChatSettings } from './chatSettings'
+import { chatToolRoundLimit, loadChatSettings } from './chatSettings'
 import { noteTextToolCalls, recoverTextToolCalls, textToolCallFilter, type TextToolCallTools } from './textToolCalls'
 
 /**
@@ -26,7 +26,7 @@ import { noteTextToolCalls, recoverTextToolCalls, textToolCallFilter, type TextT
  * off and the run is refused if any tool but CoNAI's is active; install telemetry and cache warming are off.
  * The one exception is pi's `codemode` tool when the chat settings turn it on (ChatSettings.piCodemode): its scripts
  * run in pi's QuickJS sandbox (no files, network or Node), reach only CoNAI's tools through the same execute below,
- * get no `models` API, and make at most CODEMODE_SCRIPT_TOOL_CALLS calls each.
+ * get no `models` API, and make at most as many calls each as the tool round limit (ChatSettings.toolRoundLimit).
  */
 
 /** A pi chat's session, kept like a Claude Code one (claudeChatSessions.ts): every turn forks the file it continues. */
@@ -39,9 +39,8 @@ const PI_SESSION_ID = /^[\w.-]{1,160}$/
 const DEFAULT_CONTEXT_WINDOW = 32_768
 const TOOL_BUDGET_NOTE = 'The tool budget for this reply is used up. Do not call tools; answer now with what you have.'
 const CODEMODE_TOOL = 'codemode'
-/** Tool calls one codemode script may make; past it they fail, so a loop in a script cannot run the tools up. */
-const CODEMODE_SCRIPT_TOOL_CALLS = 8
-const CODEMODE_BUDGET_NOTE = `A codemode script may make at most ${CODEMODE_SCRIPT_TOOL_CALLS} tool calls. Return what you have.`
+/** One codemode script makes at most as many tool calls as the reply has rounds; past it they fail, so a loop in a script cannot run the tools up. */
+const codemodeBudgetNote = (calls: number) => `A codemode script may make at most ${calls} tool calls. Return what you have.`
 /** The files codemode writes to the OS temp folder (long output, shown images), named in its result. */
 const CODEMODE_OUTPUT_FILE = /pi-codemode-[0-9a-f]{16}\.[a-z]{3,4}/g
 
@@ -204,6 +203,7 @@ async function runPiChatCompletion(params: {
   const cwd = path.join(dir, 'work')
   const agentDir = path.join(dir, 'agent')
   const tools = params.tools ?? []
+  const toolRounds = params.maxToolRounds ?? chatToolRoundLimit()
   const codemode = tools.length > 0 && loadChatSettings().piCodemode
   const contextWindow = params.target.contextWindow ?? DEFAULT_CONTEXT_WINDOW
   const { thinkingLevel, provider } = piModelConfig(params.target, contextWindow, Boolean(params.target.piVision))
@@ -283,13 +283,13 @@ async function runPiChatCompletion(params: {
       params.signal.throwIfAborted()
       params.onActivity?.()
       if (!params.callTool) throw new Error('Unknown or not permitted tool')
-      if (round > (params.maxToolRounds ?? 8)) return { content: [{ type: 'text' as const, text: TOOL_BUDGET_NOTE }], details: {}, isError: true }
+      if (round > toolRounds) return { content: [{ type: 'text' as const, text: TOOL_BUDGET_NOTE }], details: {}, isError: true }
       const slash = toolCallId.lastIndexOf('/')
       if (codemode && slash > 0) {
         const script = toolCallId.slice(0, slash)
         const count = (scriptCalls.get(script) ?? 0) + 1
         scriptCalls.set(script, count)
-        if (count > CODEMODE_SCRIPT_TOOL_CALLS) return { content: [{ type: 'text' as const, text: CODEMODE_BUDGET_NOTE }], details: {}, isError: true }
+        if (count > toolRounds) return { content: [{ type: 'text' as const, text: codemodeBudgetNote(toolRounds) }], details: {}, isError: true }
       }
       return piToolResult(await params.callTool(tool.function.name, (args ?? {}) as Record<string, unknown>, toolCallId))
     },
@@ -337,7 +337,7 @@ async function runPiChatCompletion(params: {
     // Past the budget the tools go (from the next turn, as pi applies it), so the model has to answer in text.
     if (event.type === 'turn_end' && (params.research
       ? params.research.finalNativeTurn(Boolean(produced.at(-1)?.content.some(part => part.type === 'toolCall')))
-      : round >= (params.maxToolRounds ?? 8))) {
+      : round >= toolRounds)) {
       agent.setActiveToolsByName([])
       recovering = false
     }

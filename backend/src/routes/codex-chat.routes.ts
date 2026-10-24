@@ -11,7 +11,7 @@ import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import { AUTHOR_NOTE_MAX_LENGTH, CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, isVisionTool, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
-import { CHAT_SCOPES, MAX_CHAT_CAPTURE_LIMIT, WEB_RESEARCH_ENGINES, WEB_RESEARCH_MAX_DAILY_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
+import { CHAT_SCOPES, MAX_CHAT_CAPTURE_LIMIT, TOOL_ROUND_LIMITS, WEB_RESEARCH_ENGINES, WEB_RESEARCH_MAX_DAILY_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
 import { exportChatDiagnostics, getChatDiagnostics, visibleContextMessages } from '../services/codex-chat/chatDiagnostics'
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
 import { chatExpressionGroupId, listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
@@ -60,7 +60,7 @@ import { ChatAppearanceStore } from '../services/codex-chat/chatAppearance'
 import { validateBlockData } from '../services/codex-chat/chatBlockState'
 import { canSuggest, ChatSuggestError, profileWriterReady, suggestReplies, userWriterReady } from '../services/codex-chat/chatSuggestions'
 import { createUploadStorage, MAX_UPLOAD_FILE_SIZE_BYTES } from '../middleware/upload'
-import { downloadProfileAsset, importFileStoreProfileAsset, ingestProfileAsset, isProfileAssetHidden, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
+import { downloadProfileAsset, hiddenProfileAssets, importFileStoreProfileAsset, ingestProfileAsset, isProfileAssetHidden, profileAssetFields, resolveProfileAsset } from '../services/codex-chat/chatProfileAssets'
 import chatAssetBatchesRouter, { chatProfileExpressionsRouter } from './chat-asset-batches.routes'
 import externalMcpRouter from './external-mcp.routes'
 import { draftChatAppearance } from '../services/codex-chat/chatAppearanceDraft'
@@ -88,7 +88,7 @@ function backgroundVersionOf(profile: ChatProfile) {
   return profile.background || profile.backgroundHash ? `${profile.id}-${profile.backgroundHash?.slice(0, 8) ?? ''}-${Date.parse(profile.updatedDate) || 0}` : null
 }
 
-function toPublicProfile(profile: ChatProfile, accountId: number | null) {
+function toPublicProfile(profile: ChatProfile, accountId: number | null, hidden?: ReadonlySet<string>) {
   const canViewImages = canRequesterViewImages({ accountId, accountType: null })
   return {
     id: profile.id,
@@ -96,7 +96,7 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null) {
     tagline: profile.tagline,
     model: effectiveModelOf(profile),
     modelLabel: modelLabelOf(profile),
-    ...profileAssetFields(profile, canViewImages),
+    ...profileAssetFields(profile, canViewImages, hidden),
     engine: profile.engine,
     isEnabled: profile.isEnabled,
     contextTurns: profile.contextTurns,
@@ -116,11 +116,11 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null) {
 }
 
 /** Admin view of a profile: everything but the background image itself (served by its own route). */
-function toAdminProfile(profile: ChatProfile | null) {
+function toAdminProfile(profile: ChatProfile | null, hidden?: ReadonlySet<string>) {
   if (!profile) return null
   const { background: _background, ...rest } = profile
   // Whether it can write reply suggestions for a profile that links it (its model is set and its connection works).
-  return { ...rest, ...profileAssetFields(profile, true), backgroundVersion: backgroundVersionOf(profile), suggestWriterReady: profileWriterReady(profile) }
+  return { ...rest, ...profileAssetFields(profile, true, hidden), backgroundVersion: backgroundVersionOf(profile), suggestWriterReady: profileWriterReady(profile) }
 }
 
 /** GET /api/codex-chat/status — whether the chat (header key, panel, /chat) should appear, and which engines. */
@@ -160,15 +160,17 @@ router.get('/health', requireChatAccess, asyncHandler(async (req: Request, res: 
 router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
   const access = chatAccessOf(req)
   const accountId = getRequesterAccountId(req)
+  const profiles = ChatProfileStore.list({ directory: true })
+  const hidden = hiddenProfileAssets(profiles)
   res.json({
     success: true,
-    data: ChatProfileStore.list().map((profile) => ({
-      ...toPublicProfile(profile, accountId),
+    data: ChatProfileStore.mapDirectory((profile) => ({
+      ...toPublicProfile(profile, accountId, hidden),
       usable: profile.isEnabled && canUseChatProfile(access, profile),
       canReadFileText: profile.mcpEnabled && profile.mcpScopes.includes('read') && access.scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('read_file_text')),
       // What a reply's bar can order this character to do (`choices` only in a direct chat).
       orders: chatOrdersOf(profile, access, 'direct'),
-    })),
+    }), profiles),
   })
 })
 
@@ -777,9 +779,10 @@ router.get('/admin/settings', requireAdmin, (_req: Request, res: Response) => {
 })
 
 router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
-  const { enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch, piCodemode } = req.body ?? {}
-  if ((enabled === undefined && diagnostics === undefined && loreAutoSave === undefined && loreKeyLanguage === undefined && webResearch === undefined && piCodemode === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
+  const { enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch, piCodemode, toolRoundLimit } = req.body ?? {}
+  if ((enabled === undefined && diagnostics === undefined && loreAutoSave === undefined && loreKeyLanguage === undefined && webResearch === undefined && piCodemode === undefined && toolRoundLimit === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
     || (piCodemode !== undefined && typeof piCodemode !== 'boolean')
+    || (toolRoundLimit !== undefined && !(Number.isInteger(toolRoundLimit) && toolRoundLimit >= TOOL_ROUND_LIMITS.min && toolRoundLimit <= TOOL_ROUND_LIMITS.max))
     || (webResearch !== undefined && (!webResearch || typeof webResearch !== 'object' || Array.isArray(webResearch)
       || (webResearch.engine !== undefined && !WEB_RESEARCH_ENGINES.includes(webResearch.engine))
       || (webResearch.model !== undefined && webResearch.model !== null && typeof webResearch.model !== 'string')
@@ -793,7 +796,7 @@ router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
     sendRouteBadRequest(res, '채팅 설정 값이 올바르지 않아.')
     return
   }
-  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch, piCodemode }) })
+  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch, piCodemode, toolRoundLimit }) })
 })
 
 /**
@@ -806,7 +809,9 @@ router.get('/admin/profile-defaults', requireAdmin, (_req: Request, res: Respons
 })
 
 router.get('/admin/profiles', requireAdmin, (_req: Request, res: Response) => {
-  res.json({ success: true, data: ChatProfileStore.list().map(toAdminProfile) })
+  const profiles = ChatProfileStore.list({ admin: true })
+  const hidden = hiddenProfileAssets(profiles)
+  res.json({ success: true, data: ModelSlotStore.withReadSnapshot(() => profiles.map((profile) => toAdminProfile(profile, hidden))) })
 })
 
 /** A Codex profile's effort must be one its model supports (when the CLI catalog lists the model). */
@@ -1484,7 +1489,7 @@ router.get('/user-profiles', requireChatAccess, (req: Request, res: Response) =>
 
 /** GET /api/codex-chat/model-options — the models a user profile can write reply suggestions with (any chat user). */
 router.get('/model-options', requireChatAccess, (_req: Request, res: Response) => {
-  res.json({ success: true, data: ModelSlotStore.list().filter((slot) => slot.providerType !== 'decision_typesafe').map((slot) => ({ id: slot.id, kind: slot.kind, routeKey: slot.routeKey, providerName: slot.providerName, providerLabel: slot.providerLabel, label: slot.label, model: slot.model, ready: slot.model !== '' && isChatTargetReady(slot.providerName, slot.model) })) })
+  res.json({ success: true, data: ModelSlotStore.list({ usage: false }).filter((slot) => slot.providerType !== 'decision_typesafe').map((slot) => ({ id: slot.id, kind: slot.kind, routeKey: slot.routeKey, providerName: slot.providerName, providerLabel: slot.providerLabel, label: slot.label, model: slot.model, ready: slot.model !== '' && isChatTargetReady(slot.providerName, slot.model) })) })
 })
 
 router.post('/user-profiles', requireChatAccess, (req: Request, res: Response) => {

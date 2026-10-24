@@ -205,12 +205,12 @@ export function ChatFlagTray({ flags, activeIds, open, flagStyle, buttonRef, onT
 }
 
 /** Under a sent message: the flags that were on for it (hover shows what was added). */
-export function ChatMessageFlags({ flags }: { flags?: ChatFlagSnapshot[] }) {
+export function ChatMessageFlags({ flags }: { flags?: Array<ChatFlagSnapshot & { displayContent?: string }> }) {
   if (!flags?.length) return null
   return (
     <div className="mt-1 flex flex-wrap justify-end gap-1">
       {flags.map((flag, index) => (
-        <Tip key={`${flag.id}-${index}`} content={<span className="whitespace-pre-wrap">{flag.content}</span>}>
+        <Tip key={`${flag.id}-${index}`} content={<span className="whitespace-pre-wrap">{flag.displayContent ?? flag.content}</span>}>
           <span tabIndex={0} className="inline-flex items-center gap-1 rounded-full border border-line px-1.5 text-2xs leading-4.5 text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
             <ChatFlagIcon icon={flag.icon} name={flag.name} className="size-3 text-xs" />
             {flag.name}

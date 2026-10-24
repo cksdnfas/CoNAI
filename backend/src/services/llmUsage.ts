@@ -178,8 +178,8 @@ export function buildLlmUsageSummary(days: number, offsetMinutes = 0): LlmUsageS
   const today = (db.prepare(`SELECT date('now', ?) AS today`).get(shift) as { today: string }).today
   const todayStart = Date.parse(`${today}T00:00:00Z`)
   const dates = Array.from({ length: days }, (_, index) => new Date(todayStart - (days - 1 - index) * 86_400_000).toISOString().slice(0, 10))
-  const since = dates[0]
-  const where = `WHERE ${localDate} >= ?`
+  const since = new Date(Date.parse(`${dates[0]}T00:00:00Z`) - Math.round(offsetMinutes) * 60_000).toISOString().slice(0, 19).replace('T', ' ')
+  const where = 'WHERE created_at >= ?'
 
   const totals = totalsOf(db.prepare(`SELECT ${TOTAL_COLUMNS} FROM llm_usage_events ${where}`).get(since) as Record<string, unknown>)
   const dailyRows = new Map((db.prepare(`

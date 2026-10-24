@@ -82,7 +82,7 @@ export function enqueueFromComment(comment: CommentRow, actor: PostActor, post: 
   const candidates = summonableProfiles(runAs);
   let picked: number[] = [];
   try { picked = (JSON.parse(comment.mentions) as unknown[]).filter((id): id is number => Number.isSafeInteger(id)); } catch { /* none */ }
-  const typed = parseMentions(comment.body, ChatProfileStore.list({ enabledOnly: true }).map((profile) => ({ id: profile.id, name: profile.name })), comment.author_profile_id ?? undefined);
+  const typed = parseMentions(comment.body, ChatProfileStore.listNames({ enabledOnly: true }), comment.author_profile_id ?? undefined);
   const settings = loadPostsSettings();
   const answered = repliedBot(comment);
   // A person answering a bot's comment calls that bot as if they had written its @name. Only when they could have:

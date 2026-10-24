@@ -7,7 +7,7 @@ import { beginDirectReply, userReplyRouting } from './chatReplies'
 import type { McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
 import { profileGenerationOptions } from './chatProfiles'
-import { inlineTextsForChat, loadAttachedImages, validateChatAttachments } from './chatAttachments'
+import { inlineTextsForChat, loadAttachedImages, validateChatAttachments, withLatestMediaGeneration } from './chatAttachments'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { readChoiceAnswer } from './chatChoices'
 import { profileContentLimit } from './chatContentRating'
@@ -17,11 +17,11 @@ import { applyChatInstructionHooks, hasPluginServerHook } from '../plugins/plugi
 import { CATALOG_OPEN_TOOL, unwrapCatalogCall } from '../../mcp/toolCatalog'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, isVisionTool, sessionRuntimeOf, type ChatProfile } from './chatProfiles'
-import { translateReply, translateUserInput } from './chatTranslation'
+import { translateReply, translateUserMessage } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses, withoutNarrationMarks } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
-import { loadChatSettings } from './chatSettings'
+import { chatToolRoundLimit, loadChatSettings } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, resolveChatAccess } from './codexChatAccess'
 import { CodexChatStore, type ChatHistorySource, type CodexChatMessageRecord, type CodexChatThreadRecord, type CodexChatToolCall } from './codexChatStore'
 import { withGenerationOutcomes } from './codexChatMedia'
@@ -297,7 +297,7 @@ async function runReply(turn: LlmTurn, requester: McpRequester, thread: CodexCha
   let preparing: Promise<Awaited<ReturnType<typeof prepareRequest>>> | null = null
   const prepareRequest = async (tools: ChatCompletionTool[]) => {
     await turn.translation
-    const history = listMessages()
+    const history = withLatestMediaGeneration(listMessages(), profile, requester)
     const current = CodexChatStore.findThreadById(thread.id) ?? thread
     // A session prepares its latest input itself. Other requests can only show their unsummarized window.
     const attachmentMessages = inSession ? [] : thread.kind === 'group'
@@ -419,11 +419,15 @@ function turnHistory(turn: LlmTurn, profile: ChatProfile) {
 
 /** Translate a stored user row under the same cancellation and lock as its reply. */
 function translateTurnInput(turn: LlmTurn, profile: ChatProfile, messageId: number, text: string) {
-  if (!text || !hasTranslation(profile)) return
-  turn.translation = Promise.resolve().then(() => translateUserInput(profile, text, turn.controller.signal, { threadId: turn.threadId, replyId: turn.delivery?.context.replyId })).then((modelText) => {
-    if (!modelText || turn.controller.signal.aborted) return
-    CodexChatStore.setUserMessageTranslation(turn.threadId, messageId, modelText, text)
-    turn.history = turn.history?.map((message) => message.id === messageId ? { ...message, content: modelText, display_content: text } : message)
+  if (!hasTranslation(profile)) return
+  const flags = CodexChatStore.findMessage(turn.threadId, messageId)?.flags ?? []
+  turn.translation = Promise.resolve().then(() => translateUserMessage(profile, text, flags, turn.controller.signal, { threadId: turn.threadId, replyId: turn.delivery?.context.replyId })).then((translated) => {
+    if (turn.controller.signal.aborted) return
+    // Nothing to translate (an English message, an already-translated row): the stored row stays as it is.
+    if (translated.display_content === null && translated.error === null && translated.flags === flags) return
+    CodexChatStore.setUserMessageTranslation(turn.threadId, messageId, translated.content, translated.display_content, translated.flags, translated.error)
+    turn.history = turn.history?.map((message) => message.id === messageId ? { ...message, ...translated, display_content: translated.display_content ?? message.display_content } : message)
+    if (translated.error) emit(turn, { type: 'error', message: translated.error })
   })
   turn.translation.catch(() => undefined)
 }
@@ -534,6 +538,8 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     // Where this reply's tool rounds begin in `messages` (fitting may drop conversation before them).
     let turnStart = messages.length
     let wrapUp = false
+    // Research carries its own count of the same limit (ChatResearchExecution); a chat reply reads it as it starts.
+    const toolRounds = turn.research ? turn.research.maxTurns - 1 : chatToolRoundLimit()
     for (let round = 1; ; round += 1) {
       turn.controller.signal.throwIfAborted()
       if (turn.research && !turn.research.canCallModel()) return
@@ -553,7 +559,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       }
       // The last round keeps the same tool list (and so the cached prompt) and tells the model to answer in text.
       const researchFinal = turn.research?.finalModelRound() ?? false
-      const lastRound = wrapUp || (!turn.research && round > profile.maxToolRounds) || researchFinal
+      const lastRound = wrapUp || (!turn.research && round > toolRounds) || researchFinal
       if (turn.research && lastRound) tools = []
       // The cap goes out cut to the room this round's prompt leaves.
       target.generation = { ...target.generation, maxTokens: replyCapFor(profile, messages, tools, replyCap) }
@@ -593,7 +599,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           retry: !turn.reaction && !turn.research,
           canRetry: () => turn.text.length === (turn.continuing?.length ?? 0) && turn.reasoning.length === 0,
           stopLoops: true,
-          maxToolRounds: turn.research ? turn.research.maxTurns - 1 : profile.maxToolRounds,
+          maxToolRounds: toolRounds,
           research: turn.research,
           usage: { purpose: 'chat', profileId: profile.id, threadId: turn.threadId, replyId: chatContext?.replyId, round: target.transport ? null : round },
           callTool: bridge ? async (name, args, id) => {
@@ -601,7 +607,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
             if (turn.research) {
               requireRequesterPermission(requester, 'posts.view')
               turn.research.validateSources(requester, profile.id)
-              if (!turn.research.takeTool()) return { isError: true, content: [{ type: 'text', text: 'Research tool budget exhausted. Answer only from evidence already returned.' }] }
+              if (!turn.research.takeTool()) return { isError: true, content: [{ type: 'text', text: 'A summary has no tools. Answer only from the text already supplied.' }] }
             }
             const target = unwrapCatalogCall(name, args).tool
             if (blocked.has(target)) return { isError: true, content: [{ type: 'text', text: `${target} is not available in this reply.` }] }
@@ -675,7 +681,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           return
         }
         if (turn.research && !turn.research.takeTool()) {
-          messages.push({ role: 'tool', tool_call_id: call.id, content: 'Research tool budget exhausted. Summarize only the evidence already returned.' })
+          messages.push({ role: 'tool', tool_call_id: call.id, content: 'A summary has no tools. Answer only from the text already supplied.' })
           continue
         }
         const target = calledTool(call.function.name, call.function.arguments)
@@ -809,6 +815,12 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   turn.delivery = beginDirectReply(updatedThread, profile.id, history, [...history].reverse().find((entry) => entry.role === 'user') ?? null, turn.controller.signal, (routing) => emit(turn, { type: 'routing', routing }), turn.historySource)
   if (reaction) turn.delivery.routing = { ...turn.delivery.routing, replyTo: null, recipients: ['user'] }
   if (page) turn.chatContext = { ...turn.delivery.context, page }
+  // A cancelled preparation (or a failed translation) may have left only the user's original row. Both retry
+  // actions use the same translation promise as a new send, before API or session request construction.
+  if (replacingMessageId && !turn.translation) {
+    const latestUser = [...history].reverse().find(message => message.role === 'user')
+    if (latestUser && latestUser.display_content == null) translateTurnInput(turn, profile, latestUser.id, latestUser.content)
+  }
   let stored: CodexChatMessageRecord | null = null
   void withLlmUsageContext({ threadId: thread.id, replyId: turn.delivery.context.replyId }, () => runReply(turn, requester, updatedThread, profile)
     .then(() => finishTurn(turn, profile, turn.controller.signal.aborted ? 'interrupted' : 'completed', null), (error: unknown) => {
@@ -1015,7 +1027,7 @@ export const LlmChatService = {
         CodexChatStore.editUserMessage(thread.id, messageId, edited as string)
         translateTurnInput(activeTurns.get(thread.id)!, profile, messageId, edited as string)
       }
-      return { type: 'rewind', mode: regenerate ? 'regenerate' : 'edit', message: regenerate ? message : { ...message, content: edited as string, display_content: null } }
+      return { type: 'rewind', mode: regenerate ? 'regenerate' : 'edit', message: regenerate ? message : { ...message, content: edited as string, display_content: null, error: null } }
     }, regenerate ? messageId : undefined)
   },
 

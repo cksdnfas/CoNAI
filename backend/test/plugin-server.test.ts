@@ -344,7 +344,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
     const { automationRoomKinds } = await import('../src/services/codex-chat/chatRoomWake')
     const profile = ChatProfileStore.create({ name: 'Plugin worker', engine: 'llm', modelSlotId: ModelSlotStore.ensure('plugin-test', 'test-model')!,
-      mcpEnabled: true, mcpScopes: ['organize'], toolAllowlist: ['create_file_folder'], maxTokens: 8192, summaryEnabled: false, maxToolRounds: 3 })
+      mcpEnabled: true, mcpScopes: ['organize'], toolAllowlist: ['create_file_folder'], maxTokens: 8192, summaryEnabled: false })
     let folderName = 'native-plugin-result', revoke = false, hold = false, aborted = false, calls = 0
     const results: string[] = []
     const budgets: number[] = []
@@ -394,7 +394,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     for (const [requestId, mode, maxTokens, expected] of [
       ['explicit-profile', 'profile', 128, 128],
       ['reset-profile', 'profile', undefined, 8192],
-      ['default-text', 'text', undefined, 512],
+      ['default-text', 'text', undefined, 8192],
       ['explicit-text', 'text', 128, 128],
     ] as const) {
       budgets.length = 0
@@ -445,7 +445,13 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const draft = PostStore.create(actor, { title: 'Draft research', body: 'DRAFT_SECRET', status: 'draft' })
     const hidden = PostStore.create(actor, { title: 'Hidden research', body: 'HIDDEN_SECRET', status: 'hidden' })
     const profile = ChatProfileStore.create({ name: 'Researcher', engine: 'llm', modelSlotId: ModelSlotStore.ensure('plugin-test', 'test-model')!,
-      mcpEnabled: true, mcpScopes: ['read', 'organize'], toolAllowlist: null, maxTokens: 1024, maxToolRounds: 8, summaryEnabled: false })
+      mcpEnabled: true, mcpScopes: ['read', 'organize'], toolAllowlist: null, maxTokens: 1024, summaryEnabled: false })
+    const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+    // Research follows the app-wide tool round limit; a test lowers it only around the case that needs it.
+    const withToolRounds = async <T>(toolRoundLimit: number, run: () => Promise<T>) => {
+      updateChatSettings({ toolRoundLimit })
+      try { return await run() } finally { updateChatSettings({ toolRoundLimit: 50 }) }
+    }
     type Call = { name: string; args: Record<string, unknown> }
     let steps: Call[][] = [], requests: Array<{ messages: Array<{ role: string; content: string }>; tools?: Array<{ function: { name: string } }>; tool_choice?: string }> = []
     let hold = false, aborted = false, revoke = false, failContext = false
@@ -468,7 +474,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
       await until(() => RuntimeJobStore.list({ kind: 'plugin-llm', status: ['queued', 'running'] }).length === 0, 'research cleanup')
     })
     const input = { requestId: 'research-scoped', profileId: profile.id, mode: 'profile', message: 'Research only the supplied sources.',
-      research: { slotId: 'slot-a', activityId: 'activity-a', allowedPostIds: [allowed.id], maxModelCalls: 4, maxToolCalls: 12 } }
+      research: { slotId: 'slot-a', activityId: 'activity-a', allowedPostIds: [allowed.id] } }
     const done = async (id: string) => {
       await until(() => !['queued', 'running'].includes(llm.getPluginLlmJob('chat-instructions', admin, id).status), 'research terminal')
       return llm.getPluginLlmJob('chat-instructions', admin, id)
@@ -519,7 +525,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.equal(new Set(roomIds).size, roomIds.length)
 
     requests = []; steps = [[{ name: 'posts_read', args: { post_id: allowed.id, offset: 7, limit: 600 } }]]
-    const limited = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-model-limit', research: { ...input.research, maxModelCalls: 2 } }).jobId)
+    const limited = await withToolRounds(1, () => done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-model-limit' }).jobId))
     assert.equal(limited.status, 'completed', limited.error ?? '')
     assert.equal(requests.length, 2)
     assert.equal(requests[1].tool_choice, undefined)
@@ -531,33 +537,17 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const longRead = limited.result!.profileRun!.research!.evidence[0]
     assert.deepEqual(longRead, { postId: allowed.id, revision: allowed.revision, contentVersion: null, offset: 7, end: 407, excerpt: bodyText.slice(7, 407) })
     assert.equal(longRead.excerpt.length, longRead.end - longRead.offset, 'evidence offsets cover the bounded excerpt, not the longer original read')
+    // A plugin's own call/turn limits are accepted for compatibility and ignored: the app-wide limit decides.
     requests = []; steps = [[{ name: 'posts_read', args: { post_id: allowed.id } }, { name: 'posts_read', args: { post_id: allowed.id, offset: 10 } }]]
-    const toolLimited = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-tool-limit', research: { ...input.research, maxToolCalls: 1 } }).jobId)
-    assert.equal(toolLimited.result!.profileRun!.research!.stopReason, 'tool_limit')
-    assert.equal(toolLimited.result!.profileRun!.research!.toolCalls, 1)
-    assert.equal(toolLimited.result!.profileRun!.research!.evidence.length, 1)
+    const ignored = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-plugin-limits-ignored',
+      research: { ...input.research, maxModelCalls: 1, maxToolCalls: 1, maxTurns: 1 } }).jobId)
+    assert.equal(ignored.status, 'completed', ignored.error ?? '')
+    assert.equal(ignored.result!.profileRun!.research!.toolCalls, 2)
+    assert.equal(ignored.result!.profileRun!.research!.stopReason, 'completed')
+    assert.deepEqual(ignored.result!.profileRun!.research!.limits, { runtime: 'direct', maxModelCalls: 51, maxTurns: null, maxToolCalls: null })
     assert.equal(requests.length, 2)
-    assert.equal(requests[1].tool_choice, undefined)
-    assert.ok(toolLimited.result!.text.length > 0, 'tool exhaustion still gets one final summary')
-
-    requests = []; steps = [[{ name: 'posts_read', args: { post_id: allowed.id } }]]
-    const summary = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-summary', research: { ...input.research, maxModelCalls: 1, maxToolCalls: 1 } }).jobId)
-    assert.equal(summary.status, 'completed', summary.error ?? '')
-    assert.equal(requests.length, 1)
-    assert.equal(requests[0].tool_choice, undefined)
-    assert.equal(requests[0].tools, undefined)
-    assert.deepEqual(summary.result!.profileRun!.research, { slotId: 'slot-a', activityId: 'activity-a', modelCalls: 1, toolCalls: 0, stopReason: 'completed', evidence: [],
-      turns: null, limits: { runtime: 'direct', maxModelCalls: 1, maxTurns: null, maxToolCalls: 1 } })
-
-    requests = []; steps = []
-    const adjustable = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-adjustable',
-      research: { ...input.research, maxModelCalls: 32, maxToolCalls: 100, maxTurns: 32 } }).jobId)
-    assert.equal(adjustable.status, 'completed', adjustable.error ?? '')
-    assert.equal(adjustable.result!.profileRun!.research!.limits.maxModelCalls, 32)
-    assert.equal(adjustable.result!.profileRun!.research!.limits.maxToolCalls, 100)
     requests = []; steps = [Array.from({ length: 100 }, () => ({ name: 'posts_read', args: { post_id: allowed.id, limit: 600 } }))]
-    const largeBudget = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-large-budget',
-      research: { ...input.research, maxModelCalls: 2, maxToolCalls: 100 } }).jobId)
+    const largeBudget = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-large-budget' }).jobId)
     assert.equal(largeBudget.status, 'completed', largeBudget.error ?? '')
     assert.equal(largeBudget.result!.profileRun!.research!.toolCalls, 100)
     assert.equal(largeBudget.result!.profileRun!.research!.evidenceTruncated, true)
@@ -567,12 +557,14 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const protectedSummary = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-purpose-summary',
       research: { ...input.research, purpose: 'summary' } }).jobId)
     assert.equal(protectedSummary.status, 'completed', protectedSummary.error ?? '')
-    assert.equal(requests.at(-1)!.tools, undefined)
-    assert.equal(protectedSummary.result!.profileRun!.research!.limits.maxToolCalls, 0)
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].tools, undefined)
+    assert.deepEqual(protectedSummary.result!.profileRun!.research, { slotId: 'slot-a', activityId: 'activity-a', modelCalls: 1, toolCalls: 0, stopReason: 'completed', evidence: [],
+      turns: null, limits: { runtime: 'direct', maxModelCalls: 1, maxTurns: null, maxToolCalls: 0 } })
 
     for (const postId of [draft.id, hidden.id, 999999]) {
       requests = []; steps = []
-      const inaccessible = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: `research-inaccessible-${postId}`, message: 'Prior quote must not leave this server.', research: { ...input.research, allowedPostIds: [allowed.id, postId], maxModelCalls: 1 } }).jobId)
+      const inaccessible = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: `research-inaccessible-${postId}`, message: 'Prior quote must not leave this server.', research: { ...input.research, allowedPostIds: [allowed.id, postId], purpose: 'summary' } }).jobId)
       assert.equal(inaccessible.status, 'failed')
       assert.match(inaccessible.error!, /source access changed/)
       assert.equal(requests.length, 0, 'every supplied source is checked even on a tool-free summary')
@@ -584,7 +576,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
       return publishedSources(...args)
     })
     requests = []; steps = [[{ name: 'posts_read', args: { post_id: allowed.id } }]]
-    const hiddenDuringRun = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-source-revoked', research: { ...input.research, maxModelCalls: 2 } }).jobId)
+    const hiddenDuringRun = await withToolRounds(1, () => done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-source-revoked' }).jobId))
     accessMock.mock.restore()
     assert.equal(hiddenDuringRun.status, 'failed')
     assert.match(hiddenDuringRun.error!, /source access changed/)
@@ -610,7 +602,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.throws(() => llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-empty', research: { ...input.research, allowedPostIds: [] } }))
     assert.throws(() => llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-text', mode: 'text' }))
     requests = []; failContext = true
-    const failed = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-provider-error', research: { ...input.research, maxModelCalls: 1 } }).jobId)
+    const failed = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-provider-error', research: { ...input.research, purpose: 'summary' } }).jobId)
     assert.equal(failed.status, 'failed')
     assert.equal(requests.length, 1, 'compatibility/context retry cannot exceed the actual provider-call budget')
     failContext = false; requests = []; hold = true
@@ -724,7 +716,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
             assert.deepEqual(names, auth!.research!.summary ? [] : ['posts_read', 'posts_search'])
             if (!auth!.research!.summary) {
               assert.notEqual((await mcp.callTool({ name: 'posts_read', arguments: { post_id: source.id } })).isError, true)
-              assert.equal((await mcp.callTool({ name: 'posts_read', arguments: { post_id: source.id } })).isError, true, 'shared tool budget blocks the second native dispatch')
+              assert.notEqual((await mcp.callTool({ name: 'posts_read', arguments: { post_id: source.id } })).isError, true, 'no per-call cap: Codex runs its own loop')
             }
           } finally { await mcp.close(); await server.close() }
           setImmediate(() => {
@@ -745,11 +737,11 @@ test('trusted plugins run a server module with their own data, hooks and tools',
       const profile = ChatProfileStore.create({ name: `Native ${engine} ${purpose}`, engine, mcpEnabled: true, mcpScopes: ['read', 'organize'], maxTokens: 1024 })
       const result = await runPluginProfile({ pluginId: 'chat-instructions', pluginName: 'Native test', requester: admin, profile, signal: new AbortController().signal,
         input: { requestId: `native-${engine}-${purpose}`, profileId: profile.id, mode: 'profile', message: 'Use the selected source.',
-          research: { slotId: 'native', activityId: purpose, allowedPostIds: [source.id], maxToolCalls: 1, purpose } } })
+          research: { slotId: 'native', activityId: purpose, allowedPostIds: [source.id], purpose } } })
       assert.equal(result.profileRun!.research!.modelCalls, null)
       assert.equal(result.profileRun!.research!.limits.runtime, engine)
-      assert.equal(result.profileRun!.research!.toolCalls, purpose === 'research' ? 1 : 0)
-      assert.equal(result.profileRun!.research!.evidence.length, purpose === 'research' ? 1 : 0)
+      assert.equal(result.profileRun!.research!.toolCalls, purpose === 'research' ? 2 : 0)
+      assert.equal(result.profileRun!.research!.evidence.length, purpose === 'research' ? 2 : 0)
       assert.equal(result.profileRun!.research!.turns, engine === 'claude' ? claudeRuns : null)
       if (engine === 'claude' && claudeRuns === 2) {
         assert.equal(result.profileRun!.research!.limits.maxTurns, 1)

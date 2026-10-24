@@ -4,6 +4,9 @@ import { CHAT_CHOICE_LIMITS } from '@conai/shared'
 import type { McpRequestContext } from '../context'
 import { ChatProposalStore } from '../../services/codex-chat/chatProposals'
 import { ChatTaskStore } from '../../services/codex-chat/chatTasks'
+import { ChatProfileStore } from '../../services/codex-chat/chatProfiles'
+import { requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry'
+import { translateChoice } from '../../services/codex-chat/chatChoices'
 import { errorResult as failure, textResult as result } from '../toolResults'
 
 /**
@@ -30,12 +33,17 @@ export function registerChatChoiceTools(server: McpServer, context: McpRequestCo
       const labels = options.map((option) => option.label.trim())
       if (new Set(labels).size !== labels.length) throw new Error('Each option needs its own label.')
       if (!chat.page && options.some((option) => option.without_page)) throw new Error('without_page needs a connected page; no page is connected to this request.')
-      const proposal = ChatProposalStore.add(chat, {
+      const { signal } = requireActiveChatReply(chat)
+      const profile = ChatProfileStore.find(chat.profileId)
+      if (!profile) throw new Error('The chat profile is no longer available.')
+      const choice = await translateChoice(profile, {
         kind: 'choice',
         question: question.trim(),
         options: options.map((option, index) => ({ label: labels[index], ...(option.detail?.trim() ? { detail: option.detail.trim() } : {}), ...(option.without_page ? { withoutPage: true } : {}) })),
         multiple: multiple === true,
-      })
+      }, signal, { threadId: chat.threadId, replyId: chat.replyId })
+      requireActiveChatReply(chat)
+      const proposal = ChatProposalStore.add(chat, choice)
       return result({ proposalId: proposal.id, note: 'The choices are shown above the composer. End your reply now; the answer comes as the person\'s next message.' }, { structuredContent: { proposal } })
     } catch (error) { return failure(error) }
   })

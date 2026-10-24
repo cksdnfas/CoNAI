@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { FileText, Folder, FolderPlus } from 'lucide-react'
-import { Chip } from '@/components/ui/chip'
+import { Chip, ChipAction } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { FilePicker } from '@/features/files/file-browser'
@@ -37,15 +37,13 @@ export function ChatProfileLinkedFiles({ value, onChange }: { value: LinkedFileL
           <Chip key={link.id} tone={view?.missing ? 'muted' : 'default'} removeLabel={t({ ko: '연결 해제', en: 'Unlink' })} onRemove={() => onChange(value.filter((item) => item.id !== link.id))}>
             <Icon className={cn('size-3.5', link.write ? 'text-primary' : 'text-muted-foreground')} aria-hidden />
             <Tip content={view?.path ?? undefined}><span className={cn('max-w-48 truncate', view?.missing && 'line-through')}>{view?.name ?? '…'}</span></Tip>
-            {/* eslint-disable-next-line no-restricted-syntax -- an inline mode switch inside the chip */}
-            <button
-              type="button"
-              className={cn('rounded px-1 text-2xs font-bold', link.write ? 'bg-success/10 text-success' : 'bg-surface-high text-muted-foreground')}
+            <ChipAction
               onClick={() => onChange(value.map((item) => (item.id === link.id ? { ...item, write: !item.write } : item)))}
               aria-label={link.write ? t({ ko: '읽기 전용으로', en: 'Make read-only' }) : t({ ko: '쓰기 허용', en: 'Allow writing' })}
+              aria-pressed={link.write}
             >
               {link.write ? t({ ko: '쓰기', en: 'Write' }) : t({ ko: '읽기', en: 'Read' })}
-            </button>
+            </ChipAction>
           </Chip>
         )
       })}

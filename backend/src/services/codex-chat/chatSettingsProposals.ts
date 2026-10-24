@@ -146,13 +146,26 @@ export function proposeChatSettings(context: ChatExecutionContext, input: ChatSe
 
 /** Saves a chat settings card for the chat's owner (the person pressing 저장), with the context tab's own rules. */
 export function applyChatSettingsProposal(requester: McpRequester, proposalId: number): ChatProposal {
-  const proposal = ChatProposalStore.find(proposalId)
-  const threadId = ChatProposalStore.threadIdOf(proposalId)
-  if (proposal?.kind !== 'chat_settings' || threadId === null) throw new ChatSettingsError('채팅 설정 제안이 아니야.')
-  if (proposal.saved || proposal.dismissed) throw new ChatSettingsError('이미 저장하거나 넘긴 제안이야.', 409)
-  const { patch } = proposal as ChatSettingsProposal
   try {
-    getUserSettingsDb().transaction(() => {
+    const saved = getUserSettingsDb().transaction(() => {
+      const proposal = ChatProposalStore.find(proposalId)
+      const threadId = ChatProposalStore.threadIdOf(proposalId)
+      if (proposal?.kind !== 'chat_settings' || threadId === null) throw new ChatSettingsError('채팅 설정 제안이 아니야.')
+      if (proposal.saved || proposal.dismissed) throw new ChatSettingsError('이미 저장하거나 넘긴 제안이야.', 409)
+      const { patch, before } = proposal as ChatSettingsProposal
+      const current: ChatSettingsPatch = {
+        lorebookIds: normalizeLorebookIds(OwnedLorebookStore.threadLinks(threadId)),
+        loreRecordBookId: OwnedLorebookStore.recordBookId(threadId),
+        linkedFiles: normalizeLinkedFiles(LinkedFileStore.threadLinks(threadId)),
+        minutesFolderId: threadRow(threadId).minutes_folder_id ?? null,
+      }
+      const normalized = (key: keyof ChatSettingsPatch, value: unknown) => key === 'lorebookIds'
+        ? normalizeLorebookIds(value) : key === 'linkedFiles' ? normalizeLinkedFiles(value) : value === '' ? null : value ?? null
+      for (const key of Object.keys(patch) as Array<keyof ChatSettingsPatch>) {
+        if (!Object.prototype.hasOwnProperty.call(before, key) || JSON.stringify(normalized(key, current[key])) !== JSON.stringify(normalized(key, before[key]))) {
+          throw new ChatSettingsError('제안 이후 채팅 설정이 바뀌었어. 새 제안을 만들어줘.', 409)
+        }
+      }
       if (patch.lorebookIds !== undefined) OwnedLorebookStore.setThreadLinks(threadId, patch.lorebookIds)
       if (patch.loreRecordBookId !== undefined) OwnedLorebookStore.setRecordBook(threadId, patch.loreRecordBookId)
       if (patch.linkedFiles !== undefined) {
@@ -163,10 +176,12 @@ export function applyChatSettingsProposal(requester: McpRequester, proposalId: n
         requireFileStoreOwner(requester)
         ChatMinutesStore.set(threadId, patch.minutesFolderId)
       }
+      return ChatProposalStore.markSaved(proposalId, null, { notify: false }) as ChatProposal
     }).immediate()
+    ChatProposalStore.notifySaved(saved)
+    return saved
   } catch (error) {
     if (error instanceof LorebookError || error instanceof LinkedFileError) throw new ChatSettingsError(error.message, error.status)
     throw error
   }
-  return ChatProposalStore.markSaved(proposalId, null) as ChatProposal
 }

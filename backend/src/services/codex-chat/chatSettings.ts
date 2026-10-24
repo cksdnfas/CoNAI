@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { normalizeLoreKeyLanguage } from '@conai/shared'
+import { CHAT_CAPTURE_LIMITS, normalizeLoreKeyLanguage, TOOL_ROUND_LIMITS } from '@conai/shared'
 import { runtimePaths } from '../../config/runtimePaths'
 import { writeJsonFileAtomic } from '../../utils/jsonFile'
 
@@ -31,6 +31,18 @@ export type ChatSettings = {
    * and returns only what it picks out (piChatCompletion). Off by default: a small model may not write scripts well.
    */
   piCodemode: boolean
+  /**
+   * The one tool limit: model ↔ tool round trips one reply may take, for every chat profile, engine runtime (API, pi,
+   * Claude Code), plugin profile run and research, web research and one pi codemode script's calls. Past it the tools go
+   * and the model answers with what it has. Codex runs its own agent loop and has no such cap.
+   */
+  toolRoundLimit: number
+}
+
+export { TOOL_ROUND_LIMITS }
+
+function toolRoundLimitOf(value: unknown, fallback: number = TOOL_ROUND_LIMITS.default) {
+  return Number.isInteger(value) && (value as number) >= TOOL_ROUND_LIMITS.min && (value as number) <= TOOL_ROUND_LIMITS.max ? value as number : fallback
 }
 
 export const WEB_RESEARCH_ENGINES = ['off', 'codex', 'claude'] as const
@@ -50,8 +62,8 @@ function webResearchOf(value: unknown, fallback = DEFAULT_WEB_RESEARCH): WebRese
 
 export const DEFAULT_LORE_KEY_LANGUAGE: string | null = null
 
-export const DEFAULT_CHAT_DIAGNOSTICS = { enabled: true, captureRaw: false, captureLimit: 20 }
-export const MAX_CHAT_CAPTURE_LIMIT = 200
+export const DEFAULT_CHAT_DIAGNOSTICS: ChatSettings['diagnostics'] = { enabled: true, captureRaw: false, captureLimit: CHAT_CAPTURE_LIMITS.default }
+export const MAX_CHAT_CAPTURE_LIMIT = CHAT_CAPTURE_LIMITS.max
 
 function diagnosticsOf(value: unknown, fallback = DEFAULT_CHAT_DIAGNOSTICS): ChatSettings['diagnostics'] {
   const input = value && typeof value === 'object' ? value as Record<string, unknown> : {}
@@ -59,7 +71,7 @@ function diagnosticsOf(value: unknown, fallback = DEFAULT_CHAT_DIAGNOSTICS): Cha
     enabled: typeof input.enabled === 'boolean' ? input.enabled : fallback.enabled,
     captureRaw: typeof input.captureRaw === 'boolean' ? input.captureRaw : fallback.captureRaw,
     captureLimit: typeof input.captureLimit === 'number' && Number.isFinite(input.captureLimit)
-      ? Math.max(1, Math.min(MAX_CHAT_CAPTURE_LIMIT, Math.floor(input.captureLimit))) : fallback.captureLimit,
+      ? Math.max(CHAT_CAPTURE_LIMITS.min, Math.min(MAX_CHAT_CAPTURE_LIMIT, Math.floor(input.captureLimit))) : fallback.captureLimit,
   }
 }
 
@@ -85,17 +97,22 @@ export function loadChatSettings(): ChatSettings {
     if (stored) {
       cachedSettings = { enabled: stored.enabled === true, diagnostics: diagnosticsOf(stored.diagnostics), loreAutoSave: stored.loreAutoSave !== false,
         loreKeyLanguage: stored.loreKeyLanguage === undefined ? DEFAULT_LORE_KEY_LANGUAGE : normalizeLoreKeyLanguage(stored.loreKeyLanguage),
-        webResearch: webResearchOf(stored.webResearch), piCodemode: stored.piCodemode === true }
+        webResearch: webResearchOf(stored.webResearch), piCodemode: stored.piCodemode === true, toolRoundLimit: toolRoundLimitOf(stored.toolRoundLimit) }
     } else {
       // First run after the profile change: chat stays on if either old switch was on.
       const legacyEnabled = readJson(LEGACY_CODEX_SETTINGS_FILE_PATH)?.enabled === true || readJson(LEGACY_LLM_SETTINGS_FILE_PATH)?.enabled === true
-      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS }, loreAutoSave: true, loreKeyLanguage: DEFAULT_LORE_KEY_LANGUAGE, webResearch: { ...DEFAULT_WEB_RESEARCH }, piCodemode: false }
+      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS }, loreAutoSave: true, loreKeyLanguage: DEFAULT_LORE_KEY_LANGUAGE, webResearch: { ...DEFAULT_WEB_RESEARCH }, piCodemode: false, toolRoundLimit: TOOL_ROUND_LIMITS.default }
     }
   }
   return { ...cachedSettings, diagnostics: { ...cachedSettings.diagnostics }, webResearch: { ...cachedSettings.webResearch } }
 }
 
-export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings>; piCodemode?: boolean }): ChatSettings {
+/** The app-wide tool round limit (ChatSettings.toolRoundLimit), read when a reply or run starts. */
+export function chatToolRoundLimit() {
+  return loadChatSettings().toolRoundLimit
+}
+
+export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings>; piCodemode?: boolean; toolRoundLimit?: number }): ChatSettings {
   const current = loadChatSettings()
   const next: ChatSettings = {
     enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled,
@@ -104,6 +121,7 @@ export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Par
     loreKeyLanguage: patch.loreKeyLanguage === undefined ? current.loreKeyLanguage : normalizeLoreKeyLanguage(patch.loreKeyLanguage),
     webResearch: patch.webResearch === undefined ? current.webResearch : webResearchOf(patch.webResearch, current.webResearch),
     piCodemode: typeof patch.piCodemode === 'boolean' ? patch.piCodemode : current.piCodemode,
+    toolRoundLimit: toolRoundLimitOf(patch.toolRoundLimit, current.toolRoundLimit),
   }
   writeJsonFileAtomic(CHAT_SETTINGS_FILE_PATH, next)
   cachedSettings = next

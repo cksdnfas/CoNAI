@@ -247,7 +247,7 @@ function proposalName(proposal: ChatProposal) {
     case 'page_fields': return '페이지 입력'
     case 'workflow_graph': return '워크플로 편집'
     case 'task_plan': return `작업 플랜 "${proposal.goal}"`
-    case 'choice': return `선택지 "${proposal.question}"`
+    case 'choice': return `선택지 "${(proposal as typeof proposal & { modelQuestion?: string }).modelQuestion ?? proposal.question}"`
   }
 }
 

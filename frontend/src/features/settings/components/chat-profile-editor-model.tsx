@@ -14,11 +14,11 @@ import { CHAT_JUDGE_PRESETS_QUERY_KEY, listChatJudgePresets } from '@/lib/api-ch
 import { thinkingMayFillCap, type ChatProfileDefaults, type ChatProfileInput, type ModelRole, type ModelSlot } from '@/lib/api-codex-chat'
 import type { CodexModelOption } from '@/lib/api-image-generation-queue'
 import { cn } from '@/lib/utils'
-import { CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage, type ClaudeModelOption } from '@conai/shared'
+import { CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_LANGUAGES, type ChatTranslationLanguage, type ClaudeModelOption } from '@conai/shared'
 import { ClaudeEffortSelect, ClaudeModelSelect } from './claude-model-select'
 import { JudgeModelSelect, useDefaultJudgeLabel, useModelLabel } from './chat-judge-connection-select'
 import { applyRoleChoice, ModelRoleSelect, roleChoice, slotCeiling, type SuggestWriters } from './chat-model-role-select'
-import { numberOrNull, type Draft, type PatchDraft } from './chat-profile-editor-fields'
+import { enginePatch, judgePresetPatch, numberOrNull, type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { SwitchLine } from '@/components/ui/switch-line'
 import { ContentRatingSelect, useCeilingLabel } from './content-rating-select'
 import { EditorGroup } from '@/components/ui/editor-group'
@@ -63,7 +63,7 @@ function JudgeRole({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
       variant="settings"
       aria-label={t({ ko: '판단 프리셋', en: 'Judge preset' })}
       value={draft.judgePresetId !== null ? String(draft.judgePresetId) : ''}
-      onChange={(event) => patch(event.target.value ? { judgePresetId: Number(event.target.value) } : { judgePresetId: null, judgeSlotId: null })}
+      onChange={(event) => patch(judgePresetPatch(numberOrNull(event.target.value)))}
     >
       <option value="">{t({ ko: '없음', en: 'None' })}</option>
       {presets.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -169,9 +169,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
         <SegmentedControl
           size="sm"
           value={draft.engine}
-          onChange={(engine) => patch(engine === 'codex' || engine === 'claude'
-            ? { engine, modelSlotId: null, model: engine === 'claude' ? 'sonnet' : '', reasoningEffort: '', reasoningBudgetTokens: null, visionEnabled: engine === 'claude' || draft.visionEnabled }
-            : { engine: 'llm', model: '', reasoningEffort: '', reasoningBudgetTokens: null })}
+          onChange={(engine) => patch(enginePatch(engine as Draft['engine'], draft))}
           items={[
             { value: 'llm', label: t({ ko: 'API LLM', en: 'API LLM' }) },
             { value: 'codex', label: 'Codex' },
@@ -195,7 +193,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
             </Field>
             <div className="grid gap-3 md:grid-cols-2">
               <Field label={t({ ko: '온도', en: 'Temperature' })}>
-                <NumberStepperInput variant="settings" allowEmpty step={0.1} min={0} max={2} value={draft.temperature} placeholder={serverDefault} onValueCommit={(value) => patch({ temperature: numberOrNull(value) })} />
+                <NumberStepperInput variant="settings" allowEmpty step={0.1} {...CHAT_PROFILE_LIMITS.temperature} value={draft.temperature} placeholder={serverDefault} onValueCommit={(value) => patch({ temperature: numberOrNull(value) })} />
               </Field>
               <Field
                 label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}
@@ -207,7 +205,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
                       <span className="text-warning"><TriangleAlert className="size-4" aria-hidden /></span>
                     </Tip>
                   ) : null}
-                  <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
+                  <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} {...CHAT_PROFILE_LIMITS.maxTokens} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
                 </div>
               </Field>
               <Field label={t({ ko: '추론 강도', en: 'Reasoning effort' })}>
@@ -236,6 +234,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
                   mono
                   textSize="xs"
                   value={draft.extraParams}
+                  maxLength={CHAT_PROFILE_TEXT_LIMITS.extraParams}
                   placeholder={'{\n  "chat_template_kwargs": { "enable_thinking": true }\n}'}
                   onChange={(event) => patch({ extraParams: event.target.value })}
                   aria-invalid={Boolean(extraParamsError)}
@@ -257,7 +256,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
               <ClaudeEffortSelect value={draft.reasoningEffort} model={draft.model} models={claudeModels} onChange={(reasoningEffort) => patch({ reasoningEffort })} />
             </Field>
             <Field label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}>
-              <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} min={1} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
+              <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} {...CHAT_PROFILE_LIMITS.maxTokens} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
             </Field>
           </div>
           <SwitchLine label={t({ ko: '이미지 첨부와 조회', en: 'Image attachments and viewing' })} checked={draft.visionEnabled} onCheckedChange={(visionEnabled) => patch({ visionEnabled })} />
@@ -285,10 +284,10 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
               {summaryOn && advanced ? (
                 <>
                   <Field label={t({ ko: '한 번에 요약할 턴 수', en: 'Turns per summary' })} className="md:w-1/2">
-                    <NumberStepperInput variant="settings" step={1} min={1} max={200} value={draft.summaryTriggerTurns} onValueCommit={(value) => patch({ summaryTriggerTurns: numberOrNull(value) ?? draft.summaryTriggerTurns })} />
+                    <NumberStepperInput variant="settings" step={1} {...CHAT_PROFILE_LIMITS.summaryTriggerTurns} value={draft.summaryTriggerTurns} onValueCommit={(value) => patch({ summaryTriggerTurns: numberOrNull(value) ?? draft.summaryTriggerTurns })} />
                   </Field>
                   <Field label={t({ ko: '요약 프롬프트', en: 'Summary prompt' })}>
-                    <Textarea variant="settings" autoGrow rows={4} value={draft.summaryPrompt} placeholder={defaults?.summaryPrompt} onChange={(event) => patch({ summaryPrompt: event.target.value })} />
+                    <Textarea variant="settings" autoGrow rows={4} value={draft.summaryPrompt} maxLength={CHAT_PROFILE_TEXT_LIMITS.summaryPrompt} placeholder={defaults?.summaryPrompt} onChange={(event) => patch({ summaryPrompt: event.target.value })} />
                   </Field>
                 </>
               ) : null}
@@ -309,7 +308,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
                   label={t({ ko: '번역 지시', en: 'Translation notes' })}
                   info={t({ ko: '답변을 표시 언어로 옮길 때 번역 모델이 따르는 메모. 말투, 호칭, 고유명사 번역표 등. {{char}}·{{user}}는 이름으로 바뀌어. 캐릭터 이름은 비워도 알려 줘. 내 메시지 번역에는 쓰지 않아.', en: 'Notes the translation model follows when it puts replies into the display language: voice, forms of address, a glossary. {{char}} and {{user}} become the names. The character’s name is passed even when empty. Not used for your own messages.' })}
                 >
-                  <Textarea variant="settings" autoGrow rows={3} maxLength={4000} value={draft.translationInstructions} placeholder={t({ ko: '말투 · 호칭 · 고유명사', en: 'Voice · address · names' })} onChange={(event) => patch({ translationInstructions: event.target.value })} />
+                  <Textarea variant="settings" autoGrow rows={3} maxLength={CHAT_PROFILE_TEXT_LIMITS.translationInstructions} value={draft.translationInstructions} placeholder={t({ ko: '말투 · 호칭 · 고유명사', en: 'Voice · address · names' })} onChange={(event) => patch({ translationInstructions: event.target.value })} />
                 </Field>
               </>
             ) : null}

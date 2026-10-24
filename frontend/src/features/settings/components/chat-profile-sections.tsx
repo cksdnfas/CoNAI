@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Braces, Plus } from 'lucide-react'
-import { unknownChatMacros } from '@conai/shared'
+import { CHAT_PROFILE_TEXT_LIMITS, unknownChatMacros } from '@conai/shared'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -51,7 +51,9 @@ export function PromptMacroMenu({ textarea, value, onChange }: { textarea: RefOb
     const element = textarea.current
     const start = element?.selectionStart ?? value.length
     const end = element?.selectionEnd ?? start
-    onChange(value.slice(0, start) + macro + value.slice(end))
+    const next = value.slice(0, start) + macro + value.slice(end)
+    if (element && element.maxLength >= 0 && next.length > element.maxLength) return
+    onChange(next)
     setTimeout(() => { element?.focus(); element?.setSelectionRange(start + macro.length, start + macro.length) }, 0)
   }
   return (
@@ -69,7 +71,7 @@ export function PromptMacroMenu({ textarea, value, onChange }: { textarea: RefOb
  * A zone's +: adds at once, or with `choices` unfolds them in place beside it (no menu) and adds the one picked.
  * Escape, a press outside the row or focus moving out of it folds them again.
  */
-export function PromptAdder({ label, choices, onAdd }: { label: string; choices?: Array<{ value: string; label: string }>; onAdd: (value: string) => void }) {
+export function PromptAdder({ label, choices, disabled = false, onAdd }: { label: string; choices?: Array<{ value: string; label: string }>; disabled?: boolean; onAdd: (value: string) => void }) {
   const [expanded, setExpanded] = useState(false)
   const row = useRef<HTMLDivElement>(null)
 
@@ -93,7 +95,7 @@ export function PromptAdder({ label, choices, onAdd }: { label: string; choices?
         setExpanded(false)
       }}
     >
-      <Button variant="ghost" size="sm" aria-expanded={choices ? expanded : undefined} onClick={() => (choices ? setExpanded(!expanded) : onAdd(''))}><Plus />{label}</Button>
+      <Button variant="ghost" size="sm" disabled={disabled} aria-expanded={choices ? expanded : undefined} onClick={() => (choices ? setExpanded(!expanded) : onAdd(''))}><Plus />{label}</Button>
       {choices && expanded ? choices.map((choice, index) => (
         <Button key={choice.value} variant="secondary" size="sm" autoFocus={index === 0} onClick={() => { setExpanded(false); onAdd(choice.value) }}>{choice.label}</Button>
       )) : null}
@@ -105,13 +107,14 @@ export function PromptAdder({ label, choices, onAdd }: { label: string; choices?
  * A prompt item that is not a speech bubble: an instruction (system prompt, section, author's note) or an example kept
  * as written. Long text folds to two lines; clicking it edits it in place, with `kind` and `tools` in the editor's footer.
  */
-export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, placeholder, editPlaceholder, onTextChange, titleField, enabled = true, assisted = false, flash = false, note, kind, tools, remove, editing, onEditingChange: setEditing }: {
+export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, maxLength = CHAT_PROFILE_TEXT_LIMITS.text, placeholder, editPlaceholder, onTextChange, titleField, enabled = true, assisted = false, flash = false, note, kind, tools, remove, editing, onEditingChange: setEditing }: {
   /** `data-prompt-item`, which a preset scrolls to after adding. */
   itemKey: string
   tone?: 'instruction' | 'example'
   title: string
   meta?: ReactNode
   text: string
+  maxLength?: number
   /** Shown instead of empty text. */
   placeholder: string
   /** The hint in the empty editor. */
@@ -167,9 +170,9 @@ export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, p
         <PromptEditFrame onClose={() => setEditing(false)}>
           <div className="space-y-2 p-2">
             {titleField ? (
-              <Input variant="settings" controlSize="compact" value={titleField.value} maxLength={80} aria-label={t({ ko: '제목', en: 'Title' })} placeholder={t({ ko: '제목 (예: 캐릭터, 세계관, 말투)', en: 'Title (e.g. Character, World, Tone)' })} onChange={(event) => titleField.onChange(event.target.value)} />
+              <Input variant="settings" controlSize="compact" value={titleField.value} maxLength={CHAT_PROFILE_TEXT_LIMITS.sectionTitle} aria-label={t({ ko: '제목', en: 'Title' })} placeholder={t({ ko: '제목 (예: 캐릭터, 세계관, 말투)', en: 'Title (e.g. Character, World, Tone)' })} onChange={(event) => titleField.onChange(event.target.value)} />
             ) : <Text variant="caption">{title}</Text>}
-            <Textarea ref={textarea} variant="settings" autoGrow autoFocus rows={4} assisted={assisted} value={text} placeholder={editPlaceholder} aria-label={titleField?.value || title} onChange={(event) => onTextChange(event.target.value)} />
+            <Textarea ref={textarea} variant="settings" autoGrow autoFocus rows={4} assisted={assisted} value={text} maxLength={maxLength} placeholder={editPlaceholder} aria-label={titleField?.value || title} onChange={(event) => onTextChange(event.target.value)} />
             {warnings.length ? <Text variant="caption" tone="warning">{t({ ko: '⚠ 모르는 변수 {variables}', en: '⚠ Unknown variables {variables}' }, { variables: warnings.join(', ') })}</Text> : null}
             {note}
             <div className="flex flex-wrap items-center gap-0.5">

@@ -191,7 +191,9 @@ function saveSnapshotModule(req: Request, res: Response, engineType: 'nai' | 'co
       return res.status(409).json({ success: false, error: 'Module definition name already exists' } as ModuleGraphResponse)
     }
 
-    const snapshotRecord = snapshot as Record<string, unknown>
+    const snapshotRecord = engineType === 'codex'
+      ? { references: [], preserve: '', ...snapshot } as Record<string, unknown>
+      : snapshot as Record<string, unknown>
     const exposedInputs = normalizeNaiExposedFields(exposed_fields, snapshotRecord)
     const createData: ModuleDefinitionCreateData = {
       name,

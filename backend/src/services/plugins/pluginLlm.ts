@@ -38,9 +38,8 @@ const inputSchema = z.object({
     slotId: z.string().trim().min(1).max(100), activityId: z.string().trim().min(1).max(100),
     allowedPostIds: z.array(z.number().int().positive()).min(1).max(100),
     purpose: z.enum(['research', 'summary']).default('research'),
-    maxModelCalls: z.number().int().min(1).max(32).default(8),
-    maxToolCalls: z.number().int().min(1).max(100).default(24),
-    maxTurns: z.number().int().min(1).max(32).default(8),
+    // Accepted for older plugins and ignored: research follows the app-wide tool round limit (ChatResearchExecution).
+    maxModelCalls: z.number().int().optional(), maxToolCalls: z.number().int().optional(), maxTurns: z.number().int().optional(),
   }).strict().optional(),
   translation: z.object({ fields: z.array(z.string().max(120).regex(/^[a-zA-Z][\w]*(?:\.(?:[a-zA-Z][\w]*|\*)){0,4}$/)).min(1).max(20), only: z.boolean().optional(), direction: z.enum(['model', 'display']).optional() }).strict().optional(),
   /** judge: the profile's prompt on its judge model (else the default judge row) instead of its chat model. */
@@ -218,12 +217,13 @@ function registerJob() {
         }
         // The judge row gets the profile's prompt as plain messages, so a Claude/Codex profile can use it too.
         const judge = input.model === 'judge'
-        const maxTokens = input.maxTokens ?? 512
+        // Unset: the profile's (or the judge row's) own output cap; a plugin's maxTokens only lowers the profile's.
+        const maxTokens = input.maxTokens === undefined ? undefined : judge ? input.maxTokens : Math.min(input.maxTokens, profile.maxTokens ?? input.maxTokens)
         const result = await runWorkflowLlmText({
           target: judge ? { modelSlotId: judgeSlotOf(profile), requesterAccountId: requester.accountId } : { profileId: profile.id, requesterAccountId: requester.accountId }, messages,
           structuredOutputJson: input.structuredOutput,
           task: `Reply as ${profile.name}.`, signal: controller.signal,
-          overrides: { maxTokens: judge ? maxTokens : Math.min(maxTokens, profile.maxTokens ?? maxTokens) },
+          overrides: maxTokens === undefined ? undefined : { maxTokens },
           usage: { purpose: 'plugin', replyId: `plugin:${pluginId}:${ctx.jobId}` },
         })
         controller.signal.throwIfAborted(); ctx.throwIfCancelled()

@@ -75,6 +75,17 @@ CoNAI는 생성 전에 `codex login status`로 상태를 확인합니다.
 
 원본 편집은 이미지 첨부가 필수입니다. 마스크는 원본 편집에서만 선택할 수 있습니다. 원본을 교체·제거하거나 사용 방식을 바꾸면 기존 마스크는 해제됩니다. 마스크는 자연어 편집 지시와 함께 전달되므로 픽셀 단위 보존을 보장하지 않습니다.
 
+### 별도 참조와 엄격 마스크 보존
+
+웹의 **참조 추가** 목록에서 이미지를 각각 선택하고 `reference`, `style`, `material`, `scale`, `item` 역할과 최대 128자 설명을 지정합니다. 위/아래 이동과 제거로 순서를 정합니다. 편집의 `image`는 유일한 원본 캔버스이고 `references`는 역할별 참고 자료입니다. 생성에서는 모든 첨부가 참고 자료이며 보호 캔버스는 없습니다. 합친 참조 시트를 만들지 않습니다.
+
+- 원본·마스크·참조 **합계 5장**, 디코딩한 파일당 **10 MiB**, 합계 **32 MiB**, 한 변 최대 **4096px**입니다. 원본/참조는 PNG·JPEG·WebP, 마스크는 원본과 크기가 같은 PNG입니다. 잘못된 base64, MIME 불일치, 손상 이미지와 초과 입력은 큐 등록 전에 거부합니다.
+- Infill에서 **엄격 마스크 보존** (`preserve: "strict"`)을 켜면 생성 크기가 원본과 달라지는 작업은 실패합니다. 자동 확대·축소하지 않습니다. 원본 위에 마스크 내부의 생성 픽셀만 합성합니다. 검정은 보호, 흰색은 편집, 회색은 비례 혼합이며 마스크 알파는 가중치를 바꾸지 않습니다.
+- 엄격 모드는 PNG·리사이즈 끔을 강제합니다. 최종 저장 파일을 다시 디코딩해 검정 보호 픽셀의 RGBA 차이가 0인지 검사하고, 차이가 있으면 작업을 실패시킵니다. 마스크 내부의 편집 품질까지 보장하지는 않습니다. 엄격 모드를 끈 기존 infill은 자연어 지시 방식 그대로입니다.
+- 크기는 **요청값이며 보장값이 아닙니다**. 결과의 크기는 실제 측정값입니다. 메타데이터는 `codex_requested_*`, `codex_actual_*`, `codex_size_mismatch`를 구분합니다. 저장 리사이즈를 켠 일반 작업에서는 파일 크기가 생성 크기와도 달라질 수 있습니다.
+- 이력/초안은 참조 역할·설명·순서를 복원하지만 이미지는 빈 슬롯으로 돌아옵니다. 원본/마스크/참조를 다시 첨부해야 합니다. 브라우저 localStorage에 이미지 바이트를 저장하지 않습니다. 초기화는 참조 슬롯과 엄격 모드도 지웁니다.
+- 페이지 어시스턴트는 참조 슬롯 수·역할·설명·순서 및 엄격 모드를 편집하고, 권한 있는 라이브러리 이미지로 슬롯을 채울 수 있습니다.
+
 ### 프롬프트 저장과 재사용
 
 - 생성에 사용한 사용자 프롬프트와 네거티브 프롬프트는 결과 이력과 이미지 메타데이터에 저장됩니다. 와일드카드는 실행 시 확정된 텍스트가 저장됩니다.
@@ -112,6 +123,33 @@ CoNAI는 생성 전에 `codex login status`로 상태를 확인합니다.
 ```
 
 `model`에 사용할 Codex 모델 ID를 넣습니다. `image`와 `mask`는 base64 data URL입니다. 참조 t2i는 `operation=generate`와 `image`를 함께 전달합니다.
+
+별도 역할 참조를 쓰는 편집 예시입니다(실제 data URL로 교체).
+
+```json
+{
+  "service_type": "codex",
+  "idempotency_key": "product-edit-1",
+  "request_payload": {
+    "model": "your-agent-model",
+    "prompt": "Change only the footwear to match the item reference.",
+    "operation": "infill",
+    "image": "data:image/png;base64,...",
+    "mask": "data:image/png;base64,...",
+    "references": [
+      {"role": "item", "label": "Footwear design", "data_url": "data:image/webp;base64,..."}
+    ],
+    "preserve": "strict",
+    "count": 1,
+    "output_format": "png",
+    "imageSaveOptions": {"format": "png", "resizeEnabled": false}
+  }
+}
+```
+
+첨부 순서는 원본 → 마스크 → `references` 배열 순서입니다. CLI에는 각각 별도 `--image`와 경로 manifest를 전달하고, 이미지 도구의 `referenced_image_paths`에 해당 경로를 순서대로 쓰도록 지시합니다. 역할과 마스크는 이미지 도구의 네이티브 인자가 아니라 이 지시 및 CoNAI의 엄격 합성으로 구현됩니다. 크기·품질도 CLI에는 요청 힌트입니다. 참조가 없으면 기존 `image`/`mask` 계약이 유지됩니다. 동일 idempotency key에서 참조 바이트·역할·설명·순서를 바꾸면 충돌합니다. 재시도는 저장된 참조를 그대로 사용합니다.
+
+메타데이터의 `codex_attachments`는 첨부 `index`(1부터), `role`, `label`, SHA-256 `sha256`, `width`, `height`만 기록합니다. 이력에 이미지 바이트나 첨부 경로를 노출하지 않습니다.
 
 - `get_generation_history_request`: 이력 ID로 전체 프롬프트와 모델/생성 설정 조회. 이미지 바이트는 반환하지 않습니다.
 - `list_prompt_presets`: UI와 공유하는 프리셋 조회.

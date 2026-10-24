@@ -209,14 +209,14 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
     })
     assert.match(result.content, /Scripted\./)
     assert.deepEqual(mock.requests[0].tools.map((tool) => (tool as { function: { name: string } }).function.name).sort(), ['codemode', 'lookup'])
-    assert.equal(calls.length, 8)
-    assert.match(JSON.stringify(mock.requests[1].messages), /at most 8 tool calls/)
+    assert.equal(calls.length, 4, 'one script makes as many calls as the reply has tool rounds')
+    assert.match(JSON.stringify(mock.requests[1].messages), /at most 4 tool calls/)
     updateChatSettings({ piCodemode: false })
   })
 
   await t.test('research uses native turn limits, removes tools for the final answer, and never fabricates provider-call counts', async () => {
     const { ChatResearchExecution } = await import('../src/services/codex-chat/chatResearch')
-    const research = new ChatResearchExecution({ slotId: 'a', activityId: 'b', allowedPostIds: [1], maxTurns: 2, maxToolCalls: 24 }, 'pi')
+    const research = new ChatResearchExecution({ slotId: 'a', activityId: 'b', allowedPostIds: [1] }, 'pi', 1)
     mock.requests.length = 0
     mock.script.push({ kind: 'tool' }, { kind: 'text', text: 'Research summary.' })
     const result = await streamPiChatCompletion({
@@ -237,7 +237,7 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
     assert.equal(research.result.stopReason, 'turn_limit')
 
     for (const maxTurns of [1, 3]) {
-      const complete = new ChatResearchExecution({ slotId: 'a', activityId: `complete-${maxTurns}`, allowedPostIds: [1], maxTurns }, 'pi')
+      const complete = new ChatResearchExecution({ slotId: 'a', activityId: `complete-${maxTurns}`, allowedPostIds: [1] }, 'pi', maxTurns - 1)
       mock.requests.length = 0
       if (maxTurns === 3) mock.script.push({ kind: 'tool' })
       mock.script.push({ kind: 'text', text: 'A normal final answer.' })
@@ -266,7 +266,7 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
     assert.equal(summary.result.turns, 1)
     assert.equal(summary.result.stopReason, 'completed')
 
-    const noncompliant = new ChatResearchExecution({ slotId: 'a', activityId: 'd', allowedPostIds: [1], maxTurns: 2 }, 'pi')
+    const noncompliant = new ChatResearchExecution({ slotId: 'a', activityId: 'd', allowedPostIds: [1] }, 'pi', 1)
     mock.requests.length = 0
     mock.script.push({ kind: 'tool' }, { kind: 'tool' })
     await streamPiChatCompletion({

@@ -46,6 +46,8 @@ type ImageAttachmentPickerButtonProps = {
   modalTitle?: string
   disabled?: boolean
   allowSaveDialog?: boolean
+  /** Pixel-sensitive source/mask inputs must not inherit global attachment resize/lossy conversion. */
+  preserveOriginal?: boolean
   uploadOnly?: boolean
   selectedImage?: SelectedImageDraft | null
   onRemove?: () => void
@@ -188,6 +190,7 @@ export function ImageAttachmentPickerButton({
   modalTitle,
   disabled = false,
   allowSaveDialog = true,
+  preserveOriginal = false,
   uploadOnly = false,
   selectedImage,
   onRemove,
@@ -292,7 +295,7 @@ export function ImageAttachmentPickerButton({
 
   /** Finalize one selected image source using the current image-save settings. */
   const finalizeSelectedImage = async (fileName: string, input: ImageSaveOutputInput, libraryHash?: string) => {
-    if (!effectiveImageSaveSettings.applyToGenerationAttachments) {
+    if (preserveOriginal || !effectiveImageSaveSettings.applyToGenerationAttachments) {
       const sourceBlob = typeof input.source === 'string'
         ? await fetch(input.source, {
             credentials: 'include',

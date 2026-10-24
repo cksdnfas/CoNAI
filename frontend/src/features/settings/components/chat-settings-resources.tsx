@@ -47,7 +47,7 @@ import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
 import { readChatToolPresetFile } from './chat-tool-preset-file'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { useChatOptionsPageParts } from './chat-options-page'
-import { ChatMemorySettings, ChatWebSettings } from './chat-options-settings'
+import { ChatMemorySettings, ChatToolSettings, ChatWebSettings } from './chat-options-settings'
 
 /** Label + icon colour of each kind: the group label and the rows' icons share the hue so a long list reads by colour. */
 const KIND_CLASS = {
@@ -271,6 +271,8 @@ export function ChatSettingsResources() {
         ))}
         {presetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(presetsQuery.error, t({ ko: '도구 프리셋을 불러오지 못했어.', en: 'Could not load tool presets.' }))}</p> : null}
       </RowGroup>
+
+      <ChatToolSettings />
 
       <ChatWebSettings />
 

@@ -49,7 +49,7 @@ function stringifyStableJson(value: unknown): string {
 }
 
 /** Build the semantic request hash used to detect conflicting idempotent retries. */
-function buildIdempotencyRequestHash(value: Record<string, unknown>) {
+export function buildIdempotencyRequestHash(value: Record<string, unknown>) {
   return crypto.createHash('sha256').update(stringifyStableJson(value)).digest('hex');
 }
 
@@ -223,7 +223,7 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
   }
 
   if (service_type === 'codex') {
-    payload = parseCodexGenerationRequest(payload);
+    payload = await parseCodexGenerationRequest(payload);
   }
   if (service_type === 'novelai') {
     assertChatNaiSampleCount(context, (payload as Record<string, unknown>).n_samples);
@@ -282,18 +282,22 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
 export function registerGenerationJobTools(server: McpServer, context: McpRequestContext): void {
   server.registerTool(
     'get_codex_generation_options',
-    { description: 'Get the Codex image-generation request schema and the agent models the server\'s Codex CLI offers. Use the same parameters as the Codex UI with submit_generation_job(service_type="codex"). The list may be incomplete; custom model IDs are accepted. Prompts are saved with results; use get_generation_history_request to retrieve them and create_prompt_preset to save reusable text.', inputSchema: z.object({}) },
+    { description: 'Get the Codex image-generation schema and CLI agent models for submit_generation_job(service_type="codex"). Supports image as the edit canvas, separate ordered role-tagged references, and opt-in preserve="strict" for masked infill. Size is requested, not guaranteed; strict mode rejects output size changes. Models may be incomplete; custom IDs are accepted. History retains prompts and reference descriptors, not image bytes or attachment paths.', inputSchema: z.object({}) },
     async () => textResult({
       ...await getCodexModelSuggestions(),
       request_schema: z.toJSONSchema(codexGenerationRequestSchema),
       default_model: 'Server Codex CLI default when model is omitted or empty',
       example: { service_type: 'codex', request_payload: { prompt: 'Create a blue ceramic teapot', model: '', operation: 'generate', size: '1024x1024', count: 1 } },
+      edit_example: { service_type: 'codex', request_payload: { prompt: 'Change only the footwear to match the item', operation: 'edit', image: 'data:image/png;base64,...', references: [{ role: 'item', label: 'Footwear', data_url: 'data:image/png;base64,...' }], count: 1 } },
+      strict_example: { service_type: 'codex', request_payload: { prompt: 'Edit only the white region', operation: 'infill', image: 'data:image/png;base64,...', mask: 'data:image/png;base64,...', preserve: 'strict', count: 1 } },
+      limits: { attachments: 5, decoded_bytes_each: 10 * 1024 * 1024, decoded_bytes_total: 32 * 1024 * 1024, max_side: 4096 },
+      size_policy: 'Size is requested, not guaranteed for advisory jobs. Strict infill replaces size with the measured source dimensions, rejects differently sized output, and saves verified lossless PNG without resizing. Its PNG mask must be opaque and contain black protected pixels; white edits and gray blends.',
     }),
   );
 
   server.registerTool(
     'get_generation_history_request',
-    { description: 'Read the full saved prompt, negative prompt, selected model and request settings behind a generation result, as used by the UI reuse action. Image bytes are omitted; pruned requests may only retain result prompts. A result above the content rating this model may be shown carries rating_restricted: true with the prompts and request payload hidden.', inputSchema: z.object({ history_id: z.number().int().positive() }) },
+    { description: 'Read saved prompts, model and request settings, including Codex ordered reference roles/labels/descriptors and strict preservation. Image bytes and attachment paths are omitted: reattach every source, mask and reference when reusing. Size is requested, not guaranteed; results report measured dimensions. Pruned requests may only retain result prompts. A result above this model\'s content rating carries rating_restricted: true with prompts and payload hidden.', inputSchema: z.object({ history_id: z.number().int().positive() }) },
     async ({ history_id }) => {
       const record = HistoryQueryRepository.findAllWithMetadata({ ids: [history_id], limit: 1 })[0];
       if (!record) return errorResult('Generation history not found');
@@ -312,7 +316,7 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       server_id: z.number().int().positive().optional().describe('ComfyUI only. Target one active workflow-eligible server. Cannot be combined with server_tag.'),
       server_tag: z.string().trim().min(1).max(64).optional().describe('ComfyUI only. Route to an active workflow-eligible server with this exact normalized tag. Cannot be combined with server_id.'),
       inputs: z.record(z.string(), z.unknown()).optional().describe(`ComfyUI marked-field inputs, or a NovelAI/Codex payload alias. ${COMFY_SEED_RULE}`),
-      request_payload: z.record(z.string(), z.unknown()).optional().describe('NovelAI/Codex generation parameters. NovelAI: prompt, negative_prompt, quality_toggle (false), uc_preset (none/heavy/light/human_focus), model, width, height, steps, scale, sampler, seed, n_samples (1), characters, action, image (base64 data URL), enhance (1x/1.5x/max, img2img + image only), strength, noise. V5 does not support vibes. Codex (see get_codex_generation_options): model (real CLI agent-model override), prompt, negative_prompt, operation, image, mask, size, count and imageSaveOptions.'),
+      request_payload: z.record(z.string(), z.unknown()).optional().describe('NovelAI/Codex generation parameters. NovelAI: prompt, negative_prompt, quality_toggle (false), uc_preset (none/heavy/light/human_focus), model, width, height, steps, scale, sampler, seed, n_samples (1), characters, action, image (base64 data URL), enhance (1x/1.5x/max, img2img + image only), strength, noise. V5 does not support vibes. Codex (get_codex_generation_options): model, prompt, negative_prompt, operation, image (PNG/JPEG/WebP canonical base64; reference in generate, sole canvas in edit/infill; legacy forms normalized), mask (matching PNG; white edit, black protect, gray blend), references [{role: reference|style|material|scale|item, label?, data_url}], preserve ("strict", infill only, opaque mask with black pixels), size (advisory request; strict overrides with source size), count and imageSaveOptions. At most 5 attachments including source/mask.'),
       group_id: z.number().int().positive().optional(),
       group_path: mcpGroupPathSchema,
       priority: z.number().int().min(0).max(100000).default(100),

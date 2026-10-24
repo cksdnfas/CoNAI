@@ -3,6 +3,7 @@ import os from 'os'
 import path from 'path'
 import { z } from 'zod'
 import { isCodexReasoningEffort, type CodexModelOption, type CodexReasoningEffort } from '@conai/shared'
+import { validateCodexImageInputs } from './codexImageInputs'
 
 /** Request contract shared by the UI queue API, MCP, and the Codex queue worker. */
 export const codexGenerationRequestSchema = z.object({
@@ -12,9 +13,15 @@ export const codexGenerationRequestSchema = z.object({
   negative_prompt: z.string().optional(),
   operation: z.enum(['generate', 'edit', 'infill']).optional()
     .describe('generate: text-only or attached visual reference; edit: modify the attached image; infill: edit using image and mask. Default: generate.'),
-  image: z.string().optional().describe('Reference/source image as a base64 data URL, as in the UI.'),
-  mask: z.string().optional().describe('Mask as a base64 data URL. Requires image and operation=infill.'),
-  size: z.string().regex(/^\d{2,5}x\d{2,5}$/i).optional().describe('Requested WIDTHxHEIGHT, e.g. 1024x1024; actual dimensions may differ.'),
+  image: z.string().optional().describe('Canonical PNG/JPEG/WebP base64 data URL. A visual reference in generate mode; the sole canvas in edit/infill. Legacy raw base64, image/jpg and case-insensitive image MIME headers are normalized; supported single-frame raster formats are converted to PNG. Empty means absent. Strict sources must be 8-bit, unrotated sRGB (untagged or standard Sharp sRGB ICC).'),
+  mask: z.string().optional().describe('Source-sized PNG base64 data URL for infill. White=edit, black=protect, gray=blend; alpha is not used. Strict requires fully opaque alpha (255) and at least one black protected pixel; transparent-hole masks are rejected. Legacy advisory masks accept the same image normalization as image, including conversion to PNG. Empty means absent.'),
+  references: z.array(z.object({
+    role: z.enum(['reference', 'style', 'material', 'scale', 'item']),
+    label: z.string().max(128).optional(),
+    data_url: z.string(),
+  })).max(5).optional().describe('Ordered advisory references, separate from image (the edit canvas). PNG/JPEG/WebP data URLs; at most 5 total attachments including image/mask, 10 MiB each, 32 MiB total, 4096 px per side.'),
+  preserve: z.literal('strict').optional().describe('Infill only: size is replaced with the measured source size. Source-sized output required, composite inside an opaque mask containing black protected pixels, verify zero protected-pixel changes before publishing lossless PNG. Resize/lossy save disabled.'),
+  size: z.string().regex(/^\d{1,5}x\d{1,5}$/i).optional().describe('Requested WIDTHxHEIGHT, e.g. 1024x1024; advisory dimensions may differ. Strict mode replaces this with the measured source size.'),
   count: z.number().int().min(1).max(4).optional(),
   quality: z.string().optional(),
   background: z.enum(['auto', 'transparent', 'opaque']).optional(),
@@ -28,7 +35,7 @@ export const codexGenerationRequestSchema = z.object({
   }).optional().describe('Post-generation save settings, identical to the UI queue payload.'),
 }).passthrough()
 
-export function parseCodexGenerationRequest(value: unknown) {
+export async function parseCodexGenerationRequest(value: unknown) {
   const request = codexGenerationRequestSchema.parse(value)
   const operation = request.operation ?? 'generate'
   if ((operation === 'edit' || operation === 'infill') && !request.image?.trim()) {
@@ -40,7 +47,19 @@ export function parseCodexGenerationRequest(value: unknown) {
   if (operation === 'infill' && !request.mask?.trim()) {
     throw new Error('Codex infill requires a mask image')
   }
-  return request
+  if (request.preserve === 'strict' && operation !== 'infill') {
+    throw new Error('Codex strict preservation requires infill, source and matching PNG mask')
+  }
+  const normalized = await validateCodexImageInputs(request)
+  return {
+    ...request,
+    ...normalized,
+    ...(request.preserve === 'strict' ? {
+      size: `${normalized.attachment_descriptors[0].width}x${normalized.attachment_descriptors[0].height}`,
+      output_format: 'png' as const,
+      imageSaveOptions: { ...request.imageSaveOptions, format: 'png' as const, resizeEnabled: false },
+    } : {}),
+  }
 }
 
 type CodexModelSuggestion = CodexModelOption

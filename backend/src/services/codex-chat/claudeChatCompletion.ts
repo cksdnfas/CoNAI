@@ -13,6 +13,7 @@ import { compareCodexVersions, killCodexProcessTree, scheduleCodexProcessTimeout
 import { isClaudeReasoningEffort } from '../llmGenerationOptions'
 import { readUsageCounts } from '../llmUsage'
 import type { ChatMcpToolResult } from './chatMcpBridge'
+import { chatToolRoundLimit } from './chatSettings'
 import type { ChatCompletionMessage, ChatCompletionResult, ChatCompletionTarget, ChatCompletionTool } from './llmChatCompletion'
 
 export const CLAUDE_CHAT_PROVIDER = '__conai_claude_code__'
@@ -181,7 +182,7 @@ export async function streamClaudeChatCompletion(params: {
     const systemFile = path.join(config, 'system.txt')
     fs.writeFileSync(systemFile, params.messages.filter((message) => message.role === 'system').map((message) => message.content).join('\n\n'), { mode: 0o600 })
     const input = session ? claudeSessionInput(params.messages) : claudeChatInput(params.messages, params.hostTools?.length ? `the available tools (${params.hostTools.join(', ')})` : undefined)
-    const args = claudeChatArgs(params.target.model, systemFile, mcpFile, (params.maxToolRounds ?? 8) + 1, params.target.generation.reasoningEffort, session ? { resumeId: session.resumeId, newId: randomUUID() } : undefined, params.hostTools)
+    const args = claudeChatArgs(params.target.model, systemFile, mcpFile, (params.maxToolRounds ?? chatToolRoundLimit()) + 1, params.target.generation.reasoningEffort, session ? { resumeId: session.resumeId, newId: randomUUID() } : undefined, params.hostTools)
     params.signal.throwIfAborted()
     return await new Promise<ChatCompletionResult>((resolve, reject) => {
       const child = spawn(cli.command, [...cli.prefixArgs, ...args], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' })
@@ -238,11 +239,12 @@ export async function streamClaudeChatCompletion(params: {
           if (buffer.trim()) read(buffer.trim())
           if (failure) throw failure
           if (timeout.timedOut) throw new Error('Claude Code 응답 제한 시간을 초과했어.')
-          const turnLimited = params.research && result?.subtype === 'error_max_turns'
+          // Out of turns (the tool round limit) cuts a reply short; it does not fail it: what it wrote and did stays.
+          const turnLimited = result?.subtype === 'error_max_turns'
           // Native max-turn receipts can include the denied continuation (2.1.302: maxTurns + 1).
           // Preserve that receipt rather than clamping it to the configured limit or inventing provider usage.
           if (params.research) params.research.result.turns = typeof result?.num_turns === 'number' && Number.isSafeInteger(result.num_turns) && result.num_turns >= 0 ? result.num_turns : null
-          if (turnLimited) params.research!.result.stopReason = 'turn_limit'
+          if (turnLimited && params.research) params.research.result.stopReason = 'turn_limit'
           if ((!turnLimited && code !== 0) || !verified || !result || (!turnLimited && (result.is_error === true || result.subtype !== 'success'))) throw new Error('Claude Code 요청에 실패했어. 인증 상태, 모델 및 사용량 한도를 확인해줘.')
           const finalText = typeof result.result === 'string' ? result.result : content
           if (!content && finalText) params.onContent?.(finalText)
@@ -253,7 +255,7 @@ export async function streamClaudeChatCompletion(params: {
             if (session.resumeId && session.resumeId !== sessionId) removeClaudeSessionFiles(path.join(root as string, 'home'), session.resumeId)
           }
           // The result event totals the run (every tool round): input counts cache reads and writes too.
-          resolve({ content: finalText, reasoning, toolCalls: [], finishReason, promptTokens: null, usage: readUsageCounts(result) })
+          resolve({ content: finalText, reasoning, toolCalls: [], finishReason: turnLimited ? 'tool_limit' : finishReason, promptTokens: null, usage: readUsageCounts(result) })
         } catch (error) { reject(error) }
       })
     })

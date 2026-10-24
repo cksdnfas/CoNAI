@@ -118,6 +118,17 @@ test('llm usage ledger: reported, estimated, failed and stopped requests; daily 
     assert.equal(buildLlmUsageSummary(1, 540).totals.requests >= 1, true)
   })
 
+  await t.test('summary cutoff preserves local midnight boundaries', () => {
+    for (const offset of [540, -480, 345]) {
+      db.prepare('DELETE FROM llm_usage_events').run()
+      const shift = `${offset >= 0 ? '+' : ''}${offset} minutes`
+      const cutoff = (db.prepare("SELECT datetime(date('now', ?), ?) AS cutoff").get(shift, `${-offset} minutes`) as { cutoff: string }).cutoff
+      db.prepare(`INSERT INTO llm_usage_events (created_at, purpose, engine) VALUES
+        (datetime(?, '-1 second'), 'chat', 'api'), (?, 'chat', 'api'), (datetime(?, '+1 second'), 'chat', 'api')`).run(cutoff, cutoff, cutoff)
+      assert.equal(buildLlmUsageSummary(1, offset).totals.requests, 2)
+    }
+  })
+
   await t.test('judge stats average the tokens of runs that reported them', () => {
     const base = { threadId: null, profileId: null, presetId: 1, stage: 'before' as const, messageId: null, replyId: null, engine: 'typesafe' as const, providerName: 'jev', model: 'system-one', latencyMs: 300, error: null, request: {} }
     const item = { itemId: 'lore', name: '로어', stage: 'before' as const, tools: [], probability: 0.8, confidence: null, choice: null, verdict: 'yes' as const, decidedBy: 'judge' as const, action: 'none' as const }

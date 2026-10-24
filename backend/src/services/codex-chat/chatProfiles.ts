@@ -1,9 +1,9 @@
-import { CHAT_TRANSLATION_DEFAULTS, isChatTranslationLanguage, isCodexReasoningEffort, type ChatTranslationLanguage, type CodexReasoningEffort } from '@conai/shared'
+import { CHAT_PROFILE_DEFAULTS, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_DEFAULTS, isChatTranslationLanguage, isCodexReasoningEffort, type ChatTranslationLanguage, type CodexReasoningEffort } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { CHAT_SCOPES, readLegacyCodexChatSettings, type ChatScope } from './chatSettings'
 import { isClaudeReasoningEffort, isLlmReasoningEffort, parseLlmExtraParams, type LlmGenerationOptions } from '../llmGenerationOptions'
 import { BACKGROUND_MAX_LENGTH, BACKGROUND_PATTERN, normalizeChatStyle, type ChatStyle } from './chatStyle'
-import { ChatLorebookStore, LORE_RECURSION_MAX_DEPTH, normalizeLorebookIds } from './chatLorebook'
+import { ChatLorebookStore, normalizeLorebookIds } from './chatLorebook'
 import { ChatSharedBlockStore, normalizeBlockIds } from './chatDisplayBlocks'
 import { ChatProfileError } from './chatProfileError'
 import { AuthPermissionGroup } from '../../models/AuthPermissionGroup'
@@ -12,41 +12,49 @@ import { contentRatingTier, LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelS
 import { ChatJudgePresetStore } from './chatJudgePresets'
 import { normalizeLinkedFiles, type LinkedFileLink } from './chatLinkedFiles'
 import { chatCharacterGroupPath, fileProfileAssetsUnderGroup, renameCharacterGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
-import { keptGreetingPosition, normalizeGreetingPosition, normalizeOpeningHistory, OPENING_HISTORY_MAX_ENTRIES, TEXT_MAX_LENGTH, type ChatOpeningMessage } from './chatOpeningHistory'
+import { keptGreetingPosition, normalizeGreetingPosition, normalizeOpeningHistory, TEXT_MAX_LENGTH, type ChatOpeningMessage } from './chatOpeningHistory'
 
-const NAME_MAX_LENGTH = 60
+const NAME_MAX_LENGTH = CHAT_PROFILE_TEXT_LIMITS.name
 const MODEL_MAX_LENGTH = 200
 const AVATAR_MAX_LENGTH = 300_000
 const AVATAR_PATTERN = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/
 
-export const CHAT_PROFILE_LIMITS = {
-  contextTurns: { min: 1, max: 200 },
-  contextTokens: { min: 1024, max: 4_000_000 },
-  summaryTriggerTurns: { min: 1, max: 200 },
-  maxToolRounds: { min: 1, max: 20 },
-  toolOutputLimit: { min: 500, max: 100_000 },
-} as const
+// Ranges and defaults are shared with the editor and page assistants (@conai/shared chatLimits).
+export { CHAT_PROFILE_LIMITS, CHAT_PROFILE_DEFAULTS, CHAT_PROFILE_TEXT_LIMITS }
 
-export const CHAT_PROFILE_DEFAULTS = {
-  loreScanDepth: 4,
-  loreTokenBudget: 1024,
-  /** Turns before the end where keyword lore is merged in (0: the latest user message). */
-  loreDepth: 4,
-  /** Recursive lore scan levels (0: off). */
-  loreRecursionDepth: 0,
-  contextTurns: 20,
-  summaryTriggerTurns: 6,
-  maxToolRounds: 8,
-  /** Characters of one tool result handed to the model within a reply. */
-  toolOutputLimit: 12_000,
-} as const
-
-export const AUTHOR_NOTE_MAX_LENGTH = 4000
+export const AUTHOR_NOTE_MAX_LENGTH = CHAT_PROFILE_TEXT_LIMITS.authorNote
 /** Text caps toColumns applies to the profile fields a chat may propose (the setup tools validate with the same numbers). */
-const TRANSLATION_INSTRUCTIONS_MAX_LENGTH = 4000
-export const CHAT_PROFILE_TEXT_LIMITS = { name: NAME_MAX_LENGTH, tagline: 200, text: TEXT_MAX_LENGTH, authorNote: AUTHOR_NOTE_MAX_LENGTH, sections: 30, sectionTitle: 80, alternateGreetings: 100, openingHistory: OPENING_HISTORY_MAX_ENTRIES, translationInstructions: TRANSLATION_INSTRUCTIONS_MAX_LENGTH, summaryPrompt: 4000 } as const
-const MAX_PROMPT_SECTIONS = 30
-const SECTION_TITLE_MAX_LENGTH = 80
+const TRANSLATION_INSTRUCTIONS_MAX_LENGTH = CHAT_PROFILE_TEXT_LIMITS.translationInstructions
+const PROFILE_SCALAR_TEXT_LIMITS: Record<string, number> = {
+  name: CHAT_PROFILE_TEXT_LIMITS.name, tagline: CHAT_PROFILE_TEXT_LIMITS.tagline,
+  systemPrompt: CHAT_PROFILE_TEXT_LIMITS.text, greeting: CHAT_PROFILE_TEXT_LIMITS.text,
+  appearance: CHAT_PROFILE_TEXT_LIMITS.text, authorNote: CHAT_PROFILE_TEXT_LIMITS.authorNote,
+  summaryPrompt: CHAT_PROFILE_TEXT_LIMITS.summaryPrompt, translationInstructions: CHAT_PROFILE_TEXT_LIMITS.translationInstructions,
+}
+const MAX_PROMPT_SECTIONS = CHAT_PROFILE_TEXT_LIMITS.sections
+const SECTION_TITLE_MAX_LENGTH = CHAT_PROFILE_TEXT_LIMITS.sectionTitle
+const PROFILE_FIELD_LABELS: Record<string, string> = {
+  name: '프로필 이름', tagline: '한 줄 소개', systemPrompt: '시스템 프롬프트', greeting: '첫 인사',
+  authorNote: '작가 노트', appearance: '외형', summaryPrompt: '요약 프롬프트', translationInstructions: '번역 지침',
+  temperature: '온도', maxTokens: '최대 출력 토큰', contextTurns: '대화 문맥 턴 수', contextTokens: '대화 문맥 토큰',
+  summaryTriggerTurns: '요약 시작 턴 수', toolOutputLimit: '도구 출력 길이', loreRecursionDepth: '로어 재귀 깊이',
+  loreScanDepth: '로어 검색 턴 수', loreTokenBudget: '로어 토큰 예산', loreDepth: '로어 삽입 깊이',
+  reasoningBudgetTokens: '추론 토큰 예산', suggestProfileId: '추천 작성 프로필', suggestUserProfileId: '추천 사용자 프로필', sortOrder: '정렬 순서',
+  summaryEnabled: '요약 사용', suggestEnabled: '답장 추천 사용', visionEnabled: '이미지 보기', allowLoreProposals: '로어 제안 허용',
+  mcpEnabled: '도구 사용', pageAssist: '페이지 어시스턴트', isEnabled: '프로필 사용',
+}
+
+const LIST_FIELD_LABELS: Record<string, string> = { promptSections: '프롬프트 구역', alternateGreetings: '다른 인사', openingHistory: '시작 대화' }
+const LIST_ITEM_FIELD_LABELS: Record<string, string> = { title: '제목', content: '내용', role: '역할' }
+
+/** `promptSections[3].title` reads as "프롬프트 구역 4 제목", so the writer knows which entry to shorten. */
+function fieldLabel(key: string) {
+  if (PROFILE_FIELD_LABELS[key]) return PROFILE_FIELD_LABELS[key]
+  const match = /^(\w+)(?:\[(\d+)\])?(?:\.(\w+))?$/.exec(key)
+  const list = match && LIST_FIELD_LABELS[match[1]]
+  if (!list) return key
+  return [list, match[2] === undefined ? '' : String(Number(match[2]) + 1), match[3] ? LIST_ITEM_FIELD_LABELS[match[3]] ?? match[3] : ''].filter(Boolean).join(' ')
+}
 
 /**
  * A user-defined block of the prompt. `text` goes into the system prompt under its title; `dialogue` is example
@@ -181,8 +189,6 @@ export type ChatProfile = {
    * At most one of the two is set.
    */
   suggestUserProfileId: number | null
-  /** Model ↔ tool round trips allowed in one reply. */
-  maxToolRounds: number
   /** LLM: the model can look at images (view_images results are sent to it). */
   visionEnabled: boolean
   /**
@@ -304,7 +310,6 @@ type ProfileRow = {
   suggest_slot_id: number | null
   suggest_profile_id: number | null
   suggest_user_profile_id: number | null
-  max_tool_rounds: number | null
   chat_style: string | null
   background_image: string | null
   vision_enabled: number | null
@@ -459,7 +464,6 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
     suggestSlotId: slot(row.suggest_slot_id),
     suggestProfileId: row.suggest_profile_id,
     suggestUserProfileId: row.suggest_profile_id === null ? row.suggest_user_profile_id : null,
-    maxToolRounds: row.max_tool_rounds ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
     visionEnabled: row.vision_enabled === 1,
     contentRatingMode: row.engine !== 'codex' && row.engine !== 'claude' && row.content_rating_mode !== 'custom' ? 'model' : 'custom',
     contentRatingTierId: row.content_rating_tier_id ?? null,
@@ -482,16 +486,42 @@ function text(value: unknown, maxLength: number) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
 }
 
-function optionalNumber(value: unknown, range: { min: number; max: number }, integer: boolean) {
-  if (value === null || value === undefined || value === '') {
-    return null
+export function validateProfileText(label: string, value: unknown, maxLength: number, options: { required?: boolean } = {}) {
+  label = fieldLabel(label)
+  if (typeof value !== 'string') throw new ChatProfileError(`${label}에는 글자를 입력해줘.`)
+  const trimmed = value.trim()
+  if (options.required && !trimmed) throw new ChatProfileError(`${label}: 비워 둘 수 없어.`)
+  if (trimmed.length > maxLength) throw new ChatProfileError(`${label}: 최대 ${maxLength}자까지 쓸 수 있어. (현재 ${trimmed.length}자)`)
+  return trimmed
+}
+
+export function validateProfileFlag(label: string, value: unknown) {
+  if (typeof value !== 'boolean') throw new ChatProfileError(`${fieldLabel(label)} 값은 참 또는 거짓이어야 해.`)
+  return value
+}
+
+export function validateProfileNumber(label: string, value: unknown, range: { min: number; max: number }, options: { integer?: boolean; nullable?: boolean } = {}) {
+  label = fieldLabel(label)
+  if (value === null || value === '') {
+    if (options.nullable) return null
+    throw new ChatProfileError(`${label}에 숫자를 입력해줘. (${range.min}~${range.max})`)
   }
   const number = Number(value)
-  if (!Number.isFinite(number)) {
-    throw new ChatProfileError('숫자 값이 올바르지 않아.')
-  }
+  if ((typeof value !== 'number' && typeof value !== 'string') || !Number.isFinite(number)) throw new ChatProfileError(`${label}에 숫자를 입력해줘. (${range.min}~${range.max})`)
   const clamped = Math.min(range.max, Math.max(range.min, number))
-  return integer ? Math.round(clamped) : clamped
+  return options.integer === false ? clamped : Math.round(clamped)
+}
+
+/** Shared scalar write contract; legacy row reads deliberately remain tolerant. */
+export function normalizeProfileScalarField(key: string, value: unknown): unknown {
+  if (Object.prototype.hasOwnProperty.call(CHAT_PROFILE_LIMITS, key)) {
+    return validateProfileNumber(key, value, CHAT_PROFILE_LIMITS[key as keyof typeof CHAT_PROFILE_LIMITS], {
+      integer: key !== 'temperature', nullable: ['temperature', 'maxTokens', 'contextTokens'].includes(key),
+    })
+  }
+  if (['summaryEnabled', 'suggestEnabled', 'visionEnabled', 'allowLoreProposals', 'mcpEnabled', 'pageAssist', 'isEnabled'].includes(key)) return validateProfileFlag(key, value)
+  if (Object.prototype.hasOwnProperty.call(PROFILE_SCALAR_TEXT_LIMITS, key)) return validateProfileText(key, value, PROFILE_SCALAR_TEXT_LIMITS[key], { required: key === 'name' })
+  return value
 }
 
 /**
@@ -556,69 +586,89 @@ function judgePresetId(value: unknown) {
 }
 
 /** `draft`: a preview of an unsaved profile, which must not create model rows for legacy pairs. */
-function toColumns(input: ChatProfileInput, options: { draft?: boolean } = {}) {
+function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKeys?: Set<string> } = {}) {
+  const strict = (key: string) => !options.strictKeys || options.strictKeys.has(key)
+  input = Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value === undefined || !strict(key) ? value : normalizeProfileScalarField(key, value)])) as ChatProfileInput
+  const optionalNumber = (key: keyof ChatProfileInput, range: { min: number; max: number }, integer: boolean) => {
+    const value = input[key]
+    if (value === undefined) return null
+    if (!strict(key)) {
+      const number = Number(value)
+      if (value === null || value === '' || !Number.isFinite(number)) return null
+      const clamped = Math.min(range.max, Math.max(range.min, number))
+      return integer ? Math.round(clamped) : clamped
+    }
+    return validateProfileNumber(key, value, range, { integer, nullable: true })
+  }
   const name = text(input.name, NAME_MAX_LENGTH)
   if (!name) {
     throw new ChatProfileError('프로필 이름이 필요해.')
   }
   const engine: ChatProfileEngine = input.engine === 'codex' ? 'codex' : input.engine === 'claude' ? 'claude' : 'llm'
   // A role's row: its id, or a legacy connection + model pair, which lands on that connection's row.
-  const roleSlot = (slotId: unknown, providerName: unknown, model: unknown, kinds: readonly string[] = LLM_CONNECTION_TYPES) => {
+  const pending: Array<{ column: string; providerName: string; model: unknown; kinds: readonly string[] }> = []
+  const roleSlot = (column: string, slotId: unknown, providerName: unknown, model: unknown, kinds: readonly string[] = LLM_CONNECTION_TYPES) => {
+    const slotKey = column.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())
+    const providerKey = column === 'model_slot_id' ? 'providerName' : `${column.replace('_slot_id', '')}ProviderName`
+    if (!strict(slotKey) && !strict(providerKey) && !strict('engine')) return ModelSlotStore.existing(slotId)
     if (slotId !== null && slotId !== undefined && slotId !== '') return ModelSlotStore.checked(slotId, kinds)
     if (typeof providerName !== 'string' || !providerName.trim()) return null
-    const id = ModelSlotStore.ensure(providerName, model, { create: options.draft !== true })
+    const id = ModelSlotStore.ensure(providerName, model, { create: false, kinds })
+    if (id === null) pending.push({ column, providerName, model, kinds })
     return id === null ? null : ModelSlotStore.checked(id, kinds)
   }
   // Codex has no connection, so no chat row; its helper roles (summary, translation, suggestions) still use rows.
-  const modelSlotId = engine === 'llm' ? roleSlot(input.modelSlotId, input.providerName, input.model) : null
-  if (engine === 'llm' && modelSlotId === null && !ModelSlotStore.defaultTarget()) {
+  const modelSlotId = engine === 'llm' ? roleSlot('model_slot_id', input.modelSlotId, input.providerName, input.model) : null
+  if (engine === 'llm' && modelSlotId === null && !pending.some((pair) => pair.column === 'model_slot_id') && !ModelSlotStore.defaultTarget()
+    && ['engine', 'modelSlotId', 'providerName', 'model'].some(strict)) {
     throw new ChatProfileError('모델을 골라줘. 설정 › LLM에서 연결에 모델을 먼저 추가해야 해.')
   }
   const avatar = typeof input.avatar === 'string' && input.avatar ? input.avatar : null
-  if (avatar && (avatar.length > AVATAR_MAX_LENGTH || !AVATAR_PATTERN.test(avatar))) {
+  if (strict('avatar') && avatar && (avatar.length > AVATAR_MAX_LENGTH || !AVATAR_PATTERN.test(avatar))) {
     throw new ChatProfileError('아바타 이미지가 올바르지 않거나 너무 커.')
   }
   const background = typeof input.background === 'string' && input.background ? input.background : null
-  if (background && (background.length > BACKGROUND_MAX_LENGTH || !BACKGROUND_PATTERN.test(background))) {
+  if (strict('background') && background && (background.length > BACKGROUND_MAX_LENGTH || !BACKGROUND_PATTERN.test(background))) {
     throw new ChatProfileError('배경 이미지가 올바르지 않거나 너무 커.')
   }
-  if (input.reasoningEffort && (engine === 'codex' ? !isCodexReasoningEffort(input.reasoningEffort) : engine === 'claude' ? !isClaudeReasoningEffort(input.reasoningEffort) : !isLlmReasoningEffort(input.reasoningEffort))) {
+  if (strict('reasoningEffort') && input.reasoningEffort && (engine === 'codex' ? !isCodexReasoningEffort(input.reasoningEffort) : engine === 'claude' ? !isClaudeReasoningEffort(input.reasoningEffort) : !isLlmReasoningEffort(input.reasoningEffort))) {
     throw new ChatProfileError('추론 강도 값이 올바르지 않아.')
   }
   let extraParams = ''
   if (engine === 'llm' && typeof input.extraParams === 'string' && input.extraParams.trim()) {
-    try {
+    if (strict('extraParams')) validateProfileText('추가 파라미터 JSON', input.extraParams, CHAT_PROFILE_TEXT_LIMITS.extraParams)
+    if (strict('extraParams')) try {
       parseLlmExtraParams(input.extraParams)
     } catch (error) {
       throw new ChatProfileError(error instanceof Error ? error.message : '추가 파라미터가 올바르지 않아.')
     }
-    extraParams = input.extraParams.trim().slice(0, 20_000)
+    extraParams = input.extraParams.trim()
   }
 
   const openingHistory = normalizeOpeningHistory(input.openingHistory)
-  return {
+  const columns = {
     name,
-    tagline: text(input.tagline, 200),
+    tagline: text(input.tagline, CHAT_PROFILE_TEXT_LIMITS.tagline),
     lorebook_ids: JSON.stringify(ChatLorebookStore.existing(normalizeLorebookIds(input.lorebookIds))),
     block_ids: JSON.stringify(ChatSharedBlockStore.existing(normalizeBlockIds(input.blockIds))),
-    lore_scan_depth: optionalNumber(input.loreScanDepth, { min: 1, max: 100 }, true) ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
-    lore_token_budget: optionalNumber(input.loreTokenBudget, { min: 0, max: 32768 }, true) ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
-    lore_depth: optionalNumber(input.loreDepth, { min: 0, max: 20 }, true) ?? CHAT_PROFILE_DEFAULTS.loreDepth,
-    lore_recursion_depth: optionalNumber(input.loreRecursionDepth, { min: 0, max: LORE_RECURSION_MAX_DEPTH }, true) ?? CHAT_PROFILE_DEFAULTS.loreRecursionDepth,
+    lore_scan_depth: optionalNumber('loreScanDepth', CHAT_PROFILE_LIMITS.loreScanDepth, true) ?? CHAT_PROFILE_DEFAULTS.loreScanDepth,
+    lore_token_budget: optionalNumber('loreTokenBudget', CHAT_PROFILE_LIMITS.loreTokenBudget, true) ?? CHAT_PROFILE_DEFAULTS.loreTokenBudget,
+    lore_depth: optionalNumber('loreDepth', CHAT_PROFILE_LIMITS.loreDepth, true) ?? CHAT_PROFILE_DEFAULTS.loreDepth,
+    lore_recursion_depth: optionalNumber('loreRecursionDepth', CHAT_PROFILE_LIMITS.loreRecursionDepth, true) ?? CHAT_PROFILE_DEFAULTS.loreRecursionDepth,
     author_note: text(input.authorNote, AUTHOR_NOTE_MAX_LENGTH) || null,
     avatar,
     appearance: text(input.appearance, TEXT_MAX_LENGTH) || null,
-    reference_hash: normalizeProfileAssetHash(input.referenceHash),
-    avatar_hash: normalizeProfileAssetHash(input.avatarHash),
+    reference_hash: strict('referenceHash') ? normalizeProfileAssetHash(input.referenceHash) : input.referenceHash ?? null,
+    avatar_hash: strict('avatarHash') ? normalizeProfileAssetHash(input.avatarHash) : input.avatarHash ?? null,
     avatar_crop: input.avatarCrop == null ? null : JSON.stringify(normalizeAvatarCrop(input.avatarCrop)),
-    background_hash: normalizeProfileAssetHash(input.backgroundHash),
+    background_hash: strict('backgroundHash') ? normalizeProfileAssetHash(input.backgroundHash) : input.backgroundHash ?? null,
     engine,
     // The pair columns are the older form of the model rows (see LegacyModelPairs); a save clears them.
     provider_name: '',
     model: engine === 'llm' ? null : text(input.model, MODEL_MAX_LENGTH) || null,
     llm_runtime: engine === 'llm' && input.llmRuntime === 'pi' ? 'pi' : null,
     reasoning_effort: input.reasoningEffort || null,
-    reasoning_budget_tokens: engine === 'llm' ? optionalNumber(input.reasoningBudgetTokens, { min: 1, max: 1_000_000 }, true) : null,
+    reasoning_budget_tokens: engine === 'llm' ? optionalNumber('reasoningBudgetTokens', CHAT_PROFILE_LIMITS.maxTokens, true) : null,
     extra_params: extraParams || null,
     system_prompt: text(input.systemPrompt, TEXT_MAX_LENGTH),
     prompt_sections: JSON.stringify(normalizeSections(input.promptSections ?? [])),
@@ -630,21 +680,21 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean } = {}) {
     alternate_greetings: JSON.stringify(normalizeAlternateGreetings(input.alternateGreetings)),
     opening_history: JSON.stringify(openingHistory),
     greeting_position: keptGreetingPosition(input.openingHistory, input.greetingPosition),
-    temperature: optionalNumber(input.temperature, { min: 0, max: 2 }, false),
-    max_tokens: optionalNumber(input.maxTokens, { min: 1, max: 1_000_000 }, true),
+    temperature: optionalNumber('temperature', CHAT_PROFILE_LIMITS.temperature, false),
+    max_tokens: optionalNumber('maxTokens', CHAT_PROFILE_LIMITS.maxTokens, true),
     mcp_enabled: input.mcpEnabled ? 1 : 0,
     allowed_group_keys: JSON.stringify(normalizeAllowedGroupKeys(input.allowedGroupKeys)),
     mcp_scopes: JSON.stringify(parseScopes(input.mcpScopes ?? ['read'])),
     tool_allowlist: Array.isArray(input.toolAllowlist)
       ? JSON.stringify([...new Set(input.toolAllowlist.filter((name): name is string => typeof name === 'string' && /^[a-z0-9_]{1,64}$/.test(name)))])
       : null,
-    tool_output_limit: optionalNumber(input.toolOutputLimit, CHAT_PROFILE_LIMITS.toolOutputLimit, true) ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit,
+    tool_output_limit: optionalNumber('toolOutputLimit', CHAT_PROFILE_LIMITS.toolOutputLimit, true) ?? CHAT_PROFILE_DEFAULTS.toolOutputLimit,
     generation_preset_ids: JSON.stringify(ChatGenerationPresetStore.existing(normalizeGenerationPresetIds(input.generationPresetIds))),
-    context_turns: optionalNumber(input.contextTurns, CHAT_PROFILE_LIMITS.contextTurns, true) ?? CHAT_PROFILE_DEFAULTS.contextTurns,
-    context_tokens: optionalNumber(input.contextTokens, CHAT_PROFILE_LIMITS.contextTokens, true),
+    context_turns: optionalNumber('contextTurns', CHAT_PROFILE_LIMITS.contextTurns, true) ?? CHAT_PROFILE_DEFAULTS.contextTurns,
+    context_tokens: optionalNumber('contextTokens', CHAT_PROFILE_LIMITS.contextTokens, true),
     summary_enabled: input.summaryEnabled ? 1 : 0,
-    summary_trigger_turns: optionalNumber(input.summaryTriggerTurns, CHAT_PROFILE_LIMITS.summaryTriggerTurns, true) ?? CHAT_PROFILE_DEFAULTS.summaryTriggerTurns,
-    summary_prompt: text(input.summaryPrompt, 4000),
+    summary_trigger_turns: optionalNumber('summaryTriggerTurns', CHAT_PROFILE_LIMITS.summaryTriggerTurns, true) ?? CHAT_PROFILE_DEFAULTS.summaryTriggerTurns,
+    summary_prompt: text(input.summaryPrompt, CHAT_PROFILE_TEXT_LIMITS.summaryPrompt),
     summary_provider_name: null,
     summary_model: null,
     translation_provider_name: null,
@@ -656,29 +706,45 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean } = {}) {
     suggest_provider_name: null,
     suggest_model: null,
     model_slot_id: modelSlotId,
-    summary_slot_id: roleSlot(input.summarySlotId, input.summaryProviderName, input.summaryModel),
-    translation_slot_id: roleSlot(input.translationSlotId, input.translationProviderName, input.translationModel),
-    suggest_slot_id: roleSlot(input.suggestSlotId, input.suggestProviderName, input.suggestModel),
-    suggest_profile_id: optionalNumber(input.suggestProfileId, { min: 1, max: Number.MAX_SAFE_INTEGER }, true),
-    suggest_user_profile_id: input.suggestProfileId ? null : optionalNumber(input.suggestUserProfileId, { min: 1, max: Number.MAX_SAFE_INTEGER }, true),
-    max_tool_rounds: optionalNumber(input.maxToolRounds, CHAT_PROFILE_LIMITS.maxToolRounds, true) ?? CHAT_PROFILE_DEFAULTS.maxToolRounds,
+    summary_slot_id: roleSlot('summary_slot_id', input.summarySlotId, input.summaryProviderName, input.summaryModel),
+    translation_slot_id: roleSlot('translation_slot_id', input.translationSlotId, input.translationProviderName, input.translationModel),
+    suggest_slot_id: roleSlot('suggest_slot_id', input.suggestSlotId, input.suggestProviderName, input.suggestModel),
+    suggest_profile_id: optionalNumber('suggestProfileId', { min: 1, max: Number.MAX_SAFE_INTEGER }, true),
+    suggest_user_profile_id: input.suggestProfileId ? null : optionalNumber('suggestUserProfileId', { min: 1, max: Number.MAX_SAFE_INTEGER }, true),
     vision_enabled: input.visionEnabled ? 1 : 0,
     content_rating_mode: engine === 'llm' && input.contentRatingMode !== 'custom' ? 'model' : 'custom',
-    content_rating_tier_id: contentRatingTier(input.contentRatingTierId ?? null),
+    content_rating_tier_id: strict('contentRatingTierId') ? contentRatingTier(input.contentRatingTierId ?? null) : input.contentRatingTierId ?? null,
     page_assist: input.pageAssist ? 1 : 0,
     allow_lore_proposals: input.allowLoreProposals === false ? 0 : 1,
     linked_files: JSON.stringify(normalizeLinkedFiles(input.linkedFiles)),
     // Every engine can be judged (a Codex chat gets the directives and status fields only, see chatJudge).
-    judge_preset_id: judgePresetId(input.judgePresetId),
+    judge_preset_id: strict('judgePresetId') ? judgePresetId(input.judgePresetId) : input.judgePresetId ?? null,
     judge_provider_name: null,
     judge_model: null,
-    judge_slot_id: roleSlot(input.judgeSlotId, input.judgeProviderName, input.judgeModel, MODEL_CONNECTION_TYPES),
+    judge_slot_id: roleSlot('judge_slot_id', input.judgeSlotId, input.judgeProviderName, input.judgeModel, MODEL_CONNECTION_TYPES),
     chat_style: JSON.stringify({ ...normalizeChatStyle(input.style), blocks: [] }),
     background_image: background,
     is_enabled: input.isEnabled === false ? 0 : 1,
-    sort_order: optionalNumber(input.sortOrder, { min: -1_000_000, max: 1_000_000 }, true) ?? 0,
+    sort_order: optionalNumber('sortOrder', { min: -1_000_000, max: 1_000_000 }, true) ?? 0,
   }
+  // All input is valid before the first model insert. The caller's transaction owns rows and profile together.
+  if (!options.draft) for (const pair of pending) {
+    (columns as Record<string, unknown>)[pair.column] = ModelSlotStore.ensure(pair.providerName, pair.model, { kinds: pair.kinds })
+  }
+  return columns
 }
+
+const ADMIN_PROFILE_COLUMNS = `id, name, tagline, lorebook_ids, block_ids, lore_scan_depth, lore_token_budget,
+  lore_depth, lore_recursion_depth, author_note, avatar, appearance, reference_hash, avatar_hash, avatar_crop,
+  background_hash, engine, model, llm_runtime, reasoning_effort, reasoning_budget_tokens, extra_params, system_prompt,
+  prompt_sections, tool_allowlist, tool_output_limit, character_description, example_dialogue, user_persona, greeting,
+  alternate_greetings, opening_history, greeting_position, temperature, max_tokens, mcp_enabled, mcp_scopes,
+  allowed_group_keys, generation_preset_ids, context_turns, context_tokens, summary_enabled, summary_trigger_turns,
+  summary_prompt, translation_instructions, translation_model_language, translation_display_language, suggest_enabled,
+  model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, suggest_profile_id, suggest_user_profile_id,
+  chat_style, vision_enabled, content_rating_mode, content_rating_tier_id, page_assist, allow_lore_proposals,
+  linked_files, judge_preset_id, judge_slot_id, is_enabled, sort_order, created_date, updated_date,
+  CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image`
 
 export const ChatProfileStore = {
   /** A profile as it would be saved, without saving it (prompt preview of an unsaved draft). */
@@ -699,10 +765,19 @@ export const ChatProfileStore = {
       .all(...ids ?? []) as Array<Pick<ChatProfile, 'id' | 'name'>>
   },
 
-  list(options: { enabledOnly?: boolean } = {}) {
+  list(options: { enabledOnly?: boolean; directory?: boolean; admin?: boolean } = {}): ChatProfile[] {
     const db = getUserSettingsDb()
+    // The public directory never sends prompts, greetings, linked-file contents or inline images.
+    // Presence sentinels retain the legacy asset URLs without hydrating the base64 payloads.
+    const projection = options.directory ? `id, name, tagline, engine, model, llm_runtime, model_slot_id, summary_slot_id,
+      translation_slot_id, suggest_slot_id, suggest_profile_id, suggest_user_profile_id, suggest_enabled,
+      reasoning_effort, reasoning_budget_tokens, temperature, max_tokens, context_turns, context_tokens, summary_enabled,
+      lore_depth, author_note, appearance, avatar_hash, avatar_crop, background_hash, reference_hash, chat_style, block_ids,
+      mcp_enabled, mcp_scopes, tool_allowlist, allowed_group_keys, generation_preset_ids, allow_lore_proposals, page_assist, is_enabled, sort_order, created_date, updated_date,
+      CASE WHEN avatar IS NOT NULL AND avatar != '' THEN 'present' ELSE NULL END AS avatar,
+      CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image` : options.admin ? ADMIN_PROFILE_COLUMNS : '*'
     const rows = db.prepare(`
-      SELECT * FROM llm_chat_profiles ${options.enabledOnly ? 'WHERE is_enabled = 1' : ''} ORDER BY sort_order ASC, id ASC
+      SELECT ${projection} FROM llm_chat_profiles ${options.enabledOnly ? 'WHERE is_enabled = 1' : ''} ORDER BY sort_order ASC, id ASC
     `).all() as ProfileRow[]
     if (!rows.length) return []
     const slots = new Set(ModelSlotStore.existingIds(rows.flatMap((row) =>
@@ -716,12 +791,28 @@ export const ChatProfileStore = {
     return rows.map((row) => toProfile(row, dependencies))
   },
 
-  find(profileId: number) {
+  /** Synchronous response serialization; never changes the meaning of find(). */
+  mapDirectory<T>(serialize: (profile: ChatProfile) => T, profiles: ChatProfile[] = ChatProfileStore.list({ directory: true })): T[] {
+    return ModelSlotStore.withReadSnapshot(() => profiles.map(serialize))
+  },
+
+  /** Workflow picker still exposes its legacy avatar field, but never loads prompts or backgrounds. */
+  workflowOptions() {
+    const rows = getUserSettingsDb().prepare(`SELECT id, name, avatar, model_slot_id, is_enabled FROM llm_chat_profiles
+      WHERE engine IS NULL OR engine NOT IN ('codex', 'claude') ORDER BY sort_order ASC, id ASC`).all() as Array<{ id: number; name: string; avatar: string | null; model_slot_id: number | null; is_enabled: number }>
+    return ModelSlotStore.withReadSnapshot(() => rows.map((row) => {
+      const target = ModelSlotStore.target(row.model_slot_id) ?? ModelSlotStore.defaultTarget()
+      return { id: row.id, name: row.name, avatar: row.avatar, provider_name: target?.providerName ?? '', model: target?.model || null, is_enabled: row.is_enabled === 1 }
+    }))
+  },
+
+  find(profileId: number): ChatProfile | null {
     const row = getUserSettingsDb().prepare('SELECT * FROM llm_chat_profiles WHERE id = ?').get(profileId) as ProfileRow | undefined
     return row ? toProfile(row) : null
   },
 
-  create(input: ChatProfileInput) {
+  create(input: ChatProfileInput): ChatProfile {
+    return getUserSettingsDb().transaction(() => {
     const columns = toColumns(input)
     fileProfileAssetsUnderGroup(columns.name, [columns.avatar_hash, columns.background_hash, columns.reference_hash])
     const names = Object.keys(columns)
@@ -729,13 +820,16 @@ export const ChatProfileStore = {
       INSERT INTO llm_chat_profiles (${names.join(', ')}) VALUES (${names.map((name) => `@${name}`).join(', ')})
     `).run(columns)
     return ChatProfileStore.find(Number(result.lastInsertRowid)) as ChatProfile
+    })()
   },
 
-  update(profileId: number, patch: ChatProfileInput, assetDatabase?: ReturnType<typeof getUserSettingsDb>) {
-    const current = ChatProfileStore.find(profileId)
-    if (!current) {
+  update(profileId: number, patch: ChatProfileInput, assetDatabase?: ReturnType<typeof getUserSettingsDb>): ChatProfile | null {
+    return getUserSettingsDb().transaction(() => {
+    const stored = getUserSettingsDb().prepare('SELECT * FROM llm_chat_profiles WHERE id = ?').get(profileId) as ProfileRow | undefined
+    if (!stored) {
       return null
     }
+    const current = toProfile(stored)
     const merged: ChatProfileInput = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
     // A legacy pair in the patch replaces the role's current row unless the patch names a row too.
     for (const [slotKey, providerKey] of LEGACY_PAIR_KEYS) {
@@ -744,7 +838,16 @@ export const ChatProfileStore = {
     // The current editor still writes legacy images; changing one invalidates its migrated hash.
     if (patch.avatar !== undefined && patch.avatar !== current.avatar && (patch.avatarHash === undefined || patch.avatarHash === current.avatarHash)) merged.avatarHash = null
     if (patch.background !== undefined && patch.background !== current.background && (patch.backgroundHash === undefined || patch.backgroundHash === current.backgroundHash)) merged.backgroundHash = null
-    const columns = toColumns(merged)
+    const strictKeys = new Set(Object.entries(patch).filter(([, value]) => value !== undefined).map(([key]) => key))
+    const columns = toColumns(merged, { strictKeys })
+    // Unedited scalar content is not a new write: retain its exact stored representation, including legacy excess.
+    for (const key of [...Object.keys(PROFILE_SCALAR_TEXT_LIMITS), ...Object.keys(CHAT_PROFILE_LIMITS), 'extraParams', 'reasoningBudgetTokens', 'sortOrder', 'promptSections', 'alternateGreetings', 'openingHistory']) {
+      if (strictKeys.has(key)) continue
+      const column = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+      // A new engine decides these engine-specific values afresh (a non-LLM profile clears them).
+      if ((key === 'reasoningBudgetTokens' || key === 'extraParams') && strictKeys.has('engine')) continue
+      ;(columns as Record<string, unknown>)[column] = (stored as unknown as Record<string, unknown>)[column]
+    }
     if (columns.engine !== current.engine && getUserSettingsDb().prepare(`
       SELECT 1 FROM codex_chat_threads WHERE profile_id = ?
       UNION ALL SELECT 1 FROM chat_group_members WHERE profile_id = ? LIMIT 1
@@ -762,6 +865,7 @@ export const ChatProfileStore = {
       WHERE id = @id
     `).run({ ...columns, id: profileId })
     return ChatProfileStore.find(profileId)
+    })()
   },
 
   /** Chats that used the profile stay readable; they just can't send until another profile replaces it. */
@@ -777,36 +881,29 @@ let codexProfileMigrationChecked = false
  * scopes and on/off carry over, and existing Codex chats are attached to it so they keep working.
  */
 export function ensureCodexProfileMigrated() {
-  if (codexProfileMigrationChecked) {
-    return
-  }
+  if (codexProfileMigrationChecked) return
+  // A failed migration must not break every chat request. A restart retries; only committed work is durable.
   codexProfileMigrationChecked = true
-
-  const db = getUserSettingsDb()
-  const orphanThreads = (db.prepare("SELECT COUNT(*) AS count FROM codex_chat_threads WHERE engine = 'codex' AND profile_id IS NULL").get() as { count: number }).count
-  const hasCodexProfile = (db.prepare("SELECT COUNT(*) AS count FROM llm_chat_profiles WHERE engine = 'codex'").get() as { count: number }).count > 0
-  const legacy = readLegacyCodexChatSettings()
-  if (hasCodexProfile && orphanThreads === 0) {
-    return
+  try {
+    const db = getUserSettingsDb()
+    db.transaction(() => {
+      if (db.prepare("SELECT 1 FROM chat_settings_migrations WHERE name = 'codex-profile'").get()) return
+      const orphanThreads = (db.prepare("SELECT COUNT(*) AS count FROM codex_chat_threads WHERE engine = 'codex' AND profile_id IS NULL").get() as { count: number }).count
+      let profileId = (db.prepare("SELECT id FROM llm_chat_profiles WHERE engine = 'codex' ORDER BY id LIMIT 1").get() as { id: number } | undefined)?.id
+      const legacy = readLegacyCodexChatSettings()
+      if (profileId === undefined && (legacy || orphanThreads > 0)) {
+        const scopes = parseScopes(legacy?.scopes ?? CHAT_SCOPES)
+        profileId = ChatProfileStore.create({
+          name: 'Codex', engine: 'codex',
+          model: typeof legacy?.model === 'string' ? legacy.model : '',
+          reasoningEffort: isCodexReasoningEffort(legacy?.reasoningEffort) ? legacy.reasoningEffort : '',
+          mcpEnabled: scopes.length > 0, mcpScopes: scopes, isEnabled: true,
+        }).id
+      }
+      if (profileId !== undefined) db.prepare("UPDATE codex_chat_threads SET profile_id = ? WHERE engine = 'codex' AND profile_id IS NULL").run(profileId)
+      db.prepare("INSERT INTO chat_settings_migrations (name) VALUES ('codex-profile')").run()
+    }).immediate()
+  } catch (error) {
+    console.warn('[chat] Codex profile migration failed; deferred until restart:', error)
   }
-  if (!hasCodexProfile && !legacy && orphanThreads === 0) {
-    return
-  }
-
-  db.transaction(() => {
-    let profileId = (db.prepare("SELECT id FROM llm_chat_profiles WHERE engine = 'codex' ORDER BY id LIMIT 1").get() as { id: number } | undefined)?.id
-    if (profileId === undefined) {
-      const scopes = parseScopes(legacy?.scopes ?? CHAT_SCOPES)
-      profileId = ChatProfileStore.create({
-        name: 'Codex',
-        engine: 'codex',
-        model: typeof legacy?.model === 'string' ? legacy.model : '',
-        reasoningEffort: isCodexReasoningEffort(legacy?.reasoningEffort) ? legacy.reasoningEffort : '',
-        mcpEnabled: scopes.length > 0,
-        mcpScopes: scopes,
-        isEnabled: true,
-      }).id
-    }
-    db.prepare("UPDATE codex_chat_threads SET profile_id = ? WHERE engine = 'codex' AND profile_id IS NULL").run(profileId)
-  })()
 }

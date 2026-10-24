@@ -58,8 +58,8 @@ function normalizeInput(input: Record<string, unknown>) {
   let modelSlotId: number | null | undefined
   if (input.modelSlotId === null || input.modelSlotId === '') modelSlotId = null
   else if (input.modelSlotId !== undefined) {
-    modelSlotId = ModelSlotStore.existing(input.modelSlotId)
-    if (modelSlotId === null) throw new ChatUserProfileError('모델을 찾을 수 없어.')
+    try { modelSlotId = ModelSlotStore.checked(input.modelSlotId) }
+    catch (error) { throw new ChatUserProfileError(error instanceof Error ? error.message : '모델을 찾을 수 없어.') }
   }
   return { name, persona, avatar, isDefault: input.isDefault === true, modelSlotId }
 }

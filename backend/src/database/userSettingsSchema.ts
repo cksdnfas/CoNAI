@@ -16,6 +16,10 @@ import { normalizeOpeningHistory, OPENING_HISTORY_MAX_ENTRIES, type ChatOpeningM
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
   console.log('📊 Creating user settings tables...');
+  db.exec(`CREATE TABLE IF NOT EXISTS chat_settings_migrations (
+    name TEXT PRIMARY KEY,
+    completed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
 
   // 1. Workflows table (stores ComfyUI workflows)
   db.exec(`

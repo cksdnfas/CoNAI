@@ -1,24 +1,8 @@
 import sharp from 'sharp'
+export { normalizeStructuredOutputJson } from './llmPresetNormalization'
 
 export type LlmResponseMode = 'text' | 'json'
 type LlmJsonParseStrategy = 'none' | 'strict' | 'markdown_fence' | 'embedded_json' | 'invalid_escape_repaired'
-
-export function normalizeStructuredOutputJson(value: unknown) {
-  if (typeof value !== 'string') {
-    return null
-  }
-
-  const trimmed = value.trim()
-  if (!trimmed) {
-    return null
-  }
-
-  try {
-    return JSON.stringify(JSON.parse(trimmed), null, 2)
-  } catch {
-    throw new Error('구조화 출력 JSON 양식이 올바른 JSON이 아니야')
-  }
-}
 
 export function buildJsonInstruction(responseMode: LlmResponseMode, structuredOutputJson: string | null) {
   if (responseMode !== 'json' && !structuredOutputJson) {

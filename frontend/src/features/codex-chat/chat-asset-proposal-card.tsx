@@ -6,12 +6,13 @@ import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { applyChatProfileAssetsProposal, CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, dismissChatProposal, type CodexChatToolCall } from '@/lib/api-codex-chat'
+import { applyChatProfileAssetsProposal, dismissChatProposal, type CodexChatToolCall } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { getPromptPresets } from '@/lib/api-prompt-presets'
 import { codexChatThreadQueryKey } from './codex-chat-context'
 import { ChatMediaAttachments } from './chat-media-picker'
 import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
+import { refreshProfileAssets } from '@/features/settings/components/chat-profile-asset-runs'
 
 // Opened on demand from an approved card; keeps the settings asset editor out of the chat bundle.
 const ChatAssetBatchModal = lazy(() => import('@/features/settings/components/chat-asset-batch-modal').then((module) => ({ default: module.ChatAssetBatchModal })))
@@ -31,16 +32,23 @@ export function ChatAssetProposalCard({ proposal, threadId }: { proposal: Assets
   const saved = state === 'saved' || proposal.savedId !== undefined
   const dismissed = !saved && (state === 'dismissed' || proposal.dismissed === true)
   const refresh = () => Promise.all([
-    queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
-    queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
-    queryClient.invalidateQueries({ queryKey: ['codex-chat-profile-emoticons', proposal.profileId] }),
-    queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all'] }),
-    queryClient.invalidateQueries({ queryKey: ['group-emoticons'] }),
-    queryClient.invalidateQueries({ queryKey: ['chat-asset-candidates'] }),
     ...(threadId === undefined ? [] : [queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) })]),
   ])
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '제안을 처리하지 못했어.', en: 'Could not process proposal.' })), tone: 'error' })
-  const approve = useMutation({ mutationFn: () => applyChatProfileAssetsProposal(proposal.id), onSuccess: async (result) => { setState('saved'); setBatchId(result.batch?.id ?? (proposal.action === 'apply' ? proposal.batchId : null)); await refresh() }, onError })
+  const approve = useMutation({
+    mutationFn: () => applyChatProfileAssetsProposal(proposal.id),
+    onSuccess: async (response) => {
+      setState('saved')
+      const nextBatchId = response.batch?.id ?? (proposal.action === 'apply' ? proposal.batchId : undefined)
+      setBatchId(nextBatchId ?? null)
+      // The proposal is already applied: a failed refresh only leaves the views stale until their next fetch.
+      await Promise.all([
+        refresh(),
+        ...(response.result ? [refreshProfileAssets(queryClient, response.result.profileId, [response.result.applied], nextBatchId)] : []),
+      ]).catch(() => undefined)
+    },
+    onError,
+  })
   const dismiss = useMutation({ mutationFn: () => dismissChatProposal(proposal.id), onSuccess: async () => { setState('dismissed'); await refresh() }, onError })
   const busy = approve.isPending || dismiss.isPending
   const expressionCount = proposal.action === 'create' ? proposal.input.expressions?.length ?? presets.data?.find((preset) => preset.id === proposal.input.expressionPresetId)?.items?.length : undefined

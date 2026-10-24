@@ -39,7 +39,7 @@ export type ChatFlagViewer = Pick<McpRequester, 'accountId' | 'accountType'>
  * `choice`: a pick that answers the chat's question card (offer_choices) of that id. `order`: an order from a reply's
  * bar, on messages sent while orders still went out as messages (now they are done on the reply, see chatOrderRunner).
  */
-export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { pick?: true; choice?: { id: number; question: string }; order?: ChatOrderKind }
+export type ChatFlagSnapshot = Pick<ChatFlag, 'id' | 'icon' | 'name' | 'content'> & { displayContent?: string; pick?: true; choice?: { id: number; question: string }; order?: ChatOrderKind }
 
 export const CHAT_PICK_LIMITS = { perMessage: 12, length: 120 }
 const PICK_ICON = 'lucide:target'

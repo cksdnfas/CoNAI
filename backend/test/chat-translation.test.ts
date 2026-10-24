@@ -2,9 +2,10 @@ import './support/testTemp'
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'
-import { maskCodeBlocks, modelLanguageGuidance, restoreCodeBlocks, structuredProseIn, translateReply, translateUserInput, translatorOf, translateStructuredFields } from '../src/services/codex-chat/chatTranslation'
+import { maskCodeBlocks, modelLanguageGuidance, restoreCodeBlocks, structuredProseIn, translateReply, translateUserInput, translateUserMessage, translatorOf, translateStructuredFields } from '../src/services/codex-chat/chatTranslation'
 import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import { mockModelRows } from './modelRowMocks'
+import { buildFlagDirective } from '../src/services/codex-chat/chatFlags'
 
 // Model rows: 1 the translator's small model, 2 a model whose connection is gone, 3 a chat model.
 const translating = { translationSlotId: 1 }
@@ -198,4 +199,92 @@ test('user input: narration lines keep their `$`; a translation that loses one i
   t.mock.restoreAll()
   mockTranslator(t, 'The door bursts open\nWho is it?')
   assert.equal(await translateUserInput(translating, '$그때 문이 벌컥 열렸다\n누구야?'), null)
+})
+
+test('user turns translate selected instructions and picks in one batch, including input outside the display language; failures are visible and cancellation never sends', async t => {
+  let answer = JSON.stringify({ '0': 'Hello', '1': 'Answer briefly.', '2': 'Use the sword.' })
+  const requests = mockTranslator(t, () => Response.json({ choices: [{ message: { content: answer }, finish_reason: 'stop' }] }))
+  const profile = { ...translating, translationDisplayLanguage: 'ja' } as ChatProfile
+  const flags = [
+    { id: 1, icon: '', name: '짧게', content: '짧게 답해줘.' },
+    { id: 0, icon: '', name: '검 사용', content: '검을 써.', pick: true as const },
+  ]
+  const translated = await translateUserMessage(profile, '안녕', flags)
+  assert.equal(requests.length, 1, 'body, flag and pick share one translation request')
+  assert.equal(translated.content, 'Hello')
+  assert.equal(translated.display_content, '안녕')
+  assert.deepEqual(translated.flags.map(flag => [flag.name, flag.content]), [['짧게', 'Answer briefly.'], ['검 사용', 'Use the sword.']])
+  assert.equal(flags[0].content, '짧게 답해줘.', 'UI source snapshots are not mutated')
+  assert.equal(translated.error, null)
+  answer = '{}'
+  const failed = await translateUserMessage(profile, '안녕', flags)
+  assert.equal(failed.content, '안녕')
+  assert.match(failed.error!, /입력 번역.*원문/)
+  const controller = new AbortController()
+  controller.abort()
+  await assert.rejects(translateUserMessage(profile, '안녕', flags, controller.signal), { name: 'AbortError' })
+  assert.equal(requests.length, 2, 'cancelled input never requests a translation')
+  await translateUserMessage({ ...profile, translationSlotId: null }, '안녕', flags)
+  assert.equal(requests.length, 2, 'translation off makes no translation calls')
+})
+
+test('preserved tokens and unchanged mixed-script input never produce translation failure notices', async t => {
+  const requests = mockTranslator(t, () => Response.json({ choices: [{ message: { content: requests.at(-1)!.messages.at(-1)!.content }, finish_reason: 'stop' }] }))
+  const english = translating as ChatProfile
+  for (const text of ['@하나 hi', 'Hello &*미소*&', 'Hello `한글`', 'https://example.test/한글', '{{사용자}} hi']) {
+    const result = await translateUserMessage(english, text, [])
+    assert.equal(result.content, text)
+    assert.equal(result.error, null)
+    assert.equal(result.display_content, null)
+  }
+  assert.equal(requests.length, 0, 'preserved tokens do not trigger translation')
+  // One-letter replies and a user's own bracketed scene notes are prose: translated, and an echo is no failure.
+  for (const text of ['응', '한 hi', '[다음 날 아침]']) {
+    const before = requests.length
+    const result = await translateUserMessage(english, text, [])
+    assert.equal(requests.length, before + 1, `${text} is sent to the translator`)
+    assert.equal(result.error, null)
+  }
+  requests.length = 0
+  for (const language of ['ja', 'zh'] as const) {
+    const profile = { ...english, translationModelLanguage: language, translationDisplayLanguage: 'ko' as const }
+    for (const text of ['OK', 'https://example.test/hello']) {
+      const result = await translateUserMessage(profile, text, [])
+      assert.equal(result.content, text)
+      assert.equal(result.error, null)
+    }
+  }
+  const text = '안녕 hi'
+  assert.equal((await translateUserMessage(english, text, [])).error, null, 'unchanged plain translation is successful')
+  const flags = [{ id: 1, icon: '', name: '짧게', content: '짧게' }]
+  const result = await translateUserMessage(english, text, flags)
+  assert.equal(result.content, text)
+  assert.deepEqual(result.flags, flags, 'unchanged JSON leaves are retained')
+  assert.equal(result.error, null)
+})
+
+test('body-only translation stays plain with an active model-language flag', async t => {
+  const requests = mockTranslator(t, 'Hello')
+  const flags = [{ id: 1, icon: '', name: 'Brief', content: 'Answer briefly.' }]
+  const result = await translateUserMessage(translating as ChatProfile, '안녕', flags)
+  assert.equal(requests[0].messages.at(-1)?.content, '안녕')
+  assert.equal(result.content, 'Hello')
+  assert.deepEqual(result.flags, flags)
+  assert.equal(result.error, null)
+})
+
+test('multi-select input translates a repeated question once and keeps its answers in one directive group', async t => {
+  let questions = 0
+  const requests = mockTranslator(t, () => {
+    const strings = JSON.parse(requests.at(-1)!.messages.at(-1)!.content) as Record<string, string>
+    const translations: Record<string, string> = { '간다': 'Go', '기다린다': 'Wait' }
+    const answer = Object.fromEntries(Object.entries(strings).map(([key, text]) => [key, text === '어떻게 할까?' ? (++questions === 1 ? 'What now?' : 'What should we do?') : translations[text]]))
+    return Response.json({ choices: [{ message: { content: JSON.stringify(answer) }, finish_reason: 'stop' }] })
+  })
+  const flags = ['간다', '기다린다'].map(content => ({ id: 0, icon: '', name: content, content, pick: true as const, choice: { id: 7, question: '어떻게 할까?' } }))
+  const result = await translateUserMessage(translating as ChatProfile, 'Both, please.', flags)
+  assert.equal(requests.length, 1)
+  assert.equal(questions, 1)
+  assert.equal(result.error, null)
+  assert.equal(buildFlagDirective(result.flags), '[선택지 답: What now?]\n- Go\n- Wait')
 })

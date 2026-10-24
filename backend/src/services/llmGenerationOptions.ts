@@ -125,19 +125,6 @@ export function buildOpenAiGenerationFields(options: LlmGenerationOptions, think
   return fields
 }
 
-/** Body fields for Ollama's native /api/generate: sampling goes in `options`, reasoning in `think`. */
-export function buildOllamaGenerationFields(options: LlmGenerationOptions): Record<string, unknown> {
-  const { options: extraOptions, ...extra } = (options.extraParams ?? {}) as { options?: Record<string, unknown> } & Record<string, unknown>
-  const sampling: Record<string, unknown> = { ...(extraOptions && typeof extraOptions === 'object' ? extraOptions : {}) }
-  if (typeof options.temperature === 'number') sampling.temperature = options.temperature
-  if (typeof options.maxTokens === 'number') sampling.num_predict = options.maxTokens
-  const fields: Record<string, unknown> = { ...extra }
-  if (Object.keys(sampling).length > 0) fields.options = sampling
-  // Ollama takes think: false to turn reasoning off, or a level for models that grade it.
-  if (options.reasoningEffort) fields.think = options.reasoningEffort === 'none' ? false : options.reasoningEffort
-  return fields
-}
-
 /**
  * The options a summary request uses: no sampling surprises, and no long thinking when the profile reasons — or, on a
  * connection that turns thinking off with `enable_thinking` (a model that thinks unless told not to), always.

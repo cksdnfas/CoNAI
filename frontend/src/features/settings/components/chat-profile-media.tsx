@@ -1,5 +1,5 @@
 import { formatFileSize } from '@/lib/format-size'
-import { useMemo, useRef, useState, type FocusEvent, type RefObject } from 'react'
+import { useRef, useState, type FocusEvent, type RefObject } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Globe, ImageDown, ImageOff, Maximize2, Plus, RefreshCw, Trash2, TriangleAlert, Undo2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -33,7 +33,7 @@ const EXTENSION_BY_MIME: Record<string, string> = {
 type TextField = { label: string; text: string }
 
 /** Every prompt text of the draft, labelled the way the editor names it. */
-function draftTextFields(draft: Draft, t: Translate): TextField[] {
+function draftTextFields(draft: Pick<Draft, 'systemPrompt' | 'promptSections' | 'greeting' | 'alternateGreetings' | 'openingHistory'>, t: Translate): TextField[] {
   return [
     { label: t({ ko: '시스템 프롬프트', en: 'System prompt' }), text: draft.systemPrompt },
     ...draft.promptSections.map((section) => ({ label: section.title.trim() || t({ ko: '제목 없는 섹션', en: 'Untitled section' }), text: section.content })),
@@ -215,11 +215,12 @@ export function ChatProfileMediaRow({ draft, patch, localize, lastTextarea, open
 }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
-  const fields = useMemo(() => draftTextFields(draft, t), [draft, t])
-  const entries = useMemo(() => findEntries(fields), [fields])
-  const hashes = useMemo(() => [...new Set(entries.flatMap((entry) => entry.compositeHash ? [entry.compositeHash] : []))].sort(), [entries])
+  const { systemPrompt, promptSections, greeting, alternateGreetings, openingHistory } = draft
+  const fields = draftTextFields({ systemPrompt, promptSections, greeting, alternateGreetings, openingHistory }, t)
+  const entries = findEntries(fields)
+  const hashes = [...new Set(entries.flatMap((entry) => entry.compositeHash ? [entry.compositeHash] : []))].sort()
   const infoQuery = useQuery({ queryKey: ['chat-media-info', hashes.join(',')], queryFn: () => getChatMediaInfo(hashes), enabled: hashes.length > 0, staleTime: 60_000 })
-  const infoByHash = useMemo(() => new Map((infoQuery.data ?? []).map((info) => [info.compositeHash, info])), [infoQuery.data])
+  const infoByHash = new Map((infoQuery.data ?? []).map((info) => [info.compositeHash, info]))
   const [broken, setBroken] = useState<Set<string>>(() => new Set())
   const [selected, setSelected] = useState<string | null>(null)
   const [preview, setPreview] = useState<MediaEntry | null>(null)

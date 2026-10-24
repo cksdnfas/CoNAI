@@ -70,7 +70,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
         try {
           if (context.research && context.source === 'codex-chat') {
             context.research.validateSources(context.requester!, context.chatContext!.profileId);
-            if (!context.research.takeTool()) throw new Error('Research tool budget exhausted. Answer only from evidence already returned.');
+            if (!context.research.takeTool()) throw new Error('A summary has no tools. Answer only from the text already supplied.');
           }
           requireMcpToolAccess(context, toolName, input[0] as Record<string, unknown> | undefined);
         }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { LORE_KEY_LANGUAGES, LORE_KEY_LANGUAGE_MAX_LENGTH, normalizeLoreKeyLanguage } from '@conai/shared'
+import { CHAT_CAPTURE_LIMITS, LORE_KEY_LANGUAGES, LORE_KEY_LANGUAGE_MAX_LENGTH, normalizeLoreKeyLanguage } from '@conai/shared'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { RowGroup } from '@/components/ui/row-group'
@@ -10,14 +10,14 @@ import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { getClaudeModels } from '@/lib/api-agent-cli'
-import { CHAT_ADMIN_SETTINGS_QUERY_KEY, CHAT_STATUS_QUERY_KEY, getChatAdminSettings, updateChatAdminSettings, type WebResearchSettings } from '@/lib/api-codex-chat'
+import { CHAT_ADMIN_SETTINGS_QUERY_KEY, CHAT_STATUS_QUERY_KEY, TOOL_ROUND_LIMITS, getChatAdminSettings, updateChatAdminSettings, type WebResearchSettings } from '@/lib/api-codex-chat'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 import { SettingsRowsSkeleton } from './settings-rows'
 import { useSettingsAdvanced } from './settings-advanced'
 
 /** The chat-wide options and their save, shared by the groups below. */
-function useChatOptions() {
+export function useChatOptions({ reportErrors = true }: { reportErrors?: boolean } = {}) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
@@ -30,7 +30,7 @@ function useChatOptions() {
       void queryClient.invalidateQueries({ queryKey: ['codex-chat-thread'] })
       void queryClient.invalidateQueries({ queryKey: ['codex-chat-diagnostics'] })
     },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+    onError: (error) => { if (reportErrors) showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }) },
   })
   return { settingsQuery, settingsMutation }
 }
@@ -49,6 +49,31 @@ export function ChatMemorySettings() {
         <LoreKeyLanguageRow value={settingsQuery.data.loreKeyLanguage} disabled={settingsMutation.isPending}
           onChange={(loreKeyLanguage) => settingsMutation.mutate({ loreKeyLanguage })} />
       ) : null}
+    </RowGroup>
+  )
+}
+
+/**
+ * Settings › 채팅 › 자원, by the tool presets: the one tool limit (ChatAdminSettings.toolRoundLimit) every profile, engine
+ * runtime and plugin run follows.
+ */
+export function ChatToolSettings() {
+  const { t } = useI18n()
+  const { settingsQuery, settingsMutation } = useChatOptions()
+  const label = t({ ko: '도구 호출 반복 한도', en: 'Tool round limit' })
+  const limit = settingsQuery.data?.toolRoundLimit
+  return (
+    <RowGroup heading={t({ ko: '도구 사용', en: 'Tool use' })}>
+      {limit !== undefined ? (
+        <SettingRow label={label} info={t({
+          ko: '한 답변에서 모델이 도구를 부르고 결과를 받는 왕복의 최대 횟수야. 모든 프로필과 실행 방식(CoNAI 직접·pi·Claude Code), 플러그인 실행·조사, 웹 검색, pi codemode 스크립트 하나의 호출 수가 이 값을 따라. 닿으면 도구를 거두고 지금까지 한 일로 답해. Codex는 자체 반복을 써서 한도가 없어.',
+          en: 'The most model ↔ tool round trips one reply may take. Every profile and runtime (CoNAI direct, pi, Claude Code), plugin runs and research, web search and one pi codemode script\'s calls follow it. At the limit the tools go and the model answers with what it has. Codex runs its own loop without this cap.',
+        })}>
+          <NumberStepperInput variant="settings" className="w-24" min={TOOL_ROUND_LIMITS.min} max={TOOL_ROUND_LIMITS.max} precision={0} value={limit}
+            aria-label={label} disabled={settingsMutation.isPending}
+            onValueCommit={(value) => { const toolRoundLimit = Number(value); if (Number.isInteger(toolRoundLimit) && toolRoundLimit !== limit) settingsMutation.mutate({ toolRoundLimit }) }} />
+        </SettingRow>
+      ) : settingsQuery.isError ? null : <SettingsRowsSkeleton rows={1} />}
     </RowGroup>
   )
 }
@@ -73,7 +98,7 @@ export function PiCodemodeRow() {
   if (!settingsQuery.data) return settingsQuery.isError ? null : <SettingsRowsSkeleton rows={1} />
   return (
     <SettingsSwitchRow label={t({ ko: 'pi codemode', en: 'pi codemode' })} checked={settingsQuery.data.piCodemode} disabled={settingsMutation.isPending}
-      info={t({ ko: '모든 pi 프로필의 채팅에서 모델이 짧은 스크립트로 CoNAI 도구 여러 개를 한 번에 부르고 필요한 결과만 받아. 스크립트 하나는 도구를 8번까지 불러. 작은 모델은 스크립트를 잘 못 쓸 수 있어.', en: 'In every pi profile\'s chats, the model can call several CoNAI tools in one short script and get back only what it needs. One script makes up to 8 tool calls. Small models may not write scripts well.' })}
+      info={t({ ko: '모든 pi 프로필의 채팅에서 모델이 짧은 스크립트로 CoNAI 도구 여러 개를 한 번에 부르고 필요한 결과만 받아. 스크립트 하나는 도구를 채팅 자원의 도구 호출 반복 한도만큼 불러. 작은 모델은 스크립트를 잘 못 쓸 수 있어.', en: 'In every pi profile\'s chats, the model can call several CoNAI tools in one short script and get back only what it needs. One script makes as many tool calls as the tool round limit under chat resources. Small models may not write scripts well.' })}
       onCheckedChange={(piCodemode) => settingsMutation.mutate({ piCodemode })} />
   )
 }
@@ -96,7 +121,7 @@ export function ChatDiagnosticsSettings() {
           <SettingsSwitchRow label={t({ ko: '원문 기록', en: 'Capture raw requests' })} checked={diagnostics.captureRaw} disabled={settingsMutation.isPending}
             onCheckedChange={(captureRaw) => settingsMutation.mutate({ diagnostics: { captureRaw } })} />
           <SettingRow label={t({ ko: '채팅당 보관', en: 'Keep per chat' })}>
-            <NumberStepperInput variant="settings" className="w-24" min={1} max={200} precision={0} value={diagnostics.captureLimit}
+            <NumberStepperInput variant="settings" className="w-24" min={CHAT_CAPTURE_LIMITS.min} max={CHAT_CAPTURE_LIMITS.max} precision={0} value={diagnostics.captureLimit}
               aria-label={t({ ko: '채팅당 보관', en: 'Keep per chat' })} disabled={settingsMutation.isPending || !diagnostics.captureRaw}
               onValueCommit={(value) => { const captureLimit = Number(value); if (captureLimit !== diagnostics.captureLimit) settingsMutation.mutate({ diagnostics: { captureLimit } }) }} />
           </SettingRow>

@@ -45,6 +45,18 @@ export function isProfileAssetHidden(hash: string | null) {
   return Boolean(metadata && ImageSafetyService.isHidden(metadata.rating_score))
 }
 
+export function hiddenProfileAssets(profiles: Array<Pick<ChatProfile, 'avatarHash'>>) {
+  const hashes = [...new Set(profiles.flatMap((profile) => profile.avatarHash ? [profile.avatarHash] : []))]
+  const hidden = new Set<string>()
+  // Stay below SQLite's binding limit even for large profile directories.
+  for (let start = 0; start < hashes.length; start += 500) {
+    const batch = hashes.slice(start, start + 500)
+    const rows = imagesDb.prepare(`SELECT composite_hash, rating_score FROM media_metadata WHERE composite_hash IN (${batch.map(() => '?').join(',')})`).all(...batch) as Array<{ composite_hash: string; rating_score: number | null }>
+    for (const row of rows) if (ImageSafetyService.isHidden(row.rating_score)) hidden.add(row.composite_hash)
+  }
+  return hidden
+}
+
 /** Pending postprocess does not block a profile's original; safety always does, including legacy fallback. */
 export function resolveProfileAsset(profile: ChatProfile, kind: ChatProfileAssetKind) {
   const hash = kind === 'avatar' ? profile.avatarHash : kind === 'background' ? profile.backgroundHash : profile.referenceHash
@@ -57,7 +69,7 @@ export function resolveProfileAsset(profile: ChatProfile, kind: ChatProfileAsset
 }
 
 /** Additive fields shared by the public and admin profile responses. */
-export function profileAssetFields(profile: ChatProfile, canViewImages: boolean) {
+export function profileAssetFields(profile: ChatProfile, canViewImages: boolean, hidden?: ReadonlySet<string>) {
   return {
     appearance: profile.appearance,
     referenceHash: canViewImages ? profile.referenceHash : null,
@@ -67,7 +79,7 @@ export function profileAssetFields(profile: ChatProfile, canViewImages: boolean)
     assetVersion: canViewImages ? [profile.avatarHash, profile.backgroundHash, profile.referenceHash].map((hash) => hash?.slice(0, 8) ?? '').join('-') + `-${Date.parse(profile.updatedDate) || 0}` : null,
     // Whether the avatar asset route has anything to serve (a library image or a legacy data URL); clients skip the request otherwise.
     hasAvatar: canViewImages && Boolean(profile.avatarHash || profile.avatar),
-    avatarThumbnailUrl: canViewImages && profile.avatarHash && !isProfileAssetHidden(profile.avatarHash) ? `/api/images/${profile.avatarHash}/thumbnail` : null,
+    avatarThumbnailUrl: canViewImages && profile.avatarHash && !(hidden ? hidden.has(profile.avatarHash) : isProfileAssetHidden(profile.avatarHash)) ? `/api/images/${profile.avatarHash}/thumbnail` : null,
   }
 }
 

@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { parseJsonishInput } from '../../utils/jsonishInput'
 import { resolveUploadsPath } from '../../config/runtimePaths'
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
@@ -18,6 +19,7 @@ import {
 } from './shared'
 import { readQueueDebugMeta } from '../generation-queue/queueDebugMeta'
 import { enqueueGenerationJobs } from '../generation-queue/queueEnqueue'
+import { externalizeQueueInputDataUrls } from '../generation-queue/queueInputStore'
 import { assertCodexAvailable } from '../codexGenerationExecutor'
 import { parseCodexGenerationRequest } from '../codexGenerationOptions'
 import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from './queue-wait'
@@ -333,7 +335,7 @@ export async function executeCodexImageGenerationNode(
   const requestedSize = resolveCodexRequestedSize(resolvedInputs)
   const count = Math.min(CODEX_MAX_COUNT, Math.max(CODEX_DEFAULT_COUNT, parsePositiveIntegerish(resolvedInputs.count) ?? CODEX_DEFAULT_COUNT))
   const imageSaveOptions = buildQueueImageSaveOptions()
-  const requestPayload = parseCodexGenerationRequest({
+  const requestPayload = await parseCodexGenerationRequest({
     prompt,
     model: model ?? undefined,
     negative_prompt: negativePrompt ?? undefined,
@@ -342,6 +344,8 @@ export async function executeCodexImageGenerationNode(
     operation,
     image: inputImage ?? undefined,
     mask: maskImage ?? undefined,
+    references: parseJsonishInput(resolvedInputs.references, undefined),
+    preserve: resolvedInputs.preserve === '' ? undefined : resolvedInputs.preserve,
     imageSaveOptions,
   })
 
@@ -372,13 +376,13 @@ export async function executeCodexImageGenerationNode(
     const [jobId] = enqueueGenerationJobs({
       service_type: 'codex',
       workflow_name: moduleDefinition.name,
-      request_payload: {
+      request_payload: externalizeQueueInputDataUrls({
         ...requestPayload,
         _debug: {
           graph_execution_id: context.executionId,
           workflow_debug_mode: context.debugMode,
         },
-      },
+      }).value,
       request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
     }).jobIds
 

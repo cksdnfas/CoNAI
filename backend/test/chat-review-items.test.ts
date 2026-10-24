@@ -115,6 +115,16 @@ test('chat review items: lore conditions, card import report, post sections, att
     assert.ok(report.dropped.some((line) => line.includes('{{random:a,b}}')))
   })
 
+  await t.test('card import caps text before strict profile draft validation', async () => {
+    const imported = await importChatCard(Buffer.from(JSON.stringify({ name: '가'.repeat(80), system_prompt: 's'.repeat(21_000),
+      first_mes: 'g'.repeat(21_000), extensions: { depth_prompt: { prompt: 'a'.repeat(5000) } } })), null)
+    assert.equal(imported.name!.length, 60)
+    assert.equal(imported.systemPrompt!.length, 20_000)
+    assert.equal(imported.greeting!.length, 20_000)
+    assert.equal(imported.authorNote!.length, 4000)
+    assert.doesNotThrow(() => ChatProfileStore.draft({ ...imported, engine: 'codex' }))
+  })
+
   const profile = ChatProfileStore.create({ name: '카이', engine: 'llm', providerName: 'test', model: 'm', mcpEnabled: false, summaryEnabled: false,
     promptSections: [{ id: 'p', title: '대화 뒤', kind: 'post', content: '{{char}}는 반말로 답해.', enabled: true }] })
   const newThread = () => CodexChatService.createThread(requester, profile.id).id

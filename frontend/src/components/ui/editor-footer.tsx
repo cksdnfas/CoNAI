@@ -3,15 +3,18 @@ import { LoaderCircle, Save, Trash2 } from 'lucide-react'
 import { useI18n } from '@/i18n'
 import { IconButton } from './icon-button'
 import { ModalFooter } from './modal'
+import { Tip } from './tooltip'
 
 /**
  * The footer of an editor modal: Delete (red icon, no fill) on the left, then the editor's other actions as icons, and
  * Save at the right end. There is no Cancel: the header ✕ closes, and asks first when there are unsaved edits.
  */
-export function EditorFooter({ onDelete, deleteLabel, deleting = false, children, onSave, saveSubmit = false, canSave = true, saving = false, saveLabel }: {
+export function EditorFooter({ onDelete, deleteLabel, deleteDisabled = false, deleteTip, deleting = false, children, onSave, saveSubmit = false, canSave = true, saving = false, saveLabel }: {
   /** Left out: no delete (a new item, or one that cannot be deleted). */
   onDelete?: () => void
   deleteLabel?: string
+  deleteDisabled?: boolean
+  deleteTip?: ReactNode
   deleting?: boolean
   /** Other actions (export, duplicate, test…) as icon buttons. */
   children?: ReactNode
@@ -26,9 +29,13 @@ export function EditorFooter({ onDelete, deleteLabel, deleting = false, children
   return (
     <ModalFooter className="mt-4 gap-1 border-t border-line pt-3">
       {onDelete ? (
-        <IconButton size="icon-sm" variant="destructive-ghost" onClick={onDelete} disabled={deleting || saving} label={deleteLabel ?? t({ ko: '삭제', en: 'Delete' })}>
-          {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
-        </IconButton>
+        <Tip content={deleteTip}>
+          <span>
+            <IconButton size="icon-sm" variant="destructive-ghost" onClick={onDelete} disabled={deleteDisabled || deleting || saving} label={deleteLabel ?? t({ ko: '삭제', en: 'Delete' })}>
+              {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />}
+            </IconButton>
+          </span>
+        </Tip>
       ) : null}
       {children}
       <span className="flex-1" />

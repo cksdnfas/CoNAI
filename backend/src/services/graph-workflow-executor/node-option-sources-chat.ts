@@ -45,7 +45,7 @@ export const CHAT_NODE_OPTION_SOURCES: Record<string, NodeOptionSource> = {
   chat_rooms: (context) => {
     const owner = askingOwner(context)
     if (!owner) return []
-    const profileNames = new Map(ChatProfileStore.list().map((profile) => [profile.id, profile.name]))
+    const profileNames = new Map(ChatProfileStore.listNames().map((profile) => [profile.id, profile.name]))
     return CodexChatStore.listThreads(owner.accountId).map((thread) => ({
       value: String(thread.id),
       label: thread.title.trim() || (thread.profile_id !== null ? profileNames.get(thread.profile_id) : undefined) || `채팅 ${thread.id}`,

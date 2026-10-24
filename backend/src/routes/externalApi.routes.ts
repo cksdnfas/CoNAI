@@ -4,8 +4,9 @@ import { routeParam } from './routeParam';
 import { ExternalApiProvider } from '../models/ExternalApiProvider';
 import { ExternalApiService } from '../services/externalApiService';
 import { ChatProfileStore } from '../services/codex-chat/chatProfiles';
-import { resolveProfileModel } from '../services/codex-chat/chatModelRoles';
-import { deleteModelsOfConnection, modelReferencesOfConnection } from '../services/codex-chat/modelSlots';
+import { assertConnectionTypeChange, deleteModelsOfConnection, modelReferencesOfConnection } from '../services/codex-chat/modelSlots';
+import { ChatProfileError } from '../services/codex-chat/chatProfileError';
+import { getUserSettingsDb } from '../database/userSettingsDb';
 import { fetchOpenAiCompatibleModels, toOpenAiApiBase } from '../services/codex-chat/llmChatCompletion';
 import { listTypesafeModels } from '../services/judge/typesafeClient';
 import { checkThinkingSwitch } from '../services/codex-chat/thinkingSwitchProbe';
@@ -49,19 +50,7 @@ router.get('/llm-options', requirePermission('workflows.view'), asyncHandler(asy
 router.get('/llm-profile-options', requirePermission('workflows.view'), asyncHandler(async (_req: Request, res: Response) => {
   res.json({
     success: true,
-    data: ChatProfileStore.list()
-      .filter((profile) => profile.engine === 'llm')
-      .map((profile) => {
-        const resolved = resolveProfileModel(profile, 'chat');
-        return {
-          id: profile.id,
-          name: profile.name,
-          avatar: profile.avatar,
-          provider_name: resolved?.providerName ?? '',
-          model: resolved?.model || null,
-          is_enabled: profile.isEnabled,
-        };
-      }),
+    data: ChatProfileStore.workflowOptions(),
   });
 }));
 
@@ -202,7 +191,17 @@ router.put('/providers/:name', asyncHandler(async (req: Request, res: Response) 
     return;
   }
 
-  const updated = ExternalApiProvider.update(name, input);
+  let updated: ReturnType<typeof ExternalApiProvider.update>;
+  try {
+    updated = getUserSettingsDb().transaction(() => {
+      if (input.provider_type !== undefined) assertConnectionTypeChange(name, input.provider_type);
+      return ExternalApiProvider.update(name, input);
+    })();
+  } catch (error) {
+    if (!(error instanceof ChatProfileError)) throw error;
+    res.status(409).json({ success: false, error: error.message });
+    return;
+  }
 
   if (!updated) {
     res.status(400).json({

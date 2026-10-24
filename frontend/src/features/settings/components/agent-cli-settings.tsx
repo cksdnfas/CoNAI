@@ -16,7 +16,8 @@ import { useI18n } from '@/i18n'
 import { CodexDeviceLoginDialog } from '@/features/image-generation/components/codex-device-login-dialog'
 import { getCodexCliVersion, updateCodexCli } from '@/lib/api-image-generation-queue'
 import { PiCodemodeRow } from './chat-options-settings'
-import { cancelClaudeLogin, getAgentCliStatus, getAgentCliUsage, getAgentCliVersion, getClaudeLogin, refreshAgentCliUsage, startClaudeLogin, submitClaudeLoginCode, updateAgentCli } from '@/lib/api-agent-cli'
+import { cancelClaudeLogin, getAgentCliStatus, getAgentCliVersion, getClaudeLogin, refreshAgentCliUsage, startClaudeLogin, submitClaudeLoginCode, updateAgentCli } from '@/lib/api-agent-cli'
+import { agentCliStatusQueryKey, agentCliUsageQueryKey, useAgentCliQueries } from './llm-agent-cli-queries'
 
 function ClaudeLoginDialog({ open, onClose, onSucceeded }: { open: boolean; onClose: () => void; onSucceeded: () => void }) {
   const { t } = useI18n()
@@ -113,12 +114,11 @@ function AgentCliRow({ agent }: { agent: AgentRuntimeName }) {
   const cli = agent === 'pi' ? null : agent
   const name = agent === 'codex' ? 'Codex' : agent === 'claude' ? 'Claude Code' : 'pi'
   const versionKey = [agent === 'codex' ? 'codex-cli-version' : agent === 'claude' ? 'claude-cli-version' : 'pi-runtime-version']
-  const status = useQuery({ queryKey: ['agent-cli-status', agent], queryFn: () => getAgentCliStatus(agent), retry: false, refetchInterval: 30000 })
+  const { status, usage } = useAgentCliQueries(agent)
   const authenticated = status.data?.authenticated === true
-  const usage = useQuery({ queryKey: ['agent-cli-usage', agent], queryFn: () => cli ? getAgentCliUsage(cli) : null, enabled: authenticated && cli !== null, retry: false, refetchInterval: 300000 })
   const version = useQuery({ queryKey: versionKey, queryFn: () => agent === 'codex' ? getCodexCliVersion() : getAgentCliVersion(agent).then((data) => ({ success: true, data })), retry: false, staleTime: 3600000, refetchInterval: (query) => query.state.data?.data.updating ? 2000 : false })
   const refreshStatus = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ['agent-cli-status', agent] })
+    void queryClient.invalidateQueries({ queryKey: agentCliStatusQueryKey(agent) })
     void queryClient.invalidateQueries({ queryKey: ['codex-generation-status'] })
     void queryClient.invalidateQueries({ queryKey: ['codex-chat-status'] })
     void queryClient.invalidateQueries({ queryKey: ['codex-chat-profiles'] })
@@ -131,14 +131,14 @@ function AgentCliRow({ agent }: { agent: AgentRuntimeName }) {
   })
   const refresh = useMutation({
     mutationFn: async () => {
-      await queryClient.cancelQueries({ queryKey: ['agent-cli-usage', agent] })
+      await queryClient.cancelQueries({ queryKey: agentCliUsageQueryKey(agent) })
       const [versionResult, usageResult] = await Promise.allSettled([
         agent === 'codex' ? getCodexCliVersion({ refresh: true }) : getAgentCliVersion(agent, true).then((data) => ({ success: true, data })),
         // pi: load the runtime once, so a package that does not load shows in the status.
         cli ? refreshAgentCliUsage(cli) : getAgentCliStatus('pi', true),
       ])
       if (versionResult.status === 'fulfilled') queryClient.setQueryData(versionKey, versionResult.value)
-      if (cli && usageResult.status === 'fulfilled') queryClient.setQueryData(['agent-cli-usage', agent], usageResult.value)
+      if (cli && usageResult.status === 'fulfilled') queryClient.setQueryData(agentCliUsageQueryKey(agent), usageResult.value)
       if (versionResult.status === 'rejected') throw versionResult.reason
       if (usageResult.status === 'rejected') throw usageResult.reason
     },

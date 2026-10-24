@@ -15,6 +15,7 @@ import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_BLOCKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
+  CHAT_PROFILE_DEFAULTS_QUERY_KEY as DEFAULTS_QUERY_KEY,
   MODEL_SLOTS_QUERY_KEY,
   applyChatProposal,
   undoChatLoreProposal,
@@ -30,7 +31,6 @@ import {
   updateChatProfile,
   type ChatDisplayBlock,
   type ChatProfile,
-  type ChatProfileDefaults,
   type ChatProfileInput,
   type ChatSharedBlock,
   type CodexChatToolCall,
@@ -57,7 +57,6 @@ import { TaskPlanCard } from './chat-task-ui'
 const ChatBlockEditorModal = lazy(() => import('@/features/settings/components/chat-block-editor-modal').then((module) => ({ default: module.ChatBlockEditorModal })))
 const ChatProfileEditorModal = lazy(() => import('@/features/settings/components/chat-profile-editor-modal').then((module) => ({ default: module.ChatProfileEditorModal })))
 
-const DEFAULTS_QUERY_KEY = ['codex-chat-profile-defaults'] as const
 const LONG_TEXT = 160
 
 /** Cards for the settings a reply proposed (and a slim row for one still being written). */
@@ -225,26 +224,6 @@ function BlockProposalCard({ proposal, threadId }: { proposal: BlockProposal; th
   )
 }
 
-/** The profile fields a proposal does not set come from the server's defaults, as the editor does for a new profile. */
-function fullProfileInput(defaults: ChatProfileDefaults, input: Record<string, unknown>, defaultSlotId: number | null): ChatProfileInput {
-  const proposed = input as ChatProfileInput
-  return {
-    loreScanDepth: defaults.loreScanDepth,
-    loreTokenBudget: defaults.loreTokenBudget,
-    loreDepth: defaults.loreDepth,
-    contextTurns: defaults.contextTurns,
-    summaryTriggerTurns: defaults.summaryTriggerTurns,
-    maxToolRounds: defaults.maxToolRounds,
-    toolOutputLimit: defaults.toolOutputLimit,
-    ...(defaultSlotId !== null ? { modelSlotId: defaultSlotId } : {}),
-    ...proposed,
-    style: { ...defaults.style, ...(proposed.style ?? {}) },
-    engine: 'llm',
-    mcpEnabled: false,
-    isEnabled: true,
-  }
-}
-
 function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal; threadId?: number }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -262,9 +241,7 @@ function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const defaults = defaultsQuery.data ?? await getChatProfileDefaults()
-      const defaultSlotId = (slots ?? await listModelSlots()).find((slot) => slot.isDefault)?.id ?? null
-      const created = await createChatProfile(fullProfileInput(defaults, proposal.input, defaultSlotId))
+      const created = await createChatProfile({ ...input, engine: 'llm', mcpEnabled: false, isEnabled: true })
       await markChatProposalSaved(proposal.id, created.id)
       return created
     },
@@ -325,7 +302,6 @@ const UPDATE_LABELS: Record<string, { ko: string; en: string }> = {
   maxTokens: { ko: '최대 출력 토큰', en: 'Max output tokens' },
   contextTurns: { ko: '컨텍스트 턴', en: 'Context turns' },
   contextTokens: { ko: '컨텍스트 토큰', en: 'Context tokens' },
-  maxToolRounds: { ko: '도구 왕복', en: 'Tool rounds' },
   toolOutputLimit: { ko: '도구 결과 길이', en: 'Tool output limit' },
   summaryEnabled: { ko: '요약', en: 'Summary' },
   summaryTriggerTurns: { ko: '요약 턴 수', en: 'Turns per summary' },

@@ -1,6 +1,7 @@
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import fs from 'fs'
 import path from 'path'
+import { parseJsonishInput } from '../../utils/jsonishInput'
 import { resolveUploadsPath } from '../../config/runtimePaths'
 import { throwIfExecutionAborted } from './execution-abort'
 import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
@@ -43,28 +44,6 @@ const TEXT_RESPONSE_CONTENT_TYPES = [
   'application/x-www-form-urlencoded',
   'text/',
 ]
-
-/** Parse a JSON-ish input value while preserving already-parsed values. */
-function parseJsonishInput(value: unknown, fallback: unknown) {
-  if (value === undefined || value === null || value === '') {
-    return fallback
-  }
-
-  if (typeof value !== 'string') {
-    return value
-  }
-
-  const trimmedValue = value.trim()
-  if (!trimmedValue) {
-    return fallback
-  }
-
-  try {
-    return JSON.parse(trimmedValue)
-  } catch {
-    return value
-  }
-}
 
 /** Convert key/value editor output or JSON objects into one plain object. */
 export function normalizeApiKeyValueMap(value: unknown) {

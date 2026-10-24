@@ -16,6 +16,8 @@ export type GeneratedImageSaveOptions = {
   sourceMimeType?: string;
   originalFileName?: string;
   metadataPatch?: Partial<AIMetadata>;
+  /** Server-only integrity check, after final encoding/write and before library registration. */
+  verifySavedFile?: (absolutePath: string) => Promise<void>;
 };
 
 /**
@@ -151,7 +153,25 @@ export class FileSaver {
         height = metadata.height || 0;
       }
 
-      await fs.promises.writeFile(fullPath, outputBuffer);
+      if (options?.verifySavedFile) {
+        // Never expose unverified output to the recursive uploads watcher.
+        const relativeTemp = path.relative(runtimePaths.uploadsDir, runtimePaths.tempDir);
+        if (!relativeTemp.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeTemp)) {
+          throw new Error('Verified image staging must be outside the uploads directory');
+        }
+        await fs.promises.mkdir(runtimePaths.tempDir, { recursive: true });
+        const stagingDirectory = await fs.promises.mkdtemp(path.join(runtimePaths.tempDir, 'verified-image-'));
+        try {
+          const stagedPath = path.join(stagingDirectory, filename);
+          await fs.promises.writeFile(stagedPath, outputBuffer);
+          await options.verifySavedFile(stagedPath);
+          await fs.promises.rename(stagedPath, fullPath);
+        } finally {
+          await fs.promises.rm(stagingDirectory, { recursive: true, force: true });
+        }
+      } else {
+        await fs.promises.writeFile(fullPath, outputBuffer);
+      }
 
       const stats = await fs.promises.stat(fullPath);
       const relativePath = normalizeRelativePath(fullPath, runtimePaths.uploadsDir);

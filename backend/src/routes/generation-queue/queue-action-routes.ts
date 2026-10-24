@@ -261,7 +261,7 @@ export function createGenerationQueueActionRoutes() {
 
     if (service_type === 'codex') {
       try {
-        normalizedRequestPayload = parseCodexGenerationRequest(request_payload)
+        normalizedRequestPayload = await parseCodexGenerationRequest(request_payload)
       } catch (error) {
         sendRouteBadRequest(res, error instanceof Error ? error.message : 'Invalid Codex request')
         return

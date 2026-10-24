@@ -6,13 +6,13 @@ import { automaticReplyRouting, messageSender, quoteMessage, requireReplyTarget,
 import { registerChatReply, skipThreadGenerationReactions } from './chatReplyRegistry'
 import { notifyChatUserSend } from './chatSendEvents'
 import type { McpRequester } from '../../mcp/context'
-import { inlineTextsForChat, loadAttachedImages, validateChatAttachments } from './chatAttachments'
+import { inlineTextsForChat, loadAttachedImages, validateChatAttachments, withLatestMediaGeneration } from './chatAttachments'
 import { generatedImagesTokens, loadInlineGeneratedImages, withGeneratedImages } from './chatGenerationPrompting'
 import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
 import { foldGroupBlockState, parseBlockEdits } from './chatBlockState'
 import { GROUP_LIMITS, GROUP_MEMBER_MAX, ChatGroupStore, groupLimitsOf } from './chatGroupStore'
 import { ChatProfileStore, sessionRuntimeOf, type ChatProfile } from './chatProfiles'
-import { translateReply, translateUserInput, translatorOf } from './chatTranslation'
+import { translateReply, translateUserMessage, translatorOf } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
 import { stripEchoedAddresses } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaForThread, type ChatUserProfile } from './chatUserProfiles'
@@ -234,7 +234,7 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
   const controller = new AbortController()
   const bounded = readGroupReplyHistory(thread, profile, { threadId: run.threadId, excludeMessageId: replacingMessageId })
   const history = bounded.history
-  const messages = withGenerationOutcomes(bounded.messages)
+  const messages = withLatestMediaGeneration(withGenerationOutcomes(bounded.messages), profile, requester)
   const source = sourceMessageId === replacingMessageId ? null : CodexChatStore.findMessage(run.threadId, sourceMessageId) ?? null
   const replyId = randomUUID()
   const context: ChatExecutionContext = { threadId: run.threadId, profileId: profile.id, kind: 'group', replyId, rootExecutionId: chatExecutionRoot(run.threadId, sourceMessageId) }
@@ -576,7 +576,7 @@ export const GroupChatService = {
    * (together as far as their connections allow) — or the representative when no one is addressed.
    * An automation's wake (`options.routine`) never cuts in: it fails while the room is talking, and may lower the
    * room's chain limit for its own run. A task continuation (`options.task`, see ChatTaskRunner) does not either, and
-   * goes to the member its step names (`options.recipients`) as it is, untranslated.
+   * goes to the member its step names (`options.recipients`), using the room's input translation like a user send.
    */
   async sendMessage(requester: McpRequester, threadId: number, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, mediaHashes?: unknown, picks?: unknown, replyToMessageId?: unknown, options: { routine?: ChatRoutineRouting; task?: ChatTaskRouting; recipients?: number[]; chainLimit?: number | null } = {}) {
     const thread = requireGroup(requester, threadId)
@@ -603,14 +603,15 @@ export const GroupChatService = {
 
     await startRun(threadId, listener, async (run) => {
       // Reserve the room before translation so stop() also cancels preparation.
-      const modelText = options.task ? null : await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed, run.controller.signal, { threadId })
+      const translated = await translateUserMessage(translatorOf(memberProfiles(threadId)), trimmed, flags, run.controller.signal, { threadId })
       run.controller.signal.throwIfAborted()
       if (typeof options.chainLimit === 'number' && options.chainLimit >= 0) run.chainLimit = Math.min(run.chainLimit, Math.floor(options.chainLimit))
       if (routing.replyTo) requireReplyTarget(threadId, routing.replyTo.messageId)
-      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', content: modelText ?? trimmed, display_content: modelText ? trimmed : null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
+      const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', ...translated, tool_calls: [], status: 'completed', mediaAttachments, routing }, attachments.map((file) => file.id))
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       if (judgeRoutes) await routeByJudge(run, requester, userMessageId, routing)
       emit(run, { type: 'user', message: findMessage(threadId, userMessageId) })
+      if (translated.error) emit(run, { type: 'error', message: translated.error })
       run.queue = (routing.recipients as number[]).map((profileId) => ({ profileId, sourceMessageId: userMessageId }))
       await processQueue(run, requester, { chain: true })
     })
@@ -639,6 +640,17 @@ export const GroupChatService = {
         if (sessionRuntimeOf(speaker)) resetMemberMemory(requester, threadId, speaker.id)
         emit(run, { type: 'rewind', mode: 'regenerate', message })
         const sourceId = message.routing?.replyTo?.messageId ?? CodexChatStore.latestUserMessageId(threadId) ?? 0
+        // A source row whose translation was stopped or failed is translated before the regenerated reply reads it.
+        const source = CodexChatStore.findMessage(threadId, sourceId)
+        const translator = translatorOf(memberProfiles(threadId))
+        if (translator && source?.role === 'user' && source.display_content === null) {
+          const flags = source.flags ?? []
+          const translated = await translateUserMessage(translator, source.content, flags, run.controller.signal, { threadId })
+          run.controller.signal.throwIfAborted()
+          if (translated.display_content !== null || translated.error !== null || translated.flags !== flags) {
+            CodexChatStore.setUserMessageTranslation(threadId, sourceId, translated.content, translated.display_content, translated.flags, translated.error)
+          }
+        }
         const reply = replyAs(run, requester, speaker, sourceId, messageId)
         emit(run, { type: 'speaker', profileId: speaker.id, speakers: [speaker.id], queue: [] })
         const routing = run.active.get(speaker.id)?.routing
@@ -655,13 +667,14 @@ export const GroupChatService = {
     routing.recipients = userRecipients(requester, thread, trimmed, routing)
     const judgeRoutes = unaddressed(thread, trimmed, routing)
     await startRun(threadId, listener, async (run) => {
-      const modelText = await translateUserInput(translatorOf(memberProfiles(threadId)), trimmed, run.controller.signal, { threadId })
+      const translated = await translateUserMessage(translatorOf(memberProfiles(threadId)), trimmed, message.flags ?? [], run.controller.signal, { threadId })
       run.controller.signal.throwIfAborted()
-      CodexChatStore.editUserMessage(threadId, messageId, modelText ?? trimmed, modelText ? trimmed : null)
+      CodexChatStore.editUserMessage(threadId, messageId, translated.content, translated.display_content, translated.flags, translated.error)
       CodexChatStore.setMessageRouting(threadId, messageId, routing)
       resetCodexMemory(requester, threadId)
       if (judgeRoutes) await routeByJudge(run, requester, messageId, routing)
-      emit(run, { type: 'rewind', mode: 'edit', message: { ...message, content: modelText ?? trimmed, display_content: modelText ? trimmed : null, routing } })
+      emit(run, { type: 'rewind', mode: 'edit', message: { ...message, ...translated, routing } })
+      if (translated.error) emit(run, { type: 'error', message: translated.error })
       run.queue = (routing.recipients as number[]).map((profileId) => ({ profileId, sourceMessageId: messageId }))
       await processQueue(run, requester, { chain: true })
     })

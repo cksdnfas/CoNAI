@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { AgentCliName, ChatPageData } from '@conai/shared'
 import { ChevronRight, RefreshCw } from 'lucide-react'
@@ -13,9 +13,8 @@ import { DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
-import { getAgentCliStatus, getAgentCliUsage } from '@/lib/api-agent-cli'
 import { CHAT_JUDGE_STATS_QUERY_KEY, getChatJudgeStats } from '@/lib/api-chat-judge'
-import { getExternalApiProviders } from '@/lib/api-external-api'
+import { EXTERNAL_API_PROVIDERS_QUERY_KEY, getExternalApiProviders } from '@/lib/api-external-api'
 import { getLlmUsage, LLM_USAGE_QUERY_KEY, type LlmUsageEngine, type LlmUsagePurpose, type LlmUsageSummary } from '@/lib/api-llm-usage'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
@@ -23,6 +22,7 @@ import { AgentCliUsageBars } from './agent-cli-settings'
 import { Sparkline, StackedBars, type StackedSeries } from './llm-usage-charts'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { useAgentCliChatData } from './use-llm-connections-chat-page'
+import { useAgentCliQueries } from './llm-agent-cli-queries'
 
 type Split = 'purpose' | 'model'
 type Metric = 'tokens' | 'requests'
@@ -133,12 +133,9 @@ function pick(all: StackedSeries[], values: number[][], requests: number[][]): C
 function SubscriptionLimits() {
   const { t } = useI18n()
   const agents: AgentCliName[] = ['codex', 'claude']
-  const statuses = useQuery({ queryKey: ['agent-cli-status', 'codex'], queryFn: () => getAgentCliStatus('codex'), retry: false, refetchInterval: 30000 })
-  const claudeStatus = useQuery({ queryKey: ['agent-cli-status', 'claude'], queryFn: () => getAgentCliStatus('claude'), retry: false, refetchInterval: 30000 })
-  const signedIn = { codex: statuses.data?.authenticated === true, claude: claudeStatus.data?.authenticated === true }
-  const codexUsage = useQuery({ queryKey: ['agent-cli-usage', 'codex'], queryFn: () => getAgentCliUsage('codex'), enabled: signedIn.codex, retry: false, refetchInterval: 300000 })
-  const claudeUsage = useQuery({ queryKey: ['agent-cli-usage', 'claude'], queryFn: () => getAgentCliUsage('claude'), enabled: signedIn.claude, retry: false, refetchInterval: 300000 })
-  const windows = { codex: signedIn.codex ? codexUsage.data?.windows ?? [] : [], claude: signedIn.claude ? claudeUsage.data?.windows ?? [] : [] }
+  const codex = useAgentCliQueries('codex')
+  const claude = useAgentCliQueries('claude')
+  const windows = { codex: codex.status.data?.authenticated ? codex.usage.data?.windows ?? [] : [], claude: claude.status.data?.authenticated ? claude.usage.data?.windows ?? [] : [] }
   const shown = agents.filter((agent) => windows[agent].length > 0)
   if (shown.length === 0) return null
   return (
@@ -165,11 +162,11 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
   const [split, setSplitState] = useState<Split>(readSplit)
   const [metric, setMetric] = useState<Metric>('tokens')
   const usageQuery = useQuery({ queryKey: [...LLM_USAGE_QUERY_KEY, days], queryFn: () => getLlmUsage(days) })
-  const providersQuery = useQuery({ queryKey: ['external-api-providers', 'settings-llm-connections'], queryFn: getExternalApiProviders })
+  const providersQuery = useQuery({ queryKey: EXTERNAL_API_PROVIDERS_QUERY_KEY, queryFn: getExternalApiProviders })
   const judgeQuery = useQuery({ queryKey: [...CHAT_JUDGE_STATS_QUERY_KEY, undefined, undefined, days], queryFn: () => getChatJudgeStats({ days }) })
-  const names = useMemo(() => new Map((providersQuery.data ?? []).map((provider) => [provider.provider_name, provider.display_name || provider.provider_name])), [providersQuery.data])
+  const names = new Map((providersQuery.data ?? []).map((provider) => [provider.provider_name, provider.display_name || provider.provider_name]))
   const summary = usageQuery.data
-  const chart = useMemo(() => (summary ? chartData(summary, split, names, t) : null), [summary, split, names, t])
+  const chart = summary ? chartData(summary, split, names, t) : null
 
   const setSplit = (next: Split) => {
     setSplitState(next)

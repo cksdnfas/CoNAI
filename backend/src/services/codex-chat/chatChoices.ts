@@ -2,6 +2,19 @@ import type { ChatChoiceProposal } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { ChatFlagSnapshot } from './chatFlags'
 import { ChatProposalStore } from './chatProposals'
+import type { ChatProfile } from './chatProfiles'
+import { translateDisplayFields } from './chatTranslation'
+import type { LlmUsageTag } from '../llmUsage'
+
+type BilingualChoice = ChatChoiceProposal & { modelQuestion?: string; modelLabels?: string[] }
+
+/** One translation for the whole card, with the model's originals kept outside its display prose. */
+export async function translateChoice(profile: ChatProfile, choice: ChatChoiceProposal, signal: AbortSignal, attribution?: Omit<LlmUsageTag, 'purpose'>): Promise<BilingualChoice> {
+  const display = await translateDisplayFields(profile, choice, ['question', 'options.*.label', 'options.*.detail'], signal, attribution)
+  signal.throwIfAborted()
+  if (!display || new Set(display.options.map(option => option.label)).size !== display.options.length) return choice
+  return { ...display, modelQuestion: choice.question, modelLabels: choice.options.map(option => option.label) }
+}
 
 const CHOICE_ICON = 'lucide:list-checks'
 
@@ -29,12 +42,12 @@ export function readChoiceAnswer(threadId: number, value: unknown): { flags: Cha
   const proposal = Number.isSafeInteger(proposalId) && ChatProposalStore.threadIdOf(proposalId) === threadId ? ChatProposalStore.find(proposalId) : null
   if (proposal?.kind !== 'choice') return { error: '선택지를 찾을 수 없어.' }
   if (ChatProposalStore.replyIdOf(proposalId) !== latestReplyId(threadId)) return { error: '이 선택지는 이미 지나갔어. 새로 보내줘.' }
-  const choice = proposal as ChatChoiceProposal & { id: number }
+  const choice = proposal as BilingualChoice & { id: number }
   const labels = Array.isArray(input.answers) ? [...new Set(input.answers.filter((label): label is string => typeof label === 'string'))] : []
   const options = labels.map((label) => choice.options.find((option) => option.label === label))
   if (labels.length === 0 || options.some((option) => !option) || (!choice.multiple && labels.length > 1)) return { error: '선택지에 없는 답이야.' }
   return {
-    flags: labels.map((label) => ({ id: 0, icon: CHOICE_ICON, name: label, content: label, pick: true, choice: { id: choice.id, question: choice.question } })),
+    flags: labels.map((label) => ({ id: 0, icon: CHOICE_ICON, name: label, content: choice.modelLabels?.[choice.options.findIndex(option => option.label === label)] ?? label, ...(choice.modelLabels ? { displayContent: label } : {}), pick: true, choice: { id: choice.id, question: choice.modelQuestion ?? choice.question } })),
     withoutPage: options.some((option) => option?.withoutPage === true),
   }
 }

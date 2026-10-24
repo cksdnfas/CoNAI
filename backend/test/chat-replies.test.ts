@@ -54,6 +54,202 @@ test('message replies: storage, delivery, context, and generation ownership', { 
   const createRoom = () => GroupChatService.create(requester, { profileIds: profiles.map((profile) => profile.id), representativeId: a.id, userProfileId: null })
   const response = (content: string, tool?: { name: string; args: unknown }) => Response.json({ choices: [{ message: { content, ...(tool ? { tool_calls: [{ id: `call-${Math.random()}`, type: 'function', function: { name: tool.name, arguments: JSON.stringify(tool.args) } }] } : {}) }, finish_reason: tool ? 'tool_calls' : 'stop' }] })
 
+  await t.test('input translation reaches direct sends, edits and group task continuations before the chat model, including picks', async s => {
+    const profile = ChatProfileStore.create({
+      name: 'Translator', engine: 'llm', providerName: 'test', model: 'target',
+      translationProviderName: 'test', translationModel: 'translator',
+      mcpEnabled: false, summaryEnabled: false,
+    })
+    const requests: Array<{ model: string; messages: Array<{ role: string; content: unknown }> }> = []
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+      const body = JSON.parse(init.body as string)
+      requests.push(body)
+      if (body.model !== 'translator') return response('끝.')
+      const input = body.messages.at(-1).content as string
+      if (input === '작업 계속') return response('Continue the task.')
+      const translations: Record<string, string> = { '다음 장면': 'Next scene.', '검 사용': 'Use the sword.', '장면 수정': 'Edit the scene.', 'Next?': '다음은?', Go: '간다', Stay: '머문다', '간다': 'Go' }
+      if (translations[input]) return response(translations[input])
+      const texts = JSON.parse(input) as Record<string, string>
+      return response(JSON.stringify(Object.fromEntries(Object.entries(texts).map(([key, text]) => {
+        assert.ok(translations[text], `unexpected translation input: ${text}`)
+        return [key, translations[text]]
+      }))))
+    })
+    const direct = CodexChatStore.findThreadById(LlmChatService.createThread(requester, profile.id))!
+    await LlmChatService.sendMessage(requester, direct, '다음 장면', () => {}, undefined, undefined, ['검 사용'])
+    const user = CodexChatStore.listMessages(direct.id).find(message => message.role === 'user')!
+    assert.equal(user.content, 'Next scene.')
+    assert.equal(user.display_content, '다음 장면')
+    assert.equal(user.flags?.[0].content, 'Use the sword.')
+    assert.equal(user.flags?.[0].name, '검 사용')
+    const first = JSON.stringify(requests.find(request => request.model === 'target')?.messages)
+    assert.match(first, /Next scene\./)
+    assert.match(first, /Use the sword\./)
+    assert.ok(!first.includes('다음 장면') && !first.includes('검 사용'))
+    await LlmChatService.rewriteMessage(requester, CodexChatStore.findThreadById(direct.id)!, user.id, '장면 수정', () => {})
+    assert.equal(CodexChatStore.findMessage(direct.id, user.id)?.content, 'Edit the scene.')
+
+    // A translated card is answered by its display label, but the stored model question/answer stay original.
+    const latest = CodexChatStore.latestMessage(direct.id)!
+    const context: ChatExecutionContext = { threadId: direct.id, profileId: profile.id, kind: 'direct', replyId: latest.routing!.replyId }
+    const controller = new AbortController()
+    const unregister = registerChatReply(context, controller.signal, () => latest.routing!)
+    const bridge = await openChatMcpBridge(requester, ['read'], null, { chatContext: context })
+    let proposalId: number
+    try {
+      const made = await bridge.call('offer_choices', { question: 'Next?', options: [{ label: 'Go' }, { label: 'Stay' }] })
+      assert.ok(!made.isError)
+      const { ChatProposalStore } = await import('../src/services/codex-chat/chatProposals')
+      const card = ChatProposalStore.forReply(direct.id, context.replyId!, 'choice')[0]
+      assert.ok(card.kind === 'choice')
+      assert.equal(card.question, '다음은?')
+      assert.deepEqual(card.options.map(option => option.label), ['간다', '머문다'])
+      const { proposalStatuses } = await import('../src/services/codex-chat/chatPageContext')
+      assert.equal(proposalStatuses(direct.id, [card.id])[0].name, '선택지 "Next?"')
+      proposalId = card.id
+    } finally {
+      await bridge.close()
+      unregister()
+    }
+    await LlmChatService.sendMessage(requester, CodexChatStore.findThreadById(direct.id)!, '간다', () => {}, undefined, undefined, undefined, undefined, undefined, undefined, { choice: { proposalId, answers: ['간다'] } })
+    const picked = CodexChatStore.listMessages(direct.id).filter(message => message.role === 'user').at(-1)!
+    assert.equal(picked.content, 'Go')
+    assert.equal(picked.flags?.[0].name, '간다')
+    assert.equal(picked.flags?.[0].content, 'Go')
+    assert.equal(picked.flags?.[0].choice?.question, 'Next?')
+    const pickRequest = JSON.stringify(requests.filter(request => request.model === 'target').at(-1)?.messages)
+    assert.match(pickRequest, /Next\?/)
+    assert.match(pickRequest, /Go/)
+    assert.ok(!pickRequest.includes('간다') && !pickRequest.includes('다음은?'), 'the outgoing model request never uses display-language choice text')
+
+    const room = GroupChatService.create(requester, { profileIds: [profile.id, b.id], representativeId: profile.id, userProfileId: null })
+    await GroupChatService.sendMessage(requester, room.id, '작업 계속', () => {}, undefined, undefined, undefined, undefined, undefined, {
+      task: { id: 999, step: 1, total: 1, title: '작업', event: 'continue' }, recipients: [profile.id], chainLimit: 0,
+    })
+    const taskInput = CodexChatStore.listMessages(room.id).find(message => message.role === 'user')!
+    assert.equal(taskInput.content, 'Continue the task.')
+    assert.equal(taskInput.display_content, '작업 계속')
+    assert.equal(requests.filter(request => request.model === 'translator').length, 5, 'one translation per user turn and one for the entire card, not once per pick')
+    const last = JSON.stringify(requests.filter(request => request.model === 'target').at(-1)?.messages)
+    assert.match(last, /Continue the task\./)
+    assert.ok(!last.includes('작업 계속'))
+  })
+
+  await t.test('regenerate and continue retry cancelled input translation before sending the model request', async s => {
+    for (const action of ['regenerate', 'continue'] as const) {
+      await s.test(action, async sub => {
+        const profile = ChatProfileStore.create({
+          name: `Retry ${action}`, engine: 'llm', providerName: 'test', model: 'retry-target',
+          translationProviderName: 'test', translationModel: 'retry-translator', mcpEnabled: false, summaryEnabled: false,
+        })
+        const thread = CodexChatStore.findThreadById(LlmChatService.createThread(requester, profile.id))!
+        let started!: () => void
+        const translationStarted = new Promise<void>(resolve => { started = resolve })
+        let first = true
+        const sent: unknown[] = []
+        sub.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+          const request = JSON.parse(init.body as string)
+          if (request.model === 'retry-translator') {
+            if (first) {
+              first = false
+              started()
+              return new Promise<Response>((_resolve, reject) => init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true }))
+            }
+            return response('Please retry.')
+          }
+          sent.push(request.messages)
+          return response('끝.')
+        })
+        let running: Promise<CodexChatMessageRecord>
+        if (action === 'regenerate') {
+          running = LlmChatService.sendMessage(requester, thread, '다시 해줘', () => {})
+        } else {
+          CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: '다시 해줘', display_content: null, tool_calls: [], status: 'completed', error: '입력 번역 실패' })
+          const partial = CodexChatStore.addMessage({ thread_id: thread.id, role: 'assistant', content: '앞부분.', tool_calls: [], status: 'completed', error: null, finish_reason: 'length' })
+          running = LlmChatService.continueReply(requester, thread, partial, () => {})
+        }
+        await translationStarted
+        await LlmChatService.stop(thread.id)
+        await running
+        assert.equal(sent.length, 0, 'stopping preparation never sends the untranslated row')
+        const user = CodexChatStore.listMessages(thread.id).find(message => message.role === 'user')!
+        assert.equal(user.content, '다시 해줘')
+        assert.equal(user.display_content, null)
+        const latest = CodexChatStore.latestMessage(thread.id)!
+        const current = CodexChatStore.findThreadById(thread.id)!
+        if (action === 'regenerate') await LlmChatService.rewriteMessage(requester, current, latest.id, undefined, () => {})
+        else await LlmChatService.continueReply(requester, current, latest.id, () => {})
+        assert.equal(sent.length, 1)
+        assert.match(JSON.stringify(sent[0]), /Please retry\./)
+        assert.ok(!JSON.stringify(sent[0]).includes('다시 해줘'))
+        const translated = CodexChatStore.findMessage(thread.id, user.id)!
+        assert.equal(translated.content, 'Please retry.')
+        assert.equal(translated.display_content, '다시 해줘')
+        assert.equal(translated.error, null)
+        CodexChatStore.setUserMessageTranslation(thread.id, user.id, translated.content, null)
+        assert.equal(CodexChatStore.findMessage(thread.id, user.id)?.display_content, '다시 해줘', 'a no-op translation cannot erase the saved original')
+      })
+    }
+  })
+
+  await t.test('regenerate retries a failed translation and edit rewind clears its old notice immediately', async s => {
+    const profile = ChatProfileStore.create({ name: 'Failed translation', engine: 'llm', providerName: 'test', model: 'failure-target', translationProviderName: 'test', translationModel: 'failure-translator', summaryEnabled: false, mcpEnabled: false })
+    const thread = CodexChatStore.findThreadById(LlmChatService.createThread(requester, profile.id))!
+    let fail = true
+    const inputs: string[] = []
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+      const request = JSON.parse(init.body as string)
+      if (request.model === 'failure-translator') return response(fail ? '' : 'Try again.')
+      inputs.push(JSON.stringify(request.messages))
+      return response('끝.')
+    })
+    const first = await LlmChatService.sendMessage(requester, thread, '다시 해줘', () => {})
+    const user = CodexChatStore.listMessages(thread.id).find(message => message.role === 'user')!
+    assert.ok(user.error)
+    fail = false
+    await LlmChatService.rewriteMessage(requester, CodexChatStore.findThreadById(thread.id)!, first.id, undefined, () => {})
+    assert.ok(!inputs.at(-1)!.includes('다시 해줘'))
+    assert.equal(CodexChatStore.findMessage(thread.id, user.id)?.error, null)
+    CodexChatStore.setUserMessageTranslation(thread.id, user.id, 'Try again.', null, undefined, 'old translation notice')
+    let rewind: CodexChatMessageRecord | undefined
+    await LlmChatService.rewriteMessage(requester, CodexChatStore.findThreadById(thread.id)!, user.id, '고쳐줘', event => {
+      if (event.type === 'rewind') rewind = event.message
+    })
+    assert.ok(rewind)
+    assert.equal(rewind.error, null)
+  })
+
+  await t.test('group suggestions use the room translator and keep generated options on a display-translation timeout', async s => {
+    const { suggestReplies, ChatSuggestError } = await import('../src/services/codex-chat/chatSuggestions')
+    const translator = ChatProfileStore.create({ name: 'Room translator', engine: 'llm', providerName: 'test', model: 'room-chat', translationProviderName: 'test', translationModel: 'room-translator', summaryEnabled: false, mcpEnabled: false })
+    const room = GroupChatService.create(requester, { profileIds: [a.id, translator.id], representativeId: a.id, userProfileId: null })
+    const representative = { ...a, suggestEnabled: true }
+    const history = [{ id: 1, thread_id: room.id, role: 'user', content: '안녕', tool_calls: [], status: 'completed', error: null } as CodexChatMessageRecord]
+    const timeout = AbortSignal.timeout.bind(AbortSignal)
+    let deadline = new AbortController()
+    s.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 60_000 ? deadline.signal : timeout(ms))
+    let expire = false
+    let cancel: AbortController | undefined
+    let translations = 0
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
+      const request = JSON.parse(init.body as string)
+      if (request.model !== 'room-translator') return response('["Go", "Stay"]')
+      translations++
+      if (expire) deadline.abort(new DOMException('Suggestion deadline', 'TimeoutError'))
+      cancel?.abort()
+      init.signal!.throwIfAborted()
+      return response('{"0":"가자","1":"기다려"}')
+    })
+    assert.deepEqual(await suggestReplies(representative, room, history, () => 'A'), ['가자', '기다려'])
+    assert.equal(translations, 1, 'a non-translating representative still uses the member translator')
+    expire = true
+    assert.deepEqual(await suggestReplies(representative, room, history, () => 'A'), ['Go', 'Stay'])
+    expire = false
+    deadline = new AbortController()
+    cancel = new AbortController()
+    await assert.rejects(suggestReplies(representative, room, history, () => 'A', cancel.signal), error => error instanceof ChatSuggestError && error.status === 499)
+  })
+
   await t.test('a concurrent member finishing first cannot consume another member’s call; replies return without mentions', async (s) => {
     const room = createRoom()
     let finishA!: () => void

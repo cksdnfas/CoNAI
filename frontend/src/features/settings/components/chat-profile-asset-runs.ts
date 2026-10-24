@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueries, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useI18n } from '@/i18n'
@@ -25,6 +25,7 @@ import {
 import { getErrorMessage } from '@/lib/error-message'
 import { getPromptPresets } from '@/lib/api-prompt-presets'
 import { createRandomUuid } from '@/lib/random-uuid'
+import { GROUPS_HIERARCHY_ALL_QUERY_KEY, groupEmoticonsQueryKey } from '@/lib/api-groups'
 
 type Attempt = ChatAssetBatch['slots'][number]['attempts'][number]
 type Run = { id: number; auto: boolean }
@@ -76,12 +77,29 @@ export function assetPresetRank(preset: ChatGenerationPreset) {
   return preset.assetSupport?.mode === 'reference' ? 0 : preset.assetSupport?.mode === 'appearance' ? 1 : 2
 }
 
+/** One refresh for an applied batch, limited to the profile and groups its results actually changed. */
+export async function refreshProfileAssets(queryClient: QueryClient, profileId: number, results: Array<Pick<ChatAssetApplyResult['applied'], 'expressionGroupId' | 'backgroundGroupId'>>, batchId?: number) {
+  const profiles = await listChatAdminProfiles()
+  queryClient.setQueryData(CHAT_ADMIN_PROFILES_QUERY_KEY, profiles)
+  const expressionGroups = [...new Set(results.flatMap((result) => result.expressionGroupId ? [result.expressionGroupId] : []))]
+  const groupsChanged = results.some((result) => result.expressionGroupId || result.backgroundGroupId)
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
+    ...(batchId === undefined ? [] : [queryClient.invalidateQueries({ queryKey: chatAssetBatchQueryKey(profileId, batchId) })]),
+    ...(groupsChanged ? [queryClient.invalidateQueries({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY })] : []),
+    ...expressionGroups.map((id) => queryClient.invalidateQueries({ queryKey: groupEmoticonsQueryKey(id) })),
+    ...(expressionGroups.length ? [queryClient.invalidateQueries({ queryKey: chatProfileEmoticonsQueryKey(profileId) })] : []),
+  ])
+  return profiles.find((entry) => entry.id === profileId)
+}
+
 /**
  * Character asset generation inside the profile editor. Each request is a batch the server tracks; this keeps the
  * session's batch ids, polls the ones still working, puts the first result straight into slots that were empty when
  * asked (`auto`), and applies a picked candidate to just its slot.
  */
-export function useProfileAssetRuns({ profileId, ensureProfile, onApplied }: {
+export function useProfileAssetRuns({ open, profileId, ensureProfile, onApplied }: {
+  open: boolean
   profileId: number | null
   /** Saves the profile (name, appearance, reference) and returns it; a new profile is created here. */
   ensureProfile: () => Promise<ChatProfile>
@@ -96,11 +114,11 @@ export function useProfileAssetRuns({ profileId, ensureProfile, onApplied }: {
   const [loadedFor, setLoadedFor] = useState(profileId)
   if (loadedFor !== profileId) { setLoadedFor(profileId); setRuns(readRuns(profileId)) }
 
-  const presetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: canViewImages })
+  const presetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: open && canViewImages })
   const presets = useMemo(() => [...(presetsQuery.data ?? [])].sort((a, b) => assetPresetRank(a) - assetPresetRank(b)), [presetsQuery.data])
   const [presetChoice, setPresetChoice] = useState(() => readChoice('conai:chat-asset-preset'))
   const preset = presets.find((entry) => entry.id === presetChoice && entry.assetSupport?.mode) ?? presets.find((entry) => entry.assetSupport?.mode) ?? null
-  const expressionPresetsQuery = useQuery({ queryKey: ['prompt-presets', 'chat-assets'], queryFn: () => getPromptPresets({ withItems: true }), enabled: canViewImages })
+  const expressionPresetsQuery = useQuery({ queryKey: ['prompt-presets', 'chat-assets'], queryFn: () => getPromptPresets({ withItems: true }), enabled: open && canViewImages })
   const [expressionChoice, setExpressionChoice] = useState(() => readChoice('conai:chat-asset-expressions'))
   const expressionPresets = expressionPresetsQuery.data ?? []
   const expressionPreset = expressionPresets.find((entry) => entry.id === expressionChoice) ?? expressionPresets.find((entry) => entry.name === DEFAULT_EXPRESSION_PRESET) ?? expressionPresets[0] ?? null
@@ -111,7 +129,7 @@ export function useProfileAssetRuns({ profileId, ensureProfile, onApplied }: {
     queries: runs.map((run) => ({
       queryKey: chatAssetBatchQueryKey(profileId ?? 0, run.id),
       queryFn: ({ signal }: { signal: AbortSignal }) => getChatAssetBatch(profileId!, run.id, signal),
-      enabled: Boolean(profileId),
+      enabled: open && Boolean(profileId),
       retry: false,
       refetchInterval: (query: { state: { data?: ChatAssetBatch } }) => (running(query.state.data) ? 3000 : false),
     })),
@@ -149,51 +167,60 @@ export function useProfileAssetRuns({ profileId, ensureProfile, onApplied }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- batchKey captures every field read here
   }, [batchKey])
 
-  const refreshAfterApply = async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
-      queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all'] }),
-      queryClient.invalidateQueries({ queryKey: ['chat-asset-candidates'] }),
-      queryClient.invalidateQueries({ queryKey: ['group-emoticons'] }),
-      profileId ? queryClient.invalidateQueries({ queryKey: chatProfileEmoticonsQueryKey(profileId) }) : Promise.resolve(),
-    ])
+  const applySlots = async (batch: ChatAssetBatch, slots: Array<{ slotKey: string; kind: ChatAssetKind; hash: string }>) => {
+    if (!profileId) return
+    const keys = slots.map((slot) => slot.slotKey)
+    setPending((current) => [...current, ...keys])
+    const applied: Array<{ result: ChatAssetApplyResult; slot: typeof slots[number] }> = []
+    try {
+      for (const slot of slots) {
+        try {
+          const result = await applyChatAssetSlot(profileId, batch.id, slot.slotKey, slot.hash)
+          applied.push({ result, slot })
+          onApplied(result, slot)
+        } catch (error) {
+          showSnackbar({ message: getErrorMessage(error, t({ ko: '적용하지 못했어.', en: 'Could not apply.' })), tone: 'error' })
+        }
+      }
+    } finally {
+      try {
+        if (applied.length) {
+          const updated = await refreshProfileAssets(queryClient, profileId, applied.map((entry) => entry.result.applied), batch.id)
+          for (const { result, slot } of applied) onApplied(result, slot, updated)
+        }
+      } catch (error) {
+        showSnackbar({ message: getErrorMessage(error, t({ ko: '적용한 프로필을 새로 읽지 못했어.', en: 'Could not refresh the applied profile.' })), tone: 'error' })
+      } finally {
+        setPending((current) => current.filter((key) => !keys.includes(key)))
+      }
+    }
   }
 
   const apply = async (slotKey: string, hash: string) => {
-    if (!profileId) return
     const batch = batches.find((entry) => entry?.slots.some((slot) => slot.slotKey === slotKey && slot.attempts.some((attempt) => attempt.candidates.some((candidate) => candidate.compositeHash === hash))))
     const slot = batch?.slots.find((entry) => entry.slotKey === slotKey)
-    if (!batch || !slot) return
-    setPending((current) => [...current, slotKey])
-    try {
-      const result = await applyChatAssetSlot(profileId, batch.id, slotKey, hash)
-      const profiles = await listChatAdminProfiles()
-      queryClient.setQueryData(CHAT_ADMIN_PROFILES_QUERY_KEY, profiles)
-      onApplied(result, { kind: slot.kind, hash }, profiles.find((entry) => entry.id === profileId))
-      await Promise.all([refreshAfterApply(), queryClient.invalidateQueries({ queryKey: chatAssetBatchQueryKey(profileId, batch.id) })])
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '적용하지 못했어.', en: 'Could not apply.' })), tone: 'error' })
-    } finally {
-      setPending((current) => current.filter((key) => key !== slotKey))
-    }
+    if (batch && slot) await applySlots(batch, [{ slotKey, kind: slot.kind, hash }])
   }
 
   // Slots that were empty when asked take their first result on their own, once per slot of a run.
   const autoApplied = useRef(new Set<string>())
   useEffect(() => {
+    if (!open) return
     batches.forEach((batch, index) => {
       const run = runs[index]
       if (!batch || !run?.auto) return
+      const ready: Array<{ slotKey: string; kind: ChatAssetKind; hash: string }> = []
       for (const slot of batch.slots) {
         const first = slot.attempts.flatMap((attempt) => attempt.candidates)[0]
         const key = `${batch.id}:${slot.slotKey}`
         if (!first || slot.chosenHash || autoApplied.current.has(key)) continue
         autoApplied.current.add(key)
-        void apply(slot.slotKey, first.compositeHash)
+        ready.push({ slotKey: slot.slotKey, kind: slot.kind, hash: first.compositeHash })
       }
+      if (ready.length) void applySlots(batch, ready)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs again when any batch changes
-  }, [batchKey])
+  }, [batchKey, open])
 
   /** Queue one request; `auto` puts the first result straight in (for slots that are empty now). */
   const start = async (request: { kind: 'expressions'; names: string[] } | { kind: 'reference' | 'background' }, auto: boolean) => {
@@ -244,7 +271,7 @@ export function useProfileAssetRuns({ profileId, ensureProfile, onApplied }: {
     start,
     apply,
     cancel,
-    refreshAfterApply,
+    refreshAfterApply: (id: number, expressionGroupId: number | null) => refreshProfileAssets(queryClient, id, [{ expressionGroupId, backgroundGroupId: null }]),
     /** The batch a candidate came from (vision review needs it). */
     batchOf: (hash: string) => batches.find((batch) => batch?.slots.some((slot) => slot.attempts.some((attempt) => attempt.candidates.some((candidate) => candidate.compositeHash === hash)))) ?? null,
   }

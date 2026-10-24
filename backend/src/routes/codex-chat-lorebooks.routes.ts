@@ -32,7 +32,8 @@ router.get('/lorebooks', requireChatAccess, (req: Request, res: Response) => {
   try {
     const own = OwnedLorebookStore.list(lorebookOwner(req)).map((book) => ({ ...book, entryCount: book.entries.length }))
     const global = ChatLorebookStore.list().map(({ entries, ...book }) => ({ ...book, entries: [], entryCount: entries.length, threadId: null, folderId: null }))
-    res.json({ success: true, data: [...own, ...global] })
+    const books = [...own, ...global]
+    res.json({ success: true, data: req.query.summary === '1' ? books.map(({ entries: _entries, ...book }) => book) : books })
   } catch (error) { sendChatError(res, error) }
 })
 

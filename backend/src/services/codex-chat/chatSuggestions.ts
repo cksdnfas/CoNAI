@@ -7,6 +7,8 @@ import { ChatUserProfileStore, userPersonaForThread, userPersonaPrompt, type Cha
 import { ModelSlotStore } from './modelSlots'
 import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatStore'
 import { resolveChatAccess } from './codexChatAccess'
+import { translateDisplayFields, translatorOf } from './chatTranslation'
+import { ChatGroupStore } from './chatGroupStore'
 
 /**
  * Reply suggestions: the composer's sparkle button asks a model for a few things the user might say next. Nothing
@@ -246,5 +248,10 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
   }
   const suggestions = parseSuggestions(answer)
   if (suggestions.length === 0) throw new ChatSuggestError('모델이 쓸 만한 추천을 주지 않았어. 다시 뽑아봐.', 502)
-  return suggestions
+  const translator = thread.kind === 'group'
+    ? translatorOf(ChatGroupStore.members(thread.id).flatMap(member => ChatProfileStore.find(member.profile_id) ?? []))
+    : profile
+  const display = translator ? await translateDisplayFields(translator, { suggestions }, ['suggestions.*'], combined, { threadId: thread.id }) : null
+  if (signal?.aborted) throw new ChatSuggestError('추천을 멈췄어.', 499)
+  return display?.suggestions ?? suggestions
 }

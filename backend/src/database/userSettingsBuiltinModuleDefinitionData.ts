@@ -1627,6 +1627,16 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         multiple: false,
         description: '인페인트 영역을 지정하는 마스크야. 참조 이미지가 필요해.',
       },
+      {
+        key: 'references', label: '역할별 참조', direction: 'input', data_type: 'json',
+        required: false, multiple: false, default_value: [],
+        description: '순서 있는 [{role: reference|style|material|scale|item, label?, data_url}] 배열. data_url은 PNG/JPEG/WebP data URL 또는 {composite_hash}. 원본/마스크 포함 5장, 장당 10 MiB, 합계 32 MiB, 최대 4096px.',
+      },
+      {
+        key: 'preserve', label: '엄격 마스크 보존', direction: 'input', data_type: 'text',
+        required: false, multiple: false, default_value: '',
+        description: 'strict: infill 전용. 원본 크기만 허용하고 검정 보호 픽셀을 유지한 PNG로 저장해. 리사이즈/손실 저장 금지.',
+      },
     ],
     outputPorts: [
       {
@@ -1707,6 +1717,13 @@ export const BUILTIN_SYSTEM_MODULE_DEFINITIONS: BuiltinSystemModuleDefinition[] 
         key: 'mask',
         label: '마스크 이미지',
         data_type: 'mask',
+      },
+      {
+        key: 'references', label: '역할별 참조', data_type: 'json', default_value: [],
+      },
+      {
+        key: 'preserve', label: '엄격 마스크 보존', data_type: 'select', default_value: '',
+        options: ['', 'strict'],
       },
     ],
     color: '#26a69a',

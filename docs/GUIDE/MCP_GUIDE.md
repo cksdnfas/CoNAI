@@ -148,6 +148,12 @@ stdio:
 
 ## 제공 도구
 
+### Codex 원본·역할 참조·엄격 인페인트
+
+`get_codex_generation_options`는 전체 요청 스키마, 역할, 파일 제한, 예시와 모델 후보를 제공합니다. `submit_generation_job(service_type="codex")`에서 `image`는 편집 원본, `references`는 순서 있는 `[{role, label?, data_url}]`입니다. 역할은 `reference|style|material|scale|item`이며 참조를 합친 시트를 만들지 않습니다. 원본/마스크 포함 5장, 각 10 MiB·합계 32 MiB(디코딩 기준), 최대 4096px입니다. 원본/참조는 PNG·JPEG·WebP, 마스크는 같은 크기 PNG입니다.
+
+`operation:"infill"`에 `preserve:"strict"`를 명시하면 원본 크기만 허용하고 검정 마스크 영역을 고정한 무손실 PNG를 최종 검사합니다. 기존 infill은 advisory입니다. `size`는 요청이지 보장이 아니며 실제 크기와 불일치를 메타데이터로 기록합니다. `get_generation_history_request`는 역할·설명·순서를 바이트/첨부 경로 없이 반환하므로 재사용 시 이미지를 다시 첨부합니다. 자세한 예시는 [Codex 생성](./CODEX_GENERATION.md)을 참고합니다.
+
 그룹 이동에서 선택한 하위 그룹은 선택한 조상과 함께 한 번만 이동하며 `moved`는 독립적으로 이동한 선택 루트 수입니다. 충돌 목록은 전체 원본·대상 경로와 ID를 포함합니다. 조상 대상 병합은 거부합니다. 원본 자동 소속은 병합 시 수동 소속으로 보존합니다. 완료된 생성 이력도 병합을 막는 참조입니다. 이력을 삭제하지 말고 원본을 유지하거나 이름을 바꿔 일반 이동하세요.
 
 `move_image_groups`는 기본적으로 이름 충돌을 거부합니다. `preview:true`로 재귀 병합 목록과 `merge_token`을 조회하고 원본·대상 ID 및 원본 설정 소실을 사용자에게 알린 뒤 명시적으로 승인된 토큰만 실행에 사용하세요. 미리보기는 저장하지 않으며 변경된 그룹/소속은 다시 확인해야 합니다. 최상위 이동도 지원합니다. 일반 이동은 `images.edit`, 병합 실행은 `images.delete`도 검사합니다. 외부 DB 참조(생성 큐/이력·런타임 작업·채팅 프로필)가 있는 원본은 병합을 거부하며 원본을 보존합니다.

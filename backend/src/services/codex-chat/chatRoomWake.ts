@@ -87,7 +87,7 @@ export async function wakeChatRoom(params: {
 
 /** The text of the replies a wake set off, speaker-labelled in group rooms. */
 export function wakeReplyText(result: ChatWakeResult) {
-  const names = new Map(ChatProfileStore.list().map((profile) => [profile.id, profile.name]))
+  const names = new Map(ChatProfileStore.listNames().map((profile) => [profile.id, profile.name]))
   return result.replies
     .filter((reply) => reply.status === 'completed' && reply.content.trim())
     .map((reply) => (result.thread.kind === 'group' && reply.speaker_profile_id ? `${names.get(reply.speaker_profile_id) ?? '참가자'}: ${reply.content.trim()}` : reply.content.trim()))

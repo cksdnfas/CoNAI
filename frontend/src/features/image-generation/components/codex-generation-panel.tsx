@@ -3,7 +3,11 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { createPortal } from 'react-dom'
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { LogIn, RefreshCw, RotateCcw, X } from 'lucide-react'
+import { ArrowUp, ArrowDown, LogIn, RefreshCw, RotateCcw, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
+import { CODEX_REFERENCE_ROLES, codexReferenceSlots, codexAttachmentUsage, codexReferencePayload, canEnableCodexStrict, shouldConfirmCodexHistoryLoad, type CodexReferenceDraft } from '../codex-reference-draft'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useCodexChatPage } from './use-codex-chat-page'
@@ -61,6 +65,8 @@ export type CodexFormDraft = {
   imageMode: 'reference' | 'edit'
   referenceImage?: SelectedImageDraft
   maskImage?: SelectedImageDraft
+  references: CodexReferenceDraft[]
+  strictPreservation: boolean
 }
 
 const CODEX_COUNT_MIN = 1
@@ -90,9 +96,11 @@ const DEFAULT_CODEX_FORM: CodexFormDraft = {
   aspectRatio: '1:1',
   resolution: '1024',
   imageMode: 'reference',
+  references: [],
+  strictPreservation: false,
 }
 
-type PersistedCodexFormDraft = Pick<CodexFormDraft, 'model' | 'prompt' | 'negativePrompt' | 'count' | 'aspectRatio' | 'resolution' | 'imageMode'>
+type PersistedCodexFormDraft = Pick<CodexFormDraft, 'model' | 'prompt' | 'negativePrompt' | 'count' | 'aspectRatio' | 'resolution' | 'imageMode' | 'references' | 'strictPreservation'>
 
 function loadPersistedCodexFormDraft(owner: string): CodexFormDraft {
   if (typeof window === 'undefined') {
@@ -115,6 +123,8 @@ function loadPersistedCodexFormDraft(owner: string): CodexFormDraft {
       aspectRatio: typeof parsedValue.aspectRatio === 'string' ? parsedValue.aspectRatio : DEFAULT_CODEX_FORM.aspectRatio,
       resolution: typeof parsedValue.resolution === 'string' ? parsedValue.resolution : DEFAULT_CODEX_FORM.resolution,
       imageMode: parsedValue.imageMode === 'edit' ? 'edit' : 'reference',
+      references: codexReferenceSlots(parsedValue.references),
+      strictPreservation: parsedValue.imageMode === 'edit' && parsedValue.strictPreservation === true,
     }
   } catch {
     return DEFAULT_CODEX_FORM
@@ -134,6 +144,8 @@ function persistCodexFormDraft(owner: string, form: CodexFormDraft) {
     aspectRatio: form.aspectRatio,
     resolution: form.resolution,
     imageMode: form.imageMode,
+    references: codexReferenceSlots(form.references),
+    strictPreservation: form.strictPreservation,
   }
 
   try {
@@ -221,9 +233,11 @@ function buildCodexFormFromHistoryPayload(payload: Record<string, unknown>, curr
       imageMode: payload.operation === 'edit' || payload.operation === 'infill' ? 'edit' : 'reference',
       referenceImage: undefined,
       maskImage: undefined,
+      references: codexReferenceSlots(payload.references),
+      strictPreservation: payload.preserve === 'strict',
       ...(sizeSelection ?? {}),
     } satisfies CodexFormDraft,
-    hasImageInputs: payload.operation === 'edit' || payload.operation === 'infill' || 'image' in payload,
+    hasImageInputs: payload.operation === 'edit' || payload.operation === 'infill' || 'image' in payload || Boolean(codexReferenceSlots(payload.references).length),
   }
 }
 
@@ -259,10 +273,8 @@ export function CodexGenerationPanel({
     handledHistorySettingsLoadNonceRef.current = request.nonce
     consumeHistorySettingsLoad(request.nonce)
     const { form: nextForm, hasImageInputs } = buildCodexFormFromHistoryPayload(request.payload, codexForm)
-    const hasPromptContent = codexForm.prompt.trim().length > 0 || codexForm.negativePrompt.trim().length > 0 || Boolean(codexForm.referenceImage)
-    const changesPrompt = codexForm.prompt !== nextForm.prompt || codexForm.negativePrompt !== nextForm.negativePrompt || Boolean(codexForm.referenceImage)
     void (async () => {
-      if (hasPromptContent && changesPrompt && !(await confirmHistorySettingsOverwrite(confirm, t))) {
+      if (shouldConfirmCodexHistoryLoad(codexForm, nextForm) && !(await confirmHistorySettingsOverwrite(confirm, t))) {
         return
       }
 
@@ -317,6 +329,8 @@ export function CodexGenerationPanel({
   }, [codexForm.imageMode, codexForm.maskImage, codexForm.referenceImage])
 
   const queueCount = useMemo(() => clampCodexCount(codexForm.count), [codexForm.count])
+  const attachmentUsage = codexAttachmentUsage([codexForm.referenceImage, codexForm.maskImage, ...codexForm.references.map((reference) => reference.image)])
+  const attachmentLimitExceeded = attachmentUsage.count > 5 || attachmentUsage.bytes > 32 * 1024 * 1024 || attachmentUsage.oversized
   const outputSize = useMemo(() => resolveCodexSize(codexForm.aspectRatio, codexForm.resolution), [codexForm.aspectRatio, codexForm.resolution])
   const outputSizeHint = codexForm.aspectRatio === 'random' ? t({ ko: '랜덤 비율', en: 'Random ratio' }) : outputSize
   const useDrawerCompactChrome = Boolean(headerPortalTargetId)
@@ -362,6 +376,7 @@ export function CodexGenerationPanel({
       || codexForm.negativePrompt.trim().length > 0
       || Boolean(codexForm.referenceImage)
       || Boolean(codexForm.maskImage)
+      || codexForm.references.length > 0
     if (hasLosableContent) {
       const confirmed = await confirm({
         title: t({ ko: 'Codex 설정을 초기화할까?', en: 'Reset the Codex settings?' }),
@@ -378,7 +393,7 @@ export function CodexGenerationPanel({
     }
 
     setCodexForm(DEFAULT_CODEX_FORM)
-  }, [codexForm.maskImage, codexForm.negativePrompt, codexForm.prompt, codexForm.referenceImage, confirm, t])
+  }, [codexForm.maskImage, codexForm.negativePrompt, codexForm.prompt, codexForm.referenceImage, codexForm.references, confirm, t])
 
   const handleRefreshStatus = useCallback(() => {
     void refetchCodexStatus()
@@ -427,6 +442,11 @@ export function CodexGenerationPanel({
     }
 
     try {
+      if (attachmentLimitExceeded) throw new Error(t({ ko: '첨부 개수와 용량 제한을 확인해줘.', en: 'Check attachment count and byte limits.' }))
+      if (codexForm.strictPreservation && (codexForm.imageMode !== 'edit' || !codexForm.maskImage)) {
+        throw new Error(t({ ko: '엄격 보존에는 원본과 마스크를 다시 첨부해야 해.', en: 'Strict preservation requires a source and mask to be attached.' }))
+      }
+      const references = codexReferencePayload(codexForm.references)
       setIsSubmitting(true)
       const response = await createGenerationQueueJob({
         service_type: 'codex',
@@ -441,6 +461,8 @@ export function CodexGenerationPanel({
           size: resolveCodexSize(pickCodexAspectRatio(codexForm.aspectRatio), codexForm.resolution),
           image: codexForm.referenceImage?.dataUrl,
           mask: codexForm.imageMode === 'edit' ? codexForm.maskImage?.dataUrl : undefined,
+          references,
+          preserve: codexForm.strictPreservation ? 'strict' : undefined,
           imageSaveOptions: {
             format: generationSaveSettings.defaultFormat,
             quality: generationSaveSettings.quality,
@@ -460,6 +482,7 @@ export function CodexGenerationPanel({
     }
   }, [
     codexForm,
+    attachmentLimitExceeded,
     codexStatus?.available,
     codexStatus?.installed,
     codexStatusQuery.isSuccess,
@@ -508,6 +531,8 @@ export function CodexGenerationPanel({
 
   const codexGenerateDisabled = codexForm.prompt.trim().length === 0 || !canGenerateWithCodex
     || (codexForm.imageMode === 'edit' && !codexForm.referenceImage)
+    || attachmentLimitExceeded || codexForm.references.some((reference) => !reference.image)
+    || (codexForm.strictPreservation && (codexForm.imageMode !== 'edit' || !codexForm.maskImage))
   const codexRepeat = {
     value: codexForm.count,
     min: CODEX_COUNT_MIN,
@@ -607,7 +632,10 @@ export function CodexGenerationPanel({
     ),
     output: (
       <Section variant="settings" heading={t({ ko: '출력', en: 'Output' })} className="@container">
-        <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-3">
+        <Text variant="muted">{codexForm.strictPreservation
+          ? t({ ko: '엄격 보존: 출력 크기는 원본 이미지 크기로 고정돼. 다른 요청 크기는 무시해.', en: 'Strict preservation: output size is locked to the source image. Other requested sizes are overridden.' })
+          : t({ ko: '요청 크기 · 실제 크기는 다를 수 있어.', en: 'Requested size · actual size may differ.' })}</Text>
+        {!codexForm.strictPreservation ? <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-3">
           <ResolutionPicker
             mode="ratio"
             ratio={codexForm.aspectRatio}
@@ -621,13 +649,13 @@ export function CodexGenerationPanel({
             tierHint={outputSizeHint}
             onTierChange={(value) => handleFieldChange('resolution', value)}
           />
-        </div>
+        </div> : null}
       </Section>
     ),
     images: (
       <Section variant="settings" heading={t({ ko: '이미지', en: 'Images' })} className="@container">
         <Tip content={t({ ko: '이미지 사용 방식: 참조로만 쓸지, 원본을 직접 편집할지', en: 'Image usage: reference only, or edit the source directly' })}>
-          <Select aria-label={t({ ko: '이미지 사용 방식', en: 'Image usage' })} value={codexForm.imageMode} onChange={(event) => setCodexForm((current) => ({ ...current, imageMode: event.target.value === 'edit' ? 'edit' : 'reference', maskImage: undefined }))}>
+          <Select aria-label={t({ ko: '이미지 사용 방식', en: 'Image usage' })} value={codexForm.imageMode} onChange={(event) => setCodexForm((current) => ({ ...current, imageMode: event.target.value === 'edit' ? 'edit' : 'reference', maskImage: undefined, strictPreservation: false }))}>
             <option value="reference">{t({ ko: '새 이미지 생성 · 참조 (t2i)', en: 'New image · reference (t2i)' })}</option>
             <option value="edit">{t({ ko: '원본 이미지 편집 (i2i)', en: 'Edit source image (i2i)' })}</option>
           </Select>
@@ -642,6 +670,7 @@ export function CodexGenerationPanel({
                     ? (codexForm.referenceImage ? t({ ko: '원본 이미지 교체', en: 'Replace source image' }) : t({ ko: '원본 이미지 선택', en: 'Select source image' }))
                     : (codexForm.referenceImage ? t({ ko: '참조 이미지 교체', en: 'Replace reference image' }) : t({ ko: '참조 이미지 선택 (선택 사항)', en: 'Select reference image (optional)' }))}
                   modalTitle={t({ ko: 'Codex 참조 이미지 선택', en: 'Select Codex reference image' })}
+                  preserveOriginal={codexForm.imageMode === 'edit'}
                   onSelect={(image) => {
                     setCodexForm((current) => ({
                       ...current,
@@ -674,6 +703,7 @@ export function CodexGenerationPanel({
                 <ImageAttachmentPickerButton
                   label={codexForm.maskImage ? t({ ko: '마스크 이미지 교체', en: 'Replace mask image' }) : t({ ko: '마스크 이미지 선택', en: 'Select mask image' })}
                   modalTitle={t({ ko: 'Codex 마스크 이미지 선택', en: 'Select Codex mask image' })}
+                  preserveOriginal
                   disabled={!codexForm.referenceImage}
                   onSelect={(image) => handleFieldChange('maskImage', image)}
                 />
@@ -694,6 +724,43 @@ export function CodexGenerationPanel({
             ) : null}
           </div> : null}
         </div>
+        {codexForm.imageMode === 'edit' ? (
+          <label className="flex items-center gap-2">
+            <Checkbox checked={codexForm.strictPreservation} disabled={!canEnableCodexStrict(codexForm) && !codexForm.strictPreservation} onCheckedChange={(checked) => handleFieldChange('strictPreservation', checked === true)} />
+            <Text variant="label">{t({ ko: '엄격 마스크 보존 · 검정 픽셀 고정, 원본 크기 PNG만 저장', en: 'Strict mask preservation · lock black pixels, source-sized PNG only' })}</Text>
+          </label>
+        ) : null}
+        <Text variant="muted">
+          {t({ ko: '첨부 {count}/5 · {bytes} MiB/32 MiB · 파일당 10 MiB, 최대 4096px · 원본/마스크 포함', en: 'Attachments {count}/5 · {bytes} MiB/32 MiB · 10 MiB each, max 4096px · includes source/mask' }, { count: attachmentUsage.count, bytes: (attachmentUsage.bytes / 1024 / 1024).toFixed(2) })}
+        </Text>
+        <Text variant="muted">{t({ ko: '원본·참조: PNG/JPEG/WebP · 마스크: 원본과 같은 크기의 PNG', en: 'Source/references: PNG/JPEG/WebP · mask: source-sized PNG' })}</Text>
+        {codexForm.references.map((reference, index) => (
+          <div key={index} className="space-y-2 border-b border-line py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Text variant="label">{t({ ko: '참조 {index}', en: 'Reference {index}' }, { index: index + 1 })}</Text>
+              <Select aria-label={t({ ko: '참조 역할', en: 'Reference role' })} value={reference.role} onChange={(event) => handleFieldChange('references', codexForm.references.map((item, position) => position === index ? { ...item, role: event.target.value as CodexReferenceDraft['role'] } : item))}>
+                {CODEX_REFERENCE_ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
+              </Select>
+              <Input aria-label={t({ ko: '참조 설명', en: 'Reference label' })} maxLength={128} value={reference.label} onChange={(event) => handleFieldChange('references', codexForm.references.map((item, position) => position === index ? { ...item, label: event.target.value } : item))} />
+              <ImageAttachmentPickerButton
+                label={reference.image ? t({ ko: '참조 교체', en: 'Replace reference' }) : t({ ko: '참조 다시 첨부', en: 'Attach reference' })}
+                onSelect={(image) => handleFieldChange('references', codexForm.references.map((item, position) => position === index ? { ...item, image } : item))}
+              />
+              {([-1, 1] as const).map((direction) => (
+                <IconButton key={direction} variant="ghost" label={direction < 0 ? t({ ko: '위로', en: 'Move up' }) : t({ ko: '아래로', en: 'Move down' })} disabled={index + direction < 0 || index + direction >= codexForm.references.length} onClick={() => {
+                  const references = [...codexForm.references]
+                  ;[references[index], references[index + direction]] = [references[index + direction], references[index]]
+                  handleFieldChange('references', references)
+                }}>{direction < 0 ? <ArrowUp /> : <ArrowDown />}</IconButton>
+              ))}
+              <IconButton variant="destructive-ghost" label={t({ ko: '참조 제거', en: 'Remove reference' })} onClick={() => handleFieldChange('references', codexForm.references.filter((_, position) => position !== index))}><X /></IconButton>
+            </div>
+            {reference.image ? <NaiSelectedImageCard image={reference.image} alt={reference.label || reference.role} /> : <Text variant="muted">{t({ ko: '이미지를 다시 첨부해야 해.', en: 'Image reattachment required.' })}</Text>}
+          </div>
+        ))}
+        <Button variant="secondary" disabled={codexForm.references.length + Number(Boolean(codexForm.referenceImage)) + Number(Boolean(codexForm.maskImage)) >= 5} onClick={() => handleFieldChange('references', [...codexForm.references, { role: 'reference', label: '' }])}>
+          {t({ ko: '참조 추가', en: 'Add reference' })}
+        </Button>
       </Section>
     ),
   }

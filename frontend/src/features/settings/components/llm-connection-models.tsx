@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { FileText, Link2, LoaderCircle, Lock, Plus, RefreshCw, Route, Save, Trash2 } from 'lucide-react'
+import { FileText, Link2, Lock, Plus, RefreshCw, Route } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { EditorGroup } from '@/components/ui/editor-group'
+import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
-import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { Modal, ModalBody } from '@/components/ui/modal'
 import { ResourceRow, ResourceRowStat, ResourceRowStatus } from '@/components/ui/resource-row'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -17,6 +18,7 @@ import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_MODEL_OPTIONS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
+  CHAT_PROFILE_DEFAULTS_QUERY_KEY,
   MODEL_SLOTS_QUERY_KEY,
   MODEL_USAGE_QUERY_KEY,
   ROUTE_NO_CEILING,
@@ -38,20 +40,34 @@ import { ContentRatingSelect } from './content-rating-select'
 
 const EMPTY_MODELS: string[] = []
 
-/** Refreshes everything a model change can alter: the rows, workflow usage, both profile lists and what follows the judge. */
+/**
+ * Built-in judges, custom default judges and directly selected board evaluators all affect judge consumers, and so
+ * does a model row any of those routes points at (`slots`: the full list, to look the pointing routes up).
+ */
+export function modelAffectsJudge(slot: ModelSlot | null | undefined, slots: readonly ModelSlot[] = []): boolean {
+  const judging = (entry: ModelSlot) => entry.routeKey === 'judge' || entry.isDefaultJudge || (entry.contentEvaluations ?? 0) > 0
+  return Boolean(slot && (judging(slot) || slot.routes.some((route) => {
+    const routeSlot = slots.find((entry) => entry.id === route.id)
+    return route.key === 'judge' || (routeSlot !== undefined && judging(routeSlot))
+  })))
+}
+
+/** Refresh model consumers; only changes reaching the judge need board evaluation/readiness data. */
 export function useRefreshModelRows() {
   const queryClient = useQueryClient()
-  return () => Promise.all([
+  return ({ judgeChanged = false }: { judgeChanged?: boolean } = {}) => Promise.all([
     queryClient.invalidateQueries({ queryKey: MODEL_SLOTS_QUERY_KEY }),
     queryClient.invalidateQueries({ queryKey: MODEL_USAGE_QUERY_KEY }),
     queryClient.invalidateQueries({ queryKey: CHAT_MODEL_OPTIONS_QUERY_KEY }),
     queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY }),
     queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
     // A new profile starts with the chat representative model's prompt.
-    queryClient.invalidateQueries({ queryKey: ['codex-chat-profile-defaults'] }),
+    queryClient.invalidateQueries({ queryKey: CHAT_PROFILE_DEFAULTS_QUERY_KEY }),
     // Topic relevance and board evaluations follow the judge representative model; their readiness changes with it.
-    queryClient.invalidateQueries({ queryKey: [CONTENT_EVALUATION_QUERY_KEY] }),
-    queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
+    ...(judgeChanged ? [
+      queryClient.invalidateQueries({ queryKey: [CONTENT_EVALUATION_QUERY_KEY] }),
+      queryClient.invalidateQueries({ queryKey: [POSTS_QUERY_KEY] }),
+    ] : []),
   ])
 }
 
@@ -83,10 +99,11 @@ function slotHoldCount(slot: ModelSlot, workflowNodes = 0) {
 }
 
 /** "대표모델: 대화\n세라 (대화, 요약)\n판단 프리셋: 기본\n워크플로 노드 2" — who uses a row, one kind per line. */
-function useUsageLines(slot: ModelSlot, workflowNodes: number) {
+function useUsageLines(slot: ModelSlot | null, workflowNodes: number) {
   const { t } = useI18n()
   const roles = useRoleLabels()
   const routeName = useRouteName()
+  if (!slot) return []
   return [
     slot.routes.length > 0 ? `${t({ ko: '대표모델', en: 'Representative' })}: ${slot.routes.map((route) => routeName({ routeKey: route.key, routeName: route.name })).join(', ')}` : null,
     slot.profiles.length > 0 ? slot.profiles.map((profile) => `${profile.name} (${profile.roles.map((role) => roles[role]).join(', ')})`).join(' · ') : null,
@@ -123,6 +140,8 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const refresh = useRefreshModelRows()
+  const queryClient = useQueryClient()
+  const affectsJudge = () => modelAffectsJudge(slot, queryClient.getQueryData<ModelSlot[]>(MODEL_SLOTS_QUERY_KEY))
   const [model, setModel] = useState('')
   const [ratingTierId, setRatingTierId] = useState<number | null>(null)
   useEffect(() => {
@@ -139,14 +158,14 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
     retry: false,
     staleTime: 60_000,
   })
-  const lines = useUsageLines(slot ?? { routes: [], profiles: [], judgePresets: [], userProfiles: 0, chats: 0 } as unknown as ModelSlot, workflowNodes)
+  const lines = useUsageLines(slot, workflowNodes)
   const used = slot !== null && slotHoldCount(slot, workflowNodes) > 0
 
   const saveMutation = useMutation({
     mutationFn: () => updateModelSlot(slot?.id ?? 0, { model: model.trim(), contentRatingTierId: ratingTierId }),
     onSuccess: async () => {
       showSnackbar({ message: t({ ko: '저장했어.', en: 'Saved.' }), tone: 'info' })
-      await refresh()
+      await refresh({ judgeChanged: affectsJudge() })
       onClose()
     },
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '저장하지 못했어.', en: 'Could not save.' }), tone: 'error' }),
@@ -155,7 +174,7 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
     mutationFn: () => deleteModelSlot(slot?.id ?? 0),
     onSuccess: async () => {
       showSnackbar({ message: t({ ko: '지웠어.', en: 'Deleted.' }), tone: 'info' })
-      await refresh()
+      await refresh({ judgeChanged: affectsJudge() })
       onClose()
     },
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '지우지 못했어.', en: 'Could not delete.' }), tone: 'error' }),
@@ -191,20 +210,16 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
           </Field>
         ) : null}
       </ModalBody>
-      {/* EditorFooter's shape; the delete keeps its own tooltip listing what uses the model. */}
-      <ModalFooter separated className="mt-4">
-        <Tip content={used ? <span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어서 지울 수 없어', en: 'In use, so it cannot be deleted' })}\n${lines.join('\n')}`}</span> : null}>
-          <span>
-            <IconButton size="icon-sm" variant="destructive-ghost" disabled={used || busy} onClick={() => deleteMutation.mutate()} label={t({ ko: '모델 삭제', en: 'Delete model' })}>
-              {deleteMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            </IconButton>
-          </span>
-        </Tip>
-        <span className="flex-1" />
-        <IconButton size="icon-sm" onClick={() => saveMutation.mutate()} disabled={!model.trim() || !changed || busy} label={t({ ko: '저장', en: 'Save' })}>
-          {saveMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        </IconButton>
-      </ModalFooter>
+      <EditorFooter
+        onDelete={() => deleteMutation.mutate()}
+        deleteLabel={t({ ko: '모델 삭제', en: 'Delete model' })}
+        deleteDisabled={used || busy}
+        deleteTip={used ? <span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어서 지울 수 없어', en: 'In use, so it cannot be deleted' })}\n${lines.join('\n')}`}</span> : null}
+        deleting={deleteMutation.isPending}
+        onSave={() => saveMutation.mutate()}
+        canSave={Boolean(model.trim()) && changed && !busy}
+        saving={saveMutation.isPending}
+      />
     </Modal>
   )
 }
@@ -309,7 +324,7 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
     if (group) group.rows.push(model)
     else groups.push({ key: model.providerName, label: model.providerLabel, rows: [model] })
   }
-  const lines = useUsageLines(slot ?? { routes: [], profiles: [], judgePresets: [], userProfiles: 0, chats: 0 } as unknown as ModelSlot, workflowNodes)
+  const lines = useUsageLines(slot, workflowNodes)
   const used = slot !== null && slotUseCount(slot, workflowNodes) > 0
   const allowsEmpty = key !== null && (FOLLOWS_CHAT_KEYS.includes(key) || EMPTY_KEYS.includes(key))
   const targetId = target ? Number(target) : null
@@ -325,7 +340,7 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
     },
     onSuccess: async () => {
       showSnackbar({ message: t({ ko: '저장했어.', en: 'Saved.' }), tone: 'info' })
-      await refresh()
+      await refresh({ judgeChanged: modelAffectsJudge(slot) })
       onClose()
     },
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '저장하지 못했어.', en: 'Could not save.' }), tone: 'error' }),
@@ -334,7 +349,7 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
     mutationFn: () => deleteModelSlot(slot?.id ?? 0),
     onSuccess: async () => {
       showSnackbar({ message: t({ ko: '지웠어.', en: 'Deleted.' }), tone: 'info' })
-      await refresh()
+      await refresh({ judgeChanged: modelAffectsJudge(slot) })
       onClose()
     },
     onError: (error) => showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '지우지 못했어.', en: 'Could not delete.' }), tone: 'error' }),
@@ -394,21 +409,16 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
           </Field>
         ) : null}
       </ModalBody>
-      <ModalFooter separated className="mt-4">
-        {slot && key === null ? (
-          <Tip content={used ? <span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어서 지울 수 없어', en: 'In use, so it cannot be deleted' })}\n${lines.join('\n')}`}</span> : null}>
-            <span>
-              <IconButton size="icon-sm" variant="destructive-ghost" disabled={used || busy} onClick={() => deleteMutation.mutate()} label={t({ ko: '대표모델 삭제', en: 'Delete representative model' })}>
-                {deleteMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              </IconButton>
-            </span>
-          </Tip>
-        ) : null}
-        <span className="flex-1" />
-        <IconButton size="icon-sm" onClick={save} disabled={!save} label={t({ ko: '저장', en: 'Save' })}>
-          {saveMutation.isPending ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        </IconButton>
-      </ModalFooter>
+      <EditorFooter
+        onDelete={slot && key === null ? () => deleteMutation.mutate() : undefined}
+        deleteLabel={t({ ko: '대표모델 삭제', en: 'Delete representative model' })}
+        deleteDisabled={used || busy}
+        deleteTip={used ? <span className="whitespace-pre-line">{`${t({ ko: '쓰는 곳이 있어서 지울 수 없어', en: 'In use, so it cannot be deleted' })}\n${lines.join('\n')}`}</span> : null}
+        deleting={deleteMutation.isPending}
+        onSave={() => saveMutation.mutate()}
+        canSave={Boolean(save)}
+        saving={saveMutation.isPending}
+      />
     </Modal>
   )
 }

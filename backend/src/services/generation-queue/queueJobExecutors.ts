@@ -679,16 +679,16 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
 
     for (let index = 0; index < result.outputFiles.length; index += 1) {
       const output = result.outputFiles[index]
+      const metadata = buildCodexMetadataPatch(
+        { ...payload, attachment_descriptors: result.attachmentDescriptors },
+        index, result.outputFiles.length, null, { width: output.width!, height: output.height! },
+      )
       let historyId: number
 
       if (index === 0 && placeholderHistoryId) {
         historyId = placeholderHistoryId
         HistoryCommandService.update(historyId, {
-          metadata: JSON.stringify({
-            codex_job_directory: result.jobDirectory,
-            codex_output_file: output.absolutePath,
-            codex_last_message: result.lastMessage,
-          }),
+          metadata: JSON.stringify({ ...metadata, codex_last_message: result.lastMessage, codex_output_file: output.absolutePath }),
         })
       } else {
         historyId = await GenerationHistoryService.createCodexHistory({
@@ -699,24 +699,22 @@ async function executeCodexJob(job: GenerationQueueJobRecord, context: QueueJobE
           queueJobId: job.id,
           requestedByAccountId: job.requested_by_account_id ?? undefined,
           requestedByAccountType: job.requested_by_account_type ?? undefined,
-          metadata: {
-            codex_job_directory: result.jobDirectory,
-            codex_output_file: output.absolutePath,
-            codex_last_message: result.lastMessage,
-          },
+          metadata: { ...metadata, codex_last_message: result.lastMessage, codex_output_file: output.absolutePath },
         })
       }
 
       historyIds.push(historyId)
-      processPromises.push(
-        GenerationHistoryService.processAndUploadGeneratedFile(historyId, output.absolutePath, 'codex', {
+      const processing = GenerationHistoryService.processAndUploadGeneratedFile(historyId, output.absolutePath, 'codex', {
           ...payload.imageSaveOptions,
+          ...(payload.preserve === 'strict' ? { format: 'png' as const, resizeEnabled: false, verifySavedFile: result.verifySavedFile } : {}),
           sourcePathForMetadata: output.absolutePath,
           sourceMimeType: output.mimeType,
           originalFileName: output.absolutePath.split(/[/\\]/).pop(),
-          metadataPatch: buildCodexMetadataPatch(payload, index, result.outputFiles.length, result.lastMessage),
-        }),
-      )
+          metadataPatch: metadata,
+        })
+      // A strict verifier retains the source/mask buffers. Never decode four saved outputs concurrently.
+      if (payload.preserve === 'strict') await processing
+      else processPromises.push(processing)
     }
 
     await Promise.all(processPromises)

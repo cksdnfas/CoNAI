@@ -3,8 +3,20 @@ import { Select } from '@/components/ui/select'
 import type { ChatProfileAssetFields, ChatProfileInput } from '@/lib/api-codex-chat'
 
 /** `background` stays undefined until the image is changed or removed, so saving does not resend it. */
-export type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background' | 'toolPresetName' | keyof ChatProfileAssetFields>> & Omit<ChatProfileAssetFields, 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl'> & { sortOrder: number; background?: string | null }
+export type Draft = Required<Omit<ChatProfileInput, 'sortOrder' | 'background' | keyof ChatProfileAssetFields>> & Omit<ChatProfileAssetFields, 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl'> & { sortOrder: number; background?: string | null }
 export type PatchDraft = (next: Partial<Draft>) => void
+
+/** Switching engines clears options belonging to the previous engine in both the editor and assistant. */
+export function enginePatch(engine: Draft['engine'], current: Draft): Partial<Draft> {
+  if (engine === current.engine) return {}
+  return engine === 'codex' || engine === 'claude'
+    ? { engine, modelSlotId: null, model: engine === 'claude' ? 'sonnet' : '', reasoningEffort: '', reasoningBudgetTokens: null, visionEnabled: engine === 'claude' || current.visionEnabled }
+    : { engine, model: '', reasoningEffort: '', reasoningBudgetTokens: null }
+}
+
+export function judgePresetPatch(judgePresetId: number | null): Partial<Draft> {
+  return judgePresetId === null ? { judgePresetId, judgeSlotId: null } : { judgePresetId }
+}
 
 export function numberOrNull(value: string) {
   const number = Number(value)

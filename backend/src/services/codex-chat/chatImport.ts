@@ -63,7 +63,8 @@ function findProfile(id: unknown, profileName: unknown) {
   const name = typeof profileName === 'string' ? profileName.trim() : ''
   const byId = typeof id === 'number' ? ChatProfileStore.find(id) : null
   if (byId && (!name || byId.name === name)) return byId
-  return (name ? ChatProfileStore.list().find((profile) => profile.name === name) : undefined) ?? null
+  const match = name ? ChatProfileStore.listNames().find((profile) => profile.name === name) : undefined
+  return match ? ChatProfileStore.find(match.id) : null
 }
 
 /**

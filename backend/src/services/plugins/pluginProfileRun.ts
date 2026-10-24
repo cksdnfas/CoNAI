@@ -89,7 +89,8 @@ export async function runPluginProfile(params: {
           requester, profile, chatContext: delivery.context, research, messages, signal: runSignal,
         }) : await generateLlmGroupReply({
           requester, profile, threadId: room.id, chatContext: delivery.context, signal: runSignal, research, emit: () => {},
-          generation: { maxTokens: Math.min(input.maxTokens ?? 4096, profile.maxTokens ?? 4096) },
+          // Unset: the profile's own output cap, as in its chats; a plugin's maxTokens only lowers it.
+          generation: input.maxTokens === undefined ? {} : { maxTokens: Math.min(input.maxTokens, profile.maxTokens ?? input.maxTokens) },
           buildMessages: (_tools, _onMeta, _judged, useSession) => {
             if (piDir) {
               useSession({ runtime: 'pi', dir: piDir, resumeId: null, onDone: () => {} })

@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { FileText, FlaskConical, LoaderCircle, Plug, TriangleAlert } from 'lucide-react'
+import { FlaskConical, LoaderCircle, Plug, TriangleAlert } from 'lucide-react'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Select } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
   createExternalApiProvider,
@@ -18,7 +17,6 @@ import {
   type ExternalApiProviderType,
 } from '@/lib/api-external-api'
 import { MODEL_SLOTS_QUERY_KEY, listModelSlots, syncConnectionModels } from '@/lib/api-codex-chat'
-import type { LlmPresetRecord } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Field } from '@/components/ui/field'
@@ -33,24 +31,18 @@ import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { ConnectionModelChecklist, type ConnectionModelsDraft } from './llm-connection-models'
 import { SettingsAdvancedSwitch, useSettingsAdvanced } from './settings-advanced'
 import {
-  LLM_PRESET_SECTIONS,
   LLM_PROVIDER_OPTIONS,
   TYPESAFE_ENDPOINTS,
   buildAdditionalConfig,
   buildEmptyDraft,
-  buildEmptyPresetDraft,
-  buildPresetDraft,
   buildProviderDraft,
   buildProviderPlaceholder,
   getBaseUrlSummary,
   type LlmConnectionDraft,
   type LlmConnectionModalState,
-  type LlmPresetDraft,
-  type LlmPresetModalState,
   type LlmThinkingSwitch,
   LLM_THINKING_SWITCHES,
 } from './llm-connections-tab-utils'
-import { SegmentedControl } from '@/components/common/segmented-control'
 
 /** A connection (server) row; its models are listed under it. */
 export function LlmConnectionListItem({
@@ -80,22 +72,6 @@ export function LlmConnectionListItem({
         </>
       )}
       onOpen={() => onOpenOptions(provider)}
-    />
-  )
-}
-
-export function LlmPresetListItem({
-  preset,
-  onOpenOptions,
-}: {
-  preset: LlmPresetRecord
-  onOpenOptions: (preset: LlmPresetRecord) => void
-}) {
-  return (
-    <ResourceRow
-      leading={<FileText />}
-      name={preset.name}
-      onOpen={() => onOpenOptions(preset)}
     />
   )
 }
@@ -294,43 +270,6 @@ function LlmConnectionFormFields({
   )
 }
 
-function LlmPresetFormFields({
-  draft,
-  section,
-  onChange,
-}: {
-  draft: LlmPresetDraft
-  section: (typeof LLM_PRESET_SECTIONS)[number]
-  onChange: (patch: Partial<LlmPresetDraft>) => void
-}) {
-  const { t } = useI18n()
-
-  return (
-    <div className="grid gap-4">
-      <Field label={t('llmConnectionsTab.presetName')}>
-        <Input
-          variant="settings"
-          value={draft.name}
-          onChange={(event) => onChange({ name: event.target.value })}
-          placeholder={t({ ko: '예: item-summary-json', en: 'e.g. item-summary-json' })}
-        />
-      </Field>
-
-      <Field label={t(section.fieldLabel)}>
-        <Textarea
-          variant="settings"
-          rows={section.expectsJson ? 10 : 8}
-          value={draft.content}
-          onChange={(event) => onChange({ content: event.target.value })}
-          placeholder={t(section.placeholder)}
-          mono={section.mono}
-          textSize={section.mono ? 'xs' : 'sm'}
-        />
-      </Field>
-    </div>
-  )
-}
-
 export function LlmConnectionEditorModal({
   state,
   onClose,
@@ -347,6 +286,8 @@ export function LlmConnectionEditorModal({
   const isEditMode = state?.mode === 'edit'
   const provider = state?.mode === 'edit' ? state.provider : null
   const [draft, setDraft] = useState<LlmConnectionDraft>(() => (provider ? buildProviderDraft(provider) : buildEmptyDraft()))
+  const probeId = useId()
+  const [credentialRevision, setCredentialRevision] = useState(0)
   /** The way of turning thinking off the connection test replaced (until the editor closes). */
   const [thinkingChanged, setThinkingChanged] = useState<LlmThinkingSwitch | null>(null)
 
@@ -356,23 +297,25 @@ export function LlmConnectionEditorModal({
     }
 
     setDraft(provider ? buildProviderDraft(provider) : buildEmptyDraft())
+    setCredentialRevision((current) => current + 1)
     setThinkingChanged(null)
   }, [isOpen, provider])
 
   // The server's model list follows the URL, key and type being edited; a saved key is reused when none is typed.
   const probe = useSettledValue(
-    { providerType: draft.providerType, baseUrl: draft.baseUrl.trim(), apiKey: draft.apiKey, providerName: provider?.provider_name ?? '' },
+    { providerType: draft.providerType, baseUrl: draft.baseUrl.trim(), apiKey: draft.apiKey, credentialRevision, providerName: provider?.provider_name ?? '' },
     600,
   )
   const modelsQuery = useQuery({
-    queryKey: ['llm-connection-models', probe.providerType, probe.baseUrl, probe.apiKey, probe.providerName],
+    queryKey: ['llm-connection-models', probeId, probe.providerType, probe.baseUrl, probe.credentialRevision, probe.providerName],
     queryFn: () => listExternalApiLlmModels({
       provider_type: probe.providerType,
       base_url: probe.baseUrl,
       api_key: probe.apiKey || undefined,
       provider_name: probe.providerName || undefined,
     }),
-    enabled: isOpen && probe.providerType !== 'general' && probe.baseUrl.length > 0,
+    enabled: isOpen && probe.providerType !== 'general' && probe.baseUrl.length > 0
+      && probe.credentialRevision === credentialRevision && probe.providerName === (provider?.provider_name ?? ''),
     retry: false,
     staleTime: 60_000,
   })
@@ -419,7 +362,7 @@ export function LlmConnectionEditorModal({
     mutationFn: async () => {
       await createExternalApiProvider({
         provider_name: draft.providerName,
-        display_name: draft.providerName,
+        display_name: draft.displayName,
         provider_type: draft.providerType,
         base_url: draft.baseUrl,
         api_key: draft.apiKey || undefined,
@@ -448,7 +391,7 @@ export function LlmConnectionEditorModal({
       }
 
       await updateExternalApiProvider(provider.provider_name, {
-        display_name: draft.providerName,
+        display_name: draft.displayName,
         provider_type: draft.providerType,
         base_url: draft.baseUrl,
         api_key: draft.apiKey || undefined,
@@ -523,7 +466,7 @@ export function LlmConnectionEditorModal({
   })
 
   const isSaving = createMutation.isPending || updateMutation.isPending
-  const savedDraft = useMemo(() => (provider ? buildProviderDraft(provider) : buildEmptyDraft()), [provider])
+  const savedDraft = provider ? buildProviderDraft(provider) : buildEmptyDraft()
   const dirty = isOpen && (modelsChanged || JSON.stringify(draft) !== JSON.stringify(savedDraft))
   const canSave = draft.providerName.trim().length > 0 && draft.baseUrl.trim().length > 0 && (dirty || !isEditMode) && !isSaving
   const save = () => (isEditMode ? updateMutation.mutate() : createMutation.mutate())
@@ -556,6 +499,7 @@ export function LlmConnectionEditorModal({
             apiKeyMasked={provider?.api_key_masked}
             onChange={(patch) => {
               if (patch.thinkingSwitch !== undefined) setThinkingChanged(null)
+              if (patch.apiKey !== undefined && patch.apiKey !== draft.apiKey) setCredentialRevision((current) => current + 1)
               setDraft((current) => ({ ...current, ...patch }))
             }}
             onEndpointModel={addEndpointModel}
@@ -602,93 +546,6 @@ export function LlmConnectionEditorModal({
           </IconButton>
         ) : null}
       </EditorFooter>
-    </Modal>
-  )
-}
-
-export function LlmPresetEditorModal({
-  state,
-  isSaving,
-  isDeleting,
-  onClose,
-  onTypeChange,
-  onSave,
-  onDelete,
-}: {
-  state: LlmPresetModalState
-  isSaving: boolean
-  isDeleting: boolean
-  onClose: () => void
-  /** A new preset's kind was changed (the kind of a saved one stays). */
-  onTypeChange: (presetType: (typeof LLM_PRESET_SECTIONS)[number]['key']) => void
-  onSave: (draft: LlmPresetDraft) => Promise<void>
-  onDelete: (preset: LlmPresetRecord) => Promise<void>
-}) {
-  const { t } = useI18n()
-  const confirm = useConfirm()
-  const isOpen = state !== null
-  const isEditMode = state?.mode === 'edit'
-  const preset = state?.mode === 'edit' ? state.preset : null
-  const presetType = state?.presetType
-  const section = LLM_PRESET_SECTIONS.find((entry) => entry.key === presetType) ?? LLM_PRESET_SECTIONS[0]
-  const [draft, setDraft] = useState<LlmPresetDraft>(() => (preset ? buildPresetDraft(preset) : buildEmptyPresetDraft(presetType)))
-
-  useEffect(() => {
-    if (!isOpen) {
-      return
-    }
-
-    setDraft(preset ? buildPresetDraft(preset) : buildEmptyPresetDraft(presetType))
-  }, [isOpen, preset, presetType])
-
-  const savedDraft = useMemo(() => (preset ? buildPresetDraft(preset) : buildEmptyPresetDraft(presetType)), [preset, presetType])
-  const dirty = isOpen && JSON.stringify(draft) !== JSON.stringify(savedDraft)
-  const canSave = draft.name.trim().length > 0 && (dirty || !isEditMode) && !isSaving && !isDeleting
-
-  return (
-    <Modal
-      open={isOpen}
-      onClose={onClose}
-      title={isEditMode ? t({ ko: '{heading} 수정', en: 'Edit {heading}' }, { heading: t(section.heading) }) : t({ ko: '프롬프트 프리셋 추가', en: 'Add prompt preset' })}
-      size="narrow"
-      dirty={dirty}
-      onSave={canSave ? () => void onSave(draft) : undefined}
-    >
-      <ModalBody>
-        {isEditMode ? null : (
-          <SegmentedControl
-            className="mb-4"
-            size="sm"
-            value={section.key}
-            onChange={(key) => onTypeChange(key as typeof section.key)}
-            items={LLM_PRESET_SECTIONS.map((entry) => ({ value: entry.key, label: t(entry.shortLabel) }))}
-            ariaLabel={t({ ko: '종류', en: 'Kind' })}
-          />
-        )}
-        <LlmPresetFormFields
-          draft={draft}
-          section={section}
-          onChange={(patch) => setDraft((current) => ({ ...current, ...patch }))}
-        />
-      </ModalBody>
-
-      <EditorFooter
-        onDelete={preset ? () => void (async () => {
-          const confirmed = await confirm({
-            title: t({ ko: '프리셋 삭제', en: 'Delete preset' }),
-            description: t({ ko: "프리셋 '{presetName}' 을(를) 삭제할까?", en: "Delete preset '{presetName}'?" }, { presetName: preset.name }),
-            confirmLabel: t({ ko: '삭제', en: 'Delete' }),
-            tone: 'destructive',
-          })
-          if (confirmed) void onDelete(preset)
-        })() : undefined}
-        deleteLabel={t('llmConnectionsTab.deletePreset')}
-        deleting={isDeleting}
-        onSave={() => void onSave(draft)}
-        canSave={canSave}
-        saving={isSaving}
-        saveLabel={preset ? t('llmConnectionsTab.savePreset') : t({ ko: '{fieldLabel} 저장', en: 'Save {fieldLabel}' }, { fieldLabel: t(section.fieldLabel) })}
-      />
     </Modal>
   )
 }

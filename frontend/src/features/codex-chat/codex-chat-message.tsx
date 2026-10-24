@@ -791,7 +791,8 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const showOwnRow = !hasCast || Boolean(ownText || showReasoning || toolCalls.length > 0)
   const truncated = !streaming && status === 'completed' && finishReason === 'length'
   const loopCut = !streaming && status === 'completed' && finishReason === 'repetition'
-  const footer = streaming || status === 'interrupted' || status === 'failed' || truncated || loopCut ? (
+  const toolLimited = !streaming && status === 'completed' && finishReason === 'tool_limit'
+  const footer = streaming || status === 'interrupted' || status === 'failed' || truncated || loopCut || toolLimited ? (
     <div className="space-y-2">
       {streaming ? <ActivityLine toolCalls={toolCalls} translating={translating} /> : null}
       {status === 'interrupted' ? <p className="text-xs text-muted-foreground">{t({ ko: '중단됨', en: 'Stopped' })}</p> : null}
@@ -810,6 +811,13 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
         <Tip content={t({ ko: '모델이 같은 걸 계속 반복해서 거기서 끊고 반복한 부분은 지웠어.', en: 'The model kept repeating itself, so the reply was stopped there and the loop removed.' })} side="bottom" align="start">
           <p tabIndex={0} className="flex w-fit cursor-help items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
             <Repeat className="size-3" aria-hidden />{t({ ko: '반복이라 끊음', en: 'Stopped a loop' })}
+          </p>
+        </Tip>
+      ) : null}
+      {toolLimited ? (
+        <Tip content={t({ ko: '도구 호출 반복 한도에 닿아서 여기서 멈췄어. 한 일은 남아 있고, "계속"이라고 하면 이어서 해. 한도는 설정 › 채팅 › 자원 › 도구 사용에서 바꿔.', en: 'The reply reached the tool round limit and stopped here. What it did stays; say "continue" to go on. Change the limit under Settings › Chat › Resources › Tool use.' })} side="bottom" align="start">
+          <p tabIndex={0} className="flex w-fit cursor-help items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+            <Wrench className="size-3" aria-hidden />{t({ ko: '도구 한도에서 멈춤', en: 'Stopped at the tool limit' })}
           </p>
         </Tip>
       ) : null}

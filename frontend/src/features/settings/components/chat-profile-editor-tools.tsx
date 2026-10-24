@@ -134,7 +134,7 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults, advanced }
         ) : null}
         {advanced && draft.mcpEnabled && draft.engine !== 'codex' ? (
           <div className="border-t border-line pt-3">
-            <ChatProfileToolLimits maxToolRounds={draft.maxToolRounds} toolOutputLimit={draft.toolOutputLimit} onChange={patch} />
+            <ChatProfileToolLimits toolOutputLimit={draft.toolOutputLimit} onChange={patch} />
           </div>
         ) : null}
       </EditorGroup>

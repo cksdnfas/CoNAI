@@ -14,17 +14,14 @@ import { getChatScopeCopy } from '@/features/codex-chat/chat-scope-copy'
 import { useI18n } from '@/i18n'
 import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
-  CHAT_ADMIN_SETTINGS_QUERY_KEY,
+  CHAT_PROFILE_DEFAULTS_QUERY_KEY,
   CHAT_LOREBOOKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
-  CHAT_STATUS_QUERY_KEY,
   MODEL_SLOTS_QUERY_KEY,
-  getChatAdminSettings,
   getChatProfileDefaults,
   importChatProfileCard,
   listChatAdminProfiles,
   listModelSlots,
-  updateChatAdminSettings,
   updateChatProfile,
   type ChatCardImportReport,
   type ChatProfile,
@@ -39,6 +36,7 @@ import { ChatCardImportReportModal } from './chat-card-import-report'
 import { InstantApplyHint } from './settings-section-status'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
+import { useChatOptions } from './chat-options-settings'
 
 /** An API LLM profile's model row: its own, else the chat representative model it falls back to. */
 function profileModelRow(profile: ChatProfile, slots: ModelSlot[]) {
@@ -92,10 +90,10 @@ export function ChatSettingsProfiles() {
   const [imported, setImported] = useState<{ draft: ChatProfileInput; report: ChatCardImportReport } | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
 
-  const settingsQuery = useQuery({ queryKey: CHAT_ADMIN_SETTINGS_QUERY_KEY, queryFn: getChatAdminSettings })
+  const { settingsQuery, settingsMutation } = useChatOptions()
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles })
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots })
-  const defaultsQuery = useQuery({ queryKey: ['codex-chat-profile-defaults'], queryFn: getChatProfileDefaults, staleTime: Infinity })
+  const defaultsQuery = useQuery({ queryKey: CHAT_PROFILE_DEFAULTS_QUERY_KEY, queryFn: getChatProfileDefaults, staleTime: Infinity })
 
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
   const importMutation = useMutation({
@@ -105,14 +103,6 @@ export function ChatSettingsProfiles() {
       if (draft.lorebookIds?.length) void queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY })
       if (importReport && (importReport.converted.length || importReport.dropped.length)) setImported({ draft, report: importReport })
       else setEditor({ profile: null, draft })
-    },
-    onError,
-  })
-  const settingsMutation = useMutation({
-    mutationFn: updateChatAdminSettings,
-    onSuccess: (settings) => {
-      queryClient.setQueryData(CHAT_ADMIN_SETTINGS_QUERY_KEY, settings)
-      void queryClient.invalidateQueries({ queryKey: CHAT_STATUS_QUERY_KEY })
     },
     onError,
   })
@@ -232,7 +222,7 @@ export function ChatSettingsProfiles() {
           setImported(null)
         }}
       />
-      <ChatProfileEditorModal open={editor !== null} profile={editor?.profile ?? null} initialDraft={editor?.draft} copyOf={editor?.copyOf} defaults={defaultsQuery.data} onClose={() => setEditor(null)} />
+      {editor ? <ChatProfileEditorModal open profile={editor.profile} initialDraft={editor.draft} copyOf={editor.copyOf} defaults={defaultsQuery.data} onClose={() => setEditor(null)} /> : null}
     </div>
   )
 }

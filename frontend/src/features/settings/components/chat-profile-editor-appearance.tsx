@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CHAT_PROFILE_TEXT_LIMITS } from '@conai/shared'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Crop, ImagePlus, Sparkles, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -81,7 +82,7 @@ export function ChatProfileAppearancePanel({ draft, patch, profile, onBusyChange
       const result = await setChatProfileExpression(current.id, name, hash)
       onProfileChange(result.profile)
       patch({ style: { ...draft.style, emoticonGroupIds: [result.expressionGroupId, ...draft.style.emoticonGroupIds.filter((id) => id !== result.expressionGroupId)] } })
-      await runs.refreshAfterApply()
+      await runs.refreshAfterApply(current.id, result.expressionGroupId)
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '표정을 넣지 못했어.', en: 'Could not set the expression.' })), tone: 'error' })
     }
@@ -89,8 +90,8 @@ export function ChatProfileAppearancePanel({ draft, patch, profile, onBusyChange
   const clearExpression = async (name: string) => {
     if (!profile) return
     try {
-      await clearChatProfileExpression(profile.id, name)
-      await runs.refreshAfterApply()
+      const result = await clearChatProfileExpression(profile.id, name)
+      await runs.refreshAfterApply(profile.id, result.expressionGroupId)
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '표정을 비우지 못했어.', en: 'Could not clear the expression.' })), tone: 'error' })
     }
@@ -127,7 +128,7 @@ export function ChatProfileAppearancePanel({ draft, patch, profile, onBusyChange
             label={<>{t({ ko: '외형 설명', en: 'Appearance' })}{appearanceWarning ? <Tip content={appearanceWarning}><span className="inline-flex normal-case tracking-normal text-warning" tabIndex={0} aria-label={appearanceWarning}><AlertTriangle className="size-3.5" /></span></Tip> : null}</>}
             actions={<IconButton size="icon-xs" variant="ghost" disabled={busy || appearance.isPending} label={t({ ko: '기준 이미지나 프롬프트 보고 초안 쓰기', en: 'Draft from the reference image or prompt' })} onClick={() => void writeAppearance()}>{appearance.isPending ? <Spinner /> : <Sparkles />}</IconButton>}
           >
-            <Textarea variant="settings" disabled={appearance.isPending} className="min-h-[120px]" rows={5} value={draft.appearance ?? ''} maxLength={20000} aria-invalid={appearanceMissing || undefined} aria-label={t({ ko: '외형 설명', en: 'Appearance' })} onChange={(event) => patch({ appearance: event.target.value })} />
+            <Textarea variant="settings" disabled={appearance.isPending} className="min-h-[120px]" rows={5} value={draft.appearance ?? ''} maxLength={CHAT_PROFILE_TEXT_LIMITS.text} aria-invalid={appearanceMissing || undefined} aria-label={t({ ko: '외형 설명', en: 'Appearance' })} onChange={(event) => patch({ appearance: event.target.value })} />
           </EditorGroup>
         </div>
       </div>

@@ -13,7 +13,7 @@ import type { NodeOption, NodeOptionSource } from './node-option-sources'
 function modelRowOptions(kinds: readonly string[], part: 'chat' | 'judge'): NodeOption[] {
   const connections = new Map(ExternalApiProvider.findAll().map((provider) => [provider.provider_name, provider]))
   const usable = (slot: { providerType: string | null }) => slot.providerType === null || kinds.includes(slot.providerType)
-  const slots = ModelSlotStore.list()
+  const slots = ModelSlotStore.list({ usage: false })
   const routes = slots.filter((slot) => slot.kind === 'route' && usable(slot))
     .sort((a, b) => Number(b.routeKey === part) - Number(a.routeKey === part))
   const models = slots.filter((slot) => slot.kind === 'model' && usable(slot))
@@ -57,7 +57,7 @@ async function codexReasoningEffortOptions(): Promise<NodeOption[]> {
 export const LLM_NODE_OPTION_SOURCES: Record<string, NodeOptionSource> = {
   llm_model_rows: () => modelRowOptions(LLM_CONNECTION_TYPES, 'chat'),
   judge_model_rows: () => modelRowOptions(MODEL_CONNECTION_TYPES, 'judge'),
-  chat_profiles: () => ChatProfileStore.list().map((profile) => ({
+  chat_profiles: () => ChatProfileStore.list({ directory: true }).map((profile) => ({
     value: String(profile.id),
     label: profile.isEnabled ? profile.name : `${profile.name} (꺼짐)`,
     ...(profile.isEnabled ? {} : { disabled: true }),

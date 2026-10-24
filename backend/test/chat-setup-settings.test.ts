@@ -41,7 +41,7 @@ test('chat setup: profile settings proposals and the chat settings card', { time
   const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
   const { LinkedFileStore } = await import('../src/services/codex-chat/chatLinkedFiles')
   const { RatingScoreModel } = await import('../src/models/RatingScore')
-  const { ChatProposalStore } = await import('../src/services/codex-chat/chatProposals')
+  const { ChatProposalStore, onProposalResolved } = await import('../src/services/codex-chat/chatProposals')
   const setup = await import('../src/mcp/tools/chatSetupTools')
   const settings = await import('../src/services/codex-chat/chatSettingsProposals')
   const { openChatMcpBridge } = await import('../src/services/codex-chat/chatMcpBridge')
@@ -81,7 +81,7 @@ test('chat setup: profile settings proposals and the chat settings card', { time
     assert.ok(tiers.length > 0, 'the default rating tiers exist')
     const { proposal } = setup.buildProfileUpdateProposal({ patch: {
       translation_display_language: 'ja', translationModelLanguage: 'zh', translationInstructions: '  존댓말  ',
-      lore_recursion_depth: 9, contextTurns: 0, contextTokens: null, maxToolRounds: 3.6, temperature: 5,
+      lore_recursion_depth: 9, contextTurns: 0, contextTokens: null, temperature: 5,
       summaryEnabled: true, summary_trigger_turns: 12, suggestEnabled: true, suggestProfileId: helper.id,
       visionEnabled: true, contentRatingMode: 'custom', contentRatingTierId: tiers[0].id, allowLoreProposals: false,
       linkedFiles: [{ id: journal.id, write: true }, { id: memo.id }],
@@ -94,7 +94,6 @@ test('chat setup: profile settings proposals and the chat settings card', { time
     assert.equal(proposal.patch.translationInstructions, '존댓말')
     assert.equal(proposal.patch.loreRecursionDepth, 5, 'clamped to the recursion maximum')
     assert.equal(proposal.patch.contextTurns, 1, 'clamped to the minimum')
-    assert.equal(proposal.patch.maxToolRounds, 4, 'rounded like the editor')
     assert.equal(proposal.patch.temperature, 2)
     assert.deepEqual(proposal.patch.openingHistory, [{ role: 'user', content: '안녕 {{char}}' }])
     assert.equal(proposal.patch.greetingPosition, 1)
@@ -118,7 +117,7 @@ test('chat setup: profile settings proposals and the chat settings card', { time
     assert.throws(() => setup.buildProfileUpdateProposal({ patch: { translationDisplayLanguage: 'fr' } }, profile.id, me), /ko, en, ja, zh/)
     assert.throws(() => setup.buildProfileUpdateProposal({ patch: { contentRatingTierId: 999999 } }, profile.id, me), /unknown rating tier/)
     assert.throws(() => setup.buildProfileUpdateProposal({ patch: { judgePresetId: 4242 } }, profile.id, me), /no such judge preset/)
-    assert.throws(() => setup.buildProfileUpdateProposal({ patch: { summaryEnabled: 'yes' } }, profile.id, me), /true or false/)
+    assert.throws(() => setup.buildProfileUpdateProposal({ patch: { summaryEnabled: 'yes' } }, profile.id, me), /요약 사용.*참 또는 거짓/)
     assert.throws(() => setup.buildProfileUpdateProposal({ patch: { linkedFiles: [{ id: book.folderId }] } }, profile.id, me), /로어북 폴더/)
     assert.throws(() => setup.buildProfileUpdateProposal({ patch: { linkedFiles: [{ id: 'nope' }] } }, profile.id, me), /32-character id/)
     assert.throws(() => setup.buildProfileUpdateProposal({ patch: { linkedFiles: [{ id: world.id }] } }, profile.id, null), /needs a chat account/)
@@ -155,7 +154,25 @@ test('chat setup: profile settings proposals and the chat settings card', { time
     assert.equal(card.display.loreRecordBookId.after, '장기 기억')
     assert.equal(card.display.minutesFolderId.after, '세계관')
     assert.equal(OwnedLorebookStore.recordBookId(threadId), null, 'nothing changes before 저장')
+    const notifications: boolean[] = []
+    const unsubscribe = onProposalResolved((_threadId, proposal) => {
+      if (proposal.id === card.id) notifications.push(dbModule.getUserSettingsDb().inTransaction)
+    })
+    t.after(unsubscribe)
+    const markSaved = t.mock.method(ChatProposalStore, 'markSaved', () => { throw new Error('save marker failed') })
+    assert.throws(() => settings.applyChatSettingsProposal({ accountId: null, accountType: 'admin' }, card.id), /save marker failed/)
+    markSaved.mock.restore()
+    assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [], 'mutations roll back if the saved marker fails')
+    assert.equal(Boolean(ChatProposalStore.find(card.id)!.saved), false)
+    LinkedFileStore.setThreadLinks(threadId, [{ id: memo.id, write: false }])
+    assert.throws(() => settings.applyChatSettingsProposal({ accountId: null, accountType: 'admin' }, card.id),
+      (error: unknown) => error instanceof settings.ChatSettingsError && error.status === 409)
+    assert.equal(Boolean(ChatProposalStore.find(card.id)!.saved), false, 'conflicts leave the card unsaved')
+    assert.deepEqual(OwnedLorebookStore.threadLinks(threadId), [], 'a conflict changes none of the other touched fields')
+    LinkedFileStore.setThreadLinks(threadId, [])
+    assert.deepEqual(notifications, [], 'failed saves and conflicts publish no resolution')
     const saved = settings.applyChatSettingsProposal({ accountId: null, accountType: 'admin' }, card.id)
+    assert.deepEqual(notifications, [false], 'resolution listeners run after the commit')
     assert.equal((saved as { saved?: boolean }).saved, true)
     assert.equal(OwnedLorebookStore.recordBookId(threadId), book.id)
     assert.deepEqual(LinkedFileStore.threadLinks(threadId), [{ id: world.id, write: true }])

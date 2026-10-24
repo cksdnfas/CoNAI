@@ -1,5 +1,5 @@
 import { createHash } from 'crypto'
-import { sortLoreKeysByLanguage } from '@conai/shared'
+import { CHAT_PROFILE_LIMITS, sortLoreKeysByLanguage } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { notifySemanticChange } from '../embeddings/semanticSignal'
 import { loadChatSettings } from './chatSettings'
@@ -312,7 +312,7 @@ export const ChatLorebookStore = {
 /** `loreRecursionDepth`: how many times chosen entries' text is scanned for further entries (0: never). */
 type LoreProfile = { lorebookIds: number[]; loreScanDepth: number; loreTokenBudget: number; loreRecursionDepth?: number }
 
-export const LORE_RECURSION_MAX_DEPTH = 5
+export const LORE_RECURSION_MAX_DEPTH = CHAT_PROFILE_LIMITS.loreRecursionDepth.max
 
 /** The key a caller that keeps context (Codex) remembers an entry by: `book:entry:content hash`. */
 export function loreEntryKey(bookId: number, entry: Pick<ChatLoreEntry, 'id' | 'content'>) {

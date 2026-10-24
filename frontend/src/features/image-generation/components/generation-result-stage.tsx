@@ -102,7 +102,7 @@ function StageMetaInfo({ image }: { image: ImageRecord }) {
   const width = detail?.width ?? image.width
   const height = detail?.height ?? image.height
   const parts = [
-    width && height ? `${formatNumber(width)}×${formatNumber(height)}` : null,
+    width && height ? `${t({ ko: '실제 크기', en: 'Measured size' })}: ${formatNumber(width)}×${formatNumber(height)}` : null,
     params?.steps != null ? `${formatNumber(params.steps)} steps` : null,
     params?.sampler || null,
     params?.seed != null ? `seed ${params.seed}` : null,

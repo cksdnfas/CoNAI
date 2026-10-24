@@ -5,23 +5,29 @@ import { resolveChatCompletionTarget } from './llmChatCompletion'
 import type { McpRequester } from '../../mcp/context'
 import { actorFromRequester } from '../posts/postActor'
 import { PostStore } from '../posts/postStore'
+import { chatToolRoundLimit } from './chatSettings'
 
 /** Internal execution capability. Never constructed from model arguments or HTTP MCP context. */
 export class ChatResearchExecution {
   readonly allowedPostIds: number[]
   readonly maxModelCalls: number
-  readonly maxToolCalls: number
+  /** Null: no per-call cap, as in a chat (rounds bound the run); a summary has no tools. */
+  readonly maxToolCalls: number | null
   readonly maxTurns: number
   readonly summary: boolean
   readonly result: PluginResearchResult
   private evidenceBytes = 0
 
-  constructor(input: PluginResearchInput, runtime: PluginResearchResult['limits']['runtime'] = 'direct') {
+  /**
+   * The app-wide tool round limit, counted as in a chat reply: that many tool rounds, then one answer without tools.
+   * A caller's own maxModelCalls/maxTurns/maxToolCalls are accepted for older plugins and ignored.
+   */
+  constructor(input: PluginResearchInput, runtime: PluginResearchResult['limits']['runtime'] = 'direct', toolRounds = chatToolRoundLimit()) {
     this.allowedPostIds = [...input.allowedPostIds]
     this.summary = input.purpose === 'summary'
-    this.maxModelCalls = this.summary ? 1 : input.maxModelCalls ?? 8
-    this.maxToolCalls = this.summary ? 0 : input.maxToolCalls ?? 24
-    this.maxTurns = this.summary ? 1 : input.maxTurns ?? 8
+    this.maxModelCalls = this.summary ? 1 : toolRounds + 1
+    this.maxToolCalls = this.summary ? 0 : null
+    this.maxTurns = this.summary ? 1 : toolRounds + 1
     this.result = { slotId: input.slotId, activityId: input.activityId, modelCalls: runtime === 'direct' ? 0 : null,
       turns: runtime === 'claude' || runtime === 'pi' ? 0 : null, toolCalls: 0, stopReason: 'completed', evidence: [],
       limits: { runtime, maxModelCalls: runtime === 'direct' ? this.maxModelCalls : null,
@@ -43,7 +49,6 @@ export class ChatResearchExecution {
 
   finalNativeTurn(continuationNeeded = false) {
     if (this.summary) return true
-    if (this.result.toolCalls >= this.maxToolCalls) { this.result.stopReason = 'tool_limit'; return true }
     if (this.result.turns !== null && this.result.turns >= this.maxTurns - 1) {
       if (this.result.turns > 0 && continuationNeeded) this.result.stopReason = 'turn_limit'
       return true
@@ -59,7 +64,6 @@ export class ChatResearchExecution {
   finalModelRound() {
     if (this.summary) return true
     if (this.result.modelCalls === null) return this.finalNativeTurn()
-    if (this.result.toolCalls >= this.maxToolCalls) { this.result.stopReason = 'tool_limit'; return true }
     if (this.result.modelCalls >= this.maxModelCalls - 1) {
       if (this.result.modelCalls > 0) this.result.stopReason = 'model_limit'
       return true
@@ -67,10 +71,10 @@ export class ChatResearchExecution {
     return false
   }
 
+  /** Counts a dispatched tool call; a summary has none to dispatch. */
   takeTool() {
-    if (this.result.toolCalls >= this.maxToolCalls) { this.result.stopReason = 'tool_limit'; return false }
+    if (this.summary) return false
     this.result.toolCalls++
-    if (this.result.toolCalls === this.maxToolCalls) this.result.stopReason = 'tool_limit'
     return true
   }
 

@@ -33,7 +33,7 @@ const INLINE_DATA_URL_PATTERN = /^data:[^,]*,/i;
 const MAX_SNAPSHOT_STRING_LENGTH = 100_000;
 const MAX_SNAPSHOT_DEPTH = 32;
 
-function sanitizeSnapshotValue(value: unknown, depth: number): unknown {
+export function sanitizeSnapshotValue(value: unknown, depth = 0): unknown {
   if (depth > MAX_SNAPSHOT_DEPTH) {
     return null;
   }

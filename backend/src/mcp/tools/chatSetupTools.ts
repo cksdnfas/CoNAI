@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { CHAT_TRANSLATION_LANGUAGES, isChatTranslationLanguage, type ChatProposal } from '@conai/shared';
 import { z } from 'zod';
 import { ChatProposalStore, type NewChatProposal } from '../../services/codex-chat/chatProposals';
-import { ChatProfileStore, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, normalizeAlternateGreetings, normalizeSections, type ChatProfile } from '../../services/codex-chat/chatProfiles';
+import { ChatProfileStore, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, normalizeAlternateGreetings, normalizeSections, normalizeProfileScalarField, validateProfileText as limitedText, type ChatProfile } from '../../services/codex-chat/chatProfiles';
 import { normalizeGreetingPosition, normalizeOpeningHistory } from '../../services/codex-chat/chatOpeningHistory';
 import { ChatSharedBlockStore, PROFILE_MAX_BLOCKS } from '../../services/codex-chat/chatDisplayBlocks';
 import { ChatLorebookStore, LORE_RECURSION_MAX_DEPTH, PROFILE_MAX_LOREBOOKS } from '../../services/codex-chat/chatLorebook';
@@ -11,7 +11,7 @@ import { assertLinkedFiles, describeLinkedFiles, normalizeLinkedFiles, type Link
 import { RatingScoreModel } from '../../models/RatingScore';
 import { requireFileStoreOwner } from '../../services/fileStoreAccess';
 import { CHAT_FEATURES_GUIDE } from './chatSettingsTools';
-import { ModelSlotStore } from '../../services/codex-chat/modelSlots';
+import { LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from '../../services/codex-chat/modelSlots';
 import { modelLabelOf } from '../../services/codex-chat/chatModelRoles';
 import { normalizeBlock } from '../../services/codex-chat/chatStyle';
 import type { McpRequestContext } from '../context';
@@ -33,7 +33,7 @@ const NO_CHAT_ERROR = 'Proposals need an active chat reply.';
 const PROPOSABLE_KEYS = [
   'name', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'openingHistory', 'greetingPosition', 'authorNote', 'appearance',
   'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'lorebookIds', 'blockIds',
-  'temperature', 'maxTokens', 'contextTurns', 'contextTokens', 'maxToolRounds', 'toolOutputLimit',
+  'temperature', 'maxTokens', 'contextTurns', 'contextTokens', 'toolOutputLimit',
   'summaryEnabled', 'summaryTriggerTurns', 'summaryPrompt',
   'translationModelLanguage', 'translationDisplayLanguage', 'translationInstructions',
   'suggestEnabled', 'suggestProfileId',
@@ -65,7 +65,6 @@ const KEY_ALIASES: Record<string, ProposableKey> = {
   max_tokens: 'maxTokens',
   context_turns: 'contextTurns',
   context_tokens: 'contextTokens',
-  max_tool_rounds: 'maxToolRounds',
   tool_output_limit: 'toolOutputLimit',
   summary_enabled: 'summaryEnabled',
   summary_trigger_turns: 'summaryTriggerTurns',
@@ -120,7 +119,7 @@ const DISPLAY_BLOCK_GUIDE = [
 ].join('\n');
 
 function profileGuide() {
-  const slots = ModelSlotStore.list();
+  const slots = ModelSlotStore.list({ usage: false });
   const lorebooks = ChatLorebookStore.list();
   const blocks = ChatSharedBlockStore.list();
   const judges = ChatJudgePresetStore.list();
@@ -148,7 +147,7 @@ function profileGuide() {
     'Other settings (propose_profile_update patch keys, or propose_chat_profile settings; snake_case also accepted). Numbers outside the range are clamped as the editor does; null clears where noted.',
     '- Models per role: modelSlotId (chat), summarySlotId, translationSlotId (null: no translation), suggestSlotId (null: the chat model), judgeSlotId (judge model, TypeSafe rows allowed; null: the judge preset\'s own) — a model id, `connection · model` label or row id.',
     '- judgePresetId: a judge preset that steers each turn (null: no judge). Editor › 모델 › 역할 › 판단.',
-    `- temperature (0-2, null: server default), maxTokens (1-1000000, null: server default; a ceiling, cut to the room left), contextTurns (${CHAT_PROFILE_LIMITS.contextTurns.min}-${CHAT_PROFILE_LIMITS.contextTurns.max}), contextTokens (${CHAT_PROFILE_LIMITS.contextTokens.min}-${CHAT_PROFILE_LIMITS.contextTokens.max}, null: no token cap), maxToolRounds (${CHAT_PROFILE_LIMITS.maxToolRounds.min}-${CHAT_PROFILE_LIMITS.maxToolRounds.max}), toolOutputLimit (${CHAT_PROFILE_LIMITS.toolOutputLimit.min}-${CHAT_PROFILE_LIMITS.toolOutputLimit.max} characters of one tool result).`,
+    `- temperature (${CHAT_PROFILE_LIMITS.temperature.min}-${CHAT_PROFILE_LIMITS.temperature.max}, null: server default), maxTokens (${CHAT_PROFILE_LIMITS.maxTokens.min}-${CHAT_PROFILE_LIMITS.maxTokens.max}, null: server default; a ceiling, cut to the room left), contextTurns (${CHAT_PROFILE_LIMITS.contextTurns.min}-${CHAT_PROFILE_LIMITS.contextTurns.max}), contextTokens (${CHAT_PROFILE_LIMITS.contextTokens.min}-${CHAT_PROFILE_LIMITS.contextTokens.max}, null: no token cap), toolOutputLimit (${CHAT_PROFILE_LIMITS.toolOutputLimit.min}-${CHAT_PROFILE_LIMITS.toolOutputLimit.max} characters of one tool result). The tool round limit is app-wide (Settings › 채팅 › 자원 › 도구 사용), not a profile field.`,
     `- summaryEnabled (true/false), summaryTriggerTurns (${CHAT_PROFILE_LIMITS.summaryTriggerTurns.min}-${CHAT_PROFILE_LIMITS.summaryTriggerTurns.max}: fold older turns once this many left the window), summaryPrompt (max ${limits.summaryPrompt}, empty: the default). Codex profiles keep their own context (no summary).`,
     `- With a translation model: translationModelLanguage (what the chat model reads and writes) and translationDisplayLanguage (what the user writes and reads), each one of ${LANGUAGE_IDS.join(' | ')}; translationInstructions (max ${limits.translationInstructions}): voice, forms of address and a glossary for translating replies.`,
     '- suggestEnabled: the composer\'s reply suggestions button; suggestProfileId: a chat profile that writes them with its own model and prompt (null: the suggest role\'s model).',
@@ -174,28 +173,20 @@ function profileGuide() {
 
 // ------------------------------------------------------------ validation
 
-function limitedText(label: string, value: unknown, maxLength: number, options: { required?: boolean } = {}) {
-  if (typeof value !== 'string') throw new Error(`${label} must be a string.`);
-  const trimmed = value.trim();
-  if (options.required && !trimmed) throw new Error(`${label} must not be empty.`);
-  if (trimmed.length > maxLength) throw new Error(`${label} is too long (${trimmed.length} > ${maxLength} characters).`);
-  return trimmed;
-}
-
 /** A model row id from a number, a numeric string, a `connection · model` label or a model id (case-insensitive); null clears. */
 function resolveSlot(label: string, value: unknown, options: { judge?: boolean } = {}): number | null {
   if (value === null || value === undefined || value === '') return null;
   // A judge may use a TypeSafe decision model as well; every other role needs an LLM row.
-  const slots = ModelSlotStore.list().filter((slot) => options.judge || slot.providerType !== 'decision_typesafe');
+  const slots = ModelSlotStore.list({ usage: false }).filter((slot) => options.judge || slot.providerType !== 'decision_typesafe');
   const known = `Known models: ${slots.map((slot) => slot.label).join(', ') || '(none)'}`;
   if (typeof value === 'string') {
     const wanted = value.trim().toLowerCase();
     const byName = slots.find((slot) => slot.label.toLowerCase() === wanted) ?? slots.find((slot) => slot.kind === 'model' && slot.model.toLowerCase() === wanted);
-    if (byName) return byName.id;
+    if (byName) return ModelSlotStore.checked(byName.id, options.judge ? MODEL_CONNECTION_TYPES : LLM_CONNECTION_TYPES);
   }
   const id = ModelSlotStore.existing(value);
   if (id === null) throw new Error(`${label}: unknown model slot ${JSON.stringify(value)}. ${known}`);
-  return id;
+  return ModelSlotStore.checked(id, options.judge ? MODEL_CONNECTION_TYPES : LLM_CONNECTION_TYPES);
 }
 
 function resolveIds(label: string, value: unknown, max: number, existing: (ids: number[]) => number[]) {
@@ -236,23 +227,6 @@ function resolveOpeningHistory(value: unknown) {
     limitedText(`openingHistory[${index}].content`, entry.content, CHAT_PROFILE_TEXT_LIMITS.text);
   });
   return normalizeOpeningHistory(value);
-}
-
-function flag(label: string, value: unknown) {
-  if (typeof value !== 'boolean') throw new Error(`${label} must be true or false.`);
-  return value;
-}
-
-/** A number in `range`, clamped and rounded like the editor stores it; null only where the setting can be unset. */
-function boundedNumber(label: string, value: unknown, range: { min: number; max: number }, options: { integer?: boolean; nullable?: boolean } = {}) {
-  if (value === null || value === '') {
-    if (options.nullable) return null;
-    throw new Error(`${label} needs a number (${range.min}-${range.max}).`);
-  }
-  const number = Number(value);
-  if (typeof value === 'boolean' || !Number.isFinite(number)) throw new Error(`${label} must be a number (${range.min}-${range.max}).`);
-  const clamped = Math.min(range.max, Math.max(range.min, number));
-  return options.integer === false ? clamped : Math.round(clamped);
 }
 
 function translationLanguage(label: string, value: unknown) {
@@ -300,12 +274,14 @@ type FieldContext = { owner?: string | null; current?: ChatProfile | null; openi
 /** Validates one proposable field and returns its normalized value (what the admin REST would store). */
 function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext: FieldContext = {}): unknown {
   switch (key) {
-    case 'name': return limitedText('name', value, CHAT_PROFILE_TEXT_LIMITS.name, { required: true });
-    case 'tagline': return limitedText('tagline', value, CHAT_PROFILE_TEXT_LIMITS.tagline);
-    case 'systemPrompt': return limitedText('systemPrompt', value, CHAT_PROFILE_TEXT_LIMITS.text);
-    case 'greeting': return limitedText('greeting', value, CHAT_PROFILE_TEXT_LIMITS.text);
-    case 'authorNote': return limitedText('authorNote', value, CHAT_PROFILE_TEXT_LIMITS.authorNote);
-    case 'appearance': return limitedText('appearance', value, CHAT_PROFILE_TEXT_LIMITS.text);
+    case 'name':
+    case 'tagline':
+    case 'systemPrompt':
+    case 'greeting':
+    case 'authorNote':
+    case 'appearance':
+    case 'summaryPrompt':
+    case 'translationInstructions': return normalizeProfileScalarField(key, value);
     case 'promptSections': return resolveSections(value);
     case 'alternateGreetings': return resolveGreetings(value);
     case 'openingHistory': return resolveOpeningHistory(value);
@@ -318,20 +294,17 @@ function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext
     case 'judgePresetId': return judgePreset(value);
     case 'lorebookIds': return resolveIds(key, value, PROFILE_MAX_LOREBOOKS, (ids) => ChatLorebookStore.existing(ids));
     case 'blockIds': return resolveIds(key, value, PROFILE_MAX_BLOCKS, (ids) => ChatSharedBlockStore.existing(ids));
-    case 'temperature': return boundedNumber(key, value, { min: 0, max: 2 }, { integer: false, nullable: true });
-    case 'maxTokens': return boundedNumber(key, value, { min: 1, max: 1_000_000 }, { nullable: true });
-    case 'contextTurns': return boundedNumber(key, value, CHAT_PROFILE_LIMITS.contextTurns);
-    case 'contextTokens': return boundedNumber(key, value, CHAT_PROFILE_LIMITS.contextTokens, { nullable: true });
-    case 'maxToolRounds': return boundedNumber(key, value, CHAT_PROFILE_LIMITS.maxToolRounds);
-    case 'toolOutputLimit': return boundedNumber(key, value, CHAT_PROFILE_LIMITS.toolOutputLimit);
-    case 'summaryTriggerTurns': return boundedNumber(key, value, CHAT_PROFILE_LIMITS.summaryTriggerTurns);
-    case 'loreRecursionDepth': return boundedNumber(key, value, { min: 0, max: LORE_RECURSION_MAX_DEPTH });
+    case 'temperature':
+    case 'maxTokens':
+    case 'contextTurns':
+    case 'contextTokens':
+    case 'toolOutputLimit':
+    case 'summaryTriggerTurns':
+    case 'loreRecursionDepth':
     case 'summaryEnabled':
     case 'suggestEnabled':
     case 'visionEnabled':
-    case 'allowLoreProposals': return flag(key, value);
-    case 'summaryPrompt': return limitedText(key, value, CHAT_PROFILE_TEXT_LIMITS.summaryPrompt);
-    case 'translationInstructions': return limitedText(key, value, CHAT_PROFILE_TEXT_LIMITS.translationInstructions);
+    case 'allowLoreProposals': return normalizeProfileScalarField(key, value);
     case 'translationModelLanguage':
     case 'translationDisplayLanguage': return translationLanguage(key, value);
     case 'suggestProfileId': return suggestProfile(value);
@@ -536,7 +509,6 @@ export function profileSetupView(profile: ChatProfile, owner: string | null = nu
     maxTokens: profile.maxTokens,
     contextTurns: profile.contextTurns,
     contextTokens: profile.contextTokens,
-    maxToolRounds: profile.maxToolRounds,
     toolOutputLimit: profile.toolOutputLimit,
     summaryEnabled: profile.summaryEnabled,
     summaryTriggerTurns: profile.summaryTriggerTurns,

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { bothSidesSpeak, splitExampleDialogue } from '@conai/shared'
+import { CHAT_PROFILE_TEXT_LIMITS, bothSidesSpeak, splitExampleDialogue } from '@conai/shared'
 import { ArrowDown, ArrowUp, Eye, EyeOff, ImageDown, Plus, Trash2 } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { AvatarButton } from '@/components/ui/avatar-button'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -21,10 +22,6 @@ import { ChatProfilePresetMenu } from './chat-profile-preset-menu'
 import { newPromptSectionId, PromptAdder, PromptCard, PromptDivider } from './chat-profile-sections'
 import { GreetingBadge, PromptBubble, PromptBubbleEditor } from './chat-profile-dialogue'
 import { useProfileAssist } from './use-profile-editor-chat-page'
-
-/** Server caps (chatProfiles.ts): opening messages per profile and the author's note length. */
-const OPENING_HISTORY_MAX = 100
-const AUTHOR_NOTE_MAX = 4000
 
 /** What a card is: a prompt section's kind, or the author's note (one per profile, untitled). */
 type CardKind = ChatPromptSection['kind'] | 'note'
@@ -101,7 +98,14 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
   const { t } = useI18n()
   const { filled } = useProfileAssist()
   const confirm = useConfirm()
+  const { showSnackbar } = useSnackbar()
   const localize = useChatMediaLocalize(draft, patch)
+  /** Presets have no length limit of their own; one longer than a prompt field is refused instead of failing the save. */
+  const fitsPrompt = (content: string) => {
+    if (content.trim().length <= CHAT_PROFILE_TEXT_LIMITS.text) return true
+    showSnackbar({ message: t({ ko: '프리셋이 너무 길어. ({max}자까지)', en: 'The preset is too long (up to {max} characters).' }, { max: CHAT_PROFILE_TEXT_LIMITS.text }), tone: 'error' })
+    return false
+  }
   const lastTextarea = useLastTextarea()
   const [mediaOpen, setMediaOpen] = useState(false)
   const [greetingCursor, setGreetingCursor] = useState(0)
@@ -118,6 +122,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
   }, [flash])
 
   const applySystemPromptPreset = async (content: string) => {
+    if (!fitsPrompt(content)) return
     if (draft.systemPrompt.trim() && draft.systemPrompt.trim() !== content.trim()) {
       const confirmed = await confirm({
         title: t({ ko: '시스템 프롬프트 바꾸기', en: 'Replace system prompt' }),
@@ -134,6 +139,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
   const shownName = name || t({ ko: '캐릭터', en: 'Character' })
   const llm = draft.engine === 'llm'
   const sections = draft.promptSections
+  const sectionLimitReached = sections.length >= CHAT_PROFILE_TEXT_LIMITS.sections
   const setSections = (promptSections: Draft['promptSections']) => patch({ promptSections })
   const updateSection = (id: string, change: Partial<ChatPromptSection>) => setSections(sections.map((section) => (section.id === id ? { ...section, ...change } : section)))
   /** Swaps a section with its neighbour in the same zone. */
@@ -186,14 +192,16 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
     return { open: index > Number(editing.slice('turn:'.length)) ? `turn:${index - 1}` : key }
   })
   const addSection = (kind: ChatPromptSection['kind']) => edit((base) => {
+    if (base.promptSections.length >= CHAT_PROFILE_TEXT_LIMITS.sections) return { open: null }
     const section: ChatPromptSection = { id: newPromptSectionId(), title: '', content: '', kind, enabled: true }
     return { open: `section:${section.id}`, change: { promptSections: [...base.promptSections, section] } }
   })
-  const addTurn = (role: ChatOpeningMessage['role']) => edit((base) => ({ open: `turn:${base.openingHistory.length}`, change: { openingHistory: [...base.openingHistory, { role, content: '' }] } }))
+  const addTurn = (role: ChatOpeningMessage['role']) => edit((base) => base.openingHistory.length >= CHAT_PROFILE_TEXT_LIMITS.openingHistory ? { open: null } : { open: `turn:${base.openingHistory.length}`, change: { openingHistory: [...base.openingHistory, { role, content: '' }] } })
   /** Another version of the greeting, or the first greeting, placed at the end of the opening. */
   const addGreeting = () => edit((base) => {
     const list = [base.greeting, ...base.alternateGreetings]
     const exists = list.some((text) => text.trim())
+    if (exists && base.alternateGreetings.length >= CHAT_PROFILE_TEXT_LIMITS.alternateGreetings) return { open: 'greeting' }
     setGreetingCursor(exists ? list.length : 0)
     return { open: 'greeting', change: exists ? greetingFields([...list, '']) : { ...greetingFields(['']), greetingPosition: base.openingHistory.length } }
   })
@@ -211,6 +219,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
     reveal(`section:${section.id}`)
   }
   const noteToSection = (kind: ChatPromptSection['kind']) => {
+    if (sectionLimitReached) return
     const section: ChatPromptSection = { id: newPromptSectionId(), title: '', content: draft.authorNote, kind, enabled: true }
     patch({ authorNote: '', promptSections: [...sections, section] })
     setEditing(`section:${section.id}`)
@@ -224,10 +233,10 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
       ariaLabel={t({ ko: '종류', en: 'Kind' })}
       onChange={(value) => { if (value !== kind) onChange(value as CardKind) }}
       items={[
-        { value: 'text', label: t({ ko: '지시문', en: 'Instruction' }) },
-        ...(kind === 'note' || !noteTaken ? [{ value: 'note', label: t({ ko: '작가 노트', en: "Author's note" }), disabled: kind !== 'note' && text.length > AUTHOR_NOTE_MAX }] : []),
-        { value: 'post', label: t({ ko: '대화 뒤 지시', en: 'After the conversation' }) },
-        { value: 'dialogue', label: t({ ko: '예시', en: 'Example' }) },
+        { value: 'text', label: t({ ko: '지시문', en: 'Instruction' }), disabled: kind === 'note' && sectionLimitReached },
+        ...(kind === 'note' || !noteTaken ? [{ value: 'note', label: t({ ko: '작가 노트', en: "Author's note" }), disabled: kind !== 'note' && text.length > CHAT_PROFILE_TEXT_LIMITS.authorNote }] : []),
+        { value: 'post', label: t({ ko: '대화 뒤 지시', en: 'After the conversation' }), disabled: kind === 'note' && sectionLimitReached },
+        { value: 'dialogue', label: t({ ko: '예시', en: 'Example' }), disabled: kind === 'note' && sectionLimitReached },
       ]}
     />
   )
@@ -347,7 +356,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
         assisted={filled('greeting') || filled('alternateGreetings')}
         onTextChange={(next) => patch(greetingFields(greetings.map((entry, i) => (i === greetingIndex ? next : entry))))}
         onClose={() => openItem(null)}
-        lead={<Button variant="secondary" size="sm" disabled={!text.trim()} onClick={addGreeting}><Plus />{t({ ko: '다른 인사말', en: 'Another greeting' })}</Button>}
+        lead={<Button variant="secondary" size="sm" disabled={!text.trim() || draft.alternateGreetings.length >= CHAT_PROFILE_TEXT_LIMITS.alternateGreetings} onClick={addGreeting}><Plus />{t({ ko: '다른 인사말', en: 'Another greeting' })}</Button>}
         tools={(
           <>
             <IconButton size="icon-sm" variant="ghost" disabled={first} onClick={() => patch({ greetingPosition: position - 1 })} label={t({ ko: '위로', en: 'Move up' })}><ArrowUp /></IconButton>
@@ -369,8 +378,8 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
             </AvatarButton>
           </Tip>
           <div className="min-w-0 flex-1 space-y-2">
-            <Input variant="settings" assisted={filled('name')} value={draft.name} maxLength={60} placeholder={t({ ko: '이름', en: 'Name' })} aria-label={t({ ko: '이름', en: 'Name' })} onChange={(event) => patch({ name: event.target.value })} />
-            <Input variant="settings" assisted={filled('tagline')} value={draft.tagline} maxLength={200} placeholder={t({ ko: '짧은 소개', en: 'Tagline' })} aria-label={t({ ko: '짧은 소개', en: 'Tagline' })} onChange={(event) => patch({ tagline: event.target.value })} />
+            <Input variant="settings" assisted={filled('name')} value={draft.name} maxLength={CHAT_PROFILE_TEXT_LIMITS.name} placeholder={t({ ko: '이름', en: 'Name' })} aria-label={t({ ko: '이름', en: 'Name' })} onChange={(event) => patch({ name: event.target.value })} />
+            <Input variant="settings" assisted={filled('tagline')} value={draft.tagline} maxLength={CHAT_PROFILE_TEXT_LIMITS.tagline} placeholder={t({ ko: '짧은 소개', en: 'Tagline' })} aria-label={t({ ko: '짧은 소개', en: 'Tagline' })} onChange={(event) => patch({ tagline: event.target.value })} />
           </div>
         </div>
       </EditorGroup>
@@ -381,10 +390,12 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
           <div className="flex items-center gap-0.5">
             <ChatProfilePresetMenu
               open={open}
+              canAddSection={!sectionLimitReached}
               onSystemPrompt={(preset) => void applySystemPromptPreset(preset.content)}
               onSection={(preset) => {
+                if (sectionLimitReached || !fitsPrompt(preset.content)) return
                 const id = newPromptSectionId()
-                setSections([...sections, { id, title: preset.name, content: preset.content, kind: 'text', enabled: true }])
+                setSections([...sections, { id, title: preset.name.slice(0, CHAT_PROFILE_TEXT_LIMITS.sectionTitle), content: preset.content, kind: 'text', enabled: true }])
                 reveal(`section:${id}`)
               }}
             />
@@ -406,9 +417,10 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
               itemKey="author-note"
               title={t({ ko: '작가 노트', en: "Author's note" })}
               meta={llm
-                ? t({ ko: '끝에서 {depth}턴 앞에 끼워 넣어', en: 'Inserted {depth} turns before the end' }, { depth: draft.loreDepth ?? 4 })
+                ? t({ ko: '끝에서 {depth}턴 앞에 끼워 넣어', en: 'Inserted {depth} turns before the end' }, { depth: draft.loreDepth })
                 : t({ ko: '매 메시지와 함께 참고 설정으로 들어가', en: 'Sent as reference settings with every message' })}
               text={draft.authorNote}
+              maxLength={CHAT_PROFILE_TEXT_LIMITS.authorNote}
               placeholder={emptyText}
               assisted={filled('authorNote')}
               flash={flash?.key === 'author-note'}
@@ -431,17 +443,18 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
           </div>
           <PromptAdder
             label={t({ ko: '지시 추가', en: 'Add instruction' })}
+            disabled={sectionLimitReached && noteTaken}
             choices={[
-              { value: 'text', label: t({ ko: '지시문', en: 'Instruction' }) },
+              ...(sectionLimitReached ? [] : [{ value: 'text', label: t({ ko: '지시문', en: 'Instruction' }) }]),
               ...(noteTaken ? [] : [{ value: 'note', label: t({ ko: '작가 노트', en: "Author's note" }) }]),
-              { value: 'post', label: t({ ko: '대화 뒤 지시', en: 'After the conversation' }) },
+              ...(sectionLimitReached ? [] : [{ value: 'post', label: t({ ko: '대화 뒤 지시', en: 'After the conversation' }) }]),
             ]}
             onAdd={(value) => (value === 'note' ? openItem('note') : addSection(value === 'post' ? 'post' : 'text'))}
           />
 
           <PromptDivider label={t({ ko: '예시', en: 'Examples' })} />
           {exampleSections.map((section, index) => sectionCard(section, index, exampleSections))}
-          <PromptAdder label={t({ ko: '예시 추가', en: 'Add example' })} onAdd={() => addSection('dialogue')} />
+          <PromptAdder label={t({ ko: '예시 추가', en: 'Add example' })} disabled={sectionLimitReached} onAdd={() => addSection('dialogue')} />
 
           <PromptDivider strong label={t({ ko: '실제 대화 · 새 채팅이 이렇게 시작해', en: 'Conversation · how a new chat starts' })} />
           {items.map((item, index) => (item.kind === 'greeting'
@@ -449,9 +462,10 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
             : turnItem(item.index, index === 0, index === items.length - 1)))}
           <PromptAdder
             label={t({ ko: '대화 추가', en: 'Add message' })}
+            disabled={history.length >= CHAT_PROFILE_TEXT_LIMITS.openingHistory && hasGreeting && draft.alternateGreetings.length >= CHAT_PROFILE_TEXT_LIMITS.alternateGreetings}
             choices={[
-              ...(history.length < OPENING_HISTORY_MAX ? [{ value: 'user', label: t({ ko: '사용자', en: 'User' }) }, { value: 'assistant', label: t({ ko: '캐릭터', en: 'Character' }) }] : []),
-              { value: 'greeting', label: hasGreeting ? t({ ko: '다른 인사말', en: 'Another greeting' }) : t({ ko: '인사말', en: 'Greeting' }) },
+              ...(history.length < CHAT_PROFILE_TEXT_LIMITS.openingHistory ? [{ value: 'user', label: t({ ko: '사용자', en: 'User' }) }, { value: 'assistant', label: t({ ko: '캐릭터', en: 'Character' }) }] : []),
+              ...(!hasGreeting || draft.alternateGreetings.length < CHAT_PROFILE_TEXT_LIMITS.alternateGreetings ? [{ value: 'greeting', label: hasGreeting ? t({ ko: '다른 인사말', en: 'Another greeting' }) : t({ ko: '인사말', en: 'Greeting' }) }] : []),
             ]}
             onAdd={(value) => (value === 'greeting' ? addGreeting() : addTurn(value === 'user' ? 'user' : 'assistant'))}
           />

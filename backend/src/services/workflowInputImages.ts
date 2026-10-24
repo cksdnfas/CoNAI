@@ -11,6 +11,8 @@ import { GroupPathService } from './groupPathService'
 import { resolveImageIdentity } from './imageIdentityService'
 import { ImageSimilarityService } from './imageSimilarity'
 import { ImageUploadService } from './imageUploadService'
+import { CODEX_MAX_ATTACHMENT_BYTES } from './codexImageInputs'
+import { parseJsonishInput } from '../utils/jsonishInput'
 
 /**
  * Images put into workflow nodes and run inputs live in the image library like any other upload: the file lands in
@@ -88,12 +90,19 @@ export async function ingestWorkflowInputImage(dataUrl: string): Promise<Library
 }
 
 /** The library image behind a ref as a data URL. */
-export async function readLibraryImageAsDataUrl(ref: LibraryImageRef): Promise<string> {
+export async function readLibraryImageAsDataUrl(ref: LibraryImageRef, maxBytes = Infinity, maxSide?: number): Promise<string> {
   const storedPath = ImageUploadService.getActiveFilePath(ref.composite_hash)
   const filePath = storedPath ? resolveUploadsPath(storedPath) : null
   if (!filePath || !fs.existsSync(filePath)) throw new Error(`라이브러리에서 이미지를 찾을 수 없어: ${ref.composite_hash}`)
   const extension = path.extname(filePath).slice(1).toLowerCase()
-  const mimeType = MEDIA_MIME_TYPES[extension === 'jpeg' ? 'jpg' : extension] ?? 'image/png'
+  const mimeType = MEDIA_MIME_TYPES[extension === 'jpeg' ? 'jpg' : extension]
+  if (!mimeType?.startsWith('image/')) throw new WorkflowInputImageError('Workflow image input must reference an image, not video or other media')
+  const stat = await fs.promises.stat(filePath)
+  if (!stat.isFile() || stat.size > maxBytes) throw new WorkflowInputImageError('Workflow image input exceeds the byte limit (10 MiB for Codex)')
+  // Header probing is file-backed, before loading/encoding the complete library file.
+  const metadata = await sharp(filePath, { limitInputPixels: MEDIA_MAX_PIXELS }).metadata()
+  if (!metadata.width || !metadata.height) throw new WorkflowInputImageError('Workflow input is not a decodable image')
+  if (maxSide && (metadata.width > maxSide || metadata.height > maxSide)) throw new WorkflowInputImageError('Codex attachment dimensions must be at most 4096 pixels per side')
   const buffer = await fs.promises.readFile(filePath)
   return `data:${mimeType};base64,${buffer.toString('base64')}`
 }
@@ -108,15 +117,33 @@ export async function materializeLibraryImageInputs(
   inputs: Record<string, any>,
 ): Promise<Record<string, any>> {
   if (engineType === 'comfyui') return inputs
+  const isCodex = engineType === 'codex' || (engineType === 'system' && exposedInputs.some((port) => port.key === 'references'))
+  const readImage = (ref: LibraryImageRef) => readLibraryImageAsDataUrl(ref, isCodex ? CODEX_MAX_ATTACHMENT_BYTES : Infinity, isCodex ? 4096 : undefined)
   let next = inputs
   for (const port of exposedInputs) {
+    // Codex/system Codex nodes use an ordered JSON references port with the same data_url field as the API.
+    if ((engineType === 'codex' || engineType === 'system') && port.key === 'references') {
+      const references = parseJsonishInput(inputs[port.key], undefined)
+      const resolved = []
+      if (Array.isArray(references)) {
+        if (references.length + Number(Boolean(inputs.image)) + Number(Boolean(inputs.mask)) > 5) throw new WorkflowInputImageError('Codex accepts at most 5 attachments including source and mask')
+        for (const reference of references) {
+          resolved.push(reference && isLibraryImageRef(reference.data_url)
+            ? { ...reference, data_url: await readImage(reference.data_url) }
+            : reference)
+        }
+      }
+      if (next === inputs) next = { ...inputs }
+      next[port.key] = Array.isArray(references) ? resolved : references
+      continue
+    }
     if (port.data_type !== 'image' && port.data_type !== 'mask') continue
     const value = inputs[port.key]
     let resolved: unknown = value
     if (isLibraryImageRef(value)) {
-      resolved = await readLibraryImageAsDataUrl(value)
+      resolved = await readImage(value)
     } else if (Array.isArray(value) && value.some(isLibraryImageRef)) {
-      resolved = await Promise.all(value.map((item) => (isLibraryImageRef(item) ? readLibraryImageAsDataUrl(item) : item)))
+      resolved = await Promise.all(value.map((item) => (isLibraryImageRef(item) ? readImage(item) : item)))
     }
     if (resolved !== value) {
       if (next === inputs) next = { ...inputs }

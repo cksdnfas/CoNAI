@@ -1,6 +1,8 @@
+import { CHAT_PROFILE_TEXT_LIMITS } from '@conai/shared'
+
 /** Shared by profile normalization and the user-settings migration without loading profile stores. */
-export const TEXT_MAX_LENGTH = 20_000
-export const OPENING_HISTORY_MAX_ENTRIES = 100
+export const TEXT_MAX_LENGTH = CHAT_PROFILE_TEXT_LIMITS.text
+export const OPENING_HISTORY_MAX_ENTRIES = CHAT_PROFILE_TEXT_LIMITS.openingHistory
 
 export type ChatOpeningMessage = { role: 'user' | 'assistant'; content: string }
 
