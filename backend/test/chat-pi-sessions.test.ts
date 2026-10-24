@@ -8,7 +8,7 @@ import type { AddressInfo } from 'node:net'
 
 /** A fake OpenAI-compatible server answering from a script: a tool call, a text, or an error; summaries on request. */
 function scriptedServer() {
-  const script: Array<{ kind: 'tool'; promptTokens?: number; name?: string } | { kind: 'text'; text: string } | { kind: 'error' }> = []
+  const script: Array<{ kind: 'tool'; promptTokens?: number; name?: string; args?: Record<string, unknown> } | { kind: 'text'; text: string } | { kind: 'error' }> = []
   const requests: Array<{ messages: Array<{ role: string; content: unknown }>; tools: unknown[]; summary: boolean; body: Record<string, unknown>; usage: { inputTokens: number; outputTokens: number } }> = []
   const server = http.createServer((req, res) => {
     let body = ''
@@ -29,7 +29,7 @@ function scriptedServer() {
       const send = (delta: unknown, finish: string | null = null) => res.write(`data: ${JSON.stringify({ id: 'x', object: 'chat.completion.chunk', created: 0, model: request.model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`)
       if (step.kind === 'tool') {
         send({ role: 'assistant', content: 'Looking it up.' })
-        send({ tool_calls: [{ index: 0, id: `call_${requests.length}`, type: 'function', function: { name: step.name ?? 'lookup', arguments: JSON.stringify({ topic: 'apples' }) } }] })
+        send({ tool_calls: [{ index: 0, id: `call_${requests.length}`, type: 'function', function: { name: step.name ?? 'lookup', arguments: JSON.stringify(step.args ?? { topic: 'apples' }) } }] })
         send({}, 'tool_calls')
       } else {
         send({ role: 'assistant', content: step.text })
@@ -191,6 +191,27 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
     assert.equal(mock.requests[0].tools.length, 1)
     assert.equal(mock.requests[1].tools.length, 0)
     sessionId = done[0]
+  })
+
+  await t.test('with codemode on, a script\'s calls run through CoNAI and stop at the per-script cap', async () => {
+    const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+    updateChatSettings({ piCodemode: true })
+    t.after(() => { updateChatSettings({ piCodemode: false }) })
+    mock.requests.length = 0
+    const code = "const out = []\nfor (let i = 0; i < 9; i++) { try { await tools.lookup({ topic: 't' + i }); out.push('ok') } catch (error) { out.push(error.message) } }\nreturn out.join('|')"
+    mock.script.push({ kind: 'tool', name: 'codemode', args: { code } }, { kind: 'text', text: 'Scripted.' })
+    const calls: Array<Record<string, unknown>> = []
+    const result = await streamPiChatCompletion({
+      target: target({ resumeId: null, onDone: () => {} }),
+      messages: [{ role: 'system', content: 'You are a test.' }, { role: 'user', content: 'script it' }],
+      tools, signal: new AbortController().signal, maxToolRounds: 4,
+      callTool: async (name, args) => { calls.push({ name, ...args }); return { content: [{ type: 'text', text: 'ok' }] } },
+    })
+    assert.match(result.content, /Scripted\./)
+    assert.deepEqual(mock.requests[0].tools.map((tool) => (tool as { function: { name: string } }).function.name).sort(), ['codemode', 'lookup'])
+    assert.equal(calls.length, 8)
+    assert.match(JSON.stringify(mock.requests[1].messages), /at most 8 tool calls/)
+    updateChatSettings({ piCodemode: false })
   })
 
   await t.test('research uses native turn limits, removes tools for the final answer, and never fabricates provider-call counts', async () => {

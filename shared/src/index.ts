@@ -22,6 +22,8 @@ export * from './types/fileStore';
 export * from './types/workspace';
 export * from './types/posts';
 export * from './types/contentEvaluation';
+// Named on its own as well: under tsx, an ESM file importing this CommonJS index does not see the name through `export *`.
+export { TOPIC_EVALUATION_LIMITS } from './types/contentEvaluation';
 export * from './types/chatAssets'
 export * from './utils/chatPortrait'
 export * from './constants/pageSettings'

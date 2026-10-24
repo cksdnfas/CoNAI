@@ -113,7 +113,7 @@ export interface ChatDiagnostics {
 /** `loreKeyLanguage`: the one language besides English every lorebook's keywords are kept in (`ko`, `ja`, `zh` or a typed name); null: English only. */
 /** Who answers the chats' web_search tool: a Codex or Claude Code run with only its web search (model null: its default). */
 export type WebResearchSettings = { engine: 'off' | 'codex' | 'claude'; model: string | null; dailyLimit: number | null }
-export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean; loreKeyLanguage: string | null; webResearch: WebResearchSettings }
+export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean; loreKeyLanguage: string | null; webResearch: WebResearchSettings; piCodemode: boolean }
 
 export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize', 'configure']
 export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
@@ -976,7 +976,7 @@ export function getChatAdminSettings() {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { cache: 'no-store' })
 }
 
-export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings> }) {
+export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings>; piCodemode?: boolean }) {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

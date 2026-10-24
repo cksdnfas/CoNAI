@@ -777,8 +777,9 @@ router.get('/admin/settings', requireAdmin, (_req: Request, res: Response) => {
 })
 
 router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
-  const { enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch } = req.body ?? {}
-  if ((enabled === undefined && diagnostics === undefined && loreAutoSave === undefined && loreKeyLanguage === undefined && webResearch === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
+  const { enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch, piCodemode } = req.body ?? {}
+  if ((enabled === undefined && diagnostics === undefined && loreAutoSave === undefined && loreKeyLanguage === undefined && webResearch === undefined && piCodemode === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
+    || (piCodemode !== undefined && typeof piCodemode !== 'boolean')
     || (webResearch !== undefined && (!webResearch || typeof webResearch !== 'object' || Array.isArray(webResearch)
       || (webResearch.engine !== undefined && !WEB_RESEARCH_ENGINES.includes(webResearch.engine))
       || (webResearch.model !== undefined && webResearch.model !== null && typeof webResearch.model !== 'string')
@@ -792,7 +793,7 @@ router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
     sendRouteBadRequest(res, '채팅 설정 값이 올바르지 않아.')
     return
   }
-  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch }) })
+  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch, piCodemode }) })
 })
 
 /**

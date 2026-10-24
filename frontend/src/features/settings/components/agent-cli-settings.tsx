@@ -15,6 +15,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { CodexDeviceLoginDialog } from '@/features/image-generation/components/codex-device-login-dialog'
 import { getCodexCliVersion, updateCodexCli } from '@/lib/api-image-generation-queue'
+import { PiCodemodeRow } from './chat-options-settings'
 import { cancelClaudeLogin, getAgentCliStatus, getAgentCliUsage, getAgentCliVersion, getClaudeLogin, refreshAgentCliUsage, startClaudeLogin, submitClaudeLoginCode, updateAgentCli } from '@/lib/api-agent-cli'
 
 function ClaudeLoginDialog({ open, onClose, onSucceeded }: { open: boolean; onClose: () => void; onSucceeded: () => void }) {
@@ -185,5 +186,6 @@ export function AgentCliSettings() {
     <AgentCliRow agent="codex" />
     <AgentCliRow agent="claude" />
     <AgentCliRow agent="pi" />
+    <PiCodemodeRow />
   </RowGroup>
 }

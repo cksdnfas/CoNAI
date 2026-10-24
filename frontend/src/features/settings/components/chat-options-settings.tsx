@@ -66,6 +66,18 @@ export function ChatWebSettings() {
   )
 }
 
+/** Settings › LLM › 연결, under the pi row: pi's codemode tool for every pi chat profile (ChatAdminSettings.piCodemode). */
+export function PiCodemodeRow() {
+  const { t } = useI18n()
+  const { settingsQuery, settingsMutation } = useChatOptions()
+  if (!settingsQuery.data) return settingsQuery.isError ? null : <SettingsRowsSkeleton rows={1} />
+  return (
+    <SettingsSwitchRow label={t({ ko: 'pi codemode', en: 'pi codemode' })} checked={settingsQuery.data.piCodemode} disabled={settingsMutation.isPending}
+      info={t({ ko: '모든 pi 프로필의 채팅에서 모델이 짧은 스크립트로 CoNAI 도구 여러 개를 한 번에 부르고 필요한 결과만 받아. 스크립트 하나는 도구를 8번까지 불러. 작은 모델은 스크립트를 잘 못 쓸 수 있어.', en: 'In every pi profile\'s chats, the model can call several CoNAI tools in one short script and get back only what it needs. One script makes up to 8 tool calls. Small models may not write scripts well.' })}
+      onCheckedChange={(piCodemode) => settingsMutation.mutate({ piCodemode })} />
+  )
+}
+
 /**
  * Settings › LLM › 기록: what each chat answer keeps of what it was sent (shown from a reply's 문맥 button). Raw capture
  * and how much of it is kept are advanced.

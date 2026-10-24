@@ -26,6 +26,11 @@ export type ChatSettings = {
    * per account in 24 hours (null: no limit; administrators have none).
    */
   webResearch: WebResearchSettings
+  /**
+   * Every pi chat run (profiles on the pi runtime) also gets pi's `codemode` tool: one script calls several CoNAI tools
+   * and returns only what it picks out (piChatCompletion). Off by default: a small model may not write scripts well.
+   */
+  piCodemode: boolean
 }
 
 export const WEB_RESEARCH_ENGINES = ['off', 'codex', 'claude'] as const
@@ -80,17 +85,17 @@ export function loadChatSettings(): ChatSettings {
     if (stored) {
       cachedSettings = { enabled: stored.enabled === true, diagnostics: diagnosticsOf(stored.diagnostics), loreAutoSave: stored.loreAutoSave !== false,
         loreKeyLanguage: stored.loreKeyLanguage === undefined ? DEFAULT_LORE_KEY_LANGUAGE : normalizeLoreKeyLanguage(stored.loreKeyLanguage),
-        webResearch: webResearchOf(stored.webResearch) }
+        webResearch: webResearchOf(stored.webResearch), piCodemode: stored.piCodemode === true }
     } else {
       // First run after the profile change: chat stays on if either old switch was on.
       const legacyEnabled = readJson(LEGACY_CODEX_SETTINGS_FILE_PATH)?.enabled === true || readJson(LEGACY_LLM_SETTINGS_FILE_PATH)?.enabled === true
-      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS }, loreAutoSave: true, loreKeyLanguage: DEFAULT_LORE_KEY_LANGUAGE, webResearch: { ...DEFAULT_WEB_RESEARCH } }
+      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS }, loreAutoSave: true, loreKeyLanguage: DEFAULT_LORE_KEY_LANGUAGE, webResearch: { ...DEFAULT_WEB_RESEARCH }, piCodemode: false }
     }
   }
   return { ...cachedSettings, diagnostics: { ...cachedSettings.diagnostics }, webResearch: { ...cachedSettings.webResearch } }
 }
 
-export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings> }): ChatSettings {
+export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings>; piCodemode?: boolean }): ChatSettings {
   const current = loadChatSettings()
   const next: ChatSettings = {
     enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled,
@@ -98,6 +103,7 @@ export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Par
     loreAutoSave: typeof patch.loreAutoSave === 'boolean' ? patch.loreAutoSave : current.loreAutoSave,
     loreKeyLanguage: patch.loreKeyLanguage === undefined ? current.loreKeyLanguage : normalizeLoreKeyLanguage(patch.loreKeyLanguage),
     webResearch: patch.webResearch === undefined ? current.webResearch : webResearchOf(patch.webResearch, current.webResearch),
+    piCodemode: typeof patch.piCodemode === 'boolean' ? patch.piCodemode : current.piCodemode,
   }
   writeJsonFileAtomic(CHAT_SETTINGS_FILE_PATH, next)
   cachedSettings = next
