@@ -58,6 +58,24 @@ test('chat setup: profile settings proposals and the chat settings card', { time
   const memo = FileStoreService.writeText(me, null, '메모.md', '메모\n', { create: true })
   const book = OwnedLorebookStore.create(me, { name: '장기 기억' })
 
+  await t.test('opening proposals show the greeting position that storage will save', () => {
+    const history = [{ role: 'user' as const, content: 'one' }, { role: 'assistant' as const, content: 'two' }]
+    const created = setup.buildProfileProposal({ name: 'Opening positions', system_prompt: '', opening_history: history, greeting_position: 5 })
+    assert.equal(created.input.greetingPosition, 2)
+    assert.equal(setup.buildProfileProposal({ name: 'Fraction', system_prompt: '', opening_history: history, greeting_position: 1.9 }).input.greetingPosition, 1)
+    const target = ChatProfileStore.create(created.input)
+    assert.equal(target.greetingPosition, created.input.greetingPosition)
+    const onlyPosition = setup.buildProfileUpdateProposal({ patch: { greeting_position: 1.9 } }, target.id).proposal
+    assert.equal(onlyPosition.patch.greetingPosition, 1, 'position-only patches use the current history and truncate')
+    ChatProfileStore.update(target.id, onlyPosition.patch)
+    const both = setup.buildProfileUpdateProposal({ patch: { greeting_position: 5, opening_history: [...history, { role: 'user', content: 'three' }] } }, target.id).proposal
+    assert.equal(both.patch.greetingPosition, 3, 'the proposed history wins regardless of patch-key order')
+    assert.equal(ChatProfileStore.update(target.id, both.patch)!.greetingPosition, both.patch.greetingPosition)
+    const shorter = setup.buildProfileUpdateProposal({ patch: { opening_history: [history[0]] } }, target.id).proposal
+    assert.equal(shorter.patch.greetingPosition, 1, 'implicit position changes caused by a shorter history are shown too')
+    assert.equal(ChatProfileStore.update(target.id, shorter.patch)!.greetingPosition, shorter.patch.greetingPosition)
+  })
+
   await t.test('profile update: newer settings are proposable, clamped and shown by name; grants are not', () => {
     const tiers = RatingScoreModel.getAllTiers()
     assert.ok(tiers.length > 0, 'the default rating tiers exist')
@@ -67,6 +85,7 @@ test('chat setup: profile settings proposals and the chat settings card', { time
       summaryEnabled: true, summary_trigger_turns: 12, suggestEnabled: true, suggestProfileId: helper.id,
       visionEnabled: true, contentRatingMode: 'custom', contentRatingTierId: tiers[0].id, allowLoreProposals: false,
       linkedFiles: [{ id: journal.id, write: true }, { id: memo.id }],
+      opening_history: [{ role: 'user', content: '  안녕 {{char}}  ' }], greeting_position: 1,
     } }, profile.id, me)
     assert.equal(proposal.kind, 'profile_update')
     if (proposal.kind !== 'profile_update') return
@@ -77,6 +96,8 @@ test('chat setup: profile settings proposals and the chat settings card', { time
     assert.equal(proposal.patch.contextTurns, 1, 'clamped to the minimum')
     assert.equal(proposal.patch.maxToolRounds, 4, 'rounded like the editor')
     assert.equal(proposal.patch.temperature, 2)
+    assert.deepEqual(proposal.patch.openingHistory, [{ role: 'user', content: '안녕 {{char}}' }])
+    assert.equal(proposal.patch.greetingPosition, 1)
     assert.equal('contextTokens' in proposal.patch, false, 'unchanged values are dropped (null already)')
     assert.deepEqual(proposal.patch.linkedFiles, [{ id: journal.id, write: true }, { id: memo.id, write: false }])
     assert.equal(proposal.display?.suggestProfileId?.after, '도우미')
@@ -88,6 +109,8 @@ test('chat setup: profile settings proposals and the chat settings card', { time
     assert.equal(saved.translationDisplayLanguage, 'ja')
     assert.equal(saved.loreRecursionDepth, 5)
     assert.equal(saved.allowLoreProposals, false)
+    assert.deepEqual(setup.profileSetupView(saved).openingHistory, saved.openingHistory)
+    assert.equal(setup.profileSetupView(saved).greetingPosition, 1)
     assert.deepEqual(saved.linkedFiles, [{ id: journal.id, write: true }, { id: memo.id, write: false }])
 
     assert.throws(() => setup.buildProfileUpdateProposal({ patch: { pageAssist: true } }, profile.id, me), /Not proposable: pageAssist.*page assistant/)

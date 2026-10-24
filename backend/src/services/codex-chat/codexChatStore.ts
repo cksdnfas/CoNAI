@@ -576,15 +576,14 @@ export const CodexChatStore = {
     }))
   },
 
-  /** A session's recap is text-only; the older-user existence check is independent of its forty-row window. */
+  /** A session's recap is a bounded text-only window, including assistant-only openings. */
   readSessionRecap(source: ChatHistorySource, before: number, limit: number) {
     const db = getUserSettingsDb()
     const args = [source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? Number.MAX_SAFE_INTEGER, before, MESSAGE_WHITESPACE]
     const where = 'thread_id = ? AND id != ? AND id <= ? AND id < ? AND length(trim(content, ?)) > 0'
-    const hasUser = Boolean(db.prepare(`SELECT 1 FROM codex_chat_messages WHERE ${where} AND role = 'user' LIMIT 1`).get(...args))
     const messages = db.prepare(`SELECT role, content FROM codex_chat_messages WHERE ${where} ORDER BY id DESC LIMIT ?`)
       .all(...args, limit) as Array<Pick<CodexChatMessageRecord, 'role' | 'content'>>
-    return { hasUser, messages: messages.reverse() }
+    return { messages: messages.reverse() }
   },
 
   /** Session outcomes need forty assistant IDs/tool records, never transcript bodies or alternatives. */
@@ -735,7 +734,7 @@ export const CodexChatStore = {
     return true
   },
 
-  clearThread(threadId: number, greeting: string) {
+  clearThread(threadId: number, opening: (() => void) | '') {
     const db = getUserSettingsDb()
     db.transaction(() => {
       db.prepare('DELETE FROM chat_generation_links WHERE thread_id = ?').run(threadId)
@@ -744,7 +743,7 @@ export const CodexChatStore = {
       ChatSummaryStore.clear(threadId)
       db.prepare(`UPDATE codex_chat_threads SET summary = NULL, summary_until_message_id = NULL, summary_updated_date = NULL, summary_error = NULL, block_edits = NULL,
         codex_thread_id = NULL, ${RESET_CODEX_STATE}, context_revision = context_revision + 1, updated_date = CURRENT_TIMESTAMP WHERE id = ?`).run(threadId)
-      if (greeting) CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', content: greeting, tool_calls: [], status: 'completed', error: null })
+      if (opening) opening()
     }).immediate()
   },
 

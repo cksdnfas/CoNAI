@@ -7,6 +7,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
+import { RowGroup } from '@/components/ui/row-group'
 import { Slider } from '@/components/ui/slider'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
@@ -301,11 +302,12 @@ function CompactChoice<T extends string>({ label, value, choices, onChange }: { 
     window.requestAnimationFrame(() => group.querySelector<HTMLButtonElement>(`[data-value="${next.value}"]`)?.focus())
   }
   return (
-    <div role="radiogroup" aria-label={label} onKeyDown={move} className="flex shrink-0 gap-0.5 rounded-md bg-foreground/6 p-0.5">
+    // The same tray and raised key as SegmentedControl, with radio semantics.
+    <div role="radiogroup" aria-label={label} onKeyDown={move} className="flex shrink-0 gap-0.5 rounded-md bg-fill p-0.75">
       {choices.map((choice) => {
         const checked = choice.value === value
         return (
-          // eslint-disable-next-line no-restricted-syntax -- a radio pill; Button's sizes and fills do not fit this compact control
+          // eslint-disable-next-line no-restricted-syntax -- a radio key; Button's segment variant keys its look on aria-pressed, which a radio cannot carry
           <button
             key={choice.value}
             type="button"
@@ -316,7 +318,7 @@ function CompactChoice<T extends string>({ label, value, choices, onChange }: { 
             onClick={() => onChange(choice.value)}
             className={cn(
               'h-6 cursor-pointer whitespace-nowrap rounded-sm px-2.5 text-xs font-medium outline-none transition-colors focus-visible:ring-3 focus-visible:ring-ring/40',
-              checked ? 'bg-foreground font-semibold text-background' : 'text-muted-foreground hover:text-foreground',
+              checked ? 'bg-background text-foreground shadow-key' : 'text-muted-foreground hover:bg-fill hover:text-foreground',
             )}
           >
             {choice.label}
@@ -330,7 +332,7 @@ function CompactChoice<T extends string>({ label, value, choices, onChange }: { 
 function AppearanceRow({ label, htmlFor, children }: { label: ReactNode; htmlFor?: string; children: ReactNode }) {
   return (
     <div className="flex min-h-10 items-center justify-between gap-3">
-      {htmlFor ? <label htmlFor={htmlFor} className="cursor-pointer text-sm">{label}</label> : <span className="text-sm">{label}</span>}
+      {htmlFor ? <label htmlFor={htmlFor} className="min-w-0 flex-1 cursor-pointer text-sm">{label}</label> : <span className="min-w-0 text-sm">{label}</span>}
       {children}
     </div>
   )
@@ -346,22 +348,16 @@ function SliderRow({ label, value, unit, min, max, step, inherited, onChange, on
 }) {
   const { t } = useI18n()
   return (
-    <div className="flex flex-col gap-1.5 py-2">
+    <div className="flex flex-col gap-2 pb-3 pt-2">
       <div className="flex h-6 items-center justify-between gap-3">
-        <span className="text-sm">{label} <span className={cn('text-xs tabular-nums', inherited ? 'text-muted-foreground' : 'text-secondary-text')}>{value}{unit}</span></span>
-        {onReset && !inherited ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '프로필 값으로', en: 'Profile value' })} onClick={onReset}><RotateCcw /></IconButton> : null}
+        <span className="text-sm">{label}</span>
+        <span className="flex items-center gap-1">
+          {onReset && !inherited ? <IconButton size="icon-xs" variant="ghost" label={t({ ko: '프로필 값으로', en: 'Profile value' })} onClick={onReset}><RotateCcw /></IconButton> : null}
+          <span className={cn('min-w-10 text-right font-mono text-xs tabular-nums', inherited ? 'text-muted-foreground' : 'text-foreground')}>{value}{unit}</span>
+        </span>
       </div>
       <Slider min={min} max={max} step={step} value={[value]} onValueChange={([next]) => onChange(next)} aria-label={label} />
     </div>
-  )
-}
-
-function AppearanceGroup({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="border-t border-line pt-2.5 first-of-type:border-t-0 first-of-type:pt-1">
-      <h3 className="text-2xs font-semibold text-muted-foreground">{title}</h3>
-      {children}
-    </section>
   )
 }
 
@@ -397,7 +393,7 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
       role="group"
       aria-label={t({ ko: '슬롯', en: 'Slots' })}
       onClick={(event) => { if (event.target === event.currentTarget) onClose() }}
-      className="absolute inset-x-0 bottom-0 top-11 z-10 flex flex-col items-center gap-4 rounded-b-md bg-surface-high/75 px-4 pt-7 backdrop-blur-sm animate-in fade-in-0 motion-reduce:animate-none"
+      className="absolute inset-x-0 bottom-0 top-12 z-10 flex flex-col items-center gap-4 rounded-b-md bg-surface-high/75 px-4 pt-7 backdrop-blur-sm animate-in fade-in-0 motion-reduce:animate-none"
     >
       <div className="flex flex-wrap justify-center gap-2" onClick={(event) => { if (event.target === event.currentTarget) onClose() }}>
         {/* eslint-disable-next-line no-restricted-syntax -- chips that spring in, as the composer's flags do */}
@@ -490,10 +486,12 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
   const medium = t({ ko: '보통', en: 'M' })
   const large = t({ ko: '크게', en: 'L' })
   const tight = t({ ko: '좁게', en: 'Tight' })
+  const normal = t({ ko: '보통', en: 'Normal' })
   const wide = t({ ko: '넓게', en: 'Wide' })
-  const spacing: Choice<ChatSpacing>[] = [{ value: 'tight', label: tight }, { value: 'normal', label: medium }, { value: 'relaxed', label: wide }]
+  const spacing: Choice<ChatSpacing>[] = [{ value: 'tight', label: tight }, { value: 'normal', label: normal }, { value: 'relaxed', label: wide }]
+  // Short enough that all five sit on one line at the popover's width in either language.
   const tabLabel: Record<AppearanceTab, string> = {
-    text: t({ ko: '글', en: 'Text' }), layout: t({ ko: '배치', en: 'Layout' }), pictures: t({ ko: '그림', en: 'Pictures' }), background: t({ ko: '배경', en: 'Background' }), composer: t({ ko: '입력창', en: 'Composer' }),
+    text: t({ ko: '글', en: 'Text' }), layout: t({ ko: '배치', en: 'Layout' }), pictures: t({ ko: '그림', en: 'Images' }), background: t({ ko: '배경', en: 'Backdrop' }), composer: t({ ko: '입력창', en: 'Input' }),
   }
 
   const activeSlot = file.slots.find((slot) => slot.id === appearance.slotId) ?? null
@@ -545,7 +543,7 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverAnchor asChild>{children}</PopoverAnchor>
-      <PopoverContent align="end" side="bottom" padding="none" className="relative flex max-h-[calc(100vh-6rem)] w-80 flex-col overflow-hidden"
+      <PopoverContent align="end" side="bottom" padding="none" className="relative flex max-h-[calc(100vh-6rem)] w-88 max-w-[calc(100vw-2rem)] flex-col overflow-hidden"
         // Focus returning to the menu button as the menu closes must not dismiss it; a click outside or Esc does.
         onFocusOutside={(event) => event.preventDefault()}
         // With the slot overlay open, Esc closes the overlay only (Radix would otherwise dismiss the popover too).
@@ -563,26 +561,26 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
           if (slotsOpen) setSlotsOpen(false)
           else onOpenChange(false)
         }}>
-        <div className="flex h-11 shrink-0 items-center justify-between gap-2 px-3.5 pt-2">
-          <span className="flex min-w-0 items-baseline gap-1.5">
-            <span className="text-sm font-semibold">{t({ ko: '채팅 모양', en: 'Chat appearance' })}</span>
-            <span className="truncate text-2xs text-muted-foreground">
+        <div className="flex h-12 shrink-0 items-center justify-between gap-2 pl-4 pr-3">
+          <span className="flex min-w-0 items-baseline gap-2">
+            <span className="shrink-0 text-sm font-semibold">{t({ ko: '채팅 모양', en: 'Chat appearance' })}</span>
+            <span className="truncate text-xs text-muted-foreground">
               {activeSlot?.name ?? t({ ko: '기본값', en: 'Defaults' })}
               {dirty ? <span className="text-secondary-text">{t({ ko: ' · 수정됨', en: ' · edited' })}</span> : null}
             </span>
           </span>
-          <span className="flex shrink-0 items-center gap-0.5">
-            <Button variant="ghost" size="xs" disabled={!dirty || threadId === null} onClick={save}>
+          <span className="flex shrink-0 items-center gap-1">
+            <Button variant={dirty ? 'secondary' : 'ghost'} size="xs" disabled={!dirty || threadId === null} onClick={save}>
               {activeSlot || !dirty ? t({ ko: '저장', en: 'Save' }) : t({ ko: '새 슬롯', en: 'New slot' })}
             </Button>
-            <IconButton size="icon-xs" variant="ghost" active={slotsOpen} aria-expanded={slotsOpen} disabled={threadId === null} onClick={() => setSlotsOpen((current) => !current)} label={t({ ko: '슬롯', en: 'Slots' })}>
+            <IconButton size="icon-sm" variant="ghost" active={slotsOpen} aria-expanded={slotsOpen} disabled={threadId === null} onClick={() => setSlotsOpen((current) => !current)} label={t({ ko: '슬롯', en: 'Slots' })}>
               <Layers className={cn('transition-transform duration-300 ease-out motion-reduce:transition-none', slotsOpen && '-rotate-45 scale-110')} />
             </IconButton>
           </span>
         </div>
         <div className="flex min-h-0 flex-1 flex-col" inert={slotsOpen || undefined}>
           {/* The sample line shows the text settings as the chat will, in the profile's colours. */}
-          <div className="mx-3.5 overflow-hidden border-y border-line px-0.5 py-2.5" style={chatTranscriptStyle(appearance, style)} aria-hidden="true">
+          <div className="mx-4 shrink-0 overflow-hidden rounded-md bg-fill px-3 py-2.5" style={chatTranscriptStyle(appearance, style)} aria-hidden="true">
             <ChatMarkdown text={sample} roleplay={style?.roleplay} />
           </div>
           <TextTabs
@@ -590,36 +588,41 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
             items={TABS.map((key) => ({ value: key, label: tabLabel[key] }))}
             onChange={setTab}
             ariaLabel={t({ ko: '채팅 모양 항목', en: 'Appearance sections' })}
-            className="mx-3.5 shrink-0"
+            className="shrink-0"
+            stripClassName="mt-3 px-4"
           />
-          <div role="tabpanel" className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3.5 pb-2 pt-1">
+          <div role="tabpanel" className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-3 pt-3">
             {tab === 'text' ? (
               <>
-                <AppearanceRow label={t({ ko: '글꼴', en: 'Typeface' })}>
-                  <CompactChoice label={t({ ko: '글꼴', en: 'Typeface' })} value={appearance.fontFamily} onChange={(fontFamily) => update({ fontFamily })}
-                    choices={[
-                      { value: 'profile', label: t({ ko: '프로필', en: 'Profile' }) },
-                      { value: 'sans', label: t({ ko: '고딕', en: 'Sans' }) },
-                      { value: 'serif', label: <span style={{ fontFamily: CHAT_TYPEFACE_FAMILY.serif }}>{t({ ko: '명조', en: 'Serif' })}</span> },
-                      { value: 'mono', label: <span style={{ fontFamily: CHAT_TYPEFACE_FAMILY.mono }}>{t({ ko: '고정폭', en: 'Mono' })}</span> },
-                    ]} />
-                </AppearanceRow>
-                <SliderRow label={t({ ko: '글자 크기', en: 'Text size' })} value={appearance.fontSize} unit="px" min={CHAT_FONT_SIZE_RANGE.min} max={CHAT_FONT_SIZE_RANGE.max} step={1} onChange={(fontSize) => update({ fontSize })} />
-                <AppearanceRow label={t({ ko: '줄 간격', en: 'Line spacing' })}>
-                  <CompactChoice label={t({ ko: '줄 간격', en: 'Line spacing' })} value={appearance.lineHeight} onChange={(lineHeight) => update({ lineHeight })} choices={spacing} />
-                </AppearanceRow>
-                <AppearanceRow label={t({ ko: '문단 간격', en: 'Paragraph spacing' })}>
-                  <CompactChoice label={t({ ko: '문단 간격', en: 'Paragraph spacing' })} value={appearance.paragraphGap} onChange={(paragraphGap) => update({ paragraphGap })} choices={spacing} />
-                </AppearanceRow>
-                <AppearanceRow label={t({ ko: '자간', en: 'Letter spacing' })}>
-                  <CompactChoice label={t({ ko: '자간', en: 'Letter spacing' })} value={appearance.letterSpacing} onChange={(letterSpacing) => update({ letterSpacing })}
-                    choices={[{ value: 'tight', label: tight }, { value: 'normal', label: medium }, { value: 'wide', label: wide }]} />
-                </AppearanceRow>
+                <RowGroup heading={t({ ko: '글자', en: 'Type' })}>
+                  <AppearanceRow label={t({ ko: '글꼴', en: 'Typeface' })}>
+                    <CompactChoice label={t({ ko: '글꼴', en: 'Typeface' })} value={appearance.fontFamily} onChange={(fontFamily) => update({ fontFamily })}
+                      choices={[
+                        { value: 'profile', label: t({ ko: '프로필', en: 'Profile' }) },
+                        { value: 'sans', label: t({ ko: '고딕', en: 'Sans' }) },
+                        { value: 'serif', label: <span style={{ fontFamily: CHAT_TYPEFACE_FAMILY.serif }}>{t({ ko: '명조', en: 'Serif' })}</span> },
+                        { value: 'mono', label: <span style={{ fontFamily: CHAT_TYPEFACE_FAMILY.mono }}>{t({ ko: '고정폭', en: 'Mono' })}</span> },
+                      ]} />
+                  </AppearanceRow>
+                  <SliderRow label={t({ ko: '글자 크기', en: 'Text size' })} value={appearance.fontSize} unit="px" min={CHAT_FONT_SIZE_RANGE.min} max={CHAT_FONT_SIZE_RANGE.max} step={1} onChange={(fontSize) => update({ fontSize })} />
+                </RowGroup>
+                <RowGroup heading={t({ ko: '간격', en: 'Spacing' })}>
+                  <AppearanceRow label={t({ ko: '줄 간격', en: 'Line spacing' })}>
+                    <CompactChoice label={t({ ko: '줄 간격', en: 'Line spacing' })} value={appearance.lineHeight} onChange={(lineHeight) => update({ lineHeight })} choices={spacing} />
+                  </AppearanceRow>
+                  <AppearanceRow label={t({ ko: '문단 간격', en: 'Paragraph spacing' })}>
+                    <CompactChoice label={t({ ko: '문단 간격', en: 'Paragraph spacing' })} value={appearance.paragraphGap} onChange={(paragraphGap) => update({ paragraphGap })} choices={spacing} />
+                  </AppearanceRow>
+                  <AppearanceRow label={t({ ko: '자간', en: 'Letter spacing' })}>
+                    <CompactChoice label={t({ ko: '자간', en: 'Letter spacing' })} value={appearance.letterSpacing} onChange={(letterSpacing) => update({ letterSpacing })}
+                      choices={[{ value: 'tight', label: tight }, { value: 'normal', label: normal }, { value: 'wide', label: wide }]} />
+                  </AppearanceRow>
+                </RowGroup>
               </>
             ) : null}
             {tab === 'layout' ? (
               <>
-                <AppearanceGroup title={t({ ko: '메시지', en: 'Messages' })}>
+                <RowGroup heading={t({ ko: '메시지', en: 'Messages' })}>
                   <AppearanceRow label={t({ ko: '답변 모양', en: 'Replies' })}>
                     <CompactChoice label={t({ ko: '답변 모양', en: 'Replies' })} value={appearance.replyShape} onChange={(replyShape) => update({ replyShape })}
                       choices={[{ value: 'flat', label: t({ ko: '평문', en: 'Plain' }) }, { value: 'bubble', label: t({ ko: '말풍선', en: 'Bubble' }) }]} />
@@ -631,15 +634,15 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
                   {layout === 'page' ? (
                     <AppearanceRow label={t({ ko: '본문 폭', en: 'Width' })}>
                       <CompactChoice label={t({ ko: '본문 폭', en: 'Width' })} value={appearance.width} onChange={(width) => update({ width })}
-                        choices={[{ value: 'narrow', label: tight }, { value: 'normal', label: medium }, { value: 'wide', label: wide }, { value: 'full', label: t({ ko: '꽉', en: 'Full' }) }]} />
+                        choices={[{ value: 'narrow', label: t({ ko: '좁게', en: 'Narrow' }) }, { value: 'normal', label: normal }, { value: 'wide', label: wide }, { value: 'full', label: t({ ko: '꽉', en: 'Full' }) }]} />
                     </AppearanceRow>
                   ) : null}
                   <AppearanceRow label={t({ ko: '메시지 간격', en: 'Message spacing' })}>
                     <CompactChoice label={t({ ko: '메시지 간격', en: 'Message spacing' })} value={appearance.messageGap} onChange={(messageGap) => update({ messageGap })}
-                      choices={[{ value: 'tight', label: t({ ko: '촘촘히', en: 'Tight' }) }, { value: 'normal', label: medium }, { value: 'relaxed', label: t({ ko: '넉넉히', en: 'Loose' }) }]} />
+                      choices={[{ value: 'tight', label: t({ ko: '촘촘히', en: 'Tight' }) }, { value: 'normal', label: normal }, { value: 'relaxed', label: t({ ko: '넉넉히', en: 'Loose' }) }]} />
                   </AppearanceRow>
-                </AppearanceGroup>
-                <AppearanceGroup title={t({ ko: '이름·시각', en: 'Names · time' })}>
+                </RowGroup>
+                <RowGroup heading={t({ ko: '이름·시각', en: 'Names · time' })}>
                   <AppearanceRow label={t({ ko: '이름 표시', en: 'Names' })} htmlFor={namesId}>
                     <Switch id={namesId} checked={appearance.showNames} onCheckedChange={(showNames) => update({ showNames })} />
                   </AppearanceRow>
@@ -647,8 +650,8 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
                     <CompactChoice label={t({ ko: '보낸 시각', en: 'Time sent' })} value={appearance.timeStamps} onChange={(timeStamps) => update({ timeStamps })}
                       choices={[{ value: 'off', label: t({ ko: '끔', en: 'Off' }) }, { value: 'hover', label: t({ ko: '올리면', en: 'Hover' }) }, { value: 'always', label: t({ ko: '항상', en: 'Always' }) }]} />
                   </AppearanceRow>
-                </AppearanceGroup>
-                <AppearanceGroup title={t({ ko: '답변 세부', en: 'Reply details' })}>
+                </RowGroup>
+                <RowGroup heading={t({ ko: '답변 세부', en: 'Reply details' })}>
                   <AppearanceRow label={t({ ko: '도구 호출 칩', en: 'Tool chips' })} htmlFor={toolsId}>
                     <Switch id={toolsId} checked={appearance.showToolChips} onCheckedChange={(showToolChips) => update({ showToolChips })} />
                   </AppearanceRow>
@@ -658,12 +661,12 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
                   <AppearanceRow label={t({ ko: '진단 아이콘', en: 'Diagnostics icon' })} htmlFor={diagnosticsId}>
                     <Switch id={diagnosticsId} checked={appearance.showDiagnostics} onCheckedChange={(showDiagnostics) => update({ showDiagnostics })} />
                   </AppearanceRow>
-                </AppearanceGroup>
+                </RowGroup>
               </>
             ) : null}
             {tab === 'pictures' ? (
               <>
-                <AppearanceGroup title={t({ ko: '사진·이모티콘', en: 'Avatars · emoticons' })}>
+                <RowGroup heading={t({ ko: '사진·이모티콘', en: 'Avatars · emoticons' })}>
                   <AppearanceRow label={t({ ko: '프로필 사진', en: 'Avatar' })}>
                     <CompactChoice label={t({ ko: '프로필 사진', en: 'Avatar' })} value={appearance.avatarSize} onChange={(avatarSize) => update({ avatarSize })}
                       choices={[{ value: 'none', label: t({ ko: '숨김', en: 'Off' }) }, { value: 'sm', label: small }, { value: 'md', label: medium }, { value: 'lg', label: large }]} />
@@ -676,43 +679,52 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
                     <CompactChoice label={t({ ko: '스티커', en: 'Stickers' })} value={appearance.stickerSize} onChange={(stickerSize) => update({ stickerSize })}
                       choices={[{ value: 'sm', label: small }, { value: 'md', label: medium }, { value: 'lg', label: large }]} />
                   </AppearanceRow>
-                </AppearanceGroup>
-                <AppearanceGroup title={t({ ko: '생성 이미지', en: 'Generated images' })}>
+                </RowGroup>
+                <RowGroup heading={t({ ko: '생성 이미지', en: 'Generated images' })}>
                   <AppearanceRow label={t({ ko: '크기', en: 'Size' })}>
                     <CompactChoice label={t({ ko: '생성 이미지 크기', en: 'Generated image size' })} value={appearance.imageSize} onChange={(imageSize) => update({ imageSize })}
                       choices={[{ value: 'sm', label: small }, { value: 'md', label: medium }, { value: 'full', label: t({ ko: '채팅 너비', en: 'Full width' }) }]} />
                   </AppearanceRow>
-                  <AppearanceRow label={t({ ko: '여러 장', en: 'Several' })}>
+                  <AppearanceRow label={t({ ko: '여러 장', en: 'Several images' })}>
                     <CompactChoice label={t({ ko: '여러 장', en: 'Several images' })} value={appearance.imageLayout} onChange={(imageLayout) => update({ imageLayout })}
-                      choices={[{ value: 'grid', label: t({ ko: '메이슨리', en: 'Masonry' }) }, { value: 'column', label: t({ ko: '세로', en: 'Stacked' }) }]} />
+                      choices={[{ value: 'grid', label: t({ ko: '그리드', en: 'Grid' }) }, { value: 'column', label: t({ ko: '세로', en: 'Stacked' }) }]} />
                   </AppearanceRow>
-                </AppearanceGroup>
+                </RowGroup>
               </>
             ) : null}
             {tab === 'background' ? (
               <>
-                <AppearanceRow label={t({ ko: '배경 이미지', en: 'Background image' })} htmlFor={backgroundId}>
-                  <Switch id={backgroundId} checked={appearance.showBackground} onCheckedChange={(showBackground) => update({ showBackground })} />
-                </AppearanceRow>
-                {appearance.showBackground ? (
-                  <>
-                    <SliderRow label={t({ ko: '어둡게', en: 'Dim' })} value={background?.dim ?? appearance.backgroundDim ?? 0} unit="%" min={0} max={90} step={5}
-                      inherited={appearance.backgroundDim === null} onChange={(backgroundDim) => update({ backgroundDim })} onReset={() => update({ backgroundDim: null })} />
-                    <SliderRow label={t({ ko: '흐리게', en: 'Blur' })} value={background?.blur ?? appearance.backgroundBlur ?? 0} unit="px" min={0} max={20} step={1}
-                      inherited={appearance.backgroundBlur === null} onChange={(backgroundBlur) => update({ backgroundBlur })} onReset={() => update({ backgroundBlur: null })} />
+                <RowGroup heading={t({ ko: '배경 이미지', en: 'Background image' })}>
+                  <AppearanceRow label={t({ ko: '배경 표시', en: 'Show background' })} htmlFor={backgroundId}>
+                    <Switch id={backgroundId} checked={appearance.showBackground} onCheckedChange={(showBackground) => update({ showBackground })} />
+                  </AppearanceRow>
+                  {appearance.showBackground ? (
                     <AppearanceRow label={t({ ko: '채우기', en: 'Fill' })}>
                       <CompactChoice label={t({ ko: '채우기', en: 'Fill' })} value={appearance.backgroundFit} onChange={(backgroundFit) => update({ backgroundFit })}
                         choices={[{ value: 'cover', label: t({ ko: '채움', en: 'Cover' }) }, { value: 'contain', label: t({ ko: '맞춤', en: 'Fit' }) }, { value: 'tile', label: t({ ko: '타일', en: 'Tile' }) }]} />
                     </AppearanceRow>
-                  </>
+                  ) : null}
+                </RowGroup>
+                {appearance.showBackground ? (
+                  <RowGroup heading={t({ ko: '효과', en: 'Effects' })}>
+                    <SliderRow label={t({ ko: '어둡게', en: 'Dim' })} value={background?.dim ?? appearance.backgroundDim ?? 0} unit="%" min={0} max={90} step={5}
+                      inherited={appearance.backgroundDim === null} onChange={(backgroundDim) => update({ backgroundDim })} onReset={() => update({ backgroundDim: null })} />
+                    <SliderRow label={t({ ko: '흐리게', en: 'Blur' })} value={background?.blur ?? appearance.backgroundBlur ?? 0} unit="px" min={0} max={20} step={1}
+                      inherited={appearance.backgroundBlur === null} onChange={(backgroundBlur) => update({ backgroundBlur })} onReset={() => update({ backgroundBlur: null })} />
+                  </RowGroup>
                 ) : null}
               </>
             ) : null}
             {tab === 'composer' ? (
-              <AppearanceRow label={t({ ko: '플래그 모양', en: 'Flags' })}>
-                <CompactChoice label={t({ ko: '플래그 모양', en: 'Flags' })} value={appearance.flagStyle} onChange={(flagStyle) => update({ flagStyle })}
-                  choices={[{ value: 'icon', label: t({ ko: '아이콘', en: 'Icon' }) }, { value: 'label', label: t({ ko: '아이콘+이름', en: 'Icon + name' }) }]} />
-              </AppearanceRow>
+              <RowGroup heading={t({ ko: '플래그', en: 'Flags' })}>
+                <AppearanceRow label={t({ ko: '플래그 모양', en: 'Flag style' })}>
+                  <CompactChoice label={t({ ko: '플래그 모양', en: 'Flag style' })} value={appearance.flagStyle} onChange={(flagStyle) => update({ flagStyle })}
+                    choices={[{ value: 'icon', label: t({ ko: '아이콘', en: 'Icon' }) }, { value: 'label', label: t({ ko: '아이콘+이름', en: 'Icon + name' }) }]} />
+                </AppearanceRow>
+                <p className="pb-1 text-xs text-muted-foreground">
+                  {t({ ko: '입력창 위로 펼쳐지는 플래그를 아이콘만, 또는 이름과 함께 보여 줘.', en: 'Flags above the composer show as icons only, or with their names.' })}
+                </p>
+              </RowGroup>
             ) : null}
           </div>
         </div>

@@ -1,5 +1,11 @@
 import './support/testTemp'
 import assert from 'node:assert/strict'
+import childProcess from 'node:child_process'
+import { EventEmitter } from 'node:events'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { PassThrough } from 'node:stream'
 import { test } from 'node:test'
 import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import { DEFAULT_CHAT_STYLE } from '../src/services/codex-chat/chatStyle'
@@ -189,22 +195,222 @@ test('a request is: one system message (persona, then lore index + always-on ent
   assert.equal(result[5].content, '[message_id=5; from=user]\n같이 갈까?\n\n[사용자 지시: 이번 메시지에 적용]\n- 짧게 답해')
 })
 
-test('dialogue marked as history follows the examples without the example note; unlabelled dialogue joins after the text sections', () => {
-  const thread = { id: 7, summary: null, summary_until_message_id: null } as CodexChatThreadRecord
+test('new chats and resets save the filled history around the greeting as ordinary conversation', async (t) => {
+  // runtimePaths gives this test process a scratch root (support/testTemp is imported first).
+  const dbModule = await import('../src/database/userSettingsDb')
+  dbModule.initializeUserSettingsDb()
+  t.after(async () => {
+    dbModule.closeUserSettingsDb()
+    ;(await import('../src/database/init')).closeDatabase()
+    const { logger } = await import('../src/utils/logger')
+    await new Promise<void>((resolve) => logger.close(resolve))
+  })
+  const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+  const { AuthAccount } = await import('../src/models/AuthAccount')
+  const { AuthAccessControlService } = await import('../src/services/authAccessControlService')
+  const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+  const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
+  const { ChatUserProfileStore } = await import('../src/services/codex-chat/chatUserProfiles')
+  const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
+  const { CodexChatService, codexHistoryRecap } = await import('../src/services/codex-chat/codexChatService')
+  const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
+  const { buildClaudeSessionTurn } = await import('../src/services/codex-chat/claudeChatSessions')
+  const { piPromptInput } = await import('../src/services/codex-chat/piChatCompletion')
+  const { userPersonaOf } = await import('../src/services/codex-chat/chatUserProfiles')
+  t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'admin' }) as never)
+  t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['chat.use', 'chat.agent.use'] }))
+  t.mock.method(Math, 'random', () => 0.5)
+  updateChatSettings({ enabled: true })
+  ExternalApiProvider.create({ provider_name: 'opening', display_name: 'Opening', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
+  const requester = { accountId: 1, accountType: 'admin' as const }
+  const user = ChatUserProfileStore.create(1, { name: '민준', persona: '' })
   const config = { contextTurns: 20, contextTokens: null, replyReserveTokens: 2048, summaryEnabled: false, summaryTriggerTurns: 6, summaryPrompt: '' }
-  const seeded = { id: 'seed', title: '지난 대화', content: '사용자: 어제 바다 갔지?\n카이: 응, 노을 봤어', kind: 'dialogue', enabled: true, asHistory: true }
-  const run = (promptSections: unknown[]) => buildChatMessages({ profile: { ...profile, promptSections } as unknown as ChatProfile, thread, messages: [record(1, 'user', '오늘은?')], config, tools: [], books: [] })
+  const openingHistory = [{ role: 'user' as const, content: '{{char}}, 나는 {{user}}야.' }, { role: 'assistant' as const, content: '{{user}}, 어서 와. {{char}}는 웃었다.' }]
+  const expected = [
+    { role: 'user', content: '카이, 나는 민준야.' },
+    { role: 'assistant', content: '다시 만난 민준, 나는 카이.' },
+    { role: 'assistant', content: '민준, 어서 와. 카이는 웃었다.' },
+  ]
+  for (const engine of ['llm', 'codex', 'claude', 'pi'] as const) {
+    const saved = ChatProfileStore.create({ name: '카이', engine: engine === 'pi' ? 'llm' : engine, llmRuntime: engine === 'pi' ? 'pi' : 'direct', providerName: 'opening',
+      greeting: '안녕 {{user}}', alternateGreetings: ['다시 만난 {{user}}, 나는 {{char}}.'], openingHistory, greetingPosition: 1, promptSections: profile.promptSections })
+    const preview = CodexChatService.previewGreeting(requester, saved.id, user.id)
+    assert.deepEqual(preview.before, expected.slice(0, 1))
+    assert.deepEqual(preview.after, expected.slice(2))
+    assert.equal(preview.text, expected[1].content)
+    const thread = CodexChatService.createThread(requester, saved.id, user.id, preview.index)
+    const messages = () => CodexChatStore.listMessages(thread.id)
+    const checkOpening = () => {
+      assert.deepEqual(messages().map(({ role, content }) => ({ role, content })), expected, engine)
+      assert.ok(messages().every((message) => message.status === 'completed'))
+      assert.equal(messages()[1].active_alternative, preview.index)
+      assert.deepEqual(messages()[1].alternatives.map(({ content }) => content), preview.greetings)
+    }
+    checkOpening()
+    const latest = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: '오늘은?', tool_calls: [], status: 'completed', error: null })
+    const historySource = { threadId: thread.id }
+    if (engine === 'llm') {
+      const run = (options = config, current = thread) => buildChatMessages({ profile: saved, thread: current, messages: messages(), config: options, tools: [], books: [], user: userPersonaOf(user) })
+      const sent = run()
+      assert.match(String(sent[0].content), /첫 user\/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐/)
+      assert.deepEqual(sent.slice(1, 3).map(({ content }) => content), ['안녕', '반가워'])
+      assert.deepEqual(sent.slice(3, 6).map(({ role, content }) => ({ role, content: String(content).split('\n').slice(1).join('\n') })), expected)
+      assert.ok(!JSON.stringify(run({ ...config, contextTurns: 1 })).includes(expected[0].content), 'the saved opening scrolls out of the normal window')
+      assert.ok(!JSON.stringify(run({ ...config, summaryEnabled: true }, { ...thread, summary_until_message_id: latest - 1 })).includes(expected[0].content), 'summarized opening messages are not injected again')
+      const system = String(buildChatMessages({ profile: { ...saved, promptSections: [{ id: 'memo', title: '말투', content: '짧게 말해.', kind: 'dialogue', enabled: true }, { id: 'world', title: '세계', content: '항구 도시.', kind: 'text', enabled: true }] }, thread, messages: [], config, tools: [], books: [] })[0].content)
+      assert.ok(system.indexOf('## 세계') < system.indexOf('## 말투'), 'unlabelled dialogue still follows text sections')
+    } else if (engine === 'codex') {
+      const recap = codexHistoryRecap(thread, messages().slice(0, -1), saved, userPersonaOf(user), historySource, latest)
+      for (const message of expected) assert.ok(recap.includes(`${message.role === 'user' ? user.name : saved.name}: ${message.content}`))
+    } else {
+      const turn = await buildClaudeSessionTurn({ requester, threadId: thread.id, profile: saved, history: messages(), historySource, withTools: false, runtime: engine })
+      const input = engine === 'pi' ? piPromptInput(turn.messages).text : String(turn.messages.at(-1)!.content)
+      for (const message of expected) assert.ok(input.includes(`${message.role === 'user' ? user.name : saved.name}: ${message.content}`))
+    }
+    CodexChatService.clearThread(requester, thread.id)
+    checkOpening()
+    if (engine === 'llm') {
+      const companion = ChatProfileStore.create({ name: '동행', engine: 'llm', providerName: 'opening', openingHistory, greeting: '반가워' })
+      const room = GroupChatService.create(requester, { profileIds: [saved.id, companion.id], representativeId: saved.id, userProfileId: user.id })
+      assert.deepEqual(CodexChatStore.listMessages(room.id), [], 'group creation does not post member openings')
+      CodexChatStore.addMessage({ thread_id: room.id, role: 'user', content: '안녕', tool_calls: [], status: 'completed', error: null })
+      GroupChatService.clearThread(requester, room.id)
+      assert.deepEqual(CodexChatStore.listMessages(room.id), [], 'group reset does not post member openings')
+    }
+    const quiet = ChatProfileStore.update(saved.id, { greeting: '', alternateGreetings: [], greetingPosition: 999 })!
+    assert.equal(quiet.greetingPosition, openingHistory.length)
+    const historyOnly = CodexChatService.createThread(requester, saved.id, user.id)
+    assert.deepEqual(CodexChatStore.listMessages(historyOnly.id).map(({ role, content }) => ({ role, content })), [expected[0], expected[2]])
+  }
 
-  const both = run([seeded, ...profile.promptSections])
-  assert.deepEqual(both.slice(1, 5).map((message) => message.content), ['안녕', '반가워', '어제 바다 갔지?', '응, 노을 봤어'])
-  assert.match(String(both[0].content), /첫 2개 user\/assistant 메시지는 말투와 형식을 보여주는 예시일 뿐/, 'the note says where the examples end')
-  assert.match(String(run(profile.promptSections)[0].content), /첫 user\/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐/)
-  const onlySeeded = run([seeded])
-  assert.doesNotMatch(String(onlySeeded[0].content), /예시일 뿐/)
-  assert.deepEqual(onlySeeded.slice(1, 3).map((message) => message.content), ['어제 바다 갔지?', '응, 노을 봤어'])
+  await t.test('Codex retries the opening after a failure or cancellation before turn/start', async (s) => {
+    const { CodexAppServerClient } = await import('../src/services/codex-chat/codexAppServerClient')
+    const { chatFeatureOverrides } = await import('../src/services/codex-chat/codexChatRuntime')
+    const features = new Set(['shell_tool', 'unified_exec', 'hooks', 'plugins', 'apps', 'code_mode_host', 'code_mode', 'browser_use', 'computer_use', 'multi_agent', 'image_generation', 'view_image', 'skill_mcp_dependency_install', 'skill_search', 'skip_host_skill_discovery'])
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-opening-auth-'))
+    fs.writeFileSync(path.join(home, 'auth.json'), '{}')
+    const previousHome = process.env.CODEX_HOME
+    process.env.CODEX_HOME = home
+    s.after(async () => {
+      await CodexChatService.stopAllSessions('opening regression complete')
+      if (previousHome === undefined) delete process.env.CODEX_HOME
+      else process.env.CODEX_HOME = previousHome
+      fs.rmSync(home, { recursive: true, force: true })
+    })
+    s.mock.method(childProcess, 'spawn', (_command: string, args: string[]) => {
+      const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kill: () => true })
+      setImmediate(() => {
+        if (args.includes('features')) child.stdout.write([...features].map((name) => `${name} stable false`).join('\n'))
+        else {
+          assert.ok(args.includes('mcp'))
+          child.stdout.write('[]')
+        }
+        child.emit('close', 0)
+      })
+      return child
+    })
+    let threadNumber = 0
+    let codexId = ''
+    let chatId = 0
+    let preparing = false
+    let failBeforeStart: 'failure' | 'cancellation' | null = null
+    const inputs: string[] = []
+    s.mock.method(CodexAppServerClient, 'start', async (options: Parameters<typeof CodexAppServerClient.start>[0]) => {
+      const client = Object.assign(new EventEmitter(), { whenExited: Promise.resolve(), close: () => {}, isAlive: true,
+        request: async (method: string, params: Record<string, unknown>) => {
+          if (method === 'config/read') {
+            if (preparing) {
+              preparing = false
+              const failure = failBeforeStart
+              failBeforeStart = null
+              if (failure === 'failure') throw new Error('pre-start preparation failed')
+              if (failure === 'cancellation') await CodexChatService.interrupt(requester, chatId)
+            }
+            return { config: { approval_policy: 'never', sandbox_mode: 'read-only', web_search: 'disabled', project_doc_max_bytes: 0,
+              features: chatFeatureOverrides(features), mcp_servers: { conai: { url: `http://127.0.0.1:${process.env.PORT || 1666}/mcp` } }, projects: { [options.cwd]: { trust_level: 'untrusted' } } } }
+          }
+          if (method === 'mcpServerStatus/list') return { data: [{ name: 'conai' }] }
+          if (method === 'model/list') return { data: [{ id: 'opening-test-model', isDefault: true }] }
+          if (method === 'thread/start') {
+            preparing = true
+            codexId = `opening-memory-${++threadNumber}`
+            return { thread: { id: codexId } }
+          }
+          assert.equal(method, 'turn/start')
+          assert.equal(params.threadId, codexId)
+          inputs.push(JSON.stringify(params.input))
+          setImmediate(() => {
+            client.emit('notification', { method: 'item/completed', params: { threadId: codexId, item: { id: 'reply', type: 'agentMessage', text: '답장' } } })
+            client.emit('notification', { method: 'turn/completed', params: { threadId: codexId, turn: { id: 'turn', status: 'completed' } } })
+          })
+          return { turn: { id: 'turn' } }
+        },
+      })
+      return client as unknown as CodexAppServerClient
+    })
+    const saved = ChatProfileStore.create({ name: '카이', engine: 'codex', openingHistory, greetingPosition: 1, greeting: expected[1].content })
+    for (const failure of ['failure', 'cancellation'] as const) {
+      chatId = CodexChatService.createThread(requester, saved.id, user.id).id
+      failBeforeStart = failure
+      const before = inputs.length
+      assert.equal((await CodexChatService.sendMessage(requester, chatId, '첫 시도', () => {})).status, 'failed')
+      assert.equal(inputs.length, before, 'the failed/cancelled preparation never starts a Codex turn')
+      assert.equal(CodexChatStore.findThreadById(chatId)!.codex_thread_id, null, 'an unused memory is not committed')
+      assert.equal((await CodexChatService.sendMessage(requester, chatId, '다시 시도', () => {})).status, 'completed')
+      for (const message of expected) assert.ok(inputs[before].includes(message.content), 'the first accepted turn contains the whole opening')
+      assert.equal(CodexChatStore.findThreadById(chatId)!.codex_thread_id, codexId)
+      await CodexChatService.sendMessage(requester, chatId, '계속', () => {})
+      assert.ok(!inputs[before + 1].includes(expected[0].content), 'a successfully started memory does not repeat the recap')
+    }
+  })
 
-  const system = String(run([{ id: 'memo', title: '말투', content: '짧게 말해.', kind: 'dialogue', enabled: true }, { id: 'world', title: '세계', content: '항구 도시.', kind: 'text', enabled: true }])[0].content)
-  assert.ok(system.indexOf('## 세계') < system.indexOf('## 말투'))
+  await t.test('legacy history sections migrate once, preserving disabled or unparseable sections as examples', async () => {
+    const { createUserSettingsSchema } = await import('../src/database/userSettingsSchema')
+    const legacy = ChatProfileStore.create({ name: '카이', engine: 'codex' })
+    const untouched = ChatProfileStore.create({ name: 'untouched', engine: 'codex' })
+    const malformed = ChatProfileStore.create({ name: 'malformed', engine: 'codex' })
+    const capped = ChatProfileStore.create({ name: 'capped', engine: 'codex' })
+    const existing = ChatProfileStore.create({ name: 'existing', engine: 'codex', openingHistory })
+    const sections = [
+      { id: 'one', kind: 'dialogue', enabled: true, content: '{{user}}: {{char}}, 안녕\n카이: 반가워', asHistory: true },
+      { id: 'disabled', kind: 'dialogue', enabled: false, content: '사용자: 꺼짐', asHistory: true },
+      { id: 'leading', kind: 'dialogue', enabled: true, content: '설명\n사용자: 안녕', asHistory: true },
+      { id: 'no-turns', kind: 'dialogue', enabled: true, content: '줄글', asHistory: true },
+      { id: 'two', kind: 'dialogue', enabled: true, content: '카이: 혼자 말해', asHistory: true },
+      { id: 'example', kind: 'dialogue', enabled: true, content: '사용자: 예시\n카이: 응' },
+    ]
+    const db = dbModule.getUserSettingsDb()
+    const unmarkedSections = JSON.stringify([{ kind: 'dialogue', content: '사용자: 예시\n카이: 응', enabled: true }], null, 2)
+    const cappedSections = [
+      { id: 'fits', kind: 'dialogue', enabled: true, asHistory: true, content: Array.from({ length: 99 }, (_, index) => `${index % 2 ? '{{char}}' : '{{user}}'}: turn ${index}`).join('\n') },
+      { id: 'overflow', kind: 'dialogue', enabled: true, asHistory: true, content: '{{user}}: must stay\n{{char}}: together' },
+      { id: 'later', kind: 'dialogue', enabled: true, asHistory: true, content: '{{char}}: must also stay' },
+    ]
+    db.prepare('UPDATE llm_chat_profiles SET opening_history = NULL, prompt_sections = ? WHERE id = ?').run(JSON.stringify(sections), legacy.id)
+    db.prepare('UPDATE llm_chat_profiles SET opening_history = NULL, prompt_sections = ? WHERE id = ?').run(unmarkedSections, untouched.id)
+    db.prepare('UPDATE llm_chat_profiles SET opening_history = NULL, prompt_sections = ? WHERE id = ?').run('not JSON', malformed.id)
+    db.prepare('UPDATE llm_chat_profiles SET opening_history = NULL, prompt_sections = ? WHERE id = ?').run(JSON.stringify(cappedSections), capped.id)
+    db.prepare('UPDATE llm_chat_profiles SET prompt_sections = ? WHERE id = ?').run(JSON.stringify(sections), existing.id)
+    createUserSettingsSchema(db)
+    assert.deepEqual(ChatProfileStore.find(legacy.id)!.openingHistory, [
+      { role: 'user', content: '{{char}}, 안녕' }, { role: 'assistant', content: '반가워' }, { role: 'assistant', content: '혼자 말해' },
+    ])
+    assert.equal(ChatProfileStore.find(legacy.id)!.greetingPosition, 0)
+    const row = db.prepare('SELECT opening_history, prompt_sections FROM llm_chat_profiles WHERE id = ?')
+    const migrated = row.get(legacy.id) as { opening_history: string; prompt_sections: string }
+    assert.deepEqual(JSON.parse(migrated.prompt_sections), sections.filter((section) => !['one', 'two'].includes(section.id)).map(({ asHistory: _old, ...section }) => section))
+    assert.deepEqual(row.get(untouched.id), { opening_history: '[]', prompt_sections: unmarkedSections }, 'checked unmarked profiles are recorded without rewriting their sections')
+    assert.deepEqual(row.get(malformed.id), { opening_history: '[]', prompt_sections: 'not JSON' }, 'malformed sections are recorded as checked too')
+    const cappedResult = row.get(capped.id) as { opening_history: string; prompt_sections: string }
+    assert.equal(JSON.parse(cappedResult.opening_history).length, 99)
+    assert.deepEqual(JSON.parse(cappedResult.prompt_sections), cappedSections.slice(1).map(({ asHistory: _old, ...section }) => section), 'overflow retains the entire section and every later section, even one that would fit')
+    assert.equal((row.get(existing.id) as { prompt_sections: string }).prompt_sections, JSON.stringify(sections), 'existing opening history is never overwritten')
+    createUserSettingsSchema(db)
+    assert.deepEqual(row.get(legacy.id), migrated, 'rerunning setup does not duplicate or change the opening')
+    assert.deepEqual(row.get(capped.id), cappedResult, 'overflow sections are not migrated on the next startup')
+    assert.deepEqual(row.get(untouched.id), { opening_history: '[]', prompt_sections: unmarkedSections })
+    assert.deepEqual(row.get(malformed.id), { opening_history: '[]', prompt_sections: 'not JSON' })
+  })
 })
 
 test("a keyword entry of an attached book goes into [참고 설정] at the lore depth, not into the system messages", () => {

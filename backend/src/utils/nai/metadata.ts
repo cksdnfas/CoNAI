@@ -4,7 +4,6 @@
 import {
   appendNaiQualityTags,
   getNaiFixedModelSettings,
-  isNaiUcPresetId,
   NAI_ENHANCE_DEFAULT_STRENGTH,
   NAI_INFILL_DEFAULT_STRENGTH,
   prependNaiUcPreset,
@@ -13,6 +12,7 @@ import {
 } from '@conai/shared'
 import { WildcardService, type WildcardPromptKind } from '../../services/wildcardService'
 import { stripPromptPresetComments } from '../promptComments'
+import { assertValidNaiRequest } from './requestValidation'
 
 export interface NAICharacterPrompt {
   prompt: string
@@ -223,6 +223,8 @@ function normalizeCharacterReferences(value: NAIMetadataInputParams['character_r
 
 /** Normalize and enrich one NovelAI payload before request building. */
 export function preprocessMetadata(params: NAIMetadataInputParams): NAIMetadataParams {
+  // Last check before the upstream request: jobs queued before validation existed are stopped here too.
+  assertValidNaiRequest(params as unknown as Record<string, unknown>)
   const metadata: NAIMetadataParams = {
     ...params,
     prompt: parseNaiWildcardText(params.prompt),
@@ -247,12 +249,6 @@ export function preprocessMetadata(params: NAIMetadataInputParams): NAIMetadataP
     metadata.uc_preset = fixedSettings.ucPreset
     metadata.negative_prompt = ''
     metadata.characters = metadata.characters?.map((character) => ({ ...character, uc: '' }))
-  }
-  if (metadata.quality_toggle !== undefined && typeof metadata.quality_toggle !== 'boolean') {
-    throw new Error('NovelAI quality_toggle must be a boolean')
-  }
-  if (metadata.uc_preset !== undefined && !isNaiUcPresetId(metadata.uc_preset)) {
-    throw new Error('NovelAI uc_preset must be none, heavy, light, or human_focus')
   }
   const prompt = appendNaiQualityTags(metadata.model, metadata.prompt, metadata.quality_toggle === true)
   if (prompt === null) {

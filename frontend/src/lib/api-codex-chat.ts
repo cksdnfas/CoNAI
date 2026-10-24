@@ -399,8 +399,13 @@ export interface ChatPromptSection {
   content: string
   /** `post`: goes after the latest message (a card's post-history instructions). */
   kind: 'text' | 'dialogue' | 'post'
-  asHistory?: boolean
   enabled: boolean
+}
+
+/** One message of a new chat's opening, saved into the chat as an ordinary message. */
+export interface ChatOpeningMessage {
+  role: 'user' | 'assistant'
+  content: string
 }
 
 /** A full chat profile (admin). */
@@ -659,6 +664,10 @@ export interface ChatProfile extends ChatProfileAssetFields {
   promptSections: ChatPromptSection[]
   greeting: string
   alternateGreetings: string[]
+  /** The opening of every new chat (and reset), saved as real messages around the greeting (max 100). */
+  openingHistory: ChatOpeningMessage[]
+  /** How many openingHistory messages come before the greeting. */
+  greetingPosition: number
   temperature: number | null
   maxTokens: number | null
   mcpEnabled: boolean
@@ -1400,7 +1409,7 @@ export interface ChatToolInfo {
 
 export interface ChatProfilePreview {
   engine: ChatEngine
-  messages: Array<{ role: string; content: string | null; seeded?: boolean }>
+  messages: Array<{ role: string; content: string | null }>
   tools: string[]
   tokens: { prompt: number; tools: number; total: number }
   contextTokens: number | null
@@ -1519,10 +1528,13 @@ export function createCodexChatThread(profileId: number, userProfileId?: number 
   return requestApiData<CodexChatThread>('/api/codex-chat/threads', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileId, ...(userProfileId === undefined ? {} : { userProfileId }), ...(greetingIndex === undefined ? {} : { greetingIndex }), ...(flagIds === undefined ? {} : { flagIds }) }) })
 }
 
-/** A new chat's opening before it is saved: one greeting (index null: none) and the user profile the chat would take. */
+/**
+ * A new chat's opening before it is saved: one greeting (index null: none), the opening history before and after it
+ * (filled for the user profile) and the user profile the chat would take.
+ */
 export function previewChatGreeting(profileId: number, userProfileId?: number | null) {
   const query = userProfileId === undefined ? '' : `?userProfileId=${userProfileId === null ? 'null' : userProfileId}`
-  return requestApiData<{ index: number | null; text: string; greetings: string[]; userProfileId: number | null }>(`/api/codex-chat/profiles/${profileId}/greeting${query}`, { cache: 'no-store' })
+  return requestApiData<{ index: number | null; text: string; greetings: string[]; userProfileId: number | null; before: ChatOpeningMessage[]; after: ChatOpeningMessage[] }>(`/api/codex-chat/profiles/${profileId}/greeting${query}`, { cache: 'no-store' })
 }
 
 export function createGroupChat(input: { profileIds: number[]; representativeId: number; title?: string; userProfileId?: number | null }) {

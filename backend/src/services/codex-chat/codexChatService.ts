@@ -21,7 +21,7 @@ import { getCodexModelSuggestions } from '../codexGenerationOptions'
 import { CodexAppServerClient, type CodexAppServerNotification } from './codexAppServerClient'
 import { prepareChatRuntime, parseChatFeatureInventory, chatRuntimeArgs, chatTurnRestrictions, verifyChatRuntime } from './codexChatRuntime'
 import { chatWorkspace, workspaceSignature, workspaceInstructions } from './chatWorkspace'
-import { ChatProfileStore, chatGreetings, pickChatGreeting, type ChatProfile } from './chatProfiles'
+import { ChatProfileStore, chatGreetings, type ChatProfile } from './chatProfiles'
 import { loadChatSettings, type ChatScope } from './chatSettings'
 import { canUseChatProfile, resolveChatProfileToolGrant, issueCodexChatMcpToken, resolveChatAccess, revokeCodexChatMcpToken, setCodexChatExecution } from './codexChatAccess'
 import { parseChatPageContext, pendingPageReference, pendingProposalOutcomes } from './chatPageContext'
@@ -58,7 +58,7 @@ import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { CodexChatStore, type ChatBranchPurpose, type CodexChatMessageRecord, type CodexChatToolCall } from './codexChatStore'
 import { ChatSummaryStore } from './chatMemory'
 import { branchChatThread } from './chatBranch'
-import { addChatGreeting } from './chatGreeting'
+import { addChatOpening, chatOpeningHistory } from './chatGreeting'
 import { deleteClaudeMemberSession, deleteClaudeSessions, isClaudeSessionValue } from './claudeChatSessions'
 import { codexHistoryRecap, codexInputMeta, nextLoreSent, pendingAuthorNote, pendingBlockState, prepareSessionLore, pendingRejectedLore, pendingReplyGuidance, pendingUserPersona, readLoreSent } from './chatSessionMemory'
 import { logger } from '../../utils/logger'
@@ -994,7 +994,7 @@ export const CodexChatService = {
     const thread = requireThread(requester, threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
-    CodexChatStore.clearThread(threadId, profile ? fillCharacterPlaceholders(pickChatGreeting(profile), profile, userPersonaForThread(thread)) : '')
+    CodexChatStore.clearThread(threadId, profile ? () => addChatOpening(threadId, profile, userPersonaForThread(thread)) : '')
     deleteCodexRollout(requester, thread.codex_thread_id)
     deleteClaudeSessions(threadId)
     return CodexChatService.getThread(requester, threadId)
@@ -1109,13 +1109,13 @@ export const CodexChatService = {
   },
 
   /**
-   * A chat with the profile's engine; the profile's greeting becomes the first message. `userProfileId`: the
+   * A chat with the profile's engine; its opening history and greeting become saved messages. `userProfileId`: the
    * account's user profile in it; undefined picks the default one (see ChatUserProfileStore.resolveNew), null none.
    */
   /**
    * What a new chat with this profile would start with, before it is saved: one of its greetings (filled for the
-   * user profile it would take) and that greeting's index, which createThread then keeps. The chat is saved only
-   * when its first message is sent.
+   * user profile it would take), the history before/after it and that greeting's index, which createThread then
+   * keeps. The chat is saved only when its first message is sent.
    */
   previewGreeting(requester: McpRequester, profileId: number, userProfileId?: number | null) {
     const user = ChatUserProfileStore.requireOwn(requester.accountId, userProfileId === undefined ? ChatUserProfileStore.resolveNew(requester.accountId) : userProfileId)
@@ -1135,6 +1135,7 @@ export const CodexChatService = {
       text: index === null ? '' : fillCharacterPlaceholders(greetings[index], profile, userPersonaOf(user)),
       greetings: greetings.map((text) => fillCharacterPlaceholders(text, profile, userPersonaOf(user))),
       userProfileId: user?.id ?? null,
+      ...chatOpeningHistory(profile, userPersonaOf(user)),
     }
   },
 
@@ -1151,7 +1152,7 @@ export const CodexChatService = {
         requireCodexProfile(profile.id, requester)
         id = CodexChatStore.createThread(requester.accountId, '', 'codex', profile.id)
         if (user) ChatUserProfileStore.setThreadUserProfile(id, user.id)
-        addChatGreeting(id, profile, userPersonaOf(user), greetingIndex)
+        addChatOpening(id, profile, userPersonaOf(user), greetingIndex)
       }
       if (flags.length) ChatFlagStore.setThreadFlags(id, flags.map((flag) => flag.id))
       return requireThread(requester, id)
@@ -1290,8 +1291,8 @@ export const CodexChatService = {
       const session = await ensureSession(requester, scopes, toolAllowlist, profile.generationPresetIds, { threadId, profileId: profile.id, kind: 'direct', page })
       controller.signal.throwIfAborted()
       const run = resolveCodexRun(session, profile)
-      const codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, (id) => CodexChatStore.setCodexThreadId(threadId, id))
-      // A new Codex thread for a chat that already has a past (branched, imported, or its memory was reset).
+      // Keep a new memory uncommitted until turn/start accepts its first input, including the opening recap.
+      const codexThreadId = await ensureCodexThread(session, thread.codex_thread_id, profile, () => {})
       const freshCodexThread = codexThreadId !== thread.codex_thread_id
 
       let resolveFinished: (message: CodexChatMessageRecord) => void = () => {}
@@ -1341,9 +1342,9 @@ export const CodexChatService = {
 
       try {
         // Codex keeps every turn's input in its memory, so lore already given since the last compaction (same entry,
-        // same content) is not given again. Read after ensureCodexThread: a new Codex thread starts with none.
+        // same content) is not given again. An uncommitted new Codex thread starts with none.
         const current = CodexChatStore.findThreadById(threadId) ?? null
-        const sent = readLoreSent(current?.codex_lore_sent ?? null)
+        const sent = freshCodexThread ? new Set<string>() : readLoreSent(current?.codex_lore_sent ?? null)
         const user = userPersonaForThread(current)
         const history = readReplyHistory(profile, historySource)
         const persona = pendingUserPersona(user, sent)
@@ -1379,6 +1380,7 @@ export const CodexChatService = {
         assertChatAvailable(requester)
         requireCodexProfile(profile.id, requester)
         await verifyChatRuntime(session.client, session.features, session.runtime.cwd, process.env.PORT || String(PORTS.BACKEND_DEFAULT), false)
+        controller.signal.throwIfAborted()
         const body = {
           threadId: codexThreadId,
           ...chatTurnRestrictions(session.runtime.cwd),
@@ -1393,6 +1395,7 @@ export const CodexChatService = {
           turn.contextMeta.session = { resumed: !freshCodexThread }
         }
         const response = await session.client.request<{ turn: { id: string } }>('turn/start', body, THREAD_REQUEST_TIMEOUT_MS)
+        if (freshCodexThread) CodexChatStore.setCodexThreadId(threadId, codexThreadId)
         turn.turnId = response.turn.id
         if (turn.judged && turn.contextMeta) turn.contextMeta.judge = turn.judged.diagnostics
         if (keys.length > 0) CodexChatStore.setCodexLoreSent(threadId, nextLoreSent(sent, keys))

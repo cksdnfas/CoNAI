@@ -263,12 +263,13 @@ test('chat review items: lore conditions, card import report, post sections, att
     assert.ok(JSON.stringify(sent).includes('첨부 본문'))
   })
 
-  await t.test('a new Codex thread for a chat with a past is told it once; a fresh chat is not', () => {
+  await t.test('a new Codex thread is told the saved opening and past once', () => {
     const { codexHistoryRecap } = codexService
     const user = { name: '사용자' } as never
     const kai = { name: '카이' } as never
     const line = (id: number, role: 'user' | 'assistant', content: string) => ({ id, role, content }) as never
-    assert.equal(codexHistoryRecap(null, [line(1, 'assistant', '안녕!')], kai, user), '', 'a greeting alone is no past')
+    assert.equal(codexHistoryRecap(null, [], kai, user), '')
+    assert.match(codexHistoryRecap(null, [line(1, 'assistant', '안녕!')], kai, user), /카이: 안녕!/, 'an assistant-only opening is real conversation too')
     const recap = codexHistoryRecap({ summary: '둘은 친구가 됐다.' }, [line(1, 'user', '바다 가자'), line(2, 'assistant', '좋아')], kai, user)
     assert.match(recap, /^\[이전 기록\]/)
     assert.ok(recap.includes('## 그 전의 요약\n둘은 친구가 됐다.') && recap.includes('사용자: 바다 가자\n\n카이: 좋아'))

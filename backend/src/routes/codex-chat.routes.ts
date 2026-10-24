@@ -24,7 +24,7 @@ import { canUseChatProfile, resolveChatAccess, resolveChatProfileToolGrant } fro
 import { CHAT_VISION_BUILTIN_TOOLS, getMcpToolScope } from '../mcp/context'
 import { openChatMcpBridge } from '../services/codex-chat/chatMcpBridge'
 import { buildCodexInstructions, CodexChatError, CodexChatService, type CodexChatStreamEvent } from '../services/codex-chat/codexChatService'
-import { buildChatPromptPreview, estimateTokens, isSeededMessage, isSummarizing, referenceBlock, selectChatLore } from '../services/codex-chat/llmChatContext'
+import { buildChatPromptPreview, estimateTokens, isSummarizing, referenceBlock, selectChatLore } from '../services/codex-chat/llmChatContext'
 import { OwnedLorebookStore } from '../services/codex-chat/chatLorebookFiles'
 import { assertLinkedFiles, LinkedFileStore, normalizeLinkedFiles } from '../services/codex-chat/chatLinkedFiles'
 import { ChatMinutesStore } from '../services/codex-chat/chatMinutes'
@@ -498,7 +498,9 @@ router.delete('/threads/:threadId/members/:profileId', requireChatAccess, (req: 
 
 /**
  * GET /api/codex-chat/profiles/:profileId/greeting?userProfileId= — a new chat's opening before it is saved:
- * `{ index, text, userProfileId }` (index null: no greeting). POST /threads with that index keeps the same greeting.
+ * `{ index, text, greetings, userProfileId, before, after }` (index null: no greeting).
+ * `before` / `after`: filled `{ role: 'user' | 'assistant', content: string }[]` surrounding the greeting.
+ * POST /threads with that index keeps the same greeting and saves the whole opening as real messages.
  */
 router.get('/profiles/:profileId/greeting', requireChatAccess, (req: Request, res: Response) => {
   const profileId = parseId(req.params.profileId)
@@ -1016,7 +1018,7 @@ router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Re
         success: true,
         data: {
           engine: profile.engine,
-          messages: messages.map((message) => (isSeededMessage(message) ? { ...message, seeded: true } : message)),
+          messages,
           tools: tools.map((tool) => tool.function.name),
           tokens: { prompt: promptTokens, tools: toolTokens, total: promptTokens + toolTokens },
           contextTokens: profile.engine !== 'codex' ? profile.contextTokens : null,

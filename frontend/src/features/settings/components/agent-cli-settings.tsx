@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, Loader2, LogIn, RefreshCw } from 'lucide-react'
-import type { AgentCliName, AgentCliUsageWindow } from '@conai/shared'
+import type { AgentCliUsageWindow, AgentRuntimeName } from '@conai/shared'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -102,17 +102,19 @@ export function AgentCliUsageBars({ windows }: { windows: AgentCliUsageWindow[] 
   </div>
 }
 
-function AgentCliRow({ agent }: { agent: AgentCliName }) {
+/** One row per CLI; pi (the in-process agent SDK of pi chats) has no sign-in or usage, only status, version and update. */
+function AgentCliRow({ agent }: { agent: AgentRuntimeName }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
   const [loginOpen, setLoginOpen] = useState(false)
-  const name = agent === 'codex' ? 'Codex' : 'Claude Code'
-  const versionKey = [agent === 'codex' ? 'codex-cli-version' : 'claude-cli-version']
+  const cli = agent === 'pi' ? null : agent
+  const name = agent === 'codex' ? 'Codex' : agent === 'claude' ? 'Claude Code' : 'pi'
+  const versionKey = [agent === 'codex' ? 'codex-cli-version' : agent === 'claude' ? 'claude-cli-version' : 'pi-runtime-version']
   const status = useQuery({ queryKey: ['agent-cli-status', agent], queryFn: () => getAgentCliStatus(agent), retry: false, refetchInterval: 30000 })
   const authenticated = status.data?.authenticated === true
-  const usage = useQuery({ queryKey: ['agent-cli-usage', agent], queryFn: () => getAgentCliUsage(agent), enabled: authenticated, retry: false, refetchInterval: 300000 })
+  const usage = useQuery({ queryKey: ['agent-cli-usage', agent], queryFn: () => cli ? getAgentCliUsage(cli) : null, enabled: authenticated && cli !== null, retry: false, refetchInterval: 300000 })
   const version = useQuery({ queryKey: versionKey, queryFn: () => agent === 'codex' ? getCodexCliVersion() : getAgentCliVersion(agent).then((data) => ({ success: true, data })), retry: false, staleTime: 3600000, refetchInterval: (query) => query.state.data?.data.updating ? 2000 : false })
   const refreshStatus = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ['agent-cli-status', agent] })
@@ -131,10 +133,11 @@ function AgentCliRow({ agent }: { agent: AgentCliName }) {
       await queryClient.cancelQueries({ queryKey: ['agent-cli-usage', agent] })
       const [versionResult, usageResult] = await Promise.allSettled([
         agent === 'codex' ? getCodexCliVersion({ refresh: true }) : getAgentCliVersion(agent, true).then((data) => ({ success: true, data })),
-        refreshAgentCliUsage(agent),
+        // pi: load the runtime once, so a package that does not load shows in the status.
+        cli ? refreshAgentCliUsage(cli) : getAgentCliStatus('pi', true),
       ])
       if (versionResult.status === 'fulfilled') queryClient.setQueryData(versionKey, versionResult.value)
-      if (usageResult.status === 'fulfilled') queryClient.setQueryData(['agent-cli-usage', agent], usageResult.value)
+      if (cli && usageResult.status === 'fulfilled') queryClient.setQueryData(['agent-cli-usage', agent], usageResult.value)
       if (versionResult.status === 'rejected') throw versionResult.reason
       if (usageResult.status === 'rejected') throw usageResult.reason
     },
@@ -148,7 +151,7 @@ function AgentCliRow({ agent }: { agent: AgentCliName }) {
     const allowed = await confirm({ title: t({ ko: '{name} 설치/업데이트', en: 'Install/update {name}' }, { name }), description: t({ ko: '진행 중인 작업이 있으면 업데이트할 수 없어. 서버에 최신 버전을 설치할까?', en: 'Updates are blocked while work is running. Install the latest version on the server?' }), confirmLabel: t({ ko: '설치/업데이트', en: 'Install/update' }) })
     if (allowed) update.mutate()
   }
-  const stateLabel = status.isPending ? t({ ko: '확인 중', en: 'Checking' }) : status.isError ? t({ ko: '확인 실패', en: 'Check failed' }) : !status.data?.installed ? t({ ko: '미설치', en: 'Not installed' }) : status.data.authenticated ? t({ ko: '인증됨', en: 'Authenticated' }) : t({ ko: '로그인 필요', en: 'Sign-in required' })
+  const stateLabel = status.isPending ? t({ ko: '확인 중', en: 'Checking' }) : status.isError ? t({ ko: '확인 실패', en: 'Check failed' }) : !status.data?.installed ? t({ ko: '미설치', en: 'Not installed' }) : !cli ? (status.data.message ? t({ ko: '불러오기 실패', en: 'Failed to load' }) : t({ ko: '사용 가능', en: 'Ready' })) : status.data.authenticated ? t({ ko: '인증됨', en: 'Authenticated' }) : t({ ko: '로그인 필요', en: 'Sign-in required' })
   const usageWindows = authenticated ? usage.data?.windows ?? [] : []
   return <>
     <SettingRow align={usageWindows.length ? 'start' : 'center'} label={<>
@@ -167,10 +170,10 @@ function AgentCliRow({ agent }: { agent: AgentCliName }) {
       {authenticated && usage.error instanceof Error ? <span className="mt-0.5 block text-xs text-destructive">{usage.error.message}</span> : null}
     </>}>
       <IconButton variant="ghost" size="icon-sm" disabled={busy || refresh.isPending} label={t({ ko: '{name} 상태 새로고침', en: 'Refresh {name} status' }, { name })} onClick={() => refresh.mutate()}><RefreshCw className={refresh.isPending ? 'animate-spin' : undefined} /></IconButton>
-      <IconButton variant="secondary" size="icon-sm" disabled={busy || refresh.isPending || !status.data?.installed} onClick={() => setLoginOpen(true)} label={status.data?.authenticated ? t({ ko: '{name} 다시 로그인', en: 'Sign in to {name} again' }, { name }) : t({ ko: '{name} 로그인', en: 'Sign in to {name}' }, { name })}><LogIn /></IconButton>
+      {cli ? <IconButton variant="secondary" size="icon-sm" disabled={busy || refresh.isPending || !status.data?.installed} onClick={() => setLoginOpen(true)} label={status.data?.authenticated ? t({ ko: '{name} 다시 로그인', en: 'Sign in to {name} again' }, { name }) : t({ ko: '{name} 로그인', en: 'Sign in to {name}' }, { name })}><LogIn /></IconButton> : null}
       <IconButton variant="secondary" size="icon-sm" disabled={busy || refresh.isPending || version.isPending || upToDate} onClick={() => void installOrUpdate()} label={busy ? t({ ko: '업데이트 중…', en: 'Updating…' }) : !info?.current ? t({ ko: '{name} 설치', en: 'Install {name}' }, { name }) : upToDate ? t({ ko: '이미 최신 버전', en: 'Already up to date' }) : t({ ko: '{name} 업데이트', en: 'Update {name}' }, { name })}>{busy ? <Loader2 className="animate-spin" /> : <Download />}</IconButton>
     </SettingRow>
-    {agent === 'codex' ? <CodexDeviceLoginDialog open={loginOpen} onClose={closeLogin} onSucceeded={refreshStatus} /> : <ClaudeLoginDialog open={loginOpen} onClose={closeLogin} onSucceeded={refreshStatus} />}
+    {agent === 'codex' ? <CodexDeviceLoginDialog open={loginOpen} onClose={closeLogin} onSucceeded={refreshStatus} /> : agent === 'claude' ? <ClaudeLoginDialog open={loginOpen} onClose={closeLogin} onSucceeded={refreshStatus} /> : null}
   </>
 }
 
@@ -181,5 +184,6 @@ export function AgentCliSettings() {
   return <RowGroup heading={t({ ko: 'CLI 인증과 업데이트', en: 'CLI authentication and updates' })}>
     <AgentCliRow agent="codex" />
     <AgentCliRow agent="claude" />
+    <AgentCliRow agent="pi" />
   </RowGroup>
 }

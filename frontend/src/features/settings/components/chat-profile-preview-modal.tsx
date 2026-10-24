@@ -55,11 +55,7 @@ export function ChatProfilePreviewModal({ open, draft, onClose }: { open: boolea
             {overBudget ? <p className="text-xs text-destructive">{t({ ko: '대화 전에 이미 컨텍스트 길이를 넘어. 섹션을 줄이거나 도구를 덜 고르거나 길이를 늘려줘.', en: 'This already exceeds the context length before any conversation.' })}</p> : null}
             <div className="space-y-4 border-t border-line pt-4">
               {preview.messages.map((message, index) => (
-                <EditorGroup key={index} label={t(message.seeded && message.role === 'user'
-                  ? { ko: '사용자 (미리 넣은 기록)', en: 'User (seeded history)' }
-                  : message.seeded && message.role === 'assistant'
-                    ? { ko: '캐릭터 (미리 넣은 기록)', en: 'Character (seeded history)' }
-                    : ROLE_LABELS[message.role] ?? { ko: message.role, en: message.role })}>
+                <EditorGroup key={index} label={t(ROLE_LABELS[message.role] ?? { ko: message.role, en: message.role })}>
                   <CodeBlock fill={false} maxHeight="lg">{message.content}</CodeBlock>
                 </EditorGroup>
               ))}

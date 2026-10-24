@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { Braces } from 'lucide-react'
+import { Braces, Plus } from 'lucide-react'
 import { unknownChatMacros } from '@conai/shared'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Panel } from '@/components/ui/panel'
 import { Separator } from '@/components/ui/separator'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
@@ -67,12 +66,47 @@ export function PromptMacroMenu({ textarea, value, onChange }: { textarea: RefOb
 }
 
 /**
- * A prompt item that is not a speech bubble: an instruction (system prompt, section, author's note) or an example sent
- * as text. Long text folds to two lines; clicking it edits it in place. `tools` float over the card on hover and sit in
- * the editor's footer while it is open, which is where touch screens reach them.
+ * A zone's +: adds at once, or with `choices` unfolds them in place beside it (no menu) and adds the one picked.
+ * Escape, a press outside the row or focus moving out of it folds them again.
  */
-export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, placeholder, onTextChange, titleField, enabled = true, assisted = false, flash = false, note, tools, editing: editingProp, onEditingChange }: {
-  /** `data-prompt-item`, which the composer scrolls to after adding. */
+export function PromptAdder({ label, choices, onAdd }: { label: string; choices?: Array<{ value: string; label: string }>; onAdd: (value: string) => void }) {
+  const [expanded, setExpanded] = useState(false)
+  const row = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!expanded) return
+    const fold = (event: PointerEvent) => { if (!row.current?.contains(event.target as Node)) setExpanded(false) }
+    document.addEventListener('pointerdown', fold)
+    return () => document.removeEventListener('pointerdown', fold)
+  }, [expanded])
+
+  return (
+    <div
+      ref={row}
+      className="flex flex-wrap items-center gap-1.5"
+      // A click does not focus a button in every browser (Safari), so only focus that lands elsewhere folds the row.
+      onBlur={(event) => { if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setExpanded(false) }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !expanded) return
+        event.preventDefault()
+        event.stopPropagation()
+        setExpanded(false)
+      }}
+    >
+      <Button variant="ghost" size="sm" aria-expanded={choices ? expanded : undefined} onClick={() => (choices ? setExpanded(!expanded) : onAdd(''))}><Plus />{label}</Button>
+      {choices && expanded ? choices.map((choice, index) => (
+        <Button key={choice.value} variant="secondary" size="sm" autoFocus={index === 0} onClick={() => { setExpanded(false); onAdd(choice.value) }}>{choice.label}</Button>
+      )) : null}
+    </div>
+  )
+}
+
+/**
+ * A prompt item that is not a speech bubble: an instruction (system prompt, section, author's note) or an example kept
+ * as written. Long text folds to two lines; clicking it edits it in place, with `kind` and `tools` in the editor's footer.
+ */
+export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, placeholder, editPlaceholder, onTextChange, titleField, enabled = true, assisted = false, flash = false, note, kind, tools, remove, editing, onEditingChange: setEditing }: {
+  /** `data-prompt-item`, which a preset scrolls to after adding. */
   itemKey: string
   tone?: 'instruction' | 'example'
   title: string
@@ -80,24 +114,25 @@ export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, p
   text: string
   /** Shown instead of empty text. */
   placeholder: string
+  /** The hint in the empty editor. */
+  editPlaceholder?: string
   onTextChange: (text: string) => void
   titleField?: { value: string; onChange: (value: string) => void }
   enabled?: boolean
   assisted?: boolean
   flash?: boolean
   note?: ReactNode
+  /** The kind switch, first in the editor's footer. */
+  kind?: ReactNode
+  /** Off/on and order, in the editor's footer before the variables. */
   tools?: ReactNode
-  /** Controlled editing, for callers that must keep the card while its text changes what it is. */
-  editing?: boolean
-  onEditingChange?: (editing: boolean) => void
+  /** Delete, just before Done. */
+  remove?: ReactNode
+  /** Held by the caller, which opens one item at a time. */
+  editing: boolean
+  onEditingChange: (editing: boolean) => void
 }) {
   const { t } = useI18n()
-  const [ownEditing, setOwnEditing] = useState(false)
-  const editing = editingProp ?? ownEditing
-  const setEditing = (next: boolean) => {
-    setOwnEditing(next)
-    onEditingChange?.(next)
-  }
   const [expanded, setExpanded] = useState(false)
   const [overflowing, setOverflowing] = useState(false)
   const textRef = useRef<HTMLSpanElement>(null)
@@ -120,7 +155,7 @@ export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, p
     <div
       data-prompt-item={itemKey}
       className={cn(
-        'group/card relative rounded-md transition-shadow duration-500 motion-reduce:transition-none',
+        'rounded-md transition-shadow duration-500 motion-reduce:transition-none',
         instruction
           ? (enabled ? 'bg-info-soft text-info-soft-foreground' : 'border border-dashed border-info/40 text-muted-foreground')
           : (enabled ? 'border border-dashed border-line text-muted-foreground' : 'border border-dashed border-line text-muted-foreground opacity-60'),
@@ -134,13 +169,15 @@ export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, p
             {titleField ? (
               <Input variant="settings" controlSize="compact" value={titleField.value} maxLength={80} aria-label={t({ ko: '제목', en: 'Title' })} placeholder={t({ ko: '제목 (예: 캐릭터, 세계관, 말투)', en: 'Title (e.g. Character, World, Tone)' })} onChange={(event) => titleField.onChange(event.target.value)} />
             ) : <Text variant="caption">{title}</Text>}
-            <Textarea ref={textarea} variant="settings" autoGrow autoFocus rows={4} assisted={assisted} value={text} aria-label={titleField?.value || title} onChange={(event) => onTextChange(event.target.value)} />
+            <Textarea ref={textarea} variant="settings" autoGrow autoFocus rows={4} assisted={assisted} value={text} placeholder={editPlaceholder} aria-label={titleField?.value || title} onChange={(event) => onTextChange(event.target.value)} />
             {warnings.length ? <Text variant="caption" tone="warning">{t({ ko: '⚠ 모르는 변수 {variables}', en: '⚠ Unknown variables {variables}' }, { variables: warnings.join(', ') })}</Text> : null}
             {note}
             <div className="flex flex-wrap items-center gap-0.5">
+              {kind}
+              <span className="flex-1" />
               {tools}
               <PromptMacroMenu textarea={textarea} value={text} onChange={onTextChange} />
-              <span className="flex-1" />
+              {remove}
               <Button size="compact" onClick={() => setEditing(false)}>{t({ ko: '완료', en: 'Done' })}</Button>
             </div>
           </div>
@@ -163,11 +200,6 @@ export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, p
           {overflowing || expanded ? (
             <div className="px-2 pb-1">
               <Button variant="link" size="xs" onClick={() => setExpanded(!expanded)}>{expanded ? t({ ko: '접기', en: 'Collapse' }) : t({ ko: '전체 보기', en: 'Show all' })}</Button>
-            </div>
-          ) : null}
-          {tools ? (
-            <div className="pointer-events-none absolute -top-4 right-2 z-10 opacity-0 transition-opacity group-focus-within/card:pointer-events-auto group-focus-within/card:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 motion-reduce:transition-none pointer-coarse:hidden">
-              <Panel treatment="floating" padding="toolbar" className="flex items-center gap-0.5">{tools}</Panel>
             </div>
           ) : null}
         </>

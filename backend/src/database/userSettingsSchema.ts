@@ -10,6 +10,8 @@ import { migrateLlmModelRows } from './llmModelRowsMigration';
 import { migrateWorkflowLlmNodes } from './workflowLlmNodeMigration';
 import { migrateLlmModelRoutes } from './llmModelRoutesMigration';
 import { DEFAULT_JUDGE_PRESETS } from '../services/codex-chat/chatJudgeDefaults';
+import { splitExampleDialogue } from '@conai/shared';
+import { normalizeOpeningHistory, OPENING_HISTORY_MAX_ENTRIES, type ChatOpeningMessage } from '../services/codex-chat/chatOpeningHistory';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
@@ -964,6 +966,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     // JSON ids of the shared display blocks the profile shows (null: not yet moved out of chat_style).
     ['block_ids', 'TEXT'],
     ['alternate_greetings', 'TEXT'],
+    ['opening_history', 'TEXT'],
+    ['greeting_position', 'INTEGER NOT NULL DEFAULT 0'],
     ['lore_scan_depth', 'INTEGER NOT NULL DEFAULT 4'],
     ['lore_token_budget', 'INTEGER NOT NULL DEFAULT 1024'],
     ['lore_depth', 'INTEGER NOT NULL DEFAULT 4'],
@@ -1039,6 +1043,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
       db.exec(`ALTER TABLE llm_chat_profiles ADD COLUMN ${columnName} ${definition}`);
     }
   }
+  migrateChatOpeningHistory(db);
   // The highest rating tier (rating_tiers.id) a model may be shown media of; null: no ceiling.
   if (!hasColumn('llm_model_slots', 'content_rating_tier_id')) {
     db.exec('ALTER TABLE llm_model_slots ADD COLUMN content_rating_tier_id INTEGER');
@@ -1530,6 +1535,42 @@ export function createUserSettingsSchema(db: Database.Database): void {
 
   console.log('  ✅ User settings tables created');
 
+}
+
+/** Legacy seeded dialogue becomes real opening messages once; other marked sections remain ordinary dialogue. */
+function migrateChatOpeningHistory(db: Database.Database): void {
+  const rows = db.prepare('SELECT id, name, prompt_sections FROM llm_chat_profiles WHERE opening_history IS NULL')
+    .all() as Array<{ id: number; name: string; prompt_sections: string | null }>;
+  const update = db.prepare('UPDATE llm_chat_profiles SET opening_history = ?, prompt_sections = ? WHERE id = ?');
+  const checked = db.prepare("UPDATE llm_chat_profiles SET opening_history = '[]' WHERE id = ?");
+  db.transaction(() => {
+    for (const row of rows) {
+      let sections: unknown = null;
+      try { sections = JSON.parse(row.prompt_sections ?? 'null'); } catch { /* Preserve malformed legacy sections unchanged. */ }
+      if (!Array.isArray(sections) || !sections.some((section) => section?.kind === 'dialogue' && section.asHistory === true)) {
+        checked.run(row.id);
+        continue;
+      }
+      const opening: ChatOpeningMessage[] = [];
+      let full = false;
+      const kept = sections.flatMap((section) => {
+        if (section?.asHistory !== true) return [section];
+        const { asHistory: _asHistory, ...plain } = section;
+        if (!full && section.kind === 'dialogue' && section.enabled !== false && typeof section.content === 'string') {
+          const parsed = splitExampleDialogue(section.content, row.name);
+          if (parsed.turns.length > 0 && !parsed.leading) {
+            if (opening.length + parsed.turns.length <= OPENING_HISTORY_MAX_ENTRIES) {
+              opening.push(...parsed.turns.map(({ role, text }) => ({ role, content: text })));
+              return [];
+            }
+            full = true;
+          }
+        }
+        return [plain];
+      });
+      update.run(JSON.stringify(normalizeOpeningHistory(opening)), JSON.stringify(kept), row.id);
+    }
+  })();
 }
 
 /** A linked preset's scopes and tools become the profile's own; a missing preset leaves no tools, as it did when linked. */

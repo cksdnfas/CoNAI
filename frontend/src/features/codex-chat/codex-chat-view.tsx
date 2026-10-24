@@ -47,6 +47,7 @@ import {
   updateChatListState,
   runChatOrder,
   type ChatEmoticon,
+  type ChatOpeningMessage,
   type ChatSearchResult,
   type ChatProfileSummary,
   type CodexChatMessage,
@@ -64,7 +65,7 @@ import { getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
-import { ChatComposerNarrationBackdrop, caretOnNarration, draftHasNarration, narrationColorStyle } from './chat-narration'
+import { ChatComposerNarrationBackdrop, ChatUserMessage, caretOnNarration, draftHasNarration, narrationColorStyle } from './chat-narration'
 import { CHAT_APPEARANCE_ICON as AppearanceIcon, CHAT_MESSAGE_GAP_PX, CHAT_WIDTH_CLASS, ChatAppearancePopover, chatBackgroundLook, chatTranscriptStyle, useChatAppearance, type ChatBackgroundFit } from './chat-appearance'
 import { ChatBlockChangesContext, type BlockAction } from './chat-display-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
@@ -968,18 +969,27 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     />
   ) : null
 
+  /** The opening history of the new chat being prepared, shown as the saved messages it becomes. */
+  const pendingOpening = (messages: ChatOpeningMessage[], side: string) => messages.map((message, index) => (message.role === 'user'
+    ? <ChatUserMessage key={`${side}-${index}`} content={message.content} appearance={appearance} speaker={userSpeaker} />
+    : <CodexChatAssistantMessage key={`${side}-${index}`} content={message.content} toolCalls={[]} appearance={appearance} speaker={speaker} />))
+
   const transcript = (
     <ChatBlockChangesContext.Provider value={blockChanges}><ChatChoiceStatesContext.Provider value={choiceStates}><div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto" onScroll={onTranscriptScroll}>
       <div ref={observeTranscript} className={cn('mx-auto flex flex-col pb-6', layout === 'page' ? cn(CHAT_WIDTH_CLASS[appearance.width], 'px-(--page-gutter) pt-2') : 'px-4 pt-3')} style={{ ...chatTranscriptStyle(appearance, profile?.style), gap: `${CHAT_MESSAGE_GAP_PX[appearance.messageGap]}px` }}>
         {visibleMessages.length < messages.length || hasMoreBefore ? <Button variant="ghost" size="sm" disabled={loadingEarlier} onClick={() => void showEarlierMessages()}>{earlierError ? t({ ko: '이전 메시지 다시 불러오기', en: 'Retry earlier messages' }) : t({ ko: '이전 메시지', en: 'Earlier messages' })}</Button> : null}
-        {pendingChat?.greeting?.text ? <div>
-          <CodexChatAssistantMessage content={pendingChat.greeting.text} toolCalls={[]} appearance={appearance} speaker={speaker} />
-          {pendingChat.greeting.greetings.length > 1 ? <div className="mt-1 flex items-center gap-1">
-            <IconButton size="icon-xs" variant="ghost" disabled={isStartingChat || (pendingChat.greeting.index ?? 0) <= 0} label={t({ ko: '이전 인사', en: 'Previous greeting' })} onClick={() => chat.selectPendingGreeting((pendingChat.greeting!.index ?? 0) - 1)}><ChevronLeft /></IconButton>
-            <span className="text-xs tabular-nums text-muted-foreground">{(pendingChat.greeting.index ?? 0) + 1}/{pendingChat.greeting.greetings.length}</span>
-            <IconButton size="icon-xs" variant="ghost" disabled={isStartingChat || (pendingChat.greeting.index ?? 0) >= pendingChat.greeting.greetings.length - 1} label={t({ ko: '다음 인사', en: 'Next greeting' })} onClick={() => chat.selectPendingGreeting((pendingChat.greeting!.index ?? 0) + 1)}><ChevronRight /></IconButton>
+        {pendingChat?.greeting ? <>
+          {pendingOpening(pendingChat.greeting.before, 'before')}
+          {pendingChat.greeting.text ? <div>
+            <CodexChatAssistantMessage content={pendingChat.greeting.text} toolCalls={[]} appearance={appearance} speaker={speaker} />
+            {pendingChat.greeting.greetings.length > 1 ? <div className="mt-1 flex items-center gap-1">
+              <IconButton size="icon-xs" variant="ghost" disabled={isStartingChat || (pendingChat.greeting.index ?? 0) <= 0} label={t({ ko: '이전 인사', en: 'Previous greeting' })} onClick={() => chat.selectPendingGreeting((pendingChat.greeting!.index ?? 0) - 1)}><ChevronLeft /></IconButton>
+              <span className="text-xs tabular-nums text-muted-foreground">{(pendingChat.greeting.index ?? 0) + 1}/{pendingChat.greeting.greetings.length}</span>
+              <IconButton size="icon-xs" variant="ghost" disabled={isStartingChat || (pendingChat.greeting.index ?? 0) >= pendingChat.greeting.greetings.length - 1} label={t({ ko: '다음 인사', en: 'Next greeting' })} onClick={() => chat.selectPendingGreeting((pendingChat.greeting!.index ?? 0) + 1)}><ChevronRight /></IconButton>
+            </div> : null}
           </div> : null}
-        </div> : null}
+          {pendingOpening(pendingChat.greeting.after, 'after')}
+        </> : null}
         <ChatSavedMessages messages={visibleMessages} contextMessages={messages} segments={threadQuery.data?.summarySegments} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         {liveTurn && liveTurn.threadId === activeThreadId ? (
           <ChatLiveMessage turn={liveTurn} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />

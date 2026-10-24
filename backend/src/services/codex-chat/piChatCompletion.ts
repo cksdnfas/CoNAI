@@ -3,12 +3,15 @@ import path from 'path'
 import { randomUUID } from 'crypto'
 import type { AgentSessionEvent, ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { runtimePaths } from '../../config/runtimePaths'
+import { loadPiSdk, reservePiRun } from '../piRuntime'
 import { isInsideServedDir, isPathStrictlyInside } from '../../utils/pathResolver'
 import type { LlmTokenCounts } from '../llmUsage'
 import { buildOpenAiGenerationFields } from '../llmGenerationOptions'
 import type { ChatMcpToolResult } from './chatMcpBridge'
 import type { ClaudeChatSession } from './claudeChatCompletion'
 import type { ChatCompletionMessage, ChatCompletionResult, ChatCompletionTarget, ChatCompletionTool } from './llmChatCompletion'
+import { CATALOG_RUN_TOOL } from '../../mcp/toolCatalog'
+import { noteTextToolCalls, recoverTextToolCalls, textToolCallFilter, type TextToolCallTools } from './textToolCalls'
 
 /**
  * API LLM chats that run through pi (ChatLlmRuntime 'pi'): the pi agent SDK, embedded in-process, keeps the chat as
@@ -24,26 +27,12 @@ import type { ChatCompletionMessage, ChatCompletionResult, ChatCompletionTarget,
 /** A pi chat's session, kept like a Claude Code one (claudeChatSessions.ts): every turn forks the file it continues. */
 export type PiChatSession = ClaudeChatSession
 
-type PiSdk = typeof import('@earendil-works/pi-coding-agent')
-
 /** The provider id the profile's connection is registered under, in a model runtime of its own per run. */
 const PI_PROVIDER = 'conai'
 const PI_SESSION_ID = /^[\w.-]{1,160}$/
 /** The window pi folds at when the server does not name its context (a hosted API). */
 const DEFAULT_CONTEXT_WINDOW = 32_768
 const TOOL_BUDGET_NOTE = 'The tool budget for this reply is used up. Do not call tools; answer now with what you have.'
-
-// tsc turns `import()` into `require()` for CommonJS output, and pi is an ES module only: keep a real dynamic import.
-const importModule = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<unknown>
-let sdk: Promise<PiSdk> | null = null
-
-export function loadPiSdk(): Promise<PiSdk> {
-  sdk ??= (importModule('@earendil-works/pi-coding-agent') as Promise<PiSdk>).catch((error: unknown) => {
-    sdk = null
-    throw new Error(`pi 런타임을 불러오지 못했어: ${error instanceof Error ? error.message : String(error)}`)
-  })
-  return sdk
-}
 
 /** Where pi chat runs keep their state (each chat's session folder). */
 export function piChatPrivateRoot() {
@@ -133,6 +122,31 @@ export function piModelConfig(target: ChatCompletionTarget, contextWindow: numbe
   }
 }
 
+type PiAssistantMessage = Extract<AgentSessionEvent, { type: 'message_end' }>['message'] & { role: 'assistant' }
+type PiToolCall = Extract<PiAssistantMessage['content'][number], { type: 'toolCall' }>
+
+/**
+ * A finished pi answer with the tool calls it wrote as text made real, and native calls to catalogued tools sent
+ * through run_tool (pi runs only the tools it was given). `held`: the text the stream kept back (textToolCallFilter);
+ * `tail` is what of it to show. Null: nothing to change. pi executes the returned message's calls (message_end).
+ */
+export function recoverPiToolCalls(message: PiAssistantMessage, available: TextToolCallTools, held: { text: string; marked: boolean }) {
+  const direct = new Set(available.tools.map((tool) => tool.function.name))
+  const routable = (name: string) => !direct.has(name) && available.catalogued.has(name) && direct.has(CATALOG_RUN_TOOL)
+  const native = message.content.filter((part): part is PiToolCall => part.type === 'toolCall')
+  const text = message.content.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('')
+  const written = native.length === 0 ? recoverTextToolCalls(text, held, available) : null
+  if (written) {
+    const firstText = message.content.findIndex((part) => part.type === 'text')
+    const content = message.content.flatMap<PiAssistantMessage['content'][number]>((part, index) => part.type !== 'text' ? [part] : index === firstText && written.text ? [{ ...part, text: written.text }] : [])
+    const calls: PiToolCall[] = written.calls.map((call) => ({ type: 'toolCall', id: call.id, name: call.function.name, arguments: JSON.parse(call.function.arguments) }))
+    return { message: { ...message, content: [...content, ...calls], stopReason: message.stopReason === 'stop' ? 'toolUse' as const : message.stopReason }, tail: written.tail }
+  }
+  if (!native.some((call) => routable(call.name))) return null
+  const content = message.content.map((part) => part.type === 'toolCall' && routable(part.name) ? { ...part, name: CATALOG_RUN_TOOL, arguments: { tool: part.name, arguments: part.arguments } } : part)
+  return { message: { ...message, content }, tail: held.text }
+}
+
 /** Every pi tool must be one of CoNAI's: a pi upgrade must never quietly give the chat its own tools. */
 export function verifyPiTools(active: readonly string[], tools: ChatCompletionTool[]) {
   const allowed = new Set(tools.map((tool) => tool.function.name))
@@ -146,7 +160,14 @@ const addUsage = (total: LlmTokenCounts, usage: { input?: number; output?: numbe
   total.outputTokens += usage.output ?? 0
 }
 
-export async function streamPiChatCompletion(params: {
+/** A pi update waits until no run uses the loaded package. */
+export async function streamPiChatCompletion(params: Parameters<typeof runPiChatCompletion>[0]): Promise<ChatCompletionResult> {
+  params.signal.throwIfAborted()
+  const release = reservePiRun()
+  try { return await runPiChatCompletion(params) } finally { release() }
+}
+
+async function runPiChatCompletion(params: {
   target: ChatCompletionTarget
   messages: ChatCompletionMessage[]
   tools?: ChatCompletionTool[]
@@ -158,6 +179,7 @@ export async function streamPiChatCompletion(params: {
   /** Any sign of life (a tool running, a compaction), so a quiet stretch is not taken for a stuck server. */
   onActivity?: () => void
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
+  catalogued?: ReadonlySet<string>
   maxToolRounds?: number
   research?: import('./chatResearch').ChatResearchExecution
 }): Promise<ChatCompletionResult> {
@@ -198,6 +220,19 @@ export async function streamPiChatCompletion(params: {
     defaultTools: [],
     images: { blockImages: !params.target.piVision },
   })
+  let content = ''
+  let separate = false
+  // Tool calls written as text are recovered while the model has tools (they go once the budget is used up).
+  let recovering = tools.length > 0
+  // Each assistant message's text starts a paragraph of its own (a round's note, then the answer).
+  const emitText = (text: string) => {
+    if (!text) return
+    const delta = separate ? `${content.endsWith('\n') ? '\n' : '\n\n'}${text}` : text
+    separate = false
+    content += delta
+    params.onContent?.(delta)
+  }
+  const textFilter = textToolCallFilter(emitText)
   // Nothing is discovered (no skills, templates, themes or context files; the private dirs hold no extensions). One
   // inline extension sends CoNAI's system prompt as it is: pi's own sections (its working dir among them) stay out.
   const resourceLoader = new pi.DefaultResourceLoader({
@@ -205,7 +240,18 @@ export async function streamPiChatCompletion(params: {
     noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
     disabledBuiltinExtensions: ['mcp', 'llama.cpp', 'codemode', 'tool-search'],
     systemPrompt: system,
-    extensionFactories: [{ name: 'conai-system-prompt', factory: (api) => { api.on('before_agent_start', () => ({ systemPrompt: system })) } }],
+    extensionFactories: [{ name: 'conai-system-prompt', factory: (api) => {
+      api.on('before_agent_start', () => ({ systemPrompt: system }))
+      // Runs before the turn's tools: a replaced message is what pi executes and keeps (see recoverPiToolCalls).
+      api.on('message_end', (event) => {
+        if (event.message.role !== 'assistant') return
+        const held = textFilter.end()
+        const recovered = recovering ? recoverPiToolCalls(event.message, { tools, catalogued: params.catalogued ?? new Set() }, held) : null
+        emitText(recovered ? recovered.tail : held.text)
+        if (recovered && held.marked) noteTextToolCalls(params.target)
+        return recovered ? { message: recovered.message } : undefined
+      })
+    } }],
     extensionsOverride: (base) => {
       if (base.extensions.length !== 1 || base.errors.length > 0) throw new Error('pi 채팅 확장 격리를 확인하지 못했어.')
       return base
@@ -243,9 +289,7 @@ export async function streamPiChatCompletion(params: {
     addUsage(usage, counts)
     params.onUsage?.({ ...usage })
   }
-  let content = ''
   let reasoning = ''
-  let separate = false
   let compacted = false
   let budgetStopped = false
   const abort = () => { void agent.abort() }
@@ -265,7 +309,10 @@ export async function streamPiChatCompletion(params: {
     // Past the budget the tools go (from the next turn, as pi applies it), so the model has to answer in text.
     if (event.type === 'turn_end' && (params.research
       ? params.research.finalNativeTurn(Boolean(produced.at(-1)?.content.some(part => part.type === 'toolCall')))
-      : round >= (params.maxToolRounds ?? 8))) agent.setActiveToolsByName([])
+      : round >= (params.maxToolRounds ?? 8))) {
+      agent.setActiveToolsByName([])
+      recovering = false
+    }
     // A noncompliant provider can still emit tool calls after tools were removed. Stop the native loop too,
     // rather than advertising a turn cap that only compliant model output would respect.
     if (event.type === 'turn_end' && params.research && round >= params.research.maxTurns
@@ -274,16 +321,10 @@ export async function streamPiChatCompletion(params: {
       params.research.result.stopReason = 'turn_limit'
       void agent.abort()
     }
-    // Each assistant message's text starts a paragraph of its own (a round's note, then the answer).
     if (event.type === 'message_start' && content && !content.endsWith('\n\n')) separate = true
     if (event.type === 'message_update') {
       const update = event.assistantMessageEvent
-      if (update.type === 'text_delta' && update.delta) {
-        const delta = separate ? `${content.endsWith('\n') ? '\n' : '\n\n'}${update.delta}` : update.delta
-        separate = false
-        content += delta
-        params.onContent?.(delta)
-      }
+      if (update.type === 'text_delta' && update.delta) textFilter.push(update.delta)
       if (update.type === 'thinking_delta' && update.delta) {
         reasoning += update.delta
         params.onReasoning?.(update.delta)

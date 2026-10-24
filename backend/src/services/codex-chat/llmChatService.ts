@@ -1,5 +1,5 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
-import { addChatGreeting } from './chatGreeting'
+import { addChatOpening } from './chatGreeting'
 import type { ChatExecutionContext, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 import { isCodexChatCreationTool } from '@conai/shared'
 import { ChatProposalStore } from './chatProposals'
@@ -33,6 +33,7 @@ import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionM
 import { ChatSummaryStore } from './chatMemory'
 import { appendUserDirective, buildChatMessages, cutToolOutput, directContextTurns, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, fitWorkspaceRead, latestWindow, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, sendableMessages, stripThinking, summarizeAhead, summarizeAll, unsummarizedMessages, wrapUpRequest } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
+import { noteTextToolCalls, recoverTextToolCalls, textToolCallFilter } from './textToolCalls'
 import { chatPageReference, NO_PAGE_NOTE, parseChatPageContext, proposalOutcomeNote } from './chatPageContext'
 import { knowledgePageForExecution, recordQuotedBoardKnowledge } from '../posts/knowledge/knowledgePage'
 import type { ChatSendOptions } from './chatTasks'
@@ -181,7 +182,14 @@ function requireUsableProfile(profileId: number | null, requester: McpRequester)
 }
 
 function parseArguments(raw: string): Record<string, unknown> {
-  const parsed: unknown = JSON.parse(raw || '{}')
+  // Some servers pass the arguments on fenced as the model wrote them.
+  const text = (raw || '').trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/, '$1') || '{}'
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch (error) {
+    throw new Error(`Tool arguments are not valid JSON (${error instanceof Error ? error.message : String(error)}). Call the tool again with one JSON object matching its input schema.`)
+  }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('Tool arguments must be a JSON object')
   }
@@ -461,6 +469,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     const visible = (bridge?.tools ?? []).filter((tool) => profile.visionEnabled || !isVisionTool(tool.function.name))
     // The tools behind the catalog (open_tools / run_tool) are steered and refused by their own names too.
     const catalogued = [...(bridge?.catalogTools ?? [])].filter((name) => profile.visionEnabled || !isVisionTool(name))
+    const cataloguedSet = new Set(catalogued)
     const preparation = prepare ? prepare(visible) : turn.translation
     // Preparation does not depend on semantic scores. Observe early rejection while retrieval is pending.
     preparation?.catch(() => undefined)
@@ -569,10 +578,15 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           turn.text += delta
           emit(turn, { type: 'delta', text: delta })
         })
+        // A tool call the server left in the text (no tool-call parser for this model) is held back and run as a
+        // call; session transports recover their own inside the run (piChatCompletion).
+        const recovering = !target.transport && tools.length > 0 && !lastRound
+        const textFilter = textToolCallFilter(filter.push)
         return streamChatCompletion({
           target,
           messages,
           tools,
+          catalogued: cataloguedSet,
           ...(lastRound && tools.length > 0 ? { toolChoice: 'none' as const } : {}),
           signal: turn.controller.signal,
           allowCompatibilityFallback: !turn.reaction && !turn.research,
@@ -608,13 +622,20 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
             const diagnostics = loadChatSettings().diagnostics
             if (diagnostics.enabled && diagnostics.captureRaw) turn.requestCapture = redactChatRequestBody(body, actualTarget)
           },
-          onContent: filter.push,
+          onContent: recovering ? textFilter.push : filter.push,
           onReasoning: (text) => {
             turn.reasoning += text
             emit(turn, { type: 'reasoning', text })
           },
-        }).then((value) => {
+        }).then((answer) => {
+          const held = textFilter.end()
+          // Calls cut by the cap or a loop carry broken arguments: their text stays as it was written.
+          const recovered = recovering && answer.toolCalls.length === 0 && answer.finishReason !== 'length' && answer.finishReason !== 'repetition'
+            ? recoverTextToolCalls(answer.content, held, { tools, catalogued: cataloguedSet }) : null
+          filter.push(recovered ? recovered.tail : held.text)
           filter.flush()
+          if (recovered) noteTextToolCalls(target)
+          const value = recovered ? { ...answer, content: recovered.text, toolCalls: recovered.calls } : answer
           // The loop was already shown live: take it back off the reply.
           if (value.loopCut) {
             turn.text = turn.text.slice(0, Math.max(roundStart, turn.text.length - value.loopCut)).trimEnd()
@@ -921,7 +942,7 @@ export const LlmChatService = {
     const user = ChatUserProfileStore.requireOwn(requester.accountId, userProfileId)
     const threadId = CodexChatStore.createThread(requester.accountId, '', 'llm', profile.id)
     if (user) ChatUserProfileStore.setThreadUserProfile(threadId, user.id)
-    addChatGreeting(threadId, profile, userPersonaOf(user), greetingIndex)
+    addChatOpening(threadId, profile, userPersonaOf(user), greetingIndex)
     return threadId
   },
 

@@ -149,6 +149,8 @@ export async function executeLoadChatProfileNode(
     engine: profile.engine,
     greeting: profile.greeting,
     alternate_greetings: profile.alternateGreetings,
+    opening_history: profile.openingHistory,
+    greeting_position: profile.greetingPosition,
     lorebook_ids: profile.lorebookIds,
     generation_preset_ids: profile.generationPresetIds,
     reference_hash: profile.referenceHash,

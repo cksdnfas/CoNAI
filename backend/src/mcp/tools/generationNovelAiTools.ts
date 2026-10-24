@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { NAI_UC_PRESET_IDS } from '@conai/shared';
+import { NAI_SAMPLER_IDS, NAI_UC_PRESET_IDS } from '@conai/shared';
 import { getToken } from '../../utils/nai/auth';
 import { mcpGroupPathSchema } from './mcpTargetGroup';
 import { enqueueMcpGenerationJob, waitForMcpGenerationJob } from './generationJobTools';
@@ -33,7 +33,7 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
       height: z.number().int().default(1024).describe('Image height in pixels'),
       steps: z.number().int().min(1).max(50).default(28).describe('Number of diffusion steps'),
       scale: z.number().min(0).max(30).default(5.0).describe('CFG scale'),
-      sampler: z.string().default('k_euler_ancestral').describe('Sampler name'),
+      sampler: z.enum(NAI_SAMPLER_IDS).default('k_euler_ancestral').describe('Sampler name'),
       seed: z.number().int().optional().describe('Random seed (auto-generated if not provided)'),
       n_samples: z.number().int().min(1).max(4).default(1).describe('Number of images to generate'),
       transparent_background: z.boolean().default(false).describe('Add the NAI V5 prompt tags that request an alpha channel'),

@@ -8,7 +8,7 @@ import type { AddressInfo } from 'node:net'
 
 /** A fake OpenAI-compatible server answering from a script: a tool call, a text, or an error; summaries on request. */
 function scriptedServer() {
-  const script: Array<{ kind: 'tool'; promptTokens?: number } | { kind: 'text'; text: string } | { kind: 'error' }> = []
+  const script: Array<{ kind: 'tool'; promptTokens?: number; name?: string } | { kind: 'text'; text: string } | { kind: 'error' }> = []
   const requests: Array<{ messages: Array<{ role: string; content: unknown }>; tools: unknown[]; summary: boolean; body: Record<string, unknown>; usage: { inputTokens: number; outputTokens: number } }> = []
   const server = http.createServer((req, res) => {
     let body = ''
@@ -29,7 +29,7 @@ function scriptedServer() {
       const send = (delta: unknown, finish: string | null = null) => res.write(`data: ${JSON.stringify({ id: 'x', object: 'chat.completion.chunk', created: 0, model: request.model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`)
       if (step.kind === 'tool') {
         send({ role: 'assistant', content: 'Looking it up.' })
-        send({ tool_calls: [{ index: 0, id: `call_${requests.length}`, type: 'function', function: { name: 'lookup', arguments: JSON.stringify({ topic: 'apples' }) } }] })
+        send({ tool_calls: [{ index: 0, id: `call_${requests.length}`, type: 'function', function: { name: step.name ?? 'lookup', arguments: JSON.stringify({ topic: 'apples' }) } }] })
         send({}, 'tool_calls')
       } else {
         send({ role: 'assistant', content: step.text })
@@ -160,6 +160,21 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
       outputTokens: mock.requests.reduce((total, request) => total + request.usage.outputTokens, 0),
       cachedInputTokens: 0,
     }, 'the compaction request is included in the run usage')
+  })
+
+  await t.test('a tool call written as text runs as a call, and a catalogued name goes through run_tool', async () => {
+    const offered = [...tools, { type: 'function' as const, function: { name: 'run_tool', parameters: { type: 'object', properties: { tool: { type: 'string' }, arguments: { type: 'object' } } } } }]
+    mock.script.push({ kind: 'text', text: 'Checking.\n\n<tool_call>\n<function=lookup>\n<parameter=topic>\npears\n</parameter>\n</function>\n</tool_call>' }, { kind: 'tool', name: 'hidden_lookup' }, { kind: 'text', text: 'Pears are green.' })
+    const calls: Array<Record<string, unknown>> = []
+    const result = await streamPiChatCompletion({
+      target: target({ resumeId: null, onDone: () => {} }),
+      messages: [{ role: 'system', content: 'You are a test.' }, { role: 'user', content: 'pears' }],
+      tools: offered, catalogued: new Set(['hidden_lookup']), signal: new AbortController().signal, maxToolRounds: 4,
+      callTool: async (name, args) => { calls.push({ name, ...args }); return { content: [{ type: 'text', text: 'ok' }] } },
+    })
+    assert.deepEqual(calls, [{ name: 'lookup', topic: 'pears' }, { name: 'run_tool', tool: 'hidden_lookup', arguments: { topic: 'apples' } }])
+    assert.doesNotMatch(result.content, /tool_call|function=/)
+    assert.match(result.content, /Checking\.[\s\S]*Pears are green\./)
   })
 
   await t.test('past the profile\'s tool rounds the tools go, so the model answers in text', async () => {

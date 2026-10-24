@@ -321,7 +321,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setView('chat')
     previewChatGreeting(profileId, userProfileId).then((preview) => {
       if (pendingRef.current !== pending) return
-      pendingRef.current = { ...pending, userProfileId: preview.userProfileId, greeting: { index: preview.index, text: preview.text, greetings: preview.greetings } }
+      pendingRef.current = { ...pending, userProfileId: preview.userProfileId, greeting: { index: preview.index, text: preview.text, greetings: preview.greetings, before: preview.before, after: preview.after } }
       setPendingChat(pendingRef.current)
     }).catch((error: unknown) => {
       if (pendingRef.current !== pending) return
@@ -593,7 +593,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     pendingRef.current = null
     setPendingChat(null)
     setDraft(PENDING_DRAFT_KEY, '')
-    // Loaded before the first message goes out (greeting only), as an opened chat would be: the stored message must
+    // Loaded before the first message goes out (the opening only), as an opened chat would be: the stored messages must
     // not show next to the streamed one.
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),

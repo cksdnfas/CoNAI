@@ -29,13 +29,18 @@ export function useAgentCliChatData(): ChatPageData {
   const codexUsage = useQuery({ queryKey: ['agent-cli-usage', 'codex'], queryFn: () => getAgentCliUsage('codex'), enabled: codex.data?.authenticated === true, retry: false, staleTime: 300_000 })
   const claudeUsage = useQuery({ queryKey: ['agent-cli-usage', 'claude'], queryFn: () => getAgentCliUsage('claude'), enabled: claude.data?.authenticated === true, retry: false, staleTime: 300_000 })
   const usages = { codex: codexUsage.data, claude: claudeUsage.data }
-  return Object.fromEntries(AGENTS.map((agent) => {
-    const status = statuses[agent]
-    if (!status) return [agent, null]
-    if (!status.installed || !status.authenticated) return [agent, status.installed ? 'not signed in' : 'not installed']
-    const limits = (usages[agent]?.windows ?? []).map((window) => `${window.window}${window.model ? ` ${window.model}` : ''} ${Math.round(window.usedPercent)}%${window.resetsAt ? ` until ${window.resetsAt}` : ''}`)
-    return [agent, limits.length ? `signed in · ${limits.join(' · ')}` : 'signed in']
-  }))
+  // pi chats' agent runtime: no sign-in, only whether it is there and loads.
+  const pi = useQuery({ queryKey: ['agent-cli-status', 'pi'], queryFn: () => getAgentCliStatus('pi'), retry: false, staleTime: 30_000 }).data
+  return {
+    ...Object.fromEntries(AGENTS.map((agent) => {
+      const status = statuses[agent]
+      if (!status) return [agent, null]
+      if (!status.installed || !status.authenticated) return [agent, status.installed ? 'not signed in' : 'not installed']
+      const limits = (usages[agent]?.windows ?? []).map((window) => `${window.window}${window.model ? ` ${window.model}` : ''} ${Math.round(window.usedPercent)}%${window.resetsAt ? ` until ${window.resetsAt}` : ''}`)
+      return [agent, limits.length ? `signed in · ${limits.join(' · ')}` : 'signed in']
+    })),
+    pi: pi ? (!pi.installed ? 'not installed' : pi.message ? `failed to load: ${chatPageText(pi.message)}` : 'ready') : null,
+  }
 }
 
 /** The full input of a saved server with a few fields changed; secrets keep their stored values (sent by name only). */

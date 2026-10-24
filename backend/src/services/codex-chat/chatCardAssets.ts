@@ -301,7 +301,7 @@ export async function localizeImages(texts: string[], options: { characterName?:
   return { saved, items, failed, remaining: Math.max(0, urls.length - MEDIA_PER_RUN) }
 }
 
-const PROFILE_TEXT_COLUMNS = ['system_prompt', 'greeting', 'prompt_sections', 'alternate_greetings', 'character_description', 'example_dialogue', 'user_persona']
+const PROFILE_TEXT_COLUMNS = ['system_prompt', 'greeting', 'prompt_sections', 'alternate_greetings', 'opening_history', 'character_description', 'example_dialogue', 'user_persona']
 
 /** Stored chat messages that still show a saved link (e.g. greetings already posted) get the copy too. */
 export function rewriteStoredMessages(saved: Map<string, string>, rewrite: (text: string) => string = (text) => rewriteMediaLinks(text, saved)) {

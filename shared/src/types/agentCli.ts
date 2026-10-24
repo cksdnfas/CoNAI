@@ -1,4 +1,6 @@
 export type AgentCliName = 'codex' | 'claude'
+/** The CLIs plus pi, the in-process agent SDK of pi chats (status, version and update only). */
+export type AgentRuntimeName = AgentCliName | 'pi'
 
 export type AgentCliStatus = {
   installed: boolean

@@ -50,10 +50,8 @@ export function replyReserveFor(contextTokens: number | null, maxTokens: number 
 
 const EXAMPLE_NOTE = '바로 뒤에 이어지는 첫 user/assistant 대화들은 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니야. 실제 대화는 그 다음부터야.'
 
-/** With seeded turns right behind the examples, the note counts the examples so the model knows where they end. */
-function exampleNote(examples: number, seeded: number) {
-  if (examples === 0) return ''
-  return seeded > 0 ? `바로 뒤에 이어지는 첫 ${examples}개 user/assistant 메시지는 말투와 형식을 보여주는 예시일 뿐 실제로 나눈 대화가 아니야. 그 다음 메시지부터는 실제로 나눈 대화야.` : EXAMPLE_NOTE
+function exampleNote(examples: number) {
+  return examples > 0 ? EXAMPLE_NOTE : ''
 }
 
 /**
@@ -81,6 +79,7 @@ export const ACTION_AUTHORIZATION_GUIDANCE = 'Carry out the user\'s requested wo
 function toolGuidance(presetMode: boolean) {
   return [
     'You can act on CoNAI, a local app for managing and generating AI images, only through the provided tools.',
+    'Call tools only through the tool-calling interface; never write tool-call markup (<tool_call>, <function=…>) or JSON calls in your reply text. A tool that is not in your tool list is called through run_tool {"tool": "<name>", "arguments": {…}} when run_tool is offered.',
     ...GENERATION_GUIDANCE[presetMode ? 'preset' : 'freeform'],
     ACTION_AUTHORIZATION_GUIDANCE,
     'To set up an emoticon group: list_emoticons for the group, view_images in small batches when available (otherwise judge from file names and tags), then set_emoticon_keywords with a few short keywords per image.',
@@ -162,19 +161,12 @@ export function postHistoryText(profile: ChatProfile, user?: ChatUserPersona | n
   return text ? fillCharacterPlaceholders(text, profile, user) : ''
 }
 
-/** Turns of dialogue sections marked as history; the profile preview labels them apart from examples. */
-const seededMessages = new WeakSet<object>()
-export const isSeededMessage = (message: object) => seededMessages.has(message)
-
-/** Turns from dialogue sections, sent right after the system messages: the examples, or (`asHistory`) the seeded turns. */
-function buildExampleMessages(profile: ChatProfile, user: ChatUserPersona | null | undefined, asHistory: boolean): ChatCompletionMessage[] {
+/** Example dialogue turns, sent right after the system message. */
+function buildExampleMessages(profile: ChatProfile, user: ChatUserPersona | null | undefined): ChatCompletionMessage[] {
   return profile.promptSections
-    .filter((section) => section.enabled && section.kind === 'dialogue' && (section.asHistory === true) === asHistory)
+    .filter((section) => section.enabled && section.kind === 'dialogue')
     .flatMap((section) => parseExampleDialogue(section.content, profile, user) ?? [])
-    .map((message) => {
-      if (asHistory) seededMessages.add(message)
-      return markContextMessage(message, 'example')
-    })
+    .map((message) => markContextMessage(message, 'example'))
 }
 
 /** A turn starts at a user message; a greeting before the first user message is a turn of its own. */
@@ -360,15 +352,13 @@ export function rejectedLoreFor(threadId: number | null | undefined, tools: Read
 
 /**
  * Everything before the real conversation: one system message — the system prompt first (stable, so servers can reuse
- * the cached prefix), then the lore index with the "always on" entries and the rolling summary — then example turns,
- * then the turns of dialogue sections marked as history. Chat templates often allow system messages only at the start,
- * so the note that the examples are not real lives in the system prompt rather than around them; it covers only the
- * examples, which come first. `lore` defaults to the profile's global books with no chat (a preview).
+ * the cached prefix), then the lore index with the "always on" entries and the rolling summary — then example turns.
+ * Chat templates often allow system messages only at the start, so the note that the examples are not real lives in
+ * the system prompt rather than around them. `lore` defaults to the profile's global books with no chat (a preview).
  */
 export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'summary'> | null, config: Pick<LlmChatContextConfig, 'summaryEnabled'>, withTools: boolean, lore: Pick<ChatLore, 'index' | 'constant'> = selectChatLore(profile), user: ChatUserPersona | null = null) {
-  const examples = buildExampleMessages(profile, user, false)
-  const seeded = buildExampleMessages(profile, user, true)
-  const note = exampleNote(examples.length, seeded.length)
+  const examples = buildExampleMessages(profile, user)
+  const note = exampleNote(examples.length)
   const personaParts: Array<{ kind: ChatContextSectionKind; text: string }> = []
   const systemPrompt = [
     buildPersonaPrompt(profile, { user, onPart: (kind, text) => personaParts.push({ kind, text }) }),
@@ -395,7 +385,7 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
     { kind: 'constant-lore', text: lore.constant ? `## 상시 항목\n${lore.constant}` : '' },
     { kind: 'summary', text: config.summaryEnabled && thread?.summary?.trim() ? `## 지금까지의 대화 요약\n${thread.summary.trim()}` : '' },
   ])] : []
-  return [...result, ...examples, ...seeded]
+  return [...result, ...examples]
 }
 
 /** The display block state of a chat as the model reads it ('' without blocks). `speakerId`: a room member's own. */

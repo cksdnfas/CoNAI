@@ -655,6 +655,7 @@ claude mcp list
 - `NovelAI token not configured`: 웹 UI에서 NAI 로그인 필요
 - `Active subscription required`: 유효한 구독 필요
 - `Invalid or expired token`: 토큰 재로그인 필요
+- `Invalid NovelAI request, nothing was sent to NovelAI: ...`: 서버가 요청을 NovelAI로 보내기 전에 거절했습니다. Anlas는 소모되지 않습니다. 메시지에 적힌 필드를 고쳐 다시 요청합니다. `prompt`가 비었거나, 허용되지 않은 `model`·`sampler`(`k_euler`, `k_euler_ancestral`, `k_dpmpp_2s_ancestral`, `k_dpmpp_2m`, `k_dpmpp_2m_sde`, `k_dpmpp_sde`)·`noise_schedule`·`uc_preset`을 넣었거나, 크기(64~4096, 64 배수)·스텝(1~50)·CFG(0~30)·생성 수(1~4)가 범위를 벗어난 경우입니다. 화면·채팅·MCP·그래프·재시도 모든 경로에서 큐 등록 시와 전송 직전에 같은 검사를 합니다.
 
 ### 프롬프트 그룹 정리 실수
 

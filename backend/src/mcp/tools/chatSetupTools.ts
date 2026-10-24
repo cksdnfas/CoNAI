@@ -3,6 +3,7 @@ import { CHAT_TRANSLATION_LANGUAGES, isChatTranslationLanguage, type ChatProposa
 import { z } from 'zod';
 import { ChatProposalStore, type NewChatProposal } from '../../services/codex-chat/chatProposals';
 import { ChatProfileStore, CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS, normalizeAlternateGreetings, normalizeSections, type ChatProfile } from '../../services/codex-chat/chatProfiles';
+import { normalizeGreetingPosition, normalizeOpeningHistory } from '../../services/codex-chat/chatOpeningHistory';
 import { ChatSharedBlockStore, PROFILE_MAX_BLOCKS } from '../../services/codex-chat/chatDisplayBlocks';
 import { ChatLorebookStore, LORE_RECURSION_MAX_DEPTH, PROFILE_MAX_LOREBOOKS } from '../../services/codex-chat/chatLorebook';
 import { ChatJudgePresetStore } from '../../services/codex-chat/chatJudgePresets';
@@ -30,7 +31,7 @@ const NO_CHAT_ERROR = 'Proposals need an active chat reply.';
  * who may chat with it, generation presets and provider/model pairs are set by hand in the editor.
  */
 const PROPOSABLE_KEYS = [
-  'name', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'authorNote', 'appearance',
+  'name', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'openingHistory', 'greetingPosition', 'authorNote', 'appearance',
   'modelSlotId', 'summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'lorebookIds', 'blockIds',
   'temperature', 'maxTokens', 'contextTurns', 'contextTokens', 'maxToolRounds', 'toolOutputLimit',
   'summaryEnabled', 'summaryTriggerTurns', 'summaryPrompt',
@@ -45,6 +46,8 @@ const KEY_ALIASES: Record<string, ProposableKey> = {
   system_prompt: 'systemPrompt',
   prompt_sections: 'promptSections',
   alternate_greetings: 'alternateGreetings',
+  opening_history: 'openingHistory',
+  greeting_position: 'greetingPosition',
   author_note: 'authorNote',
   model_slot: 'modelSlotId',
   model_slot_id: 'modelSlotId',
@@ -132,8 +135,9 @@ function profileGuide() {
     'Fields (propose_chat_profile):',
     `- name (required, max ${limits.name}), tagline (max ${limits.tagline}, one-line intro shown on the profile card).`,
     `- system_prompt (max ${limits.text}): instructions every chat starts with. Use {{char}} for the profile name and {{user}} for the user's persona name.`,
-    `- prompt_sections (max ${limits.sections}): [{ "title": "World", "content": "...", "enabled": true }]. Title max ${limits.sectionTitle}, content max ${limits.text}. Plain sections are appended after the system prompt as "## title". Optional kind "dialogue" marks example conversation (lines starting with {{user}}: / {{char}}: become real turns); add "asHistory": true to send those turns as conversation already held instead of as examples. Kind "post" goes after the latest message (a character card's post-history instructions).`,
-    `- greeting (max ${limits.text}) and alternate_greetings (max ${limits.alternateGreetings}): the first message of a new chat is picked at random among them.`,
+    `- prompt_sections (max ${limits.sections}): [{ "title": "World", "content": "...", "enabled": true }]. Title max ${limits.sectionTitle}, content max ${limits.text}. Plain sections are appended after the system prompt as "## title". Optional kind "dialogue" marks example conversation (lines starting with {{user}}: / {{char}}: become example turns). Kind "post" goes after the latest message (a character card's post-history instructions).`,
+    `- opening_history (max ${limits.openingHistory}): [{ "role": "user" | "assistant", "content": "..." }], content max ${limits.text}. The opening of every new chat, saved as real messages that scroll out and get summarized like other conversation.`,
+    `- greeting (max ${limits.text}) and alternate_greetings (max ${limits.alternateGreetings}): one greeting is picked at random and saved as an assistant message, with the others as variants. greeting_position (integer, default 0): insert it after this many opening_history messages; clamped to the history's length.`,
     `- author_note (max ${limits.authorNote}): scene direction added near the end of every request.`,
     `- appearance (max ${limits.text}): the character's look as image-prompt tags (hair, eyes, outfit…). Character image generation puts it in front of every asset prompt.`,
     '- model_slot: model id or `connection · model` label (the chat model). Omit to start on the default model.',
@@ -224,6 +228,16 @@ function resolveGreetings(value: unknown) {
   return normalizeAlternateGreetings(value);
 }
 
+function resolveOpeningHistory(value: unknown) {
+  if (!Array.isArray(value)) throw new Error('openingHistory must be an array of { role, content }.');
+  if (value.length > CHAT_PROFILE_TEXT_LIMITS.openingHistory) throw new Error(`openingHistory holds at most ${CHAT_PROFILE_TEXT_LIMITS.openingHistory} entries.`);
+  value.forEach((entry, index) => {
+    if (!entry || (entry.role !== 'user' && entry.role !== 'assistant')) throw new Error(`openingHistory[${index}].role must be "user" or "assistant".`);
+    limitedText(`openingHistory[${index}].content`, entry.content, CHAT_PROFILE_TEXT_LIMITS.text);
+  });
+  return normalizeOpeningHistory(value);
+}
+
 function flag(label: string, value: unknown) {
   if (typeof value !== 'boolean') throw new Error(`${label} must be true or false.`);
   return value;
@@ -281,7 +295,7 @@ function proposedLinkedFiles(value: unknown, owner: string | null, kept: LinkedF
 }
 
 /** What validating a field may need beyond its value: the proposer's file store and the profile's current links. */
-type FieldContext = { owner?: string | null; current?: ChatProfile | null };
+type FieldContext = { owner?: string | null; current?: ChatProfile | null; openingHistory?: ChatProfile['openingHistory'] };
 
 /** Validates one proposable field and returns its normalized value (what the admin REST would store). */
 function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext: FieldContext = {}): unknown {
@@ -294,6 +308,8 @@ function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext
     case 'appearance': return limitedText('appearance', value, CHAT_PROFILE_TEXT_LIMITS.text);
     case 'promptSections': return resolveSections(value);
     case 'alternateGreetings': return resolveGreetings(value);
+    case 'openingHistory': return resolveOpeningHistory(value);
+    case 'greetingPosition': return normalizeGreetingPosition(value, (fieldContext.openingHistory ?? fieldContext.current?.openingHistory ?? []).length);
     case 'modelSlotId':
     case 'summarySlotId':
     case 'translationSlotId':
@@ -347,7 +363,7 @@ function proposerFileOwner(context: McpRequestContext): string | null {
 }
 
 function withoutSectionIds(value: unknown) {
-  return Array.isArray(value) ? value.map((section) => ({ title: section.title, content: section.content, kind: section.kind, enabled: section.enabled, asHistory: section.asHistory === true })) : value;
+  return Array.isArray(value) ? value.map((section) => ({ title: section.title, content: section.content, kind: section.kind, enabled: section.enabled })) : value;
 }
 
 function sameValue(key: ProposableKey, a: unknown, b: unknown) {
@@ -390,6 +406,8 @@ export type ProfileProposalArgs = {
   prompt_sections?: unknown[];
   greeting?: string;
   alternate_greetings?: string[];
+  opening_history?: ChatProfile['openingHistory'];
+  greeting_position?: number;
   author_note?: string;
   appearance?: string;
   model_slot?: string | number;
@@ -401,9 +419,10 @@ export type ProfileProposalArgs = {
 };
 
 /** The top-level arguments of propose_chat_profile; `settings` may not repeat them. */
-const PROFILE_ARG_KEYS = new Set<ProposableKey>(['name', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'authorNote', 'appearance', 'modelSlotId', 'lorebookIds', 'blockIds']);
+const PROFILE_ARG_KEYS = new Set<ProposableKey>(['name', 'tagline', 'systemPrompt', 'promptSections', 'greeting', 'alternateGreetings', 'openingHistory', 'greetingPosition', 'authorNote', 'appearance', 'modelSlotId', 'lorebookIds', 'blockIds']);
 
 export function buildProfileProposal(args: ProfileProposalArgs, owner: string | null = null) {
+  const openingHistory = resolveOpeningHistory(args.opening_history ?? []);
   const input: Record<string, unknown> = {
     name: normalizeProposedField('name', args.name),
     tagline: normalizeProposedField('tagline', args.tagline ?? ''),
@@ -411,6 +430,8 @@ export function buildProfileProposal(args: ProfileProposalArgs, owner: string | 
     promptSections: normalizeProposedField('promptSections', args.prompt_sections ?? []),
     greeting: normalizeProposedField('greeting', args.greeting ?? ''),
     alternateGreetings: normalizeProposedField('alternateGreetings', args.alternate_greetings ?? []),
+    openingHistory,
+    greetingPosition: normalizeProposedField('greetingPosition', args.greeting_position ?? 0, { openingHistory }),
     authorNote: normalizeProposedField('authorNote', args.author_note ?? ''),
     appearance: normalizeProposedField('appearance', args.appearance ?? ''),
     modelSlotId: normalizeProposedField('modelSlotId', args.model_slot ?? null),
@@ -449,11 +470,14 @@ export function buildProfileUpdateProposal(args: { profile_id?: number; patch: R
   const mapped = readProfilePatch(args.patch);
   const current = ChatProfileStore.find(profileId);
   if (!current) throw new Error(`Chat profile not found: ${profileId}`);
+  const openingHistory = mapped.has('openingHistory') ? resolveOpeningHistory(mapped.get('openingHistory')) : current.openingHistory;
+  // Shrinking the history may also move the greeting, even when the patch leaves its position implicit.
+  if (mapped.has('openingHistory') && !mapped.has('greetingPosition')) mapped.set('greetingPosition', current.greetingPosition);
   const patch: Record<string, unknown> = {};
   const before: Record<string, unknown> = {};
   const display: Record<string, { before: string; after: string }> = {};
   for (const [key, raw] of mapped) {
-    const value = normalizeProposedField(key, raw, { owner, current });
+    const value = key === 'openingHistory' ? openingHistory : normalizeProposedField(key, raw, { owner, current, openingHistory });
     if (sameValue(key, value, current[key])) continue;
     patch[key] = value;
     before[key] = current[key];
@@ -496,6 +520,8 @@ export function profileSetupView(profile: ChatProfile, owner: string | null = nu
     promptSections: profile.promptSections,
     greeting: profile.greeting,
     alternateGreetings: profile.alternateGreetings,
+    openingHistory: profile.openingHistory,
+    greetingPosition: profile.greetingPosition,
     authorNote: profile.authorNote,
     appearance: profile.appearance,
     modelSlotId: profile.modelSlotId,
@@ -675,9 +701,11 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
       name: z.string(),
       tagline: z.string().optional(),
       system_prompt: z.string(),
-      prompt_sections: z.array(z.object({ title: z.string(), content: z.string(), enabled: z.boolean().optional(), kind: z.enum(['text', 'dialogue', 'post']).optional(), asHistory: z.boolean().optional() })).optional(),
+      prompt_sections: z.array(z.object({ title: z.string(), content: z.string(), enabled: z.boolean().optional(), kind: z.enum(['text', 'dialogue', 'post']).optional() })).optional(),
       greeting: z.string().optional(),
       alternate_greetings: z.array(z.string()).optional(),
+      opening_history: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string() })).optional().describe('Opening of every new chat, saved as real conversation messages'),
+      greeting_position: z.number().int().optional().describe('Insert the greeting after this many opening_history messages (default 0)'),
       author_note: z.string().optional(),
       appearance: z.string().optional().describe('Look as image-prompt tags; used for character image generation'),
       model_slot: z.union([z.string(), z.number()]).optional().describe('Model slot name or id'),

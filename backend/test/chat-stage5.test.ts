@@ -38,7 +38,7 @@ test('stage 5: lore provenance, usage, undo, branches, greetings and tone', { ti
   const { buildChatMessages, resolveContextConfig } = await import('../src/services/codex-chat/llmChatContext')
   const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
   updateChatSettings({ enabled: true, diagnostics: { enabled: true } })
-  const { addChatGreeting } = await import('../src/services/codex-chat/chatGreeting')
+  const { addChatOpening } = await import('../src/services/codex-chat/chatGreeting')
   const { userPersonaOf } = await import('../src/services/codex-chat/chatUserProfiles')
   ExternalApiProvider.create({ provider_name: 'stage5', display_name: 'Stage 5', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const profile = ChatProfileStore.create({ name: '카이', engine: 'llm', providerName: 'stage5', greeting: '안녕 {{user}}', alternateGreetings: ['{{char}}가 웃어', '세 번째 인사'] })
@@ -185,7 +185,7 @@ test('stage 5: lore provenance, usage, undo, branches, greetings and tone', { ti
 
   await t.test('E3: every greeting is saved as a variant and the previewed index remains active', () => {
     const id = freshThread()
-    addChatGreeting(id, profile, userPersonaOf(null), 1)
+    addChatOpening(id, profile, userPersonaOf(null), 1)
     const message = CodexChatStore.listMessages(id)[0]
     assert.equal(message.alternatives.length, 3)
     assert.equal(message.active_alternative, 1)
@@ -195,10 +195,10 @@ test('stage 5: lore provenance, usage, undo, branches, greetings and tone', { ti
     assert.equal(CodexChatStore.listMessages(id)[0].content, '세 번째 인사')
     const single = { ...profile, greeting: '한 인사', alternateGreetings: [] }
     const singleId = freshThread()
-    addChatGreeting(singleId, single, userPersonaOf(null), 0)
+    addChatOpening(singleId, single, userPersonaOf(null), 0)
     assert.equal(CodexChatStore.listMessages(singleId)[0].alternatives.length, 1)
     const emptyId = freshThread()
-    addChatGreeting(emptyId, { ...single, greeting: '' }, userPersonaOf(null))
+    addChatOpening(emptyId, { ...single, greeting: '' }, userPersonaOf(null))
     assert.equal(CodexChatStore.listMessages(emptyId).length, 0)
   })
 

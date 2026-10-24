@@ -85,6 +85,8 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     promptSections: profile?.promptSections ?? [],
     greeting: profile?.greeting ?? '',
     alternateGreetings: profile?.alternateGreetings ?? [],
+    openingHistory: profile?.openingHistory ?? [],
+    greetingPosition: profile?.greetingPosition ?? 0,
     temperature: profile?.temperature ?? null,
     maxTokens: profile?.maxTokens ?? null,
     mcpEnabled: profile?.mcpEnabled ?? false,

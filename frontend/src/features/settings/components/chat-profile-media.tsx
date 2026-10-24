@@ -37,8 +37,9 @@ function draftTextFields(draft: Draft, t: Translate): TextField[] {
   return [
     { label: t({ ko: '시스템 프롬프트', en: 'System prompt' }), text: draft.systemPrompt },
     ...draft.promptSections.map((section) => ({ label: section.title.trim() || t({ ko: '제목 없는 섹션', en: 'Untitled section' }), text: section.content })),
-    { label: t({ ko: '첫 인사말', en: 'Greeting' }), text: draft.greeting },
-    ...draft.alternateGreetings.map((text, index) => ({ label: t({ ko: '추가 인사말 {n}', en: 'Alternate greeting {n}' }, { n: index + 1 }), text })),
+    { label: t({ ko: '인사말', en: 'Greeting' }), text: draft.greeting },
+    ...draft.alternateGreetings.map((text, index) => ({ label: t({ ko: '인사말 {n}', en: 'Greeting {n}' }, { n: index + 2 }), text })),
+    ...draft.openingHistory.map((message, index) => ({ label: t({ ko: '시작 대화 {n}', en: 'Opening message {n}' }, { n: index + 1 }), text: message.content })),
   ]
 }
 
@@ -49,11 +50,12 @@ function mapDraftTexts(draft: Draft, rewrite: (text: string) => string): Partial
     greeting: rewrite(draft.greeting),
     alternateGreetings: draft.alternateGreetings.map(rewrite),
     promptSections: draft.promptSections.map((section) => ({ ...section, content: rewrite(section.content) })),
+    openingHistory: draft.openingHistory.map((message) => ({ ...message, content: rewrite(message.content) })),
   }
 }
 
-/** Texts in the order the localize route rewrites them: system prompt, greeting, alternates, sections. */
-const localizeTexts = (draft: Draft) => [draft.systemPrompt, draft.greeting, ...draft.alternateGreetings, ...draft.promptSections.map((section) => section.content)]
+/** Texts in the order the localize route rewrites them: system prompt, greeting, alternates, sections, opening history. */
+const localizeTexts = (draft: Draft) => [draft.systemPrompt, draft.greeting, ...draft.alternateGreetings, ...draft.promptSections.map((section) => section.content), ...draft.openingHistory.map((message) => message.content)]
 
 type MediaEntry = {
   /** The link as written in the text (web URL, `media:` or `chat-asset:` link). */
@@ -147,11 +149,13 @@ export function useChatMediaLocalize(draft: Draft, patch: PatchDraft) {
     mutationFn: ({ source, only }: { source: Draft; only?: string[] }) => localizeChatImages(localizeTexts(source), { name: source.name, only }),
     onSuccess: (result, { source }) => {
       const [systemPrompt, greeting, ...rest] = result.texts
+      const historyStart = source.alternateGreetings.length + source.promptSections.length
       patch({
         systemPrompt,
         greeting,
         alternateGreetings: rest.slice(0, source.alternateGreetings.length),
         promptSections: source.promptSections.map((section, index) => ({ ...section, content: rest[source.alternateGreetings.length + index] ?? section.content })),
+        openingHistory: source.openingHistory.map((message, index) => ({ ...message, content: rest[historyStart + index] ?? message.content })),
       })
       setFailures((current) => {
         const next = new Map(current)

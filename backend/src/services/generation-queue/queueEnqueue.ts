@@ -4,6 +4,7 @@ import type { GenerationQueueJobCreateData } from '../../types/generationQueue'
 import type { WorkflowRecord } from '../../types/workflow'
 import { publishQueueJobEvent } from '../runtime-events/runtimeEventPublishers'
 import { GenerationQueueService } from '../generationQueueService'
+import { assertValidNaiRequest } from '../../utils/nai/requestValidation'
 import { buildWorkflowRoleQueueLimitMessage, checkWorkflowRoleQueueLimit, type WorkflowRoleQueueLimitState } from './queueRoleLimitPolicy'
 
 /** The requester already holds as many active jobs on this workflow as their role allows. */
@@ -39,6 +40,8 @@ export interface EnqueuedGenerationJobs {
 export function enqueueGenerationJobs(data: GenerationQueueJobCreateData, options: EnqueueGenerationJobsOptions = {}): EnqueuedGenerationJobs {
   const count = Math.max(1, Math.floor(options.count ?? 1))
   if (options.idempotency && count > 1) throw new Error('An idempotent enqueue creates exactly one job.')
+  // Every NovelAI job (screen, chat/MCP, graph, retry) is checked before it can be queued and sent.
+  if (data.service_type === 'novelai') assertValidNaiRequest(data.request_payload)
 
   const created = getUserSettingsDb().transaction((): EnqueuedGenerationJobs => {
     const { idempotency } = options

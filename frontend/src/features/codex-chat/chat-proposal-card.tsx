@@ -309,6 +309,8 @@ const UPDATE_LABELS: Record<string, { ko: string; en: string }> = {
   promptSections: { ko: '섹션', en: 'Sections' },
   greeting: { ko: '첫 인사말', en: 'Greeting' },
   alternateGreetings: { ko: '추가 인사말', en: 'Alternate greetings' },
+  openingHistory: { ko: '시작 대화', en: 'Opening messages' },
+  greetingPosition: { ko: '인사말 위치', en: 'Greeting position' },
   authorNote: { ko: '작가 노트', en: 'Author note' },
   appearance: { ko: '외형', en: 'Appearance' },
   modelSlotId: { ko: '대화 모델', en: 'Chat model' },

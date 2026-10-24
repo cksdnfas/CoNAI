@@ -356,6 +356,8 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
   /** One-shot background reactions fail without resending compatibility fallbacks. */
   allowCompatibilityFallback?: boolean
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
+  /** The tools behind the catalog: pi routes a call to one of them by name through run_tool (pi runs offered tools only). */
+  catalogued?: ReadonlySet<string>
   /** 'none': the tools stay in the request (and the prompt cache) but the model must answer in text. */
   toolChoice?: 'none'
   maxToolRounds?: number

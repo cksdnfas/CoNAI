@@ -46,13 +46,13 @@ export function isCodexCliUpdating() {
   return updating
 }
 
-function tail(output: string) {
+export function tail(output: string) {
   const trimmed = output.trim()
   return trimmed.length > OUTPUT_TAIL_LENGTH ? `…${trimmed.slice(-OUTPUT_TAIL_LENGTH)}` : trimmed
 }
 
 /** npm-cli.js next to the running node (Windows: `node_modules/npm`, POSIX: `../lib/node_modules/npm`); falls back to `npm` on PATH. */
-function resolveNpmCommand() {
+export function resolveNpmCommand() {
   const nodeDir = path.dirname(process.execPath)
   const candidates = [
     path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
@@ -64,7 +64,7 @@ function resolveNpmCommand() {
     : { command: process.platform === 'win32' ? 'npm.cmd' : 'npm', prefixArgs: [] as string[], shell: process.platform === 'win32' }
 }
 
-function runProcess(command: string, args: string[], timeoutMs: number, shell = false): Promise<ProcessResult> {
+export function runProcess(command: string, args: string[], timeoutMs: number, shell = false): Promise<ProcessResult> {
   return new Promise((resolve) => {
     let stdout = ''
     let stderr = ''

@@ -320,6 +320,35 @@ test('prompt preview uses the same author note and block state as a new direct r
   assert.ok(JSON.stringify(preview).includes('현재 상태'))
 })
 
+test('tool calls a server left in the reply text are recovered only for offered tools', async () => {
+  const { parseTextToolCalls, recoverTextToolCalls, textToolCallFilter } = await import('../src/services/codex-chat/textToolCalls')
+  const fn = (name: string, properties: Record<string, unknown> = {}) => ({ type: 'function' as const, function: { name, parameters: { type: 'object', properties } } })
+  const available = { tools: [fn('search_images', { query: { type: 'string' }, limit: { type: 'number' } }), fn('run_tool')], catalogued: new Set(['submit_generation_job']) }
+  const qwen = 'Submitting now.\n\n&lt;tool_call>\n&lt;function=submit_generation_job>\n&lt;parameter=service_type>\nnovelai\n&lt;/parameter>\n&lt;parameter=request_payload>\n{"prompt": "forest", "n_samples": 1}\n&lt;/parameter>\n&lt;/function>\n&lt;/tool_call>'
+  const parsed = parseTextToolCalls(qwen, available)!
+  assert.equal(parsed.text, 'Submitting now.')
+  assert.equal(parsed.calls[0].function.name, 'run_tool', 'a catalogued tool goes through run_tool')
+  assert.deepEqual(JSON.parse(parsed.calls[0].function.arguments), { tool: 'submit_generation_job', arguments: { service_type: 'novelai', request_payload: { prompt: 'forest', n_samples: 1 } } })
+  const hermes = parseTextToolCalls('<tool_call>{"name": "search_images", "arguments": {"query": "42", "limit": 5}}</tool_call>', available)!
+  assert.deepEqual(JSON.parse(hermes.calls[0].function.arguments), { query: '42', limit: 5 })
+  const xml = parseTextToolCalls('<function=search_images><parameter=query>42</parameter><parameter=limit>5</parameter></function>', available)!
+  assert.deepEqual(JSON.parse(xml.calls[0].function.arguments), { query: '42', limit: 5 }, 'string parameters stay strings, others are read as JSON')
+  assert.equal(parseTextToolCalls('<tool_call>{"name": "delete_files", "arguments": {}}</tool_call>', available), null, 'a tool this request does not offer never runs')
+  assert.equal(parseTextToolCalls('Example:\n```xml\n<tool_call>{"name": "search_images", "arguments": {}}</tool_call>\n```', available), null, 'a call inside a code block is an example')
+
+  const shown: string[] = []
+  const filter = textToolCallFilter((text) => shown.push(text))
+  for (const chunk of ['Submitting', ' now.\n\n&lt;tool', '_call>\n&lt;function=search_images>', '&lt;/function>&lt;/tool_call>']) filter.push(chunk)
+  assert.equal(shown.join(''), 'Submitting now.\n\n', 'the markup never streams out')
+  const text = 'Submitting now.\n\n&lt;tool_call>\n&lt;function=search_images>&lt;/function>&lt;/tool_call>'
+  const recovered = recoverTextToolCalls(text, filter.end(), available)!
+  assert.equal(recovered.text, 'Submitting now.\n\n')
+  assert.equal(recovered.calls[0].function.name, 'search_images')
+  const plain = textToolCallFilter((value) => shown.push(value))
+  plain.push('a < b and <func')
+  assert.deepEqual(plain.end(), { text: '<func', marked: false }, 'a tail that may still become a marker is held, then given back')
+})
+
 // ---- Live test findings (2026-10-06, llama.cpp + Qwen) -----------------------------------------------------------
 
 const sse = (...chunks: unknown[]) => new Response(`${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`, { headers: { 'Content-Type': 'text/event-stream' } })

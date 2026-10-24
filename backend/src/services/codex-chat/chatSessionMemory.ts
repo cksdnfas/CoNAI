@@ -49,12 +49,12 @@ const RECAP_CHARS = 16_000
 
 /**
  * What a new Codex thread is told of a chat it did not take part in (a branch, an import, a chat whose Codex memory was
- * reset): its summary and its last messages, once. Empty when there is no conversation yet (a greeting alone).
+ * reset): its summary and its last messages, once, including an assistant-only opening.
  */
 export function codexHistoryRecap(thread: Pick<CodexChatThreadRecord, 'summary'> | null, earlier: CodexChatMessageRecord[], profile: ChatProfile, user: ChatUserPersona, source?: ChatHistorySource, before = Number.MAX_SAFE_INTEGER) {
   const recap = source ? CodexChatStore.readSessionRecap(source, before, RECAP_MESSAGES) : null
   const messages = recap?.messages ?? earlier.filter((message) => message.content.trim())
-  if (!(recap?.hasUser ?? messages.some((message) => message.role === 'user'))) return ''
+  if (!messages.length) return ''
   let transcript = messages.slice(-RECAP_MESSAGES).map((message) => `${message.role === 'user' ? user.name : profile.name}: ${message.content.trim()}`).join('\n\n')
   if (transcript.length > RECAP_CHARS) transcript = `…${transcript.slice(-RECAP_CHARS)}`
   const summary = thread?.summary?.trim()

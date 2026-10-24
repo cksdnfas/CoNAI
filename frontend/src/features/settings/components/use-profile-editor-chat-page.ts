@@ -16,6 +16,7 @@ export type ProfileEditorSection = 'character' | 'appearance' | 'model' | 'memor
  */
 const DRAFT_KEYS = {
   name: 'character', tagline: 'character', systemPrompt: 'character', promptSections: 'character', greeting: 'character', alternateGreetings: 'character', authorNote: 'character',
+  openingHistory: 'character', greetingPosition: 'character',
   appearance: 'appearance', engine: 'model', modelSlotId: 'model', lorebookIds: 'memory', blockIds: 'look', isEnabled: 'character',
   temperature: 'model', maxTokens: 'model', visionEnabled: 'model', contentRatingMode: 'model', contentRatingTierId: 'model',
   summaryEnabled: 'model', summarySlotId: 'model', summaryTriggerTurns: 'model', summaryPrompt: 'model',
@@ -47,8 +48,16 @@ function draftValue(key: DraftKey, value: ChatPageData, current: Draft): unknown
       const existing = byId.get(id)
       const kind = section.kind === 'text' || section.kind === 'dialogue' || section.kind === 'post' ? section.kind : existing?.kind ?? 'text'
       const content = existing && section.content === cut(existing.content) ? existing.content : section.content
-      const asHistory = kind === 'dialogue' && (typeof section.asHistory === 'boolean' ? section.asHistory : existing?.asHistory === true)
-      return { ...section, id, kind, content, asHistory, enabled: section.enabled !== false }
+      return { ...section, id, kind, content, enabled: section.enabled !== false }
+    })
+  }
+  if (key === 'openingHistory' && Array.isArray(value)) {
+    // Resent whole like the sections: a message whose content is still the cut read-out keeps the full text in its place.
+    return value.map((entry, index) => {
+      const message = entry as Record<string, unknown>
+      const existing = current.openingHistory[index]
+      const content = existing && message.content === cut(existing.content) ? existing.content : String(message.content ?? '')
+      return { role: message.role === 'user' ? 'user' : 'assistant', content }
     })
   }
   return value
@@ -106,8 +115,10 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
   const ids = <T extends { id: number }>(items: T[] | undefined) => (items ?? []).map((item) => item.id)
   const draftSchema = pageObject({
     name: pageText(60), tagline: pageText(200), systemPrompt: pageText(20000),
-    promptSections: pageArray(pageObject({ id: pageText(100), title: pageText(80), content: pageText(20000), kind: pageChoice(['text', 'dialogue', 'post']), asHistory: { type: 'boolean' }, enabled: { type: 'boolean' } }, ['title', 'content']), 30),
+    promptSections: pageArray(pageObject({ id: pageText(100), title: pageText(80), content: pageText(20000), kind: pageChoice(['text', 'dialogue', 'post']), enabled: { type: 'boolean' } }, ['title', 'content']), 30),
     greeting: pageText(20000), alternateGreetings: pageArray(pageText(20000), 100), authorNote: pageText(4000), appearance: pageText(20000),
+    openingHistory: { ...pageArray(pageObject({ role: pageChoice(['user', 'assistant']), content: pageText(20000) }, ['role', 'content']), 100), description: 'Saved as real messages at the start of every new chat' },
+    greetingPosition: { ...pageNumber(0, 100, true), description: 'openingHistory messages before the greeting' },
     engine: pageChoice(['llm', 'codex', 'claude']),
     ...(slots.length ? { modelSlotId: pageChoice(slots.map((slot) => slot.id)) } : {}),
     ...(lorebooks?.length ? { lorebookIds: pageArray(pageChoice(ids(lorebooks)), 20) } : {}),
@@ -153,8 +164,9 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       section,
       profile: {
         saved: Boolean(profile), id: profile?.id ?? null, name: draft.name, tagline: draft.tagline, systemPrompt: cut(draft.systemPrompt),
-        promptSections: draft.promptSections.map((entry) => ({ id: entry.id, title: entry.title, content: cut(entry.content), kind: entry.kind, asHistory: entry.asHistory === true, enabled: entry.enabled !== false })),
+        promptSections: draft.promptSections.map((entry) => ({ id: entry.id, title: entry.title, content: cut(entry.content), kind: entry.kind, enabled: entry.enabled !== false })),
         greeting: cut(draft.greeting), alternateGreetings: draft.alternateGreetings.map(cut), authorNote: draft.authorNote, appearance: cut(draft.appearance ?? ''),
+        openingHistory: draft.openingHistory.map((message) => ({ role: message.role, content: cut(message.content) })), greetingPosition: draft.greetingPosition,
         engine: draft.engine, modelSlotId: draft.modelSlotId, lorebookIds: draft.lorebookIds, blockIds: draft.blockIds, isEnabled: draft.isEnabled,
         temperature: draft.temperature, maxTokens: draft.maxTokens, visionEnabled: draft.visionEnabled, contentRatingMode: draft.contentRatingMode, contentRatingTierId: draft.contentRatingTierId,
         summaryEnabled: draft.summaryEnabled, summarySlotId: draft.summarySlotId, summaryTriggerTurns: draft.summaryTriggerTurns, summaryPrompt: brief(draft.summaryPrompt),

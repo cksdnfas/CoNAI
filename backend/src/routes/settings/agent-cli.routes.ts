@@ -6,9 +6,23 @@ import { getCodexCliVersionInfo, updateCodexCli } from '../../services/codexCliM
 import { cancelCodexDeviceLogin, getCodexDeviceLoginState, startCodexDeviceLogin } from '../../services/codexDeviceLogin'
 import { cancelClaudeLogin, getClaudeLogin, getClaudeModels, getClaudeStatus, getClaudeVersion, startClaudeLogin, submitClaudeLoginCode, updateClaudeCli } from '../../services/claudeCli'
 import { getAgentCliUsage } from '../../services/agentCliUsage'
+import { getPiStatus, getPiVersion, updatePi } from '../../services/piRuntime'
 import { sendRouteBadRequest } from '../routeValidation'
 
 export const agentCliRoutes = Router()
+// pi is the in-process agent SDK of pi chats: status, version and update only (no sign-in or usage). Other pi paths
+// fall through to the check below and are refused.
+agentCliRoutes.use('/agent-cli/pi', requireAdmin, (_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next() })
+agentCliRoutes.get('/agent-cli/pi/status', asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await getPiStatus(req.query.check === 'true') })
+}))
+agentCliRoutes.get('/agent-cli/pi/version', asyncHandler(async (req, res) => {
+  res.json({ success: true, data: await getPiVersion(req.query.refresh === 'true') })
+}))
+agentCliRoutes.post('/agent-cli/pi/update', asyncHandler(async (_req, res) => {
+  try { res.json({ success: true, data: await updatePi() }) }
+  catch (error) { sendRouteBadRequest(res, error instanceof Error ? error.message : 'pi update failed') }
+}))
 agentCliRoutes.use('/agent-cli/:agent', requireAdmin, (req, res, next) => {
   res.setHeader('Cache-Control', 'no-store')
   if (req.params.agent !== 'codex' && req.params.agent !== 'claude') { sendRouteBadRequest(res, 'Unknown agent CLI'); return }

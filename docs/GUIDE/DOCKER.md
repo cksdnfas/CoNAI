@@ -104,6 +104,8 @@ docker compose exec conai claude auth login --claudeai
 
 로그인 정보는 `CLAUDE_CONFIG_DIR=/app/data/user/claude`에 보관합니다. 앱에서 설치·업데이트한 CLI는 `/app/data/user/claude-cli`에 저장하므로 기존 데이터 볼륨 하나로 유지됩니다. 이미지 설치본과 업데이트본 중 최신 버전을 실행합니다. 진행 중인 Claude 작업이나 로그인이 있으면 업데이트를 거절합니다. CLI 자체 업데이트는 비활성화하고 앱의 업데이트 기능으로 관리합니다.
 
+pi 실행 방식이 쓰는 pi 런타임은 이미지의 앱 의존성에 포함됩니다. 같은 화면의 **pi** 줄에서 업데이트하면 `/app/data/user/pi-runtime`에 설치되어 데이터 볼륨과 함께 유지되고, 이미지 포함본보다 새로운 버전을 사용합니다.
+
 자동화용 OAuth 토큰은 `claude setup-token`으로 발급해 `CLAUDE_CODE_OAUTH_TOKEN` 환경 변수에 넣을 수도 있습니다. API 인증은 `ANTHROPIC_API_KEY`를 사용합니다. 키·토큰을 이미지나 저장소에 포함하지 않습니다. OAuth 토큰의 만료·교체는 관리자가 처리합니다. 제3자 제품에서 claude.ai 로그인·구독 한도를 제공하는 사용에는 Anthropic 사전 승인이 필요하다는 [공식 연동 안내](https://code.claude.com/docs/en/agent-sdk/overview#get-started)를 확인하세요.
 
 Claude 채팅은 별도의 전용 홈에서 기본 파일·셸 도구를 끄고 허용된 CoNAI 도구만 제공합니다. Codex 이미지 생성의 `CODEX_SANDBOX_MODE`는 Claude 채팅에 적용하지 않습니다.

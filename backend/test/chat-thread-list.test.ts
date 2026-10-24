@@ -249,7 +249,7 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     const outOfRange = CodexChatService.createThread(requester, greeter.id, null, 9)
     assert.equal(CodexChatStore.listMessages(outOfRange.id).length, 1, 'a stale index still opens with a greeting')
     const quiet = ChatProfileStore.create({ name: '말없음', engine: 'llm', providerName: 'test', model: 'm', mcpEnabled: false, summaryEnabled: false })
-    assert.deepEqual(CodexChatService.previewGreeting(requester, quiet.id), { index: null, text: '', greetings: [], userProfileId: null })
+    assert.deepEqual(CodexChatService.previewGreeting(requester, quiet.id), { index: null, text: '', greetings: [], userProfileId: null, before: [], after: [] })
     assert.equal(CodexChatStore.listMessages(CodexChatService.createThread(requester, quiet.id, null, null).id).length, 0)
   })
 

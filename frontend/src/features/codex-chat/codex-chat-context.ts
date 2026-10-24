@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { ChatFlagSnapshot, ChatMediaAttachment, CodexChatToolCall } from '@/lib/api-codex-chat'
+import type { ChatFlagSnapshot, ChatMediaAttachment, ChatOpeningMessage, CodexChatToolCall } from '@/lib/api-codex-chat'
 import type { StoredFileEntry, ChatMessageRouting, ChatReplyQuote, ChatChoiceProposal } from '@conai/shared'
 
 /** A post or comment put on the next message with 참조 (sent as a `post:` link line above the text). */
@@ -39,14 +39,15 @@ export type CodexChatView = 'chat' | 'gallery' | 'context'
 export const PENDING_DRAFT_KEY = 0
 
 /**
- * A new 1:1 chat that is not saved yet: it shows the profile's greeting and is saved, with that greeting, when its
- * first message is sent (so opening and leaving it leaves nothing behind). `greeting` is null while it loads.
+ * A new 1:1 chat that is not saved yet: it shows the profile's opening (history around the greeting) and is saved, with
+ * that opening, when its first message is sent (so opening and leaving it leaves nothing behind). `greeting` is null
+ * while it loads; `before` / `after` are the opening history around it.
  */
 export type CodexChatPendingChat = {
   profileId: number
   /** Undefined until the preview says which user profile the chat takes (then a number or null). */
   userProfileId: number | null | undefined
-  greeting: { index: number | null; text: string; greetings: string[] } | null
+  greeting: { index: number | null; text: string; greetings: string[]; before: ChatOpeningMessage[]; after: ChatOpeningMessage[] } | null
   flagIds: number[]
 }
 

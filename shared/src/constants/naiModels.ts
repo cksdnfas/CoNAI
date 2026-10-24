@@ -10,6 +10,27 @@
 
 export const NAI_V5_FULL_MEDIUM_MODEL = 'nai-diffusion-5-full-medium'
 
+/** Models a request may select; infill switches to the `-inpainting` variant by itself (resolveNaiRequestModel). */
+export const NAI_MODEL_IDS = [
+  'nai-diffusion-5-curated',
+  'nai-diffusion-5-full',
+  NAI_V5_FULL_MEDIUM_MODEL,
+  'nai-diffusion-4-5-curated',
+  'nai-diffusion-4-5-full',
+  'nai-diffusion-4-curated-preview',
+  'nai-diffusion-3',
+] as const
+
+/**
+ * Sampler API ids NovelAI accepts: the generation screen's four, DPM++ 2M SDE (accepted by earlier queued V5 requests)
+ * and DPM++ SDE (NovelAI web UI). Anything else (`k_lms`, invented names) is answered with a bare 500.
+ */
+export const NAI_SAMPLER_IDS = ['k_euler', 'k_euler_ancestral', 'k_dpmpp_2s_ancestral', 'k_dpmpp_2m', 'k_dpmpp_2m_sde', 'k_dpmpp_sde'] as const
+
+export const NAI_NOISE_SCHEDULE_IDS = ['karras', 'native', 'exponential', 'polyexponential'] as const
+
+export const NAI_ACTION_IDS = ['generate', 'img2img', 'infill'] as const
+
 /** Inpainting strength the web UI starts from: the masked area is redrawn fully (img2img keeps its own lower default). */
 export const NAI_INFILL_DEFAULT_STRENGTH = 1
 

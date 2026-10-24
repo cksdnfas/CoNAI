@@ -12,10 +12,10 @@ import { contentRatingTier, LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelS
 import { ChatJudgePresetStore } from './chatJudgePresets'
 import { normalizeLinkedFiles, type LinkedFileLink } from './chatLinkedFiles'
 import { chatCharacterGroupPath, fileProfileAssetsUnderGroup, renameCharacterGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
+import { keptGreetingPosition, normalizeGreetingPosition, normalizeOpeningHistory, OPENING_HISTORY_MAX_ENTRIES, TEXT_MAX_LENGTH, type ChatOpeningMessage } from './chatOpeningHistory'
 
 const NAME_MAX_LENGTH = 60
 const MODEL_MAX_LENGTH = 200
-const TEXT_MAX_LENGTH = 20_000
 const AVATAR_MAX_LENGTH = 300_000
 const AVATAR_PATTERN = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/
 
@@ -44,7 +44,7 @@ export const CHAT_PROFILE_DEFAULTS = {
 export const AUTHOR_NOTE_MAX_LENGTH = 4000
 /** Text caps toColumns applies to the profile fields a chat may propose (the setup tools validate with the same numbers). */
 const TRANSLATION_INSTRUCTIONS_MAX_LENGTH = 4000
-export const CHAT_PROFILE_TEXT_LIMITS = { name: NAME_MAX_LENGTH, tagline: 200, text: TEXT_MAX_LENGTH, authorNote: AUTHOR_NOTE_MAX_LENGTH, sections: 30, sectionTitle: 80, alternateGreetings: 100, translationInstructions: TRANSLATION_INSTRUCTIONS_MAX_LENGTH, summaryPrompt: 4000 } as const
+export const CHAT_PROFILE_TEXT_LIMITS = { name: NAME_MAX_LENGTH, tagline: 200, text: TEXT_MAX_LENGTH, authorNote: AUTHOR_NOTE_MAX_LENGTH, sections: 30, sectionTitle: 80, alternateGreetings: 100, openingHistory: OPENING_HISTORY_MAX_ENTRIES, translationInstructions: TRANSLATION_INSTRUCTIONS_MAX_LENGTH, summaryPrompt: 4000 } as const
 const MAX_PROMPT_SECTIONS = 30
 const SECTION_TITLE_MAX_LENGTH = 80
 
@@ -62,8 +62,6 @@ export type ChatPromptSection = {
    */
   kind: 'text' | 'dialogue' | 'post'
   enabled: boolean
-  /** `dialogue` only: the turns go out as conversation already held, without the note that they are only examples. */
-  asHistory?: boolean
 }
 
 export const DEFAULT_CHAT_SUMMARY_PROMPT = [
@@ -122,9 +120,13 @@ export type ChatProfile = {
   extraParams: string
   systemPrompt: string
   promptSections: ChatPromptSection[]
-  /** Randomly selected with alternateGreetings as the first assistant message on chat creation/reset. */
+  /** Randomly selected with alternateGreetings and inserted at greetingPosition on chat creation/reset. */
   greeting: string
   alternateGreetings: string[]
+  /** The opening of every new chat, saved as ordinary conversation messages. */
+  openingHistory: ChatOpeningMessage[]
+  /** How many openingHistory messages come before the greeting. */
+  greetingPosition: number
   temperature: number | null
   maxTokens: number | null
   mcpEnabled: boolean
@@ -273,6 +275,8 @@ type ProfileRow = {
   user_persona: string
   greeting: string
   alternate_greetings: string | null
+  opening_history: string | null
+  greeting_position: number
   temperature: number | null
   max_tokens: number | null
   mcp_enabled: number
@@ -354,16 +358,6 @@ export function chatGreetings(profile: Pick<ChatProfile, 'greeting' | 'alternate
   return [profile.greeting, ...profile.alternateGreetings].filter((greeting) => greeting.trim().length > 0)
 }
 
-/**
- * The greeting at `index` of chatGreetings (the one a new chat previewed), or one chosen uniformly when there is no
- * such index; no greeting keeps the chat empty.
- */
-export function pickChatGreeting(profile: Pick<ChatProfile, 'greeting' | 'alternateGreetings'>, index?: number | null): string {
-  const greetings = chatGreetings(profile)
-  if (typeof index === 'number' && Number.isSafeInteger(index) && index >= 0 && index < greetings.length) return greetings[index]
-  return greetings.length > 0 ? greetings[Math.floor(Math.random() * greetings.length)] : ''
-}
-
 export function normalizeSections(value: unknown): ChatPromptSection[] {
   if (!Array.isArray(value)) {
     return []
@@ -381,7 +375,6 @@ export function normalizeSections(value: unknown): ChatPromptSection[] {
       content,
       kind,
       enabled: record.enabled !== false,
-      ...(kind === 'dialogue' && record.asHistory === true ? { asHistory: true } : {}),
     }]
   })
 }
@@ -405,6 +398,7 @@ type ProfileListDependencies = {
 
 function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): ChatProfile {
   const storedSections = parseJsonArray(row.prompt_sections)
+  const openingHistory = normalizeOpeningHistory(parseJsonArray(row.opening_history))
   const allowlist = parseJsonArray(row.tool_allowlist)
   const blockIds = normalizeBlockIds(row.block_ids)
   const slot = (id: number | null) => dependencies ? id !== null && dependencies.slots.has(id) ? id : null : ModelSlotStore.existing(id)
@@ -439,6 +433,8 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
     promptSections: storedSections ? normalizeSections(storedSections) : legacySections(row),
     greeting: row.greeting,
     alternateGreetings: normalizeAlternateGreetings(parseJsonArray(row.alternate_greetings)),
+    openingHistory,
+    greetingPosition: normalizeGreetingPosition(row.greeting_position, openingHistory.length),
     temperature: row.temperature,
     maxTokens: row.max_tokens,
     mcpEnabled: row.mcp_enabled === 1,
@@ -599,6 +595,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean } = {}) {
     extraParams = input.extraParams.trim().slice(0, 20_000)
   }
 
+  const openingHistory = normalizeOpeningHistory(input.openingHistory)
   return {
     name,
     tagline: text(input.tagline, 200),
@@ -631,6 +628,8 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean } = {}) {
     user_persona: '',
     greeting: text(input.greeting, TEXT_MAX_LENGTH),
     alternate_greetings: JSON.stringify(normalizeAlternateGreetings(input.alternateGreetings)),
+    opening_history: JSON.stringify(openingHistory),
+    greeting_position: keptGreetingPosition(input.openingHistory, input.greetingPosition),
     temperature: optionalNumber(input.temperature, { min: 0, max: 2 }, false),
     max_tokens: optionalNumber(input.maxTokens, { min: 1, max: 1_000_000 }, true),
     mcp_enabled: input.mcpEnabled ? 1 : 0,

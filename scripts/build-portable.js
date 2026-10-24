@@ -165,13 +165,28 @@ if (sharpPackageJson.optionalDependencies) {
 
 console.log(`   Found ${sharpDependencies.size} direct dependencies of sharp`);
 
-// Function to recursively collect dependencies
-const collectAllDependencies = (moduleName, collected = new Set()) => {
-  if (collected.has(moduleName)) return collected;
-  collected.add(moduleName);
+// Resolve a dependency as Node does: the nearest node_modules from the requiring package upward, within the repo.
+const resolveFromPackage = (fromDir, moduleName) => {
+  for (let dir = fromDir; dir.startsWith(ROOT_DIR); dir = path.dirname(dir)) {
+    const candidate = path.join(dir, 'node_modules', moduleName);
+    if (fs.existsSync(path.join(candidate, 'package.json'))) return candidate;
+    if (dir === ROOT_DIR) break;
+  }
+  return null;
+};
 
-  const modulePath = resolveModuleSourcePath(moduleName);
-  if (!modulePath) return collected;
+// Function to recursively collect dependencies. A nested copy travels inside its parent's folder, so only top-level
+// packages are collected by name, but the dependencies of nested ones are followed too.
+const visitedPackageDirs = new Set();
+const collectAllDependencies = (moduleName, collected = new Set(), fromDir = null) => {
+  const modulePath = fromDir ? resolveFromPackage(fromDir, moduleName) : resolveModuleSourcePath(moduleName);
+  if (!modulePath) {
+    collected.add(moduleName);
+    return collected;
+  }
+  if (visitedPackageDirs.has(modulePath)) return collected;
+  visitedPackageDirs.add(modulePath);
+  if (sourceNodeModulesCandidates.some((root) => modulePath === path.join(root, moduleName))) collected.add(moduleName);
 
   const packageJsonPath = path.join(modulePath, 'package.json');
   if (!fs.existsSync(packageJsonPath)) return collected;
@@ -181,7 +196,7 @@ const collectAllDependencies = (moduleName, collected = new Set()) => {
 
     if (packageJson.dependencies) {
       Object.keys(packageJson.dependencies).forEach(dep => {
-        collectAllDependencies(dep, collected);
+        collectAllDependencies(dep, collected, modulePath);
       });
     }
   } catch (e) {
@@ -243,7 +258,8 @@ if (argon2Source && fs.existsSync(argon2Source)) {
   console.warn(`   ⚠️  argon2 not found - NovelAI authentication will not work`);
 }
 
-for (const moduleName of ['pdfjs-dist', 'read-excel-file', '@napi-rs/canvas']) collectAllDependencies(moduleName, allDependencies);
+// pi is an ES module the backend loads with a runtime import(), so the bundle cannot include it.
+for (const moduleName of ['pdfjs-dist', 'read-excel-file', '@napi-rs/canvas', '@earendil-works/pi-coding-agent']) collectAllDependencies(moduleName, allDependencies);
 const documentCanvasPath = resolveModuleSourcePath('@napi-rs/canvas');
 if (documentCanvasPath) {
   const optional = fs.readJsonSync(path.join(documentCanvasPath, 'package.json')).optionalDependencies || {};

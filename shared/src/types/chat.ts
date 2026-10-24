@@ -124,7 +124,7 @@ export type ChatProposal = { id: number; dismissed?: boolean } & (
     }
   | {
       kind: 'profile'
-      /** Normalized ChatProfileInput subset: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, modelSlotId, lorebookIds, blockIds, style, authorNote. */
+      /** Normalized ChatProfileInput subset: name, tagline, systemPrompt, promptSections, greeting, alternateGreetings, openingHistory, greetingPosition, modelSlotId, lorebookIds, blockIds, style, authorNote. */
       input: Record<string, unknown>
       savedId?: number | null
     }
