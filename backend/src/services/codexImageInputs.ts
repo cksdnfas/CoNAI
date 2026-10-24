@@ -1,6 +1,6 @@
 import { createHash } from 'crypto'
 import fs from 'fs/promises'
-import sharp from 'sharp'
+import sharp, { type Metadata } from 'sharp'
 import { setImmediate as yieldToEventLoop } from 'timers/promises'
 import { normalizeBase64ImageData } from '../utils/base64ImageData'
 
@@ -70,7 +70,7 @@ function decodeLegacyImage(value: string) {
   return { ...decoded, claimedFormat: mime?.slice('image/'.length).replace(/^jpg$/, 'jpeg') }
 }
 
-function checkDimensions(metadata: sharp.Metadata) {
+function checkDimensions(metadata: Metadata) {
   if (!metadata.width || !metadata.height || metadata.width > MAX_SIDE || metadata.height > MAX_SIDE) {
     throw new Error('Codex attachment dimensions must be at most 4096 pixels per side')
   }
@@ -79,7 +79,7 @@ function checkDimensions(metadata: sharp.Metadata) {
 
 // Compare complete profiles, never infer a colour space from a description containing "sRGB".
 let srgbProfile: Promise<Buffer | undefined> | undefined
-async function assertStrictSource(metadata: sharp.Metadata) {
+async function assertStrictSource(metadata: Metadata) {
   if (metadata.depth !== 'uchar' || (metadata.bitsPerSample ?? 8) > 8) {
     throw new Error('Strict preservation requires an 8-bit source; 16-bit/high-depth sources are unsupported')
   }
