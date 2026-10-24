@@ -38,7 +38,7 @@ const PROPOSABLE_KEYS = [
   'translationModelLanguage', 'translationDisplayLanguage', 'translationInstructions',
   'suggestEnabled', 'suggestProfileId',
   'visionEnabled', 'contentRatingMode', 'contentRatingTierId',
-  'loreRecursionDepth', 'allowLoreProposals', 'linkedFiles',
+  'loreRecursionDepth', 'allowLoreProposals', 'agentEnabled', 'agentDescription', 'linkedFiles',
 ] as const;
 type ProposableKey = typeof PROPOSABLE_KEYS[number];
 
@@ -79,6 +79,8 @@ const KEY_ALIASES: Record<string, ProposableKey> = {
   content_rating_tier_id: 'contentRatingTierId',
   lore_recursion_depth: 'loreRecursionDepth',
   allow_lore_proposals: 'allowLoreProposals',
+  agent_enabled: 'agentEnabled',
+  agent_description: 'agentDescription',
   linked_files: 'linkedFiles',
 };
 
@@ -153,6 +155,7 @@ function profileGuide() {
     '- suggestEnabled: the composer\'s reply suggestions button; suggestProfileId: a chat profile that writes them with its own model and prompt (null: the suggest role\'s model).',
     '- visionEnabled: the model sees images (Codex always does). contentRatingMode "model" (follow the chat model row\'s ceiling; API LLM only) or "custom" with contentRatingTierId (the highest rating tier the model is shown; null: no ceiling).',
     `- loreRecursionDepth (0-${LORE_RECURSION_MAX_DEPTH}): how many times chosen lore entries\' text is scanned for more entries (0: off). allowLoreProposals: the model may save_lore.`,
+    `- agentEnabled (default false): other chat profiles may delegate work to this profile. agentDescription (max ${limits.agentDescription}): short description shown in call_agent's agent list.`,
     '- linkedFiles: [{ "id": "<32-hex file store id>", "write": false }]: folders, text files, PDFs or XLSX documents (PDF/XLSX content is read-only) in the shared file store every chat of this profile can open (write: may write there); not inside 로어북/.',
     NOT_PROPOSABLE,
     'Where to find those by hand (profile editor tabs 캐릭터 · 외형 · 모델 · 기억 · 도구 · 꾸미기): engine and model params in 모델; tool scopes, tool list, tool presets and the 페이지 어시스턴트 switch in 도구; generation presets and character images in 외형 (images: propose_profile_assets); who may chat with it in the editor header\'s access menu; colours and blocks in 꾸미기.',
@@ -276,6 +279,7 @@ function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext
   switch (key) {
     case 'name':
     case 'tagline':
+    case 'agentDescription':
     case 'systemPrompt':
     case 'greeting':
     case 'authorNote':
@@ -304,6 +308,7 @@ function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext
     case 'summaryEnabled':
     case 'suggestEnabled':
     case 'visionEnabled':
+    case 'agentEnabled':
     case 'allowLoreProposals': return normalizeProfileScalarField(key, value);
     case 'translationModelLanguage':
     case 'translationDisplayLanguage': return translationLanguage(key, value);
@@ -523,6 +528,8 @@ export function profileSetupView(profile: ChatProfile, owner: string | null = nu
     contentRatingTierId: profile.contentRatingTierId,
     loreRecursionDepth: profile.loreRecursionDepth,
     allowLoreProposals: profile.allowLoreProposals,
+    agentEnabled: profile.agentEnabled,
+    agentDescription: profile.agentDescription,
     // Resolve shared file names only when the requester may access the file store.
     linkedFiles: owner
       ? describeLinkedFiles(owner, profile.linkedFiles, 'profile').map((view) => ({ id: view.id, name: view.missing ? null : view.name, kind: view.kind, write: view.write, ...(view.missing ? { missing: true } : {}) }))

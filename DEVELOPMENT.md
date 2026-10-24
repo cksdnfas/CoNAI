@@ -20,6 +20,23 @@
 
 ## 채팅과 페이지 어시스턴트
 
+### 프로필 에이전트
+
+- `chatAgentCalls.ts`는 `chat_agent_calls`의 최초 생성, 비동기 실행·결과 게시·재시작 실패·호출방 삭제 취소·1분 청소를 담당한다. `chatAgentTools.ts`의 `call_agent`는 현재 답변의 방 소유자 권한으로 사용 가능한 다른 에이전트만 호출한다. 게시판 호출·공개 페이지·에이전트 방에서는 도구 목록과 실행 양쪽에서 거부한다. 호출 프로필의 유효 도구 grant가 비어 있으면 제공하지 않으며 allowlist도 따른다. 후보는 `ChatProfileStore.listAgents`의 경량 projection으로 조회하고 도구 설명에는 최대 20개만 넣는다. 동시 실행·비용 상한은 두지 않는다.
+- 프로필 API의 `agentEnabled`(기본 false), `agentDescription`(기본 빈 문자열, 최대 300자)은 관리자 저장·공개 목록·MCP 설정 제안에서 공통 검증한다. 공유 계약은 `ChatProfileAgentSettings`, `CHAT_PROFILE_TEXT_LIMITS.agentDescription`이다. 프로필 편집기의 도구 영역에 **에이전트로 사용** 스위치와 설명 입력이 있다.
+- `ChatAutomationRoomKind`의 `agent`는 호출마다 새 `agent:<callId>` 자동화 방이다. 목록의 `automation`으로 전달되며 **자동화 → 에이전트** 그룹에 표시한다. 헤더 미읽음 집계에서는 제외한다.
+- 도구 입력은 `agent_profile_id`, `instruction`, 선택 `media_composite_hashes`, `on_done`(`notify` 기본값 또는 `react`); 즉시 `{callId, status:'running'}`를 반환한다. `wakeChatRoom`은 미디어와 `ChatRoutineRouting.source:'agent'`를 지원한다. 에이전트 내부 재호출과 검토 카드 도구는 제공하지 않으며 `ChatProposalStore.add`에서도 거부한다.
+- 호출방에 assistant 메시지 하나를 저장한다. `speaker_profile_id`는 에이전트 ID, `routing.agent`는 `{callId, profileId, name, status:'completed'|'failed', toolsTruncated}`이다. UI는 **에이전트** 칩과 `routing.agent.name`으로 발신자를 표시한다(프로필 삭제 후에도 유지). `routing.recipients:['room']`이며 `content`/`display_content`, `tool_calls`는 기존 메시지 계약이다. `chatAutomationResults.ts`의 플러그인/로그 요약은 최대 32개/24KiB이며 잘린 경우 표시한다. 호출방에 저장하는 이력·미디어·작업 참조는 개수를 자르지 않는다. 생성 연결, 파일 변경 칩, 파일 버전의 작성자·되돌리기 연결을 결과 방/답변으로 같은 트랜잭션에서 옮긴다. 삭제 직전에도 늦게 도착한 연결을 옮기며, 호출방이 남아 있는데 완료 결과가 게시되지 않았다면 작업방 삭제를 보류한다.
+- `react`는 연결된 생성 작업이 모두 종료된 후 호출방을 `ChatRoutineRouting.source:'agent_result'`로 깨운다. 이 알림은 “에이전트가 작업을 마쳤으니 유용하면 반응”하는 요청이며 호출방의 검토 카드를 금지하지 않는다. 작업방의 지시는 기존 `'agent'`이다. 바쁜 방은 다음 sweep에서 최대 60번 시도한다. 생성 작업 대기는 방의 1시간 TTL과 독립적이며, 방을 삭제해도 호출 기록과 결과방의 작업 연결로 반응을 이어간다. 결과 게시와 ID는 같은 트랜잭션으로 중복을 막는다. 시작된 반응은 재시작 후 재생하지 않는다. 실행 중 재시작은 `서버 재시작으로 중단` 실패 메시지가 된다.
+- 완료·실패·취소 방은 종료 1시간 후 서비스 삭제 경로로 정리한다. 실패는 먼저 인스턴스 공용 파일함 `에이전트 작업 기록/<YYYY-MM-DD>/<이름> (#<callId>).json`에 호출/에이전트 이름·ID·시각·상태·오류, **지시 최대 500자와 답변 최대 1,000자 발췌**, 제한된 도구 상태·산출물 참조만 남긴다(전체 지시·답변·도구 원문·인수·전체 프롬프트·시스템 문맥 제외). 로그 저장/삭제 실패는 해당 항목만 다음 sweep에서 재시도한다. 남은 반응이 없으면 기록 행도 청소하며 호출방의 결과 메시지와 실패 파일은 유지한다.
+- `chatSessionMemory.pendingAgentResults`는 Codex 및 재개형 Claude/Pi 세션의 다음 턴 입력에 아직 전달하지 않은 결과를 ID·이름·상태·500자 발췌로 넣는다(한 턴 20개, 남은 것은 이후 턴/방 기록으로 조회). 전달 표시는 입력 수락/세션 완료 후 기존 sent-key 저장과 함께 갱신한다. 일반 API LLM은 기존 대화 history로 결과를 읽으며, 그룹 세션도 기존 missed-message 경로를 유지한다.
+- `/admin/tools`는 채팅 문맥 없이도 `call_agent`를 도구 선택기의 `read` 그룹에 정적으로 제공한다(편집기 분류이며 실행 권한을 추가하지 않음). 제한된 allowlist에서는 이 항목을 선택해야 한다.
+- 새 Codex/Claude/Pi 세션은 recap으로 결과를 한 번만 읽고 별도 결과 발췌 없이 `agent-results-through:<id>`만 전진시킨다. recap에서도 에이전트의 저장된 이름을 쓴다.
+- 결과 게시 트랜잭션의 `chat.message.created` 알림은 커밋 뒤에만 보낸다. 게시 실패가 만료 시각 이후 1시간까지 이어지면 실패/게시 포기로 기록하고 로그 저장과 정상 청소를 진행한다. 로그·삭제 실패의 재시도는 유지하되 게시를 다시 시도하지 않는다.
+- 호출방에는 도구 레코드를 그대로 복사하며 `routing.agent.toolsTruncated`는 메시지 자체의 손실만 뜻한다(현재 false). 플러그인/로그의 `toolsTruncated`는 별도의 제한된 요약 손실 표시다. `react`의 생성 대기는 완료 시각부터 최대 30분이며, 이후에는 남은 생성 작업이 있다는 설명과 함께 호출방을 깨운다.
+- 결과 게시 전과 표시 번역 후에 호출방의 직접/그룹 실행 상태를 다시 확인한다. 답변 중이면 완료 상태와 미게시 결과를 DB에 남기고 답변 종료 알림/다음 sweep에서 재시도한다. 호출별 비동기 전달을 분리하므로 한 방의 대기나 번역은 다른 호출을 막지 않는다. `react`는 결과 메시지 커밋 이후에만 실행한다.
+- 결과의 모델용 `content`는 보존한다. 에이전트 답변의 `display_content`가 있으면 재사용하고, 없으면 호출방 프로필(그룹은 호출한 멤버)의 기존 `translateReply`·번역 슬롯으로 표시 언어에 맞춘다. 일반 wake 답변도 프로필에 번역 슬롯이 있으면 번역하며, 슬롯이 없는 에이전트는 자체 표시 번역을 만들지 않는다.
+
 화면 연결은 현재 페이지의 등록된 상태·필드·작업을 사용한다. 페이지 연결은 1:1 채팅 경로이며 그룹 채팅의 서버 작업 도구와 구분한다.
 
 | 변경 지점 | 코드 |

@@ -4,6 +4,7 @@ import type { ChatPageActionProposal } from './chatPageAction'
 import type { ChatProfileAssetsProposal } from './chatAssets'
 import type { ChatTaskPlanProposal, ChatTaskRouting } from './chatTask'
 import type { ChatRoutineRouting } from './chatRoutine'
+import type { ChatAgentResultRouting } from './chatAgent'
 import type { ChatChoiceProposal } from './chatChoice'
 import type { PostKnowledgeTaskPurpose } from './postKnowledgeRuntime'
 
@@ -30,6 +31,8 @@ export type ChatMessageRouting = {
   task?: ChatTaskRouting
   /** A request an automation (routine or workflow) sent, not something the person typed. */
   routine?: ChatRoutineRouting
+  /** A delegated profile's result, not the speaking room profile's own reply. */
+  agent?: ChatAgentResultRouting
 }
 
 /** Server-issued MCP binding. Models cannot choose their sender, room, or active reply. */

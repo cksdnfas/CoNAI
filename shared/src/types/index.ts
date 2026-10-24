@@ -19,6 +19,7 @@ export * from './chatPageAction';
 export * from './chatTask';
 export * from './chatChoice';
 export * from './chatRoutine';
+export * from './chatAgent';
 export * from './chatJudge';
 export * from './chatTranslation';
 export * from './runtimeEvents';

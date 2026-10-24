@@ -112,6 +112,22 @@ export function undoFileChange(params: { threadId: number; accountId: number | n
   return view({ ...row, undone_at: 'now' })
 }
 
+/** Transfer a temporary room's file chips and undo lineage to its durable result reply. */
+export function moveThreadFileChanges(fromThreadId: number, threadId: number, replyId: string) {
+  const database = db()
+  database.transaction(() => {
+    const files = database.prepare('SELECT DISTINCT file_id FROM chat_file_changes WHERE thread_id = ?').all(fromThreadId) as Array<{ file_id: string }>
+    // Several replies can touch the same file. Keep the first creation/undo boundary, as ordinary reply writes do.
+    database.prepare(`INSERT INTO chat_file_changes (thread_id, reply_id, file_id, owner_key, name, created, undone_at, changed_at)
+      SELECT ?, ?, file_id, owner_key, name, created, undone_at, changed_at FROM chat_file_changes
+      WHERE thread_id = ? ORDER BY changed_at, rowid
+      ON CONFLICT(thread_id, reply_id, file_id) DO UPDATE SET name = excluded.name, undone_at = excluded.undone_at, changed_at = excluded.changed_at`)
+      .run(threadId, replyId, fromThreadId)
+    FileStoreRevisions.moveChatReply(files.map(file => file.file_id), fromThreadId, threadId, replyId)
+    database.prepare('DELETE FROM chat_file_changes WHERE thread_id = ?').run(fromThreadId)
+  })()
+}
+
 /** A deleted chat lets go of its rows. */
 export function forgetThreadFileChanges(threadId: number) {
   db().prepare('DELETE FROM chat_file_changes WHERE thread_id = ?').run(threadId)

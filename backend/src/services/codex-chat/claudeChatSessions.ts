@@ -14,7 +14,7 @@ import { pendingPageReference, pendingProposalOutcomes } from './chatPageContext
 import { profileContentLimit } from './chatContentRating'
 import type { ChatProfile } from './chatProfiles'
 import { buildReplyContext } from './chatReplyContext'
-import { codexHistoryRecap, codexInputMeta, nextLoreSent, pendingAuthorNote, pendingBlockState, prepareSessionLore, pendingRejectedLore, readLoreSent } from './chatSessionMemory'
+import { codexHistoryRecap, codexInputMeta, nextLoreSent, pendingAgentResults, pendingAuthorNote, pendingBlockState, prepareSessionLore, pendingRejectedLore, readLoreSent } from './chatSessionMemory'
 import { userPersonaForThread } from './chatUserProfiles'
 import { claudeChatPrivateRoot, claudeSessionFileExists, type ClaudeChatSession } from './claudeChatCompletion'
 import { piChatPrivateRoot, piSessionFileExists } from './piChatCompletion'
@@ -128,6 +128,7 @@ export async function buildClaudeSessionTurn(params: {
   const outcomes = pendingGenerationOutcomes(threadId, earlier, sent, params.historySource ? { source: params.historySource, before: latest?.id } : undefined)
   const pageReference = pendingPageReference(params.page, requester, sent, profileContentLimit(profile))
   const cards = pendingProposalOutcomes(threadId, sent)
+  const agentResults = latest ? pendingAgentResults(threadId, latest.id, sent, { recap: !resumeId || Boolean(recap) }) : { text: '', keys: [] }
   const [generated, images, attachmentTexts] = await Promise.all([
     pendingGeneratedImages(profile, requester, threadId, sent),
     latest ? loadAttachedImages(profile, requester, [latest]) : null,
@@ -137,6 +138,7 @@ export async function buildClaudeSessionTurn(params: {
   const directive = [flagDirectiveFor(history, profile, user), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
   const text = [
     recap,
+    agentResults.text,
     referenceBlock([lore.index.text, lore.keyed, rejected.text, note.text, state.text, outcomes.text]),
     buildReplyContext(history, latest?.routing, { historySource: params.historySource }),
     pageReference.text,
@@ -146,7 +148,7 @@ export async function buildClaudeSessionTurn(params: {
     generated.text,
   ].filter(Boolean).join('\n\n')
   const urls = [...(latest ? attachedImagesOf(latest, images) : []), ...generated.urls]
-  const keys = [...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...pageReference.keys, ...cards.keys, ...generated.keys]
+  const keys = [...lore.index.keys, ...lore.keyedKeys, ...rejected.keys, ...note.keys, ...state.keys, ...outcomes.keys, ...pageReference.keys, ...cards.keys, ...generated.keys, ...agentResults.keys]
   const content: string | ChatContentPart[] = urls.length ? [{ type: 'text', text }, ...urls.map((url) => ({ type: 'image_url' as const, image_url: { url } }))] : text
 
   const session: EngineSession = {

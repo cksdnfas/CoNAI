@@ -109,6 +109,8 @@ export async function startRuntimeSideEffectServices(
   ChatTaskRunner.start()
   const { ChatRoutineRunner } = await import('../services/codex-chat/chatRoutines')
   ChatRoutineRunner.start()
+  const { ChatAgentRunner } = await import('../services/codex-chat/chatAgentCalls')
+  ChatAgentRunner.start()
   const { PostBotRunner } = await import('../services/posts/postBotRunner')
   PostBotRunner.start()
   try {

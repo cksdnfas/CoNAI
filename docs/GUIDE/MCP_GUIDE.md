@@ -4,6 +4,17 @@ CoNAI는 MCP(Model Context Protocol) 서버를 제공합니다. Claude Code, Her
 
 ## 핵심 요약
 
+### 채팅 전용 `call_agent`
+
+1:1·그룹 채팅에서 목록에 제공하고 실행 시 활성 답변을 확인합니다. 호출 프로필에 비어 있지 않은 도구 grant가 있어야 하며 allowlist가 있으면 `call_agent`도 허용해야 합니다. 현재 방의 소유자가 사용할 수 있는 다른 `agentEnabled` 프로필이 있어야 하며 에이전트 작업방·게시판 호출·공개 페이지에서는 제공/실행하지 않습니다. 도구 설명에는 최대 20개 대상의 ID·이름·`agentDescription`만 나열합니다.
+
+- 입력: `agent_profile_id`(양의 정수), `instruction`(1~20,000자), 선택 `media_composite_hashes`(첨부 미디어 해시 배열), `on_done`(`notify` 기본값 / `react`).
+- 출력: `{callId, status:"running"}`. 호출 모델은 대기하지 않습니다. 새 자동화 방에서 대상 프로필 자신의 도구 권한(방 소유자 권한으로 제한)으로 실행합니다.
+- 결과: 호출방에 에이전트 이름과 답변·생성물 참조·파일 변경을 게시합니다. `notify`는 게시만, `react`는 생성 작업 종료 뒤 `agent_result` 완료 알림으로 원래 방을 깨웁니다. 에이전트 작업방의 지시는 `agent`로 구분합니다. 에이전트 내부 재호출·검토 카드 생성만 금지하며 원래 방의 검토 카드는 유지합니다.
+- 방은 종료 1시간 뒤 삭제합니다. 실패 시 먼저 인스턴스 공용 파일함 `에이전트 작업 기록/<날짜>/<이름> (#호출번호).json`에 지시 최대 500자·답변 최대 1,000자 발췌, 상태·오류·이름·ID·시각·제한된 도구 메타데이터를 보존합니다(전체 원문 제외). 호출방 삭제는 진행 중 호출을 취소하며, 서버 재시작은 실패로 알립니다. 호출 수·비용 상한은 없습니다.
+- 프로필 설정 제안은 `agentEnabled`/`agentDescription`(최대 300자), 또는 `agent_enabled`/`agent_description` 별칭을 지원합니다.
+- `/admin/tools`에도 `call_agent`가 표시되므로 프로필의 제한된 도구 목록에서 선택할 수 있습니다(편집기에서는 읽기 그룹). `react`의 생성 대기는 완료 후 최대 30분이며 이후에는 미완료 작업을 명시하고 반응을 요청합니다. 결과 게시 실패는 원래 만료 시각 이후 1시간까지만 재시도하고 실패 로그/청소로 전환합니다.
+
 - 기본 HTTP 엔드포인트: `http://localhost:1666/mcp`
 - 전송 방식: Streamable HTTP(권장), stdio(로컬 전용)
 - HTTP 서버는 stateless 방식이라 `POST /mcp`만 사용합니다.
@@ -150,9 +161,9 @@ stdio:
 
 ### Codex 원본·역할 참조·엄격 인페인트
 
-`get_codex_generation_options`는 전체 요청 스키마, 역할, 파일 제한, 예시와 모델 후보를 제공합니다. `submit_generation_job(service_type="codex")`에서 `image`는 편집 원본, `references`는 순서 있는 `[{role, label?, data_url}]`입니다. 역할은 `reference|style|material|scale|item`이며 참조를 합친 시트를 만들지 않습니다. 원본/마스크 포함 5장, 각 10 MiB·합계 32 MiB(디코딩 기준), 최대 4096px입니다. 원본/참조는 PNG·JPEG·WebP, 마스크는 같은 크기 PNG입니다.
+`get_codex_generation_options`는 전체 요청 스키마, 역할, 파일 제한, 일반/엄격 예시와 모델 후보를 제공합니다. `submit_generation_job(service_type="codex")`에서 `image`는 generate의 참조, edit/infill의 유일한 편집 원본입니다. `references`는 순서 있는 `[{role, label?, data_url}]`입니다. 역할은 `reference|style|material|scale|item`이며 참조를 합친 시트를 만들지 않습니다. 원본/마스크 포함 5장, 각 10 MiB·합계 32 MiB(디코딩 기준), 최대 4096px입니다. 표준 입력은 PNG·JPEG·WebP data URL, 마스크는 같은 크기 PNG입니다. 기존 image/mask의 raw base64·MIME 별칭/대소문자·빈 문자열은 정규화하며 지원되는 단일 프레임 래스터는 필요하면 PNG로 변환합니다.
 
-`operation:"infill"`에 `preserve:"strict"`를 명시하면 원본 크기만 허용하고 검정 마스크 영역을 고정한 무손실 PNG를 최종 검사합니다. 기존 infill은 advisory입니다. `size`는 요청이지 보장이 아니며 실제 크기와 불일치를 메타데이터로 기록합니다. `get_generation_history_request`는 역할·설명·순서를 바이트/첨부 경로 없이 반환하므로 재사용 시 이미지를 다시 첨부합니다. 자세한 예시는 [Codex 생성](./CODEX_GENERATION.md)을 참고합니다.
+`operation:"infill"`에 `preserve:"strict"`를 명시하면 `size`를 측정한 원본 크기로 덮어쓰고, 다른 생성 크기는 거부합니다. 원본은 회전 없는 8비트 sRGB/회색조(ICC 없음 또는 Sharp 표준 sRGB)만 지원합니다. 마스크는 불투명 PNG(알파 255)이며 검정 보호 픽셀이 있어야 합니다. 흰색=편집, 검정=보호, 회색=혼합이고 알파는 사용하지 않습니다. 검정 영역을 고정한 무손실 PNG를 staging에서 검사한 뒤에만 라이브러리에 공개합니다. 기존 infill은 advisory이며 일반 `size`는 요청이지 보장이 아닙니다. `get_generation_history_request`는 역할·설명·순서를 바이트/첨부 경로 없이 반환하므로 재사용 시 이미지를 다시 첨부합니다. 자세한 예시는 [Codex 생성](./CODEX_GENERATION.md)을 참고합니다.
 
 그룹 이동에서 선택한 하위 그룹은 선택한 조상과 함께 한 번만 이동하며 `moved`는 독립적으로 이동한 선택 루트 수입니다. 충돌 목록은 전체 원본·대상 경로와 ID를 포함합니다. 조상 대상 병합은 거부합니다. 원본 자동 소속은 병합 시 수동 소속으로 보존합니다. 완료된 생성 이력도 병합을 막는 참조입니다. 이력을 삭제하지 말고 원본을 유지하거나 이름을 바꿔 일반 이동하세요.
 

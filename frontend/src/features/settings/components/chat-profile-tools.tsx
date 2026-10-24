@@ -1,8 +1,42 @@
 import { Field } from '@/components/ui/field'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
+import { SwitchLine } from '@/components/ui/switch-line'
+import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
-import { CHAT_PROFILE_LIMITS } from '@conai/shared'
+import { CHAT_PROFILE_LIMITS, CHAT_PROFILE_TEXT_LIMITS } from '@conai/shared'
 import { numberOrNull } from './chat-profile-editor-fields'
+import { useProfileAssist } from './use-profile-editor-chat-page'
+
+/** Agent use: other profiles may call this one during a chat to do work; the description tells them what it does and when. */
+export function ChatProfileAgentSetting({ agentEnabled, agentDescription, onChange }: {
+  agentEnabled: boolean
+  agentDescription: string
+  onChange: (patch: { agentEnabled?: boolean; agentDescription?: string }) => void
+}) {
+  const { t } = useI18n()
+  const { filled } = useProfileAssist()
+  return (
+    <div className="space-y-2">
+      <SwitchLine label={t({ ko: '에이전트로 사용', en: 'Use as an agent' })} checked={agentEnabled} onCheckedChange={(next) => onChange({ agentEnabled: next })} />
+      <p className="text-xs text-muted-foreground">{t({ ko: '대화 중에 다른 프로필이 이 프로필을 불러 일을 맡기고, 결과를 돌려받을 수 있어.', en: 'Other profiles can call this profile during a chat to do work and get the result back.' })}</p>
+      {agentEnabled || filled('agentDescription') ? (
+        <Field label={t({ ko: '에이전트 설명', en: 'Agent description' })}>
+          <Textarea
+            variant="settings"
+            autoGrow
+            rows={3}
+            assisted={filled('agentDescription')}
+            maxLength={CHAT_PROFILE_TEXT_LIMITS.agentDescription}
+            value={agentDescription}
+            placeholder={t({ ko: '할 수 있는 일과 언제 부르면 좋은지', en: 'What it can do and when to call it' })}
+            onChange={(event) => onChange({ agentDescription: event.target.value })}
+          />
+          <span aria-hidden className="self-end text-2xs tabular-nums text-muted-foreground">{agentDescription.length}/{CHAT_PROFILE_TEXT_LIMITS.agentDescription}</span>
+        </Field>
+      ) : null}
+    </div>
+  )
+}
 
 /**
  * API LLM profiles: how much of one tool result the model sees. How many tool rounds a reply may take is app-wide

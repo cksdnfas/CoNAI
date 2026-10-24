@@ -27,6 +27,7 @@ test('workflow input images: data URLs go into the library once and come back as
     ingestWorkflowInputImage,
     isLibraryImageRef,
     materializeLibraryImageInputs,
+    readLibraryImageAsDataUrl,
   } = await import('../src/services/workflowInputImages')
   const { GroupPathService } = await import('../src/services/groupPathService')
   const { BackgroundQueueService } = await import('../src/services/backgroundQueue')
@@ -72,12 +73,59 @@ test('workflow input images: data URLs go into the library once and come back as
   const referencePorts = [{ key: 'references', label: 'References', direction: 'input' as const, data_type: 'json' as const }]
   const references = [{ role: 'item', label: 'first', data_url: ref }, { role: 'style', data_url: ref }]
   for (const engine of ['codex', 'system']) {
-    const result = await materializeLibraryImageInputs(engine, referencePorts, { references })
+    const result = await materializeLibraryImageInputs(engine, referencePorts, { references: JSON.stringify(references) })
     assert.deepEqual(result.references, [
       { role: 'item', label: 'first', data_url: forNai.image }, { role: 'style', data_url: forNai.image },
     ])
     assert.deepEqual(references[0].data_url, ref)
+    for (const empty of ['', ' ', null, 'null']) assert.equal((await materializeLibraryImageInputs(engine, referencePorts, { references: empty })).references, undefined)
   }
+
+  await t.test('library type and stat limits reject before reading complete bytes', async (sub) => {
+    const { ImageUploadService } = await import('../src/services/imageUploadService')
+    const video = path.join(root, 'large.mp4')
+    const largeImage = path.join(root, 'large.png')
+    fs.writeFileSync(video, 'not an image')
+    fs.writeFileSync(largeImage, '')
+    fs.truncateSync(largeImage, 10 * 1024 * 1024 + 1)
+    let target = video
+    sub.mock.method(ImageUploadService, 'getActiveFilePath', () => target)
+    sub.mock.method(fs.promises, 'readFile', () => { throw new Error('unexpected whole-file read') })
+    await assert.rejects(readLibraryImageAsDataUrl(ref, 10 * 1024 * 1024), /not video/)
+    target = largeImage
+    await assert.rejects(materializeLibraryImageInputs('codex', referencePorts, { references: JSON.stringify(references) }), /byte limit/)
+  })
+
+  await t.test('Codex graph node normalizes editor JSON and library references before durable enqueue', async (sub) => {
+    const { executeCodexImageGenerationNode } = await import('../src/services/graph-workflow-executor/system-codex-operations')
+    const { GenerationQueueService } = await import('../src/services/generationQueueService')
+    const { GenerationQueueModel } = await import('../src/models/GenerationQueue')
+    const { hydrateQueueInputDataUrls } = await import('../src/services/generation-queue/queueInputStore')
+    const childProcess = (await import('node:child_process')).default
+    const { EventEmitter } = await import('node:events')
+    const { PassThrough } = await import('node:stream')
+    sub.mock.method(childProcess, 'spawn', () => {
+      const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() })
+      queueMicrotask(() => { child.stdout.write('Logged in using ChatGPT'); child.emit('close', 0, null) })
+      return child
+    })
+    sub.mock.method(GenerationQueueService, 'requestDispatch', () => {})
+    let jobId = 0
+    sub.mock.method(GenerationQueueService, 'waitForTerminalJob', async (id: number) => {
+      jobId = id
+      return { id, status: 'failed', failure_message: 'fixture: stop after enqueue' }
+    })
+    const context = { executionId: 99999, workflow: { name: 'Codex references' }, signal: new AbortController().signal } as never
+    const node = { id: 'codex', label: 'Codex' } as never
+    const module = { name: 'Codex', output_ports: [] } as never
+    for (const referenceInput of [JSON.stringify([{ role: 'style', data_url: dataUrl }]), JSON.stringify(references)]) {
+      const inputs = await materializeLibraryImageInputs('system', referencePorts, { prompt: 'graph', references: referenceInput })
+      await assert.rejects(executeCodexImageGenerationNode(context, node, module, inputs), /fixture: stop after enqueue/)
+      const payload = hydrateQueueInputDataUrls(JSON.parse(GenerationQueueModel.findById(jobId)!.request_payload))
+      assert.equal(payload.references[0].data_url, forNai.image)
+      assert.equal(payload.references[0].role, JSON.parse(referenceInput)[0].role)
+    }
+  })
 
   await assert.rejects(ingestWorkflowInputImage('data:image/png;base64,'), WorkflowInputImageError)
   await assert.rejects(ingestWorkflowInputImage(`data:image/png;base64,${Buffer.from('<html></html>').toString('base64')}`), WorkflowInputImageError)

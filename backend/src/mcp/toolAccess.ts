@@ -4,6 +4,8 @@ import { isRequesterAdmin, keyGroupPermissionKeys, requesterPermissionKeys, requ
 import { ChatProfileStore, isVisionTool, profileSeesImages } from '../services/codex-chat/chatProfiles';
 import { requireChatMcpAccountAccess } from '../services/codex-chat/codexChatAccess';
 import { requireActiveChatReply } from '../services/codex-chat/chatReplyRegistry';
+import { isAgentRoom } from '../services/codex-chat/chatRoomWake';
+import { isProposalTool } from '../services/codex-chat/codexChatMedia';
 import { BoardCallRooms } from '../services/posts/boardCallRooms';
 import { validateMcpToolArguments } from './requestSecurity';
 import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
@@ -11,6 +13,7 @@ import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
+  call_agent: [],
   workspace_publish_resources: ['files.view', 'files.edit', 'images.view', 'images.edit'],
   list_group_resources: 'images.view',
   list_plugin_pages: [], run_plugin_action: [], get_plugin_action: [], cancel_plugin_action: [],
@@ -168,6 +171,11 @@ function keyHoldsTool(context: McpRequestContext, toolName: string): boolean {
  * `requireMcpToolAccess` re-runs this before each call, then rechecks the account with explicit errors.
  */
 export function isContextToolAllowed(context: McpRequestContext, toolName: string, accountChecks = true): boolean {
+  if (toolName === 'call_agent' && (!context.chatContext || context.scopes.length === 0
+    || (context.toolAllowlist && !context.toolAllowlist.includes(toolName))
+    || context.chatContext.page?.path.startsWith('/public/')
+    || BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null)) return false;
+  if (context.chatContext && (toolName === 'call_agent' || toolName === 'task_propose' || isProposalTool(toolName)) && isAgentRoom(context.chatContext.threadId)) return false;
   if (context.research && !context.research.allowsTool(toolName)) return false;
   if (['list_plugin_drafts', 'create_plugin_draft', 'read_plugin_draft', 'edit_plugin_draft', 'prepare_plugin_install', 'check_plugin_updates'].includes(toolName)) {
     if (!context.requester || !isChatMcpSource(context.source) || context.chatContext?.kind !== 'direct' || BoardCallRooms.runFor(context.chatContext.threadId, context.chatContext.profileId) !== null) return false;

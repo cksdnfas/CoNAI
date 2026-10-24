@@ -36,7 +36,7 @@ function quotedText(message: CodexChatMessageRecord) {
 
 export function quoteMessage(thread: CodexChatThreadRecord, message: CodexChatMessageRecord): ChatReplyQuote {
   const profileId = message.role === 'assistant' ? message.speaker_profile_id ?? thread.profile_id : null
-  const speakerName = message.role === 'user' ? userPersonaForThread(thread).name : (profileId && ChatProfileStore.find(profileId)?.name) || '(나간 참가자)'
+  const speakerName = message.role === 'user' ? userPersonaForThread(thread).name : message.routing?.agent?.name ?? ((profileId && ChatProfileStore.find(profileId)?.name) || '(나간 참가자)')
   let media = message.mediaAttachments?.[0]
   if (!media) {
     let hash = message.tool_calls.flatMap((call) => call.compositeHashes)[0]

@@ -12,7 +12,7 @@ import { CollapsibleRow } from '@/components/ui/collapsible-row'
 import { type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { SwitchLine } from '@/components/ui/switch-line'
 import { EditorGroup } from '@/components/ui/editor-group'
-import { ChatProfileToolLimits } from './chat-profile-tools'
+import { ChatProfileAgentSetting, ChatProfileToolLimits } from './chat-profile-tools'
 import { ChatToolPicker, useChatToolGroups } from './chat-tool-picker'
 import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
 
@@ -137,6 +137,9 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults, advanced }
             <ChatProfileToolLimits toolOutputLimit={draft.toolOutputLimit} onChange={patch} />
           </div>
         ) : null}
+      </EditorGroup>
+      <EditorGroup label={t({ ko: '에이전트', en: 'Agent' })}>
+        <ChatProfileAgentSetting agentEnabled={draft.agentEnabled} agentDescription={draft.agentDescription} onChange={patch} />
       </EditorGroup>
       <ChatToolPresetEditorModal
         open={presetEditor !== null}

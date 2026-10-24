@@ -25,6 +25,13 @@ export class ChatWakeBusyError extends Error {
 
 /** What the model reads: the instruction, framed as the app's request rather than the person's words. */
 export function wakeInstructionText(routing: ChatRoutineRouting, instruction: string) {
+  if (routing.source === 'agent_result') {
+    return [`[Agent "${routing.name}" finished your request; its result is above. React if useful.]`, '', instruction.trim()].join('\n')
+  }
+  if (routing.source === 'agent') {
+    return [`[Agent request from "${routing.name}" — sent by the app, not typed by the person]`,
+      'Do the work with your own tools, then report the result. Do not ask for review cards; report any decision needing a person in your result.', '', instruction.trim()].join('\n')
+  }
   if (routing.source === 'post') {
     return [`[Posts board call on "${routing.name}" — sent by the app, not typed by the person]`, '', instruction.trim()].join('\n')
   }
@@ -51,6 +58,9 @@ export async function wakeChatRoom(params: {
   /** Group rooms: lowers the room's chain limit for this run. */
   chainLimit?: number | null
   signal?: AbortSignal
+  mediaHashes?: string[]
+  /** Group rooms: address the profile that delegated this work, rather than every member. */
+  recipients?: number[]
 }): Promise<ChatWakeResult> {
   const { requester, threadId } = params
   const { CodexChatError, CodexChatService, GroupChatService } = await chatServices()
@@ -70,9 +80,9 @@ export async function wakeChatRoom(params: {
   params.signal?.addEventListener('abort', stop, { once: true })
   try {
     if (isGroup) {
-      await GroupChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, { routine: params.routing, chainLimit: params.chainLimit })
+      await GroupChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, params.mediaHashes, undefined, undefined, { routine: params.routing, chainLimit: params.chainLimit, recipients: params.recipients })
     } else {
-      await CodexChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, undefined, undefined, undefined, { routine: params.routing })
+      await CodexChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, params.mediaHashes, undefined, undefined, { routine: params.routing })
     }
   } catch (error) {
     // Lost the race with a send that started after the check above (either engine's "still answering").
@@ -143,6 +153,23 @@ export function forgetAutomationRoom(accountId: number | null, key: string) {
 export function automationRoomKinds(accountId: number | null): Map<number, ChatAutomationRoomKind> {
   const rows = roomsTable().prepare('SELECT room_key, thread_id FROM chat_automation_rooms WHERE account_key = ?').all(accountKey(accountId)) as Array<{ room_key: string; thread_id: number }>
   const kinds = new Map<number, ChatAutomationRoomKind>()
-  for (const row of rows) kinds.set(row.thread_id, row.room_key.startsWith('posts:board:') ? 'board' : row.room_key.startsWith('workflow:') ? 'workflow' : row.room_key.startsWith('plugin:') ? 'plugin' : 'routine')
+  for (const row of rows) kinds.set(row.thread_id, row.room_key.startsWith('agent:') ? 'agent' : row.room_key.startsWith('posts:board:') ? 'board' : row.room_key.startsWith('workflow:') ? 'workflow' : row.room_key.startsWith('plugin:') ? 'plugin' : 'routine')
   return kinds
+}
+
+/** Also used at the proposal persistence boundary, without trusting model-supplied context flags. */
+export function isAgentRoom(threadId: number) {
+  return !!roomsTable().prepare("SELECT 1 FROM chat_automation_rooms WHERE thread_id = ? AND room_key LIKE 'agent:%'").get(threadId)
+}
+
+/** The shell badge excludes only agent rooms; all other automation behaviour stays unchanged. */
+export function chatUnreadCount(accountId: number | null) {
+  return (roomsTable().prepare(`
+    SELECT COUNT(m.id) AS count FROM codex_chat_threads t
+    JOIN codex_chat_messages m ON m.thread_id = t.id AND m.role = 'assistant'
+      AND m.id > COALESCE(t.last_read_message_id, 0)
+    WHERE t.account_id IS ? AND t.archived = 0
+      AND NOT EXISTS (SELECT 1 FROM chat_automation_rooms a
+        WHERE a.thread_id = t.id AND a.account_key = ? AND a.room_key LIKE 'agent:%')
+  `).get(accountId, accountKey(accountId)) as { count: number }).count
 }

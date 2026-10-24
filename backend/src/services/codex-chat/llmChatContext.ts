@@ -265,7 +265,7 @@ export function toCompletionMessages(message: CodexChatMessageRecord, blockKeys:
   }
   const text = stripBlockFences(message.content, blockKeys)
   if (text.trim()) {
-    result.push({ role: 'assistant', content: `[${messageAddress(message)}; from=${message.speaker_profile_id ?? 'assistant'}]\n${text}` })
+    result.push({ role: 'assistant', content: `[${messageAddress(message)}; from=${message.routing?.agent ? `${message.routing.agent.name} (agent)` : message.speaker_profile_id ?? 'assistant'}]\n${text}` })
   }
   return result
 }

@@ -2,7 +2,7 @@ import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
 export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
-import type { ChatJudgeDiagnostics, ChatFileChange } from '@conai/shared'
+import type { ChatJudgeDiagnostics, ChatFileChange, ChatProfileAgentSettings } from '@conai/shared'
 import type { ChatStreamEvent, ChatTranslationLanguage, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask, ChatChoiceAnswer } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
@@ -642,7 +642,8 @@ export type ChatGenerationPresetInput = { name: string; instruction: string; kin
 /** The file a generation preset exports as; import also takes a bare preset or an array of either. */
 export const CHAT_GENERATION_PRESET_FILE_MARK = 'conai_generation_preset'
 
-export interface ChatProfile extends ChatProfileAssetFields {
+/** `agentEnabled`: other profiles may call this one during a chat; `agentDescription` tells them when. */
+export interface ChatProfile extends ChatProfileAssetFields, ChatProfileAgentSettings {
   /** Linked shared lorebooks, in priority order. */
   lorebookIds: number[]
   /** Linked shared display blocks, in display order; the server fills `style.blocks` from them. */

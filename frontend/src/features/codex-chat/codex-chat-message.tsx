@@ -6,9 +6,10 @@ import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as Re
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { AlertTriangle, Ban, Check, ChevronLeft, ChevronRight, ImageOff, RefreshCw, Repeat, Scissors, Wrench, X } from 'lucide-react'
 import { isCodexChatGenerationTool, stripEchoedAddresses, withChatGenerationProgress } from '@conai/shared'
-import type { ChatFileChange, ChatMessageRouting } from '@conai/shared'
+import type { ChatAgentResultRouting, ChatFileChange, ChatMessageRouting } from '@conai/shared'
 import { ChatMessageReply } from './chat-reply'
 import { Button } from '@/components/ui/button'
+import { Chip } from '@/components/ui/chip'
 import { Tip } from '@/components/ui/tooltip'
 import { IconButton } from '@/components/ui/icon-button'
 import { MediaHoverExpandCue, useMediaHoverPreview } from '@/components/common/media-hover-preview'
@@ -699,7 +700,9 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
 const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
 const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/85 px-3.5 py-2.5 backdrop-blur-sm'
 
-export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel, threadId, fileChanges, replyId, onRetry }: {
+export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel, threadId, fileChanges, replyId, onRetry, agent = null }: {
+  /** A delegated agent's result copied into this room: marked as the agent's, and as failed when it failed. */
+  agent?: ChatAgentResultRouting | null
   /** The stored thread this reply belongs to (proposal cards refresh it after a save). */
   threadId?: number
   /** The text files this reply's tools wrote (chips with undo). */
@@ -734,6 +737,11 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const content = stripEchoedAddresses(written)
   const { avatarSize } = appearance
   const toolBadge = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null
+  const ownExtra = agent ? <>
+    <Chip size="sm" tone="muted">{t({ ko: '에이전트', en: 'Agent' })}</Chip>
+    {agent.status === 'failed' ? <Chip size="sm" tone="destructive">{t({ ko: '실패', en: 'Failed' })}</Chip> : null}
+    {toolBadge}
+  </> : toolBadge
   const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} hiddenGroupIds={speaker?.hiddenEmoticonGroupIds} mentions={speaker?.mentions} />
   const avatarOf = (who: ChatProfileAssetFields & { id?: number; name: string; avatar?: string | null }, engine: ChatEngine) => avatarSize === 'none' ? null : (
     <ChatProfileAvatar name={who.name} avatar={who.avatar} profile={'id' in who ? who : undefined} engine={engine} size={AVATAR_SIZE[avatarSize]} className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
@@ -788,7 +796,8 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
       <ChatFileChangeChips changes={fileChanges} threadId={threadId} replyId={replyId ?? routing?.replyId} />
     </div>
   )
-  const showOwnRow = !hasCast || Boolean(ownText || showReasoning || toolCalls.length > 0)
+  // An agent result keeps its own name line (agent / failed marks) even when only cast lines follow.
+  const showOwnRow = !hasCast || Boolean(agent || ownText || showReasoning || toolCalls.length > 0)
   const truncated = !streaming && status === 'completed' && finishReason === 'length'
   const loopCut = !streaming && status === 'completed' && finishReason === 'repetition'
   const toolLimited = !streaming && status === 'completed' && finishReason === 'tool_limit'
@@ -825,12 +834,12 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   ) : null
 
   if (!hasCast) {
-    return row('own', speaker, speaker?.engine ?? 'llm', toolBadge, ownParts, footer)
+    return row('own', speaker, speaker?.engine ?? 'llm', ownExtra, ownParts, footer)
   }
 
   return (
     <div className="space-y-5">
-      {showOwnRow ? row('own', speaker, speaker?.engine ?? 'llm', toolBadge, ownParts) : null}
+      {showOwnRow ? row('own', speaker, speaker?.engine ?? 'llm', ownExtra, ownParts) : null}
       {castSegments.map((segment, index) => row(`cast-${index}`, segment.speaker ?? speaker, segment.speaker ? 'llm' : speaker?.engine ?? 'llm', null, markdown(segment.text)))}
       {footer}
     </div>

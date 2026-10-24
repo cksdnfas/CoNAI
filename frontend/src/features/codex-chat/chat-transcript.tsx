@@ -32,6 +32,8 @@ type MessageLook = {
   appearance: ChatAppearance
   /** Group rooms: who wrote a reply (its speaker), instead of the chat's one speaker. */
   speakerOf?: (profileId: number | null) => ChatSpeaker | null
+  /** Any room: an agent profile's look, for the results it hands back (its own face and engine). */
+  agentSpeakerOf?: (profileId: number) => ChatSpeaker | null
   /** Group rooms: member names, so `@name` mentions are highlighted. */
   mentions?: readonly string[]
 }
@@ -112,7 +114,7 @@ class MessageErrorBoundary extends Component<{ message: CodexChatMessage; childr
   }
 }
 
-const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousContext, segments, flash, media, actions, speakerOf, mentions, userSpeaker = null, ...look }: MessageLook & {
+const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousContext, segments, flash, media, actions, speakerOf, agentSpeakerOf, mentions, userSpeaker = null, ...look }: MessageLook & {
   message: CodexChatMessage; last: boolean; previousContext: ChatContextMeta | null; segments: ChatSummarySegment[]; flash: boolean; media?: Record<string, CodexChatMediaInfo>; actions: MessageActions
 }) {
   const { t } = useI18n()
@@ -132,7 +134,11 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
   const [menuOpen, setMenuOpen] = useState(false)
   // Starting an edit from the menu: the editor takes focus, so the menu must not hand it back to its button.
   const keepMenuFocusRef = useRef(false)
-  const showRewriteTools = actions.canRewrite && (isUser || lastReply || editableReply || alternatives.length > 1) && actions.editingId !== message.id
+  // A delegated agent's result speaks with the agent's stored name (and its own face), not the room profile's look; it
+  // is the agent's work, so the room never rewrites it.
+  const agent = isUser ? undefined : message.routing?.agent
+  const agentSpeaker: ChatSpeaker | null = agent ? { ...(agentSpeakerOf?.(agent.profileId) ?? { engine: 'llm' as const }), name: agent.name } : null
+  const showRewriteTools = actions.canRewrite && !agent && (isUser || lastReply || editableReply || alternatives.length > 1) && actions.editingId !== message.id
   const canEditHere = showRewriteTools && (isUser || editableReply)
   const canContinueHere = showRewriteTools && lastReply && actions.canContinue && message.finish_reason === 'length'
   const hasTextItems = translated || canEditHere || canContinueHere
@@ -164,7 +170,7 @@ const ChatMessageRow = memo(function ChatMessageRow({ message, last, previousCon
         : (content || message.routing?.replyTo) && <ChatUserMessage content={content} routing={routing} recipientLabel={recipientLabel} mentions={mentions} appearance={look.appearance} createdAt={message.created_date} speaker={userSpeaker} />}<ChatFileLinks files={message.attachments} /><ChatReferenceChips items={message.mediaAttachments} threadId={message.thread_id} /><ChatMessageFlags flags={message.flags} /></>
       : actions.editingId === message.id
         ? <ChatMessageEditor message={message} busy={actions.busy} onSave={actions.onEditReply} onCancel={() => actions.onEditingChange(null)} reply />
-        : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} fileChanges={message.fileChanges} replyId={message.routing?.replyId} onRetry={lastReply && actions.canRewrite && !actions.busy ? () => actions.onRegenerate(message.id) : undefined} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} speaker={speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker} /></ChatMessageIdContext.Provider>}
+        : <ChatMessageIdContext.Provider value={message.id}><CodexChatAssistantMessage content={content} routing={routing} recipientLabel={recipientLabel} toolCalls={message.tool_calls} threadId={message.thread_id} fileChanges={message.fileChanges} replyId={message.routing?.replyId} onRetry={lastReply && actions.canRewrite && !actions.busy ? () => actions.onRegenerate(message.id) : undefined} status={message.status} error={message.error} finishReason={message.finish_reason ?? null} media={media} {...look} createdAt={message.created_date} agent={agent} speaker={agentSpeaker ?? (speakerOf ? speakerOf(message.speaker_profile_id) : look.speaker)} /></ChatMessageIdContext.Provider>}
     {/* A folded bar takes no room but stays in the tab order, and shows while a key lands on one of its buttons.
         Reply, regenerate and the answer switch stay on the bar; edits and the rarer actions sit under ⋯ with their names. */}
     {inputNotice}

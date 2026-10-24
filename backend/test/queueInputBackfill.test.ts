@@ -13,7 +13,7 @@ import { randomBytes } from 'node:crypto'
 import sharp from 'sharp'
 import { scratchDir } from './support/scratchRuntime'
 import { parseCodexGenerationRequest } from '../src/services/codexGenerationOptions'
-import { buildCodexExecArgs, buildCodexPrompt, discoverOutputFiles, writeAttachedImage } from '../src/services/codexGenerationExecutor'
+import { buildCodexExecArgs, buildCodexPrompt, discoverOutputFiles, writeAttachedImage, executeCodexGeneration } from '../src/services/codexGenerationExecutor'
 import { createCodexStrictPreservation } from '../src/services/codexImageInputs'
 import { buildCodexMetadataPatch } from '../src/services/generation-queue/queuePayloads'
 import { sanitizeSnapshotValue } from '../src/services/generationHistoryRequestSnapshot'
@@ -112,20 +112,20 @@ test('Codex validates legacy inputs and role-tagged references before enqueue', 
   assert.equal(legacy.preserve, undefined)
   assert.equal(legacy.attachment_descriptors.length, 2)
   assert.equal((await parseCodexGenerationRequest({ prompt: 'refs', references: [{ role: 'style', data_url: jpeg }, { role: 'item', data_url: webp }] })).attachment_descriptors.length, 2)
-  const invalid = [
-    { image: 'data:image/png;base64,!!!!' },
-    { image: 'data:image/png;base64,YQ==' },
-    { image: image.replace('image/png', 'image/jpeg') },
-    { image: image + '\n' },
-    { image, references: Array.from({ length: 5 }, () => ({ role: 'item', data_url: image })) },
-    { references: [{ role: 'unknown', data_url: image }] },
-    { references: [{ role: 'style', label: 'x'.repeat(129), data_url: image }] },
-    { operation: 'infill', image, mask: jpeg },
-    { operation: 'edit', image, preserve: 'strict' },
-    { image: `data:image/png;base64,${Buffer.alloc(10 * 1024 * 1024 + 1).toString('base64')}` },
-    { references: Array.from({ length: 4 }, () => ({ role: 'item', data_url: `data:image/png;base64,${Buffer.alloc(9 * 1024 * 1024).toString('base64')}` })) },
+  const invalid: Array<[Record<string, unknown>, RegExp]> = [
+    [{ image: 'data:image/png;base64,!!!!' }, /Invalid Codex attachment base64/],
+    [{ image: 'data:image/png;base64,YQ==' }, /unsupported image format/i],
+    [{ image: image.replace('image/png', 'image/jpeg') }, /MIME does not match/],
+    [{ references: [{ role: 'style', data_url: image + '\n' }] }, /strict.*base64/],
+    [{ image, references: Array.from({ length: 5 }, () => ({ role: 'item', data_url: image })) }, /at most 5/],
+    [{ references: [{ role: 'unknown', data_url: image }] }, /Invalid option/],
+    [{ references: [{ role: 'style', label: 'x'.repeat(129), data_url: image }] }, /128/],
+    [{ operation: 'infill', image, mask: jpeg, preserve: 'strict' }, /strict mask must be PNG/],
+    [{ operation: 'edit', image, preserve: 'strict' }, /requires infill/],
+    [{ image: `data:image/png;base64,${Buffer.alloc(10 * 1024 * 1024 + 1).toString('base64')}` }, /10 MiB/],
+    [{ references: Array.from({ length: 4 }, () => ({ role: 'item', data_url: `data:image/png;base64,${Buffer.alloc(9 * 1024 * 1024).toString('base64')}` })) }, /32 MiB/],
   ]
-  for (const value of invalid) await assert.rejects(parseCodexGenerationRequest({ prompt: 'invalid', ...value }))
+  for (const [value, message] of invalid) await assert.rejects(parseCodexGenerationRequest({ prompt: 'invalid', ...value }), message)
   const wide = await sharp({ create: { width: 4097, height: 1, channels: 3, background: 'white' } }).png().toBuffer()
   await assert.rejects(parseCodexGenerationRequest({ prompt: 'wide', image: `data:image/png;base64,${wide.toString('base64')}` }), /4096/)
   const small = await sharp(png).resize(8, 8).png().toBuffer()
@@ -223,6 +223,145 @@ test('strict infill composites only inside the mask and verifies the final PNG s
   const wrongSize = path.join(directory, 'wrong.png')
   await sharp(source).resize(8, 8).png().toFile(wrongSize)
   await assert.rejects(strict.composite(wrongSize, composite), /resizing is forbidden/)
+})
+
+test('legacy image/mask encodings normalize without weakening new reference validation', async () => {
+  const buffer = await sharp({ create: { width: 16, height: 12, channels: 3, background: '#123456' } }).png().toBuffer()
+  const image = `data:image/png;base64,${buffer.toString('base64')}`
+  for (const legacy of [buffer.toString('base64'), buffer.toString('base64').replace(/=+$/, ''), image.toUpperCase().split(';BASE64,')[0] + ';base64,' + buffer.toString('base64'), image + '\n']) {
+    assert.equal((await parseCodexGenerationRequest({ prompt: 'legacy', image: legacy })).image, image)
+    assert.deepEqual(sanitizeSnapshotValue({ image: legacy, mask: legacy }), { image: null, mask: null })
+  }
+  const jpeg = await sharp(buffer).jpeg().toBuffer()
+  assert.equal((await parseCodexGenerationRequest({ prompt: 'jpg', image: `data:IMAGE/JPG;base64,${jpeg.toString('base64')}` })).image, `data:image/jpeg;base64,${jpeg.toString('base64')}`)
+  const gif = await sharp(buffer).gif().toBuffer()
+  const converted = await parseCodexGenerationRequest({ prompt: 'gif', image: `data:image/gif;base64,${gif.toString('base64')}` })
+  assert.ok(converted.image?.startsWith('data:image/png;base64,'))
+  assert.equal((await sharp(Buffer.from(converted.image!.split(',')[1], 'base64')).metadata()).width, 16)
+  const advisory = await parseCodexGenerationRequest({ prompt: 'mask', operation: 'infill', image, mask: `data:image/jpeg;base64,${jpeg.toString('base64')}` })
+  assert.ok(advisory.mask?.startsWith('data:image/png;base64,'))
+  const empty = await parseCodexGenerationRequest({ prompt: 'empty', image: ' ', mask: '' })
+  assert.equal(empty.image, undefined)
+  assert.equal(empty.mask, undefined)
+  await assert.rejects(parseCodexGenerationRequest({ prompt: 'refs', references: [{ role: 'item', data_url: buffer.toString('base64') }] }), /strict.*base64/)
+})
+
+test('strict masks reject transparency and vacuous protection; gray pixels blend', async () => {
+  const toUrl = (buffer: Buffer) => `data:image/png;base64,${buffer.toString('base64')}`
+  const source = await sharp({ create: { width: 3, height: 1, channels: 4, background: { r: 10, g: 20, b: 30, alpha: 1 } } }).png().toBuffer()
+  const mask = await sharp(Buffer.from([0, 128, 255]), { raw: { width: 3, height: 1, channels: 1 } }).png().toBuffer()
+  const request = { prompt: 'strict', operation: 'infill', image: toUrl(source), mask: toUrl(mask), preserve: 'strict', size: '1024x1024' }
+  const parsed = await parseCodexGenerationRequest(request)
+  assert.equal(parsed.size, '3x1')
+  assert.equal((await parseCodexGenerationRequest(parsed)).size, '3x1', 'worker revalidation accepts the normalized size')
+  for (const pixels of [
+    Buffer.from([10, 20, 30, 255, 10, 20, 30, 0, 10, 20, 30, 255]),
+    Buffer.from([255, 255, 255, 0, 0, 0, 0, 255, 255, 255, 255, 255]),
+  ]) {
+    const alphaMask = toUrl(await sharp(pixels, { raw: { width: 3, height: 1, channels: 4 } }).png().toBuffer())
+    await assert.rejects(parseCodexGenerationRequest({ ...request, mask: alphaMask }), /fully opaque/)
+    await assert.rejects(createCodexStrictPreservation(request.image, alphaMask), /fully opaque/)
+  }
+  const white = toUrl(await sharp({ create: { width: 3, height: 1, channels: 3, background: 'white' } }).png().toBuffer())
+  await assert.rejects(parseCodexGenerationRequest({ ...request, mask: white }), /black.*protected pixel/)
+  const directory = await fs.mkdtemp(path.join(scratchDir, 'gray-mask-'))
+  const generated = path.join(directory, 'generated.png')
+  await sharp({ create: { width: 3, height: 1, channels: 4, background: { r: 210, g: 120, b: 70, alpha: 1 } } }).png().toFile(generated)
+  const output = path.join(directory, 'output.png')
+  const strict = await createCodexStrictPreservation(request.image, request.mask)
+  await strict.composite(generated, output)
+  await strict.verifySavedFile(output)
+  assert.deepEqual([...await sharp(output).raw().toBuffer()], [10, 20, 30, 255, 110, 70, 50, 255, 210, 120, 70, 255])
+})
+
+test('strict rejects unsupported source spaces, depth and orientation before generation', async () => {
+  const source = sharp({ create: { width: 16, height: 16, channels: 3, background: '#123456' } })
+  const mask = `data:image/png;base64,${(await sharp({ create: { width: 16, height: 16, channels: 3, background: 'black' } }).png().toBuffer()).toString('base64')}`
+  for (const [buffer, message] of [
+    [await source.clone().withIccProfile('p3').png().toBuffer(), /ICC/],
+    [await source.clone().toColourspace('rgb16').png().toBuffer(), /8-bit/],
+    [await source.clone().withMetadata({ orientation: 6 }).png().toBuffer(), /EXIF-unrotated/],
+  ] as Array<[Buffer, RegExp]>) {
+    await assert.rejects(parseCodexGenerationRequest({ prompt: 'strict', operation: 'infill', image: `data:image/png;base64,${buffer.toString('base64')}`, mask, preserve: 'strict' }), message)
+  }
+  const srgb = await source.clone().withIccProfile('srgb').png().toBuffer()
+  assert.equal((await parseCodexGenerationRequest({ prompt: 'srgb', operation: 'infill', image: `data:image/png;base64,${srgb.toString('base64')}`, mask, preserve: 'strict' })).size, '16x16')
+})
+
+test('failed final verification never publishes a file and removes its staging directory', async () => {
+  const image = await sharp({ create: { width: 4, height: 4, channels: 3, background: 'red' } }).png().toBuffer()
+  let stagedPath = ''
+  await fs.mkdir(path.join(runtimePaths.uploadsDir, 'API', 'images'), { recursive: true })
+  const before = await fs.readdir(path.join(runtimePaths.uploadsDir, 'API', 'images'), { recursive: true })
+  await assert.rejects(FileSaver.saveGeneratedImage(image, 'codex', {
+    format: 'png', resizeEnabled: false,
+    verifySavedFile: async (file) => {
+      stagedPath = file
+      assert.ok(!path.relative(runtimePaths.uploadsDir, file).startsWith('API'))
+      assert.equal((await sharp(file).metadata()).format, 'png')
+      throw new Error('fixture protected-pixel mismatch')
+    },
+  }), /protected-pixel mismatch/)
+  await assert.rejects(fs.stat(stagedPath), /ENOENT/)
+  await assert.rejects(fs.stat(path.dirname(stagedPath)), /ENOENT/)
+  assert.deepEqual(await fs.readdir(path.join(runtimePaths.uploadsDir, 'API', 'images'), { recursive: true }), before)
+})
+
+test('MCP idempotency reuses identical Codex requests and conflicts on reference bytes, role or order', async (t) => {
+  const { enqueueMcpGenerationJob } = await import('../src/mcp/tools/generationJobTools')
+  const { GenerationQueueService } = await import('../src/services/generationQueueService')
+  const { HistoryQueryRepository } = await import('../src/repositories/history/HistoryQueryRepository')
+  t.mock.method(GenerationQueueService, 'requestDispatch', () => {})
+  t.mock.method(HistoryQueryRepository, 'findAllWithMetadata', () => [])
+  const image = `data:image/png;base64,${(await sharp({ create: { width: 16, height: 16, channels: 3, background: 'red' } }).png().toBuffer()).toString('base64')}`
+  const references = [{ role: 'style', label: 'one', data_url: image }, { role: 'item', label: 'two', data_url: image }]
+  const input = { service_type: 'codex' as const, idempotency_key: 'codex-reference-conflict', request_payload: { prompt: 'test', references } }
+  const context = { scopes: ['generate' as const], source: 'http' as const, keyId: 'reference-test-key' }
+  const first = await enqueueMcpGenerationJob(context, input)
+  const again = await enqueueMcpGenerationJob(context, input)
+  assert.equal(again.id, first.id)
+  assert.equal(again.idempotency_reused, true)
+  for (const changed of [
+    [...references].reverse(),
+    [{ ...references[0], role: 'material' }, references[1]],
+    [{ ...references[0], data_url: image + 'changed' }, references[1]],
+  ]) await assert.rejects(enqueueMcpGenerationJob(context, { ...input, request_payload: { prompt: 'test', references: changed } }), /idempotency_key.*different request/)
+})
+
+test('executor revalidates a queued legacy strict request, overrides size, forces PNG and verifies saved output', async (t) => {
+  const childProcess = (await import('node:child_process')).default
+  const { EventEmitter } = await import('node:events')
+  const { PassThrough } = await import('node:stream')
+  const syncFs = await import('node:fs')
+  const source = await sharp({ create: { width: 16, height: 12, channels: 3, background: '#123456' } }).png().toBuffer()
+  const mask = await sharp({ create: { width: 16, height: 12, channels: 3, background: 'black' } }).png().toBuffer()
+  let generated = await sharp(source).negate().png().toBuffer()
+  const invocations: string[][] = []
+  t.mock.method(childProcess, 'spawn', (_command: string, args: string[], options: { cwd: string }) => {
+    const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), exitCode: null })
+    queueMicrotask(() => {
+      if (args.includes('login')) child.stdout.write('Logged in using ChatGPT')
+      else {
+        invocations.push(args)
+        syncFs.writeFileSync(path.join(options.cwd, 'codex-output-01.png'), generated)
+      }
+      child.emit('close', 0, null)
+    })
+    return child
+  })
+  const id = GenerationQueueModel.create({ service_type: 'codex', request_payload: { prompt: 'strict executor', image: source.toString('base64'), mask: `data:IMAGE/PNG;base64,${mask.toString('base64')}`, operation: 'infill', preserve: 'strict', size: '1024x1024', output_format: 'jpeg' } })
+  const payload = parseCodexQueuePayload(GenerationQueueModel.findById(id)!)
+  const result = await executeCodexGeneration(payload)
+  assert.equal(result.outputFiles[0].mimeType, 'image/png')
+  assert.equal((await sharp(result.outputFiles[0].absolutePath).metadata()).format, 'png')
+  assert.ok(invocations[0].at(-1)!.includes('Preferred size: 16x12'))
+  assert.ok(!invocations[0].at(-1)!.includes('Preferred size: 1024x1024'))
+  assert.ok(invocations[0].at(-1)!.includes('codex-output-01.png'))
+  const saved = await FileSaver.saveGeneratedFile(result.outputFiles[0].absolutePath, 'codex', { format: 'png', resizeEnabled: false, verifySavedFile: result.verifySavedFile })
+  await result.verifySavedFile!(path.join(runtimePaths.uploadsDir, saved.originalPath))
+  assert.deepEqual(await sharp(path.join(runtimePaths.uploadsDir, saved.originalPath)).raw().toBuffer(), await sharp(source).ensureAlpha().raw().toBuffer())
+  generated = await sharp(source).resize(8, 8).png().toBuffer()
+  await assert.rejects(executeCodexGeneration(payload), /requires 16x12.*got 8x8/)
 })
 
 test('conditional queue updates preserve payload and cancellation when the expected status is stale', () => {

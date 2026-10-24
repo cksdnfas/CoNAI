@@ -67,6 +67,18 @@ function toRevision(row: RevisionRow): StoredFileRevision {
 }
 
 export const FileStoreRevisions = {
+  /** Preserve writer identity and before-reply undo when an automation's result moves to a durable chat. */
+  moveChatReply(fileIds: string[], fromThreadId: number, threadId: number, replyId: string) {
+    const database = db();
+    for (const fileId of fileIds) {
+      for (const [table, column] of [['stored_file_revisions', 'written_by'], ['stored_file_revisions', 'replaced_by'], ['stored_file_writers', 'written_by']]) {
+        database.prepare(`UPDATE ${table} SET ${column} = json_set(${column}, '$.threadId', ?, '$.replyId', ?)
+          WHERE file_id = ? AND json_valid(${column}) AND json_extract(${column}, '$.via') = 'chat'
+            AND json_extract(${column}, '$.threadId') = ?`).run(threadId, replyId, fileId, fromThreadId);
+      }
+    }
+  },
+
   /** Who wrote the file's current text (null: not known, e.g. written before versions existed). */
   writer(fileId: string): FileWriteSource | null {
     return parseSource((db().prepare('SELECT written_by FROM stored_file_writers WHERE file_id = ?').get(fileId) as { written_by: string | null } | undefined)?.written_by ?? null);

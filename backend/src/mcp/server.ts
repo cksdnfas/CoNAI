@@ -27,6 +27,7 @@ import { registerChatSetupTools } from './tools/chatSetupTools';
 import { registerChatPageTools } from './tools/chatPageTools';
 import { registerChatTaskTools } from './tools/chatTaskTools';
 import { registerChatChoiceTools } from './tools/chatChoiceTools';
+import { registerChatAgentTools } from './tools/chatAgentTools';
 import { registerSpriteTools } from './tools/spriteTools';
 import { registerImageResizeTools } from './tools/imageResizeTools';
 import { registerAudioTools } from './tools/audioTools';
@@ -120,6 +121,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   registerChatRoomListTools(server, context);
   registerChatTaskTools(server, context);
   registerChatChoiceTools(server, context);
+  registerChatAgentTools(server, context);
   registerChatLoreTools(server, context);
   registerChatLinkedFileTools(server, context);
   registerChatSettingsTools(server, context);

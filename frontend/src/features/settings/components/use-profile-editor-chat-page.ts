@@ -13,7 +13,8 @@ export type ProfileEditorSection = 'character' | 'appearance' | 'model' | 'memor
 
 /**
  * Draft keys the chat may fill, and the section that shows each. Tool grants and access are never among them (tool
- * scopes and list, the page assistant switch, allowed groups, generation presets).
+ * scopes and list, the page assistant switch, allowed groups, generation presets, agent use — which lets other profiles
+ * call this one's tools); the agent description is.
  */
 const DRAFT_KEYS = {
   name: 'character', tagline: 'character', systemPrompt: 'character', promptSections: 'character', greeting: 'character', alternateGreetings: 'character', authorNote: 'character',
@@ -24,7 +25,7 @@ const DRAFT_KEYS = {
   translationSlotId: 'model', translationModelLanguage: 'model', translationDisplayLanguage: 'model', translationInstructions: 'model',
   suggestEnabled: 'model', suggestSlotId: 'model', suggestProfileId: 'model', judgePresetId: 'model', judgeSlotId: 'model',
   contextTurns: 'memory', contextTokens: 'memory', loreRecursionDepth: 'memory', allowLoreProposals: 'memory', linkedFiles: 'memory',
-  toolOutputLimit: 'tools',
+  toolOutputLimit: 'tools', agentDescription: 'tools',
 } as const satisfies Partial<Record<keyof Draft, ProfileEditorSection>>
 type DraftKey = keyof typeof DRAFT_KEYS
 
@@ -154,6 +155,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     allowLoreProposals: { type: 'boolean' },
     linkedFiles: pageArray(pageObject({ id: pageText(32), write: { type: 'boolean' } }, ['id']), 20),
     toolOutputLimit: pageNumber(CHAT_PROFILE_LIMITS.toolOutputLimit.min, CHAT_PROFILE_LIMITS.toolOutputLimit.max, true),
+    agentDescription: { ...pageText(CHAT_PROFILE_TEXT_LIMITS.agentDescription), description: 'What it can do and when to call it (used while agentEnabled, which the user turns on)' },
   })
 
   useChatPageRegistration(open ? {
@@ -177,7 +179,8 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
         suggestEnabled: draft.suggestEnabled, suggestSlotId: draft.suggestSlotId, suggestProfileId: draft.suggestProfileId, judgePresetId: draft.judgePresetId, judgeSlotId: draft.judgeSlotId,
         contextTurns: draft.contextTurns, contextTokens: draft.contextTokens, loreRecursionDepth: draft.loreRecursionDepth, allowLoreProposals: draft.allowLoreProposals,
         linkedFiles: draft.linkedFiles.map((link) => ({ id: link.id, write: link.write })), toolOutputLimit: draft.toolOutputLimit,
-        // Grants stay manual. Engine fills above use the editor's engine switch patch.
+        agentEnabled: draft.agentEnabled, agentDescription: draft.agentDescription,
+        // Grants (and agent use) stay manual. Engine fills above use the editor's engine switch patch.
         pageAssist: draft.pageAssist,
       },
       // What a save card shows as the contents it will store.

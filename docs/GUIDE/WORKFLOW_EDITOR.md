@@ -1,12 +1,12 @@
 # 워크플로우 편집
 
+워크플로우 탭은 모듈 그래프로 생성·처리 흐름을 만들고, 저장하고, 실행 결과를 관리하는 화면입니다. ComfyUI, NAI, Codex, LLM, 커스텀 노드 같은 작업을 노드로 이어 붙여 반복 가능한 파이프라인으로 씁니다.
+
 ## Codex 역할 참조 입력
 
-`Codex 이미지 생성` 노드는 기존 `image`/`mask` 포트와 `operation:auto` 추론을 유지합니다. 추가 `references` JSON 포트는 순서 있는 `[{role, label?, data_url}]`를 받습니다. `role`은 `reference|style|material|scale|item`, `label`은 최대 128자입니다. `data_url`은 PNG/JPEG/WebP base64 data URL 또는 라이브러리 선택 `{ "composite_hash": "…" }`를 사용할 수 있습니다. 라이브러리 선택은 실행 시 파일로 해석되고 큐 저장 전에 큰 바이트가 별도 입력 저장소로 분리됩니다.
+`Codex 이미지 생성` 노드는 기존 `image`/`mask` 포트와 `operation:auto` 추론을 유지합니다. `references` JSON 텍스트 영역에 순서 있는 배열을 입력합니다. 예: `[{"role":"style","label":"palette","data_url":{"composite_hash":"라이브러리 해시"}}]`. API에서 이미 파싱한 배열도 받을 수 있고 빈 문자열/null은 첨부 없음입니다. JSON 파싱은 라이브러리 이미지 해석 전에 수행합니다. `role`은 `reference|style|material|scale|item`, `label`은 최대 128자입니다. `data_url`은 PNG/JPEG/WebP base64 data URL 또는 `{ "composite_hash": "…" }`입니다. 라이브러리 입력은 기존 image/mask 포트와 같은 권한/파일 해석 경로를 사용하며 별도 접근 권한을 부여하지 않습니다. 전체 파일을 읽기 전에 파일 종류·크기와 헤더의 크기를 검사하고, 큐 저장 전에 큰 바이트를 별도 입력 저장소로 분리합니다.
 
-`preserve`의 빈 값은 기존 동작, `strict`는 원본과 같은 크기의 PNG 마스크가 있는 infill 전용입니다. 생성 크기 불일치를 거부하고 검정 보호 영역을 원본 픽셀로 유지한 PNG를 저장·검사합니다. 원본/마스크/참조 합계 5장, 파일당 10 MiB·합계 32 MiB, 최대 한 변 4096px입니다. MCP·웹·그래프는 같은 검증을 거칩니다. 해상도는 요청값이며 일반 생성 크기는 달라질 수 있습니다. 전체 계약은 [Codex 생성](./CODEX_GENERATION.md)을 참고합니다.
-
-워크플로우 탭은 모듈 그래프로 생성·처리 흐름을 만들고, 저장하고, 실행 결과를 관리하는 화면입니다. ComfyUI, NAI, Codex, LLM, 커스텀 노드 같은 작업을 노드로 이어 붙여 반복 가능한 파이프라인으로 씁니다.
+`preserve`의 빈 값은 기존 동작, `strict`는 원본과 같은 크기의 불투명 PNG 마스크가 있는 infill 전용입니다. strict에서는 요청 크기를 측정한 원본 크기로 덮어씁니다. 알파 255, 검정 보호 픽셀 1개 이상이 필수이며 흰색은 편집, 회색은 혼합입니다. 원본은 회전 없는 8비트 sRGB/회색조(ICC 없음 또는 Sharp 표준 sRGB)만 지원합니다. 생성 크기 불일치를 거부하고 검정 보호 영역을 유지한 PNG를 감시 폴더 밖에서 검증한 뒤 게시합니다. 원본/마스크/참조 합계 5장, 파일당 10 MiB·합계 32 MiB, 최대 한 변 4096px입니다. MCP·웹·그래프는 같은 검증을 거칩니다. 일반 생성 크기는 요청과 달라질 수 있습니다. 전체 계약은 [Codex 생성](./CODEX_GENERATION.md)을 참고합니다.
 
 ## 위치
 

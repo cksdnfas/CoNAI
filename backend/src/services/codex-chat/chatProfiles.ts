@@ -27,6 +27,7 @@ export const AUTHOR_NOTE_MAX_LENGTH = CHAT_PROFILE_TEXT_LIMITS.authorNote
 const TRANSLATION_INSTRUCTIONS_MAX_LENGTH = CHAT_PROFILE_TEXT_LIMITS.translationInstructions
 const PROFILE_SCALAR_TEXT_LIMITS: Record<string, number> = {
   name: CHAT_PROFILE_TEXT_LIMITS.name, tagline: CHAT_PROFILE_TEXT_LIMITS.tagline,
+  agentDescription: CHAT_PROFILE_TEXT_LIMITS.agentDescription,
   systemPrompt: CHAT_PROFILE_TEXT_LIMITS.text, greeting: CHAT_PROFILE_TEXT_LIMITS.text,
   appearance: CHAT_PROFILE_TEXT_LIMITS.text, authorNote: CHAT_PROFILE_TEXT_LIMITS.authorNote,
   summaryPrompt: CHAT_PROFILE_TEXT_LIMITS.summaryPrompt, translationInstructions: CHAT_PROFILE_TEXT_LIMITS.translationInstructions,
@@ -42,6 +43,7 @@ const PROFILE_FIELD_LABELS: Record<string, string> = {
   reasoningBudgetTokens: '추론 토큰 예산', suggestProfileId: '추천 작성 프로필', suggestUserProfileId: '추천 사용자 프로필', sortOrder: '정렬 순서',
   summaryEnabled: '요약 사용', suggestEnabled: '답장 추천 사용', visionEnabled: '이미지 보기', allowLoreProposals: '로어 제안 허용',
   mcpEnabled: '도구 사용', pageAssist: '페이지 어시스턴트', isEnabled: '프로필 사용',
+  agentEnabled: '에이전트로 사용', agentDescription: '에이전트 설명',
 }
 
 const LIST_FIELD_LABELS: Record<string, string> = { promptSections: '프롬프트 구역', alternateGreetings: '다른 인사', openingHistory: '시작 대화' }
@@ -202,6 +204,8 @@ export type ChatProfile = {
   pageAssist: boolean
   /** The model may propose chat lorebook entries (save_lore) for the user to save. */
   allowLoreProposals: boolean
+  agentEnabled: boolean
+  agentDescription: string
   /** File store folders and text files its characters may open (and write, where `write`) in any chat of the owner. */
   linkedFiles: LinkedFileLink[]
   /**
@@ -317,6 +321,8 @@ type ProfileRow = {
   content_rating_tier_id: number | null
   page_assist: number | null
   allow_lore_proposals: number | null
+  agent_enabled: number | null
+  agent_description: string | null
   linked_files: string | null
   judge_preset_id: number | null
   judge_provider_name: string | null
@@ -469,6 +475,8 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
     contentRatingTierId: row.content_rating_tier_id ?? null,
     pageAssist: row.page_assist === 1,
     allowLoreProposals: row.allow_lore_proposals !== 0,
+    agentEnabled: row.agent_enabled === 1,
+    agentDescription: row.agent_description ?? '',
     linkedFiles: normalizeLinkedFiles(row.linked_files),
     judgePresetId: dependencies ? row.judge_preset_id !== null && dependencies.judges.has(row.judge_preset_id) ? row.judge_preset_id : null : ChatJudgePresetStore.existing(row.judge_preset_id),
     judgeSlotId: slot(row.judge_slot_id),
@@ -519,7 +527,7 @@ export function normalizeProfileScalarField(key: string, value: unknown): unknow
       integer: key !== 'temperature', nullable: ['temperature', 'maxTokens', 'contextTokens'].includes(key),
     })
   }
-  if (['summaryEnabled', 'suggestEnabled', 'visionEnabled', 'allowLoreProposals', 'mcpEnabled', 'pageAssist', 'isEnabled'].includes(key)) return validateProfileFlag(key, value)
+  if (['summaryEnabled', 'suggestEnabled', 'visionEnabled', 'allowLoreProposals', 'agentEnabled', 'mcpEnabled', 'pageAssist', 'isEnabled'].includes(key)) return validateProfileFlag(key, value)
   if (Object.prototype.hasOwnProperty.call(PROFILE_SCALAR_TEXT_LIMITS, key)) return validateProfileText(key, value, PROFILE_SCALAR_TEXT_LIMITS[key], { required: key === 'name' })
   return value
 }
@@ -716,6 +724,8 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
     content_rating_tier_id: strict('contentRatingTierId') ? contentRatingTier(input.contentRatingTierId ?? null) : input.contentRatingTierId ?? null,
     page_assist: input.pageAssist ? 1 : 0,
     allow_lore_proposals: input.allowLoreProposals === false ? 0 : 1,
+    agent_enabled: input.agentEnabled === true ? 1 : 0,
+    agent_description: input.agentDescription ?? '',
     linked_files: JSON.stringify(normalizeLinkedFiles(input.linkedFiles)),
     // Every engine can be judged (a Codex chat gets the directives and status fields only, see chatJudge).
     judge_preset_id: strict('judgePresetId') ? judgePresetId(input.judgePresetId) : input.judgePresetId ?? null,
@@ -743,10 +753,32 @@ const ADMIN_PROFILE_COLUMNS = `id, name, tagline, lorebook_ids, block_ids, lore_
   summary_prompt, translation_instructions, translation_model_language, translation_display_language, suggest_enabled,
   model_slot_id, summary_slot_id, translation_slot_id, suggest_slot_id, suggest_profile_id, suggest_user_profile_id,
   chat_style, vision_enabled, content_rating_mode, content_rating_tier_id, page_assist, allow_lore_proposals,
-  linked_files, judge_preset_id, judge_slot_id, is_enabled, sort_order, created_date, updated_date,
+  agent_enabled, agent_description, linked_files, judge_preset_id, judge_slot_id, is_enabled, sort_order, created_date, updated_date,
   CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image`
 
 export const ChatProfileStore = {
+  /** Agent discovery needs no prompts, assets, model slots or display blocks. */
+  listAgents() {
+    const rows = getUserSettingsDb().prepare(`SELECT id, name, agent_description, engine, allowed_group_keys
+      FROM llm_chat_profiles WHERE is_enabled = 1 AND agent_enabled = 1 ORDER BY sort_order, id`).all() as
+      Array<Pick<ProfileRow, 'id' | 'name' | 'agent_description' | 'engine' | 'allowed_group_keys'>>
+    return rows.map(row => ({ id: row.id, name: row.name, agentDescription: row.agent_description ?? '',
+      engine: (row.engine === 'codex' || row.engine === 'claude' ? row.engine : 'llm') as ChatProfileEngine,
+      allowedGroupKeys: (parseJsonArray(row.allowed_group_keys) ?? []).filter((key): key is string => typeof key === 'string') }))
+  },
+
+  /** Read just the caller's tool configuration for delegation admission. */
+  findToolGrant(profileId: number) {
+    const row = getUserSettingsDb().prepare(`SELECT mcp_enabled, mcp_scopes, tool_allowlist, generation_preset_ids
+      FROM llm_chat_profiles WHERE id = ? AND is_enabled = 1`).get(profileId) as
+      Pick<ProfileRow, 'mcp_enabled' | 'mcp_scopes' | 'tool_allowlist' | 'generation_preset_ids'> | undefined
+    if (!row) return null
+    const allowlist = parseJsonArray(row.tool_allowlist)
+    return { mcpEnabled: row.mcp_enabled === 1, mcpScopes: parseScopes(row.mcp_scopes),
+      toolAllowlist: allowlist ? allowlist.filter((name): name is string => typeof name === 'string') : null,
+      generationPresetIds: ChatGenerationPresetStore.existing(normalizeGenerationPresetIds(row.generation_preset_ids)) }
+  },
+
   /** A profile as it would be saved, without saving it (prompt preview of an unsaved draft). */
   draft(input: ChatProfileInput, profileId = 0): ChatProfile {
     const now = new Date().toISOString()
@@ -773,7 +805,7 @@ export const ChatProfileStore = {
       translation_slot_id, suggest_slot_id, suggest_profile_id, suggest_user_profile_id, suggest_enabled,
       reasoning_effort, reasoning_budget_tokens, temperature, max_tokens, context_turns, context_tokens, summary_enabled,
       lore_depth, author_note, appearance, avatar_hash, avatar_crop, background_hash, reference_hash, chat_style, block_ids,
-      mcp_enabled, mcp_scopes, tool_allowlist, allowed_group_keys, generation_preset_ids, allow_lore_proposals, page_assist, is_enabled, sort_order, created_date, updated_date,
+      mcp_enabled, mcp_scopes, tool_allowlist, allowed_group_keys, generation_preset_ids, allow_lore_proposals, agent_enabled, agent_description, page_assist, is_enabled, sort_order, created_date, updated_date,
       CASE WHEN avatar IS NOT NULL AND avatar != '' THEN 'present' ELSE NULL END AS avatar,
       CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image` : options.admin ? ADMIN_PROFILE_COLUMNS : '*'
     const rows = db.prepare(`

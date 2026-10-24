@@ -10,6 +10,7 @@ import { OwnedLorebookStore } from './chatLorebookFiles'
 import { ChatProposalStore } from './chatProposals'
 import { forgetThreadFileChanges } from './chatFileChanges'
 import { notifySemanticChange } from '../embeddings/semanticSignal'
+import { cancelAgentCallsForThread } from './chatAgentCalls'
 
 export type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
 import type { ChatToolCall as CodexChatToolCall } from '@conai/shared'
@@ -500,6 +501,7 @@ export const CodexChatStore = {
   deleteThread(threadId: number) {
     const db = getUserSettingsDb()
     db.transaction(() => {
+      cancelAgentCallsForThread(threadId)
       db.prepare('DELETE FROM codex_chat_messages WHERE thread_id = ?').run(threadId)
       db.prepare('DELETE FROM chat_group_members WHERE thread_id = ?').run(threadId)
       ChatSummaryStore.clear(threadId)
@@ -581,9 +583,9 @@ export const CodexChatStore = {
     const db = getUserSettingsDb()
     const args = [source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? Number.MAX_SAFE_INTEGER, before, MESSAGE_WHITESPACE]
     const where = 'thread_id = ? AND id != ? AND id <= ? AND id < ? AND length(trim(content, ?)) > 0'
-    const messages = db.prepare(`SELECT role, content FROM codex_chat_messages WHERE ${where} ORDER BY id DESC LIMIT ?`)
-      .all(...args, limit) as Array<Pick<CodexChatMessageRecord, 'role' | 'content'>>
-    return { messages: messages.reverse() }
+    const messages = db.prepare(`SELECT role, content, routing FROM codex_chat_messages WHERE ${where} ORDER BY id DESC LIMIT ?`)
+      .all(...args, limit) as Array<Pick<CodexChatMessageRecord, 'role' | 'content'> & { routing: string | null }>
+    return { messages: messages.reverse().map(message => ({ ...message, routing: parseMessageRouting(message.routing) })) }
   },
 
   /** Session outcomes need forty assistant IDs/tool records, never transcript bodies or alternatives. */
@@ -854,7 +856,7 @@ export const CodexChatStore = {
     return true
   },
 
-  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'display_content' | 'tool_calls' | 'status' | 'error' | 'flags' | 'mediaAttachments' | 'routing'> & { speaker_profile_id?: number | null; finish_reason?: string | null }, fileIds: string[] = []) {
+  addMessage(message: Pick<CodexChatMessageRecord, 'thread_id' | 'role' | 'content' | 'display_content' | 'tool_calls' | 'status' | 'error' | 'flags' | 'mediaAttachments' | 'routing'> & { speaker_profile_id?: number | null; finish_reason?: string | null }, fileIds: string[] = [], options: { notify?: boolean } = {}) {
     const db = getUserSettingsDb()
     const saved = db.transaction(() => {
       const thread = CodexChatStore.findThreadById(message.thread_id)
@@ -882,12 +884,16 @@ export const CodexChatStore = {
       if (message.role === 'user') CodexChatStore.markRead(message.thread_id, Number(result.lastInsertRowid))
       return { id: Number(result.lastInsertRowid), accountId: thread.account_id }
     }).immediate()
-    notifySemanticChange('message')
-    // A new reply refreshes the owner's unread marks in every tab, wherever it was written.
-    if (message.role === 'assistant') {
-      publishRuntimeEvent({ name: 'chat.message.created', topic: 'generation-queue', visibility: 'owner', accountId: saved.accountId,
-        payload: { threadId: message.thread_id, messageId: saved.id, requestedByAccountId: saved.accountId } })
-    }
+    if (options.notify !== false) CodexChatStore.notifyMessageAdded({ ...saved, threadId: message.thread_id, role: message.role })
     return saved.id
+  },
+
+  /** Owners of an outer transaction suppress addMessage notifications and call this only after commit. */
+  notifyMessageAdded(message: { id: number; threadId: number; accountId: number | null; role: CodexChatMessageRecord['role'] }) {
+    notifySemanticChange('message')
+    if (message.role === 'assistant') {
+      publishRuntimeEvent({ name: 'chat.message.created', topic: 'generation-queue', visibility: 'owner', accountId: message.accountId,
+        payload: { threadId: message.threadId, messageId: message.id, requestedByAccountId: message.accountId } })
+    }
   },
 }

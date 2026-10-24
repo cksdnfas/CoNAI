@@ -29,6 +29,7 @@ import { memberAliases } from '@conai/shared'
 
 function speakerName(message: CodexChatMessageRecord, names: Map<number, string>, user: ChatUserPersona) {
   if (message.role === 'user') return user.name
+  if (message.routing?.agent) return `${message.routing.agent.name} (agent)`
   return (message.speaker_profile_id !== null && names.get(message.speaker_profile_id)) || '(나간 참가자)'
 }
 

@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
 import { Panel } from '@/components/ui/panel'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
+import { RowGroup } from '@/components/ui/row-group'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { ChatProfileSummary, CodexChatThreadSummary } from '@/lib/api-codex-chat'
@@ -29,7 +30,8 @@ export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
  * The chats: pinned first, then the latest activity (as the server lists them). Each row shows the face it talks to,
  * its title, when it last moved, how many replies are unread and (roomy rows) the latest message or the unsent text. Branches kept before an edit
  * fold under the chat they came from; archived chats wait behind the archive row at the end. Rooms an automation made
- * for itself (board calls, routines, workflow nodes) sit on their own 자동화 tab, shown once there is one.
+ * for itself (board calls, routines, workflow nodes) sit on their own 자동화 tab, shown once there is one; agent rooms
+ * are grouped under their own heading there.
  * `dense` is the page's side column; the panel's list screen uses roomier rows.
  *
  * Several chats are picked with "Select" in the row menu; while any is picked the faces turn into checks, a row click
@@ -243,6 +245,17 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
     return top.map((entry) => render(entry))
   }
 
+  /** The 자동화 tab files agent rooms under their own heading first, then the other automation rooms under theirs. */
+  const grouped = (entries: CodexChatThreadSummary[]) => {
+    const agents = shownTab === 'automation' ? entries.filter((entry) => entry.automation === 'agent') : []
+    if (agents.length === 0) return section(entries)
+    const others = entries.filter((entry) => entry.automation !== 'agent')
+    return <div className="space-y-6">
+      <RowGroup heading={t({ ko: '에이전트', en: 'Agents' })}>{section(agents)}</RowGroup>
+      {others.length ? <RowGroup heading={t({ ko: '다른 자동화', en: 'Other automation' })}>{section(others)}</RowGroup> : null}
+    </div>
+  }
+
   const archiveShown = archiveOpen || archived.some((entry) => entry.id === activeThreadId)
   const hasArchive = shownTab === 'automation' ? activePage.hasArchivedAutomation : activePage.hasArchivedChats
   // "All" is every chat the list shows now (folded branches included; the archive only while it is open).
@@ -280,12 +293,12 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
       />
     ) : null}
     {query.trim() ? <p className="px-3 py-1 text-xs text-muted-foreground">{t({ ko: '방 이름 · 캐릭터', en: 'Rooms · characters' })}</p> : null}
-    {section(listed)}
+    {grouped(listed)}
     {parents.isError ? <Button variant="ghost" size="xs" onClick={() => void parents.refetch()}>{t({ ko: '분기 원본 다시 불러오기', en: 'Retry branch parents' })}</Button> : null}
     <ChatRoomPageMore page={activePage} />
     {hasArchive ? <>
       {foldRow('archive', archiveShown, () => setArchiveOpen((current) => !current), <Archive className="size-3.5" />, t({ ko: '보관된 채팅', en: 'Archived chats' }))}
-      {archiveShown ? <>{section(archived)}<ChatRoomPageMore page={archivePage} /></> : null}
+      {archiveShown ? <>{grouped(archived)}<ChatRoomPageMore page={archivePage} /></> : null}
     </> : null}
     {selecting ? (
       <Panel treatment="floating" padding="toolbar" className="sticky bottom-2 z-10 mx-1 mt-2 flex items-center gap-0.5">

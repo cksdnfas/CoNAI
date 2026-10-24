@@ -1027,6 +1027,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['suggest_user_profile_id', 'INTEGER'],
     // The model may propose chat lorebook entries (save_lore).
     ['allow_lore_proposals', 'INTEGER NOT NULL DEFAULT 1'],
+    ['agent_enabled', 'INTEGER NOT NULL DEFAULT 0'],
+    ['agent_description', "TEXT NOT NULL DEFAULT ''"],
     // JSON [{ id, write }]: file store folders and files the profile's characters may open in any chat of their owner.
     ['linked_files', 'TEXT'],
     // Judge preset (chat_judge_presets; no foreign key, like the slots) and an override of its judge connection.

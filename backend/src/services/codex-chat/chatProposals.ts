@@ -1,5 +1,6 @@
 import type { ChatExecutionContext, ChatProposal } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { isAgentRoom } from './chatRoomWake'
 
 /** A proposal before it is stored: the shared contract without the row id. */
 export type NewChatProposal = ChatProposal extends infer P ? (P extends { id: number } ? Omit<P, 'id'> : never) : never
@@ -44,6 +45,7 @@ function toProposal(row: ProposalRow): ChatProposal {
 export const ChatProposalStore = {
   /** Stores a proposal for the reply it was made in; `seq` is its order within that reply. */
   add(context: ChatExecutionContext, proposal: NewChatProposal): ChatProposal {
+    if (isAgentRoom(context.threadId)) throw new Error('Agent rooms cannot create review cards. Report what needs review in your final result instead.')
     if (!context.replyId) throw new Error('Proposals need an active chat reply.')
     const db = table()
     const id = db.transaction(() => {

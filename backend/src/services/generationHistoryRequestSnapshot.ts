@@ -57,6 +57,11 @@ export function sanitizeSnapshotValue(value: unknown, depth = 0): unknown {
       if (depth === 0 && OMITTED_TOP_LEVEL_PAYLOAD_KEYS.has(key)) {
         continue;
       }
+      // Pre-upgrade Codex/NAI jobs can contain small raw base64 strings without a data URL prefix.
+      if (depth === 0 && (key === 'image' || key === 'mask') && typeof entry === 'string') {
+        sanitized[key] = null;
+        continue;
+      }
       sanitized[key] = sanitizeSnapshotValue(entry, depth + 1);
     }
     return sanitized;

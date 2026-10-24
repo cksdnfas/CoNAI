@@ -270,6 +270,15 @@ function routineInstruction(text: string) {
   return (start >= 0 ? text.slice(start + 2) : text).trim()
 }
 
+/**
+ * The thin line's label per wake source (anything else: workflow). Keyed by string: `agent_result` (an agent's result
+ * arriving in the caller room) is not in the shared source union yet.
+ */
+const ROUTINE_SOURCE_LABELS: Record<string, { ko: string; en: string }> = {
+  routine: { ko: '루틴', en: 'Routine' }, post: { ko: '게시판', en: 'Posts' }, plugin: { ko: '플러그인', en: 'Plugin' },
+  agent: { ko: '에이전트 요청', en: 'Agent request' }, agent_result: { ko: '에이전트 결과 도착', en: 'Agent result' },
+}
+
 /** A wake an automation (a routine or a workflow) sent: one thin line, the instruction on hover. */
 export function ChatRoutineEventLine({ routing, text }: { routing: ChatRoutineRouting; text: string }) {
   const { t } = useI18n()
@@ -278,7 +287,7 @@ export function ChatRoutineEventLine({ routing, text }: { routing: ChatRoutineRo
     <div className="flex items-center gap-3 py-1 text-xs text-muted-foreground">
       <span className="h-px flex-1 bg-line" />
       <span className="min-w-0 truncate">
-        {routing.source === 'routine' ? t({ ko: '루틴', en: 'Routine' }) : routing.source === 'post' ? t({ ko: '게시판', en: 'Posts' }) : routing.source === 'plugin' ? t({ ko: '플러그인', en: 'Plugin' }) : t({ ko: '워크플로', en: 'Workflow' })}
+        {t(ROUTINE_SOURCE_LABELS[routing.source] ?? { ko: '워크플로', en: 'Workflow' })}
         {routing.name ? ` · ${routing.name}` : ''}
       </span>
       <span className="h-px flex-1 bg-line" />

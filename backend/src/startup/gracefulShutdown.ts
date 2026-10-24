@@ -60,6 +60,8 @@ export function createProductionGracefulShutdownDependencies(): GracefulShutdown
       return RuntimeEventBroadcaster.shutdown();
     },
     stopGenerationQueue: async () => {
+      const { ChatAgentRunner } = await import('../services/codex-chat/chatAgentCalls');
+      ChatAgentRunner.stop();
       const { ChatGenerationReactionService } = await import('../services/codex-chat/chatGenerationReactions');
       await ChatGenerationReactionService.stop();
       const { ChatGenerationPromptingService } = await import('../services/codex-chat/chatGenerationPrompting');

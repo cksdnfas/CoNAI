@@ -156,7 +156,7 @@ export class FileSaver {
       if (options?.verifySavedFile) {
         // Never expose unverified output to the recursive uploads watcher.
         const relativeTemp = path.relative(runtimePaths.uploadsDir, runtimePaths.tempDir);
-        if (!relativeTemp.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeTemp)) {
+        if (relativeTemp !== '..' && !relativeTemp.startsWith(`..${path.sep}`) && !path.isAbsolute(relativeTemp)) {
           throw new Error('Verified image staging must be outside the uploads directory');
         }
         await fs.promises.mkdir(runtimePaths.tempDir, { recursive: true });

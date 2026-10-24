@@ -6,7 +6,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { z } from 'zod'
 import { resolveChatPageCommand } from '../services/codex-chat/chatPageBridge'
 import { ChatTaskRunner, ChatTaskStore } from '../services/codex-chat/chatTasks'
-import { automationRoomKinds } from '../services/codex-chat/chatRoomWake'
+import { automationRoomKinds, chatUnreadCount } from '../services/codex-chat/chatRoomWake'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
@@ -94,6 +94,8 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null, hidden?
     id: profile.id,
     name: profile.name,
     tagline: profile.tagline,
+    agentEnabled: profile.agentEnabled,
+    agentDescription: profile.agentDescription,
     model: effectiveModelOf(profile),
     modelLabel: modelLabelOf(profile),
     ...profileAssetFields(profile, canViewImages, hidden),
@@ -351,13 +353,7 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
 
 /** The shell badge is an account-scoped aggregate, not the sum of whichever directory pages are loaded. */
 router.get('/threads/unread-count', requireChatAccess, (req: Request, res: Response) => {
-  const { count } = getUserSettingsDb().prepare(`
-    SELECT COUNT(m.id) AS count FROM codex_chat_threads t
-    JOIN codex_chat_messages m ON m.thread_id = t.id AND m.role = 'assistant'
-      AND m.id > COALESCE(t.last_read_message_id, 0)
-    WHERE t.account_id IS ? AND t.archived = 0
-  `).get(getRequesterAccountId(req)) as { count: number }
-  res.json({ success: true, data: count })
+  res.json({ success: true, data: chatUnreadCount(getRequesterAccountId(req)) })
 })
 
 /** POST /api/codex-chat/threads/:threadId/read — `{ messageId }`: the owner has seen the chat up to this message. */
@@ -986,7 +982,11 @@ router.get('/admin/tools', requireAdmin, asyncHandler(async (req: Request, res: 
   try {
     res.json({
       success: true,
-      data: bridge.tools.filter((tool) => !CHAT_VISION_BUILTIN_TOOLS.has(tool.function.name)).map((tool) => ({ name: tool.function.name, description: tool.function.description ?? '', scope: getMcpToolScope(tool.function.name) })),
+      data: [
+        ...bridge.tools.filter((tool) => !CHAT_VISION_BUILTIN_TOOLS.has(tool.function.name)).map((tool) => ({ name: tool.function.name, description: tool.function.description ?? '', scope: getMcpToolScope(tool.function.name) })),
+        // Picker grouping only: delegation still follows its own nonempty-grant/allowlist checks at execution.
+        { name: 'call_agent', description: 'Delegate work to another usable profile agent. Results arrive in this chat; notify posts only, react also requests a reaction. Requires enabled tools and is unavailable in agent rooms, board calls and public pages.', scope: 'read' },
+      ],
     })
   } finally {
     await bridge.close()

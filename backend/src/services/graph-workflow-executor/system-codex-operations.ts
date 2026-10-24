@@ -344,7 +344,7 @@ export async function executeCodexImageGenerationNode(
     operation,
     image: inputImage ?? undefined,
     mask: maskImage ?? undefined,
-    references: parseJsonishInput(resolvedInputs.references, undefined),
+    references: parseJsonishInput(resolvedInputs.references, undefined) ?? undefined,
     preserve: resolvedInputs.preserve === '' ? undefined : resolvedInputs.preserve,
     imageSaveOptions,
   })

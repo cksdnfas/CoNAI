@@ -430,7 +430,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const handleAlternative = useCallback((id: number, index: number) => { if (!isBusy) chooseAlternative({ id, index }) }, [chooseAlternative, isBusy])
   const setDraftReply = chat.setDraftReply
   const quoteOf = useCallback((message: CodexChatMessage): ChatReplyQuote => {
-    const name = message.role === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : (message.speaker_profile_id ? profilesById.get(message.speaker_profile_id)?.name : profile?.name) ?? t({ ko: '나간 참가자', en: 'Former member' })
+    const name = message.role === 'user' ? userSpeaker?.name ?? t({ ko: '사용자', en: 'User' }) : (message.routing?.agent?.name ?? (message.speaker_profile_id ? profilesById.get(message.speaker_profile_id)?.name : profile?.name)) ?? t({ ko: '나간 참가자', en: 'Former member' })
     const hash = message.tool_calls.flatMap((call) => call.compositeHashes)[0]
     const media = message.mediaAttachments?.[0] ?? (hash ? { compositeHash: hash, name: t({ ko: '이미지', en: 'Image' }), mimeType: null } : undefined)
     return { messageId: message.id, role: message.role, speakerProfileId: message.speaker_profile_id ?? (message.role === 'assistant' ? profile?.id ?? null : null), speakerName: name, excerpt: message.content.trim().slice(0, 400) || message.attachments?.map((file) => file.name).join(', ') || t({ ko: '이미지·도구 결과', en: 'Image / tool result' }), alternative: message.active_alternative, media }
@@ -454,11 +454,13 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const lastMessage = messages[messages.length - 1]
   // Group rooms: only API LLM members' replies can be regenerated.
   const lastReplyByCodex = isGroup && lastMessage?.speaker_profile_id != null && profilesById.get(lastMessage.speaker_profile_id)?.engine === 'codex'
-  const lastReplyId = lastMessage?.role === 'assistant' && messages.some((message) => message.role === 'user') && !lastReplyByCodex ? lastMessage.id : null
+  // A delegated agent's result is the agent's, not the room's: it is never regenerated or hand-edited here.
+  const lastReplyId = lastMessage?.role === 'assistant' && !lastMessage.routing?.agent && messages.some((message) => message.role === 'user') && !lastReplyByCodex ? lastMessage.id : null
   // Hand edits of replies (API LLM: the chat's own, or an API LLM member's in a room) and continuing a cut reply
   // (API LLM direct chats); any chat can branch.
   const directLlm = !isCodexThread && !isGroup
   const canEditReply = useCallback((message: CodexChatMessage) => {
+    if (message.routing?.agent) return false
     if (!isGroup) return directLlm
     const speaker = message.speaker_profile_id != null ? profilesById.get(message.speaker_profile_id) : undefined
     return speaker?.engine === 'llm' || speaker?.engine === 'claude'
@@ -990,7 +992,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           </div> : null}
           {pendingOpening(pendingChat.greeting.after, 'after')}
         </> : null}
-        <ChatSavedMessages messages={visibleMessages} contextMessages={messages} segments={threadQuery.data?.summarySegments} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
+        <ChatSavedMessages messages={visibleMessages} contextMessages={messages} segments={threadQuery.data?.summarySegments} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} agentSpeakerOf={speakerOf} mentions={isGroup ? memberNames : undefined} />
         {liveTurn && liveTurn.threadId === activeThreadId ? (
           <ChatLiveMessage turn={liveTurn} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         ) : null}

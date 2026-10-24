@@ -123,7 +123,7 @@ export async function materializeLibraryImageInputs(
   for (const port of exposedInputs) {
     // Codex/system Codex nodes use an ordered JSON references port with the same data_url field as the API.
     if ((engineType === 'codex' || engineType === 'system') && port.key === 'references') {
-      const references = parseJsonishInput(inputs[port.key], undefined)
+      const references = parseJsonishInput(inputs[port.key], undefined) ?? undefined
       const resolved = []
       if (Array.isArray(references)) {
         if (references.length + Number(Boolean(inputs.image)) + Number(Boolean(inputs.mask)) > 5) throw new WorkflowInputImageError('Codex accepts at most 5 attachments including source and mask')

@@ -4,7 +4,7 @@ import type { ChatProfile } from '../codex-chat/chatProfiles'
 import { CodexChatStore } from '../codex-chat/codexChatStore'
 import { ensureAutomationRoom, wakeChatRoom } from '../codex-chat/chatRoomWake'
 import { resolveProfileModel } from '../codex-chat/chatModelRoles'
-import { attachJobResults } from '../codex-chat/codexChatMedia'
+import { automationResults } from '../codex-chat/chatAutomationResults'
 import { PluginError, sha256 } from './pluginStore'
 import { ChatResearchExecution, requireResearchProfile } from '../codex-chat/chatResearch'
 import { buildChatProfileReplyMessages } from '../codex-chat/chatProfileReply'
@@ -21,22 +21,8 @@ const running = new Set<string>()
 export function refreshPluginProfileRun(run: PluginProfileRun, requester: McpRequester): PluginProfileRun {
   if (!CodexChatStore.findThread(run.threadId, requester.accountId)) throw new PluginError('프로필 실행 대화를 찾을 수 없어.', 404)
   if (run.research) requireRequesterPermission(requester, 'posts.view')
-  const tools: PluginProfileRun['tools'] = []
-  let bytes = 0, toolsTruncated = false
   const replies = run.messageIds.flatMap(id => { const reply = CodexChatStore.findMessage(run.threadId, id); return reply ? [reply] : [] })
-  for (const reply of attachJobResults(replies).messages) {
-    for (const call of reply.tool_calls) {
-      const entry = { id: call.id.slice(0, 160), name: call.tool.slice(0, 128), status: call.status,
-        summary: (call.summary ?? '').slice(0, 300), output: (call.output ?? '').slice(0, 600),
-        historyIds: call.historyIds.slice(0, 20), compositeHashes: call.compositeHashes.slice(0, 20),
-        audioCandidateIds: (call.audioCandidateIds ?? []).slice(0, 20), pendingJobIds: (call.pendingJobIds ?? []).slice(0, 20),
-        proposalId: call.proposal?.id ?? null, failedJobs: (call.failedJobs ?? []).slice(0, 20).map(job => ({ jobId: job.jobId, message: job.failureMessage.slice(0, 300) })),
-        ...(call.deferred ? { deferred: { state: call.deferred.state, error: call.deferred.error?.slice(0, 300) ?? null } } : {}) }
-      const size = Buffer.byteLength(JSON.stringify(entry))
-      if (tools.length >= 32 || bytes + size > 24 * 1024) { toolsTruncated = true; continue }
-      tools.push(entry); bytes += size
-    }
-  }
+  const { tools, summaryToolsTruncated: toolsTruncated } = automationResults(replies)
   return { ...run, tools, toolsTruncated }
 }
 

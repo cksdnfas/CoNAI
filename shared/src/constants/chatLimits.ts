@@ -17,7 +17,7 @@ export const CHAT_PROFILE_LIMITS = {
 
 /** Character limits (array limits are named explicitly); shared by profile writes, card import and editors. */
 export const CHAT_PROFILE_TEXT_LIMITS = {
-  name: 60, tagline: 200, text: 20_000, authorNote: 4000,
+  name: 60, tagline: 200, agentDescription: 300, text: 20_000, authorNote: 4000,
   sections: 30, sectionTitle: 80, alternateGreetings: 100, openingHistory: 100,
   translationInstructions: 4000, summaryPrompt: 4000, extraParams: 20_000,
 } as const
