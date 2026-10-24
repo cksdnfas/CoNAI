@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { isChatMcpSource, type McpRequestContext } from '../context';
+import { resolveMcpInlineWaitMs, type McpRequestContext } from '../context';
+import { runToolResult as run } from '../toolResults';
 import { McpArtifactService } from '../../services/mcpArtifactService';
 import { saveAudioEdit } from '../../services/audio/audioEdit';
 import { AudioServiceError, deleteAudioGroupCandidates } from '../../services/audio/audioService';
@@ -16,21 +17,9 @@ import { waitForRuntimeJob } from '../../services/sprite/spriteService';
 import { candidateSummary } from './audioTools';
 
 /**
- * Audio edits, cleanup of unselected takes and exports for agents. Review (selected / rejected) stays with people;
- * the cleanup tool can never remove a selected take.
+ * Audio edits, cleanup of unselected takes and exports for agents. Reviews use the candidate-review tool;
+ * the cleanup tool never removes a selected take.
  */
-
-function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
-}
-
-function errorResult(error: unknown) {
-  return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
-}
-
-async function run(action: () => unknown) {
-  try { return textResult(await action()); } catch (error) { return errorResult(error); }
-}
 
 const id = z.string().trim().min(1).max(64);
 
@@ -54,11 +43,6 @@ function ownerOf(context: McpRequestContext): AudioExportOwner {
 async function exportDownload(context: McpRequestContext, exportId: string, downloadPath: string) {
   if (!context.baseUrl) return { download_path: downloadPath };
   return { artifact: await McpArtifactService.createAudioExportDescriptor(exportId, context.baseUrl, context.requester) };
-}
-
-function waitBudgetMs(context: McpRequestContext, seconds: number | undefined) {
-  const requested = seconds ?? 60;
-  return Math.max(0, Math.min(requested, isChatMcpSource(context.source) ? 30 : 120)) * 1000;
 }
 
 async function describeExportJob(context: McpRequestContext, jobId: string) {
@@ -104,7 +88,7 @@ export function registerAudioEditExportTools(server: McpServer, context: McpRequ
       return { manifest, file_name: result.file_name, size_bytes: result.size_bytes, ...(await exportDownload(context, result.export_id, result.download_path)) };
     }
     const job = startAudioExportJob({ projectId: project_id, groupId: audio_group_id ?? null, options: resolved, owner: ownerOf(context) }, plan.count);
-    await waitForRuntimeJob(job.jobId, waitBudgetMs(context, wait_seconds));
+    await waitForRuntimeJob(job.jobId, resolveMcpInlineWaitMs(context.source, wait_seconds));
     return { manifest, ...(await describeExportJob(context, job.jobId)) };
   }));
 

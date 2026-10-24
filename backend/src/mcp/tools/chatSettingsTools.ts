@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { chatSettingsView, proposeChatSettings } from '../../services/codex-chat/chatSettingsProposals';
 import type { McpRequestContext } from '../context';
+import { errorResult, textResult } from '../toolResults';
 
 export const GET_CHAT_SETTINGS_TOOL = 'get_chat_settings';
 export const PROPOSE_CHAT_SETTINGS_TOOL = 'propose_chat_settings';
@@ -34,9 +35,9 @@ export function registerChatSettingsTools(server: McpServer, context: McpRequest
     inputSchema: z.object({}),
   }, async () => {
     try {
-      return { content: [{ type: 'text' as const, text: JSON.stringify(chatSettingsView(context.chatContext!.threadId)) }] };
+      return textResult(chatSettingsView(context.chatContext!.threadId));
     } catch (error) {
-      return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
+      return errorResult(error);
     }
   });
   server.registerTool(PROPOSE_CHAT_SETTINGS_TOOL, {
@@ -53,9 +54,9 @@ export function registerChatSettingsTools(server: McpServer, context: McpRequest
       if (!chatContext?.replyId) throw new Error('Proposals need an active chat reply.');
       const proposal = proposeChatSettings(chatContext, args);
       const changed = proposal.kind === 'chat_settings' ? Object.keys(proposal.patch) : [];
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ proposalId: proposal.id, changed, note: 'The card is shown to the user; nothing is saved until they press 저장.' }) }], structuredContent: { proposal } };
+      return textResult({ proposalId: proposal.id, changed, note: 'The card is shown to the user; nothing is saved until they press 저장.' }, { structuredContent: { proposal } });
     } catch (error) {
-      return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
+      return errorResult(error);
     }
   });
 }

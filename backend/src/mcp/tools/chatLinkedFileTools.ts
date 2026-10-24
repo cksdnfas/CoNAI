@@ -5,6 +5,7 @@ import { CodexChatStore } from '../../services/codex-chat/codexChatStore';
 import { editLinked, LINKED_TOOLS, LinkedFileError, listLinked, placesForRequest, readLinked, searchLinked, writeLinked, type LinkedPlace } from '../../services/codex-chat/chatLinkedFiles';
 import { MAX_TEXT_DOCUMENT_BYTES } from '../../services/fileStoreService';
 import { fileWriteSource, type McpRequestContext } from '../context';
+import { errorResult } from '../toolResults';
 
 /**
  * The chat's linked files (see chatLinkedFiles), scoped like the room tools: they reach only the folders and files
@@ -30,7 +31,7 @@ export function registerChatLinkedFileTools(server: McpServer, context: McpReque
     try {
       return { content: [{ type: 'text' as const, text: await action() }] };
     } catch (error) {
-      return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
+      return errorResult(error);
     }
   };
   // "path" is a refused MCP argument name (server file paths), hence "target".

@@ -33,10 +33,6 @@ export function getAudioDb(): Database.Database {
   return audioDb ?? initializeAudioDb();
 }
 
-export function isAudioDbOpen(): boolean {
-  return audioDb !== null;
-}
-
 /**
  * Whether there is an audio workspace to maintain. Maintenance passes (backup, orphan sweep, verification, retention)
  * check this first so they never create an empty audio.db, or hold one open, in a process that has none.

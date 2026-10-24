@@ -10,17 +10,10 @@ import { enqueueMcpGenerationJob } from './generationJobTools';
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles';
 import { requireMcpToolAccess } from '../toolAccess';
 import { requireRequesterPermission } from '../../middleware/featureAccess';
+import { errorResult, textResult } from '../toolResults';
 
 import { buildChatGenerationPresetJob, CHAT_NAI_PAYLOAD_MAX_BYTES } from '../../services/codex-chat/chatGenerationPayload';
 export { buildChatGenerationPresetJob, CHAT_NAI_REFERENCE_MAX_BYTES, CHAT_NAI_PAYLOAD_MAX_BYTES } from '../../services/codex-chat/chatGenerationPayload';
-
-function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
-}
-
-function errorResult(message: string) {
-  return { isError: true, content: [{ type: 'text' as const, text: message }] };
-}
 
 function describe(preset: ChatGenerationPreset, body: string) {
   return [

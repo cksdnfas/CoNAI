@@ -2,7 +2,7 @@ import { validateChatPageArguments, type ChatPageAction, type ChatPageData, type
 import type { TranslationInput } from '@/i18n'
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { normalizeWallpaperAnimationEasing } from './wallpaper-widget-utils'
-import { normalizeWallpaperBackground, normalizeWallpaperWidgetStyle, resolveWallpaperPresetOptions, WALLPAPER_DEFAULT_PRESET_OPTIONS } from './wallpaper-layout-utils'
+import { normalizeWallpaperBackground, normalizeWallpaperWidgetStyle, resolveWallpaperPresetOptions, WALLPAPER_DEFAULT_PRESET_OPTIONS, WALLPAPER_HEX_COLOR } from './wallpaper-layout-utils'
 import { getWallpaperWidgetDefinition, listWallpaperWidgetDefinitions, WALLPAPER_DEFAULT_WIDGET_STYLE } from './wallpaper-widget-registry'
 import { listWallpaperCanvasPresets, WALLPAPER_CANVAS_MAX, WALLPAPER_CANVAS_MIN, WALLPAPER_CUSTOM_CANVAS_ID } from './wallpaper-canvas-presets'
 import { WALLPAPER_TEMPLATES } from './wallpaper-templates'
@@ -14,7 +14,6 @@ import { isWallpaperPreviewableImageWidget, type WallpaperBackground, type Wallp
  * #RRGGBB, an empty string clears a color or a time window, and every value is normalized like a stored preset.
  */
 
-const HEX = /^#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?$/
 const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/
 const FONTS = ['inherit', 'sans', 'serif', 'mono', 'display']
 
@@ -152,7 +151,7 @@ export function describeWallpaperWidgetTypes(t: (input: TranslationInput) => str
 
 function requireColor(value: string, key: string): string | null {
   if (value === '') return null
-  if (!HEX.test(value)) throw new Error(`${key}: 색은 #RRGGBB 또는 #RRGGBBAA 형식이어야 해.`)
+  if (!WALLPAPER_HEX_COLOR.test(value)) throw new Error(`${key}: 색은 #RRGGBB 또는 #RRGGBBAA 형식이어야 해.`)
   return value
 }
 

@@ -54,16 +54,7 @@ interface WallpaperMotionEasingEditorFieldProps {
   onEasingChange: (nextValue: WallpaperAnimationEasing) => void
 }
 
-interface WallpaperPreviewOpenAnimationEditorFieldProps {
-  scalePercent?: number
-  durationMs?: number
-  easing: WallpaperAnimationEasing | undefined
-  onScalePercentChange: (nextValue: number) => void
-  onDurationMsChange: (nextValue: number) => void
-  onEasingChange: (nextValue: WallpaperAnimationEasing) => void
-}
-
-interface WallpaperPreviewCloseAnimationEditorFieldProps {
+interface WallpaperPreviewAnimationEditorFieldProps {
   scalePercent?: number
   durationMs?: number
   easing: WallpaperAnimationEasing | undefined
@@ -327,7 +318,7 @@ export function WallpaperPreviewOpenAnimationEditorField({
   onScalePercentChange,
   onDurationMsChange,
   onEasingChange,
-}: WallpaperPreviewOpenAnimationEditorFieldProps) {
+}: WallpaperPreviewAnimationEditorFieldProps) {
   const { t } = useI18n()
   const resolvedScalePercent = Math.min(100, Math.max(60, Math.round(scalePercent ?? 88)))
   const resolvedDurationMs = Math.min(1200, Math.max(80, Math.round(durationMs ?? 260)))
@@ -387,7 +378,7 @@ export function WallpaperPreviewCloseAnimationEditorField({
   onScalePercentChange,
   onDurationMsChange,
   onEasingChange,
-}: WallpaperPreviewCloseAnimationEditorFieldProps) {
+}: WallpaperPreviewAnimationEditorFieldProps) {
   const { t } = useI18n()
   const resolvedScalePercent = Math.min(100, Math.max(60, Math.round(scalePercent ?? 88)))
   const resolvedDurationMs = Math.min(1200, Math.max(80, Math.round(durationMs ?? 260)))

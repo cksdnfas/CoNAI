@@ -1,6 +1,6 @@
 export const SQLITE_BIND_BATCH_SIZE = 500
 
-export function chunkSqliteValues<T>(values: T[], chunkSize = SQLITE_BIND_BATCH_SIZE) {
+export function chunkSqliteValues<T>(values: readonly T[], chunkSize = SQLITE_BIND_BATCH_SIZE) {
   const chunks: T[][] = []
   for (let index = 0; index < values.length; index += chunkSize) {
     chunks.push(values.slice(index, index + chunkSize))

@@ -93,7 +93,7 @@ export function ensurePostsSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_post_comments_parent ON post_comments(parent_id);
     CREATE INDEX IF NOT EXISTS idx_post_comments_thread_page ON post_comments(post_id, parent_id, created_at DESC, id DESC);
 
-    -- Media a post or comment embeds, extracted from its body on save. file_owner_key: whose file store a file ref is in.
+    -- Media a post or comment embeds, extracted from its body on save. file_owner_key records provenance, not a file-access boundary.
     CREATE TABLE IF NOT EXISTS post_media_refs (
       post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
       owner_type TEXT NOT NULL CHECK (owner_type IN ('post', 'comment')),
@@ -312,7 +312,7 @@ export function ensurePostsSchema(db: Database.Database): void {
   const assessmentColumns = new Set((db.prepare('PRAGMA table_info(post_assessment_events)').all() as Array<{ name: string }>).map(column => column.name));
   for (const [name,definition] of Object.entries({event_kind:"TEXT NOT NULL DEFAULT 'assessment'",moderator_account_key:'TEXT',supersedes_event_id:'INTEGER REFERENCES post_assessment_events(id)',moderation_reason:'TEXT'}))
     if (!assessmentColumns.has(name)) db.exec(`ALTER TABLE post_assessment_events ADD COLUMN ${name} ${definition}`);
-  // Backfill known versions conservatively: only current server provenance or a real file in the post owner's store.
+  // Backfill known versions conservatively: only current server provenance or an existing shared-file record.
   const versions = db.prepare(`SELECT v.post_id,v.content_version,v.body,p.owner_account_id FROM post_knowledge_versions v
     JOIN posts p ON p.id=v.post_id WHERE NOT EXISTS(SELECT 1 FROM post_knowledge_media_refs r WHERE r.post_id=v.post_id AND r.content_version=v.content_version)`).all() as Array<{ post_id: number; content_version: number; body: string; owner_account_id: number | null }>;
   if (versions.length) {

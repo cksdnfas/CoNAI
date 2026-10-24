@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { PromptCollectionModel } from '../../models/PromptCollection';
 import { PromptGroupModel } from '../../models/PromptGroup';
 import { danbooruBrowserService, resolveDanbooruDbInfo } from '../../services/danbooruBrowserService';
+import { errorResult, textResult } from '../toolResults';
 
 async function searchDanbooru(query: string, section: 'all' | 'tags' | 'artists' | 'characters', page: number, limit: number, relatedTagLimit: number) {
   const available = resolveDanbooruDbInfo().available;
@@ -60,24 +61,16 @@ export function registerPromptTools(server: McpServer): void {
             break;
         }
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              prompts: result.prompts,
-              total: result.total,
-              page,
-              limit,
-              source,
-              ...(source !== 'stored' ? { danbooru: await searchDanbooru(query, danbooru_section, page, limit, related_tag_limit) } : {}),
-            }),
-          }],
-        };
+        return textResult({
+          prompts: result.prompts,
+          total: result.total,
+          page,
+          limit,
+          source,
+          ...(source !== 'stored' ? { danbooru: await searchDanbooru(query, danbooru_section, page, limit, related_tag_limit) } : {}),
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error searching prompts: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error searching prompts: ${(error as Error).message}`);
       }
     }
   );
@@ -92,17 +85,9 @@ export function registerPromptTools(server: McpServer): void {
       try {
         const prompts = PromptCollectionModel.getMostUsedPrompts(limit);
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify(prompts),
-          }],
-        };
+        return textResult(prompts);
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -118,17 +103,9 @@ export function registerPromptTools(server: McpServer): void {
       try {
         const groups = PromptGroupModel.findAllWithCounts(include_hidden, type);
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify(groups),
-          }],
-        };
+        return textResult(groups);
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );

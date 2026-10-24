@@ -13,7 +13,7 @@ const router = Router()
 router.use('/:id/artifacts', requireImagesView)
 
 function parseWorkflowId(req: Request) {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseInt(routeParam(req.params.id))
   return Number.isFinite(id) ? id : null
 }
 

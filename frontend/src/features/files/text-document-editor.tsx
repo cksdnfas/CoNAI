@@ -18,6 +18,7 @@ import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-tr
 import { useI18n } from '@/i18n'
 import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
+import { replaceExactText, type ExactTextEdit } from '@/lib/exact-text-edits'
 
 const ChatMarkdown = lazy(() => import('@/features/codex-chat/chat-markdown').then((module) => ({ default: module.ChatMarkdown })))
 const PlainTextEditor = lazy(() => import('@/components/common/plain-text-editor').then((module) => ({ default: module.PlainTextEditor })))
@@ -30,19 +31,6 @@ type MarkdownTab = 'write' | 'source' | 'preview'
  * a chunk of this size (files.doc_at moves it) changed with files.doc_edit.
  */
 const DOCUMENT_CHUNK = 2000
-type TextEdit = { find: string; replace: string; all?: boolean }
-
-/** Exact-text replacements in order; each `find` must appear once unless `all` is set, or nothing changes. */
-function replaceText(text: string, edits: TextEdit[]) {
-  let next = text
-  for (const edit of edits) {
-    const count = edit.find ? next.split(edit.find).length - 1 : 0
-    if (count === 0) throw new Error(`문서에 없는 글이야: ${edit.find.slice(0, 40)}`)
-    if (count > 1 && !edit.all) throw new Error(`문서에 ${count}번 나와. 앞뒤 글을 더 넣거나 all을 켜줘: ${edit.find.slice(0, 40)}`)
-    next = edit.all ? next.split(edit.find).join(edit.replace) : next.replace(edit.find, () => edit.replace)
-  }
-  return next
-}
 const isMarkdownName = (name: string) => /\.(md|markdown)$/i.test(name)
 
 /** A document the editor can open: `id` is stable per store (file id, project path), `name` the file name. */
@@ -146,9 +134,9 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
   const canSave = text !== null && !save.isPending && (file ? dirty : name.trim() !== '')
   const submit = () => { if (canSave && text !== null) save.mutate({ value: text }) }
 
-  // The connected chat reads and drafts the document the person opened here: it is already on their screen, and it
-  // leaves the connection when they close it. Connecting the files page alone never hands file contents to a chat
-  // (the server withholds the file-reading tools while a page is connected). Saving stays a review card.
+  // The connected chat reads and drafts the document opened here; that draft leaves the page context on close.
+  // The file browser does not attach unopened document bodies. Existing file-tool grants remain available;
+  // saving still goes through a review card.
   const [chunkOffset, setChunkOffset] = useState(0)
   const commitText = useChatDraftTransaction(text ?? '', setText)
   const textFits = text !== null && text.length <= DOCUMENT_CHUNK
@@ -187,7 +175,7 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
       assertCurrent()
       if (text === null) throw new Error('문서를 아직 불러오는 중이야.')
       if (id === 'files.doc_at') { setChunkOffset(Number(args.offset)); return }
-      if (id === 'files.doc_edit') return commitText(typeof args.whole === 'string' ? args.whole : replaceText(text, (Array.isArray(args.edits) ? args.edits : []) as TextEdit[]))
+      if (id === 'files.doc_edit') return commitText(typeof args.whole === 'string' ? args.whole : replaceExactText(text, (Array.isArray(args.edits) ? args.edits : []) as ExactTextEdit[], '문서'))
       if (id === 'files.doc_append') return commitText(text + String(args.text))
       if (id !== 'files.doc_save') throw new Error('문서 편집기에 없는 작업이야.')
       if (!canSave) throw new Error('저장할 내용이 없어.')

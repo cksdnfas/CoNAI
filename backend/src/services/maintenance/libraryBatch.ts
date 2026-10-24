@@ -1,4 +1,5 @@
 import type { RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner';
+import { chunkSqliteValues } from '../../utils/sqliteBatch';
 
 /**
  * Shared pacing for whole-library passes.
@@ -41,11 +42,7 @@ export async function pageBoundary(hooks: LibraryBatchHooks): Promise<void> {
 }
 
 export function chunkArray<T>(items: readonly T[], size: number = LIBRARY_BATCH_SIZE): T[][] {
-  const chunks: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    chunks.push(items.slice(index, index + size));
-  }
-  return chunks;
+  return chunkSqliteValues(items, size);
 }
 
 export function placeholders(count: number): string {

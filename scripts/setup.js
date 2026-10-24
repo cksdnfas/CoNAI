@@ -48,8 +48,7 @@ envFiles.forEach(({ source, target, name }) => {
 });
 
 console.log('\n📦 의존성 설치 가이드:');
-console.log('  1. 루트 디렉토리에서: npm install');
-console.log('  2. 전체 의존성 설치: npm run install:all');
+console.log('  루트 디렉토리에서: npm install (shared/backend/frontend 워크스페이스 포함)');
 console.log('\n🚀 개발 서버 실행:');
 console.log('  - 전체 실행: npm run dev');
 console.log('  - 프론트엔드만: npm run dev:frontend');

@@ -37,7 +37,7 @@ export function saveMediaRefs(postId: number, ownerType: 'post' | 'comment', own
   const db = getUserSettingsDb();
   const ownerKey = fileOwnerKey(actor.accountId);
   const fileExists = db.prepare(`SELECT 1 FROM stored_file_entries WHERE id = ? AND kind = 'file' AND deleted_at IS NULL`);
-  // A file already embedded by this post or comment keeps its store (an administrator may edit someone else's post).
+  // Existing embeds keep their original attribution when another account edits the post or comment.
   const previous = new Map((db.prepare(`SELECT ref, file_owner_key FROM post_media_refs WHERE owner_type = ? AND owner_id = ? AND kind = 'file'`)
     .all(ownerType, ownerId) as Array<{ ref: string; file_owner_key: string }>).map((row) => [row.ref, row.file_owner_key]));
   db.prepare('DELETE FROM post_media_refs WHERE owner_type = ? AND owner_id = ?').run(ownerType, ownerId);

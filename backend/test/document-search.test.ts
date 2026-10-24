@@ -25,7 +25,7 @@ function pdf(pages: string[]) {
   return Buffer.from(body)
 }
 
-test('document retrieval: PDF/XLSX extraction, permissions, resumable chunks and session references', { timeout: 120000 }, async t => {
+test('document retrieval: PDF/XLSX extraction, shared files, resumable chunks and session references', { timeout: 120000 }, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-documents-'))
   process.env.RUNTIME_BASE_PATH = root
   for (const part of ['DATABASE', 'SAVE', 'MODELS', 'TEMP', 'UPLOADS', 'LOGS']) process.env[`RUNTIME_${part}_DIR`] = path.join(root, part.toLowerCase())
@@ -76,8 +76,9 @@ test('document retrieval: PDF/XLSX extraction, permissions, resumable chunks and
     assert.equal(result.hits[0].location, 'Page 2')
     const reference = result.hits[0].read!
     assert.equal(reference.source, 'extracted')
-    assert.match((await FileStoreService.readText(owner, document.id, reference.offset, reference.limit, reference)).text, /Needle/)
-    await assert.rejects(FileStoreService.readText(fileOwnerKey(2), document.id, reference.offset, reference.limit, reference))
+    const passage = await FileStoreService.readText(owner, document.id, reference.offset, reference.limit, reference)
+    assert.match(passage.text, /Needle/)
+    assert.deepEqual(await FileStoreService.readText(fileOwnerKey(2), document.id, reference.offset, reference.limit, reference), passage)
     const excel = await FileStoreService.readText(owner, book.id)
     assert.equal(excel.extracted, true)
     assert.match(excel.text, /Sheet 예산/)
@@ -91,10 +92,11 @@ test('document retrieval: PDF/XLSX extraction, permissions, resumable chunks and
       offset = part.nextOffset
     }
     assert.equal(text, excel.text)
-    assert.equal((await searchStoredFiles(fileOwnerKey(2), 'Needle')).hits.length, 0)
-    await assert.rejects(FileStoreService.readText(fileOwnerKey(2), book.id))
+    assert.equal((await searchStoredFiles(fileOwnerKey(2), 'Needle')).hits[0].entry.id, document.id)
+    assert.deepEqual(await FileStoreService.readText(fileOwnerKey(2), book.id), excel)
     const { assertLinkedFiles } = await import('../src/services/codex-chat/chatLinkedFiles')
     assert.equal(assertLinkedFiles(owner, [{ id: document.id, write: false }, { id: book.id, write: false }]).length, 2)
+    assert.equal(assertLinkedFiles(fileOwnerKey(2), [{ id: document.id, write: false }, { id: book.id, write: false }]).length, 2)
   })
 
   await t.test('extracted HTML offsets address normalized text, and old references are refused after edits', async () => {
@@ -109,7 +111,7 @@ test('document retrieval: PDF/XLSX extraction, permissions, resumable chunks and
     await assert.rejects(FileStoreService.readText(owner, html.id, hit.read.offset, hit.read.limit, hit.read), /다시 검색/)
   })
 
-  await t.test('transient extraction errors back off, stop after three retries, and can be explicitly retried by the owner', async sub => {
+  await t.test('transient extraction errors stop after three retries and requesters share the manual retry cooldown', async sub => {
     const file = FileStoreService.writeText(owner, null, 'retry.txt', 'retry content')
     const target = FileStoreService.resolveFile(owner, file.id).filePath
     const open = fs.promises.open.bind(fs.promises)
@@ -133,11 +135,11 @@ test('document retrieval: PDF/XLSX extraction, permissions, resumable chunks and
     assert.equal(status().retry_after, null)
     await refreshFileSearchIndex(owner, file.id)
     assert.equal(reads, 4)
-    await assert.rejects(retryFileSearchIndex(fileOwnerKey(2), file.id))
-    await assert.rejects(retryFileSearchIndex(owner, file.id), /잠시 뒤/)
+    await assert.rejects(retryFileSearchIndex(fileOwnerKey(2), file.id), { status: 429 })
+    await assert.rejects(retryFileSearchIndex(owner, file.id), { status: 429 })
     failing = false
     db.prepare("UPDATE search_db.search_documents SET last_attempt = 0 WHERE source_id = ?").run(file.id)
-    await retryFileSearchIndex(owner, file.id)
+    await retryFileSearchIndex(fileOwnerKey(2), file.id)
     assert.equal(status().extraction_state, 'ready')
   })
 

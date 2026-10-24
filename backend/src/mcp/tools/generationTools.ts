@@ -28,6 +28,7 @@ import { isChatMcpSource } from '../context';
 import { COMFY_SEED_RULE } from '../../services/comfyui/seedControl';
 import { checkComfyWorkflowOnServers } from '../../services/comfyui/workflowServerCheck';
 import { ComfyUiWorkflowConversionError, describeComfyUiWorkflowConversionFailure, resolveApiWorkflowJson } from '../../services/comfyui/uiWorkflowConversion';
+import { errorResult, textResult } from '../toolResults';
 
 export function registerGenerationTools(server: McpServer, context: McpRequestContext): void {
   registerWorkflowListTools(server);
@@ -95,17 +96,9 @@ function registerWorkflowListTools(server: McpServer): void {
           };
         });
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify(summary),
-          }],
-        };
+        return textResult(summary);
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -120,17 +113,9 @@ function registerWorkflowListTools(server: McpServer): void {
       try {
         const servers = ComfyUIServerModel.findAll(active_only);
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify(servers),
-          }],
-        };
+        return textResult(servers);
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -245,12 +230,9 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
           requester: context.requester,
           context,
         });
-        return { content: [{ type: 'text' as const, text: JSON.stringify(await replaceOutputPathsWithArtifacts(result, context)) }] };
+        return textResult(await replaceOutputPathsWithArtifacts(result, context));
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `ComfyUI generation error: ${(error as Error).message}` }],
-        };
+        return errorResult(`ComfyUI generation error: ${(error as Error).message}`);
       }
     },
   );
@@ -294,24 +276,16 @@ function registerComfyGenerationTools(server: McpServer, context: McpRequestCont
           }
         }));
         const successCount = settled.filter(result => result.success).length;
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              success: successCount > 0,
-              totalServers: activeServers.length,
-              successCount,
-              failCount: activeServers.length - successCount,
-              workflow: workflow.name,
-              results: settled,
-            }),
-          }],
-        };
+        return textResult({
+          success: successCount > 0,
+          totalServers: activeServers.length,
+          successCount,
+          failCount: activeServers.length - successCount,
+          workflow: workflow.name,
+          results: settled,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `ComfyUI parallel generation error: ${(error as Error).message}` }],
-        };
+        return errorResult(`ComfyUI parallel generation error: ${(error as Error).message}`);
       }
     },
   );
@@ -329,65 +303,56 @@ function registerWorkflowDetailTools(server: McpServer): void {
         const workflow = WorkflowModel.findByIdIncludingDeleted(workflow_id);
         if (!workflow || workflow.deleted_at) {
           const reference = HistoryQueryRepository.findWorkflowReference(workflow_id);
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: !workflow && !reference
-              ? `Workflow with ID ${workflow_id} not found`
-              : `삭제된 워크플로우(사용 불가): ${workflow?.name ?? reference?.workflow_name ?? `ID ${workflow_id}`}` }],
-          };
+          return errorResult(!workflow && !reference
+            ? `Workflow with ID ${workflow_id} not found`
+            : `삭제된 워크플로우(사용 불가): ${workflow?.name ?? reference?.workflow_name ?? `ID ${workflow_id}`}`);
         }
 
         const markedFields = parseMcpMarkedFields(workflow);
         const mcpBodyLimitMiB = resolveRequestBodyLimitsMb().mcp;
         const routingOptions = getMcpGenerationRoutingOptions(workflow_id);
+        const inputSchema = markedFields.map(describeMcpMarkedField);
+        const inputTemplate = createMcpWorkflowInputTemplate(markedFields);
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              id: workflow.id,
-              name: workflow.name,
-              description: workflow.description,
-              is_active: workflow.is_active,
-              api_endpoint: workflow.api_endpoint,
-              color: workflow.color,
-              input_schema: markedFields.map(describeMcpMarkedField),
-              input_values_template: createMcpWorkflowInputTemplate(markedFields),
-              transport_contract: {
-                max_json_body_mib: mcpBodyLimitMiB,
-                preferred_media_reference: 'composite_hash',
-                data_url_note: 'Base64 data URLs count toward the full JSON request limit.',
-              },
-              invocation: {
-                tool: 'submit_generation_job',
-                arguments: {
-                  service_type: 'comfyui',
-                  workflow_id: workflow.id,
-                  inputs: createMcpWorkflowInputTemplate(markedFields),
-                },
-                notes: [
-                  'Every input key is a marked field ID.',
-                  'Any omitted field uses its saved workflow default.',
-                  COMFY_SEED_RULE,
-                  'Omit both server_id and server_tag for automatic queue distribution.',
-                  'Provide server_id for one fixed active workflow-eligible server, or server_tag for exact normalized tag routing. Do not combine them.',
-                  'submit_generation_job returns immediately; poll get_generation_job at intervals of at least 2 seconds and back off on HTTP 429.',
-                  'Pass idempotency_key when retrying a submission: the same MCP key and request return the original job, while a different request is rejected.',
-                  'generate_comfyui remains available only as a synchronous compatibility tool.',
-                ],
-              },
-              routing_rules: getMcpGenerationRoutingRules(),
-              routing_options: routingOptions,
-              created_date: workflow.created_date,
-              updated_date: workflow.updated_date,
-            }),
-          }],
-        };
+        return textResult({
+          id: workflow.id,
+          name: workflow.name,
+          description: workflow.description,
+          is_active: workflow.is_active,
+          api_endpoint: workflow.api_endpoint,
+          color: workflow.color,
+          input_schema: inputSchema,
+          input_values_template: inputTemplate,
+          transport_contract: {
+            max_json_body_mib: mcpBodyLimitMiB,
+            preferred_media_reference: 'composite_hash',
+            data_url_note: 'Base64 data URLs count toward the full JSON request limit.',
+          },
+          invocation: {
+            tool: 'submit_generation_job',
+            arguments: {
+              service_type: 'comfyui',
+              workflow_id: workflow.id,
+              inputs: inputTemplate,
+            },
+            notes: [
+              'Every input key is a marked field ID.',
+              'Any omitted field uses its saved workflow default.',
+              COMFY_SEED_RULE,
+              'Omit both server_id and server_tag for automatic queue distribution.',
+              'Provide server_id for one fixed active workflow-eligible server, or server_tag for exact normalized tag routing. Do not combine them.',
+              'submit_generation_job returns immediately; poll get_generation_job at intervals of at least 2 seconds and back off on HTTP 429.',
+              'Pass idempotency_key when retrying a submission: the same MCP key and request return the original job, while a different request is rejected.',
+              'generate_comfyui remains available only as a synchronous compatibility tool.',
+            ],
+          },
+          routing_rules: getMcpGenerationRoutingRules(),
+          routing_options: routingOptions,
+          created_date: workflow.created_date,
+          updated_date: workflow.updated_date,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -416,7 +381,7 @@ function registerWorkflowDetailTools(server: McpServer): void {
           throw error;
         }
         const check = await checkComfyWorkflowOnServers(converted.workflowJson, { workflowId: workflow_id ?? null });
-        return { content: [{ type: 'text' as const, text: JSON.stringify({
+        return textResult({
           converted: converted.converted,
           ...(converted.warnings.length > 0 ? { conversion_warnings: converted.warnings } : {}),
           ...(include_converted && converted.converted ? { converted_workflow_json: converted.workflowJson.length <= CHECK_WORKFLOW_JSON_MAX ? converted.workflowJson : null } : {}),
@@ -424,9 +389,9 @@ function registerWorkflowDetailTools(server: McpServer): void {
           output_node_ids: check.output_node_ids,
           unused_node_ids: check.unused_node_ids,
           ...(check.servers.length === 0 ? { note: 'No active ComfyUI server can run this workflow, so nothing was checked.' } : {}),
-        }) }] };
+        });
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: `Workflow check error: ${(error as Error).message}` }] };
+        return errorResult(`Workflow check error: ${(error as Error).message}`);
       }
     },
   );

@@ -1,10 +1,10 @@
 import { ComfyUIServerModel } from '../../models/ComfyUIServer'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
-import { WorkflowModel } from '../../models/Workflow'
 import { createComfyUIService, type ComfyUICancelPromptResult } from '../comfyuiService'
 import type { ComfyUIServerRecord } from '../../types/comfyuiServer'
 import type { GenerationQueueReconcileCandidate } from '../../types/generationQueue'
 import { classifySubmitFailure, requiresCompensatingCancel, type SubmitFailureClass } from './queueSubmitFailureClassifier'
+import { resolveComfyQueueEndpoint } from './queueComfyEndpoint'
 
 /** 보상 취소 재시도 백오프. 상류 큐 반영이 늦는 경우를 감안해 짧게 3회만 시도한다. */
 const COMPENSATING_CANCEL_BACKOFF_MS = [1000, 3000, 9000]
@@ -19,28 +19,6 @@ export type CompensateComfySubmitOptions = {
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
-}
-
-function resolveComfyEndpoint(candidate: { assigned_server_id?: number | null; workflow_id?: number | null }, assignedServer?: ComfyUIServerRecord | null) {
-  if (assignedServer?.endpoint) {
-    return assignedServer.endpoint
-  }
-
-  if (candidate.assigned_server_id) {
-    const server = ComfyUIServerModel.findById(candidate.assigned_server_id)
-    if (server?.endpoint) {
-      return server.endpoint
-    }
-  }
-
-  if (candidate.workflow_id) {
-    const workflow = WorkflowModel.findById(candidate.workflow_id)
-    if (workflow?.api_endpoint) {
-      return workflow.api_endpoint
-    }
-  }
-
-  return null
 }
 
 function resolveAssignedServer(candidate: { assigned_server_id?: number | null }, assignedServer?: ComfyUIServerRecord | null) {
@@ -89,7 +67,7 @@ export async function compensateComfySubmit(
     return 'cancel_unsupported'
   }
 
-  const endpoint = resolveComfyEndpoint(latest, assignedServer)
+  const endpoint = resolveComfyQueueEndpoint(latest, assignedServer)
   if (!endpoint) {
     GenerationQueueModel.markProviderSubmitState(jobId, 'orphan_unresolved', { providerCancelState: 'missing_endpoint' })
     return 'orphan_unresolved'

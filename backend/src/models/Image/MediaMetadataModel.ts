@@ -287,39 +287,6 @@ export class MediaMetadataModel {
   }
 
   /**
-   * 통계: AI 도구별 개수
-   */
-  static getAIToolStats(): Array<{ ai_tool: string; count: number }> {
-    const readyCondition = getReadyMediaMetadataCondition();
-
-    const rows = resolveLibraryAggregate(`stats:ai-tool:${readyCondition}`, () => db.prepare(`
-      SELECT ai_tool, COUNT(*) as count
-      FROM media_metadata
-      WHERE ai_tool IS NOT NULL AND ${readyCondition}
-      GROUP BY ai_tool
-      ORDER BY count DESC
-    `).all() as Array<{ ai_tool: string; count: number }>);
-    return rows.map((row) => ({ ...row }));
-  }
-
-  /**
-   * 통계: 모델별 개수
-   */
-  static getModelStats(): Array<{ model_name: string; count: number }> {
-    const readyCondition = getReadyMediaMetadataCondition();
-
-    const rows = resolveLibraryAggregate(`stats:model:${readyCondition}`, () => db.prepare(`
-      SELECT model_name, COUNT(*) as count
-      FROM media_metadata
-      WHERE model_name IS NOT NULL AND ${readyCondition}
-      GROUP BY model_name
-      ORDER BY count DESC
-      LIMIT 50
-    `).all() as Array<{ model_name: string; count: number }>);
-    return rows.map((row) => ({ ...row }));
-  }
-
-  /**
    * 검색 UI용 모델 자동완성 후보 조회
    *
    * The whole model list (one GROUP BY over the library) is cached per library version and filtered per keystroke;

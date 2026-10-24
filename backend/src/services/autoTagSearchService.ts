@@ -202,81 +202,52 @@ export class AutoTagSearchService {
     const params: any[] = [];
 
     for (const tagFilter of tags) {
-      // Score 조건이 있으면 더 정확한 매칭 필요 (개별 토큰 제외)
-      const hasScoreFilter = tagFilter.min_score !== undefined || tagFilter.max_score !== undefined;
-
-      // 검색어 정규화 및 변형 생성
-      const searchVariants = normalizeAutoTagSearchTerm(tagFilter.tag, hasScoreFilter);
-
-      // 각 변형에 대한 OR 조건 생성
-      const tagOrConditions: string[] = [];
-
-      for (const variant of searchVariants) {
-        // SQLite JSON 키 검색: json_each로 키를 순회하며 LIKE 패턴 매칭
-        const keyMatchCondition = buildAutoTagExistsForPaths(
-          'i',
-          AUTO_TAG_GENERAL_JSON_PATHS,
-          AUTO_TAG_KEY_LIKE_SQL
-        );
-
-        tagOrConditions.push(keyMatchCondition);
-        pushAutoTagPathMatchParams(params, AUTO_TAG_GENERAL_JSON_PATHS.length, variant);
-      }
-
-      // 매칭되는 키가 하나라도 있으면 통과 (OR 조건)
-      const existsCondition = `(${tagOrConditions.join(' OR ')})`;
-
-      // Score 범위 조건이 실질적으로 필터링을 하는 경우만 적용
-      // 0~1 범위는 모든 값을 포함하므로 조건이 없는 것과 동일
-      const hasMinFilter = tagFilter.min_score !== undefined && tagFilter.min_score > 0;
-      const hasMaxFilter = tagFilter.max_score !== undefined && tagFilter.max_score < 1;
-
-      if (hasMinFilter || hasMaxFilter) {
-        // Score 조건을 위한 서브쿼리
-        const scoreConditions: string[] = [];
-
-        for (const variant of searchVariants) {
-          const scoreCheck: string[] = [];
-          if (hasMinFilter) {
-            scoreCheck.push(`value >= ?`);
-          }
-          if (hasMaxFilter) {
-            scoreCheck.push(`value <= ?`);
-          }
-
-          const scoreCheckStr = scoreCheck.length > 0
-            ? ` AND ${scoreCheck.join(' AND ')}`
-            : '';
-
-          const scoreCondition = buildAutoTagExistsForPaths(
-            'i',
-            AUTO_TAG_GENERAL_JSON_PATHS,
-            `${AUTO_TAG_KEY_LIKE_SQL}${scoreCheckStr}`
-          );
-
-          scoreConditions.push(scoreCondition);
-
-          // 파라미터 순서: 문자열(key LIKE), 숫자(min), 숫자(max)
-          pushAutoTagPathMatchParams(
-            params,
-            AUTO_TAG_GENERAL_JSON_PATHS.length,
-            variant,
-            hasMinFilter ? tagFilter.min_score : undefined,
-            hasMaxFilter ? tagFilter.max_score : undefined
-          );
-        }
-
-        // 존재 여부와 Score 조건을 AND로 결합
-        const finalCondition = `(${existsCondition} AND (${scoreConditions.join(' OR ')}))`;
-        console.log('[AutoTagSearch] Final condition:', finalCondition);
-        conditions.push(finalCondition);
-      } else {
-        // Score 조건이 없으면 존재 여부만 체크
-        conditions.push(existsCondition);
-      }
+      const match = this.buildJsonTagMatchCondition(tagFilter.tag, AUTO_TAG_GENERAL_JSON_PATHS, tagFilter);
+      conditions.push(...match.conditions);
+      params.push(...match.params);
     }
 
     return { conditions, params };
+  }
+
+  /** 구형 JSON 저장 경로의 이름·점수 매칭을 공통으로 생성. */
+  private static buildJsonTagMatchCondition(
+    tag: string,
+    paths: readonly string[],
+    scoreFilter: Pick<TagFilter, 'min_score' | 'max_score'>,
+  ): QueryBuilderResult {
+    const params: any[] = [];
+    // 0..1처럼 실질적인 점수 제한이 없어도 명시된 범위는 개별 토큰 확장을 막는다.
+    const hasScoreFilter = scoreFilter.min_score !== undefined || scoreFilter.max_score !== undefined;
+    const searchVariants = normalizeAutoTagSearchTerm(tag, hasScoreFilter);
+    const keyMatchCondition = buildAutoTagExistsForPaths('i', paths, AUTO_TAG_KEY_LIKE_SQL);
+    const keyConditions = searchVariants.map((variant) => {
+      pushAutoTagPathMatchParams(params, paths.length, variant);
+      return keyMatchCondition;
+    });
+    const existsCondition = `(${keyConditions.join(' OR ')})`;
+    const hasMinFilter = scoreFilter.min_score !== undefined && scoreFilter.min_score > 0;
+    const hasMaxFilter = scoreFilter.max_score !== undefined && scoreFilter.max_score < 1;
+    if (!hasMinFilter && !hasMaxFilter) {
+      return { conditions: [existsCondition], params };
+    }
+
+    const scoreCheck: string[] = [];
+    if (hasMinFilter) scoreCheck.push('value >= ?');
+    if (hasMaxFilter) scoreCheck.push('value <= ?');
+    const scoreCondition = buildAutoTagExistsForPaths(
+      'i', paths, `${AUTO_TAG_KEY_LIKE_SQL} AND ${scoreCheck.join(' AND ')}`,
+    );
+    const scoreConditions = searchVariants.map((variant) => {
+      // 존재 여부의 파라미터 뒤에 경로별 key, min, max 순서로 추가한다.
+      pushAutoTagPathMatchParams(
+        params, paths.length, variant,
+        hasMinFilter ? scoreFilter.min_score : undefined,
+        hasMaxFilter ? scoreFilter.max_score : undefined,
+      );
+      return scoreCondition;
+    });
+    return { conditions: [`(${existsCondition} AND (${scoreConditions.join(' OR ')}))`], params };
   }
 
   /**
@@ -447,109 +418,13 @@ export class AutoTagSearchService {
 
     // 특정 캐릭터명 검색 (부분 매칭 지원)
     if (character.name) {
-      // Score 조건이 있으면 더 정확한 매칭 필요 (개별 토큰 제외)
-      const hasScoreFilter = character.min_score !== undefined || character.max_score !== undefined;
-
-      // 검색어 정규화 및 변형 생성
-      const searchVariants = normalizeAutoTagSearchTerm(character.name, hasScoreFilter);
-
-      // 각 변형에 대한 OR 조건 생성
-      const charOrConditions: string[] = [];
-
-      for (const variant of searchVariants) {
-        // SQLite JSON 키 검색: json_each로 키를 순회하며 LIKE 패턴 매칭
-        const keyMatchCondition = buildAutoTagExistsForPaths(
-          'i',
-          AUTO_TAG_CHARACTER_JSON_PATHS,
-          AUTO_TAG_KEY_LIKE_SQL
-        );
-
-        charOrConditions.push(keyMatchCondition);
-        pushAutoTagPathMatchParams(params, AUTO_TAG_CHARACTER_JSON_PATHS.length, variant);
-      }
-
-      // 매칭되는 키가 하나라도 있으면 통과 (OR 조건)
-      const existsCondition = `(${charOrConditions.join(' OR ')})`;
-
-      // Score 범위 조건이 실질적으로 필터링을 하는 경우만 적용
-      // 0~1 범위는 모든 값을 포함하므로 조건이 없는 것과 동일
-      const hasMinFilter = character.min_score !== undefined && character.min_score > 0;
-      const hasMaxFilter = character.max_score !== undefined && character.max_score < 1;
-
-      if (hasMinFilter || hasMaxFilter) {
-        // Score 조건을 위한 서브쿼리
-        const scoreConditions: string[] = [];
-
-        console.log('[AutoTagSearch] Building character score condition for:', character.name);
-        console.log('[AutoTagSearch] Character score range:', character.min_score, '~', character.max_score);
-        console.log('[AutoTagSearch] Character search variants:', searchVariants);
-
-        for (const variant of searchVariants) {
-          const scoreCheck: string[] = [];
-          if (hasMinFilter) {
-            scoreCheck.push(`value >= ?`);
-          }
-          if (hasMaxFilter) {
-            scoreCheck.push(`value <= ?`);
-          }
-
-          const scoreCheckStr = scoreCheck.length > 0
-            ? ` AND ${scoreCheck.join(' AND ')}`
-            : '';
-
-          const scoreCondition = buildAutoTagExistsForPaths(
-            'i',
-            AUTO_TAG_CHARACTER_JSON_PATHS,
-            `${AUTO_TAG_KEY_LIKE_SQL}${scoreCheckStr}`
-          );
-
-          console.log('[AutoTagSearch] Character score condition SQL:', scoreCondition);
-
-          scoreConditions.push(scoreCondition);
-
-          // 파라미터 순서: 문자열(key LIKE), 숫자(min), 숫자(max)
-          pushAutoTagPathMatchParams(
-            params,
-            AUTO_TAG_CHARACTER_JSON_PATHS.length,
-            variant,
-            hasMinFilter ? character.min_score : undefined,
-            hasMaxFilter ? character.max_score : undefined
-          );
-        }
-
-        // 존재 여부와 Score 조건을 AND로 결합
-        const finalCondition = `(${existsCondition} AND (${scoreConditions.join(' OR ')}))`;
-        console.log('[AutoTagSearch] Character final condition:', finalCondition);
-        conditions.push(finalCondition);
-      } else {
-        // Score 조건이 없으면 존재 여부만 체크
-        conditions.push(existsCondition);
-      }
+      const match = this.buildJsonTagMatchCondition(character.name, AUTO_TAG_CHARACTER_JSON_PATHS, character);
+      conditions.push(...match.conditions);
+      params.push(...match.params);
     }
 
     return { conditions, params };
   }
-
-  /**
-   * JSON path에서 특수문자 처리
-   * SQLite json_extract에서는 특수문자가 포함된 키를 큰따옴표로 감싸야 함
-   */
-  private static escapeJsonPath(key: string): string {
-    // 이미 큰따옴표로 감싸져 있으면 그대로 반환
-    if (key.startsWith('"') && key.endsWith('"')) {
-      return key;
-    }
-
-    // 특수문자가 있거나 공백이 있으면 큰따옴표로 감싸기
-    if (/[^a-zA-Z0-9_]/.test(key)) {
-      // 내부의 큰따옴표는 이스케이프
-      const escaped = key.replace(/"/g, '\\"');
-      return `"${escaped}"`;
-    }
-
-    return key;
-  }
-
 
   /**
    * 검색 파라미터 유효성 검증

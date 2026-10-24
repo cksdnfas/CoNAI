@@ -10,6 +10,8 @@ import {
   AppearancePresetSlot,
   AppearanceThemeSettings,
   DeleteProtectionSettings,
+  DEFAULT_APPEARANCE_THEME,
+  createDefaultAppearancePresetSlots as getDefaultAppearancePresetSlots,
   getDefaultHeaderNavigationSettings,
   HEADER_NAVIGATION_PAGE_KEYS,
   isHeaderNavigationItemKey,
@@ -33,8 +35,6 @@ import {
 import { writeJsonFileAtomic } from '../utils/jsonFile';
 
 export const SETTINGS_FILE_PATH = path.join(runtimePaths.basePath, 'config', 'settings.json');
-
-const APPEARANCE_PRESET_SLOT_IDS = ['slot-1', 'slot-2', 'slot-3'] as const;
 
 /** Complete delete-protection settings; drops the never-used legacy `recycleBinPath`. */
 function normalizeDeleteProtectionSettings(raw: unknown, defaults: DeleteProtectionSettings): DeleteProtectionSettings {
@@ -64,53 +64,7 @@ function normalizeHeaderNavigationSettings(rawNavigation: unknown): HeaderNaviga
 
 /** Build the default appearance theme used for fresh settings files and fallback merges. */
 function getDefaultAppearanceTheme(): AppearanceThemeSettings {
-  return {
-    themeMode: 'system',
-    accentPreset: 'conai',
-    customPrimaryColor: '#f95e14',
-    customSecondaryColor: '#ffb59a',
-    surfacePreset: 'studio',
-    customSurfaceBackgroundColor: '#131313',
-    customSurfaceContainerColor: '#201f1f',
-    customSurfaceHighColor: '#2a2a2a',
-    radiusPreset: 'balanced',
-    glassPreset: 'balanced',
-    shadowPreset: 'balanced',
-    density: 'comfortable',
-    fontPreset: 'manrope',
-    customFontFamily: 'Pretendard Variable, Pretendard, Manrope, ui-sans-serif, system-ui, sans-serif',
-    customMonoFontFamily: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-    customFontUrl: '',
-    customMonoFontUrl: '',
-    customFontFileName: '',
-    customMonoFontFileName: '',
-    fontScalePercent: 100,
-    textScalePercent: 100,
-    bodyFontWeightPreset: 'regular',
-    emphasisFontWeightPreset: 'standard',
-    desktopSearchMinWidth: 1280,
-    desktopNavMinWidth: 1280,
-    desktopPageColumnsMinWidth: 1280,
-    detailRelatedImageMobileColumns: 1,
-    detailRelatedImageColumns: 3,
-    detailRelatedImageAspectRatio: 'square',
-    groupExplorerCardStyle: 'compact-row',
-    selectionOutlineWidth: 3,
-    positiveBadgeColor: '#34d399',
-    negativeBadgeColor: '#fb7185',
-    autoBadgeColor: '#38bdf8',
-    ratingBadgeColor: '#a78bfa',
-  };
-}
-
-/** Build the default appearance preset slot list. */
-function getDefaultAppearancePresetSlots(): AppearancePresetSlot[] {
-  return APPEARANCE_PRESET_SLOT_IDS.map((id, index) => ({
-    id,
-    label: `Slot ${index + 1}`,
-    appearance: null,
-    updatedAt: null,
-  }));
+  return { ...DEFAULT_APPEARANCE_THEME };
 }
 
 /** Normalize one raw wallpaper widget into the persisted settings shape. */
@@ -317,6 +271,7 @@ function normalizeIsoDateString(value: unknown): string | null {
 }
 
 type LlmPresetValueType = 'text' | 'json';
+type LlmPresetContentKey = 'content' | 'systemPrompt' | 'prompt' | 'structuredOutputJson';
 
 function normalizeLlmPresetContent(value: unknown, valueType: LlmPresetValueType): string {
   if (valueType === 'json') {
@@ -330,7 +285,7 @@ function normalizeLlmPresetContent(value: unknown, valueType: LlmPresetValueType
   return value.trim().length > 0 ? value : '';
 }
 
-function normalizeLlmPreset(rawPreset: unknown, valueType: LlmPresetValueType = 'text'): LlmPresetRecord | null {
+function normalizeLlmPreset(rawPreset: unknown, valueType: LlmPresetValueType = 'text', contentKey: LlmPresetContentKey = 'content'): LlmPresetRecord | null {
   if (!rawPreset || typeof rawPreset !== 'object') {
     return null;
   }
@@ -338,7 +293,7 @@ function normalizeLlmPreset(rawPreset: unknown, valueType: LlmPresetValueType = 
   const record = rawPreset as Record<string, unknown>;
   const id = typeof record.id === 'string' ? record.id.trim() : '';
   const name = typeof record.name === 'string' ? record.name.trim() : '';
-  const content = normalizeLlmPresetContent(record.content, valueType);
+  const content = normalizeLlmPresetContent(record[contentKey], valueType);
   if (!id || !name || !content) {
     return null;
   }
@@ -376,45 +331,14 @@ function mergeLlmPresetCollections(...collections: LlmPresetRecord[][]): LlmPres
   return nextPresets;
 }
 
-function normalizeLlmPresets(rawPresets: unknown, valueType: LlmPresetValueType = 'text'): LlmPresetRecord[] {
+function normalizeLlmPresets(rawPresets: unknown, valueType: LlmPresetValueType = 'text', contentKey: LlmPresetContentKey = 'content'): LlmPresetRecord[] {
   if (!Array.isArray(rawPresets)) {
     return [];
   }
 
   return mergeLlmPresetCollections(rawPresets.flatMap((rawPreset) => {
-    const preset = normalizeLlmPreset(rawPreset, valueType);
+    const preset = normalizeLlmPreset(rawPreset, valueType, contentKey);
     return preset ? [preset] : [];
-  }));
-}
-
-function normalizeLegacyLlmPresets(rawPresets: unknown, contentKey: 'systemPrompt' | 'prompt' | 'structuredOutputJson', valueType: LlmPresetValueType = 'text'): LlmPresetRecord[] {
-  if (!Array.isArray(rawPresets)) {
-    return [];
-  }
-
-  return mergeLlmPresetCollections(rawPresets.flatMap((rawPreset) => {
-    if (!rawPreset || typeof rawPreset !== 'object') {
-      return [];
-    }
-
-    const record = rawPreset as Record<string, unknown>;
-    const id = typeof record.id === 'string' ? record.id.trim() : '';
-    const name = typeof record.name === 'string' ? record.name.trim() : '';
-    const content = normalizeLlmPresetContent(record[contentKey], valueType);
-    if (!id || !name || !content) {
-      return [];
-    }
-
-    const createdAt = normalizeIsoDateString(record.createdAt) ?? new Date().toISOString();
-    const updatedAt = normalizeIsoDateString(record.updatedAt) ?? createdAt;
-
-    return [{
-      id,
-      name,
-      content,
-      createdAt,
-      updatedAt,
-    }];
   }));
 }
 
@@ -426,15 +350,15 @@ export function normalizeLlmSettings(rawLlmSettings: unknown): AppSettings['llm'
   return {
     systemPromptPresets: mergeLlmPresetCollections(
       normalizeLlmPresets(record.systemPromptPresets),
-      normalizeLegacyLlmPresets(record.presets, 'systemPrompt'),
+      normalizeLlmPresets(record.presets, 'text', 'systemPrompt'),
     ),
     promptPresets: mergeLlmPresetCollections(
       normalizeLlmPresets(record.promptPresets),
-      normalizeLegacyLlmPresets(record.presets, 'prompt'),
+      normalizeLlmPresets(record.presets, 'text', 'prompt'),
     ),
     structuredOutputJsonPresets: mergeLlmPresetCollections(
       normalizeLlmPresets(record.structuredOutputJsonPresets, 'json'),
-      normalizeLegacyLlmPresets(record.presets, 'structuredOutputJson', 'json'),
+      normalizeLlmPresets(record.presets, 'json', 'structuredOutputJson'),
     ),
     ...(typeof record.builtinSeedVersion === 'number' ? { builtinSeedVersion: record.builtinSeedVersion } : {}),
   };
@@ -775,103 +699,28 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
 
 /** Check whether persisted settings are missing any top-level section fields from current defaults. */
 export function hasMissingSettingsFields(loaded: any, defaults: AppSettings): boolean {
-  for (const key of Object.keys(defaults.general)) {
-    if (!(key in (loaded.general || {}))) {
-      return true;
-    }
-  }
+  const sections = [
+    [defaults.general, loaded.general],
+    [defaults.general.headerNavigation, loaded.general?.headerNavigation],
+    [defaults.aiRuntime, loaded.aiRuntime],
+    [defaults.tagger, loaded.tagger],
+    [defaults.similarity, loaded.similarity],
+    [defaults.kaloscope, loaded.kaloscope],
+    [defaults.embedding, loaded.embedding],
+    [defaults.appearance, loaded.appearance],
+    [defaults.metadataExtraction, loaded.metadataExtraction],
+    [defaults.thumbnail, loaded.thumbnail],
+    [defaults.imageSave, loaded.imageSave],
+    [defaults.generationThrottle.novelai, loaded.generationThrottle?.novelai],
+    [defaults.generationThrottle.codex, loaded.generationThrottle?.codex],
+    [defaults.generationThrottle.reservations, loaded.generationThrottle?.reservations],
+    [defaults.videoOptimization, loaded.videoOptimization],
+    [defaults.llm, loaded.llm],
+  ] as const;
 
-  for (const key of Object.keys(defaults.general.headerNavigation)) {
-    if (!(key in (loaded.general?.headerNavigation || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.aiRuntime)) {
-    if (!(key in (loaded.aiRuntime || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.tagger)) {
-    if (!(key in (loaded.tagger || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.similarity)) {
-    if (!(key in (loaded.similarity || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.kaloscope)) {
-    if (!(key in (loaded.kaloscope || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.embedding)) {
-    if (!(key in (loaded.embedding || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.appearance)) {
-    if (!(key in (loaded.appearance || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.metadataExtraction)) {
-    if (!(key in (loaded.metadataExtraction || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.thumbnail)) {
-    if (!(key in (loaded.thumbnail || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.imageSave)) {
-    if (!(key in (loaded.imageSave || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.generationThrottle.novelai)) {
-    if (!(key in (loaded.generationThrottle?.novelai || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.generationThrottle.codex)) {
-    if (!(key in (loaded.generationThrottle?.codex || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.generationThrottle.reservations)) {
-    if (!(key in (loaded.generationThrottle?.reservations || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.videoOptimization)) {
-    if (!(key in (loaded.videoOptimization || {}))) {
-      return true;
-    }
-  }
-
-  for (const key of Object.keys(defaults.llm)) {
-    if (!(key in (loaded.llm || {}))) {
-      return true;
-    }
-  }
-
-  return false;
+  return sections.some(([expected, current]) =>
+    Object.keys(expected).some((key) => !(key in (current || {}))),
+  );
 }
 
 /** Read and parse the raw settings JSON file when it exists. */

@@ -94,29 +94,19 @@ export class PromptCollectionIngestService {
     return terms.filter((term) => term.value.length >= 2).map((term) => ({ prompt: term.value }));
   }
 
-  private static async collectPositiveLikePrompt(prompt: string, groupId?: number) {
+  private static async collectPrompt(prompt: string, type: 'positive' | 'negative', groupId?: number) {
     const { loras, terms } = tokenizePrompt(prompt);
-    const loraPrompts = this.cleanLoRAPrompts(loras, groupId, 'positive');
+    const loraPrompts = this.cleanLoRAPrompts(loras, groupId, type);
     const termPrompts = this.termPrompts(terms);
+    const addPrompts = type === 'positive'
+      ? PromptCollectionModel.batchAddOrIncrement.bind(PromptCollectionModel)
+      : PromptCollectionModel.batchAddOrIncrementNegative.bind(PromptCollectionModel);
 
     if (loraPrompts.length > 0) {
-      await PromptCollectionModel.batchAddOrIncrement(loraPrompts);
+      await addPrompts(loraPrompts);
     }
     if (termPrompts.length > 0) {
-      await PromptCollectionModel.batchAddOrIncrement(termPrompts);
-    }
-  }
-
-  private static async collectNegativePrompt(prompt: string, groupId?: number) {
-    const { loras, terms } = tokenizePrompt(prompt);
-    const loraPrompts = this.cleanLoRAPrompts(loras, groupId, 'negative');
-    const termPrompts = this.termPrompts(terms);
-
-    if (loraPrompts.length > 0) {
-      await PromptCollectionModel.batchAddOrIncrementNegative(loraPrompts);
-    }
-    if (termPrompts.length > 0) {
-      await PromptCollectionModel.batchAddOrIncrementNegative(termPrompts);
+      await addPrompts(termPrompts);
     }
   }
 
@@ -128,7 +118,7 @@ export class PromptCollectionIngestService {
       const loraGroups = await this.ensureLoRAGroup();
 
       if (this.isValidPrompt(prompt)) {
-        await this.collectPositiveLikePrompt(prompt!, loraGroups.positiveGroupId);
+        await this.collectPrompt(prompt!, 'positive', loraGroups.positiveGroupId);
       } else if (prompt) {
         console.log(`⚠️ Skipping invalid prompt: "${prompt}"`);
       }
@@ -143,7 +133,7 @@ export class PromptCollectionIngestService {
       }
 
       if (this.isValidPrompt(negativePrompt)) {
-        await this.collectNegativePrompt(negativePrompt!, loraGroups.negativeGroupId);
+        await this.collectPrompt(negativePrompt!, 'negative', loraGroups.negativeGroupId);
       } else if (negativePrompt) {
         console.log(`⚠️ Skipping invalid negative prompt: "${negativePrompt}"`);
       }

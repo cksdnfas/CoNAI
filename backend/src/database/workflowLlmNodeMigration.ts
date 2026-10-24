@@ -1,12 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
+import { normalizeOptionalString as text } from '../utils/valueNormalization';
 
 const LLM_CONNECTION_TYPES = ['llm_openai_compatible', 'llm_ollama'];
 const LEGACY_KEYS = ['provider_name', 'model'];
-
-function text(value: unknown) {
-  return typeof value === 'string' ? value.trim() : '';
-}
 
 function hasId(value: unknown) {
   const id = Number(value);
@@ -39,7 +36,7 @@ export function migrateWorkflowLlmNodes(db: Database.Database): void {
   const maxOrder = db.prepare('SELECT MAX(sort_order) AS max FROM llm_model_slots');
   const insertRow = db.prepare('INSERT INTO llm_model_slots (name, provider_name, model, sort_order) VALUES (?, ?, ?, ?)');
   /** The row a saved connection + model called; null when the connection is gone or has no model to call. */
-  const rowFor = (providerName: string, model: string) => {
+  const rowFor = (providerName: string, model: string | null) => {
     if (!connections.has(providerName)) return null;
     if (!model) return (primaryRow.get(providerName) as { id: number } | undefined)?.id ?? null;
     const found = findRow.get(providerName, model) as { id: number } | undefined;

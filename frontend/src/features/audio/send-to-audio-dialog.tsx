@@ -19,7 +19,7 @@ export function useCanSendToAudio() {
   return !!auth?.authenticated && (auth.hasCredentials === false || hasAuthPermission(auth.permissionKeys, 'audio.edit'))
 }
 
-/** "오디오로 보내기": copy audio files from your file store into a project's 받은 파일 or a group. */
+/** "오디오로 보내기": copy shared audio files into a project's 받은 파일 or a group. */
 export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: string; name: string }> | null; onClose: () => void }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()

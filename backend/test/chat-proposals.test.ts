@@ -503,6 +503,40 @@ test('chat proposals: configure scope, setup tools, storage, read-time attachmen
     assert.equal((await request(`/workflows/${workflowId}`, 'PUT', { description: 'new' }, workflowRevision)).status, 200)
     assert.equal((await request(`/workflows/${workflowId}`, 'PUT', { description: 'stale' }, workflowRevision)).status, 409)
     assert.equal(WorkflowModel.findById(workflowId)?.description, 'new')
+
+    await sub.test('public workflow queue limits and artifact paths keep their input and update semantics', async () => {
+      const cases = [
+        [undefined, null], [null, null], ['', null], [0, 1], [2.9, 2],
+        [' 4.9 ', 4], [32, 32], [999, 32], ['bad', null], ['Infinity', null],
+      ] as const
+      let publicId = 0
+      for (const [index, [value, expected]] of cases.entries()) {
+        const createdPublic = await request('/workflows', 'POST', {
+          name: `Public queue normalization ${index}`,
+          workflow_json: JSON.stringify({ 1: { class_type: 'Text', inputs: { text: 'public draft' } } }),
+          marked_fields: [],
+          is_public_page: true,
+          public_slug: `public-queue-normalization-${index}`,
+          public_queue_max_count: value,
+          artifact_root_path: index === 0 ? 42 : '  /render/output  ',
+        })
+        assert.equal(createdPublic.status, 201, JSON.stringify(createdPublic.json))
+        publicId = Number(createdPublic.json.data.id)
+        const record = WorkflowModel.findById(publicId)!
+        assert.equal(record.public_queue_max_count, expected)
+        assert.equal(record.artifact_root_path, index === 0 ? null : '/render/output')
+      }
+      const savePublic = async (body: unknown) => request(
+        `/workflows/${publicId}`, 'PUT', body, nativeEditRevision(WorkflowModel.findById(publicId)),
+      )
+      assert.equal((await savePublic({ public_queue_max_count: ' 6.8 ', artifact_root_path: '   ' })).status, 200)
+      assert.equal(WorkflowModel.findById(publicId)?.public_queue_max_count, 6)
+      assert.equal(WorkflowModel.findById(publicId)?.artifact_root_path, null)
+      assert.equal((await savePublic({ description: 'unrelated edit' })).status, 200)
+      assert.equal(WorkflowModel.findById(publicId)?.public_queue_max_count, 6, 'omitting the limit keeps it')
+      assert.equal((await savePublic({ is_public_page: false })).status, 200)
+      assert.equal(WorkflowModel.findById(publicId)?.public_queue_max_count, null, 'disabling public access clears it')
+    })
   })
 
   await t.test('page inputs: atomic validation, stale targets, edited values, and safe undo', () => {

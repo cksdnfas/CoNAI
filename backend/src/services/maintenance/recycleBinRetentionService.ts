@@ -8,6 +8,7 @@ import {
   readRecycleBinOrigins,
 } from '../../utils/recycleBin';
 import { fileStoreRoot } from '../fileStorePaths';
+import { yieldToEventLoop } from './libraryBatch';
 
 /**
  * RecycleBin retention: delete top-level RecycleBin files older than the configured number of days.
@@ -46,8 +47,6 @@ export interface RecycleBinRetentionResult {
   undatedFiles: number;
   deletedPreviews: number;
 }
-
-const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /** Deletion time in ms: the recorded one, else the bin name's timestamp, else null. */
 function deletedAtMs(name: string, recordedDeletedAt: string | undefined): number | null {

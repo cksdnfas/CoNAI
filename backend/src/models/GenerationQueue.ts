@@ -432,11 +432,6 @@ export class GenerationQueueModel {
     }
   }
 
-  /** Check cancellation flag without hydrating the heavyweight request payload (hot polling path). */
-  static isCancelRequested(id: number) {
-    return this.readCancelState(id)?.cancelRequested ?? false
-  }
-
   /**
    * Read the debug flag + metadata without hydrating the request payload (PAYLOAD-2).
    *
@@ -756,38 +751,10 @@ export class GenerationQueueModel {
       return false
     }
 
-    const setClauses: string[] = []
-    const values: any[] = []
-    for (const [key, value] of Object.entries(updates)) {
-      if (value && typeof value === 'object' && '__sqlLiteral' in value && value.__sqlLiteral === true) {
-        setClauses.push(`${key} = ${value.value}`)
-      } else {
-        setClauses.push(`${key} = ?`)
-        values.push(value)
-      }
-    }
-
+    const { sql, values } = buildUpdateQuery('generation_queue_jobs', updates, { id })
     const statusPlaceholders = expectedStatuses.map(() => '?').join(', ')
-    const sql = `
-      UPDATE generation_queue_jobs
-      SET ${setClauses.join(', ')}
-      WHERE id = ?
-        AND status IN (${statusPlaceholders})
-    `
-
-    values.push(id, ...expectedStatuses)
-    const info = db.prepare(sql).run(...values)
+    const info = db.prepare(`${sql} AND status IN (${statusPlaceholders})`).run(...values, ...expectedStatuses)
     return info.changes > 0
-  }
-
-  /** Mark a queued or running job as cancellation-requested. */
-  static requestCancel(id: number) {
-    return this.update(id, { cancel_requested: true })
-  }
-
-  /** Mark a queue job as cancellation-requested only if its status still matches. */
-  static requestCancelIfCurrentStatus(id: number, expectedStatuses: GenerationQueueJobStatus[]) {
-    return this.updateIfCurrentStatus(id, expectedStatuses, { cancel_requested: true })
   }
 
   /**

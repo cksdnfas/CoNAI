@@ -271,13 +271,6 @@ export class AutoFolderGroupImageModel {
   }
 
   /**
-   * 그룹의 모든 이미지 제거
-   */
-  static removeAllImagesFromGroup(groupId: number): void {
-    db.prepare('DELETE FROM auto_folder_group_images WHERE group_id = ?').run(groupId);
-  }
-
-  /**
    * 그룹의 이미지 조회 (페이징 지원, 메타데이터 포함)
    */
   static findImagesByGroup(

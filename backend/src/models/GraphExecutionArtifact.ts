@@ -57,26 +57,6 @@ export class GraphExecutionArtifactModel {
     return new Map(rows.map((row) => [row.execution_id, row.count]))
   }
 
-  /** List artifacts for every execution belonging to one workflow id set. */
-  static findByWorkflowIds(workflowIds: number[]): GraphExecutionArtifactRecord[] {
-    if (workflowIds.length === 0) {
-      return []
-    }
-
-    const db = getUserSettingsDb()
-    const records = chunkSqliteValues(workflowIds).flatMap((batch) => {
-      const placeholders = sqliteInPlaceholders(batch)
-      return db.prepare(`
-        SELECT ga.*
-        FROM graph_execution_artifacts ga
-        INNER JOIN graph_executions ge
-          ON ge.id = ga.execution_id
-        WHERE ge.graph_workflow_id IN (${placeholders})
-      `).all(...batch) as GraphExecutionArtifactRecord[]
-    })
-    return records.sort(compareNewestFirst)
-  }
-
   /** Scan artifacts for one workflow in newest-first pages without hydrating the whole workflow. */
   static findByWorkflowIdPage(workflowId: number, limit = 1000, cursor?: { created_date: string; id: number }): GraphExecutionArtifactRecord[] {
     const db = getUserSettingsDb()

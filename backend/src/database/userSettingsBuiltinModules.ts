@@ -64,6 +64,45 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
     return null;
   };
 
+  const updateModule = db.prepare(`
+    UPDATE module_definitions
+    SET
+      name = ?,
+      description = ?,
+      category = ?,
+      template_defaults = ?,
+      exposed_inputs = ?,
+      output_ports = ?,
+      internal_fixed_values = ?,
+      ui_schema = ?,
+      color = ?,
+      external_key = ?,
+      updated_date = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `);
+  const insertModule = db.prepare(`
+    INSERT INTO module_definitions (
+      name, description, engine_type, authoring_source, category,
+      template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
+      version, is_active, color, external_key
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(name) DO UPDATE SET
+      description = excluded.description,
+      engine_type = excluded.engine_type,
+      authoring_source = excluded.authoring_source,
+      category = excluded.category,
+      template_defaults = excluded.template_defaults,
+      exposed_inputs = excluded.exposed_inputs,
+      output_ports = excluded.output_ports,
+      internal_fixed_values = excluded.internal_fixed_values,
+      ui_schema = excluded.ui_schema,
+      version = excluded.version,
+      is_active = excluded.is_active,
+      color = excluded.color,
+      external_key = excluded.external_key,
+      updated_date = CURRENT_TIMESTAMP
+  `);
+
   /** Upsert one built-in module using operation_key as the stable identity. */
   const upsertBuiltinModule = (
     name: string,
@@ -81,22 +120,7 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
 
     if (existing) {
       claimedRowIds.add(existing.id);
-      db.prepare(`
-        UPDATE module_definitions
-        SET
-          name = ?,
-          description = ?,
-          category = ?,
-          template_defaults = ?,
-          exposed_inputs = ?,
-          output_ports = ?,
-          internal_fixed_values = ?,
-          ui_schema = ?,
-          color = ?,
-          external_key = ?,
-          updated_date = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(
+      updateModule.run(
         name,
         description,
         category,
@@ -112,28 +136,7 @@ export function ensureBuiltinSystemModules(db: Database.Database): void {
       return;
     }
 
-    db.prepare(`
-      INSERT INTO module_definitions (
-        name, description, engine_type, authoring_source, category,
-        template_defaults, exposed_inputs, output_ports, internal_fixed_values, ui_schema,
-        version, is_active, color, external_key
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(name) DO UPDATE SET
-        description = excluded.description,
-        engine_type = excluded.engine_type,
-        authoring_source = excluded.authoring_source,
-        category = excluded.category,
-        template_defaults = excluded.template_defaults,
-        exposed_inputs = excluded.exposed_inputs,
-        output_ports = excluded.output_ports,
-        internal_fixed_values = excluded.internal_fixed_values,
-        ui_schema = excluded.ui_schema,
-        version = excluded.version,
-        is_active = excluded.is_active,
-        color = excluded.color,
-        external_key = excluded.external_key,
-        updated_date = CURRENT_TIMESTAMP
-    `).run(
+    insertModule.run(
       name,
       description,
       'system',

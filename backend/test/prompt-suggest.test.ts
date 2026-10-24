@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
 
-/** Prompt editor suggestions: tiered matching of my prompts, "used together" terms, and per-account editor settings. */
+/** Prompt collection ingestion and editor suggestions, including per-account editor settings. */
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-prompt-suggest-'))
 process.env.RUNTIME_BASE_PATH = root
@@ -190,4 +190,102 @@ test('prompt collection search has global pages, bounded inputs and one typed gr
   const expectedGroupIds = (db.prepare("SELECT id FROM prompt_collection WHERE group_id IS NULL AND prompt LIKE 'bounded%'").all() as Array<{ id: number }>).map(row => row.id).sort((a, b) => a - b)
   assert.deepEqual(groupPages.map(prompt => prompt.id).sort((a, b) => a - b), expectedGroupIds,
     'clamped offsets cover the positive collection without duplicates or skipped rows')
+})
+
+test('prompt ingestion keeps domains, existing groups and failed batches atomic', async (t) => {
+  const { db } = await boot()
+  const { PromptCollectionModel } = await import('../src/models/PromptCollection')
+  const cases = [
+    ['positive', 'prompt_collection', 'prompt_groups', PromptCollectionModel.addOrIncrement, PromptCollectionModel.batchAddOrIncrement],
+    ['negative', 'negative_prompt_collection', 'negative_prompt_groups', PromptCollectionModel.addOrIncrementNegative, PromptCollectionModel.batchAddOrIncrementNegative],
+    ['auto', 'auto_prompt_collection', 'auto_prompt_groups', PromptCollectionModel.addOrIncrementAuto, PromptCollectionModel.batchAddOrIncrementAuto],
+  ] as const
+  for (const [domain, table, groupTable, add, batch] of cases) {
+    await t.test(domain, () => {
+      const insertGroup = db.prepare(`INSERT INTO ${groupTable} (group_name) VALUES (?)`)
+      const originalGroup = Number(insertGroup.run('ingest original').lastInsertRowid)
+      const otherGroup = Number(insertGroup.run('ingest other').lastInsertRowid)
+      const read = db.prepare(`SELECT usage_count, group_id FROM ${table} WHERE prompt = ?`)
+      const id = add('ingest existing', originalGroup)
+      assert.deepEqual(read.get('ingest existing'), { usage_count: 1, group_id: originalGroup })
+      assert.equal(add('ingest existing', otherGroup), id)
+      assert.deepEqual(read.get('ingest existing'), { usage_count: 2, group_id: originalGroup })
+      add('ingest ungrouped', 0)
+      assert.deepEqual(read.get('ingest ungrouped'), { usage_count: 1, group_id: null })
+      assert.equal(batch([]), 0)
+      assert.equal(batch([
+        { prompt: 'ingest existing', group_id: otherGroup },
+        { prompt: 'ingest new', group_id: otherGroup },
+        { prompt: 'ingest new' },
+      ]), 3)
+      assert.deepEqual(read.get('ingest existing'), { usage_count: 3, group_id: originalGroup })
+      assert.deepEqual(read.get('ingest new'), { usage_count: 2, group_id: otherGroup })
+
+      db.exec(`CREATE TEMP TRIGGER reject_ingest_fixture BEFORE INSERT ON ${table}
+        WHEN NEW.prompt = 'ingest rollback'
+        BEGIN SELECT RAISE(ABORT, 'injected ingestion failure'); END`)
+      try {
+        assert.throws(() => batch([
+          { prompt: 'ingest existing' },
+          { prompt: 'ingest transient' },
+          { prompt: 'ingest rollback' },
+        ]), /injected ingestion failure/)
+      } finally {
+        db.exec('DROP TRIGGER reject_ingest_fixture')
+      }
+      assert.deepEqual(read.get('ingest existing'), { usage_count: 3, group_id: originalGroup })
+      assert.equal(read.get('ingest transient'), undefined)
+      assert.equal(read.get('ingest rollback'), undefined)
+    })
+  }
+})
+
+test('image prompt ingestion keeps LoRA domains, character terms and metadata placeholders distinct', async () => {
+  const { db } = await boot()
+  const { PromptCollectionService } = await import('../src/services/promptCollectionService')
+  await PromptCollectionService.collectFromImage(
+    'service-positive, <lora:service-positive:0.6>, x',
+    'service-negative, <lora:service-negative:0.2>, z',
+    'service-positive, service-character, <lora:service-character:0.9>',
+  )
+  for (const [table, groupTable, expected] of [
+    ['prompt_collection', 'prompt_groups', [
+      { prompt: '<lora:service-positive>', usage_count: 1, group_name: 'LoRA' },
+      { prompt: 'service-character', usage_count: 1, group_name: null },
+      { prompt: 'service-positive', usage_count: 2, group_name: null },
+    ]],
+    ['negative_prompt_collection', 'negative_prompt_groups', [
+      { prompt: '<lora:service-negative>', usage_count: 1, group_name: 'LoRA' },
+      { prompt: 'service-negative', usage_count: 1, group_name: null },
+    ]],
+  ] as const) {
+    const rows = db.prepare(`
+      SELECT p.prompt, p.usage_count, g.group_name
+      FROM ${table} p LEFT JOIN ${groupTable} g ON g.id = p.group_id
+      WHERE p.prompt LIKE 'service-%' OR p.prompt LIKE '<lora:service-%'
+      ORDER BY p.prompt
+    `).all()
+    assert.deepEqual(rows, expected)
+    assert.equal(db.prepare(`SELECT 1 FROM ${table} WHERE prompt IN ('x', 'z')`).get(), undefined)
+  }
+  await PromptCollectionService.collectFromImage('Unknown', 'No prompt', 'Metadata extraction failed')
+  for (const table of ['prompt_collection', 'negative_prompt_collection']) {
+    assert.equal(db.prepare(`SELECT 1 FROM ${table} WHERE prompt IN ('Unknown', 'No prompt', 'Metadata extraction failed')`).get(), undefined)
+  }
+})
+
+test('prompt group mutations preserve LoRA protection for case variants and descendants', async () => {
+  const { db } = await boot()
+  const { PromptGroupService } = await import('../src/services/promptGroupService')
+  await assert.rejects(PromptGroupService.createGroup({ group_name: '  lOrA  ' }), /LoRA group is protected/)
+  const insert = db.prepare('INSERT INTO prompt_groups (group_name, parent_id) VALUES (?, ?)')
+  const parentId = Number(insert.run('protected group parent', null).lastInsertRowid)
+  const protectedId = Number(insert.run('  lOrA  ', parentId).lastInsertRowid)
+  await assert.rejects(PromptGroupService.updateGroup(protectedId, { group_name: 'renamed' }), /LoRA group is protected/)
+  await assert.rejects(PromptGroupService.updateGroupOrders([{ id: protectedId, display_order: 123 }]), /LoRA group is protected/)
+  await assert.rejects(PromptGroupService.deleteGroup(parentId), /LoRA group is protected/)
+  assert.deepEqual(db.prepare('SELECT group_name, parent_id, display_order FROM prompt_groups WHERE id = ?').get(protectedId), {
+    group_name: '  lOrA  ', parent_id: parentId, display_order: 0,
+  })
+  assert.ok(db.prepare('SELECT 1 FROM prompt_groups WHERE id = ?').get(parentId))
 })

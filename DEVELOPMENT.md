@@ -113,7 +113,7 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 | 영역 | 코드 진입점 | 사용 흐름 |
 | --- | --- | --- |
-| 라이브러리·목록 | [ImageModel.ts](backend/src/models/ImageModel.ts), [image-list](frontend/src/features/images/components/image-list/image-list.tsx) | [라이브러리](docs/GUIDE/MEDIA_LIBRARY_BASICS.md) |
+| 라이브러리·목록 | [MediaMetadataModel.ts](backend/src/models/Image/MediaMetadataModel.ts), [ImageSearchModel.ts](backend/src/models/Image/ImageSearchModel.ts), [image-list](frontend/src/features/images/components/image-list/image-list.tsx) | [라이브러리](docs/GUIDE/MEDIA_LIBRARY_BASICS.md) |
 | 감시 폴더 | [fileWatcherService.ts](backend/src/services/fileWatcherService.ts) | [감시 폴더](docs/GUIDE/WATCHED_FOLDERS.md) |
 | 생성 큐 | [generationQueueService.ts](backend/src/services/generationQueueService.ts), [queueJobExecutors.ts](backend/src/services/generation-queue/queueJobExecutors.ts) | [생성](docs/GUIDE/GENERATION_OVERVIEW.md) |
 | 생성물 저장 | [APIImageProcessor.ts](backend/src/services/APIImageProcessor.ts), [fileSaver.ts](backend/src/utils/fileSaver.ts) | [업로드](docs/GUIDE/UPLOAD_AND_METADATA_EXTRACT.md), [메타데이터 수정](docs/GUIDE/EDIT_IMAGE_METADATA.md) |

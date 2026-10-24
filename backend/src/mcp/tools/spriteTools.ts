@@ -18,8 +18,9 @@ import {
 } from '../../services/sprite/spriteService';
 import type { SpriteExtractOptionsInput } from '../../services/sprite/spriteOptions';
 import type { RuntimeJobRecord } from '../../types/runtimeJob';
-import { isChatMcpSource, type McpRequestContext } from '../context';
+import { isChatMcpSource, resolveMcpInlineWaitMs, type McpRequestContext } from '../context';
 import { refreshMcpRequester } from '../toolAccess';
+import { errorResult, textResult } from '../toolResults';
 
 /**
  * Sprite sheets from library videos (the video-sprite-extractor port): extract, batch extract, normalise sheets and
@@ -27,24 +28,10 @@ import { refreshMcpRequester } from '../toolAccess';
  * "스프라이트" unless the caller picks one) so results come back as composite hashes.
  */
 
-function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
-}
-
-function errorResult(error: unknown) {
-  return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
-}
-
 function requesterOf(context: McpRequestContext): SpriteRequester {
   if (!context.requester) return { accountId: null, accountType: null };
   refreshMcpRequester(context.requester);
   return { accountId: context.requester.accountId, accountType: context.requester.accountType };
-}
-
-/** Chat replies must not hang on a long job: their inline wait is shorter. */
-function waitBudgetMs(context: McpRequestContext, seconds: number | undefined) {
-  const requested = seconds ?? 60;
-  return Math.max(0, Math.min(requested, isChatMcpSource(context.source) ? 30 : 120)) * 1000;
 }
 
 const hashSchema = z.string().trim().regex(/^[0-9a-f]{32,48}$/i, 'composite_hash must be a library media hash');
@@ -186,7 +173,7 @@ function requireSpriteJob(jobId: string, requester: SpriteRequester): RuntimeJob
 
 async function startAndWait(context: McpRequestContext, start: () => RuntimeJobRecord | Promise<RuntimeJobRecord>, waitSeconds: number | undefined) {
   const job = await start();
-  const finished = await waitForRuntimeJob(job.jobId, waitBudgetMs(context, waitSeconds));
+  const finished = await waitForRuntimeJob(job.jobId, resolveMcpInlineWaitMs(context.source, waitSeconds));
   return textResult(await describeJob(context, finished ?? job));
 }
 

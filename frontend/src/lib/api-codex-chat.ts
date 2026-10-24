@@ -999,7 +999,7 @@ export function importCodexChatThread(file: File) {
   return requestApiData<{ thread: CodexChatThread; notes: string[] }>('/api/codex-chat/threads/import', { method: 'POST', body })
 }
 
-/** CoNAI chat JSON files from the requester's file store (chat backups) as new chats, each reported on its own. */
+/** CoNAI chat JSON files from the shared file store (chat backups) as new chats, each reported on its own. */
 export function importChatFromFiles(fileIds: string[]) {
   return requestApiData<{ results: Array<{ fileId: string; name: string; threadId?: number; notes?: string[]; error?: string }> }>('/api/codex-chat/threads/import-files', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ fileIds }) })
 }
@@ -1643,7 +1643,7 @@ export interface LinkedFileView {
   size: number | null
   /** The profiles (a room: its members) whose links bring it. */
   profiles: Array<{ id: number; name: string }>
-  /** Gone, in the lorebooks, or another account's: requests skip it. */
+  /** Unavailable, not text, or in the lorebooks: requests skip it. */
   missing: boolean
 }
 
@@ -1659,7 +1659,7 @@ export function undoChatFileChange(threadId: number, replyId: string, fileId: st
   return requestApiData<ChatFileChange>(`/api/codex-chat/threads/${threadId}/file-changes/undo`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ replyId, fileId }) })
 }
 
-/** Names and places of links in your own file store (the profile editor). */
+/** Names and places of links in the shared file store (the profile editor). */
 export function describeLinkedFiles(links: LinkedFileLink[]) {
   return requestApiData<LinkedFileView[]>('/api/codex-chat/linked-files/describe', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ links }) })
 }

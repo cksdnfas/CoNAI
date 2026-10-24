@@ -286,9 +286,9 @@ export class WatchedFolderService {
   }
 
   /**
-   * 폴더 삭제
+   * 폴더 등록 해제. 원본 파일 삭제 옵션은 기존 호출 시그니처로만 유지한다.
    */
-  static async deleteFolder(id: number, deleteFiles: boolean = false): Promise<boolean> {
+  static async deleteFolder(id: number, _deleteFiles: boolean = false): Promise<boolean> {
     const folder = db.prepare(`
       SELECT id, folder_name, is_default FROM watched_folders WHERE id = ?
     `).get(id) as Pick<WatchedFolder, 'id' | 'folder_name' | 'is_default'> | undefined;
@@ -299,11 +299,6 @@ export class WatchedFolderService {
 
     if (folder.is_default === 1 && folder.folder_name === DEFAULT_UPLOAD_FOLDER_NAME) {
       throw createServiceError('기본 Upload 폴더는 삭제할 수 없습니다', 400);
-    }
-
-    if (deleteFiles) {
-      // image_files에서도 삭제 (CASCADE로 자동 처리됨)
-      // 하지만 media_metadata는 유지 (다른 폴더에서 참조 가능)
     }
 
     const info = db.prepare('DELETE FROM watched_folders WHERE id = ?').run(id);

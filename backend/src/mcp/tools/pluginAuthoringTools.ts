@@ -4,13 +4,14 @@ import type { McpRequestContext } from '../context'
 import { changePluginDraft, createPluginDraft, listPluginDrafts, pluginDraftChangeSchema, pluginDraftCreateSchema, pluginDraftReadSchema, pluginDraftRevisionSchema, readPluginDraft, requirePluginAuthor, reviewPluginDraft } from '../../services/plugins/pluginAuthoring'
 import { listPlugins } from '../../services/plugins/pluginRegistry'
 import { checkPluginSources, listPluginSources, pluginSourceCheckSchema } from '../../services/plugins/pluginSources'
+import { errorResult, textResult } from '../toolResults'
 
 export function registerPluginAuthoringTools(server: McpServer, context: McpRequestContext) {
   const output = async (operation: () => unknown) => {
     try {
       requirePluginAuthor(context.requester)
-      return { content: [{ type: 'text' as const, text: JSON.stringify(await operation()) }] }
-    } catch (error) { return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] } }
+      return textResult(await operation())
+    } catch (error) { return errorResult(error) }
   }
   server.registerTool('list_plugin_drafts', {
     description: 'List plugin development drafts and installed packages (including disabled) for an administrator. Drafts are inactive source code. Read PLUGIN_DEVELOPMENT with get_app_guide before authoring. Create/edit a draft, then prepare_plugin_install for human review in plugin management. Installed packages linked to a Git repository carry `source` (repository, ref, installed commit, last update check).',

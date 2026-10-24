@@ -78,7 +78,6 @@ export class AutoScanScheduler {
     const runPhase2 = async () => {
       // 중복 실행 방지 락
       if (this.isPhase2Running) {
-        // console.log('  ⏳ Phase 2 백그라운드 처리가 이미 진행 중입니다. 건너뜁니다.');
         return;
       }
 
@@ -169,35 +168,6 @@ export class AutoScanScheduler {
     }
 
     console.log('🛑 자동 스캔 스케줄러 중지됨 (Phase 1 + Phase 2 + Phase 3)');
-  }
-
-  /**
-   * 스케줄러 상태 확인
-   */
-  static getStatus(): {
-    running: boolean;
-    scanning: boolean;
-  } {
-    return {
-      running: this.cronTask !== null,
-      scanning: this.isRunning
-    };
-  }
-
-  /**
-   * 수동 스캔 트리거 (테스트용)
-   */
-  static async triggerManualScan(): Promise<void> {
-    if (this.isRunning) {
-      throw new Error('스캔이 이미 진행 중입니다');
-    }
-
-    this.isRunning = true;
-    try {
-      await FolderScanService.runAutoScan();
-    } finally {
-      this.isRunning = false;
-    }
   }
 
   /**

@@ -46,7 +46,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/custom-dropdown-lists/by-name/:name
  */
 router.get('/by-name/:name', asyncHandler(async (req: Request, res: Response) => {
-  const name = routeParam(routeParam(req.params.name));
+  const name = routeParam(req.params.name);
 
   if (!name) {
     return res.status(400).json({
@@ -114,7 +114,7 @@ router.get('/comfy-model-thumbnail', requireImagesView, asyncHandler(async (req:
  * GET /api/custom-dropdown-lists/:id
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -212,7 +212,7 @@ router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: R
  * PUT /api/custom-dropdown-lists/:id
  */
 router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
   const { name, description, items } = req.body;
 
   if (isNaN(id)) {
@@ -295,7 +295,7 @@ router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req:
  * DELETE /api/custom-dropdown-lists/:id
  */
 router.delete('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
     return res.status(400).json({

@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { isChatMcpSource, type McpRequestContext } from '../context';
+import { runToolResult as run } from '../toolResults';
 import { requireMcpResourceOwner } from '../toolAccess';
 import { requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry';
 import {
@@ -21,18 +22,6 @@ import { listAudioWorkflows } from '../../services/audio/audioWorkflows';
  * The order tool takes `audio_group_id`, not `group_id`: generate-scope tools with a `group_id` are image-library
  * group writes in the shared access check.
  */
-
-function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
-}
-
-function errorResult(error: unknown) {
-  return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
-}
-
-async function run(action: () => unknown) {
-  try { return textResult(await action()); } catch (error) { return errorResult(error); }
-}
 
 /** What a bot needs: status per job and the candidate ids, which the chat shows as players. */
 function orderSummary(order: AudioOrder) {

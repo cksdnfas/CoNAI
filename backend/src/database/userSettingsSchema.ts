@@ -1205,36 +1205,6 @@ export function createUserSettingsSchema(db: Database.Database): void {
     db.exec('ALTER TABLE custom_dropdown_lists ADD COLUMN source_path TEXT');
   }
 
-  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='prompt_presets'").get()) {
-    console.log('  Migrating user settings: creating prompt_presets table');
-    db.exec(`
-      CREATE TABLE prompt_presets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL UNIQUE,
-        description TEXT,
-        parent_id INTEGER DEFAULT NULL,
-        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (parent_id) REFERENCES prompt_presets(id) ON DELETE SET NULL
-      )
-    `);
-  }
-
-  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='prompt_preset_items'").get()) {
-    console.log('  Migrating user settings: creating prompt_preset_items table');
-    db.exec(`
-      CREATE TABLE prompt_preset_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        preset_id INTEGER NOT NULL,
-        description TEXT NOT NULL,
-        value TEXT NOT NULL,
-        order_index INTEGER NOT NULL DEFAULT 0,
-        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (preset_id) REFERENCES prompt_presets(id) ON DELETE CASCADE
-      )
-    `);
-  }
-
   // Migrate external_api_providers table
   if (!hasColumn('external_api_providers', 'provider_type')) {
     console.log('  Migrating external_api_providers: adding provider_type column');
@@ -1273,39 +1243,6 @@ export function createUserSettingsSchema(db: Database.Database): void {
   }
 
   // Migrate graph_workflow_schedules table
-  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='graph_workflow_schedules'").get()) {
-    console.log('  Migrating user settings: creating graph_workflow_schedules table');
-    db.exec(`
-      CREATE TABLE graph_workflow_schedules (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        graph_workflow_id INTEGER NOT NULL,
-        name TEXT NOT NULL,
-        schedule_type TEXT NOT NULL CHECK(schedule_type IN ('once', 'interval', 'daily')),
-        status TEXT NOT NULL CHECK(status IN ('active', 'paused', 'error_stopped', 'overlap_stopped', 'completed')) DEFAULT 'paused',
-        timezone TEXT,
-        run_at DATETIME,
-        interval_minutes INTEGER,
-        daily_time TEXT,
-        max_run_count INTEGER,
-        run_enqueue_count INTEGER NOT NULL DEFAULT 1,
-        failure_policy TEXT CHECK(failure_policy IN ('stop', 'continue')) DEFAULT 'stop',
-        input_values TEXT,
-        confirmed_graph_version INTEGER,
-        confirmed_input_signature TEXT,
-        stop_reason_code TEXT,
-        stop_reason_message TEXT,
-        last_execution_id INTEGER,
-        next_run_at DATETIME,
-        last_enqueued_at DATETIME,
-        run_as_account_id INTEGER,
-        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (graph_workflow_id) REFERENCES graph_workflows(id) ON DELETE CASCADE,
-        FOREIGN KEY (last_execution_id) REFERENCES graph_executions(id) ON DELETE SET NULL
-      )
-    `);
-  }
-
   if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='graph_workflow_schedules'").get() && !hasColumn('graph_workflow_schedules', 'failure_policy')) {
     console.log('  Migrating graph_workflow_schedules: adding failure_policy column');
     db.exec("ALTER TABLE graph_workflow_schedules ADD COLUMN failure_policy TEXT CHECK(failure_policy IN ('stop', 'continue')) DEFAULT 'stop'");
@@ -1322,46 +1259,6 @@ export function createUserSettingsSchema(db: Database.Database): void {
   if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='graph_workflow_schedules'").get() && !hasColumn('graph_workflow_schedules', 'run_as_account_id')) {
     console.log('  Migrating graph_workflow_schedules: adding run_as_account_id column');
     db.exec('ALTER TABLE graph_workflow_schedules ADD COLUMN run_as_account_id INTEGER');
-  }
-
-  if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='generation_queue_jobs'").get()) {
-    console.log('  Migrating user settings: creating generation_queue_jobs table');
-    db.exec(`
-      CREATE TABLE generation_queue_jobs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        service_type TEXT NOT NULL CHECK(service_type IN ('comfyui', 'novelai', 'codex')),
-        status TEXT NOT NULL CHECK(status IN ('queued', 'dispatching', 'running', 'completed', 'failed', 'cancelled')) DEFAULT 'queued',
-        priority INTEGER NOT NULL DEFAULT 100,
-        requested_by_account_id INTEGER,
-        requested_by_account_type TEXT,
-        workflow_id INTEGER,
-        workflow_name TEXT,
-        requested_group_id INTEGER,
-        requested_server_id INTEGER,
-        requested_server_tag TEXT,
-        assigned_server_id INTEGER,
-        provider_job_id TEXT,
-        request_payload TEXT NOT NULL,
-        request_summary TEXT,
-        failure_code TEXT,
-        failure_message TEXT,
-        cancel_requested INTEGER NOT NULL DEFAULT 0,
-        cancel_requested_at TEXT,
-        cancel_origin TEXT,
-        provider_submit_state TEXT NOT NULL DEFAULT 'none',
-        provider_submit_started_at TEXT,
-        provider_cancel_state TEXT,
-        submit_attempt_count INTEGER NOT NULL DEFAULT 0,
-        queued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        started_at DATETIME,
-        completed_at DATETIME,
-        created_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_date DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE SET NULL,
-        FOREIGN KEY (requested_server_id) REFERENCES comfyui_servers(id) ON DELETE SET NULL,
-        FOREIGN KEY (assigned_server_id) REFERENCES comfyui_servers(id) ON DELETE SET NULL
-      )
-    `);
   }
 
   if (!hasColumn('generation_queue_jobs', 'requested_server_tag')) {
@@ -1485,7 +1382,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
   }
 
   // PAYLOAD-2: debug flag/metadata columns.
-  // Deliberately added *after* the CHECK rebuild so the three CREATE TABLE copies
+  // Deliberately added *after* the CHECK rebuild so the two CREATE TABLE copies
   // and the rebuild's INSERT/SELECT column lists stay identical (R-b contract),
   // and so a legacy rebuild can never drop freshly written debug metadata.
   applyGenerationQueueDebugColumns(db);
@@ -1631,7 +1528,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     migratePinnedMemoriesToChatBooks(db);
   }
 
-  console.log('  ✅ User settings tables created (19 tables + indexes)');
+  console.log('  ✅ User settings tables created');
 
 }
 

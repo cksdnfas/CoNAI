@@ -1,68 +1,79 @@
 import { db } from '../database/init';
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
 import { PromptCollectionRecord,
-NegativePromptCollectionRecord,
 PromptCollectionData,
 PromptSearchResult,
 PAGINATION } from '@conai/shared';
-import { getPromptCollectionTableName as getTableName } from '../utils/promptTables';
+import { getPromptCollectionTableName as getTableName, type PromptTableType } from '../utils/promptTables';
 
 type PromptSearchRow = Pick<PromptCollectionRecord, 'id' | 'prompt' | 'usage_count' | 'group_id' | 'synonyms'>
   & Pick<PromptSearchResult, 'type'>;
+
+function addOrIncrementPrompt(type: PromptTableType, prompt: string, group_id?: number): number {
+  const tableName = getTableName(type);
+  const row = db.prepare(`SELECT id, usage_count FROM ${tableName} WHERE prompt = ?`).get(prompt) as PromptCollectionRecord | undefined;
+
+  if (row) {
+    db.prepare(`UPDATE ${tableName} SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(row.id);
+    return row.id;
+  } else {
+    const info = db.prepare(`
+      INSERT INTO ${tableName} (prompt, usage_count, group_id)
+      VALUES (?, 1, ?)
+    `).run(prompt, group_id || null);
+    return info.lastInsertRowid as number;
+  }
+}
+
+function batchAddOrIncrementPrompts(type: PromptTableType, prompts: PromptCollectionData[]): number {
+  if (!prompts || prompts.length === 0) {
+    return 0;
+  }
+
+  const tableName = getTableName(type);
+  let processedCount = 0;
+  const transaction = db.transaction(() => {
+    const selectStmt = db.prepare(`SELECT id, usage_count FROM ${tableName} WHERE prompt = ?`);
+    const updateStmt = db.prepare(`UPDATE ${tableName} SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
+    const insertStmt = db.prepare(`INSERT INTO ${tableName} (prompt, usage_count, group_id) VALUES (?, 1, ?)`);
+
+    for (const item of prompts) {
+      const row = selectStmt.get(item.prompt) as PromptCollectionRecord | undefined;
+      if (row) {
+        updateStmt.run(row.id);
+      } else {
+        insertStmt.run(item.prompt, item.group_id || null);
+      }
+      processedCount++;
+    }
+  });
+
+  // IMMEDIATE: the batch reads before it writes, and a deferred read transaction cannot be upgraded
+  // (SQLITE_BUSY at once, busy_timeout ignored) once another connection has written.
+  transaction.immediate();
+  return processedCount;
+}
 
 export class PromptCollectionModel {
   /**
    * 프롬프트 추가 또는 사용 횟수 증가
    */
   static addOrIncrement(prompt: string, group_id?: number): number {
-    const row = db.prepare('SELECT id, usage_count FROM prompt_collection WHERE prompt = ?').get(prompt) as PromptCollectionRecord | undefined;
-
-    if (row) {
-      db.prepare('UPDATE prompt_collection SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
-      return row.id;
-    } else {
-      const info = db.prepare(`
-        INSERT INTO prompt_collection (prompt, usage_count, group_id)
-        VALUES (?, 1, ?)
-      `).run(prompt, group_id || null);
-      return info.lastInsertRowid as number;
-    }
+    return addOrIncrementPrompt('positive', prompt, group_id);
   }
 
   /**
    * 네거티브 프롬프트 추가 또는 사용 횟수 증가
    */
   static addOrIncrementNegative(prompt: string, group_id?: number): number {
-    const row = db.prepare('SELECT id, usage_count FROM negative_prompt_collection WHERE prompt = ?').get(prompt) as NegativePromptCollectionRecord | undefined;
-
-    if (row) {
-      db.prepare('UPDATE negative_prompt_collection SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
-      return row.id;
-    } else {
-      const info = db.prepare(`
-        INSERT INTO negative_prompt_collection (prompt, usage_count, group_id)
-        VALUES (?, 1, ?)
-      `).run(prompt, group_id || null);
-      return info.lastInsertRowid as number;
-    }
+    return addOrIncrementPrompt('negative', prompt, group_id);
   }
 
   /**
    * 자동 프롬프트(태그) 추가 또는 사용 횟수 증가
    */
   static addOrIncrementAuto(prompt: string, group_id?: number): number {
-    const row = db.prepare('SELECT id, usage_count FROM auto_prompt_collection WHERE prompt = ?').get(prompt) as PromptCollectionRecord | undefined;
-
-    if (row) {
-      db.prepare('UPDATE auto_prompt_collection SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
-      return row.id;
-    } else {
-      const info = db.prepare(`
-        INSERT INTO auto_prompt_collection (prompt, usage_count, group_id)
-        VALUES (?, 1, ?)
-      `).run(prompt, group_id || null);
-      return info.lastInsertRowid as number;
-    }
+    return addOrIncrementPrompt('auto', prompt, group_id);
   }
 
   /**
@@ -71,34 +82,7 @@ export class PromptCollectionModel {
    * @returns 처리된 프롬프트 수
    */
   static batchAddOrIncrement(prompts: Array<{ prompt: string; group_id?: number }>): number {
-    if (!prompts || prompts.length === 0) {
-      return 0;
-    }
-
-    let processedCount = 0;
-
-    // 트랜잭션으로 배치 처리
-    const transaction = db.transaction(() => {
-      const selectStmt = db.prepare('SELECT id, usage_count FROM prompt_collection WHERE prompt = ?');
-      const updateStmt = db.prepare('UPDATE prompt_collection SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-      const insertStmt = db.prepare('INSERT INTO prompt_collection (prompt, usage_count, group_id) VALUES (?, 1, ?)');
-
-      for (const item of prompts) {
-        const row = selectStmt.get(item.prompt) as PromptCollectionRecord | undefined;
-
-        if (row) {
-          updateStmt.run(row.id);
-        } else {
-          insertStmt.run(item.prompt, item.group_id || null);
-        }
-        processedCount++;
-      }
-    });
-
-    // IMMEDIATE: the batch reads before it writes, and a deferred read transaction cannot be upgraded
-    // (SQLITE_BUSY at once, busy_timeout ignored) once another connection has written.
-    transaction.immediate();
-    return processedCount;
+    return batchAddOrIncrementPrompts('positive', prompts);
   }
 
   /**
@@ -107,67 +91,14 @@ export class PromptCollectionModel {
    * @returns 처리된 프롬프트 수
    */
   static batchAddOrIncrementNegative(prompts: Array<{ prompt: string; group_id?: number }>): number {
-    if (!prompts || prompts.length === 0) {
-      return 0;
-    }
-
-    let processedCount = 0;
-
-    // 트랜잭션으로 배치 처리
-    const transaction = db.transaction(() => {
-      const selectStmt = db.prepare('SELECT id, usage_count FROM negative_prompt_collection WHERE prompt = ?');
-      const updateStmt = db.prepare('UPDATE negative_prompt_collection SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-      const insertStmt = db.prepare('INSERT INTO negative_prompt_collection (prompt, usage_count, group_id) VALUES (?, 1, ?)');
-
-      for (const item of prompts) {
-        const row = selectStmt.get(item.prompt) as NegativePromptCollectionRecord | undefined;
-
-        if (row) {
-          updateStmt.run(row.id);
-        } else {
-          insertStmt.run(item.prompt, item.group_id || null);
-        }
-        processedCount++;
-      }
-    });
-
-    // IMMEDIATE: the batch reads before it writes, and a deferred read transaction cannot be upgraded
-    // (SQLITE_BUSY at once, busy_timeout ignored) once another connection has written.
-    transaction.immediate();
-    return processedCount;
+    return batchAddOrIncrementPrompts('negative', prompts);
   }
 
   /**
    * 배치 자동 프롬프트 추가 또는 사용 횟수 증가
    */
   static batchAddOrIncrementAuto(prompts: Array<{ prompt: string; group_id?: number }>): number {
-    if (!prompts || prompts.length === 0) {
-      return 0;
-    }
-
-    let processedCount = 0;
-
-    const transaction = db.transaction(() => {
-      const selectStmt = db.prepare('SELECT id, usage_count FROM auto_prompt_collection WHERE prompt = ?');
-      const updateStmt = db.prepare('UPDATE auto_prompt_collection SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-      const insertStmt = db.prepare('INSERT INTO auto_prompt_collection (prompt, usage_count, group_id) VALUES (?, 1, ?)');
-
-      for (const item of prompts) {
-        const row = selectStmt.get(item.prompt) as PromptCollectionRecord | undefined;
-
-        if (row) {
-          updateStmt.run(row.id);
-        } else {
-          insertStmt.run(item.prompt, item.group_id || null);
-        }
-        processedCount++;
-      }
-    });
-
-    // IMMEDIATE: the batch reads before it writes, and a deferred read transaction cannot be upgraded
-    // (SQLITE_BUSY at once, busy_timeout ignored) once another connection has written.
-    transaction.immediate();
-    return processedCount;
+    return batchAddOrIncrementPrompts('auto', prompts);
   }
 
   /**

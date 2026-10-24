@@ -122,37 +122,6 @@ export class GraphExecutionModel {
     return records.sort(compareNewestFirst)
   }
 
-  /** List executions for a workflow id set, newest first. */
-  static findByWorkflowIds(workflowIds: number[], limit = 200): GraphExecutionRecord[] {
-    if (workflowIds.length === 0) {
-      return []
-    }
-
-    const db = getUserSettingsDb()
-    const placeholders = workflowIds.map(() => '?').join(', ')
-    return db.prepare(`
-      SELECT * FROM graph_executions
-      WHERE graph_workflow_id IN (${placeholders})
-      ORDER BY created_date DESC, id DESC
-      LIMIT ?
-    `).all(...workflowIds, limit) as GraphExecutionRecord[]
-  }
-
-  /** List every execution for a workflow id set, newest first. */
-  static findAllByWorkflowIds(workflowIds: number[]): GraphExecutionRecord[] {
-    if (workflowIds.length === 0) {
-      return []
-    }
-
-    const db = getUserSettingsDb()
-    const placeholders = workflowIds.map(() => '?').join(', ')
-    return db.prepare(`
-      SELECT * FROM graph_executions
-      WHERE graph_workflow_id IN (${placeholders})
-      ORDER BY created_date DESC, id DESC
-    `).all(...workflowIds) as GraphExecutionRecord[]
-  }
-
   /** Count executions by status for schedule id sets without hydrating execution rows. */
   static countStatusesByScheduleIds(scheduleIds: number[]) {
     const countsByScheduleId = new Map<number, GraphExecutionStatusCounts>()
@@ -508,22 +477,6 @@ export class GraphExecutionModel {
     }
 
     return positions
-  }
-
-  /** List executions linked to one schedule id set, newest first. */
-  static findByScheduleIds(scheduleIds: number[], limit = 200): GraphExecutionRecord[] {
-    if (scheduleIds.length === 0) {
-      return []
-    }
-
-    const db = getUserSettingsDb()
-    const placeholders = scheduleIds.map(() => '?').join(', ')
-    return db.prepare(`
-      SELECT * FROM graph_executions
-      WHERE schedule_id IN (${placeholders})
-      ORDER BY created_date DESC, id DESC
-      LIMIT ?
-    `).all(...scheduleIds, limit) as GraphExecutionRecord[]
   }
 
   static update(id: number, data: Partial<GraphExecutionRecord>) {

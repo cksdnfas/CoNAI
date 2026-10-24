@@ -365,9 +365,7 @@ export class PromptSimilarityService {
     if (mediaIds.length === 0) {
       return [];
     }
-    const visibleCondition = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
-    const readyCondition = MediaPostprocessVisibilityService.buildReadyCondition('im');
-    const candidateFingerprintCondition = this.buildPromptCandidateFingerprintCondition(activeFields);
+    const candidateCondition = this.buildPromptCandidateCondition(activeFields);
     return db.prepare(`
       SELECT
         im.media_id,
@@ -380,18 +378,7 @@ export class PromptSimilarityService {
         im.prompt_similarity_updated_date
       FROM media_metadata im
       WHERE im.media_id IN (${mediaIds.map(() => '?').join(',')})
-        AND im.composite_hash != ?
-        AND im.prompt_similarity_algorithm = ?
-        AND im.prompt_similarity_version = ?
-        AND (${candidateFingerprintCondition})
-        AND ${visibleCondition}
-        AND ${readyCondition}
-        AND EXISTS (
-          SELECT 1
-          FROM image_files if
-          WHERE if.composite_hash = im.composite_hash
-            AND if.file_status = 'active'
-        )
+        AND ${candidateCondition}
     `).all(...mediaIds, compositeHash, settings.algorithm, PROMPT_SIMILARITY_VERSION) as Array<PromptSimilarityCandidateRow & { media_id: number }>;
   }
 
@@ -401,9 +388,7 @@ export class PromptSimilarityService {
     settings: PromptSimilaritySettings,
     activeFields: PromptSimilarityFieldName[],
   ): PromptSimilarityCandidateRow[] {
-    const visibleCondition = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
-    const readyCondition = MediaPostprocessVisibilityService.buildReadyCondition('im');
-    const candidateFingerprintCondition = this.buildPromptCandidateFingerprintCondition(activeFields);
+    const candidateCondition = this.buildPromptCandidateCondition(activeFields);
     return db.prepare(`
       SELECT
         im.composite_hash,
@@ -414,18 +399,7 @@ export class PromptSimilarityService {
         im.auto_prompt_fingerprint,
         im.prompt_similarity_updated_date
       FROM media_metadata im
-      WHERE im.composite_hash != ?
-        AND im.prompt_similarity_algorithm = ?
-        AND im.prompt_similarity_version = ?
-        AND (${candidateFingerprintCondition})
-        AND ${visibleCondition}
-        AND ${readyCondition}
-        AND EXISTS (
-          SELECT 1
-          FROM image_files if
-          WHERE if.composite_hash = im.composite_hash
-            AND if.file_status = 'active'
-        )
+      WHERE ${candidateCondition}
     `).all(compositeHash, settings.algorithm, PROMPT_SIMILARITY_VERSION) as PromptSimilarityCandidateRow[];
   }
 
@@ -734,15 +708,31 @@ export class PromptSimilarityService {
     return fields.filter((field) => field.hasSource && field.weight > 0).map((field) => field.name);
   }
 
-  /** Restrict prompt similarity candidates to rows with usable prepared fingerprints. */
-  private static buildPromptCandidateFingerprintCondition(activeFields: PromptSimilarityFieldName[]): string {
+  /** Indexed and full-scan candidates share visibility, active-file and prepared-fingerprint requirements. */
+  private static buildPromptCandidateCondition(activeFields: PromptSimilarityFieldName[]): string {
+    const visibleCondition = ImageSafetyService.buildVisibleScoreCondition('im.rating_score');
+    const readyCondition = MediaPostprocessVisibilityService.buildReadyCondition('im');
     const fingerprintColumns: Record<PromptSimilarityFieldName, string> = {
       positive: 'im.pos_prompt_fingerprint',
       negative: 'im.neg_prompt_fingerprint',
       auto: 'im.auto_prompt_fingerprint',
     };
 
-    return activeFields.map((field) => `${fingerprintColumns[field]} IS NOT NULL`).join(' OR ') || '1 = 0';
+    const fingerprintCondition = activeFields.map((field) => `${fingerprintColumns[field]} IS NOT NULL`).join(' OR ') || '1 = 0';
+    return `
+      im.composite_hash != ?
+      AND im.prompt_similarity_algorithm = ?
+      AND im.prompt_similarity_version = ?
+      AND (${fingerprintCondition})
+      AND ${visibleCondition}
+      AND ${readyCondition}
+      AND EXISTS (
+        SELECT 1
+        FROM image_files if
+        WHERE if.composite_hash = im.composite_hash
+          AND if.file_status = 'active'
+      )
+    `;
   }
 
   /** Build normalized text and fingerprint pairs for one row. */

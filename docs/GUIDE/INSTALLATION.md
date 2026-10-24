@@ -6,7 +6,7 @@
 
 | 항목 | 기준 |
 | --- | --- |
-| Node.js | `>= 20.19` |
+| Node.js | `>= 22.13.0` (`package.json`의 engines 기준) |
 | npm | Node.js와 함께 설치되는 npm |
 | OS | Windows 권장 |
 | 디스크 | 이미지/비디오 저장 공간 충분히 확보 |
@@ -21,10 +21,9 @@ Node.js 없이 컨테이너로 실행하려면 [Docker로 실행](./DOCKER.md)�
 
 ```bash
 npm install
-npm run install:all
 ```
 
-`install:all`은 루트, 프론트엔드, 백엔드 워크스페이스 의존성을 설치합니다.
+루트의 `npm install`은 shared, backend, frontend 워크스페이스 의존성도 함께 설치합니다.
 
 ## `.env` 준비
 

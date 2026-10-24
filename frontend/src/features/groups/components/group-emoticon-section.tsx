@@ -16,6 +16,7 @@ import { buildApiUrl } from '@/lib/api-url'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import type { EmoticonEntry, GroupRecord } from '@/types/group'
+import { UPLOAD_LIMITS } from '@conai/shared'
 
 function parseKeywords(value: string) {
   const seen = new Set<string>()
@@ -27,7 +28,6 @@ function parseKeywords(value: string) {
   })
 }
 
-const UPLOAD_BATCH_FILES = 20
 const UPLOAD_BATCH_BYTES = 900 * 1024 * 1024
 
 /** Splits files into requests the upload endpoint accepts (20 files, under 1 GB). */
@@ -36,7 +36,7 @@ function uploadBatches(files: File[]) {
   let current: File[] = []
   let bytes = 0
   for (const file of files) {
-    if (current.length >= UPLOAD_BATCH_FILES || (current.length > 0 && bytes + file.size > UPLOAD_BATCH_BYTES)) {
+    if (current.length >= UPLOAD_LIMITS.maxFilesPerRequest || (current.length > 0 && bytes + file.size > UPLOAD_BATCH_BYTES)) {
       batches.push(current)
       current = []
       bytes = 0

@@ -5,14 +5,7 @@ import { settingsService } from '../../services/settingsService';
 import { WALLPAPER_SCHEDULE_TIME } from '../../services/settingsServiceStorage';
 import { resolveScheduledWallpaperPresetId } from '@conai/shared';
 import { saveWallpaperSchedule, setLiveWallpaper } from '../../services/wallpaperSettings';
-
-function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
-}
-
-function errorResult(error: unknown) {
-  return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
-}
+import { errorResult, textResult } from '../toolResults';
 
 /** Compact wallpaper state: saved wallpapers without their widgets, the live one, the schedule and what it shows now. */
 function wallpaperState(appearance: AppearanceSettings) {

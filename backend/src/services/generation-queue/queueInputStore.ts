@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { runtimePaths } from '../../config/runtimePaths'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
+import { chunkSqliteValues, sqliteInPlaceholders } from '../../utils/sqliteBatch'
 
 /**
  * PAYLOAD-3: content-addressed store for base64 image inputs.
@@ -17,9 +18,8 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
  * See `releaseQueueInputsForJobs` for why that anchor (rather than "job is terminal")
  * is the safe one.
  *
- * Backward compatibility (plan §1-8): nothing here rewrites existing rows. Payloads that
- * still carry inline `dataUrl` values keep working through the untouched base64 branch in
- * `prepareComfyPromptData`, which is why this module never has to migrate old jobs.
+ * CleanupService backfills stored payloads through `externalizeStoredQueuePayloads`.
+ * Inputs that remain inline still work through the base64 branch in `prepareComfyPromptData`.
  */
 
 export const QUEUE_INPUT_REF_KIND = 'queue-input'
@@ -34,9 +34,6 @@ const MAX_PAYLOAD_WALK_DEPTH = 12
 const ORPHAN_SWEEP_GRACE_MS = 60 * 60 * 1000
 
 const DATA_URL_PATTERN = /^data:([a-zA-Z0-9.+/-]+)?;base64,/
-
-/** Stay well under SQLite's bind-parameter ceiling when releasing a large prune batch. */
-const RELEASE_JOB_ID_CHUNK_SIZE = 500
 
 export type QueueInputRef = {
   __ref: typeof QUEUE_INPUT_REF_KIND
@@ -326,14 +323,11 @@ export function releaseQueueInputsForJobs(jobIds: number[]) {
 
   const db = getUserSettingsDb()
   // A cold backlog can compact far more jobs than SQLite's bind-parameter ceiling allows.
-  const chunks: number[][] = []
-  for (let index = 0; index < jobIds.length; index += RELEASE_JOB_ID_CHUNK_SIZE) {
-    chunks.push(jobIds.slice(index, index + RELEASE_JOB_ID_CHUNK_SIZE))
-  }
+  const chunks = chunkSqliteValues(jobIds)
 
   const candidateShaSet = new Set<string>()
   for (const chunk of chunks) {
-    const placeholders = chunk.map(() => '?').join(', ')
+    const placeholders = sqliteInPlaceholders(chunk)
     for (const row of db.prepare(`
       SELECT DISTINCT sha256 FROM generation_queue_input_refs
       WHERE job_id IN (${placeholders})
@@ -348,7 +342,7 @@ export function releaseQueueInputsForJobs(jobIds: number[]) {
   }
 
   for (const chunk of chunks) {
-    const placeholders = chunk.map(() => '?').join(', ')
+    const placeholders = sqliteInPlaceholders(chunk)
     db.prepare(`DELETE FROM generation_queue_input_refs WHERE job_id IN (${placeholders})`).run(...chunk)
   }
 

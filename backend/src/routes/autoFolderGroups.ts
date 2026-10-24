@@ -44,9 +44,9 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/children/:parentId', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const parentId = routeParam(routeParam(req.params.parentId)) === 'root'
+    const parentId = routeParam(req.params.parentId) === 'root'
       ? null
-      : validateId(routeParam(routeParam(req.params.parentId)), 'Parent ID');
+      : validateId(routeParam(req.params.parentId), 'Parent ID');
 
     const groups = await AutoFolderGroupService.getChildGroups(parentId);
     return res.json(successResponse(groups));
@@ -64,7 +64,7 @@ router.get('/children/:parentId', asyncHandler(async (req: Request, res: Respons
  */
 router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
 
     const randomImage = await AutoFolderGroupService.getRandomThumbnail(id);
 
@@ -91,7 +91,7 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
  */
 router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const count = parseInt(req.query.count as string) || 8;
     const includeChildren = req.query.includeChildren !== 'false'; // 기본값 true
 
@@ -118,7 +118,7 @@ router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Respons
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
 
     const group = await AutoFolderGroupService.getGroupById(id);
 
@@ -141,7 +141,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const pageSize = Math.min(
       Math.max(1, parseInt(req.query.pageSize as string) || PAGINATION.DEFAULT_LIMIT),
@@ -190,7 +190,7 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/:id/breadcrumb', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
 
     const breadcrumb = await AutoFolderGroupService.getBreadcrumbPath(id);
 
@@ -225,7 +225,7 @@ router.post('/rebuild', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/:id/download', cancellableAsyncHandler(async (req, res, signal) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const type = (req.query.type as DownloadType) || 'original';
     const hashesParam = req.query.hashes as string | undefined;
     const includeChildren = req.query.include_children === 'true';
@@ -276,7 +276,7 @@ router.get('/:id/download', cancellableAsyncHandler(async (req, res, signal) => 
  */
 router.get('/:id/file-counts', cancellableAsyncHandler(async (req, res, signal) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const includeChildren = req.query.include_children === 'true';
 
     const fileCounts = await GroupDownloadService.getFileCountByType(id, 'auto-folder', includeChildren, signal);

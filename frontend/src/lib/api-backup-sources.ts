@@ -1,15 +1,5 @@
-import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { fetchJson } from '@/lib/api-client'
-import type { ApiResponse } from '@/types/image'
+import { fetchApiData as requestBackupSourceData } from '@/lib/api-client'
 import type { BackupSource, BackupSourceInput, BackupSourceUpdateInput } from '@/types/folder'
-
-async function requestBackupSourceData<T>(path: string, fallbackKey: Parameters<typeof createApiFallbackError>[1], init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<T>>(path, init)
-  if (!response.success) {
-    throw createApiFallbackError(response.error, fallbackKey)
-  }
-  return response.data
-}
 
 export async function getBackupSources(activeOnly = false) {
   const searchParams = new URLSearchParams()

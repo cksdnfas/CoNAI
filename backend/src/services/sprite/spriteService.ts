@@ -11,7 +11,7 @@ import { spriteOptionsXmp } from './spriteEncode'
 import { SpriteError } from './spriteErrors'
 import { ffmpegBinary, probeVideo, runTool } from './spriteFfmpeg'
 import { ANIMATION_DEFAULTS, ANIMATION_MIME, type AnimationOptions } from './spriteAnimation'
-import { NORMALIZATION_DEFAULTS, type NormalizationOptions, type NormalizationSheetOptions } from './spriteNormalize'
+import { MAX_BULK_NORMALIZATION_SHEETS, MAX_NORMALIZATION_SHEETS, NORMALIZATION_DEFAULTS, type NormalizationOptions, type NormalizationSheetOptions } from './spriteNormalize'
 import { resolveExtractOptions, validateExtractOptions, validateImageOutput, type SpriteExtractOptionsInput, type SpriteImageFormat, type SpriteVideoInfo } from './spriteOptions'
 import type { Rect } from './spritePixels'
 import { findLibraryMedia, requireLibraryImage, requireLibraryVideo, saveSpriteOutputToLibrary, type SpriteGroupTarget } from './spriteLibrary'
@@ -238,7 +238,6 @@ export interface ExtractBatchJobResult {
 interface LiveBatch {
   items: ExtractBatchItem[]
   stopRequested: boolean
-  requestedByAccountId: number | null
 }
 const liveBatches = new Map<string, LiveBatch>()
 const LIVE_BATCH_KEEP_MS = 60 * 60 * 1000
@@ -315,7 +314,6 @@ async function runExtractBatch(params: ExtractBatchJobParams, ctx: RuntimeJobCon
   const live: LiveBatch = {
     items: params.videoHashes.map((videoHash) => ({ videoHash, status: 'waiting' })),
     stopRequested: false,
-    requestedByAccountId: params.requester.accountId,
   }
   liveBatches.set(ctx.jobId, live)
   try {
@@ -380,7 +378,7 @@ export interface NormalizeJobResult {
 
 async function runNormalize(params: NormalizeJobParams, ctx: RuntimeJobContext<unknown>): Promise<NormalizeJobResult> {
   const options: NormalizationOptions = { ...NORMALIZATION_DEFAULTS, ...params.options }
-  const bulk = params.sheets.length > 16
+  const bulk = params.sheets.length > MAX_NORMALIZATION_SHEETS
   const used = new Map<string, number>()
   const sources = params.sheets.map((sheet) => {
     const media = requireLibraryImage(sheet.imageHash)
@@ -513,8 +511,8 @@ export function withSheetDefaults(options: Partial<NormalizationSheetOptions> & 
 }
 
 export function startNormalizeJob(params: NormalizeJobParams): RuntimeJobRecord {
-  if (!Array.isArray(params.sheets) || params.sheets.length < 1 || params.sheets.length > 500) {
-    throw new SpriteError('한 번에 1개에서 500개의 시트를 처리할 수 있습니다.')
+  if (!Array.isArray(params.sheets) || params.sheets.length < 1 || params.sheets.length > MAX_BULK_NORMALIZATION_SHEETS) {
+    throw new SpriteError(`한 번에 1개에서 ${MAX_BULK_NORMALIZATION_SHEETS}개의 시트를 처리할 수 있습니다.`)
   }
   params.sheets.forEach((sheet) => requireLibraryImage(sheet.imageHash))
   params = { ...params, sheets: params.sheets.map((sheet) => ({ imageHash: sheet.imageHash, options: withSheetDefaults(sheet.options ?? ({} as NormalizationSheetOptions)) })) }

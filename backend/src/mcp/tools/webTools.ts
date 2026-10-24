@@ -6,6 +6,7 @@ import { readWebPage, researchWeb, webResearchSettings } from '../../services/co
 import { CodexChatStore } from '../../services/codex-chat/codexChatStore';
 import { fileWriteSource, isChatMcpSource, type McpRequestContext } from '../context';
 import { isContextToolAllowed } from '../toolAccess';
+import { errorResult } from '../toolResults';
 
 export const WEB_TOOLS = { search: 'web_search', read: 'web_read' } as const;
 
@@ -20,7 +21,7 @@ export function registerWebTools(server: McpServer, context: McpRequestContext):
     try {
       return { content: [{ type: 'text' as const, text: await action() }] };
     } catch (error) {
-      return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
+      return errorResult(error);
     }
   };
   const signalOf = (extra: unknown) => (extra as { mcpReq?: { signal?: AbortSignal } } | undefined)?.mcpReq?.signal;

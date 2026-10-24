@@ -18,6 +18,7 @@ import { pageAction, pageArray, pageFreeText, pageNumber, pageObject, pageText }
 import { useI18n } from '@/i18n'
 import { invalidatePostScope, createPost, updatePost, getPostsSettings } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
+import { replaceExactText, type ExactTextEdit } from '@/lib/exact-text-edits'
 import { PostAttachPicker, type AttachTab } from './post-attach-picker'
 import { mediaHashesOf, PostMarkdown } from './post-markdown'
 import { PostMediaContext } from './post-media'
@@ -50,18 +51,6 @@ function useStickyTopBelowPageToolbar() {
  * this size (posts.body_at moves it) changed with posts.body_edit.
  */
 const BODY_CHUNK = 2000
-
-/** Exact-text replacements on a body, in order; each `find` must appear once unless `all` is set. */
-function replaceInBody(body: string, edits: Array<{ find: string; replace: string; all?: boolean }>) {
-  let next = body
-  for (const edit of edits) {
-    const count = edit.find ? next.split(edit.find).length - 1 : 0
-    if (count === 0) throw new Error(`본문에 없는 글이야: ${edit.find.slice(0, 40)}`)
-    if (count > 1 && !edit.all) throw new Error(`본문에 ${count}번 나와. 앞뒤 글을 더 넣거나 all을 켜줘: ${edit.find.slice(0, 40)}`)
-    next = edit.all ? next.split(edit.find).join(edit.replace) : next.replace(edit.find, () => edit.replace)
-  }
-  return next
-}
 
 /** Categories in tree order with their depth, for a select. */
 export function flattenCategories(categories: PostCategory[]) {
@@ -221,7 +210,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
       if (id === 'posts.body_at') { setBodyOffset(Number(args.offset)); return }
       if (id === 'posts.body_edit') {
         if (typeof args.whole === 'string') return commitBody(args.whole)
-        return commitBody(replaceInBody(body, (Array.isArray(args.edits) ? args.edits : []) as Array<{ find: string; replace: string; all?: boolean }>))
+        return commitBody(replaceExactText(body, (Array.isArray(args.edits) ? args.edits : []) as ExactTextEdit[], '본문'))
       }
       if (id !== 'posts.save') throw new Error('글 편집기에 없는 작업이야.')
       await save.mutateAsync()

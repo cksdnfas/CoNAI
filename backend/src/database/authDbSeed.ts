@@ -178,7 +178,7 @@ export function migratePermissionsV2(db: Database.Database): void {
       AND permission_id IN (${memberOnly})`).run(visitorKeys);
     // One line per group so an administrator can review what each group can do after the conversion.
     const catalog = new Set<string>(PERMISSION_KEYS);
-    console.log('🔐 Permissions converted to the 18-key catalog (permissions_v2):');
+    console.log(`🔐 Permissions converted to the ${PERMISSION_CATALOG.length}-key catalog (permissions_v2):`);
     for (const [group, after] of grantsByGroup()) {
       console.log(`  - ${group}: [${(before.get(group) ?? []).join(', ')}] → [${after.filter((key) => catalog.has(key)).join(', ')}]`);
     }

@@ -64,7 +64,7 @@ export class RegexEvaluator implements ConditionEvaluator {
       case 'prompt_contains':
         return this.evaluateContains(
           image.prompt || '',
-          value as string,
+          value,
           case_sensitive,
           condition.exact_match
         );
@@ -72,14 +72,14 @@ export class RegexEvaluator implements ConditionEvaluator {
       case 'prompt_regex':
         return this.evaluateRegex(
           image.prompt || '',
-          value as string,
+          value,
           case_sensitive
         );
 
       case 'negative_prompt_contains':
         return this.evaluateContains(
           image.negative_prompt || '',
-          value as string,
+          value,
           case_sensitive,
           condition.exact_match
         );
@@ -87,14 +87,14 @@ export class RegexEvaluator implements ConditionEvaluator {
       case 'negative_prompt_regex':
         return this.evaluateRegex(
           image.negative_prompt || '',
-          value as string,
+          value,
           case_sensitive
         );
 
       case 'model_name':
         return this.evaluateContains(
           image.model_name || '',
-          value as string,
+          value,
           case_sensitive,
           condition.exact_match
         );
@@ -102,12 +102,12 @@ export class RegexEvaluator implements ConditionEvaluator {
       case 'ai_tool':
         return this.evaluateExactMatch(
           image.ai_tool || '',
-          value as string,
+          value,
           case_sensitive
         );
 
       case 'ai_tool_group':
-        return this.evaluateAIToolGroup(image.ai_tool || '', value as string);
+        return this.evaluateAIToolGroup(image.ai_tool || '', value);
 
       case 'lora_model': {
         const loraValue = (image as { lora_models?: string | string[] | null }).lora_models;
@@ -119,7 +119,7 @@ export class RegexEvaluator implements ConditionEvaluator {
 
         return this.evaluateContains(
           loraText,
-          value as string,
+          value,
           case_sensitive,
           condition.exact_match
         );

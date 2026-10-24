@@ -79,21 +79,6 @@ export class GroupHierarchyService {
   }
 
   /**
-   * 직속 자식 그룹 ID 목록 조회
-   * @param parentId 부모 그룹 ID
-   * @returns 자식 그룹 ID 배열
-   */
-  getChildrenIds(parentId: number | null): number[] {
-    const query = parentId === null
-      ? `SELECT id FROM groups WHERE parent_id IS NULL`
-      : `SELECT id FROM groups WHERE parent_id = ?`;
-
-    const params = parentId === null ? [] : [parentId];
-    const rows = this.db.prepare(query).all(...params) as Array<{ id: number }>;
-    return rows.map(row => row.id);
-  }
-
-  /**
    * 현재 깊이 계산
    * @param groupId 그룹 ID
    * @returns 깊이 (루트 = 0)
@@ -137,9 +122,8 @@ export class GroupHierarchyService {
 
     // 깊이 제한 검증
     const parentDepth = this.calculateDepth(newParentId);
-    const descendants_of_group = this.getDescendants(groupId);
-    const maxDescendantDepth = descendants_of_group.length > 0
-      ? Math.max(...descendants_of_group.map(d => d.depth))
+    const maxDescendantDepth = descendants.length > 0
+      ? Math.max(...descendants.map(d => d.depth))
       : 0;
 
     // 새 위치에서의 최대 깊이 = 부모 깊이 + 1 + 현재 그룹의 최대 자손 깊이
@@ -155,17 +139,6 @@ export class GroupHierarchyService {
     }
 
     return { valid: true };
-  }
-
-  /**
-   * 그룹의 자식 개수 조회
-   * @param groupId 그룹 ID
-   * @returns 직속 자식 개수
-   */
-  getChildCount(groupId: number): number {
-    const query = `SELECT COUNT(*) as count FROM groups WHERE parent_id = ?`;
-    const result = this.db.prepare(query).get(groupId) as { count: number };
-    return result.count;
   }
 
   /**

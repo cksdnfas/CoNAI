@@ -110,7 +110,6 @@ CoNAI는 이미지·영상·생성물 관리를 기반으로 지식을 축적하
 
 ```bash
 npm install
-npm run install:all
 ```
 
 ### 개발 서버
@@ -166,9 +165,9 @@ npm run build                       # 전체 빌드
 npm run docs:build                  # VitePress 문서 빌드
 npm run docs:dev                    # 문서 개발 서버
 npm run build:portable              # 포터블 패키지 빌드
-npm run build:docker                # 도커 패키지 빌드
-npm run build:all                   # 통합 + 번들 + 포터블 + 도커 빌드
-npm run db:reset                    # DB 초기화 후 마이그레이션
+npm run deploy:docker:build         # Docker 이미지 빌드·실행
+npm run build:all                   # 통합 + 번들 + 포터블 빌드
+npm run db:migrate --prefix backend # DB 마이그레이션 (초기화 아님)
 ```
 
 ---

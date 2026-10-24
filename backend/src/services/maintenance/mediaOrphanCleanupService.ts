@@ -11,6 +11,7 @@ import { HistoryCommandService } from '../historyCommandService';
 import { PromptCollectionService } from '../promptCollectionService';
 import { SystemMaintenanceLockService } from '../systemMaintenanceLockService';
 import { collectUserDbMediaReferences } from './userMediaReferences';
+import { placeholders, yieldToEventLoop as defaultYield } from './libraryBatch';
 import { sweepAudioOrphans, type AudioOrphanResult } from '../audio/audioMaintenance';
 
 /**
@@ -84,8 +85,6 @@ export interface MediaOrphanCleanupHooks {
   throwIfCancelled?: () => void;
 }
 
-const defaultYield = () => new Promise<void>((resolve) => setImmediate(resolve));
-
 function emptyResult(dryRun: boolean): MediaOrphanCleanupResult {
   return {
     dryRun,
@@ -101,10 +100,6 @@ function emptyResult(dryRun: boolean): MediaOrphanCleanupResult {
 
 function daysModifier(days: number): string {
   return `-${Math.max(0, Math.floor(days))} days`;
-}
-
-function placeholders(count: number): string {
-  return new Array(count).fill('?').join(',');
 }
 
 async function unlinkIfPresent(filePath: string): Promise<boolean> {

@@ -151,7 +151,6 @@ export function useGroupPageQueries({
   const selectedGroupHierarchy = selectedGroupId == null ? null : groupHierarchyLookups.groupById.get(selectedGroupId) ?? null
   const rootGroups = groupHierarchyLookups.childrenByParentId.get(null) ?? EMPTY_GROUP_HIERARCHY_LIST
   const childGroups = selectedGroupId == null ? EMPTY_GROUP_HIERARCHY_LIST : groupHierarchyLookups.childrenByParentId.get(selectedGroupId) ?? EMPTY_GROUP_HIERARCHY_LIST
-  const parentGroupHierarchy = selectedGroupHierarchy?.parent_id == null ? null : groupHierarchyLookups.groupById.get(selectedGroupHierarchy.parent_id) ?? null
   const groupImages = useMemo(
     () => (groupImagesQuery.data?.pages ?? []).flatMap((page) => page.images),
     [groupImagesQuery.data?.pages],
@@ -192,7 +191,6 @@ export function useGroupPageQueries({
     selectedGroupHierarchy,
     rootGroups,
     childGroups,
-    parentGroupHierarchy,
     groupImages,
     selectedGroupImages,
     selectedGroupCompositeHashes,

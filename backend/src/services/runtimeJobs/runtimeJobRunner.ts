@@ -271,10 +271,6 @@ export class RuntimeJobRunner {
     return registry.has(kind)
   }
 
-  static registeredKinds(): RuntimeJobKind[] {
-    return [...registry.keys()]
-  }
-
   /**
    * Create one job row and hand execution to the background.
    * 라우트는 이 반환값을 그대로 202 로 실어 보낸다. 충돌 시 `RuntimeJobConflictError`.

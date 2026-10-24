@@ -20,3 +20,4 @@ export * from './chatNarration';
 export * from './loreKeyLanguage';
 export * from './groupAutoCollect';
 export * from './promptRandomToken';
+export * from './valueNormalization';

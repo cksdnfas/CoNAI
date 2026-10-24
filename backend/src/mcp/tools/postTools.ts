@@ -10,12 +10,11 @@ import { isRequesterAdmin } from '../../middleware/featureAccess';
 import { knowledgeExecutionFromMcp, knowledgeTaskConditionKey, recordKnowledgeSearch, recordKnowledgeUse, submitKnowledgeAssessment } from '../../services/posts/knowledge/knowledgeRuntime';
 import { KnowledgeProposalStore } from '../../services/posts/knowledge/knowledgeProposals';
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles';
-
-function result(data: unknown) { return { content: [{ type: 'text' as const, text: JSON.stringify(data) }] }; }
+import { textResult as result } from '../toolResults';
 
 const LINK_HELP = 'To point the user to it in your chat reply, write the link from the result, e.g. [title](post:12).';
 const EMBED_HELP = 'Body is Markdown. Embed app media on its own line as ![caption](media:<library hash>) for images, videos and animated images, '
-  + '![](audio:<audio candidate id>), ![](group:<image group id>) or ![](file:<file store id>) (your own files only). Consecutive media lines show as a gallery.';
+  + '![](audio:<audio candidate id>), ![](group:<image group id>) or ![](file:<file store id>) (shared file store). Consecutive media lines show as a gallery.';
 
 /** How a post or comment reads to a model: short, with untrusted text marked as data. */
 function postForModel(post: ReturnType<typeof PostStore.get>) {

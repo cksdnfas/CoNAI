@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { SPRITE_DEFAULT_ALPHA_THRESHOLD } from '@conai/shared'
 import { Pipette, Plus, Wand2, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -12,7 +13,7 @@ import { useI18n } from '@/i18n'
 import { getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import type { SpriteVideoInfo } from '@/lib/api-sprite'
 import { cn } from '@/lib/utils'
-import { MAX_KEY_COLORS, MAX_SPRITE_FRAMES, normalizeHex, withDespill, type ExtractForm, type OutputForm, type SaveForm } from './sprite-options'
+import { MAX_KEY_COLORS, MAX_SHEET_DIMENSION, MAX_SPRITE_FRAMES, normalizeHex, withDespill, type ExtractForm, type OutputForm, type SaveForm } from './sprite-options'
 import { HexInput } from './sprite-result-panel'
 import { MiniField, SpriteSection } from './sprite-ui'
 
@@ -147,7 +148,7 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
         {form.autoCrop ? (
           <div className="border-l-2 border-line pl-3">
             <MiniField label={t({ ko: '알파 임계값', en: 'Alpha threshold' })} className="w-32">
-              <NumberStepperInput value={form.alphaThreshold} min={1} max={255} step={1} onValueCommit={(value) => update({ alphaThreshold: Math.max(1, Math.min(255, Number(value) || 20)) })} aria-label={t({ ko: '알파 임계값', en: 'Alpha threshold' })} />
+              <NumberStepperInput value={form.alphaThreshold} min={1} max={255} step={1} onValueCommit={(value) => update({ alphaThreshold: Math.max(1, Math.min(255, Number(value) || SPRITE_DEFAULT_ALPHA_THRESHOLD)) })} aria-label={t({ ko: '알파 임계값', en: 'Alpha threshold' })} />
             </MiniField>
           </div>
         ) : null}
@@ -175,8 +176,8 @@ export function SpriteSettingsPanel({ form, setForm, output, setOutput, save, se
         />
         {form.resizeMode !== 'none' ? (
           <div className="grid grid-cols-2 gap-3">
-            <MiniField label={t({ ko: '가로', en: 'Width' })}><NumberStepperInput value={form.outputWidth} min={1} max={16384} step={1} onValueCommit={(value) => update({ outputWidth: Math.max(1, Number(value) || 1) })} /></MiniField>
-            <MiniField label={t({ ko: '세로', en: 'Height' })}><NumberStepperInput value={form.outputHeight} min={1} max={16384} step={1} onValueCommit={(value) => update({ outputHeight: Math.max(1, Number(value) || 1) })} /></MiniField>
+            <MiniField label={t({ ko: '가로', en: 'Width' })}><NumberStepperInput value={form.outputWidth} min={1} max={MAX_SHEET_DIMENSION} step={1} onValueCommit={(value) => update({ outputWidth: Math.max(1, Number(value) || 1) })} /></MiniField>
+            <MiniField label={t({ ko: '세로', en: 'Height' })}><NumberStepperInput value={form.outputHeight} min={1} max={MAX_SHEET_DIMENSION} step={1} onValueCommit={(value) => update({ outputHeight: Math.max(1, Number(value) || 1) })} /></MiniField>
           </div>
         ) : null}
       </SpriteSection>

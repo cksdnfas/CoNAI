@@ -37,11 +37,6 @@ export function normalizeAutoTagSearchTerm(term: string, exactMatch = false): st
   return Array.from(variants);
 }
 
-/** Collapse separator variants into one key for indexed equality lookups. */
-function compactAutoTagSearchKey(term: string): string {
-  return term.trim().toLowerCase().replace(/[_\s-]+/g, '');
-}
-
 /**
  * The one search key stored per tag in `auto_tag_terms` and used for indexed lookups: separators removed, or the
  * lower-cased text itself when it is nothing but separators. Two terms share a canonical key exactly when one's
@@ -50,7 +45,7 @@ function compactAutoTagSearchKey(term: string): string {
  */
 export function canonicalAutoTagSearchKey(term: string): string {
   const normalized = term.trim().toLowerCase();
-  return compactAutoTagSearchKey(normalized) || normalized;
+  return normalized.replace(/[_\s-]+/g, '') || normalized;
 }
 
 /** Find JSON keys that match any normalized search variant. */

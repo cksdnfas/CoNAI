@@ -498,29 +498,6 @@ export function reorderWallpaperWidgets(layoutPreset: WallpaperLayoutPreset, ord
   }
 }
 
-/** Move one widget to the requested front-to-back order position (1 = front). */
-export function moveWallpaperWidgetToOrder(layoutPreset: WallpaperLayoutPreset, widgetId: string, nextOrder: number) {
-  const currentFrontToBack = getWallpaperWidgetsFrontToBack(layoutPreset.widgets)
-  const currentIndex = currentFrontToBack.findIndex((widget) => widget.id === widgetId)
-  if (currentIndex < 0) {
-    return layoutPreset
-  }
-
-  const clampedIndex = Math.max(0, Math.min(currentFrontToBack.length - 1, Math.round(nextOrder) - 1))
-  if (clampedIndex === currentIndex) {
-    return layoutPreset
-  }
-
-  const reordered = [...currentFrontToBack]
-  const [movedWidget] = reordered.splice(currentIndex, 1)
-  if (!movedWidget) {
-    return layoutPreset
-  }
-  reordered.splice(clampedIndex, 0, movedWidget)
-
-  return reorderWallpaperWidgets(layoutPreset, reordered.map((widget) => widget.id))
-}
-
 /** Bring the given widgets to the front (or back), keeping their order among themselves. */
 export function stackWallpaperWidgets(layoutPreset: WallpaperLayoutPreset, widgetIds: string[], where: 'front' | 'back') {
   const ids = new Set(widgetIds)

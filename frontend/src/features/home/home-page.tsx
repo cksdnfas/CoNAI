@@ -42,7 +42,7 @@ import { useHomeSearch, type TextSearchScope } from './home-search-context'
 import { useHomePageData } from './use-home-page-data'
 import { HOME_HIDDEN_GROUPS_LIMIT } from './home-hidden-groups'
 
-/** Library images can be deleted from the viewer (still admin-only). Module constant keeps ImageList memoized. */
+/** Viewer deletion still requires the account's image-delete permission. Module constant keeps ImageList memoized. */
 const HOME_VIEWER_ACCESS_OPTIONS: ImageViewModalAccessOptions = { allowDeleteAction: true }
 // Signed-out visitors only look: no delete, group assignment or editing from the viewer.
 const ANONYMOUS_VIEWER_ACCESS_OPTIONS: ImageViewModalAccessOptions = { allowGroupAssignAction: false, allowEditAction: false }

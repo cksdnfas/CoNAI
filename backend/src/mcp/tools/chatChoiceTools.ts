@@ -4,9 +4,7 @@ import { CHAT_CHOICE_LIMITS } from '@conai/shared'
 import type { McpRequestContext } from '../context'
 import { ChatProposalStore } from '../../services/codex-chat/chatProposals'
 import { ChatTaskStore } from '../../services/codex-chat/chatTasks'
-
-const result = (value: unknown, extra: Record<string, unknown> = {}) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }], ...extra })
-const failure = (error: unknown) => ({ isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] })
+import { errorResult as failure, textResult as result } from '../toolResults'
 
 /**
  * A question with ready answers in a 1:1 chat: the app shows it above the composer, and the person's next message

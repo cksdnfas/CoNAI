@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
-import { WorkflowModel, normalizePublicQueueRoleLimits, parseWorkflowRoleQueueLimits } from '../../models/Workflow';
+import { WorkflowModel, normalizePublicQueueMaxCount, normalizePublicQueueRoleLimits, parseWorkflowRoleQueueLimits } from '../../models/Workflow';
 import { WorkflowResponse, WorkflowCreateData, WorkflowUpdateData, normalizeWorkflowKind, type WorkflowKind } from '../../types/workflow';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { getWorkflowNumericFieldDefinitionError } from '../../services/workflowNumericFieldPolicy';
@@ -14,6 +14,7 @@ import {
   resolveApiWorkflowJson,
 } from '../../services/comfyui/uiWorkflowConversion';
 import { checkComfyWorkflowOnServers } from '../../services/comfyui/workflowServerCheck';
+import { normalizeOptionalString as normalizeArtifactRootPath } from '../../utils/valueNormalization';
 
 const router = Router();
 
@@ -47,15 +48,6 @@ function normalizeArtifactDirectoryMode(value: unknown) {
   return value === 'per_run' ? 'per_run' : 'shared';
 }
 
-function normalizeArtifactRootPath(value: unknown) {
-  if (typeof value !== 'string') {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
 function normalizePublicSlug(value: unknown): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -70,20 +62,6 @@ function normalizePublicSlug(value: unknown): string | null {
     .replace(/^-|-$/g, '');
 
   return normalized.length > 0 ? normalized : null;
-}
-
-function normalizePublicQueueMaxCount(value: unknown): number | null {
-  const numericValue = typeof value === 'number'
-    ? value
-    : typeof value === 'string' && value.trim().length > 0
-      ? Number(value)
-      : null;
-
-  if (!Number.isFinite(numericValue)) {
-    return null;
-  }
-
-  return Math.min(32, Math.max(1, Math.trunc(numericValue as number)));
 }
 
 /**
@@ -152,7 +130,7 @@ router.get('/:id/export', requirePermission('workflows.view'), asyncHandler(asyn
  * GET /api/workflows/:id
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -394,7 +372,7 @@ router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: R
  * PUT /api/workflows/:id
  */
 router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
   const { name, description, workflow_json, marked_fields, api_endpoint, is_active, is_public_page, public_slug, public_queue_max_count, public_queue_role_limits, result_view_mode, artifact_root_path, artifact_directory_mode, color } = req.body;
   const kind = readWorkflowKindInput(req.body?.kind);
 
@@ -516,7 +494,7 @@ router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req:
  * DELETE /api/workflows/:id
  */
 router.delete('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
     return res.status(400).json({

@@ -16,7 +16,7 @@ export function isValidShortcutKey(key: string): boolean {
 }
 
 export function normalizeShortcutKey(key: string): string {
-  return key.length === 1 ? key.toLowerCase() : key.toLowerCase()
+  return key.toLowerCase()
 }
 
 export function shortcutLabel(key: string): string {

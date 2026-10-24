@@ -1,13 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { listAppGuides, readAppGuide } from '../../services/appGuides';
+import { textResult } from '../toolResults';
 
 /** One page of guide text; a section usually fits in one. */
 const GUIDE_PAGE_CHARS = 8_000;
-
-function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
-}
 
 /** The CoNAI user guides (docs/GUIDE): how each screen and feature works, in the app's own words. */
 export function registerAppGuideTools(server: McpServer): void {

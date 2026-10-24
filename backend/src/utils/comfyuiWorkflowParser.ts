@@ -96,35 +96,6 @@ export class ComfyUIWorkflowParser {
   }
 
   /**
-   * Find nodes by class type
-   * @param workflow - ComfyUI workflow JSON object
-   * @param classType - Node class type to search for
-   * @returns Array of matching nodes
-   */
-  static findNodesByType(workflow: any, classType: string): any[] {
-    const nodes: any[] = [];
-
-    if (!workflow || typeof workflow !== 'object') {
-      return nodes;
-    }
-
-    try {
-      for (const [nodeId, node] of Object.entries(workflow)) {
-        if (!node || typeof node !== 'object') continue;
-        const nodeData = node as any;
-
-        if (nodeData.class_type === classType) {
-          nodes.push({ id: nodeId, ...nodeData });
-        }
-      }
-    } catch (error) {
-      console.error(`[WorkflowParser] Failed to find nodes of type ${classType}:`, error);
-    }
-
-    return nodes;
-  }
-
-  /**
    * Apply prompt_data substitutions to workflow
    * @param workflow - ComfyUI workflow JSON object
    * @param promptData - Prompt data with substitutions

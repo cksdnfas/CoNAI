@@ -5,8 +5,7 @@ import { canStoreAnyFileType, requireFileStoreAction, requireFileStoreOwner, typ
 import { FileStoreError, FileStoreService, MAX_TEXT_DOCUMENT_BYTES, applyTextEdits } from '../../services/fileStoreService';
 import { retryFileSearchIndex, searchStoredFiles } from '../../services/fileStoreSearch';
 import { FileStoreRevisions } from '../../services/fileStoreRevisions';
-
-function result(data: unknown) { return { content: [{ type: 'text' as const, text: JSON.stringify(data) }] }; }
+import { textResult as result } from '../toolResults';
 
 function fitDocument(text: string) {
   if (Buffer.byteLength(text, 'utf8') > MAX_TEXT_DOCUMENT_BYTES) throw new FileStoreError('문서는 2MB까지 저장할 수 있어.', 413);
@@ -45,13 +44,13 @@ export function registerFileStoreTools(server: McpServer, context: McpRequestCon
     text: z.string().max(MAX_TEXT_DOCUMENT_BYTES), overwrite: z.boolean().optional(),
     expected_revision: z.string().regex(/^[a-f0-9]{64}$/).optional().describe('For overwrite: revision from read_file_text; rejects a file changed since that read.'),
   }) }, ({ parent_id, name, text, overwrite, expected_revision }) => manage('organize', (owner) => FileStoreService.writeText(owner, parent_id ?? null, name, fitDocument(text), { create: !overwrite, source: fileWriteSource(context), expectedRevision: expected_revision })));
-  server.registerTool('update_file_text', { description: 'Replace the whole text of one private text file (mode "replace", the default), or add text to its end (mode "append"; start with a newline yourself if needed). The file keeps its ID, name and folder. Up to 2 MB.', inputSchema: z.object({
+  server.registerTool('update_file_text', { description: 'Replace the whole text of one shared text file (mode "replace", the default), or add text to its end (mode "append"; start with a newline yourself if needed). The file keeps its ID, name and folder. Up to 2 MB.', inputSchema: z.object({
     file_id: fileId, text: z.string().max(MAX_TEXT_DOCUMENT_BYTES), mode: z.enum(['replace', 'append']).optional(),
     expected_revision: z.string().regex(/^[a-f0-9]{64}$/).optional().describe('Revision from read_file_text; rejects a file changed since that read.'),
   }) }, ({ file_id, text, mode, expected_revision }) => manage('organize', (owner) => mode === 'append'
     ? FileStoreService.editText(owner, file_id, (current) => current + text, { source: fileWriteSource(context), expectedRevision: expected_revision })
     : FileStoreService.updateText(owner, file_id, fitDocument(text), { source: fileWriteSource(context), expectedRevision: expected_revision })));
-  server.registerTool('edit_file_text', { description: 'Change part of one private text file by exact-text replacement, without resending the whole file. Each old_text must appear exactly once (copy it from read_file_text with enough surrounding text to be unique) unless replace_all is true. Edits apply in order; if any fails, nothing is saved. Returns the file and the number of replacements.', inputSchema: z.object({
+  server.registerTool('edit_file_text', { description: 'Change part of one shared text file by exact-text replacement, without resending the whole file. Each old_text must appear exactly once (copy it from read_file_text with enough surrounding text to be unique) unless replace_all is true. Edits apply in order; if any fails, nothing is saved. Returns the file and the number of replacements.', inputSchema: z.object({
     file_id: fileId,
     edits: z.array(z.object({ old_text: z.string().min(1), new_text: z.string(), replace_all: z.boolean().optional() })).min(1).max(50),
   }) }, ({ file_id, edits }) => manage('organize', (owner) => {
@@ -63,7 +62,7 @@ export function registerFileStoreTools(server: McpServer, context: McpRequestCon
     }, { source: fileWriteSource(context) });
     return { file, replaced };
   }));
-  server.registerTool('list_file_versions', { description: 'Earlier texts of one private text file, newest first (each edit or restore keeps the text it replaced, up to 30). Each version says when it was replaced and by whom (via: editor, chat, mcp, restore…); `current` says who wrote the text the file holds now. Read one with read_file_version, put it back with restore_file_version.', inputSchema: z.object({
+  server.registerTool('list_file_versions', { description: 'Earlier texts of one shared text file, newest first (each edit or restore keeps the text it replaced, up to 30). Each version says when it was replaced and by whom (via: editor, chat, mcp, restore…); `current` says who wrote the text the file holds now. Read one with read_file_version, put it back with restore_file_version.', inputSchema: z.object({
     file_id: fileId,
   }) }, ({ file_id }) => wrap((owner) => {
     const entry = FileStoreService.get(owner, file_id);

@@ -570,32 +570,6 @@ export class WildcardItemModel {
   }
 
   /**
-   * 항목 ID로 조회
-   */
-  static findById(id: number): WildcardItem | undefined {
-    const db = getUserSettingsDb();
-    return db.prepare('SELECT * FROM wildcard_items WHERE id = ?').get(id) as WildcardItem | undefined;
-  }
-
-  /**
-   * 항목 생성
-   */
-  static create(wildcardId: number, tool: WildcardTool, content: string, weight: number, orderIndex: number): WildcardItem {
-    const db = getUserSettingsDb();
-    const result = db.prepare(`
-      INSERT INTO wildcard_items (wildcard_id, tool, content, weight, order_index)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(wildcardId, tool, content, weight, orderIndex);
-
-    const item = WildcardItemModel.findById(result.lastInsertRowid as number);
-    if (!item) {
-      throw new Error('Failed to create wildcard item');
-    }
-
-    return item;
-  }
-
-  /**
    * 특정 도구의 항목만 조회
    */
   static findByWildcardIdAndTool(wildcardId: number, tool: WildcardTool): WildcardItem[] {
@@ -607,12 +581,4 @@ export class WildcardItemModel {
     `).all(wildcardId, tool) as WildcardItem[];
   }
 
-  /**
-   * 항목 삭제
-   */
-  static delete(id: number): boolean {
-    const db = getUserSettingsDb();
-    const result = db.prepare('DELETE FROM wildcard_items WHERE id = ?').run(id);
-    return result.changes > 0;
-  }
 }

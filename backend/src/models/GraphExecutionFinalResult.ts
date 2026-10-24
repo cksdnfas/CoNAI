@@ -2,6 +2,24 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import { GraphExecutionFinalResultRecord } from '../types/moduleGraph'
 import { chunkSqliteValues, compareNewestFirst, sqliteInPlaceholders } from '../utils/sqliteBatch'
 
+const FINAL_RESULT_SELECT = `
+  SELECT
+    fr.id,
+    fr.execution_id,
+    fr.final_node_id,
+    fr.source_artifact_id,
+    ga.execution_id AS source_execution_id,
+    fr.source_node_id,
+    fr.source_port_key,
+    fr.artifact_type,
+    ga.storage_path AS source_storage_path,
+    ga.metadata AS source_metadata,
+    fr.created_date
+  FROM graph_execution_final_results fr
+  INNER JOIN graph_execution_artifacts ga
+    ON ga.id = fr.source_artifact_id
+`
+
 let coverCache: { newestId: number; covers: Record<number, string> } | null = null
 
 /** The library image an artifact's metadata points at (the keys the executor and older rows use). */
@@ -30,21 +48,7 @@ export class GraphExecutionFinalResultModel {
     const records = chunkSqliteValues(executionIds).flatMap((batch) => {
       const placeholders = sqliteInPlaceholders(batch)
       return db.prepare(`
-        SELECT
-          fr.id,
-          fr.execution_id,
-          fr.final_node_id,
-          fr.source_artifact_id,
-          ga.execution_id AS source_execution_id,
-          fr.source_node_id,
-          fr.source_port_key,
-          fr.artifact_type,
-          ga.storage_path AS source_storage_path,
-          ga.metadata AS source_metadata,
-          fr.created_date
-        FROM graph_execution_final_results fr
-        INNER JOIN graph_execution_artifacts ga
-          ON ga.id = fr.source_artifact_id
+        ${FINAL_RESULT_SELECT}
         WHERE fr.execution_id IN (${placeholders})
       `).all(...batch) as GraphExecutionFinalResultRecord[]
     })
@@ -71,39 +75,6 @@ export class GraphExecutionFinalResultModel {
     return new Map(rows.map((row) => [row.execution_id, row.count]))
   }
 
-  /** List final results for every execution belonging to one workflow id set. */
-  static findByWorkflowIds(workflowIds: number[]): GraphExecutionFinalResultRecord[] {
-    if (workflowIds.length === 0) {
-      return []
-    }
-
-    const db = getUserSettingsDb()
-    const records = chunkSqliteValues(workflowIds).flatMap((batch) => {
-      const placeholders = sqliteInPlaceholders(batch)
-      return db.prepare(`
-        SELECT
-          fr.id,
-          fr.execution_id,
-          fr.final_node_id,
-          fr.source_artifact_id,
-          ga.execution_id AS source_execution_id,
-          fr.source_node_id,
-          fr.source_port_key,
-          fr.artifact_type,
-          ga.storage_path AS source_storage_path,
-          ga.metadata AS source_metadata,
-          fr.created_date
-        FROM graph_execution_final_results fr
-        INNER JOIN graph_execution_artifacts ga
-          ON ga.id = fr.source_artifact_id
-        INNER JOIN graph_executions ge
-          ON ge.id = fr.execution_id
-        WHERE ge.graph_workflow_id IN (${placeholders})
-      `).all(...batch) as GraphExecutionFinalResultRecord[]
-    })
-    return records.sort(compareNewestFirst)
-  }
-
   /** Scan final results for one workflow in newest-first pages without hydrating the whole workflow. */
   static findByWorkflowIdPage(workflowId: number, limit = 1000, cursor?: { created_date: string; id: number }): GraphExecutionFinalResultRecord[] {
     const db = getUserSettingsDb()
@@ -119,21 +90,7 @@ export class GraphExecutionFinalResultModel {
       : [workflowId, safeLimit]
 
     return db.prepare(`
-      SELECT
-        fr.id,
-        fr.execution_id,
-        fr.final_node_id,
-        fr.source_artifact_id,
-        ga.execution_id AS source_execution_id,
-        fr.source_node_id,
-        fr.source_port_key,
-        fr.artifact_type,
-        ga.storage_path AS source_storage_path,
-        ga.metadata AS source_metadata,
-        fr.created_date
-      FROM graph_execution_final_results fr
-      INNER JOIN graph_execution_artifacts ga
-        ON ga.id = fr.source_artifact_id
+      ${FINAL_RESULT_SELECT}
       INNER JOIN graph_executions ge
         ON ge.id = fr.execution_id
       WHERE ge.graph_workflow_id = ?
@@ -204,21 +161,7 @@ export class GraphExecutionFinalResultModel {
   static findByExecution(executionId: number): GraphExecutionFinalResultRecord[] {
     const db = getUserSettingsDb()
     return db.prepare(`
-      SELECT
-        fr.id,
-        fr.execution_id,
-        fr.final_node_id,
-        fr.source_artifact_id,
-        ga.execution_id AS source_execution_id,
-        fr.source_node_id,
-        fr.source_port_key,
-        fr.artifact_type,
-        ga.storage_path AS source_storage_path,
-        ga.metadata AS source_metadata,
-        fr.created_date
-      FROM graph_execution_final_results fr
-      INNER JOIN graph_execution_artifacts ga
-        ON ga.id = fr.source_artifact_id
+      ${FINAL_RESULT_SELECT}
       WHERE fr.execution_id = ?
       ORDER BY fr.created_date DESC, fr.id DESC
     `).all(executionId) as GraphExecutionFinalResultRecord[]

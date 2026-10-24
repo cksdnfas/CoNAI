@@ -1,6 +1,4 @@
-import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { fetchJson } from '@/lib/api-client'
-import type { ApiResponse } from '@/types/image'
+import { fetchApiData as requestFolderData } from '@/lib/api-client'
 import type {
   FolderScanLog,
   FolderWatcherStatus,
@@ -11,17 +9,6 @@ import type {
   WatchersHealthSummary,
 } from '@/types/folder'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
-
-type FolderFallbackKey = Parameters<typeof createApiFallbackError>[1]
-
-async function requestFolderData<T>(path: string, fallbackKey: FolderFallbackKey, init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<T>>(path, init)
-  if (!response.success) {
-    throw createApiFallbackError(response.error, fallbackKey)
-  }
-
-  return response.data
-}
 
 export async function getWatchedFolders(activeOnly = false) {
   const searchParams = new URLSearchParams()

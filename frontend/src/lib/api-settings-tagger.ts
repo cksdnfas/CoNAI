@@ -6,9 +6,7 @@ import type {
   TaggerServerStatus,
   TaggerSettings,
 } from '@conai/shared'
-import type { ApiResponse } from '@/types/image'
-import { fetchJson } from '@/lib/api-client'
-import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
+import { fetchApiData } from '@/lib/api-client'
 
 export interface AutoTestTaggerResult {
   caption?: string
@@ -24,51 +22,31 @@ export interface AutoTestTaggerResult {
 }
 
 export async function updateTaggerSettings(settings: Partial<TaggerSettings>, revision?: string) {
-  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/tagger', {
+  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/tagger', 'settings.tagger.update', {
     method: 'PUT',
     headers: { ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.tagger.update')
-  }
-  return response.data
 }
 
 export async function getTaggerModels() {
-  const response = await fetchJson<ApiResponse<TaggerModelInfo[]>>('/api/settings/tagger/models')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.taggerModels.load')
-  }
-  return response.data
+  return fetchApiData<TaggerModelInfo[]>('/api/settings/tagger/models', 'settings.taggerModels.load')
 }
 
 export async function getTaggerStatus() {
-  const response = await fetchJson<ApiResponse<TaggerServerStatus>>('/api/settings/tagger/status')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.taggerStatus.load')
-  }
-  return response.data
+  return fetchApiData<TaggerServerStatus>('/api/settings/tagger/status', 'settings.taggerStatus.load')
 }
 
 export async function checkTaggerDependencies() {
-  const response = await fetchJson<ApiResponse<TaggerDependencyCheckResult>>('/api/settings/tagger/check-dependencies', {
+  return fetchApiData<TaggerDependencyCheckResult>('/api/settings/tagger/check-dependencies', 'settings.taggerDependencies.check', {
     method: 'POST',
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.taggerDependencies.check')
-  }
-  return response.data
 }
 
 export async function runTaggerAutoTest(imageId: string) {
-  const response = await fetchJson<ApiResponse<AutoTestTaggerResult>>('/api/settings/tagger/test', {
+  return fetchApiData<AutoTestTaggerResult>('/api/settings/tagger/test', 'settings.taggerAutoTest.run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageId }),
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.taggerAutoTest.run')
-  }
-  return response.data
 }

@@ -1,8 +1,6 @@
 import { db } from '../database/init';
 import { PromptCollectionModel } from '../models/PromptCollection';
-import { PromptCollectionRecord,
-NegativePromptCollectionRecord,
-normalizeSearchTerm } from '@conai/shared';
+import { normalizeSearchTerm } from '@conai/shared';
 
 export class SynonymService {
   private static getTableName(type: 'positive' | 'negative' | 'auto'): string {
@@ -21,7 +19,6 @@ export class SynonymService {
     type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<{ success: boolean; mergedCount: number; mainPromptId: number }> {
     try {
-      const tableName = this.getTableName(type);
       const normalizedMain = normalizeSearchTerm(mainPrompt);
 
       // 1. 메인 프롬프트가 존재하는지 확인, 없으면 생성

@@ -63,7 +63,7 @@ router.post('/', requirePermission('wildcards.edit'), asyncHandler(async (req: R
 }));
 
 router.put('/:id', requirePermission('wildcards.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid wildcard ID' });
@@ -114,7 +114,7 @@ router.put('/:id', requirePermission('wildcards.edit'), asyncHandler(async (req:
 }));
 
 router.delete('/:id', requirePermission('wildcards.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
   const cascade = req.query.cascade === 'true';
 
   if (isNaN(id)) {

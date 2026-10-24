@@ -148,11 +148,6 @@ export function getGenerationQueueEligibleServerIds(job: GenerationQueueRoutingJ
   return eligibleServerIds
 }
 
-/** Check whether a queued ComfyUI job is dispatch-compatible with one active server. */
-export function isGenerationQueueComfyJobCompatibleWithServer(job: GenerationQueueRoutingJobRecord, server: ComfyUIServerRecord, source: GenerationQueueRoutingSource) {
-  return getGenerationQueueEligibleServerIds(job, source).includes(server.id)
-}
-
 /** Build the display lane metadata for queue position and ETA calculations. */
 export function resolveGenerationQueueLaneMeta(record: GenerationQueueJobListRecord, source: GenerationQueueRoutingSource): GenerationQueueLaneMeta {
   if (record.service_type === 'novelai' || record.service_type === 'codex') {

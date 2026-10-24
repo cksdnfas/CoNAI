@@ -11,6 +11,7 @@ import { loadChatSettings } from '../../services/codex-chat/chatSettings';
 import { FileStoreService, applyTextEdits, fileOwnerKey } from '../../services/fileStoreService';
 import { loreKeyLanguageLabel, type FileWriteSource } from '@conai/shared';
 import { fileWriteSource, type McpRequestContext } from '../context';
+import { errorResult } from '../toolResults';
 
 /** Bytes of a linked file one call returns; the rest follows with `offset`. */
 const READ_LORE_FILE_MAX_BYTES = 32_000;
@@ -168,7 +169,7 @@ export function registerChatLoreTools(server: McpServer, context: McpRequestCont
       try {
         return { content: [{ type: 'text' as const, text: loreFileResultText(await readLoreFile(chat, { book, title, offset })) }] };
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
+        return errorResult(error);
       }
     },
   );
@@ -237,7 +238,7 @@ function registerSaveLore(server: McpServer, context: McpRequestContext): void {
         const done = saved ? SAVE_LORE_SAVED : SAVE_LORE_DONE;
         return { content: [{ type: 'text' as const, text: proposal.replaces ? `${done} (${saved ? '같은 제목의 항목을 고쳤어.' : '같은 제목의 항목을 고치는 제안이야.'})` : done }], structuredContent: { proposal } };
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
+        return errorResult(error);
       }
     },
   );
@@ -259,7 +260,7 @@ function registerSaveLore(server: McpServer, context: McpRequestContext): void {
         const edited = editLoreFile(chat, args, fileWriteSource(context));
         return { content: [{ type: 'text' as const, text: `자료를 고쳤어: [${edited.book}] ${edited.title} (${edited.file}, ${edited.size}바이트${edited.replaced !== undefined ? `, ${edited.replaced}군데 바꿈` : ''})` }] };
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
+        return errorResult(error);
       }
     },
   );

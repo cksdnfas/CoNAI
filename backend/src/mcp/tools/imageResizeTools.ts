@@ -6,21 +6,14 @@ import {
   type ImageBatchResizeResult,
 } from '../../services/imageBatchResize/imageBatchResizeService';
 import type { RuntimeJobRecord } from '../../types/runtimeJob';
-import { isChatMcpSource, type McpRequestContext } from '../context';
+import { resolveMcpInlineWaitMs, type McpRequestContext } from '../context';
 import { refreshMcpRequester } from '../toolAccess';
+import { errorResult, textResult } from '../toolResults';
 
 /**
  * resize_images — the library selection action "크기 변경" for agents: resize library images to exactly W×H (Lanczos,
  * alpha kept) into NEW library items filed under a group. Originals are untouched; videos and animations are skipped.
  */
-
-function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
-}
-
-function errorResult(error: unknown) {
-  return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
-}
 
 function describeJob(job: RuntimeJobRecord | null) {
   if (!job) return { status: 'missing' };
@@ -68,7 +61,7 @@ export function registerImageResizeTools(server: McpServer, context: McpRequestC
           groupId: group_id ?? null,
           requestedByAccountId: context.requester?.accountId ?? null,
         });
-        const budgetMs = Math.max(0, Math.min(wait_seconds ?? 60, isChatMcpSource(context.source) ? 30 : 120)) * 1000;
+        const budgetMs = resolveMcpInlineWaitMs(context.source, wait_seconds);
         return textResult(describeJob(budgetMs > 0 ? await waitForImageBatchResizeJob(job.jobId, budgetMs) : job));
       } catch (error) {
         return errorResult(error);

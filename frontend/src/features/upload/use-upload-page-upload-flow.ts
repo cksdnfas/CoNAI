@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState, type ChangeEvent } from 'react'
+import { useState, type ChangeEvent } from 'react'
 import { useI18n } from '@/i18n'
 import { formatFileSize } from '@/lib/format-size'
 import {
@@ -81,11 +81,6 @@ export function useUploadPageUploadFlow({
   })
 
   const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
-  const uploadTotalSize = useMemo(() => getUploadFileTotalSize(uploadFiles), [uploadFiles])
-  const uploadPercent = uploadProgress?.percent ?? (uploadResult ? 100 : 0)
-  const processPercent = uploadProgress && uploadProgress.totalFiles > 0
-    ? Math.min(100, Math.round((uploadProgress.processedFiles / uploadProgress.totalFiles) * 100))
-    : (uploadResult ? 100 : 0)
 
   const resetUploadState = () => {
     setUploadResult(null)
@@ -365,9 +360,6 @@ export function useUploadPageUploadFlow({
     setPendingUploadSave,
     pendingUploadSaveInfo,
     setPendingUploadSaveInfo,
-    uploadTotalSize,
-    uploadPercent,
-    processPercent,
     applyUploadFiles,
     resetUploadState,
     handleUploadFileChange,

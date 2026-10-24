@@ -1,5 +1,5 @@
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { fetchJson } from '@/lib/api-client'
+import { fetchJson, fetchRequiredApiData as requestPromptPresetData } from '@/lib/api-client'
 
 interface ApiResponse<T> {
   success: boolean
@@ -8,15 +8,6 @@ interface ApiResponse<T> {
 }
 
 type PromptPresetFallbackKey = Parameters<typeof createApiFallbackError>[1]
-
-async function requestPromptPresetData<T>(path: string, fallbackKey: PromptPresetFallbackKey, init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<T>>(path, init)
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, fallbackKey)
-  }
-
-  return response.data
-}
 
 async function requestPromptPresetAction<T>(path: string, fallbackKey: PromptPresetFallbackKey, init?: RequestInit) {
   const response = await fetchJson<ApiResponse<T>>(path, init)

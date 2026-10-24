@@ -1,10 +1,8 @@
 import { userSettingsDb } from '../database/userSettingsDb';
-import { apiGenDb } from '../database/apiGenerationDb';
 import {
   ComfyUIServerRecord,
   ComfyUIServerCreateData,
   ComfyUIServerUpdateData,
-  WorkflowServerRecord,
   type ComfyUIBackendType,
 } from '../types/comfyuiServer';
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate';
@@ -346,14 +344,6 @@ export class WorkflowServerModel {
 
     const rows = userSettingsDb.prepare(query).all(serverId) as any[];
     return rows || [];
-  }
-
-  /**
-   * 워크플로우의 모든 서버 연결 해제
-   */
-  static unlinkAllServers(workflowId: number): number {
-    const info = userSettingsDb.prepare('DELETE FROM workflow_servers WHERE workflow_id = ?').run(workflowId);
-    return info.changes;
   }
 
   /**

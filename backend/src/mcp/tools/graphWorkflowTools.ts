@@ -10,6 +10,7 @@ import type { GraphWorkflowDocument, GraphWorkflowExposedInput } from '../../typ
 import type { McpRequestContext } from '../context'
 import { McpArtifactService } from '../../services/mcpArtifactService'
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup'
+import { errorResult, textResult } from '../toolResults'
 
 function parseGraphDocument(graphJson: string): GraphWorkflowDocument {
   const parsed = JSON.parse(graphJson)
@@ -124,11 +125,9 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
     { description: 'List user-built workflows from the /generation?tab=workflows workspace.', inputSchema: z.object({ active_only: z.boolean().default(false).describe('Show only active graph workflows') }) },
     async ({ active_only }) => {
       try {
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(GraphWorkflowModel.findAllSummaries(active_only)) }],
-        }
+        return textResult(GraphWorkflowModel.findAllSummaries(active_only))
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }] }
+        return errorResult(`Error: ${(error as Error).message}`)
       }
     },
   )
@@ -142,26 +141,23 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
         if (!workflow) throw new Error(`Graph workflow ${workflow_id} not found`)
         const graph = parseGraphDocument(workflow.graph_json)
         const exposedInputs = graph.metadata?.exposed_inputs ?? []
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              id: workflow.id,
-              name: workflow.name,
-              description: workflow.description,
-              version: workflow.version,
-              is_active: workflow.is_active,
-              input_schema: exposedInputs.map(describeGraphInput),
-              input_values_template: createGraphInputTemplate(exposedInputs),
-              invocation: {
-                tool: 'execute_graph_workflow',
-                arguments: { workflow_id: workflow.id, input_values: createGraphInputTemplate(exposedInputs) },
-              },
-            }),
-          }],
-        }
+        const inputSchema = exposedInputs.map(describeGraphInput)
+        const inputTemplate = createGraphInputTemplate(exposedInputs)
+        return textResult({
+          id: workflow.id,
+          name: workflow.name,
+          description: workflow.description,
+          version: workflow.version,
+          is_active: workflow.is_active,
+          input_schema: inputSchema,
+          input_values_template: inputTemplate,
+          invocation: {
+            tool: 'execute_graph_workflow',
+            arguments: { workflow_id: workflow.id, input_values: inputTemplate },
+          },
+        })
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }] }
+        return errorResult(`Error: ${(error as Error).message}`)
       }
     },
   )
@@ -184,9 +180,9 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
         const outputGroupId = resolveMcpTargetGroup(group_id, group_path)
         const result = await GraphWorkflowExecutor.execute(workflow_id, { runtimeInputValues: runtimeInputs, outputGroupId: outputGroupId ?? null, requestedByAccountId: context.requester?.accountId ?? null })
         const compactResult = await compactGraphExecution(result.executionId, context)
-        return { content: [{ type: 'text' as const, text: JSON.stringify(compactResult) }] }
+        return textResult(compactResult)
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: `Graph workflow execution error: ${(error as Error).message}` }] }
+        return errorResult(`Graph workflow execution error: ${(error as Error).message}`)
       }
     },
   )
@@ -198,9 +194,9 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
       try {
         const result = await compactGraphExecution(execution_id, context)
         if (!result) throw new Error(`Graph workflow execution ${execution_id} not found`)
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] }
+        return textResult(result)
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }] }
+        return errorResult(`Error: ${(error as Error).message}`)
       }
     },
   )

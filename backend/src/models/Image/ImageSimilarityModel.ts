@@ -30,6 +30,7 @@ import {
 } from './ImageSimilarityQueryBuilder';
 import { hamming64, parseHash64 } from './similarityIndexSql';
 import { sortedUniqueChunks } from '../../utils/sqlInChunks';
+import { chunkSqliteValues } from '../../utils/sqliteBatch';
 import { greedyDuplicateGroups, planBandLayout } from './duplicateGrouping';
 import {
   buildColorSimilarMatch,
@@ -76,12 +77,6 @@ export type DuplicateGroupRef = {
 
 /** Internal switch for tests and comparisons: force the original full candidate scan. */
 type CandidateStrategy = { candidateStrategy?: 'auto' | 'full-scan' };
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
-  return chunks;
-}
 
 export class DuplicateGroupScanTooLargeError extends Error {
   readonly candidateCount: number;
@@ -165,7 +160,7 @@ export class ImageSimilarityModel {
       .filter((value): value is string => typeof value === 'string' && value.length > 0))];
     const hydratedByKey = new Map<string, any>();
 
-    for (const fileIdChunk of chunk(fileIds, IN_LIST_CHUNK)) {
+    for (const fileIdChunk of chunkSqliteValues(fileIds, IN_LIST_CHUNK)) {
       const placeholders = fileIdChunk.map(() => '?').join(',');
       const rows = db.prepare(`
         SELECT
@@ -190,7 +185,7 @@ export class ImageSimilarityModel {
       }
     }
 
-    for (const hashChunk of chunk(compositeHashes, IN_LIST_CHUNK)) {
+    for (const hashChunk of chunkSqliteValues(compositeHashes, IN_LIST_CHUNK)) {
       const placeholders = hashChunk.map(() => '?').join(',');
       const rows = db.prepare(`
         SELECT
@@ -571,7 +566,7 @@ export class ImageSimilarityModel {
 
     // STEP 3: active file ids of the kept groups, a few hundred media rows per query.
     const filesByMediaId = new Map<number, Array<{ file_id: number; composite_hash: string }>>();
-    const mediaIdChunks = chunk(kept.flatMap((group) => group.map((position) => mediaIds[position])), IN_LIST_CHUNK);
+    const mediaIdChunks = chunkSqliteValues(kept.flatMap((group) => group.map((position) => mediaIds[position])), IN_LIST_CHUNK);
     for (let index = 0; index < mediaIdChunks.length; index += 1) {
       const { query, params } = buildDuplicateGroupFileIdsQuery(mediaIdChunks[index]);
       for (const record of db.prepare(query).all(...params) as Array<{ media_id: number; file_id: number; composite_hash: string }>) {
@@ -630,7 +625,7 @@ export class ImageSimilarityModel {
   /** Load the file rows (metadata + file columns) of duplicate group references, keeping their order. */
   static hydrateDuplicateGroupRefs(refs: DuplicateGroupRef[]): DuplicateGroup[] {
     const rowsByFileId = new Map<number, any>();
-    for (const fileIds of chunk(refs.flatMap((ref) => ref.fileIds), IN_LIST_CHUNK)) {
+    for (const fileIds of chunkSqliteValues(refs.flatMap((ref) => ref.fileIds), IN_LIST_CHUNK)) {
       const { query, params } = buildDuplicateGroupFilesByIdQuery(fileIds);
       for (const row of db.prepare(query).all(...params) as any[]) {
         rowsByFileId.set(row.file_id, row);

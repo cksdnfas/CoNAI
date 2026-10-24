@@ -47,19 +47,6 @@ class ConditionEvaluatorFactory {
     return this.evaluators.get(type) || null;
   }
 
-  /**
-   * Check if condition type is supported
-   */
-  isSupported(type: AutoCollectCondition['type']): boolean {
-    return this.evaluators.has(type);
-  }
-
-  /**
-   * Get all supported condition types
-   */
-  getSupportedTypes(): AutoCollectCondition['type'][] {
-    return Array.from(this.evaluators.keys());
-  }
 }
 
 // Singleton instance
@@ -67,8 +54,6 @@ const factory = new ConditionEvaluatorFactory();
 
 /**
  * Evaluate a single condition against an image
- * This replaces the 160-line switch statement with Strategy pattern
- *
  * @param image - Image to evaluate
  * @param condition - Condition to check
  * @returns Promise resolving to true if condition matches

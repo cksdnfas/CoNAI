@@ -34,7 +34,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
 router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const randomImage = await ImageGroupModel.findRandomImageForGroup(id);
 
     if (!randomImage) {
@@ -56,7 +56,7 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
 
 router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const countResult = parsePositiveIntegerQuery(req.query.count, 8, {
       max: GROUP_PREVIEW_IMAGE_COUNT_MAX,
       error: GROUP_PREVIEW_COUNT_ERROR,
@@ -81,7 +81,7 @@ router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Respons
 
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
 
     const query = `
       SELECT
@@ -112,7 +112,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
 
 router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const pageResult = parsePositiveIntegerQuery(req.query.page, PAGINATION.DEFAULT_PAGE, {
       error: GROUP_IMAGE_PAGE_ERROR,
     });
@@ -185,7 +185,7 @@ router.get('/:id/images', asyncHandler(async (req: Request, res: Response) => {
 
 router.get('/:id/image-ids', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     // Paged: up to ID_PAGE_DEFAULT_LIMIT ids come back whole as before; longer lists carry hasMore / nextOffset.
     const page = await ImageGroupModel.getImageFileIdsForGroup(id, normalizeIdPage(req.query));
 
@@ -200,7 +200,7 @@ router.get('/:id/image-ids', asyncHandler(async (req: Request, res: Response) =>
 
 router.get('/:id/random-image', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const randomImage = await ImageGroupModel.findRandomImageForGroup(id);
 
     if (!randomImage) {
@@ -218,7 +218,7 @@ router.get('/:id/random-image', asyncHandler(async (req: Request, res: Response)
 
 router.get('/:id/download', cancellableAsyncHandler(async (req, res, signal) => {
   try {
-    const groupId = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const groupId = validateId(routeParam(req.params.id), 'Group ID');
     const downloadType = (req.query.type as DownloadType) || 'thumbnail';
     const includeChildren = req.query.include_children === 'true';
 
@@ -281,7 +281,7 @@ router.get('/:id/download', cancellableAsyncHandler(async (req, res, signal) => 
 
 router.get('/:id/file-counts', cancellableAsyncHandler(async (req, res, signal) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const includeChildren = req.query.include_children === 'true';
     const counts = await GroupDownloadService.getFileCountByType(id, 'custom', includeChildren, signal);
     return res.json(successResponse(counts));

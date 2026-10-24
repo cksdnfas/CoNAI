@@ -116,11 +116,6 @@ export function requestVideoPoster(compositeHash: string, originalPath: string):
   }
 }
 
-/** Exposed for diagnostics/tests: how many hashes are waiting for a poster. */
-export function getPendingVideoPosterCount(): number {
-  return pending.size
-}
-
 function takeNextPendingPoster(): PendingPoster | null {
   const next = pending.values().next()
   if (next.done) {

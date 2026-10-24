@@ -4,7 +4,6 @@ import {
   WorkflowCreateData,
   WorkflowUpdateData,
   WorkflowRoleQueueLimits,
-  MarkedField,
   WorkflowKind,
   normalizeWorkflowKind
 } from '../types/workflow';
@@ -15,7 +14,7 @@ export type WorkflowSummaryRecord = Omit<WorkflowRecord, 'workflow_json'>;
 
 const PUBLIC_QUEUE_MAX_COUNT_DEFAULT = 32;
 
-function normalizePublicQueueMaxCount(value: unknown) {
+export function normalizePublicQueueMaxCount(value: unknown) {
   const numericValue = typeof value === 'number'
     ? value
     : typeof value === 'string' && value.trim().length > 0
@@ -82,7 +81,7 @@ export function parseWorkflowRoleQueueLimits(raw: string | null | undefined): Wo
 }
 
 export class WorkflowModel {
-  private static normalizeWorkflowRecord(workflow: WorkflowRecord | undefined | null): WorkflowRecord | null {
+  private static normalizeWorkflowRecord<T extends WorkflowSummaryRecord>(workflow: T | undefined | null): T | null {
     if (!workflow) {
       return null
     }
@@ -194,19 +193,7 @@ export class WorkflowModel {
     query += ' ORDER BY created_date DESC';
 
     const rows = userSettingsDb.prepare(query).all(...params) as WorkflowSummaryRecord[];
-    return (rows || []).map((row) => ({
-      ...row,
-      is_active: (row as unknown as { is_active: boolean | number }).is_active === true
-        || (row as unknown as { is_active: boolean | number }).is_active === 1,
-      is_public_page: (row as unknown as { is_public_page: boolean | number }).is_public_page === true
-        || (row as unknown as { is_public_page: boolean | number }).is_public_page === 1,
-      public_queue_max_count: normalizePublicQueueMaxCount(row.public_queue_max_count),
-      public_queue_role_limits: row.public_queue_role_limits ?? null,
-      result_view_mode: row.result_view_mode === 'artifact_explorer' ? 'artifact_explorer' : 'history',
-      artifact_root_path: row.artifact_root_path ?? null,
-      artifact_directory_mode: row.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
-      kind: normalizeWorkflowKind(row.kind),
-    }));
+    return (rows || []).map((row) => this.normalizeWorkflowRecord(row)).filter((row): row is WorkflowSummaryRecord => row !== null);
   }
 
   /**

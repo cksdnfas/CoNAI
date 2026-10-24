@@ -9,7 +9,7 @@ export const mcpGroupPathSchema = z.string().trim().min(1).max(1024).optional().
 
 /**
  * MCP 생성 도구의 group_id / group_path 입력을 그룹 id 로 확정한다.
- * MCP 는 계정 권한 대신 도구 scope 로 통제되므로 권한 검사 없이 해석한다.
+ * 도구 scope 와 연결 계정의 기능 권한은 MCP 등록/실행 경계에서 확인하며, 여기서는 그룹 입력만 해석한다.
  * 잘못된 입력이면 Error 를 던져 도구가 isError 로 응답하게 한다.
  */
 export function resolveMcpTargetGroup(groupId: number | null | undefined, groupPath: string | null | undefined): number | undefined {

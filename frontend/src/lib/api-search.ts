@@ -1,5 +1,5 @@
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { fetchJson } from '@/lib/api-client'
+import { fetchJson, fetchRequiredApiData as requestSearchData } from '@/lib/api-client'
 import type { RatingTierRecord, SearchChip, SearchHistoryEntry, SearchMetadataSuggestion } from '@/features/search/search-types'
 
 interface ApiResponse<T> {
@@ -9,15 +9,6 @@ interface ApiResponse<T> {
 }
 
 type SearchFallbackKey = Parameters<typeof createApiFallbackError>[1]
-
-async function requestSearchData<T>(path: string, fallbackKey: SearchFallbackKey, init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<T>>(path, init)
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, fallbackKey)
-  }
-
-  return response.data
-}
 
 async function requestSearchAction<T>(path: string, fallbackKey: SearchFallbackKey, init?: RequestInit) {
   const response = await fetchJson<ApiResponse<T>>(path, init)

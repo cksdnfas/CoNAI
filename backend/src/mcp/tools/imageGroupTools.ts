@@ -19,6 +19,7 @@ import type { McpRequestContext } from '../context';
 import { createCustomGroup, deleteCustomGroups, moveCustomGroups, updateCustomGroup } from '../../services/groupMutationService';
 import { GroupRematchJobService, type GroupRematchJobRecord } from '../../services/groupRematchJobService';
 import { listGroupResources } from '../../services/groupResources';
+import { errorResult, textResult } from '../toolResults';
 
 type GroupSummary = {
   id: number;
@@ -28,17 +29,6 @@ type GroupSummary = {
   image_count: number;
   child_count: number;
 };
-
-function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
-}
-
-function errorResult(prefix: string, error: unknown) {
-  return {
-    isError: true,
-    content: [{ type: 'text' as const, text: `${prefix}: ${error instanceof Error ? error.message : String(error)}` }],
-  };
-}
 
 const compositeHashesSchema = z.array(z.string().trim().min(1)).min(1).max(500)
   .describe('Image composite hashes from search_images or generation results; duplicates are processed once');
@@ -139,7 +129,7 @@ function resolveParentGroup(parentId?: number, parentPath?: string): number | nu
 export function registerImageGroupTools(server: McpServer, context: McpRequestContext): void {
   server.registerTool('list_group_resources', { description: 'List linked audio and project documents in a custom group. Original assets remain in their stores. Source permissions are checked; unavailable references remain marked. Continue with nextOffset.', inputSchema: z.object({ group_id: z.number().int().positive(), offset: z.number().int().min(0).max(1000000).default(0) }) }, async ({ group_id, offset }) => {
     try { return textResult(await listGroupResources(context, group_id, offset)); }
-    catch (error) { return errorResult('Failed to read linked resources', error); }
+    catch (error) { return errorResult(error, 'Failed to read linked resources'); }
   });
   const requesterAccountId = context.requester?.accountId ?? null;
 
@@ -170,9 +160,9 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
         return textResult({ groups, total: groups.length });
       } catch (error) {
         if (error instanceof GroupPathError) {
-          return errorResult('Invalid group path', error);
+          return errorResult(error, 'Invalid group path');
         }
-        return errorResult('Failed to list image groups', error);
+        return errorResult(error, 'Failed to list image groups');
       }
     },
   );
@@ -197,7 +187,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
           created_group_ids: resolved.createdGroupIds,
         });
       } catch (error) {
-        return errorResult('Failed to resolve group path', error);
+        return errorResult(error, 'Failed to resolve group path');
       }
     },
   );
@@ -223,7 +213,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
           };
         }).immediate());
       } catch (error) {
-        return errorResult('Failed to add images to group', error);
+        return errorResult(error, 'Failed to add images to group');
       }
     },
   );
@@ -244,7 +234,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
         }));
         return textResult({ composite_hash, groups, total: groups.length });
       } catch (error) {
-        return errorResult('Failed to get image groups', error);
+        return errorResult(error, 'Failed to get image groups');
       }
     },
   );
@@ -276,7 +266,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
           };
         }).immediate());
       } catch (error) {
-        return errorResult('Failed to remove images from group', error);
+        return errorResult(error, 'Failed to remove images from group');
       }
     },
   );
@@ -326,7 +316,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
           };
         }).immediate());
       } catch (error) {
-        return errorResult('Failed to move images between groups', error);
+        return errorResult(error, 'Failed to move images between groups');
       }
     },
   );
@@ -343,7 +333,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
         if (!group) throw new Error('Group not found');
         return textResult(describeGroup(group));
       } catch (error) {
-        return errorResult('Failed to get image group', error);
+        return errorResult(error, 'Failed to get image group');
       }
     },
   );
@@ -371,7 +361,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
         }, requesterAccountId);
         return textResult({ ...describeGroup(GroupModel.findById(id)!), auto_collect_job: summarizeJob(autoCollectJob) });
       } catch (error) {
-        return errorResult('Failed to create image group', error);
+        return errorResult(error, 'Failed to create image group');
       }
     },
   );
@@ -409,7 +399,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
         }, requesterAccountId);
         return textResult({ ...describeGroup(GroupModel.findById(id)!), auto_collect_job: summarizeJob(autoCollectJob) });
       } catch (error) {
-        return errorResult('Failed to update image group', error);
+        return errorResult(error, 'Failed to update image group');
       }
     },
   );
@@ -434,7 +424,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
           return { group_id: target, path: GroupPathService.getPathLabel(target) };
         }) });
       } catch (error) {
-        return errorResult('Failed to move image groups', error);
+        return errorResult(error, 'Failed to move image groups');
       }
     },
   );
@@ -459,7 +449,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
         const { deleted } = deleteCustomGroups(group_ids, cascade);
         return textResult({ deleted, cascade });
       } catch (error) {
-        return errorResult('Failed to delete image groups', error);
+        return errorResult(error, 'Failed to delete image groups');
       }
     },
   );
@@ -477,7 +467,7 @@ export function registerImageGroupTools(server: McpServer, context: McpRequestCo
         const job = GroupRematchJobService.startJobProcess('group-auto-collect', { groupId: id, requestedByAccountId: requesterAccountId });
         return textResult({ group_id: id, path: GroupPathService.getPathLabel(id), auto_collect_job: summarizeJob(job) });
       } catch (error) {
-        return errorResult('Failed to run group auto-collect', error);
+        return errorResult(error, 'Failed to run group auto-collect');
       }
     },
   );

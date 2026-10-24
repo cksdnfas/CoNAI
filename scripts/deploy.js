@@ -87,7 +87,7 @@ async function buildPortable() {
 async function buildDocker() {
   console.log('🐳 Docker image from the root Dockerfile\n');
   console.log('  CPU: docker compose up -d --build');
-  console.log('  GPU: docker compose -f compose.gpu.yaml up -d --build\n');
+  console.log('  GPU: docker compose -f compose.yaml -f compose.gpu.yaml up -d --build\n');
 
   const deploy = await question('Build and start the CPU image with Docker Compose now? (y/n): ');
 

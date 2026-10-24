@@ -1,5 +1,4 @@
 import { db } from '../../database/init';
-import { ImageRecord, ImageMetadataRecord, ImageWithFileView } from '../../types/image';
 
 /**
  * 태깅 관련 작업을 담당하는 이미지 모델 (새 구조 기반)
@@ -40,48 +39,6 @@ export class ImageTaggingModel {
       id: row.composite_hash,
       upload_date: row.first_seen_date
     }));
-  }
-
-  /**
-   * 전체 이미지 composite_hash 조회 (일괄 처리용)
-   * @returns composite_hash 배열 (레거시 호환을 위해 숫자 배열로 변환)
-   */
-  static async findAllIds(limit?: number): Promise<number[]> {
-    const query = limit
-      ? `SELECT composite_hash FROM media_metadata ORDER BY first_seen_date DESC LIMIT ?`
-      : `SELECT composite_hash FROM media_metadata ORDER BY first_seen_date DESC`;
-
-    const rows = limit
-      ? db.prepare(query).all(limit) as any[]
-      : db.prepare(query).all() as any[];
-
-    // composite_hash를 숫자로 변환 (레거시 호환)
-    return rows.map(row => {
-      // 간단한 문자열 해시 함수
-      let hash = 0;
-      for (let i = 0; i < row.composite_hash.length; i++) {
-        const char = row.composite_hash.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
-      }
-      return Math.abs(hash);
-    });
-  }
-
-  /**
-   * 전체 이미지 composite_hash 조회 (새 코드용)
-   * @returns composite_hash 문자열 배열
-   */
-  static async findAllCompositeHashes(limit?: number): Promise<string[]> {
-    const query = limit
-      ? `SELECT composite_hash FROM media_metadata ORDER BY first_seen_date DESC LIMIT ?`
-      : `SELECT composite_hash FROM media_metadata ORDER BY first_seen_date DESC`;
-
-    const rows = limit
-      ? db.prepare(query).all(limit) as any[]
-      : db.prepare(query).all() as any[];
-
-    return rows.map(row => row.composite_hash);
   }
 
   /**

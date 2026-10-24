@@ -153,7 +153,6 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   /** The document editor: `entry` null writes a new document in this folder. */
   const [editor, setEditor] = useState<{ entry: StoredFileEntry | null } | null>(null)
   const [audioSend, setAudioSend] = useState<StoredFileEntry[] | null>(null)
-  // Only your own store: the audio import copies from the requester's files.
   const canSendAudio = useCanSendToAudio()
   const [viewMode, changeViewMode] = useFileViewMode()
   const uploadInput = useRef<HTMLInputElement>(null)

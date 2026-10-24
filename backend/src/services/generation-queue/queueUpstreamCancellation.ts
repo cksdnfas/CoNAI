@@ -1,36 +1,13 @@
 import { ComfyUIServerModel } from '../../models/ComfyUIServer'
 import { GenerationQueueModel } from '../../models/GenerationQueue'
-import { WorkflowModel } from '../../models/Workflow'
 import type { ComfyUIServerRecord } from '../../types/comfyuiServer'
-import type { GenerationQueueJobListRecord } from '../../types/generationQueue'
 import { createComfyUIService, type ComfyUICancelPromptResult } from '../comfyuiService'
 import { updateQueueRequestDebugMeta } from './queueDebugMeta'
+import { resolveComfyQueueEndpoint } from './queueComfyEndpoint'
 
 export type QueueUpstreamCancellationOptions = {
   assignedServer?: ComfyUIServerRecord | null
   providerJobId?: string | null
-}
-
-function resolveComfyCancellationEndpoint(job: GenerationQueueJobListRecord, assignedServer?: ComfyUIServerRecord | null) {
-  if (assignedServer?.endpoint) {
-    return assignedServer.endpoint
-  }
-
-  if (job.assigned_server_id) {
-    const server = ComfyUIServerModel.findById(job.assigned_server_id)
-    if (server?.endpoint) {
-      return server.endpoint
-    }
-  }
-
-  if (job.workflow_id) {
-    const workflow = WorkflowModel.findById(job.workflow_id)
-    if (workflow?.api_endpoint) {
-      return workflow.api_endpoint
-    }
-  }
-
-  return null
 }
 
 function resolveCancellationState(result: ComfyUICancelPromptResult, assignedServer?: ComfyUIServerRecord | null) {
@@ -60,7 +37,7 @@ export async function attemptQueueUpstreamCancellation(jobId: number, options?: 
 
   const promptId = options?.providerJobId ?? latest.provider_job_id ?? null
   const assignedServer = options?.assignedServer ?? (latest.assigned_server_id ? ComfyUIServerModel.findById(latest.assigned_server_id) : null)
-  const endpoint = resolveComfyCancellationEndpoint(latest, assignedServer)
+  const endpoint = resolveComfyQueueEndpoint(latest, assignedServer)
   const requestedAt = new Date().toISOString()
 
   // prompt id 가 없어도 PJ-3 마커로 `/queue` 를 역매칭할 수 있으므로 엔드포인트만 있으면 진행한다.

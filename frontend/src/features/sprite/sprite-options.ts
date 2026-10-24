@@ -1,12 +1,20 @@
 import type { SpriteExtractOptions, SpriteImageFormat, SpriteRect, SpriteVideoInfo } from '@/lib/api-sprite'
-import { planSpriteSampling } from '@conai/shared'
+import {
+  planSpriteSampling,
+  SPRITE_MAX_SHEET_DIMENSION as MAX_SHEET_DIMENSION,
+  SPRITE_MAX_KEY_COLORS as MAX_KEY_COLORS,
+  SPRITE_DEFAULT_ALPHA_THRESHOLD,
+  SPRITE_KEY_DEFAULT_TOLERANCE,
+  SPRITE_KEY_DEFAULT_SOFTNESS,
+  SPRITE_DESPILL_DEFAULT_TOLERANCE,
+  SPRITE_DESPILL_DEFAULT_SOFTNESS,
+} from '@conai/shared'
 export { MAX_SPRITE_FRAMES } from '@conai/shared'
 
-/** Mirrors backend/src/services/sprite/spriteOptions.ts limits and defaults (web defaults for web and MCP). */
-export const MAX_SHEET_DIMENSION = 16384
-export const MAX_KEY_COLORS = 8
-export const KEY_DEFAULTS = { tolerance: 0.1, softness: 0.05 }
-export const DESPILL_DEFAULTS = { tolerance: 0.08, softness: 0.92 }
+/** Shared with the server; form-only defaults stay in this module. */
+export { MAX_SHEET_DIMENSION, MAX_KEY_COLORS }
+export const KEY_DEFAULTS = { tolerance: SPRITE_KEY_DEFAULT_TOLERANCE, softness: SPRITE_KEY_DEFAULT_SOFTNESS }
+export const DESPILL_DEFAULTS = { tolerance: SPRITE_DESPILL_DEFAULT_TOLERANCE, softness: SPRITE_DESPILL_DEFAULT_SOFTNESS }
 export const MAGENTA = '#FF00FF'
 
 export type IntervalUnit = 'seconds' | 'frames'
@@ -76,7 +84,7 @@ export function defaultExtractForm(info?: SpriteVideoInfo | null): ExtractForm {
     despill: true,
     edgeCleanup: true,
     autoCrop: true,
-    alphaThreshold: 20,
+    alphaThreshold: SPRITE_DEFAULT_ALPHA_THRESHOLD,
     preCrop: null,
     resizeMode: 'none',
     outputWidth: info?.width ?? 0,
@@ -171,7 +179,7 @@ export function sheetLayout(frameCount: number, frameWidth: number, frameHeight:
   return { columns: effective, rows, width: effective * frameWidth + (effective - 1) * spacing, height: rows * frameHeight + (rows - 1) * spacing }
 }
 
-/** The original's grid guess for a sheet image: landscape → 1 row, portrait → 1 column, first divisor of 8/6/5/4/3/2. */
+/** Cell dimensions after spacing; exact only when both dimensions are positive integers. */
 export function cellSize(width: number, height: number, columns: number, rows: number, spacing: number) {
   const cellWidth = (width - (columns - 1) * spacing) / columns
   const cellHeight = (height - (rows - 1) * spacing) / rows

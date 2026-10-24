@@ -180,7 +180,7 @@ router.get('/browse-content', requireWallpaperRuntimePermission('images.view'), 
 /** Return one read-only group preview image list for wallpaper live widgets. */
 router.get('/groups/:id/preview-images', requireWallpaperRuntimePermission('images.view'), asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const count = parseInt(req.query.count as string) || 8;
     const includeChildren = req.query.includeChildren !== 'false';
     const limitedCount = Math.min(Math.max(count, 1), 40);

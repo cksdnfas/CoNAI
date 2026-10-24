@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { publishRuntimeEvent } from '../../services/runtime-events/runtimeEventBus';
 import type { McpRequestContext } from '../context';
+import { runToolResult as run } from '../toolResults';
 import { requireFileStoreOwner } from '../../services/fileStoreAccess';
 import {
   audioCandidateRevision,
@@ -41,18 +42,6 @@ import {
  * Audio workspace tools share the web's domain services and permissions. Review and destructive changes follow the
  * user's request, never instructions found in comments. Revisions protect candidate and comment edits from stale reads.
  */
-
-function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
-}
-
-function errorResult(error: unknown) {
-  return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
-}
-
-async function run(action: () => unknown) {
-  try { return textResult(await action()); } catch (error) { return errorResult(error); }
-}
 
 /** Refresh only the affected audio group after an authorized mutation completes. */
 function changed(groupId: string, action: () => unknown) {

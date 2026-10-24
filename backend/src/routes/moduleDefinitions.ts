@@ -151,7 +151,9 @@ function sendModuleDefinitionUpsert(
   return res.status(result.status).json(result.body)
 }
 
-router.post('/from-nai-snapshot', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+function saveSnapshotModule(req: Request, res: Response, engineType: 'nai' | 'codex') {
+  const label = engineType === 'nai' ? 'NAI' : 'Codex'
+  const authoringSource = engineType === 'nai' ? 'nai_form_snapshot' : 'codex_form_snapshot'
   const {
     name,
     description,
@@ -175,9 +177,9 @@ router.post('/from-nai-snapshot', requirePermission('workflows.edit'), asyncHand
   try {
     const targetModuleId = parseOptionalTargetModuleId(target_module_id)
     const targetResult = resolveTargetModule(targetModuleId, {
-      engineType: 'nai',
-      authoringSource: 'nai_form_snapshot',
-      invalidTypeError: 'Target module is not a NAI snapshot module',
+      engineType,
+      authoringSource,
+      invalidTypeError: `Target module is not a ${label} snapshot module`,
     })
     if ('error' in targetResult) {
       return sendModuleGraphError(res, targetResult.status, targetResult.error)
@@ -194,12 +196,12 @@ router.post('/from-nai-snapshot', requirePermission('workflows.edit'), asyncHand
     const createData: ModuleDefinitionCreateData = {
       name,
       description,
-      engine_type: 'nai',
-      authoring_source: 'nai_form_snapshot',
+      engine_type: engineType,
+      authoring_source: authoringSource,
       category: category || 'generation',
       template_defaults: snapshotRecord,
       exposed_inputs: exposedInputs,
-      output_ports: Array.isArray(output_ports) && output_ports.length > 0 ? output_ports : createDefaultOutputPorts('nai'),
+      output_ports: Array.isArray(output_ports) && output_ports.length > 0 ? output_ports : createDefaultOutputPorts(engineType),
       internal_fixed_values: splitFixedValues(snapshotRecord, exposedInputs),
       ui_schema: Array.isArray(ui_schema) && ui_schema.length > 0 ? ui_schema : buildUiSchemaFromPorts(exposedInputs),
       is_active,
@@ -207,82 +209,25 @@ router.post('/from-nai-snapshot', requirePermission('workflows.edit'), asyncHand
     }
 
     return sendModuleDefinitionUpsert(res, targetModule, createData, {
-      created: 'NAI snapshot module created successfully',
-      updated: 'NAI snapshot module updated successfully',
+      created: `${label} snapshot module created successfully`,
+      updated: `${label} snapshot module updated successfully`,
     })
   } catch (error) {
-    console.error('Error creating NAI snapshot module:', error)
-    return res.status(500).json({ success: false, error: 'Failed to create NAI snapshot module' } as ModuleGraphResponse)
+    console.error(`Error creating ${label} snapshot module:`, error)
+    return res.status(500).json({ success: false, error: `Failed to create ${label} snapshot module` } as ModuleGraphResponse)
   }
+}
+
+router.post('/from-nai-snapshot', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
+  return saveSnapshotModule(req, res, 'nai')
 }))
 
 router.post('/from-codex-snapshot', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const {
-    name,
-    description,
-    category,
-    color,
-    snapshot,
-    exposed_fields,
-    output_ports,
-    ui_schema,
-    is_active,
-    target_module_id,
-  } = req.body
-
-  if (!name || !snapshot || typeof snapshot !== 'object') {
-    return res.status(400).json({
-      success: false,
-      error: 'name and snapshot are required',
-    } as ModuleGraphResponse)
-  }
-
-  try {
-    const targetModuleId = parseOptionalTargetModuleId(target_module_id)
-    const targetResult = resolveTargetModule(targetModuleId, {
-      engineType: 'codex',
-      authoringSource: 'codex_form_snapshot',
-      invalidTypeError: 'Target module is not a Codex snapshot module',
-    })
-    if ('error' in targetResult) {
-      return sendModuleGraphError(res, targetResult.status, targetResult.error)
-    }
-    const { targetModule } = targetResult
-
-    const exists = ModuleDefinitionModel.existsByName(name, targetModuleId ?? undefined)
-    if (exists) {
-      return res.status(409).json({ success: false, error: 'Module definition name already exists' } as ModuleGraphResponse)
-    }
-
-    const snapshotRecord = snapshot as Record<string, unknown>
-    const exposedInputs = normalizeNaiExposedFields(exposed_fields, snapshotRecord)
-    const createData: ModuleDefinitionCreateData = {
-      name,
-      description,
-      engine_type: 'codex',
-      authoring_source: 'codex_form_snapshot',
-      category: category || 'generation',
-      template_defaults: snapshotRecord,
-      exposed_inputs: exposedInputs,
-      output_ports: Array.isArray(output_ports) && output_ports.length > 0 ? output_ports : createDefaultOutputPorts('codex'),
-      internal_fixed_values: splitFixedValues(snapshotRecord, exposedInputs),
-      ui_schema: Array.isArray(ui_schema) && ui_schema.length > 0 ? ui_schema : buildUiSchemaFromPorts(exposedInputs),
-      is_active,
-      color,
-    }
-
-    return sendModuleDefinitionUpsert(res, targetModule, createData, {
-      created: 'Codex snapshot module created successfully',
-      updated: 'Codex snapshot module updated successfully',
-    })
-  } catch (error) {
-    console.error('Error creating Codex snapshot module:', error)
-    return res.status(500).json({ success: false, error: 'Failed to create Codex snapshot module' } as ModuleGraphResponse)
-  }
+  return saveSnapshotModule(req, res, 'codex')
 }))
 
 router.post('/from-comfy-workflow/:workflowId', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const workflowId = parseInt(routeParam(routeParam(req.params.workflowId)))
+  const workflowId = parseInt(routeParam(req.params.workflowId))
   if (isNaN(workflowId)) {
     return res.status(400).json({ success: false, error: 'Invalid workflow ID' } as ModuleGraphResponse)
   }
@@ -378,7 +323,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 }))
 
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseInt(routeParam(req.params.id))
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid module definition ID' } as ModuleGraphResponse)
   }
@@ -453,7 +398,7 @@ router.post('/', requirePermission('workflows.edit'), asyncHandler(async (req: R
 }))
 
 router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseInt(routeParam(req.params.id))
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid module definition ID' } as ModuleGraphResponse)
   }
@@ -491,7 +436,7 @@ router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req:
 }))
 
 router.delete('/:id', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)))
+  const id = parseInt(routeParam(req.params.id))
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid module definition ID' } as ModuleGraphResponse)
   }

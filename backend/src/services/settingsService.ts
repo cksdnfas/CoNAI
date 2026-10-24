@@ -128,9 +128,6 @@ class SettingsService {
   }
 
   /**
-   * Check if loaded settings are missing any fields from defaults
-   */
-  /**
    * Save settings to file
    */
   saveSettings(settings: AppSettings): void {
@@ -384,20 +381,6 @@ class SettingsService {
     }));
   }
 
-  /**
-   * Get model repository ID
-   */
-  getModelRepoId(model: TaggerModel): string {
-    return MODEL_REPO_MAP[model];
-  }
-
-  /**
-   * Reload settings from file (invalidate cache)
-   */
-  reloadSettings(): AppSettings {
-    this.settings = null;
-    return this.loadSettings();
-  }
 }
 
 // Export singleton instance

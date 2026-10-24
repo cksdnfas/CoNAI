@@ -20,7 +20,7 @@ import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { useRuntimeJob } from '@/lib/use-runtime-job'
 import { cn } from '@/lib/utils'
 import { detectSheetGrid } from './sprite-grid-detect'
-import { cellSize } from './sprite-options'
+import { cellSize, MAX_SPRITE_FRAMES } from './sprite-options'
 import { LibraryMediaButtons, LibraryResults } from './sprite-library'
 import { PageBlockLayout } from '@/features/image-generation/layout/page-block-layout'
 import { MiniField, SpriteActionBar, SpriteCheckerStage, SpriteSection } from './sprite-ui'
@@ -39,7 +39,7 @@ const DEFAULT_OPTIONS: SpriteNormalizeOptions = { mode: 'per_sheet', alphaThresh
 function sheetProblem(sheet: SheetEntry) {
   const { columns, rows, frameCount, inputSpacing, customAnchorX, customAnchorY } = sheet.options
   const cell = cellSize(sheet.width, sheet.height, columns, rows, inputSpacing)
-  return !cell.exact || frameCount < 1 || frameCount > columns * rows || columns * rows > 256
+  return !cell.exact || frameCount < 1 || frameCount > columns * rows || columns * rows > MAX_SPRITE_FRAMES
     || customAnchorX < 0 || customAnchorY < 0 || customAnchorX > cell.cellWidth || customAnchorY > cell.cellHeight
 }
 
@@ -159,7 +159,7 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
           <div className="grid grid-cols-2 gap-2">
             <MiniField label={t({ ko: '열', en: 'Columns' })}><NumberStepperInput value={current.options.columns} min={1} max={64} step={1} onValueCommit={(value) => updateSheet(current.hash, { columns: Math.max(1, Number(value) || 1) })} /></MiniField>
             <MiniField label={t({ ko: '행', en: 'Rows' })}><NumberStepperInput value={current.options.rows} min={1} max={64} step={1} onValueCommit={(value) => updateSheet(current.hash, { rows: Math.max(1, Number(value) || 1) })} /></MiniField>
-            <MiniField label={t({ ko: '프레임', en: 'Frames' })}><NumberStepperInput value={current.options.frameCount} min={1} max={256} step={1} onValueCommit={(value) => updateSheet(current.hash, { frameCount: Math.max(1, Number(value) || 1) })} /></MiniField>
+            <MiniField label={t({ ko: '프레임', en: 'Frames' })}><NumberStepperInput value={current.options.frameCount} min={1} max={MAX_SPRITE_FRAMES} step={1} onValueCommit={(value) => updateSheet(current.hash, { frameCount: Math.max(1, Number(value) || 1) })} /></MiniField>
             <MiniField label={t({ ko: '입력 간격', en: 'Spacing' })}><NumberStepperInput value={current.options.inputSpacing} min={0} max={64} step={1} onValueCommit={(value) => updateSheet(current.hash, { inputSpacing: Math.max(0, Number(value) || 0) })} /></MiniField>
           </div>
           <div className="flex flex-wrap items-end gap-2">

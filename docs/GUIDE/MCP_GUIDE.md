@@ -87,7 +87,7 @@ claude mcp add --transport stdio conai -- npx tsx backend/src/mcp/stdio.ts
 빌드된 파일을 쓸 때:
 
 ```bash
-claude mcp add --transport stdio conai -- node backend/dist/mcp/stdio.js
+claude mcp add --transport stdio conai -- node backend/dist/backend/src/mcp/stdio.js
 ```
 
 ## Hermes Agent 연결

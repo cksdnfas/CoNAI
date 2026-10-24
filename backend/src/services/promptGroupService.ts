@@ -14,6 +14,7 @@ import {
 import { db } from '../database/init';
 import { buildSqlContainsPattern, SQL_LIKE_ESCAPE_CLAUSE } from '../utils/sqlLike';
 import { sqliteInPlaceholders } from '../utils/sqliteBatch';
+import { isProtectedLoRAGroup } from './promptCollectionProtection';
 import {
   getPromptCollectionTableName as getPromptTableName,
   getPromptGroupTableName as getTableName,
@@ -51,10 +52,6 @@ import {
 export type { DanbooruGroupingPreviewResult };
 
 export class PromptGroupService {
-  private static isProtectedLoRAGroup(group: { group_name?: string | null } | null | undefined): boolean {
-    return group?.group_name?.trim().toLowerCase() === 'lora';
-  }
-
   /**
    * 모든 그룹 조회 (프롬프트 수 포함)
    */
@@ -146,7 +143,7 @@ export class PromptGroupService {
     type: 'positive' | 'negative' | 'auto' = 'positive'
   ): Promise<number> {
     try {
-      if (this.isProtectedLoRAGroup({ group_name: data.group_name })) {
+      if (isProtectedLoRAGroup({ group_name: data.group_name })) {
         throw new Error('LoRA group is protected');
       }
       if (this.isDanbooruManagedGroupId(data.parent_id, type)) {
@@ -169,7 +166,7 @@ export class PromptGroupService {
   ): Promise<boolean> {
     try {
       const currentGroup = await PromptGroupModel.findById(id, type);
-      if (this.isProtectedLoRAGroup(currentGroup)) {
+      if (isProtectedLoRAGroup(currentGroup)) {
         throw new Error('LoRA group is protected');
       }
       if (this.isDanbooruManagedGroupId(id, type) || this.isDanbooruManagedGroupId(data.parent_id, type)) {
@@ -198,7 +195,7 @@ export class PromptGroupService {
       const groupIds = this.getGroupDescendantIds(id, type);
       const protectedGroup = groupIds
         .map((groupId) => PromptGroupModel.findById(groupId, type))
-        .find((group) => this.isProtectedLoRAGroup(group));
+        .find((group) => isProtectedLoRAGroup(group));
       if (protectedGroup) {
         throw new Error('LoRA group is protected');
       }
@@ -313,7 +310,7 @@ export class PromptGroupService {
     try {
       for (const item of groupOrders) {
         const group = await PromptGroupModel.findById(item.id, type);
-        if (this.isProtectedLoRAGroup(group)) {
+        if (isProtectedLoRAGroup(group)) {
           throw new Error('LoRA group is protected');
         }
         if (this.isDanbooruManagedGroupId(item.id, type)) {

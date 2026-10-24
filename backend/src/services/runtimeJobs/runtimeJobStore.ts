@@ -99,9 +99,10 @@ function serializeResult(result: unknown, jobId: string, kind: RuntimeJobKind): 
     return null
   }
 
-  if (Buffer.byteLength(serialized, 'utf8') > RUNTIME_JOB_RESULT_MAX_BYTES) {
+  const byteLength = Buffer.byteLength(serialized, 'utf8')
+  if (byteLength > RUNTIME_JOB_RESULT_MAX_BYTES) {
     if ((kind === 'sprite-normalize' || kind === 'plugin-action')) return JSON.stringify(storeRuntimeJobResult(jobId, serialized))
-    return JSON.stringify({ truncated: true, byte_length: Buffer.byteLength(serialized, 'utf8') })
+    return JSON.stringify({ truncated: true, byte_length: byteLength })
   }
 
   return serialized
@@ -302,19 +303,6 @@ export class RuntimeJobStore {
       ORDER BY created_date DESC
       LIMIT 1
     `).get(singletonKey) as RuntimeJobRow | undefined
-
-    return row ? mapRow(row) : null
-  }
-
-  /** Read the most recent job of one kind, whatever its status. 레거시 진행률 어댑터가 쓴다. */
-  static findLatestByKind(kind: RuntimeJobKind): RuntimeJobRecord | null {
-    const db = getUserSettingsDb()
-    const row = db.prepare(`
-      SELECT * FROM runtime_jobs
-      WHERE kind = ?
-      ORDER BY created_date DESC, job_id DESC
-      LIMIT 1
-    `).get(kind) as RuntimeJobRow | undefined
 
     return row ? mapRow(row) : null
   }

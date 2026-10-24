@@ -17,7 +17,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { useRuntimeJob } from '@/lib/use-runtime-job'
 import { detectSheetGrid } from './sprite-grid-detect'
-import { cellSize } from './sprite-options'
+import { cellSize, MAX_SPRITE_FRAMES } from './sprite-options'
 import { LibraryMediaButtons, LibraryResults } from './sprite-library'
 import { PageBlockLayout } from '@/features/image-generation/layout/page-block-layout'
 import { MiniField, SpriteActionBar, SpriteCheckerStage, SpriteSection } from './sprite-ui'
@@ -85,7 +85,7 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
         <div className="grid grid-cols-2 gap-2">
           <MiniField label={t({ ko: '열', en: 'Columns' })}><NumberStepperInput value={options.columns} min={1} max={64} step={1} onValueCommit={(value) => setOptions({ ...options, columns: Math.max(1, Number(value) || 1) })} /></MiniField>
           <MiniField label={t({ ko: '행', en: 'Rows' })}><NumberStepperInput value={options.rows} min={1} max={64} step={1} onValueCommit={(value) => setOptions({ ...options, rows: Math.max(1, Number(value) || 1) })} /></MiniField>
-          <MiniField label={t({ ko: '프레임', en: 'Frames' })}><NumberStepperInput value={options.frameCount} min={1} max={256} step={1} onValueCommit={(value) => setOptions({ ...options, frameCount: Math.max(1, Number(value) || 1) })} /></MiniField>
+          <MiniField label={t({ ko: '프레임', en: 'Frames' })}><NumberStepperInput value={options.frameCount} min={1} max={MAX_SPRITE_FRAMES} step={1} onValueCommit={(value) => setOptions({ ...options, frameCount: Math.max(1, Number(value) || 1) })} /></MiniField>
           <MiniField label={t({ ko: '간격', en: 'Spacing' })}><NumberStepperInput value={options.spacing} min={0} max={64} step={1} onValueCommit={(value) => setOptions({ ...options, spacing: Math.max(0, Number(value) || 0) })} /></MiniField>
         </div>
         {sheet && invalid ? <div role="alert" className="text-xs text-warning">{t({ ko: '격자가 시트 크기와 맞지 않거나 프레임 수가 칸 수를 넘어.', en: 'The grid does not divide the sheet, or the frame count exceeds the cells.' })}</div> : null}

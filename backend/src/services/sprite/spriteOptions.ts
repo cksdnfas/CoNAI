@@ -1,5 +1,15 @@
 import { SpriteError } from './spriteErrors'
-import { MAX_SPRITE_FRAMES, planSpriteSampling } from '@conai/shared'
+import {
+  MAX_SPRITE_FRAMES,
+  planSpriteSampling,
+  SPRITE_MAX_SHEET_DIMENSION as MAX_SHEET_DIMENSION,
+  SPRITE_MAX_KEY_COLORS as MAX_KEY_COLORS,
+  SPRITE_DEFAULT_ALPHA_THRESHOLD as DEFAULT_ALPHA_THRESHOLD,
+  SPRITE_KEY_DEFAULT_TOLERANCE as KEY_DEFAULT_TOLERANCE,
+  SPRITE_KEY_DEFAULT_SOFTNESS as KEY_DEFAULT_SOFTNESS,
+  SPRITE_DESPILL_DEFAULT_TOLERANCE as DESPILL_DEFAULT_TOLERANCE,
+  SPRITE_DESPILL_DEFAULT_SOFTNESS as DESPILL_DEFAULT_SOFTNESS,
+} from '@conai/shared'
 export { MAX_SPRITE_FRAMES, sampleBounds, countModeIndices, intervalFrameCount, intervalModeIndices } from '@conai/shared'
 
 /**
@@ -10,18 +20,12 @@ export { MAX_SPRITE_FRAMES, sampleBounds, countModeIndices, intervalFrameCount, 
  * (D3), and the web UI defaults for both web and MCP callers (D5).
  */
 
-export const MAX_SHEET_DIMENSION = 16384
+export { MAX_SHEET_DIMENSION, MAX_KEY_COLORS, DEFAULT_ALPHA_THRESHOLD }
 export const MAX_IMAGE_PIXELS = 64 * 1024 * 1024
 /** Raw RGBA bytes one build may hold on disk at once (256 frames of 2048x2048). */
 export const MAX_BUILD_RAW_BYTES = 4 * 1024 * 1024 * 1024
-export const DEFAULT_ALPHA_THRESHOLD = 20
-export const MAX_KEY_COLORS = 8
-
 /** D5: the original web UI defaults, used for web and MCP alike (the original MCP used 0.18 / 0.12). */
-export const KEY_DEFAULT_TOLERANCE = 0.1
-export const KEY_DEFAULT_SOFTNESS = 0.05
-export const DESPILL_DEFAULT_TOLERANCE = 0.08
-export const DESPILL_DEFAULT_SOFTNESS = 0.92
+export { KEY_DEFAULT_TOLERANCE, KEY_DEFAULT_SOFTNESS, DESPILL_DEFAULT_TOLERANCE, DESPILL_DEFAULT_SOFTNESS }
 
 export type SpriteBackgroundMode = 'none' | 'key'
 export type SpriteResizeMode = 'none' | 'contain' | 'cover' | 'stretch'

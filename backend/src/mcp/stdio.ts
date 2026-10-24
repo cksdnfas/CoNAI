@@ -6,7 +6,7 @@
  *
  * 사용법:
  *   npx tsx backend/src/mcp/stdio.ts
- *   node backend/dist/mcp/stdio.js
+ *   node backend/dist/backend/src/mcp/stdio.js
  *
  * Claude Code 설정:
  *   claude mcp add --transport stdio conai -- npx tsx backend/src/mcp/stdio.ts

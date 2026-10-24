@@ -1,12 +1,12 @@
 import axios from 'axios';
-import type { NextFunction, Request, Response, Router } from 'express';
+import type { Request, Response, Router } from 'express';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { ComfyUIServerModel } from '../models/ComfyUIServer';
 import { GraphWorkflowModel } from '../models/GraphWorkflow';
 import { GraphWorkflowScheduleModel } from '../models/GraphWorkflowSchedule';
 import { enqueueScheduleRuns, parseStoredScheduleInputValues } from '../services/graphWorkflowScheduleRuns';
 import { settingsService } from '../services/settingsService';
-import { getWallpaperRuntimeAccess, sendWallpaperRuntimeForbidden } from '../services/wallpaperRuntimeAccess';
+import { getWallpaperRuntimeAccess, requireWallpaperRuntimeAdmin as requireAdminReader, sendWallpaperRuntimeForbidden } from '../services/wallpaperRuntimeAccess';
 import { errorResponse, successResponse } from '@conai/shared';
 
 const COMFY_STATS_TTL_MS = 3_000;
@@ -26,14 +26,6 @@ interface ComfyServerStats {
 
 let comfyStatsCache: { at: number; data: ComfyServerStats[] } | null = null;
 const quickRunPressedAt = new Map<string, number>();
-
-function requireAdminReader(_req: Request, res: Response, next: NextFunction) {
-  if (!getWallpaperRuntimeAccess(res).isAdmin) {
-    sendWallpaperRuntimeForbidden(res);
-    return;
-  }
-  next();
-}
 
 function finiteOrNull(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;

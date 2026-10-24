@@ -12,7 +12,7 @@ const router = Router();
  * GET /api/workflows/:id/servers
  */
 router.get('/:id/servers', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
     return res.status(400).json({
@@ -45,7 +45,7 @@ router.get('/:id/servers', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/workflows/:id/servers
  */
 router.post('/:id/servers', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
   const { server_ids } = req.body;
 
   if (isNaN(id) || !server_ids || !Array.isArray(server_ids)) {
@@ -82,8 +82,8 @@ router.post('/:id/servers', requirePermission('workflows.edit'), asyncHandler(as
  * DELETE /api/workflows/:id/servers/:serverId
  */
 router.delete('/:id/servers/:serverId', requirePermission('workflows.edit'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
-  const serverId = parseInt(routeParam(routeParam(req.params.serverId)));
+  const id = parseInt(routeParam(req.params.id));
+  const serverId = parseInt(routeParam(req.params.serverId));
 
   if (isNaN(id) || isNaN(serverId)) {
     return res.status(400).json({

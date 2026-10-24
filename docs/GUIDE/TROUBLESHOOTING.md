@@ -4,12 +4,11 @@ CoNAI 사용 중 자주 만나는 문제와 확인 순서입니다. 먼저 증�
 
 ## 앱이 켜지지 않음
 
-1. Node.js 버전을 확인합니다. CoNAI는 Node.js `>= 18.0.0`이 필요합니다.
+1. Node.js 버전을 확인합니다. CoNAI는 루트 `package.json`의 engines 기준으로 Node.js `>= 22.13.0`이 필요합니다.
 2. 의존성을 다시 설치합니다.
 
 ```bash
 npm install
-npm run install:all
 ```
 
 3. `.env`가 있는지 확인합니다.

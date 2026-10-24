@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { Transform, pipeline } from 'stream';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import { UPLOAD_LIMITS } from '@conai/shared';
 import { runtimePaths } from '../config/runtimePaths';
 
 const ALLOWED_MIME_TYPES = [
@@ -19,9 +20,9 @@ const ALLOWED_MIME_TYPES = [
   'video/x-matroska'
 ];
 
-export const MAX_UPLOAD_FILE_SIZE_BYTES = 500 * 1024 * 1024;
-export const MAX_MULTIPLE_UPLOAD_FILES = 20;
-export const MAX_MULTIPLE_UPLOAD_TOTAL_BYTES = 1024 * 1024 * 1024;
+export const MAX_UPLOAD_FILE_SIZE_BYTES = UPLOAD_LIMITS.maxFileBytes;
+export const MAX_MULTIPLE_UPLOAD_FILES = UPLOAD_LIMITS.maxFilesPerRequest;
+export const MAX_MULTIPLE_UPLOAD_TOTAL_BYTES = UPLOAD_LIMITS.maxRequestBytes;
 
 const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
   if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {

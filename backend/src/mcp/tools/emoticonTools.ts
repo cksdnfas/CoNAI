@@ -17,16 +17,9 @@ import { ImageSafetyService } from '../../services/imageSafetyService';
 import { CONTENT_RATING_BLOCKED, libraryMediaAllowed, storedFileAllowed } from '../../services/contentRating';
 import { contextContentLimit, RATING_RESTRICTED_TEXT, ratingRestrictedHashes } from '../../services/codex-chat/chatContentRating';
 import type { McpRequestContext } from '../context';
+import { errorResult, textResult } from '../toolResults';
 
 const VIEW_MAX_IMAGES = 6;
-
-function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
-}
-
-function errorResult(error: unknown) {
-  return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
-}
 
 const groupIdSchema = z.number().int().positive().optional().describe('Custom image group ID');
 const groupPathSchema = z.string().trim().min(1).max(1024).optional().describe("Existing custom group path, e.g. 'Emoticons/Kona'. Use instead of group_id.");
@@ -137,7 +130,7 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'view_images',
-    { description: `Look at up to ${VIEW_MAX_IMAGES} images: library images by composite_hash and/or private stored files by file_id. Returns small previews (first frame of animations). Only works when your model can see images.`, inputSchema: z.object({
+    { description: `Look at up to ${VIEW_MAX_IMAGES} images: library images by composite_hash and/or shared stored files by file_id. Returns small previews (first frame of animations). Only works when your model can see images.`, inputSchema: z.object({
       composite_hashes: z.array(z.string().trim().min(1)).max(VIEW_MAX_IMAGES).optional(),
       file_ids: z.array(z.string().regex(/^[a-f0-9]{32}$/)).max(VIEW_MAX_IMAGES).optional(),
     }) },
@@ -175,7 +168,7 @@ export function registerEmoticonTools(server: McpServer, context: McpRequestCont
 
   server.registerTool(
     'view_media_frames',
-    { description: `Watch a video or an animated GIF/WebP as still frames: a library item by composite_hash or a private stored file by file_id. Takes up to ${MEDIA_FRAMES_MAX} frames spread evenly over the whole clip or over start_seconds..end_seconds and tiles them, numbered, into pictures of up to ${FRAMES_PER_SHEET_MAX} frames; the frame times come as text. Narrow the range, or use fewer frames per picture, to look closer at a moment. Only works when your model can see images.`, inputSchema: z.object({
+    { description: `Watch a video or an animated GIF/WebP as still frames: a library item by composite_hash or a shared stored file by file_id. Takes up to ${MEDIA_FRAMES_MAX} frames spread evenly over the whole clip or over start_seconds..end_seconds and tiles them, numbered, into pictures of up to ${FRAMES_PER_SHEET_MAX} frames; the frame times come as text. Narrow the range, or use fewer frames per picture, to look closer at a moment. Only works when your model can see images.`, inputSchema: z.object({
       composite_hash: z.string().trim().min(1).optional(),
       file_id: z.string().regex(/^[a-f0-9]{32}$/).optional(),
       count: z.number().int().min(1).max(MEDIA_FRAMES_MAX).optional().describe(`Frames to take (default ${MEDIA_FRAMES_DEFAULT})`),

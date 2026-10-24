@@ -15,6 +15,7 @@ import { AuthAccount } from '../../models/AuthAccount';
 import { db } from '../../database/init';
 import { searchImagesByText, similarImagesByVector, type ImageVectorHit } from '../../services/embeddings/imageIndex';
 import { embeddingFeatureOn } from '../../services/aiWorker/textEmbeddingService';
+import { errorResult, textResult } from '../toolResults';
 
 function sanitizeMetadata(metadata: Record<string, unknown>, includeHeavyFields: boolean) {
   const excluded = new Set(['original_file_path', 'thumbnail_path', 'storage_path', 'path']);
@@ -87,22 +88,14 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           file_size: img.file_size,
         })), ['prompt', 'negative_prompt']);
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              images,
-              total: result.total,
-              page,
-              limit,
-            }),
-          }],
-        };
+        return textResult({
+          images,
+          total: result.total,
+          page,
+          limit,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error searching images: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error searching images: ${(error as Error).message}`);
       }
     }
   );
@@ -123,7 +116,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           const artifact = await McpArtifactService.createMediaDescriptor(hash, baseUrl, context.requester);
           return artifact ? { composite_hash: hash, artifact } : { composite_hash: hash, error: 'not found or not available' };
         }));
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ items }) }] };
+        return textResult({ items });
       } catch (error) {
         return { isError: true, content: [{ type: 'text' as const, text: (error as Error).message }] };
       }
@@ -142,24 +135,13 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
         const metadata = MediaMetadataModel.findByHash(composite_hash);
 
         if (!metadata || !MediaPostprocessVisibilityService.isReadyRecord(metadata) || ImageSafetyService.isHidden(metadata.rating_score)) {
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: `Image with hash ${composite_hash} not found` }],
-          };
+          return errorResult(`Image with hash ${composite_hash} not found`);
         }
 
         const shown = sanitizeMetadata(metadata as unknown as Record<string, unknown>, include_heavy_fields);
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify(ratingRestrictedHashes(context, [composite_hash]).size ? hideRatingRestrictedText(shown, METADATA_TEXT_FIELDS) : shown),
-          }],
-        };
+        return textResult(ratingRestrictedHashes(context, [composite_hash]).size ? hideRatingRestrictedText(shown, METADATA_TEXT_FIELDS) : shown);
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -229,22 +211,14 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           };
         }));
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              records: hideRatingRestrictedRows(context, summary, ['positive_prompt', 'negative_prompt']),
-              total,
-              limit,
-              offset,
-            }),
-          }],
-        };
+        return textResult({
+          records: hideRatingRestrictedRows(context, summary, ['positive_prompt', 'negative_prompt']),
+          total,
+          limit,
+          offset,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -314,10 +288,7 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
         // 유효성 검증
         const validation = AutoTagSearchService.validateSearchParams(autoTagParams);
         if (!validation.valid) {
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: `Invalid parameters: ${validation.errors.join(', ')}` }],
-          };
+          return errorResult(`Invalid parameters: ${validation.errors.join(', ')}`);
         }
 
         // 기본 검색 파라미터
@@ -341,22 +312,14 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
           rating_score: img.rating_score,
         })), ['prompt']);
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              images,
-              total: result.total,
-              page: params.page,
-              limit: params.limit,
-            }),
-          }],
-        };
+        return textResult({
+          images,
+          total: result.total,
+          page: params.page,
+          limit: params.limit,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error searching by tags: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error searching by tags: ${(error as Error).message}`);
       }
     }
   );
@@ -370,13 +333,13 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
     }) },
     async ({ text, limit }, ctx) => {
       try {
-        if (!embeddingFeatureOn('imageSearch')) return vectorToolError(IMAGE_SEARCH_OFF);
+        if (!embeddingFeatureOn('imageSearch')) return errorResult(IMAGE_SEARCH_OFF);
         const hits = await searchImagesByText(text, limit, { signal: ctx?.mcpReq?.signal });
-        if (!hits) return vectorToolError('The embedding model did not answer (the AI runtime may not be installed or is still loading). Try again in a moment.');
+        if (!hits) return errorResult('The embedding model did not answer (the AI runtime may not be installed or is still loading). Try again in a moment.');
         const images = hideRatingRestrictedRows(context, vectorHitSummaries(hits), ['prompt']);
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ images, total: images.length, query: text }) }] };
+        return textResult({ images, total: images.length, query: text });
       } catch (error) {
-        return vectorToolError(`Error searching by meaning: ${(error as Error).message}`);
+        return errorResult(`Error searching by meaning: ${(error as Error).message}`);
       }
     }
   );
@@ -393,19 +356,19 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
       try {
         const target = MediaMetadataModel.findByHash(composite_hash);
         if (!target || !MediaPostprocessVisibilityService.isReadyRecord(target) || ImageSafetyService.isHidden(target.rating_score)) {
-          return vectorToolError(`Image with hash ${composite_hash} not found`);
+          return errorResult(`Image with hash ${composite_hash} not found`);
         }
-        if (basis === 'content' && !embeddingFeatureOn('imageSearch')) return vectorToolError(IMAGE_SEARCH_OFF);
+        if (basis === 'content' && !embeddingFeatureOn('imageSearch')) return errorResult(IMAGE_SEARCH_OFF);
         const hits = similarImagesByVector(composite_hash, basis, limit);
         if (!hits) {
-          return vectorToolError(basis === 'style'
+          return errorResult(basis === 'style'
             ? 'This image has no style vector yet (Kaloscope with style vectors on has to run on it first; Settings › 자동 › Kaloscope › 화풍 벡터 저장).'
             : 'This image has no image vector yet (it is still waiting to be indexed).');
         }
         const images = hideRatingRestrictedRows(context, vectorHitSummaries(hits), ['prompt']);
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ images, total: images.length, basis, composite_hash }) }] };
+        return textResult({ images, total: images.length, basis, composite_hash });
       } catch (error) {
-        return vectorToolError(`Error finding similar images: ${(error as Error).message}`);
+        return errorResult(`Error finding similar images: ${(error as Error).message}`);
       }
     }
   );
@@ -414,10 +377,6 @@ export function registerImageTools(server: McpServer, context: McpRequestContext
 const MEANING_QUERY_MAX_CHARS = 500;
 const VECTOR_TOOL_MAX_LIMIT = 50;
 const IMAGE_SEARCH_OFF = 'Image search by meaning is off. An administrator turns it on in Settings › 자동 › 임베딩 (이미지 임베딩); the library is then indexed in the background.';
-
-function vectorToolError(text: string) {
-  return { isError: true, content: [{ type: 'text' as const, text }] };
-}
 
 /** The hits as short library rows, in hit order (hits are already limited to images the library shows). */
 function vectorHitSummaries(hits: ImageVectorHit[]) {

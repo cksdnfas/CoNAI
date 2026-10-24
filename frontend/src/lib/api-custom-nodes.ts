@@ -1,14 +1,4 @@
-import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { fetchJson } from '@/lib/api-client'
-import type { ApiResponse } from '@/types/image'
-
-async function requestCustomNodeData<T>(path: string, fallbackKey: Parameters<typeof createApiFallbackError>[1], init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<T>>(path, init)
-  if (!response.success) {
-    throw createApiFallbackError(response.error, fallbackKey)
-  }
-  return response.data
-}
+import { fetchApiData as requestCustomNodeData } from '@/lib/api-client'
 
 export type CustomNodePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
 export type CustomNodeUiDataType = CustomNodePortDataType | 'select'

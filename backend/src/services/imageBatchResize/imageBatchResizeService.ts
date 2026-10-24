@@ -3,8 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { runtimePaths } from '../../config/runtimePaths'
 import { RuntimeJobRunner, type RuntimeJobContext } from '../runtimeJobs/runtimeJobRunner'
-import { RuntimeJobStore } from '../runtimeJobs/runtimeJobStore'
-import { isRuntimeJobTerminalStatus, type RuntimeJobRecord } from '../../types/runtimeJob'
+import type { RuntimeJobRecord } from '../../types/runtimeJob'
 import { SpriteError } from '../sprite/spriteErrors'
 import { findLibraryMedia, resolveSpriteGroup, saveSpriteOutputToLibrary } from '../sprite/spriteLibrary'
 import { MAX_IMAGE_PIXELS, MAX_SHEET_DIMENSION, validateImageOutput, type SpriteImageFormat } from '../sprite/spriteOptions'
@@ -72,8 +71,7 @@ export async function resizeImageFile(filePath: string, options: ImageBatchResiz
 }
 
 /** Why an item cannot be resized (not in the library, a video or an animation), or null when it can. */
-function skipReason(compositeHash: string): string | null {
-  const media = findLibraryMedia(compositeHash)
+function skipReason(media: ReturnType<typeof findLibraryMedia>): string | null {
   if (!media) return '라이브러리에서 찾을 수 없어'
   if (media.fileType === 'video' || media.mimeType.startsWith('video/')) return '영상은 건너뛰어'
   if (media.fileType === 'animated') return '움직이는 이미지는 건너뛰어'
@@ -89,12 +87,13 @@ async function runImageBatchResize(ctx: RuntimeJobContext<ImageBatchResizeParams
   ctx.flush({ processed: 0, total: hashes.length })
   for (const [index, source] of hashes.entries()) {
     ctx.throwIfCancelled()
-    const reason = skipReason(source)
+    const media = findLibraryMedia(source)
+    const reason = skipReason(media)
     if (reason) {
       result.skipped.push({ source, reason })
     } else {
       try {
-        const bytes = await resizeImageFile(findLibraryMedia(source)!.filePath, options, ctx.signal)
+        const bytes = await resizeImageFile(media!.filePath, options, ctx.signal)
         const saved = await saveSpriteOutputToLibrary({ bytes, extension: options.format, mimeType: `image/${options.format}`, group: { groupId } })
         result.saved.push({ source, compositeHash: saved.compositeHash })
       } catch (error) {
@@ -127,7 +126,7 @@ export function startImageBatchResizeJob(params: ImageBatchResizeParams): Runtim
   }
   if (new Set(hashes).size !== hashes.length) throw new SpriteError('같은 이미지가 두 번 들어 있어.')
   const options = resolveImageBatchResizeOptions(params)
-  if (hashes.every((hash) => skipReason(hash) !== null)) throw new SpriteError('크기를 바꿀 수 있는 이미지가 없어 (영상·움직이는 이미지는 제외돼).')
+  if (hashes.every((hash) => skipReason(findLibraryMedia(hash)) !== null)) throw new SpriteError('크기를 바꿀 수 있는 이미지가 없어 (영상·움직이는 이미지는 제외돼).')
   // An explicit group id must exist; the default group path is created when the job runs.
   if (params.groupId !== undefined && params.groupId !== null) resolveSpriteGroup({ groupId: params.groupId })
   return RuntimeJobRunner.start<ImageBatchResizeParams>('image-batch-resize', {
@@ -140,11 +139,4 @@ export function startImageBatchResizeJob(params: ImageBatchResizeParams): Runtim
 }
 
 /** Wait for the job to end, polling the job table (bounded; returns the latest record on timeout). */
-export async function waitForImageBatchResizeJob(jobId: string, timeoutMs: number): Promise<RuntimeJobRecord | null> {
-  const deadline = Date.now() + timeoutMs
-  for (;;) {
-    const job = RuntimeJobStore.get(jobId)
-    if (!job || isRuntimeJobTerminalStatus(job.status) || Date.now() >= deadline) return job
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-}
+export { waitForRuntimeJob as waitForImageBatchResizeJob } from '../sprite/spriteService'

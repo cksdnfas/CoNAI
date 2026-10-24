@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { CustomDropdownListModel } from '../../models/CustomDropdownList';
 import { WildcardModel, WildcardItemModel } from '../../models/Wildcard';
 import { WildcardService } from '../../services/wildcardService';
+import { errorResult, textResult } from '../toolResults';
 
 export function registerResourceTools(server: McpServer): void {
   // 커스텀 드롭다운 목록 조회 (경량)
@@ -22,17 +23,9 @@ export function registerResourceTools(server: McpServer): void {
           source_path: list.source_path,
         }));
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify(summary),
-          }],
-        };
+        return textResult(summary);
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -50,10 +43,7 @@ export function registerResourceTools(server: McpServer): void {
       try {
         const list = CustomDropdownListModel.findByName(list_name);
         if (!list) {
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: `Dropdown list "${list_name}" not found` }],
-          };
+          return errorResult(`Dropdown list "${list_name}" not found`);
         }
 
         // 아이템 필터링
@@ -68,23 +58,15 @@ export function registerResourceTools(server: McpServer): void {
         const offset = (page - 1) * limit;
         const paginated = filtered.slice(offset, offset + limit);
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              list_name: list.name,
-              items: paginated,
-              total,
-              page,
-              limit,
-            }),
-          }],
-        };
+        return textResult({
+          list_name: list.name,
+          items: paginated,
+          total,
+          page,
+          limit,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -159,22 +141,14 @@ export function registerResourceTools(server: McpServer): void {
           return entry;
         });
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              wildcards: results,
-              total,
-              page: params.page,
-              limit: params.limit,
-            }),
-          }],
-        };
+        return textResult({
+          wildcards: results,
+          total,
+          page: params.page,
+          limit: params.limit,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -190,20 +164,12 @@ export function registerResourceTools(server: McpServer): void {
     }) },
     async ({ text, tool, count, prompt_kind }) => {
       try {
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              samples: WildcardService.parseMultiple(text, tool, count, prompt_kind),
-              used_wildcards: WildcardService.extractWildcardNames(text),
-            }),
-          }],
-        };
+        return textResult({
+          samples: WildcardService.parseMultiple(text, tool, count, prompt_kind),
+          used_wildcards: WildcardService.extractWildcardNames(text),
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );

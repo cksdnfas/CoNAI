@@ -5,7 +5,7 @@ import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-tr
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
 import type { SpriteAnchorPolicy, SpriteAnimationOptions, SpriteBatchItem, SpriteExtractResult, SpriteNormalizeOptions, SpriteNormalizeSheet, SpriteVideoInfo } from '@/lib/api-sprite'
-import { MAX_SPRITE_FRAMES, normalizeHex, toExtractOptions, withDespill, type ExtractForm, type OutputForm, type SaveForm } from './sprite-options'
+import { MAX_KEY_COLORS, MAX_SHEET_DIMENSION, MAX_SPRITE_FRAMES, normalizeHex, toExtractOptions, withDespill, type ExtractForm, type OutputForm, type SaveForm } from './sprite-options'
 
 const HASH = /^[0-9a-f]{32,48}$/i
 /** A longer video list is picked by hash text (checked on apply): listing every hash in the schema fills the page view. */
@@ -65,8 +65,8 @@ export function useSpriteChatPage({ active, videoHash, videos, setVideos, maxVid
     { id: 'autoCrop', label: t({ ko: '자동 크롭', en: 'Auto crop' }), type: 'boolean', value: form.autoCrop },
     { id: 'alphaThreshold', label: t({ ko: '알파 임계값', en: 'Alpha threshold' }), type: 'number', value: form.alphaThreshold, min: 1, max: 255, integer: true },
     { id: 'resizeMode', label: t({ ko: '크기 조정', en: 'Resize' }), type: 'select', value: form.resizeMode, options: ['none', 'contain', 'cover', 'stretch'] },
-    { id: 'outputWidth', label: t({ ko: '가로', en: 'Width' }), type: 'number', value: form.outputWidth, min: 1, max: 16384, integer: true },
-    { id: 'outputHeight', label: t({ ko: '세로', en: 'Height' }), type: 'number', value: form.outputHeight, min: 1, max: 16384, integer: true },
+    { id: 'outputWidth', label: t({ ko: '가로', en: 'Width' }), type: 'number', value: form.outputWidth, min: 1, max: MAX_SHEET_DIMENSION, integer: true },
+    { id: 'outputHeight', label: t({ ko: '세로', en: 'Height' }), type: 'number', value: form.outputHeight, min: 1, max: MAX_SHEET_DIMENSION, integer: true },
     { id: 'columns', label: t({ ko: '시트 열 (0 = 자동)', en: 'Sheet columns (0 = automatic)' }), type: 'number', value: output.columns, min: 0, max: 64, integer: true },
     { id: 'spacing', label: t({ ko: '칸 간격 (px)', en: 'Cell spacing (px)' }), type: 'number', value: output.spacing, min: 0, max: 64, integer: true },
     { id: 'format', label: t({ ko: '시트 형식', en: 'Sheet format' }), type: 'select', value: output.format, options: ['png', 'webp'] },
@@ -158,7 +158,7 @@ function applySpritePatch(current: ExtractForm, patch: Record<string, ChatPageVa
     if (key === 'despill' || !(key in next)) continue
     if (key === 'keyColors') {
       const colors = String(value).split(',').map((color) => normalizeHex(color)).filter((color): color is string => Boolean(color))
-      if (colors.length) next.keyColors = next.despill ? colors.slice(0, 1) : colors.slice(0, 8)
+      if (colors.length) next.keyColors = next.despill ? colors.slice(0, 1) : colors.slice(0, MAX_KEY_COLORS)
     } else if (key === 'endTime') {
       next.endTime = value === '' ? null : Number(value)
       if (!('rangeMode' in patch)) next.rangeMode = 'common'
@@ -212,8 +212,8 @@ export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected
   ]
   const sheetSchema = pageObject({
     hash: { type: 'string', maxLength: 48 },
-    columns: pageNumber(1, 64, true), rows: pageNumber(1, 64, true), frameCount: pageNumber(1, 256, true), inputSpacing: pageNumber(0, 64, true),
-    outputColumns: pageNumber(1, 256, true), readOrder: pageChoice(['row_major', 'column_major']), customAnchorX: pageNumber(0), customAnchorY: pageNumber(0),
+    columns: pageNumber(1, 64, true), rows: pageNumber(1, 64, true), frameCount: pageNumber(1, MAX_SPRITE_FRAMES, true), inputSpacing: pageNumber(0, 64, true),
+    outputColumns: pageNumber(1, MAX_SPRITE_FRAMES, true), readOrder: pageChoice(['row_major', 'column_major']), customAnchorX: pageNumber(0), customAnchorY: pageNumber(0),
   }, ['hash'])
   const hashes = sheets.map((sheet) => sheet.hash)
   const actions: ChatPageAction[] = running ? [] : [
@@ -313,7 +313,7 @@ export function useSpriteAnimationChatPage({ active, sheet, pickSheet, options, 
   const fields: ChatPageField[] = [
     { id: 'columns', label: t({ ko: '열', en: 'Columns' }), type: 'number', value: options.columns, min: 1, max: 64, integer: true },
     { id: 'rows', label: t({ ko: '행', en: 'Rows' }), type: 'number', value: options.rows, min: 1, max: 64, integer: true },
-    { id: 'frameCount', label: t({ ko: '프레임', en: 'Frames' }), type: 'number', value: options.frameCount, min: 1, max: 256, integer: true },
+    { id: 'frameCount', label: t({ ko: '프레임', en: 'Frames' }), type: 'number', value: options.frameCount, min: 1, max: MAX_SPRITE_FRAMES, integer: true },
     { id: 'spacing', label: t({ ko: '간격', en: 'Spacing' }), type: 'number', value: options.spacing, min: 0, max: 64, integer: true },
     { id: 'fps', label: 'FPS', type: 'number', value: options.fps, min: 1, max: 60, integer: true },
     { id: 'outputFormat', label: t({ ko: '형식', en: 'Format' }), type: 'select', value: options.outputFormat, options: ['gif', 'webp', 'mp4'] },

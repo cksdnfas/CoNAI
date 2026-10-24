@@ -20,7 +20,7 @@ import { settingsService } from './settingsService';
  * rating tiers (rating_tiers.id, the tiers the feed uses): media whose weighted rating score falls in that tier or one
  * ordered before it passes; null is no ceiling. A ceiling whose tier was deleted lets nothing through.
  *
- * Media not rated yet (the auto-tagger has not reached it, or a private file) is rated on the spot with the tagger and
+ * Media not rated yet (the auto-tagger has not reached it, or a stored file) is rated on the spot with the tagger and
  * the score kept. Media that cannot be rated (tagger off, failed) never reaches a model with a ceiling.
  */
 export type ContentRatingLimit = number | null;
@@ -107,7 +107,7 @@ function ratesAsMedia(mimeType: string | null) {
   return Boolean(mimeType && (mimeType.startsWith('image/') || mimeType.startsWith('video/')));
 }
 
-/** A private file's rating score (images and videos), rated now when it has none. */
+/** A stored file's rating score (images and videos), rated now when it has none. */
 export async function storedFileRatingScore(fileId: string): Promise<number | null> {
   const row = storedRatingRow(fileId);
   if (!row || row.kind !== 'file' || !ratesAsMedia(row.mime_type)) return null;
@@ -121,7 +121,7 @@ export async function storedFileRatingScore(fileId: string): Promise<number | nu
   });
 }
 
-/** Whether a private file may be shown to a model with `limit` (the caller has already checked its owner). */
+/** Whether a stored file may be shown to a model with `limit` (the caller has already checked file access). */
 export async function storedFileAllowed(fileId: string, limit: ContentRatingLimit): Promise<boolean> {
   if (limit === null) return true;
   const known = scoreWithinLimit(storedRatingRow(fileId)?.rating_score, limit);

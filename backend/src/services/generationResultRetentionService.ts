@@ -4,6 +4,7 @@ import {
   normalizeGenerationHistoryMaxItems,
 } from '../constants/generationHistory'
 import { settingsService } from './settingsService'
+import { yieldToEventLoop } from './maintenance/libraryBatch'
 
 export const DEFAULT_GENERATION_RESULT_RETENTION_LIMIT = DEFAULT_GENERATION_HISTORY_MAX_ITEMS
 export const GENERATION_HISTORY_RETENTION_BATCH_SIZE = 1_000
@@ -22,10 +23,6 @@ export interface GenerationHistoryRetentionReport extends GenerationHistoryReten
 
 let backgroundPrunePromise: Promise<void> | null = null
 let pendingRetentionLimit: number | null = null
-
-function yieldToEventLoop() {
-  return new Promise<void>((resolve) => setImmediate(resolve))
-}
 
 /** Resolve the configured maximum number of generation-history rows. */
 export function getGenerationResultRetentionLimit() {

@@ -166,31 +166,6 @@ export class CustomDropdownListModel {
   }
 
   /**
-   * 특정 소스 경로로 수집된 목록 조회
-   */
-  static findBySourcePath(sourcePath: string): CustomDropdownListWithParsedItems[] {
-    const rows = userSettingsDb.prepare(
-      'SELECT * FROM custom_dropdown_lists WHERE source_path = ?'
-    ).all(sourcePath) as CustomDropdownListRecord[];
-
-    return rows.map(row => ({
-      ...row,
-      items: JSON.parse(row.items) as string[],
-      is_auto_collected: row.is_auto_collected === 1
-    }));
-  }
-
-  /**
-   * 특정 소스 경로로 수집된 모든 목록 삭제 (재스캔용)
-   */
-  static deleteBySourcePath(sourcePath: string): number {
-    const info = userSettingsDb.prepare(
-      'DELETE FROM custom_dropdown_lists WHERE source_path = ?'
-    ).run(sourcePath);
-    return info.changes;
-  }
-
-  /**
    * 모든 자동 수집 목록 삭제 (대표 서버 API 재수집용)
    */
   static deleteAutoCollected(): number {

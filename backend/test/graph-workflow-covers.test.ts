@@ -61,6 +61,29 @@ test('graph workflow covers: newest library image per workflow, refreshed when a
     // A text-typed source becomes a visual final result in a different workflow.
     const reused = Number(insert.run(sourceRun, 'text', '{}').lastInsertRowid)
     db.prepare("INSERT INTO graph_execution_final_results (execution_id, final_node_id, source_artifact_id, source_node_id, source_port_key, artifact_type) VALUES (?, 'final', ?, 'n', 'out', 'image')").run(finalRun, reused)
+    for (const rows of [
+      GraphExecutionFinalResultModel.findByExecutionIds([finalRun]),
+      GraphExecutionFinalResultModel.findByExecution(finalRun),
+      GraphExecutionFinalResultModel.findByWorkflowIdPage(finalWorkflow),
+    ]) {
+      assert.equal(rows.length, 1)
+      const [row] = rows
+      assert.deepEqual({
+        execution_id: row.execution_id,
+        source_execution_id: row.source_execution_id,
+        source_artifact_id: row.source_artifact_id,
+        artifact_type: row.artifact_type,
+        source_storage_path: row.source_storage_path,
+        source_metadata: row.source_metadata,
+      }, {
+        execution_id: finalRun,
+        source_execution_id: sourceRun,
+        source_artifact_id: reused,
+        artifact_type: 'image',
+        source_storage_path: null,
+        source_metadata: '{}',
+      })
+    }
     const active = Number(insert.run(activeRun, 'text', '{}').lastInsertRowid)
     const fallback = Number(insert.run(sourceRun, 'image', '{}').lastInsertRowid)
     const technical = db.transaction(() => Array.from({ length: 503 }, () => Number(insert.run(sourceRun, 'text', '{"note":"temporary"}').lastInsertRowid)))()
@@ -68,5 +91,62 @@ test('graph workflow covers: newest library image per workflow, refreshed when a
     assert.deepEqual(new Set(deleted.deleted_artifact_ids), new Set(technical))
     for (const id of [reused, active, fallback]) assert.ok(db.prepare('SELECT id FROM graph_execution_artifacts WHERE id=?').get(id))
     assert.ok(deleted.skipped_files.some(item => item.artifact_id === active))
+  })
+
+  await t.test('MCP preserves zero and false defaults and rejects invalid inputs before execution', async (sub) => {
+    const { McpServer } = await import('@modelcontextprotocol/server')
+    const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
+    const { registerGraphWorkflowTools } = await import('../src/mcp/tools/graphWorkflowTools')
+    const { GraphWorkflowExecutor } = await import('../src/services/graphWorkflowExecutor')
+    const graphId = Number(db.prepare('INSERT INTO graph_workflows (name, graph_json) VALUES (?, ?)').run('MCP inputs', JSON.stringify({
+      nodes: [], edges: [], metadata: { exposed_inputs: [
+        { id: 'amount', label: 'Amount', data_type: 'number', required: true, default_value: 0 },
+        { id: 'enabled', label: 'Enabled', data_type: 'boolean', required: true, default_value: false },
+      ] },
+    })).lastInsertRowid)
+    result(graphId, 'text', { note: 'stored result' })
+    const execution = db.prepare('SELECT id FROM graph_executions WHERE graph_workflow_id = ?').get(graphId) as { id: number }
+    const execute = sub.mock.method(GraphWorkflowExecutor, 'execute', async () => ({ executionId: execution.id }))
+    const server = new McpServer({ name: 'graph-inputs-test', version: '1.0.0' })
+    const client = new Client({ name: 'graph-inputs-test-client', version: '1.0.0' })
+    sub.after(async () => { await client.close(); await server.close() })
+    registerGraphWorkflowTools(server, { scopes: ['read', 'generate'] })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await server.connect(serverTransport)
+    await client.connect(clientTransport)
+
+    const response = await client.callTool({ name: 'get_graph_workflow_details', arguments: { workflow_id: graphId } })
+    assert.notEqual(response.isError, true)
+    const details = JSON.parse((response.content![0] as { text: string }).text)
+    assert.deepEqual(details.input_values_template, { amount: 0, enabled: false })
+    assert.deepEqual(details.invocation, { tool: 'execute_graph_workflow', arguments: { workflow_id: graphId, input_values: { amount: 0, enabled: false } } })
+    assert.deepEqual(details.input_schema.map(({ id, required, default_value }: { id: string; required: boolean; default_value: unknown }) => ({ id, required, default_value })), [
+      { id: 'amount', required: true, default_value: 0 },
+      { id: 'enabled', required: true, default_value: false },
+    ])
+
+    for (const [input, message] of [
+      [{ unknown: 1 }, /Unknown graph workflow input/],
+      [{ amount: '1' }, /must be a finite number/],
+      [{ enabled: 'true' }, /must be a boolean/],
+    ] as const) {
+      const rejected = await client.callTool({ name: 'execute_graph_workflow', arguments: { workflow_id: graphId, input_values: input } })
+      assert.equal(rejected.isError, true)
+      assert.match((rejected.content![0] as { text: string }).text, message)
+    }
+    assert.equal(execute.mock.callCount(), 0)
+
+    const accepted = await client.callTool({ name: 'execute_graph_workflow', arguments: { workflow_id: graphId, input_values: {} } })
+    assert.notEqual(accepted.isError, true)
+    assert.equal(execute.mock.callCount(), 1)
+    assert.deepEqual(execute.mock.calls[0].arguments[1].runtimeInputValues, { amount: 0, enabled: false })
+    const saved = JSON.parse((accepted.content![0] as { text: string }).text)
+    assert.equal(saved.execution.id, execution.id)
+    assert.equal(saved.final_results.length, 1)
+    assert.equal(saved.final_results[0].artifact_type, 'text')
+    assert.deepEqual(saved.artifacts, [])
+    const fetched = await client.callTool({ name: 'get_graph_workflow_execution', arguments: { execution_id: execution.id } })
+    assert.notEqual(fetched.isError, true)
+    assert.deepEqual(JSON.parse((fetched.content![0] as { text: string }).text), saved)
   })
 })

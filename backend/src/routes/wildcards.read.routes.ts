@@ -56,7 +56,7 @@ router.get('/last-scan-log', asyncHandler(async (req: Request, res: Response) =>
 }));
 
 router.get('/:id/children', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid wildcard ID' });
@@ -72,7 +72,7 @@ router.get('/:id/children', asyncHandler(async (req: Request, res: Response) => 
 }));
 
 router.get('/:id/path', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid wildcard ID' });
@@ -109,7 +109,7 @@ router.get('/:id/items', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid wildcard ID' });
@@ -141,7 +141,7 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
 }));
 
 router.get('/:id/circular-check', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
     return res.status(400).json({ success: false, error: 'Invalid wildcard ID' });

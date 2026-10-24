@@ -186,38 +186,6 @@ export class AutoCollectionOrchestrator {
   }
 
   /**
-   * Run auto-collection for all enabled groups
-   */
-  static async runAutoCollectionForAllGroups(): Promise<AutoCollectResult[]> {
-    try {
-      const groups = await GroupModel.findAutoCollectEnabled();
-      const results: AutoCollectResult[] = [];
-
-      for (const group of groups) {
-        try {
-          const result = await this.runAutoCollectionForGroup(group.id);
-          results.push(result);
-        } catch (error) {
-          console.error(`Auto collection failed for group ${group.name} (${group.id}):`, error);
-          // Continue processing other groups even if one fails
-          results.push({
-            group_id: group.id,
-            group_name: group.name,
-            images_added: 0,
-            images_removed: 0,
-            execution_time: 0
-          });
-        }
-      }
-
-      return results;
-    } catch (error) {
-      console.error('Auto collection for all groups failed:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Run auto-collection for a newly uploaded image
    *
    * @param compositeHash - Image composite hash
@@ -301,6 +269,18 @@ export class AutoCollectionOrchestrator {
       return { valid: false, errors };
     }
 
+    const validTypes = [
+      'prompt_contains', 'prompt_regex',
+      'negative_prompt_contains', 'negative_prompt_regex',
+      'ai_tool', 'ai_tool_group', 'model_name', 'lora_model',
+      'auto_tag_rating', 'auto_tag_general',
+      'auto_tag_character', 'auto_tag_model',
+      'auto_tag_has_character', 'auto_tag_exists',
+      'auto_tag_rating_score',
+      'duplicate_exact', 'duplicate_near',
+      'duplicate_similar', 'duplicate_custom'
+    ];
+
     for (let i = 0; i < conditions.length; i++) {
       const condition = conditions[i];
 
@@ -308,18 +288,6 @@ export class AutoCollectionOrchestrator {
         errors.push(`Condition ${i + 1}: type is required`);
         continue;
       }
-
-      const validTypes = [
-        'prompt_contains', 'prompt_regex',
-        'negative_prompt_contains', 'negative_prompt_regex',
-        'ai_tool', 'ai_tool_group', 'model_name', 'lora_model',
-        'auto_tag_rating', 'auto_tag_general',
-        'auto_tag_character', 'auto_tag_model',
-        'auto_tag_has_character', 'auto_tag_exists',
-        'auto_tag_rating_score',
-        'duplicate_exact', 'duplicate_near',
-        'duplicate_similar', 'duplicate_custom'
-      ];
 
       if (!validTypes.includes(condition.type)) {
         errors.push(`Condition ${i + 1}: invalid type "${condition.type}"`);

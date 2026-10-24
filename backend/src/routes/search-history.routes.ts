@@ -52,7 +52,7 @@ router.delete('/', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const entryId = routeParam(routeParam(req.params.id));
+  const entryId = routeParam(req.params.id);
   const deleted = SearchHistoryService.deleteEntry(historyOwner(req), entryId);
 
   if (!deleted) {

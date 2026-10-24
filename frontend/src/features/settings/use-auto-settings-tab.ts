@@ -491,7 +491,7 @@ export function useAutoSettingsTab({
     }
 
     const lastTier = currentTiers[currentTiers.length - 1]
-    const nextMinScore = Math.max(lastTier.min_score + 1, lastTier.min_score + 10)
+    const nextMinScore = lastTier.min_score + 10
     const now = new Date().toISOString()
 
     setRatingTiersDraft(normalizeRatingTierDrafts([

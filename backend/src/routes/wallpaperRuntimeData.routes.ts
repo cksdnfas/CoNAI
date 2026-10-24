@@ -21,6 +21,7 @@ import { PostError } from '../services/posts/postActor';
 import { WildcardService } from '../services/wildcardService';
 import {
   getWallpaperRuntimeAccess,
+  requireWallpaperRuntimeAdmin as requireAdminReader,
   requireWallpaperRuntimePermission,
   sendWallpaperRuntimeForbidden,
   type WallpaperRuntimeAccess,
@@ -50,14 +51,6 @@ function thumbnailUrl(hash: string | null | undefined) {
 /** Account-scoped feeds (queue, chat) never open to a logged-out viewer. */
 function requireSignedReader(_req: Request, res: Response, next: NextFunction) {
   if (getWallpaperRuntimeAccess(res).isAnonymous) {
-    sendWallpaperRuntimeForbidden(res);
-    return;
-  }
-  next();
-}
-
-function requireAdminReader(_req: Request, res: Response, next: NextFunction) {
-  if (!getWallpaperRuntimeAccess(res).isAdmin) {
     sendWallpaperRuntimeForbidden(res);
     return;
   }

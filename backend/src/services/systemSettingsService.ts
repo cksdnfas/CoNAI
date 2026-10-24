@@ -1,12 +1,5 @@
 import { db } from '../database/init';
 
-interface SystemSetting {
-  key: string;
-  value: string;
-  description: string | null;
-  updated_at: string;
-}
-
 /**
  * 시스템 전역 설정 관리 서비스
  */
@@ -44,13 +37,6 @@ export class SystemSettingsService {
         value = excluded.value,
         updated_at = CURRENT_TIMESTAMP
     `).run(key, value);
-  }
-
-  /**
-   * 모든 설정 조회
-   */
-  static getAllSettings(): SystemSetting[] {
-    return db.prepare('SELECT * FROM system_settings ORDER BY key').all() as SystemSetting[];
   }
 
   /**

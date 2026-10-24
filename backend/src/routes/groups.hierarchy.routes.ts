@@ -27,7 +27,7 @@ router.get('/hierarchy/roots', asyncHandler(async (req: Request, res: Response) 
 
 router.get('/:id/children', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const groups = await GroupModel.findChildrenWithHierarchy(id);
     return res.json(successResponse(groups));
   } catch (error) {
@@ -40,7 +40,7 @@ router.get('/:id/children', asyncHandler(async (req: Request, res: Response) => 
 
 router.get('/:id/breadcrumb', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const breadcrumb = await GroupModel.getBreadcrumbPath(id);
     return res.json(successResponse(breadcrumb));
   } catch (error) {
@@ -53,7 +53,7 @@ router.get('/:id/breadcrumb', asyncHandler(async (req: Request, res: Response) =
 
 router.post('/:id/move', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const { parent_id, preview, merge_token, edit } = req.body as GroupMoveRequest;
     return res.json(successResponse({ message: 'Group moved successfully', ...moveCustomGroups([id], parent_id ?? null, getRequesterAccountId(req), { preview: preview === true, merge_token, edit }) }));
   } catch (error) {
@@ -70,7 +70,7 @@ router.post('/:id/move', asyncHandler(async (req: Request, res: Response) => {
 
 router.post('/:id/validate-hierarchy', asyncHandler(async (req: Request, res: Response) => {
   try {
-    const id = validateId(routeParam(routeParam(req.params.id)), 'Group ID');
+    const id = validateId(routeParam(req.params.id), 'Group ID');
     const { parent_id } = req.body;
 
     const hierarchyService = getGroupHierarchyService();

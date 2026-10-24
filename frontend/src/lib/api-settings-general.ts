@@ -4,34 +4,20 @@ import type {
   GeneralSettings,
   PublicHeaderNavigationSettings,
 } from '@conai/shared'
-import type { ApiResponse } from '@/types/image'
-import { fetchJson } from '@/lib/api-client'
-import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
+import { fetchApiData } from '@/lib/api-client'
 
 export async function getAppSettings() {
-  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.app.load')
-  }
-  return response.data
+  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings', 'settings.app.load')
 }
 
 export async function getPublicHeaderNavigationSettings() {
-  const response = await fetchJson<ApiResponse<PublicHeaderNavigationSettings>>('/api/settings/header-navigation-public')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.headerNavigationPublic.load')
-  }
-  return response.data
+  return fetchApiData<PublicHeaderNavigationSettings>('/api/settings/header-navigation-public', 'settings.headerNavigationPublic.load')
 }
 
 export async function updateGeneralSettings(settings: Partial<GeneralSettings>, revision?: string) {
-  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/general', {
+  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/general', 'settings.general.update', {
     method: 'PUT',
     headers: { ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.general.update')
-  }
-  return response.data
 }

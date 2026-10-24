@@ -139,6 +139,15 @@ export function sendWallpaperRuntimeForbidden(res: Response): void {
   res.status(403).json({ success: false, error: 'Forbidden', ...(anonymous ? { code: WALLPAPER_RUNTIME_SIGN_IN_REQUIRED } : {}) });
 }
 
+/** Gate administrator data using the resolved runtime login or key session. */
+export function requireWallpaperRuntimeAdmin(_req: Request, res: Response, next: NextFunction): void {
+  if (!getWallpaperRuntimeAccess(res).isAdmin) {
+    sendWallpaperRuntimeForbidden(res);
+    return;
+  }
+  next();
+}
+
 /** Narrow a runtime read to readers holding one feature permission. */
 export function requireWallpaperRuntimePermission(permissionKey: string) {
   return (_req: Request, res: Response, next: NextFunction): void => {

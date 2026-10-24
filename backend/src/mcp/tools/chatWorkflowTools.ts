@@ -5,6 +5,7 @@ import type { McpRequestContext } from '../context'
 import { requireChatPageAccess } from '../../services/codex-chat/chatPageContext'
 import { chatWorkflowModules, requireChatWorkflowChoiceValues, sanitizeChatWorkflowPage, withChatWorkflowChoices } from '../../services/codex-chat/chatWorkflowContext'
 import { captureChatPage, currentChatPage, newChatPageCommandId, runChatPageCommand } from '../../services/codex-chat/chatPageBridge'
+import { textResult as result } from '../toolResults'
 
 const key = z.string().min(1).max(100)
 const label = z.string().max(200)
@@ -21,7 +22,6 @@ const operation = z.discriminatedUnion('type', [
   z.object({ type: z.literal('set_workflow'), name: z.string().max(160).optional(), description: z.string().max(CHAT_WORKFLOW_LIMITS.text).optional() }),
   z.object({ type: z.literal('set_run_input'), nodeId: key, enabled: z.boolean(), label: z.string().max(160).optional(), description: z.string().max(CHAT_WORKFLOW_LIMITS.text).optional() }),
 ])
-const result = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] })
 const failure = (error: unknown) => ({ isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : 'Workflow tool failed' }] })
 
 /** Edits run in the person's open editor as an undoable draft; nothing here saves or executes a workflow. */

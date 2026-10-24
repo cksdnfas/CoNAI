@@ -292,7 +292,7 @@ router.get('/:compositeHash/download/original', asyncHandler(async (req: Request
 }));
 
 router.get('/by-path/:encodedPath', asyncHandler(async (req: Request, res: Response) => {
-  const encodedPath = routeParam(routeParam(req.params.encodedPath));
+  const encodedPath = routeParam(req.params.encodedPath);
 
   try {
     const filePath = decodeURIComponent(encodedPath);

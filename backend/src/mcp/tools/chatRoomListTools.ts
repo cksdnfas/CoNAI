@@ -5,8 +5,7 @@ import { ChatGroupStore } from '../../services/codex-chat/chatGroupStore'
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles'
 import { CodexChatStore } from '../../services/codex-chat/codexChatStore'
 import type { McpRequestContext } from '../context'
-
-const result = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }] })
+import { textResult as result } from '../toolResults'
 
 /** The asking account's chats; without an account only the bootstrap owner (no accounts configured) has any. */
 function ownerAccount(context: McpRequestContext): { accountId: number | null } | null {

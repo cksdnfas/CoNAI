@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import type { ImageRecord } from '@/types/image'
-import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord } from '@/lib/api-module-graph'
 import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset, WallpaperImageHoverMotion, WallpaperImageTransitionSpeed } from './wallpaper-types'
 import { isWallpaperPlaybackRunning, useWallpaperPlayback } from './wallpaper-playback'
 
@@ -102,7 +101,7 @@ function clampWallpaperNumericIntensity(value: number, min: number, max: number)
 
 function formatWallpaperBezierNumber(value: number) {
   const rounded = Number(value.toFixed(3))
-  return Number.isInteger(rounded) ? String(rounded) : String(rounded)
+  return String(rounded)
 }
 
 function clampWallpaperEasingStopPoint(point: WallpaperEasingStopPoint): WallpaperEasingStopPoint {
@@ -223,7 +222,7 @@ export function parseWallpaperLinearEasing(easing: string | undefined): Wallpape
 
     const y = Number(stopMatch[1])
     const explicitPercent = stopMatch[2] !== undefined ? Number(stopMatch[2]) / 100 : undefined
-    const fallbackPercent = rawStops.length === 1 ? 0 : index / (rawStops.length - 1)
+    const fallbackPercent = index / (rawStops.length - 1)
     const x = explicitPercent ?? fallbackPercent
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return null
@@ -474,18 +473,4 @@ export function resolveWallpaperHoverMotionMetrics(hoverMotion: WallpaperImageHo
 /** Resolve one image preview url from a generic ImageRecord. */
 export function getWallpaperImageUrl(image: ImageRecord | null | undefined) {
   return image?.thumbnail_url || image?.image_url || null
-}
-
-/** Build one artifact-like record from a final-result row so shared preview helpers can be reused. */
-export function buildWallpaperFinalResultArtifact(finalResult: GraphExecutionFinalResultRecord): GraphExecutionArtifactRecord {
-  return {
-    id: finalResult.source_artifact_id,
-    execution_id: finalResult.source_execution_id ?? finalResult.execution_id,
-    node_id: finalResult.source_node_id,
-    port_key: finalResult.source_port_key,
-    artifact_type: finalResult.artifact_type,
-    storage_path: finalResult.source_storage_path,
-    metadata: finalResult.source_metadata,
-    created_date: finalResult.created_date,
-  }
 }

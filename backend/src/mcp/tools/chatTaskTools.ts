@@ -9,9 +9,8 @@ import { placesForRequest } from '../../services/codex-chat/chatLinkedFiles'
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles'
 import { CodexChatStore } from '../../services/codex-chat/codexChatStore'
 import { ChatGroupStore } from '../../services/codex-chat/chatGroupStore'
+import { errorResult as failure, textResult as result } from '../toolResults'
 
-const result = (value: unknown, extra: Record<string, unknown> = {}) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }], ...extra })
-const failure = (error: unknown) => ({ isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] })
 type Member = { id: number; name: string }
 /** A step's assignee by name for the model (`all`: every member). */
 const assigneeName = (assignee: ChatTaskAssignee, members: Member[]) => assignee === 'all' ? 'all' : members.find((member) => member.id === assignee)?.name ?? `#${assignee}`

@@ -89,11 +89,6 @@ export function requestThumbnailRepair(compositeHash: string, originalPath: stri
   }
 }
 
-/** Exposed for diagnostics/tests: how many hashes are waiting for repair. */
-export function getPendingThumbnailRepairCount(): number {
-  return pending.size
-}
-
 function takeNextPendingRepair(): PendingRepair | null {
   const next = pending.values().next()
   if (next.done) {

@@ -1,8 +1,6 @@
 import type { PageSettingsVersions } from '@conai/shared'
 import type { AppSettings, KaloscopeServerStatus, KaloscopeSettings } from '@conai/shared'
-import type { ApiResponse } from '@/types/image'
-import { fetchJson } from '@/lib/api-client'
-import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
+import { fetchApiData } from '@/lib/api-client'
 
 export interface AutoTestKaloscopeResult {
   model?: string
@@ -13,33 +11,21 @@ export interface AutoTestKaloscopeResult {
 }
 
 export async function updateKaloscopeSettings(settings: Partial<KaloscopeSettings>, revision?: string) {
-  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/kaloscope', {
+  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/kaloscope', 'settings.kaloscope.update', {
     method: 'PUT',
     headers: { ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.kaloscope.update')
-  }
-  return response.data
 }
 
 export async function getKaloscopeStatus() {
-  const response = await fetchJson<ApiResponse<KaloscopeServerStatus>>('/api/settings/kaloscope/status')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.kaloscopeStatus.load')
-  }
-  return response.data
+  return fetchApiData<KaloscopeServerStatus>('/api/settings/kaloscope/status', 'settings.kaloscopeStatus.load')
 }
 
 export async function runKaloscopeAutoTest(imageId: string) {
-  const response = await fetchJson<ApiResponse<AutoTestKaloscopeResult>>('/api/settings/kaloscope/test', {
+  return fetchApiData<AutoTestKaloscopeResult>('/api/settings/kaloscope/test', 'settings.kaloscopeAutoTest.run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageId }),
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.kaloscopeAutoTest.run')
-  }
-  return response.data
 }

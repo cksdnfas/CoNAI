@@ -5,6 +5,7 @@ import { requireFileStoreOwner, requireFileStoreAction } from '../../services/fi
 import { WorkspaceService } from '../../services/workspaceService'
 import { workspaceListSchema, workspaceReadSchema, workspaceApplySchema, workspaceSearchSchema } from '../../services/workspaceSchemas'
 import { publishWorkspaceResources, workspacePublishSchema } from '../../services/workspacePublishResources'
+import { textResult } from '../toolResults'
 
 export function registerWorkspaceTools(server: McpServer, context: McpRequestContext) {
   const binding = context.workspace
@@ -23,7 +24,7 @@ export function registerWorkspaceTools(server: McpServer, context: McpRequestCon
     return write ? requireFileStoreAction(account, 'organize') : requireFileStoreOwner(account)
   }
   const output = async (fn: () => unknown | Promise<unknown>) => {
-    try { return { content: [{ type: 'text' as const, text: JSON.stringify(await fn()) }] } }
+    try { return textResult(await fn()) }
     catch (error) { return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : 'Workspace operation failed' }] } }
   }
   server.registerTool('workspace_publish_resources', { description: 'Attach existing media/audio/documents to project subgroups, then write the completed work document and active queue in order. Originals stay in place. Both file revisions are required. On partial failure keep pending work and read both files before retrying; membership inserts are idempotent.', inputSchema: workspacePublishSchema }, (input, ctx) => output(() => publishWorkspaceResources(context, check(true), binding.project.id, input, () => { check(true) }, ctx.mcpReq?.signal)))

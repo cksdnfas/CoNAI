@@ -79,6 +79,23 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
     assert.ok(listed.length < catalogued.length, 'the catalog is the smaller list')
     assert.match(contents, /Danbooru/)
 
+    await t.test('prompt previews preserve positive and negative group domains through the catalog', async () => {
+      const { PromptGroupModel } = await import('../src/models/PromptGroup')
+      const { PromptCollectionModel } = await import('../src/models/PromptCollection')
+      const name = 'MCP-domain-preview'
+      const positive = PromptGroupModel.create({ group_name: name }, 'positive')
+      const negative = PromptGroupModel.create({ group_name: name }, 'negative')
+      PromptCollectionModel.addOrIncrement('positive-only', positive)
+      PromptCollectionModel.addOrIncrementNegative('negative-only', negative)
+      for (const kind of ['positive', 'negative'] as const) {
+        const response = await client.callTool({ name: CATALOG_RUN_TOOL, arguments: {
+          tool: 'preview_random_prompt', arguments: { text: `__my:${name}__`, tool: 'general', count: 2, prompt_kind: kind },
+        } })
+        assert.notEqual(response.isError, true, text(response))
+        assert.deepEqual(JSON.parse(text(response)).samples, [`${kind}-only`, `${kind}-only`])
+      }
+    })
+
     await t.test('prompt search combines saved prompts and dictionary characters through the catalog', async () => {
       const { default: Database } = await import('better-sqlite3')
       const { danbooruBrowserService } = await import('../src/services/danbooruBrowserService')

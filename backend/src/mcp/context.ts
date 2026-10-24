@@ -74,6 +74,11 @@ export function isChatMcpSource(source: McpRequestContext['source']) {
   return source === 'codex-chat' || source === 'llm-chat';
 }
 
+/** Keep inline jobs from holding a chat reply open: 30s in chat, 120s elsewhere (60s requested by default). */
+export function resolveMcpInlineWaitMs(source: McpRequestContext['source'], seconds: number | undefined): number {
+  return Math.max(0, Math.min(seconds ?? 60, isChatMcpSource(source) ? 30 : 120)) * 1000;
+}
+
 /**
  * Withheld from chat agents: a chat reply must not block on a generation job (Codex jobs can run for minutes).
  * The job is linked to the reply at submission and the app attaches the result when it lands.

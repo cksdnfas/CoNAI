@@ -139,7 +139,7 @@ export function pipeFileToResponse(
 
 /** Validate the composite-hash route param and send the shared 400 response when invalid. */
 export function getCompositeHashOrBlock(req: Request, res: Response) {
-  const compositeHash = routeParam(routeParam(req.params.compositeHash));
+  const compositeHash = routeParam(req.params.compositeHash);
 
   if (!compositeHash || (compositeHash.length !== 48 && compositeHash.length !== 32)) {
     res.status(400).json({

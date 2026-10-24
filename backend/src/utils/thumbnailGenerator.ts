@@ -89,16 +89,6 @@ export class ThumbnailGenerator {
     }
   }
 
-  /**
-   * 썸네일 존재 여부 확인
-   *
-   * @param thumbnailPath DB에 저장된 썸네일 상대 경로
-   * @returns 존재 여부
-   */
-  static thumbnailExists(thumbnailPath: string): boolean {
-    const absolutePath = resolveThumbnailAbsolutePath(thumbnailPath);
-    return absolutePath !== null && fs.existsSync(absolutePath);
-  }
 }
 
 /**

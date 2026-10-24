@@ -6,6 +6,7 @@ import { mcpGroupPathSchema } from './mcpTargetGroup';
 import { enqueueMcpGenerationJob, waitForMcpGenerationJob } from './generationJobTools';
 import { assertChatNaiSampleCount, type McpRequestContext } from '../context';
 import { canRequesterViewImages } from '../../middleware/imageAccess';
+import { errorResult, textResult } from '../toolResults';
 
 /** generate_nai answers synchronously; a job still running after this returns its id to wait on. */
 const GENERATE_NAI_WAIT_MS = 180_000;
@@ -43,10 +44,7 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
       try {
         assertChatNaiSampleCount(context, n_samples);
         if (!getToken()) {
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: 'NovelAI token not configured. Please connect a persistent API token via the web UI first (/api/nai/auth/login-with-token).' }],
-          };
+          return errorResult('NovelAI token not configured. Please connect a persistent API token via the web UI first (/api/nai/auth/login-with-token).');
         }
 
         // The same durable queue job submit_generation_job creates, waited on here for the synchronous answer.
@@ -79,33 +77,28 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
         const job = await waitForMcpGenerationJob(context, jobId, GENERATE_NAI_WAIT_MS);
         if (!job) throw new Error(`Queue job ${jobId} no longer exists`);
         if (job.status === 'failed' || job.status === 'cancelled') {
-          return { isError: true, content: [{ type: 'text' as const, text: `NAI generation ${job.status}: ${job.failure_message ?? 'no details'} (job ${job.id})` }] };
+          return errorResult(`NAI generation ${job.status}: ${job.failure_message ?? 'no details'} (job ${job.id})`);
         }
         const canView = !context.requester || canRequesterViewImages(context.requester);
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              success: job.finished,
-              job_id: job.id,
-              status: job.status,
-              ...(job.finished ? {} : { note: 'Still running: call wait_generation_job with this job_id.' }),
-              ...(canView ? { historyIds: job.history_ids } : {}),
-              count: job.history_ids.length,
-              ...(canView ? { metadata: {
-                prompt,
-                negative_prompt,
-                seed: request.seed,
-                resolution: `${width}x${height}`,
-                steps,
-                scale,
-                sampler,
-                model,
-              } } : {}),
-            }),
-          }],
-        };
+        return textResult({
+          success: job.finished,
+          job_id: job.id,
+          status: job.status,
+          ...(job.finished ? {} : { note: 'Still running: call wait_generation_job with this job_id.' }),
+          ...(canView ? { historyIds: job.history_ids } : {}),
+          count: job.history_ids.length,
+          ...(canView ? { metadata: {
+            prompt,
+            negative_prompt,
+            seed: request.seed,
+            resolution: `${width}x${height}`,
+            steps,
+            scale,
+            sampler,
+            model,
+          } } : {}),
+        });
       } catch (error: any) {
         let errorMessage = error.message;
 
@@ -117,10 +110,7 @@ export function registerNovelAiGenerationTools(server: McpServer, context: McpRe
           errorMessage = 'Request timeout. Please try again.';
         }
 
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `NAI generation error: ${errorMessage}` }],
-        };
+        return errorResult(`NAI generation error: ${errorMessage}`);
       }
     }
   );

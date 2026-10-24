@@ -3,6 +3,7 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { z } from 'zod';
 import { rawTokenEstimate } from '../services/llmUsage';
 import { CHAT_PAGE_KIND_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, isChatGenerationTool, type McpRequestContext } from './context';
+import { errorResult } from './toolResults';
 
 /**
  * A chat agent sees the app's tools as a table of contents instead of every definition at once: the chat's own tools
@@ -95,10 +96,6 @@ function firstSentence(description: string) {
   return sentence.length > 140 ? `${sentence.slice(0, 139)}…` : sentence;
 }
 
-function errorResult(text: string) {
-  return { isError: true, content: [{ type: 'text' as const, text }] };
-}
-
 /**
  * Collects the catalogued tools while the server is built, then either lists them directly (few of them) or puts them
  * on a private server behind `open_tools` / `run_tool`.
@@ -175,8 +172,9 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         const budget = Math.max(0, Math.min(max_tokens, remainingTokens?.() ?? max_tokens) - 150);
         for (const tool of selected.slice(offset)) {
           const definition = detail === 'summary' ? { name: tool.name, description: byName.get(tool.name)?.summary } : { name: tool.name, description: tool.description, input_schema: tool.inputSchema };
-          const size = JSON.stringify(definition).length;
-          const cost = rawTokenEstimate(JSON.stringify(definition));
+          const serialized = JSON.stringify(definition);
+          const size = serialized.length;
+          const cost = rawTokenEstimate(serialized);
           if (tokens + cost > budget || (opened.length > 0 && chars + size > CATALOG_PAGE_CHARS)) {
             if (opened.length === 0) return errorResult(`Definition of ${tool.name} needs about ${cost + 150} tokens. Use detail="summary" to browse, or open that tool alone with a larger max_tokens when context permits. The schema was not cut.`);
             break;

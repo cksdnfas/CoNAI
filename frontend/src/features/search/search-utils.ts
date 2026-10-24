@@ -42,16 +42,6 @@ function getSearchChipScoreRange(chip: Pick<SearchChip, 'minScore' | 'maxScore'>
   }
 }
 
-/** Build a stable UI label for a search chip. */
-function buildSearchChipLabel(_scope: SearchScope, value: string) {
-  const trimmedValue = value.trim()
-  if (!trimmedValue) {
-    return ''
-  }
-
-  return trimmedValue
-}
-
 /** Create a stable browser-safe id for a search chip. */
 export function createSearchChipId(scope: SearchScope) {
   return `${scope}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -92,7 +82,7 @@ export function createTextSearchChip(scope: Exclude<SearchScope, 'rating' | 'too
     id: createSearchChipId(scope),
     scope,
     operator: scope === 'meaning' ? 'AND' : options?.operator ?? 'AND',
-    label: buildSearchChipLabel(scope, trimmedValue),
+    label: trimmedValue,
     value: trimmedValue,
   } satisfies SearchChip
 }

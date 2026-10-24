@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
+import { normalizeOptionalString as text } from '../utils/valueNormalization';
 
 const MODEL_CONNECTION_TYPES = ['llm_openai_compatible', 'llm_ollama', 'decision_typesafe'];
 const TYPESAFE_DEFAULT_MODEL = 'jev-latest';
@@ -49,10 +50,6 @@ function parseConfig(value: string | null): Record<string, unknown> | null {
   }
 }
 
-function text(value: unknown) {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
 /**
  * Settings → LLM became "connection ▸ its models": a connection no longer carries a default model, and nothing names a
  * connection + model pair directly any more; everything references a model row (llm_model_slots) instead. This moves
@@ -89,7 +86,7 @@ export function migrateLlmModelRows(db: Database.Database): void {
   const rowFor = (providerName: string | null, model: string | null) => {
     const name = text(providerName);
     const connection = name ? byName.get(name) : undefined;
-    if (!connection) return null;
+    if (!name || !connection) return null;
     const resolved = text(model) || defaultModelOf(name);
     return resolved ? ensure(name, resolved) : null;
   };

@@ -25,6 +25,7 @@ import { canRequesterViewImages } from '../../middleware/imageAccess';
 import { requireChatAssetGeneration } from '../../services/codex-chat/chatAssetAccess';
 import { COMFY_SEED_RULE } from '../../services/comfyui/seedControl';
 import type { McpRequester } from '../context';
+import { errorResult, textResult } from '../toolResults';
 import {
   describeMcpGenerationJobRouting,
   getMcpGenerationRoutingOptions,
@@ -282,12 +283,12 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
   server.registerTool(
     'get_codex_generation_options',
     { description: 'Get the Codex image-generation request schema and the agent models the server\'s Codex CLI offers. Use the same parameters as the Codex UI with submit_generation_job(service_type="codex"). The list may be incomplete; custom model IDs are accepted. Prompts are saved with results; use get_generation_history_request to retrieve them and create_prompt_preset to save reusable text.', inputSchema: z.object({}) },
-    async () => ({ content: [{ type: 'text' as const, text: JSON.stringify({
+    async () => textResult({
       ...await getCodexModelSuggestions(),
       request_schema: z.toJSONSchema(codexGenerationRequestSchema),
       default_model: 'Server Codex CLI default when model is omitted or empty',
       example: { service_type: 'codex', request_payload: { prompt: 'Create a blue ceramic teapot', model: '', operation: 'generate', size: '1024x1024', count: 1 } },
-    }) }] }),
+    }),
   );
 
   server.registerTool(
@@ -295,11 +296,11 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     { description: 'Read the full saved prompt, negative prompt, selected model and request settings behind a generation result, as used by the UI reuse action. Image bytes are omitted; pruned requests may only retain result prompts. A result above the content rating this model may be shown carries rating_restricted: true with the prompts and request payload hidden.', inputSchema: z.object({ history_id: z.number().int().positive() }) },
     async ({ history_id }) => {
       const record = HistoryQueryRepository.findAllWithMetadata({ ids: [history_id], limit: 1 })[0];
-      if (!record) return { isError: true, content: [{ type: 'text' as const, text: 'Generation history not found' }] };
+      if (!record) return errorResult('Generation history not found');
       requireMcpResourceOwner(context, record, true);
       const snapshot = buildGenerationHistoryRequestSnapshot(record);
       const restricted = ratingRestrictedHashes(context, [record.actual_composite_hash ?? record.composite_hash]).size > 0;
-      return { content: [{ type: 'text' as const, text: JSON.stringify(restricted ? hideRatingRestrictedText(snapshot, ['request_payload', 'result_prompt', 'result_negative_prompt']) : snapshot) }] };
+      return textResult(restricted ? hideRatingRestrictedText(snapshot, ['request_payload', 'result_prompt', 'result_negative_prompt']) : snapshot);
     },
   );
 
@@ -319,9 +320,9 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     }) },
     async (args) => {
       try {
-        return { content: [{ type: 'text' as const, text: JSON.stringify(await enqueueMcpGenerationJob(context, args)) }] };
+        return textResult(await enqueueMcpGenerationJob(context, args));
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: `Generation job error: ${(error as Error).message}` }] };
+        return errorResult(`Generation job error: ${(error as Error).message}`);
       }
     },
   );
@@ -343,23 +344,18 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
         }
 
         const options = getMcpGenerationRoutingOptions(workflow_id);
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              workflow,
-              routing_rules: getMcpGenerationRoutingRules(),
-              ...options,
-              examples: {
-                automatic: { service_type: 'comfyui', workflow_id: workflow_id ?? '<workflow_id>', inputs: {} },
-                fixed_server: { service_type: 'comfyui', workflow_id: workflow_id ?? '<workflow_id>', server_id: '<server_id>', inputs: {} },
-                server_tag: { service_type: 'comfyui', workflow_id: workflow_id ?? '<workflow_id>', server_tag: '<routing_tag>', inputs: {} },
-              },
-            }),
-          }],
-        };
+        return textResult({
+          workflow,
+          routing_rules: getMcpGenerationRoutingRules(),
+          ...options,
+          examples: {
+            automatic: { service_type: 'comfyui', workflow_id: workflow_id ?? '<workflow_id>', inputs: {} },
+            fixed_server: { service_type: 'comfyui', workflow_id: workflow_id ?? '<workflow_id>', server_id: '<server_id>', inputs: {} },
+            server_tag: { service_type: 'comfyui', workflow_id: workflow_id ?? '<workflow_id>', server_tag: '<routing_tag>', inputs: {} },
+          },
+        });
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: `Generation routing error: ${(error as Error).message}` }] };
+        return errorResult(`Generation routing error: ${(error as Error).message}`);
       }
     },
   );
@@ -370,8 +366,8 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     async ({ job_id }) => {
       const job = await describeJob(job_id, context);
       return job
-        ? { content: [{ type: 'text' as const, text: JSON.stringify(job) }] }
-        : { isError: true, content: [{ type: 'text' as const, text: `Queue job ${job_id} not found` }] };
+        ? textResult(job)
+        : errorResult(`Queue job ${job_id} not found`);
     },
   );
 
@@ -384,8 +380,8 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     async ({ job_id, timeout_seconds }) => {
       const job = await waitForMcpGenerationJob(context, job_id, timeout_seconds * 1000);
       return job
-        ? { content: [{ type: 'text' as const, text: JSON.stringify(job) }] }
-        : { isError: true, content: [{ type: 'text' as const, text: `Queue job ${job_id} not found` }] };
+        ? textResult(job)
+        : errorResult(`Queue job ${job_id} not found`);
     },
   );
 
@@ -395,8 +391,8 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     async ({ job_id }) => {
       const job = await describeJob(job_id, context);
       return job
-        ? { content: [{ type: 'text' as const, text: JSON.stringify({ job_id, status: job.status, artifacts: job.artifacts }) }] }
-        : { isError: true, content: [{ type: 'text' as const, text: `Queue job ${job_id} not found` }] };
+        ? textResult({ job_id, status: job.status, artifacts: job.artifacts })
+        : errorResult(`Queue job ${job_id} not found`);
     },
   );
 
@@ -405,12 +401,12 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
     { description: 'Issue a fresh signed download URL from a stable MCP artifact ID.', inputSchema: z.object({ artifact_id: z.string().min(1) }) },
     async ({ artifact_id }) => {
       if (!context.baseUrl) {
-        return { isError: true, content: [{ type: 'text' as const, text: 'Artifact downloads require the Streamable HTTP transport' }] };
+        return errorResult('Artifact downloads require the Streamable HTTP transport');
       }
       if (context.requester) {
         const identity = McpArtifactService.identity(artifact_id);
         // Sprite frame ZIPs and audio exports check their owner (audio files: audio.view) inside refreshDescriptor.
-        if (!identity || !['history', 'sprite-frames', 'audio', 'audio-export'].includes(identity.kind)) return { isError: true, content: [{ type: 'text' as const, text: 'Artifact not accessible to this account' }] };
+        if (!identity || !['history', 'sprite-frames', 'audio', 'audio-export'].includes(identity.kind)) return errorResult('Artifact not accessible to this account');
         if (identity.kind === 'history') requireMcpResourceOwner(context, HistoryQueryRepository.findAllWithMetadata({ ids: [identity.id], limit: 1 })[0], true);
       }
       const artifact = await McpArtifactService.refreshDescriptor(artifact_id, context.baseUrl, context.requester).catch((error: Error) => {
@@ -418,8 +414,8 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
         throw error;
       });
       return artifact
-        ? { content: [{ type: 'text' as const, text: JSON.stringify(artifact) }] }
-        : { isError: true, content: [{ type: 'text' as const, text: 'Artifact not found or artifact ID is invalid' }] };
+        ? textResult(artifact)
+        : errorResult('Artifact not found or artifact ID is invalid');
     },
   );
 
@@ -430,9 +426,9 @@ export function registerGenerationJobTools(server: McpServer, context: McpReques
       try {
         requireMcpResourceOwner(context, GenerationQueueModel.findListRecordById(job_id));
         await GenerationQueueService.requestCancellation(job_id, { origin: 'user' });
-        return { content: [{ type: 'text' as const, text: JSON.stringify(await describeJob(job_id, context)) }] };
+        return textResult(await describeJob(job_id, context));
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: `Cancellation error: ${(error as Error).message}` }] };
+        return errorResult(`Cancellation error: ${(error as Error).message}`);
       }
     },
   );

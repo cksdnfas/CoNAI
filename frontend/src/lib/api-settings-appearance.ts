@@ -1,9 +1,6 @@
 import type { PageSettingsVersions } from '@conai/shared'
 import type { AppearanceSettings, AppSettings } from '@conai/shared'
-import type { ApiResponse } from '@/types/image'
-import { fetchJson } from '@/lib/api-client'
-import { requestJson } from '@/lib/api-request'
-import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
+import { fetchApiData } from '@/lib/api-client'
 
 export interface AppearanceFontUploadResult {
   target: 'sans' | 'mono'
@@ -21,31 +18,19 @@ export interface WallpaperRuntimeSettings {
 }
 
 export async function getPublicAppearanceSettings() {
-  const response = await fetchJson<ApiResponse<AppearanceSettings>>('/api/settings/appearance-public')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.appearancePublic.load')
-  }
-  return response.data
+  return fetchApiData<AppearanceSettings>('/api/settings/appearance-public', 'settings.appearancePublic.load')
 }
 
 export async function getWallpaperRuntimeSettings() {
-  const response = await fetchJson<ApiResponse<WallpaperRuntimeSettings>>('/api/wallpaper-runtime/settings')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.wallpaperRuntime.load')
-  }
-  return response.data
+  return fetchApiData<WallpaperRuntimeSettings>('/api/wallpaper-runtime/settings', 'settings.wallpaperRuntime.load')
 }
 
 export async function updateAppearanceSettings(settings: Partial<AppearanceSettings>, revision?: string) {
-  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/appearance', {
+  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/appearance', 'settings.appearance.update', {
     method: 'PUT',
     headers: { ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
   })
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.appearance.update')
-  }
-  return response.data
 }
 
 export async function uploadAppearanceFont(file: File, target: 'sans' | 'mono') {
@@ -53,12 +38,8 @@ export async function uploadAppearanceFont(file: File, target: 'sans' | 'mono') 
   formData.append('font', file)
   formData.append('target', target)
 
-  const payload = await requestJson<ApiResponse<AppearanceFontUploadResult>>('/api/settings/appearance/font-upload', {
+  return fetchApiData<AppearanceFontUploadResult>('/api/settings/appearance/font-upload', 'settings.appearanceFont.upload', {
     method: 'POST',
     body: formData,
   })
-  if (!payload.success) {
-    throw createApiFallbackError(payload.error, 'settings.appearanceFont.upload')
-  }
-  return payload.data
 }

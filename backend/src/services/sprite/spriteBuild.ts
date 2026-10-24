@@ -8,6 +8,7 @@ import { colorKeyFilter, extractRawFrames, resizeFilters, scaleRawFrames } from 
 import { encodeStill } from './spriteEncode'
 import {
   MAX_SHEET_DIMENSION,
+  MAX_SPRITE_FRAMES,
   resolveSheetLayout,
   validateExtractOptions,
   validateImageOutput,
@@ -106,7 +107,7 @@ export async function buildSpriteFrames(input: BuildInput): Promise<SpriteBuildM
   if (input.frameIndicesOverride) {
     const indices = input.frameIndicesOverride
     // ffmpeg's select emits frames in decode order, so the list must be strictly increasing.
-    if (indices.length < 1 || indices.length > 256 || indices.some((index, position) => !Number.isInteger(index) || index < 0 || index >= input.video.frameCount || (position > 0 && index <= indices[position - 1]))) {
+    if (indices.length < 1 || indices.length > MAX_SPRITE_FRAMES || indices.some((index, position) => !Number.isInteger(index) || index < 0 || index >= input.video.frameCount || (position > 0 && index <= indices[position - 1]))) {
       throw new SpriteError('선택한 프레임 번호를 확인하세요.')
     }
     plan.frameIndices = [...indices]

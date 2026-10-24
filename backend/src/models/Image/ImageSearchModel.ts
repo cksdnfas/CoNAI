@@ -33,6 +33,34 @@ function getReadyImageCondition() {
   return MediaPostprocessVisibilityService.buildReadyCondition('im');
 }
 
+/** Load the same metadata and group projection in the order chosen by either search path. */
+function loadGroupedImageSearchRows(pageHashes: string[]): any[] {
+  const pageHashPlaceholders = pageHashes.map(() => '?').join(', ');
+  const pageOrderCase = pageHashes.map((_, index) => `WHEN ? THEN ${index}`).join(' ');
+  const dataQuery = `
+    SELECT
+      im.*,
+      if.id as file_id,
+      if.original_file_path,
+      if.file_status,
+      if.file_size,
+      if.mime_type,
+      if.folder_id,
+      GROUP_CONCAT(DISTINCT g.id) as group_ids,
+      GROUP_CONCAT(DISTINCT g.name) as group_names,
+      GROUP_CONCAT(DISTINCT g.color) as group_colors,
+      GROUP_CONCAT(DISTINCT ig.collection_type) as collection_types
+    FROM media_metadata im
+    LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
+    LEFT JOIN image_groups ig ON im.composite_hash = ig.composite_hash
+    LEFT JOIN groups g ON ig.group_id = g.id
+    WHERE im.composite_hash IN (${pageHashPlaceholders})
+    GROUP BY im.composite_hash
+    ORDER BY CASE im.composite_hash ${pageOrderCase} ELSE ${pageHashes.length} END
+  `;
+  return db.prepare(dataQuery).all(...pageHashes, ...pageHashes) as any[];
+}
+
 export class ImageSearchModel {
 
   /**
@@ -169,32 +197,7 @@ export class ImageSearchModel {
 
     // 2단계: 확정된 해시에 대해서만 넓은 컬럼과 그룹 정보를 읽는다.
     const pageHashes = pageRows.map((row) => row.composite_hash);
-    const pageHashPlaceholders = pageHashes.map(() => '?').join(', ');
-    const pageOrderCase = pageHashes.map((_, index) => `WHEN ? THEN ${index}`).join(' ');
-
-    const dataQuery = `
-      SELECT
-        im.*,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_status,
-        if.file_size,
-        if.mime_type,
-        if.folder_id,
-        GROUP_CONCAT(DISTINCT g.id) as group_ids,
-        GROUP_CONCAT(DISTINCT g.name) as group_names,
-        GROUP_CONCAT(DISTINCT g.color) as group_colors,
-        GROUP_CONCAT(DISTINCT ig.collection_type) as collection_types
-      FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      LEFT JOIN image_groups ig ON im.composite_hash = ig.composite_hash
-      LEFT JOIN groups g ON ig.group_id = g.id
-      WHERE im.composite_hash IN (${pageHashPlaceholders})
-      GROUP BY im.composite_hash
-      ORDER BY CASE im.composite_hash ${pageOrderCase} ELSE ${pageHashes.length} END
-    `;
-
-    const rows = db.prepare(dataQuery).all(...pageHashes, ...pageHashes) as any[];
+    const rows = loadGroupedImageSearchRows(pageHashes);
 
     return {
       images: mapGroupedImageRows(rows),
@@ -316,33 +319,7 @@ export class ImageSearchModel {
       return { images: [], total, hasMore: false, totalKnown: shouldCountTotal, nextCursorValue: null, nextCursorHash: null };
     }
 
-    const pageHashPlaceholders = pageHashes.map(() => '?').join(', ');
-    const pageOrderCase = pageHashes.map((_, index) => `WHEN ? THEN ${index}`).join(' ');
-
-    // 데이터 조회
-    const dataQuery = `
-      SELECT
-        im.*,
-        if.id as file_id,
-        if.original_file_path,
-        if.file_status,
-        if.file_size,
-        if.mime_type,
-        if.folder_id,
-        GROUP_CONCAT(DISTINCT g.id) as group_ids,
-        GROUP_CONCAT(DISTINCT g.name) as group_names,
-        GROUP_CONCAT(DISTINCT g.color) as group_colors,
-        GROUP_CONCAT(DISTINCT ig.collection_type) as collection_types
-      FROM media_metadata im
-      LEFT JOIN image_files if ON im.composite_hash = if.composite_hash AND if.file_status = 'active'
-      LEFT JOIN image_groups ig ON im.composite_hash = ig.composite_hash
-      LEFT JOIN groups g ON ig.group_id = g.id
-      WHERE im.composite_hash IN (${pageHashPlaceholders})
-      GROUP BY im.composite_hash
-      ORDER BY CASE im.composite_hash ${pageOrderCase} ELSE ${pageHashes.length} END
-    `;
-
-    const rows = db.prepare(dataQuery).all(...pageHashes, ...pageHashes) as any[];
+    const rows = loadGroupedImageSearchRows(pageHashes);
 
     const lastPageHash = pageHashRows.at(-1);
     return {

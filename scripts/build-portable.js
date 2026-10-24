@@ -9,7 +9,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const { execSync } = require('child_process');
 const os = require('os');
-const https = require('https');
+const { copyUserGuides } = require('./copy-user-guides');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const ROOT_PACKAGE_JSON = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'package.json'), 'utf8'));
@@ -19,31 +19,12 @@ const BUNDLE_FILE = path.join(BACKEND_DIST, 'bundle.js');
 const BUILD_OUTPUT_DIR = path.join(ROOT_DIR, 'build-output');
 const PORTABLE_OUTPUT_DIR = path.join(BUILD_OUTPUT_DIR, 'portable');
 
-// User guides the chat and MCP read with get_app_guide (backend/src/services/appGuides.ts looks next to the app).
-function copyUserGuides(target) {
-  const source = path.join(ROOT_DIR, 'docs', 'GUIDE');
-  if (!fs.existsSync(source)) {
-    console.warn('   ⚠️  docs/GUIDE not found, the chat cannot read the user guides');
-    return;
-  }
-  fs.ensureDirSync(target);
-  let copied = 0;
-  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-    if (entry.isFile() && entry.name.endsWith('.md')) {
-      fs.copyFileSync(path.join(source, entry.name), path.join(target, entry.name));
-      copied++;
-    }
-  }
-  console.log(`   ✅ Copied ${copied} user guides`);
-}
-
 const platform = os.platform();
 const arch = os.arch();
 const isWindows = platform === 'win32';
 
 // Node.js version to download
 const NODE_VERSION = process.version; // Use current Node.js version
-const NODE_MAJOR = NODE_VERSION.split('.')[0];
 
 console.log('🚀 CoNAI - Portable Build\n');
 console.log(`📋 Platform: ${platform} ${arch}`);
@@ -761,7 +742,7 @@ This approach allows:
 
 ---
 
-**Version:** 1.0.0
+**Version:** ${APP_VERSION}
 **Platform:** ${platform} ${arch}
 **Node.js:** ${NODE_VERSION}
 **Built:** ${new Date().toISOString()}

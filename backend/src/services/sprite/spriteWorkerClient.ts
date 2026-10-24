@@ -3,6 +3,7 @@ import path from 'path'
 import { Worker } from 'worker_threads'
 import { SpriteError } from './spriteErrors'
 import { retainSpriteWorkspace } from './spriteCache'
+import { yieldToEventLoop } from '../maintenance/libraryBatch'
 import { SPRITE_TASKS, type SpriteTaskName, type SpriteTaskPayload, type SpriteTaskResult, type TaskProgress } from './spriteTasks'
 
 /**
@@ -118,8 +119,6 @@ function getWorker(): Worker | null {
 export function spriteWorkerMode(): 'worker' | 'inline' {
   return workerScript() && workerFailures < 2 ? 'worker' : 'inline'
 }
-
-const yieldToEventLoop = () => new Promise<void>((resolve) => setImmediate(resolve))
 
 /** Run one sprite task off the main thread (or inline as a fallback). Cancels through `signal`. */
 export async function runSpriteTask<T extends SpriteTaskName>(

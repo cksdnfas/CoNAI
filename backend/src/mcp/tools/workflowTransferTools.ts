@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { WorkflowModel } from '../../models/Workflow';
 import { HistoryQueryRepository } from '../../repositories/history/HistoryQueryRepository';
 import { ComfyUiWorkflowConversionError, describeComfyUiWorkflowConversionFailure, resolveApiWorkflowJson } from '../../services/comfyui/uiWorkflowConversion';
+import { errorResult, textResult } from '../toolResults';
 
 export function registerWorkflowTransferTools(server: McpServer): void {
   server.registerTool(
@@ -12,12 +13,12 @@ export function registerWorkflowTransferTools(server: McpServer): void {
       const workflow = WorkflowModel.findByIdIncludingDeleted(workflow_id);
       if (!workflow) {
         const reference = HistoryQueryRepository.findWorkflowReference(workflow_id);
-        return { isError: true, content: [{ type: 'text' as const, text: reference
+        return errorResult(reference
           ? `삭제된 워크플로우(사용 불가): ${reference.workflow_name ?? `ID ${workflow_id}`}`
-          : `Workflow with ID ${workflow_id} not found` }] };
+          : `Workflow with ID ${workflow_id} not found`);
       }
       const { artifact_root_path: _internalArtifactPath, deleted_at: _deletedAt, ...portable } = workflow;
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ format: 'conai-workflow', version: 1, workflow: portable }) }] };
+      return textResult({ format: 'conai-workflow', version: 1, workflow: portable });
     },
   );
 
@@ -51,9 +52,9 @@ export function registerWorkflowTransferTools(server: McpServer): void {
           artifact_directory_mode: workflow.artifact_directory_mode === 'per_run' ? 'per_run' : 'shared',
           kind: workflow.kind === 'audio' ? 'audio' : 'image',
         });
-        return { content: [{ type: 'text' as const, text: JSON.stringify({ id, name }) }] };
+        return textResult({ id, name });
       } catch (error) {
-        return { isError: true, content: [{ type: 'text' as const, text: `Workflow import error: ${(error as Error).message}` }] };
+        return errorResult(`Workflow import error: ${(error as Error).message}`);
       }
     },
   );
@@ -64,11 +65,11 @@ export function registerWorkflowTransferTools(server: McpServer): void {
     async ({ workflow_id }) => {
       if (!WorkflowModel.restore(workflow_id)) {
         const reference = HistoryQueryRepository.findWorkflowReference(workflow_id);
-        return { isError: true, content: [{ type: 'text' as const, text: reference
+        return errorResult(reference
           ? `복구할 수 없는 삭제된 워크플로우: ${reference.workflow_name ?? `ID ${workflow_id}`}`
-          : `Deleted workflow ${workflow_id} not found` }] };
+          : `Deleted workflow ${workflow_id} not found`);
       }
-      return { content: [{ type: 'text' as const, text: JSON.stringify({ workflow_id, restored: true }) }] };
+      return textResult({ workflow_id, restored: true });
     },
   );
 }

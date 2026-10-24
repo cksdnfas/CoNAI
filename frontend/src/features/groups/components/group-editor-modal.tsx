@@ -8,7 +8,7 @@ import { buildGroupCountMaps, getGroupHierarchyTotalCount } from '@/features/gro
 import { collectDescendantGroupIds } from '@/features/groups/group-option-utils'
 import { getGroupPreviewImages } from '@/lib/api-groups'
 import type { GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
-import { AutoCollectChipEditor } from './auto-collect-chip-editor'
+import { AutoCollectChipEditor, type AutoCollectEditorState } from './auto-collect-chip-editor'
 import { GroupCoverMosaic } from './group-cover-mosaic'
 import { GroupLocationPicker } from './group-location-picker'
 import { GroupColorSwatches, GroupModalFooter, GroupModalRow, GroupModalSection, GroupModalSwitchRow } from './group-modal-parts'
@@ -25,12 +25,6 @@ interface GroupEditorModalProps {
   onSubmit: (input: GroupMutationInput) => Promise<void>
   /** Edit mode: open the delete confirmation for this group. */
   onDelete?: () => void
-}
-
-interface AutoCollectEditorState {
-  mode: 'chip' | 'json'
-  parsedValue: unknown
-  errorMessage: string | null
 }
 
 /** Build the editable auto-collect JSON text shown in the group form. */

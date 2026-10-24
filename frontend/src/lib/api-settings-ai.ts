@@ -1,64 +1,48 @@
 import type { AiRuntimeSettings, AiRuntimeStatus, AiTorchBackendPreference, EmbeddingServerStatus, EmbeddingSettings } from '@conai/shared'
 import type { PageSettingsVersions } from '@conai/shared'
-import type { ApiResponse } from '@/types/image'
-import { fetchJson } from '@/lib/api-client'
-import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
+import { fetchApiData } from '@/lib/api-client'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
 /** The AI Python environment: GPU detection, the installed build, install progress. `refresh` re-runs nvidia-smi. */
 export async function getAiRuntimeStatus(refresh = false) {
-  const response = await fetchJson<ApiResponse<AiRuntimeStatus>>(`/api/settings/ai-runtime${refresh ? '?refresh=1' : ''}`)
-  if (!response.success) throw createApiFallbackError(response.error, 'settings.aiRuntime.load')
-  return response.data
+  return fetchApiData<AiRuntimeStatus>(`/api/settings/ai-runtime${refresh ? '?refresh=1' : ''}`, 'settings.aiRuntime.load')
 }
 
 export async function updateAiRuntimeSettings(settings: Partial<AiRuntimeSettings>) {
-  const response = await fetchJson<ApiResponse<AiRuntimeStatus>>('/api/settings/ai-runtime', {
+  return fetchApiData<AiRuntimeStatus>('/api/settings/ai-runtime', 'settings.aiRuntime.update', {
     method: 'PUT',
     headers: JSON_HEADERS,
     body: JSON.stringify(settings),
   })
-  if (!response.success) throw createApiFallbackError(response.error, 'settings.aiRuntime.update')
-  return response.data
 }
 
 /** Start installing a new environment with that build (the current one stays until the new one passes its check). */
 export async function installAiRuntime(backend: AiTorchBackendPreference) {
-  const response = await fetchJson<ApiResponse<AiRuntimeStatus>>('/api/settings/ai-runtime/install', {
+  return fetchApiData<AiRuntimeStatus>('/api/settings/ai-runtime/install', 'settings.aiRuntime.install', {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({ backend }),
   })
-  if (!response.success) throw createApiFallbackError(response.error, 'settings.aiRuntime.install')
-  return response.data
 }
 
 export async function cancelAiRuntimeInstall() {
-  const response = await fetchJson<ApiResponse<AiRuntimeStatus>>('/api/settings/ai-runtime/cancel', { method: 'POST' })
-  if (!response.success) throw createApiFallbackError(response.error, 'settings.aiRuntime.install')
-  return response.data
+  return fetchApiData<AiRuntimeStatus>('/api/settings/ai-runtime/cancel', 'settings.aiRuntime.install', { method: 'POST' })
 }
 
 export async function getEmbeddingStatus() {
-  const response = await fetchJson<ApiResponse<EmbeddingServerStatus>>('/api/settings/embedding/status')
-  if (!response.success) throw createApiFallbackError(response.error, 'settings.embedding.load')
-  return response.data
+  return fetchApiData<EmbeddingServerStatus>('/api/settings/embedding/status', 'settings.embedding.load')
 }
 
 export async function updateEmbeddingSettings(settings: Partial<EmbeddingSettings>, revision?: string) {
-  const response = await fetchJson<ApiResponse<{ settings: EmbeddingSettings; status: EmbeddingServerStatus } & PageSettingsVersions>>('/api/settings/embedding', {
+  return fetchApiData<{ settings: EmbeddingSettings; status: EmbeddingServerStatus } & PageSettingsVersions>('/api/settings/embedding', 'settings.embedding.update', {
     method: 'PUT',
     headers: { ...JSON_HEADERS, ...(revision ? { 'If-Match': revision } : {}) },
     body: JSON.stringify(settings),
   })
-  if (!response.success) throw createApiFallbackError(response.error, 'settings.embedding.update')
-  return response.data
 }
 
 /** Send Kaloscope v2 artist results back to the auto-tag queue to be extracted again with 3.0. */
 export async function requeueOutdatedKaloscopeResults() {
-  const response = await fetchJson<ApiResponse<{ requeued: number }>>('/api/settings/kaloscope/requeue-outdated', { method: 'POST' })
-  if (!response.success) throw createApiFallbackError(response.error, 'settings.kaloscopeRequeue.run')
-  return response.data
+  return fetchApiData<{ requeued: number }>('/api/settings/kaloscope/requeue-outdated', 'settings.kaloscopeRequeue.run', { method: 'POST' })
 }

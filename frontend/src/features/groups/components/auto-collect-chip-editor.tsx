@@ -22,7 +22,7 @@ import { parseAutoCollectChipState } from '@/features/groups/auto-collect-chip-u
 import { IconButton } from '@/components/ui/icon-button'
 import { useI18n } from '@/i18n'
 
-interface AutoCollectEditorState {
+export interface AutoCollectEditorState {
   mode: 'chip' | 'json'
   parsedValue: unknown
   errorMessage: string | null

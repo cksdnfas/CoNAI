@@ -1,6 +1,7 @@
 import type { FileStoreListing, FileWriteSource, StoredFileEntry, StoredFileRevision, StoredFileSearchResult, StoredFileText } from '@conai/shared'
 import { requestApiData } from './api-request'
 import { buildApiUrl } from './api-url'
+import { UPLOAD_LIMITS } from './upload-limits'
 
 export const FILES_QUERY_KEY = ['file-store'] as const
 const headers = { 'Content-Type': 'application/json' }
@@ -60,8 +61,8 @@ export function isRestrictedFileName(name: string) {
 }
 
 export async function uploadStoredFiles(parentId: string | null, files: File[], options: { allowAnyType?: boolean } = {}) {
-  if (files.length === 0 || files.length > 20) throw new Error('한 번에 1~20개 파일을 업로드할 수 있어. / Upload 1–20 files at a time.')
-  if (files.some((file) => file.size > 500 * 1024 * 1024) || files.reduce((sum, file) => sum + file.size, 0) > 1024 ** 3) {
+  if (files.length === 0 || files.length > UPLOAD_LIMITS.maxFilesPerRequest) throw new Error('한 번에 1~20개 파일을 업로드할 수 있어. / Upload 1–20 files at a time.')
+  if (files.some((file) => file.size > UPLOAD_LIMITS.maxFileBytes) || files.reduce((sum, file) => sum + file.size, 0) > UPLOAD_LIMITS.maxRequestBytes) {
     throw new Error('파일당 500MB, 한 번에 총 1GB까지 가능해. / Limit: 500 MB per file, 1 GB total.')
   }
   // Only a caller that knows the user is not an administrator pre-checks; otherwise the server decides.

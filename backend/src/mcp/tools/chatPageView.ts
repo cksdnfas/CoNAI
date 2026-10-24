@@ -3,6 +3,7 @@ import type { McpRequester } from '../context'
 import { boundedPageView, PAGE_VIEW_BUDGET, requireChatPageActionAccess, requireChatPageDataAccess } from '../../services/codex-chat/chatPageContext'
 import { hideRatingRestrictedText, RATING_RESTRICTED_TEXT, ratingRestrictedHashesUnder } from '../../services/codex-chat/chatContentRating'
 import type { ContentRatingLimit } from '../../services/contentRating'
+import { textResult } from '../toolResults'
 
 /**
  * The descriptive text a screen shows of the library media it is about (its resourceId): field ids, and data keys
@@ -34,7 +35,7 @@ export function ratingFilteredPage(page: ChatPageSnapshot, limit: ContentRatingL
   }
 }
 
-export const pageResult = (data: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(data) }] })
+export const pageResult = (data: unknown) => textResult(data)
 export const pageFailure = (error: unknown) => ({ isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : 'Page tool failed' }] })
 
 /** A collection this small goes in the view itself, so picking an item by name needs no read_page_data first. */

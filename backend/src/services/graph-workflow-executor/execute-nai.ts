@@ -12,6 +12,7 @@ import { saveCanonicalMediaArtifactReference, saveMetadataArtifact, shouldMateri
 import { GRAPH_EXECUTION_CANCELLED_MESSAGE, waitForGraphQueueCompletion } from './queue-wait'
 import {
   bufferToDataUrl,
+  normalizeOptionalString,
   writeExecutionLog,
   type ExecutionContext,
   type ParsedModuleDefinition,
@@ -31,10 +32,6 @@ function buildQueueImageSaveOptions() {
     maxWidth: imageSaveSettings.maxWidth,
     maxHeight: imageSaveSettings.maxHeight,
   }
-}
-
-function normalizeOptionalString(value: unknown) {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 }
 
 async function resolveQueueBackedNaiOutput(params: {

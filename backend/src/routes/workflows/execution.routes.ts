@@ -33,7 +33,7 @@ const router = Router();
  * POST /api/workflows/:id/generate
  */
 router.post('/:id/generate', requirePermission('generation.execute'), asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
   const { prompt_data, server_id, groupId, group_path, source_image, imageSaveOptions } = req.body as {
     prompt_data?: Record<string, any>;
     server_id?: number;
@@ -257,7 +257,7 @@ router.post('/:id/generate', requirePermission('generation.execute'), asyncHandl
  * GET /api/workflows/:id/history
  */
 router.get('/:id/history', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
 
@@ -305,7 +305,7 @@ router.get('/:id/history', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/workflows/history/:historyId
  */
 router.get('/history/:historyId', asyncHandler(async (req: Request, res: Response) => {
-  const historyId = parseInt(routeParam(routeParam(req.params.historyId)));
+  const historyId = parseInt(routeParam(req.params.historyId));
 
   if (isNaN(historyId)) {
     return res.status(400).json({
@@ -364,7 +364,7 @@ router.get('/history/:historyId', asyncHandler(async (req: Request, res: Respons
  * GET /api/workflows/:id/test-connection
  */
 router.get('/:id/test-connection', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(routeParam(req.params.id)));
+  const id = parseInt(routeParam(req.params.id));
 
   if (isNaN(id)) {
     return res.status(400).json({

@@ -208,15 +208,17 @@ test('wallpaper runtime keys, access scope and feeds', { timeout: 120000 }, asyn
     auth.prepare('INSERT OR REPLACE INTO auth_group_permissions (group_id, permission_id, allowed) VALUES (?, ?, 1)').run(anonymousGroup.id, permission.id)
     ;(await import('../src/services/authAccessControlService')).invalidateResolvedAuthAccessCache()
     assert.equal((await call('GET', '/api/wallpaper-runtime/settings')).status, 200)
-    for (const url of ['/generation/history', '/generation/stats', '/generation/queue', '/workflow-activity', '/llm-usage']) {
+    for (const url of ['/generation/history', '/generation/stats', '/generation/queue', '/workflow-activity', '/llm-usage', '/comfyui/stats']) {
       const refused = await call('GET', `/api/wallpaper-runtime${url}`)
       assert.equal(refused.status, 403, url)
       // Widgets read this to say "sign in or use a key" rather than "not allowed".
       assert.equal(refused.json.code, 'sign_in_required', url)
     }
-    const guestRefused = await call('GET', '/api/wallpaper-runtime/llm-usage', 'guest')
-    assert.equal(guestRefused.status, 403)
-    assert.equal(guestRefused.json.code, undefined)
+    for (const url of ['/llm-usage', '/comfyui/stats']) {
+      const guestRefused = await call('GET', `/api/wallpaper-runtime${url}`, 'guest')
+      assert.equal(guestRefused.status, 403, url)
+      assert.deepEqual(guestRefused.json, { success: false, error: 'Forbidden' }, url)
+    }
     // Library stats stay public (visible media only).
     assert.equal((await call('GET', '/api/wallpaper-runtime/library/stats')).status, 200)
   })

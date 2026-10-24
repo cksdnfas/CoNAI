@@ -6,6 +6,7 @@ import { PromptCollectionModel } from '../../models/PromptCollection';
 import { PromptGroupModel } from '../../models/PromptGroup';
 import { PromptGroupService } from '../../services/promptGroupService';
 import { runtimePaths } from '../../config/runtimePaths';
+import { errorResult, textResult } from '../toolResults';
 
 const BACKUPS_DIR = path.join(runtimePaths.basePath, 'backups');
 
@@ -41,21 +42,13 @@ export function registerPromptOrganizationTools(server: McpServer): void {
       try {
         const groups = await PromptGroupService.getAllGroups(include_hidden, type);
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              groups,
-              total_groups: groups.length,
-              type,
-            }),
-          }],
-        };
+        return textResult({
+          groups,
+          total_groups: groups.length,
+          type,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -85,26 +78,18 @@ export function registerPromptOrganizationTools(server: McpServer): void {
           include_total
         );
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              group_id,
-              prompts: result.prompts,
-              total: result.total,
-              has_more: result.has_more,
-              next_page: result.has_more ? page + 1 : null,
-              page,
-              limit,
-              type,
-            }),
-          }],
-        };
+        return textResult({
+          group_id,
+          prompts: result.prompts,
+          total: result.total,
+          has_more: result.has_more,
+          next_page: result.has_more ? page + 1 : null,
+          page,
+          limit,
+          type,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -142,22 +127,14 @@ export function registerPromptOrganizationTools(server: McpServer): void {
           };
         });
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              results,
-              created: results.filter(r => r.is_new).length,
-              existing: results.filter(r => !r.is_new).length,
-              type,
-            }),
-          }],
-        };
+        return textResult({
+          results,
+          created: results.filter(r => r.is_new).length,
+          existing: results.filter(r => !r.is_new).length,
+          type,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -173,10 +150,7 @@ export function registerPromptOrganizationTools(server: McpServer): void {
     async ({ prompt_ids, source_group_id, target_group_id, type }) => {
       try {
         if (!prompt_ids && source_group_id === undefined) {
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: 'Error: Either prompt_ids or source_group_id must be provided' }],
-          };
+          return errorResult('Error: Either prompt_ids or source_group_id must be provided');
         }
 
         const actualTargetId = target_group_id === 0 ? null : target_group_id;
@@ -201,24 +175,16 @@ export function registerPromptOrganizationTools(server: McpServer): void {
           }
         }
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              moved_count: movedCount,
-              fail_count: failCount,
-              total: movedCount + failCount,
-              source_group_id: source_group_id ?? null,
-              target_group_id,
-              type,
-            }),
-          }],
-        };
+        return textResult({
+          moved_count: movedCount,
+          fail_count: failCount,
+          total: movedCount + failCount,
+          source_group_id: source_group_id ?? null,
+          target_group_id,
+          type,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -261,21 +227,13 @@ export function registerPromptOrganizationTools(server: McpServer): void {
 
         fs.writeFileSync(filePath, JSON.stringify(backup), 'utf-8');
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              success: true,
-              filename: resolvedBackup.filename,
-              metadata,
-            }),
-          }],
-        };
+        return textResult({
+          success: true,
+          filename: resolvedBackup.filename,
+          metadata,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -290,20 +248,14 @@ export function registerPromptOrganizationTools(server: McpServer): void {
         const filePath = resolveBackupPath(filename).filePath;
 
         if (!fs.existsSync(filePath)) {
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: `Error: Backup file not found: ${filename}` }],
-          };
+          return errorResult(`Error: Backup file not found: ${filename}`);
         }
 
         const raw = fs.readFileSync(filePath, 'utf-8');
         const backup = JSON.parse(raw);
 
         if (!backup.version || !backup.data) {
-          return {
-            isError: true,
-            content: [{ type: 'text' as const, text: 'Error: Invalid backup file format' }],
-          };
+          return errorResult('Error: Invalid backup file format');
         }
 
         const types = ['positive', 'negative', 'auto'] as const;
@@ -353,21 +305,13 @@ export function registerPromptOrganizationTools(server: McpServer): void {
           };
         }
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              success: true,
-              backup_date: backup.backup_date,
-              results,
-            }),
-          }],
-        };
+        return textResult({
+          success: true,
+          backup_date: backup.backup_date,
+          results,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );
@@ -407,20 +351,12 @@ export function registerPromptOrganizationTools(server: McpServer): void {
           })
           .sort((a, b) => b.modified_at.localeCompare(a.modified_at));
 
-        return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              backups: files,
-              total: files.length,
-            }),
-          }],
-        };
+        return textResult({
+          backups: files,
+          total: files.length,
+        });
       } catch (error) {
-        return {
-          isError: true,
-          content: [{ type: 'text' as const, text: `Error: ${(error as Error).message}` }],
-        };
+        return errorResult(`Error: ${(error as Error).message}`);
       }
     }
   );

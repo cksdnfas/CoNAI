@@ -61,7 +61,7 @@ export function AudioSettingsDialog({ open, onClose, canManage, focusWorkflowId 
 
 /* ------------------------------------------------------------------------------------------------ workflows */
 
-const ROLES: Array<[AudioWorkflowRole, 'prompt_field_id' | 'seconds_field_id' | 'seed_field_id']> = [['prompt', 'prompt_field_id'], ['seconds', 'seconds_field_id'], ['seed', 'seed_field_id']]
+const ROLES: AudioWorkflowRole[] = ['prompt', 'seconds', 'seed']
 
 function WorkflowTab({ focusWorkflowId }: { focusWorkflowId: number | null }) {
   const { t } = useI18n()
@@ -137,7 +137,7 @@ function WorkflowTab({ focusWorkflowId }: { focusWorkflowId: number | null }) {
       {workflow ? (
         <>
           <div className="border-y border-line">
-            {ROLES.map(([role]) => (
+            {ROLES.map((role) => (
               <SettingRow key={role} label={roleLabel[role]}>
                 <Select variant="settings" className="w-52" aria-label={roleLabel[role]} value={roles[role]} onChange={(event) => setRoles((current) => ({ ...current, [role]: event.target.value }))}>
                   <option value="">—</option>

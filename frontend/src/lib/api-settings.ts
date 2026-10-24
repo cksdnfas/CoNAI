@@ -1,6 +1,5 @@
 import type { PageSettingsVersions } from '@conai/shared'
-import { fetchJson } from '@/lib/api-client'
-import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
+import { fetchApiData, fetchJson, fetchRequiredApiData } from '@/lib/api-client'
 import type { ApiResponse } from '@/types/image'
 import type {
   AppSettings,
@@ -157,37 +156,23 @@ export interface DataRematchJobSnapshot {
 }
 
 export async function getRuntimeSimilaritySettings(init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<SimilaritySettings>>('/api/runtime-media-settings/similarity', init)
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.runtimeSimilarity.load')
-  }
-  return response.data
+  return fetchApiData<SimilaritySettings>('/api/runtime-media-settings/similarity', 'settings.runtimeSimilarity.load', init)
 }
 
 /** Load the runtime-safe subset of generation history settings. */
 export async function getRuntimeGenerationHistorySettings() {
-  const response = await fetchJson<ApiResponse<RuntimeGenerationHistorySettings>>('/api/runtime-media-settings/generation-history')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.runtimeGenerationHistory.load')
-  }
-  return response.data
+  return fetchApiData<RuntimeGenerationHistorySettings>('/api/runtime-media-settings/generation-history', 'settings.runtimeGenerationHistory.load')
 }
 
 /** Start a full file verification. 202 + job; the `FileVerificationRunResult` arrives as the job's result. */
 export async function runFileVerification() {
-  const response = await fetchJson<ApiResponse<RuntimeJobRecord<FileVerificationRunResult>>>('/api/file-verification/verify', {
+  return fetchRequiredApiData<RuntimeJobRecord<FileVerificationRunResult>>('/api/file-verification/verify', 'settings.fileVerification.run', {
     method: 'POST',
   })
-
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'settings.fileVerification.run')
-  }
-
-  return response.data
 }
 
 export async function updateMetadataSettings(settings: Partial<MetadataExtractionSettings>, revision?: string) {
-  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/metadata', {
+  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/metadata', 'settings.metadata.update', {
     method: 'PUT',
     headers: {
       ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',
@@ -195,35 +180,20 @@ export async function updateMetadataSettings(settings: Partial<MetadataExtractio
     body: JSON.stringify(settings),
   })
 
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.metadata.update')
-  }
-
-  return response.data
 }
 
 export async function reextractAllImageMetadata() {
-  const response = await fetchJson<ApiResponse<MetadataReextractAllResult>>('/api/settings/metadata/reextract-all', {
+  return fetchApiData<MetadataReextractAllResult>('/api/settings/metadata/reextract-all', 'settings.metadata.reextractAll', {
     method: 'POST',
   })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.metadata.reextractAll')
-  }
-
-  return response.data
 }
 
 export async function getDataRematchStatus() {
-  const response = await fetchJson<ApiResponse<DataRematchJobSnapshot>>('/api/settings/data-rematch/status')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.dataRematch.status')
-  }
-  return response.data
+  return fetchApiData<DataRematchJobSnapshot>('/api/settings/data-rematch/status', 'settings.dataRematch.status')
 }
 
 export async function startDataRematchJob(request: DataRematchStartRequest) {
-  const response = await fetchJson<ApiResponse<DataRematchJobSnapshot>>('/api/settings/data-rematch/jobs', {
+  return fetchApiData<DataRematchJobSnapshot>('/api/settings/data-rematch/jobs', 'settings.dataRematch.start', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -231,15 +201,10 @@ export async function startDataRematchJob(request: DataRematchStartRequest) {
     body: JSON.stringify(request),
   })
 
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.dataRematch.start')
-  }
-
-  return response.data
 }
 
 export async function updateImageSaveSettings(settings: Partial<ImageSaveSettings>, revision?: string) {
-  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/image-save', {
+  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/image-save', 'settings.imageSave.update', {
     method: 'PUT',
     headers: {
       ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',
@@ -247,15 +212,10 @@ export async function updateImageSaveSettings(settings: Partial<ImageSaveSetting
     body: JSON.stringify(settings),
   })
 
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.imageSave.update')
-  }
-
-  return response.data
 }
 
 export async function updateThumbnailSettings(settings: Partial<ThumbnailSettings>, revision?: string) {
-  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/thumbnail', {
+  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/thumbnail', 'settings.thumbnail.update', {
     method: 'PUT',
     headers: {
       ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',
@@ -263,15 +223,10 @@ export async function updateThumbnailSettings(settings: Partial<ThumbnailSetting
     body: JSON.stringify(settings),
   })
 
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.thumbnail.update')
-  }
-
-  return response.data
 }
 
 export async function updateGenerationThrottleSettings(settings: Partial<GenerationThrottleSettings>, revision?: string) {
-  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/generation-throttle', {
+  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/generation-throttle', 'settings.generationThrottle.update', {
     method: 'PUT',
     headers: {
       ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',
@@ -279,15 +234,10 @@ export async function updateGenerationThrottleSettings(settings: Partial<Generat
     body: JSON.stringify(settings),
   })
 
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.generationThrottle.update')
-  }
-
-  return response.data
 }
 
 export async function updateVideoOptimizationSettings(settings: Partial<VideoOptimizationSettings>, revision?: string) {
-  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/video-optimization', {
+  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/video-optimization', 'settings.videoOptimization.update', {
     method: 'PUT',
     headers: {
       ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json',
@@ -295,23 +245,14 @@ export async function updateVideoOptimizationSettings(settings: Partial<VideoOpt
     body: JSON.stringify(settings),
   })
 
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.videoOptimization.update')
-  }
-
-  return response.data
 }
 
 export async function getRatingWeights() {
-  const response = await fetchJson<ApiResponse<RatingWeightsRecord>>('/api/settings/rating/weights')
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'settings.ratingWeights.load')
-  }
-  return response.data
+  return fetchRequiredApiData<RatingWeightsRecord>('/api/settings/rating/weights', 'settings.ratingWeights.load')
 }
 
 export async function updateRatingWeights(weights: Partial<Pick<RatingWeightsRecord, 'general_weight' | 'sensitive_weight' | 'questionable_weight' | 'explicit_weight'>>) {
-  const response = await fetchJson<ApiResponse<RatingWeightsRecord>>('/api/settings/rating/weights', {
+  return fetchRequiredApiData<RatingWeightsRecord>('/api/settings/rating/weights', 'settings.ratingWeights.update', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -319,15 +260,10 @@ export async function updateRatingWeights(weights: Partial<Pick<RatingWeightsRec
     body: JSON.stringify(weights),
   })
 
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'settings.ratingWeights.update')
-  }
-
-  return response.data
 }
 
 export async function updateRatingTiers(tiers: RatingTierUpdateInput[]) {
-  const response = await fetchJson<ApiResponse<RatingTierRecord[]>>('/api/settings/rating/tiers', {
+  return fetchRequiredApiData<RatingTierRecord[]>('/api/settings/rating/tiers', 'settings.ratingTiers.update', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -335,27 +271,14 @@ export async function updateRatingTiers(tiers: RatingTierUpdateInput[]) {
     body: JSON.stringify(tiers),
   })
 
-  if (!response.success || !response.data) {
-    throw createApiFallbackError(response.error, 'settings.ratingTiers.update')
-  }
-
-  return response.data
 }
 
 export async function resolveAutoTestMedia(imageId: string) {
-  const response = await fetchJson<ApiResponse<AutoTestMediaRecord>>(`/api/settings/auto-test/media/${encodeURIComponent(imageId)}`)
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.autoTestMedia.resolve')
-  }
-  return response.data
+  return fetchApiData<AutoTestMediaRecord>(`/api/settings/auto-test/media/${encodeURIComponent(imageId)}`, 'settings.autoTestMedia.resolve')
 }
 
 export async function getRandomAutoTestMedia() {
-  const response = await fetchJson<ApiResponse<AutoTestMediaRecord>>('/api/settings/auto-test/random')
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.autoTestMedia.random')
-  }
-  return response.data
+  return fetchApiData<AutoTestMediaRecord>('/api/settings/auto-test/random', 'settings.autoTestMedia.random')
 }
 
 type SimilaritySettingsUpdateInput = Partial<Omit<SimilaritySettings, 'promptSimilarity'>> & {
@@ -363,7 +286,7 @@ type SimilaritySettingsUpdateInput = Partial<Omit<SimilaritySettings, 'promptSim
 }
 
 export async function updateSimilaritySettings(settings: SimilaritySettingsUpdateInput) {
-  const response = await fetchJson<ApiResponse<AppSettings & PageSettingsVersions>>('/api/settings/similarity', {
+  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/similarity', 'settings.similarity.update', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -371,9 +294,4 @@ export async function updateSimilaritySettings(settings: SimilaritySettingsUpdat
     body: JSON.stringify(settings),
   })
 
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'settings.similarity.update')
-  }
-
-  return response.data
 }

@@ -48,7 +48,7 @@ function parseImageIdentifier(id: string): SimilarityImageIdentifier {
 
 /** Read the shared :id route param with the existing routeParam normalization. */
 export function getSimilarityRouteIdentifier(req: Request): SimilarityImageIdentifier {
-  return parseImageIdentifier(routeParam(routeParam(req.params.id)));
+  return parseImageIdentifier(routeParam(req.params.id));
 }
 
 /** Validate that the identified image exists and has the required similarity field before model calls. */

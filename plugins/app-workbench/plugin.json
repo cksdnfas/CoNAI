@@ -124,7 +124,7 @@
     {
       "id": "app-workbench.project_note",
       "label": "프로젝트 문서 만들기",
-      "description": "연결한 프로젝트에 새 문서 작성을 검토 요청한다. 기존 문서는 덮어쓰지 않는다. 사람이 적용해야 저장된다.",
+      "description": "연결한 프로젝트에 새 문서를 작성한다. 기존 문서는 덮어쓰지 않는다. AI/MCP 요청은 호스트 검토 후 적용한다.",
       "tool": "workspace_apply",
       "schema": {
         "type": "object",

@@ -10,18 +10,11 @@ import { resolveMemberName } from '../../services/codex-chat/groupChatContext';
 import { buildReplyContext } from '../../services/codex-chat/chatReplyContext';
 import { type HistorySearchStatus, connectedThreadIds, HISTORY_SEARCH_LIMIT, searchChatHistory, sharesKnowledge } from '../../services/codex-chat/chatHistorySearch';
 import type { McpRequestContext } from '../context';
+import { errorResult, textResult } from '../toolResults';
 
 const MESSAGE_TEXT_LIMIT = 2000;
 
 type RoomMessageRow = { id: number; role: 'user' | 'assistant'; speaker_profile_id: number | null; content: string; created_date: string; routing: string | null };
-
-function textResult(value: unknown) {
-  return { content: [{ type: 'text' as const, text: JSON.stringify(value) }] };
-}
-
-function errorResult(error: unknown) {
-  return { isError: true, content: [{ type: 'text' as const, text: error instanceof Error ? error.message : String(error) }] };
-}
 
 /** The caller's own chat (a group room or a direct chat) the reply is in, or an error the model can read. */
 function requireRoom(context: McpRequestContext, roomId: number) {
