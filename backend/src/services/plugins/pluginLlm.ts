@@ -32,7 +32,7 @@ const inputSchema = z.object({
   profileId: z.number().int().positive(), message: z.string().trim().min(1).max(16_000),
   history: z.string().max(32_000).default(''), userName: z.string().trim().min(1).max(100).default('사용자'),
   useLorebooks: z.boolean().default(true), maxTokens: z.number().int().min(1).max(4096).optional(),
-  timeoutMs: z.number().int().min(1000).max(600_000).optional(),
+  timeoutMs: z.number().int().min(1000).max(1_800_000).optional(),
   mode: z.enum(['text', 'profile']).optional(),
   research: z.object({
     slotId: z.string().trim().min(1).max(100), activityId: z.string().trim().min(1).max(100),
