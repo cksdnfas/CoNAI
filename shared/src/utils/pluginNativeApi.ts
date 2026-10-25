@@ -27,4 +27,4 @@ export function pluginNativeApiPath(input: string, origins: readonly string[]): 
 }
 
 export const PLUGIN_REQUEST_TIMEOUT_MS = 10 * 60_000
-export const PLUGIN_SDK_FEATURES = ['app.fetch', 'app.cancel', 'app.wait', 'media.open', 'preview', 'storage', 'events', 'navigation', 'request.abort', 'errors.structured', 'llm.asset', 'llm.profile', 'llm.judge', 'llm.decide', 'page.form'] as const
+export const PLUGIN_SDK_FEATURES = ['app.fetch', 'app.cancel', 'app.wait', 'media.open', 'preview', 'storage', 'events', 'navigation', 'request.abort', 'errors.structured', 'llm.asset', 'llm.profile', 'llm.judge', 'llm.decide', 'llm.measure', 'page.form'] as const

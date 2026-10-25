@@ -30,6 +30,34 @@ async function until(check: () => boolean | Promise<boolean>, label: string, tim
   }
 }
 
+async function checkPluginLlmFailures() {
+  const { pluginLlmFailure } = await import('../src/services/plugins/pluginLlmErrors')
+  const { LlmRequestError } = await import('../src/services/llmRequestRetry')
+  const { LlmJsonTruncatedError } = await import('../src/services/llmProviderService')
+  const budget = { inputTokens: 1000, outputReserve: 512, contextTokens: 1024, available: -488, engine: 'api' as const, estimator: 'heuristic' as const }
+  const context = pluginLlmFailure(new LlmRequestError('maximum context length exceeded: PRIVATE_BODY', 400), { measurement: budget })
+  assert.equal(context.status, 413); assert.match(context.message, /^문맥이 모델 한도를 넘었어/); assert.match(context.message, /1000.*512.*1024/)
+  const timeout = pluginLlmFailure(new DOMException('private details', 'TimeoutError'), { deadline: 'plugin', timeoutMs: 1000 })
+  assert.equal(timeout.status, 408); assert.match(timeout.message, /^요청 제한 시간을 넘었어 \(플러그인 답변 1000ms\)/)
+  assert.match(pluginLlmFailure(new DOMException('', 'TimeoutError')).message, /모델 연결\/요청/)
+  const auth = pluginLlmFailure(new LlmRequestError('https://secret.invalid Authorization Bearer sk-secret PRIVATE_BODY', 401))
+  assert.equal(auth.status, 401); assert.match(auth.message, /^모델 인증·권한이 거부됐어 \(HTTP 401\)/)
+  const provider = pluginLlmFailure(new LlmRequestError('invalid request https://secret.invalid sk-secret {"message":"PRIVATE_BODY"}', 422))
+  assert.equal(provider.status, 422); assert.match(provider.message, /^모델 제공자 요청이 실패했어 \(HTTP 422\): invalid request/)
+  assert.match(pluginLlmFailure(new LlmRequestError('private', 429)).message, /^모델 요청 한도에 걸렸어/)
+  assert.match(pluginLlmFailure(new LlmJsonTruncatedError('private')).message, /^출력 토큰 한도에서 답변이 잘렸어/)
+  const cli = pluginLlmFailure(new Error('codex exec failed with exit code 7\nlast message: PRIVATE_BODY\nstderr: permission denied https://secret.invalid sk-secret'))
+  assert.match(cli.message, /^모델 실행기가 실패했어 \(Codex exit 7\): permission denied/)
+  const unknown = pluginLlmFailure(new Error('SECRET_CREDENTIALS PRIVATE_BODY'))
+  assert.match(pluginLlmFailure(new Error('other failure / LLM 요청 실패 (401): PRIVATE_BODY')).message, /^모델 인증·권한이 거부됐어/)
+  assert.match(pluginLlmFailure(new Error('판단 모델이 일부 질문에 답하지 않았어.')).message, /^판단 답변이 불완전해/)
+  assert.match(pluginLlmFailure(new Error('LLM 응답이 너무 오래 멈춰 있어.')).message, /^요청 제한 시간을 넘었어 \(모델 응답 유휴\)/)
+  for (const error of [context, timeout, auth, provider, cli, unknown]) {
+    assert.ok(error.message.length <= 200)
+    assert.doesNotMatch(error.message, /PRIVATE_BODY|SECRET|secret\.invalid|sk-secret|private details/)
+  }
+}
+
 test('trusted plugins run a server module with their own data, hooks and tools', { timeout: 120_000 }, async (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'conai-plugin-server-test-'))
   process.env.RUNTIME_BASE_PATH = path.join(root, '.private')
@@ -41,6 +69,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
   await main.initializeDatabase()
   const user = await import('../src/database/userSettingsDb')
   user.initializeUserSettingsDb()
+  await t.test('plugin LLM failures preserve safe categories without provider bodies or credentials', checkPluginLlmFailures)
   const { invalidateConfiguredAuthCache } = await import('../src/services/auth/sessionAccess')
   const registry = await import('../src/services/plugins/pluginRegistry')
   const runtime = await import('../src/services/plugins/pluginServerRuntime')
@@ -154,6 +183,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const nobody = { accountId: 999999, accountType: 'admin' as const }
     let calls = 0, aborted = 0, hold = false
     let replyText = '안녕, 이웃!'
+    let finishReason = 'stop'
     let translatedReply = '{}'
     let holdTranslation = false
     let judgeAnswers: Record<string, unknown> = {}
@@ -170,7 +200,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
         else init?.signal?.addEventListener('abort', cancel, { once: true })
       })
       if (String(url).endsWith('/v1/systemone')) return Response.json({ model: JSON.parse(lastBody).model, answers: judgeAnswers, usage: { prompt_tokens: 12, completion_tokens: 4 } })
-      return Response.json({ choices: [{ message: { content: JSON.parse(lastBody).model === 'translation-model' ? translatedReply : replyText }, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 4 } })
+      return Response.json({ choices: [{ message: { content: JSON.parse(lastBody).model === 'translation-model' ? translatedReply : replyText }, finish_reason: finishReason }], usage: { prompt_tokens: 12, completion_tokens: 4 } })
     })
     await registry.installPlugin(packageOf(folder, m => { m.id = 'llm-bridge' }, { 'server.mjs': `export function activate(conai) {
       let late = null;
@@ -245,6 +275,30 @@ test('trusted plugins run a server module with their own data, hooks and tools',
       fields: [{ name: 'mood', label: '기분', values: ['calm', 'happy'], readonly: false }],
     } })
     ChatProfileStore.update(profile.id, { lorebookIds: [profileBook.id], blockIds: [statusBlock.id] })
+    const { requestId: _requestId, ...measureInput } = input
+    const measured = await bridge('measure', measureInput) as import('@conai/shared').PluginLlmMeasurement
+    assert.equal(measured.contextTokens, null)
+    assert.equal(measured.available, null)
+    assert.equal(measured.outputReserve, 100)
+    assert.equal(measured.engine, 'api')
+    assert.equal(measured.estimator, 'heuristic')
+    assert.equal(calls, 0, 'measure never contacts the provider')
+    assert.deepEqual(llm.listPluginLlmProfiles('llm-bridge', guest).find(item => item.id === profile.id)!.context, { contextTokens: null, maxOutputTokens: 100 })
+    assert.throws(() => llm.measurePluginLlm('llm-bridge', guest, { ...measureInput, requestId: 'not-allowed' }))
+    assert.throws(() => llm.measurePluginLlm('llm-bridge', nobody, measureInput), /권한/)
+    ChatProfileStore.update(profile.id, { contextTokens: 2048 })
+    const overInput = { ...measureInput, message: '가'.repeat(8000) }
+    const over = llm.measurePluginLlm('llm-bridge', guest, overInput)
+    assert.equal(over.available, 2048 - over.outputReserve - over.inputTokens)
+    const beforeJobs = RuntimeJobStore.list({ kind: 'plugin-llm' }).length
+    assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...overInput, requestId: 'context-overflow' }), (error: unknown) => {
+      assert.equal((error as { status: number }).status, 413)
+      assert.equal((error as Error).message, `문맥이 모델 한도를 넘었어 (입력 약 ${over.inputTokens} + 출력 ${over.outputReserve} > 한도 2048 토큰). 입력을 줄여줘.`)
+      return true
+    })
+    assert.equal(calls, 0)
+    assert.equal(RuntimeJobStore.list({ kind: 'plugin-llm' }).length, beforeJobs, 'preflight creates no job')
+    ChatProfileStore.update(profile.id, { contextTokens: null })
     const first = await bridge('start', input) as { jobId: string }
     const again = await bridge('start', input) as { jobId: string }
     assert.equal(first.jobId, again.jobId)
@@ -252,6 +306,8 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const completed = await bridge('get', first.jobId) as { result: { text: string } }
     assert.equal(completed.result.text, '안녕, 이웃!')
     assert.equal(calls, 1)
+    const { estimateMessagesTokens } = await import('../src/services/codex-chat/llmChatContext')
+    assert.equal(measured.inputTokens, estimateMessagesTokens(profile.id, JSON.parse(lastBody).messages), 'measure includes exactly the admitted persona, history, lore and blocks')
     assert.match(lastBody, /village resident/)
     assert.match(lastBody, /FILE_BACKED_PROFILE_LORE/, 'stateless plugin calls load the profile shared file-backed lore through the authenticated requester')
     assert.match(lastBody, /PRIVATE_INPUT/)
@@ -264,10 +320,12 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.throws(() => llm.getPluginLlmJob('llm-bridge', admin, first.jobId), /찾을 수 없어/)
     assert.throws(() => llm.getPluginLlmJob('chat-instructions', guest, first.jobId), /찾을 수 없어/)
     replyText = '{"action":"wave"}'
+    const structuredMeasure = llm.measurePluginLlm('llm-bridge', guest, { ...measureInput, structuredOutput: { action: 'string' } })
     const structured = llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'structured-turn', structuredOutput: { action: 'string' } })
     await until(() => llm.getPluginLlmJob('llm-bridge', guest, structured.jobId).status === 'completed', 'structured reply')
     assert.deepEqual(llm.getPluginLlmJob('llm-bridge', guest, structured.jobId).result?.json, { action: 'wave' })
     assert.match(lastBody, /JSON/)
+    assert.equal(structuredMeasure.inputTokens, estimateMessagesTokens(profile.id, JSON.parse(lastBody).messages), 'JSON instructions and block omission match start')
     assert.doesNotMatch(lastBody, /PRIVATE_BLOCK_INSTRUCTION|resident_status/, 'forced JSON omits only display blocks')
     assert.match(lastBody, /village resident|FILE_BACKED_PROFILE_LORE/)
     const translationRow = ModelSlotStore.ensure('plugin-test', 'translation-model')!
@@ -323,13 +381,13 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const turnInput = { profileId: profile.id, stage: 'before', user: '방문자', actions: ['wave', 'leave'], conversation: [
       { from: 'user', name: '방문자', text: 'old' },
       { from: 'character', name: profile.name, text: 'hello' },
-      { from: 'user', name: '방문자', text: 'x'.repeat(2000) },
+      { from: 'user', name: '방문자', text: 'x'.repeat(5000) },
     ] }
     const decide = (value: unknown = decideInput) => llm.callPluginLlm('llm-bridge', guest, 'decide', value)
     const turn = (value: unknown = turnInput) => llm.callPluginLlm('llm-bridge', guest, 'judgeTurn', value)
     const noJudgeCalls = calls
     for (const invalid of [
-      { ...decideInput, extra: true }, { ...decideInput, state: [] }, { ...decideInput, state: { text: '한'.repeat(6000) } },
+      { ...decideInput, extra: true }, { ...decideInput, state: [] },
       { ...decideInput, timeoutMs: 999 }, { ...decideInput, questions: [] },
       { ...decideInput, questions: Array(9).fill(decideInput.questions[0]) },
       { ...decideInput, questions: [decideInput.questions[0], decideInput.questions[0]] },
@@ -339,7 +397,6 @@ test('trusted plugins run a server module with their own data, hooks and tools',
       { ...decideInput, questions: [{ ...decideInput.questions[0], options: [{ id: 'bad.id', description: '' }, { id: 'a', description: '' }] }] },
       { ...decideInput, questions: [{ ...decideInput.questions[0], options: undefined }] },
       { ...decideInput, questions: [{ ...decideInput.questions[0], kind: 'yesno' }] },
-      { ...decideInput, questions: [{ ...decideInput.questions[1], instructions: 'x'.repeat(1001) }] },
     ]) assert.throws(() => decide(invalid))
     assert.throws(() => decide(), (error: any) => error.status === 409 && error.message.startsWith('판단 모델이 없어'))
     for (const method of ['decide', 'judgeTurn']) {
@@ -373,6 +430,13 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.deepEqual(Object.keys(JSON.parse(lastBody).questions.pick.criteria), ['stay', 'go'], 'option ids become native labels')
     const judgeUsage = user.getUserSettingsDb().prepare('SELECT purpose, profile_id FROM llm_usage_events ORDER BY id DESC LIMIT 1').get() as any
     assert.equal(judgeUsage.purpose, 'judge'); assert.equal(judgeUsage.profile_id, profile.id)
+    const largeDecision = { ...decideInput, state: { text: '한'.repeat(6000) }, questions: decideInput.questions.map(question => ({
+      ...question, instructions: 'i'.repeat(4000),
+      ...(question.options ? { options: question.options.map(option => ({ ...option, description: 'd'.repeat(2000) })) }
+        : { criteria: { yes: 'y'.repeat(2000), no: 'n'.repeat(2000) } }),
+    })) }
+    assert.equal((await bridge('decide', largeDecision) as import('@conai/shared').PluginLlmDecision).error, null)
+    assert.deepEqual(JSON.parse(lastBody).state, largeDecision.state, 'large state and instructions reach the native judge without plugin cuts')
     ChatProfileStore.update(profile.id, { judgeSlotId: null })
     replyText = '{"pick":{"stay":0.25,"go":0.75},"ready":{"yes":0.9,"no":0.1}}'
     assert.equal(((await decide()) as import('@conai/shared').PluginLlmDecision).model, 'preset-judge')
@@ -388,7 +452,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.deepEqual(await turn(), emptyTurn, 'a preset without a model does not call a provider either')
     ChatProfileStore.update(profile.id, { judgeSlotId: decisionRow })
     judgeAnswers = { offer: { type: 'noul', noul: 0.95 }, withhold: { type: 'noul', noul: 0.05 }, note: { type: 'noul', noul: 0.95 }, follow: { type: 'noul', noul: 0.95 } }
-    const steered = await bridge('judgeTurn', turnInput) as import('@conai/shared').PluginJudgeTurn
+    const steered = await bridge('judgeTurn', { ...turnInput, actions: [...turnInput.actions, 'unused'.repeat(100)] }) as import('@conai/shared').PluginJudgeTurn
     assert.deepEqual(steered.offered, ['wave*']); assert.deepEqual(steered.withheld, ['leave'])
     assert.equal(steered.directive, 'Say hello.\nBe kind.'); assert.equal(steered.followUp, false)
     assert.deepEqual(steered.items.map(item => item.itemId), ['offer', 'withhold', 'note'])
@@ -399,9 +463,9 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.ok(ChatJudgeLogStore.list({ profileId: profile.id }).some(run => run.threadId === null && run.presetId === judgePreset.id))
     const exposed = (await bridge('profiles') as import('@conai/shared').PluginLlmProfile[]).find(item => item.id === profile.id)!
     assert.equal(exposed.judge.available, true); assert.equal(exposed.judge.presetName, 'Plugin judge')
-    assert.equal(exposed.judge.followUp?.directive.length, 1000)
-    assert.equal(exposed.judge.room?.route.instructions, DEFAULT_ROUTE_INSTRUCTIONS.slice(0, 1000))
-    assert.equal(exposed.judge.room?.next.instructions, DEFAULT_NEXT_INSTRUCTIONS.slice(0, 1000))
+    assert.equal(exposed.judge.followUp?.directive.length, 1100)
+    assert.equal(exposed.judge.room?.route.instructions, DEFAULT_ROUTE_INSTRUCTIONS)
+    assert.equal(exposed.judge.room?.next.instructions, DEFAULT_NEXT_INSTRUCTIONS)
     assert.deepEqual(exposed.statusBlocks, [{ key: 'resident_status', name: '상태', fields: [{ name: 'mood', label: '기분', min: null, max: null, step: null, values: ['calm', 'happy'], readonly: false }] }])
     assert.doesNotMatch(JSON.stringify(exposed), /PRIVATE_BLOCK_|systemPrompt|apiKey/)
     judgeAnswers = { ready: { type: 'noul', noul: 0.6 } }
@@ -429,11 +493,57 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const other = llm.startPluginLlmJob('llm-bridge', admin, input)
     assert.notEqual(other.jobId, first.jobId)
     await until(() => llm.getPluginLlmJob('llm-bridge', admin, other.jobId).status === 'completed', 'admin reply')
+    const doneText = async (requestId: string, changes: Record<string, unknown> = {}) => {
+      const job = llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId, ...changes })
+      await until(() => !['queued', 'running'].includes(llm.getPluginLlmJob('llm-bridge', guest, job.jobId).status), requestId)
+      const completed = llm.getPluginLlmJob('llm-bridge', guest, job.jobId)
+      assert.equal(completed.status, 'completed', completed.error ?? requestId)
+      return completed
+    }
+    const longText = Array.from({ length: 6000 }, (_, index) => `Full paragraph ${index}.`).join('\n')
+    replyText = longText
+    const full = await doneText('full-text', { message: 'm'.repeat(300000), history: 'h'.repeat(300000), maxTokens: 10000 })
+    assert.equal(full.result?.text, longText)
+    assert.equal(full.result?.truncated, false)
+    assert.equal(JSON.parse(lastBody).max_tokens, 100, 'large caller cap still only lowers the profile setting')
+    assert.deepEqual(RuntimeJobStore.get(full.jobId)!.result, { runtime_job_result_file: 1, byte_length: Buffer.byteLength(JSON.stringify(full.result)) })
+    assert.equal((RuntimeJobStore.get(full.jobId, { includeResultFile: true })!.result as { text: string }).text, longText)
+    assert.throws(() => llm.getPluginLlmJob('llm-bridge', admin, full.jobId), /찾을 수 없어/, 'file-backed results remain account-private')
+    replyText = JSON.stringify({ say: longText })
+    const largeSchema = { say: 's'.repeat(100000) }
+    const fullJson = await doneText('full-json', { structuredOutput: largeSchema })
+    assert.deepEqual(fullJson.result?.json, { say: longText })
+    assert.equal(fullJson.result?.text, replyText)
+    const { runtimePaths } = await import('../src/config/runtimePaths')
+    const resultFile = path.join(runtimePaths.artifactsDir, 'runtime-job-results', `${fullJson.jobId}.json`)
+    fs.unlinkSync(resultFile)
+    for (const readMissing of [
+      () => llm.getPluginLlmJob('llm-bridge', guest, fullJson.jobId),
+      () => llm.cancelPluginLlmJob('llm-bridge', guest, fullJson.jobId),
+      () => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'full-json', structuredOutput: largeSchema }),
+    ]) assert.throws(readMissing, (error: any) => error.status === 410)
+    fs.writeFileSync(resultFile, '{}')
+    assert.throws(() => llm.getPluginLlmJob('llm-bridge', guest, fullJson.jobId), (error: any) => error.status === 410, 'mismatched result files also return 410')
+    replyText = 'model stopped at its cap'; finishReason = 'length'
+    assert.equal((await doneText('real-output-cut')).result?.truncated, true)
+    finishReason = 'stop'; replyText = 'provider default'
+    ChatProfileStore.update(profile.id, { maxTokens: null, contextTokens: 2048 })
+    const advisory = llm.measurePluginLlm('llm-bridge', guest, { profileId: profile.id, message: 'hi' })
+    assert.ok(advisory.available! < 0, 'an estimate-only output reserve can exhaust advisory availability')
+    await doneText('provider-default', { maxTokens: undefined, message: 'hi', history: '' })
+    assert.equal(JSON.parse(lastBody).max_tokens, undefined, 'no invented 2048-token provider cap')
+    assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'input-alone-too-large', maxTokens: undefined, message: '가'.repeat(3000) }), (error: any) => error.status === 413)
+    ChatProfileStore.update(profile.id, { maxTokens: 100, contextTokens: null })
+    assert.ok(llm.measurePluginLlm('llm-bridge', guest, { ...measureInput, message: 'x'.repeat(200000), history: 'y'.repeat(100000) }).inputTokens > 0)
+    assert.throws(() => llm.measurePluginLlm('llm-bridge', guest, { ...measureInput, message: 'x'.repeat(5 * 1024 * 1024) }), (error: any) => error.status === 413 && /전송 한도/.test(error.message))
     hold = true
     const before = calls
-    const active = [0, 1, 2, 3].map(i => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: `active-${i}` }))
+    const active = Array.from({ length: 64 }, (_, i) => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: `active-${i}` }))
     await until(() => calls === before + 1, 'first call starts while the others wait for the shared connection slot')
-    assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'overflow' }), /4개/)
+    assert.equal(active.filter(job => RuntimeJobStore.get(job.jobId)?.phase === 'generating').length, 4, 'only four jobs execute; the rest queue without spawning engines')
+    assert.equal(active.filter(job => RuntimeJobStore.get(job.jobId)?.phase === 'queued').length, 60)
+    active.push(...Array.from({ length: 4 }, (_, i) => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: `queued-extra-${i}` })))
+    assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...input, requestId: 'overflow' }), /대기열.*64개/)
     await bridge('cancel', active[0].jobId)
     await until(() => RuntimeJobStore.get(active[0].jobId)?.status === 'cancelled', 'cancel reaches provider')
     assert.equal(aborted, 1)
@@ -455,6 +565,15 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await until(() => RuntimeJobStore.get(timed.jobId)?.status === 'failed', 'timeout releases the provider slot')
     assert.match(llm.getPluginLlmJob('llm-bridge', guest, timed.jobId).error!, /제한 시간/)
     assert.equal(aborted, 4)
+
+    const largeQueuedInput = { ...input, message: 'q'.repeat(4 * 1024 * 1024), history: '', useLorebooks: false }
+    const queuedBytes = Array.from({ length: 15 }, (_, i) => llm.startPluginLlmJob('llm-bridge', guest, { ...largeQueuedInput, requestId: `byte-queue-${i}` }))
+    assert.throws(() => llm.startPluginLlmJob('llm-bridge', guest, { ...largeQueuedInput, requestId: 'byte-queue-full' }), (error: any) => error.status === 429 && /64 MiB/.test(error.message))
+    for (const job of queuedBytes) llm.cancelPluginLlmJob('llm-bridge', guest, job.jobId)
+    await until(() => queuedBytes.every(job => RuntimeJobStore.get(job.jobId)?.status === 'cancelled'), 'cancelled queued inputs release byte admission')
+    const byteRetry = llm.startPluginLlmJob('llm-bridge', guest, { ...largeQueuedInput, requestId: 'byte-queue-full' })
+    llm.cancelPluginLlmJob('llm-bridge', guest, byteRetry.jobId)
+    await until(() => RuntimeJobStore.get(byteRetry.jobId)?.status === 'cancelled', 'busy request identity can be admitted after capacity is released')
 
     await bridge('delay')
     await new Promise(resolve => setTimeout(resolve, 150))
@@ -514,7 +633,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const callCount = calls
     assert.equal(llm.startPluginLlmJob('chat-instructions', admin, input).jobId, job.jobId)
     assert.equal(calls, callCount, 'a repeated request never repeats a tool mutation')
-    for (const maxTokens of [0, 4097, 1.5]) {
+    for (const maxTokens of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
       assert.throws(() => llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: `invalid-${maxTokens}`, maxTokens }))
     }
     for (const [requestId, mode, maxTokens, expected] of [
@@ -522,6 +641,8 @@ test('trusted plugins run a server module with their own data, hooks and tools',
       ['reset-profile', 'profile', undefined, 8192],
       ['default-text', 'text', undefined, 8192],
       ['explicit-text', 'text', 128, 128],
+      ['large-profile-cap', 'profile', 10000, 8192],
+      ['large-text-cap', 'text', 10000, 8192],
     ] as const) {
       budgets.length = 0
       captureToolsOnly = mode === 'profile'
@@ -676,9 +797,9 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const largeBudget = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-large-budget' }).jobId)
     assert.equal(largeBudget.status, 'completed', largeBudget.error ?? '')
     assert.equal(largeBudget.result!.profileRun!.research!.toolCalls, 100)
-    assert.equal(largeBudget.result!.profileRun!.research!.evidenceTruncated, true)
-    assert.ok(largeBudget.result!.profileRun!.research!.evidence.length > 0)
-    assert.ok(Buffer.byteLength(JSON.stringify(largeBudget.result)) < 64 * 1024)
+    assert.notEqual(largeBudget.result!.profileRun!.research!.evidenceTruncated, true)
+    assert.equal(largeBudget.result!.profileRun!.research!.evidence.length, 100)
+    assert.ok(Buffer.byteLength(JSON.stringify(largeBudget.result!.profileRun!.research!.evidence)) > 12 * 1024)
     requests = []; steps = []
     const protectedSummary = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-purpose-summary',
       research: { ...input.research, purpose: 'summary' } }).jobId)
@@ -692,7 +813,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
       requests = []; steps = []
       const inaccessible = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: `research-inaccessible-${postId}`, message: 'Prior quote must not leave this server.', research: { ...input.research, allowedPostIds: [allowed.id, postId], purpose: 'summary' } }).jobId)
       assert.equal(inaccessible.status, 'failed')
-      assert.match(inaccessible.error!, /source access changed/)
+      assert.match(inaccessible.error!, /조사 자료 접근 권한이 바뀌었어/)
       assert.equal(requests.length, 0, 'every supplied source is checked even on a tool-free summary')
     }
     const publishedSources = PostStore.publishedSources.bind(PostStore)
@@ -705,7 +826,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const hiddenDuringRun = await withToolRounds(1, () => done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'research-source-revoked' }).jobId))
     accessMock.mock.restore()
     assert.equal(hiddenDuringRun.status, 'failed')
-    assert.match(hiddenDuringRun.error!, /source access changed/)
+    assert.match(hiddenDuringRun.error!, /조사 자료 접근 권한이 바뀌었어/)
     assert.equal(requests.length, 1, 'the previously read quote is not sent to another provider request after hiding')
     PostStore.update(actor, allowed.id, { status: 'published' })
 

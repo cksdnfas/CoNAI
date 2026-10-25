@@ -35,7 +35,7 @@ export type RuntimeJobProgressPatch = Partial<RuntimeJobProgress> & {
 /** `errors` 컬럼에 유지하는 최근 실패 건수 상한. 잡 하나가 DB를 채우는 것을 막는다. */
 export const RUNTIME_JOB_ERROR_LIMIT = 50
 
-/** `result` 컬럼 상한(64KB). 대량 정규화는 결과 파일 참조, 다른 작업은 크기 요약을 저장한다. */
+/** `result` 컬럼 상한(64KB). 대량 정규화·플러그인 작업/LLM은 비공개 결과 파일 참조를 저장한다. */
 export const RUNTIME_JOB_RESULT_MAX_BYTES = 64 * 1024
 
 /** Compute the derived percentage the same way on every read path. */

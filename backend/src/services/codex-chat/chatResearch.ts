@@ -16,7 +16,6 @@ export class ChatResearchExecution {
   readonly maxTurns: number
   readonly summary: boolean
   readonly result: PluginResearchResult
-  private evidenceBytes = 0
 
   /**
    * The app-wide tool round limit, counted as in a chat reply: that many tool rounds, then one answer without tools.
@@ -37,9 +36,6 @@ export class ChatResearchExecution {
   allowsTool(name: string) { return !this.summary && (name === 'posts_search' || name === 'posts_read') }
 
   recordEvidence(evidence: PluginResearchResult['evidence'][number]) {
-    const bytes = Buffer.byteLength(JSON.stringify(evidence))
-    if (this.evidenceBytes + bytes > 12 * 1024) { this.result.evidenceTruncated = true; return }
-    this.evidenceBytes += bytes
     this.result.evidence.push(evidence)
   }
 

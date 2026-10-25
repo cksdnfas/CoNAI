@@ -14,6 +14,7 @@ import { requireRequesterPermission } from '../../middleware/featureAccess'
 import fs from 'node:fs'
 import path from 'node:path'
 import { piChatPrivateRoot } from '../codex-chat/piChatCompletion'
+import { pluginLlmFailure } from './pluginLlmErrors'
 
 const running = new Set<string>()
 
@@ -88,10 +89,10 @@ export async function runPluginProfile(params: {
         })
         const messageId = CodexChatStore.addMessage({ thread_id: room.id, role: 'assistant', ...reply, display_content: null, routing: delivery.routing })
         runSignal.throwIfAborted()
-        if (reply.status !== 'completed') throw new PluginError(`Research failed (chat ${room.id}): ${reply.error ?? reply.status}`, 502)
+        if (reply.status !== 'completed') throw pluginLlmFailure(new Error(reply.error ?? reply.status))
         validate()
         const profileRun = refreshPluginProfileRun({ threadId: room.id, messageIds: [messageId], tools: [], toolsTruncated: false, research: research.result }, requester)
-        return { text: reply.content.slice(0, 4000), truncated: reply.content.length > 4000, model: resolveProfileModel(profile, 'chat')?.model ?? '', engine: profile.engine, profileRun }
+        return { text: reply.content, truncated: reply.finish_reason === 'length', model: resolveProfileModel(profile, 'chat')?.model ?? '', engine: profile.engine, profileRun }
       } finally {
         if (accessTimer) clearInterval(accessTimer)
         if (piDir) fs.rmSync(piDir, { recursive: true, force: true })
@@ -112,8 +113,7 @@ export async function runPluginProfile(params: {
       throw new PluginError(`프로필 실행을 완료하지 못했어. 채팅에서 실행 결과를 확인해줘. (대화 ${room.id})`, 502)
     }
     const raw = result.replies.map(reply => reply.display_content ?? reply.content).join('\n\n')
-    const text = raw.slice(0, 4000)
     const profileRun = refreshPluginProfileRun({ threadId: room.id, messageIds: result.replies.map(reply => reply.id), tools: [], toolsTruncated: false }, requester)
-    return { text, truncated: text.length !== raw.length, model: resolveProfileModel(profile, 'chat')?.model ?? '', engine: profile.engine, profileRun }
+    return { text: raw, truncated: result.replies.some(reply => reply.finish_reason === 'length'), model: resolveProfileModel(profile, 'chat')?.model ?? '', engine: profile.engine, profileRun }
   } finally { running.delete(lock) }
 }

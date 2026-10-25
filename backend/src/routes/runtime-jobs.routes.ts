@@ -5,11 +5,16 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { routeParam } from './routeParam';
 import { RuntimeJobRunner } from '../services/runtimeJobs/runtimeJobRunner';
 import { RuntimeJobStore } from '../services/runtimeJobs/runtimeJobStore';
-import { RUNTIME_JOB_KINDS, type RuntimeJobKind, type RuntimeJobStatus } from '../types/runtimeJob';
+import { RUNTIME_JOB_KINDS, type RuntimeJobKind, type RuntimeJobStatus, type RuntimeJobRecord } from '../types/runtimeJob';
 
 const router = Router();
 
 const RUNTIME_JOB_STATUSES: readonly RuntimeJobStatus[] = ['queued', 'running', 'completed', 'failed', 'cancelled'];
+
+/** Plugin reply bodies require the plugin/profile/research checks in llm.get, even for inline results. */
+function jobSummary(job: RuntimeJobRecord): RuntimeJobRecord {
+  return job.kind === 'plugin-llm' ? { ...job, result: null } : job;
+}
 
 /** Read the session account id without assuming an authenticated session exists. */
 function resolveRequestAccountId(req: Request): number | null {
@@ -62,7 +67,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     visibleToAccountId: isAdminRequest(req) ? undefined : resolveRequestAccountId(req),
   });
 
-  return res.json(successResponse(jobs));
+  return res.json(successResponse(jobs.map(jobSummary)));
 }));
 
 /**
@@ -81,12 +86,12 @@ router.get('/:jobId', asyncHandler(async (req: Request, res: Response) => {
     return res.status(403).json(errorResponse('Forbidden'));
   }
 
-  const job = RuntimeJobStore.get(jobId, { includeResultFile: true });
+  const job = RuntimeJobStore.get(jobId);
   if (!job) {
     return res.status(404).json(errorResponse('Job not found'));
   }
 
-  return res.json(successResponse(job));
+  return res.json(successResponse(job.kind === 'plugin-llm' ? jobSummary(job) : RuntimeJobStore.get(jobId, { includeResultFile: true })));
 }));
 
 /**
@@ -110,12 +115,12 @@ router.post('/:jobId/cancel', asyncHandler(async (req: Request, res: Response) =
     return res.status(409).json({
       ...errorResponse('이미 종료된 작업입니다'),
       code: 'JOB_ALREADY_FINISHED',
-      data: current,
+      data: jobSummary(current),
     });
   }
 
   const cancelled = RuntimeJobRunner.cancel(jobId);
-  return res.status(202).json(successResponse(cancelled));
+  return res.status(202).json(successResponse(cancelled ? jobSummary(cancelled) : null));
 }));
 
 export const runtimeJobRoutes = router;

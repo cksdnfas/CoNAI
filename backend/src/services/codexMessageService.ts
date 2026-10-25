@@ -133,6 +133,34 @@ function buildCodexMessagePrompt(params: {
   ].filter((line): line is string => Boolean(line)).join('\n\n')
 }
 
+/** Exact one-shot prompt, shared with synchronous token admission. */
+export function codexMessagePrompt(request: ExecuteCodexMessageRequest) {
+  const structuredOutputJson = normalizeStructuredOutputJson(request.structuredOutputJson)
+  return buildCodexMessagePrompt({
+    task: normalizeOptionalString(request.task),
+    prompt: normalizeOptionalString(request.prompt) ?? '',
+    systemPrompt: normalizeOptionalString(request.systemPrompt),
+    contextValue: normalizeOptionalString(request.context),
+    hasImage: !!normalizeImageDataUrl(request.image),
+    responseMode: structuredOutputJson ? 'json' : 'text',
+    structuredOutputJson,
+  })
+}
+
+/** `-` reads stdin, as in the existing Codex web research path. Never put prompt text in argv. */
+export function codexMessageExecArgs(params: {
+  prefixArgs: string[]; sandbox: string; lastMessagePath: string; model: string | null; reasoningEffort: string | null; imagePaths: string[]
+}) {
+  return [
+    ...params.prefixArgs, 'exec', '--skip-git-repo-check', '--ephemeral', '--sandbox', params.sandbox,
+    '--json', '--output-last-message', params.lastMessagePath,
+    ...(params.model ? ['--model', params.model] : []),
+    ...(params.reasoningEffort ? ['-c', `model_reasoning_effort="${params.reasoningEffort}"`] : []),
+    ...params.imagePaths.flatMap(imagePath => ['--image', imagePath]),
+    '--', '-',
+  ]
+}
+
 async function runCodexExec(params: {
   workDir: string
   prompt: string
@@ -147,36 +175,12 @@ async function runCodexExec(params: {
   const lastMessagePath = path.join(params.workDir, 'codex-last-message.txt')
   const resolvedCommand = resolveCodexCommand()
 
-  const args = [
-    ...resolvedCommand.prefixArgs,
-    'exec',
-    '--skip-git-repo-check',
-    '--ephemeral',
-    '--sandbox',
-    resolveCodexSandboxMode(),
-    '--json',
-    '--output-last-message',
-    lastMessagePath,
-  ]
-
-  if (params.model) {
-    args.push('--model', params.model)
-  }
-
-  if (params.reasoningEffort) {
-    args.push('-c', `model_reasoning_effort="${params.reasoningEffort}"`)
-  }
-
-  for (const imagePath of params.imagePaths) {
-    args.push('--image', imagePath)
-  }
-
-  args.push('--', params.prompt)
+  const args = codexMessageExecArgs({ ...params, prefixArgs: resolvedCommand.prefixArgs, sandbox: resolveCodexSandboxMode(), lastMessagePath })
 
   return await new Promise<{ stdoutPath: string; stderrPath: string; lastMessage: string | null; sessionId: string | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(resolvedCommand.command, args, {
       cwd: params.workDir,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: process.env,
       windowsHide: true,
     })
@@ -266,6 +270,10 @@ async function runCodexExec(params: {
       finalizeReject(new Error(`Failed to launch codex exec: ${error.message}`))
     })
 
+    // CLI early exits can close stdin with EPIPE or Windows write EOF; close owns the exit/stderr diagnosis.
+    child.stdin.on('error', () => {})
+    child.stdin.end(params.prompt)
+
     child.once('close', async (code) => {
       if (cancelled) {
         finalizeReject(new Error(CODEX_CANCELLED_MESSAGE))
@@ -347,15 +355,7 @@ export async function executeCodexMessageRequest(request: ExecuteCodexMessageReq
     ? Math.max(1000, Math.round(request.timeoutMs))
     : DEFAULT_CODEX_TIMEOUT_MS
 
-  const codexPrompt = buildCodexMessagePrompt({
-    task: normalizeOptionalString(request.task),
-    prompt,
-    systemPrompt: normalizeOptionalString(request.systemPrompt),
-    contextValue: normalizeOptionalString(request.context),
-    hasImage: attachedImagePaths.length > 0,
-    responseMode,
-    structuredOutputJson,
-  })
+  const codexPrompt = codexMessagePrompt(request)
 
   const reasoningEffort = normalizeOptionalString(request.reasoningEffort)
   const startedAt = Date.now()

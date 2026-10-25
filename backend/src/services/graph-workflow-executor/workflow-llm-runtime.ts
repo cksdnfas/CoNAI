@@ -4,7 +4,8 @@ import { resolveChatAccess } from '../codex-chat/codexChatAccess'
 import { resolveProfileModel } from '../codex-chat/chatModelRoles'
 import { slotContentLimit } from '../codex-chat/chatContentRating'
 import { imageDataUrlAllowed } from '../contentRating'
-import { stripThinking } from '../codex-chat/llmChatContext'
+import { DEFAULT_REPLY_RESERVE_TOKENS, stripThinking } from '../codex-chat/llmChatContext'
+import { cachedServerContextLimit, MIN_FITTED_REPLY_TOKENS } from '../codex-chat/serverContextLimit'
 import {
   resolveChatCompletionTarget,
   streamChatCompletion,
@@ -13,7 +14,7 @@ import {
   type ChatContentPart,
 } from '../codex-chat/llmChatCompletion'
 import { LLM_CONNECTION_TYPES, ModelSlotStore } from '../codex-chat/modelSlots'
-import { executeCodexMessageRequest } from '../codexMessageService'
+import { executeCodexMessageRequest, type ExecuteCodexMessageRequest } from '../codexMessageService'
 import {
   isClaudeReasoningEffort,
   isLlmReasoningEffort,
@@ -213,6 +214,23 @@ export type WorkflowLlmRequest = {
   /** Codex engine: the first line of its prompt (what the run is for). */
   task?: string
   signal?: AbortSignal
+  /** Explicit caller deadline for the Codex one-shot transport; omitted keeps its native timeout. */
+  timeoutMs?: number
+}
+
+/** Stateless callers share native context discovery without probing a server on every preview. */
+export function workflowLlmBudget(resolved: ResolvedWorkflowLlm, maxTokens?: number) {
+  // The editor exposes manual context only for direct API profiles; engine switches can retain hidden stale values.
+  const declared = resolved.profile?.engine === 'llm' && resolved.profile.llmRuntime !== 'pi' ? resolved.profile.contextTokens : null
+  const learned = resolved.engine === 'api' ? cachedServerContextLimit(resolved) : null
+  const contextTokens = declared === null ? learned : learned === null ? declared : Math.min(declared, learned)
+  const maxOutputTokens = resolved.engine === 'codex' ? null : resolved.profileGeneration.maxTokens ?? null
+  const effectiveMaxTokens = resolved.engine === 'codex' ? undefined
+    : maxTokens === undefined ? maxOutputTokens ?? undefined : Math.min(maxTokens, maxOutputTokens ?? maxTokens)
+  const outputReserve = effectiveMaxTokens ?? DEFAULT_REPLY_RESERVE_TOKENS
+  // A planning reserve is not a configured cap and must never become provider policy or an admission veto.
+  const admissionReserve = maxOutputTokens === null ? 0 : Math.min(effectiveMaxTokens ?? 0, MIN_FITTED_REPLY_TOKENS)
+  return { contextTokens, maxOutputTokens, outputReserve, effectiveMaxTokens, admissionReserve }
 }
 
 export type WorkflowLlmResult = {
@@ -261,6 +279,27 @@ function flattenForCodex(messages: ChatCompletionMessage[]) {
   return { systemPrompt: system || null, context: earlier || null, prompt: lastUser || earlier, image }
 }
 
+/** The same flattened request is used by admission estimates and the actual Codex transport. */
+export function workflowCodexRequest(request: WorkflowLlmRequest, resolved: Extract<ResolvedWorkflowLlm, { engine: 'codex' }>): ExecuteCodexMessageRequest {
+  const flat = request.messages ? flattenForCodex(request.messages) : null
+  const structuredOutputJson = structuredOutputText(request.structuredOutputJson)
+  return {
+    prompt: flat ? flat.prompt : normalizeOptionalString(request.prompt) ?? '',
+    systemPrompt: flat ? flat.systemPrompt : normalizeOptionalString(request.systemPrompt),
+    context: flat ? flat.context : normalizeOptionalString(request.context),
+    image: flat ? flat.image : normalizeOptionalString(request.image),
+    model: resolved.model,
+    reasoningEffort: normalizeOptionalString(request.overrides?.reasoningEffort) ?? resolved.reasoningEffort,
+    task: request.task ?? null,
+    cleanup: true,
+    responseMode: structuredOutputJson ? 'json' : 'text',
+    structuredOutputJson,
+    shouldCancel: () => request.signal?.aborted === true,
+    timeoutMs: request.timeoutMs,
+    usage: { purpose: 'workflow', ...request.usage, profileId: resolved.profile.id },
+  }
+}
+
 /**
  * Refuses a request whose images are above the target model's content rating ceiling: the profile's own when it sets
  * one, else the model row's. Workflow images are bytes without a library record, so they are rated here.
@@ -292,22 +331,7 @@ export async function runWorkflowLlmText(request: WorkflowLlmRequest): Promise<W
   const usageProfileId = resolved.profile?.id ?? null
 
   if (resolved.engine === 'codex') {
-    const flat = request.messages ? flattenForCodex(request.messages) : null
-    const effort = normalizeOptionalString(request.overrides?.reasoningEffort)
-    const result = await executeCodexMessageRequest({
-      prompt: flat ? flat.prompt : prompt,
-      systemPrompt: flat ? flat.systemPrompt : normalizeOptionalString(request.systemPrompt),
-      context: flat ? flat.context : normalizeOptionalString(request.context),
-      image: flat ? flat.image : normalizeOptionalString(request.image),
-      model: resolved.model,
-      reasoningEffort: effort ?? resolved.reasoningEffort,
-      task: request.task ?? null,
-      cleanup: true,
-      responseMode,
-      structuredOutputJson,
-      shouldCancel: () => request.signal?.aborted === true,
-      usage: { purpose: 'workflow', ...request.usage, profileId: usageProfileId },
-    })
+    const result = await executeCodexMessageRequest(workflowCodexRequest(request, resolved))
     request.signal?.throwIfAborted()
     return {
       text: result.text,

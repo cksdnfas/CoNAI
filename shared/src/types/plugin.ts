@@ -100,17 +100,24 @@ export type PluginLlmInput = {
   /** Text mode only. judge: the profile's prompt on its judge model, else the default judge row (cheap quick calls). */
   model?: 'chat' | 'judge'
   useLorebooks?: boolean
-  /** Optional integer 1–4096, capped by the profile. Omitted: text uses 512; profile uses its native budget. */
+  /** Optional positive safe integer; only lowers the profile cap. Omitted follows profile/provider settings. Codex cannot enforce it. */
   maxTokens?: number
-  /** Optional 1,000–600,000 ms. Omitted: text and research use 120,000; profile runs until done or cancelled. */
+  /** Optional 1,000–1,800,000 ms explicit deadline. Omitted follows engine/connection settings. */
   timeoutMs?: number
-  /** JSON example/schema passed through the native workflow LLM JSON mode. */
+  /** JSON example/schema passed through native workflow JSON mode; no separate size cap beyond request transport/context. */
   structuredOutput?: string | Record<string, unknown>
   /** Opt-in prose translation. `only` translates message JSON without a character/model turn. */
   translation?: { fields: string[]; only?: boolean; direction?: 'model' | 'display' }
 }
+export type PluginLlmMeasureInput = Omit<PluginLlmInput, 'requestId' | 'mode' | 'research' | 'timeoutMs'>
+export type PluginLlmMeasurement = {
+  /** outputReserve may be estimate-only when no cap is configured; available is then advisory, not a rejection rule. */
+  inputTokens: number; outputReserve: number; contextTokens: number | null; available: number | null
+  engine: 'api' | 'claude-code' | 'codex'; estimator: 'tokenizer' | 'heuristic'
+}
 export type PluginLlmProfile = {
   id: number; name: string; tagline: string; engine: string
+  context: { contextTokens: number | null; maxOutputTokens: number | null }
   /** Visible look as image-prompt tags (the profile's appearance field); empty when unset. */
   appearance: string
   translation?: { enabled: boolean; modelLanguage: 'en' | 'ko' | 'ja' | 'zh'; displayLanguage: 'en' | 'ko' | 'ja' | 'zh' }
@@ -197,6 +204,7 @@ export type PluginResearchResult = {
    */
   limits: { runtime: 'direct' | 'claude' | 'pi' | 'codex'; maxModelCalls: number | null; maxTurns: number | null; maxToolCalls: number | null }
   turns: number | null
+  /** Legacy hosts could omit receipts; current hosts retain them up to the shared result-file protection. */
   evidenceTruncated?: boolean
   evidence: Array<{ postId: number; revision: number; contentVersion: number | null; offset: number; end: number; excerpt: string }>
 }

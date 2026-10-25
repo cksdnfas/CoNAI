@@ -10,6 +10,50 @@ import { buildFlagDirective } from '../src/services/codex-chat/chatFlags'
 // Model rows: 1 the translator's small model, 2 a model whose connection is gone, 3 a chat model.
 const translating = { translationSlotId: 1 }
 
+test('structured translation chunks all wildcard leaves and discards partial failures', async t => {
+  let failSecond = false
+  const requests = mockTranslator(t, () => {
+    const values = JSON.parse(requests.at(-1)!.messages.at(-1)!.content) as Record<string, string>
+    return Response.json({ choices: [{ message: { content: JSON.stringify(failSecond && requests.length === 2 ? {} : Object.fromEntries(Object.keys(values).map(key => [key, '번역']))) }, finish_reason: 'stop' }] })
+  })
+  const original = { entries: Array.from({ length: 130 }, (_, id) => ({ id, text: 'Hello' })) }
+  const translated = await translateStructuredFields(translating, original, ['entries.*.text'], 'ko') as typeof original
+  assert.deepEqual(requests.map(request => Object.keys(JSON.parse(request.messages.at(-1)!.content)).length), [128, 2])
+  assert.equal(translated.entries.length, 130)
+  assert.ok(translated.entries.every((entry, id) => entry.id === id && entry.text === '번역'))
+  assert.ok(original.entries.every(entry => entry.text === 'Hello'))
+  assert.ok(requests.every(request => !('max_tokens' in request)), 'translation never sends the planning reserve as a cap')
+  requests.length = 0; failSecond = true
+  assert.equal(await translateStructuredFields(translating, original, ['entries.*.text'], 'ko'), null)
+  assert.equal(requests.length, 2)
+})
+
+test('structured translation sizes chunks for the translator context, not the chat profile', async t => {
+  const { learnServerContextLimit } = await import('../src/services/codex-chat/serverContextLimit')
+  const { rawMessagesEstimate } = await import('../src/services/codex-chat/llmChatContext')
+  const requests = mockTranslator(t, () => {
+    const values = JSON.parse(requests.at(-1)!.messages.at(-1)!.content)
+    return Response.json({ choices: [{ message: { content: JSON.stringify(values) }, finish_reason: 'stop' }] })
+  }, 'budgeted')
+  learnServerContextLimit({ providerName: 'translator', model: 'budgeted' }, 'context length (1024 tokens)')
+  const original = { entries: Array.from({ length: 10 }, () => ({ text: 'A sentence. '.repeat(30) })) }
+  const translated = await translateStructuredFields(translating, original, ['entries.*.text'], 'en')
+  assert.deepEqual(translated, original)
+  assert.ok(requests.length > 1)
+  assert.ok(requests.every(request => rawMessagesEstimate(request.messages as import('../src/services/codex-chat/llmChatCompletion').ChatCompletionMessage[]) + 512 <= 1024))
+})
+
+test('an unknown translation output budget does not reject a single long leaf', async t => {
+  const requests = mockTranslator(t, () => {
+    const values = JSON.parse(requests.at(-1)!.messages.at(-1)!.content)
+    return Response.json({ choices: [{ message: { content: JSON.stringify(values) }, finish_reason: 'stop' }] })
+  })
+  const input = { say: 'A long prose passage. '.repeat(1500) }
+  assert.deepEqual(await translateStructuredFields(translating, input, ['say'], 'en'), input)
+  assert.equal(requests.length, 1)
+  assert.equal((requests[0] as { max_tokens?: number }).max_tokens, undefined)
+})
+
 test('structured translation changes prose leaves only and rejects incomplete translations', async t => {
   const original = { say: 'I will bring a potion.', action: { type: 'draw', prompt: 'forest, watercolor' }, entries: [{ id: 'promise-1', title: 'Potion', keys: ['potion'], content: 'Bring a potion.', state: 'active', sourceIds: [17] }] }
   let answer = JSON.stringify({ '0': '회복약을 가져올게.', '1': '회복약', '2': '회복약', '3': '회복약을 가져온다.' })
@@ -27,9 +71,9 @@ test('structured translation changes prose leaves only and rejects incomplete tr
 })
 
 /** The translation connection answers `reply`; `requests` collects what was sent to it. */
-function mockTranslator(t: TestContext, reply: string | (() => Response)) {
+function mockTranslator(t: TestContext, reply: string | (() => Response), model = 'small') {
   const requests: Array<{ model: string; messages: Array<{ role: string; content: string }> }> = []
-  mockModelRows(t, { 1: ['translator', 'small'], 2: ['gone', 'x'], 3: ['test', 'test'] })
+  mockModelRows(t, { 1: ['translator', model], 2: ['gone', 'x'], 3: ['test', 'test'] })
   t.mock.method(ExternalApiProvider, 'findByName', (name: string) => name === 'translator'
     ? { provider_name: 'translator', display_name: 'Translator', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', additional_config: {} }
     : undefined)

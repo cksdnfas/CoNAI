@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import fs from 'node:fs/promises'
 import sharp from 'sharp'
-import type { PluginLlmJob, PluginLlmProfile, PluginProfileAsset } from '@conai/shared'
+import type { PluginLlmJob, PluginLlmMeasurement, PluginLlmProfile, PluginProfileAsset } from '@conai/shared'
 import { canRequesterViewImages, requireRequesterImagePermission } from '../../middleware/imageAccess'
 import { resolveProfileAsset } from '../codex-chat/chatProfileAssets'
 import { MEDIA_MAX_PIXELS } from '../codex-chat/chatMediaLinks'
@@ -15,11 +15,13 @@ import { loadChatSettings } from '../codex-chat/chatSettings'
 import { buildChatProfileReplyMessages } from '../codex-chat/chatProfileReply'
 import { fileOwnerKey } from '../fileStoreService'
 import { hasTranslation } from '../codex-chat/chatModelRoles'
-import { structuredProseIn, translateStructuredFields } from '../codex-chat/chatTranslation'
-import { runWorkflowLlmText } from '../graph-workflow-executor/workflow-llm-runtime'
-import { buildJsonInstruction, LlmJsonTruncatedError } from '../llmProviderService'
+import { planStructuredTranslation, structuredProseIn, translateStructuredFields } from '../codex-chat/chatTranslation'
+import { resolveWorkflowLlm, runWorkflowLlmText, workflowCodexRequest, workflowLlmBudget, type WorkflowLlmRequest } from '../graph-workflow-executor/workflow-llm-runtime'
+import { estimateMessagesTokens, rawMessagesEstimate } from '../codex-chat/llmChatContext'
+import { codexMessagePrompt } from '../codexMessageService'
+import { buildJsonInstruction } from '../llmProviderService'
 import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
-import { RuntimeJobConflictError, RuntimeJobStore, RUNTIME_JOB_TTL_MS } from '../runtimeJobs/runtimeJobStore'
+import { RuntimeJobStore, RUNTIME_JOB_TTL_MS } from '../runtimeJobs/runtimeJobStore'
 import { getPlugin } from './pluginRegistry'
 import { onPluginChanged, pluginDb, PluginError, sha256 } from './pluginStore'
 import { refreshPluginProfileRun, runPluginProfile } from './pluginProfileRun'
@@ -27,13 +29,18 @@ import { requireResearchProfile } from '../codex-chat/chatResearch'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { usableBlocks } from '../codex-chat/chatBlockState'
 import { callPluginJudge, pluginJudgeSettings } from './pluginJudge'
+import { pluginLlmFailure } from './pluginLlmErrors'
+import { acquireLlmRequestSlot } from '../llmRequestScheduler'
+import { pluginLlmInputBytes } from './pluginLlmInput'
+import { readRuntimeJobResult } from '../runtimeJobs/runtimeJobResults'
 
-const DEFAULT_TIMEOUT_MS = 120_000
-const inputSchema = z.object({
+const MAX_PENDING_REQUESTS = 64
+const MAX_QUEUED_INPUT_BYTES = 64 * 1024 * 1024
+const inputFields = z.object({
   requestId: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_.:-]+$/),
-  profileId: z.number().int().positive(), message: z.string().trim().min(1).max(16_000),
-  history: z.string().max(32_000).default(''), userName: z.string().trim().min(1).max(100).default('사용자'),
-  useLorebooks: z.boolean().default(true), maxTokens: z.number().int().min(1).max(4096).optional(),
+  profileId: z.number().int().positive(), message: z.string().trim().min(1),
+  history: z.string().default(''), userName: z.string().trim().min(1).default('사용자'),
+  useLorebooks: z.boolean().default(true), maxTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
   timeoutMs: z.number().int().min(1000).max(1_800_000).optional(),
   mode: z.enum(['text', 'profile']).optional(),
   research: z.object({
@@ -43,22 +50,24 @@ const inputSchema = z.object({
     // Accepted for older plugins and ignored: research follows the app-wide tool round limit (ChatResearchExecution).
     maxModelCalls: z.number().int().optional(), maxToolCalls: z.number().int().optional(), maxTurns: z.number().int().optional(),
   }).strict().optional(),
-  translation: z.object({ fields: z.array(z.string().max(120).regex(/^[a-zA-Z][\w]*(?:\.(?:[a-zA-Z][\w]*|\*)){0,4}$/)).min(1).max(20), only: z.boolean().optional(), direction: z.enum(['model', 'display']).optional() }).strict().optional(),
+  translation: z.object({ fields: z.array(z.string().regex(/^[a-zA-Z][\w]*(?:\.(?:[a-zA-Z][\w]*|\*)){0,4}$/)).min(1).max(20), only: z.boolean().optional(), direction: z.enum(['model', 'display']).optional() }).strict().optional(),
   /** judge: the profile's prompt on its judge model (else the default judge row) instead of its chat model. */
   model: z.enum(['chat', 'judge']).optional(),
   structuredOutput: z.union([z.string().min(1), z.record(z.string(), z.unknown())]).refine(value => {
-    try { const text = typeof value === 'string' ? value : JSON.stringify(value); JSON.parse(text); return Buffer.byteLength(text) <= 16 * 1024 } catch { return false }
-  }, 'structuredOutput must be valid JSON within 16KB').optional(),
-}).strict().refine(input => input.mode !== 'profile' || input.structuredOutput === undefined, 'structuredOutput is only available in text mode')
+    try { JSON.parse(typeof value === 'string' ? value : JSON.stringify(value)); return true } catch { return false }
+  }, 'structuredOutput must be valid JSON').optional(),
+}).strict()
+const measureSchema = inputFields.omit({ requestId: true, mode: true, research: true, timeoutMs: true })
+const inputSchema = inputFields.refine(input => input.mode !== 'profile' || input.structuredOutput === undefined, 'structuredOutput is only available in text mode')
   .refine(input => input.mode !== 'profile' || input.translation === undefined, 'profile mode uses native translation')
   .refine(input => input.mode !== 'profile' || input.research || input.useLorebooks, 'Profile execution uses the profile lorebook settings; use text mode to disable lorebooks')
   .refine(input => input.mode !== 'profile' || input.model !== 'judge', 'The judge model is only available in text mode')
   .refine(input => !input.research || input.mode === 'profile', 'research requires profile mode')
 type Input = z.infer<typeof inputSchema>
 type Row = { plugin_id: string; owner_key: string; request_key: string; fingerprint: string; digest: string; profile_id: number; job_id: string; expires_at: number }
-type Params = { pluginId: string; requester: McpRequester; digest: string; slot: number; inputKey: string }
+type Params = { pluginId: string; requester: McpRequester; digest: string; inputKey: string; inputBytes: number }
 // Prompts live only for admitted work, never in runtime_jobs.params or the idempotency table.
-const inputs = new Map<string, Input>()
+const inputs = new Map<string, { input: Input; measured?: PluginLlmMeasurement }>()
 
 function access(pluginId: string, requester: McpRequester | undefined) {
   const plugin = getPlugin(pluginId)
@@ -92,11 +101,73 @@ function judgeSlotOf(profile: ChatProfile): number {
   return slot
 }
 
+function measurement(inputTokens: number, outputReserve: number, contextTokens: number | null, engine: PluginLlmMeasurement['engine']): PluginLlmMeasurement {
+  return { inputTokens, outputReserve, contextTokens, available: contextTokens === null ? null : contextTokens - outputReserve - inputTokens, engine, estimator: 'heuristic' }
+}
+
+function prepareText(profile: ChatProfile, input: z.infer<typeof measureSchema>, requester: McpRequester) {
+  try { return buildText(profile, input, requester) } catch (error) { throw pluginLlmFailure(error) }
+}
+
+function buildText(profile: ChatProfile, input: z.infer<typeof measureSchema>, requester: McpRequester) {
+  if (input.model === 'judge') judgeSlotOf(profile)
+  if (input.translation?.only) {
+    let json: unknown
+    try { json = JSON.parse(input.message) } catch { throw new PluginError('번역할 JSON을 확인해줘.') }
+    const language = input.translation.direction === 'model' ? profile.translationModelLanguage : profile.translationDisplayLanguage
+    const plan = planStructuredTranslation(profile, json, input.translation.fields, language)
+    if (!plan) throw new PluginError('번역 모델과 입력을 확인해줘.')
+    return { request: null, admissionReserve: plan.target.generation.maxTokens ?? 0, measured: measurement(Math.max(0, ...plan.chunks.map(chunk => chunk.inputTokens)), plan.outputReserve, plan.contextTokens, plan.target.transport === 'claude-code' ? 'claude-code' : 'api') }
+  }
+  // Omit only display blocks for JSON, preserving all persona, example, lore and translation instructions.
+  const replyProfile = input.structuredOutput === undefined ? profile : { ...profile, style: { ...profile.style, blocks: [] } }
+  const messages = buildChatProfileReplyMessages({ profile: replyProfile, message: input.message, history: input.history || null, userName: input.userName, useLorebooks: input.useLorebooks, loreOwner: fileOwnerKey(requester.accountId), translate: !!input.translation })
+  if (input.structuredOutput !== undefined) {
+    const instruction = buildJsonInstruction('json', typeof input.structuredOutput === 'string' ? input.structuredOutput : JSON.stringify(input.structuredOutput))
+    const system = messages.find(message => message.role === 'system' && typeof message.content === 'string')
+    if (instruction && system) system.content = `${system.content}\n\n${instruction}`
+    else if (instruction) messages.unshift({ role: 'system', content: instruction })
+  }
+  const target = input.model === 'judge' ? { modelSlotId: judgeSlotOf(profile), requesterAccountId: requester.accountId } : { profileId: profile.id, requesterAccountId: requester.accountId }
+  const resolved = resolveWorkflowLlm(target)
+  const budget = workflowLlmBudget(resolved, input.maxTokens)
+  const request: WorkflowLlmRequest = { target, messages, structuredOutputJson: input.structuredOutput, task: `Reply as ${profile.name}.`,
+    overrides: budget.effectiveMaxTokens === undefined ? undefined : { maxTokens: budget.effectiveMaxTokens } }
+  const inputTokens = resolved.engine === 'codex'
+    ? rawMessagesEstimate([{ role: 'user', content: codexMessagePrompt(workflowCodexRequest(request, resolved)) }])
+    : input.model === 'judge' ? rawMessagesEstimate(messages) : estimateMessagesTokens(profile.id, messages)
+  return { request, admissionReserve: budget.admissionReserve, measured: measurement(inputTokens, budget.outputReserve, budget.contextTokens, resolved.engine) }
+}
+
+function assertMeasuredFits({ measured, admissionReserve }: ReturnType<typeof prepareText>) {
+  if (measured.contextTokens !== null && measured.inputTokens + admissionReserve > measured.contextTokens) {
+    throw new PluginError(`문맥이 모델 한도를 넘었어 (입력 약 ${measured.inputTokens} + 출력 ${admissionReserve} > 한도 ${measured.contextTokens} 토큰). 입력을 줄여줘.`, 413)
+  }
+}
+
+export function measurePluginLlm(pluginId: string, requester: McpRequester | undefined, raw: unknown): PluginLlmMeasurement {
+  pluginLlmInputBytes(raw)
+  const input = measureSchema.parse(raw)
+  const { profile, requester: actor } = profileAccess(pluginId, requester, input.profileId)
+  return prepareText(profile, input, actor).measured
+}
+
+function profileContext(profile: ChatProfile) {
+  try {
+    const { contextTokens, maxOutputTokens } = workflowLlmBudget(resolveWorkflowLlm({ profileId: profile.id }))
+    return { contextTokens, maxOutputTokens }
+  } catch {
+    // An enabled profile with a removed model remains listable; start still rejects it.
+    return { contextTokens: profile.engine === 'llm' && profile.llmRuntime !== 'pi' ? profile.contextTokens : null, maxOutputTokens: profile.engine === 'codex' ? null : profile.maxTokens }
+  }
+}
+
 export function listPluginLlmProfiles(pluginId: string, requester: McpRequester | undefined): PluginLlmProfile[] {
   const { chat, requester: actor } = access(pluginId, requester)
   const images = canRequesterViewImages(actor)
   return ChatProfileStore.list({ enabledOnly: true }).filter(profile => canUseChatProfile(chat, profile))
     .map(profile => ({ id: profile.id, name: profile.name, tagline: profile.tagline, engine: profile.engine, appearance: profile.appearance ?? '',
+      context: profileContext(profile),
       translation: { enabled: hasTranslation(profile), modelLanguage: profile.translationModelLanguage, displayLanguage: profile.translationDisplayLanguage },
       assetVersion: images ? `${profile.updatedDate}:${profile.avatarHash ?? ''}:${profile.backgroundHash ?? ''}:${profile.referenceHash ?? ''}` : null,
       avatarCrop: images ? profile.avatarCrop : null,
@@ -142,6 +213,8 @@ export async function readPluginProfileAsset(pluginId: string, requester: McpReq
 function view(row: Row): PluginLlmJob {
   const job = RuntimeJobStore.get(row.job_id)
   if (!job || row.expires_at <= Date.now()) throw new PluginError('답변 작업이 만료됐어. 같은 요청을 자동 재전송하지 마.', 410)
+  try { job.result = readRuntimeJobResult(row.job_id, job.result) }
+  catch { throw new PluginError('답변 결과 파일이 없거나 손상됐어. 같은 요청을 자동 재전송하지 마.', 410) }
   return { jobId: job.jobId, requestId: row.request_key, profileId: row.profile_id, status: job.status,
     cancelRequested: job.cancelRequested, result: job.result as PluginLlmJob['result'], error: job.failureMessage, expiresAt: row.expires_at }
 }
@@ -171,22 +244,23 @@ export function cancelPluginLlmJob(pluginId: string, requester: McpRequester | u
 function registerJob() {
   if (RuntimeJobRunner.isRegistered('plugin-llm')) return
   RuntimeJobRunner.register<Params, NonNullable<PluginLlmJob['result']>>({
-    kind: 'plugin-llm', singletonKey: params => `plugin-llm:${params.slot}`,
+    kind: 'plugin-llm', singletonKey: params => `plugin-llm:${params.inputKey}`,
     handler: async ctx => {
       // Start returns a durable ID before any provider request is made.
       await ctx.yield()
       const { pluginId, requester, digest, inputKey } = ctx.params
-      const input = inputs.get(inputKey)
+      const admitted = inputs.get(inputKey)
       inputs.delete(inputKey)
-      if (!input) throw new PluginError('중단된 답변은 자동 재실행하지 않아. 새 요청이 필요해.')
+      if (!admitted) throw new PluginError('중단된 답변은 자동 재실행하지 않아. 새 요청이 필요해.')
+      const { input } = admitted
       ctx.throwIfCancelled()
-      const { profile } = profileAccess(pluginId, requester, input.profileId, digest)
+      let { profile } = profileAccess(pluginId, requester, input.profileId, digest)
       const controller = new AbortController()
       const startedAt = Date.now()
       const abort = () => controller.abort(ctx.signal.reason)
       ctx.signal.addEventListener('abort', abort, { once: true })
       // A profile run follows the profile's own engine and connection limits; only an explicit plugin deadline stops it early.
-      const timeoutMs = input.timeoutMs ?? (input.mode === 'profile' && !input.research ? undefined : DEFAULT_TIMEOUT_MS)
+      const timeoutMs = input.timeoutMs
       const timeout = timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(new DOMException('답변 제한 시간을 넘었어.', 'TimeoutError')), timeoutMs)
       const permissionCheck = setInterval(() => {
         try {
@@ -195,7 +269,14 @@ function registerJob() {
         } catch (error) { controller.abort(error) }
       }, 1000)
       timeout?.unref(); permissionCheck.unref()
+      let releaseExecution: (() => void) | undefined
+      let measured = admitted.measured
       try {
+        ctx.flush({ phase: 'queued', currentLabel: profile.name, total: 1 })
+        // Bound CLI processes too; requests beyond four wait, while connection limits still govern provider work.
+        releaseExecution = await acquireLlmRequestSlot('\0plugin-llm-execution', 4, controller.signal)
+        controller.signal.throwIfAborted(); ctx.throwIfCancelled()
+        profile = profileAccess(pluginId, requester, input.profileId, digest).profile
         ctx.flush({ phase: 'generating', currentLabel: profile.name, total: 1 })
         if (input.mode === 'profile') {
           const result = await runPluginProfile({ pluginId, pluginName: getPlugin(pluginId).definition.name, requester, profile, input, signal: controller.signal })
@@ -208,63 +289,50 @@ function registerJob() {
           let json: unknown
           try { json = JSON.parse(input.message) } catch { throw new PluginError('번역할 JSON을 확인해줘.') }
           const language = input.translation.direction === 'model' ? profile.translationModelLanguage : profile.translationDisplayLanguage
-          const translated = await translateStructuredFields(profile, json, input.translation.fields, language, controller.signal, { replyId: `plugin:${pluginId}:${ctx.jobId}` })
+          const translated = await translateStructuredFields(profile, json, input.translation.fields, language, controller.signal, { replyId: `plugin:${pluginId}:${ctx.jobId}` }, false, { followConnectionTimeout: true })
           controller.signal.throwIfAborted(); ctx.throwIfCancelled(); profileAccess(pluginId, requester, input.profileId, digest)
           if (!translated) throw new PluginError('번역에 실패했어. 프로필의 번역 모델을 확인해줘.')
           const output = { text: '', json, truncated: false, model: 'translation', engine: profile.engine, translation: { status: 'completed' as const, language, json: translated } }
-          if (Buffer.byteLength(JSON.stringify(output)) > 60 * 1024) throw new PluginError('번역 결과가 너무 커. 항목을 나눠줘.', 413)
           return output
         }
-        // Stateless JSON is never folded into chat display blocks; their fenced-block guidance conflicts with JSON mode.
-        const replyProfile = input.structuredOutput === undefined ? profile : { ...profile, style: { ...profile.style, blocks: [] } }
-        const messages = buildChatProfileReplyMessages({ profile: replyProfile, message: input.message, history: input.history || null, userName: input.userName, useLorebooks: input.useLorebooks, loreOwner: fileOwnerKey(requester.accountId), translate: !!input.translation })
-        if (input.structuredOutput !== undefined) {
-          const instruction = buildJsonInstruction('json', typeof input.structuredOutput === 'string' ? input.structuredOutput : JSON.stringify(input.structuredOutput))
-          const system = messages.find(message => message.role === 'system' && typeof message.content === 'string')
-          if (instruction && system) system.content = `${system.content}\n\n${instruction}`
-          else if (instruction) messages.unshift({ role: 'system', content: instruction })
-        }
-        // The judge row gets the profile's prompt as plain messages, so a Claude/Codex profile can use it too.
-        const judge = input.model === 'judge'
-        // Unset: the profile's (or the judge row's) own output cap; a plugin's maxTokens only lowers the profile's.
-        const maxTokens = input.maxTokens === undefined ? undefined : judge ? input.maxTokens : Math.min(input.maxTokens, profile.maxTokens ?? input.maxTokens)
+        // A queued job may outlive profile, route and lore edits: admit against the live target again before sending.
+        const prepared = prepareText(profile, input, requester)
+        measured = prepared.measured
+        assertMeasuredFits(prepared)
+        if (!prepared.request) throw new PluginError('답변 입력을 확인해줘.')
         const result = await runWorkflowLlmText({
-          target: judge ? { modelSlotId: judgeSlotOf(profile), requesterAccountId: requester.accountId } : { profileId: profile.id, requesterAccountId: requester.accountId }, messages,
-          structuredOutputJson: input.structuredOutput,
-          task: `Reply as ${profile.name}.`, signal: controller.signal,
-          overrides: maxTokens === undefined ? undefined : { maxTokens },
+          ...prepared.request, signal: controller.signal,
+          timeoutMs: timeoutMs === undefined ? undefined : Math.max(1000, timeoutMs - (Date.now() - startedAt)),
           usage: { purpose: 'plugin', replyId: `plugin:${pluginId}:${ctx.jobId}` },
         })
         controller.signal.throwIfAborted(); ctx.throwIfCancelled()
         profileAccess(pluginId, requester, input.profileId, digest)
-        // Even escape-heavy text fits the runtime job's 64 KiB JSON result cap.
-        if (input.structuredOutput !== undefined && Buffer.byteLength(JSON.stringify(result.json)) > 32 * 1024) throw new PluginError('구조화 답변이 32KB를 넘었어. 요청 범위를 줄여줘.', 413)
-        const text = result.text.slice(0, input.structuredOutput === undefined ? 8000 : 4000)
+        const text = result.text
         let translation: NonNullable<PluginLlmJob['result']>['translation']
         if (input.translation) {
           // Once the original is available, a translation deadline must not discard that successful answer.
           // Explicit cancellation and permission revocation still abort the whole job via controller.
           clearTimeout(timeout)
-          const translationSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(Math.max(1, (input.timeoutMs ?? DEFAULT_TIMEOUT_MS) - (Date.now() - startedAt)))])
+          const translationSignal = input.timeoutMs === undefined ? controller.signal : AbortSignal.any([controller.signal, AbortSignal.timeout(Math.max(1, input.timeoutMs - (Date.now() - startedAt)))])
           ctx.flush({ phase: 'translating', currentLabel: profile.name, total: 1 })
           const language = profile.translationDisplayLanguage, source = result.json ?? { text }
           // A persona can answer in the display language despite the model-language directive: that answer is the
           // source as written, labelled with its real language, and has nothing to translate.
           const written = hasTranslation(profile) && structuredProseIn(source, input.translation.fields, language)
-          const translated = hasTranslation(profile) && !written ? await translateStructuredFields(profile, source, input.translation.fields, language, translationSignal, { replyId: `plugin:${pluginId}:${ctx.jobId}` }) : null
+          const translated = hasTranslation(profile) && !written ? await translateStructuredFields(profile, source, input.translation.fields, language, translationSignal, { replyId: `plugin:${pluginId}:${ctx.jobId}` }, false, { followConnectionTimeout: true }) : null
           controller.signal.throwIfAborted(); ctx.throwIfCancelled(); profileAccess(pluginId, requester, input.profileId, digest)
           translation = { status: !hasTranslation(profile) ? 'disabled' : written || translated ? 'completed' : 'failed', language, ...(hasTranslation(profile) ? { sourceLanguage: written ? language : profile.translationModelLanguage } : {}), ...(translated ? { json: translated } : {}) }
-          if (Buffer.byteLength(JSON.stringify({ text, json: result.json, translation })) > 60 * 1024) translation = { ...translation, status: 'failed', json: undefined }
         }
         ctx.flush({ processed: 1, succeeded: 1 })
-        return { text, truncated: text.length !== result.text.length, model: result.model.slice(0, 200), engine: result.engine, ...(translation ? { translation } : {}), ...(input.structuredOutput === undefined ? {} : { json: result.json }) }
+        return { text, truncated: result.metadata.finish_reason === 'length', model: result.model, engine: result.engine, ...(translation ? { translation } : {}), ...(input.structuredOutput === undefined ? {} : { json: result.json }) }
       } catch (error) {
-        if (controller.signal.aborted) throw controller.signal.reason
-        if (error instanceof PluginError) throw error
-        if (error instanceof LlmJsonTruncatedError) throw new PluginError(error.message)
-        // Provider errors can contain request bodies or credentials; keep them out of job results/logs.
-        throw new PluginError('프로필 답변 생성에 실패했어. 모델 연결과 입력 길이를 확인해줘.')
+        const reason = controller.signal.aborted ? controller.signal.reason : error
+        throw pluginLlmFailure(reason, {
+          measurement: measured,
+          ...(controller.signal.aborted && reason instanceof Error && reason.name === 'TimeoutError' ? { deadline: 'plugin', timeoutMs } : {}),
+        })
       } finally {
+        releaseExecution?.()
         clearTimeout(timeout); clearInterval(permissionCheck)
         ctx.signal.removeEventListener('abort', abort)
       }
@@ -273,6 +341,7 @@ function registerJob() {
 }
 
 export function startPluginLlmJob(pluginId: string, requester: McpRequester | undefined, raw: unknown): PluginLlmJob {
+  const inputBytes = pluginLlmInputBytes(raw)
   const input = inputSchema.parse(raw)
   const { plugin, owner, requester: actor, profile } = profileAccess(pluginId, requester, input.profileId)
   if (input.research) { requireResearchProfile(profile); requireRequesterPermission(actor, 'posts.view') }
@@ -280,28 +349,37 @@ export function startPluginLlmJob(pluginId: string, requester: McpRequester | un
   const fingerprint = sha256(JSON.stringify(input))
   const db = pluginDb()
   registerJob()
-  // SQLite admission and request identity are atomic, including between API processes.
-  return db.transaction(() => {
+  const replay = () => {
     const previous = db.prepare('SELECT * FROM plugin_llm_requests WHERE plugin_id=? AND owner_key=? AND request_key=?').get(pluginId, owner, input.requestId) as Row | undefined
     if (previous) {
       if (previous.fingerprint !== fingerprint || previous.digest !== plugin.digest) throw new PluginError('같은 요청 ID에 다른 입력이나 플러그인 버전을 사용할 수 없어.', 409)
       return view(previous)
     }
+    return null
+  }
+  const previous = replay()
+  if (previous) return previous
+  // Lore reads and prompt estimation must not hold the SQLite write lock.
+  const prepared = input.mode === 'profile' ? undefined : prepareText(profile, input, actor)
+  if (prepared) assertMeasuredFits(prepared)
+  // SQLite admission and request identity remain atomic, including between API processes.
+  return db.transaction(() => {
+    const raced = replay()
+    if (raced) return raced
     db.prepare('DELETE FROM plugin_llm_requests WHERE expires_at<? AND job_id NOT IN (SELECT job_id FROM runtime_jobs WHERE status IN (\'queued\',\'running\'))').run(Date.now())
-    const count = db.prepare('SELECT COUNT(*) AS n FROM plugin_llm_requests WHERE plugin_id=?').get(pluginId) as { n: number }
-    if (count.n >= 10_000) throw new PluginError('플러그인 답변 기록 한도에 도달했어. 만료 후 다시 요청해줘.', 429)
+    const queued = db.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(json_extract(j.params, '$.inputBytes')), 0) AS bytes
+      FROM plugin_llm_requests p JOIN runtime_jobs j ON j.job_id=p.job_id
+      WHERE p.plugin_id=? AND j.status IN ('queued','running') AND (j.phase IS NULL OR j.phase='queued')`).get(pluginId) as { n: number; bytes: number }
+    if (queued.n >= MAX_PENDING_REQUESTS || queued.bytes + inputBytes > MAX_QUEUED_INPUT_BYTES) {
+      throw new PluginError('플러그인 답변 대기열이 가득 찼어 (64개 또는 입력 합계 64 MiB). 완료 후 같은 요청 ID로 다시 시도해줘.', 429)
+    }
     const inputKey = `${pluginId}:${owner}:${input.requestId}`
-    inputs.set(inputKey, input)
+    inputs.set(inputKey, { input, measured: prepared?.measured })
     try {
-      for (const slot of [0, 1, 2, 3]) {
-        try {
-          const job = RuntimeJobRunner.start('plugin-llm', { pluginId, requester: actor, digest: plugin.digest, inputKey, slot }, { requestedByAccountId: actor.accountId, total: 1 })
-          const row: Row = { plugin_id: pluginId, owner_key: owner, request_key: input.requestId, fingerprint, digest: plugin.digest, profile_id: input.profileId, job_id: job.jobId, expires_at: Date.now() + RUNTIME_JOB_TTL_MS }
-          db.prepare('INSERT INTO plugin_llm_requests(plugin_id,owner_key,request_key,fingerprint,digest,profile_id,job_id,expires_at) VALUES(?,?,?,?,?,?,?,?)').run(pluginId, owner, input.requestId, fingerprint, plugin.digest, input.profileId, job.jobId, row.expires_at)
-          return view(row)
-        } catch (error) { if (!(error instanceof RuntimeJobConflictError)) throw error }
-      }
-      throw new PluginError('플러그인 답변 4개가 실행 중이야. 완료 후 같은 요청 ID로 다시 시도해줘.', 429)
+      const job = RuntimeJobRunner.start('plugin-llm', { pluginId, requester: actor, digest: plugin.digest, inputKey, inputBytes }, { requestedByAccountId: actor.accountId, total: 1 })
+      const row: Row = { plugin_id: pluginId, owner_key: owner, request_key: input.requestId, fingerprint, digest: plugin.digest, profile_id: input.profileId, job_id: job.jobId, expires_at: Date.now() + RUNTIME_JOB_TTL_MS }
+      db.prepare('INSERT INTO plugin_llm_requests(plugin_id,owner_key,request_key,fingerprint,digest,profile_id,job_id,expires_at) VALUES(?,?,?,?,?,?,?,?)').run(pluginId, owner, input.requestId, fingerprint, plugin.digest, input.profileId, job.jobId, row.expires_at)
+      return view(row)
     } catch (error) { inputs.delete(inputKey); throw error }
   }).immediate()
 }
@@ -309,6 +387,7 @@ export function startPluginLlmJob(pluginId: string, requester: McpRequester | un
 /** One dispatcher for the authenticated page bridge and server worker SDK. */
 export function callPluginLlm(pluginId: string, requester: McpRequester | undefined, method: string, args: unknown) {
   if (method === 'profiles') return listPluginLlmProfiles(pluginId, requester)
+  if (method === 'measure') return measurePluginLlm(pluginId, requester, args)
   if (method === 'asset') return readPluginProfileAsset(pluginId, requester, args)
   if (method === 'start') return startPluginLlmJob(pluginId, requester, args)
   if (method === 'decide' || method === 'judgeTurn') return callPluginJudge(pluginId, method, args, profileId => profileAccess(pluginId, requester, profileId))

@@ -93,6 +93,29 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
   })
 
+  await t.test('plugin judge calls follow caller deadlines and do not cap multi-option distributions', async s => {
+    const { askJudge, choiceQuestion, resolveJudgeConnection, withJudgeCallerSettings } = await import('../src/services/judge/judgeEngine')
+    const durations: number[] = []
+    const originalTimeout = AbortSignal.timeout
+    s.mock.method(AbortSignal, 'timeout', (ms: number) => { durations.push(ms); return originalTimeout(ms) })
+    const options = Array.from({ length: 16 }, (_, i): [string, string, boolean] => [`option_${i}_${'x'.repeat(25)}`, 'description', true])
+    const question = choiceQuestion('choice', 'Choose', options)
+    const distribution = Object.fromEntries(options.map(([label]) => [label, 1 / 16]))
+    const calls = route(s, () => ({ choice: { type: 'choice', choice: options[0][0], probabilities: distribution, confidence: 1 } }),
+      () => reply(JSON.stringify({ choice: distribution })))
+    for (const provider of ['chat', 'jev']) {
+      durations.length = 0
+      const result = await withJudgeCallerSettings({ timeoutMs: 180000 }, () => askJudge(resolveJudgeConnection(provider, 'model'), {}, [question]))
+      assert.equal(result.answers.get('choice')?.distribution && Object.keys(result.answers.get('choice')!.distribution!).length, 16)
+      assert.ok(durations.includes(180000))
+      assert.ok(!durations.includes(20000) && !durations.includes(60000), 'no shorter native fallback overrides the caller')
+    }
+    assert.equal(calls.find(call => call.url.endsWith('/chat/completions'))!.body.max_tokens, undefined)
+    durations.length = 0
+    await withJudgeCallerSettings({}, () => askJudge(resolveJudgeConnection('jev', 'model'), {}, [question]))
+    assert.deepEqual(durations, [20000], 'omitted TypeSafe timeout retains its native engine default')
+  })
+
   await t.test('the built-in presets are seeded once and items are normalized', () => {
     const names = ChatJudgePresetStore.list().map((entry) => entry.name)
     assert.ok(names.includes('캐릭터 롤플레이') && names.includes('어시스턴트'))

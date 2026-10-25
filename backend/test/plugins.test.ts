@@ -333,6 +333,54 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
       await registry.removePlugin('workspace-test')
     }
   })
+  await t.test('generic job routes hide plugin replies and orphaned reply files are removed', async () => {
+    const express = (await import('express')).default
+    const { runtimeJobRoutes: jobs } = await import('../src/routes/runtime-jobs.routes')
+    const { RuntimeJobStore } = await import('../src/services/runtimeJobs/runtimeJobStore')
+    const { runtimePaths } = await import('../src/config/runtimePaths')
+    const large = { text: 'PRIVATE_LLM_REPLY'.repeat(10000) }
+    const created = [large, { text: 'PRIVATE_INLINE_REPLY' }].map(result => {
+      const job = RuntimeJobStore.create({ kind: 'plugin-llm', requestedByAccountId: aliceId })
+      RuntimeJobStore.markRunning(job.jobId, 'all'); RuntimeJobStore.markCompleted(job.jobId, result)
+      return job
+    })
+    fs.unlinkSync(path.join(runtimePaths.artifactsDir, 'runtime-job-results', `${created[0].jobId}.json`))
+    const app = express()
+    app.use((req, _res, next) => { Object.assign(req, { session: { authenticated: true, accountId: aliceId, accountType: 'guest' } }); next() })
+    app.use('/api/jobs', jobs)
+    const server = http.createServer(app)
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+    try {
+      for (const job of created) {
+        const response = await fetch(`${origin}/api/jobs/${job.jobId}`)
+        assert.equal(response.status, 200, 'generic route must not open the missing private result file')
+        const value = await response.json() as { data: { result: unknown } }
+        assert.equal(value.data.result, null)
+        const cancelled = await fetch(`${origin}/api/jobs/${job.jobId}/cancel`, { method: 'POST' })
+        assert.equal(cancelled.status, 409)
+        assert.equal(((await cancelled.json()) as { data: { result: unknown } }).data.result, null)
+      }
+      const list = await (await fetch(`${origin}/api/jobs?kind=plugin-llm`)).text()
+      assert.doesNotMatch(list, /PRIVATE_LLM_REPLY|PRIVATE_INLINE_REPLY|runtime_job_result_file/)
+    } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())) }
+
+    const cancelled = RuntimeJobStore.create({ kind: 'plugin-llm', requestedByAccountId: aliceId })
+    RuntimeJobStore.markRunning(cancelled.jobId, 'all')
+    RuntimeJobStore.markCompleted(cancelled.jobId, { toJSON() {
+      RuntimeJobStore.markCancelled(cancelled.jobId, 'cancelled during serialization')
+      return large
+    } })
+    assert.equal(RuntimeJobStore.get(cancelled.jobId)!.status, 'cancelled')
+    assert.equal(fs.existsSync(path.join(runtimePaths.artifactsDir, 'runtime-job-results', `${cancelled.jobId}.json`)), false)
+    const failed = RuntimeJobStore.create({ kind: 'plugin-llm', requestedByAccountId: aliceId })
+    const db = user.getUserSettingsDb()
+    db.exec(`CREATE TEMP TRIGGER fail_llm_completion BEFORE UPDATE ON runtime_jobs WHEN NEW.job_id='${failed.jobId}' AND NEW.status='completed' BEGIN SELECT RAISE(ABORT, 'completion blocked'); END`)
+    try {
+      assert.throws(() => RuntimeJobStore.markCompleted(failed.jobId, large), /completion blocked/)
+      assert.equal(fs.existsSync(path.join(runtimePaths.artifactsDir, 'runtime-job-results', `${failed.jobId}.json`)), false)
+    } finally { db.exec('DROP TRIGGER fail_llm_completion') }
+  })
   await t.test('native app actions share permissions, immutable approvals and headless MCP execution', async sub => {
     const app = await import('../src/services/plugins/pluginAppActions')
     const { RuntimeJobStore } = await import('../src/services/runtimeJobs/runtimeJobStore')

@@ -1,4 +1,5 @@
 import type { ChatJudgeItem } from '@conai/shared'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { ExternalApiProvider } from '../../models/ExternalApiProvider'
 import { readLlmConnectionConfig } from '../llmGenerationOptions'
 import { callTypesafeSystemOne, TYPESAFE_DEFAULT_MODEL, type TypesafeQuestion, type TypesafeResponse } from './typesafeClient'
@@ -33,6 +34,13 @@ export type JudgeConnection =
 export class JudgeError extends Error {}
 
 const LLM_JUDGE_TIMEOUT_MS = 60_000
+
+// Plugin judging reuses native preset batching/escalation, but its caller owns the deadline.
+// Async context carries that contract through nested runJudgeItems calls without changing native callers.
+const callerSettings = new AsyncLocalStorage<{ timeoutMs?: number }>()
+export function withJudgeCallerSettings<T>(settings: { timeoutMs?: number }, run: () => T): T {
+  return callerSettings.run(settings, run)
+}
 
 /** A connection the judge calls, by name; throws JudgeError when it is missing, off, or not a judge connection. */
 export function resolveJudgeConnection(providerName: string, model: string | null | undefined): JudgeConnection {
@@ -121,7 +129,9 @@ async function askTypesafe(connection: Extract<JudgeConnection, { engine: 'types
   let response: TypesafeResponse
   beforeRequest?.()
   try {
-    response = await callTypesafeSystemOne({ baseUrl: connection.baseUrl, apiKey: connection.apiKey, model: connection.model, state, questions: typed, signal, timeoutMs: connection.timeoutMs })
+    const caller = callerSettings.getStore()
+    response = await callTypesafeSystemOne({ baseUrl: connection.baseUrl, apiKey: connection.apiKey, model: connection.model, state, questions: typed, signal,
+      timeoutMs: caller?.timeoutMs ?? connection.timeoutMs })
   } catch (error) {
     meter(false)
     throw error
@@ -170,8 +180,11 @@ async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, s
     options: Object.fromEntries(optionsOf(question).map((option) => [option.label, option.description || (option.yes ? 'yes' : 'no')])),
   }]))
   const request = { model: connection.model, state, questions: asked }
-  const target = { ...connection.target, generation: { ...connection.target.generation, maxTokens: 200 + (strict ? 140 : 60) * questions.length } }
-  const timeout = AbortSignal.timeout(connection.target.timeoutMs ?? LLM_JUDGE_TIMEOUT_MS)
+  const caller = callerSettings.getStore()
+  const target = caller ? { ...connection.target, timeoutMs: caller.timeoutMs ?? connection.target.timeoutMs }
+    : { ...connection.target, generation: { ...connection.target.generation, maxTokens: 200 + (strict ? 140 : 60) * questions.length } }
+  const timeoutMs = caller ? caller.timeoutMs ?? connection.target.timeoutMs : connection.target.timeoutMs ?? LLM_JUDGE_TIMEOUT_MS
+  const timeout = timeoutMs == null ? null : AbortSignal.timeout(timeoutMs)
   const result = await streamChatCompletion({
     target,
     messages: [
@@ -179,7 +192,7 @@ async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, s
       { role: 'system', content: [LLM_JUDGE_PROMPT, ModelSlotStore.routePrompt('judge')].filter(Boolean).join('\n\n') },
       { role: 'user', content: JSON.stringify({ state, questions: asked }) },
     ],
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    signal: timeout ? signal ? AbortSignal.any([signal, timeout]) : timeout : signal ?? new AbortController().signal,
     usage,
     onRequestBody: beforeRequest,
   })

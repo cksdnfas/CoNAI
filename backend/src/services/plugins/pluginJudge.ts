@@ -6,21 +6,23 @@ import { askableJudgeItems, ChatJudgePresetStore } from '../codex-chat/chatJudge
 import { cutForJudge, logJudgeRun, runJudgeItems } from '../codex-chat/chatJudge'
 import { judgeToolMatches } from '../codex-chat/chatJudgeLogs'
 import { DEFAULT_FOLLOW_UP_DIRECTIVE, DEFAULT_NEXT_INSTRUCTIONS, DEFAULT_ROUTE_INSTRUCTIONS } from '../codex-chat/chatJudgeDefaults'
-import { askJudge, choiceQuestion, resolveJudgeConnection, yesNoQuestion } from '../judge/judgeEngine'
+import { askJudge, choiceQuestion, resolveJudgeConnection, withJudgeCallerSettings, yesNoQuestion } from '../judge/judgeEngine'
 import { onPluginChanged, PluginError } from './pluginStore'
+import { pluginLlmFailure } from './pluginLlmErrors'
+import { pluginLlmInputBytes } from './pluginLlmInput'
 
 const id = z.string().regex(/^[a-zA-Z][\w-]{0,39}$/)
-const criteria = z.object({ yes: z.string().max(300), no: z.string().max(300) }).strict()
-const question = { id, instructions: z.string().min(1).max(1000) }
-const timeoutMs = z.number().int().min(1000).max(120_000).default(60_000)
+const criteria = z.object({ yes: z.string(), no: z.string() }).strict()
+const question = { id, instructions: z.string().min(1) }
+const timeoutMs = z.number().int().min(1000).max(1_800_000).optional()
 const profileId = z.number().int().positive()
 const decideSchema = z.object({
   profileId,
-  state: z.record(z.string(), z.json()).refine(state => Buffer.byteLength(JSON.stringify(state)) <= 16 * 1024, 'state must be JSON within 16 KiB'),
+  state: z.record(z.string(), z.json()),
   questions: z.array(z.discriminatedUnion('kind', [
     z.object({
       ...question, kind: z.literal('choice'),
-      options: z.array(z.object({ id, description: z.string().max(300), yes: z.boolean().default(true) }).strict()).min(2).max(16)
+      options: z.array(z.object({ id, description: z.string(), yes: z.boolean().default(true) }).strict()).min(2).max(16)
         .refine(options => new Set(options.map(option => option.id)).size === options.length, 'option ids must be unique'),
     }).strict(),
     z.object({ ...question, kind: z.literal('yesno'), criteria: criteria.optional() }).strict(),
@@ -28,13 +30,12 @@ const decideSchema = z.object({
   timeoutMs,
 }).strict()
 const turnSchema = z.object({
-  profileId, stage: z.enum(['before', 'after']), user: z.string().min(1).max(100),
-  conversation: z.array(z.object({ from: z.enum(['user', 'character']), name: z.string().min(1).max(100), text: z.string().trim().min(1).max(4000) }).strict()).min(1).max(40),
-  actions: z.array(z.string().min(1).max(200)).max(40).default([]), timeoutMs,
+  profileId, stage: z.enum(['before', 'after']), user: z.string().min(1),
+  conversation: z.array(z.object({ from: z.enum(['user', 'character']), name: z.string().min(1), text: z.string().trim().min(1) }).strict()).min(1).max(40),
+  actions: z.array(z.string().min(1)).max(40).default([]), timeoutMs,
 }).strict()
 
-// Provider exceptions can contain credentials or whole request bodies. Only this bounded host message leaves the bridge.
-const JUDGE_FAILED = '판단에 실패했거나 일부 질문에 답하지 않았어. 모델 연결과 입력 길이를 확인해줘.'
+const JUDGE_FAILED = '판단 답변이 불완전해. 일부 질문에 답하지 않았어.'
 
 function connectionOf(profile: ChatProfile, preset: ChatJudgePreset | null) {
   const target = ModelSlotStore.target(profile.judgeSlotId ?? preset?.modelSlotId ?? ModelSlotStore.routeId('judge'))
@@ -45,13 +46,13 @@ function connectionOf(profile: ChatProfile, preset: ChatJudgePreset | null) {
 export function pluginJudgeSettings(profile: ChatProfile): PluginLlmProfile['judge'] {
   const preset = ChatJudgePresetStore.find(profile.judgePresetId)
   return {
-    presetId: preset?.id ?? null, presetName: preset?.name.slice(0, 1000) ?? null, available: connectionOf(profile, preset) !== null,
-    followUp: preset ? { ...preset.followUp, directive: (preset.followUp.directive || DEFAULT_FOLLOW_UP_DIRECTIVE).slice(0, 1000) } : null,
+    presetId: preset?.id ?? null, presetName: preset?.name ?? null, available: connectionOf(profile, preset) !== null,
+    followUp: preset ? { ...preset.followUp, directive: preset.followUp.directive || DEFAULT_FOLLOW_UP_DIRECTIVE } : null,
     fields: preset ? { ...preset.fields } : null,
     room: preset ? {
       window: preset.room.window,
-      route: { ...preset.room.route, instructions: (preset.room.route.instructions || DEFAULT_ROUTE_INSTRUCTIONS).slice(0, 1000) },
-      next: { ...preset.room.next, instructions: (preset.room.next.instructions || DEFAULT_NEXT_INSTRUCTIONS).slice(0, 1000) },
+      route: { ...preset.room.route, instructions: preset.room.route.instructions || DEFAULT_ROUTE_INSTRUCTIONS },
+      next: { ...preset.room.next, instructions: preset.room.next.instructions || DEFAULT_NEXT_INSTRUCTIONS },
     } : null,
   }
 }
@@ -63,7 +64,7 @@ onPluginChanged(pluginId => {
   for (const controller of active.get(pluginId) ?? []) controller.abort(new PluginError('플러그인이 바뀌었거나 꺼졌어.', 409))
 })
 
-async function execute<T>(pluginId: string, input: { profileId: number; timeoutMs: number }, authorized: Authorized, authorize: Authorize, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
+async function execute<T>(pluginId: string, input: { profileId: number; timeoutMs?: number }, authorized: Authorized, authorize: Authorize, run: (signal: AbortSignal) => Promise<T>): Promise<T> {
   const controllers = active.get(pluginId) ?? new Set<AbortController>()
   if (controllers.size >= 4) throw new PluginError('플러그인 판단 4개가 실행 중이야. 완료 후 다시 시도해줘.', 429)
   const controller = new AbortController()
@@ -72,20 +73,18 @@ async function execute<T>(pluginId: string, input: { profileId: number; timeoutM
   const check = () => {
     if (authorize(input.profileId).plugin.digest !== authorized.plugin.digest) throw new PluginError('플러그인 버전이 바뀌었어.', 409)
   }
-  const timeout = setTimeout(() => controller.abort(new PluginError('판단 제한 시간을 넘었어.', 408)), input.timeoutMs)
+  const timeout = input.timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(pluginLlmFailure(new DOMException('', 'TimeoutError'), { deadline: 'judge', timeoutMs: input.timeoutMs })), input.timeoutMs)
   const permissions = setInterval(() => {
     try { check() } catch (error) { controller.abort(error) }
   }, 1000)
-  timeout.unref(); permissions.unref()
+  timeout?.unref(); permissions.unref()
   try {
-    const result = await run(controller.signal)
+    const result = await withJudgeCallerSettings({ timeoutMs: input.timeoutMs }, () => run(controller.signal))
     controller.signal.throwIfAborted()
     check()
     return result
   } catch (error) {
-    if (controller.signal.aborted) throw controller.signal.reason
-    if (error instanceof PluginError) throw error
-    throw new PluginError(JUDGE_FAILED)
+    throw pluginLlmFailure(controller.signal.aborted ? controller.signal.reason : error)
   } finally {
     clearTimeout(timeout); clearInterval(permissions)
     controllers.delete(controller)
@@ -95,6 +94,7 @@ async function execute<T>(pluginId: string, input: { profileId: number; timeoutM
 
 /** Authorization stays in pluginLlm, shared with replies, assets and profile discovery. */
 export function callPluginJudge(pluginId: string, method: 'decide' | 'judgeTurn', raw: unknown, authorize: Authorize): Promise<PluginLlmDecision | PluginJudgeTurn> {
+  pluginLlmInputBytes(raw)
   if (method === 'decide') {
     const input = decideSchema.parse(raw)
     const authorized = authorize(input.profileId)
@@ -106,10 +106,10 @@ export function callPluginJudge(pluginId: string, method: 'decide' | 'judgeTurn'
     return execute(pluginId, input, authorized, authorize, async signal => {
       try {
         const run = await askJudge(connection, input.state, questions, signal, { purpose: 'judge', profileId: input.profileId })
-        return { engine: connection.engine, model: run.model.slice(0, 200), answers: Object.fromEntries(run.answers), error: run.answers.size < questions.length ? JUDGE_FAILED : null }
-      } catch {
+        return { engine: connection.engine, model: run.model, answers: Object.fromEntries(run.answers), error: run.answers.size < questions.length ? JUDGE_FAILED : null }
+      } catch (error) {
         signal.throwIfAborted()
-        return { engine: connection.engine, model: connection.model, answers: {}, error: JUDGE_FAILED }
+        return { engine: connection.engine, model: connection.model, answers: {}, error: pluginLlmFailure(error).message }
       }
     })
   }
@@ -142,7 +142,7 @@ export function callPluginJudge(pluginId: string, method: 'decide' | 'judgeTurn'
       withheld: run.results.filter(result => result.action === 'withheld').flatMap(result => result.tools),
       followUp: input.stage === 'after' && run.results.some(result => result.action === 'follow-up'),
       items: run.results.map(({ itemId, name, verdict, probability, action }) => ({ itemId, name, verdict, probability, action })),
-      error: run.error ? JUDGE_FAILED : null,
+      error: run.error ? pluginLlmFailure(new Error(run.error)).message : null,
     }
   })
 }

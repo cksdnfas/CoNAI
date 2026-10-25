@@ -34,8 +34,13 @@ test('workflow LLM nodes: model resolution, chat-path requests, usage, new nodes
   const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
   const { buildModelUsage } = await import('../src/services/codex-chat/modelUsage')
   const { APPEARANCE_DRAFT_PROMPT } = await import('../src/services/codex-chat/chatAppearanceDraft')
-  const { readCodexExecUsage } = await import('../src/services/codexMessageService')
-  const { resolveWorkflowLlm } = await import('../src/services/graph-workflow-executor/workflow-llm-runtime')
+  const { readCodexExecUsage, codexMessageExecArgs, codexMessagePrompt } = await import('../src/services/codexMessageService')
+  const codexPrompt = 'PRIVATE_PROMPT'.repeat(4000)
+  const codexArgs = codexMessageExecArgs({ prefixArgs: ['cli.js'], sandbox: 'read-only', lastMessagePath: 'reply.txt', model: 'model', reasoningEffort: 'high', imagePaths: ['image.png'] })
+  assert.deepEqual(codexArgs, ['cli.js', 'exec', '--skip-git-repo-check', '--ephemeral', '--sandbox', 'read-only', '--json', '--output-last-message', 'reply.txt', '--model', 'model', '-c', 'model_reasoning_effort="high"', '--image', 'image.png', '--', '-'])
+  assert.ok(codexMessagePrompt({ prompt: codexPrompt }).includes(codexPrompt))
+  assert.ok(!codexArgs.join(' ').includes('PRIVATE_PROMPT'))
+  const { resolveWorkflowLlm, workflowCodexRequest, workflowLlmBudget } = await import('../src/services/graph-workflow-executor/workflow-llm-runtime')
   const { executeCallLlmNode } = await import('../src/services/graph-workflow-executor/system-llm-operations')
   const { buildChatProfileReplyMessages } = await import('../src/services/graph-workflow-executor/system-llm-node-operations')
   const { LLM_NODE_HANDLERS } = await import('../src/services/graph-workflow-executor/system-llm-node-handlers')
@@ -99,6 +104,13 @@ test('workflow LLM nodes: model resolution, chat-path requests, usage, new nodes
     assert.equal(viaProfile.engine, 'api')
     assert.equal(viaProfile.engine === 'api' && viaProfile.model, 'qwen3')
     assert.equal(viaProfile.engine === 'api' && viaProfile.profileGeneration.temperature, 0.9)
+    if (viaProfile.engine === 'api' && viaProfile.profile) {
+      const direct = { ...viaProfile, profile: { ...viaProfile.profile, contextTokens: 4096 }, profileGeneration: { ...viaProfile.profileGeneration, maxTokens: 8192 } }
+      assert.equal(workflowLlmBudget(direct).contextTokens, 4096)
+      assert.equal(workflowLlmBudget(direct).outputReserve, 8192)
+      assert.equal(workflowLlmBudget(direct).admissionReserve, 256, 'large profile output caps are not fully booked at admission')
+      assert.equal(workflowLlmBudget({ ...direct, profile: { ...direct.profile, llmRuntime: 'pi' } }).contextTokens, null, 'Pi ignores the hidden stale manual context field')
+    }
     const rowOverProfile = resolveWorkflowLlm({ profileId: sera.id, modelSlotId: gemma })
     assert.equal(rowOverProfile.engine === 'api' && rowOverProfile.model, 'gemma-4', 'a row replaces an API profile\'s model')
     assert.equal(rowOverProfile.engine === 'api' && rowOverProfile.profileGeneration.temperature, 0.9, 'and keeps its options')
@@ -106,8 +118,15 @@ test('workflow LLM nodes: model resolution, chat-path requests, usage, new nodes
     const viaClaude = resolveWorkflowLlm({ profileId: claude.id, modelSlotId: gemma })
     assert.equal(viaClaude.engine, 'claude-code', 'a Claude Code profile keeps its engine')
     assert.equal(viaClaude.engine === 'claude-code' && viaClaude.model, 'sonnet')
+    assert.equal(workflowLlmBudget({ ...viaClaude, profile: { ...claude, contextTokens: 1024 } }).contextTokens, null)
     const viaCodex = resolveWorkflowLlm({ profileId: codex.id })
     assert.deepEqual(viaCodex.engine === 'codex' && [viaCodex.model, viaCodex.reasoningEffort], ['gpt-5.5', 'high'])
+    assert.equal(viaCodex.engine, 'codex')
+    if (viaCodex.engine === 'codex') {
+      assert.equal(workflowLlmBudget({ ...viaCodex, profile: { ...codex, contextTokens: 1024 } }).contextTokens, null)
+      assert.equal(workflowCodexRequest({ target: { profileId: codex.id }, prompt: 'hi', timeoutMs: 900000 }, viaCodex).timeoutMs, 900000)
+      assert.equal(workflowCodexRequest({ target: { profileId: codex.id }, prompt: 'hi' }, viaCodex).timeoutMs, undefined)
+    }
 
     assert.throws(() => resolveWorkflowLlm({ profileId: off.id }), /꺼진 프로필/)
     assert.throws(() => resolveWorkflowLlm({ profileId: 99999 }), /채팅 프로필을 찾을 수 없어/)

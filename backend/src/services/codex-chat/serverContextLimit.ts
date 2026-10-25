@@ -26,6 +26,12 @@ const known = new Map<string, { tokens: number | null; until: number }>()
 const pending = new Map<string, Promise<number | null>>()
 const keyOf = (target: Pick<ChatCompletionTarget, 'providerName' | 'model'>) => `${target.providerName}\u0000${target.model}`
 
+/** Synchronous admission/preview: reuse discovery and refusals, never initiate network I/O. */
+export function cachedServerContextLimit(target: Pick<ChatCompletionTarget, 'providerName' | 'model'>): number | null {
+  const cached = known.get(keyOf(target))
+  return cached && Date.now() < cached.until ? cached.tokens : null
+}
+
 /** A context size the server named in an error ("… exceeds the available context size (8192 tokens)"). */
 export function learnServerContextLimit(target: Pick<ChatCompletionTarget, 'providerName' | 'model'>, errorText: string) {
   const match = /context[^0-9]{0,60}\(?\s*(\d{3,7})\s*(?:tokens)?\)?/i.exec(errorText.replace(/request \(\d+ tokens\)/i, ''))
