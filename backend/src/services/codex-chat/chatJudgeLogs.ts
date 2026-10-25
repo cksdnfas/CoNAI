@@ -31,6 +31,7 @@ type RunRow = {
   request: string | null
   tools_called: string | null
   follow_up_message_id: number | null
+  source: string | null
 }
 
 type ItemRow = {
@@ -99,6 +100,8 @@ export type NewJudgeRun = {
   error: string | null
   request: unknown
   items: JudgeLogItem[]
+  /** The plugin name for a plugin's run. */
+  source?: string | null
 }
 
 export const ChatJudgeLogStore = {
@@ -106,9 +109,9 @@ export const ChatJudgeLogStore = {
     const db = getUserSettingsDb()
     pruneOld()
     return db.transaction(() => {
-      const result = db.prepare(`INSERT INTO chat_judge_runs (thread_id, profile_id, preset_id, stage, message_id, reply_id, engine, provider_name, model, latency_ms, tokens, error, request)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(run.threadId, run.profileId, run.presetId, run.stage, run.messageId, run.replyId, run.engine, run.providerName, run.model,
-        Math.round(run.latencyMs), run.tokens ?? null, run.error, run.request === undefined ? null : JSON.stringify(run.request))
+      const result = db.prepare(`INSERT INTO chat_judge_runs (thread_id, profile_id, preset_id, stage, message_id, reply_id, engine, provider_name, model, latency_ms, tokens, error, request, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(run.threadId, run.profileId, run.presetId, run.stage, run.messageId, run.replyId, run.engine, run.providerName, run.model,
+        Math.round(run.latencyMs), run.tokens ?? null, run.error, run.request === undefined ? null : JSON.stringify(run.request), run.source ?? null)
       const runId = Number(result.lastInsertRowid)
       const insert = db.prepare(`INSERT INTO chat_judge_items (run_id, item_id, name, probability, confidence, choice, verdict, decided_by, action, tools) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       for (const item of run.items) insert.run(runId, item.itemId, item.name, item.probability, item.confidence, item.choice, item.verdict, item.decidedBy, item.action, item.tools.length ? JSON.stringify(item.tools) : null)
@@ -162,6 +165,7 @@ export const ChatJudgeLogStore = {
         createdAt: run.created_at,
         threadId: run.thread_id,
         threadTitle: run.thread_title,
+        source: run.source ?? null,
         profileId: run.profile_id,
         profileName: run.profile_name,
         presetId: run.preset_id,

@@ -157,7 +157,7 @@ parentPort.on('message', async (message) => {
     const entry = pending.get(message.id);
     if (!entry) return;
     pending.delete(message.id);
-    if (message.error !== undefined) entry.reject(new Error(message.error));
+    if (message.error !== undefined) entry.reject(Object.assign(new Error(message.error), message.status === undefined ? {} : { status: message.status }));
     else entry.resolve(message.value);
     return;
   }
@@ -216,7 +216,7 @@ function failAll(server: Server, message: string) {
 }
 
 async function answerCall(server: Server, message: { id: number; method: string; params: Record<string, unknown>; invocation: string | null }) {
-  const reply = (outcome: { value?: unknown; error?: string }) => server.worker?.postMessage({ type: 'result', id: message.id, ...outcome })
+  const reply = (outcome: { value?: unknown; error?: string; status?: number }) => server.worker?.postMessage({ type: 'result', id: message.id, ...outcome })
   try {
     const invocation = message.invocation ? server.invocations.get(message.invocation) : undefined
     // A delayed handler must never inherit the enabling administrator after its caller's lease ended.
@@ -250,7 +250,10 @@ async function answerCall(server: Server, message: { id: number; method: string;
       reply({ value: tools.map(tool => ({ name: tool.name, description: tool.description ?? '', inputSchema: tool.inputSchema })) })
     } else reply({ error: `Unknown call: ${message.method}` })
   } catch (error) {
-    reply({ error: error instanceof Error ? error.message : String(error) })
+    // The HTTP-like status crosses with the message so a module can tell a rejection (version change, bad input,
+    // busy) from a model failure; invalid input arrives as 400.
+    const status = error instanceof PluginError ? error.status : error instanceof Error && error.name === 'ZodError' ? 400 : undefined
+    reply({ error: error instanceof Error ? error.message : String(error), ...(status === undefined ? {} : { status }) })
   }
 }
 

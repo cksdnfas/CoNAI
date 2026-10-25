@@ -257,11 +257,11 @@ export async function runJudgeItems(setup: JudgeSetup, profile: ChatProfile, ite
 }
 
 /** One run in the judge log (best effort: a failed write never fails the turn). Returns its id, 0 when not written. */
-export function logJudgeRun(params: { setup: Pick<JudgeSetup, 'preset' | 'providerName' | 'model'>; threadId: number | null; profileId: number | null; stage: ChatJudgeRunStage; messageId: number | null; replyId: string | null; run: JudgeRun }) {
+export function logJudgeRun(params: { setup: Pick<JudgeSetup, 'preset' | 'providerName' | 'model'>; threadId: number | null; profileId: number | null; stage: ChatJudgeRunStage; messageId: number | null; replyId: string | null; run: JudgeRun; source?: string }) {
   const { setup, run } = params
   try {
     return ChatJudgeLogStore.add({
-      threadId: params.threadId, profileId: params.profileId, presetId: setup.preset.id, stage: params.stage, messageId: params.messageId, replyId: params.replyId,
+      threadId: params.threadId, source: params.source ?? null, profileId: params.profileId, presetId: setup.preset.id, stage: params.stage, messageId: params.messageId, replyId: params.replyId,
       engine: run.connection?.engine ?? 'typesafe', providerName: setup.providerName, model: run.connection?.model ?? setup.model,
       latencyMs: run.latencyMs, tokens: run.tokens, error: run.error, request: run.request, items: run.results,
     })

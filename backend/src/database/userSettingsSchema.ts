@@ -909,6 +909,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
   )`);
   const judgeRunColumns = (db.prepare('PRAGMA table_info(chat_judge_runs)').all() as Array<{ name: string }>).map((column) => column.name);
   if (!judgeRunColumns.includes('tokens')) db.exec('ALTER TABLE chat_judge_runs ADD COLUMN tokens INTEGER');
+  // The plugin a run outside a chat came from (its name when logged); null for chat turns and asset reviews.
+  if (!judgeRunColumns.includes('source')) db.exec('ALTER TABLE chat_judge_runs ADD COLUMN source TEXT');
   // One row per model request (llmUsage.ts), for the LLM dashboard. No foreign keys: usage outlives a deleted chat.
   db.exec(`CREATE TABLE IF NOT EXISTS llm_usage_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -22,7 +22,7 @@ const decideSchema = z.object({
   questions: z.array(z.discriminatedUnion('kind', [
     z.object({
       ...question, kind: z.literal('choice'),
-      options: z.array(z.object({ id, description: z.string(), yes: z.boolean().default(true) }).strict()).min(2).max(16)
+      options: z.array(z.object({ id, description: z.string(), yes: z.boolean().default(true) }).strict()).min(2)
         .refine(options => new Set(options.map(option => option.id)).size === options.length, 'option ids must be unique'),
     }).strict(),
     z.object({ ...question, kind: z.literal('yesno'), criteria: criteria.optional() }).strict(),
@@ -57,7 +57,7 @@ export function pluginJudgeSettings(profile: ChatProfile): PluginLlmProfile['jud
   }
 }
 
-type Authorized = { profile: ChatProfile; plugin: { digest: string } }
+type Authorized = { profile: ChatProfile; plugin: { digest: string; definition: { name: string } } }
 type Authorize = (profileId: number) => Authorized
 const active = new Map<string, Set<AbortController>>()
 onPluginChanged(pluginId => {
@@ -134,7 +134,7 @@ export function callPluginJudge(pluginId: string, method: 'decide' | 'judgeTurn'
     }), signal, { usage: { purpose: 'judge', profileId: profile.id } })
     signal.throwIfAborted()
     // The admin judge log keeps the real error as native turns do; only the bounded message leaves the bridge.
-    logJudgeRun({ setup, threadId: null, profileId: profile.id, stage: input.stage, messageId: null, replyId: null, run })
+    logJudgeRun({ setup, threadId: null, profileId: profile.id, stage: input.stage, messageId: null, replyId: null, run, source: authorized.plugin.definition.name })
     return {
       presetId: preset.id, engine: connection.engine, model: connection.model,
       directive: run.results.filter(result => result.action === 'offered').map(result => items.find(item => item.id === result.itemId)?.directive ?? '').filter(Boolean).join('\n'),

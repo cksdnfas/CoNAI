@@ -99,7 +99,7 @@ function LogRow({ run }: { run: ChatJudgeLogRun }) {
         <span className="tabular-nums text-xs text-muted-foreground">{formatDateTime(parseServerDate(run.createdAt), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
         <span className="min-w-0">
           <span className="block truncate font-medium">{run.profileName || (run.profileId === null ? t({ ko: '그룹 방', en: 'Group room' }) : `#${run.profileId}`)}</span>
-          <span className="block truncate text-xs text-muted-foreground">{run.threadTitle || (run.threadId === null ? t({ ko: '자산 묶음', en: 'Asset batch' }) : `#${run.threadId}`)} · {judgeStageLabel(run.stage, t)}</span>
+          <span className="block truncate text-xs text-muted-foreground">{run.threadTitle || (run.source ? `${t({ ko: '플러그인', en: 'Plugin' })} · ${run.source}` : run.threadId === null ? t({ ko: '자산 묶음', en: 'Asset batch' }) : `#${run.threadId}`)} · {judgeStageLabel(run.stage, t)}</span>
         </span>
         <span className="flex min-w-0 flex-wrap items-center gap-1.5">
           {run.items.map((item) => (

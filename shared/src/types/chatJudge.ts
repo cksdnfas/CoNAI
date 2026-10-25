@@ -168,9 +168,11 @@ export type ChatJudgeLogItem = ChatJudgeItemResult & { outcome: ChatJudgeOutcome
 export type ChatJudgeLogRun = {
   id: number
   createdAt: string
-  /** Null for a run outside a chat (an asset review). */
+  /** Null for a run outside a chat (an asset review or a plugin's turn). */
   threadId: number | null
   threadTitle: string
+  /** The plugin name for a plugin's run; null for chats and asset reviews. */
+  source: string | null
   /** Null for a group room's own runs (route / next). */
   profileId: number | null
   profileName: string
