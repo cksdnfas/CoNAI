@@ -25,6 +25,8 @@ import { onPluginChanged, pluginDb, PluginError, sha256 } from './pluginStore'
 import { refreshPluginProfileRun, runPluginProfile } from './pluginProfileRun'
 import { requireResearchProfile } from '../codex-chat/chatResearch'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { usableBlocks } from '../codex-chat/chatBlockState'
+import { callPluginJudge, pluginJudgeSettings } from './pluginJudge'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 const inputSchema = z.object({
@@ -99,6 +101,11 @@ export function listPluginLlmProfiles(pluginId: string, requester: McpRequester 
       assetVersion: images ? `${profile.updatedDate}:${profile.avatarHash ?? ''}:${profile.backgroundHash ?? ''}:${profile.referenceHash ?? ''}` : null,
       avatarCrop: images ? profile.avatarCrop : null,
       assets: { avatar: images && Boolean(profile.avatarHash || profile.avatar), background: images && Boolean(profile.backgroundHash || profile.background), reference: images && Boolean(profile.referenceHash) },
+      judge: pluginJudgeSettings(profile),
+      statusBlocks: usableBlocks(profile.style.blocks).map(block => ({
+        key: block.key, name: block.name ?? block.key,
+        fields: block.fields.map(field => ({ name: field.name, label: field.label ?? field.name, min: field.min, max: field.max, step: field.step, values: field.values, readonly: field.readonly })),
+      })),
     }))
 }
 
@@ -208,7 +215,9 @@ function registerJob() {
           if (Buffer.byteLength(JSON.stringify(output)) > 60 * 1024) throw new PluginError('번역 결과가 너무 커. 항목을 나눠줘.', 413)
           return output
         }
-        const messages = buildChatProfileReplyMessages({ profile, message: input.message, history: input.history || null, userName: input.userName, useLorebooks: input.useLorebooks, loreOwner: fileOwnerKey(requester.accountId), translate: !!input.translation })
+        // Stateless JSON is never folded into chat display blocks; their fenced-block guidance conflicts with JSON mode.
+        const replyProfile = input.structuredOutput === undefined ? profile : { ...profile, style: { ...profile.style, blocks: [] } }
+        const messages = buildChatProfileReplyMessages({ profile: replyProfile, message: input.message, history: input.history || null, userName: input.userName, useLorebooks: input.useLorebooks, loreOwner: fileOwnerKey(requester.accountId), translate: !!input.translation })
         if (input.structuredOutput !== undefined) {
           const instruction = buildJsonInstruction('json', typeof input.structuredOutput === 'string' ? input.structuredOutput : JSON.stringify(input.structuredOutput))
           const system = messages.find(message => message.role === 'system' && typeof message.content === 'string')
@@ -302,6 +311,7 @@ export function callPluginLlm(pluginId: string, requester: McpRequester | undefi
   if (method === 'profiles') return listPluginLlmProfiles(pluginId, requester)
   if (method === 'asset') return readPluginProfileAsset(pluginId, requester, args)
   if (method === 'start') return startPluginLlmJob(pluginId, requester, args)
+  if (method === 'decide' || method === 'judgeTurn') return callPluginJudge(pluginId, method, args, profileId => profileAccess(pluginId, requester, profileId))
   const { jobId } = z.object({ jobId: z.string().uuid() }).strict().parse(args)
   if (method === 'get') return getPluginLlmJob(pluginId, requester, jobId)
   if (method === 'cancel') return cancelPluginLlmJob(pluginId, requester, jobId)

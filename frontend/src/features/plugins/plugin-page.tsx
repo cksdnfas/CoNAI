@@ -370,7 +370,7 @@ function PluginFrame({ instance, onDirty, embed }: { instance: PluginInstance; o
           })
           return { subscribed: args?.enabled !== false }
         }
-        if (['llm.profiles', 'llm.asset', 'llm.start', 'llm.get', 'llm.cancel'].includes(message.method ?? '')) return request(`/instances/${instance.id}/llm/${message.method!.split('.')[1]}`, 'POST', args ?? {})
+        if (['llm.profiles', 'llm.asset', 'llm.start', 'llm.get', 'llm.cancel', 'llm.decide', 'llm.judgeTurn'].includes(message.method ?? '')) return request(`/instances/${instance.id}/llm/${message.method!.split('.')[1]}`, 'POST', args ?? {})
         if (['workspace.list', 'workspace.read', 'workspace.stat'].includes(message.method ?? '')) return request(`/instances/${instance.id}/workspace/${message.method!.split('.')[1]}`, 'POST', args)
         if (message.method === 'workspace.proposeChanges' || message.method === 'media.proposeProcess') {
           const suffix = message.method === 'workspace.proposeChanges' ? 'workspace/changes' : 'media-proposals'

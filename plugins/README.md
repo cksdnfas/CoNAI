@@ -289,11 +289,13 @@ Two more hooks report every generation queue job (any service, any caller, inclu
 
 ### Profile replies
 
-Enabled plugins can generate a single character reply through `api.llm`; server modules use `conai.llm`. Both share account/profile checks and runtime jobs. A server module and file permissions are not required for page LLM calls. Shared contracts are `PluginLlmInput`, `PluginLlmProfile` and `PluginLlmJob` in `@conai/shared`.
+Enabled plugins can generate a single character reply or ask a profile's judge through `api.llm`; server modules use `conai.llm`. Both share account/profile checks. Replies use runtime jobs; judge calls are awaited directly. A server module and file permissions are not required for page LLM calls. Shared contracts live in `@conai/shared`.
 
 | Method | Contract |
 | --- | --- |
-| `llm.profiles()` | Enabled profiles this account can use: `id`, `name`, `tagline`, `engine`, `appearance` (image-prompt tags of the character's look), `assetVersion`, `avatarCrop`, `assets: {avatar, background, reference}`. No prompts, image bytes or credentials. Normal chat users do not need administrator access. |
+| `llm.profiles()` | Enabled profiles this account can use: `id`, `name`, `tagline`, `engine`, `appearance` (image-prompt tags of the character's look), `translation`, `assetVersion`, `avatarCrop`, `assets`, plus bounded `judge` settings and `statusBlocks` below. No persona prompts, image bytes or credentials. Normal chat users do not need administrator access. |
+| `llm.decide(input)` | Await `PluginLlmDecision` for plugin-supplied typed questions on the profile's judge model; no preset or thread required. |
+| `llm.judgeTurn(input)` | Await `PluginJudgeTurn` from the profile's own preset items for a supplied conversation; no native chat thread. |
 | `llm.asset({profileId, kind?, maxSize?})` | Reads a native profile image with the caller's profile and `images.view` permissions. `kind`: `avatar` (default), `background`, `reference`. `maxSize`: 64–512, default 256. Returns `PluginProfileAsset` with `state` (`ready`, `missing`, `hidden`), `version`, `crop`, and, when ready, base64 `data`, `mimeType: image/webp`, `width`, `height`. |
 | `llm.start(input)` | Starts one asynchronous reply and immediately returns a job. Required: `requestId`, `profileId`, `message`. Optional: `history`, `userName`, `useLorebooks`, `maxTokens`, `timeoutMs`, `mode`, `model`, `structuredOutput`. |
 | `llm.get(jobId)` | Returns `status`, `cancelRequested`, `result`, `error`, `expiresAt` and the request/profile IDs. A completed result contains `text`, `truncated`, `model`, `engine`. |
@@ -309,6 +311,21 @@ const state = await api.llm.get(job.jobId);
 if (state.status === 'completed') showReply(state.result.text);
 // A stop button uses: await api.llm.cancel(job.jobId).
 ```
+
+### Stateless profile judging
+
+Both SDK surfaces expose `decide` and `judgeTurn`. Pages check the host feature `llm.decide`; server modules have no feature API and check `typeof conai.llm.decide === 'function'`. An `after` turn returns the empty result without a model call when the preset's follow-ups are off (`followUp.maxConsecutive` 0), as do stages without askable items. Older hosts/SDK copies do not provide these methods. `model:'judge'` on `llm.start` remains a persona/free-text reply, **not** preset judging.
+
+- `PluginLlmDecideInput`: `{profileId, state, questions, timeoutMs?}`. Strict JSON objects throughout; `state` must be an object serialized within 16 KiB. `questions` has 1–8 unique `{id, kind:'choice'|'yesno', instructions, options?, criteria?}` items. IDs (including option IDs) match `/^[a-zA-Z][\w-]{0,39}$/`; instructions have 1–1000 characters. Choice requires 2–16 unique `{id, description, yes?}` options (description ≤300 characters; `yes` defaults true); yes/no forbids options. Optional criteria is `{yes, no}`, each ≤300 characters. Option IDs are judge labels.
+- `PluginLlmDecision`: `{engine:'typesafe'|'llm', model, answers, error}`; each `answers[questionId]` is `{probability, confidence:number|null, choice:string|null, distribution:Record<string,number>|null}`. Unanswered questions are absent. Partial/provider failures return a sanitized non-null `error`, preserving available answers.
+- `PluginJudgeTurnInput`: `{profileId, stage:'before'|'after', user, conversation, actions?, timeoutMs?}`. `user` and entry `name` are 1–100 characters. `conversation` has 1–40 strict `{from:'user'|'character', name, text}` entries; text is 1–4000 characters and is cut with native `cutForJudge` (1500 characters plus ellipsis). `actions` has at most 40 strings; before-stage tool patterns are asked only if an action matches (trailing `*` matches a prefix). Non-tool items are still asked. Each preset item reads its own recent-message window and uses native thresholds/uncertain escalation.
+- `PluginJudgeTurn`: `{presetId, engine, model, directive, offered, withheld, followUp, items, error}`. `directive` joins yes-item directives with newlines; `offered`/`withheld` contain **tool patterns**, not expanded action names. `items` contains `{itemId,name,verdict,probability,action}`; failed items can have null probability. `followUp` only reports an after-stage follow-up decision; the host executes no actions and schedules no follow-up. No preset or usable judge model returns exactly `{presetId:null,engine:null,model:null,directive:'',offered:[],withheld:[],followUp:false,items:[],error:null}` without a model call. Runs use the existing judge log with `threadId:null` and the profile ID; logging is best effort.
+
+Both resolve `profile.judgeSlotId ?? preset?.modelSlotId ?? ModelSlotStore.routeId('judge')`, supporting TypeSafe and LLM connections. `decide` without a usable selected model throws HTTP 409 with message prefix `판단 모델이 없어` (PluginError has no error-code field). Both require chat enabled, the caller's chat permission, and an enabled usable profile. There is no additional approval or saved-input revision. Each plugin shares at most four in-flight judge calls; overflow is 429. `timeoutMs` is 1000–120000, default 60000. Timeout, plugin change/disable and revoked access abort requests; usage is tagged `purpose:'judge', profileId`. These calls have no runtime-job/request ID, durable recovery or automatic retry; retrying can incur another model call. Page request cancellation is not a judge-job cancellation API; set the input deadline explicitly.
+
+`PluginLlmProfile.judge` is `{presetId,presetName,available,followUp,fields,room}`. Without a preset its settings are null; availability independently means a judge connection resolves. Follow-up exposes `{maxConsecutive,delaySeconds,directive}`, fields `{enabled,threshold,window}`, room `{window,route:{enabled,minProbability,instructions},next:{enabled,continueThreshold,instructions}}`. Empty room instructions use native defaults; exposed strings are capped at 1000 characters. `statusBlocks` contains enabled usable `{key,name,fields:[{name,label,min,max,step,values,readonly}]}` definitions only, never templates, CSS or block instructions.
+
+Text replies with `structuredOutput` omit display-block fence guidance only; persona, lore and opted-in translation remain unchanged. Ordinary text and native chat threads keep their display blocks.
 
 ### Execute a profile with its tools
 

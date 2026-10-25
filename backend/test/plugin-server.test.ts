@@ -156,16 +156,20 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     let replyText = '안녕, 이웃!'
     let translatedReply = '{}'
     let holdTranslation = false
+    let judgeAnswers: Record<string, unknown> = {}
+    let judgeFailure = false
     const requestBodies: string[] = []
     let lastBody = ''
-    st.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+    st.mock.method(globalThis, 'fetch', async (url: unknown, init?: RequestInit) => {
       calls++; lastBody = String(init?.body)
       requestBodies.push(lastBody)
+      if (judgeFailure) throw new Error('SECRET_CREDENTIALS PRIVATE_BODY')
       if (hold || (holdTranslation && JSON.parse(lastBody).model === 'translation-model')) await new Promise<void>((_resolve, reject) => {
         const cancel = () => { aborted++; reject(init?.signal?.reason) }
         if (init?.signal?.aborted) cancel()
         else init?.signal?.addEventListener('abort', cancel, { once: true })
       })
+      if (String(url).endsWith('/v1/systemone')) return Response.json({ model: JSON.parse(lastBody).model, answers: judgeAnswers, usage: { prompt_tokens: 12, completion_tokens: 4 } })
       return Response.json({ choices: [{ message: { content: JSON.parse(lastBody).model === 'translation-model' ? translatedReply : replyText }, finish_reason: 'stop' }], usage: { prompt_tokens: 12, completion_tokens: 4 } })
     })
     await registry.installPlugin(packageOf(folder, m => { m.id = 'llm-bridge' }, { 'server.mjs': `export function activate(conai) {
@@ -234,7 +238,13 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
     const { fileOwnerKey } = await import('../src/services/fileStoreService')
     const profileBook = OwnedLorebookStore.create(fileOwnerKey(adminId), { name: 'Plugin profile lore', entries: [{ title: '마을 출신', content: 'FILE_BACKED_PROFILE_LORE', constant: true }] })
-    ChatProfileStore.update(profile.id, { lorebookIds: [profileBook.id] })
+    const { ChatSharedBlockStore } = await import('../src/services/codex-chat/chatDisplayBlocks')
+    const statusBlock = ChatSharedBlockStore.create({ name: '상태', block: {
+      key: 'resident_status', enabled: true, instruction: 'PRIVATE_BLOCK_INSTRUCTION', example: '{"mood":"calm"}',
+      template: '<div>PRIVATE_BLOCK_TEMPLATE</div>', css: 'PRIVATE_BLOCK_CSS',
+      fields: [{ name: 'mood', label: '기분', values: ['calm', 'happy'], readonly: false }],
+    } })
+    ChatProfileStore.update(profile.id, { lorebookIds: [profileBook.id], blockIds: [statusBlock.id] })
     const first = await bridge('start', input) as { jobId: string }
     const again = await bridge('start', input) as { jobId: string }
     assert.equal(first.jobId, again.jobId)
@@ -245,6 +255,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.match(lastBody, /village resident/)
     assert.match(lastBody, /FILE_BACKED_PROFILE_LORE/, 'stateless plugin calls load the profile shared file-backed lore through the authenticated requester')
     assert.match(lastBody, /PRIVATE_INPUT/)
+    assert.match(lastBody, /PRIVATE_BLOCK_INSTRUCTION/, 'plain text keeps the profile display block guidance')
     assert.match(lastBody, /"max_tokens":100/)
     assert.doesNotMatch(RuntimeJobStore.getParamsJson(first.jobId)!, /PRIVATE_INPUT|반가워/)
     const usage = user.getUserSettingsDb().prepare('SELECT purpose, profile_id, reply_id FROM llm_usage_events ORDER BY id DESC LIMIT 1').get() as { purpose: string; profile_id: number; reply_id: string }
@@ -257,6 +268,8 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await until(() => llm.getPluginLlmJob('llm-bridge', guest, structured.jobId).status === 'completed', 'structured reply')
     assert.deepEqual(llm.getPluginLlmJob('llm-bridge', guest, structured.jobId).result?.json, { action: 'wave' })
     assert.match(lastBody, /JSON/)
+    assert.doesNotMatch(lastBody, /PRIVATE_BLOCK_INSTRUCTION|resident_status/, 'forced JSON omits only display blocks')
+    assert.match(lastBody, /village resident|FILE_BACKED_PROFILE_LORE/)
     const translationRow = ModelSlotStore.ensure('plugin-test', 'translation-model')!
     ChatProfileStore.update(profile.id, { translationSlotId: translationRow, translationModelLanguage: 'en', translationDisplayLanguage: 'ko' })
     replyText = '{"say":"I remember the potion.","action":"wait","sourceIds":[7]}'
@@ -298,6 +311,119 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.match(lastBody, /"model":"judge-model"/)
     assert.match(lastBody, /village resident/, 'the profile prompt goes along')
     ModelSlotStore.setDefaultJudge(judgeRow, false)
+
+    // Stateless judging shares the native judge engine and profile authorization, not the free-text judge mode.
+    const { ChatJudgePresetStore } = await import('../src/services/codex-chat/chatJudgePresets')
+    const { ChatJudgeLogStore } = await import('../src/services/codex-chat/chatJudgeLogs')
+    const { DEFAULT_ROUTE_INSTRUCTIONS, DEFAULT_NEXT_INSTRUCTIONS } = await import('../src/services/codex-chat/chatJudgeDefaults')
+    const decideInput = { profileId: profile.id, state: { turn: 1 }, questions: [
+      { id: 'pick', kind: 'choice', instructions: 'Choose an action.', options: [{ id: 'stay', description: 'Remain here.' }, { id: 'go', description: 'Go away.', yes: false }] },
+      { id: 'ready', kind: 'yesno', instructions: 'Ready?', criteria: { yes: 'Ready.', no: 'Not ready.' } },
+    ] }
+    const turnInput = { profileId: profile.id, stage: 'before', user: '방문자', actions: ['wave', 'leave'], conversation: [
+      { from: 'user', name: '방문자', text: 'old' },
+      { from: 'character', name: profile.name, text: 'hello' },
+      { from: 'user', name: '방문자', text: 'x'.repeat(2000) },
+    ] }
+    const decide = (value: unknown = decideInput) => llm.callPluginLlm('llm-bridge', guest, 'decide', value)
+    const turn = (value: unknown = turnInput) => llm.callPluginLlm('llm-bridge', guest, 'judgeTurn', value)
+    const noJudgeCalls = calls
+    for (const invalid of [
+      { ...decideInput, extra: true }, { ...decideInput, state: [] }, { ...decideInput, state: { text: '한'.repeat(6000) } },
+      { ...decideInput, timeoutMs: 999 }, { ...decideInput, questions: [] },
+      { ...decideInput, questions: Array(9).fill(decideInput.questions[0]) },
+      { ...decideInput, questions: [decideInput.questions[0], decideInput.questions[0]] },
+      ...['_bad', 'a'.repeat(41), 'a.b'].map(id => ({ ...decideInput, questions: [{ ...decideInput.questions[0], id }] })),
+      { ...decideInput, questions: [{ ...decideInput.questions[0], options: Array(17).fill({ id: 'a', description: '' }) }] },
+      { ...decideInput, questions: [{ ...decideInput.questions[0], options: [{ id: 'a', description: '' }, { id: 'a', description: '' }] }] },
+      { ...decideInput, questions: [{ ...decideInput.questions[0], options: [{ id: 'bad.id', description: '' }, { id: 'a', description: '' }] }] },
+      { ...decideInput, questions: [{ ...decideInput.questions[0], options: undefined }] },
+      { ...decideInput, questions: [{ ...decideInput.questions[0], kind: 'yesno' }] },
+      { ...decideInput, questions: [{ ...decideInput.questions[1], instructions: 'x'.repeat(1001) }] },
+    ]) assert.throws(() => decide(invalid))
+    assert.throws(() => decide(), (error: any) => error.status === 409 && error.message.startsWith('판단 모델이 없어'))
+    for (const method of ['decide', 'judgeTurn']) {
+      const value = method === 'decide' ? decideInput : turnInput
+      assert.throws(() => llm.callPluginLlm('llm-bridge', nobody, method, value), /권한/)
+      assert.throws(() => llm.callPluginLlm('llm-bridge', guest, method, { ...value, profileId: off.id }), /프로필/)
+    }
+    const emptyTurn = { presetId: null, engine: null, model: null, directive: '', offered: [], withheld: [], followUp: false, items: [], error: null }
+    assert.deepEqual(await bridge('judgeTurn', turnInput), emptyTurn)
+    assert.equal(calls, noJudgeCalls, 'invalid, unauthorized and unconfigured turns never reach a provider')
+    ExternalApiProvider.create({ provider_name: 'plugin-decision', display_name: 'decision', provider_type: 'decision_typesafe', base_url: 'https://decision.invalid', is_enabled: true, additional_config: {} })
+    const decisionRow = ModelSlotStore.ensure('plugin-decision', 'decision-model', { kinds: ['decision_typesafe'] })!
+    const presetRow = ModelSlotStore.ensure('plugin-test', 'preset-judge')!
+    const judgePreset = ChatJudgePresetStore.create({ name: 'Plugin judge', modelSlotId: presetRow, items: [
+      { id: 'offer', name: '인사', stage: 'before', instructions: 'Greet?', tools: ['wave*'], directive: 'Say hello.', window: 2 },
+      { id: 'withhold', name: '이동', stage: 'before', instructions: 'Leave?', tools: ['leave'], window: 2 },
+      { id: 'absent', name: '숨김', stage: 'before', instructions: 'Missing action?', tools: ['missing'], window: 2 },
+      { id: 'note', name: '안내', stage: 'before', instructions: 'Be kind?', directive: 'Be kind.', window: 2 },
+      { id: 'follow', name: '후속', stage: 'after', instructions: 'Follow up?', window: 2 },
+    ], followUp: { maxConsecutive: 2, delaySeconds: 3, directive: 'd'.repeat(1100) } })
+    ChatProfileStore.update(profile.id, { judgePresetId: judgePreset.id, judgeSlotId: decisionRow })
+    ModelSlotStore.setDefaultJudge(judgeRow, true)
+    judgeAnswers = {
+      pick: { type: 'choice', choice: 'stay', probabilities: { stay: 0.8, go: 0.2 }, confidence: 0.9 },
+      ready: { type: 'noul', noul: 0.7 },
+    }
+    const decision = await bridge('decide', decideInput) as import('@conai/shared').PluginLlmDecision
+    assert.equal(decision.engine, 'typesafe'); assert.equal(decision.model, 'decision-model')
+    assert.deepEqual(decision.answers.pick, { probability: 0.8, confidence: 0.9, choice: 'stay', distribution: { stay: 0.8, go: 0.2 } })
+    assert.equal(decision.answers.ready.probability, 0.7); assert.equal(decision.error, null)
+    assert.deepEqual(Object.keys(JSON.parse(lastBody).questions.pick.criteria), ['stay', 'go'], 'option ids become native labels')
+    const judgeUsage = user.getUserSettingsDb().prepare('SELECT purpose, profile_id FROM llm_usage_events ORDER BY id DESC LIMIT 1').get() as any
+    assert.equal(judgeUsage.purpose, 'judge'); assert.equal(judgeUsage.profile_id, profile.id)
+    ChatProfileStore.update(profile.id, { judgeSlotId: null })
+    replyText = '{"pick":{"stay":0.25,"go":0.75},"ready":{"yes":0.9,"no":0.1}}'
+    assert.equal(((await decide()) as import('@conai/shared').PluginLlmDecision).model, 'preset-judge')
+    ChatJudgePresetStore.update(judgePreset.id, { modelSlotId: null })
+    assert.equal(((await decide()) as import('@conai/shared').PluginLlmDecision).model, 'judge-model')
+    ChatProfileStore.update(profile.id, { judgePresetId: null })
+    assert.equal(((await decide()) as import('@conai/shared').PluginLlmDecision).engine, 'llm', 'decide needs no preset')
+    const configuredCalls = calls
+    assert.deepEqual(await turn(), emptyTurn, 'a model without a preset still cannot judge a turn')
+    assert.equal(calls, configuredCalls)
+    ModelSlotStore.setDefaultJudge(judgeRow, false)
+    ChatProfileStore.update(profile.id, { judgePresetId: judgePreset.id })
+    assert.deepEqual(await turn(), emptyTurn, 'a preset without a model does not call a provider either')
+    ChatProfileStore.update(profile.id, { judgeSlotId: decisionRow })
+    judgeAnswers = { offer: { type: 'noul', noul: 0.95 }, withhold: { type: 'noul', noul: 0.05 }, note: { type: 'noul', noul: 0.95 }, follow: { type: 'noul', noul: 0.95 } }
+    const steered = await bridge('judgeTurn', turnInput) as import('@conai/shared').PluginJudgeTurn
+    assert.deepEqual(steered.offered, ['wave*']); assert.deepEqual(steered.withheld, ['leave'])
+    assert.equal(steered.directive, 'Say hello.\nBe kind.'); assert.equal(steered.followUp, false)
+    assert.deepEqual(steered.items.map(item => item.itemId), ['offer', 'withhold', 'note'])
+    const judgedState = JSON.parse(lastBody).state
+    assert.equal(judgedState.character, profile.name); assert.equal(judgedState.user, '방문자')
+    assert.equal(judgedState.conversation.length, 2); assert.equal(judgedState.conversation[1].text, `${'x'.repeat(1500)}…`)
+    assert.equal(((await turn({ ...turnInput, stage: 'after' })) as import('@conai/shared').PluginJudgeTurn).followUp, true)
+    assert.ok(ChatJudgeLogStore.list({ profileId: profile.id }).some(run => run.threadId === null && run.presetId === judgePreset.id))
+    const exposed = (await bridge('profiles') as import('@conai/shared').PluginLlmProfile[]).find(item => item.id === profile.id)!
+    assert.equal(exposed.judge.available, true); assert.equal(exposed.judge.presetName, 'Plugin judge')
+    assert.equal(exposed.judge.followUp?.directive.length, 1000)
+    assert.equal(exposed.judge.room?.route.instructions, DEFAULT_ROUTE_INSTRUCTIONS.slice(0, 1000))
+    assert.equal(exposed.judge.room?.next.instructions, DEFAULT_NEXT_INSTRUCTIONS.slice(0, 1000))
+    assert.deepEqual(exposed.statusBlocks, [{ key: 'resident_status', name: '상태', fields: [{ name: 'mood', label: '기분', min: null, max: null, step: null, values: ['calm', 'happy'], readonly: false }] }])
+    assert.doesNotMatch(JSON.stringify(exposed), /PRIVATE_BLOCK_|systemPrompt|apiKey/)
+    judgeAnswers = { ready: { type: 'noul', noul: 0.6 } }
+    const partial = await decide() as import('@conai/shared').PluginLlmDecision
+    assert.deepEqual(Object.keys(partial.answers), ['ready']); assert.ok(partial.error)
+    judgeFailure = true
+    const failed = await decide() as import('@conai/shared').PluginLlmDecision
+    assert.deepEqual(failed.answers, {}); assert.ok(failed.error); assert.doesNotMatch(failed.error!, /SECRET|PRIVATE_BODY/)
+    judgeFailure = false; hold = true; aborted = 0
+    const judging = [decide(), turn(), decide(), turn()]
+    const stoppedJudging = Promise.allSettled(judging)
+    await until(() => aborted === 0 && calls >= configuredCalls + 8, 'concurrent judge requests start')
+    await assert.rejects(async () => decide(), (error: any) => error.status === 429 && /4개/.test(error.message))
+    await registry.setPluginEnabled('llm-bridge', false, adminId)
+    assert.ok((await stoppedJudging).every(result => result.status === 'rejected'))
+    assert.equal(aborted, 4)
+    await registry.setPluginEnabled('llm-bridge', true, adminId)
+    await until(() => runtime.pluginServerStatus('llm-bridge').state === 'ready', 'judge bridge re-enabled')
+    await assert.rejects(async () => decide({ ...decideInput, timeoutMs: 1000 }), /제한 시간/)
+    hold = false; aborted = 0
+    ChatProfileStore.update(profile.id, { judgePresetId: null, judgeSlotId: null, blockIds: [] })
+    replyText = '안녕, 이웃!'
 
     // The same token means another account's independent turn, never its private result.
     const other = llm.startPluginLlmJob('llm-bridge', admin, input)

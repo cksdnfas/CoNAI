@@ -131,6 +131,8 @@ export function connectPlugin(handlers = {}) {
       /** Profile replies using the current account; no server module required. Reuse requestId only for the same turn. */
       api.llm = {
         profiles: options => api.request('llm.profiles', {}, options),
+        decide: (input, options) => api.request('llm.decide', input, options),
+        judgeTurn: (input, options) => api.request('llm.judgeTurn', input, options),
         asset: (input, options) => api.request('llm.asset', input, options),
         start: (input, options) => api.request('llm.start', input, options),
         get: (jobId, options) => api.request('llm.get', { jobId }, options),

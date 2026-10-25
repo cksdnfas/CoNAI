@@ -3,6 +3,7 @@ import type { ChatPageValue } from './chatPage'
 import type { GenerationLayoutSurface } from '../constants/generationLayout'
 import type { WorkspaceOperation } from './workspace'
 import type { PluginPackageReview } from './pluginAuthoring'
+import type { ChatJudgeItemResult } from './chatJudge'
 
 /** Legacy manifest metadata; installed plugins use native account permissions instead of capability grants. */
 export type PluginCapability = 'files.read' | 'files.write' | 'files.media' | 'workspace.read' | 'workspace.write' | 'workspace.media' | 'media.process' | 'server'
@@ -115,6 +116,46 @@ export type PluginLlmProfile = {
   translation?: { enabled: boolean; modelLanguage: 'en' | 'ko' | 'ja' | 'zh'; displayLanguage: 'en' | 'ko' | 'ja' | 'zh' }
   assetVersion: string | null; avatarCrop: { x: number; y: number; scale: number } | null
   assets: { avatar: boolean; background: boolean; reference: boolean }
+  judge: {
+    presetId: number | null; presetName: string | null; available: boolean
+    followUp: { maxConsecutive: number; delaySeconds: number; directive: string } | null
+    fields: { enabled: boolean; threshold: number; window: number } | null
+    room: {
+      window: number
+      route: { enabled: boolean; minProbability: number; instructions: string }
+      next: { enabled: boolean; continueThreshold: number; instructions: string }
+    } | null
+  }
+  statusBlocks: Array<{ key: string; name: string; fields: Array<{
+    name: string; label: string; min: number | null; max: number | null; step: number | null; values: string[]; readonly: boolean
+  }> }>
+}
+/** Stateless questions on the profile's judge model; no preset or chat thread is required. */
+export type PluginLlmDecideInput = {
+  profileId: number; state: Record<string, unknown>; timeoutMs?: number
+  questions: Array<{
+    id: string; instructions: string; criteria?: { yes: string; no: string }
+  } & (
+    | { kind: 'choice'; options: Array<{ id: string; description: string; yes?: boolean }> }
+    | { kind: 'yesno'; options?: never }
+  )>
+}
+export type PluginLlmDecision = {
+  engine: 'typesafe' | 'llm'; model: string
+  answers: Record<string, { probability: number; confidence: number | null; choice: string | null; distribution: Record<string, number> | null }>
+  error: string | null
+}
+/** Run the profile's preset items, without executing actions or scheduling a follow-up. */
+export type PluginJudgeTurnInput = {
+  profileId: number; stage: 'before' | 'after'; user: string
+  conversation: Array<{ from: 'user' | 'character'; name: string; text: string }>
+  actions?: string[]; timeoutMs?: number
+}
+export type PluginJudgeTurn = {
+  presetId: number | null; engine: 'typesafe' | 'llm' | null; model: string | null
+  directive: string; offered: string[]; withheld: string[]; followUp: boolean
+  items: Array<Pick<ChatJudgeItemResult, 'itemId' | 'name' | 'verdict' | 'probability' | 'action'>>
+  error: string | null
 }
 /** Bounded native profile image; convert data to a Blob URL in sandboxed pages. */
 export type PluginProfileAsset = {
