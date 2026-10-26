@@ -120,7 +120,7 @@ export async function discardPluginProfileRun(pluginId: string, requester: McpRe
   if (deletingRooms.has(namespace) || llmRequestSlotBusy(room.lock) || CodexChatService.isRunning(run.threadId)) {
     throw new PluginError('프로필 방이 실행 중이야. 완료되거나 취소가 끝난 뒤 답변을 버려줘.', 409)
   }
-  deletingRooms.add(namespace)
+  // The held room lock alone keeps forgetRooms out; other profiles of the same namespace keep running.
   let release: (() => void) | undefined
   try {
     release = await acquireLlmRequestSlot(room.lock, 1, undefined, { fifo: true })
@@ -130,7 +130,6 @@ export async function discardPluginProfileRun(pluginId: string, requester: McpRe
     return CodexChatService.deleteMessages(requester, run.threadId, [wakeMessageId, ...run.messageIds])
   } finally {
     release?.()
-    deletingRooms.delete(namespace)
   }
 }
 

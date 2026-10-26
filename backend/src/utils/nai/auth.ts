@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { ExternalApiProvider } from '../../models/ExternalApiProvider';
 
 const NAI_PROVIDER_NAME = 'novelai';
@@ -30,6 +31,22 @@ function persistToken(token: string): void {
     api_key: token,
     base_url: NAI_PROVIDER_BASE_URL,
     is_enabled: true,
+  });
+}
+
+/**
+ * NovelAI 이미지 API의 구독 정보 조회로 토큰을 검증한다. 유효하지 않으면 axios 오류를 던진다.
+ */
+export async function verifyToken(token: string): Promise<void> {
+  await axios.get(`${NAI_PROVIDER_BASE_URL}/user/subscription`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Origin': 'https://novelai.net',
+      'Referer': 'https://novelai.net',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    },
+    timeout: 10000
   });
 }
 

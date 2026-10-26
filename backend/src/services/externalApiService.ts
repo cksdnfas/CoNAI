@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import type { ProviderType } from '../types/externalApi';
 import { listTypesafeModels } from './judge/typesafeClient';
+import { verifyToken as verifyNaiToken } from '../utils/nai/auth';
 
 /**
  * External API Service
@@ -226,6 +227,15 @@ export class ExternalApiService {
         switch (providerName) {
           case 'civitai':
             return apiKey ? this.testCivitaiConnection(apiKey) : false;
+          case 'novelai':
+            if (!apiKey) return false;
+            try {
+              await verifyNaiToken(apiKey);
+              return true;
+            } catch (error) {
+              console.error('NovelAI connection test failed:', error);
+              return false;
+            }
           default:
             console.warn(`No connection test available for provider: ${providerName}`);
             return false;

@@ -1,7 +1,6 @@
 import { requireAdmin } from '../../middleware/authMiddleware';
 import { Router, Request, Response } from 'express';
-import axios from 'axios';
-import { setToken } from '../../utils/nai/auth';
+import { setToken, verifyToken } from '../../utils/nai/auth';
 
 const router = Router();
 
@@ -31,19 +30,7 @@ router.post('/login-with-token', requireAdmin, async (req: Request<{}, {}, Token
 
     // 토큰 유효성 검증 - NovelAI 이미지 API로 구독 정보 조회
     try {
-      await axios.get(
-        'https://image.novelai.net/user/subscription',
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Origin': 'https://novelai.net',
-            'Referer': 'https://novelai.net',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          },
-          timeout: 10000
-        }
-      );
+      await verifyToken(token);
 
       // 토큰이 유효하면 저장 및 반환
       setToken(token);
