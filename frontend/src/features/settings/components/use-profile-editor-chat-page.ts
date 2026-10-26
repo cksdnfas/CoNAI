@@ -20,17 +20,17 @@ const DRAFT_KEYS = {
   name: 'character', tagline: 'character', systemPrompt: 'character', promptSections: 'character', greeting: 'character', alternateGreetings: 'character', authorNote: 'character',
   openingHistory: 'character', greetingPosition: 'character',
   appearance: 'appearance', engine: 'model', modelSlotId: 'model', lorebookIds: 'memory', blockIds: 'look', isEnabled: 'character',
-  temperature: 'model', maxTokens: 'model', visionEnabled: 'model', contentRatingMode: 'model', contentRatingTierId: 'model',
+  temperature: 'model', maxTokens: 'model', contextTokens: 'model', reasoningBudgetTokens: 'model', visionEnabled: 'model', contentRatingMode: 'model', contentRatingTierId: 'model',
   summaryEnabled: 'model', summarySlotId: 'model', summaryTriggerTurns: 'model', summaryPrompt: 'model',
   translationSlotId: 'model', translationModelLanguage: 'model', translationDisplayLanguage: 'model', translationInstructions: 'model',
   suggestEnabled: 'model', suggestSlotId: 'model', suggestProfileId: 'model', judgePresetId: 'model', judgeSlotId: 'model',
-  contextTurns: 'memory', contextTokens: 'memory', loreRecursionDepth: 'memory', allowLoreProposals: 'memory', linkedFiles: 'memory',
+  contextTurns: 'memory', loreRecursionDepth: 'memory', allowLoreProposals: 'memory', linkedFiles: 'memory',
   toolOutputLimit: 'tools', agentDescription: 'tools',
 } as const satisfies Partial<Record<keyof Draft, ProfileEditorSection>>
 type DraftKey = keyof typeof DRAFT_KEYS
 
 /** Keys a page value of 0 clears (the action schema has no null): a role's model row, a picked id or an optional cap. */
-const ZERO_CLEARS = new Set<DraftKey>(['summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'suggestProfileId', 'contentRatingTierId', 'contextTokens', 'maxTokens'])
+const ZERO_CLEARS = new Set<DraftKey>(['summarySlotId', 'translationSlotId', 'suggestSlotId', 'judgeSlotId', 'judgePresetId', 'suggestProfileId', 'contentRatingTierId', 'contextTokens', 'maxTokens', 'reasoningBudgetTokens'])
 const LANGUAGES = CHAT_TRANSLATION_LANGUAGES.map((language) => language.id)
 
 /** A filled page value as the draft holds it: 0 (or −1 for temperature) for "unset", linked files with their write flag. */
@@ -130,7 +130,9 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     ...(blocks?.length ? { blockIds: pageArray(pageChoice(ids(blocks)), 20) } : {}),
     isEnabled: { type: 'boolean' },
     temperature: { ...pageNumber(-1, CHAT_PROFILE_LIMITS.temperature.max), description: '-1: default' },
-    maxTokens: { ...pageNumber(0, CHAT_PROFILE_LIMITS.maxTokens.max, true), description: '0: default' },
+    maxTokens: { ...pageNumber(0, CHAT_PROFILE_LIMITS.maxTokens.max, true), description: '0: default; a ceiling, cut to the room left' },
+    contextTokens: { ...pageNumber(0, CHAT_PROFILE_LIMITS.contextTokens.max, true), description: `Max context (API LLM, direct and pi). 0: the server's own size (no token cap when it does not say); otherwise at least ${CHAT_PROFILE_LIMITS.contextTokens.min}, and the smaller of it and the server's size counts` },
+    reasoningBudgetTokens: { ...pageNumber(0, undefined, true), description: '0: not sent. API LLM reasoning_budget_tokens, Claude Code thinking budget' },
     visionEnabled: { type: 'boolean' },
     contentRatingMode: pageChoice(['model', 'custom']),
     contentRatingTierId: { ...pageNumber(0, undefined, true), description: '0: none' },
@@ -150,7 +152,6 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     suggestProfileId: { ...pageNumber(0, undefined, true), description: '0: none' },
     judgePresetId: { ...pageNumber(0, undefined, true), description: '0: none' },
     contextTurns: pageNumber(CHAT_PROFILE_LIMITS.contextTurns.min, CHAT_PROFILE_LIMITS.contextTurns.max, true),
-    contextTokens: { ...pageNumber(0, CHAT_PROFILE_LIMITS.contextTokens.max, true), description: `0: none; otherwise at least ${CHAT_PROFILE_LIMITS.contextTokens.min}` },
     loreRecursionDepth: { ...pageNumber(CHAT_PROFILE_LIMITS.loreRecursionDepth.min, CHAT_PROFILE_LIMITS.loreRecursionDepth.max, true), description: '0: off' },
     allowLoreProposals: { type: 'boolean' },
     linkedFiles: pageArray(pageObject({ id: pageText(32), write: { type: 'boolean' } }, ['id']), 20),
@@ -173,11 +174,11 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
         greeting: cut(draft.greeting), alternateGreetings: draft.alternateGreetings.map(cut), authorNote: draft.authorNote, appearance: cut(draft.appearance ?? ''),
         openingHistory: draft.openingHistory.map((message) => ({ role: message.role, content: cut(message.content) })), greetingPosition: draft.greetingPosition,
         engine: draft.engine, modelSlotId: draft.modelSlotId, lorebookIds: draft.lorebookIds, blockIds: draft.blockIds, isEnabled: draft.isEnabled,
-        temperature: draft.temperature, maxTokens: draft.maxTokens, visionEnabled: draft.visionEnabled, contentRatingMode: draft.contentRatingMode, contentRatingTierId: draft.contentRatingTierId,
+        temperature: draft.temperature, maxTokens: draft.maxTokens, contextTokens: draft.contextTokens, reasoningBudgetTokens: draft.reasoningBudgetTokens, visionEnabled: draft.visionEnabled, contentRatingMode: draft.contentRatingMode, contentRatingTierId: draft.contentRatingTierId,
         summaryEnabled: draft.summaryEnabled, summarySlotId: draft.summarySlotId, summaryTriggerTurns: draft.summaryTriggerTurns, summaryPrompt: brief(draft.summaryPrompt),
         translationSlotId: draft.translationSlotId, translationModelLanguage: draft.translationModelLanguage, translationDisplayLanguage: draft.translationDisplayLanguage, translationInstructions: brief(draft.translationInstructions),
         suggestEnabled: draft.suggestEnabled, suggestSlotId: draft.suggestSlotId, suggestProfileId: draft.suggestProfileId, judgePresetId: draft.judgePresetId, judgeSlotId: draft.judgeSlotId,
-        contextTurns: draft.contextTurns, contextTokens: draft.contextTokens, loreRecursionDepth: draft.loreRecursionDepth, allowLoreProposals: draft.allowLoreProposals,
+        contextTurns: draft.contextTurns, loreRecursionDepth: draft.loreRecursionDepth, allowLoreProposals: draft.allowLoreProposals,
         linkedFiles: draft.linkedFiles.map((link) => ({ id: link.id, write: link.write })), toolOutputLimit: draft.toolOutputLimit,
         agentEnabled: draft.agentEnabled, agentDescription: draft.agentDescription,
         // Grants (and agent use) stay manual. Engine fills above use the editor's engine switch patch.

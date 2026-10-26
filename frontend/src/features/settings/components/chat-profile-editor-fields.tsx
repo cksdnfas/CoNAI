@@ -9,9 +9,10 @@ export type PatchDraft = (next: Partial<Draft>) => void
 /** Switching engines clears options belonging to the previous engine in both the editor and assistant. */
 export function enginePatch(engine: Draft['engine'], current: Draft): Partial<Draft> {
   if (engine === current.engine) return {}
+  // The token budget means the same thinking budget for API LLM and Claude Code; Codex takes none.
   return engine === 'codex' || engine === 'claude'
-    ? { engine, modelSlotId: null, model: engine === 'claude' ? 'sonnet' : '', reasoningEffort: '', reasoningBudgetTokens: null, visionEnabled: engine === 'claude' || current.visionEnabled }
-    : { engine, model: '', reasoningEffort: '', reasoningBudgetTokens: null }
+    ? { engine, modelSlotId: null, model: engine === 'claude' ? 'sonnet' : '', reasoningEffort: '', reasoningBudgetTokens: engine === 'codex' ? null : current.reasoningBudgetTokens, visionEnabled: engine === 'claude' || current.visionEnabled }
+    : { engine, model: '', reasoningEffort: '' }
 }
 
 export function judgePresetPatch(judgePresetId: number | null): Partial<Draft> {

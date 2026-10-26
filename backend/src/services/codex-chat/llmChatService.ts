@@ -520,10 +520,11 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
       },
     } : undefined
     if (turn.engineSession?.runtime === 'pi') {
-      // The same connection and model, run by pi, which folds its session at the context the server runs with.
+      // The same connection and model, run by pi, which folds its session at the profile's context (its 최대
+      // 컨텍스트 or what the server runs with; the first reply waits for the lookup the sizing above started).
       target.transport = 'pi'
       target.piSession = engineSession
-      target.contextWindow = await serverContextLimit(target)
+      target.contextWindow = profile.contextTokens ?? await serverContextLimit(target)
       target.piVision = profile.visionEnabled
     } else if (engineSession) target.claudeSession = engineSession
     const directive = judgeDirectiveText(judged, withheld)

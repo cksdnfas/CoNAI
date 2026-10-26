@@ -117,6 +117,53 @@ function ContentRatingField({ draft, patch, slots }: { draft: Draft; patch: Patc
   )
 }
 
+/**
+ * 최대 컨텍스트 · 최대 출력 토큰 · 추론 토큰 예산, as far as the engine applies them: API LLM (direct and pi) all three;
+ * Claude Code output and thinking budget (it holds its own context); Codex none (model and effort only).
+ */
+function TokenFields({ draft, patch, serverDefault }: { draft: Draft; patch: PatchDraft; serverDefault: string }) {
+  const { t } = useI18n()
+  if (draft.engine === 'codex') {
+    return <p className="text-xs text-muted-foreground">{t({ ko: 'Codex는 컨텍스트를 스스로 관리하고, 출력 토큰·추론 예산 대신 추론 강도만 받아.', en: 'Codex manages its own context and takes only a reasoning effort, not output or reasoning token limits.' })}</p>
+  }
+  const isLlm = draft.engine === 'llm'
+  return (
+    <EditorGroup label={t({ ko: '토큰', en: 'Tokens' })}>
+      <div className="grid gap-3 md:grid-cols-3">
+        {isLlm ? (
+          <Field
+            label={t({ ko: '최대 컨텍스트', en: 'Max context' })}
+            info={t({ ko: '요청 하나가 넣을 수 있는 전체 토큰(입력+출력). 비우면 서버가 알려준 크기를 쓰고, 서버도 모르면 제한 없이 보내. 정하면 서버 크기와 둘 중 작은 값을 써. 대화·요약·도구 설명·답변 몫이 이 안에 맞춰지고, pi는 이 크기에서 세션을 압축해.', en: 'All tokens one request may hold (input + output). Empty uses the size the server reports, and no cap when it does not say. When set, the smaller of it and the server size counts. Conversation, summary, tool descriptions and the reply fit inside it; pi folds its session at it.' })}
+          >
+            <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} {...CHAT_PROFILE_LIMITS.contextTokens} value={draft.contextTokens} placeholder={t({ ko: '서버 크기', en: 'Server size' })} onValueCommit={(value) => patch({ contextTokens: numberOrNull(value) })} />
+          </Field>
+        ) : null}
+        <Field
+          label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}
+          info={t({ ko: '추론과 답변을 합친 상한. 미리 비워두는 자리가 아니라 상한이라, 컨텍스트에 남은 자리가 더 작으면 그만큼으로 줄여서 보내. 채팅 헤더의 컨텍스트에서 따로 정하면 그쪽이 우선이야.', en: 'Ceiling for reasoning and answer combined. It is a ceiling, not a reservation: when less room is left in the context, the request goes with that much. A value set per chat under Context in the chat header takes precedence.' })}
+        >
+          <div className="flex items-center gap-2">
+            {isLlm && thinkingMayFillCap(draft.reasoningEffort, draft.maxTokens) ? (
+              <Tip content={t({ ko: '추론이 켜진 채 최대 출력 토큰이 {n}이면 생각만 하다 끝날 수 있어', en: 'With reasoning on, a cap of {n} tokens may run out while still thinking' }, { n: draft.maxTokens ?? 0 })} side="top">
+                <span className="text-warning"><TriangleAlert className="size-4" aria-hidden /></span>
+              </Tip>
+            ) : null}
+            <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} {...CHAT_PROFILE_LIMITS.maxTokens} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
+          </div>
+        </Field>
+        <Field
+          label={t({ ko: '추론 토큰 예산', en: 'Reasoning token budget' })}
+          info={isLlm
+            ? t({ ko: '추론에 쓸 토큰 예산(reasoning_budget_tokens). 비우면 보내지 않아. 추론 강도가 끔이면 쓰지 않아.', en: 'Token budget for reasoning (reasoning_budget_tokens). Not sent when empty. Unused while reasoning effort is off.' })
+            : t({ ko: 'Claude의 생각 토큰 예산(MAX_THINKING_TOKENS). 비우면 Claude 기본값. 추론 강도가 끔이면 쓰지 않아.', en: 'Claude thinking budget (MAX_THINKING_TOKENS). Empty keeps Claude’s default. Unused while reasoning effort is off.' })}
+        >
+          <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} min={1} value={draft.reasoningBudgetTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ reasoningBudgetTokens: numberOrNull(value) })} />
+        </Field>
+      </div>
+    </EditorGroup>
+  )
+}
+
 /** The engine and its model, then the roles other models play (summary, translation, suggestions, judge). */
 export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsReady, suggestWriters, codexModels, claudeModels, advanced }: {
   draft: Draft
@@ -195,19 +242,6 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
               <Field label={t({ ko: '온도', en: 'Temperature' })}>
                 <NumberStepperInput variant="settings" allowEmpty step={0.1} {...CHAT_PROFILE_LIMITS.temperature} value={draft.temperature} placeholder={serverDefault} onValueCommit={(value) => patch({ temperature: numberOrNull(value) })} />
               </Field>
-              <Field
-                label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}
-                info={t({ ko: '추론과 답변을 합친 한도. 채팅의 헤더의 컨텍스트에서 따로 정하면 그쪽이 우선이야.', en: 'Limit for reasoning and answer combined. A value set per chat under Context in the chat header takes precedence.' })}
-              >
-                <div className="flex items-center gap-2">
-                  {thinkingMayFillCap(draft.reasoningEffort, draft.maxTokens) ? (
-                    <Tip content={t({ ko: '추론이 켜진 채 최대 출력 토큰이 {n}이면 생각만 하다 끝날 수 있어', en: 'With reasoning on, a cap of {n} tokens may run out while still thinking' }, { n: draft.maxTokens ?? 0 })} side="top">
-                      <span className="text-warning"><TriangleAlert className="size-4" aria-hidden /></span>
-                    </Tip>
-                  ) : null}
-                  <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} {...CHAT_PROFILE_LIMITS.maxTokens} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
-                </div>
-              </Field>
               <Field label={t({ ko: '추론 강도', en: 'Reasoning effort' })}>
                 <Select variant="settings" value={draft.reasoningEffort} onChange={(event) => patch({ reasoningEffort: event.target.value as ChatProfileInput['reasoningEffort'] ?? '' })}>
                   <option value="">{serverDefault}</option>
@@ -217,12 +251,8 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
                   <option value="high">high</option>
                 </Select>
               </Field>
-              {advanced ? (
-                <Field label={t({ ko: '추론 토큰 예산', en: 'Reasoning token budget' })} info={t({ ko: 'reasoning_budget_tokens. 비우면 보내지 않아.', en: 'reasoning_budget_tokens. Not sent when empty.' })}>
-                  <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} min={1} value={draft.reasoningBudgetTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ reasoningBudgetTokens: numberOrNull(value) })} />
-                </Field>
-              ) : null}
             </div>
+            <TokenFields draft={draft} patch={patch} serverDefault={serverDefault} />
             <SwitchLine label={t({ ko: '이미지를 볼 수 있는 모델', en: 'Model can see images' })} checked={draft.visionEnabled} onCheckedChange={(visionEnabled) => patch({ visionEnabled })} />
             {draft.visionEnabled ? <ContentRatingField draft={draft} patch={patch} slots={slots} /> : null}
             {advanced ? (
@@ -255,10 +285,8 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
             <Field label={t({ ko: '추론 강도', en: 'Reasoning effort' })}>
               <ClaudeEffortSelect value={draft.reasoningEffort} model={draft.model} models={claudeModels} onChange={(reasoningEffort) => patch({ reasoningEffort })} />
             </Field>
-            <Field label={t({ ko: '최대 출력 토큰', en: 'Max output tokens' })}>
-              <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} {...CHAT_PROFILE_LIMITS.maxTokens} value={draft.maxTokens} placeholder={serverDefault} onValueCommit={(value) => patch({ maxTokens: numberOrNull(value) })} />
-            </Field>
           </div>
+          <TokenFields draft={draft} patch={patch} serverDefault={serverDefault} />
           <SwitchLine label={t({ ko: '이미지 첨부와 조회', en: 'Image attachments and viewing' })} checked={draft.visionEnabled} onCheckedChange={(visionEnabled) => patch({ visionEnabled })} />
           {draft.visionEnabled ? <ContentRatingField draft={draft} patch={patch} slots={slots} /> : null}
         </>
@@ -271,6 +299,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
               <CodexReasoningSelect variant="settings" value={draft.reasoningEffort} model={draft.model} models={codexModels} onChange={(reasoningEffort) => patch({ reasoningEffort })} />
             </Field>
           </div>
+          <TokenFields draft={draft} patch={patch} serverDefault={serverDefault} />
           {/* Codex models always see images. */}
           <ContentRatingField draft={draft} patch={patch} slots={slots} />
         </>

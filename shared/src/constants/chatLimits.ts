@@ -38,5 +38,11 @@ export const CHAT_PROFILE_DEFAULTS = {
 /** Model ↔ tool round trips one reply may take, app-wide (ChatSettings.toolRoundLimit). */
 export const TOOL_ROUND_LIMITS = { min: 1, max: 200, default: 50 } as const
 
+/**
+ * Keyword lore entries one judge or plugin selection keeps, best matches first, app-wide (ChatSettings.loreSelectionLimit).
+ * Always-on entries are not counted.
+ */
+export const LORE_SELECTION_LIMITS = { min: 1, max: 100, default: 8 } as const
+
 /** Raw request captures kept per chat (ChatSettings.diagnostics.captureLimit). */
 export const CHAT_CAPTURE_LIMITS = { min: 1, max: 200, default: 20 } as const

@@ -667,7 +667,9 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     s.mock.method(ChatProfileStore, 'find', (id: number) => (id === profile.id ? live : find(id)))
     const thread = CodexChatStore.findThreadById(LlmChatService.createThread(requester, profile.id))!
     let calls = 0
-    s.mock.method(globalThis, 'fetch', async () => {
+    s.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+      // The server-size lookup (the profile's context is the smaller of its own and the server's) is not a reply request.
+      if (!String(input instanceof Request ? input.url : input).includes('/chat/completions')) return new Response('', { status: 404 })
       calls += 1
       // The budget shrinks under the reply: the request after the tool round cannot fit, whatever is cut.
       live.contextTokens = 50

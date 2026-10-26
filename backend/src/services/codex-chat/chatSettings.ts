@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { CHAT_CAPTURE_LIMITS, normalizeLoreKeyLanguage, TOOL_ROUND_LIMITS } from '@conai/shared'
+import { CHAT_CAPTURE_LIMITS, LORE_SELECTION_LIMITS, normalizeLoreKeyLanguage, TOOL_ROUND_LIMITS } from '@conai/shared'
 import { runtimePaths } from '../../config/runtimePaths'
 import { writeJsonFileAtomic } from '../../utils/jsonFile'
 
@@ -37,12 +37,21 @@ export type ChatSettings = {
    * and the model answers with what it has. Codex runs its own agent loop and has no such cap.
    */
   toolRoundLimit: number
+  /**
+   * Keyword lore entries a judge or plugin selection keeps, best matches first (plugins read it from `llm.profiles()`).
+   * Always-on entries are not counted.
+   */
+  loreSelectionLimit: number
 }
 
-export { TOOL_ROUND_LIMITS }
+export { TOOL_ROUND_LIMITS, LORE_SELECTION_LIMITS }
 
 function toolRoundLimitOf(value: unknown, fallback: number = TOOL_ROUND_LIMITS.default) {
   return Number.isInteger(value) && (value as number) >= TOOL_ROUND_LIMITS.min && (value as number) <= TOOL_ROUND_LIMITS.max ? value as number : fallback
+}
+
+function loreSelectionLimitOf(value: unknown, fallback: number = LORE_SELECTION_LIMITS.default) {
+  return Number.isInteger(value) && (value as number) >= LORE_SELECTION_LIMITS.min && (value as number) <= LORE_SELECTION_LIMITS.max ? value as number : fallback
 }
 
 export const WEB_RESEARCH_ENGINES = ['off', 'codex', 'claude'] as const
@@ -97,11 +106,12 @@ export function loadChatSettings(): ChatSettings {
     if (stored) {
       cachedSettings = { enabled: stored.enabled === true, diagnostics: diagnosticsOf(stored.diagnostics), loreAutoSave: stored.loreAutoSave !== false,
         loreKeyLanguage: stored.loreKeyLanguage === undefined ? DEFAULT_LORE_KEY_LANGUAGE : normalizeLoreKeyLanguage(stored.loreKeyLanguage),
-        webResearch: webResearchOf(stored.webResearch), piCodemode: stored.piCodemode === true, toolRoundLimit: toolRoundLimitOf(stored.toolRoundLimit) }
+        webResearch: webResearchOf(stored.webResearch), piCodemode: stored.piCodemode === true, toolRoundLimit: toolRoundLimitOf(stored.toolRoundLimit),
+        loreSelectionLimit: loreSelectionLimitOf(stored.loreSelectionLimit) }
     } else {
       // First run after the profile change: chat stays on if either old switch was on.
       const legacyEnabled = readJson(LEGACY_CODEX_SETTINGS_FILE_PATH)?.enabled === true || readJson(LEGACY_LLM_SETTINGS_FILE_PATH)?.enabled === true
-      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS }, loreAutoSave: true, loreKeyLanguage: DEFAULT_LORE_KEY_LANGUAGE, webResearch: { ...DEFAULT_WEB_RESEARCH }, piCodemode: false, toolRoundLimit: TOOL_ROUND_LIMITS.default }
+      cachedSettings = { enabled: legacyEnabled, diagnostics: { ...DEFAULT_CHAT_DIAGNOSTICS }, loreAutoSave: true, loreKeyLanguage: DEFAULT_LORE_KEY_LANGUAGE, webResearch: { ...DEFAULT_WEB_RESEARCH }, piCodemode: false, toolRoundLimit: TOOL_ROUND_LIMITS.default, loreSelectionLimit: LORE_SELECTION_LIMITS.default }
     }
   }
   return { ...cachedSettings, diagnostics: { ...cachedSettings.diagnostics }, webResearch: { ...cachedSettings.webResearch } }
@@ -112,7 +122,7 @@ export function chatToolRoundLimit() {
   return loadChatSettings().toolRoundLimit
 }
 
-export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings>; piCodemode?: boolean; toolRoundLimit?: number }): ChatSettings {
+export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings>; piCodemode?: boolean; toolRoundLimit?: number; loreSelectionLimit?: number }): ChatSettings {
   const current = loadChatSettings()
   const next: ChatSettings = {
     enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled,
@@ -122,6 +132,7 @@ export function updateChatSettings(patch: { enabled?: boolean; diagnostics?: Par
     webResearch: patch.webResearch === undefined ? current.webResearch : webResearchOf(patch.webResearch, current.webResearch),
     piCodemode: typeof patch.piCodemode === 'boolean' ? patch.piCodemode : current.piCodemode,
     toolRoundLimit: toolRoundLimitOf(patch.toolRoundLimit, current.toolRoundLimit),
+    loreSelectionLimit: loreSelectionLimitOf(patch.loreSelectionLimit, current.loreSelectionLimit),
   }
   writeJsonFileAtomic(CHAT_SETTINGS_FILE_PATH, next)
   cachedSettings = next

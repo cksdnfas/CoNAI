@@ -29,7 +29,7 @@ export function pluginLlmFailure(error: unknown, options: { measurement?: Plugin
   const classified = classifyRequestFailure(status === undefined ? error : new LlmRequestError('', status))
   if (text.startsWith('Research source access changed:')) return new PluginError('조사 자료 접근 권한이 바뀌었어. 지정 자료의 공개 상태와 권한을 확인해줘.', 403)
   if (error instanceof LlmJsonTruncatedError) return new PluginError('출력 토큰 한도에서 답변이 잘렸어. JSON을 완성하지 못했어. 출력 한도를 늘리거나 요청 범위를 줄여줘.', 422)
-  if (/context.{0,60}(?:exceed|length|window|limit|size)|maximum context|too many tokens|컨텍스트.*(?:초과|한도)|문맥.*한도/i.test(text)) {
+  if (/context.{0,60}(?:exceed|length|window|limit|size)|maximum context|too many tokens|max_tokens_exceeded|컨텍스트.*(?:초과|한도)|문맥.*한도/i.test(text)) {
     const budget = options.measurement
     const numbers = budget?.contextTokens !== null && budget?.contextTokens !== undefined
       ? ` (입력 약 ${budget.inputTokens}, 출력 예약 ${budget.outputReserve}, 설정 한도 ${budget.contextTokens} 토큰)` : ''

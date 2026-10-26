@@ -109,7 +109,7 @@ test('workflow LLM nodes: model resolution, chat-path requests, usage, new nodes
       assert.equal(workflowLlmBudget(direct).contextTokens, 4096)
       assert.equal(workflowLlmBudget(direct).outputReserve, 8192)
       assert.equal(workflowLlmBudget(direct).admissionReserve, 256, 'large profile output caps are not fully booked at admission')
-      assert.equal(workflowLlmBudget({ ...direct, profile: { ...direct.profile, llmRuntime: 'pi' } }).contextTokens, null, 'Pi ignores the hidden stale manual context field')
+      assert.equal(workflowLlmBudget({ ...direct, profile: { ...direct.profile, llmRuntime: 'pi' } }).contextTokens, 4096, 'a pi profile sets its 최대 컨텍스트 like a direct one')
     }
     const rowOverProfile = resolveWorkflowLlm({ profileId: sera.id, modelSlotId: gemma })
     assert.equal(rowOverProfile.engine === 'api' && rowOverProfile.model, 'gemma-4', 'a row replaces an API profile\'s model')

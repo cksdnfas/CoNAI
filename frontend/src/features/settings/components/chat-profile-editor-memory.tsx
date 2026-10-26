@@ -26,17 +26,11 @@ export function ChatProfileMemoryPanel({ draft, patch, lorebooks, advanced }: {
 
   return (
     <div className="space-y-4">
-      {/* Codex, Claude and pi fold their sessions at the model's own context: nothing to set here. */}
+      {/* Codex, Claude and pi keep the conversation in their sessions. The context size is on the model tab (토큰). */}
       {draft.engine === 'llm' && !isPi ? <EditorGroup label={t({ ko: '대화', en: 'Conversation' })}>
         <div className="grid gap-3 md:grid-cols-2">
-          <Field label={t({ ko: '최근 턴 수', en: 'Recent turns' })} info={t({ ko: '요청마다 보내는 최근 대화. 사용자 메시지 하나와 그 답변이 한 턴.', en: 'The recent conversation sent with each request. One user message and its reply make a turn.' })}>
+          <Field label={t({ ko: '최근 턴 수', en: 'Recent turns' })} info={t({ ko: '요청마다 보내는 최근 대화. 사용자 메시지 하나와 그 답변이 한 턴. 모델 탭의 최대 컨텍스트에 맞지 않는 오래된 턴은 빠져.', en: 'The recent conversation sent with each request. One user message and its reply make a turn. Older turns that do not fit the max context (model tab) are left out.' })}>
             <NumberStepperInput variant="settings" step={1} {...CHAT_PROFILE_LIMITS.contextTurns} value={draft.contextTurns} onValueCommit={(value) => patch({ contextTurns: numberOrNull(value) ?? draft.contextTurns })} />
-          </Field>
-          <Field
-            label={t({ ko: '컨텍스트 길이', en: 'Context length' })}
-            info={t({ ko: '토큰. 비우면 제한 없음. 정하면 시스템 프롬프트·요약·도구 설명·답변 몫을 뺀 만큼만 최근 턴을 보내.', en: 'In tokens. Empty means no limit. When set, only as many recent turns are sent as fit after the system prompt, summary, tool descriptions and the reply allowance.' })}
-          >
-            <NumberStepperInput variant="settings" allowEmpty shorthand step={1024} {...CHAT_PROFILE_LIMITS.contextTokens} value={draft.contextTokens} placeholder={t({ ko: '제한 없음', en: 'No limit' })} onValueCommit={(value) => patch({ contextTokens: numberOrNull(value) })} />
           </Field>
         </div>
       </EditorGroup> : null}

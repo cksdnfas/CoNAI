@@ -3,7 +3,7 @@ import type { ChatPageValue } from './chatPage'
 import type { GenerationLayoutSurface } from '../constants/generationLayout'
 import type { WorkspaceOperation } from './workspace'
 import type { PluginPackageReview } from './pluginAuthoring'
-import type { ChatJudgeItemResult } from './chatJudge'
+import type { ChatJudgeItemResult, ChatJudgePreset } from './chatJudge'
 
 /** Legacy manifest metadata; installed plugins use native account permissions instead of capability grants. */
 export type PluginCapability = 'files.read' | 'files.write' | 'files.media' | 'workspace.read' | 'workspace.write' | 'workspace.media' | 'media.process' | 'server'
@@ -150,6 +150,21 @@ export type PluginLlmProfile = {
   statusBlocks: Array<{ key: string; name: string; fields: Array<{
     name: string; label: string; min: number | null; max: number | null; step: number | null; values: string[]; readonly: boolean
   }> }>
+  /**
+   * Every saved profile setting as the profile editor holds it (persona prompt and sections, greetings, opening history,
+   * lore/summary/context/judge settings, style with its blocks, model rows…). Only image bytes are left out: read
+   * them with `asset()`.
+   */
+  details: Record<string, unknown>
+  /** App-wide (Settings › 채팅 › 자원 › 기억): keyword lore entries one selection keeps, best matches first. */
+  loreSelectionLimit: number
+}
+/** `llm.profile({ profileId })`: one profile with what it links, read whole. */
+export type PluginLlmProfileDetail = PluginLlmProfile & {
+  /** The profile's lorebooks (shared account books, then global ones) with every entry. */
+  lorebooks: Array<{ id: number; name: string; kind: string; entries: Array<Record<string, unknown>> }>
+  /** The judge preset the profile uses, whole; null without one. */
+  judgePreset: ChatJudgePreset | null
 }
 /** Stateless questions on the profile's judge model; no preset or chat thread is required. */
 export type PluginLlmDecideInput = {

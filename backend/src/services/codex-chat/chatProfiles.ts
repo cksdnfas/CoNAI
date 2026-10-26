@@ -37,7 +37,7 @@ const SECTION_TITLE_MAX_LENGTH = CHAT_PROFILE_TEXT_LIMITS.sectionTitle
 const PROFILE_FIELD_LABELS: Record<string, string> = {
   name: '프로필 이름', tagline: '한 줄 소개', systemPrompt: '시스템 프롬프트', greeting: '첫 인사',
   authorNote: '작가 노트', appearance: '외형', summaryPrompt: '요약 프롬프트', translationInstructions: '번역 지침',
-  temperature: '온도', maxTokens: '최대 출력 토큰', contextTurns: '대화 문맥 턴 수', contextTokens: '대화 문맥 토큰',
+  temperature: '온도', maxTokens: '최대 출력 토큰', contextTurns: '대화 문맥 턴 수', contextTokens: '최대 컨텍스트',
   summaryTriggerTurns: '요약 시작 턴 수', toolOutputLimit: '도구 출력 길이', loreRecursionDepth: '로어 재귀 깊이',
   loreScanDepth: '로어 검색 턴 수', loreTokenBudget: '로어 토큰 예산', loreDepth: '로어 삽입 깊이',
   reasoningBudgetTokens: '추론 토큰 예산', suggestProfileId: '추천 작성 프로필', suggestUserProfileId: '추천 사용자 프로필', sortOrder: '정렬 순서',
@@ -149,8 +149,12 @@ export type ChatProfile = {
   generationPresetIds: number[]
   /** LLM: characters of one tool result the model sees within a reply. */
   toolOutputLimit: number
-  /** LLM context: recent turns sent with each request, capped by `contextTokens` when set. */
+  /** LLM context: recent turns sent with each request, capped by the profile's context (profileContextTokens). */
   contextTurns: number
+  /**
+   * 최대 컨텍스트 of an API LLM profile (direct and pi): the context its requests fit in, the smaller of this and what
+   * the server says it runs with. Null: the server's size, unknown when it does not say. Claude Code / Codex: unused.
+   */
   contextTokens: number | null
   summaryEnabled: boolean
   /** Fold older turns into the summary once this many have left the window. */

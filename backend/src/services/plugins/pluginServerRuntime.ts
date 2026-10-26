@@ -131,6 +131,7 @@ const conai = Object.freeze({
   }),
   llm: Object.freeze({
     profiles: () => call('llm.profiles', {}),
+    profile: (input) => call('llm.profile', input),
     measure: (input) => call('llm.measure', input),
     decide: (input) => call('llm.decide', input),
     judgeTurn: (input) => call('llm.judgeTurn', input),

@@ -95,14 +95,23 @@ export function piToolResult(result: ChatMcpToolResult) {
 }
 
 /**
+ * The reply room in a context window: the profile's max output tokens (else a quarter of the window, at most 8192) as a
+ * ceiling, cut to half the window so a cap near the window's size still leaves the conversation room. pi folds the
+ * session before it would no longer leave this room, and sends it as the request's max_tokens.
+ */
+export function piReplyRoom(contextWindow: number, maxTokens: number | null | undefined) {
+  return Math.max(1, Math.min(maxTokens ?? Math.min(8192, Math.floor(contextWindow / 4)), Math.floor(contextWindow / 2)))
+}
+
+/**
  * The compaction budget for a context window: pi folds the memory once the context passes `window - reserve`, and
  * keeps the latest `keepRecent` tokens verbatim. Its defaults (16k / 20k) suit a large hosted model; a small local
- * context gets proportionate ones.
+ * context gets proportionate ones. The reserve always holds the reply room, so a folded session plus a full reply fits.
  */
-export function piCompactionSettings(contextWindow: number) {
+export function piCompactionSettings(contextWindow: number, maxTokens?: number | null) {
   return {
     enabled: true,
-    reserveTokens: Math.min(16_384, Math.max(1024, Math.floor(contextWindow * 0.2))),
+    reserveTokens: Math.max(Math.min(16_384, Math.max(1024, Math.floor(contextWindow * 0.2))), piReplyRoom(contextWindow, maxTokens)),
     keepRecentTokens: Math.min(20_000, Math.max(1024, Math.floor(contextWindow * 0.25))),
   }
 }
@@ -125,7 +134,7 @@ export function piModelConfig(target: ChatCompletionTarget, contextWindow: numbe
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         reasoning, contextWindow,
         compat: { maxTokensField: 'max_tokens' as const },
-        maxTokens: target.generation.maxTokens ?? Math.min(8192, Math.floor(contextWindow / 4)),
+        maxTokens: piReplyRoom(contextWindow, target.generation.maxTokens),
         ...(Object.keys(sampling).length ? { samplingParams: sampling } : {}),
       }],
     },
@@ -225,7 +234,7 @@ async function runPiChatCompletion(params: {
   if (!model) throw new Error('pi에 모델을 등록하지 못했어.')
   const system = params.messages.filter((message) => message.role === 'system').map((message) => message.content).join('\n\n')
   const settingsManager = pi.SettingsManager.inMemory({
-    compaction: params.research ? { enabled: false } : piCompactionSettings(contextWindow),
+    compaction: params.research ? { enabled: false } : piCompactionSettings(contextWindow, params.target.generation.maxTokens),
     retry: { enabled: !params.research, maxRetries: params.research ? 0 : 2, ...(params.target.timeoutMs != null ? { provider: { timeoutMs: params.target.timeoutMs } } : {}) },
     enableInstallTelemetry: false,
     cacheWarming: 'off',

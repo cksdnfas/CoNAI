@@ -4,17 +4,17 @@ import type { ChatProfile } from './chatProfiles'
 
 /**
  * The context size a local server actually runs with (llama.cpp `/props`, its `/v1/models` meta, LM Studio, OpenRouter),
- * so a profile without its own context length is not sent more than the server holds: llama.cpp refuses such a
- * request outright, and other servers drop its beginning (the character prompt). Looked up once per connection and
- * model and kept for a while; unknown stays unknown.
+ * so a profile is not sent more than the server holds: llama.cpp refuses such a request outright, and other servers
+ * drop its beginning (the character prompt). Looked up once per connection and model and kept for a while; unknown
+ * stays unknown.
  */
 const CACHE_MS = 60 * 60_000
 const LOOKUP_TIMEOUT_MS = 2500
 /**
- * Above this the server is not the limit in practice: the window keeps following the turn count, and summary chunks
- * keep their defaults instead of growing to half of a 256k context.
+ * Summary sizing stops growing here: a long chat folds in chunks sized for this context (half of it per call) rather
+ * than half of a 256k context in one call. Requests themselves fit the whole context.
  */
-export const SERVER_CONTEXT_CAP = 65_536
+export const SUMMARY_CONTEXT_CAP = 65_536
 
 /**
  * A size learned from a refusal lives shorter: behind a proxy (LiteLLM) the lookup cannot see the server, and a server
@@ -105,21 +105,31 @@ export async function serverContextLimit(target: ChatCompletionTarget): Promise<
 }
 
 /**
- * The profile as an LLM reply sizes its request: without its own context length, a server that says it holds at most
- * SERVER_CONTEXT_CAP tokens counts as that length (as if it were set on the profile). The lookup never holds a reply
- * up: it runs in the background and its answer sizes the replies after it (a refusal naming the size counts at once).
+ * The one context an API LLM profile's requests fit in, direct or through pi: its 최대 컨텍스트 setting and the size
+ * its chat model's server runs with, the smaller when both are known; null when neither is. Claude Code and Codex
+ * hold their own context, so a value left on such a profile counts for nothing. Never waits on the network: a lookup
+ * it starts sizes the requests after it (a refusal naming the size counts at once).
  */
-export function withServerContextLimit(profile: ChatProfile): ChatProfile {
-  if (profile.contextTokens !== null) return profile
+export function profileContextTokens(profile: ChatProfile): number | null {
+  if (profile.engine !== 'llm') return null
+  let learned: number | null = null
   try {
     const chat = resolveProfileModel(profile, 'chat')
-    if (!chat) return profile
-    const target = resolveChatCompletionTarget(chat.providerName, { model: chat.model })
-    const cached = known.get(keyOf(target))
-    if (!cached || Date.now() >= cached.until) void serverContextLimit(target)
-    const tokens = cached?.tokens ?? null
-    return tokens !== null && tokens <= SERVER_CONTEXT_CAP ? { ...profile, contextTokens: tokens } : profile
+    if (chat) {
+      const target = resolveChatCompletionTarget(chat.providerName, { model: chat.model })
+      const cached = known.get(keyOf(target))
+      if (!cached || Date.now() >= cached.until) void serverContextLimit(target)
+      learned = cached && Date.now() < cached.until ? cached.tokens : null
+    }
   } catch {
-    return profile
+    learned = null
   }
+  const declared = profile.contextTokens
+  return declared === null ? learned : learned === null ? declared : Math.min(declared, learned)
+}
+
+/** The profile as an LLM reply sizes its request: `contextTokens` is what profileContextTokens says. */
+export function withServerContextLimit(profile: ChatProfile): ChatProfile {
+  const contextTokens = profileContextTokens(profile)
+  return contextTokens === profile.contextTokens ? profile : { ...profile, contextTokens }
 }

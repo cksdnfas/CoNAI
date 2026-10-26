@@ -220,8 +220,8 @@ export type WorkflowLlmRequest = {
 
 /** Stateless callers share native context discovery without probing a server on every preview. */
 export function workflowLlmBudget(resolved: ResolvedWorkflowLlm, maxTokens?: number) {
-  // The editor exposes manual context only for direct API profiles; engine switches can retain hidden stale values.
-  const declared = resolved.profile?.engine === 'llm' && resolved.profile.llmRuntime !== 'pi' ? resolved.profile.contextTokens : null
+  // The profile's 최대 컨텍스트 (API LLM, direct or pi); Claude Code and Codex hold their own, so a stale value counts for nothing.
+  const declared = resolved.profile?.engine === 'llm' ? resolved.profile.contextTokens : null
   const learned = resolved.engine === 'api' ? cachedServerContextLimit(resolved) : null
   const contextTokens = declared === null ? learned : learned === null ? declared : Math.min(declared, learned)
   const maxOutputTokens = resolved.engine === 'codex' ? null : resolved.profileGeneration.maxTokens ?? null

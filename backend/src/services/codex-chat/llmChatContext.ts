@@ -30,7 +30,7 @@ import { REFERENCE_BLOCK_START, resolveChatCompletionTarget, streamChatCompletio
 import { inBackground } from '../llmRequestScheduler'
 import { rawMessagesEstimate as rawUsageEstimate, rawTokenEstimate } from '../llmUsage'
 import { ChatEstimateRatioStore } from './chatEstimateRatios'
-import { serverContextLimit } from './serverContextLimit'
+import { serverContextLimit, SUMMARY_CONTEXT_CAP } from './serverContextLimit'
 
 /** Tool output replayed to the model for turns still in the window. */
 const REPLAYED_TOOL_OUTPUT_LENGTH = 4000
@@ -1060,9 +1060,15 @@ function planFold(profile: ChatProfile, thread: CodexChatThreadRecord, config: L
   return turnsToFold(turns.length, fit, config.summaryTriggerTurns)
 }
 
+/** The context summary sizing reads: the request context, no larger than SUMMARY_CONTEXT_CAP (null: unknown). */
+function summaryContextOf(config: Pick<LlmChatContextConfig, 'contextTokens'>) {
+  return config.contextTokens === null ? null : Math.min(config.contextTokens, SUMMARY_CONTEXT_CAP)
+}
+
 /** The oldest of `turns` whose transcript stays within one summary call (at least one turn). */
 function takeSummaryChunk(profile: ChatProfile, config: LlmChatContextConfig, turns: CodexChatMessageRecord[][], lineOf: TranscriptLineOf) {
-  const limit = config.contextTokens ? Math.floor(config.contextTokens / 2) : DEFAULT_SUMMARY_CHUNK_TOKENS
+  const context = summaryContextOf(config)
+  const limit = context ? Math.floor(context / 2) : DEFAULT_SUMMARY_CHUNK_TOKENS
   let used = 0
   let count = 0
   for (const turn of turns) {
@@ -1089,7 +1095,8 @@ const DEFAULT_SUMMARY_BUDGET_TOKENS = 3000
 const KEEP_RECENT_SEGMENTS = 2
 
 function summaryBudget(config: Pick<LlmChatContextConfig, 'contextTokens'>) {
-  return config.contextTokens ? Math.max(1000, Math.floor(config.contextTokens * 0.15)) : DEFAULT_SUMMARY_BUDGET_TOKENS
+  const context = summaryContextOf(config)
+  return context ? Math.max(1000, Math.floor(context * 0.15)) : DEFAULT_SUMMARY_BUDGET_TOKENS
 }
 
 /**
@@ -1142,7 +1149,7 @@ export async function completeSummary(profile: ChatProfile, system: string, cont
  */
 async function summarizeSegment(profile: ChatProfile, config: LlmChatContextConfig, segments: ChatSummarySegment[], messages: CodexChatMessageRecord[], lineOf: TranscriptLineOf, signal?: AbortSignal, threadId?: number) {
   const { plot, active } = splitSegments(segments)
-  const limit = Math.floor((config.contextTokens ?? DEFAULT_SUMMARY_CHUNK_TOKENS) / 4)
+  const limit = Math.floor((summaryContextOf(config) ?? DEFAULT_SUMMARY_CHUNK_TOKENS) / 4)
   const context: string[] = []
   let used = 0
   for (const text of [...active.slice(-KEEP_RECENT_SEGMENTS).reverse().map((segment) => segment.content), plot?.content ?? '']) {
@@ -1169,7 +1176,8 @@ function summarizePlot(profile: ChatProfile, config: LlmChatContextConfig, plot:
 
 /** The oldest of `segments` that fit one plot call beside the plot itself (at least one), so a long backlog goes in passes. */
 function takePlotChunk(profile: ChatProfile, config: LlmChatContextConfig, plot: ChatSummarySegment | null, segments: ChatSummarySegment[]) {
-  const limit = (config.contextTokens ? Math.floor(config.contextTokens / 2) : DEFAULT_SUMMARY_CHUNK_TOKENS) - rawTokenEstimate(plot?.content ?? '')
+  const context = summaryContextOf(config)
+  const limit = (context ? Math.floor(context / 2) : DEFAULT_SUMMARY_CHUNK_TOKENS) - rawTokenEstimate(plot?.content ?? '')
   let used = 0
   let count = 0
   for (const segment of segments) {

@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import fs from 'node:fs/promises'
 import sharp from 'sharp'
-import type { PluginLlmJob, PluginLlmMeasurement, PluginLlmProfile, PluginProfileAsset, PluginLlmDiscardResult } from '@conai/shared'
+import type { PluginLlmJob, PluginLlmMeasurement, PluginLlmProfile, PluginLlmProfileDetail, PluginProfileAsset, PluginLlmDiscardResult } from '@conai/shared'
+import { booksForRequest } from '../codex-chat/chatLoreContext'
 import { canRequesterViewImages, requireRequesterImagePermission } from '../../middleware/imageAccess'
 import { resolveProfileAsset } from '../codex-chat/chatProfileAssets'
 import { MEDIA_MAX_PIXELS } from '../codex-chat/chatMediaLinks'
@@ -168,26 +169,46 @@ function profileContext(profile: ChatProfile) {
     return { contextTokens, maxOutputTokens }
   } catch {
     // An enabled profile with a removed model remains listable; start still rejects it.
-    return { contextTokens: profile.engine === 'llm' && profile.llmRuntime !== 'pi' ? profile.contextTokens : null, maxOutputTokens: profile.engine === 'codex' ? null : profile.maxTokens }
+    return { contextTokens: profile.engine === 'llm' ? profile.contextTokens : null, maxOutputTokens: profile.engine === 'codex' ? null : profile.maxTokens }
+  }
+}
+
+function pluginProfileOf(profile: ChatProfile, images: boolean, loreSelectionLimit: number): PluginLlmProfile {
+  // Image bytes are served by `asset()`; every other saved setting is the plugin's to read.
+  const { avatar: _avatar, background: _background, ...details } = profile
+  return { id: profile.id, name: profile.name, tagline: profile.tagline, engine: profile.engine, appearance: profile.appearance ?? '',
+    context: profileContext(profile),
+    translation: { enabled: hasTranslation(profile), modelLanguage: profile.translationModelLanguage, displayLanguage: profile.translationDisplayLanguage },
+    assetVersion: images ? `${profile.updatedDate}:${profile.avatarHash ?? ''}:${profile.backgroundHash ?? ''}:${profile.referenceHash ?? ''}` : null,
+    avatarCrop: images ? profile.avatarCrop : null,
+    assets: { avatar: images && Boolean(profile.avatarHash || profile.avatar), background: images && Boolean(profile.backgroundHash || profile.background), reference: images && Boolean(profile.referenceHash) },
+    judge: pluginJudgeSettings(profile),
+    statusBlocks: usableBlocks(profile.style.blocks).map(block => ({
+      key: block.key, name: block.name ?? block.key,
+      fields: block.fields.map(field => ({ name: field.name, label: field.label ?? field.name, min: field.min, max: field.max, step: field.step, values: field.values, readonly: field.readonly })),
+    })),
+    details,
+    loreSelectionLimit,
   }
 }
 
 export function listPluginLlmProfiles(pluginId: string, requester: McpRequester | undefined): PluginLlmProfile[] {
   const { chat, requester: actor } = access(pluginId, requester)
-  const images = canRequesterViewImages(actor)
+  const images = canRequesterViewImages(actor), { loreSelectionLimit } = loadChatSettings()
   return ChatProfileStore.list({ enabledOnly: true }).filter(profile => canUseChatProfile(chat, profile))
-    .map(profile => ({ id: profile.id, name: profile.name, tagline: profile.tagline, engine: profile.engine, appearance: profile.appearance ?? '',
-      context: profileContext(profile),
-      translation: { enabled: hasTranslation(profile), modelLanguage: profile.translationModelLanguage, displayLanguage: profile.translationDisplayLanguage },
-      assetVersion: images ? `${profile.updatedDate}:${profile.avatarHash ?? ''}:${profile.backgroundHash ?? ''}:${profile.referenceHash ?? ''}` : null,
-      avatarCrop: images ? profile.avatarCrop : null,
-      assets: { avatar: images && Boolean(profile.avatarHash || profile.avatar), background: images && Boolean(profile.backgroundHash || profile.background), reference: images && Boolean(profile.referenceHash) },
-      judge: pluginJudgeSettings(profile),
-      statusBlocks: usableBlocks(profile.style.blocks).map(block => ({
-        key: block.key, name: block.name ?? block.key,
-        fields: block.fields.map(field => ({ name: field.name, label: field.label ?? field.name, min: field.min, max: field.max, step: field.step, values: field.values, readonly: field.readonly })),
-      })),
-    }))
+    .map(profile => pluginProfileOf(profile, images, loreSelectionLimit))
+}
+
+/** One profile with its lorebooks and judge preset read whole (`llm.profile`). */
+export function readPluginLlmProfile(pluginId: string, requester: McpRequester | undefined, raw: unknown): PluginLlmProfileDetail {
+  const input = z.object({ profileId: z.number().int().positive() }).strict().parse(raw)
+  const { profile, requester: actor } = profileAccess(pluginId, requester, input.profileId)
+  const books = booksForRequest({ thread: null, profile, profileOwner: fileOwnerKey(actor.accountId ?? null) })
+  return {
+    ...pluginProfileOf(profile, canRequesterViewImages(actor), loadChatSettings().loreSelectionLimit),
+    lorebooks: books.map(book => ({ id: book.id, name: book.name, kind: book.kind, entries: book.entries })),
+    judgePreset: profile.judgePresetId ? ChatJudgePresetStore.find(profile.judgePresetId) : null,
+  }
 }
 
 let activeAssetReads = 0
@@ -422,6 +443,7 @@ export function startPluginLlmJob(pluginId: string, requester: McpRequester | un
 /** One dispatcher for the authenticated page bridge and server worker SDK. */
 export function callPluginLlm(pluginId: string, requester: McpRequester | undefined, method: string, args: unknown) {
   if (method === 'profiles') return listPluginLlmProfiles(pluginId, requester)
+  if (method === 'profile') return readPluginLlmProfile(pluginId, requester, args)
   if (method === 'measure') return measurePluginLlm(pluginId, requester, args)
   if (method === 'asset') return readPluginProfileAsset(pluginId, requester, args)
   if (method === 'start') return startPluginLlmJob(pluginId, requester, args)

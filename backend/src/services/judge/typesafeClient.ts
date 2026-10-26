@@ -42,6 +42,8 @@ function errorText(json: unknown, fallback: string) {
   const value = error?.error ?? error?.message ?? error?.detail
   if (typeof value === 'string') return value
   if (value && typeof value === 'object' && typeof (value as { message?: unknown }).message === 'string') return (value as { message: string }).message
+  // TypeSafe refusals: {"detail":{"error_type":"max_tokens_exceeded"}}.
+  if (value && typeof value === 'object' && typeof (value as { error_type?: unknown }).error_type === 'string') return (value as { error_type: string }).error_type
   return fallback
 }
 

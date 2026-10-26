@@ -11,7 +11,7 @@ import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import { AUTHOR_NOTE_MAX_LENGTH, CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, isVisionTool, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
-import { CHAT_SCOPES, MAX_CHAT_CAPTURE_LIMIT, TOOL_ROUND_LIMITS, WEB_RESEARCH_ENGINES, WEB_RESEARCH_MAX_DAILY_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
+import { CHAT_SCOPES, LORE_SELECTION_LIMITS, MAX_CHAT_CAPTURE_LIMIT, TOOL_ROUND_LIMITS, WEB_RESEARCH_ENGINES, WEB_RESEARCH_MAX_DAILY_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
 import { exportChatDiagnostics, getChatDiagnostics, visibleContextMessages } from '../services/codex-chat/chatDiagnostics'
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
 import { chatExpressionGroupId, listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
@@ -777,10 +777,11 @@ router.get('/admin/settings', requireAdmin, (_req: Request, res: Response) => {
 })
 
 router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
-  const { enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch, piCodemode, toolRoundLimit } = req.body ?? {}
-  if ((enabled === undefined && diagnostics === undefined && loreAutoSave === undefined && loreKeyLanguage === undefined && webResearch === undefined && piCodemode === undefined && toolRoundLimit === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
+  const { enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch, piCodemode, toolRoundLimit, loreSelectionLimit } = req.body ?? {}
+  if ((enabled === undefined && diagnostics === undefined && loreAutoSave === undefined && loreKeyLanguage === undefined && webResearch === undefined && piCodemode === undefined && toolRoundLimit === undefined && loreSelectionLimit === undefined) || (enabled !== undefined && typeof enabled !== 'boolean')
     || (piCodemode !== undefined && typeof piCodemode !== 'boolean')
     || (toolRoundLimit !== undefined && !(Number.isInteger(toolRoundLimit) && toolRoundLimit >= TOOL_ROUND_LIMITS.min && toolRoundLimit <= TOOL_ROUND_LIMITS.max))
+    || (loreSelectionLimit !== undefined && !(Number.isInteger(loreSelectionLimit) && loreSelectionLimit >= LORE_SELECTION_LIMITS.min && loreSelectionLimit <= LORE_SELECTION_LIMITS.max))
     || (webResearch !== undefined && (!webResearch || typeof webResearch !== 'object' || Array.isArray(webResearch)
       || (webResearch.engine !== undefined && !WEB_RESEARCH_ENGINES.includes(webResearch.engine))
       || (webResearch.model !== undefined && webResearch.model !== null && typeof webResearch.model !== 'string')
@@ -794,7 +795,7 @@ router.put('/admin/settings', requireAdmin, (req: Request, res: Response) => {
     sendRouteBadRequest(res, '채팅 설정 값이 올바르지 않아.')
     return
   }
-  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch, piCodemode, toolRoundLimit }) })
+  res.json({ success: true, data: updateChatSettings({ enabled, diagnostics, loreAutoSave, loreKeyLanguage, webResearch, piCodemode, toolRoundLimit, loreSelectionLimit }) })
 })
 
 /**

@@ -10,7 +10,7 @@ import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { getClaudeModels } from '@/lib/api-agent-cli'
-import { CHAT_ADMIN_SETTINGS_QUERY_KEY, CHAT_STATUS_QUERY_KEY, TOOL_ROUND_LIMITS, getChatAdminSettings, updateChatAdminSettings, type WebResearchSettings } from '@/lib/api-codex-chat'
+import { CHAT_ADMIN_SETTINGS_QUERY_KEY, CHAT_STATUS_QUERY_KEY, LORE_SELECTION_LIMITS, TOOL_ROUND_LIMITS, getChatAdminSettings, updateChatAdminSettings, type WebResearchSettings } from '@/lib/api-codex-chat'
 import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 import { SettingsRowsSkeleton } from './settings-rows'
@@ -44,12 +44,32 @@ export function ChatMemorySettings() {
       {settingsQuery.data ? (
         <SettingsSwitchRow label={t({ ko: '로어 자동 저장', en: 'Save lore automatically' })} checked={settingsQuery.data.loreAutoSave} disabled={settingsMutation.isPending}
           onCheckedChange={(loreAutoSave) => settingsMutation.mutate({ loreAutoSave })} />
-      ) : settingsQuery.isError ? null : <SettingsRowsSkeleton rows={2} />}
+      ) : settingsQuery.isError ? null : <SettingsRowsSkeleton rows={3} />}
       {settingsQuery.data ? (
         <LoreKeyLanguageRow value={settingsQuery.data.loreKeyLanguage} disabled={settingsMutation.isPending}
           onChange={(loreKeyLanguage) => settingsMutation.mutate({ loreKeyLanguage })} />
       ) : null}
+      {settingsQuery.data ? (
+        <LoreSelectionLimitRow value={settingsQuery.data.loreSelectionLimit} disabled={settingsMutation.isPending}
+          onChange={(loreSelectionLimit) => settingsMutation.mutate({ loreSelectionLimit })} />
+      ) : null}
     </RowGroup>
+  )
+}
+
+/** ChatAdminSettings.loreSelectionLimit: how many keyword lore entries a judge or plugin selection keeps. */
+function LoreSelectionLimitRow({ value, disabled, onChange }: { value: number; disabled: boolean; onChange: (limit: number) => void }) {
+  const { t } = useI18n()
+  const label = t({ ko: '선택 로어 상위 개수', en: 'Top lore entries kept' })
+  return (
+    <SettingRow label={label} info={t({
+      ko: '판단 모델과 플러그인(AI 어항 등)이 지금 상황에 맞는 로어를 고를 때, 키워드가 가장 잘 맞는 순서로 이 개수까지만 넣어. 항상 적용 로어는 따로 들어가고 이 개수에 세지 않아.',
+      en: 'When the judge model or a plugin (such as AI Aquarium) picks lore for the current situation, it keeps at most this many keyword entries, best matches first. Always-on entries go in separately and are not counted.',
+    })}>
+      <NumberStepperInput variant="settings" className="w-24" min={LORE_SELECTION_LIMITS.min} max={LORE_SELECTION_LIMITS.max} precision={0} value={value}
+        aria-label={label} disabled={disabled}
+        onValueCommit={(text) => { const limit = Number(text); if (Number.isInteger(limit) && limit !== value) onChange(limit) }} />
+    </SettingRow>
   )
 }
 

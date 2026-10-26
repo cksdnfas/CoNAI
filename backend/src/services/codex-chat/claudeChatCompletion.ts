@@ -157,7 +157,9 @@ export async function streamClaudeChatCompletion(params: {
     const env: NodeJS.ProcessEnv = { ...claudeEnvironment(config), HOME: config, USERPROFILE: config, APPDATA: config, LOCALAPPDATA: config, TEMP: temp, TMP: temp, TMPDIR: temp }
     env.MCP_CONNECTION_NONBLOCKING = '0'
     env.CLAUDE_CODE_MAX_RETRIES = '0'
+    // The profile's reasoning token budget is Claude Code's thinking budget; effort "none" turns thinking off.
     if (params.target.generation.reasoningEffort === 'none') env.MAX_THINKING_TOKENS = '0'
+    else if (params.target.generation.reasoningBudgetTokens != null) env.MAX_THINKING_TOKENS = String(params.target.generation.reasoningBudgetTokens)
     if (params.target.generation.maxTokens != null) env.CLAUDE_CODE_MAX_OUTPUT_TOKENS = String(params.target.generation.maxTokens)
     if (!env.ANTHROPIC_API_KEY && !env.CLAUDE_CODE_OAUTH_TOKEN) {
       credentialSource = path.join(claudeConfigDir(), '.credentials.json')

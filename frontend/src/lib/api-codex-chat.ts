@@ -112,9 +112,12 @@ export interface ChatDiagnostics {
 
 /** Who answers the chats' web_search tool: a Codex or Claude Code run with only its web search (model null: its default). */
 export type WebResearchSettings = { engine: 'off' | 'codex' | 'claude'; model: string | null; dailyLimit: number | null }
-/** `toolRoundLimit`: the one tool limit, model ↔ tool round trips per reply for every profile, engine and plugin run (1–200). */
-export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean; loreKeyLanguage: string | null; webResearch: WebResearchSettings; piCodemode: boolean; toolRoundLimit: number }
-export { TOOL_ROUND_LIMITS } from '@conai/shared'
+/**
+ * `toolRoundLimit`: the one tool limit, model ↔ tool round trips per reply for every profile, engine and plugin run (1–200).
+ * `loreSelectionLimit`: keyword lore entries a judge or plugin selection keeps, best matches first.
+ */
+export type ChatAdminSettings = { enabled: boolean; diagnostics: { enabled: boolean; captureRaw: boolean; captureLimit: number }; loreAutoSave: boolean; loreKeyLanguage: string | null; webResearch: WebResearchSettings; piCodemode: boolean; toolRoundLimit: number; loreSelectionLimit: number }
+export { TOOL_ROUND_LIMITS, LORE_SELECTION_LIMITS } from '@conai/shared'
 
 export const CHAT_SCOPES: ChatScope[] = ['read', 'generate', 'organize', 'configure']
 export const CHAT_PROFILES_QUERY_KEY = ['codex-chat-profiles'] as const
@@ -986,7 +989,7 @@ export function getChatAdminSettings() {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { cache: 'no-store' })
 }
 
-export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings>; piCodemode?: boolean; toolRoundLimit?: number }) {
+export function updateChatAdminSettings(patch: { enabled?: boolean; diagnostics?: Partial<ChatAdminSettings['diagnostics']>; loreAutoSave?: boolean; loreKeyLanguage?: string | null; webResearch?: Partial<WebResearchSettings>; piCodemode?: boolean; toolRoundLimit?: number; loreSelectionLimit?: number }) {
   return requestApiData<ChatAdminSettings>('/api/codex-chat/admin/settings', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

@@ -34,9 +34,12 @@ async function checkPluginLlmFailures() {
   const { pluginLlmFailure } = await import('../src/services/plugins/pluginLlmErrors')
   const { LlmRequestError } = await import('../src/services/llmRequestRetry')
   const { LlmJsonTruncatedError } = await import('../src/services/llmProviderService')
+  const { TypesafeError } = await import('../src/services/judge/typesafeClient')
   const budget = { inputTokens: 1000, outputReserve: 512, contextTokens: 1024, available: -488, engine: 'api' as const, estimator: 'heuristic' as const }
   const context = pluginLlmFailure(new LlmRequestError('maximum context length exceeded: PRIVATE_BODY', 400), { measurement: budget })
   assert.equal(context.status, 413); assert.match(context.message, /^문맥이 모델 한도를 넘었어/); assert.match(context.message, /1000.*512.*1024/)
+  // TypeSafe (JEV) refuses an over-long judge input with HTTP 400 and this error type.
+  assert.equal(pluginLlmFailure(new TypesafeError('판단 모델 요청 실패 (400): max_tokens_exceeded', 400)).status, 413)
   const timeout = pluginLlmFailure(new DOMException('private details', 'TimeoutError'), { deadline: 'plugin', timeoutMs: 1000 })
   assert.equal(timeout.status, 408); assert.match(timeout.message, /^요청 제한 시간을 넘었어 \(플러그인 답변 1000ms\)/)
   assert.match(pluginLlmFailure(new DOMException('', 'TimeoutError')).message, /모델 연결\/요청/)
@@ -232,7 +235,12 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const listed = await bridge('profiles') as Array<{ id: number }>
     assert.ok(listed.some(item => item.id === profile.id), 'ordinary chat users can select their profiles')
     assert.ok(!listed.some(item => item.id === off.id))
-    assert.doesNotMatch(JSON.stringify(listed), /systemPrompt|village resident|apiKey/)
+    // Plugins read every saved profile setting, persona included; profiles hold no credentials.
+    assert.equal((listed.find(item => item.id === profile.id) as unknown as import('@conai/shared').PluginLlmProfile).details.systemPrompt, 'You are a village resident.')
+    assert.doesNotMatch(JSON.stringify(listed), /apiKey/)
+    const detail = await bridge('profile', { profileId: profile.id }) as import('@conai/shared').PluginLlmProfileDetail
+    assert.equal(detail.details.systemPrompt, 'You are a village resident.'); assert.deepEqual(detail.lorebooks, []); assert.equal(detail.judgePreset, null)
+    await assert.rejects(bridge('profile', { profileId: off.id }), /사용할 수 없는 프로필/)
     assert.deepEqual(await bridge('background'), { id: adminId, type: 'admin' }, 'modules learn which account their own timer calls run as')
     await registry.installPlugin(packageOf(folder, m => { m.id = 'web-llm'; delete m.server; delete m.capabilities }))
     await registry.setPluginEnabled('web-llm', true, adminId)
@@ -252,7 +260,8 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     const publicProfile = llm.listPluginLlmProfiles('llm-bridge', admin).find(p => p.id === profile.id)!
     assert.equal(publicProfile.assets.avatar, true)
     assert.deepEqual(publicProfile.avatarCrop, crop)
-    assert.doesNotMatch(JSON.stringify(publicProfile), /base64|uploads|systemPrompt/)
+    // Image bytes stay behind llm.asset.
+    assert.doesNotMatch(JSON.stringify(publicProfile), /base64|uploads/)
     assert.equal(llm.listPluginLlmProfiles('llm-bridge', guest).find(p => p.id === profile.id)!.assets.avatar, false)
     await assert.rejects(bridge('asset', { profileId: profile.id }), /images.view/)
     const portrait = await runtime.requestPluginServer('llm-bridge', { op: 'asset', input: { profileId: profile.id, maxSize: 128 } }, admin, {}) as import('@conai/shared').PluginProfileAsset
@@ -467,7 +476,12 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.equal(exposed.judge.room?.route.instructions, DEFAULT_ROUTE_INSTRUCTIONS)
     assert.equal(exposed.judge.room?.next.instructions, DEFAULT_NEXT_INSTRUCTIONS)
     assert.deepEqual(exposed.statusBlocks, [{ key: 'resident_status', name: '상태', fields: [{ name: 'mood', label: '기분', min: null, max: null, step: null, values: ['calm', 'happy'], readonly: false }] }])
-    assert.doesNotMatch(JSON.stringify(exposed), /PRIVATE_BLOCK_|systemPrompt|apiKey/)
+    // statusBlocks is the field summary; the whole blocks (templates, instructions) are in details.style.
+    assert.doesNotMatch(JSON.stringify(exposed.statusBlocks), /PRIVATE_BLOCK_/)
+    assert.match(JSON.stringify(exposed.details), /PRIVATE_BLOCK_/)
+    assert.doesNotMatch(JSON.stringify(exposed), /apiKey/)
+    assert.equal(exposed.loreSelectionLimit, 8)
+    assert.equal((await bridge('profile', { profileId: profile.id }) as import('@conai/shared').PluginLlmProfileDetail).judgePreset?.name, 'Plugin judge')
     judgeAnswers = { ready: { type: 'noul', noul: 0.6 } }
     const partial = await decide() as import('@conai/shared').PluginLlmDecision
     assert.deepEqual(Object.keys(partial.answers), ['ready']); assert.ok(partial.error)
