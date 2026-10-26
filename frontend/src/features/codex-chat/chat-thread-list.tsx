@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { AlarmClock, Archive, ArchiveRestore, Check, CheckCheck, ChevronDown, ChevronRight, GitBranch, MoreHorizontal, Pencil, Pin, PinOff, SquareCheck, Trash2, X } from 'lucide-react'
+import { AlarmClock, Archive, ArchiveRestore, Bell, BellOff, Check, CheckCheck, ChevronDown, ChevronRight, GitBranch, MoreHorizontal, Pencil, Pin, PinOff, SquareCheck, Trash2, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -23,15 +23,16 @@ import { parseServerDate } from '@/lib/server-time'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { ChatRoomPageMore, useChatBranchParents, useChatRoomPages, useChatRoomSummaries } from './use-chat-room-directory'
 
-export type ChatListPatch = { title?: string; pinned?: boolean; archived?: boolean }
+export type ChatListPatch = { title?: string; pinned?: boolean; archived?: boolean; notify?: boolean }
 export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
 
 /**
  * The chats: pinned first, then the latest activity (as the server lists them). Each row shows the face it talks to,
  * its title, when it last moved, how many replies are unread and (roomy rows) the latest message or the unsent text. Branches kept before an edit
  * fold under the chat they came from; archived chats wait behind the archive row at the end. Rooms an automation made
- * for itself (board calls, routines, workflow nodes) sit on their own 자동화 tab, shown once there is one; agent rooms
- * are grouped under their own heading there.
+ * for itself (board calls, routines, workflow nodes) sit on their own 자동화 tab, shown once there is one; agent and
+ * plugin rooms are grouped under their own headings there. A muted chat (bell off) keeps its row count but leaves the
+ * shell badge.
  * `dense` is the page's side column; the panel's list screen uses roomier rows.
  *
  * Several chats are picked with "Select" in the row menu; while any is picked the faces turn into checks, a row click
@@ -165,6 +166,7 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
                 <span className={cn('truncate', !dense && 'font-semibold')}>{entry.title || untitled}</span>
                 {entry.pinned ? <Pin aria-label={t({ ko: '고정됨', en: 'Pinned' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
                 {routineThreadIds?.has(entry.id) ? <AlarmClock aria-label={t({ ko: '루틴', en: 'Routine' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
+                {entry.notify_enabled === false ? <BellOff aria-label={t({ ko: '알림 꺼짐', en: 'Muted' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
               </span>
               {preview ? <span className="block truncate text-xs text-muted-foreground">{preview}</span> : null}
               {/* The side column puts the time under the title, so the title gets the whole width. */}
@@ -199,6 +201,9 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
             <DropdownMenuItem onSelect={() => togglePick(entry.id)}><SquareCheck />{t({ ko: '선택', en: 'Select' })}</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onUpdate(entry.id, { pinned: !entry.pinned })}>
               {entry.pinned ? <PinOff /> : <Pin />}{entry.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정', en: 'Pin' })}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onUpdate(entry.id, { notify: entry.notify_enabled === false })}>
+              {entry.notify_enabled === false ? <Bell /> : <BellOff />}{entry.notify_enabled === false ? t({ ko: '알림 켜기', en: 'Turn on notifications' }) : t({ ko: '알림 끄기', en: 'Mute notifications' })}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setRenaming({ id: entry.id, title: entry.title || '' })}><Pencil />{t({ ko: '이름 바꾸기', en: 'Rename' })}</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onUpdate(entry.id, { archived: !entry.archived })}>
@@ -245,14 +250,17 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
     return top.map((entry) => render(entry))
   }
 
-  /** The 자동화 tab files agent rooms under their own heading first, then the other automation rooms under theirs. */
+  /** The 자동화 tab files agent rooms, plugin rooms and the user's own automation (routines, workflows, boards) under their own headings. */
   const grouped = (entries: CodexChatThreadSummary[]) => {
-    const agents = shownTab === 'automation' ? entries.filter((entry) => entry.automation === 'agent') : []
-    if (agents.length === 0) return section(entries)
-    const others = entries.filter((entry) => entry.automation !== 'agent')
+    if (shownTab !== 'automation') return section(entries)
+    const groups = [
+      { key: 'agent', heading: t({ ko: '에이전트', en: 'Agents' }), entries: entries.filter((entry) => entry.automation === 'agent') },
+      { key: 'plugin', heading: t({ ko: '플러그인', en: 'Plugins' }), entries: entries.filter((entry) => entry.automation === 'plugin') },
+      { key: 'user', heading: t({ ko: '내 자동화', en: 'My automation' }), entries: entries.filter((entry) => entry.automation !== 'agent' && entry.automation !== 'plugin') },
+    ].filter((group) => group.entries.length > 0)
+    if (groups.length <= 1) return section(entries)
     return <div className="space-y-6">
-      <RowGroup heading={t({ ko: '에이전트', en: 'Agents' })}>{section(agents)}</RowGroup>
-      {others.length ? <RowGroup heading={t({ ko: '다른 자동화', en: 'Other automation' })}>{section(others)}</RowGroup> : null}
+      {groups.map((group) => <RowGroup key={group.key} heading={group.heading}>{section(group.entries)}</RowGroup>)}
     </div>
   }
 

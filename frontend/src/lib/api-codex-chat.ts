@@ -829,6 +829,8 @@ export interface CodexChatThread {
   last_read_message_id?: number | null
   /** Chat lists: replies after the read mark. */
   unread_count?: number
+  /** Chat lists: its unread replies count on the shell badge (plugin and agent rooms default off, other chats on). */
+  notify_enabled?: boolean
   created_date: string
   updated_date: string
 }
@@ -837,7 +839,7 @@ export interface CodexChatThread {
 export type CodexChatThreadSummary = Pick<CodexChatThread,
   'id' | 'title' | 'engine' | 'profile_id' | 'kind' | 'pinned' | 'archived' |
   'branched_from_thread_id' | 'branched_at_message_id' | 'branch_purpose' | 'created_date' | 'updated_date' |
-  'member_profile_ids' | 'preview' | 'running' | 'unread_count' | 'task' | 'automation'>
+  'member_profile_ids' | 'preview' | 'running' | 'unread_count' | 'task' | 'automation' | 'notify_enabled'>
 
 /** `preserve`: the chat as it was before an edit rewrote it; `continue`: branched to go on from that point. */
 export type ChatBranchPurpose = 'preserve' | 'continue'
@@ -1002,6 +1004,11 @@ export function getChatProfileDefaults() {
 
 export function listChatAdminProfiles() {
   return requestApiData<ChatProfile[]>('/api/codex-chat/admin/profiles', { cache: 'no-store' })
+}
+
+/** Every chat profile in this order; returns the reordered admin list. */
+export function reorderChatProfiles(ids: number[]) {
+  return requestApiData<ChatProfile[]>('/api/codex-chat/admin/profiles/order', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ids }) })
 }
 
 /** `copyOf`: the profile this one copies; it keeps that profile's links and gets its own copy of its expressions. */
@@ -1833,8 +1840,8 @@ export function markCodexChatThreadRead(threadId: number, messageId: number) {
   return requestApiData<undefined>(`/api/codex-chat/threads/${threadId}/read`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ messageId }) })
 }
 
-/** Pin, archive or rename a chat from the chat list. */
-export function updateChatListState(threadId: number, patch: { title?: string; pinned?: boolean; archived?: boolean }) {
+/** Pin, archive, rename or (un)mute a chat from the chat list. */
+export function updateChatListState(threadId: number, patch: { title?: string; pinned?: boolean; archived?: boolean; notify?: boolean }) {
   return requestApiData<CodexChatThread>(`/api/codex-chat/threads/${threadId}/list`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 

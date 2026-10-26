@@ -78,6 +78,8 @@ export type CodexChatThreadRecord = {
   branch_purpose: ChatBranchPurpose | null
   /** The owner has read up to this message; replies after it are unread (null: none read). */
   last_read_message_id: number | null
+  /** Its unread replies count on the shell badge: 1 on, 0 off, null the room kind's default (chatNotifyDefault). */
+  notify: 0 | 1 | null
   created_date: string
   updated_date: string
 }
@@ -87,7 +89,7 @@ export type ChatBranchPurpose = 'preserve' | 'continue'
 
 /** Directory rows never read stored summaries, prompts, block edits or engine context. */
 export type ChatThreadSummary = Pick<CodexChatThreadRecord,
-  'id' | 'title' | 'engine' | 'profile_id' | 'kind' | 'pinned' | 'archived' |
+  'id' | 'title' | 'engine' | 'profile_id' | 'kind' | 'pinned' | 'archived' | 'notify' |
   'branched_from_thread_id' | 'branched_at_message_id' | 'branch_purpose' | 'created_date' | 'updated_date'>
 
 export type ChatThreadListOptions = {
@@ -102,7 +104,7 @@ export type ChatThreadListOptions = {
   offset?: number
 }
 
-const THREAD_SUMMARY_COLUMNS = `t.id, t.title, t.engine, t.profile_id, t.kind, t.pinned, t.archived,
+const THREAD_SUMMARY_COLUMNS = `t.id, t.title, t.engine, t.profile_id, t.kind, t.pinned, t.archived, t.notify,
   t.branched_from_thread_id, t.branched_at_message_id, t.branch_purpose, t.created_date, t.updated_date`
 
 function threadListFilter(accountId: number | null, options: ChatThreadListOptions) {
@@ -364,9 +366,10 @@ export const CodexChatStore = {
     `).run(messageId, threadId, threadId)
   },
 
-  /** Pin, archive or rename a chat from the chat list (rename keeps its place: the list sorts by activity). */
-  updateListState(threadId: number, patch: { title?: string; pinned?: boolean; archived?: boolean }) {
+  /** Pin, archive, rename or (un)mute a chat from the chat list (rename keeps its place: the list sorts by activity). */
+  updateListState(threadId: number, patch: { title?: string; pinned?: boolean; archived?: boolean; notify?: boolean }) {
     const db = getUserSettingsDb()
+    if (patch.notify !== undefined) db.prepare('UPDATE codex_chat_threads SET notify = ? WHERE id = ?').run(patch.notify ? 1 : 0, threadId)
     if (patch.title !== undefined) db.prepare('UPDATE codex_chat_threads SET title = ? WHERE id = ?').run(patch.title.slice(0, TITLE_MAX_LENGTH), threadId)
     if (patch.pinned !== undefined) db.prepare('UPDATE codex_chat_threads SET pinned = ? WHERE id = ?').run(patch.pinned ? 1 : 0, threadId)
     if (patch.archived !== undefined) db.prepare('UPDATE codex_chat_threads SET archived = ? WHERE id = ?').run(patch.archived ? 1 : 0, threadId)

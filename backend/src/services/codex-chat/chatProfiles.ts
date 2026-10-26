@@ -904,6 +904,20 @@ export const ChatProfileStore = {
   delete(profileId: number) {
     return getUserSettingsDb().prepare('DELETE FROM llm_chat_profiles WHERE id = ?').run(profileId).changes > 0
   },
+
+  /** The sort order after every current profile: a new profile joins the end of the list. */
+  nextSortOrder() {
+    return (getUserSettingsDb().prepare('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM llm_chat_profiles').get() as { next: number }).next
+  },
+
+  /** Every profile in this order; profiles missing from `ids` keep their place after them. */
+  reorder(ids: number[]) {
+    const db = getUserSettingsDb()
+    const current = (db.prepare('SELECT id FROM llm_chat_profiles ORDER BY sort_order ASC, id ASC').all() as Array<{ id: number }>).map((row) => row.id)
+    const ordered = [...new Set(ids.filter((id) => current.includes(id))), ...current.filter((id) => !ids.includes(id))]
+    const update = db.prepare('UPDATE llm_chat_profiles SET sort_order = ? WHERE id = ?')
+    db.transaction(() => ordered.forEach((id, index) => update.run(index, id)))()
+  },
 }
 
 let codexProfileMigrationChecked = false

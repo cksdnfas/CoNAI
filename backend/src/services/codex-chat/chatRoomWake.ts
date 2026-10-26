@@ -192,14 +192,19 @@ export function isAgentRoom(threadId: number) {
   return !!roomsTable().prepare("SELECT 1 FROM chat_automation_rooms WHERE thread_id = ? AND room_key LIKE 'agent:%'").get(threadId)
 }
 
-/** The shell badge excludes only agent rooms; all other automation behaviour stays unchanged. */
+/** A chat's notification default when the owner never switched it: plugin and agent rooms stay quiet, every other chat notifies. */
+export function chatNotifyDefault(kind: ChatAutomationRoomKind | null | undefined) {
+  return kind !== 'plugin' && kind !== 'agent'
+}
+
+/** The shell badge counts unread replies of unarchived chats whose notifications are on (chatNotifyDefault unless switched). */
 export function chatUnreadCount(accountId: number | null) {
   return (roomsTable().prepare(`
     SELECT COUNT(m.id) AS count FROM codex_chat_threads t
     JOIN codex_chat_messages m ON m.thread_id = t.id AND m.role = 'assistant'
       AND m.id > COALESCE(t.last_read_message_id, 0)
     WHERE t.account_id IS ? AND t.archived = 0
-      AND NOT EXISTS (SELECT 1 FROM chat_automation_rooms a
-        WHERE a.thread_id = t.id AND a.account_key = ? AND a.room_key LIKE 'agent:%')
+      AND COALESCE(t.notify, CASE WHEN EXISTS (SELECT 1 FROM chat_automation_rooms a
+        WHERE a.thread_id = t.id AND a.account_key = ? AND (a.room_key LIKE 'agent:%' OR a.room_key LIKE 'plugin:%')) THEN 0 ELSE 1 END) = 1
   `).get(accountId, accountKey(accountId)) as { count: number }).count
 }

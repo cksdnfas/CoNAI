@@ -922,6 +922,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       ...(patch.title !== undefined ? { title: patch.title } : {}),
       ...(patch.pinned !== undefined ? { pinned: patch.pinned ? 1 as const : 0 as const } : {}),
       ...(patch.archived !== undefined ? { archived: patch.archived ? 1 as const : 0 as const } : {}),
+      ...(patch.notify !== undefined ? { notify_enabled: patch.notify } : {}),
     }
     patchChatRoomLists(queryClient, threadId, apply({ id: threadId } as CodexChatThread))
     queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId), (current) => current ? { ...current, thread: apply(current.thread) } : current)

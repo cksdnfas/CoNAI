@@ -155,14 +155,21 @@ test('profile agents: admission, no recursion, expiry logs and unread isolation'
     deletion.mock.restore()
   })
 
-  await t.test('unread aggregate excludes agents but not other automation rooms', async () => {
+  await t.test('unread aggregate leaves out agent and plugin rooms by default; each room can be switched', async () => {
     const before = chatUnreadCount(1)
+    const rooms = new Map<string, number>()
     for (const kind of ['agent', 'routine', 'workflow', 'plugin', 'posts:board']) {
       const room = await ensureAutomationRoom(requester, agent.id, `${kind}:unread`, kind)
+      rooms.set(kind, room.id)
       CodexChatStore.addMessage({ thread_id: room.id, role: 'assistant', content: 'unread', tool_calls: [], status: 'completed', error: null })
     }
-    assert.equal(chatUnreadCount(1), before + 4)
+    assert.equal(chatUnreadCount(1), before + 3)
     assert.equal(chatUnreadCount(2), 0)
+    CodexChatStore.updateListState(rooms.get('plugin')!, { notify: true })
+    CodexChatStore.updateListState(rooms.get('routine')!, { notify: false })
+    assert.equal(chatUnreadCount(1), before + 3)
+    CodexChatStore.updateListState(rooms.get('workflow')!, { notify: false })
+    assert.equal(chatUnreadCount(1), before + 2)
   })
 
   await t.test('direct and group results wait for the caller reply; reactions follow the result exactly once', async child => {

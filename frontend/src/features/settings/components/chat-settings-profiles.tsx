@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type DragEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, FileUp, Plus } from 'lucide-react'
+import { Copy, FileUp, GripVertical, Plus } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRow } from '@/components/ui/resource-row'
@@ -22,6 +22,7 @@ import {
   importChatProfileCard,
   listChatAdminProfiles,
   listModelSlots,
+  reorderChatProfiles,
   updateChatProfile,
   type ChatCardImportReport,
   type ChatProfile,
@@ -121,6 +122,31 @@ export function ChatSettingsProfiles() {
   const slots = slotsQuery.data ?? []
   const healthOf = useChatHealth()
 
+  // Drag a row's handle onto another row to move it there; the order is the chat pickers' too.
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [overId, setOverId] = useState<number | null>(null)
+  const reorderMutation = useMutation({
+    mutationFn: reorderChatProfiles,
+    onMutate: (ids) => {
+      queryClient.setQueryData<ChatProfile[]>(CHAT_ADMIN_PROFILES_QUERY_KEY, (current) => current ? ids.flatMap((id) => current.filter((profile) => profile.id === id)) : current)
+    },
+    onSuccess: (next) => {
+      queryClient.setQueryData(CHAT_ADMIN_PROFILES_QUERY_KEY, next)
+      void queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY })
+    },
+    onError: (error) => {
+      void queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '순서를 바꾸지 못했어.', en: 'Could not reorder.' })), tone: 'error' })
+    },
+  })
+  const drop = (event: DragEvent, targetId: number) => {
+    event.preventDefault()
+    if (dragId === null || dragId === targetId) return
+    const ids = profiles.map((profile) => profile.id).filter((id) => id !== dragId)
+    ids.splice(ids.indexOf(targetId) + (profiles.findIndex((profile) => profile.id === dragId) < profiles.findIndex((profile) => profile.id === targetId) ? 1 : 0), 0, dragId)
+    reorderMutation.mutate(ids)
+  }
+
   // A connected chat can open the editor for a new or listed profile; it fills and saves from there.
   useChatPageRegistration({
     kind: 'settings', title: t({ ko: '설정 · 채팅 프로필', en: 'Settings · Chat profiles' }), resourceId: 'chat', priority: 5, fields: [],
@@ -183,7 +209,28 @@ export function ChatSettingsProfiles() {
           <ResourceRow
             key={profile.id}
             className="min-h-14"
-            leading={<ChatHealthDot down={healthOf(profile.id)}><ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="lg" /></ChatHealthDot>}
+            onDragOver={(event) => { if (dragId !== null) { event.preventDefault(); setOverId(profile.id) } }}
+            onDragLeave={() => setOverId((current) => (current === profile.id ? null : current))}
+            onDrop={(event) => { drop(event, profile.id); setDragId(null); setOverId(null) }}
+            dimmed={dragId === profile.id}
+            dropTarget={overId === profile.id && dragId !== profile.id}
+            leading={(
+              <>
+                <Tip content={t({ ko: '끌어서 순서 바꾸기', en: 'Drag to reorder' })}>
+                  <span
+                    draggable
+                    onClick={(event) => event.stopPropagation()}
+                    onDragStart={(event) => { setDragId(profile.id); event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', String(profile.id)) }}
+                    onDragEnd={() => { setDragId(null); setOverId(null) }}
+                    className="mr-3 cursor-grab text-muted-foreground/60 active:cursor-grabbing"
+                    aria-hidden="true"
+                  >
+                    <GripVertical className="size-4" />
+                  </span>
+                </Tip>
+                <ChatHealthDot down={healthOf(profile.id)}><ChatProfileAvatar name={profile.name} avatar={profile.avatar} profile={profile} engine={profile.engine} size="lg" /></ChatHealthDot>
+              </>
+            )}
             name={profile.name}
             extra={(
               <Tip content={healthOf(profile.id) ? <ChatHealthTip down={healthOf(profile.id)!} /> : profileModelLine(profile, slots, t)}>
@@ -200,13 +247,15 @@ export function ChatSettingsProfiles() {
                 <IconButton size="icon-sm" variant="ghost" onClick={() => setEditor({ profile: null, draft: copyDraft(profile, profiles, t), copyOf: profile.id })} label={t({ ko: '복사', en: 'Copy' })}>
                   <Copy />
                 </IconButton>
-                <Switch
-                  className="ml-1"
-                  checked={profile.isEnabled}
-                  disabled={toggleMutation.isPending}
-                  onCheckedChange={(isEnabled) => toggleMutation.mutate({ profileId: profile.id, isEnabled })}
-                  aria-label={t({ ko: '사용', en: 'On' })}
-                />
+                <Tip content={profile.isEnabled ? t({ ko: '사용 중 · 끄면 채팅에서 고를 수 없어', en: 'On · turn off to hide it from chat' }) : t({ ko: '꺼짐 · 켜면 채팅에서 고를 수 있어', en: 'Off · turn on to use it in chat' })}>
+                  <Switch
+                    className="ml-1"
+                    checked={profile.isEnabled}
+                    disabled={toggleMutation.isPending}
+                    onCheckedChange={(isEnabled) => toggleMutation.mutate({ profileId: profile.id, isEnabled })}
+                    aria-label={t({ ko: '사용', en: 'On' })}
+                  />
+                </Tip>
               </>
             )}
             onOpen={() => setEditor({ profile })}

@@ -744,6 +744,9 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['judge_preset_id', 'INTEGER'],
     ['branched_at_message_id', 'INTEGER'],
     ['branch_purpose', 'TEXT'],
+    // Whether the chat's unread replies count on the shell badge: 1 on, 0 off, null the room kind's default
+    // (plugin and agent rooms off, every other chat on; see chatNotifyDefault).
+    ['notify', 'INTEGER'],
   ];
   for (const [columnName, definition] of codexChatThreadColumns) {
     if (!hasColumn('codex_chat_threads', columnName)) {

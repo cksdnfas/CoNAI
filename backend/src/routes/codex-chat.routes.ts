@@ -6,7 +6,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { z } from 'zod'
 import { resolveChatPageCommand } from '../services/codex-chat/chatPageBridge'
 import { ChatTaskRunner, ChatTaskStore } from '../services/codex-chat/chatTasks'
-import { automationRoomKinds, chatUnreadCount } from '../services/codex-chat/chatRoomWake'
+import { automationRoomKinds, chatNotifyDefault, chatUnreadCount } from '../services/codex-chat/chatRoomWake'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
@@ -272,7 +272,7 @@ router.get('/assets/:name', requireChatAccess, requireImagesView, asyncHandler(a
 function threadDirectoryByIds(ids: number[], accountId: number | null): ChatThreadSummary[] {
   if (!ids.length) return []
   return getUserSettingsDb().prepare(`
-    SELECT id, title, engine, profile_id, kind, pinned, archived, branched_from_thread_id,
+    SELECT id, title, engine, profile_id, kind, pinned, archived, notify, branched_from_thread_id,
       branched_at_message_id, branch_purpose, created_date, updated_date
     FROM codex_chat_threads WHERE account_id IS ? AND id IN (${ids.map(() => '?').join(',')})
   `).all(accountId, ...ids) as ChatThreadSummary[]
@@ -339,6 +339,8 @@ router.get('/threads', requireChatAccess, (req: Request, res: Response) => {
     task: tasks.get(thread.id) ?? null,
     // Rooms a board call, routine or workflow made for itself: the list keeps them under 자동화.
     automation: automation.get(thread.id) ?? null,
+    // Whether its unread replies count on the shell badge (the room kind's default until the owner switches it).
+    notify_enabled: thread.notify === null || thread.notify === undefined ? chatNotifyDefault(automation.get(thread.id)) : thread.notify === 1,
   }))
   res.json({ success: true, data: summaries.slice(0, threads.length),
     ...(page ? {
@@ -398,18 +400,18 @@ router.post('/page-commands/:commandId', requireChatAccess, (req: Request, res: 
   } catch (error) { sendChatError(res, error) }
 })
 
-/** PATCH /api/codex-chat/threads/:threadId/list — `{ title?, pinned?, archived? }`: the chat's place in the chat list. */
+/** PATCH /api/codex-chat/threads/:threadId/list — `{ title?, pinned?, archived?, notify? }`: the chat's place in the chat list. */
 router.patch('/threads/:threadId/list', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   const body = (req.body ?? {}) as Record<string, unknown>
-  const patch: { title?: string; pinned?: boolean; archived?: boolean } = {}
+  const patch: { title?: string; pinned?: boolean; archived?: boolean; notify?: boolean } = {}
   if (body.title !== undefined) {
     const title = typeof body.title === 'string' ? body.title.replace(/\s+/g, ' ').trim() : ''
     if (!title) { sendRouteBadRequest(res, 'title must be a non-empty string'); return }
     patch.title = title
   }
-  for (const key of ['pinned', 'archived'] as const) {
+  for (const key of ['pinned', 'archived', 'notify'] as const) {
     if (body[key] === undefined) continue
     if (typeof body[key] !== 'boolean') { sendRouteBadRequest(res, `${key} must be a boolean`); return }
     patch[key] = body[key] as boolean
@@ -804,10 +806,20 @@ router.get('/admin/profile-defaults', requireAdmin, (_req: Request, res: Respons
   res.json({ success: true, data: { ...CHAT_PROFILE_DEFAULTS, systemPrompt: ModelSlotStore.routePrompt('chat'), summaryPrompt: ModelSlotStore.routePrompt('summary') || DEFAULT_CHAT_SUMMARY_PROMPT, scopes: CHAT_SCOPES, style: DEFAULT_CHAT_STYLE } })
 })
 
-router.get('/admin/profiles', requireAdmin, (_req: Request, res: Response) => {
+function adminProfileList() {
   const profiles = ChatProfileStore.list({ admin: true })
   const hidden = hiddenProfileAssets(profiles)
-  res.json({ success: true, data: ModelSlotStore.withReadSnapshot(() => profiles.map((profile) => toAdminProfile(profile, hidden))) })
+  return ModelSlotStore.withReadSnapshot(() => profiles.map((profile) => toAdminProfile(profile, hidden)))
+}
+
+router.get('/admin/profiles', requireAdmin, (_req: Request, res: Response) => {
+  res.json({ success: true, data: adminProfileList() })
+})
+
+/** PUT /api/codex-chat/admin/profiles/order — `{ ids }`: every chat profile in this order (settings and chat pickers). */
+router.put('/admin/profiles/order', requireAdmin, (req: Request, res: Response) => {
+  ChatProfileStore.reorder(parseFlagIds(req.body?.ids))
+  res.json({ success: true, data: adminProfileList() })
 })
 
 /** A Codex profile's effort must be one its model supports (when the CLI catalog lists the model). */
@@ -888,6 +900,8 @@ router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, r
       return
     }
     assertLinkedFiles(fileOwnerKey(getRequesterAccountId(req)), normalizeLinkedFiles(input.linkedFiles), source?.linkedFiles)
+    // A new profile joins the end of the list; a copy sits right after its source.
+    input.sortOrder = source ? source.sortOrder : ChatProfileStore.nextSortOrder()
     const created = ChatProfileStore.create(input)
     res.status(201).json({ success: true, data: toAdminProfile(source ? copyProfileExpressions(source, created) : created) })
   } catch (error) {

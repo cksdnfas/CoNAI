@@ -1149,8 +1149,8 @@ export const CodexChatService = {
     return CodexChatStore.listThreads(requester.accountId)
   },
 
-  /** Pin, archive or rename a chat (any kind) of the requester's from the chat list. */
-  updateListState(requester: McpRequester, threadId: number, patch: { title?: string; pinned?: boolean; archived?: boolean }) {
+  /** Pin, archive, rename or (un)mute a chat (any kind) of the requester's from the chat list. */
+  updateListState(requester: McpRequester, threadId: number, patch: { title?: string; pinned?: boolean; archived?: boolean; notify?: boolean }) {
     requireThread(requester, threadId)
     CodexChatStore.updateListState(threadId, patch)
     return requireThread(requester, threadId)
