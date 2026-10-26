@@ -392,15 +392,46 @@ export function endJudgedTurn(judged: JudgedTurn | null | undefined, toolsCalled
 
 // ---- After the reply: follow-up messages -------------------------------------------------------------------------
 
-const pendingFollowUps = new Map<number, { controller: AbortController; timer: NodeJS.Timeout | null }>()
+type FollowUp = { controller: AbortController; timer: NodeJS.Timeout | null; done: Promise<void>; finish: () => void; settled: boolean; messageId: number }
+const pendingFollowUps = new Map<number, FollowUp>()
+// Completion tracking must not change normal stop/rewrite/continue semantics: writing replies are no longer pending.
+const writingFollowUps = new Map<number, FollowUp>()
+const followUpDrains = new Map<number, { seen: Set<number>; failed: boolean }>()
+function settleFollowUp(threadId: number, pending: FollowUp) {
+  if (pendingFollowUps.get(threadId) === pending) pendingFollowUps.delete(threadId)
+  if (writingFollowUps.get(threadId) === pending) writingFollowUps.delete(threadId)
+  pending.settled = true
+  pending.finish()
+}
+
+/** Plugin wakes own the complete native follow-up chain, including the preset's delay. */
+export async function drainJudgeFollowUps(threadId: number, signal?: AbortSignal) {
+  const state = { seen: new Set<number>(), failed: false }
+  const existing = pendingFollowUps.get(threadId) ?? writingFollowUps.get(threadId)
+  if (existing) state.seen.add(existing.messageId)
+  followUpDrains.set(threadId, state)
+  const cancel = () => cancelJudgeFollowUp(threadId)
+  signal?.addEventListener('abort', cancel, { once: true })
+  try {
+    for (;;) {
+      // Reply completion resolves before its native after-reply hook runs.
+      await new Promise<void>(resolve => setImmediate(resolve))
+      signal?.throwIfAborted()
+      const pending = pendingFollowUps.get(threadId) ?? writingFollowUps.get(threadId)
+      if (!pending || pending.settled) return state.failed
+      state.seen.add(pending.messageId)
+      await pending.done
+    }
+  } finally { signal?.removeEventListener('abort', cancel); followUpDrains.delete(threadId) }
+}
 
 /** A user message (or anything that changes the end of the chat) drops a follow-up that is being judged or waits. */
 export function cancelJudgeFollowUp(threadId: number) {
   const pending = pendingFollowUps.get(threadId)
   if (!pending) return
-  pendingFollowUps.delete(threadId)
   pending.controller.abort()
   if (pending.timer) clearTimeout(pending.timer)
+  settleFollowUp(threadId, pending)
 }
 
 /**
@@ -409,6 +440,10 @@ export function cancelJudgeFollowUp(threadId: number) {
  * row stop at the preset's limit. Runs in the background; nothing here throws.
  */
 export function judgeAfterReply(params: { profile: ChatProfile; threadId: number; message: CodexChatMessageRecord; write: (directive: string, signal: AbortSignal) => Promise<CodexChatMessageRecord | null> }) {
+  const drain = followUpDrains.get(params.threadId)
+  // A native headless failure may store no reply and re-enter with the same primary message.
+  // Only plugin drains suppress that retry; ordinary chat scheduling is unchanged.
+  if (drain?.seen.has(params.message.id)) return
   const setup = judgeSetupOf(params.profile)
   if (!setup || setup.preset.followUp.maxConsecutive <= 0) return
   const items = askableJudgeItems(setup.preset.items).filter((item) => item.stage === 'after')
@@ -419,34 +454,42 @@ export function judgeAfterReply(params: { profile: ChatProfile; threadId: number
   // The reply itself counts once; each follow-up after it once more.
   if (CodexChatStore.trailingReplyCount(params.threadId) > setup.preset.followUp.maxConsecutive) return
   const messages = CodexChatStore.listJudgeMessages(params.threadId, Math.max(...items.map((item) => item.window)))
+  drain?.seen.add(params.message.id)
 
   cancelJudgeFollowUp(params.threadId)
-  const pending = { controller: new AbortController(), timer: null as NodeJS.Timeout | null }
+  let finish!: () => void
+  const done = new Promise<void>(resolve => { finish = resolve })
+  const pending: FollowUp = { controller: new AbortController(), timer: null, done, finish, settled: false, messageId: params.message.id }
   pendingFollowUps.set(params.threadId, pending)
   const stillLatest = () => pendingFollowUps.get(params.threadId) === pending && !pending.controller.signal.aborted
     && CodexChatStore.latestMessageId(params.threadId) === params.message.id
 
   void inBackground(async () => {
     const run = await runJudgeItems(setup, params.profile, items, (window) => judgeStateOf(params.profile, thread, messages, window), pending.controller.signal, { usage: { purpose: 'judge', threadId: params.threadId, profileId: params.profile.id } })
-    if (pending.controller.signal.aborted) return
+    if (pending.controller.signal.aborted) { settleFollowUp(params.threadId, pending); return }
     const runId = logJudgeRun({ setup, threadId: params.threadId, profileId: params.profile.id, stage: 'after', messageId: params.message.id, replyId: params.message.routing?.replyId ?? null, run })
     if (!run.results.some((result) => result.action === 'follow-up') || !stillLatest()) {
-      if (pendingFollowUps.get(params.threadId) === pending) pendingFollowUps.delete(params.threadId)
+      settleFollowUp(params.threadId, pending)
       return
     }
     pending.timer = setTimeout(() => {
       pending.timer = null
-      if (!stillLatest()) return
+      if (!stillLatest()) { settleFollowUp(params.threadId, pending); return }
       pendingFollowUps.delete(params.threadId)
+      writingFollowUps.set(params.threadId, pending)
       const directive = setup.preset.followUp.directive || DEFAULT_FOLLOW_UP_DIRECTIVE
-      params.write(directive, pending.controller.signal).then((message) => {
+      Promise.resolve().then(() => params.write(directive, pending.controller.signal)).then((message) => {
+        const currentDrain = followUpDrains.get(params.threadId)
+        if (!message && currentDrain) currentDrain.failed = true
         if (message && runId) ChatJudgeLogStore.setFollowUpMessage(runId, message.id)
       }, (error: unknown) => {
+        const currentDrain = followUpDrains.get(params.threadId)
+        if (currentDrain) currentDrain.failed = true
         console.warn('[chat-judge] follow-up failed:', messageOf(error))
-      })
+      }).finally(() => settleFollowUp(params.threadId, pending))
     }, setup.preset.followUp.delaySeconds * 1000)
   }).catch((error: unknown) => {
-    if (pendingFollowUps.get(params.threadId) === pending) pendingFollowUps.delete(params.threadId)
+    settleFollowUp(params.threadId, pending)
     if (!pending.controller.signal.aborted) console.warn('[chat-judge] after-reply judge failed:', messageOf(error))
   })
 }

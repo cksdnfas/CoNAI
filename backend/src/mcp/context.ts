@@ -1,7 +1,7 @@
 import type { McpHttpScope, ChatExecutionContext, FileWriteSource } from '@conai/shared';
 import type { AuthAccountType } from '../types/authAccount';
-import { findExternalMcpTool } from '../services/externalMcp/externalMcpServers';
-import { findPluginServerTool } from '../services/plugins/pluginServerTools';
+import { findExternalMcpTool, externalMcpTools } from '../services/externalMcp/externalMcpServers';
+import { findPluginServerTool, pluginServerTools } from '../services/plugins/pluginServerTools';
 
 /** Account that owns the jobs and history a request creates (set for Codex chat sessions). */
 export interface McpRequester {
@@ -337,6 +337,11 @@ export function getMcpToolScope(toolName: string): McpHttpScope | null {
   if (isChatGenerationTool(toolName)) return 'generate';
   // An external MCP server's tools take the scope its administrator gave it, a plugin's the scope its module gave.
   return TOOL_SCOPES[toolName] ?? findExternalMcpTool(toolName)?.scope ?? findPluginServerTool(toolName)?.scope ?? null;
+}
+
+/** Enumerate registered names without loading schemas, for an exact run-local grant union. */
+export function mcpToolNames(): string[] {
+  return [...Object.keys(TOOL_SCOPES), ...externalMcpTools().map(tool => tool.name), ...pluginServerTools().map(tool => tool.name)];
 }
 
 export function isMcpToolAllowed(toolName: string, scopes: readonly McpHttpScope[]): boolean {

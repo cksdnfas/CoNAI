@@ -86,6 +86,15 @@ test('plugin SDK preserves cancellation, structured errors, binary uploads and r
     assert.deepEqual(await fill, { filled: ['prompt'] })
   })
 
+  await t.test('discard forwards only the job identity through the page LLM bridge', async () => {
+    const incoming = once(channel.port1, 'message')
+    const result = api.llm.discard({ jobId: 'discard-job' })
+    const [request] = await incoming
+    assert.deepEqual([request.method, request.args], ['llm.discard', { jobId: 'discard-job' }])
+    channel.port1.postMessage({ type: 'response', id: request.id, result: { jobId: 'discard-job', deleted: 2 } })
+    assert.deepEqual(await result, { jobId: 'discard-job', deleted: 2 })
+  })
+
   await t.test('closing the host rejects pending calls immediately', async () => {
     const incoming = once(channel.port1, 'message')
     const task = api.request('workspace.read', {})

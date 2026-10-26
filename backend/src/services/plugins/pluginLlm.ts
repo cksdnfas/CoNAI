@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import fs from 'node:fs/promises'
 import sharp from 'sharp'
-import type { PluginLlmJob, PluginLlmMeasurement, PluginLlmProfile, PluginProfileAsset } from '@conai/shared'
+import type { PluginLlmJob, PluginLlmMeasurement, PluginLlmProfile, PluginProfileAsset, PluginLlmDiscardResult } from '@conai/shared'
 import { canRequesterViewImages, requireRequesterImagePermission } from '../../middleware/imageAccess'
 import { resolveProfileAsset } from '../codex-chat/chatProfileAssets'
 import { MEDIA_MAX_PIXELS } from '../codex-chat/chatMediaLinks'
@@ -24,7 +24,8 @@ import { RuntimeJobRunner } from '../runtimeJobs/runtimeJobRunner'
 import { RuntimeJobStore, RUNTIME_JOB_TTL_MS } from '../runtimeJobs/runtimeJobStore'
 import { getPlugin } from './pluginRegistry'
 import { onPluginChanged, pluginDb, PluginError, sha256 } from './pluginStore'
-import { refreshPluginProfileRun, runPluginProfile } from './pluginProfileRun'
+import { refreshPluginProfileRun, runPluginProfile, acquirePluginProfileLock, ensurePluginProfileRoom, forgetPluginProfileRooms, discardPluginProfileRun } from './pluginProfileRun'
+import { validatePluginProfileTools } from './pluginServerTools'
 import { requireResearchProfile } from '../codex-chat/chatResearch'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { usableBlocks } from '../codex-chat/chatBlockState'
@@ -33,9 +34,12 @@ import { pluginLlmFailure } from './pluginLlmErrors'
 import { acquireLlmRequestSlot } from '../llmRequestScheduler'
 import { pluginLlmInputBytes } from './pluginLlmInput'
 import { readRuntimeJobResult } from '../runtimeJobs/runtimeJobResults'
+import { CHAT_THREAD_TITLE_MAX_LENGTH } from '@conai/shared'
 
 const MAX_PENDING_REQUESTS = 64
 const MAX_QUEUED_INPUT_BYTES = 64 * 1024 * 1024
+const roomKeySchema = z.string().min(1).max(100).regex(/^[a-zA-Z0-9_.:-]+$/)
+const roomTitleSchema = z.string().trim().min(1).max(CHAT_THREAD_TITLE_MAX_LENGTH)
 const inputFields = z.object({
   requestId: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_.:-]+$/),
   profileId: z.number().int().positive(), message: z.string().trim().min(1),
@@ -43,6 +47,10 @@ const inputFields = z.object({
   useLorebooks: z.boolean().default(true), maxTokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
   timeoutMs: z.number().int().min(1000).max(1_800_000).optional(),
   mode: z.enum(['text', 'profile']).optional(),
+  pluginTools: z.array(z.string().regex(/^[a-z0-9_]+$/).max(64)).optional(),
+  roomKey: roomKeySchema.optional(),
+  roomTitle: roomTitleSchema.optional(),
+  expectedThreadId: z.number().int().positive().optional(),
   research: z.object({
     slotId: z.string().trim().min(1).max(100), activityId: z.string().trim().min(1).max(100),
     allowedPostIds: z.array(z.number().int().positive()).min(1).max(100),
@@ -57,14 +65,16 @@ const inputFields = z.object({
     try { JSON.parse(typeof value === 'string' ? value : JSON.stringify(value)); return true } catch { return false }
   }, 'structuredOutput must be valid JSON').optional(),
 }).strict()
-const measureSchema = inputFields.omit({ requestId: true, mode: true, research: true, timeoutMs: true })
+const measureSchema = inputFields.omit({ requestId: true, mode: true, research: true, timeoutMs: true, pluginTools: true, roomKey: true, roomTitle: true, expectedThreadId: true })
 const inputSchema = inputFields.refine(input => input.mode !== 'profile' || input.structuredOutput === undefined, 'structuredOutput is only available in text mode')
   .refine(input => input.mode !== 'profile' || input.translation === undefined, 'profile mode uses native translation')
   .refine(input => input.mode !== 'profile' || input.research || input.useLorebooks, 'Profile execution uses the profile lorebook settings; use text mode to disable lorebooks')
   .refine(input => input.mode !== 'profile' || input.model !== 'judge', 'The judge model is only available in text mode')
   .refine(input => !input.research || input.mode === 'profile', 'research requires profile mode')
+  .refine(input => (input.pluginTools === undefined && input.roomKey === undefined && input.expectedThreadId === undefined) || (input.mode === 'profile' && !input.research), 'pluginTools, roomKey and expectedThreadId require ordinary profile mode')
+  .refine(input => input.roomTitle === undefined || (input.roomKey !== undefined && input.mode === 'profile' && !input.research), 'roomTitle requires roomKey and ordinary profile mode')
 type Input = z.infer<typeof inputSchema>
-type Row = { plugin_id: string; owner_key: string; request_key: string; fingerprint: string; digest: string; profile_id: number; job_id: string; expires_at: number }
+type Row = { plugin_id: string; owner_key: string; request_key: string; fingerprint: string; digest: string; profile_id: number; job_id: string; expires_at: number; delivery?: string | null }
 type Params = { pluginId: string; requester: McpRequester; digest: string; inputKey: string; inputBytes: number }
 // Prompts live only for admitted work, never in runtime_jobs.params or the idempotency table.
 const inputs = new Map<string, { input: Input; measured?: PluginLlmMeasurement }>()
@@ -216,7 +226,8 @@ function view(row: Row): PluginLlmJob {
   try { job.result = readRuntimeJobResult(row.job_id, job.result) }
   catch { throw new PluginError('답변 결과 파일이 없거나 손상됐어. 같은 요청을 자동 재전송하지 마.', 410) }
   return { jobId: job.jobId, requestId: row.request_key, profileId: row.profile_id, status: job.status,
-    cancelRequested: job.cancelRequested, result: job.result as PluginLlmJob['result'], error: job.failureMessage, expiresAt: row.expires_at }
+    cancelRequested: job.cancelRequested, result: job.result as PluginLlmJob['result'], error: job.failureMessage, expiresAt: row.expires_at,
+    ...(row.delivery ? { delivery: JSON.parse(row.delivery) } : {}) }
 }
 function owned(pluginId: string, requester: McpRequester | undefined, jobId: unknown) {
   const { owner } = access(pluginId, requester)
@@ -241,6 +252,19 @@ export function cancelPluginLlmJob(pluginId: string, requester: McpRequester | u
   return result
 }
 
+export async function discardPluginLlmJob(pluginId: string, requester: McpRequester | undefined, jobId: unknown): Promise<PluginLlmDiscardResult> {
+  const row = owned(pluginId, requester, jobId)
+  const job = view(row)
+  if (!['completed', 'failed', 'cancelled'].includes(job.status)) throw new PluginError('답변 작업이 아직 끝나지 않았어.', 409)
+  // Only native profile execution produces profileRun. Research has its own isolated room and is never discarded.
+  const run = job.result?.profileRun
+  if (!run || run.research || !job.delivery || job.delivery.threadId !== run.threadId) {
+    throw new PluginError('입력 영수증과 실행 결과가 있는 일반 프로필 답변만 버릴 수 있어.', 409)
+  }
+  const deleted = await discardPluginProfileRun(pluginId, requester!, row.profile_id, run, job.delivery.messageId)
+  return { jobId: job.jobId, deleted }
+}
+
 function registerJob() {
   if (RuntimeJobRunner.isRegistered('plugin-llm')) return
   RuntimeJobRunner.register<Params, NonNullable<PluginLlmJob['result']>>({
@@ -261,7 +285,8 @@ function registerJob() {
       ctx.signal.addEventListener('abort', abort, { once: true })
       // A profile run follows the profile's own engine and connection limits; only an explicit plugin deadline stops it early.
       const timeoutMs = input.timeoutMs
-      const timeout = timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(new DOMException('답변 제한 시간을 넘었어.', 'TimeoutError')), timeoutMs)
+      const deadline = new DOMException('답변 제한 시간을 넘었어.', 'TimeoutError')
+      const timeout = timeoutMs === undefined ? undefined : setTimeout(() => controller.abort(deadline), timeoutMs)
       const permissionCheck = setInterval(() => {
         try {
           ctx.throwIfCancelled()
@@ -270,17 +295,25 @@ function registerJob() {
       }, 1000)
       timeout?.unref(); permissionCheck.unref()
       let releaseExecution: (() => void) | undefined
+      let releaseProfile: (() => void) | undefined
       let measured = admitted.measured
       try {
         ctx.flush({ phase: 'queued', currentLabel: profile.name, total: 1 })
+        if (input.mode === 'profile') {
+          releaseProfile = await acquirePluginProfileLock(requester.accountId, pluginId, input.profileId, input.roomKey, controller.signal)
+        }
         // Bound CLI processes too; requests beyond four wait, while connection limits still govern provider work.
         releaseExecution = await acquireLlmRequestSlot('\0plugin-llm-execution', 4, controller.signal)
         controller.signal.throwIfAborted(); ctx.throwIfCancelled()
         profile = profileAccess(pluginId, requester, input.profileId, digest).profile
         ctx.flush({ phase: 'generating', currentLabel: profile.name, total: 1 })
         if (input.mode === 'profile') {
-          const result = await runPluginProfile({ pluginId, pluginName: getPlugin(pluginId).definition.name, requester, profile, input, signal: controller.signal })
-          controller.signal.throwIfAborted(); ctx.throwIfCancelled()
+          const result = await runPluginProfile({ pluginId, pluginName: getPlugin(pluginId).definition.name, requester, profile, input, signal: controller.signal,
+            onDelivered: delivery => pluginDb().prepare('UPDATE plugin_llm_requests SET delivery=? WHERE job_id=?').run(JSON.stringify(delivery), ctx.jobId),
+            onPrimaryComplete: () => { releaseExecution?.(); releaseExecution = undefined; ctx.flush({ phase: 'follow-up' }) },
+            followUpDeadlineExpired: () => controller.signal.reason === deadline && !ctx.signal.aborted })
+          if (!result.profileRun?.followUpTimedOut) controller.signal.throwIfAborted()
+          ctx.throwIfCancelled()
           profileAccess(pluginId, requester, input.profileId, digest)
           ctx.flush({ processed: 1, succeeded: 1 })
           return result
@@ -333,6 +366,7 @@ function registerJob() {
         })
       } finally {
         releaseExecution?.()
+        releaseProfile?.()
         clearTimeout(timeout); clearInterval(permissionCheck)
         ctx.signal.removeEventListener('abort', abort)
       }
@@ -359,6 +393,7 @@ export function startPluginLlmJob(pluginId: string, requester: McpRequester | un
   }
   const previous = replay()
   if (previous) return previous
+  validatePluginProfileTools(pluginId, input.pluginTools)
   // Lore reads and prompt estimation must not hold the SQLite write lock.
   const prepared = input.mode === 'profile' ? undefined : prepareText(profile, input, actor)
   if (prepared) assertMeasuredFits(prepared)
@@ -390,10 +425,24 @@ export function callPluginLlm(pluginId: string, requester: McpRequester | undefi
   if (method === 'measure') return measurePluginLlm(pluginId, requester, args)
   if (method === 'asset') return readPluginProfileAsset(pluginId, requester, args)
   if (method === 'start') return startPluginLlmJob(pluginId, requester, args)
+  if (method === 'room') {
+    const input = z.object({ profileId: z.number().int().positive(), roomKey: roomKeySchema.optional(), roomTitle: roomTitleSchema.optional() }).strict()
+      .refine(input => input.roomTitle === undefined || input.roomKey !== undefined, 'roomTitle requires roomKey').parse(args)
+    const { plugin, requester: actor, profile } = profileAccess(pluginId, requester, input.profileId)
+    return ensurePluginProfileRoom(pluginId, plugin.definition.name, actor, profile, input.roomKey, input.roomTitle).then(room => {
+      profileAccess(pluginId, actor, profile.id, plugin.digest)
+      return { threadId: room.id }
+    })
+  }
+  if (method === 'forgetRooms') {
+    const { roomKey } = z.object({ roomKey: roomKeySchema }).strict().parse(args)
+    return forgetPluginProfileRooms(pluginId, access(pluginId, requester).requester, roomKey)
+  }
   if (method === 'decide' || method === 'judgeTurn') return callPluginJudge(pluginId, method, args, profileId => profileAccess(pluginId, requester, profileId))
   const { jobId } = z.object({ jobId: z.string().uuid() }).strict().parse(args)
   if (method === 'get') return getPluginLlmJob(pluginId, requester, jobId)
   if (method === 'cancel') return cancelPluginLlmJob(pluginId, requester, jobId)
+  if (method === 'discard') return discardPluginLlmJob(pluginId, requester, jobId)
   throw new PluginError('알 수 없는 LLM 요청이야.')
 }
 

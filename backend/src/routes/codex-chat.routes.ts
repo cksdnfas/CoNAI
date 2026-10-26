@@ -29,7 +29,7 @@ import { OwnedLorebookStore } from '../services/codex-chat/chatLorebookFiles'
 import { assertLinkedFiles, LinkedFileStore, normalizeLinkedFiles } from '../services/codex-chat/chatLinkedFiles'
 import { ChatMinutesStore } from '../services/codex-chat/chatMinutes'
 import { loreIndexText } from '../services/codex-chat/chatLoreContext'
-import { applyMerge, assertMergeDecisions, previewMerge, type MergeResult } from '../services/codex-chat/chatLorebookMerge'
+import { deleteChatThread, type ThreadLorebookOption } from '../services/codex-chat/chatThreadDeletion'
 import { ModelSlotStore } from '../services/codex-chat/modelSlots'
 import { downChatProfiles } from '../services/codex-chat/chatConnectionHealth'
 import { effectiveModelOf, modelLabelOf } from '../services/codex-chat/chatModelRoles'
@@ -65,7 +65,7 @@ import chatAssetBatchesRouter, { chatProfileExpressionsRouter } from './chat-ass
 import externalMcpRouter from './external-mcp.routes'
 import { draftChatAppearance } from '../services/codex-chat/chatAppearanceDraft'
 import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
-import { chatAccessOf, isGroupThread, lorebookOwner, parseId, parseThreadId, requesterFrom, requireChatAccess, sendChatError, sendMergeError } from './codex-chat-route-helpers'
+import { chatAccessOf, isGroupThread, parseId, parseThreadId, requesterFrom, requireChatAccess, sendChatError, sendMergeError } from './codex-chat-route-helpers'
 import chatLorebooksRouter from './codex-chat-lorebooks.routes'
 import chatAdminPresetsRouter from './codex-chat-admin-presets.routes'
 
@@ -1196,7 +1196,6 @@ router.get('/threads/:threadId/media', requireChatAccess, requireImagesView, (re
   }
 })
 
-type ThreadLorebookOption = { action: 'delete' | 'keep' | 'merge'; targetId: number | null; decisions: unknown }
 
 /** The `lorebook` option of a chat deletion; null when it is malformed. No option: the book goes with the chat. */
 function threadLorebookOption(value: unknown): ThreadLorebookOption | null {
@@ -1222,31 +1221,8 @@ router.delete('/threads/:threadId', requireChatAccess, asyncHandler(async (req: 
   const body = (req.body ?? {}) as { lorebook?: unknown; backup?: unknown; backupDate?: unknown }
   const option = threadLorebookOption(body.lorebook)
   if (!option) { sendRouteBadRequest(res, 'lorebook must be { action: delete | keep | merge, targetId?, decisions? } (merge needs targetId)'); return }
-  const owner = lorebookOwner(req)
   try {
-    const chatBook = CodexChatStore.findThread(threadId, getRequesterAccountId(req)) ? OwnedLorebookStore.chatBookOf(threadId) : null
-    if (chatBook && option.action === 'merge') assertMergeDecisions(previewMerge(chatBook.id, option.targetId as number, owner), option.decisions)
-    // A backup is written before anything is removed (the book still in it); when it fails nothing is deleted.
-    if (body.backup === true) backupChatToFiles(requesterFrom(req), threadId, backupDateOf(body.backupDate))
-    let lorebook: { action: ThreadLorebookOption['action']; bookId: number | null; merge?: Omit<MergeResult, 'book'> } = { action: chatBook ? option.action : 'delete', bookId: null }
-    if (chatBook && option.action === 'keep') {
-      lorebook = { action: 'keep', bookId: OwnedLorebookStore.keepChatBook(threadId).id }
-    } else if (chatBook && option.action === 'merge') {
-      const { book, ...counts } = applyMerge(chatBook.id, option.targetId as number, owner, option.decisions)
-      lorebook = { action: 'merge', bookId: book.id, merge: counts }
-    }
-    try {
-      if (isGroupThread(req, threadId)) await GroupChatService.deleteThread(requesterFrom(req), threadId)
-      else await CodexChatService.deleteThread(requesterFrom(req), threadId)
-    } catch (error) {
-      // Merged already: the chat book goes anyway, so deleting the chat again does not merge it twice.
-      if (chatBook && lorebook.action === 'merge') {
-        try { OwnedLorebookStore.delete(chatBook.id, owner) } catch { /* a file a message attaches keeps it; the next delete asks again */ }
-      }
-      throw error
-    }
-    ChatAppearanceStore.threadDeleted(getRequesterAccountId(req), threadId)
-    res.json({ success: true, data: { lorebook } })
+    res.json({ success: true, data: await deleteChatThread(requesterFrom(req), threadId, { lorebook: option, backup: body.backup === true, backupDate: body.backupDate }) })
   } catch (error) {
     sendMergeError(res, error)
   }

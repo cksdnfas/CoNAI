@@ -95,6 +95,14 @@ export type PluginLlmInput = {
   requestId: string; profileId: number; message: string; history?: string; userName?: string
   /** profile: native chat execution with the profile's tools and its own plugin/account room. text: stateless compatibility mode. */
   mode?: 'text' | 'profile'
+  /** Ordinary profile runs only: local names of this plugin's registered tools to add for this run. Default none. */
+  pluginTools?: string[]
+  /** Ordinary profile runs only: plugin-namespaced room identity, 1–100 ASCII letters/digits/_ . : -. */
+  roomKey?: string
+  /** Human-readable title suffix on room creation; 1–60 characters, requires roomKey. */
+  roomTitle?: string
+  /** Optional room precondition from llm.room; refuse stale context if the room was recreated. */
+  expectedThreadId?: number
   /** Opt-in isolated, read-only published-post research using the selected profile's engine. */
   research?: PluginResearchInput
   /** Text mode only. judge: the profile's prompt on its judge model, else the default judge row (cheap quick calls). */
@@ -109,7 +117,13 @@ export type PluginLlmInput = {
   /** Opt-in prose translation. `only` translates message JSON without a character/model turn. */
   translation?: { fields: string[]; only?: boolean; direction?: 'model' | 'display' }
 }
-export type PluginLlmMeasureInput = Omit<PluginLlmInput, 'requestId' | 'mode' | 'research' | 'timeoutMs'>
+export type PluginLlmMeasureInput = Omit<PluginLlmInput, 'requestId' | 'mode' | 'research' | 'timeoutMs' | 'pluginTools' | 'roomKey' | 'roomTitle' | 'expectedThreadId'>
+export type PluginLlmRoomInput = { profileId: number; roomKey?: string; roomTitle?: string }
+export type PluginLlmRoom = { threadId: number }
+export type PluginLlmForgetRoomsInput = { roomKey: string }
+export type PluginLlmForgetRoomsResult = { rooms: Array<{ threadId: number; status: 'deleted' | 'unlinked' }> }
+export type PluginLlmDiscardInput = { jobId: string }
+export type PluginLlmDiscardResult = { jobId: string; deleted: number }
 export type PluginLlmMeasurement = {
   /** outputReserve may be estimate-only when no cap is configured; available is then advisory, not a rejection rule. */
   inputTokens: number; outputReserve: number; contextTokens: number | null; available: number | null
@@ -175,9 +189,18 @@ export type PluginLlmJob = {
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'; cancelRequested: boolean
   result: { text: string; truncated: boolean; model: string; engine: string; json?: unknown; profileRun?: PluginProfileRun; translation?: { status: 'completed' | 'failed' | 'disabled'; language: 'en' | 'ko' | 'ja' | 'zh'; sourceLanguage?: 'en' | 'ko' | 'ja' | 'zh'; json?: unknown } } | null
   error: string | null; expiresAt: number
+  /** Durable receipt: the input was stored in the native room, even if generation subsequently failed/cancelled. */
+  delivery?: { threadId: number; messageId: number }
 }
+export type PluginProfileRunIdentity = { requestId: string; profileId: number; threadId: number }
 export type PluginProfileRun = {
   threadId: number; messageIds: number[]
+  /** Later replies that failed; completed primary/follow-up speech is still returned. */
+  incompleteMessageIds?: number[]
+  /** A native follow-up writer failed or produced no reply; some engines store no failed message. */
+  followUpFailed?: boolean
+  /** Explicit plugin deadline expired after primary completion; completed speech is retained. */
+  followUpTimedOut?: boolean
   research?: PluginResearchResult
   tools: Array<{ id: string; name: string; status: 'running' | 'completed' | 'failed'; summary: string; output: string;
     historyIds: number[]; compositeHashes: string[]; audioCandidateIds: string[]; pendingJobIds: number[];

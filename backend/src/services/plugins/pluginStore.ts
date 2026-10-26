@@ -51,6 +51,7 @@ export function pluginDb(): Database.Database {
         commit_sha TEXT NOT NULL, digest TEXT NOT NULL, latest_commit TEXT, checked_at TEXT, check_error TEXT);
     `)
     if (!(db.prepare('PRAGMA table_info(plugin_instances)').all() as Array<{ name: string }>).some(column => column.name === 'workspace')) db.exec('ALTER TABLE plugin_instances ADD COLUMN workspace TEXT')
+    if (!(db.prepare('PRAGMA table_info(plugin_llm_requests)').all() as Array<{ name: string }>).some(column => column.name === 'delivery')) db.exec('ALTER TABLE plugin_llm_requests ADD COLUMN delivery TEXT')
     // The administrator who turned a plugin on: its server module's own calls (timers, startup) run as them.
     if (!(db.prepare('PRAGMA table_info(plugins)').all() as Array<{ name: string }>).some(column => column.name === 'enabled_by')) db.exec('ALTER TABLE plugins ADD COLUMN enabled_by INTEGER')
     initialized.add(db)

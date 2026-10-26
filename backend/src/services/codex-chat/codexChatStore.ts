@@ -1,6 +1,6 @@
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { publishRuntimeEvent } from '../runtime-events/runtimeEventBus'
-import type { StoredFileEntry, ChatMessageRouting, ChatFileChange } from '@conai/shared'
+import { CHAT_THREAD_TITLE_MAX_LENGTH as TITLE_MAX_LENGTH, type StoredFileEntry, type ChatMessageRouting, type ChatFileChange } from '@conai/shared'
 import { FileStoreService, fileOwnerKey } from '../fileStoreService'
 import { parseBlockEdits, type BlockEdit } from './chatBlockState'
 import { parseFlagSnapshots, type ChatFlagSnapshot } from './chatFlags'
@@ -8,7 +8,7 @@ import { parseChatMediaAttachments, type ChatMediaAttachment } from './chatMedia
 import { ChatSummaryStore } from './chatMemory'
 import { OwnedLorebookStore } from './chatLorebookFiles'
 import { ChatProposalStore } from './chatProposals'
-import { forgetThreadFileChanges } from './chatFileChanges'
+import { forgetReplyFileChanges, forgetThreadFileChanges } from './chatFileChanges'
 import { notifySemanticChange } from '../embeddings/semanticSignal'
 import { cancelAgentCallsForThread } from './chatAgentCalls'
 
@@ -223,7 +223,6 @@ export function parseMessageRouting(value: string | null): ChatMessageRouting | 
   } catch { return null }
 }
 
-const TITLE_MAX_LENGTH = 60
 
 /** A new or emptied Codex thread starts with no usage and no lore in its memory. */
 const RESET_CODEX_STATE = `codex_context_tokens = NULL, codex_context_window = NULL, codex_input_tokens = NULL,
@@ -405,6 +404,11 @@ export const CodexChatStore = {
     return getUserSettingsDb().prepare(`
       SELECT * FROM codex_chat_threads WHERE id = ? AND account_id IS ?
     `).get(threadId, accountId) as CodexChatThreadRecord | undefined
+  },
+  hasNonPluginUserMessages(threadId: number) {
+    return Boolean(getUserSettingsDb().prepare(`SELECT 1 FROM codex_chat_messages
+      WHERE thread_id=? AND role='user'
+      AND (CASE WHEN json_valid(routing) THEN json_extract(routing,'$.routine.source') END) IS NOT 'plugin' LIMIT 1`).get(threadId))
   },
 
   findThreadById(threadId: number) {
@@ -670,6 +674,47 @@ export const CodexChatStore = {
       removeMessagesAfter(threadId, messageId)
       invalidateContext(threadId, messageId + 1)
     }).immediate()
+  },
+
+  /** Delete only the selected rows and their reply metadata; never truncate later messages. */
+  deleteMessages(threadId: number, messageIds: number[]) {
+    if (messageIds.some(id => !Number.isSafeInteger(id) || id < 1)) throw new Error('Invalid message ID')
+    const db = getUserSettingsDb()
+    const deleted = db.transaction(() => {
+      const find = db.prepare('SELECT routing, alternatives FROM codex_chat_messages WHERE thread_id = ? AND id = ?')
+      const attachments = db.prepare('DELETE FROM chat_file_attachments WHERE message_id = ?')
+      const remove = db.prepare('DELETE FROM codex_chat_messages WHERE thread_id = ? AND id = ?')
+      const replyCleanup = ['chat_generation_links', 'chat_generation_reactions', 'chat_deferred_generations', 'chat_judge_runs']
+        .map(table => db.prepare(`DELETE FROM ${table} WHERE thread_id = ? AND reply_id = ?`))
+      const judgeMessages = db.prepare('DELETE FROM chat_judge_runs WHERE thread_id = ? AND message_id = ?')
+      const removed = new Set<number>()
+      let first = Infinity
+      for (const id of new Set(messageIds)) {
+        const row = find.get(threadId, id) as { routing: string | null; alternatives: string | null } | undefined
+        if (!row) continue
+        const replyIds = new Set([parseMessageRouting(row.routing)?.replyId, ...parseAlternatives(row.alternatives).map(alternative => alternative.routing?.replyId)])
+        for (const replyId of replyIds) {
+          if (!replyId) continue
+          ChatProposalStore.deleteForReply(threadId, replyId)
+          forgetReplyFileChanges(threadId, replyId)
+          for (const cleanup of replyCleanup) cleanup.run(threadId, replyId)
+        }
+        judgeMessages.run(threadId, id)
+        attachments.run(id)
+        remove.run(threadId, id)
+        removed.add(id)
+        first = Math.min(first, id)
+      }
+      if (removed.size) {
+        const row = db.prepare('SELECT block_edits FROM codex_chat_threads WHERE id = ?').get(threadId) as { block_edits: string | null }
+        const kept = parseBlockEdits(row.block_edits).filter(edit => !removed.has(edit.afterMessageId))
+        db.prepare('UPDATE codex_chat_threads SET block_edits = ? WHERE id = ?').run(kept.length ? JSON.stringify(kept) : null, threadId)
+        invalidateContext(threadId, first)
+      }
+      return removed.size
+    }).immediate()
+    if (deleted) notifySemanticChange('message')
+    return deleted
   },
 
   prepareRegeneration(threadId: number, messageId: number) {

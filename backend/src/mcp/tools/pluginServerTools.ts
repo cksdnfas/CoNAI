@@ -14,7 +14,7 @@ export function registerPluginServerTools(server: McpServer, context: McpRequest
       inputSchema: forwardedToolInputSchema(tool.inputSchema),
     }, async (args: unknown, extra: unknown) => {
       const signal = (extra as { mcpReq?: { signal?: AbortSignal } } | undefined)?.mcpReq?.signal;
-      return await callPluginServerTool(tool.name, (args ?? {}) as Record<string, unknown>, context.requester, signal) as never;
+      return await callPluginServerTool(tool.name, (args ?? {}) as Record<string, unknown>, context.requester, signal, context.chatContext) as never;
     });
   }
 }

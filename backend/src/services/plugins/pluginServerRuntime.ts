@@ -136,6 +136,9 @@ const conai = Object.freeze({
     judgeTurn: (input) => call('llm.judgeTurn', input),
     asset: (input) => call('llm.asset', input),
     start: (input) => call('llm.start', input),
+    room: (input) => call('llm.room', input),
+    forgetRooms: (input) => call('llm.forgetRooms', input),
+    discard: (input) => call('llm.discard', input),
     get: (jobId) => call('llm.get', { jobId }),
     cancel: (jobId) => call('llm.cancel', { jobId }),
   }),
@@ -457,10 +460,10 @@ function toolResult(value: unknown): PluginServerToolResult {
   if (Buffer.byteLength(JSON.stringify(result)) > RESULT_LIMIT) return { isError: true, content: [{ type: 'text', text: '플러그인 도구 결과가 512KB를 넘었어.' }] }
   return result
 }
-setPluginServerToolInvoker(async (tool, args, requester, signal) => {
+setPluginServerToolInvoker(async (tool, args, requester, signal, run) => {
   try {
     if (signal?.aborted) throw new PluginError('취소됐어.', 499)
-    return toolResult(await invoke(tool.pluginId, 'tool', tool.localName, args, { account: accountOf(requester), tool: tool.name }, { requester }, TOOL_TIMEOUT_MS, signal))
+    return toolResult(await invoke(tool.pluginId, 'tool', tool.localName, args, { account: accountOf(requester), tool: tool.name, ...(run ? { run } : {}) }, { requester }, TOOL_TIMEOUT_MS, signal))
   } catch (error) {
     return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }] }
   }

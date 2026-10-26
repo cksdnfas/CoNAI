@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import type { ChatRecipient } from '@conai/shared';
 import { getUserSettingsDb } from '../../database/userSettingsDb';
 import { ChatProfileStore } from '../../services/codex-chat/chatProfiles';
 import { userPersonaForThread } from '../../services/codex-chat/chatUserProfiles';
@@ -34,11 +35,14 @@ function speakerName(row: RoomMessageRow, names: Map<number, string>, userName: 
 
 /**
  * A direct chat's reply already answers (and quotes) the latest user message, so chat_reply_to there only quotes an
- * older one. It is still offered from the first message on: a tool list that grows on the second message would make a
- * local server or a provider cache read the whole prompt again, and the tool says it is for older messages.
+ * older one. Without an earlier message there is nothing to change. Codex keeps its session's initial tool list,
+ * so it must retain the tool even before an older message exists.
  */
-export function offersChatReplyTo(_context: McpRequestContext) {
-  return true;
+export function offersChatReplyTo(context: McpRequestContext) {
+  const chat = context.chatContext;
+  if (!chat || chat.kind === 'group' || context.source === 'codex-chat') return true;
+  const latest = CodexChatStore.latestUserMessageId(chat.threadId);
+  return latest !== null && CodexChatStore.hasMessagesBefore(chat.threadId, latest);
 }
 
 /**
@@ -51,17 +55,20 @@ export function registerChatRoomTools(server: McpServer, context: McpRequestCont
 }
 
 function registerChatReplyTo(server: McpServer, context: McpRequestContext): void {
+  const direct = context.chatContext?.kind === 'direct';
   server.registerTool(
     'chat_reply_to',
-    { description: 'Set the quote and recipients of the reply you are writing. message_id: the message to quote (omit to keep the current quote). to: exact member profile IDs, "user" (address the human) or "room" (announce without waking anyone); replaces earlier recipients. The app shows the quote; do not repeat it. Sender and room are server-controlled.', inputSchema: z.object({
-      message_id: z.number().int().positive().optional(),
-      to: z.array(z.union([z.number().int().positive(), z.literal('user'), z.literal('room')])).min(1).max(6).optional(),
+    { description: direct
+      ? 'Quote an older message in this 1:1 chat. Your reply already quotes the latest incoming message and addresses the user; do not call this to confirm delivery or recipients. message_id: the older message to quote. The app shows the quote; do not repeat it.'
+      : 'Set the quote and recipients of the reply you are writing. message_id: the message to quote (omit to keep the current quote). to: exact member profile IDs, "user" (address the human) or "room" (announce without waking anyone); replaces earlier recipients. The app shows the quote; do not repeat it. Sender and room are server-controlled.', inputSchema: z.object({
+      message_id: direct ? z.number().int().positive() : z.number().int().positive().optional(),
+      ...(!direct ? { to: z.array(z.union([z.number().int().positive(), z.literal('user'), z.literal('room')])).min(1).max(6).optional() } : {}),
     }) },
     async ({ message_id, to }) => {
       try {
         if (message_id === undefined && to === undefined) throw new Error('Choose a message_id or to recipient.');
         requireRoom(context, context.chatContext?.threadId ?? 0);
-        const routing = routeChatReply(context.chatContext, { messageId: message_id, recipients: to });
+        const routing = routeChatReply(context.chatContext, { messageId: message_id, recipients: direct ? undefined : to as ChatRecipient[] | undefined });
         return textResult({ reply_to: routing.replyTo?.messageId ?? null, to: routing.recipients, context: message_id ? buildReplyContext(CodexChatStore.listMessages(context.chatContext!.threadId), routing, { group: context.chatContext?.kind === 'group' }) : undefined, note: 'Recipients are accepted. Finish your own reply; delivery happens after it is saved.' });
       } catch (error) { return errorResult(error); }
     },

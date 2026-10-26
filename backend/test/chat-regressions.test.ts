@@ -333,7 +333,15 @@ test('tool calls a server left in the reply text are recovered only for offered 
   assert.deepEqual(JSON.parse(hermes.calls[0].function.arguments), { query: '42', limit: 5 })
   const xml = parseTextToolCalls('<function=search_images><parameter=query>42</parameter><parameter=limit>5</parameter></function>', available)!
   assert.deepEqual(JSON.parse(xml.calls[0].function.arguments), { query: '42', limit: 5 }, 'string parameters stay strings, others are read as JSON')
+  const spaced = '<tool_call> <function=chat_reply_to> <parameter=message_id> 89 </parameter> <parameter=to> ["user"] </parameter> </function> </tool_call>'
+  for (const markup of [spaced, spaced.replace(/</g, '&lt;').replace(/>/g, '&gt;')]) {
+    const reply = parseTextToolCalls(markup, { tools: [fn('chat_reply_to')], catalogued: new Set() })!
+    assert.equal(reply.text, '')
+    assert.deepEqual(JSON.parse(reply.calls[0].function.arguments), { message_id: 89, to: ['user'] })
+  }
   assert.equal(parseTextToolCalls('<tool_call>{"name": "delete_files", "arguments": {}}</tool_call>', available), null, 'a tool this request does not offer never runs')
+  const unavailable = '<tool_call> <function=chat_reply_to> <parameter=message_id> 89 </parameter> </function> </tool_call>'
+  assert.deepEqual(recoverTextToolCalls(unavailable, { text: unavailable, marked: true }, available, true), { text: '', tail: '', calls: [] }, 'unavailable markup is stripped, never executed or stored as speech')
   assert.equal(parseTextToolCalls('Example:\n```xml\n<tool_call>{"name": "search_images", "arguments": {}}</tool_call>\n```', available), null, 'a call inside a code block is an example')
 
   const shown: string[] = []

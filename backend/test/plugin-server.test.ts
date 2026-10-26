@@ -582,25 +582,40 @@ test('trusted plugins run a server module with their own data, hooks and tools',
   })
 
   await t.test('profile runs execute native tools, return their results, recheck grants and cancel without replay', async st => {
+    const fixture = fs.readFileSync(path.join(folder, 'server.mjs'), 'utf8').replace('export function activate(conai) {',
+      `export function activate(conai) {
+        conai.tools.register({ name: 'run_identity', scope: 'read', inputSchema: { type: 'object', properties: { profile_id: { type: 'integer' }, discardJobId: { type: 'string' } } },
+          handler: (_args, context) => _args.discardJobId ? conai.llm.discard({ jobId: _args.discardJobId }) : context.run ?? null });`)
+    await registry.installPlugin(packageOf(folder, () => {}, { 'server.mjs': fixture }))
+    await until(() => status().state === 'ready' && status().tools.some(tool => tool.name === 'p_chat_instructions_run_identity'), 'run identity fixture')
     const llm = await import('../src/services/plugins/pluginLlm')
     const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
     const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
     const { FileStoreService } = await import('../src/services/fileStoreService')
     const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
     const { automationRoomKinds } = await import('../src/services/codex-chat/chatRoomWake')
+    const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+    ExternalApiProvider.create({ provider_name: 'plugin-independent', display_name: 'Independent test connection', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: {} })
+    const independentProfile = ChatProfileStore.create({ name: 'Independent worker', engine: 'llm',
+      modelSlotId: ModelSlotStore.ensure('plugin-independent', 'test-model')!, mcpEnabled: false, summaryEnabled: false })
     const profile = ChatProfileStore.create({ name: 'Plugin worker', engine: 'llm', modelSlotId: ModelSlotStore.ensure('plugin-test', 'test-model')!,
       mcpEnabled: true, mcpScopes: ['organize'], toolAllowlist: ['create_file_folder'], maxTokens: 8192, summaryEnabled: false })
     let folderName = 'native-plugin-result', revoke = false, hold = false, aborted = false, calls = 0
+    let finishCancellation!: () => void
+    const cancellationUnwind = new Promise<void>(resolve => { finishCancellation = resolve })
+    st.after(() => finishCancellation())
+    let requestedTool = 'create_file_folder'
     const results: string[] = []
     const budgets: number[] = []
     let captureToolsOnly = true
     st.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       calls++
-      if (hold) await new Promise<void>((_resolve, reject) => {
-        const cancel = () => { aborted = true; reject(init?.signal?.reason) }
+      const body = JSON.parse(String(init?.body ?? '{}'))
+      if (String(_url).endsWith('/v1/systemone')) return Response.json({ model: 'decision-model', answers: { follow: { type: 'noul', noul: 0.95 } } })
+      if (hold && !JSON.stringify(body.messages).includes('Independent room')) await new Promise<void>((_resolve, reject) => {
+        const cancel = () => { aborted = true; void cancellationUnwind.then(() => reject(init?.signal?.reason)) }
         if (init?.signal?.aborted) cancel(); else init?.signal?.addEventListener('abort', cancel, { once: true })
       })
-      const body = JSON.parse(String(init?.body ?? '{}'))
       if (!captureToolsOnly || body.tools?.length) budgets.push(body.max_tokens ?? body.max_completion_tokens)
       const messages = body.messages as Array<{ role: string; content: string }>
       // Only inspect the current turn; a dedicated profile room retains its earlier tool history.
@@ -610,8 +625,9 @@ test('trusted plugins run a server module with their own data, hooks and tools',
       if (!result && body.tools?.length) {
         if (revoke) ChatProfileStore.update(profile.id, { toolAllowlist: ['list_files'] })
         const catalog = body.tools.some((tool: { function: { name: string } }) => tool.function.name === 'run_tool')
+        const args = requestedTool === 'create_file_folder' ? { name: folderName } : { profile_id: 5 }
         return Response.json({ choices: [{ message: { content: null, tool_calls: [{ id: `folder-${calls}`, type: 'function', function: {
-          name: catalog ? 'run_tool' : 'create_file_folder', arguments: JSON.stringify(catalog ? { tool: 'create_file_folder', arguments: { name: folderName } } : { name: folderName }) } }] }, finish_reason: 'tool_calls' }] })
+          name: catalog ? 'run_tool' : requestedTool, arguments: JSON.stringify(catalog ? { tool: requestedTool, arguments: args } : args) } }] }, finish_reason: 'tool_calls' }] })
       }
       return Response.json({ choices: [{ message: { content: '실행 결과를 확인했어.' }, finish_reason: 'stop' }] })
     })
@@ -659,6 +675,176 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.throws(() => llm.getPluginLlmJob('chat-instructions', { accountId: guestId, accountType: 'guest' }, job.jobId), /찾을 수 없어/)
     assert.ok(!CodexChatStore.findThread(run.threadId, guestId))
 
+    // The initiating plugin contributes only its own tools, even when the profile has no native MCP grant.
+    ChatProfileStore.update(profile.id, { mcpEnabled: false, toolAllowlist: [] })
+    requestedTool = 'p_chat_instructions_run_identity'
+    const omitted = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'profile-no-extra-tools' }).jobId)
+    assert.ok(!omitted.result?.profileRun?.tools.some(tool => tool.name === requestedTool && tool.status === 'completed'))
+    const own = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'profile-own-tool', pluginTools: ['run_identity'] }).jobId)
+    assert.equal(own.status, 'completed', own.error ?? '')
+    assert.ok(own.result?.profileRun?.tools.some(tool => tool.name === requestedTool && tool.status === 'completed'))
+    assert.deepEqual(JSON.parse(own.result!.profileRun!.tools.find(tool => tool.name === requestedTool)!.output),
+      { requestId: 'profile-own-tool', profileId: profile.id, threadId: run.threadId })
+    assert.ok(own.delivery && CodexChatStore.findMessage(own.delivery.threadId, own.delivery.messageId)?.role === 'user')
+    assert.equal(JSON.stringify((await serverTools.callPluginServerTool(requestedTool, {}, admin)).content).includes('profile-own-tool'), false, 'ordinary MCP calls carry no run identity')
+    for (const patch of [
+      { pluginTools: ['missing'] }, { pluginTools: ['run_identity', 'run_identity'] },
+      { mode: 'text', pluginTools: ['run_identity'] }, { mode: 'text', roomKey: 'slot' },
+      { roomKey: '../slot' }, { roomKey: '' }, { roomKey: 's'.repeat(101) },
+    ]) assert.throws(() => llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'invalid-run-options', ...patch }))
+    const { resolveChatProfileToolGrant, resolveChatAccess } = await import('../src/services/codex-chat/codexChatAccess')
+    assert.deepEqual(resolveChatProfileToolGrant(ChatProfileStore.find(profile.id)!, resolveChatAccess(adminId), run.threadId).scopes, [], 'run-local grants are removed after completion')
+    await serverTools.withPluginProfileTools({ pluginId: 'chat-instructions', accountId: adminId, profileId: profile.id,
+      threadId: run.threadId, requestId: 'grant-test', tools: ['run_identity'] }, async () => {
+      const original = ChatProfileStore.find(profile.id)!
+      const grant = resolveChatProfileToolGrant(original, resolveChatAccess(adminId), run.threadId)
+      assert.ok(grant.toolAllowlist?.includes(requestedTool))
+      assert.ok(!grant.toolAllowlist?.includes('p_chat_instructions_list_rules'))
+      assert.ok(resolveChatProfileToolGrant({ ...original, mcpEnabled: true, mcpScopes: ['read'], toolAllowlist: ['call_agent'] }, resolveChatAccess(adminId), run.threadId).toolAllowlist?.includes('call_agent'))
+      const { createMcpServer } = await import('../src/mcp/server')
+      const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
+      const server = createMcpServer({ requester: admin, source: 'llm-chat', ...grant, toolCatalog: false, chatContext: { threadId: run.threadId, profileId: profile.id, kind: 'direct' } })
+      const client = new Client({ name: 'plugin-grant-regression', version: '1' })
+      const [a, b] = InMemoryTransport.createLinkedPair()
+      await Promise.all([server.connect(b), client.connect(a)])
+      try {
+        const names = (await client.listTools()).tools.map(tool => tool.name)
+        assert.ok(names.includes(requestedTool))
+        assert.ok(!names.includes('offer_choices') && !names.some(name => name.startsWith('task_')))
+      } finally { await client.close(); await server.close() }
+    })
+    await st.test('discard enforces ownership, terminal state, room locks and exact native message cleanup', async () => {
+      const discard = (jobId: string, actor: { accountId: number; accountType: 'admin' | 'guest' } = admin, pluginId = 'chat-instructions') => llm.callPluginLlm(pluginId, actor, 'discard', { jobId }) as Promise<import('@conai/shared').PluginLlmDiscardResult>
+      const first = llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'discard-turn', roomKey: 'discard', pluginTools: ['run_identity'] })
+      await assert.rejects(discard(first.jobId), { status: 409 })
+      const rejected = await done(first.jobId)
+      const discardedRun = rejected.result!.profileRun!
+      const wake = rejected.delivery!
+      const later = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'discard-keep-later', roomKey: 'discard', pluginTools: ['run_identity'] }).jobId)
+      assert.equal(later.result!.profileRun!.threadId, discardedRun.threadId)
+      const human = CodexChatStore.addMessage({ thread_id: discardedRun.threadId, role: 'user', content: 'Keep the human message.', tool_calls: [], status: 'completed', error: null })
+      const removedIds = new Set([wake.messageId, ...discardedRun.messageIds])
+      const expected = CodexChatStore.listMessages(discardedRun.threadId).filter(message => !removedIds.has(message.id)).map(message => message.id)
+      const untouched = CodexChatStore.listMessages(run.threadId).map(message => message.id)
+      const db = user.getUserSettingsDb()
+      const file = FileStoreService.writeText(`account:${adminId}`, null, 'discard-attachment.txt', 'The stored file must survive.')
+      db.prepare('INSERT INTO chat_file_attachments(message_id,file_id) VALUES(?,?)').run(wake.messageId, file.id)
+      const { ChatProposalStore } = await import('../src/services/codex-chat/chatProposals')
+      const replyId = CodexChatStore.findMessage(discardedRun.threadId, discardedRun.messageIds[0])!.routing!.replyId!
+      const card = ChatProposalStore.add({ threadId: discardedRun.threadId, profileId: profile.id, kind: 'direct', replyId }, { kind: 'lore', title: 'Rejected line', keys: [], content: 'Discard this proposal.', constant: false })
+      const { ChatSummaryStore } = await import('../src/services/codex-chat/chatMemory')
+      const revision = CodexChatStore.findThreadById(discardedRun.threadId)!.context_revision
+      assert.ok(ChatSummaryStore.addSegment(discardedRun.threadId, { from: wake.messageId, until: human, content: 'Rejected duplicate.' }, revision))
+      await assert.rejects(discard(first.jobId, { accountId: guestId, accountType: 'guest' }), { status: 404 })
+      await registry.installPlugin(packageOf(folder, manifest => { manifest.id = 'discard-other'; delete manifest.server }))
+      try {
+        await registry.setPluginEnabled('discard-other', true, adminId)
+        await assert.rejects(discard(first.jobId, admin, 'discard-other'), { status: 404 })
+      } finally { await registry.removePlugin('discard-other') }
+      const { acquirePluginProfileLock } = await import('../src/services/plugins/pluginProfileRun')
+      const release = await acquirePluginProfileLock(adminId, 'chat-instructions', profile.id, 'discard')
+      try { await assert.rejects(discard(first.jobId), { status: 409 }) } finally { release() }
+      const { beginChatOrderRun } = await import('../src/services/codex-chat/chatOrderRuns')
+      const active = beginChatOrderRun(discardedRun.threadId, later.result!.profileRun!.messageIds[0], 'discard-busy')!
+      try { await assert.rejects(discard(first.jobId), { status: 409 }) } finally { active.end() }
+      assert.ok([...removedIds].every(id => CodexChatStore.findMessage(discardedRun.threadId, id)))
+      const viaSdk = await serverTools.callPluginServerTool(requestedTool, { discardJobId: first.jobId }, admin)
+      assert.notEqual(viaSdk.isError, true, JSON.stringify(viaSdk))
+      assert.deepEqual(JSON.parse((viaSdk.content[0] as { text: string }).text), { jobId: first.jobId, deleted: removedIds.size })
+      assert.deepEqual(CodexChatStore.listMessages(discardedRun.threadId).map(message => message.id), expected)
+      assert.deepEqual(CodexChatStore.listMessages(run.threadId).map(message => message.id), untouched)
+      assert.equal(ChatProposalStore.find(card.id), null)
+      assert.equal(db.prepare('SELECT 1 FROM chat_file_attachments WHERE message_id=?').get(wake.messageId), undefined)
+      assert.ok(FileStoreService.list(`account:${adminId}`, null).entries.some(entry => entry.id === file.id), 'discard does not undo stored files')
+      assert.deepEqual(ChatSummaryStore.list(discardedRun.threadId), [])
+      assert.ok(CodexChatStore.findThreadById(discardedRun.threadId)!.context_revision > revision)
+      assert.deepEqual(await discard(first.jobId), { jobId: first.jobId, deleted: 0 })
+      assert.throws(() => llm.callPluginLlm('chat-instructions', admin, 'discard', { jobId: first.jobId, threadId: run.threadId }))
+      const { forgetAutomationRoom } = await import('../src/services/codex-chat/chatRoomWake')
+      const { pluginProfileRoomKey } = await import('../src/services/plugins/pluginProfileRun')
+      forgetAutomationRoom(adminId, pluginProfileRoomKey('chat-instructions', profile.id, 'discard'))
+      await assert.rejects(discard(later.jobId), { status: 404 })
+      assert.deepEqual(CodexChatStore.listMessages(discardedRun.threadId).map(message => message.id), expected)
+      const text = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'discard-text', mode: 'text' }).jobId)
+      await assert.rejects(discard(text.jobId), { status: 409 })
+    })
+    const rooms: number[] = []
+    for (const [index, roomKey] of ['slot:1:g1', 'slot:2:g1', 'slot:1:g1', 'slot:1:g2'].entries()) {
+      const scoped = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: `scoped-room-${index}`, roomKey, pluginTools: ['run_identity'] }).jobId)
+      assert.equal(scoped.status, 'completed', scoped.error ?? '')
+      rooms.push(scoped.result!.profileRun!.threadId)
+    }
+    assert.equal(rooms[0], rooms[2])
+    assert.notEqual(rooms[0], rooms[1]); assert.notEqual(rooms[0], rooms[3])
+    const { CodexChatService } = await import('../src/services/codex-chat/codexChatService')
+    const { findAutomationRoom } = await import('../src/services/codex-chat/chatRoomWake')
+    const { pluginProfileRoomKey } = await import('../src/services/plugins/pluginProfileRun')
+    const { OwnedLorebookStore } = await import('../src/services/codex-chat/chatLorebookFiles')
+    const { ChatAppearanceStore } = await import('../src/services/codex-chat/chatAppearance')
+    assert.deepEqual(await llm.callPluginLlm('chat-instructions', admin, 'room', { profileId: profile.id, roomKey: 'slot:1:g1' }), { threadId: rooms[0] })
+    await CodexChatService.deleteThread(admin, rooms[0])
+    const stale = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'stale-room', roomKey: 'slot:1:g1', expectedThreadId: rooms[0] }).jobId)
+    assert.equal(stale.status, 'failed')
+    assert.match(stale.error!, /방이 새로 만들어졌거나 정리됐어/)
+    assert.equal(findAutomationRoom(admin, profile.id, pluginProfileRoomKey('chat-instructions', profile.id, 'slot:1:g1')), undefined, 'stale admitted runs cannot create a replacement room')
+    const recreated = await llm.callPluginLlm('chat-instructions', admin, 'room', { profileId: profile.id, roomKey: 'slot:1:g1', roomTitle: '햇살 마을' }) as { threadId: number }
+    assert.notEqual(recreated.threadId, rooms[0])
+    assert.match(CodexChatStore.findThread(recreated.threadId, adminId)!.title, /햇살 마을$/)
+    assert.doesNotMatch(CodexChatStore.findThread(recreated.threadId, adminId)!.title, /slot:1:g1/)
+    assert.throws(() => llm.callPluginLlm('chat-instructions', admin, 'room', { profileId: profile.id, roomTitle: 'missing key' }))
+    assert.throws(() => llm.callPluginLlm('chat-instructions', admin, 'room', { profileId: profile.id, roomKey: 'slot', roomTitle: 'a'.repeat(61) }))
+    const otherProfileRoom = await llm.callPluginLlm('chat-instructions', admin, 'room', { profileId: independentProfile.id, roomKey: 'slot:1:g1' }) as { threadId: number }
+    CodexChatStore.addMessage({ thread_id: otherProfileRoom.threadId, role: 'user', content: 'My own message must survive reset', tool_calls: [], status: 'completed', error: null })
+    for (const id of [recreated.threadId, otherProfileRoom.threadId]) {
+      OwnedLorebookStore.saveChatBook(id, [{ id: 'memory', content: 'Room memory' }])
+      ChatAppearanceStore.setThread(adminId, id, { fontSize: 'lg' })
+    }
+    assert.deepEqual(await llm.callPluginLlm('chat-instructions', { accountId: guestId, accountType: 'guest' }, 'forgetRooms', { roomKey: 'slot:1:g1' }), { rooms: [] })
+    const removed = await llm.callPluginLlm('chat-instructions', admin, 'forgetRooms', { roomKey: 'slot:1:g1' }) as import('@conai/shared').PluginLlmForgetRoomsResult
+    assert.deepEqual(removed.rooms.sort((a, b) => a.threadId - b.threadId),
+      [{ threadId: recreated.threadId, status: 'deleted' }, { threadId: otherProfileRoom.threadId, status: 'unlinked' }].sort((a, b) => a.threadId - b.threadId))
+    assert.equal(CodexChatStore.findThread(recreated.threadId, adminId), undefined)
+    assert.ok(!OwnedLorebookStore.chatBookOf(recreated.threadId))
+    assert.equal(ChatAppearanceStore.threadAppearance(adminId, recreated.threadId), null)
+    assert.ok(CodexChatStore.findThread(otherProfileRoom.threadId, adminId))
+    assert.ok(OwnedLorebookStore.chatBookOf(otherProfileRoom.threadId))
+    assert.deepEqual(ChatAppearanceStore.threadAppearance(adminId, otherProfileRoom.threadId), { fontSize: 'lg' })
+    assert.equal(automationRoomKinds(adminId).has(otherProfileRoom.threadId), false)
+    assert.ok(CodexChatStore.findThread(rooms[1], adminId)); assert.ok(CodexChatStore.findThread(run.threadId, adminId))
+    assert.deepEqual(await llm.callPluginLlm('chat-instructions', admin, 'forgetRooms', { roomKey: 'slot:1:g1' }), { rooms: [] })
+    assert.deepEqual(await llm.callPluginLlm('chat-instructions', admin, 'forgetRooms', { roomKey: 'slot:2:g1' }), { rooms: [{ threadId: rooms[1], status: 'deleted' }] }, 'real plugin wakes, unlike human messages, allow deletion')
+    assert.throws(() => llm.callPluginLlm('chat-instructions', admin, 'forgetRooms', { roomKey: '../slot' }))
+    assert.throws(() => llm.callPluginLlm('chat-instructions', admin, 'forgetRooms', { roomKey: 'slot:1:g1', threadId: run.threadId }))
+
+    const { ChatJudgePresetStore } = await import('../src/services/codex-chat/chatJudgePresets')
+    const { RuntimeJobStore } = await import('../src/services/runtimeJobs/runtimeJobStore')
+    const { acquireLlmRequestSlot } = await import('../src/services/llmRequestScheduler')
+    const delayedPreset = ChatJudgePresetStore.create({ name: 'Delayed plugin follow-up', modelSlotId: ModelSlotStore.ensure('plugin-decision', 'decision-model', { kinds: ['decision_typesafe'] })!,
+      items: [{ id: 'follow', name: 'Follow', stage: 'after', instructions: 'Follow up?' }], followUp: { maxConsecutive: 1, delaySeconds: 600 } })
+    ChatProfileStore.update(independentProfile.id, { judgePresetId: delayedPreset.id, judgeSlotId: ModelSlotStore.ensure('plugin-decision', 'decision-model', { kinds: ['decision_typesafe'] })! })
+    const delayed = llm.startPluginLlmJob('chat-instructions', admin, { ...input, profileId: independentProfile.id, requestId: 'follow-deadline', roomKey: 'delayed', timeoutMs: 2000 })
+    await until(() => RuntimeJobStore.get(delayed.jobId)?.phase === 'follow-up', 'primary reply releases execution slot')
+    const releases: Array<() => void> = []
+    try {
+      await Promise.all([0, 1, 2, 3].map(async () => {
+        releases.push(await acquireLlmRequestSlot('\0plugin-llm-execution', 4, AbortSignal.timeout(500)))
+      }))
+      await assert.rejects(llm.callPluginLlm('chat-instructions', admin, 'forgetRooms', { roomKey: 'delayed' }) as Promise<unknown>, /실행 중/)
+    } finally { for (const release of releases) release() }
+    const timedFollow = await done(delayed.jobId)
+    assert.equal(timedFollow.status, 'completed', timedFollow.error ?? '')
+    assert.ok(timedFollow.result?.text)
+    assert.equal(timedFollow.result?.profileRun?.followUpTimedOut, true)
+    const cancellingFollow = llm.startPluginLlmJob('chat-instructions', admin, { ...input, profileId: independentProfile.id, requestId: 'follow-cancel', roomKey: 'delayed-cancel' })
+    await until(() => RuntimeJobStore.get(cancellingFollow.jobId)?.phase === 'follow-up', 'follow-up cancellation stage')
+    llm.cancelPluginLlmJob('chat-instructions', admin, cancellingFollow.jobId)
+    assert.equal((await done(cancellingFollow.jobId)).status, 'cancelled', 'explicit cancellation never becomes partial success')
+    ChatProfileStore.update(independentProfile.id, { judgePresetId: null, judgeSlotId: null })
+    requestedTool = 'create_file_folder'; folderName = 'must-not-create-through-plugin-scope'
+    await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'profile-native-still-disabled', pluginTools: ['run_identity'] }).jobId)
+    assert.ok(!FileStoreService.list(`account:${adminId}`, null).entries.some(entry => entry.name === folderName))
+    ChatProfileStore.update(profile.id, { mcpEnabled: true, toolAllowlist: ['create_file_folder'] })
+
     revoke = true; folderName = 'must-not-create-revoked'
     const denied = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'profile-revoked' }).jobId)
     assert.equal(denied.status, 'completed', denied.error ?? '')
@@ -668,10 +854,40 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     revoke = false; hold = true
     const before = calls
     const active = llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'profile-cancel' })
+    const heldJobs = [active.jobId]
+    st.after(() => { for (const id of heldJobs) llm.cancelPluginLlmJob('chat-instructions', admin, id) })
     await until(() => calls > before, 'native model starts')
+    assert.deepEqual(await llm.callPluginLlm('chat-instructions', admin, 'room', { profileId: profile.id }), { threadId: run.threadId }, 'lookup does not wait for the long-running profile lock')
+    const waiting = llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'profile-wait-cancel' })
+    heldJobs.push(waiting.jobId)
+    await until(() => llm.getPluginLlmJob('chat-instructions', admin, waiting.jobId).status === 'running', 'same-profile job waits inside its cancellable run')
+    assert.equal(calls, before + 1, 'a waiting same-profile run never starts a concurrent model request')
+    const otherWaiters = [1, 2].map(i => llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: `profile-wait-${i}` }))
+    heldJobs.push(...otherWaiters.map(job => job.jobId))
+    await until(() => otherWaiters.every(job => llm.getPluginLlmJob('chat-instructions', admin, job.jobId).status === 'running'), 'same-room queue fills without taking global slots')
+    const independent = await done(llm.startPluginLlmJob('chat-instructions', admin, { ...input, profileId: independentProfile.id, requestId: 'independent-room', roomKey: 'independent', message: 'Independent room: report the result.' }).jobId)
+    assert.equal(independent.status, 'completed', independent.error ?? '')
+    for (const job of otherWaiters) llm.cancelPluginLlmJob('chat-instructions', admin, job.jobId)
+    llm.cancelPluginLlmJob('chat-instructions', admin, waiting.jobId)
+    await until(() => llm.getPluginLlmJob('chat-instructions', admin, waiting.jobId).status === 'cancelled', 'waiting profile run cancels')
     llm.cancelPluginLlmJob('chat-instructions', admin, active.jobId)
     await until(() => aborted, 'native cancellation reaches provider')
+    hold = false
+    const afterStop = llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'after-stopping' })
+    heldJobs.push(afterStop.jobId)
+    await until(() => llm.getPluginLlmJob('chat-instructions', admin, afterStop.jobId).status === 'running', 'queued run waits for teardown')
+    const delivered = llm.getPluginLlmJob('chat-instructions', admin, active.jobId).delivery!
+    await assert.rejects(CodexChatService.waitUntilIdle(delivered.threadId, AbortSignal.timeout(20)), /timeout/i)
+    const { beginChatOrderRun } = await import('../src/services/codex-chat/chatOrderRuns')
+    const unrelated = beginChatOrderRun(delivered.threadId, delivered.messageId, 'later-unrelated-order')!
+    st.after(() => unrelated.end())
+    finishCancellation()
+    await until(() => llm.getPluginLlmJob('chat-instructions', admin, active.jobId).status === 'cancelled', 'cancel waits only for work active when cancellation began')
+    unrelated.end()
+    assert.equal((await done(afterStop.jobId)).status, 'completed', 'the next run waits for native teardown rather than failing 409')
     await until(() => llm.getPluginLlmJob('chat-instructions', admin, active.jobId).status === 'cancelled', 'native job cancelled')
+    assert.ok(llm.getPluginLlmJob('chat-instructions', admin, active.jobId).delivery, 'cancellation preserves the delivered-input receipt')
+    await assert.rejects(llm.discardPluginLlmJob('chat-instructions', admin, active.jobId), { status: 409 }, 'a terminal job without a profileRun result cannot discard messages')
     assert.equal(llm.startPluginLlmJob('chat-instructions', admin, { ...input, requestId: 'profile-cancel' }).status, 'cancelled')
   })
 
@@ -740,6 +956,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.equal(completed.status, 'completed', completed.error ?? '')
     const run = completed.result!.profileRun!
     assert.deepEqual(run.research!.evidence, [{ postId: allowed.id, revision: allowed.revision, contentVersion: null, offset: 5, end: 30, excerpt: bodyText.slice(5, 30) }])
+    await assert.rejects(llm.discardPluginLlmJob('chat-instructions', admin, completed.jobId), { status: 409 }, 'research room messages cannot be discarded')
     assert.equal(run.research!.modelCalls, requests.length)
     assert.equal(run.research!.toolCalls, 10)
     assert.equal(run.research!.stopReason, 'completed')

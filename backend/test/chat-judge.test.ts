@@ -349,7 +349,7 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
   await t.test('uncertain answers follow the item setting, including asking an LLM again', async (s) => {
     const uncertain = ChatJudgePresetStore.create({ name: '애매', providerName: 'jev', items: [
       { id: 'a', name: 'A', instructions: 'A?', tools: ['save_lore'], uncertain: 'yes' },
-      { id: 'b', name: 'B', instructions: 'B?', tools: ['chat_reply_to'], uncertain: 'llm' },
+      { id: 'b', name: 'B', instructions: 'B?', tools: ['save_lore'], uncertain: 'llm' },
     ] })
     const profile = ChatProfileStore.create({ name: '별', engine: 'llm', providerName: 'chat', model: 'chat-model', summaryEnabled: false, mcpEnabled: false, judgePresetId: uncertain.id })
     let escalated = 0
@@ -374,15 +374,61 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
       return reply(lastUserText(body).startsWith('[후속]') ? '아 그리고 하나 더!' : '좋아.')
     })
     const thread = threadOf(judged.id)
-    await LlmChatService.sendMessage(requester, thread, '뭐해?', () => {})
-    await waitFor(() => CodexChatStore.listMessages(thread.id).filter((entry) => entry.role === 'assistant').length === 2, 'follow-up message')
-    await waitFor(() => !LlmChatService.isRunning(thread.id), 'follow-up finished')
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    const { wakeChatRoom } = await import('../src/services/codex-chat/chatRoomWake')
+    const wake = await wakeChatRoom({ requester, threadId: thread.id, instruction: '뭐해?', routing: { source: 'plugin', id: null, name: 'Judge regression' } })
+    assert.equal(wake.replies.length, 2, 'a plugin wake includes the completed native follow-up')
+    assert.equal(LlmChatService.isRunning(thread.id), false)
     const assistants = CodexChatStore.listMessages(thread.id).filter((entry) => entry.role === 'assistant')
     assert.deepEqual(assistants.map((entry) => entry.content), ['좋아.', '아 그리고 하나 더!'])
     assert.equal(chats, 2)
     const [after] = ChatJudgeLogStore.list({ threadId: thread.id, stage: 'after' })
     assert.equal(after.items[0].outcome.followUp, 'sent')
+  })
+
+  await t.test('a completed plugin primary reply survives a failed native follow-up', async s => {
+    let replies = 0
+    route(s, body => body.questions.lore ? { lore: { type: 'noul', noul: 0.5 } } : { 'follow-up': { type: 'noul', noul: 0.95 } },
+      () => ++replies === 1 ? reply('Completed primary') : Response.json({ error: { message: 'invalid request' } }, { status: 400 }))
+    const { runPluginProfile } = await import('../src/services/plugins/pluginProfileRun')
+    const result = await runPluginProfile({ pluginId: 'judge-regression', pluginName: 'Judge regression', requester, profile: judged,
+      input: { requestId: 'failed-follow-up', profileId: judged.id, mode: 'profile', message: 'Reply, then follow up.' }, signal: AbortSignal.timeout(5000) })
+    assert.equal(result.text, 'Completed primary')
+    assert.equal(result.profileRun?.followUpFailed, true)
+    assert.equal(result.profileRun?.messageIds.length, 1, 'the native headless writer stores no failed message')
+    assert.equal(replies, 2, 'a failed follow-up must not repeatedly judge the same primary reply')
+  })
+
+  await t.test('an outside assistant message settles a delayed follow-up instead of hanging plugin drain', async s => {
+    const { drainJudgeFollowUps } = await import('../src/services/codex-chat/chatJudge')
+    ChatJudgePresetStore.update(preset.id, { followUp: { maxConsecutive: 1, delaySeconds: 1, directive: '' } })
+    s.after(() => ChatJudgePresetStore.update(preset.id, { followUp: { maxConsecutive: 1, delaySeconds: 0, directive: '' } }))
+    route(s, body => body.questions.lore ? { lore: { type: 'noul', noul: 0.5 } } : { 'follow-up': { type: 'noul', noul: 0.95 } })
+    const thread = threadOf(judged.id)
+    await LlmChatService.sendMessage(requester, thread, '첫 답변', () => {})
+    await waitFor(() => ChatJudgeLogStore.list({ threadId: thread.id, stage: 'after' }).length === 1, 'delayed follow-up judged')
+    CodexChatStore.addMessage({ thread_id: thread.id, role: 'assistant', content: 'External generation result', tool_calls: [], status: 'completed', error: null })
+    await drainJudgeFollowUps(thread.id, AbortSignal.timeout(2500))
+    assert.equal(CodexChatStore.listMessages(thread.id).filter(m => m.role === 'assistant').length, 2)
+  })
+
+  await t.test('follow-up drain settles synchronous writer errors; normal cancellation does not abort a writing reply', async s => {
+    const { drainJudgeFollowUps, judgeAfterReply, cancelJudgeFollowUp } = await import('../src/services/codex-chat/chatJudge')
+    route(s, () => ({ 'follow-up': { type: 'noul', noul: 0.95 } }))
+    const warnings = s.mock.method(console, 'warn', () => {})
+    const thread = threadOf(judged.id)
+    const id = CodexChatStore.addMessage({ thread_id: thread.id, role: 'assistant', content: 'Primary reply', tool_calls: [], status: 'completed', error: null })
+    const message = CodexChatStore.findMessage(thread.id, id)!
+    judgeAfterReply({ profile: judged, threadId: thread.id, message, write: () => { throw new Error('synchronous writer failure') } })
+    await drainJudgeFollowUps(thread.id, AbortSignal.timeout(2500))
+    assert.ok(warnings.mock.calls.some(call => String(call.arguments).includes('synchronous writer failure')))
+    let writeSignal: AbortSignal | undefined, finish!: () => void
+    const writing = new Promise<null>(resolve => { finish = () => resolve(null) })
+    judgeAfterReply({ profile: judged, threadId: thread.id, message, write: (_directive, signal) => { writeSignal = signal; return writing } })
+    await waitFor(() => Boolean(writeSignal), 'follow-up writer starts')
+    cancelJudgeFollowUp(thread.id)
+    assert.equal(writeSignal!.aborted, false, 'normal cancel only affects judging/delayed replies, not the writing reply')
+    finish()
+    await drainJudgeFollowUps(thread.id, AbortSignal.timeout(2500))
   })
 
   await t.test('the user writing first cancels a follow-up that waits', async (s) => {

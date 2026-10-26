@@ -10,6 +10,7 @@ const runs = new Map<number, OrderRun>()
 export function isChatOrderRunning(threadId: number) {
   return runs.has(threadId)
 }
+export const chatOrderFinished = (threadId: number) => runs.get(threadId)?.finished
 
 /** The reply an order is working on: the generation jobs it starts never get a reaction message of their own. */
 export function isChatOrderReply(threadId: number, replyId: string | undefined) {

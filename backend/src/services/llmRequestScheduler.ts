@@ -4,6 +4,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 type Waiter = { limit: number; background: boolean; start: () => void }
 type Pool = { active: number; waiting: Waiter[] }
 const pools = new Map<string, Pool>()
+export const llmRequestSlotBusy = (key: string) => Boolean(pools.get(key)?.active || pools.get(key)?.waiting.length)
 
 /**
  * Work nobody is waiting on (status fields, follow-up checks, summaries ahead, generation reactions) runs in the
@@ -15,10 +16,10 @@ export function inBackground<T>(run: () => T): T {
   return backgroundWork.run(true, run)
 }
 
-export function acquireLlmRequestSlot(providerName: string, concurrency: number, signal?: AbortSignal): Promise<() => void> {
+export function acquireLlmRequestSlot(providerName: string, concurrency: number, signal?: AbortSignal, options: { fifo?: boolean } = {}): Promise<() => void> {
   signal?.throwIfAborted()
   const limit = Math.max(1, Math.floor(concurrency))
-  const background = backgroundWork.getStore() === true
+  const background = !options.fifo && backgroundWork.getStore() === true
   const pool = pools.get(providerName) ?? { active: 0, waiting: [] }
   pools.set(providerName, pool)
   const drain = () => {

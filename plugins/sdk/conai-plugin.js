@@ -136,6 +136,9 @@ export function connectPlugin(handlers = {}) {
         judgeTurn: (input, options) => api.request('llm.judgeTurn', input, options),
         asset: (input, options) => api.request('llm.asset', input, options),
         start: (input, options) => api.request('llm.start', input, options),
+        room: (input, options) => api.request('llm.room', input, options),
+        forgetRooms: (input, options) => api.request('llm.forgetRooms', input, options),
+        discard: (input, options) => api.request('llm.discard', input, options),
         get: (jobId, options) => api.request('llm.get', { jobId }, options),
         cancel: (jobId, options) => api.request('llm.cancel', { jobId }, options),
       }

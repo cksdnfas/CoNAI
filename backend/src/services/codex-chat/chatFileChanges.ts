@@ -132,3 +132,8 @@ export function moveThreadFileChanges(fromThreadId: number, threadId: number, re
 export function forgetThreadFileChanges(threadId: number) {
   db().prepare('DELETE FROM chat_file_changes WHERE thread_id = ?').run(threadId)
 }
+
+/** Forget a deleted reply's chips, not the files or their revision history. */
+export function forgetReplyFileChanges(threadId: number, replyId: string) {
+  db().prepare('DELETE FROM chat_file_changes WHERE thread_id = ? AND reply_id = ?').run(threadId, replyId)
+}

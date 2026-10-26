@@ -123,6 +123,11 @@ export const ChatProposalStore = {
     return rows.map(toProposal)
   },
 
+  /** A removed reply lets go of its review cards, without undoing effects already applied. */
+  deleteForReply(threadId: number, replyId: string) {
+    table().prepare('DELETE FROM chat_proposals WHERE thread_id = ? AND reply_id = ?').run(threadId, replyId)
+  },
+
   /** Every proposal of one kind a person set aside in a chat, newest first, at most `limit`. */
   dismissedOfKind(threadId: number, kind: string, limit: number): ChatProposal[] {
     const rows = table().prepare('SELECT * FROM chat_proposals WHERE thread_id = ? AND kind = ? AND dismissed = 1 ORDER BY id DESC LIMIT ?').all(threadId, kind, limit) as ProposalRow[]
@@ -133,4 +138,10 @@ export const ChatProposalStore = {
   deleteForThread(threadId: number) {
     return table().prepare('DELETE FROM chat_proposals WHERE thread_id = ?').run(threadId).changes
   },
+}
+
+/** These tools enforce one stored proposal per reply, including proposals already saved or dismissed. */
+export function isChatProposalToolAvailable(context: ChatExecutionContext | undefined, toolName: string) {
+  const kind = toolName === 'save_lore' ? 'lore' : toolName === 'propose_profile_assets' ? 'profile_assets' : null
+  return !kind || !context?.replyId || ChatProposalStore.forReply(context.threadId, context.replyId, kind).length === 0
 }

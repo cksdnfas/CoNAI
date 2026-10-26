@@ -51,7 +51,7 @@ import { currentLlmUsageContext, recordLlmUsage, type LlmTokenCounts, type LlmUs
 import { LlmChatService, type GroupReplyResult } from './llmChatService'
 import { ChatGroupStore } from './chatGroupStore'
 import { buildFlagDirective, ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
-import { stopChatOrderRun } from './chatOrderRuns'
+import { stopChatOrderRun, chatOrderFinished } from './chatOrderRuns'
 import { readChoiceAnswer } from './chatChoices'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
 import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
@@ -157,6 +157,18 @@ const sessions = new Map<string, Session>()
 const startingSessions = new Map<string, Promise<Session>>()
 // A preparation reservation holds its cancellation signal; compaction has no input translation.
 const startingThreads = new Map<number, AbortController | null>()
+const startingFinished = new Map<number, { promise: Promise<void>; resolve: () => void }>()
+function reserveStarting(threadId: number, controller: AbortController | null) {
+  let resolve!: () => void
+  const promise = new Promise<void>(done => { resolve = done })
+  startingFinished.set(threadId, { promise, resolve })
+  startingThreads.set(threadId, controller)
+}
+function releaseStarting(threadId: number) {
+  startingThreads.delete(threadId)
+  startingFinished.get(threadId)?.resolve()
+  startingFinished.delete(threadId)
+}
 
 /**
  * MCP grants are per process (token), so processes are keyed by account + its grants + scopes + tool allowlist and
@@ -989,6 +1001,30 @@ export const CodexChatService = {
   isRunning(threadId: number) {
     return startingThreads.has(threadId) || Boolean(findActiveTurn(threadId)) || LlmChatService.isRunning(threadId)
   },
+  /** Await actual preparation/reply/order completion without interrupting it or polling. */
+  async waitUntilIdle(threadId: number, signal?: AbortSignal) {
+    for (;;) {
+      signal?.throwIfAborted()
+      const finished = startingFinished.get(threadId)?.promise ?? findActiveTurn(threadId)?.turn.finished
+        ?? LlmChatService.replyFinished(threadId) ?? chatOrderFinished(threadId)
+      if (!finished) return
+      let abort: (() => void) | undefined
+      try {
+        await new Promise<void>((resolve, reject) => {
+          abort = () => reject(signal?.reason)
+          signal?.addEventListener('abort', abort, { once: true })
+          // The previous reply's failure is its own outcome; waiters only need it to release the room.
+          finished.then(() => resolve(), () => resolve())
+        })
+      } finally { if (abort) signal?.removeEventListener('abort', abort) }
+    }
+  },
+  /** Snapshot only the work active now; later unrelated turns cannot extend this wait. */
+  captureRunningCompletion(threadId: number) {
+    const promises = [startingFinished.get(threadId)?.promise, findActiveTurn(threadId)?.turn.finished,
+      LlmChatService.replyFinished(threadId), chatOrderFinished(threadId)].filter(promise => promise !== undefined)
+    return Promise.allSettled(promises).then(() => undefined)
+  },
 
   clearThread(requester: McpRequester, threadId: number) {
     const thread = requireThread(requester, threadId)
@@ -1000,6 +1036,18 @@ export const CodexChatService = {
     return CodexChatService.getThread(requester, threadId)
   },
 
+  /** Shared exact-message deletion, including native history/session invalidation. Missing rows are harmless. */
+  deleteMessages(requester: McpRequester, threadId: number, messageIds: number[]) {
+    const thread = requireThread(requester, threadId)
+    if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    const deleted = CodexChatStore.deleteMessages(threadId, messageIds)
+    if (deleted) {
+      deleteCodexRollout(requester, thread.codex_thread_id)
+      deleteClaudeSessions(threadId)
+    }
+    return deleted
+  },
+
   /** Codex chats: fold the Codex thread's memory now (what /compact does), and wait until Codex has finished. */
   async compact(requester: McpRequester, threadId: number) {
     const thread = requireThread(requester, threadId)
@@ -1008,7 +1056,7 @@ export const CodexChatService = {
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (!thread.codex_thread_id) throw new CodexChatError('아직 압축할 대화가 없어.', 409)
 
-    startingThreads.set(threadId, null)
+    reserveStarting(threadId, null)
     let session: Session | null = null
     let codexThreadId: string | null = null
     try {
@@ -1035,7 +1083,7 @@ export const CodexChatService = {
     } finally {
       if (session && codexThreadId) session.compactions.delete(codexThreadId)
       if (session) scheduleIdleClose(session)
-      startingThreads.delete(threadId)
+      releaseStarting(threadId)
     }
   },
 
@@ -1231,11 +1279,12 @@ export const CodexChatService = {
     return collectCodexChatMedia(attachJobResults(CodexChatStore.listMessages(threadId)).messages)
   },
 
-  async deleteThread(requester: McpRequester, threadId: number) {
+  async deleteThread(requester: McpRequester, threadId: number, beforeDelete?: () => void) {
     const thread = requireThread(requester, threadId)
     if (thread.engine === 'llm') {
       await LlmChatService.stop(threadId)
       if (LlmChatService.isRunning(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
+      beforeDelete?.()
       CodexChatStore.deleteThread(threadId)
       deleteClaudeSessions(threadId)
       return
@@ -1247,6 +1296,7 @@ export const CodexChatService = {
       await CodexChatService.interrupt(requester, threadId).catch(() => undefined)
       void finishTurn(active.session, active.turn, 'interrupted', null)
     }
+    beforeDelete?.()
     CodexChatStore.deleteThread(threadId)
     deleteCodexRollout(requester, thread.codex_thread_id)
   },
@@ -1275,7 +1325,7 @@ export const CodexChatService = {
     }
 
     const controller = new AbortController()
-    startingThreads.set(threadId, controller)
+    reserveStarting(threadId, controller)
     try {
       const profile = requireCodexProfile(thread.profile_id, requester)
       if (pageContext != null && !profile.pageAssist) throw new CodexChatError('이 프로필은 페이지 어시스턴트가 꺼져 있어.', 400)
@@ -1284,7 +1334,7 @@ export const CodexChatService = {
       rememberChatPage(requester, page, threadId)
       if (!options.task && !options.routine) notifyChatUserSend(threadId, Boolean(page))
       const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
-      const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
+      const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId), threadId)
       // The model reads the message in English; the reader keeps their own words. Translated while the session starts.
       const translating = translateUserMessage(profile, trimmed, flags, controller.signal, { threadId })
       translating.catch(() => undefined)
@@ -1321,6 +1371,7 @@ export const CodexChatService = {
       controller.signal.throwIfAborted()
       if (session.activeTurns.has(codexThreadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', ...translated, tool_calls: [], status: 'completed', mediaAttachments, routing }, attachments.map((file) => file.id))
+      options.onDelivered?.(userMessageId)
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       turn.userMessageId = userMessageId
       if (hasTranslation(profile)) turn.translate = (content) => translateReply(profile, content, turn.controller?.signal, userPersonaForThread(thread).name, { ...turn.usage, threadId, replyId: turn.delivery?.context.replyId })
@@ -1409,7 +1460,7 @@ export const CodexChatService = {
       return await turn.finished
     } finally {
       controller.abort()
-      startingThreads.delete(threadId)
+      releaseStarting(threadId)
     }
   },
 

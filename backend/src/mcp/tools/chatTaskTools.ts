@@ -10,6 +10,8 @@ import { ChatProfileStore } from '../../services/codex-chat/chatProfiles'
 import { CodexChatStore } from '../../services/codex-chat/codexChatStore'
 import { ChatGroupStore } from '../../services/codex-chat/chatGroupStore'
 import { errorResult as failure, textResult as result } from '../toolResults'
+import { isPluginProfileRun } from '../../services/plugins/pluginServerTools'
+import { resolveChatAccess, resolveChatProfileToolGrant } from '../../services/codex-chat/codexChatAccess'
 
 type Member = { id: number; name: string }
 /** A step's assignee by name for the model (`all`: every member). */
@@ -52,7 +54,9 @@ export function registerChatTaskTools(server: McpServer, context: McpRequestCont
   // A profile with nothing to work with (no scopes, no page, no generation presets, no linked place it may write) has
   // no use for a plan; its tools would only cost every request and break models that cannot take tools. A task already
   // running keeps them.
-  if (context.scopes.length === 0 && !chat.page && !context.generationPresetIds?.length && !writesLinkedFiles(context) && !ChatTaskStore.live(chat.threadId)) return
+  const profile = isPluginProfileRun(chat.threadId) ? ChatProfileStore.find(chat.profileId) : null
+  const scopes = profile && context.requester ? resolveChatProfileToolGrant(profile, resolveChatAccess(context.requester.accountId)).scopes : context.scopes
+  if (scopes.length === 0 && !chat.page && !context.generationPresetIds?.length && !writesLinkedFiles(context) && !ChatTaskStore.live(chat.threadId)) return
   const live = () => {
     const task = ChatTaskStore.live(chat.threadId)
     if (!task) throw new Error('진행 중인 작업이 없어. task_propose로 플랜부터 제안해.')

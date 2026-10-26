@@ -8,6 +8,9 @@ import type { ChatAgentResultRouting } from './chatAgent'
 import type { ChatChoiceProposal } from './chatChoice'
 import type { PostKnowledgeTaskPurpose } from './postKnowledgeRuntime'
 
+/** Native chat title storage limit; also used by plugin room title validation/composition. */
+export const CHAT_THREAD_TITLE_MAX_LENGTH = 60
+
 /** A recipient is a member profile, the human, or a room announcement (no automatic reply). */
 export type ChatRecipient = number | 'user' | 'room'
 

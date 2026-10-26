@@ -8,6 +8,8 @@ import { ChatProfileStore } from '../../services/codex-chat/chatProfiles'
 import { requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry'
 import { translateChoice } from '../../services/codex-chat/chatChoices'
 import { errorResult as failure, textResult as result } from '../toolResults'
+import { isPluginProfileRun } from '../../services/plugins/pluginServerTools'
+import { resolveChatAccess, resolveChatProfileToolGrant } from '../../services/codex-chat/codexChatAccess'
 
 /**
  * A question with ready answers in a 1:1 chat: the app shows it above the composer, and the person's next message
@@ -17,7 +19,9 @@ export function registerChatChoiceTools(server: McpServer, context: McpRequestCo
   const chat = context.chatContext
   if (!chat || chat.kind !== 'direct') return
   // Same gate as the task tools: a profile with nothing to work with keeps its tool list empty.
-  if (context.scopes.length === 0 && !chat.page && !context.generationPresetIds?.length && !ChatTaskStore.live(chat.threadId)) return
+  const profile = isPluginProfileRun(chat.threadId) ? ChatProfileStore.find(chat.profileId) : null
+  const scopes = profile && context.requester ? resolveChatProfileToolGrant(profile, resolveChatAccess(context.requester.accountId)).scopes : context.scopes
+  if (scopes.length === 0 && !chat.page && !context.generationPresetIds?.length && !ChatTaskStore.live(chat.threadId)) return
 
   server.registerTool('offer_choices', { description: 'Ask the person to pick from ready answers, shown above the composer: they click one (several if multiple) or type their own, and it arrives as their next message. Use it when a request is ambiguous between a few concrete options, or when they must choose how to go on because you cannot do it as things stand. Call it once, last in your reply, then end the reply; keep the reply text short and do not repeat the options.', inputSchema: z.object({
     question: z.string().min(1).max(CHAT_CHOICE_LIMITS.question).describe('In the person\'s language'),

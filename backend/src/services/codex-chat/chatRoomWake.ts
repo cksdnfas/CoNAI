@@ -4,6 +4,7 @@ import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { ChatProfileStore } from './chatProfiles'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from './codexChatStore'
+import { drainJudgeFollowUps } from './chatJudge'
 
 /**
  * Waking a chat from an automation (a chat routine or the 채팅방 깨우기 workflow node): the app sends an instruction
@@ -44,7 +45,7 @@ export function wakeInstructionText(routing: ChatRoutineRouting, instruction: st
   ].join('\n')
 }
 
-export type ChatWakeResult = { thread: CodexChatThreadRecord; replies: CodexChatMessageRecord[] }
+export type ChatWakeResult = { thread: CodexChatThreadRecord; replies: CodexChatMessageRecord[]; followUpFailed?: boolean; followUpTimedOut?: boolean }
 
 /**
  * Send one wake into a room the requester owns and wait for the answer (in a group room, every reply the wake set
@@ -61,6 +62,11 @@ export async function wakeChatRoom(params: {
   mediaHashes?: string[]
   /** Group rooms: address the profile that delegated this work, rather than every member. */
   recipients?: number[]
+  /** Host-only receipt, called after the direct room stores the input, before generation. */
+  onDelivered?: (messageId: number) => void
+  onPrimaryComplete?: () => void
+  /** Only the caller's explicit plugin deadline may preserve the already-completed primary. */
+  followUpDeadlineExpired?: () => boolean
 }): Promise<ChatWakeResult> {
   const { requester, threadId } = params
   const { CodexChatError, CodexChatService, GroupChatService } = await chatServices()
@@ -73,26 +79,39 @@ export async function wakeChatRoom(params: {
 
   const lastId = CodexChatStore.latestMessageId(threadId) ?? 0
   const text = wakeInstructionText(params.routing, params.instruction)
+  let stopping: Promise<unknown> | undefined
   const stop = () => {
-    const stopping = isGroup ? GroupChatService.stop(threadId) : CodexChatService.interrupt(requester, threadId)
-    void Promise.resolve(stopping).catch(() => undefined)
+    if (stopping) return
+    const active = params.routing.source === 'plugin' && !isGroup ? CodexChatService.captureRunningCompletion(threadId) : Promise.resolve()
+    stopping = Promise.all([active, Promise.resolve(isGroup ? GroupChatService.stop(threadId) : CodexChatService.interrupt(requester, threadId)).catch(() => undefined)])
   }
   params.signal?.addEventListener('abort', stop, { once: true })
+  let followUpFailed = false
+  let draining = false, followUpTimedOut = false
   try {
     if (isGroup) {
       await GroupChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, params.mediaHashes, undefined, undefined, { routine: params.routing, chainLimit: params.chainLimit, recipients: params.recipients })
     } else {
-      await CodexChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, params.mediaHashes, undefined, undefined, { routine: params.routing })
+      const primary = await CodexChatService.sendMessage(requester, threadId, text, () => {}, undefined, undefined, undefined, params.mediaHashes, undefined, undefined, { routine: params.routing, onDelivered: params.onDelivered })
+      if (params.routing.source === 'plugin' && primary?.status === 'completed' && !params.signal?.aborted) {
+        params.onPrimaryComplete?.()
+        draining = true
+        followUpFailed = await drainJudgeFollowUps(threadId, params.signal)
+      }
     }
   } catch (error) {
     // Lost the race with a send that started after the check above (either engine's "still answering").
     if (error instanceof Error && (error as { status?: unknown }).status === 409 && /진행 중/.test(error.message)) throw new ChatWakeBusyError()
-    throw error
+    if (draining && params.followUpDeadlineExpired?.()) { followUpFailed = true; followUpTimedOut = true }
+    else throw error
   } finally {
     params.signal?.removeEventListener('abort', stop)
+    if (params.routing.source === 'plugin' && stopping) {
+      await stopping
+    }
   }
   const replies = CodexChatStore.listMessages(threadId, { after: lastId }).filter((message) => message.role === 'assistant')
-  return { thread, replies }
+  return { thread, replies, ...(followUpFailed ? { followUpFailed } : {}), ...(followUpTimedOut ? { followUpTimedOut } : {}) }
 }
 
 /** The text of the replies a wake set off, speaker-labelled in group rooms. */
@@ -131,9 +150,8 @@ const accountKey = (accountId: number | null) => (accountId === null ? 'bootstra
  */
 export async function ensureAutomationRoom(requester: McpRequester, profileId: number, key: string, title: string) {
   const db = roomsTable()
-  const row = db.prepare('SELECT thread_id FROM chat_automation_rooms WHERE account_key = ? AND room_key = ?').get(accountKey(requester.accountId), key) as { thread_id: number } | undefined
-  const existing = row ? CodexChatStore.findThread(row.thread_id, requester.accountId) : null
-  if (existing && existing.kind === 'direct' && existing.profile_id === profileId) return existing
+  const existing = findAutomationRoom(requester, profileId, key)
+  if (existing) return existing
   const profile = ChatProfileStore.find(profileId)
   const { CodexChatError, CodexChatService } = await chatServices()
   if (!profile) throw new CodexChatError(`캐릭터를 찾을 수 없어: ${profileId}`, 404)
@@ -143,10 +161,22 @@ export async function ensureAutomationRoom(requester: McpRequester, profileId: n
     ON CONFLICT(account_key, room_key) DO UPDATE SET thread_id = excluded.thread_id`).run(accountKey(requester.accountId), key, thread.id)
   return CodexChatStore.findThread(thread.id, requester.accountId) as CodexChatThreadRecord
 }
+/** Read-only lookup: a stale queued execution must not recreate a forgotten room. */
+export function findAutomationRoom(requester: McpRequester, profileId: number, key: string) {
+  const row = roomsTable().prepare('SELECT thread_id FROM chat_automation_rooms WHERE account_key=? AND room_key=?')
+    .get(accountKey(requester.accountId), key) as { thread_id: number } | undefined
+  const thread = row ? CodexChatStore.findThread(row.thread_id, requester.accountId) : undefined
+  return thread?.kind === 'direct' && thread.profile_id === profileId ? thread : undefined
+}
 
 /** Forget an automation's room link (the room itself stays, as an ordinary chat). */
 export function forgetAutomationRoom(accountId: number | null, key: string) {
   roomsTable().prepare('DELETE FROM chat_automation_rooms WHERE account_key = ? AND room_key = ?').run(accountKey(accountId), key)
+}
+/** Internal exact-key inventory for an account; public callers must further restrict their namespace. */
+export function automationRooms(accountId: number | null) {
+  return roomsTable().prepare('SELECT room_key, thread_id FROM chat_automation_rooms WHERE account_key=?')
+    .all(accountKey(accountId)) as Array<{ room_key: string; thread_id: number }>
 }
 
 /** The account's rooms an automation made for itself, by thread, with what made them (the chat list files them apart). */

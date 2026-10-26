@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { rawTokenEstimate } from '../services/llmUsage';
 import { CHAT_PAGE_KIND_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, isChatGenerationTool, type McpRequestContext } from './context';
 import { errorResult } from './toolResults';
+import { PLUGIN_SERVER_TOOL_PREFIX, pluginProfileTools } from '../services/plugins/pluginServerTools';
+import { isChatProposalToolAvailable } from '../services/codex-chat/chatProposals';
 
 /**
  * A chat agent sees the app's tools as a table of contents instead of every definition at once: the chat's own tools
@@ -70,6 +72,7 @@ function contentsLine(names: string[]) {
 export function isDirectChatTool(context: McpRequestContext, toolName: string): boolean {
   if (context.workspace && toolName.startsWith('workspace_') && toolName !== 'workspace_publish_resources') return true;
   if (CHAT_ROOM_TOOLS.has(toolName) || CHAT_VISION_BUILTIN_TOOLS.has(toolName) || CHAT_PAGE_TOOLS.has(toolName) || isChatGenerationTool(toolName)) return true;
+  if (toolName.startsWith(PLUGIN_SERVER_TOOL_PREFIX) && pluginProfileTools(context.chatContext?.threadId).some(tool => tool.name === toolName)) return true;
   const page = context.chatContext?.page;
   return Boolean(page && CHAT_PAGE_KIND_TOOLS[page.kind]?.has(toolName));
 }
@@ -83,7 +86,7 @@ export function unwrapCatalogCall(name: string, args: unknown): { tool: string; 
     : { tool: name, arguments: args };
 }
 
-type PendingTool = { name: string; category: ToolCategoryId; summary: string; args: unknown[] };
+type PendingTool = { name: string; category: ToolCategoryId; summary: string; args: unknown[]; direct: boolean };
 
 const catalogNames = new WeakMap<McpServer, string[]>();
 /** The tools a server offers through its catalog (empty when it lists everything directly). */
@@ -100,24 +103,26 @@ function firstSentence(description: string) {
  * Collects the catalogued tools while the server is built, then either lists them directly (few of them) or puts them
  * on a private server behind `open_tools` / `run_tool`.
  */
-export function createToolCatalog(server: McpServer, registerDirect: (args: unknown[]) => void, remainingTokens?: () => number) {
+export function createToolCatalog(server: McpServer, registerDirect: (args: unknown[]) => void, remainingTokens?: () => number, chatContext?: McpRequestContext['chatContext']) {
   const pending: PendingTool[] = [];
   return {
-    add(name: string, category: ToolCategoryId, args: unknown[]) {
+    add(name: string, category: ToolCategoryId, args: unknown[], direct = false) {
       const description = (args[1] as { description?: unknown } | undefined)?.description;
-      pending.push({ name, category, summary: typeof description === 'string' ? firstSentence(description) : '', args });
+      pending.push({ name, category, summary: typeof description === 'string' ? firstSentence(description) : '', args, direct });
     },
     install() {
+      // Direct tools can be looked up by query/name too, but never become catalog-only or run_tool targets.
+      const catalogued = pending.filter((tool) => !tool.direct);
       // The chat's settings tools never cost a direct definition: without a catalog they are left out.
-      if (pending.filter((tool) => !CHAT_SETTINGS_TOOLS.has(tool.name)).length < CATALOG_MIN_TOOLS) {
-        for (const tool of pending) if (!CHAT_SETTINGS_TOOLS.has(tool.name)) registerDirect(tool.args);
+      if (catalogued.filter((tool) => !CHAT_SETTINGS_TOOLS.has(tool.name)).length < CATALOG_MIN_TOOLS) {
+        for (const tool of catalogued) if (!CHAT_SETTINGS_TOOLS.has(tool.name)) registerDirect(tool.args);
         return;
       }
       const inner = new McpServer({ name: 'conai-catalog', version: '1.0.0' });
       const innerRegister = inner.registerTool.bind(inner) as (...args: unknown[]) => unknown;
       for (const tool of pending) innerRegister(...tool.args);
       const byName = new Map(pending.map((tool) => [tool.name, tool]));
-      catalogNames.set(server, pending.map((tool) => tool.name));
+      catalogNames.set(server, catalogued.map((tool) => tool.name));
 
       let connecting: Promise<Client> | null = null;
       const client = () => connecting ??= (async () => {
@@ -136,11 +141,11 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         await inner.close().catch(() => undefined);
       };
 
-      const categories = [...new Set(pending.map((tool) => tool.category))];
-      const contents = categories.map((category) => `- ${category}: ${TOOL_CATEGORIES[category]}\n  ${contentsLine(pending.filter((tool) => tool.category === category).map((tool) => tool.name))}`).join('\n');
+      const categories = [...new Set(catalogued.map((tool) => tool.category))];
+      const contents = categories.map((category) => `- ${category}: ${TOOL_CATEGORIES[category]}\n  ${contentsLine(catalogued.filter((tool) => tool.category === category).map((tool) => tool.name))}`).join('\n');
       registerDirect([CATALOG_OPEN_TOOL, { description: [
         'The CoNAI app tools beyond this list, as a table of contents (category: what it covers, then its main tools; "+N more" are listed when you open the category).',
-        'Search with query or browse a category using detail="summary"; open exact tool names for input schemas, then call one with run_tool.',
+        'Search with query or browse a category using detail="summary"; open exact tool names for input schemas. Call catalogued tools with run_tool; tools marked direct are already available and are called by name.',
         'A tool named in your instructions or in earlier replies that is not in your tool list is one of these.',
         'Contents:',
         contents,
@@ -154,24 +159,27 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
       }) }, async ({ category, tools, query, detail = 'schema', max_tokens = 3000, offset = 0 }: { category?: string; tools?: string[]; query?: string; detail?: 'summary' | 'schema'; max_tokens?: number; offset?: number }) => {
         const terms = (query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
         const wanted = new Set([
-          ...(category ? pending.filter((tool) => tool.category === category).map((tool) => tool.name) : []),
+          ...(category ? catalogued.filter((tool) => tool.category === category).map((tool) => tool.name) : []),
           ...(tools ?? []).filter((name) => byName.has(name)),
           ...(!category && !tools?.length && terms.length ? pending.map((tool) => tool.name) : []),
         ]);
         for (const name of wanted) {
           const tool = byName.get(name)!;
           const text = `${name} ${(tool.args[1] as { description?: string })?.description ?? tool.summary}`.toLowerCase();
-          if (!terms.every((term) => text.includes(term))) wanted.delete(name);
+          if (!isChatProposalToolAvailable(chatContext, name) || !terms.every((term) => text.includes(term))) wanted.delete(name);
         }
         if (wanted.size === 0) return errorResult(`Nothing to open. Categories: ${categories.join(', ')}.`);
         const { tools: listed } = await listDefinitions();
         const selected = listed.filter((tool) => wanted.has(tool.name));
-        const opened: Array<{ name: string; description?: string; input_schema?: unknown }> = [];
+        const opened: Array<{ name: string; description?: string; input_schema?: unknown; direct?: boolean }> = [];
         let chars = 0;
         let tokens = 0;
         const budget = Math.max(0, Math.min(max_tokens, remainingTokens?.() ?? max_tokens) - 150);
         for (const tool of selected.slice(offset)) {
-          const definition = detail === 'summary' ? { name: tool.name, description: byName.get(tool.name)?.summary } : { name: tool.name, description: tool.description, input_schema: tool.inputSchema };
+          const definition = {
+            ...(detail === 'summary' ? { name: tool.name, description: byName.get(tool.name)?.summary } : { name: tool.name, description: tool.description, input_schema: tool.inputSchema }),
+            ...(byName.get(tool.name)?.direct ? { direct: true } : {}),
+          };
           const serialized = JSON.stringify(definition);
           const size = serialized.length;
           const cost = rawTokenEstimate(serialized);
@@ -187,7 +195,9 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         return { content: [{ type: 'text' as const, text: JSON.stringify({
           tools: opened,
           ...(nextOffset < selected.length ? { next_offset: nextOffset, remaining: selected.length - nextOffset, continue_with: { category, tools, query, detail, max_tokens, offset: nextOffset } } : {}),
-          call_with: `${CATALOG_RUN_TOOL} {"tool": "<name>", "arguments": {…}}`,
+          call_with: opened.some((tool) => tool.direct)
+            ? `Tools marked direct are already available: call them by name with their arguments, not through ${CATALOG_RUN_TOOL}. For other tools: ${CATALOG_RUN_TOOL} {"tool": "<name>", "arguments": {…}}`
+            : `${CATALOG_RUN_TOOL} {"tool": "<name>", "arguments": {…}}`,
         }) }] };
       }]);
 
@@ -195,7 +205,8 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         tool: z.string().describe('The tool name, e.g. "create_audio_folder"'),
         arguments: z.record(z.string(), z.unknown()).optional().describe('The tool\'s arguments, as its input schema describes'),
       }) }, async ({ tool, arguments: args }: { tool: string; arguments?: Record<string, unknown> }, ctx: { mcpReq?: { signal?: AbortSignal } }) => {
-        if (!byName.has(tool)) return errorResult(`Unknown tool: ${tool}. See the contents of ${CATALOG_OPEN_TOOL}.`);
+        if (!byName.has(tool) || byName.get(tool)?.direct) return errorResult(`Unknown tool: ${tool}. See the contents of ${CATALOG_OPEN_TOOL}.`);
+        if (!isChatProposalToolAvailable(chatContext, tool)) return errorResult(`${tool} is not available in this reply.`);
         try {
           const connected = await client();
           const result = await connected.callTool({ name: tool, arguments: args ?? {} }, { signal: ctx?.mcpReq?.signal, timeout: CATALOG_CALL_TIMEOUT_MS });

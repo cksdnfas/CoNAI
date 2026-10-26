@@ -24,7 +24,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.ok(path.basename(root).startsWith('conai-replies-test-'))
     await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
   })
-  const { updateChatSettings } = await import('../src/services/codex-chat/chatSettings')
+  const { updateChatSettings, loadChatSettings } = await import('../src/services/codex-chat/chatSettings')
   const { ChatProfileStore } = await import('../src/services/codex-chat/chatProfiles')
   const { CodexChatStore } = await import('../src/services/codex-chat/codexChatStore')
   const { ChatSummaryStore } = await import('../src/services/codex-chat/chatMemory')
@@ -531,7 +531,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
   const directChat = () => CodexChatStore.findThreadById(LlmChatService.createThread(requester, a.id))!
   type StreamEvent = Parameters<Parameters<typeof LlmChatService.sendMessage>[3]>[0]
 
-  await t.test('direct chats get no room history tools and always chat_reply_to (a steady tool list); group rooms get all', async () => {
+  await t.test('direct chats offer quoting only with older messages; group routing stays unchanged', async () => {
     const names = async (context: ChatExecutionContext) => {
       const bridge = await openChatMcpBridge(requester, [], null, { chatContext: context })
       try { return bridge.tools.map((tool) => tool.function.name) } finally { await bridge.close() }
@@ -541,16 +541,84 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const directContext = { threadId: thread.id, profileId: a.id, kind: 'direct' as const, replyId: 'tools-direct' }
     sayUser('안녕')
     const first = await names(directContext)
-    assert.ok(first.includes('chat_reply_to'), 'offered from the first message, so the tool list does not change on the second')
+    assert.ok(!first.includes('chat_reply_to'), 'the only incoming message is already quoted')
     for (const tool of ['room_history_search', 'room_history_read', 'room_call_member']) assert.ok(!first.includes(tool), tool)
     sayUser('아까 그 얘기 말인데')
     const direct = await names(directContext)
     assert.ok(direct.includes('chat_reply_to'), 'an older message to quote')
+    const bridge = await openChatMcpBridge(requester, [], null, { chatContext: directContext })
+    try {
+      const schema = bridge.tools.find(tool => tool.function.name === 'chat_reply_to')!.function.parameters as { required: string[]; properties: Record<string, unknown> }
+      assert.ok(schema.required.includes('message_id'), 'direct routing must change the quote, not just confirm recipients')
+      assert.ok(!('to' in schema.properties), 'a direct reply already addresses the user')
+    } finally { await bridge.close() }
     for (const tool of ['room_history_search', 'room_history_read', 'room_call_member']) assert.ok(!direct.includes(tool), tool)
     const guidance = String(buildChatMessages({ profile: ChatProfileStore.find(a.id)!, thread, messages: CodexChatStore.listMessages(thread.id), config: resolveContextConfig(thread, ChatProfileStore.find(a.id)!), tools: [] })[0].content)
     assert.ok(guidance.includes('you are already answering the latest message; use chat_reply_to only to quote an older one'))
     const group = await names({ threadId: createRoom().id, profileId: a.id, kind: 'group', replyId: 'tools-group' })
     for (const tool of ['chat_reply_to', 'room_history_search', 'room_history_read', 'room_call_member']) assert.ok(group.includes(tool), tool)
+  })
+
+  await t.test('a stored lore proposal removes save_lore from later rounds, but a failed proposal does not', async s => {
+    const thread = directChat()
+    let calls = 0
+    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+      const body = JSON.parse(String(init?.body))
+      const offered = (body.tools ?? []).some((tool: { function: { name: string } }) => tool.function.name === 'save_lore')
+      calls++
+      assert.equal(offered, calls <= 2)
+      if (calls <= 2) return response('', { name: 'save_lore', args: { title: calls === 1 ? '' : 'Favorite tea', keys: ['oolong'], content: 'The user prefers oolong tea.' } })
+      return response('기억해둘게.')
+    })
+    const reply = await LlmChatService.sendMessage(requester, thread, 'Remember that I prefer oolong tea.', () => {})
+    assert.equal(reply.status, 'completed', reply.error ?? '')
+    assert.deepEqual(reply.tool_calls.map(call => call.status), ['failed', 'completed'])
+    const { ChatProposalStore } = await import('../src/services/codex-chat/chatProposals')
+    assert.equal(ChatProposalStore.forReply(thread.id, reply.routing!.replyId!, 'lore').length, 1)
+  })
+
+  await t.test('spaced Qwen XML executes as a quote and never streams or persists as speech, including the final round', async s => {
+    const thread = directChat()
+    const older = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: 'Earlier question', tool_calls: [], status: 'completed', error: null })
+    const markup = `<tool_call> <function=chat_reply_to> <parameter=message_id> ${older} </parameter> <parameter=to> ["user"] </parameter> </function> </tool_call>`
+    let calls = 0
+    let streamed = ''
+    s.mock.method(globalThis, 'fetch', async () => ++calls === 1 ? response(markup) : response('Earlier answer.'))
+    const reply = await LlmChatService.sendMessage(requester, thread, 'Quote the earlier question.', event => { if (event.type === 'delta') streamed += event.text })
+    assert.equal(reply.status, 'completed', reply.error ?? '')
+    assert.equal(reply.routing?.replyTo?.messageId, older)
+    assert.equal(reply.tool_calls[0]?.tool, 'chat_reply_to')
+    assert.equal(reply.tool_calls[0]?.status, 'completed')
+    assert.equal(reply.content, 'Earlier answer.')
+    assert.equal(streamed, 'Earlier answer.')
+
+    const previousLimit = loadChatSettings().toolRoundLimit
+    updateChatSettings({ toolRoundLimit: 1 })
+    s.after(() => updateChatSettings({ toolRoundLimit: previousLimit }))
+    calls = 0; streamed = ''
+    const escaped = markup.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    s.mock.method(globalThis, 'fetch', async (_url, init) => {
+      calls++
+      if (calls === 1) return sse(text(escaped, 'stop'))
+      assert.equal(JSON.parse(String(init?.body)).tool_choice, 'none')
+      return sse(text(`Done. ${escaped}`, 'stop'))
+    })
+    const final = await LlmChatService.sendMessage(requester, thread, 'Again.', event => { if (event.type === 'delta') streamed += event.text })
+    assert.equal(final.status, 'completed', final.error ?? '')
+    assert.equal(final.tool_calls.length, 1, 'the text-only final round cannot execute another call')
+    assert.equal(final.content, 'Done.')
+    assert.equal(streamed.trim(), 'Done.')
+
+    s.mock.method(globalThis, 'fetch', async () => response(`Done. ${escaped}`))
+    const unavailable = await LlmChatService.sendMessage(requester, directChat(), 'First message, nothing older to quote.', () => {})
+    assert.equal(unavailable.status, 'completed', unavailable.error ?? '')
+    assert.equal(unavailable.content, 'Done.', 'unavailable calls are not speech either')
+    assert.deepEqual(unavailable.tool_calls, [], 'stripping unavailable markup never grants permission to execute')
+
+    s.mock.method(globalThis, 'fetch', async () => sse(text(`Done. ${escaped}`, 'length')))
+    const cut = await LlmChatService.sendMessage(requester, thread, 'A capped response.', () => {})
+    assert.equal(cut.content, 'Done.', 'a capped response must not persist tool markup')
+    assert.deepEqual(cut.tool_calls, [], 'a capped text-form call cannot execute')
   })
 
   await t.test('tool calls cut by the output cap fail the reply, never run and never go out again', async (s) => {

@@ -289,6 +289,74 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
   }
 
   // The LLM bridge routes a catalogued name called directly.
+  await t.test('run-granted plugin tools have complete schemas up front; other tools remain lazy', async () => {
+    const { setPluginServerTool, clearPluginServerTools, withPluginProfileTools } = await import('../src/services/plugins/pluginServerTools')
+    const name = 'p_catalog_fixture_turn'
+    const inputSchema = { type: 'object', properties: { action: { type: 'string', enum: ['advance'] } }, required: ['action'] }
+    setPluginServerTool({ name, pluginId: 'catalog-fixture', localName: 'turn', description: 'Advance the fixture.', scope: 'read', inputSchema })
+    try {
+      await withPluginProfileTools({ threadId, profileId: profile.id, requestId: 'catalog-grant', pluginId: 'catalog-fixture', accountId: null, tools: ['turn'] }, async () => {
+        const granted = await openChatMcpBridge(admin, [...CHAT_SCOPES], null, { chatContext })
+        try {
+          assert.deepEqual(granted.tools.find(tool => tool.function.name === name)?.function.parameters, inputSchema)
+          assert.ok(!granted.catalogTools.has(name))
+          assert.ok(granted.catalogTools.has('search_images'))
+          assert.ok(!granted.tools.some(tool => tool.function.name === 'search_images'))
+          for (const lookup of [{ query: 'catalog fixture turn', detail: 'schema' }, { tools: [name], detail: 'schema' }]) {
+            const opened = await granted.call(CATALOG_OPEN_TOOL, lookup)
+            assert.notEqual(opened.isError, true, text(opened))
+            const result = JSON.parse(text(opened))
+            assert.deepEqual(result.tools.find((tool: { name: string }) => tool.name === name).input_schema, inputSchema)
+            assert.equal(result.tools.find((tool: { name: string }) => tool.name === name).direct, true)
+            assert.match(result.call_with, /call them by name/)
+          }
+          const choices = await granted.call(CATALOG_OPEN_TOOL, { tools: ['offer_choices'] })
+          assert.notEqual(choices.isError, true, text(choices))
+          assert.deepEqual(JSON.parse(text(choices)).tools[0].input_schema, granted.tools.find(tool => tool.function.name === 'offer_choices')!.function.parameters)
+          const mixed = await granted.call(CATALOG_OPEN_TOOL, { tools: [name, 'list_audio_projects'] })
+          assert.notEqual(mixed.isError, true, text(mixed))
+          const mixedTools = JSON.parse(text(mixed)).tools as Array<{ name: string; direct?: boolean }>
+          assert.equal(mixedTools.find(tool => tool.name === name)?.direct, true)
+          assert.ok(mixedTools.some(tool => tool.name === 'list_audio_projects' && !tool.direct))
+          assert.ok(!granted.tools.some(tool => tool.function.name === 'room_call_member'))
+          const unavailable = await granted.call(CATALOG_OPEN_TOOL, { tools: ['room_call_member'] })
+          assert.equal(unavailable.isError, true, 'direct classification alone must not expose an unoffered room tool')
+          const wrongRoute = await granted.call(CATALOG_RUN_TOOL, { tool: name, arguments: {} })
+          assert.equal(wrongRoute.isError, true, 'opening a direct tool must not add it to run_tool')
+        } finally { await granted.close() }
+      })
+      const ordinary = await openChatMcpBridge(admin, [...CHAT_SCOPES], null, { chatContext })
+      try {
+        assert.ok(ordinary.catalogTools.has(name), 'the run grant does not change ordinary plugin-tool discovery')
+        assert.ok(!ordinary.tools.some(tool => tool.function.name === name))
+      } finally { await ordinary.close() }
+    } finally { clearPluginServerTools('catalog-fixture') }
+  })
+
+  await t.test('a used one-per-reply asset proposal disappears from catalog discovery and cannot run again', async () => {
+    const { ChatProposalStore } = await import('../src/services/codex-chat/chatProposals')
+    const limited = await openChatMcpBridge(admin, [...CHAT_SCOPES], null, { chatContext })
+    try {
+      const before = await limited.call(CATALOG_OPEN_TOOL, { tools: ['propose_profile_assets'] })
+      assert.notEqual(before.isError, true, text(before))
+      ChatProposalStore.add(chatContext, { kind: 'profile_assets', action: 'create', profileId: profile.id, profileName: profile.name, input: { idempotencyKey: 'catalog-proposal', presetId: 1 } })
+      const after = await limited.call(CATALOG_OPEN_TOOL, { tools: ['propose_profile_assets'] })
+      assert.equal(after.isError, true)
+      assert.ok(!text(after).includes('input_schema'))
+      const repeated = await limited.call(CATALOG_RUN_TOOL, { tool: 'propose_profile_assets', arguments: {} })
+      assert.equal(repeated.isError, true)
+      assert.match(text(repeated), /not available in this reply/)
+      const lore = await limited.call(CATALOG_OPEN_TOOL, { tools: ['save_lore'] })
+      assert.notEqual(lore.isError, true, text(lore))
+      ChatProposalStore.add(chatContext, { kind: 'lore', title: 'Favorite tea', keys: ['oolong'], content: 'The user prefers oolong tea.', constant: false })
+      for (const lookup of [{ tools: ['save_lore'] }, { query: 'save_lore', detail: 'schema' }]) {
+        const spent = await limited.call(CATALOG_OPEN_TOOL, lookup)
+        assert.ok(spent.isError || JSON.parse(text(spent)).tools.every((tool: { name: string }) => tool.name !== 'save_lore'),
+          'a consumed direct proposal tool is no longer available by name or query; other matching tools may remain')
+      }
+    } finally { await limited.close() }
+  })
+
   const bridge = await openChatMcpBridge(admin, [...CHAT_SCOPES], null, { chatContext })
   try {
     assert.ok(bridge.catalogTools.has('list_audio_projects'))

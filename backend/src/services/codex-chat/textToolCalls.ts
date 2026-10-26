@@ -63,8 +63,8 @@ function readCall(body: string, coerce: (tool: string, key: string, value: strin
  * The calls written in `text` (outside code blocks) and the text from `from` on without them, or null unless every
  * written call is a usable one. `from`: where the part of the text not yet shown to the reader starts.
  */
-export function parseTextToolCalls(text: string, available: TextToolCallTools, from = 0): { text: string; calls: ChatCompletionToolCall[] } | null {
-  const direct = new Map(available.tools.map((tool) => [tool.function.name, tool]))
+function readTextToolCalls(text: string, available: TextToolCallTools | null, from = 0): { text: string; calls: ChatCompletionToolCall[] } | null {
+  const direct = new Map((available?.tools ?? []).map((tool) => [tool.function.name, tool]))
   // A string parameter stays as written; anything else is read as JSON when it is JSON (numbers, objects, booleans).
   const coerce = (tool: string, key: string, value: string) => {
     const properties = (direct.get(tool)?.function.parameters as { properties?: Record<string, { type?: unknown }> } | undefined)?.properties
@@ -81,7 +81,7 @@ export function parseTextToolCalls(text: string, available: TextToolCallTools, f
   for (const [index, span] of spans.entries()) {
     const call = readCall(span.body, coerce)
     if (!call) return null
-    const name = direct.has(call.name) ? call.name : available.catalogued.has(call.name) && direct.has(CATALOG_RUN_TOOL) ? CATALOG_RUN_TOOL : null
+    const name = !available || direct.has(call.name) ? call.name : available.catalogued.has(call.name) && direct.has(CATALOG_RUN_TOOL) ? CATALOG_RUN_TOOL : null
     if (!name) return null
     calls.push({
       id: `call_text_${index}_${Date.now().toString(36)}`,
@@ -97,6 +97,11 @@ export function parseTextToolCalls(text: string, available: TextToolCallTools, f
   }
   rest += text.slice(at)
   return { text: rest.replace(/\n{3,}/g, '\n\n').trim(), calls }
+}
+
+/** Recover executable calls only when every named tool is offered by this request. */
+export function parseTextToolCalls(text: string, available: TextToolCallTools, from = 0) {
+  return readTextToolCalls(text, available, from)
 }
 
 /**
@@ -143,15 +148,17 @@ export function textToolCallFilter(onText: (text: string) => void) {
 
 /**
  * The calls written in the `held` tail of a message's `text` (what textToolCallFilter kept back): `text` without them,
- * `tail` the part of it still to show, set off from what was already shown. Null when nothing usable was written.
+ * `tail` the part of it still to show, set off from what was already shown. `stripUnavailable`: also remove valid
+ * markup for unavailable tools without executing it. Null when no recoverable call syntax was recognized.
  */
-export function recoverTextToolCalls(text: string, held: { text: string; marked: boolean }, available: TextToolCallTools) {
+export function recoverTextToolCalls(text: string, held: { text: string; marked: boolean }, available: TextToolCallTools, stripUnavailable = false) {
   if (!held.marked || !text.endsWith(held.text)) return null
   const shown = text.slice(0, text.length - held.text.length)
-  const parsed = parseTextToolCalls(text, available, shown.length)
+  const executable = parseTextToolCalls(text, available, shown.length)
+  const parsed = executable ?? (stripUnavailable ? readTextToolCalls(text, null, shown.length) : null)
   if (!parsed) return null
   const tail = parsed.text ? `${shown && !shown.endsWith('\n\n') ? (shown.endsWith('\n') ? '\n' : '\n\n') : ''}${parsed.text}` : ''
-  return { text: shown + tail, tail, calls: parsed.calls }
+  return { text: shown + tail, tail, calls: executable?.calls ?? [] }
 }
 
 const warned = new Map<string, number>()

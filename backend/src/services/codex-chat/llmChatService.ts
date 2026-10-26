@@ -2,7 +2,7 @@ import { validateChatMediaAttachments } from './chatMediaAttachments'
 import { addChatOpening } from './chatGreeting'
 import type { ChatExecutionContext, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 import { isCodexChatCreationTool } from '@conai/shared'
-import { ChatProposalStore } from './chatProposals'
+import { ChatProposalStore, isChatProposalToolAvailable } from './chatProposals'
 import { beginDirectReply, userReplyRouting } from './chatReplies'
 import type { McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
@@ -449,7 +449,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
   if (turn.research) requireResearchProfile(profile)
   const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
   if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)
-  const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId))
+  const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId), turn.threadId)
   const chatContext = turn.chatContext ?? turn.delivery?.context
   if (chatContext) {
     chatContext.knowledgeProvider = target.providerName
@@ -531,7 +531,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     // Session engines own their accumulated context; only direct API requests can calculate the remaining room here.
     if (!engineSession && profile.contextTokens !== null) catalogBudget = () => Math.max(0, profile.contextTokens! - estimateMessagesTokens(profile.id, messages, offeredTools) - 2048)
     const offeredNames = new Set([...offeredTools.map((tool) => tool.function.name), ...catalogued])
-    const permitted = (name: string) => offeredNames.has(name) && !blocked.has(name)
+    const permitted = (name: string) => offeredNames.has(name) && !blocked.has(name) && isChatProposalToolAvailable(chatContext, name)
     if (judged && turn.contextMeta) turn.contextMeta.judge = judged.diagnostics
     let previousRound: TextSpan | null = null
     const replyCap = target.generation.maxTokens
@@ -543,7 +543,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
     for (let round = 1; ; round += 1) {
       turn.controller.signal.throwIfAborted()
       if (turn.research && !turn.research.canCallModel()) return
-      let tools = bridge ? offeredTools : []
+      let tools = bridge ? offeredTools.filter(tool => isChatProposalToolAvailable(chatContext, tool.function.name)) : []
       // A request over the limit sheds old turns and cuts tool results first (fitChatContext). When a later round
       // still does not fit, the reply wraps up with what it did instead of failing; a first round has nothing to tell.
       try {
@@ -586,7 +586,8 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
         })
         // A tool call the server left in the text (no tool-call parser for this model) is held back and run as a
         // call; session transports recover their own inside the run (piChatCompletion).
-        const recovering = !target.transport && tools.length > 0 && !lastRound
+        // Even on the final text-only round, recognized markup must not become assistant speech.
+        const recovering = !target.transport
         const textFilter = textToolCallFilter(filter.push)
         return streamChatCompletion({
           target,
@@ -610,7 +611,7 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
               if (!turn.research.takeTool()) return { isError: true, content: [{ type: 'text', text: 'A summary has no tools. Answer only from the text already supplied.' }] }
             }
             const target = unwrapCatalogCall(name, args).tool
-            if (blocked.has(target)) return { isError: true, content: [{ type: 'text', text: `${target} is not available in this reply.` }] }
+            if (!permitted(target)) return { isError: true, content: [{ type: 'text', text: `${target} is not available in this reply.` }] }
             return (await runToolCall(turn, bridge, { id, function: { name, arguments: JSON.stringify(args) } }, profile.toolOutputLimit, [])).nativeResult
           } : undefined,
           onRequestBody: (body, actualTarget) => {
@@ -635,13 +636,14 @@ async function streamReply(turn: LlmTurn, requester: McpRequester, profile: Chat
           },
         }).then((answer) => {
           const held = textFilter.end()
-          // Calls cut by the cap or a loop carry broken arguments: their text stays as it was written.
-          const recovered = recovering && answer.toolCalls.length === 0 && answer.finishReason !== 'length' && answer.finishReason !== 'repetition'
-            ? recoverTextToolCalls(answer.content, held, { tools, catalogued: cataloguedSet }) : null
+          // Cut calls never execute, but recognized tool markup is not assistant speech either.
+          const recovered = recovering ? recoverTextToolCalls(answer.content, held, { tools, catalogued: cataloguedSet }, true) : null
           filter.push(recovered ? recovered.tail : held.text)
           filter.flush()
           if (recovered) noteTextToolCalls(target)
-          const value = recovered ? { ...answer, content: recovered.text, toolCalls: recovered.calls } : answer
+          // Native calls take precedence over a textual copy, so recovery cannot execute the same write twice.
+          const cut = answer.finishReason === 'length' || answer.finishReason === 'repetition'
+          const value = recovered ? { ...answer, content: recovered.text, toolCalls: lastRound || cut || answer.toolCalls.length > 0 ? answer.toolCalls : recovered.calls } : answer
           // The loop was already shown live: take it back off the reply.
           if (value.loopCut) {
             turn.text = turn.text.slice(0, Math.max(roundStart, turn.text.length - value.loopCut)).trimEnd()
@@ -967,6 +969,9 @@ export const LlmChatService = {
   isRunning(threadId: number) {
     return busy(threadId)
   },
+  replyFinished(threadId: number) {
+    return activeTurns.get(threadId)?.finished
+  },
 
   /**
    * Send one user message and stream the reply to `listener`. Resolves with the stored assistant message; the reply
@@ -996,6 +1001,7 @@ export const LlmChatService = {
     skipThreadGenerationReactions(thread.id)
     return startReply(requester, thread, profile, listener, () => {
       const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, display_content: null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
+      options.onDelivered?.(userMessageId)
       // The model reads the message in English; the reader keeps their own words. The message is shown right away and
       // translated beside the judge (the turn is already reserved here, see startReply).
       const turn = activeTurns.get(thread.id)

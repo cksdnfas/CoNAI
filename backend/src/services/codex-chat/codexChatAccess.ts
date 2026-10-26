@@ -14,6 +14,8 @@ import { CodexChatStore } from './codexChatStore'
 import { ChatGroupStore } from './chatGroupStore'
 import { requireChatPageAccess } from './chatPageContext'
 import { chatWorkspace } from './chatWorkspace'
+import { mcpToolNames } from '../../mcp/context'
+import { pluginProfileTools } from '../plugins/pluginServerTools'
 
 const CHAT_MCP_TOKEN_PREFIX = 'conai_chat_'
 
@@ -97,13 +99,17 @@ export function intersectChatScopes(configured: readonly ChatScope[], access: Ch
 }
 
 /** Linking a generation preset explicitly enables that tool, independently of the general tool selection. */
-export function resolveChatProfileToolGrant(profile: Pick<ChatProfile, 'mcpEnabled' | 'mcpScopes' | 'toolAllowlist' | 'generationPresetIds'>, access: ChatAccess) {
+export function resolveChatProfileToolGrant(profile: Pick<ChatProfile, 'mcpEnabled' | 'mcpScopes' | 'toolAllowlist' | 'generationPresetIds'>, access: ChatAccess, threadId?: number) {
   const presetTools = profile.generationPresetIds.map((_, index) => chatGenerationToolName(index))
   const configured: ChatScope[] = [...new Set<ChatScope>([...profile.mcpScopes, ...(presetTools.length ? ['generate' as const] : [])])]
-  return {
-    scopes: profile.mcpEnabled ? intersectChatScopes(configured, access) : [],
-    toolAllowlist: profile.toolAllowlist === null ? null : [...new Set([...profile.toolAllowlist, ...presetTools])],
-  }
+  const scopes = profile.mcpEnabled ? intersectChatScopes(configured, access) : []
+  const own = pluginProfileTools(threadId).filter(tool => access.scopes.includes(tool.scope))
+  if (!own.length) return { scopes, toolAllowlist: profile.toolAllowlist === null ? null : [...new Set([...profile.toolAllowlist, ...presetTools])] }
+  // Expanding a scope for an owning plugin must not enable unrelated native or other-plugin tools.
+  const native = profile.mcpEnabled
+    ? [...(profile.toolAllowlist ?? [...mcpToolNames(), 'call_agent']), ...presetTools].filter(name => name === 'call_agent' ? scopes.length > 0 : scopes.includes(getMcpToolScope(name) as ChatScope))
+    : []
+  return { scopes: [...new Set([...scopes, ...own.map(tool => tool.scope)])], toolAllowlist: [...new Set([...native, ...own.map(tool => tool.name)])] }
 }
 
 /** Recheck account revocation for in-process API LLM tools as well as loopback Codex tools. */
@@ -127,7 +133,7 @@ export function requireChatMcpAccountAccess(context: McpRequestContext, toolName
     requireChatPageAccess(context.requester, chat.page!)
   } else if (!builtin) {
     // The chat's own tools (reply, room, lorebook, frame viewing) are always there; everything else follows the profile.
-    const grant = resolveChatProfileToolGrant(profile, access)
+    const grant = resolveChatProfileToolGrant(profile, access, chat.threadId)
     if (grant.toolAllowlist && !grant.toolAllowlist.includes(toolName)) throw new Error('프로필에서 이 도구를 더 이상 허용하지 않아.')
     if (!grant.scopes.includes(scope as ChatScope)) throw new Error('프로필의 도구 사용 설정이 변경됐어.')
   }
