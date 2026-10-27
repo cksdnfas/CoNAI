@@ -16,6 +16,7 @@ import {
   getThemeModeLabel,
 } from './appearance-tab-editor-shared'
 import { ChatFilledLabel } from './settings-filled-label'
+import { SettingsAdvanced } from './settings-navigation'
 import { useI18n } from '@/i18n'
 
 /** One round colour swatch; the chosen one gets a ring. */
@@ -83,8 +84,9 @@ export function AppearanceThemeRows({
         </Swatch>
       </SettingRow>
 
-      {appearanceDraft.accentPreset === 'custom' ? (
-        <>
+      <SettingsAdvanced count={2}>
+        {appearanceDraft.accentPreset !== 'custom' ? <p className="text-xs text-muted-foreground">{t({ ko: '강조색을 사용자 지정으로 고르면 바꿀 수 있어.', en: 'Choose a custom accent to edit these colors.' })}</p> : null}
+        <fieldset disabled={appearanceDraft.accentPreset !== 'custom'}>
           <AppearanceColorRow
             fieldId="appearance.customPrimaryColor"
             label={t({ ko: '기본 강조색', en: 'Primary accent' })}
@@ -103,8 +105,8 @@ export function AppearanceThemeRows({
             onChangeText={(value) => onPatchAppearance({ customSecondaryColor: value })}
             placeholder={DEFAULT_APPEARANCE_SETTINGS.customSecondaryColor}
           />
-        </>
-      ) : null}
+        </fieldset>
+      </SettingsAdvanced>
 
       <SettingRow label={<ChatFilledLabel fieldId="appearance.surfacePreset">{t({ ko: '표면', en: 'Surfaces' })}</ChatFilledLabel>}>
         {Object.entries(SURFACE_PRESETS).map(([presetKey, preset]) => {
@@ -129,8 +131,9 @@ export function AppearanceThemeRows({
         </Swatch>
       </SettingRow>
 
-      {appearanceDraft.surfacePreset === 'custom' ? (
-        <>
+      <SettingsAdvanced count={5}>
+        {appearanceDraft.surfacePreset !== 'custom' ? <p className="text-xs text-muted-foreground">{t({ ko: '배경을 사용자 지정으로 고르면 바꿀 수 있어.', en: 'Choose a custom surface to edit these colors.' })}</p> : null}
+        <fieldset disabled={appearanceDraft.surfacePreset !== 'custom'}>
           <AppearanceColorRow
             fieldId="appearance.customSurfaceBackgroundColor"
             label={t({ ko: '배경', en: 'Background' })}
@@ -176,8 +179,8 @@ export function AppearanceThemeRows({
             onChangeText={(value) => onPatchAppearance({ customSurfaceHighColor: value })}
             placeholder={DEFAULT_APPEARANCE_SETTINGS.customSurfaceHighColor}
           />
-        </>
-      ) : null}
+        </fieldset>
+      </SettingsAdvanced>
 
       <SettingRow label={<ChatFilledLabel fieldId="appearance.density">{densityLabel}</ChatFilledLabel>} controlWidth="standard">
         <Select

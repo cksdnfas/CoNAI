@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { CircleUserRound, Command, Languages, LogIn, LogOut, MessageSquare, Search, type LucideIcon } from 'lucide-react'
+import { CircleUserRound, Command, Languages, LogIn, LogOut, MessageSquare, Search, Settings, UserRound, type LucideIcon } from 'lucide-react'
 import { openCommandPalette } from '@/components/layout/command-palette-launcher'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AnchoredPopup, anchoredPopupBodyClassName } from '@/components/ui/anchored-popup'
@@ -15,6 +15,7 @@ import { UnreadCount } from '@/features/codex-chat/chat-unread-count'
 import { useHomeSearchToggle } from '@/features/home/components/home-search-ui'
 import { useI18n } from '@/i18n'
 import { logoutLocalAccount } from '@/lib/api-auth'
+import { hasAuthPermission } from './auth-permissions'
 import { LanguageTabs } from './language-switch'
 import { AUTH_STATUS_QUERY_KEY, useAuthStatusQuery } from './use-auth-status-query'
 
@@ -25,7 +26,10 @@ type HeaderAccountMenuProps = {
   foldedChat?: boolean
 }
 
-/** Render one compact header account button with a mini popup: who is signed in, language, sign-out, and folded header keys. */
+/**
+ * The header account key and its popup: who is signed in and the language, the way to Settings (the gear is app
+ * settings only) and to 내 설정, the header keys folded on narrow screens, then sign-in or sign-out.
+ */
 export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: HeaderAccountMenuProps) {
   const location = useLocation()
   const navigate = useNavigate()
@@ -95,6 +99,9 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
   const menuChat = foldedChat ? chatToggle : null
   // The folded chat key hands its unread dot to this key.
   const hasUnreadChat = menuChat !== null && unreadCount > 0
+  // 설정 holds both personal and shared settings (administrators); 내 설정 is its personal part, for chat users.
+  const canOpenSettings = hasAuthPermission(authStatus.permissionKeys, 'page.settings.view')
+  const canOpenMine = isSignedIn && hasAuthPermission(authStatus.permissionKeys, 'page.chat.view')
 
   const runAndClose = (action: () => void) => {
     closeMenu()
@@ -149,22 +156,17 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
             >
               <Languages />
             </IconButton>
-            {isSignedIn ? (
-              <IconButton
-                size="icon-sm"
-                variant="ghost"
-                label={logoutMutation.isPending ? t('headerAccountMenu.signingOut') : t('headerAccountMenu.signOut')}
-                onClick={() => logoutMutation.mutate()}
-                disabled={logoutMutation.isPending}
-              >
-                <LogOut />
-              </IconButton>
-            ) : null}
           </div>
 
           {isLanguageOpen ? <div className="pb-1 pl-10.5"><LanguageTabs /></div> : null}
 
-          {isAnonymousSession || showSearch || menuChat ? <Separator /> : null}
+          {canOpenSettings || canOpenMine ? <Separator /> : null}
+
+          {canOpenSettings ? <MenuRow icon={Settings} label={t({ ko: '설정', en: 'Settings' })} onClick={() => runAndClose(() => navigate('/settings'))} /> : null}
+
+          {canOpenMine ? <MenuRow icon={UserRound} label={t({ ko: '내 설정', en: 'My settings' })} onClick={() => runAndClose(() => navigate('/settings?section=mine'))} /> : null}
+
+          {showSearch || menuChat ? <Separator /> : null}
 
           {showSearch ? (
             <MenuRow
@@ -188,11 +190,22 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
           {/* Narrow (touch) headers have no Ctrl/⌘+K, so the palette sits with the other folded keys. */}
           {menuChat ? <MenuRow icon={Command} label={t({ ko: '빠른 실행', en: 'Command palette' })} onClick={() => runAndClose(openCommandPalette)} /> : null}
 
+          {isAnonymousSession || isSignedIn ? <Separator /> : null}
+
           {isAnonymousSession ? (
             <MenuRow
               icon={LogIn}
               label={t('loginPage.signIn')}
               onClick={() => runAndClose(() => navigate(`/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`))}
+            />
+          ) : null}
+
+          {isSignedIn ? (
+            <MenuRow
+              icon={LogOut}
+              label={logoutMutation.isPending ? t('headerAccountMenu.signingOut') : t('headerAccountMenu.signOut')}
+              disabled={logoutMutation.isPending}
+              onClick={() => logoutMutation.mutate()}
             />
           ) : null}
         </div>
@@ -202,10 +215,11 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
 }
 
 /** One labelled action row; touch has no tooltips, so folded keys get words here. */
-function MenuRow({ icon: Icon, label, end, onClick, onPointerEnter }: {
+function MenuRow({ icon: Icon, label, end, disabled, onClick, onPointerEnter }: {
   icon: LucideIcon
   label: string
   end?: ReactNode
+  disabled?: boolean
   onClick: () => void
   onPointerEnter?: () => void
 }) {
@@ -216,6 +230,7 @@ function MenuRow({ icon: Icon, label, end, onClick, onPointerEnter }: {
       size="sm"
       role="menuitem"
       className="w-full justify-start"
+      disabled={disabled}
       onClick={onClick}
       onPointerEnter={onPointerEnter}
     >

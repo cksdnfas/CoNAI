@@ -349,12 +349,12 @@ export function NaiGenerationPanel({
     ? undefined
     : naiCostQuery.isSuccess
       ? naiFreePerJob
-        ? t({ ko: '(무료)', en: '(free)' })
+        ? t({ ko: '무료', en: 'free' })
         : naiServerUpscale
-          ? t({ ko: '({cost}+ Anlas)', en: '({cost}+ Anlas)' }, { cost: formatNumber(naiClickCost) })
-          : t({ ko: '({cost} Anlas)', en: '({cost} Anlas)' }, { cost: formatNumber(naiClickCost) })
+          ? t({ ko: '{cost}+ Anlas', en: '{cost}+ Anlas' }, { cost: formatNumber(naiClickCost) })
+          : t({ ko: '{cost} Anlas', en: '{cost} Anlas' }, { cost: formatNumber(naiClickCost) })
       : naiCostQuery.isPending
-        ? t({ ko: '(계산 중…)', en: '(calculating…)' })
+        ? t({ ko: '계산 중…', en: 'calculating…' })
         : undefined
   const naiGenerateButtonSuffixHint = naiGenerateButtonSuffix && naiCostQuery.isSuccess && naiServerUpscale
     ? t({ ko: 'Max의 서버 업스케일 비용은 예상에 들어 있지 않아.', en: 'The Max server upscale adds a cost that is not in this estimate.' })
@@ -464,10 +464,11 @@ export function NaiGenerationPanel({
     ? <GenerationBlockLayout surface="nai" blocks={{ ...blocks, action: actionSection, result: blockLayout.result }} />
     : (
       <>
-        {stackedLayoutBlocks(layoutPreset)
-          .filter((block): block is keyof NaiEditorBlockNodes => block in blocks)
-          .map((block) => <Fragment key={block}>{blocks[block]}</Fragment>)}
-        <StackedPluginBlocks surface="nai" />
+        {stackedLayoutBlocks(layoutPreset).map((block) => (
+          <Fragment key={block}>
+            {block in blocks ? blocks[block as keyof NaiEditorBlockNodes] : <StackedPluginBlocks surface="nai" block={block} />}
+          </Fragment>
+        ))}
       </>
     )
 

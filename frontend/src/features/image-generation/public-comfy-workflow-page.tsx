@@ -413,7 +413,7 @@ function PublicComfyWorkflowPageContent() {
     <div
       className={cn(
         isWideLayout
-          ? 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col overflow-hidden'
+          ? 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom)-var(--shell-bottom-inset))] min-h-0 flex-col overflow-hidden'
           : 'space-y-4',
         !isWideLayout && narrowView === 'edit' && 'pb-28',
       )}

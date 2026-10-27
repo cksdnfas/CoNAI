@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { PostAssessmentQuality, PostDetail, PostReviewIssue } from '@conai/shared'
-import { Check, RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
+import { RefreshCw, ThumbsDown, ThumbsUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ToggleChip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
-import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
@@ -55,7 +54,7 @@ export function KnowledgeMetadataEditor({ post, onClose }: { post: PostDetail; o
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '출처를 저장하지 못했어.', en: 'Could not save sources.' })) }),
   })
   return (
-    <Modal open onClose={onClose} title={t({ ko: '문서 출처', en: 'Document sources' })} size="normal" dirty={JSON.stringify(sources) !== JSON.stringify(post.knowledgeSources ?? [])} onSave={() => { if (!save.isPending) save.mutate() }}>
+    <Modal open onClose={onClose} title={t({ ko: '문서 출처', en: 'Document sources' })} size="lg" dirty={JSON.stringify(sources) !== JSON.stringify(post.knowledgeSources ?? [])} onSave={() => { if (!save.isPending) save.mutate() }}>
       <ModalBody><KnowledgeSourcesEditor sources={sources} onChange={setSources} /></ModalBody>
       <ModalFooter><Button variant="ghost" onClick={onClose}>{t({ ko: '닫기', en: 'Close' })}</Button><Button disabled={save.isPending} onClick={() => save.mutate()}>{t({ ko: '저장', en: 'Save' })}</Button></ModalFooter>
     </Modal>
@@ -75,7 +74,7 @@ export function KnowledgeReviewDialog({ post, action, issue, onClose }: { post: 
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '검토를 저장하지 못했어.', en: 'Could not save the review.' })) }),
   })
   return (
-    <Modal open onClose={onClose} title={title} size="narrow">
+    <Modal open onClose={onClose} title={title} size="md">
       <ModalBody>
         {issue ? <p className="whitespace-pre-wrap text-sm">{issue.reason}</p> : null}
         <Field label={action === 'resolve_issue' ? t({ ko: '해결 근거', en: 'Resolution evidence' }) : t({ ko: '이유', en: 'Reason' })}><Textarea rows={3} maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
@@ -162,7 +161,7 @@ export function PostVoteBar({ post }: { post: PostDetail }) {
             </div>
             <form className="flex items-center gap-1.5" onSubmit={(event) => { event.preventDefault(); if (!vote.isPending) vote.mutate({ quality: 'down', reasonCode: reasonCode ?? undefined, reason: reason.trim() }) }}>
               <Input autoFocus value={reason} maxLength={2000} onChange={(event) => setReason(event.target.value)} placeholder={t({ ko: '한 줄 이유', en: 'One-line reason' })} aria-label={t({ ko: '한 줄 이유', en: 'One-line reason' })} className="flex-1" />
-              <IconButton type="submit" size="icon-sm" disabled={vote.isPending} label={t({ ko: '비추천 남기기', en: 'Save' })}><Check /></IconButton>
+              <Button type="submit" size="sm" disabled={vote.isPending}>{t({ ko: '비추천 남기기', en: 'Submit' })}</Button>
             </form>
           </PopoverContent>
         </Popover>

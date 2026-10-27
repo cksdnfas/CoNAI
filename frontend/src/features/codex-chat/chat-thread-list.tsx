@@ -26,9 +26,15 @@ import { ChatRoomPageMore, useChatBranchParents, useChatRoomPages, useChatRoomSu
 export type ChatListPatch = { title?: string; pinned?: boolean; archived?: boolean; notify?: boolean }
 export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
 
+/** The chats tab's date headings, in list order: pinned chats, then by the day they last moved. */
+type DateBucket = 'pinned' | 'today' | 'yesterday' | 'week' | 'older'
+const DATE_BUCKETS: DateBucket[] = ['pinned', 'today', 'yesterday', 'week', 'older']
+const DAY_MS = 86_400_000
+
 /**
- * The chats: pinned first, then the latest activity (as the server lists them). Each row shows the face it talks to,
- * its title, when it last moved, how many replies are unread and (roomy rows) the latest message or the unsent text. Branches kept before an edit
+ * The chats: pinned first, then the latest activity (as the server lists them), under date headings on the chats tab.
+ * Each row shows the face it talks to, its title, when it last moved, how many replies are unread and the latest line
+ * (whose it is) or the unsent text. Branches kept before an edit
  * fold under the chat they came from; archived chats wait behind the archive row at the end. Rooms an automation made
  * for itself (board calls, routines, workflow nodes) sit on their own 자동화 tab, shown once there is one; agent and
  * plugin rooms are grouped under their own headings there. A muted chat (bell off) keeps its row count but leaves the
@@ -100,10 +106,27 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
   }, [selecting, confirmingDelete])
   const untitled = t({ ko: '새 채팅', en: 'New chat' })
   const today = new Date()
-  // The clock today, the day otherwise.
-  const whenLabel = (date: Date) => date.toDateString() === today.toDateString()
-    ? formatDate(date, { hour: 'numeric', minute: '2-digit' })
-    : formatDate(date, date.getFullYear() === today.getFullYear() ? { month: 'short', day: 'numeric' } : { dateStyle: 'medium' })
+  /** Calendar days from `date` to today (0: today). */
+  const daysAgo = (date: Date) => Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() - new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / DAY_MS)
+  // The clock today, then "yesterday", the weekday within a week and the date before that.
+  const whenLabel = (date: Date) => {
+    const days = daysAgo(date)
+    if (days <= 0) return formatDate(date, { hour: 'numeric', minute: '2-digit' })
+    if (days === 1) return t({ ko: '어제', en: 'Yesterday' })
+    if (days < 7) return formatDate(date, { weekday: 'short' })
+    return formatDate(date, date.getFullYear() === today.getFullYear() ? { month: 'short', day: 'numeric' } : { dateStyle: 'medium' })
+  }
+  const bucketLabel: Record<DateBucket, string> = {
+    pinned: t({ ko: '고정됨', en: 'Pinned' }), today: t({ ko: '오늘', en: 'Today' }), yesterday: t({ ko: '어제', en: 'Yesterday' }),
+    week: t({ ko: '지난 7일', en: 'Previous 7 days' }), older: t({ ko: '이전', en: 'Earlier' }),
+  }
+  const bucketOf = (entry: CodexChatThreadSummary): DateBucket => {
+    if (entry.pinned) return 'pinned'
+    const movedAt = parseServerDate(entry.updated_date)
+    if (Number.isNaN(movedAt.getTime())) return 'older'
+    const days = daysAgo(movedAt)
+    return days <= 0 ? 'today' : days === 1 ? 'yesterday' : days < 7 ? 'week' : 'older'
+  }
 
   const listed = inTab.filter((entry) => !entry.archived)
   const archived = archiveOpen ? inTab.filter((entry) => entry.archived) : []
@@ -121,23 +144,26 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
     return { top: top.sort((a, b) => (b.pinned ?? 0) - (a.pinned ?? 0)), branches }
   }
 
-  const previewOf = (entry: CodexChatThreadSummary) => {
+  const previewOf = (entry: CodexChatThreadSummary, profileName: string | null) => {
     const draft = drafts[entry.id]
     if (draft?.trim()) return <><span className="text-secondary-text">{t({ ko: '초안', en: 'Draft' })}</span> {draft.replace(/\s+/g, ' ')}</>
     const preview = entry.preview
     if (!preview) return null
-    return preview.text || (preview.media ? t({ ko: '이미지', en: 'Image' }) : preview.files ? t({ ko: '파일', en: 'File' }) : null)
+    const text = preview.text || (preview.media ? t({ ko: '이미지', en: 'Image' }) : preview.files ? t({ ko: '파일', en: 'File' }) : null)
+    // Whose line it is: mine, or the character's in a 1:1 chat (a room's line could be any member's).
+    const who = preview.role === 'user' ? t({ ko: '나', en: 'Me' }) : entry.kind === 'group' ? null : profileName
+    return text && who ? `${who}: ${text}` : text
   }
 
   const row = (entry: CodexChatThreadSummary, nested = false) => {
     const entryProfile = entry.profile_id ? profilesById.get(entry.profile_id) : undefined
     const movedAt = parseServerDate(entry.updated_date)
     const time = Number.isNaN(movedAt.getTime()) ? null : <time className="text-2xs tabular-nums text-muted-foreground" dateTime={movedAt.toISOString()}>{whenLabel(movedAt)}</time>
-    const preview = dense ? null : previewOf(entry)
+    const preview = previewOf(entry, entryProfile?.name ?? null)
     const checked = picked.has(entry.id)
     return (
       <div key={entry.id} className={cn('relative', nested && (dense ? 'pl-5' : 'pl-8'))}>
-        <ListRow asChild interactive size={dense ? 'sm' : 'lg'} selected={selecting ? checked : entry.id === activeThreadId}>
+        <ListRow asChild interactive size={dense ? 'md' : 'lg'} selected={selecting ? checked : entry.id === activeThreadId}>
           <button
             type="button"
             aria-pressed={selecting ? checked : undefined}
@@ -150,7 +176,7 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
               <span className={cn('flex', selecting && 'opacity-0')}>
               {entry.kind === 'group'
                 ? <ChatHealthDot down={groupDown(entry.member_profile_ids ?? [])}><GroupAvatarStack profiles={(entry.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])} size={dense ? 'xs' : 'sm'} ringClassName="ring-background" /></ChatHealthDot>
-                : entryProfile ? <ChatHealthDot down={healthOf(entryProfile.id)}><ChatProfileAvatar name={entryProfile.name} avatar={entryProfile.avatar} profile={entryProfile} engine={entryProfile.engine} size={dense ? 'xs' : 'md'} /></ChatHealthDot> : <span className={dense ? 'size-5' : 'size-8'} />}
+                : entryProfile ? <ChatHealthDot down={healthOf(entryProfile.id)}><ChatProfileAvatar name={entryProfile.name} avatar={entryProfile.avatar} profile={entryProfile} engine={entryProfile.engine} size={dense ? 'sm' : 'md'} /></ChatHealthDot> : <span className={dense ? 'size-6' : 'size-8'} />}
               </span>
               <span
                 aria-hidden
@@ -163,16 +189,20 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
             </span>
             <span className="min-w-0 flex-1">
               <span className="flex min-w-0 items-center gap-1.5">
-                <span className={cn('truncate', !dense && 'font-semibold')}>{entry.title || untitled}</span>
+                <span className={cn('truncate', dense ? 'font-medium' : 'font-semibold')}>{entry.title || untitled}</span>
                 {entry.pinned ? <Pin aria-label={t({ ko: '고정됨', en: 'Pinned' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
                 {routineThreadIds?.has(entry.id) ? <AlarmClock aria-label={t({ ko: '루틴', en: 'Routine' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
                 {entry.notify_enabled === false ? <BellOff aria-label={t({ ko: '알림 꺼짐', en: 'Muted' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
               </span>
-              {preview ? <span className="block truncate text-xs text-muted-foreground">{preview}</span> : null}
-              {/* The side column puts the time under the title, so the title gets the whole width. */}
-              {dense && time ? <span className="block leading-tight">{time}</span> : null}
+              {/* The side column ends the latest line with the time, so the title keeps the whole width. */}
+              {dense ? (
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {preview ? <span className="min-w-0 truncate text-xs text-muted-foreground">{preview}</span> : null}
+                  <span className="ml-auto shrink-0">{time}</span>
+                </span>
+              ) : preview ? <span className="block truncate text-xs text-muted-foreground">{preview}</span> : null}
             </span>
-            {/* Time on top, the unread count under it (the dense list keeps only the marks and the count here). */}
+            {/* Time on top, the unread count under it (the side column keeps only the marks and the count here). */}
             <span className={cn('flex shrink-0', dense ? 'items-center gap-2' : 'flex-col items-end gap-1')}>
               <span className="flex items-center gap-2">
                 {entry.task ? <ChatTaskRing summary={entry.task} /> : null}
@@ -226,7 +256,8 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
     </ListRow>
   )
 
-  const section = (entries: CodexChatThreadSummary[]) => {
+  /** `byDate`: the top rows go under the date headings (their branches stay under them). */
+  const section = (entries: CodexChatThreadSummary[], byDate = false) => {
     const { top, branches } = arrange(entries)
     const render = (entry: CodexChatThreadSummary, nested = false): ReactNode => {
       const kept = branches.get(entry.id) ?? []
@@ -247,12 +278,27 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
         </div>
       )
     }
-    return top.map((entry) => render(entry))
+    if (!byDate) return top.map((entry) => render(entry))
+    const buckets = new Map<DateBucket, CodexChatThreadSummary[]>()
+    for (const entry of top) {
+      const key = bucketOf(entry)
+      buckets.set(key, [...(buckets.get(key) ?? []), entry])
+    }
+    return DATE_BUCKETS.flatMap((key) => {
+      const rows = buckets.get(key)
+      return rows ? [<div key={key}>
+        <p className={cn('pb-1 pt-3 text-2xs font-semibold text-muted-foreground', dense ? 'px-2' : 'px-3')}>{bucketLabel[key]}</p>
+        {rows.map((entry) => render(entry))}
+      </div>] : []
+    })
   }
 
-  /** The 자동화 tab files agent rooms, plugin rooms and the user's own automation (routines, workflows, boards) under their own headings. */
-  const grouped = (entries: CodexChatThreadSummary[]) => {
-    if (shownTab !== 'automation') return section(entries)
+  /**
+   * The chats tab files its rows under date headings (`byDate`, not the archive); the 자동화 tab files agent rooms,
+   * plugin rooms and the user's own automation (routines, workflows, boards) under their own headings.
+   */
+  const grouped = (entries: CodexChatThreadSummary[], byDate = false) => {
+    if (shownTab !== 'automation') return section(entries, byDate)
     const groups = [
       { key: 'agent', heading: t({ ko: '에이전트', en: 'Agents' }), entries: entries.filter((entry) => entry.automation === 'agent') },
       { key: 'plugin', heading: t({ ko: '플러그인', en: 'Plugins' }), entries: entries.filter((entry) => entry.automation === 'plugin') },
@@ -301,7 +347,7 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
       />
     ) : null}
     {query.trim() ? <p className="px-3 py-1 text-xs text-muted-foreground">{t({ ko: '방 이름 · 캐릭터', en: 'Rooms · characters' })}</p> : null}
-    {grouped(listed)}
+    {grouped(listed, true)}
     {parents.isError ? <Button variant="ghost" size="xs" onClick={() => void parents.refetch()}>{t({ ko: '분기 원본 다시 불러오기', en: 'Retry branch parents' })}</Button> : null}
     <ChatRoomPageMore page={activePage} />
     {hasArchive ? <>
@@ -320,7 +366,7 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
       </Panel>
     ) : null}
     <ChatDeleteDialog open={confirmingDelete} count={pickedIds.length} book={null} pending={bulkBusy} onClose={() => setConfirmingDelete(false)} onConfirm={(choice) => void runBulk('delete', choice.backupDate)} />
-    <Modal open={renaming !== null} onClose={() => setRenaming(null)} title={t({ ko: '이름 바꾸기', en: 'Rename' })} widthClassName="max-w-sm">
+    <Modal open={renaming !== null} onClose={() => setRenaming(null)} title={t({ ko: '이름 바꾸기', en: 'Rename' })} size="sm">
       <ModalBody>
         <Input
           autoFocus

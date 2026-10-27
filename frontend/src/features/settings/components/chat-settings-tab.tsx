@@ -1,66 +1,29 @@
-import { lazy, Suspense, useEffect } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { TextTabs } from '@/components/common/text-tabs'
-import { TabsContent } from '@/components/ui/tabs'
-import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { Link } from 'react-router-dom'
+import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
+import { ChatMemorySettings, ChatToolSettings, ChatWebSettings, useChatOptions } from './chat-options-settings'
+import { useChatOptionsPageParts } from './chat-options-page'
+import { SettingsContents, SettingsGroup } from './settings-navigation'
+import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
+import { ChatFilledLabel } from './settings-filled-label'
 import { ChatSettingsMine } from './chat-settings-mine'
-import { ChatSettingsProfiles } from './chat-settings-profiles'
-import { ChatSettingsResources } from './chat-settings-resources'
 
-// Loaded on its tab: chat-routines shares its chunk with the chat view, which the settings page must not pull in.
-const ChatSettingsRoutines = lazy(() => import('@/features/codex-chat/chat-routines').then((module) => ({ default: module.ChatSettingsRoutines })))
-
-type ChatSettingsView = 'profiles' | 'resources' | 'mine' | 'routines'
-
-/** `?view=` of the chat tab (the page's own tab lives in `?section=`); no value means the profiles view. */
-function parseView(raw: string | null): ChatSettingsView {
-  return raw === 'resources' || raw === 'mine' || raw === 'routines' ? raw : 'profiles'
-}
-
-/** Settings › Chat: text tabs for the profiles, the shared resources, the account's own settings and the routines. */
+/** Behaviour only: resources live in the character and chat workspaces. */
 export function ChatSettingsTab() {
   const { t } = useI18n()
-  const isAdmin = useAuthStatusQuery().data?.isAdmin === true
-  const [searchParams, setSearchParams] = useSearchParams()
-  const rawView = searchParams.get('view')
-  const view = parseView(rawView)
-
-  // The judge log moved to Settings › LLM; old links land there.
-  useEffect(() => {
-    if (rawView !== 'judge') return
-    setSearchParams((current) => {
-      const params = new URLSearchParams(current)
-      params.set('section', 'llm')
-      return params
-    }, { replace: true })
-  }, [rawView, setSearchParams])
-
-  const setView = (next: string) => {
-    const target = parseView(next)
-    setSearchParams((current) => {
-      const params = new URLSearchParams(current)
-      if (target === 'profiles') params.delete('view')
-      else params.set('view', target)
-      return params
-    }, { replace: true })
-  }
-
-  return (
-    <TextTabs
-      value={view}
-      onChange={setView}
-      items={[
-        { value: 'profiles', label: t({ ko: '프로필', en: 'Profiles' }) },
-        { value: 'resources', label: t({ ko: '자원', en: 'Resources' }) },
-        { value: 'mine', label: t({ ko: '내 설정', en: 'Mine' }) },
-        ...(isAdmin ? [{ value: 'routines', label: t({ ko: '루틴', en: 'Routines' }) }] : []),
-      ]}
-    >
-      <TabsContent value="profiles" className="mt-6"><ChatSettingsProfiles /></TabsContent>
-      <TabsContent value="resources" className="mt-6"><ChatSettingsResources /></TabsContent>
-      <TabsContent value="mine" className="mt-6"><ChatSettingsMine /></TabsContent>
-      {isAdmin ? <TabsContent value="routines" className="mt-6"><Suspense fallback={null}><ChatSettingsRoutines /></Suspense></TabsContent> : null}
-    </TextTabs>
-  )
+  const options = useChatOptionsPageParts('memory-web')
+  const { settingsQuery, settingsMutation } = useChatOptions()
+  const groups = [{ id: 'memory', label: t({ ko: '기억', en: 'Memory' }) }, { id: 'tools', label: t({ ko: '도구 사용', en: 'Tool use' }) }, { id: 'web', label: t({ ko: '웹 검색', en: 'Web search' }) }, { id: 'flags', label: t({ ko: '공용 플래그', en: 'Shared flags' }) }]
+  return <div className="space-y-8">
+    <SettingsContents groups={groups} />
+    <div className="flex flex-wrap gap-2">
+      <Button asChild variant="ghost" size="sm"><Link to="/characters?view=profiles">{t({ ko: '채팅 프로필은 캐릭터 화면으로 옮겼어 → 열기', en: 'Chat profiles moved to Characters → Open' })}</Link></Button>
+      <Button asChild variant="ghost" size="sm"><Link to="/chat/resources">{t({ ko: '채팅 자원 열기', en: 'Open chat resources' })}</Link></Button>
+    </div>
+    {settingsQuery.data ? <SettingsSwitchRow label={<ChatFilledLabel fieldId="chat.enabled" />} checked={settingsQuery.data.enabled} disabled={settingsMutation.isPending} onCheckedChange={(enabled) => settingsMutation.mutate({ enabled })} /> : null}
+    <SettingsGroup id="memory" title={groups[0].label}><ChatMemorySettings /></SettingsGroup>
+    <SettingsGroup id="tools" title={groups[1].label}><ChatToolSettings /></SettingsGroup>
+    <SettingsGroup id="web" title={groups[2].label}><ChatWebSettings /></SettingsGroup>
+    <ChatSettingsMine sharedFlags options={options} />
+  </div>
 }

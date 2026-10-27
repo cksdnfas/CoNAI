@@ -51,7 +51,8 @@ function ConfirmDialog({ open, title, description, confirmLabel, cancelLabel, to
           data-slot="confirm-dialog"
           data-tone={tone}
           {...(description ? {} : { 'aria-describedby': undefined })}
-          className="fixed top-1/2 left-1/2 z-modal w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 space-y-5 rounded-lg bg-surface-container p-5 text-foreground shadow-elevation-3 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 motion-reduce:animate-none sm:p-6"
+          // The `sm` modal look: a bottom sheet on phones, a centred 26rem card from sm up.
+          className="fixed inset-x-0 bottom-0 z-modal w-full space-y-5 rounded-t-xl border-t border-line bg-surface-low p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] text-foreground shadow-elevation-3 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:animate-none sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:w-[calc(100%-2rem)] sm:max-w-[26rem] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:border sm:p-6 sm:data-[state=open]:zoom-in-95"
           onClick={stopAtPortalEdge()}
           onOpenAutoFocus={(event) => {
             // Radix focuses Cancel by default, which is right for destructive prompts; plain confirmations focus the action.

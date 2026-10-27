@@ -30,7 +30,7 @@ export function PostKnowledgeVersionsDialog({ post, onClose }: { post: PostDetai
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '내용 판을 복원하지 못했어.', en: 'Could not restore the content version.' })) }),
   })
   return (
-    <Modal open onClose={onClose} title={t({ ko: '지식 내용 이력', en: 'Knowledge content history' })} size="wide" height="tall">
+    <Modal open onClose={onClose} title={t({ ko: '지식 내용 이력', en: 'Knowledge content history' })} size="xl" height="tall">
       <ModalBody spacing="none">
         <div className="grid gap-5 md:grid-cols-[12rem_1fr]">
         <div>{query.isPending ? <LoadingState /> : query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : query.data?.map((version) => <ListRow key={version.contentVersion} asChild interactive selected={picked?.contentVersion === version.contentVersion}><button type="button" className="w-full text-left" onClick={() => setSelected(version.contentVersion)}><span><span className="block text-sm font-medium">{t({ ko: '내용 {version}판', en: 'Content version {version}' }, { version: version.contentVersion })}</span><span className="text-xs text-muted-foreground">{version.changedBy} · {formatDateTime(version.createdAt)}</span></span></button></ListRow>)}</div>

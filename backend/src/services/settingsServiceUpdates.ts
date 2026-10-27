@@ -13,7 +13,7 @@ import type {
   ThumbnailSettings,
   VideoOptimizationSettings,
 } from '@conai/shared';
-import { normalizeHeaderNavigationOrder } from '@conai/shared';
+import { HEADER_NAVIGATION_VERSION, normalizeHeaderNavigationOrder } from '@conai/shared';
 
 /** Build the next settings state after applying a general-settings patch. */
 export function applyGeneralSettingsUpdate(currentSettings: AppSettings, generalSettings: Partial<GeneralSettings>): AppSettings {
@@ -32,6 +32,8 @@ export function applyGeneralSettingsUpdate(currentSettings: AppSettings, general
         ...generalSettings.headerNavigation,
       },
       headerNavigationOrder: normalizeHeaderNavigationOrder(generalSettings.headerNavigationOrder ?? currentSettings.general.headerNavigationOrder),
+      // Server-owned: a client value could make the next load treat the stored pins as old shown/hidden flags.
+      headerNavigationVersion: HEADER_NAVIGATION_VERSION,
     },
   };
 }

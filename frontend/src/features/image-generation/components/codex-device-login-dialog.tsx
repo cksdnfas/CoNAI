@@ -102,7 +102,7 @@ export function CodexDeviceLoginDialog({ open, onClose, onSucceeded }: CodexDevi
   const verificationUrl = loginState?.verificationUrl?.startsWith('https://') ? loginState.verificationUrl : null
 
   return (
-    <Modal open={open} onClose={handleClose} title={t({ ko: 'Codex 로그인', en: 'Codex sign-in' })} widthClassName="max-w-md">
+    <Modal open={open} onClose={handleClose} title={t({ ko: 'Codex 로그인', en: 'Codex sign-in' })} size="md">
       <ModalBody>
         {errorMessage ? (
           <div className="space-y-4">

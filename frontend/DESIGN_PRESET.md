@@ -167,7 +167,7 @@ Do not turn every observed combination into a new variant. Keep existing API def
 | Disabled `ListRow interactive` `disabled:opacity-*` | Remove: an interactive row dims and drops its wash when disabled. A row with nothing to do is a plain (non-interactive) row, not a disabled button. |
 | Ghost Button inside a chip with `text-current` (operator key) | `ChipAction`; it keeps the chip's tone. |
 | Category colours on a pressable chip (`bg-info-soft …`, active ring) | `ToggleChip tone="info" \| "warning" \| "success" \| "primary"`; pressed adds an inset ring. |
-| A dense block of on/off chips where primary would flood the screen (header menu items) | `ToggleChip tone="neutral"`: outlined when off, neutral fill when pressed. |
+| A dense block of on/off chips where primary would flood the screen (pinned-page chips) | `ToggleChip tone="neutral"`: outlined when off, neutral fill when pressed. |
 | Per-item colour on the selected SegmentedControl key | Item `activeStyle` (data-driven colour, inline). |
 | Overlay Badge `font-semibold uppercase` (status / tier label on a thumbnail) | `casing="upper"`; a user-defined tier colour stays inline. |
 | Textarea `text-muted-foreground` (de-emphasised editable text) | `muted`. |
@@ -247,7 +247,13 @@ buttons up one tone.
   | `--content-gutter` | 2rem | content side gutter beside a column |
   | `--content-gutter-narrow` | `--theme-shell-inline-padding` | content side gutter where no column can sit beside it (narrow screens; a collapsed desktop column keeps `--content-gutter`) |
   | `--page-gutter` | set per content column | what toolbars and bodies read (`px-(--page-gutter)`); `pageGutterStyle(besideColumn)` sets it |
-  | `--shell-content-height` | 100dvh − header | full-height pages and sticky columns |
+  | `--shell-content-height` | 100dvh − header − `--shell-bottom-inset` | full-height pages and sticky columns |
+  | `--shell-bottom-inset` | phone bottom tabs + home indicator (below md), else 0 | the room `AppBottomNav` takes at the bottom of the viewport |
+  | `--shell-float-bottom` | max(`--shell-bottom-inset`, safe area) | the edge a floating bar rests on |
+- Anything anchored to the bottom of the viewport keeps `--shell-bottom-inset` free: fixed bars and drawers
+  `bottom-(--shell-bottom-inset)`, a floating bar or the save bar `bottom-[calc(var(--shell-float-bottom)+…)]`, a sticky
+  bar in the document scroll `bottom-(--shell-bottom-inset)`. Don't add `env(safe-area-inset-bottom)` beside them; a
+  layer above the tabs (dialogs, sheets, the phone's chat panel, full-screen viewers) covers them instead.
 - `SidebarColumn` (`components/common/sidebar-layout`, `label?`, `footer?`, `className` positioning, `bodyClassName`
   layout): the column itself — token width and padding, right hairline, own scroll. PageWithSidebar, TwoPane and the
   chat page render it.
@@ -269,8 +275,20 @@ buttons up one tone.
   `depth?`, `asChild?`) / `SidebarFooter` (`components/ui/sidebar`). Current row = `bg-fill` + 2px primary bar.
   In the mobile drawer an item click closes the drawer.
 - `PageToolbar` (`components/common/page-toolbar`): one 56px row, no surface. `title?` · `start?` (segmented…) ·
-  `children` (flexible middle, e.g. search) · `actions?` (ghost IconButtons, at most one primary). Adds the sidebar
-  toggle itself inside PageWithSidebar. `PageHeader` is deprecated.
+  `children` (flexible middle, e.g. search) · `actions?` (ghost IconButtons, at most one primary Button that names its
+  action). Adds the sidebar toggle itself inside PageWithSidebar. `PageHeader` is deprecated.
+- Page first row: every page opens with its PageToolbar, and its left end says where you are. `title` is the page's
+  menu name (`t('pageAccessCatalog.<page>')`) followed by the count; views of the whole page are a SegmentedControl in
+  `start` after the title (prompts, wildcards, sprite); a sidebar page names the open item after the title as a muted
+  path with the current step in the foreground (audio: project / folder / effect); folder pages lead with a breadcrumb
+  whose first step is the page (files, groups, posts, character library). Tabs over a list inside the page sit in a
+  TextTabs row right under the toolbar (posts, chat resources). The generation page and, for administrators, 캐릭터
+  lead with their view switch instead, since it names the page. A page root takes the full content width (no
+  `mx-auto max-w-*`); a form inside may narrow itself.
+- Empty states: a page, list, menu or picker with nothing in it shows `EmptyState`, never a hand-written muted line.
+  The title says what is missing (아직 효과음이 없어), the description says in one line what fills it, and the action is
+  one Button that does it. `default` for a page or its main pane; `compact` in sidebars, lists inside editors, menus
+  and pickers. A no-results state keeps the search icon and has no action.
 - Header → content gap: the shell's main starts right under the app header (no extra top padding). The page's first
   row is its PageToolbar (or a 56px row like a tab strip), and that row's height is the gap. Don't add `pt-*` / `-mt-*`
   at a page root, and don't subtract a top gap in `calc(100dvh - header …)` heights.
@@ -322,6 +340,33 @@ buttons up one tone.
   `cadence`, `details?`, `stats?`, `nextRunAt?`, `actions?`, `notice?` + `noticeTone`, `compact?`): one workflow autorun
   / chat routine in a list (status dot, cadence, next run on the end, stop reason under the text).
 
+### Dialogs (`Modal`, `ConfirmDialog`, `EditorFooter`)
+Dialogs are for short jobs: a question, a name, a choice, a small form. An editor with more than two sections is a page.
+- `size` is required and has four steps: `sm` 26rem (a question and two buttons; `ConfirmDialog` uses this look),
+  `md` 36rem (one to six fields), `lg` 56rem (choosing from a list or tree, one-column editors), `xl` 72rem (a work
+  surface: viewer, media library, split editors). There is no free width.
+- Header: `title` says what the dialog does, `description` is one muted line on where the thing lives and what the
+  action affects, `status` holds a state chip (linked, synced). No switches, menus or buttons in the header; they go in
+  the body or the footer.
+- Footer (`EditorFooter`): Delete in words on the left (asks first), the editor's other actions, then on the right the
+  unsaved status (`Ctrl S`), Cancel and the primary action as a verb (저장 · 만들기 · 불러오기). An icon-only primary
+  action fails lint (`[ds/icon-primary]`) in a `ModalFooter` / `EditorFooter` and on pages alike; icons alone stay for
+  small repeated tools (export, duplicate), and the chat composer's send arrow is the one exception.
+- Height: `auto` by default. `medium` / `tall` only when the body changes while open (pickers, managers, tabs or a
+  section list), so the frame does not jump.
+
+### Editor pages (`EditorPage`, `FloatingSaveBar`)
+A large editor (chat profile, appearance setting, lorebook) is a page with its own address, not a dialog.
+- `EditorPage` (`components/common/editor-page`): the path back (`crumbs`), the title with `status` chips and `actions`
+  (one `⋯` menu), an optional `nav` (`EditorSectionNav`: the sections with a one-line summary each; a drawer on a
+  phone) and the `saveBar`. Ctrl/⌘ S calls `onSave` while no dialog is open over it.
+- `FloatingSaveBar` (`components/ui/floating-save-bar`): shown only while something is unsaved or saving — what is
+  unsaved on the left, 되돌리기 and 저장 in words on the right. `SettingsSaveBar` is the settings page's use of it.
+- Leaving with unsaved changes asks first (`useUnsavedSettingsGuard` with the page's own address check, so a new item
+  moving to its id after the first save does not ask). The page keeps the assistant field and action IDs of the
+  dialog it replaced.
+- A section folds its rarely changed fields into `SettingsAdvanced` in place; there is no page-wide advanced switch.
+
 ### Component → look
 | Component | Default | Escape hatch |
 |---|---|---|
@@ -334,7 +379,7 @@ buttons up one tone.
 | `StatTile` | flat overline label + value | `tone="fill"` |
 | `EmptyState` | no box | |
 | `Alert` / `ErrorState` | status soft fills | |
-| `Modal` | `background` over `backdrop`, `shadow-elevation-3` | |
+| `Modal` | `surface-low` card (`rounded-xl`, hairline edge) over `backdrop`, `shadow-elevation-3`; quiet ghost ✕ | phones: `sm`/`md` bottom sheet, `lg`/`xl` full screen |
 | `BottomDrawerSheet` | floating glass, neutral hairline edge | |
 | Popover / DropdownMenu | `surface-high`, `shadow-elevation-2` | |
 | Input / Select / Textarea / ToggleRow | `bg-field`, transparent border | focus: `border-primary/55` + ring |
@@ -378,7 +423,7 @@ Do not restyle buttons with `bg-*`, `border`, `rounded-*` or `shadow-*` override
 |---|---|---|
 | `Badge` | short status / kind labels | `text-2xs` semibold, `tracking-overline`, uppercase (Latin); variants `default secondary outline ghost link` + status `success warning info destructive` (soft token fills) |
 | `Chip` | user content: tags, terms, tokens | keeps text case; `tone` `default muted primary success warning info destructive`, `size` `sm md` |
-| `ToggleChip` | multi-select filters / category toggles | `aria-pressed`; muted wash → primary/12 tint when pressed |
+| `ToggleChip` | multi-select filters / category toggles; the chat composer's tools (the label says the state: 페이지 연결 켜짐, 플래그 2) | `aria-pressed`; muted wash → primary/12 tint when pressed. Without `pressed` it is a plain worded key (a menu or popup trigger) in the same row |
 | `Chip onRemove` | removable tag / keyword / applied filter | `onRemove`, `removeLabel?` (default 빼기), `removeDisabled?`; trailing ghost X key sized to the chip (sm 16px, md 20px). Never hand-place an IconButton X inside a Chip |
 | `Badge variant="overlay"` | counts / kind tags on a photo or thumbnail (`+3`, `1/4`, 영상, GIF) | `bg-backdrop` scrim + blur, white, own case, medium weight; `size` `default` (24px) `sm` (20px) `xs` (16px). Never re-create with `bg-backdrop … text-white text-2xs` |
 | `CountBadge` (`ui/count-badge`) | unread / pending counter or attention dot on a key, inline unread pill | `count?` (none = 8px dot), `max?` (`99+`), `label?` (role img), `tone` `primary destructive`, `size` `xs` 14 / `sm` 16 / `md` 18px, `corner` `top-right bottom-right` (absolute on a `relative` parent), `ring` |
@@ -409,6 +454,18 @@ is a muted overline (no accent colour, no rule line); the RowGroup heading is th
 Current row = `bg-fill` + 2px primary bar on the left + `foreground` text (SidebarItem, Button `nav`, `HierarchyNav`,
 `getNavigationItemClassName`). Hover = `bg-fill`. Only the top app nav uses primary text for the active item.
 
+### Icons: one meaning each
+| Icon (lucide) | Means | Never |
+|---|---|---|
+| gear `Settings` | app settings (account menu, the Settings page) | a page's or a tool's own options |
+| sliders `SlidersHorizontal` | this page's or tool's settings (the header's "갤러리 설정", in-page options) | app settings |
+| wand `Wand` | image or media generation (생성, 만들기, empty slots, the generation page) | AI text |
+| ✦ `Sparkles` | AI writes or suggests text (AI 초안, reply suggestions, keyword fill, merge drafts) | generation runs |
+
+The wand and ✦ never stand alone on a primary action: pair them with the verb ("생성", "만들기", "AI 초안"). Wildcards
+use `Shuffle`; the page of every page (`/access`, 전체) uses `LayoutGrid`. Page icons come from
+`features/auth/page-access-catalog.tsx`.
+
 ### Other tokens
 - Text: `Text` variants `overline / label / body / muted / caption / title`, `Heading level`; type scale
   `text-2xs … text-5xl` (scaled by `--theme-text-scale`). Body text is `foreground`, metadata `muted-foreground`.
@@ -420,6 +477,11 @@ Current row = `bg-fill` + 2px primary bar on the left + `foreground` text (Sideb
 - Radius: `rounded-sm` default; `rounded-md` for floating menus.
 - Chips (`Badge` / `Chip`): small metadata pieces, not pill-round.
 - Top navigation: `theme-shell-header` (translucent + blur, `--line` bottom hairline); active state is the only orange.
+  From md it holds the pinned pages (icon + name from xl; narrower only the current page keeps its name) and the
+  grouped menus 라이브러리 · 만들기 · 확장 (`AppNavGroupMenu`: name + one line per page, the group key tinted while its
+  page is open). Phones get `AppBottomNav` instead: the first four pinned pages and 전체 (`/access`), same glass with
+  the hairline on top (`.app-bottom-nav`). The right side keeps search, queue, chat and the account menu, which holds
+  설정 (gear) and 내 설정.
 
 ---
 

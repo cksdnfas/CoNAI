@@ -38,7 +38,7 @@ type GenerationResultStageProps = {
   activeJob: GenerationQueueJobRecord | null
   activeJobCount: number
   nowMs: number
-  /** Stacks the actions under the image and shortens the stage (narrow layout). */
+  /** Shortens the stage on narrow layouts. */
   compact?: boolean
   allowReuse?: boolean
   shouldBlur?: (image: ImageRecord) => boolean
@@ -215,15 +215,16 @@ export function GenerationResultStage({
   const historyId = typeof selected?.generation_history_id === 'number' ? selected.generation_history_id : null
   // A sound-only run has no picture: the image actions (group, viewer, delete) do not apply.
   const actions = selected && sounds ? (
-    <div className={cn('flex shrink-0 gap-1.5', compact ? 'flex-row flex-wrap justify-end' : 'flex-col')}>
+    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
       {allowReuse && historyId !== null ? <GenerationHistoryReuseActions key={historyId} historyId={historyId} /> : null}
       <DownloadSoundButton sound={sounds[0]} />
       <OpenSoundsInAudioTab sounds={sounds} />
     </div>
   ) : selected ? (
-    <div className={cn('flex shrink-0 gap-1.5', compact ? 'flex-row flex-wrap justify-end' : 'flex-col')}>
-      {allowReuse ? <ImageGroupAssignAction key={`group-${selectedId}`} image={selected} /> : null}
-      {allowReuse && historyId !== null ? <GenerationHistoryReuseActions key={historyId} historyId={historyId} /> : null}
+    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+      {allowReuse ? (
+        <GenerationHistoryReuseActions key={historyId ?? selectedId} historyId={historyId} between={<ImageGroupAssignAction key={`group-${selectedId}`} image={selected} labelled />} />
+      ) : null}
       <ImageDownloadTriggerButton image={selected} size="icon-sm" variant="secondary" />
       <IconButton size="icon-sm" variant="secondary" onClick={handleOpenDetail} label={t({ ko: '크게 보기', en: 'Open viewer' })}>
         <Maximize2 />
@@ -317,6 +318,7 @@ export function GenerationResultStage({
   return (
     <div className={cn('flex min-h-0 flex-col gap-3', !compact && 'flex-1')}>
       {stripPlacement === 'top' ? strip : null}
+      {actions}
       <div className={cn('flex min-h-0 gap-3', compact ? 'flex-col' : 'flex-1')}>
         <div
           className={cn(
@@ -358,7 +360,6 @@ export function GenerationResultStage({
             </div>
           ) : null}
         </div>
-        {actions}
       </div>
 
       {/* Fixed-height slot: the gauge coming and going must not resize the media above it. */}

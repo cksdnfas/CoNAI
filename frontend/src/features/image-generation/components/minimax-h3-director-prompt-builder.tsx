@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Copy, Eye, Plus, Sparkles } from 'lucide-react'
+import { Copy, Eye, ListChecks, Plus } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -76,7 +76,7 @@ export function MiniMaxH3DirectorPromptBuilder({
           </IconButton>
           {state.mode === 'REF2VA' ? (
             <IconButton size="icon-sm" variant="secondary" label={t({ ko: '라벨·요약 자동 채우기', en: 'Auto-fill labels & summary' })} onClick={() => onChange(prefillMiniMaxH3DirectorRefBuilder(state, items))}>
-              <Sparkles className="h-3.5 w-3.5" />
+              <ListChecks className="h-3.5 w-3.5" />
             </IconButton>
           ) : null}
           <IconButton size="icon-sm" variant="secondary" label={t({ ko: '최종 프롬프트 미리보기', en: 'Preview final prompt' })} onClick={() => setPreviewOpen(true)}>
@@ -151,7 +151,7 @@ export function MiniMaxH3DirectorPromptBuilder({
     <Modal
       open={previewOpen}
       title={t({ ko: '프롬프트 미리보기', en: 'Prompt preview' })}
-      widthClassName="max-w-3xl"
+      size="lg"
       onClose={() => setPreviewOpen(false)}
     >
       <div className="space-y-3">
@@ -171,7 +171,7 @@ export function MiniMaxH3DirectorPromptBuilder({
     <Modal
       open={shotNumberDraft !== null}
       title={t({ ko: '샷 마커 추가', en: 'Add shot marker' })}
-      widthClassName="max-w-md"
+      size="md"
       onClose={() => setShotNumberDraft(null)}
     >
       <form

@@ -61,7 +61,7 @@ export function PostCategoryDialog({ category, parentId, categories, onClose, on
   const busy = save.isPending || remove.isPending
 
   return (
-    <Modal open title={category ? t({ ko: '카테고리 고치기', en: 'Edit category' }) : t({ ko: '새 카테고리', en: 'New category' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
+    <Modal open title={category ? t({ ko: '카테고리 고치기', en: 'Edit category' }) : t({ ko: '새 카테고리', en: 'New category' })} onClose={() => { if (!busy) onClose() }} size="md">
       <form onSubmit={(event) => { event.preventDefault(); if (name.trim() && !busy) save.mutate() }}>
         <ModalBody spacing="sm">
           <Input variant="settings" autoFocus value={name} onChange={(event) => setName(event.target.value)} aria-label={t({ ko: '이름', en: 'Name' })} placeholder={t({ ko: '이름', en: 'Name' })} />

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CopyCheck, Download, LayoutGrid, Loader2, Save, X } from 'lucide-react'
 import { MediaCard } from '@/components/common/media-card'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { ListRow } from '@/components/ui/list-row'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -197,9 +198,9 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
           {problems ? t({ ko: '확인 필요 {count}개', en: '{count} need a check' }, { count: problems }) : null}
         </span>
         <IconButton variant="ghost" size="icon-sm" disabled={!canRun} label={t({ ko: 'ZIP으로 받기', en: 'Download ZIP' })} onClick={() => void run(false)}><Download /></IconButton>
-        <IconButton variant="default" disabled={!canRun || !has('images.upload')} onClick={() => void run(true)} aria-busy={running || undefined} label={running ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '라이브러리에 저장', en: 'Save to library' })}>
-          {running ? <Loader2 className="animate-spin" /> : <Save />}
-        </IconButton>
+        <Button disabled={!canRun || !has('images.upload')} onClick={() => void run(true)} aria-busy={running || undefined}>
+          {running ? <Loader2 className="animate-spin" /> : <Save />}{running ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '라이브러리에 저장', en: 'Save to library' })}
+        </Button>
       </SpriteActionBar>
     </div>
   )

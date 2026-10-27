@@ -124,7 +124,7 @@ export function SecurityAccountEditorModal({
       open={open}
       onClose={onClose}
       title={account.username}
-      size="normal"
+      size="lg"
       height="medium"
       dirty={dirty}
       onSave={save}

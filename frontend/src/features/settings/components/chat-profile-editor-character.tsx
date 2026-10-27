@@ -1,16 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import { CHAT_PROFILE_TEXT_LIMITS, bothSidesSpeak, splitExampleDialogue } from '@conai/shared'
-import { ArrowDown, ArrowUp, Eye, EyeOff, ImageDown, Plus, Trash2 } from 'lucide-react'
+import { CHAT_PROFILE_TEXT_LIMITS, bothSidesSpeak, rawTokenEstimate, splitExampleDialogue } from '@conai/shared'
+import { ArrowDown, ArrowUp, Eye, EyeOff, ImageDown, MessageSquare, MessagesSquare, Plus, Trash2 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { AvatarButton } from '@/components/ui/avatar-button'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
-import { Tip } from '@/components/ui/tooltip'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { useI18n } from '@/i18n'
 import type { ChatOpeningMessage, ChatProfile, ChatPromptSection } from '@/lib/api-codex-chat'
@@ -19,7 +17,7 @@ import { EditorGroup } from '@/components/ui/editor-group'
 import { draftProfileAssetUrl } from './chat-profile-images'
 import { ChatProfileMediaRow, useChatMediaLocalize, useLastTextarea } from './chat-profile-media'
 import { ChatProfilePresetMenu } from './chat-profile-preset-menu'
-import { newPromptSectionId, PromptAdder, PromptCard, PromptDivider } from './chat-profile-sections'
+import { newPromptSectionId, PromptAdder, PromptCard } from './chat-profile-sections'
 import { GreetingBadge, PromptBubble, PromptBubbleEditor } from './chat-profile-dialogue'
 import { useProfileAssist } from './use-profile-editor-chat-page'
 
@@ -82,20 +80,19 @@ function SectionTools({ enabled, first, last, onToggle, onMove }: {
 }
 
 /**
- * Who the profile is: name and tagline (the avatar is changed under Appearance), then the prompt in the order the model
- * reads it: instruction cards (system prompt, sections, author's note, post-conversation instructions), example cards
+ * The prompt in the order the model reads it, as three groups under one heading style: the instructions (system
+ * prompt, sections, author's note, post-conversation instructions) as rows with their rough token counts, the examples
  * kept as written, and as bubbles the conversation a new chat starts with (opening history around the greeting). Each
- * zone adds through its own +; one item is edited in place at a time.
+ * group adds through its own +; one item is edited in place at a time. The name and tagline are under 기본 정보.
  */
-export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profile, onOpenAppearance }: {
+export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profile }: {
   open: boolean
   draft: Draft
   patch: PatchDraft
   onPreview: () => void
   profile: ChatProfile | null
-  onOpenAppearance: () => void
 }) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const { filled } = useProfileAssist()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
@@ -168,10 +165,12 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
   const avatar = <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} imageUrl={draftProfileAssetUrl(draft, profile, 'avatar')} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine={draft.engine} size="sm" />
   const emptyText = t({ ko: '비어 있어 · 눌러서 쓰기', en: 'Empty · click to write' })
 
+  // The examples' group says how they are sent once, instead of every example card.
+  const examplesNote = llm ? t({ ko: '말투 참고용 · 실제 대화로는 안 들어가', en: 'For tone only · not part of the conversation' }) : t({ ko: '지시문 뒤에 글로 들어가', en: 'Sent as text after the instructions' })
   const meta: Record<ChatPromptSection['kind'], string | undefined> = {
     text: undefined,
     post: t({ ko: '매번 마지막 메시지 뒤에 붙어', en: 'Added after the last message every time' }),
-    dialogue: llm ? t({ ko: '말투 참고용 · 실제 대화로는 안 들어가', en: 'For tone only · not part of the conversation' }) : t({ ko: '지시문 뒤에 글로 들어가', en: 'Sent as text after the instructions' }),
+    dialogue: undefined,
   }
 
   /**
@@ -270,7 +269,6 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
       <PromptCard
         key={section.id}
         itemKey={key}
-        tone={example ? 'example' : 'instruction'}
         title={section.title || (example ? t({ ko: '대화 예시', en: 'Example dialogue' }) : section.kind === 'post' ? t({ ko: '대화 뒤 지시', en: 'After the conversation' }) : t({ ko: '제목 없음', en: 'Untitled' }))}
         meta={meta[section.kind]}
         text={section.content}
@@ -368,26 +366,18 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
     )
   }
 
-  return (
-    <div className="space-y-4" onFocusCapture={lastTextarea.onFocusCapture}>
-      <EditorGroup>
-        <div className="flex items-center gap-4">
-          <Tip content={t({ ko: '외형에서 바꾸기', en: 'Change under Appearance' })}>
-            <AvatarButton onClick={onOpenAppearance} aria-label={t({ ko: '외형에서 바꾸기', en: 'Change under Appearance' })}>
-              <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} imageUrl={draftProfileAssetUrl(draft, profile, 'avatar')} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine={draft.engine} size="xl" />
-            </AvatarButton>
-          </Tip>
-          <div className="min-w-0 flex-1 space-y-2">
-            <Input variant="settings" assisted={filled('name')} value={draft.name} maxLength={CHAT_PROFILE_TEXT_LIMITS.name} placeholder={t({ ko: '이름', en: 'Name' })} aria-label={t({ ko: '이름', en: 'Name' })} onChange={(event) => patch({ name: event.target.value })} />
-            <Input variant="settings" assisted={filled('tagline')} value={draft.tagline} maxLength={CHAT_PROFILE_TEXT_LIMITS.tagline} placeholder={t({ ko: '짧은 소개', en: 'Tagline' })} aria-label={t({ ko: '짧은 소개', en: 'Tagline' })} onChange={(event) => patch({ tagline: event.target.value })} />
-          </div>
-        </div>
-      </EditorGroup>
+  // Rough sizes (the same estimate the server starts from): what the instructions add to every request.
+  const instructionTokens = [draft.systemPrompt, ...[...textSections, ...postSections].filter((section) => section.enabled).map((section) => section.content), draft.authorNote]
+    .reduce((sum, text) => sum + (text.trim() ? rawTokenEstimate(text) : 0), 0)
 
+  return (
+    <div ref={chatRef} className="space-y-4" onFocusCapture={lastTextarea.onFocusCapture}>
       <EditorGroup
         label={t({ ko: '프롬프트', en: 'Prompt' })}
+        description={t({ ko: '위에서부터 순서대로 모델에 들어가', en: 'The model reads it top to bottom' })}
         actions={(
           <div className="flex items-center gap-0.5">
+            {instructionTokens ? <Chip size="sm" tone="muted" className="mr-1 tabular-nums">{t({ ko: '약 {count} 토큰', en: '~{count} tokens' }, { count: formatNumber(instructionTokens) })}</Chip> : null}
             <ChatProfilePresetMenu
               open={open}
               canAddSection={!sectionLimitReached}
@@ -408,8 +398,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
           </div>
         )}
       >
-        <div ref={chatRef} className="flex flex-col gap-2.5">
-          <PromptDivider label={t({ ko: '지시문', en: 'Instructions' })} />
+        <div className="flex flex-col divide-y divide-line">
           <PromptCard itemKey="system-prompt" title={t({ ko: '시스템 프롬프트', en: 'System prompt' })} text={draft.systemPrompt} placeholder={emptyText} assisted={filled('systemPrompt')} editing={editing === 'system'} onEditingChange={(next) => openItem(next ? 'system' : null)} onTextChange={(systemPrompt) => patch({ systemPrompt })} />
           {textSections.map((section, index) => sectionCard(section, index, textSections))}
           {noteTaken || editing === 'note' ? (
@@ -433,6 +422,8 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
             />
           ) : null}
           {postSections.map((section, index) => sectionCard(section, index, postSections))}
+        </div>
+        <div className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             <span>{t({ ko: '자동 포함', en: 'Added automatically' })}</span>
             <Chip size="sm" tone="muted">{t({ ko: '답변 형식', en: 'Reply format' })}</Chip>
@@ -452,14 +443,23 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
             onAdd={(value) => (value === 'note' ? openItem('note') : addSection(value === 'post' ? 'post' : 'text'))}
           />
 
-          <PromptDivider label={t({ ko: '예시', en: 'Examples' })} />
-          {exampleSections.map((section, index) => sectionCard(section, index, exampleSections))}
-          <PromptAdder label={t({ ko: '예시 추가', en: 'Add example' })} disabled={sectionLimitReached} onAdd={() => addSection('dialogue')} />
+        </div>
+      </EditorGroup>
 
-          <PromptDivider strong label={t({ ko: '실제 대화 · 새 채팅이 이렇게 시작해', en: 'Conversation · how a new chat starts' })} />
-          {items.map((item, index) => (item.kind === 'greeting'
+      <EditorGroup label={t({ ko: '예시', en: 'Examples' })} description={examplesNote}>
+        {exampleSections.length ? (
+          <div className="flex flex-col divide-y divide-line">
+            {exampleSections.map((section, index) => sectionCard(section, index, exampleSections))}
+          </div>
+        ) : <EmptyState size="compact" icon={MessagesSquare} title={t({ ko: '아직 예시가 없어', en: 'No examples yet' })} description={t({ ko: '말투를 보여 주는 대화를 넣으면 모델이 따라 해.', en: 'A sample conversation shows the model the voice.' })} />}
+        <PromptAdder label={t({ ko: '예시 추가', en: 'Add example' })} disabled={sectionLimitReached} onAdd={() => addSection('dialogue')} />
+      </EditorGroup>
+
+      <EditorGroup label={t({ ko: '첫 대화', en: 'Opening' })} description={t({ ko: '새 채팅이 이렇게 시작해', en: 'How a new chat starts' })}>
+        <div className="flex flex-col gap-2.5">
+          {items.length ? items.map((item, index) => (item.kind === 'greeting'
             ? greetingItem(index === 0, index === items.length - 1)
-            : turnItem(item.index, index === 0, index === items.length - 1)))}
+            : turnItem(item.index, index === 0, index === items.length - 1))) : <EmptyState size="compact" icon={MessageSquare} title={t({ ko: '아직 첫 대화가 없어', en: 'No opening yet' })} description={t({ ko: '비워 두면 사용자가 먼저 말을 걸어.', en: 'Left empty, the user speaks first.' })} />}
           <PromptAdder
             label={t({ ko: '대화 추가', en: 'Add message' })}
             disabled={history.length >= CHAT_PROFILE_TEXT_LIMITS.openingHistory && hasGreeting && draft.alternateGreetings.length >= CHAT_PROFILE_TEXT_LIMITS.alternateGreetings}
@@ -470,9 +470,8 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
             onAdd={(value) => (value === 'greeting' ? addGreeting() : addTurn(value === 'user' ? 'user' : 'assistant'))}
           />
         </div>
-        <ChatProfileMediaRow draft={draft} patch={patch} localize={localize} lastTextarea={lastTextarea.ref} open={mediaOpen} onOpenChange={setMediaOpen} />
       </EditorGroup>
-
+      <ChatProfileMediaRow draft={draft} patch={patch} localize={localize} lastTextarea={lastTextarea.ref} open={mediaOpen} onOpenChange={setMediaOpen} />
     </div>
   )
 }

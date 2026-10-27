@@ -955,6 +955,7 @@ export function WallpaperEditorPage() {
   const isLivePreset = Boolean(activePreset) && effectiveActivePresetId === effectiveLivePresetId
   const toolbar = (
     <PageToolbar
+      title={t('pageAccessCatalog.wallpaper')}
       start={(<>
         <Select
           aria-label={t({ ko: '프리셋', en: 'Preset' })}
@@ -1015,9 +1016,9 @@ export function WallpaperEditorPage() {
           {activePreset && hasUnsavedPresetChanges ? (
             <span className="ml-1 size-2 shrink-0 rounded-full bg-primary" role="status" aria-label={unsavedLabel} title={unsavedLabel} />
           ) : null}
-          <IconButton variant="default" size="icon-sm" className="ml-1" disabled={!isAdmin || wallpaperPresetMutation.isPending} onClick={() => handleSavePreset()} aria-busy={wallpaperPresetMutation.isPending || undefined} label={t({ ko: '저장', en: 'Save' })}>
-            <Save />
-          </IconButton>
+          <Button size="sm" className="ml-1" disabled={!isAdmin || wallpaperPresetMutation.isPending} onClick={() => handleSavePreset()} aria-busy={wallpaperPresetMutation.isPending || undefined}>
+            <Save />{t({ ko: '저장', en: 'Save' })}
+          </Button>
         </>
       )}
     >

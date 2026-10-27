@@ -23,7 +23,7 @@ export function PromptSummaryModal({
   const { t } = useI18n()
 
   return (
-    <Modal open={open} onClose={onClose} title={t('prompts.components.prompt.summary.modal.status')} widthClassName="max-w-6xl">
+    <Modal open={open} onClose={onClose} title={t('prompts.components.prompt.summary.modal.status')} size="xl">
       <PromptSummaryPanel promptType={promptType} statistics={statistics} topPrompts={topPrompts} groupStatistics={groupStatistics} />
     </Modal>
   )

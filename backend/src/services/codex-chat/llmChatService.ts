@@ -19,6 +19,7 @@ import { readMcpToolResult, truncateToolSummary } from './chatToolReferences'
 import { ChatProfileStore, isVisionTool, sessionRuntimeOf, type ChatProfile } from './chatProfiles'
 import { translateReply, translateUserMessage } from './chatTranslation'
 import { hasTranslation, resolveProfileModel } from './chatModelRoles'
+import { titleAfterFirstReply } from './chatAutoTitle'
 import { stripEchoedAddresses, withoutNarrationMarks } from '@conai/shared'
 import { ChatUserProfileStore, userPersonaForThread, userPersonaOf } from './chatUserProfiles'
 import { chatToolRoundLimit, loadChatSettings } from './chatSettings'
@@ -1000,7 +1001,9 @@ export const LlmChatService = {
     cancelJudgeFollowUp(thread.id)
     if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     skipThreadGenerationReactions(thread.id)
-    return startReply(requester, thread, profile, listener, () => {
+    // An untitled chat is named after this message now, and after what was said once the reply is stored.
+    const firstTitle = thread.title ? null : (withoutNarrationMarks(trimmed) || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' ')
+    const reply = startReply(requester, thread, profile, listener, () => {
       const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, display_content: null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
       options.onDelivered?.(userMessageId)
       // The model reads the message in English; the reader keeps their own words. The message is shown right away and
@@ -1008,9 +1011,11 @@ export const LlmChatService = {
       const turn = activeTurns.get(thread.id)
       if (turn) translateTurnInput(turn, profile, userMessageId, trimmed)
       ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
-      if (!thread.title) CodexChatStore.renameThread(thread.id, (withoutNarrationMarks(trimmed) || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
+      if (firstTitle !== null) CodexChatStore.renameThread(thread.id, firstTitle)
       return { type: 'user', message: CodexChatStore.findMessage(thread.id, userMessageId) as CodexChatMessageRecord }
     }, undefined, undefined, page)
+    if (firstTitle !== null) titleAfterFirstReply(profile, thread, firstTitle, trimmed, reply)
+    return reply
   },
 
   async rewriteMessage(requester: McpRequester, thread: CodexChatThreadRecord, messageId: number, content: string | undefined, listener: (event: CodexChatStreamEvent) => void) {

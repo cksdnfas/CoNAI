@@ -25,7 +25,7 @@ type GenerationResultAreaProps = {
   /** Public workflow page: history actions use the public routes. */
   publicWorkflowSlug?: string | null
   splitPaneScroll?: boolean
-  /** Narrow layout: shorter stage, actions under the image. */
+  /** Narrow layout: shorter stage. */
   compact?: boolean
   view: GenerationResultView
   onViewChange: (view: GenerationResultView) => void

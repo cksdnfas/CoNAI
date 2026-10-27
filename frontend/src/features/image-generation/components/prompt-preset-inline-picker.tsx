@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Folder, FolderOpen } from 'lucide-react'
+import { Bookmark, Folder, FolderOpen } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { HierarchyNav } from '@/components/common/hierarchy-nav'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -109,7 +110,7 @@ export function PromptPresetInlinePicker({
             renderIcon={(_, state) => (state.hasChildren || state.isSelected ? <FolderOpen className="h-4 w-4 shrink-0" /> : <Folder className="h-4 w-4 shrink-0" />)}
           />
         ) : (
-          <div className="px-2 py-3 text-sm text-muted-foreground">{t('image-generation.components.prompt.preset.inline.picker.no.saved.presets')}</div>
+          <EmptyState size="compact" icon={Bookmark} title={t('image-generation.components.prompt.preset.inline.picker.no.saved.presets')} />
         )}
 
         <div className="mt-3 flex items-center justify-between gap-2">

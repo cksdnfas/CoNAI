@@ -195,10 +195,12 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   if (id.startsWith('page.')) return true
   // The editor opens over library, group, detail and generation pages; extension pages never host it.
   if (id.startsWith('image_editor.')) return !path.startsWith('/ext/')
-  if (id.startsWith('profile.')) return path === '/settings'
+  if (id.startsWith('profile.')) return path === '/settings' || path === '/characters'
   if (id.startsWith('library.')) return path === '/'
   if (id.startsWith('files.')) return path === '/files'
-  if (id.startsWith('resource.') || id.startsWith('lorebook.') || id.startsWith('block.') || id.startsWith('settings.')) return path === '/settings'
+  if (id.startsWith('resource.') || id.startsWith('lorebook.') || id.startsWith('block.')) return path === '/settings' || path === '/characters' || path === '/chat/resources'
+  if (id === 'settings.routine' || id === 'settings.automation_switch') return path === '/settings' || path === '/chat/resources'
+  if (id.startsWith('settings.')) return path === '/settings'
   if (id.startsWith('chat.')) return path === '/chat'
   if (id.startsWith('audio.')) return path === '/audio'
   if (id.startsWith('sprite.')) return path === '/sprite'

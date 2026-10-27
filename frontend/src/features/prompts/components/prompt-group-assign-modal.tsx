@@ -55,7 +55,7 @@ export function PromptGroupAssignModal({
       open={open}
       onClose={onClose}
       title={t('prompts.components.prompt.group.assign.modal.assign.selected.prompts.to.a.group')}
-      widthClassName="max-w-xl"
+      size="md"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (

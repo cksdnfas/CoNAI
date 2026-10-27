@@ -36,7 +36,7 @@ const buttonVariants = cva(
         ),
         /** Icon toolbars and inline actions: no fill until hover (translucent wash, reads on any surface). */
         ghost: cn(
-          "text-muted-foreground hover:bg-fill hover:text-foreground aria-expanded:bg-fill aria-expanded:text-foreground aria-[current=location]:font-semibold",
+          "text-muted-foreground hover:bg-fill hover:text-foreground aria-expanded:bg-fill aria-expanded:text-foreground aria-[current=location]:font-semibold aria-[current=location]:text-foreground",
           PRESSED_TINT,
         ),
         /** A key in a SegmentedControl tray; selection is semantic, never a caller-supplied fill. */
@@ -81,6 +81,8 @@ const buttonVariants = cva(
         field: "h-auto min-h-9 gap-3 px-3 py-2",
         sm: "h-8 gap-1.5 rounded-sm px-3 has-[>svg]:px-2.5",
         lg: "h-10 rounded-sm px-6 has-[>svg]:px-4",
+        /** Touch-first worded key in a bottom-docked bar: 44px on phones, `default` (36px) from sm up. */
+        touch: "h-11 px-5 has-[>svg]:px-4 sm:h-9 sm:px-4 sm:has-[>svg]:px-3",
         icon: "size-9",
         /** Touch-first key in a bottom-docked bar: 44px on phones, `icon` (36px) from sm up. */
         "icon-touch": "size-11 sm:size-9",

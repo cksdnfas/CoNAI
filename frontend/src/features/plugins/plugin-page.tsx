@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ChevronDown, Files, FolderKanban, RefreshCw, TriangleAlert } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { copyChatPageData, type ChatPageData, type GenerationLayoutSurface, type PluginInstance, type PluginSnapshot, type PluginWorkspaceProposal, type PluginMediaProposal, type StoredFileEntry } from '@conai/shared'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -96,7 +97,7 @@ export function PluginPage() {
       start={<div className="flex min-w-0 flex-wrap items-center gap-1">{contextButtons}</div>}
       actions={<IconButton variant="ghost" label={t({ ko: '다시 열기', en: 'Reopen' })} onClick={() => { void (async () => { if (await discardDraft()) setReload(value => value + 1) })() }}><RefreshCw /></IconButton>}
     />
-    {files || projectId || page.accepts.length === 0 ? <PluginConnection key={`${pluginId}/${pageId}/${files}/${projectId}/${write}/${reload}`} pluginId={pluginId} pageId={pageId} fileIds={files} projectId={projectId} write={write} onDirty={setHasDraft} /> : <p className="py-4 text-sm text-muted-foreground">{t({ ko: '이 도구로 열 파일을 골라줘.', en: 'Choose files to open in this tool.' })}</p>}
+    {files || projectId || page.accepts.length === 0 ? <PluginConnection key={`${pluginId}/${pageId}/${files}/${projectId}/${write}/${reload}`} pluginId={pluginId} pageId={pageId} fileIds={files} projectId={projectId} write={write} onDirty={setHasDraft} /> : <EmptyState icon={Files} title={t({ ko: '열린 파일이 없어', en: 'No files open' })} description={t({ ko: '이 도구로 열 파일을 골라줘.', en: 'Choose files to open in this tool.' })} action={canFiles ? <Button onClick={() => setPicker(true)}><Files />{t({ ko: '파일 고르기', en: 'Choose files' })}</Button> : undefined} />}
     <WorkspaceProjectPicker
       open={projectPicker}
       onClose={() => setProjectPicker(false)}
@@ -108,7 +109,7 @@ export function PluginPage() {
         setProjectPicker(false)
       }}
     />
-    <Modal open={picker} onClose={() => setPicker(false)} title={t({ ko: '플러그인에 연결할 파일', en: 'Files for this plugin' })} size="wide"><ModalBody>
+    <Modal open={picker} onClose={() => setPicker(false)} title={t({ ko: '플러그인에 연결할 파일', en: 'Files for this plugin' })} size="xl"><ModalBody>
       <FileBrowser parentId={folder} onNavigate={setFolder} onPick={pick} accept={page.accepts.length ? page.accepts : undefined} pickLabel={(count) => t({ ko: '{count}개 연결', en: 'Connect {count}' }, { count })} />
     </ModalBody></Modal>
   </div>

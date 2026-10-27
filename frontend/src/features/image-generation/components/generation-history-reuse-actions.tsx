@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ClipboardCopy, Loader2, SlidersHorizontal } from 'lucide-react'
 import type { ActionMenuAction } from '@/components/ui/action-menu'
-import { IconButton } from '@/components/ui/icon-button'
+import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { useI18n } from '@/i18n'
@@ -12,7 +12,8 @@ import { getErrorMessage } from '@/lib/error-message'
 import { requestHistorySettingsLoad } from '../history-settings-load-store'
 
 type GenerationHistoryReuseActionsProps = {
-  historyId: number
+  historyId: number | null
+  between?: ReactNode
 }
 
 function readPayloadText(payload: Record<string, unknown> | null, key: string) {
@@ -21,18 +22,21 @@ function readPayloadText(payload: Record<string, unknown> | null, key: string) {
 }
 
 /** Copy the prompt of, or reload the settings from, one generation history record (generation result stage). */
-export function GenerationHistoryReuseActions({ historyId }: GenerationHistoryReuseActionsProps) {
+export function GenerationHistoryReuseActions({ historyId, between }: GenerationHistoryReuseActionsProps) {
   const { busyAction, copy, load } = useGenerationHistoryReuseMenuActions(historyId)
-  if (!copy || !load) return null
+  if (!copy || !load) return between ?? null
 
   return (
     <>
-      <IconButton size="icon-sm" variant="secondary" onClick={copy.onSelect} disabled={copy.disabled} label={copy.label}>
-        {busyAction === 'copy' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCopy className="h-4 w-4" />}
-      </IconButton>
-      <IconButton size="icon-sm" variant="secondary" onClick={load.onSelect} disabled={load.disabled} label={load.label}>
+      <Button size="compact" variant="secondary" onClick={load.onSelect} disabled={load.disabled}>
         {busyAction === 'load' ? <Loader2 className="h-4 w-4 animate-spin" /> : <SlidersHorizontal className="h-4 w-4" />}
-      </IconButton>
+        {load.label}
+      </Button>
+      {between}
+      <Button size="compact" variant="secondary" onClick={copy.onSelect} disabled={copy.disabled}>
+        {busyAction === 'copy' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardCopy className="h-4 w-4" />}
+        {copy.label}
+      </Button>
     </>
   )
 }

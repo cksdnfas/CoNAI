@@ -49,7 +49,7 @@ export function KnowledgeProposalEditor({ post, mode, onClose }: { post: PostDet
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '제안을 저장하지 못했어.', en: 'Could not save the proposal.' })) }),
   })
   return (
-    <Modal open onClose={onClose} title={mode === 'update' ? t({ ko: '지식 문서 수정 제안', en: 'Propose a knowledge change' }) : t({ ko: '글·댓글로 지식 초안', en: 'Draft knowledge from a post and comments' })} size="wide" height="tall" dirty onSave={() => { if (title.trim() && !save.isPending) save.mutate(crypto.randomUUID()) }}>
+    <Modal open onClose={onClose} title={mode === 'update' ? t({ ko: '지식 문서 수정 제안', en: 'Propose a knowledge change' }) : t({ ko: '글·댓글로 지식 초안', en: 'Draft knowledge from a post and comments' })} size="xl" height="tall" dirty onSave={() => { if (title.trim() && !save.isPending) save.mutate(crypto.randomUUID()) }}>
       <ModalBody>
         <Field label={t({ ko: '제목', en: 'Title' })}><Input maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
         {similar.data?.items.some((item) => item.id !== post.id) ? <Section heading={t({ ko: '기존 문서 확인', en: 'Check existing documents' })}><div className="flex flex-wrap gap-3">{similar.data.items.filter((item) => item.id !== post.id).map((item) => <Link key={item.id} to={postRoute({ postId: item.id, commentId: null })} target="_blank" className="text-sm text-secondary-text hover:underline">{item.title}</Link>)}</div></Section> : null}
@@ -89,7 +89,7 @@ export function KnowledgeProposalReview({ proposalId, onClose }: { proposalId: s
   const conflict = data?.kind === 'update' && current.data && (current.data.revision !== data.baseRevision || current.data.knowledge?.contentVersion !== data.baseContentVersion)
   const ready = data?.kind === 'create' || current.isSuccess
   return (
-    <Modal open onClose={onClose} title={t({ ko: '지식 문서 변경 검토', en: 'Review knowledge changes' })} size="wide" height="tall">
+    <Modal open onClose={onClose} title={t({ ko: '지식 문서 변경 검토', en: 'Review knowledge changes' })} size="xl" height="tall">
       <ModalBody>
         {proposal.isPending ? <LoadingState /> : proposal.isError ? <ErrorState error={proposal.error} onRetry={() => void proposal.refetch()} /> : data ? <>
           <div className="flex flex-wrap items-center gap-2"><Badge variant={data.status === 'pending' ? 'warning' : data.status === 'applied' ? 'success' : 'secondary'}>{data.status === 'pending' ? t({ ko: '검토 대기', en: 'Pending review' }) : data.status === 'applied' ? t({ ko: '반영됨', en: 'Applied' }) : t({ ko: '거절됨', en: 'Rejected' })}</Badge><span className="text-xs text-muted-foreground">{data.proposedByName} · {formatDateTime(data.createdAt)}</span></div>

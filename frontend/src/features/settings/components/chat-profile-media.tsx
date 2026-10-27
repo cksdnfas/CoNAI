@@ -190,7 +190,7 @@ function MediaPreview({ entry, onClose }: { entry: MediaEntry; onClose: () => vo
   const { t } = useI18n()
   const src = entry.kind === 'media' ? chatMediaUrl(entry.compositeHash!, entry.extension!) : entry.kind === 'legacy' ? chatAssetUrl(entry.link.slice('chat-asset:'.length)) : entry.link
   return (
-    <Modal open onClose={onClose} title={t({ ko: '크게 보기', en: 'Preview' })} widthClassName="max-w-4xl">
+    <Modal open onClose={onClose} title={t({ ko: '크게 보기', en: 'Preview' })} size="lg">
       <ModalBody className="flex justify-center">
         {entry.video
           ? <video src={src} controls autoPlay loop muted playsInline className="max-h-[70vh] max-w-full rounded-sm" />

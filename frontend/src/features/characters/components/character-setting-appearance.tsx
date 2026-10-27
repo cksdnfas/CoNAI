@@ -13,7 +13,7 @@ import type { CharacterSettingEditorState } from '../use-character-setting-edito
  * setting: imports, generation and expressions are the setting's. The library editor and a profile synced to the
  * setting both show it. Without `editable` it only shows; `generation` (administrators) adds imports and generation.
  */
-export function CharacterSettingAppearanceEditor({ editor, runs, editable, generation, busy, onBusyChange, appearanceWarning = null, children }: {
+export function CharacterSettingAppearanceEditor({ editor, runs, editable, generation, busy, onBusyChange, appearanceWarning = null, appearanceNote = null, aside, children }: {
   editor: CharacterSettingEditorState
   runs: AssetRuns
   editable: boolean
@@ -22,6 +22,10 @@ export function CharacterSettingAppearanceEditor({ editor, runs, editable, gener
   onBusyChange: (busy: boolean) => void
   /** Why the appearance text needs writing (a synced profile's after-reply pictures read only it); marks it invalid. */
   appearanceWarning?: string | null
+  /** Who else a change reaches, under the appearance text. */
+  appearanceNote?: ReactNode
+  /** Under the avatar in the image column. */
+  aside?: ReactNode
   children?: ReactNode
 }) {
   const queryClient = useQueryClient()
@@ -57,6 +61,8 @@ export function CharacterSettingAppearanceEditor({ editor, runs, editable, gener
       draftNeedsName
       appearanceWarning={appearanceWarning}
       appearanceInvalid={Boolean(appearanceWarning)}
+      appearanceNote={appearanceNote}
+      aside={aside}
       onSetExpression={setExpression}
       onClearExpression={clearExpression}
       editable={editable}

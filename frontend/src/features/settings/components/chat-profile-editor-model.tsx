@@ -22,6 +22,7 @@ import { enginePatch, judgePresetPatch, numberOrNull, type Draft, type PatchDraf
 import { SwitchLine } from '@/components/ui/switch-line'
 import { ContentRatingSelect, useCeilingLabel } from './content-rating-select'
 import { EditorGroup } from '@/components/ui/editor-group'
+import { SettingsAdvanced } from './settings-navigation'
 
 /**
  * One role: its name on the left (with a fold toggle when it has settings of its own), its model on the right, and
@@ -165,7 +166,7 @@ function TokenFields({ draft, patch, serverDefault }: { draft: Draft; patch: Pat
 }
 
 /** The engine and its model, then the roles other models play (summary, translation, suggestions, judge). */
-export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsReady, suggestWriters, codexModels, claudeModels, advanced }: {
+export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsReady, suggestWriters, codexModels, claudeModels }: {
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
@@ -176,7 +177,6 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
   suggestWriters: SuggestWriters
   codexModels: CodexModelOption[] | undefined
   claudeModels: ClaudeModelOption[] | undefined
-  advanced: boolean
 }) {
   const { t } = useI18n()
   const isLlm = draft.engine === 'llm'
@@ -186,6 +186,8 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
   const serverDefault = t({ ko: '서버 기본값', en: 'Server default' })
   const summaryOn = roleChoice(draft, 'summary', slots, hasLlmContext, slotsReady) !== 'off'
   const translationOn = roleChoice(draft, 'translation', slots, isLlm, slotsReady) !== 'off'
+  const summaryTuning = !selfCompacting && summaryOn
+  const advancedFields = (isLlm ? 1 : 0) + (summaryTuning ? 2 : 0)
   const extraParamsError = (() => {
     if (!isLlm || !draft.extraParams.trim()) return null
     try {
@@ -255,23 +257,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
             <TokenFields draft={draft} patch={patch} serverDefault={serverDefault} />
             <SwitchLine label={t({ ko: '이미지를 볼 수 있는 모델', en: 'Model can see images' })} checked={draft.visionEnabled} onCheckedChange={(visionEnabled) => patch({ visionEnabled })} />
             {draft.visionEnabled ? <ContentRatingField draft={draft} patch={patch} slots={slots} /> : null}
-            {advanced ? (
-              <Field label={t({ ko: '추가 파라미터 (JSON)', en: 'Extra parameters (JSON)' })}>
-                <Textarea
-                  variant="settings"
-                  rows={4}
-                  autoGrow
-                  mono
-                  textSize="xs"
-                  value={draft.extraParams}
-                  maxLength={CHAT_PROFILE_TEXT_LIMITS.extraParams}
-                  placeholder={'{\n  "chat_template_kwargs": { "enable_thinking": true }\n}'}
-                  onChange={(event) => patch({ extraParams: event.target.value })}
-                  aria-invalid={Boolean(extraParamsError)}
-                />
-                {extraParamsError ? <p className="text-xs text-destructive">{extraParamsError}</p> : null}
-              </Field>
-            ) : extraParamsError ? <p className="text-xs text-destructive">{t({ ko: '추가 파라미터(고급)에 오류가 있어: {error}', en: 'Extra parameters (advanced) have an error: {error}' }, { error: extraParamsError })}</p> : null}
+            {extraParamsError ? <p className="text-xs text-destructive">{t({ ko: '추가 파라미터(고급 설정)에 오류가 있어: {error}', en: 'Extra parameters (advanced settings) have an error: {error}' }, { error: extraParamsError })}</p> : null}
           </>
         ) : draft.engine === 'claude' ? (<>
           <div className="grid gap-3 md:grid-cols-2">
@@ -309,18 +295,7 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
       <EditorGroup label={t({ ko: '역할', en: 'Roles' })}>
         <div>
           {!selfCompacting ? (
-            <RoleRow label={t({ ko: '요약', en: 'Summary' })} select={roleSelect('summary', t({ ko: '요약 모델', en: 'Summary model' }))}>
-              {summaryOn && advanced ? (
-                <>
-                  <Field label={t({ ko: '한 번에 요약할 턴 수', en: 'Turns per summary' })} className="md:w-1/2">
-                    <NumberStepperInput variant="settings" step={1} {...CHAT_PROFILE_LIMITS.summaryTriggerTurns} value={draft.summaryTriggerTurns} onValueCommit={(value) => patch({ summaryTriggerTurns: numberOrNull(value) ?? draft.summaryTriggerTurns })} />
-                  </Field>
-                  <Field label={t({ ko: '요약 프롬프트', en: 'Summary prompt' })}>
-                    <Textarea variant="settings" autoGrow rows={4} value={draft.summaryPrompt} maxLength={CHAT_PROFILE_TEXT_LIMITS.summaryPrompt} placeholder={defaults?.summaryPrompt} onChange={(event) => patch({ summaryPrompt: event.target.value })} />
-                  </Field>
-                </>
-              ) : null}
-            </RoleRow>
+            <RoleRow label={t({ ko: '요약', en: 'Summary' })} select={roleSelect('summary', t({ ko: '요약 모델', en: 'Summary model' }))} />
           ) : null}
           <RoleRow label={t({ ko: '번역', en: 'Translation' })} select={roleSelect('translation', t({ ko: '번역 모델', en: 'Translation model' }))}>
             {translationOn ? (
@@ -346,6 +321,41 @@ export function ChatProfileModelPanel({ draft, patch, defaults, slots, slotsRead
           <JudgeRole draft={draft} patch={patch} />
         </div>
       </EditorGroup>
+
+      {/* Request tuning folds at the end of the section instead of hiding behind a global switch. */}
+      {advancedFields ? (
+        <SettingsAdvanced count={advancedFields}>
+          <div className="space-y-4">
+            {isLlm ? (
+              <Field label={t({ ko: '추가 파라미터 (JSON)', en: 'Extra parameters (JSON)' })}>
+                <Textarea
+                  variant="settings"
+                  rows={4}
+                  autoGrow
+                  mono
+                  textSize="xs"
+                  value={draft.extraParams}
+                  maxLength={CHAT_PROFILE_TEXT_LIMITS.extraParams}
+                  placeholder={'{\n  "chat_template_kwargs": { "enable_thinking": true }\n}'}
+                  onChange={(event) => patch({ extraParams: event.target.value })}
+                  aria-invalid={Boolean(extraParamsError)}
+                />
+                {extraParamsError ? <p className="text-xs text-destructive">{extraParamsError}</p> : null}
+              </Field>
+            ) : null}
+            {summaryTuning ? (
+              <>
+                <Field label={t({ ko: '한 번에 요약할 턴 수', en: 'Turns per summary' })} className="md:w-1/2">
+                  <NumberStepperInput variant="settings" step={1} {...CHAT_PROFILE_LIMITS.summaryTriggerTurns} value={draft.summaryTriggerTurns} onValueCommit={(value) => patch({ summaryTriggerTurns: numberOrNull(value) ?? draft.summaryTriggerTurns })} />
+                </Field>
+                <Field label={t({ ko: '요약 프롬프트', en: 'Summary prompt' })}>
+                  <Textarea variant="settings" autoGrow rows={4} value={draft.summaryPrompt} maxLength={CHAT_PROFILE_TEXT_LIMITS.summaryPrompt} placeholder={defaults?.summaryPrompt} onChange={(event) => patch({ summaryPrompt: event.target.value })} />
+                </Field>
+              </>
+            ) : null}
+          </div>
+        </SettingsAdvanced>
+      ) : null}
     </div>
   )
 }

@@ -58,7 +58,7 @@ export function ChatGenerationPresetSaveModal({ open, build, summary, onClose }:
       open={open}
       onClose={onClose}
       title={t({ ko: '채팅 생성 프리셋으로 저장', en: 'Save as chat generation preset' })}
-      size="narrow"
+      size="md"
       sidePanelInset={CHAT_DOCK_INSET}
       dirty={name.trim().length > 0 || instruction.trim().length > 0}
       onSave={canSave ? () => saveMutation.mutate() : undefined}

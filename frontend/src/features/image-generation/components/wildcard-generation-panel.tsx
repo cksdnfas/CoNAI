@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWildcardChatPage } from './use-wildcard-chat-page'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, RefreshCw, Trash2, WandSparkles } from 'lucide-react'
+import { FlaskConical, Pencil, RefreshCw, Trash2 } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -345,6 +345,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
 
   const toolbar = (
     <PageToolbar
+      title={t('pageAccessCatalog.wildcards')}
       start={(
         <SegmentedControl
           value={activeWorkspaceTab}
@@ -363,7 +364,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
             </IconButton>
           ) : null}
           <IconButton variant="ghost" size="icon-sm" onClick={() => setIsPreviewModalOpen(true)} label={t('image-generation.components.wildcard.generation.panel.parsing.test')}>
-            <WandSparkles />
+            <FlaskConical />
           </IconButton>
         </>
       )}

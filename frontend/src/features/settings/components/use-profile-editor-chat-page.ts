@@ -12,7 +12,7 @@ import { BACKGROUND_SLOT, REFERENCE_SLOT, type AssetRuns } from './chat-profile-
 import { newPromptSectionId } from './chat-profile-sections'
 import type { ProfileCharacterLink } from './use-profile-character-link'
 
-export type ProfileEditorSection = 'character' | 'appearance' | 'model' | 'memory' | 'tools' | 'look'
+export type ProfileEditorSection = 'basic' | 'character' | 'appearance' | 'model' | 'memory' | 'tools' | 'look'
 
 /**
  * Draft keys the chat may fill, and the section that shows each. Tool grants and access are never among them (tool
@@ -20,9 +20,9 @@ export type ProfileEditorSection = 'character' | 'appearance' | 'model' | 'memor
  * call this one's tools); the agent description is.
  */
 const DRAFT_KEYS = {
-  name: 'character', tagline: 'character', systemPrompt: 'character', promptSections: 'character', greeting: 'character', alternateGreetings: 'character', authorNote: 'character',
+  name: 'basic', tagline: 'basic', systemPrompt: 'character', promptSections: 'character', greeting: 'character', alternateGreetings: 'character', authorNote: 'character',
   openingHistory: 'character', greetingPosition: 'character',
-  appearance: 'appearance', engine: 'model', modelSlotId: 'model', lorebookIds: 'memory', blockIds: 'look', isEnabled: 'character',
+  appearance: 'appearance', engine: 'model', modelSlotId: 'model', lorebookIds: 'memory', blockIds: 'look', isEnabled: 'basic',
   temperature: 'model', maxTokens: 'model', contextTokens: 'model', reasoningBudgetTokens: 'model', visionEnabled: 'model', contentRatingMode: 'model', contentRatingTierId: 'model',
   summaryEnabled: 'model', summarySlotId: 'model', summaryTriggerTurns: 'model', summaryPrompt: 'model',
   translationSlotId: 'model', translationModelLanguage: 'model', translationDisplayLanguage: 'model', translationInstructions: 'model',
@@ -219,7 +219,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       assets,
     } as Record<string, ChatPageData>,
     actions: [
-      pageAction('profile.section', t({ ko: '편집 항목 열기', en: 'Open editor section' }), t({ ko: '편집기의 항목(캐릭터·외형·모델·기억·도구·꾸미기)을 열어.', en: 'Open an editor section.' }), pageObject({ section: pageChoice(['character', 'appearance', 'model', 'memory', 'tools', 'look']) }, ['section'])),
+      pageAction('profile.section', t({ ko: '편집 항목 열기', en: 'Open editor section' }), t({ ko: '편집기의 항목(기본 정보·캐릭터·외형·모델·기억·도구·꾸미기)을 열어.', en: 'Open an editor section.' }), pageObject({ section: pageChoice(['basic', 'character', 'appearance', 'model', 'memory', 'tools', 'look']) }, ['section'])),
       pageAction('profile.draft', t({ ko: '프로필 초안 채우기', en: 'Fill profile draft' }), t({ ko: '주어진 항목만 편집기 초안에 채워. 저장하지 않아. appearance는 이미지 프롬프트용 외형 태그야.', en: 'Fill only the given keys into the editor draft; nothing is saved. appearance is image-prompt tags for the look.' }), draftSchema),
       pageAction('profile.save', t({ ko: '프로필 저장', en: 'Save profile' }), t({ ko: '편집기의 현재 초안을 저장해.', en: 'Save the editor draft as it is.' }), pageObject({}), 'save'),
       ...(link.canEdit && !characterLink?.synced ? [pageAction('profile.character_save', t({ ko: '외형을 라이브러리에 저장', en: 'Store look in library' }), t({ ko: '편집기의 지금 외형(외형 태그·기준 이미지·아바타)을 캐릭터 라이브러리에 저장하고 프로필을 그 설정과 동기화해. create는 새 설정(folderId·name), overwrite는 동기화가 끊긴 원본에 덮어써(그 설정과 동기화 중인 프로필도 바뀌어). 새 프로필이면 먼저 저장돼.', en: 'Store the editor’s current look in the character library and sync the profile to it: create makes a new setting (folderId, name); overwrite writes over the detached origin (its synced profiles change too). A new profile is saved first.' }), storeSchema, 'save')] : []),

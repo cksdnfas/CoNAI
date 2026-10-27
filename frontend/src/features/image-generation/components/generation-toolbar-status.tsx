@@ -1,26 +1,23 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { cn } from '@/lib/utils'
+import { Chip } from '@/components/ui/chip'
 
 /** DOM id of the generation page toolbar slot that provider panels portal their status into. */
 export const GENERATION_TOOLBAR_STATUS_SLOT_ID = 'generation-toolbar-status'
 
 type GenerationToolbarStatusTone = 'ready' | 'warning' | 'off' | 'pending'
 
-const DOT_TONE_CLASS: Record<GenerationToolbarStatusTone, string> = {
-  ready: 'bg-success',
-  warning: 'bg-warning',
-  off: 'bg-muted-foreground/50',
-  pending: 'animate-pulse bg-muted-foreground/50',
+const CHIP_TONE: Record<GenerationToolbarStatusTone, 'success' | 'warning' | 'muted'> = {
+  ready: 'success',
+  warning: 'warning',
+  off: 'muted',
+  pending: 'muted',
 }
 
-/** Compact provider connection state for the page toolbar: a dot, a short label and optional trailing chips/actions. */
+/** Provider connection state beside the engine tabs: a state chip and optional trailing chips/actions (same on every tab). */
 export function GenerationToolbarStatus({ tone, label, children }: { tone: GenerationToolbarStatusTone; label: string; children?: ReactNode }) {
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-        <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', DOT_TONE_CLASS[tone])} />
-        <span className="truncate">{label}</span>
-      </span>
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <Chip size="sm" tone={CHIP_TONE[tone]} className="max-w-full"><span className="truncate">{label}</span></Chip>
       {children}
     </div>
   )

@@ -42,7 +42,7 @@ function ClaudeLoginDialog({ open, onClose, onSucceeded }: { open: boolean; onCl
   }, [open, state?.status, onSucceeded, onClose])
   const close = () => { if (start.isPending || state?.status === 'pending') void cancelClaudeLogin().catch(() => {}); setCode(''); submit.reset(); onClose() }
   const error = start.error ?? submit.error ?? login.error
-  return <Modal open={open} onClose={close} title={t({ ko: 'Claude Code 로그인', en: 'Claude Code sign-in' })} widthClassName="max-w-md">
+  return <Modal open={open} onClose={close} title={t({ ko: 'Claude Code 로그인', en: 'Claude Code sign-in' })} size="md">
     <ModalBody>
       <div className="space-y-4">
         {state?.status === 'pending' && state.verificationUrl ? <>

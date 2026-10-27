@@ -279,7 +279,7 @@ export function FoldersTab({
         </RowGroup>
       </div>
 
-      <Modal
+      <Modal size="lg"
         open={isAddFolderModalOpen}
         onClose={() => setIsAddFolderModalOpen(false)}
         title={t({ ko: '감시 폴더 추가', en: 'Add watched folder' })}
@@ -295,7 +295,7 @@ export function FoldersTab({
         />
       </Modal>
 
-      <Modal
+      <Modal size="lg"
         open={selectedFolder != null}
         onClose={() => setSelectedFolderId(null)}
         title={selectedFolder ? selectedFolder.folder_name || t({ ko: '감시 폴더 상세', en: 'Watched folder details' }) : t({ ko: '감시 폴더 상세', en: 'Watched folder details' })}
@@ -318,7 +318,7 @@ export function FoldersTab({
         ) : null}
       </Modal>
 
-      <Modal
+      <Modal size="lg"
         open={isAddBackupSourceModalOpen}
         onClose={() => setIsAddBackupSourceModalOpen(false)}
         title={t({ ko: '백업 소스 추가', en: 'Add backup source' })}
@@ -334,7 +334,7 @@ export function FoldersTab({
         />
       </Modal>
 
-      <Modal
+      <Modal size="lg"
         open={selectedBackupSource != null}
         onClose={() => setSelectedBackupSourceId(null)}
         title={selectedBackupSource ? selectedBackupSource.display_name || t({ ko: '백업 소스 상세', en: 'Backup source details' }) : t({ ko: '백업 소스 상세', en: 'Backup source details' })}

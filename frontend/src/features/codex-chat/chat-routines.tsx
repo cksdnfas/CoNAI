@@ -270,7 +270,7 @@ export function ChatRoutineEditor({ open, routine, presetThreadId = null, onClos
       open={open}
       onClose={onClose}
       title={routine ? t({ ko: '루틴 수정', en: 'Edit routine' }) : t({ ko: '루틴 추가', en: 'Add routine' })}
-      size="normal"
+      size="lg"
       dirty={dirty}
       onSave={canSave ? () => submit() : undefined}
     >
@@ -458,33 +458,4 @@ function useRoutinesChatPage(routines: ChatRoutineView[]) {
       await queryClient.invalidateQueries({ queryKey: CHAT_ROUTINES_QUERY_KEY })
     },
   }, { preserveOnSearchChange: true })
-}
-
-/** 채팅 메뉴 › 루틴: the open room's routines, and a new one on this room. */
-export function ChatRoomRoutinesModal({ threadId, open, onClose }: { threadId: number | null; open: boolean; onClose: () => void }) {
-  const { t } = useI18n()
-  const query = useChatRoutines(open)
-  const [editing, setEditing] = useState<ChatRoutineView | null>(null)
-  const [editorOpen, setEditorOpen] = useState(false)
-  const routines = (query.data ?? []).filter((routine) => threadId !== null && routine.threadId === threadId)
-  const edit = (routine: ChatRoutineView | null) => {
-    setEditing(routine)
-    setEditorOpen(true)
-  }
-  return (
-    <>
-      <Modal
-        open={open}
-        onClose={onClose}
-        title={t({ ko: '루틴', en: 'Routines' })}
-        size="normal"
-        headerActions={<IconButton size="icon-sm" variant="secondary" disabled={threadId === null} onClick={() => edit(null)} label={t({ ko: '이 방에 루틴 추가', en: 'Add a routine for this room' })}><Plus /></IconButton>}
-      >
-        {query.isLoading ? null : routines.length === 0
-          ? <EmptyState title={t({ ko: '이 방에 걸린 루틴이 없어', en: 'No routines on this room' })} />
-          : <ChatRoutineRows routines={routines} onEdit={edit} />}
-      </Modal>
-      <ChatRoutineEditor open={editorOpen} routine={editing} presetThreadId={threadId} onClose={() => setEditorOpen(false)} />
-    </>
-  )
 }

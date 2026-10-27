@@ -20,43 +20,55 @@ export function normalizeRecycleBinRetentionDays(value: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_RECYCLE_BIN_RETENTION_DAYS ? value : 0;
 }
 
-/** Header page links in their default order: library, making, chat then posts, the rest. */
+/**
+ * Pages that can be pinned to the top bar, in their default order: the four everyday pages, the library, making, then
+ * the rest. A page that is not pinned sits in the header's grouped menus (라이브러리·만들기·확장).
+ */
 export const HEADER_NAVIGATION_PAGE_KEYS = [
-  'access',
   'home',
+  'generation',
+  'chat',
+  'characters',
   'groups',
   'upload',
   'files',
   'prompts',
-  'characters',
-  'generation',
+  'posts',
   'audio',
   'sprite',
-  'chat',
-  'posts',
   'wallpaper',
+  'access',
   'settings',
 ] as const;
 
+/** The header's right-side tools in their header order; each can be shown or hidden. */
+export const HEADER_NAVIGATION_TOOL_KEYS = ['queue', 'search', 'account'] as const;
+
 export const HEADER_NAVIGATION_ITEM_KEYS = [
   ...HEADER_NAVIGATION_PAGE_KEYS,
-  'search',
-  'queue',
-  'account',
+  ...HEADER_NAVIGATION_TOOL_KEYS,
 ] as const;
 
-/** Pages a fresh install keeps out of the header so first launch isn't crowded; Settings can turn them on. */
-export const HEADER_NAVIGATION_DEFAULT_HIDDEN_KEYS: readonly typeof HEADER_NAVIGATION_ITEM_KEYS[number][] = ['audio', 'sprite', 'chat'];
+/** Pages a fresh install pins to the top bar; on phones the first four pinned pages are the bottom tabs. */
+export const HEADER_NAVIGATION_DEFAULT_PINNED_KEYS: readonly typeof HEADER_NAVIGATION_PAGE_KEYS[number][] = ['home', 'generation', 'chat', 'characters'];
+
+/**
+ * 2: a page key's flag means "pinned to the top bar". Before it (unset) the flag meant shown or hidden, so stored page
+ * flags and order are not carried over; the right-side tools keep theirs.
+ */
+export const HEADER_NAVIGATION_VERSION = 2;
 
 export type PluginHeaderNavigationKey = `plugin:${string}:${string}`;
 export type HeaderNavigationItemKey = typeof HEADER_NAVIGATION_ITEM_KEYS[number] | PluginHeaderNavigationKey;
 export type HeaderNavigationPageKey = typeof HEADER_NAVIGATION_PAGE_KEYS[number] | PluginHeaderNavigationKey;
 export type HeaderNavigationSettings = Record<typeof HEADER_NAVIGATION_ITEM_KEYS[number], boolean> & Partial<Record<PluginHeaderNavigationKey, boolean>>;
 
-/** Build a complete top-header navigation visibility map for a fresh install. */
+/** Build the complete header map for a fresh install: the default pages pinned, every right-side tool shown. */
 export function getDefaultHeaderNavigationSettings(): HeaderNavigationSettings {
+  const pages: readonly string[] = HEADER_NAVIGATION_PAGE_KEYS;
+  const pinned: readonly string[] = HEADER_NAVIGATION_DEFAULT_PINNED_KEYS;
   return HEADER_NAVIGATION_ITEM_KEYS.reduce((settings, key) => {
-    settings[key] = !HEADER_NAVIGATION_DEFAULT_HIDDEN_KEYS.includes(key);
+    settings[key] = !pages.includes(key) || pinned.includes(key);
     return settings;
   }, {} as HeaderNavigationSettings);
 }
@@ -86,7 +98,7 @@ export function normalizeHeaderNavigationOrder(value: unknown, pluginPages: read
   return normalized;
 }
 
-/** What the header reads before sign-in: which items show and the page order. */
+/** What the header reads before sign-in: the pinned pages, the shown tools and the pin order. */
 export interface PublicHeaderNavigationSettings {
   items: HeaderNavigationSettings;
   order: HeaderNavigationPageKey[];
@@ -97,9 +109,12 @@ export interface GeneralSettings {
   language: SupportedLanguage;
   promptForDownloadLocation: boolean;
   deleteProtection: DeleteProtectionSettings;
+  /** Page key → pinned to the top bar; tool key → shown on the right. */
   headerNavigation: HeaderNavigationSettings;
-  /** Page links in the order the header shows them. */
+  /** Pinned pages in the order the top bar (and the phone's bottom tabs) shows them. */
   headerNavigationOrder: HeaderNavigationPageKey[];
+  /** `HEADER_NAVIGATION_VERSION` once stored flags mean pins; the server owns it. */
+  headerNavigationVersion?: number;
   enableGallery?: boolean;
   autoCleanupCanvasOnShutdown?: boolean;
   showRatingBadges?: boolean;

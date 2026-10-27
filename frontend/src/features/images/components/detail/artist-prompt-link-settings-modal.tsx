@@ -33,7 +33,7 @@ export function ArtistPromptLinkSettingsModal({ open, initialTemplate, isSaving 
       open={open}
       onClose={onClose}
       title={t('images.components.detail.artist.prompt.link.settings.modal.artist.prompt.link.settings')}
-      widthClassName="max-w-2xl"
+      size="md"
     >
       <ModalBody>
         <Field label="URL template" info={t('images.components.detail.artist.prompt.link.settings.modal.value.will.be.replaced.with.the.badge', { key: '{key}' })}>

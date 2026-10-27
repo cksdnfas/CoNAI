@@ -261,19 +261,11 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
       open={open}
       onClose={onClose}
       title={preset ? t({ ko: '판단 프리셋 편집', en: 'Edit judge preset' }) : t({ ko: '판단 프리셋 추가', en: 'Add judge preset' })}
-      size="wide"
+      size="xl"
       height="tall"
       sidePanelInset={CHAT_DOCK_INSET}
       dirty={dirty}
       onSave={canSave ? () => saveMutation.mutate() : undefined}
-      headerActions={(
-        <div className="flex shrink-0 items-center gap-1">
-          <SettingsAdvancedSwitch />
-          <IconButton size="icon-sm" variant="ghost" active={testOpen} onClick={() => setTestOpen(!testOpen)} label={t({ ko: '테스트', en: 'Test' })}>
-            {testMutation.isPending ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}
-          </IconButton>
-        </div>
-      )}
       headerContent={testOpen ? testControls : undefined}
     >
       <EditorSplit
@@ -371,6 +363,11 @@ export function ChatJudgePresetEditorModal({ open, preset, initial, onClose, onD
         canSave={canSave}
         saving={saveMutation.isPending}
       >
+        <Button size="sm" variant="ghost" aria-pressed={testOpen} onClick={() => setTestOpen(!testOpen)}>
+          {testMutation.isPending ? <LoaderCircle className="animate-spin" /> : <FlaskConical />}
+          {t({ ko: '테스트', en: 'Test' })}
+        </Button>
+        <SettingsAdvancedSwitch />
         <IconButton size="icon-sm" variant="ghost" onClick={() => downloadChatJudgePresetFile(draft)} disabled={nameMissing} label={t({ ko: 'JSON으로 내보내기', en: 'Export as JSON' })}>
           <Download />
         </IconButton>

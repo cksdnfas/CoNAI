@@ -215,7 +215,7 @@ export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onC
   const toggle = (id: number) => setPicked((current) => current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id])
 
   return (
-    <Modal open={open} onClose={onClose} title={t({ ko: '참가자 초대', en: 'Invite members' })} widthClassName="max-w-md">
+    <Modal open={open} onClose={onClose} title={t({ ko: '참가자 초대', en: 'Invite members' })} size="md">
       <ModalBody>
         <div className="max-h-[50vh] overflow-y-auto">
           {base ? (

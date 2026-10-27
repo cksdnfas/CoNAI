@@ -1,5 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { Copy, Ellipsis, Eye, ListFilter, ListTree, Pencil, Play, Plus, RefreshCw, RotateCcw, Save, Server, Star, Trash2, Upload } from 'lucide-react'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
@@ -135,9 +136,16 @@ export function ComfyServerListSection({ servers, serverTests, onOpenCreateServe
       heading={<SectionLabel icon={<Server />}>{t({ ko: '서버', en: 'Servers' })}</SectionLabel>}
       count={servers.length}
       actions={(
+        <>
+        {isAdmin ? (
+          <Button variant="link" size="sm" asChild>
+            <Link to="/settings?section=generation&group=comfyui">{t({ ko: '설정에서 관리', en: 'Manage in settings' })}</Link>
+          </Button>
+        ) : null}
         <IconButton size="icon-sm" variant="ghost" onClick={onOpenCreateServer} disabled={!isAdmin} label={t({ ko: '서버 등록', en: 'Add server' })}>
           <Plus />
         </IconButton>
+        </>
       )}
     >
       {servers.length > 0 ? servers.map((server) => {
@@ -288,7 +296,7 @@ function CustomDropdownListEditorModal({ open, isSubmitting = false, initialList
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={readOnly ? t({ ko: '드롭다운 목록 상세', en: 'Dropdown list details' }) : initialList ? t({ ko: '커스텀 드롭다운 수정', en: 'Edit custom dropdown' }) : t({ ko: '커스텀 드롭다운 목록', en: 'Custom dropdown list' })} widthClassName="max-w-2xl">
+    <Modal open={open} onClose={onClose} title={readOnly ? t({ ko: '드롭다운 목록 상세', en: 'Dropdown list details' }) : initialList ? t({ ko: '커스텀 드롭다운 수정', en: 'Edit custom dropdown' }) : t({ ko: '커스텀 드롭다운 목록', en: 'Custom dropdown list' })} size="md">
       <ModalBody spacing="lg">
         <Field label={t({ ko: '목록 이름', en: 'List name' })}>
           <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t({ ko: '목록 이름', en: 'List name' })} readOnly={readOnly} />
@@ -343,7 +351,7 @@ function ComfyDropdownAutoCollectModal({ open, isSubmitting = false, onClose, on
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={t({ ko: 'ComfyUI 자동수집', en: 'ComfyUI auto collect' })} widthClassName="max-w-3xl">
+    <Modal open={open} onClose={onClose} title={t({ ko: 'ComfyUI 자동수집', en: 'ComfyUI auto collect' })} size="lg">
       <ModalBody spacing="lg">
         <Field label={t({ ko: 'API 목록', en: 'API paths' })} info={t({ ko: '대표 ComfyUI 서버에서 수집해. 통합·개별 목록과 하위 폴더 통합은 항상 적용돼.', en: 'Collected from the default ComfyUI server; merged and separate lists and subfolder merging always apply.' })}>
           <Textarea

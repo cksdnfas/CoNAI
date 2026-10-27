@@ -69,12 +69,10 @@ export function PostAttachPicker({ initialTab, onClose, onInsert }: { initialTab
     <Modal
       open
       onClose={onClose}
-      widthClassName="max-w-5xl"
+      size="xl"
       height="tall"
-      title={<span className="sr-only">{t({ ko: '앱 자료 넣기', en: 'Insert from the app' })}</span>}
-      headerActions={(
-        <TextTabs value={tab} onChange={setTab} items={tabs} ariaLabel={t({ ko: '넣을 자료', en: 'What to insert' })} hairline={false} className="order-first flex-1" />
-      )}
+      title={t({ ko: '앱 자료 넣기', en: 'Insert from the app' })}
+      headerContent={<TextTabs value={tab} onChange={setTab} items={tabs} ariaLabel={t({ ko: '넣을 자료', en: 'What to insert' })} hairline={false} />}
     >
       {tab === 'media' ? <AttachMediaTab selected={selected} setSelected={setSelected} />
         : tab === 'audio' ? <AttachAudioTab selected={selected} setSelected={setSelected} />

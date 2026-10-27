@@ -47,8 +47,12 @@ function mergeDraft(previous: SettingDraft, latest: SettingDraft, draft: Setting
  */
 export function useCharacterSettingEditor({ target, onCreated, onClose }: {
   target: SettingEditorTarget
-  /** A new setting got its id before a save (created so an image could be generated for it); the editor stays open. */
+  /**
+   * A new setting got its id (created so an image could be generated for it, or saved); the editor stays open on it.
+   * A save of a saved setting keeps the editor open too.
+   */
   onCreated: (setting: CharacterSetting) => void
+  /** The setting is gone (deleted): leave its editor. */
   onClose: () => void
 }) {
   const { t } = useI18n()
@@ -191,11 +195,12 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
   const saveMutation = useMutation({
     mutationFn: () => baseRef.current ? writeChanges(SETTING_DRAFT_KEYS) : createFromDraft(),
     onSuccess: (saved) => {
+      const created = !baseRef.current
       const previousFolder = baseRef.current?.folderId ?? saved.folderId
       adopt(saved, settingDraftOf(saved))
       void refreshCharacterViews(queryClient, { folderIds: [previousFolder, saved.folderId], settingIds: [saved.id] })
-      // Saving closes the editor; a new setting needs no URL of its own on the way out.
-      onClose()
+      // The editor page stays on the saved setting; a new one moves to its own address.
+      if (created) onCreated(saved)
     },
     onError: (error) => showSnackbar({
       message: isCharacterRevisionConflict(error)

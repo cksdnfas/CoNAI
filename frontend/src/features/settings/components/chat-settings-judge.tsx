@@ -11,6 +11,8 @@ import { Text } from '@/components/ui/text'
 import { DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useSettingsGroupActive } from './settings-navigation'
+import { SETTINGS_ROW_BY_ID } from '@conai/shared'
 import { pageAction, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import {
   CHAT_JUDGE_LOGS_QUERY_KEY,
@@ -189,8 +191,9 @@ export function ChatSettingsJudge() {
   }
   // The answer diagnostics shown above the log on the same view.
   const diagnosticsParts = useChatOptionsPageParts('diagnostics')
-  useChatPageRegistration({
-    kind: 'settings', title: t({ ko: '설정 · LLM 기록', en: 'Settings · LLM log' }), resourceId: 'llm', priority: 5, fields: [], data: { ...chatData, ...diagnosticsParts.data },
+  const groupActive = useSettingsGroupActive('log', 'connections')
+  useChatPageRegistration(groupActive ? {
+    kind: 'settings', title: t(SETTINGS_ROW_BY_ID['llm.log'].label), resourceId: 'llm', priority: 5, fields: [], data: { ...chatData, ...diagnosticsParts.data },
     actions: [...diagnosticsParts.actions, pageAction('settings.judge_filter', t({ ko: '판단 기록 거르기', en: 'Filter the judge log' }), t({
       ko: 'data.filter를 바꿔(넘긴 것만, 0이나 빈 값 = 전체).',
       en: 'Change data.filter (only what you pass; 0 or empty = all).',
@@ -209,7 +212,7 @@ export function ChatSettingsJudge() {
       if (typeof args.days === 'number') next.days = args.days
       patch(next)
     },
-  }, { preserveOnSearchChange: true })
+  } : null, { preserveOnSearchChange: true })
 
   return (
     <div className="space-y-6">

@@ -1,7 +1,8 @@
-import { Braces, Copy, Sparkles, WandSparkles } from 'lucide-react'
+import { Braces, Copy, FlaskConical, Shuffle } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Inset } from '@/components/ui/inset'
 import { Text } from '@/components/ui/text'
@@ -62,11 +63,11 @@ export function WildcardPreviewModal({
       onClose={onClose}
       title={(
         <span className="flex items-center gap-2">
-          <WandSparkles className="h-4 w-4 text-primary" />
+          <Shuffle className="h-4 w-4 text-primary" />
           {t('image-generation.components.wildcard.generation.panel.parsing.test')}
         </span>
       )}
-      widthClassName="max-w-4xl" height="tall"
+      size="lg" height="tall"
     >
       <div className="space-y-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_120px]">
@@ -95,9 +96,10 @@ export function WildcardPreviewModal({
           <IconButton variant="secondary" onClick={onFillSelectedSyntax} disabled={!selectedWildcardSyntax} label={t({ ko: '선택 항목 넣기', en: 'Insert selection' })}>
             <Braces className="h-4 w-4" />
           </IconButton>
-          <IconButton variant="default" onClick={onParsePreview} disabled={isParsing || previewText.trim().length === 0} aria-busy={isParsing || undefined} label={isParsing ? t('image-generation.components.wildcard.preview.modal.testing') : t('image-generation.components.wildcard.preview.modal.test')}>
-            <Sparkles className="h-4 w-4" />
-          </IconButton>
+          <Button onClick={onParsePreview} disabled={isParsing || previewText.trim().length === 0} aria-busy={isParsing || undefined}>
+            <FlaskConical />
+            {isParsing ? t('image-generation.components.wildcard.preview.modal.testing') : t('image-generation.components.wildcard.preview.modal.test')}
+          </Button>
         </div>
 
         {parseErrorMessage ? (

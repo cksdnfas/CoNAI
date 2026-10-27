@@ -67,6 +67,21 @@ test('maintenance routes are admin-only and search history is per account', { ti
   AuthPermissionGroup.addAccountMembership(group.id, otherId)
   invalidateConfiguredAuthCache()
 
+  await t.test('moving resource editors keeps administrator access; personal settings cannot run shared actions', async () => {
+    const { requireChatPageAccess, requireChatPageActionAccess } = await import('../src/services/codex-chat/chatPageContext')
+    const guest = { accountId: guestId, accountType: 'guest' as const }
+    assert.throws(() => requireChatPageAccess(guest, { path: '/chat/resources', kind: 'settings', resourceId: 'chat' }), /권한/)
+    assert.throws(() => requireChatPageActionAccess(guest, { path: '/characters', kind: 'settings' }, 'profile.save'), /관리자/)
+    const personal = { path: '/settings', kind: 'settings' as const, resourceId: 'mine' }
+    assert.throws(() => requireChatPageActionAccess(guest, personal, 'settings.save'), /내 설정/)
+    assert.throws(() => requireChatPageActionAccess(guest, personal, 'settings.mcp_server'), /내 설정/)
+    const chatGroup = AuthPermissionGroup.createCustomGroup({ name: 'personal-settings', permissionKeys: ['chat.use'] })
+    AuthPermissionGroup.addAccountMembership(chatGroup.id, guestId)
+    assert.doesNotThrow(() => requireChatPageAccess(guest, personal))
+    assert.doesNotThrow(() => requireChatPageActionAccess(guest, personal, 'settings.user_profile'))
+    assert.doesNotThrow(() => requireChatPageActionAccess(guest, personal, 'settings.flag'))
+  })
+
   await t.test('all page-setting snapshots fit the public field contract without exposing extra values', async () => {
     const { PAGE_SETTINGS_SCOPES, pageSettingsPatch } = await import('@conai/shared')
     for (const [scope, definition] of Object.entries(PAGE_SETTINGS_SCOPES)) {

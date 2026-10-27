@@ -21,7 +21,8 @@ export class ChatPageContextError extends Error {
 }
 
 export function requireChatPageAccess(requester: McpRequester, page: Pick<ChatPageSnapshot, 'path'> & Partial<Pick<ChatPageSnapshot, 'kind' | 'resourceId'>>) {
-  const permission = chatPagePermission(page.path)
+  const personal = page.path === '/settings' && page.kind === 'settings' && page.resourceId === 'mine'
+  const permission = personal ? 'page.chat.view' : page.path === '/characters' && page.kind === 'settings' ? 'page.settings.view' : chatPagePermission(page.path)
   const id = requester.accountId
   const permitted = id === null
     ? !hasConfiguredAuth()
@@ -41,6 +42,11 @@ function requirePageSettingsAccess(requester: McpRequester, path: string, scope:
 }
 
 export function requireChatPageActionAccess(requester: McpRequester, page: Pick<ChatPageSnapshot, 'path'> & Partial<Pick<ChatPageSnapshot, 'resourceId' | 'data' | 'kind'>>, actionId: string, args?: Record<string, unknown>) {
+  if (page.path === '/settings' && page.resourceId === 'mine'
+    && !['settings.user_profile', 'settings.flag', 'page.navigate', 'page.refresh', 'page.settings_open'].includes(actionId)) throw new ChatPageContextError('내 설정에서 사용할 수 없는 작업이야.', 403)
+  // Moving profile/resource editors must not turn their old administrator boundary into characters.edit.
+  if (page.path === '/characters' && /^(profile|resource|lorebook|block)\./.test(actionId)
+    && requester.accountId !== null && !AuthAccessControlService.hasPermission(requester.accountId, 'page.settings.view')) throw new ChatPageContextError('이 편집기는 관리자만 사용할 수 있어.', 403)
   if (actionId.startsWith('plugin_author.') || actionId.startsWith('plugin_source.')) requirePluginAuthor(requester)
   if (page.path.startsWith('/ext/') && !actionId.startsWith('page.')) {
     requireChatPageAccess(requester, page)
@@ -57,7 +63,7 @@ export function requireChatPageActionAccess(requester: McpRequester, page: Pick<
   if (actionId === 'page.navigate' && args) {
     // The destination is `to`: MCP argument checks refuse any key named `path` as a server file path.
     const path = typeof args.to === 'string' ? args.to : ''
-    const permission = chatPagePermission(path.split('?')[0])
+    const permission = chatPagePermission(path)
     if (!path.startsWith('/') || path.startsWith('//') || permission === null || (permission !== '' && requester.accountId !== null && !AuthAccessControlService.hasPermission(requester.accountId, permission))) throw new ChatPageContextError('접근할 수 있는 내부 페이지가 아니야.', 403)
   }
   const permission = actionId === 'media.attach' ? 'images.view' : CHAT_PAGE_ACTION_PERMISSIONS[actionId]

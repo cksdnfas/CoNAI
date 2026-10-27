@@ -37,7 +37,7 @@ export function SecurityGroupColorEditorModal({
       open={open}
       onClose={onClose}
       title={t('securityGroupColorEditorModal.permissionGroupColors')}
-      size="normal"
+      size="lg"
     >
       <div>
         <div className="flex justify-end pb-2">

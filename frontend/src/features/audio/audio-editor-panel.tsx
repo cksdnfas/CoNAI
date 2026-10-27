@@ -325,9 +325,9 @@ export function AudioEditorPanel({ candidate, canEdit, onClose, onSaved, classNa
           <span className="font-mono text-xs text-muted-foreground" tabIndex={0}>{length > 0 ? `${length.toFixed(2)}s` : '—'}</span>
         </Tip>
         {canEdit ? (
-          <IconButton variant="default" size="icon-sm" disabled={Boolean(problem) || !changed || busy !== null} onClick={() => void save()} label={t({ ko: '편집본 저장', en: 'Save edit' })}>
-            <Save />
-          </IconButton>
+          <Button size="sm" disabled={Boolean(problem) || !changed || busy !== null} onClick={() => void save()}>
+            <Save />{t({ ko: '편집본 저장', en: 'Save edit' })}
+          </Button>
         ) : null}
       </div>
 

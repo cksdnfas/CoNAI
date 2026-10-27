@@ -109,7 +109,7 @@ export function ChatBlockEditorModal({ open, shared, initialName, initialBlock, 
       open={open}
       onClose={onClose}
       title={shared ? t({ ko: '표시 블록 편집', en: 'Edit display block' }) : t({ ko: '표시 블록 추가', en: 'Add display block' })}
-      size="wide"
+      size="xl"
       height="tall"
       sidePanelInset={CHAT_DOCK_INSET}
       dirty={dirty}

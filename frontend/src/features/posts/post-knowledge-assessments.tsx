@@ -32,7 +32,7 @@ export function AssessmentModerationDialog({ post, entry, action, onClose }: { p
     onSuccess: async () => { await invalidatePostScope(queryClient, post.id, 'post'); onClose() },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '평가 변경을 저장하지 못했어.', en: 'Could not save the feedback change.' })) }),
   })
-  return <Modal open onClose={onClose} title={title} size="narrow">
+  return <Modal open onClose={onClose} title={title} size="md">
     <ModalBody>
       <p className="text-sm text-muted-foreground">{t({ ko: '내용 {version}판 · {evaluator} · 기존 {quality}', en: 'Content version {version} · {evaluator} · previously {quality}' }, { version: entry.contentVersion, evaluator: t(evaluatorLabels[entry.evaluator]), quality: t(qualityLabels[entry.quality]) })}</p>
       {entry.reason ? <p className="whitespace-pre-wrap text-sm">{entry.reason}</p> : null}

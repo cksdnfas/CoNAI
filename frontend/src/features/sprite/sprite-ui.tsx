@@ -31,7 +31,7 @@ export function MiniField({ label, children, className }: { label: string; child
 /** The sticky run bar at the bottom of a tab: a short summary on the left, the download / save keys on the right. */
 export function SpriteActionBar({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('sticky bottom-3 z-sticky mt-2 flex items-center gap-2 rounded-md bg-surface-container/95 p-1.5 pl-3 shadow-elevation-3 backdrop-blur-md', className)}>
+    <div className={cn('sticky bottom-[calc(var(--shell-bottom-inset)+0.75rem)] z-sticky mt-2 flex items-center gap-2 rounded-md bg-surface-container/95 p-1.5 pl-3 shadow-elevation-3 backdrop-blur-md', className)}>
       {children}
     </div>
   )

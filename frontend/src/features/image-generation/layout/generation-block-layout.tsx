@@ -49,10 +49,10 @@ export function withPluginBlockNodes(surface: GenerationLayoutSurface, blocks: G
 export type GenerationBlockLayoutFlow = 'fill' | 'page'
 
 /** Narrow screens that stack their own sections: the plugin blocks the preset shows, in its order. */
-export function StackedPluginBlocks({ surface }: { surface: GenerationLayoutSurface }) {
+export function StackedPluginBlocks({ surface, block }: { surface: GenerationLayoutSurface; block?: GenerationLayoutBlock }) {
   const blocks = useStackedPluginBlocks(surface)
-  return blocks.map((block) => (
-    <Suspense key={block.key} fallback={null}><PluginLayoutBlock block={block} surface={surface} /></Suspense>
+  return blocks.filter((item) => !block || item.key === block).map((item) => (
+    <Suspense key={item.key} fallback={null}><PluginLayoutBlock block={item} surface={surface} /></Suspense>
   ))
 }
 

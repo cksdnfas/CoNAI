@@ -120,11 +120,14 @@ const toggleChipVariants = cva(
 )
 
 type ToggleChipProps = Omit<ComponentProps<'button'>, 'aria-pressed'> & VariantProps<typeof toggleChipVariants> & {
-  /** On/off state, announced as aria-pressed. */
-  pressed: boolean
+  /** On/off state, announced as aria-pressed. Left out, the chip is a plain worded key (a menu or popup trigger) in the same row. */
+  pressed?: boolean
 }
 
-/** Render a pressable filter / option chip with aria-pressed state (multi-select filters, category toggles). */
+/**
+ * Render a pressable filter / option chip with aria-pressed state (multi-select filters, category toggles, the chat
+ * composer's tools); without `pressed` it is a plain key in the same look.
+ */
 function ToggleChip({ className, tone, size, pressed, type = 'button', ...props }: ToggleChipProps) {
   return (
     <button

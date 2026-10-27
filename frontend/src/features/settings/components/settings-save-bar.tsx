@@ -1,9 +1,6 @@
-import { Check, CircleDot, LoaderCircle, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { IconButton } from '@/components/ui/icon-button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
-import { cn } from '@/lib/utils'
+import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
 import { useI18n } from '@/i18n'
 import type { SettingsDraftSection } from '../settings-draft-sections'
 import type { SettingsTab } from '../settings-tabs'
@@ -42,36 +39,19 @@ export function SettingsSaveBar({ dirtySections, isSaving, onSave, onDiscard, on
   }
 
   return (
-    <div className="sticky bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-30 mt-8" role="region" aria-label={t({ ko: '설정 저장', en: 'Save settings' })}>
-      <div className={cn('theme-floating-panel', floatingSurfaceClassName, 'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg py-2 pr-2 pl-4')}>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5" aria-live="polite">
-          <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-foreground">
-            <CircleDot className="h-4 w-4 text-primary" aria-hidden />
-            {t({ ko: '변경 {count}건', en: '{count} unsaved changes' }, { count: formatNumber(dirtySections.length) })}
-          </div>
-          <div className="flex min-w-0 flex-wrap gap-1.5">
-            {dirtySections.map((section) => (
-              <Button
-                key={section.id}
-                type="button"
-                size="xs"
-                variant="subtle"
-                onClick={() => onOpenTab(section.tab)}
-              >
-                {section.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          <IconButton size="icon-sm" variant="ghost" disabled={isSaving || dirtySections.length === 0} onClick={() => void handleDiscard()} label={t({ ko: '변경 취소', en: 'Discard changes' })}>
-            <Undo2 className="h-4 w-4" />
-          </IconButton>
-          <IconButton variant="default" size="icon-sm" disabled={isSaving || dirtySections.length === 0} onClick={onSave} aria-busy={isSaving || undefined} label={isSaving ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장', en: 'Save' })}>
-            {isSaving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-          </IconButton>
-        </div>
-      </div>
-    </div>
+    <FloatingSaveBar
+      ariaLabel={t({ ko: '설정 저장', en: 'Save settings' })}
+      label={t({ ko: '변경 {count}건', en: '{count} unsaved changes' }, { count: formatNumber(dirtySections.length) })}
+      saving={isSaving}
+      canSave={dirtySections.length > 0}
+      onSave={onSave}
+      onDiscard={dirtySections.length ? () => void handleDiscard() : undefined}
+    >
+      {dirtySections.map((section) => (
+        <Button key={section.id} type="button" size="xs" variant="subtle" onClick={() => onOpenTab(section.tab)}>
+          {section.label}
+        </Button>
+      ))}
+    </FloatingSaveBar>
   )
 }

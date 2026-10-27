@@ -16,7 +16,7 @@ import { useI18n } from '@/i18n'
 import { GENERATION_LAYOUTS_QUERY_KEY, getGenerationLayouts, saveGenerationLayouts } from '@/lib/api-generation-layouts'
 import { usePluginGenerationContributions, type PluginLayoutBlock } from '@/features/plugins/plugin-generation'
 import { GENERATION_LAYOUT_BLOCK_LABELS } from './generation-layout-labels'
-import { stackedLayoutBlocks, withPluginBlocks } from './generation-layout-ops'
+import { stackedLayoutBlocks, withNaiSettingsAbovePrompt, withPluginBlocks } from './generation-layout-ops'
 
 const storageKey = (surface: GenerationLayoutSurface) => `conai.generation-layout.preset.${surface}`
 
@@ -83,7 +83,7 @@ export function GenerationLayoutProvider({ children }: PropsWithChildren) {
   const pluginBlocksOf = useCallback((surface: GenerationLayoutSurface) => pluginBlocks.filter((block) => block.surfaces.includes(surface)), [pluginBlocks])
   const withPlugins = useCallback((surface: GenerationLayoutSurface, presets: GenerationLayoutPreset[]) => {
     const available = pluginBlocksOf(surface).map((block) => block.key)
-    return presets.map((preset) => withPluginBlocks(preset, available))
+    return presets.map((preset) => withPluginBlocks(withNaiSettingsAbovePrompt(surface, preset), available))
   }, [pluginBlocksOf])
   const blockLabel = useCallback((block: GenerationLayoutBlock) => {
     if (!isGenerationLayoutPluginBlock(block)) return t(GENERATION_LAYOUT_BLOCK_LABELS[block])

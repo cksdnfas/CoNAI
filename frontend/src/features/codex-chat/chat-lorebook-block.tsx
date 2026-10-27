@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
-import { Switch } from '@/components/ui/switch'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { ChatLoreEntryFields, loreBookFilesQueryKey, newLoreEntry, type LoreFilePlace } from '@/features/settings/components/chat-profile-lorebook'
 import { useI18n } from '@/i18n'
 import {
@@ -316,7 +316,7 @@ function NewLorebookDialog({ saving, onSave, onClose }: { saving: boolean; onSav
   const { t } = useI18n()
   const [name, setName] = useState('')
   return (
-    <Modal open onClose={onClose} title={t({ ko: '새 로어북', en: 'New lorebook' })} widthClassName="max-w-md">
+    <Modal open onClose={onClose} title={t({ ko: '새 로어북', en: 'New lorebook' })} size="md">
       <form onSubmit={(event) => {
         event.preventDefault()
         if (name.trim()) onSave(name.trim())
@@ -416,10 +416,9 @@ function LoreEntryModal({ target, filePlace, keyLanguage, promoteLabel, saving, 
       open={target !== null}
       onClose={onClose}
       title={entry ? loreEntryTitle(entry) || t({ ko: '새 항목', en: 'New entry' }) : ''}
-      size="narrow"
+      size="md"
       dirty={dirty}
       onSave={canSave && entry ? () => onSave(entry) : undefined}
-      headerActions={entry ? <Switch checked={entry.enabled} onCheckedChange={(enabled) => setDraft((current) => current ? { ...current, enabled } : current)} aria-label={t({ ko: '로어 사용', en: 'Enable lore' })} /> : null}
       description={entry && (entry.source || usage?.turnsAgo !== undefined) ? <div className="flex items-center gap-3 text-xs">
         {entry.source ? usage?.sourceMessageId ? <Button variant="link" size="xs" onClick={() => onSource(entry.source!.threadId, usage.sourceMessageId!)}>{t({ ko: '출처 답변', en: 'Source reply' })}</Button> : <span className="text-muted-foreground/50">{t({ ko: '출처 없음', en: 'Source unavailable' })}</span> : null}
         {usage?.turnsAgo !== undefined ? <span>{t({ ko: '최근 사용 · {count}턴 전', en: 'Last used · {count} turns ago' }, { count: usage.turnsAgo })}</span> : null}
@@ -428,6 +427,7 @@ function LoreEntryModal({ target, filePlace, keyLanguage, promoteLabel, saving, 
       {entry && target ? (
         <>
           <ModalBody>
+            <SwitchLine label={t({ ko: '이 로어 사용', en: 'Use this lore' })} checked={entry.enabled} onCheckedChange={(enabled) => setDraft((current) => current ? { ...current, enabled } : current)} />
             <ChatLoreEntryFields entry={entry} filePlace={filePlace} keyLanguage={keyLanguage} onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))} />
           </ModalBody>
           <EditorFooter onDelete={target.isNew ? undefined : onDelete} deleting={saving} onSave={() => onSave(entry)} canSave={canSave} saving={saving}>

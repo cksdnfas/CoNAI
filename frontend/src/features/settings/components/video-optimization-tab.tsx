@@ -39,7 +39,8 @@ export function VideoOptimizationTab({
 
   return (
     <RowGroup
-      heading={<SettingsLabelTip label={t({ ko: '비디오 최적화', en: 'Video optimization' })} tip={t({ ko: 'H.264 MP4로 저장하고, 원본 크기는 유지해. 원본은 따로 남기지 않아.', en: 'Save as H.264 MP4, keep the original dimensions, and do not keep a separate original copy.' })} />}
+      data-settings-group="video-optimization"
+      heading={<SettingsLabelTip label={t({ ko: '영상 저장', en: 'Video saving' })} tip={t({ ko: 'H.264 MP4로 저장하고, 원본 크기는 유지해. 원본은 따로 남기지 않아.', en: 'Save as H.264 MP4, keep the original dimensions, and do not keep a separate original copy.' })} />}
       actions={<SectionDirtyBadge dirty={hasChanges} />}
     >
       {videoOptimizationDraft ? (

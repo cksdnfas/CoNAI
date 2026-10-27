@@ -67,7 +67,7 @@ export function ChatLoreKeyFillDialog({ open, language, entries, onApply, onClos
   })
 
   return (
-    <Modal open={open} onClose={onClose} title={t({ ko: '{language} 키 채우기', en: 'Fill {language} keywords' }, { language: label })} size="normal" height="medium">
+    <Modal open={open} onClose={onClose} title={t({ ko: '{language} 키 채우기', en: 'Fill {language} keywords' }, { language: label })} size="lg" height="medium">
       <ModalBody spacing="none">
         {fillMutation.isPending ? <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Spinner className="size-4" />{t({ ko: '{count}개 항목의 키를 만드는 중', en: 'Writing keywords for {count} entries' }, { count: entries.length })}</div> : null}
         {!fillMutation.isPending && ready.length === 0 && failed.length === 0 ? (

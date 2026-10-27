@@ -126,12 +126,12 @@ export function AppearanceTab({
             <div className="min-w-0 truncate text-sm text-foreground">{importPreviewFileName}</div>
           </div>
           <div className="flex shrink-0 gap-1">
-            <IconButton size="icon-sm" variant="secondary" onClick={onRevertImportPreview} label={t({ ko: '미리보기 되돌리기', en: 'Revert the preview' })}>
-              <Undo2 className="h-4 w-4" />
-            </IconButton>
-            <IconButton size="icon-sm" onClick={onApplyImportPreview} label={t({ ko: '가져온 테마 적용', en: 'Apply the imported theme' })}>
-              <Check className="h-4 w-4" />
-            </IconButton>
+            <Button size="sm" variant="secondary" onClick={onRevertImportPreview}>
+              <Undo2 />{t({ ko: '되돌리기', en: 'Revert' })}
+            </Button>
+            <Button size="sm" onClick={onApplyImportPreview}>
+              <Check />{t({ ko: '적용', en: 'Apply' })}
+            </Button>
           </div>
         </div>
       ) : null}

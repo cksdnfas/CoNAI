@@ -12,42 +12,47 @@ import { lockBodyScroll } from '@/lib/body-scroll-lock'
 
 interface ModalProps extends PropsWithChildren {
   open: boolean
+  /** What the dialog does ("새 외형 설정", "'기본' 설정을 삭제할까?"). */
   title: ReactNode
+  /** One muted line under the title: where the thing lives and what the action affects. */
   description?: ReactNode
+  /** A state chip after the title (linked, synced…). Controls never go in the header. */
+  status?: ReactNode
+  /** Tabs or a search under the title; stays in view while the body scrolls. */
   headerContent?: ReactNode
-  headerActions?: ReactNode
   /** Visual before the title, e.g. a cover thumbnail. */
   leading?: ReactNode
-  /** `card`: rounded surface card with a hairline edge and a quiet ✕ (the group dialogs). */
-  appearance?: 'default' | 'card'
   onClose: () => void
   /**
-   * Width step: `narrow` (35rem) for a few fields, `normal` (48rem) for one-column editors, `wide` (64rem) for editors
-   * with a side list or a table. `widthClassName` overrides it.
+   * `sm` (26rem) a question and two buttons · `md` (36rem) a form of one to six fields · `lg` (56rem) choosing from a
+   * list or tree, one-column editors · `xl` (72rem) a work surface (viewer, media library). On phones `sm` / `md` rise
+   * as a bottom sheet and `lg` / `xl` fill the screen. An editor with more than two sections is a page, not a dialog.
    */
-  size?: ModalSize
-  widthClassName?: string
+  size: ModalSize
   closeOnBack?: boolean
   /**
-   * Unsaved edits: a dot after the title, and a close from the dialog itself (Esc, backdrop, back, ✕) asks before
-   * discarding them. Closing from code (after a save) never asks.
+   * Unsaved edits: a dot after the title, the footer status, and a close from the dialog itself (Esc, backdrop, back,
+   * ✕, Cancel) asks before discarding them. Closing from code (after a save) never asks.
    */
   dirty?: boolean
   /** Ctrl/⌘+S inside the dialog calls it; leave it out while saving is not possible. */
   onSave?: () => void
   /**
-   * `auto` fits the content. `medium` and `tall` open at a fixed height (up to 40rem / 64rem) for content that grows or
-   * changes while open (sections, accordions, lists): the frame stays put, the body scrolls, and a `ModalFooter` at the
-   * end of the body (or of a form wrapping it) stays pinned.
+   * `auto` (default) fits the content up to the screen. `medium` and `tall` open at a fixed height (up to 40rem /
+   * 64rem) for a list that changes while open (pickers, the command palette, managers) or a body that switches tabs or
+   * sections, so the frame does not jump. A short form stays `auto`.
+   * In every case the body scrolls and a `ModalFooter` at its end (or at the end of a form wrapping it) stays pinned.
    */
   height?: 'auto' | 'medium' | 'tall'
   /** Reserve room for an existing desktop side panel so both surfaces remain interactive. */
   sidePanelInset?: string
+  /** A full-height contextual panel entering from the right; keeps the same focus and dirty-close contract. */
+  placement?: 'center' | 'right'
 }
 
-type ModalSize = 'narrow' | 'normal' | 'wide'
+type ModalSize = 'sm' | 'md' | 'lg' | 'xl'
 
-const SIZE_CLASS: Record<ModalSize, string> = { narrow: 'max-w-[35rem]', normal: 'max-w-3xl', wide: 'max-w-5xl' }
+const SIZE_CLASS: Record<ModalSize, string> = { sm: 'sm:max-w-[26rem]', md: 'sm:max-w-[36rem]', lg: 'sm:max-w-[56rem]', xl: 'sm:max-w-[72rem]' }
 
 const TABBABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
 
@@ -90,15 +95,26 @@ function ModalOpenerCapture({ open, targetRef }: { open: boolean; targetRef: { c
   return null
 }
 
-const ModalRequestCloseContext = createContext<(() => void) | null>(null)
+interface ModalContextValue {
+  /** Close the way ✕ does: with unsaved edits it asks first. */
+  requestClose: () => void
+  dirty: boolean
+}
+
+const ModalContext = createContext<ModalContextValue | null>(null)
 
 /** Close the surrounding modal the way ✕ does: with unsaved edits it asks first. For Cancel buttons in the body. */
 function useModalRequestClose() {
-  const requestClose = useContext(ModalRequestCloseContext)
-  if (!requestClose) {
+  const modal = useContext(ModalContext)
+  if (!modal) {
     throw new Error('useModalRequestClose must be used inside a Modal')
   }
-  return requestClose
+  return modal.requestClose
+}
+
+/** The surrounding modal's close and unsaved state, or null outside a modal (a footer shared with pages). */
+function useOptionalModal() {
+  return useContext(ModalContext)
 }
 
 /** Stop Radix from treating clicks/focus on body-portaled popups (or the backdrop) as a dismiss; the backdrop closes explicitly. */
@@ -117,8 +133,10 @@ function preventOutsideDismiss(event: Event) {
  * Esc closes only the top-most dialog, and only when nothing handled the keydown first (`defaultPrevented`), whether in
  * the capture phase (image editor) or in content bubble handlers (inputs that revert their draft on Esc).
  */
-function Modal({ open, title, description, headerContent, headerActions, leading, appearance = 'default', onClose, size, widthClassName, closeOnBack = true, height = 'auto', dirty = false, onSave, sidePanelInset, children }: ModalProps) {
+function Modal({ open, title, description, status, headerContent, leading, onClose, size, closeOnBack = true, height = 'auto', dirty = false, onSave, sidePanelInset, placement = 'center', children }: ModalProps) {
   const fixedHeight = height !== 'auto'
+  // Phones: a short dialog rises as a bottom sheet; a picker or work surface takes the whole screen.
+  const sheet = size === 'sm' || size === 'md'
   const { t } = useI18n()
   const confirm = useOptionalConfirm()
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -238,8 +256,7 @@ function Modal({ open, title, description, headerContent, headerActions, leading
   }, [])
 
   const hasTitle = title !== null && title !== undefined && title !== false && title !== ''
-  const isCard = appearance === 'card'
-  const body = <ModalRequestCloseContext.Provider value={requestClose}>{children}</ModalRequestCloseContext.Provider>
+  const body = <ModalContext.Provider value={{ requestClose, dirty }}>{children}</ModalContext.Provider>
 
   return (
     <>
@@ -255,14 +272,23 @@ function Modal({ open, title, description, headerContent, headerActions, leading
       >
         <DialogPrimitive.Portal>
           {/* Events still bubble up the React tree from here: clicks stop at this edge, and `nokey` keeps a modal opened inside a graph node from steering that node with its keys. */}
-          <div data-slot="modal" data-side-panel={sidePanelInset ? 'true' : undefined} className={cn('nokey fixed inset-0 z-modal flex items-center justify-center bg-backdrop p-3 sm:p-4 md:p-6', sidePanelInset && 'lg:right-(--modal-side-inset)')} style={sidePanelInset ? { '--modal-side-inset': sidePanelInset } as CSSProperties : undefined} onMouseDown={requestClose} onClick={stopAtPortalEdge()} onDoubleClick={stopAtPortalEdge()} onContextMenu={stopAtPortalEdge()}>
+          <div data-slot="modal" data-side-panel={sidePanelInset ? 'true' : undefined} className={cn('nokey fixed inset-0 z-modal flex bg-backdrop', placement === 'right' ? 'items-stretch justify-end' : 'justify-center sm:items-center sm:p-4 md:p-6', placement !== 'right' && (sheet ? 'items-end' : 'items-stretch'), sidePanelInset && 'lg:right-(--modal-side-inset)')} style={sidePanelInset ? { '--modal-side-inset': sidePanelInset } as CSSProperties : undefined} onMouseDown={requestClose} onClick={stopAtPortalEdge()} onDoubleClick={stopAtPortalEdge()} onContextMenu={stopAtPortalEdge()}>
             <DialogPrimitive.Content
               ref={contentRef}
               aria-modal={!sidePanelInset}
               aria-label={hasTitle ? undefined : t({ ko: '대화 상자', en: 'Dialog' })}
               {...(description ? {} : { 'aria-describedby': undefined })}
+              data-size={size}
               data-height={height}
-              className={cn('mx-auto flex max-h-full w-full flex-col shadow-elevation-3 outline-none', isCard ? 'rounded-xl border border-line bg-surface-low' : 'rounded-sm bg-background', !fixedHeight && 'overflow-y-auto', height === 'medium' && 'h-full max-h-[min(100%,40rem)]', height === 'tall' && 'h-full max-h-[min(100%,64rem)]', widthClassName ?? (size ? SIZE_CLASS[size] : 'max-w-4xl'))}
+              className={cn(
+                'flex w-full flex-col overflow-hidden border-line bg-surface-low shadow-elevation-3 outline-none',
+                placement === 'right' ? 'h-full max-h-full border-l motion-safe:animate-in motion-safe:slide-in-from-right' : 'mx-auto sm:max-h-full sm:rounded-xl sm:border',
+                placement !== 'right' && (sheet ? 'max-h-[92dvh] rounded-t-xl border-t' : 'h-full max-h-full sm:h-auto'),
+                placement !== 'right' && sheet && fixedHeight && 'h-[85dvh]',
+                placement !== 'right' && height === 'medium' && 'sm:h-full sm:max-h-[min(100%,40rem)]',
+                placement !== 'right' && height === 'tall' && 'sm:h-full sm:max-h-[min(100%,64rem)]',
+                SIZE_CLASS[size],
+              )}
               onMouseDown={(event) => event.stopPropagation()}
               onKeyDown={handleContentKeyDown}
               onEscapeKeyDown={handleEscapeKeyDown}
@@ -270,27 +296,28 @@ function Modal({ open, title, description, headerContent, headerActions, leading
               onOpenAutoFocus={handleOpenAutoFocus}
               onCloseAutoFocus={handleCloseAutoFocus}
             >
-              <div className={cn('sticky top-0 z-10 shrink-0 px-4 pt-4 pb-2 backdrop-blur md:px-5', isCard ? 'rounded-t-xl bg-surface-low/96' : 'bg-background/96')}>
+              <div className="shrink-0 px-4 pt-4 pb-2 md:px-5">
                 <div className="flex items-start justify-between gap-3">
                   {leading ? <div className="shrink-0">{leading}</div> : null}
-                  <div className={cn('min-w-0 flex-1', isCard ? 'space-y-0.5' : 'space-y-1')}>
-                    <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-foreground sm:text-lg">
-                      {title}
-                      {dirty ? (
-                        <Tip content={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })}>
-                          <span role="img" aria-label={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })} className="ml-2 inline-block size-1.5 rounded-full bg-primary align-middle" />
-                        </Tip>
-                      ) : null}
-                    </DialogPrimitive.Title>
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                      <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-foreground">
+                        {title}
+                        {dirty ? (
+                          <Tip content={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })}>
+                            <span role="img" aria-label={t({ ko: '저장 안 한 변경', en: 'Unsaved changes' })} className="ml-2 inline-block size-1.5 rounded-full bg-primary align-middle" />
+                          </Tip>
+                        ) : null}
+                      </DialogPrimitive.Title>
+                      {status}
+                    </div>
                     {description ? (
                       <DialogPrimitive.Description asChild>
-                        <div className={cn('text-muted-foreground', isCard ? 'truncate text-xs' : 'text-sm')}>{description}</div>
+                        <div className="text-sm text-muted-foreground">{description}</div>
                       </DialogPrimitive.Description>
                     ) : null}
                   </div>
-
-                  {headerActions}
-                  <IconButton size="icon-sm" variant={isCard ? 'ghost' : 'secondary'} className="shrink-0" onClick={requestClose} label={t({ ko: '닫기', en: 'Close' })}>
+                  <IconButton size="icon-sm" variant="ghost" className="-mr-1 shrink-0" onClick={requestClose} label={t({ ko: '닫기', en: 'Close' })}>
                     <X className="h-4 w-4" />
                   </IconButton>
                 </div>
@@ -298,14 +325,10 @@ function Modal({ open, title, description, headerContent, headerActions, leading
                 {headerContent ? <div className="mt-3">{headerContent}</div> : null}
               </div>
 
-              {fixedHeight ? (
-                // Footer pinning lives in index.css (`[data-slot="modal-scroll"]`).
-                <div data-slot="modal-scroll" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2 pb-4 md:px-5 md:pb-5">
-                  {body}
-                </div>
-              ) : (
-                <div className="px-4 pt-2 pb-4 md:px-5 md:pb-5">{body}</div>
-              )}
+              {/* The body scrolls under a fixed header; a footer at its end stays pinned (index.css, `[data-slot="modal-scroll"]`). */}
+              <div data-slot="modal-scroll" className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2 pb-4 md:px-5 md:pb-5">
+                {body}
+              </div>
             </DialogPrimitive.Content>
           </div>
         </DialogPrimitive.Portal>
@@ -324,4 +347,5 @@ function ModalFooter({ className, separated = false, ...props }: ComponentProps<
   return <div data-slot="modal-footer" className={cn('flex flex-wrap items-center justify-end gap-2', separated ? 'border-t border-line pt-3' : 'pt-2', className)} {...props} />
 }
 
-export { Modal, ModalBody, ModalFooter, useModalRequestClose }
+export { Modal, ModalBody, ModalFooter, useModalRequestClose, useOptionalModal }
+export type { ModalSize }

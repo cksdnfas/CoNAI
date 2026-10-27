@@ -9,17 +9,17 @@ import { numberOrNull, type Draft, type PatchDraft } from './chat-profile-editor
 import { SwitchLine } from '@/components/ui/switch-line'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { ChatProfileLinkedFiles } from './chat-profile-linked-files'
+import { SettingsAdvanced } from './settings-navigation'
 
 /**
  * What the model is given from before: how much of the conversation, and the lorebooks with how much of them.
- * The lorebook numbers are advanced fields.
+ * The lorebook numbers fold away as advanced settings.
  */
-export function ChatProfileMemoryPanel({ draft, patch, lorebooks, advanced }: {
+export function ChatProfileMemoryPanel({ draft, patch, lorebooks }: {
   draft: Draft
   patch: PatchDraft
   /** The linkable lorebooks; undefined until they load. */
   lorebooks: ChatLorebookSummary[] | undefined
-  advanced: boolean
 }) {
   const { t } = useI18n()
   const isPi = draft.engine === 'llm' && draft.llmRuntime === 'pi'
@@ -51,7 +51,7 @@ export function ChatProfileMemoryPanel({ draft, patch, lorebooks, advanced }: {
           {lorebooks && lorebooks.length === 0 ? <span className="text-sm text-muted-foreground">{t({ ko: '가져온 로어북이 없어.', en: 'No lorebooks yet.' })}</span> : null}
         </div>
         <SwitchLine label={t({ ko: '대화 중 로어 제안 받기', en: 'Allow lore proposals' })} checked={draft.allowLoreProposals} onCheckedChange={(allowLoreProposals) => patch({ allowLoreProposals })} />
-        {advanced ? (
+        <SettingsAdvanced count={draft.engine === 'llm' && !isPi ? 4 : 3}>
           <div className="grid gap-3 md:grid-cols-4">
             <Field label={t({ ko: '로어북 최근 메시지', en: 'Lorebook recent messages' })}>
               <NumberStepperInput variant="settings" {...CHAT_PROFILE_LIMITS.loreScanDepth} value={draft.loreScanDepth} onValueCommit={(value) => patch({ loreScanDepth: numberOrNull(value) ?? CHAT_PROFILE_DEFAULTS.loreScanDepth })} />
@@ -68,7 +68,7 @@ export function ChatProfileMemoryPanel({ draft, patch, lorebooks, advanced }: {
               <NumberStepperInput variant="settings" {...CHAT_PROFILE_LIMITS.loreRecursionDepth} value={draft.loreRecursionDepth} onValueCommit={(value) => patch({ loreRecursionDepth: numberOrNull(value) ?? CHAT_PROFILE_DEFAULTS.loreRecursionDepth })} />
             </Field>
           </div>
-        ) : null}
+        </SettingsAdvanced>
       </EditorGroup>
 
       <EditorGroup label={t({ ko: '연결 파일', en: 'Linked files' })}>

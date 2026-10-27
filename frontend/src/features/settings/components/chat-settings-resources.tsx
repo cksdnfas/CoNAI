@@ -1,4 +1,5 @@
 import { useRef, useState, type ComponentProps } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, BookUser, FileUp, ImagePlus, LayoutTemplate, Link2, List, Plus, Rows3, Wrench } from 'lucide-react'
 import { Chip } from '@/components/ui/chip'
@@ -42,12 +43,10 @@ import { readChatBlockFile } from './chat-block-file'
 import { ChatGenerationPresetEditorModal } from './chat-generation-preset-editor-modal'
 import { ChatJudgePresetGroup } from './chat-judge-preset-group'
 import { readChatGenerationPresetFile } from './chat-generation-preset-file'
-import { ChatLorebookEditorModal } from './chat-lorebook-editor-modal'
+import { lorebookEditorPath } from './chat-lorebook-editor-page'
 import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
 import { readChatToolPresetFile } from './chat-tool-preset-file'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
-import { useChatOptionsPageParts } from './chat-options-page'
-import { ChatMemorySettings, ChatToolSettings, ChatWebSettings } from './chat-options-settings'
 
 /** Label + icon colour of each kind: the group label and the rows' icons share the hue so a long list reads by colour. */
 const KIND_CLASS = {
@@ -76,14 +75,13 @@ function ResourceAside({ icon, value, tip, profiles }: { icon: ComponentProps<ty
 }
 
 /** Settings › Chat › 자원: tool presets, generation presets, judge presets, display blocks and lorebooks shared by the chat profiles. */
-export function ChatSettingsResources() {
+export function ChatSettingsResources({ tab = 'presets' }: { tab?: 'presets' | 'blocks' | 'lorebooks' }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const [lorebookEditor, setLorebookEditor] = useState<{ lorebook: ChatLorebook | OwnedChatLorebook | null; kind?: 'global' | 'account' } | null>(null)
+  // A lorebook opens in its own editor page (채팅 자원 › 로어북 › ?lorebook=…).
+  const navigate = useNavigate()
   const lorebookImportRef = useRef<HTMLInputElement>(null)
-  /** Set while a file is picked to refresh that book; null picks a new book. */
-  const lorebookTargetRef = useRef<number | null>(null)
   const [blockEditor, setBlockEditor] = useState<{ shared: ChatSharedBlock | null } | null>(null)
   const blockImportRef = useRef<HTMLInputElement>(null)
   const [presetEditor, setPresetEditor] = useState<{ preset: ChatToolPreset | null } | null>(null)
@@ -107,17 +105,13 @@ export function ChatSettingsResources() {
     block: (blocksQuery.data ?? []).map((shared) => ({ id: shared.id, name: shared.name })),
     tool_preset: (presetsQuery.data ?? []).map((preset) => ({ id: preset.id, name: preset.name })),
   }
-  // Memory and web search sit among the resources (by the lorebooks and the tool presets).
-  const optionParts = useChatOptionsPageParts('memory-web')
   useChatPageRegistration({
-    kind: 'settings', title: t({ ko: '설정 · 채팅 자원', en: 'Settings · Chat resources' }), resourceId: 'chat-resources', priority: 5, fields: [],
-    data: { section: 'chat', view: 'resources', ...listed, ...optionParts.data },
-    actions: [...optionParts.actions, pageAction('resource.open', t({ ko: '자원 편집기 열기', en: 'Open resource editor' }), t({ ko: '로어북(lorebook)·생성 프리셋(generation_preset)·판단 프리셋(judge_preset)·표시 블록(block)·도구 프리셋(tool_preset) 편집기를 열어. id를 빼면 새로 만들기, 있으면 data의 목록 id. 새 로어북은 kind=account면 공유 계정 로어북이야.', en: 'Open an editor for a lorebook, generation preset, judge preset, display block or tool preset. Without id: a new one; with id: one from the lists in data. A new lorebook with kind=account is a shared account book.' }), pageObject({ kind: pageChoice(['lorebook', 'generation_preset', 'judge_preset', 'block', 'tool_preset']), id: pageNumber(1, undefined, true), lorebookKind: pageChoice(['global', 'account']) }, ['kind']))],
+    kind: 'settings', title: t({ ko: '채팅 자원', en: 'Chat resources' }), resourceId: 'chat-resources', priority: 5, fields: [],
+    data: { section: 'chat', view: 'resources', ...listed },
+    actions: [pageAction('resource.open', t({ ko: '자원 편집기 열기', en: 'Open resource editor' }), t({ ko: '로어북(lorebook)·생성 프리셋(generation_preset)·판단 프리셋(judge_preset)·표시 블록(block)·도구 프리셋(tool_preset) 편집기를 열어. id를 빼면 새로 만들기, 있으면 data의 목록 id. 새 로어북은 kind=account면 공유 계정 로어북이야.', en: 'Open an editor for a lorebook, generation preset, judge preset, display block or tool preset. Without id: a new one; with id: one from the lists in data. A new lorebook with kind=account is a shared account book.' }), pageObject({ kind: pageChoice(['lorebook', 'generation_preset', 'judge_preset', 'block', 'tool_preset']), id: pageNumber(1, undefined, true), lorebookKind: pageChoice(['global', 'account']) }, ['kind']))],
     apply: () => {},
     applyAction: (id, args, assertCurrent) => {
       assertCurrent()
-      const saved = optionParts.apply(id, args)
-      if (saved) return saved
       if (id !== 'resource.open') throw new Error('자원 목록에 없는 작업이야.')
       const kind = String(args.kind) as keyof typeof listed
       const target = args.id === undefined ? null : Number(args.id)
@@ -129,7 +123,7 @@ export function ChatSettingsResources() {
       }
       if (kind === 'lorebook') {
         const books: Array<ChatLorebook | OwnedChatLorebook> = [...(lorebooksQuery.data ?? []), ...(ownLorebooksQuery.data ?? [])]
-        setLorebookEditor({ lorebook: find(books), kind: args.lorebookKind === 'account' ? 'account' : 'global' })
+        navigate(lorebookEditorPath(find(books) ?? (args.lorebookKind === 'account' ? 'new-account' : 'new')))
       } else if (kind === 'generation_preset') setGenerationEditor({ preset: find(generationPresetsQuery.data) })
       else if (kind === 'judge_preset') setJudgeEditor({ preset: find(judgePresetsQuery.data) })
       else if (kind === 'block') setBlockEditor({ shared: find(blocksQuery.data) })
@@ -140,25 +134,15 @@ export function ChatSettingsResources() {
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
   const onDuplicateError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '복제하지 못했어.', en: 'Could not duplicate.' })), tone: 'error' })
 
+  // A new book from a file (a book's own page updates it from a newer file).
   const lorebookImportMutation = useMutation({
-    mutationFn: ({ file, lorebookId }: { file: File; lorebookId: number | null }) => importChatLorebook(file, lorebookId ?? undefined),
-    onSuccess: async (lorebook, { lorebookId }) => {
+    mutationFn: (file: File) => importChatLorebook(file),
+    onSuccess: async (lorebook) => {
       await queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY })
-      // The editor open on the refreshed book reloads its entries from the new copy.
-      if (lorebookId) setLorebookEditor((current) => (current?.lorebook?.id === lorebookId ? { lorebook } : current))
-      showSnackbar({
-        message: lorebookId
-          ? t({ ko: '{name} 업데이트했어. 항목 {count}개.', en: 'Updated {name}: {count} entries.' }, { name: lorebook.name, count: lorebook.entries.length })
-          : t({ ko: '{name} 가져왔어. 항목 {count}개.', en: 'Imported {name}: {count} entries.' }, { name: lorebook.name, count: lorebook.entries.length }),
-        tone: 'info',
-      })
+      showSnackbar({ message: t({ ko: '{name} 가져왔어. 항목 {count}개.', en: 'Imported {name}: {count} entries.' }, { name: lorebook.name, count: lorebook.entries.length }), tone: 'info' })
     },
     onError,
   })
-  const pickLorebookFile = (lorebookId: number | null) => {
-    lorebookTargetRef.current = lorebookId
-    lorebookImportRef.current?.click()
-  }
 
   const refreshBlocks = () => Promise.all([
     queryClient.invalidateQueries({ queryKey: CHAT_BLOCKS_QUERY_KEY }),
@@ -240,6 +224,7 @@ export function ChatSettingsResources() {
 
   return (
     <div className="space-y-8">
+      <div hidden={tab !== 'presets'} className="space-y-8">
       <RowGroup
         headingClassName={KIND_CLASS.tool}
         heading={toolPresetsLabel}
@@ -271,10 +256,6 @@ export function ChatSettingsResources() {
         ))}
         {presetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(presetsQuery.error, t({ ko: '도구 프리셋을 불러오지 못했어.', en: 'Could not load tool presets.' }))}</p> : null}
       </RowGroup>
-
-      <ChatToolSettings />
-
-      <ChatWebSettings />
 
       <RowGroup
         headingClassName={KIND_CLASS.generation}
@@ -313,7 +294,9 @@ export function ChatSettingsResources() {
       </RowGroup>
 
       <ChatJudgePresetGroup editor={judgeEditor} setEditor={setJudgeEditor} />
+      </div>
 
+      <div hidden={tab !== 'blocks'}>
       <RowGroup
         headingClassName={KIND_CLASS.block}
         heading={blocksLabel}
@@ -350,6 +333,8 @@ export function ChatSettingsResources() {
         {blocksQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(blocksQuery.error, t({ ko: '표시 블록을 불러오지 못했어.', en: 'Could not load display blocks.' }))}</p> : null}
       </RowGroup>
 
+      </div>
+      <div hidden={tab !== 'lorebooks'}>
       <RowGroup
         headingClassName={KIND_CLASS.lorebook}
         heading={lorebooksLabel}
@@ -359,11 +344,11 @@ export function ChatSettingsResources() {
             <input ref={lorebookImportRef} type="file" accept=".json,.lorebook,.png,application/json,image/png" className="hidden" aria-label={t({ ko: '로어북 파일', en: 'Lorebook file' })} onChange={(event) => {
               const file = event.target.files?.[0]
               event.target.value = ''
-              if (file) lorebookImportMutation.mutate({ file, lorebookId: lorebookTargetRef.current })
+              if (file) lorebookImportMutation.mutate(file)
             }} />
-            <IconButton size="icon-sm" variant="ghost" disabled={lorebookImportMutation.isPending} onClick={() => pickLorebookFile(null)} label={t({ ko: '로어북 가져오기', en: 'Import lorebook' })}><FileUp /></IconButton>
-            <IconButton size="icon-sm" variant="ghost" onClick={() => setLorebookEditor({ lorebook: null, kind: 'account' })} label={t({ ko: '계정 로어북 추가', en: 'Add account lorebook' })}><BookUser /></IconButton>
-            <IconButton size="icon-sm" variant="ghost" onClick={() => setLorebookEditor({ lorebook: null })} label={t({ ko: '로어북 추가', en: 'Add lorebook' })}><Plus /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" disabled={lorebookImportMutation.isPending} onClick={() => lorebookImportRef.current?.click()} label={t({ ko: '로어북 가져오기', en: 'Import lorebook' })}><FileUp /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" onClick={() => navigate(lorebookEditorPath('new-account'))} label={t({ ko: '계정 로어북 추가', en: 'Add account lorebook' })}><BookUser /></IconButton>
+            <IconButton size="icon-sm" variant="ghost" onClick={() => navigate(lorebookEditorPath('new'))} label={t({ ko: '로어북 추가', en: 'Add lorebook' })}><Plus /></IconButton>
           </div>
         )}
       >
@@ -381,7 +366,7 @@ export function ChatSettingsResources() {
               </>
             )}
             aside={<ResourceAside icon={List} value={lorebook.entries.length} tip={t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length })} profiles={lorebook.profiles} />}
-            onOpen={() => setLorebookEditor({ lorebook })}
+            onOpen={() => navigate(lorebookEditorPath(lorebook))}
           />
         ))}
         {accountLorebooks.map((lorebook) => (
@@ -396,22 +381,14 @@ export function ChatSettingsResources() {
               </>
             )}
             aside={<ResourceAside icon={List} value={lorebook.entries.length} tip={t({ ko: '항목 {count}', en: '{count} entries' }, { count: lorebook.entries.length })} profiles={lorebook.profiles} />}
-            onOpen={() => setLorebookEditor({ lorebook })}
+            onOpen={() => navigate(lorebookEditorPath(lorebook))}
           />
         ))}
         {lorebooksQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(lorebooksQuery.error, t({ ko: '로어북을 불러오지 못했어.', en: 'Could not load lorebooks.' }))}</p> : null}
       </RowGroup>
 
-      <ChatMemorySettings />
+      </div>
 
-      <ChatLorebookEditorModal
-        open={lorebookEditor !== null}
-        lorebook={lorebookEditor?.lorebook ?? null}
-        kind={lorebookEditor?.kind}
-        onClose={() => setLorebookEditor(null)}
-        onUpdateFromFile={(lorebook) => pickLorebookFile(lorebook.id)}
-        updating={lorebookImportMutation.isPending}
-      />
       <ChatBlockEditorModal
         open={blockEditor !== null}
         shared={blockEditor?.shared ?? null}

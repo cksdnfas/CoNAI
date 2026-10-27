@@ -4,6 +4,7 @@ import { FileDown, FileSearch, ImageDown, Library, RotateCcw, ScanSearch, Settin
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import {
@@ -461,13 +462,14 @@ function UploadPageContent() {
       >
         <RotateCcw />
       </IconButton>
-      <IconButton variant="default" size="icon-sm" className="ml-1" onClick={() => void handleUpload()} disabled={uploadFiles.length === 0 || isUploading} aria-busy={isUploading || undefined} label={isUploading
+      <Button size="sm" className="ml-1" onClick={() => void handleUpload()} disabled={uploadFiles.length === 0 || isUploading} aria-busy={isUploading || undefined}>
+        <Upload />
+        {isUploading
           ? t('uploadPageSections.uploading')
           : uploadFiles.length > 0
-            ? t({ ko: '업로드 {count}', en: 'Upload {count}' }, { count: formatNumber(uploadFiles.length) })
-            : t({ ko: '업로드', en: 'Upload' })}>
-        <Upload />
-      </IconButton>
+            ? t({ ko: '업로드 · {count}', en: 'Upload · {count}' }, { count: formatNumber(uploadFiles.length) })
+            : t({ ko: '업로드', en: 'Upload' })}
+      </Button>
     </>
   )
 
@@ -513,8 +515,9 @@ function UploadPageContent() {
   )
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div>
       <PageToolbar
+        title={t('pageAccessCatalog.upload')}
         start={(
           <SegmentedControl
             value={mode}

@@ -39,7 +39,7 @@ function HtmlPreviewModal({ open, source, onClose }: { open: boolean; source: st
   const { t } = useI18n()
   const document = /<svg[\s>]/i.test(source.trim().slice(0, 200)) && !/<html[\s>]/i.test(source) ? `<!doctype html><body style="margin:0;display:grid;place-items:center;min-height:100vh">${source}</body>` : source
   return (
-    <Modal open={open} onClose={onClose} title={t({ ko: 'HTML 미리보기', en: 'HTML preview' })} widthClassName="max-w-5xl">
+    <Modal open={open} onClose={onClose} title={t({ ko: 'HTML 미리보기', en: 'HTML preview' })} size="xl">
       <ModalBody>
         <iframe title={t({ ko: 'HTML 미리보기', en: 'HTML preview' })} sandbox="" srcDoc={isolatedChatPreview(document)} className="h-[70vh] w-full rounded-sm border border-line bg-white" />
       </ModalBody>

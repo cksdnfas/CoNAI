@@ -70,7 +70,7 @@ function CharacterSettingPicker({ onOpenChange, onPick, title, confirmLabel, ini
   const pick = (settingId: number) => { if (!confirm.isPending) confirm.mutate(settingId) }
 
   return (
-    <Modal open title={title ?? t({ ko: '외형 설정 고르기', en: 'Choose appearance setting' })} onClose={() => onOpenChange(false)} size="wide" height="tall">
+    <Modal open title={title ?? t({ ko: '외형 설정 고르기', en: 'Choose appearance setting' })} onClose={() => onOpenChange(false)} size="xl" height="tall">
       {!canView ? (
         <ModalBody>
           <EmptyState icon={UserRound} title={t({ ko: '캐릭터 라이브러리를 볼 권한이 없어', en: 'You cannot view the character library' })} description={t({ ko: '관리자에게 캐릭터 보기 권한을 받아야 외형 설정을 고를 수 있어.', en: 'Ask an administrator for character view access to choose a setting.' })} />

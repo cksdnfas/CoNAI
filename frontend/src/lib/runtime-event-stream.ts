@@ -35,6 +35,7 @@ const RUNTIME_EVENT_NAMES: readonly RuntimeEventName[] = [
   'chat.message.updated',
   'chat.page.command',
   'chat.task.updated',
+  'chat.thread.updated',
   'history.record.created',
   'history.record.status',
   'job.status',

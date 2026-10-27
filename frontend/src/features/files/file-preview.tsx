@@ -54,7 +54,7 @@ export function FilePreview({ entry, onClose, onNavigate, onEdit, history: openH
   const canWrite = auth.data?.permissionKeys?.includes('files.edit') === true
   const accountKey = `${auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')}`
   const neighbors = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'neighbors', entry.id], queryFn: () => getStoredFileNeighbors(entry.id) })
-  return <Modal open title={entry.name} onClose={onClose} widthClassName="max-w-5xl" headerContent={<div className="flex items-center gap-1">
+  return <Modal open title={entry.name} onClose={onClose} size="xl" headerContent={<div className="flex items-center gap-1">
     <FilePreviewNavigation previous={neighbors.data?.previous} next={neighbors.data?.next} onNavigate={onNavigate} />
     <span className="flex-1 text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>
     {versioned ? <IconButton variant="ghost" size="icon-sm" active={history} label={t({ ko: '버전 기록', en: 'Version history' })} onClick={() => setHistory(!history)}><History /></IconButton> : null}

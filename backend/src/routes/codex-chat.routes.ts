@@ -90,8 +90,13 @@ function backgroundVersionOf(profile: ChatProfile) {
   return profile.background || profile.backgroundHash ? `${profile.id}-${profile.backgroundHash?.slice(0, 8) ?? ''}-${Date.parse(profile.updatedDate) || 0}` : null
 }
 
-function toPublicProfile(profile: ChatProfile, accountId: number | null, hidden?: ReadonlySet<string>) {
+/**
+ * `canViewLibrary`: the reader may see the character library, so the library setting the profile looks like is named
+ * (its folders and name); others only see the profile.
+ */
+function toPublicProfile(profile: ChatProfile, accountId: number | null, canViewLibrary: boolean, hidden?: ReadonlySet<string>) {
   const canViewImages = canRequesterViewImages({ accountId, accountType: null })
+  const link = canViewLibrary ? profile.characterLink : null
   return {
     id: profile.id,
     name: profile.name,
@@ -116,6 +121,7 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null, hidden?
     // The composer shows the suggestion button only when someone can answer it.
     suggestEnabled: canSuggest(profile, accountId),
     pageAssist: profile.pageAssist,
+    characterLink: link ? { settingId: link.settingId, synced: link.synced, settingName: link.settingName, path: link.path } : null,
   }
 }
 
@@ -166,10 +172,11 @@ router.get('/profiles', requireChatAccess, (req: Request, res: Response) => {
   const accountId = getRequesterAccountId(req)
   const profiles = ChatProfileStore.list({ directory: true })
   const hidden = hiddenProfileAssets(profiles)
+  const canViewLibrary = requesterPermissionKeys({ accountId, accountType: null }).includes('characters.view')
   res.json({
     success: true,
     data: ChatProfileStore.mapDirectory((profile) => ({
-      ...toPublicProfile(profile, accountId, hidden),
+      ...toPublicProfile(profile, accountId, canViewLibrary, hidden),
       usable: profile.isEnabled && canUseChatProfile(access, profile),
       canReadFileText: profile.mcpEnabled && profile.mcpScopes.includes('read') && access.scopes.includes('read') && (!profile.toolAllowlist || profile.toolAllowlist.includes('read_file_text')),
       // What a reply's bar can order this character to do (`choices` only in a direct chat).

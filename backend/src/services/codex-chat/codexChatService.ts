@@ -44,6 +44,7 @@ import { ChatGenerationPresetStore } from './chatGenerationPresets'
 import { translateReply, translateUserMessage } from './chatTranslation'
 import { groupMissedMessages, type GroupHistory } from './groupChatContext'
 import { hasTranslation } from './chatModelRoles'
+import { titleAfterFirstReply } from './chatAutoTitle'
 import { endJudgedTurn, judgeBeforeReply, judgeDirectiveText, readReplyHistory, type JudgedTurn } from './chatJudge'
 import { judgeStatusFields } from './chatJudgeFields'
 import { stripEchoedAddresses, withoutNarrationMarks } from '@conai/shared'
@@ -1378,7 +1379,10 @@ export const CodexChatService = {
       session.activeTurns.set(codexThreadId, turn)
       clearIdleTimer(session)
       if (!thread.title) {
-        CodexChatStore.renameThread(threadId, (withoutNarrationMarks(trimmed) || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' '))
+        // Named after this message now, and after what was said once the reply is stored (with a summary model).
+        const firstTitle = (withoutNarrationMarks(trimmed) || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' ')
+        CodexChatStore.renameThread(threadId, firstTitle)
+        titleAfterFirstReply(profile, thread, firstTitle, trimmed, finished)
       }
       const userMessage = CodexChatStore.findMessage(threadId, userMessageId) as CodexChatMessageRecord
       emit(turn, { type: 'user', message: userMessage })

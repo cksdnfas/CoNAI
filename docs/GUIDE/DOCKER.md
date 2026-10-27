@@ -96,7 +96,7 @@ Docker 기본 설정은 Codex의 Linux sandbox(bwrap)가 쓰는 user namespace�
 
 ## Claude Code 로그인과 업데이트
 
-이미지에 Claude Code CLI도 포함됩니다. 관리자 계정으로 **설정 → LLM → CLI 인증과 업데이트**에서 설치 버전·인증 상태를 확인하고 로그인합니다. 인증 페이지가 코드를 표시하면 로그인 창에 붙여넣습니다. 터미널에서도 로그인할 수 있습니다.
+이미지에 Claude Code CLI도 포함됩니다. 관리자 계정으로 **설정 → AI 연결 → AI 연결·모델 슬롯 → CLI 인증과 업데이트**에서 설치 버전·인증 상태를 확인하고 로그인합니다. 인증 페이지가 코드를 표시하면 로그인 창에 붙여넣습니다. 터미널에서도 로그인할 수 있습니다.
 
 ```bash
 docker compose exec conai claude auth login --claudeai
@@ -175,7 +175,7 @@ docker compose -f compose.qa.yaml ps
 
 - 주소는 `http://localhost:17666`이며 호스트의 루프백에만 공개합니다. 운영 서버의 포트와 데이터는 사용하지 않습니다.
 - `conai-qa-data` 볼륨에 테스트 DB·파일·프로젝트·확장과 Codex/Claude 인증을 보존합니다. Codex는 `/app/data/user/codex`, Claude는 `/app/data/user/claude`입니다.
-- 처음 관리자 계정은 위의 초기 설정 절차에서 `docker compose -f compose.qa.yaml exec conai`를 사용해 만듭니다. 로그인 후 **설정 → LLM**에서 Codex와 Claude Code 인증을 진행합니다. 로그인 진행 중에는 컨테이너를 교체하지 않습니다.
+- 처음 관리자 계정은 위의 초기 설정 절차에서 `docker compose -f compose.qa.yaml exec conai`를 사용해 만듭니다. 로그인 후 **설정 → AI 연결**에서 Codex와 Claude Code 인증을 진행합니다. 로그인 진행 중에는 컨테이너를 교체하지 않습니다.
 - 코드 수정 후 같은 `up -d --build` 명령으로 업데이트합니다. 볼륨을 유지하면 인증과 테스트 자료도 남습니다. `down -v` 또는 볼륨 삭제는 사용하지 않습니다. 인증 취소·토큰 갱신 실패 시에는 다시 로그인해야 합니다.
 - 컨테이너에서 Windows 호스트의 API에 연결할 때는 `host.docker.internal`을 사용합니다. 다른 PC의 API는 해당 PC의 주소를 사용합니다. Pi와 직접 API 방식은 테스트 앱의 LLM 연결·모델을 별도로 지정합니다.
 - 문서 편집 확장은 호스트에서 `node scripts/build-plugin.mjs text-editor`로 만든 ZIP을 테스트 앱에 설치합니다. 개별 확장은 Docker 이미지에 자동 설치하지 않습니다.

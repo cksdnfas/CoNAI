@@ -40,7 +40,7 @@ export function ImageSaveOptionsModal({
   const resolvedFormat = resolveImageSaveFormat(options.defaultFormat, sourceInfo?.mimeType)
 
   return (
-    <Modal open={open} onClose={onClose} title={title ?? t('imageSaveOptionsModal.saveImage')} widthClassName="max-w-2xl">
+    <Modal open={open} onClose={onClose} title={title ?? t('imageSaveOptionsModal.saveImage')} size="md">
       <ModalBody spacing="lg">
         <div className="flex flex-wrap gap-2">
           {sourceInfo ? (

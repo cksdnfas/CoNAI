@@ -458,15 +458,16 @@ type AppearanceTab = 'text' | 'layout' | 'pictures' | 'background' | 'composer'
 const TABS: AppearanceTab[] = ['text', 'layout', 'pictures', 'background', 'composer']
 
 /**
- * The reader's adjustments for this chat, opened from the chat menu and placed under `children` (the menu's button).
- * It is not nested in the menu: moving the pointer across menu items would take focus away and close it before it
- * could be reached. `style` is the profile's look (the sample line and the background rows start from it); `layout`
- * hides the width row in the side panel, which is as wide as it is.
+ * The reader's adjustments for this chat, opened from the chat's info panel and placed beside `children` (its key):
+ * under it, or (`side="left"`) to its left over the transcript, so a panel at the screen's edge stays readable.
+ * `style` is the profile's look (the sample line and the background rows start from it); `layout` hides the width row
+ * in the side panel, which is as wide as it is.
  */
-export function ChatAppearancePopover({ threadId, style, layout = 'page', open, onOpenChange, children }: {
+export function ChatAppearancePopover({ threadId, style, layout = 'page', side = 'bottom', open, onOpenChange, children }: {
   threadId: number | null
   style?: ChatStyle | null
   layout?: 'page' | 'panel'
+  side?: 'bottom' | 'left'
   open: boolean
   onOpenChange: (open: boolean) => void
   children: ReactNode
@@ -543,8 +544,8 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', open, 
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverAnchor asChild>{children}</PopoverAnchor>
-      <PopoverContent align="end" side="bottom" padding="none" className="relative flex max-h-[calc(100vh-6rem)] w-88 max-w-[calc(100vw-2rem)] flex-col overflow-hidden"
-        // Focus returning to the menu button as the menu closes must not dismiss it; a click outside or Esc does.
+      <PopoverContent align={side === 'left' ? 'center' : 'end'} side={side} padding="none" className="relative flex max-h-[calc(100vh-6rem)] w-88 max-w-[calc(100vw-2rem)] flex-col overflow-hidden"
+        // Focus moving back to its key (or out of a closing sheet) must not dismiss it; a click outside or Esc does.
         onFocusOutside={(event) => event.preventDefault()}
         // With the slot overlay open, Esc closes the overlay only (Radix would otherwise dismiss the popover too).
         onEscapeKeyDown={(event) => {

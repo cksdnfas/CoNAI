@@ -24,7 +24,7 @@ import { EditorFooter } from '@/components/ui/editor-footer'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { SettingRow } from '@/components/ui/setting-row'
-import { Switch } from '@/components/ui/switch'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { Tip } from '@/components/ui/tooltip'
 import { ResourceRow, ResourceRowStatus } from '@/components/ui/resource-row'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
@@ -476,23 +476,14 @@ export function LlmConnectionEditorModal({
       open={isOpen}
       onClose={onClose}
       title={isEditMode ? t('llmConnectionsTab.editLlmConnection') : t('llmConnectionsTab.addLlmConnection')}
-      size="normal"
+      size="lg"
       height="tall"
       dirty={dirty}
       onSave={canSave ? save : undefined}
-      headerActions={(
-        <div className="flex shrink-0 items-center gap-1">
-          <SettingsAdvancedSwitch />
-          <Tip content={draft.isEnabled ? t({ ko: '사용 중', en: 'On' }) : t({ ko: '꺼짐', en: 'Off' })}>
-            <span className="inline-flex px-1.5">
-              <Switch checked={draft.isEnabled} onCheckedChange={(isEnabled) => setDraft((current) => ({ ...current, isEnabled }))} aria-label={t({ ko: '연결 사용', en: 'Connection on' })} />
-            </span>
-          </Tip>
-        </div>
-      )}
     >
       <ModalBody>
         <div className="space-y-4">
+          <SwitchLine label={t({ ko: '이 연결 사용', en: 'Use this connection' })} checked={draft.isEnabled} onCheckedChange={(isEnabled) => setDraft((current) => ({ ...current, isEnabled }))} />
           <LlmConnectionFormFields
             draft={draft}
             mode={isEditMode ? 'edit' : 'create'}
@@ -534,6 +525,7 @@ export function LlmConnectionEditorModal({
         saving={isSaving}
         saveLabel={isEditMode ? t('llmConnectionsTab.saveConnection') : t('llmConnectionsTab.createAndSaveConnection')}
       >
+        <SettingsAdvancedSwitch />
         {isEditMode ? (
           <IconButton
             size="icon-sm"

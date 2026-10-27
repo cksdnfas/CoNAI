@@ -11,17 +11,9 @@ import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsRowsSkeleton } from './settings-rows'
 import { PostsKnowledgeSettingsRows } from './posts-knowledge-settings'
 import { PostsTopicSettings } from './posts-topic-settings'
-import { useSearchParams } from 'react-router-dom'
-import { TextTabs } from '@/components/common/text-tabs'
-import { TabsContent } from '@/components/ui/tabs'
+import { SettingsContents, SettingsGroup } from './settings-navigation'
 import type { useContentEvaluationSettings } from '../use-content-evaluation-settings'
-
-type PostsSettingsView = 'general' | 'topics' | 'knowledge'
-
-/** `?view=` of the posts tab; no value means the general rows. */
-function parseView(raw: string | null): PostsSettingsView {
-  return raw === 'topics' || raw === 'knowledge' ? raw : 'general'
-}
+import { ChatFilledLabel } from './settings-filled-label'
 
 type NumericSafetyKey = Exclude<keyof PostsSafetySettings, 'summonEnabled'>
 
@@ -36,17 +28,6 @@ export function PostsSettingsTab({ draft, onPatch, dirty, contentEvaluation }: {
   contentEvaluation: ReturnType<typeof useContentEvaluationSettings>['tabProps']
 }) {
   const { t } = useI18n()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const view = parseView(searchParams.get('view'))
-  const setView = (next: string) => {
-    const target = parseView(next)
-    setSearchParams((current) => {
-      const params = new URLSearchParams(current)
-      if (target === 'general') params.delete('view')
-      else params.set('view', target)
-      return params
-    }, { replace: true })
-  }
   if (!draft) {
     return (
       <RowGroup heading={t({ ko: '게시판', en: 'Posts' })}>
@@ -62,27 +43,20 @@ export function PostsSettingsTab({ draft, onPatch, dirty, contentEvaluation }: {
     { key: 'summonsPerAccountPerHour', label: t({ ko: '계정 하나의 시간당 호출', en: 'Calls per account per hour' }) },
   ]
   return (
-    <TextTabs
-      value={view}
-      onChange={setView}
-      actions={<SectionDirtyBadge dirty={dirty || contentEvaluation.dirty} />}
-      items={[
-        { value: 'general', label: t({ ko: '일반', en: 'General' }) },
-        { value: 'topics', label: t({ ko: '주제 관련도', en: 'Topic relevance' }) },
-        { value: 'knowledge', label: t({ ko: '지식 품질', en: 'Knowledge quality' }) },
-      ]}
-    >
-      <TabsContent value="general" className="mt-6">
+    <div className="space-y-8">
+      <SettingsContents groups={[{ id: 'general', label: t({ ko: '일반', en: 'General' }) }, { id: 'topics', label: t({ ko: '주제 관련도', en: 'Topic relevance' }) }, { id: 'knowledge', label: t({ ko: '지식 품질', en: 'Knowledge quality' }) }]} />
+      <SectionDirtyBadge dirty={dirty || contentEvaluation.dirty} />
+      <SettingsGroup id="general" title={t({ ko: '일반', en: 'General' })}>
         <div className="space-y-8">
           <RowGroup heading={t({ ko: '게시판', en: 'Posts' })}>
-            <SettingRow label={t({ ko: '기본 목록 모양', en: 'Default list layout' })} controlWidth="standard">
+            <SettingRow label={<ChatFilledLabel fieldId="posts.layout" />} controlWidth="standard">
               <Select variant="settings" aria-label={t({ ko: '기본 목록 모양', en: 'Default list layout' })} value={draft.layout} onChange={(event) => onPatch({ layout: event.target.value as PostListLayout })}>
                 <option value="feed">{t({ ko: '피드', en: 'Feed' })}</option>
                 <option value="cards">{t({ ko: '카드', en: 'Cards' })}</option>
                 <option value="sns">{t({ ko: 'SNS', en: 'SNS' })}</option>
               </Select>
             </SettingRow>
-            <SettingRow label={t({ ko: '봇이 쓴 글', en: 'Posts written by bots' })} controlWidth="standard">
+            <SettingRow label={<ChatFilledLabel fieldId="posts.botPostStatus" />} controlWidth="standard">
               <Select variant="settings" aria-label={t({ ko: '봇이 쓴 글', en: 'Posts written by bots' })} value={draft.botPostStatus} onChange={(event) => onPatch({ botPostStatus: event.target.value as PostsSettings['botPostStatus'] })}>
                 <option value="published">{t({ ko: '바로 발행', en: 'Publish right away' })}</option>
                 <option value="draft">{t({ ko: '초안으로 두기', en: 'Keep as draft' })}</option>
@@ -98,12 +72,12 @@ export function PostsSettingsTab({ draft, onPatch, dirty, contentEvaluation }: {
             )}
           >
             <SettingsSwitchRow
-              label={t({ ko: '봇 부르기', en: 'Bot calls' })}
+              label={<ChatFilledLabel fieldId="posts.safety.summonEnabled" />}
               checked={draft.safety.summonEnabled}
               onCheckedChange={(checked) => onPatch({ safety: { summonEnabled: checked } })}
             />
             {limitRows.map((row) => (
-              <SettingRow key={row.key} label={row.label} controlWidth="standard">
+              <SettingRow key={row.key} label={<ChatFilledLabel fieldId={`posts.safety.${row.key}`} />} controlWidth="standard">
                 <NumberStepperInput
                   min={POSTS_SAFETY_LIMITS[row.key].min}
                   max={POSTS_SAFETY_LIMITS[row.key].max}
@@ -117,13 +91,13 @@ export function PostsSettingsTab({ draft, onPatch, dirty, contentEvaluation }: {
             ))}
           </RowGroup>
         </div>
-      </TabsContent>
-      <TabsContent value="topics" className="mt-6">
+      </SettingsGroup>
+      <SettingsGroup id="topics" title={t({ ko: '주제 관련도', en: 'Topic relevance' })}>
         <PostsTopicSettings draft={draft.topicEvaluation} onPatch={(patch) => onPatch({ topicEvaluation: { ...draft.topicEvaluation, ...patch } })} criteria={contentEvaluation} />
-      </TabsContent>
-      <TabsContent value="knowledge" className="mt-6">
+      </SettingsGroup>
+      <SettingsGroup id="knowledge" title={t({ ko: '지식 품질', en: 'Knowledge quality' })}>
         <PostsKnowledgeSettingsRows draft={draft.knowledge} onPatch={(patch) => onPatch({ knowledge: { ...draft.knowledge, ...patch } })} />
-      </TabsContent>
-    </TextTabs>
+      </SettingsGroup>
+    </div>
   )
 }

@@ -271,9 +271,9 @@ export function ComfyWorkflowAuthoringModal({
       <IconButton size="icon-sm" variant="ghost" className="shrink-0" onClick={openFilePicker} label={t({ ko: '워크플로 불러오기 (JSON·이미지·영상)', en: 'Load workflow (JSON, image, video)' })}>
         <Upload />
       </IconButton>
-      <IconButton size="icon-sm" variant="default" onClick={() => void handleSave()} disabled={isSaving} label={saveLabel} aria-busy={isSaving || undefined}>
-        {isSaving ? <Loader2 className="animate-spin" /> : <Save />}
-      </IconButton>
+      <Button size="sm" className="shrink-0" onClick={() => void handleSave()} disabled={isSaving} aria-busy={isSaving || undefined}>
+        {isSaving ? <Loader2 className="animate-spin" /> : <Save />}{saveLabel}
+      </Button>
     </div>
   )
 

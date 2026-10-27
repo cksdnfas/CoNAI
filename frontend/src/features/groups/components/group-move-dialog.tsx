@@ -40,8 +40,7 @@ export function GroupMoveDialog({ open, targets, allGroups, countMaps, isMoving 
     <Modal
       open={open}
       onClose={onClose}
-      appearance="card"
-      widthClassName="max-w-md"
+      size="md"
       title={single
         ? t({ ko: '‘{name}’ 옮기기', en: 'Move ‘{name}’' }, { name: single.name })
         : t({ ko: '그룹 {count}개 옮기기', en: 'Move {count} groups' }, { count: formatNumber(targets.length) })}

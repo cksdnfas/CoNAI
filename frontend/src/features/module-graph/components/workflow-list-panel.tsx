@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronDown, ChevronRight, Copy, Download, Folder, FolderInput, FolderPlus, MoreHorizontal, PenSquare, Plus, Search, Settings2, Trash2, Upload } from 'lucide-react'
+import { ChevronDown, ChevronRight, Copy, Download, Folder, FolderInput, FolderPlus, MoreHorizontal, PenSquare, Plus, Search, Settings2, Trash2, Upload, Workflow } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { SearchField } from '@/components/common/search-field'
 import { ListRow } from '@/components/ui/list-row'
 import { Chip } from '@/components/ui/chip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
@@ -294,9 +295,9 @@ export function WorkflowListPanel({
             </>
           ) : null}
           {onCreateWorkflow ? (
-            <IconButton size="icon-sm" variant="secondary" onClick={onCreateWorkflow} disabled={!canUpdateWorkflows} label={t({ ko: '새 워크플로', en: 'New workflow' })}>
-              <Plus />
-            </IconButton>
+            <Button size="sm" variant="secondary" onClick={onCreateWorkflow} disabled={!canUpdateWorkflows}>
+              <Plus />{t({ ko: '새 워크플로', en: 'New workflow' })}
+            </Button>
           ) : null}
         </div>
       ) : null}
@@ -313,7 +314,7 @@ export function WorkflowListPanel({
         {rootFolders.map((folder) => renderFolder(folder, 0))}
         {rootGraphs.map((graph) => renderGraphRow(graph, 0))}
         {graphs.length === 0 && folders.length === 0 ? (
-          <EmptyState size="compact" icon={Plus} title={t({ ko: '저장된 워크플로가 없어', en: 'No saved workflows' })} />
+          <EmptyState size="compact" icon={Workflow} title={t({ ko: '저장된 워크플로가 없어', en: 'No saved workflows' })} />
         ) : !hasRows ? (
           <EmptyState size="compact" icon={Search} title={t({ ko: '검색 결과가 없어', en: 'No search results' })} />
         ) : null}

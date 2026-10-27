@@ -37,8 +37,7 @@ export function GroupDeleteDialog({ open, targets, allGroups, isDeleting = false
     <Modal
       open={open}
       onClose={onClose}
-      appearance="card"
-      widthClassName="max-w-md"
+      size="sm"
       title={single
         ? t({ ko: '그룹 삭제', en: 'Delete group' })
         : t({ ko: '그룹 {count}개 삭제', en: 'Delete {count} groups' }, { count: formatNumber(targets.length) })}

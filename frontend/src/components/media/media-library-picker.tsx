@@ -37,7 +37,7 @@ export function MediaLibraryPicker({ initial, maxCount, onPick, onClose, title, 
   const { canViewImages } = useImagePermissions()
   const [selected, setSelected] = useState(() => new Map(initial.map((item) => [item.compositeHash, item])))
 
-  return <Modal open title={title ?? t({ ko: '앱 미디어에서 고르기', en: 'Choose app media' })} onClose={onClose} size="wide" height="tall">
+  return <Modal open title={title ?? t({ ko: '앱 미디어에서 고르기', en: 'Choose app media' })} onClose={onClose} size="xl" height="tall">
     <MediaLibraryBrowser
       selectedIds={[...selected.keys()]}
       maxCount={maxCount}

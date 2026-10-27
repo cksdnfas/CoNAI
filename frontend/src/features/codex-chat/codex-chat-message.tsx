@@ -2,14 +2,13 @@ import { useRuntimeEventStream } from '@/features/runtime-events/use-runtime-eve
 import { chatGenerationPollInterval } from '@/features/runtime-events/chat-generation-query-updates'
 import type { RuntimeStreamStatus } from '@/features/runtime-events/runtime-event-fallback'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Ban, Check, ChevronLeft, ChevronRight, ImageOff, RefreshCw, Repeat, Scissors, Wrench, X } from 'lucide-react'
+import { AlertTriangle, Ban, Check, ChevronDown, ChevronLeft, ChevronRight, CircleX, ImageOff, RefreshCw, Repeat, Scissors, SquareCheck, Wrench, X } from 'lucide-react'
 import { isCodexChatGenerationTool, stripEchoedAddresses, withChatGenerationProgress } from '@conai/shared'
 import type { ChatAgentResultRouting, ChatFileChange, ChatMessageRouting } from '@conai/shared'
 import { ChatMessageReply } from './chat-reply'
 import { Button } from '@/components/ui/button'
-import { Chip } from '@/components/ui/chip'
 import { Tip } from '@/components/ui/tooltip'
 import { IconButton } from '@/components/ui/icon-button'
 import { MediaHoverExpandCue, useMediaHoverPreview } from '@/components/common/media-hover-preview'
@@ -391,7 +390,7 @@ function ToolStatusIcon({ status }: { status: CodexChatToolCall['status'] }) {
 
 const HOVER_DELAY_MS = 120
 
-/** The tools a reply used, as one wrench + count; hovering (or tapping) it lists them. */
+/** The tools a reply used, as one "도구 N번 사용" key; hovering (or tapping) it lists them. */
 function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
@@ -417,13 +416,12 @@ function ToolCallsBadge({ calls }: { calls: CodexChatToolCall[] }) {
         <Button
           variant="ghost"
           size="xs"
-          aria-label={t({ ko: '사용한 도구 {count}개', en: '{count} tool calls' }, { count: calls.length })}
           onPointerEnter={hoverTo(true)}
           onPointerLeave={hoverTo(false)}
         >
           <Wrench />
-          <span className="tabular-nums">{calls.length}</span>
-          {status !== 'completed' ? <ToolStatusIcon status={status} /> : null}
+          {t({ ko: '도구 {count}번 사용', en: '{count} tool calls' }, { count: calls.length })}
+          {status !== 'completed' ? <ToolStatusIcon status={status} /> : <ChevronDown />}
         </Button>
       </PopoverTrigger>
       <PopoverContent
@@ -700,6 +698,40 @@ function ReasoningBlock({ text, active }: { text: string; active: boolean }) {
 const AVATAR_SIZE = { sm: 'sm', md: 'lg', lg: 'xl' } as const
 const BUBBLE_CLASS = 'max-w-[85%] self-start rounded-lg bg-surface-low/85 px-3.5 py-2.5 backdrop-blur-sm'
 
+/** A report's first line as plain text (heading, list and emphasis marks dropped), for a folded card's title. */
+const firstLineOf = (text: string) => text.split('\n').map((line) => line.replace(/^\s*(#+|[-*>]|\d+\.)\s+/, '').replace(/\*\*|__|`/g, '').trim()).find(Boolean) ?? ''
+
+/**
+ * A delegated agent's result as a folded card: what it reports (its first line), done or failed and how many images
+ * it made; 펼치기 opens the whole report. The pictures stay under the card.
+ */
+function AgentResultCard({ agent, text, imageCount, children }: { agent: ChatAgentResultRouting; text: string; imageCount: number; children: ReactNode }) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const bodyId = useId()
+  const failed = agent.status === 'failed'
+  const status = [
+    failed ? t({ ko: '실패', en: 'Failed' }) : t({ ko: '완료', en: 'Done' }),
+    imageCount > 0 ? t({ ko: '이미지 {count}장', en: '{count} images' }, { count: imageCount }) : '',
+  ].filter(Boolean).join(' · ')
+  return (
+    <div className="rounded-md border border-line bg-surface-container/40">
+      <div className="flex items-center gap-2.5 px-3 py-2">
+        {failed ? <CircleX aria-hidden className="size-4 shrink-0 text-destructive" /> : <SquareCheck aria-hidden className="size-4 shrink-0 text-success" />}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{t({ ko: '위임 작업 · {title}', en: 'Delegated · {title}' }, { title: firstLineOf(text) || agent.name })}</p>
+          <p className="truncate text-xs text-muted-foreground">{status}</p>
+        </div>
+        <Button variant="ghost" size="xs" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(!open)}>
+          {open ? t({ ko: '접기', en: 'Fold' }) : t({ ko: '펼치기', en: 'Open' })}
+          <ChevronDown className={cn('transition-transform', open && 'rotate-180')} />
+        </Button>
+      </div>
+      {open ? <div id={bodyId} className="border-t border-line px-3 py-2.5">{children}</div> : null}
+    </div>
+  )
+}
+
 export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage({ content: written, toolCalls, status, error, finishReason = null, reasoning, streaming = false, translating = false, speaker = null, media, appearance = DEFAULT_CHAT_APPEARANCE, createdAt, routing, recipientLabel, threadId, fileChanges, replyId, onRetry, agent = null }: {
   /** A delegated agent's result copied into this room: marked as the agent's, and as failed when it failed. */
   agent?: ChatAgentResultRouting | null
@@ -736,12 +768,8 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const { canViewImages } = useImagePermissions()
   const content = stripEchoedAddresses(written)
   const { avatarSize } = appearance
-  const toolBadge = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null
-  const ownExtra = agent ? <>
-    <Chip size="sm" tone="muted">{t({ ko: '에이전트', en: 'Agent' })}</Chip>
-    {agent.status === 'failed' ? <Chip size="sm" tone="destructive">{t({ ko: '실패', en: 'Failed' })}</Chip> : null}
-    {toolBadge}
-  </> : toolBadge
+  // A delegated agent's result says so (and whether it failed) on its card, under the agent's own name.
+  const ownExtra = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null
   const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} hiddenGroupIds={speaker?.hiddenEmoticonGroupIds} mentions={speaker?.mentions} />
   const avatarOf = (who: ChatProfileAssetFields & { id?: number; name: string; avatar?: string | null }, engine: ChatEngine) => avatarSize === 'none' ? null : (
     <ChatProfileAvatar name={who.name} avatar={who.avatar} profile={'id' in who ? who : undefined} engine={engine} size={AVATAR_SIZE[avatarSize]} className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
@@ -782,16 +810,21 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const showReasoning = Boolean(reasoning) && appearance.showReasoning
   // A failed or empty reply has no body: nothing to draw a bubble around.
   // A proposal rides on a tool call, so `toolCalls.length` already counts it as content.
+  // An agent's report folds into its card, above the pictures it made.
+  const agentCard = agent && ownText && !streaming
+    ? <AgentResultCard agent={agent} text={ownText} imageCount={new Set(toolCalls.flatMap((call) => call.compositeHashes)).size}>{markdown(ownText)}</AgentResultCard>
+    : null
   const ownParts = !ownText && !showReasoning && toolCalls.length === 0 && !fileChanges?.length && !routing?.replyTo ? null : (
     <div className="space-y-2">
       <ChatMessageReply routing={routing} recipientLabel={routing?.replyTo ? recipientLabel : undefined} />
       {showReasoning ? <ReasoningBlock text={reasoning as string} active={streaming && !content} /> : null}
+      {agentCard}
       {canViewImages ? <CodexChatToolMedia calls={toolCalls.filter((call) => !isAudioWorkspaceCall(call))} size={appearance.imageSize} layout={appearance.imageLayout} media={media} /> : null}
       <ChatAudioCards calls={toolCalls} />
       <ChatProposalCards calls={toolCalls} threadId={threadId} />
       <ChatPageOperationChips calls={toolCalls} />
       {streaming ? null : <ChatPostCards calls={toolCalls} text={content} />}
-      {ownText ? markdown(ownText) : null}
+      {ownText && !agentCard ? markdown(ownText) : null}
       <ChatChoiceLines calls={toolCalls} />
       <ChatFileChangeChips changes={fileChanges} threadId={threadId} replyId={replyId ?? routing?.replyId} />
     </div>
@@ -810,7 +843,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
         {onRetry ? <Button type="button" variant="link" size="xs" onClick={onRetry}><RefreshCw />{t({ ko: '다시 시도', en: 'Try again' })}</Button> : null}
       </div> : null}
       {truncated ? (
-        <Tip content={t({ ko: '최대 출력 토큰에 닿아서 답변이 여기서 끊겼어. 헤더의 컨텍스트에서 한도를 올릴 수 있어.', en: 'The reply hit the max output tokens. Raise the cap under Context in the chat header.' })} side="bottom" align="start">
+        <Tip content={t({ ko: '최대 출력 토큰에 닿아서 답변이 여기서 끊겼어. 정보 패널의 컨텍스트에서 한도를 올릴 수 있어.', en: 'The reply hit the max output tokens. Raise the cap under Context in the chat’s info panel.' })} side="bottom" align="start">
           <p tabIndex={0} className="flex w-fit cursor-help items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
             <Scissors className="size-3" aria-hidden />{t({ ko: '길이 제한에서 잘림', en: 'Cut at the length limit' })}
           </p>
@@ -824,7 +857,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
         </Tip>
       ) : null}
       {toolLimited ? (
-        <Tip content={t({ ko: '도구 호출 반복 한도에 닿아서 여기서 멈췄어. 한 일은 남아 있고, "계속"이라고 하면 이어서 해. 한도는 설정 › 채팅 › 자원 › 도구 사용에서 바꿔.', en: 'The reply reached the tool round limit and stopped here. What it did stays; say "continue" to go on. Change the limit under Settings › Chat › Resources › Tool use.' })} side="bottom" align="start">
+        <Tip content={t({ ko: '도구 호출 반복 한도에 닿아서 여기서 멈췄어. 한 일은 남아 있고, "계속"이라고 하면 이어서 해. 한도는 설정 › 채팅 › 도구 사용에서 바꿔.', en: 'The reply reached the tool round limit and stopped here. What it did stays; say "continue" to go on. Change the limit under Settings › Chat › Tool use.' })} side="bottom" align="start">
           <p tabIndex={0} className="flex w-fit cursor-help items-center gap-1 rounded-sm text-xs text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
             <Wrench className="size-3" aria-hidden />{t({ ko: '도구 한도에서 멈춤', en: 'Stopped at the tool limit' })}
           </p>

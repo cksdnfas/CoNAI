@@ -2,6 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AgentCliName, ChatPageData, LlmSettings } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration, type WorkflowUndo } from '@/features/codex-chat/chat-page-context'
+import { useSettingsGroupActive } from './settings-navigation'
+import { SETTINGS_ROW_BY_ID } from '@conai/shared'
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import type { ModelSlot } from '@/lib/api-codex-chat'
 import type { ExternalApiProviderRecord } from '@/lib/api-external-api'
@@ -127,8 +129,9 @@ export function useLlmConnectionsChatPage({ providers, slots, onPointRoute, onDr
     await queryClient.invalidateQueries({ queryKey: EXTERNAL_MCP_QUERY_KEY })
   }
 
-  useChatPageRegistration({
-    kind: 'settings', title: t({ ko: '설정 · LLM 연결', en: 'Settings · LLM connections' }), resourceId: 'llm', priority: 5, fields: [], data, actions,
+  const groupActive = useSettingsGroupActive('connections', 'connections')
+  useChatPageRegistration(groupActive ? {
+    kind: 'settings', title: t(SETTINGS_ROW_BY_ID['llm.connections'].label), resourceId: 'llm', priority: 5, fields: [], data, actions,
     apply: () => {},
     applyAction: async (id, args, assertCurrent): Promise<WorkflowUndo | void> => {
       assertCurrent()
@@ -160,7 +163,7 @@ export function useLlmConnectionsChatPage({ providers, slots, onPointRoute, onDr
       }
       throw new Error('이 화면에 없는 작업이야.')
     },
-  }, { preserveOnSearchChange: true })
+  } : null, { preserveOnSearchChange: true })
 }
 
 /** Settings › LLM › 프롬프트 for a connected chat: the workflow text presets of each kind, and saving or deleting one. */
@@ -188,8 +191,9 @@ export function useLlmPromptPresetsChatPage(presets: Pick<LlmSettings, LlmPreset
     }
   }
 
-  useChatPageRegistration({
-    kind: 'settings', title: t({ ko: '설정 · 워크플로 프롬프트', en: 'Settings · Workflow prompts' }), resourceId: 'llm', priority: 5, fields: [], data,
+  const groupActive = useSettingsGroupActive('prompts', 'connections')
+  useChatPageRegistration(groupActive ? {
+    kind: 'settings', title: t(SETTINGS_ROW_BY_ID['llm.prompts'].label), resourceId: 'llm', priority: 5, fields: [], data,
     actions: [pageAction('settings.llm_preset', t({ ko: 'LLM 프리셋 저장·삭제', en: 'Save or delete an LLM preset' }), t({
       ko: 'kind 목록(data의 같은 이름)의 프리셋. save: id 있으면 수정, 없으면 추가(name·content). structuredOutputJsonPresets 내용은 JSON.',
       en: 'A preset of the kind list (same key in data). save: with id edits, without adds (name, content). structuredOutputJsonPresets content is JSON.',
@@ -200,5 +204,5 @@ export function useLlmPromptPresetsChatPage(presets: Pick<LlmSettings, LlmPreset
       if (id !== 'settings.llm_preset') throw new Error('이 화면에 없는 작업이야.')
       await savePreset(args)
     },
-  }, { preserveOnSearchChange: true })
+  } : null, { preserveOnSearchChange: true })
 }

@@ -264,7 +264,7 @@ export function PostSns({ posts, categories, onOpen, onTag, onReachEnd }: ListPr
   }
 
   return (
-    <div className="-mx-4 h-[calc(100dvh-8.5rem)] snap-y snap-mandatory overflow-y-auto overscroll-contain px-4 sm:mx-0 sm:px-0">
+    <div className="-mx-4 h-[calc(100dvh-8.5rem-var(--shell-bottom-inset))] snap-y snap-mandatory overflow-y-auto overscroll-contain px-4 sm:mx-0 sm:px-0">
       {posts.map((post, index) => (
         <SnsSlide key={post.id} post={post} categories={categories} onOpen={onOpen} onTag={onTag} onVisible={handleVisible} loadMedia={Math.abs(index - activeIndex) <= 1} />
       ))}

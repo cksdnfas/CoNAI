@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Sparkles } from 'lucide-react'
+import { Check, Wand } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -65,7 +65,7 @@ export function ChatAssetProposalCard({ proposal, threadId }: { proposal: Assets
     <div className="flex items-baseline gap-2"><span className="text-xs font-semibold text-muted-foreground">{proposal.action === 'create' ? t({ ko: '자산 만들기', en: 'Create assets' }) : t({ ko: '자산 적용', en: 'Apply assets' })}</span><span className="truncate text-xs text-muted-foreground">{ownerName}</span></div>
     <div className="text-sm">{parts.join(' · ')}</div>
     {proposal.action === 'apply' ? <ChatMediaAttachments items={[...new Map(Object.entries(proposal.chosenHashes).map(([name, compositeHash]) => [compositeHash, { name, compositeHash, mimeType: null }])).values()]} /> : null}
-    {saved || dismissed ? <ProposalFooter status><span>{saved ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '거절됨', en: 'Dismissed' })}</span>{admin && saved && (batchId ?? proposal.savedId) ? <Button variant="link" size="xs" onClick={() => setOpen(true)}>{t({ ko: '자산 창 열기', en: 'Open assets' })}</Button> : null}</ProposalFooter> : admin ? <ProposalFooter className="justify-end"><Button size="xs" variant="ghost" disabled={busy} onClick={() => dismiss.mutate()}>{t({ ko: '거절', en: 'Dismiss' })}</Button><Button size="xs" disabled={busy} onClick={() => approve.mutate()}>{approve.isPending ? <Spinner /> : proposal.action === 'create' ? <Sparkles /> : <Check />}{t({ ko: '승인', en: 'Approve' })}</Button></ProposalFooter> : null}
+    {saved || dismissed ? <ProposalFooter status><span>{saved ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '거절됨', en: 'Dismissed' })}</span>{admin && saved && (batchId ?? proposal.savedId) ? <Button variant="link" size="xs" onClick={() => setOpen(true)}>{t({ ko: '자산 창 열기', en: 'Open assets' })}</Button> : null}</ProposalFooter> : admin ? <ProposalFooter className="justify-end"><Button size="xs" variant="ghost" disabled={busy} onClick={() => dismiss.mutate()}>{t({ ko: '거절', en: 'Dismiss' })}</Button><Button size="xs" disabled={busy} onClick={() => approve.mutate()}>{approve.isPending ? <Spinner /> : proposal.action === 'create' ? <Wand /> : <Check />}{t({ ko: '승인', en: 'Approve' })}</Button></ProposalFooter> : null}
     {admin && open ? <Suspense fallback={null}><ChatAssetBatchModal target={{ owner, name: ownerName }} initialBatchId={batchId ?? proposal.savedId} onClose={() => setOpen(false)} /></Suspense> : null}
   </ProposalFrame>
 }

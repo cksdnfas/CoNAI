@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { loreKeyLanguageTag } from '@conai/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookPlus, Trash2 } from 'lucide-react'
+import { BookOpen, Trash2 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
@@ -21,6 +22,7 @@ import { createStoredFolder, listStoredFiles, uploadStoredFiles } from '@/lib/ap
 import { getErrorMessage } from '@/lib/error-message'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { CollapsibleRow } from '@/components/ui/collapsible-row'
+import { PromptAdder } from './chat-profile-sections'
 
 /** Where an entry's linked file lives: a global book has none; an account or chat book has its folder (null until it exists). */
 export type LoreFilePlace = { kind: 'global' } | { kind: 'owned'; folderId: string | null }
@@ -259,9 +261,10 @@ export function ChatLorebookEditor({ entries, onChange, filePlace = { kind: 'glo
       <Switch checked={entry.enabled} onCheckedChange={(enabled) => update(entry.id, { enabled })} aria-label={t({ ko: '로어 사용', en: 'Enable lore' })} />
       <IconButton size="icon-sm" variant="ghost" label={t({ ko: '로어 삭제', en: 'Delete lore' })} onClick={() => onChange(entries.filter((item) => item.id !== entry.id))}><Trash2 /></IconButton>
     </>}><ChatLoreEntryFields entry={entry} filePlace={filePlace} keyLanguage={keyLanguage} onChange={(patch) => update(entry.id, patch)} /></CollapsibleRow>)}
-    <IconButton variant="secondary" size="icon-sm" label={t({ ko: '로어 설정 추가', en: 'Add lore entry' })} disabled={entries.length >= 500} onClick={() => {
+    {entries.length ? null : <EmptyState size="compact" icon={BookOpen} title={t({ ko: '아직 항목이 없어', en: 'No entries yet' })} description={t({ ko: '키워드가 대화에 나오면 그 항목의 내용이 모델에 들어가.', en: 'When an entry’s keyword comes up in the chat, its content goes to the model.' })} />}
+    <PromptAdder label={t({ ko: '항목 추가', en: 'Add entry' })} disabled={entries.length >= 500} onAdd={() => {
       const entry = newLoreEntry(entries.length)
       onChange([...entries, entry]); setOpenId(entry.id)
-    }}><BookPlus /></IconButton>
+    }} />
   </div>
 }

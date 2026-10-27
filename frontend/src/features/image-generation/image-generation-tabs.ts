@@ -24,10 +24,10 @@ export function getImageGenerationTabLabel(tab: ImageGenerationTab, t: Translate
     return 'ComfyUI'
   }
   if (tab === 'workflows') {
-    return t({ ko: '워크플로우', en: 'Workflow' })
+    return t({ ko: '워크플로', en: 'Workflow' })
   }
 
-  return t({ ko: '예약작업', en: 'Reservations' })
+  return t({ ko: '예약', en: 'Reservations' })
 }
 
 export function getImageGenerationTabs(t: Translate): Array<{ value: ImageGenerationTab; label: string }> {

@@ -2,33 +2,26 @@ import { PageSettingsProvider } from '@/features/settings/page-settings-provider
 import { UnsavedSettingsGuardProvider } from '@/features/settings/use-unsaved-settings-guard'
 import { PageSettingsButton } from '@/features/settings/page-settings-button'
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Map as MapIcon, type LucideIcon } from 'lucide-react'
-import { matchPath, NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
+import { NavLink, Outlet, ScrollRestoration, useLocation } from 'react-router-dom'
 import { prefetchAppRoute } from '@/app/lazy-routes'
 import { HomeSearchProvider } from '@/features/home/home-search-context'
 import { HomeSearchDrawer, HomeSearchHeaderBox } from '@/features/home/components/home-search-ui'
 import { HeaderAccountMenu } from '@/features/auth/header-account-menu'
-import { hasAuthPermission } from '@/features/auth/auth-permissions'
-import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
-import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatGenerationNotifications } from '@/features/runtime-events/use-chat-generation-notifications'
 import { CodexChatProvider } from '@/features/codex-chat/codex-chat-provider'
 import { ChatPageProvider } from '@/features/codex-chat/chat-page-context'
-import { CODEX_CHAT_ROUTE } from '@/features/codex-chat/codex-chat-context'
 import { CodexChatDock, CodexChatHeaderButton, useCodexChatDockVisible } from '@/features/codex-chat/codex-chat-shell'
 import { ImageViewModalProvider } from '@/features/images/components/detail/image-view-modal-provider'
 import { registerTranslationCatalog, useI18n } from '@/i18n'
-import { getPublicHeaderNavigationSettings } from '@/lib/api-settings-general'
 import { APP_BRAND_TOOLTIP, APP_ICON_SRC, APP_NAME } from '@/lib/app-metadata'
 import { cn } from '@/lib/utils'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useMinWidth } from '@/lib/use-min-width'
-import { normalizeHeaderNavigationOrder, type HeaderNavigationPageKey } from '@conai/shared'
-import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
-import { useHorizontalDragScroll } from '@/components/common/use-horizontal-drag-scroll'
 import { Tip } from '@/components/ui/tooltip'
+import { AppBottomNav } from './app-bottom-nav'
+import { AppNavGroupMenu } from './app-nav-menu'
+import { isAppNavLinkActive, useAppNavigation } from './app-navigation'
 import { CommandPaletteLauncher } from './command-palette-launcher'
 
 const GenerationQueueHeaderWidgetLazy = lazy(async () => {
@@ -40,35 +33,8 @@ const GenerationQueueHeaderWidgetLazy = lazy(async () => {
   return { default: module.GenerationQueueHeaderWidget }
 })
 
-/** Below Tailwind `sm` the search and chat keys fold into the account menu so the page icons get the room. */
+/** Below Tailwind `sm` the search and chat keys fold into the account menu so the page keys get the room. */
 const FULL_HEADER_MIN_WIDTH_PX = 640
-
-const HEADER_PAGE_PATHS: Record<Exclude<HeaderNavigationPageKey, 'access'>, string> = {
-  home: '/',
-  groups: '/groups',
-  upload: '/upload',
-  files: '/files',
-  prompts: '/prompts',
-  characters: '/characters',
-  generation: '/generation',
-  audio: '/audio',
-  sprite: '/sprite',
-  chat: CODEX_CHAT_ROUTE,
-  posts: '/posts',
-  wallpaper: '/wallpaper',
-  settings: '/settings',
-}
-
-type NavItem = { id: HeaderNavigationPageKey; to: string; labelKey?: string; label?: string; icon: LucideIcon; permissionKey: string | null }
-
-// "이용 가능 페이지" is the hub people use to reach every page they may open; it leads unless the order moves it.
-const navItemsById = new Map<HeaderNavigationPageKey, NavItem>([
-  ['access', { id: 'access', to: '/access', labelKey: 'appShell.availablePages', icon: MapIcon, permissionKey: null }],
-  ...(Object.entries(HEADER_PAGE_PATHS) as Array<[Exclude<HeaderNavigationPageKey, 'access'>, string]>).flatMap(([id, path]): Array<[HeaderNavigationPageKey, NavItem]> => {
-    const item = PAGE_ACCESS_CATALOG.find((entry) => entry.path === path)
-    return item ? [[id, { id, to: item.path, labelKey: item.labelKey, icon: item.icon, permissionKey: item.permissionKey }]] : []
-  }),
-])
 
 function DeferredGenerationQueueHeaderWidget() {
   const [shouldRender, setShouldRender] = useState(false)
@@ -106,29 +72,19 @@ export function AppShell() {
   )
 }
 
-/** Render the shell layout, leaving nav-scroll mechanics to a focused hook. */
+/**
+ * The shell: header (logo, pinned pages and grouped menus from md, right-side tools), the page, the chat dock and, on
+ * phones, the bottom tabs.
+ */
 function AppShellLayout() {
   useChatGenerationNotifications()
   const location = useLocation()
   const { t } = useI18n()
   const authStatusQuery = useAuthStatusQuery()
   const appearanceQuery = useGlobalAppearanceSettingsQuery()
-  const headerNavigationQuery = useQuery({
-    queryKey: ['public-header-navigation-settings'],
-    queryFn: getPublicHeaderNavigationSettings,
-    staleTime: 60_000,
-  })
-  const headerNavigation = headerNavigationQuery.data?.items ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
-  const pluginPages = usePluginPages()
-  const headerNavigationOrder = normalizeHeaderNavigationOrder(headerNavigationQuery.data?.order, pluginPages.map((page) => page.id))
-  const allNavItems = new Map(navItemsById)
-  for (const page of pluginPages) {
-    allNavItems.set(page.id, { id: page.id, to: page.to, label: page.title, icon: page.icon, permissionKey: null })
-  }
-  const permissionKeys = authStatusQuery.data?.permissionKeys ?? []
+  const { items: headerNavigation, pinned, groups } = useAppNavigation()
   const isAnonymousSession = authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated !== true
-  const visibleNavItems = headerNavigationOrder.flatMap((id) => allNavItems.get(id) ?? []).filter((item) => headerNavigation[item.id] !== false
-    && (item.permissionKey === null || hasAuthPermission(permissionKeys, item.permissionKey)))
+  // The overview of every page: the logo here, 전체 in the phone's bottom tabs.
   const logoTarget = '/access'
   const shouldShowGenerationQueueWidget = headerNavigation.queue !== false && (authStatusQuery.data?.hasCredentials !== true || authStatusQuery.data?.authenticated === true)
   const shouldShowHeaderSearch = headerNavigation.search !== false && !isAnonymousSession
@@ -137,24 +93,12 @@ function AppShellLayout() {
   const shouldFoldKeysIntoAccountMenu = !useMinWidth(FULL_HEADER_MIN_WIDTH_PX) && shouldShowAccountMenu
   const shouldUseGlobalScrollRestoration = location.pathname !== '/' && !location.pathname.startsWith('/groups')
   const isCodexChatDockVisible = useCodexChatDockVisible()
-  const {
-    scrollRef: navScrollRef,
-    canScrollLeft: canScrollNavLeft,
-    canScrollRight: canScrollNavRight,
-    isDragging: isDraggingNav,
-    handlePointerDown,
-    handlePointerMove,
-    handlePointerUp,
-    handlePointerCancel,
-    handlePointerLeave,
-    handleItemClick: handleNavItemClick,
-  } = useHorizontalDragScroll(location.pathname)
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="theme-shell-header fixed inset-x-0 top-0 z-50">
         <div className="theme-shell-inner mx-auto flex w-full max-w-[1680px] items-center gap-3 sm:gap-4">
-          <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3 lg:gap-6">
             <Tip content={APP_BRAND_TOOLTIP} side="bottom" align="start">
               <NavLink
                 to={logoTarget}
@@ -172,69 +116,42 @@ function AppShellLayout() {
                     if (event.currentTarget.getAttribute('src') !== APP_ICON_SRC) event.currentTarget.src = APP_ICON_SRC
                   }}
                 />
-                <span className="hidden text-lg font-bold tracking-tighter text-foreground sm:inline">{APP_NAME}</span>
+                <span className="text-lg font-bold tracking-tighter text-foreground md:hidden lg:inline">{APP_NAME}</span>
               </NavLink>
             </Tip>
 
-            <div className="relative min-w-0 flex-1">
-              <div
-                ref={navScrollRef}
-                className={cn('theme-nav-scroll scroll-x min-w-0', isDraggingNav && 'cursor-grabbing select-none')}
-                onPointerDown={handlePointerDown}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                onPointerCancel={handlePointerCancel}
-                onPointerLeave={handlePointerLeave}
-                style={{ touchAction: 'pan-y pinch-zoom' }}
-              >
-                <nav className="flex min-w-max items-center gap-0.5 pr-10 sm:pr-2" aria-label={t('appShell.mainPageNavigation')}>
-                  {visibleNavItems.map(({ to, labelKey, label: pageLabel, icon: Icon }) => {
-                    const label = pageLabel ?? t(labelKey!)
-                    // Resolved here (not via NavLink's render props) so the Tip trigger can merge a plain className.
-                    const isActive = matchPath({ path: to, end: to === '/' }, location.pathname) !== null
-
-                    return (
-                    <Tip key={to} content={label} side="bottom">
-                    <NavLink
-                      to={to}
-                      end={to === '/'}
-                      aria-label={label}
-                      draggable={false}
-                      onClick={handleNavItemClick}
-                      onMouseEnter={() => prefetchAppRoute(to)}
-                      onFocus={() => prefetchAppRoute(to)}
-                      onDragStart={(event) => event.preventDefault()}
-                      className={cn(
-                        // Icon-only; from md the current page also shows its label.
-                        'inline-flex size-9 shrink-0 items-center justify-center gap-2 rounded-sm text-muted-foreground transition-colors duration-200 outline-none hover:bg-fill hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40 select-none',
-                        isDraggingNav && 'pointer-events-none',
-                        isActive && 'bg-primary/12 text-primary hover:bg-primary/16 hover:text-primary md:w-auto md:px-3',
-                      )}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className={cn('sr-only', isActive && 'md:not-sr-only md:whitespace-nowrap md:text-sm md:font-semibold')}>{label}</span>
-                    </NavLink>
+            {/* From md: the pinned pages, then the grouped menus. Phones use the bottom tabs instead. */}
+            <nav className="scroll-x theme-nav-scroll hidden min-w-0 flex-1 md:block" aria-label={t('appShell.mainPageNavigation')}>
+              <div className="flex w-max items-center gap-0.5">
+                {pinned.map(({ key, to, label, icon: Icon }) => {
+                  // Resolved here (not via NavLink's render props) so the Tip trigger can merge a plain className.
+                  const isActive = isAppNavLinkActive(to, location.pathname)
+                  return (
+                    <Tip key={key} content={label} side="bottom">
+                      <NavLink
+                        to={to}
+                        end={to === '/'}
+                        onMouseEnter={() => prefetchAppRoute(to)}
+                        onFocus={() => prefetchAppRoute(to)}
+                        className={cn(
+                          // Icon and name from xl; narrower, only the current page keeps its name.
+                          'inline-flex h-9 min-w-9 shrink-0 items-center justify-center gap-2 rounded-sm px-2.5 text-sm text-muted-foreground transition-colors duration-200 outline-none select-none hover:bg-fill hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/40',
+                          isActive && 'bg-primary/12 font-semibold text-primary hover:bg-primary/16 hover:text-primary',
+                        )}
+                      >
+                        <Icon className="size-4 shrink-0" />
+                        <span className={cn('sr-only xl:not-sr-only xl:whitespace-nowrap', isActive && 'md:not-sr-only md:whitespace-nowrap')}>{label}</span>
+                      </NavLink>
                     </Tip>
-                    )
-                  })}
-                </nav>
+                  )
+                })}
+                {pinned.length && groups.length ? <span className="mx-1.5 h-5 w-px shrink-0 bg-line" aria-hidden /> : null}
+                {groups.map((group) => <AppNavGroupMenu key={group.id} group={group} />)}
               </div>
-
-              {canScrollNavLeft ? (
-                <div className="pointer-events-none absolute inset-y-0 left-0 z-10 flex items-center bg-gradient-to-r from-background via-background/90 to-transparent pr-6 pl-1 text-foreground/45">
-                  <ChevronLeft className="h-4 w-4" />
-                </div>
-              ) : null}
-
-              {canScrollNavRight ? (
-                <div className="pointer-events-none absolute inset-y-0 right-0 z-10 flex items-center bg-gradient-to-l from-background via-background/90 to-transparent pr-1 pl-6 text-foreground/55">
-                  <ChevronRight className="h-4 w-4" />
-                </div>
-              ) : null}
-            </div>
+            </nav>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2 sm:gap-4">
+          <div className="flex shrink-0 items-center gap-2 lg:gap-4">
             <PageSettingsButton />
             {shouldShowGenerationQueueWidget ? <DeferredGenerationQueueHeaderWidget /> : null}
             <HomeSearchHeaderBox active={shouldShowHeaderSearch && !shouldFoldKeysIntoAccountMenu} />
@@ -253,6 +170,7 @@ function AppShellLayout() {
         </main>
       </div>
       <CodexChatDock />
+      <AppBottomNav pinned={pinned} />
 
       <HomeSearchDrawer active={shouldShowHeaderSearch} />
       <CommandPaletteLauncher />

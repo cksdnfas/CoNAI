@@ -1,8 +1,9 @@
 import { useId, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react'
-import { Brush, Dices, Plus, Trash2 } from 'lucide-react'
+import { Brush, ChevronDown, Dices, Plus, Trash2 } from 'lucide-react'
 import { getNaiFixedModelSettings, getNaiQualityTags, getNaiUcPresetIds, getNaiUcPresetText, NAI_ENHANCE_AMOUNTS, type NaiEnhanceAmount, type NaiUcPresetId } from '@conai/shared'
 import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 import { DisclosureButton } from '@/components/ui/disclosure-button'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -690,6 +691,8 @@ function NaiSettingsSection({
   handleResolutionPresetChange: (presetKey: string) => void
 }) {
   const { t } = useI18n()
+  const settingsRegionId = useId()
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const advancedRegionId = useId()
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(readAdvancedOpen)
   const toggleAdvancedOpen = () => {
@@ -702,15 +705,28 @@ function NaiSettingsSection({
   const samplingFixed = getNaiFixedModelSettings(naiForm.model) !== null
   const sampling = resolveNaiSamplingSettings(naiForm)
   const fixedHint = samplingFixed ? t({ ko: '모델 고정', en: 'Fixed by model' }) : undefined
-  const samplerLabel = NAI_SAMPLER_OPTIONS.find((option) => option.value === sampling.sampler)?.label ?? sampling.sampler
   const schedulerLabel = NAI_SCHEDULER_OPTIONS.find((option) => option.value === naiForm.scheduler)?.label ?? naiForm.scheduler
-  const advancedSummary = [samplerLabel, schedulerLabel, `CFG ${naiForm.scale}`, naiForm.varietyPlus ? 'Variety+' : null]
+  const advancedSummary = [schedulerLabel, `CFG ${naiForm.scale}`, naiForm.varietyPlus ? 'Variety+' : null]
     .filter(Boolean)
     .join(' · ')
+  const modelLabel = NAI_MODEL_OPTIONS.find((option) => option.value === naiForm.model)?.label ?? naiForm.model
+  const sizeLabel = enhance
+    ? enhance.plan ? `${enhance.plan.width}×${enhance.plan.height}` : getNaiEnhanceIssueLabel(t, enhance.issue)
+    : `${naiForm.width}×${naiForm.height}`
+  const summary = t(
+    { ko: '{model} · {size} · {steps}스텝 · 시드 {seed}', en: '{model} · {size} · {steps} steps · seed {seed}' },
+    { model: modelLabel, size: sizeLabel, steps: sampling.steps, seed: naiForm.seed.trim() || t({ ko: '무작위', en: 'random' }) },
+  )
 
   return (
-    <Section variant="settings" heading={t({ ko: '설정', en: 'Settings' })} className="@container">
-      <div className="space-y-5">
+    <section className="@container space-y-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="min-w-0 flex-1 text-sm text-muted-foreground">{summary}</span>
+        <Button type="button" variant="secondary" size="sm" aria-expanded={isSettingsOpen} aria-controls={settingsRegionId} onClick={() => setIsSettingsOpen((open) => !open)}>
+          {t({ ko: '세부 설정', en: 'Details' })}<ChevronDown />
+        </Button>
+      </div>
+      <div id={settingsRegionId} hidden={!isSettingsOpen} className="space-y-5">
         <div className="grid gap-4 @md:grid-cols-4">
           <div className="@md:col-span-3">
             <FormField label={t({ ko: '모델', en: 'Model' })}>
@@ -761,6 +777,14 @@ function NaiSettingsSection({
             <NumberStepperInput aria-label={t({ ko: '스텝', en: 'Steps' })} min={1} max={100} value={sampling.steps} disabled={samplingFixed} onValueCommit={(nextValue) => handleNaiFieldChange('steps', nextValue)} />
           </FormField>
 
+          <FormField label={t({ ko: '샘플러', en: 'Sampler' })} hint={fixedHint}>
+            <Select value={sampling.sampler} disabled={samplingFixed} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
+              {NAI_SAMPLER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </Select>
+          </FormField>
+
           <FormField label={t({ ko: '요청당 이미지', en: 'Images per request' })}>
             <NumberStepperInput aria-label={t({ ko: '요청당 이미지', en: 'Images per request' })} min={NAI_SAMPLE_COUNT_MIN} max={maxSampleCount} step={1} value={naiForm.samples} onValueCommit={(nextValue) => handleNaiFieldChange('samples', nextValue)} />
           </FormField>
@@ -785,14 +809,6 @@ function NaiSettingsSection({
 
           {isAdvancedOpen ? (
             <div id={advancedRegionId} className="mt-3 grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-4">
-              <FormField label={t({ ko: '샘플러', en: 'Sampler' })} hint={fixedHint}>
-                <Select value={sampling.sampler} disabled={samplingFixed} onChange={(event) => handleNaiFieldChange('sampler', event.target.value)}>
-                  {NAI_SAMPLER_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </Select>
-              </FormField>
-
               <FormField label={t({ ko: '스케줄러', en: 'Scheduler' })}>
                 <Select value={naiForm.scheduler} onChange={(event) => handleNaiFieldChange('scheduler', event.target.value)}>
                   {NAI_SCHEDULER_OPTIONS.map((option) => (
@@ -814,6 +830,6 @@ function NaiSettingsSection({
           ) : null}
         </div>
       </div>
-    </Section>
+    </section>
   )
 }

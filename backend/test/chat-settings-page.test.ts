@@ -34,6 +34,20 @@ test('settings page connection: field hints, settings operation tiers and bindin
   const admin = { accountId: null, accountType: 'admin' as const }
   const page = { instanceId: 'inst-settings-1', connectionId: 'conn-settings-1', path: '/settings', title: '설정 · 자동', kind: 'settings' as const, resourceId: 'auto', revision: 'rev-settings-1' }
 
+  await t.test('moved resource adapters retain action IDs and their route boundaries', async () => {
+    const { chatPagePermission } = await import('@conai/shared')
+    assert.equal(chatPagePermission('/chat/resources'), 'page.settings.view')
+    assert.equal(chatPagePermission('/settings?section=mine'), 'page.chat.view')
+    assert.equal(chatPagePermission('/settings?section=chat'), 'page.settings.view')
+    for (const id of ['profile.open_create', 'profile.open_edit', 'profile.draft', 'profile.save', 'profile.character_save']) {
+      assert.ok(chatPageActionAllowed('/characters', id), id)
+      assert.ok(!chatPageActionAllowed('/chat/resources', id), id)
+    }
+    for (const id of ['resource.open', 'resource.save', 'lorebook.entries', 'block.fields', 'settings.routine', 'settings.automation_switch']) assert.ok(chatPageActionAllowed('/chat/resources', id), id)
+    assert.ok(!chatPageActionAllowed('/chat/resources', 'settings.save'))
+    for (const path of ['/characters', '/chat/resources']) assert.equal(normalizeChatPageSnapshot({ ...page, path, fields: [] }).path, path)
+  })
+
   await t.test('a field hint is kept, capped, and shown in the view', () => {
     const snapshot = normalizeChatPageSnapshot({ ...page, fields: [{ id: 'tagger.model', label: '모델', type: 'text', value: 'vit', hint: 'pixai-v1: more tags, CUDA GPU only' }] })
     assert.equal(snapshot.fields[0].hint, 'pixai-v1: more tags, CUDA GPU only')

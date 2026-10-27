@@ -2,9 +2,11 @@ import './support/testTemp'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { DEFAULT_APPEARANCE_SETTINGS } from '../../frontend/src/lib/appearance-presets'
+import { HEADER_NAVIGATION_VERSION } from '@conai/shared'
 import {
   getDefaultSettingsFromEnvironment,
   hasMissingSettingsFields,
+  mergeLoadedSettingsWithDefaults,
   normalizeLlmSettings,
 } from '../src/services/settingsServiceStorage'
 
@@ -50,6 +52,26 @@ test('settings migration checks every supported section without treating key ord
     assert.equal(hasMissingSettingsFields(loaded, defaults), true, path)
   }
   assert.throws(() => hasMissingSettingsFields({ ...defaults, general: 'invalid' }, defaults), TypeError)
+})
+
+test('header flags stored before the pin version keep only the tools, while stored pins keep their order', () => {
+  const defaults = getDefaultSettingsFromEnvironment()
+  const legacy = mergeLoadedSettingsWithDefaults({
+    general: { headerNavigation: { groups: true, chat: false, search: false, 'plugin:aa:bb': true }, headerNavigationOrder: ['settings', 'groups'] },
+  }, defaults).general
+  // Old "shown" pages do not become pins: the pages start from the default pins.
+  assert.equal(legacy.headerNavigation.groups, false)
+  assert.equal(legacy.headerNavigation.chat, true)
+  assert.equal(legacy.headerNavigation['plugin:aa:bb'], undefined)
+  assert.equal(legacy.headerNavigation.search, false)
+  assert.deepEqual(legacy.headerNavigationOrder, defaults.general.headerNavigationOrder)
+  assert.equal(legacy.headerNavigationVersion, HEADER_NAVIGATION_VERSION)
+
+  const pinned = mergeLoadedSettingsWithDefaults({
+    general: { ...legacy, headerNavigation: { ...legacy.headerNavigation, groups: true }, headerNavigationOrder: ['groups', 'home'] },
+  }, defaults).general
+  assert.equal(pinned.headerNavigation.groups, true)
+  assert.deepEqual(pinned.headerNavigationOrder.slice(0, 2), ['groups', 'home'])
 })
 
 test('server and first-paint appearance defaults agree while each settings object owns its theme and slots', () => {

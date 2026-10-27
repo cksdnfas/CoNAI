@@ -24,6 +24,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { InstantApplyHint } from './settings-section-status'
 import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
+import { ChatFilledLabel } from './settings-filled-label'
 
 const QUERY_KEY = ['mcp-http-settings'] as const
 
@@ -75,7 +76,7 @@ export function McpHttpSettingsCard() {
               checked={query.data.enabled}
               disabled={busy}
               onCheckedChange={(checked) => enabled.mutate(checked)}
-              label={t({ ko: 'HTTP MCP 사용', en: 'Enable HTTP MCP' })}
+              label={<ChatFilledLabel fieldId="mcpHttp.enabled" />}
             />
             <SettingRow label={endpointLabel} controlWidth="wide">
               <Input variant="settings" mono readOnly value={endpoint} className="min-w-0 flex-1" aria-label={endpointLabel} />
@@ -150,7 +151,7 @@ export function McpHttpSettingsCard() {
         </RowGroup>
       ) : null}
 
-      <Modal open={newKeyName !== null} onClose={() => setNewKeyName(null)} title={t({ ko: 'MCP 키 추가', en: 'Add MCP key' })} widthClassName="max-w-md">
+      <Modal open={newKeyName !== null} onClose={() => setNewKeyName(null)} title={t({ ko: 'MCP 키 추가', en: 'Add MCP key' })} size="md">
         <form
           onSubmit={(event) => {
             event.preventDefault()

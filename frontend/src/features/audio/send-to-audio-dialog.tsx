@@ -72,7 +72,7 @@ export function SendToAudioDialog({ files, onClose }: { files: Array<{ id: strin
   }
 
   return (
-    <Modal open={open} title={t({ ko: '오디오로 보내기', en: 'Send to Audio' })} onClose={() => { if (!busy) onClose() }} size="narrow">
+    <Modal open={open} title={t({ ko: '오디오로 보내기', en: 'Send to Audio' })} onClose={() => { if (!busy) onClose() }} size="md">
       <ModalBody>
         <Field label={t({ ko: '프로젝트', en: 'Project' })}>
           <Select variant="settings" value={projectId} disabled={!projectItems.length} onChange={(event) => setProjectId(event.target.value)}>

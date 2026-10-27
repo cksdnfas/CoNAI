@@ -77,7 +77,7 @@ export function usePluginSourceInstall(onInstalled: (result: PluginInstallResult
 export function PluginSourceInstall({ state }: { state: ReturnType<typeof usePluginSourceInstall> }) {
   const { t } = useI18n()
   const { input, review, busy, error } = state
-  return <Modal open={input !== null} onClose={state.close} title={t(state.pluginId ? { ko: 'Git 업데이트 검토', en: 'Review Git update' } : { ko: 'Git에서 설치', en: 'Install from Git' })} size="wide" sidePanelInset={CHAT_DOCK_INSET}>
+  return <Modal open={input !== null} onClose={state.close} title={t(state.pluginId ? { ko: 'Git 업데이트 검토', en: 'Review Git update' } : { ko: 'Git에서 설치', en: 'Install from Git' })} size="xl" sidePanelInset={CHAT_DOCK_INSET}>
     {input ? <>
       <ModalBody>
         <Field label={t({ ko: '저장소 주소', en: 'Repository URL' })}>

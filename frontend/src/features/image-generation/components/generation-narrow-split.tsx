@@ -41,7 +41,7 @@ export function GenerationNarrowSplit({ view, onViewChange, resultLabel, control
 
       <div
         className={cn(
-          'pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[86] flex justify-end px-3',
+          'pointer-events-none fixed inset-x-0 bottom-[calc(var(--shell-float-bottom)+0.75rem)] z-[86] flex justify-end px-3',
           view !== 'edit' && 'hidden',
         )}
       >

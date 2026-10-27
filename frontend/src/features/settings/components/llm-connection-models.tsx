@@ -189,7 +189,7 @@ export function ConnectionModelEditorModal({ slot, workflowNodes, onClose }: { s
       open={slot !== null}
       onClose={onClose}
       title={slot ? slot.providerLabel : ''}
-      size="narrow"
+      size="md"
       dirty={changed}
       onSave={model.trim() && changed && !busy ? () => saveMutation.mutate() : undefined}
     >
@@ -367,7 +367,7 @@ export function ModelRouteEditorModal({ state, slots, workflowNodes, onClose }: 
       open={state !== null}
       onClose={onClose}
       title={slot ? routeName(slot) : t({ ko: '대표모델 추가', en: 'Add representative model' })}
-      size="narrow"
+      size="md"
       dirty={changed}
       onSave={save}
     >

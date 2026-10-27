@@ -204,7 +204,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
     <>
       <div
         className={cn(
-          'fixed inset-x-0 bottom-0 top-[var(--theme-shell-header-height)] z-40 bg-backdrop/50 transition-opacity',
+          'fixed inset-x-0 bottom-(--shell-bottom-inset) top-[var(--theme-shell-header-height)] z-40 bg-backdrop/50 transition-opacity',
           isDrawerOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
         )}
         onClick={closeDrawer}
@@ -212,7 +212,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
 
       <aside
         className={cn(
-          'theme-floating-panel fixed bottom-0 right-0 top-[var(--theme-shell-header-height)] z-40 flex h-[calc(100vh-var(--theme-shell-header-height))] max-w-full flex-col bg-background/94 transition-transform duration-300',
+          'theme-floating-panel fixed bottom-(--shell-bottom-inset) right-0 top-[var(--theme-shell-header-height)] z-40 flex h-[calc(100vh-var(--theme-shell-header-height)-var(--shell-bottom-inset))] max-w-full flex-col bg-background/94 transition-transform duration-300',
           isDrawerOpen ? 'translate-x-0' : 'translate-x-full',
         )}
         style={{ width: 'min(calc(100vw - 0.75rem), 420px)' }}

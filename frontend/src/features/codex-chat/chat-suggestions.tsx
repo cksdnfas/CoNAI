@@ -5,9 +5,10 @@ import { useI18n } from '@/i18n'
 import { getErrorMessage } from '@/lib/error-message'
 import { suggestChatReplies } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
+import { ToggleChip } from '@/components/ui/chip'
 
 /*
- * Reply suggestions: the sparkle button beside the composer. Nothing is generated until it is pressed; the answer
+ * Reply suggestions: the 추천 답변 chip under the composer. Nothing is generated until it is pressed; the answer
  * is kept per (thread, last message) so reopening the tray is instant until the chat moves on.
  */
 
@@ -86,6 +87,7 @@ export function useReplySuggestions({ threadId, lastMessageId, enabled }: { thre
   return { open: open && enabled, loading, items, error, toggle, close, refresh: fetchNow }
 }
 
+/** The composer's 추천 답변 chip: opens (and asks for) the suggestions, tinted while they are open. */
 export function ChatSuggestButton({ buttonRef, open, loading, disabled, onToggle }: {
   buttonRef: RefObject<HTMLButtonElement | null>
   open: boolean
@@ -95,24 +97,15 @@ export function ChatSuggestButton({ buttonRef, open, loading, disabled, onToggle
 }) {
   const { t } = useI18n()
   return (
-    <IconButton
-      ref={buttonRef}
-      variant="ghost"
-      size="icon-sm"
-      active={open}
-      aria-expanded={open}
-      disabled={disabled}
-      onClick={onToggle}
-      label={t({ ko: '답장 추천', en: 'Suggest replies' })}
-    >
-      <Sparkles className={cn(loading && 'animate-pulse')} />
-    </IconButton>
+    <ToggleChip ref={buttonRef} pressed={open} aria-expanded={open} disabled={disabled} onClick={onToggle}>
+      <Sparkles className={cn(loading && 'animate-pulse')} />{t({ ko: '추천 답변', en: 'Suggestions' })}
+    </ToggleChip>
   )
 }
 
 /**
  * The suggestions, popped up above the composer: a tap fills the composer with that line. Closes on Esc or a click
- * elsewhere (not on the sparkle button, which toggles).
+ * elsewhere (not on the 추천 답변 chip, which toggles).
  */
 export function ChatSuggestTray({ suggestions, buttonRef, onPick }: {
   suggestions: ReplySuggestions

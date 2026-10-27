@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Braces, Plus } from 'lucide-react'
-import { CHAT_PROFILE_TEXT_LIMITS, unknownChatMacros } from '@conai/shared'
+import { CHAT_PROFILE_TEXT_LIMITS, rawTokenEstimate, unknownChatMacros } from '@conai/shared'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
-import { Separator } from '@/components/ui/separator'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { useI18n } from '@/i18n'
@@ -15,17 +14,6 @@ import { cn } from '@/lib/utils'
 /** A prompt section id; plain characters only, so it works without a secure context (no crypto.randomUUID). */
 export function newPromptSectionId() {
   return `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
-}
-
-/** A zone boundary in the prompt chat, drawn like a date line; `strong` marks where the actual conversation starts. */
-export function PromptDivider({ label, strong = false }: { label: string; strong?: boolean }) {
-  return (
-    <div role="separator" aria-label={label} className="flex items-center gap-3 py-1">
-      <Separator className="flex-1" />
-      <Text as="span" variant={strong ? 'label' : 'caption'}>{label}</Text>
-      <Separator className="flex-1" />
-    </div>
-  )
 }
 
 /** The frame of an in-place editor: Escape closes it without closing the dialog around it. */
@@ -104,13 +92,13 @@ export function PromptAdder({ label, choices, disabled = false, onAdd }: { label
 }
 
 /**
- * A prompt item that is not a speech bubble: an instruction (system prompt, section, author's note) or an example kept
- * as written. Long text folds to two lines; clicking it edits it in place, with `kind` and `tools` in the editor's footer.
+ * A prompt item that is not a speech bubble, as one row of a hairline list: an instruction (system prompt, section,
+ * author's note) or an example kept as written. The row shows its title, its rough token count and two lines of its
+ * text (more on request); clicking it edits it in place, with `kind` and `tools` in the editor's footer.
  */
-export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, maxLength = CHAT_PROFILE_TEXT_LIMITS.text, placeholder, editPlaceholder, onTextChange, titleField, enabled = true, assisted = false, flash = false, note, kind, tools, remove, editing, onEditingChange: setEditing }: {
+export function PromptCard({ itemKey, title, meta, text, maxLength = CHAT_PROFILE_TEXT_LIMITS.text, placeholder, editPlaceholder, onTextChange, titleField, enabled = true, assisted = false, flash = false, note, kind, tools, remove, editing, onEditingChange: setEditing }: {
   /** `data-prompt-item`, which a preset scrolls to after adding. */
   itemKey: string
-  tone?: 'instruction' | 'example'
   title: string
   meta?: ReactNode
   text: string
@@ -135,7 +123,7 @@ export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, m
   editing: boolean
   onEditingChange: (editing: boolean) => void
 }) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
   const [expanded, setExpanded] = useState(false)
   const [overflowing, setOverflowing] = useState(false)
   const textRef = useRef<HTMLSpanElement>(null)
@@ -151,17 +139,16 @@ export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, m
     return () => observer.disconnect()
   }, [text, expanded, editing])
 
-  const instruction = tone === 'instruction'
   const warnings = editing ? unknownChatMacros(text) : []
+  // The same rough estimate the server starts from (errs high).
+  const tokens = text.trim() ? rawTokenEstimate(text) : 0
 
   return (
     <div
       data-prompt-item={itemKey}
       className={cn(
-        'rounded-md transition-shadow duration-500 motion-reduce:transition-none',
-        instruction
-          ? (enabled ? 'bg-info-soft text-info-soft-foreground' : 'border border-dashed border-info/40 text-muted-foreground')
-          : (enabled ? 'border border-dashed border-line text-muted-foreground' : 'border border-dashed border-line text-muted-foreground opacity-60'),
+        'rounded-sm transition-shadow duration-500 motion-reduce:transition-none',
+        editing && 'my-1 bg-fill/60',
         assisted && 'ring-1 ring-primary/50',
         flash && 'ring-2 ring-primary/60',
       )}
@@ -188,13 +175,14 @@ export function PromptCard({ itemKey, tone = 'instruction', title, meta, text, m
       ) : (
         <>
           <Button variant="ghost" size="content" className="w-full" onClick={() => setEditing(true)}>
-            <span className="flex w-full min-w-0 flex-col gap-0.5 px-1 py-0.5">
-              <span className={cn('flex flex-wrap items-center gap-1.5 text-xs font-semibold', instruction && enabled ? 'text-info' : 'text-muted-foreground')}>
-                <span className={cn(!enabled && 'line-through')}>{title}</span>
-                {meta ? <span className="font-normal">{meta}</span> : null}
+            <span className="flex w-full min-w-0 flex-col gap-0.5 px-1 py-1">
+              <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-semibold text-foreground">
+                <span className={cn(!enabled && 'text-muted-foreground line-through')}>{title}</span>
+                {meta ? <span className="text-xs font-normal text-muted-foreground">{meta}</span> : null}
                 {enabled ? null : <Badge variant="secondary" size="xs">{t({ ko: '꺼짐', en: 'Off' })}</Badge>}
+                {tokens ? <span className="ml-auto text-2xs font-normal tabular-nums text-muted-foreground">{t({ ko: '약 {count} 토큰', en: '~{count} tokens' }, { count: formatNumber(tokens) })}</span> : null}
               </span>
-              <span ref={textRef} className={cn('text-sm whitespace-pre-wrap break-words', !expanded && 'line-clamp-2', text.trim() && instruction && enabled ? 'text-info-soft-foreground' : 'text-muted-foreground')}>
+              <span ref={textRef} className={cn('text-sm font-normal whitespace-pre-wrap break-words', text.trim() && enabled ? 'text-foreground/80' : 'text-muted-foreground', !expanded && 'line-clamp-2')}>
                 {text.trim() ? text : placeholder}
               </span>
             </span>

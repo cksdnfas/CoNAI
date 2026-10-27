@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import { TOPIC_EVALUATION_LIMITS, type ContentEvaluationSettings, type ContentEvaluationTopic } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useSettingsGroupActive } from './settings-navigation'
+import { SETTINGS_ROW_BY_ID } from '@conai/shared'
 import { MODEL_SLOTS_QUERY_KEY, listModelSlots } from '@/lib/api-codex-chat'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { contentEvaluationAuthored, contentEvaluationChatActions, contentEvaluationChatData, contentEvaluationModelPatch, contentEvaluationTopicPatch, type ContentEvaluationDraftPatch } from './content-evaluation-chat'
@@ -28,9 +30,10 @@ export function useContentEvaluationChatPage({ draft, onPatch, isSaving, dirty, 
       restore: () => onPatch({ modelSlotId: draft.modelSlotId, topics: draft.topics }),
     }
   }
-  useChatPageRegistration(draft ? {
+  const groupActive = useSettingsGroupActive('topics', 'general')
+  useChatPageRegistration(draft && groupActive ? {
     kind: 'settings', title: t({ ko: '설정 · 게시판 · 주제 관련도', en: 'Settings · Posts · Topic relevance' }), resourceId: 'content-evaluation', priority: 5, dirty,
-    fields: [{ id: 'modelSlotId', label: t({ ko: '판단 모델 ID (0: 사용 안 함)', en: 'Judge model id (0: off)' }), type: 'number', min: 0, integer: true, value: draft.modelSlotId ?? 0, hint: 'Choose an id from data.models; 0 disables the judge.' }],
+    fields: [{ id: 'modelSlotId', label: t(SETTINGS_ROW_BY_ID['contentEvaluation.modelSlotId'].label), type: 'number', min: 0, integer: true, value: draft.modelSlotId ?? 0, hint: 'Choose an id from data.models; 0 disables the judge.' }],
     data: contentEvaluationChatData(draft, models), actions: contentEvaluationChatActions(t),
     apply: patch => { if (patch.modelSlotId !== undefined) onPatch(contentEvaluationModelPatch(patch.modelSlotId, models)) },
     applyAction: async (id, args, assertCurrent) => {

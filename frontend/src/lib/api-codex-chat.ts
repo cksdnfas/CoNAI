@@ -298,6 +298,8 @@ export interface ChatProfileSummary extends ChatProfileAssetFields {
   suggestEnabled: boolean
   /** The chat can be connected to the current page (monitor button). */
   pageAssist: boolean
+  /** The library setting the profile looks like (folders and name); sent only to readers of the character library. */
+  characterLink?: Pick<ChatProfileCharacterLink, 'settingId' | 'synced' | 'settingName' | 'path'> | null
   id: number
   name: string
   /** Kept optional for older servers; current lists serve avatar bytes through the asset route. */

@@ -31,7 +31,7 @@ export function CompactGenerationControllerActionBar({
   const expandedLabel = expandedLabelProp ?? t({ ko: '접기', en: 'Collapse' })
   const collapsedLabel = collapsedLabelProp ?? t({ ko: '컨트롤 열기', en: 'Open controls' })
   return (
-    <div className={cn('pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[86] flex justify-start px-3', className)}>
+    <div className={cn('pointer-events-none fixed inset-x-0 bottom-[calc(var(--shell-float-bottom)+0.75rem)] z-[86] flex justify-start px-3', className)}>
       <div className={cn('pointer-events-auto flex w-full items-center gap-2', innerClassName)}>
         {/* Collapsed it shows its text, so only the icon-only expanded state needs the tooltip. */}
         <Tip content={isExpanded ? expandedLabel : null}>

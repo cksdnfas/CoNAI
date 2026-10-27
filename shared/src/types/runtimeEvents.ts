@@ -29,6 +29,7 @@ export type RuntimeEventName =
   | 'chat.message.updated'
   | 'chat.page.command'
   | 'chat.task.updated'
+  | 'chat.thread.updated'
   | 'history.record.created'
   | 'history.record.status'
   | 'graph.schedule.changed'
@@ -104,6 +105,12 @@ export interface ChatMessageCreatedEventPayload {
 
 /** A stored reply changed after it was announced (the judge settled its status fields): its chat refetches. */
 export type ChatMessageUpdatedEventPayload = ChatMessageCreatedEventPayload
+
+/** A chat changed outside a reply stream (its automatic title arrived): the chat and the chat lists refetch. */
+export interface ChatThreadUpdatedEventPayload {
+  threadId: number
+  requestedByAccountId: number | null
+}
 
 export interface QueueJobEventPayload {
   /** Empty for non-audio jobs; omitted only by older event producers. */

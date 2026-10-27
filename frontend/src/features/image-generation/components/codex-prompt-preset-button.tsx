@@ -59,7 +59,7 @@ export function CodexPromptPresetButton({ prompt, negativePrompt }: { prompt: st
     <IconButton variant="ghost" size="icon-sm" label={label} disabled={!prompt.trim() && !negativePrompt.trim()} onClick={() => { setKind(prompt.trim() ? 'positive' : 'negative'); setOpen(true) }}>
       <Save />
     </IconButton>
-    <Modal open={open} title={label} onClose={() => { if (!saving) setOpen(false) }} widthClassName="max-w-xl">
+    <Modal open={open} title={label} onClose={() => { if (!saving) setOpen(false) }} size="md">
       <form onSubmit={(event) => void save(event)}>
         <ModalBody>
           <Field label={t({ ko: '이름', en: 'Name' })}><Input value={name} onChange={(event) => setName(event.target.value)} required disabled={saving} /></Field>

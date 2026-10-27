@@ -45,7 +45,7 @@ export function ChatExportDialog({ threadId, open, onClose }: { threadId: number
     catch (error) { showSnackbar({ message: getErrorMessage(error, t({ ko: '내보내기 실패', en: 'Export failed' })), tone: 'error' }) }
     finally { setBusy(false) }
   }
-  return <Modal open={open} onClose={onClose} title={t({ ko: '대화 내보내기', en: 'Export chat' })} widthClassName="max-w-sm">
+  return <Modal open={open} onClose={onClose} title={t({ ko: '대화 내보내기', en: 'Export chat' })} size="sm">
     <ModalBody><div className="flex gap-2"><Button disabled={busy} onClick={() => void download('md')}>Markdown</Button><Button variant="secondary" disabled={busy} onClick={() => void download('json')}>JSON</Button></div></ModalBody>
   </Modal>
 }

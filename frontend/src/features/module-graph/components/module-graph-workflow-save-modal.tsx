@@ -62,7 +62,7 @@ export function ModuleGraphWorkflowSaveModal({
       open={open}
       onClose={onClose}
       title={selectedGraphVersion !== null ? t({ ko: '워크플로우 저장', en: 'Save workflow' }) : t({ ko: '워크플로우 등록', en: 'Register workflow' })}
-      size="normal"
+      size="lg"
       height="medium"
       onSave={canSave ? () => void handleSave() : undefined}
     >

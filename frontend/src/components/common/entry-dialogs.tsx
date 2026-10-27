@@ -5,7 +5,7 @@ import { Select } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
 
 /** One name to type (new folder, rename): an input and a save button; Enter saves. */
-export function NameDialog({ open, title, value, onChange, onSubmit, onClose, busy = false, label, submitLabel }: {
+export function NameDialog({ open, title, value, onChange, onSubmit, onClose, busy = false, label, submitLabel, maxLength }: {
   open: boolean
   title: string
   value: string
@@ -16,13 +16,15 @@ export function NameDialog({ open, title, value, onChange, onSubmit, onClose, bu
   /** Accessible name of the input (default 이름). */
   label?: string
   submitLabel?: string
+  /** The server's length limit for this name, when it has one. */
+  maxLength?: number
 }) {
   const { t } = useI18n()
   return (
-    <Modal open={open} title={title} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
+    <Modal open={open} title={title} onClose={() => { if (!busy) onClose() }} size="md">
       <form onSubmit={(event) => { event.preventDefault(); if (!busy && value.trim()) onSubmit() }}>
         <ModalBody>
-          <Input variant="settings" autoFocus aria-label={label ?? t({ ko: '이름', en: 'Name' })} value={value} onChange={(event) => onChange(event.target.value)} />
+          <Input variant="settings" autoFocus aria-label={label ?? t({ ko: '이름', en: 'Name' })} value={value} maxLength={maxLength} onChange={(event) => onChange(event.target.value)} />
         </ModalBody>
         <ModalFooter>
           <span className="flex-1" />
@@ -48,7 +50,7 @@ export function MoveDialog({ open, value, onChange, folders, rootLabel, onSubmit
 }) {
   const { t } = useI18n()
   return (
-    <Modal open={open} title={t({ ko: '폴더로 이동', en: 'Move to folder' })} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
+    <Modal open={open} title={t({ ko: '폴더로 이동', en: 'Move to folder' })} onClose={() => { if (!busy) onClose() }} size="md">
       <ModalBody>
         <Select variant="settings" aria-label={t({ ko: '대상 폴더', en: 'Destination folder' })} value={value} onChange={(event) => onChange(event.target.value)}>
           <option value="">{rootLabel}</option>

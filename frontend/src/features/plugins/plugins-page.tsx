@@ -36,7 +36,7 @@ function AppRequestHistory({ open, onClose, pluginName, onReview }: { open: bool
   const items = requests.data?.requests
   const nextOffset = requests.data?.nextOffset ?? null
   return (
-    <Modal open={open} onClose={onClose} title={t({ ko: '작업 기록', en: 'Operation history' })} size="normal">
+    <Modal open={open} onClose={onClose} title={t({ ko: '작업 기록', en: 'Operation history' })} size="lg">
       <ModalBody spacing="sm">
         {requests.isPending ? <LoadingState /> : requests.error ? <ErrorState error={requests.error} onRetry={() => void requests.refetch()} /> : null}
         {items?.length === 0 ? <EmptyState icon={History} title={t({ ko: '아직 작업이 없어', en: 'No operations yet' })} /> : null}

@@ -17,7 +17,8 @@ import { cn } from '@/lib/utils'
 import { ModelRowOptions } from './chat-model-role-select'
 import { useDefaultJudgeLabel } from './chat-judge-connection-select'
 import { SettingsStatLine } from './settings-rows'
-import { useSettingsAdvanced } from './settings-advanced'
+import { SettingsAdvanced } from './settings-navigation'
+import { ChatFilledLabel } from './settings-filled-label'
 
 type NumberSettingKey = { [Key in keyof PostsKnowledgeSettings]: PostsKnowledgeSettings[Key] extends number ? Key : never }[keyof PostsKnowledgeSettings]
 type NumberRow = { key: NumberSettingKey; ko: string; en: string; min: number; max: number; step?: number }
@@ -54,7 +55,6 @@ const WEIGHT_ROWS: NumberRow[] = [
 /** Settings › 게시판 › 지식 품질: knowledge features and the judge; feedback weights, limits and caps show with the 고급 switch. */
 export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKnowledgeSettings; onPatch: (patch: Partial<PostsKnowledgeSettings>) => void }) {
   const { t } = useI18n()
-  const advanced = useSettingsAdvanced()
   const models = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots })
   const status = useQuery({ queryKey: [POSTS_QUERY_KEY, 'evaluation-status'], queryFn: getPostKnowledgeEvaluationStatus, refetchInterval: (query) => query.state.data?.queued || query.state.data?.running ? 10000 : false })
   const search = useQuery({ queryKey: [POSTS_QUERY_KEY, 'knowledge-search-status'], queryFn: getPostKnowledgeSearchStatus, staleTime: 30_000 })
@@ -81,10 +81,10 @@ export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKno
         ]} />
       ) : status.isError ? <ErrorState size="compact" error={status.error} onRetry={() => void status.refetch()} /> : null}
       <RowGroup>
-        <SettingsSwitchRow label={t({ ko: '지식 문서', en: 'Knowledge documents' })} checked={draft.enabled} onCheckedChange={(enabled) => onPatch({ enabled })} />
-        <SettingsSwitchRow label={t({ ko: '검색에 평가 반영', en: 'Use feedback in search ranking' })} checked={draft.rankingEnabled} disabled={!draft.enabled} onCheckedChange={(rankingEnabled) => onPatch({ rankingEnabled })} />
-        <SettingsSwitchRow label={t({ ko: '쓰고 나면 자동 평가', en: 'Evaluate automatically after use' })} checked={draft.autoEvaluationEnabled} disabled={!draft.enabled} onCheckedChange={(autoEvaluationEnabled) => onPatch({ autoEvaluationEnabled })} />
-        <SettingRow label={t({ ko: '판단 모델', en: 'Judge model' })} controlWidth="standard">
+        <SettingsSwitchRow label={<ChatFilledLabel fieldId="posts.knowledge.enabled" />} checked={draft.enabled} onCheckedChange={(enabled) => onPatch({ enabled })} />
+        <SettingsSwitchRow label={<ChatFilledLabel fieldId="posts.knowledge.rankingEnabled" />} checked={draft.rankingEnabled} disabled={!draft.enabled} onCheckedChange={(rankingEnabled) => onPatch({ rankingEnabled })} />
+        <SettingsSwitchRow label={<ChatFilledLabel fieldId="posts.knowledge.autoEvaluationEnabled" />} checked={draft.autoEvaluationEnabled} disabled={!draft.enabled} onCheckedChange={(autoEvaluationEnabled) => onPatch({ autoEvaluationEnabled })} />
+        <SettingRow label={<ChatFilledLabel fieldId="posts.knowledge.judgeSlotId" />} controlWidth="standard">
           {ready !== null ? <span role="img" aria-label={readyLabel} title={readyLabel} className={cn('size-2 shrink-0 rounded-full', ready ? 'bg-success' : 'bg-warning')} /> : null}
           <Select variant="settings" aria-label={t({ ko: '판단 모델', en: 'Judge model' })} value={modelValue} disabled={!models.isSuccess || !draft.enabled} onChange={(event) => {
             const selected = models.data?.find((item) => `slot:${item.id}` === event.target.value)
@@ -96,7 +96,9 @@ export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKno
           </Select>
         </SettingRow>
         <SettingRow label={t({ ko: '검색', en: 'Search' })}><span className="text-sm tabular-nums text-muted-foreground">{searchLabel}</span></SettingRow>
-        {advanced ? <SettingRow label={t({ ko: '평가 비중', en: 'Feedback weights' })}>
+      </RowGroup>
+      <SettingsAdvanced count={1 + ADVANCED_GROUPS.reduce((count, group) => count + group.rows.length, 0)}>
+        <SettingRow label={<ChatFilledLabel fieldId="posts.knowledge.weights" />}>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {WEIGHT_ROWS.map((row) => (
             <label key={row.key} className="inline-flex items-center gap-2 text-sm text-muted-foreground">
@@ -105,9 +107,8 @@ export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKno
             </label>
           ))}
           </div>
-        </SettingRow> : null}
-      </RowGroup>
-      {advanced ? <Section
+        </SettingRow>
+      <Section
         variant="settings"
         heading={t({ ko: '한도', en: 'Limits' })}
         actions={<IconButton size="icon-sm" variant="ghost" label={t({ ko: '기본값으로 (정책 {version})', en: 'Restore defaults (policy {version})' }, { version: draft.policyVersion })} onClick={() => onPatch(DEFAULT_POSTS_KNOWLEDGE_SETTINGS)}><RefreshCw /></IconButton>}
@@ -117,14 +118,15 @@ export function PostsKnowledgeSettingsRows({ draft, onPatch }: { draft: PostsKno
           <Fragment key={group.ko}>
             <h4 className="col-span-full pb-1 pt-4 text-xs text-muted-foreground first:pt-0">{t(group)}</h4>
             {group.rows.map((row) => (
-              <SettingRow key={row.key} label={t(row)} controlClassName="w-36">
+              <SettingRow key={row.key} label={<ChatFilledLabel fieldId={`posts.knowledge.${row.key}`}>{t(row)}</ChatFilledLabel>} controlClassName="w-36">
                 <NumberStepperInput min={row.min} max={row.max} step={row.step} variant="settings" aria-label={t(row)} value={draft[row.key]} onValueCommit={(value) => onPatch({ [row.key]: Number(value) })} />
               </SettingRow>
             ))}
           </Fragment>
         ))}
         </div>
-      </Section> : null}
+      </Section>
+      </SettingsAdvanced>
     </div>
   )
 }

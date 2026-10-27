@@ -3,6 +3,7 @@ import { ArrowLeft, Bug, FolderCog, LayoutGrid, Loader2, Maximize, PanelRight, P
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { TextTabs } from '@/components/common/text-tabs'
 import { ActionMenuButton, type ActionMenuEntry } from '@/components/ui/action-menu'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Tip } from '@/components/ui/tooltip'
@@ -231,9 +232,9 @@ export function ModuleWorkflowEditorView({
           {settingsPanel}
         </PopoverContent>
       </Popover>
-      <IconButton size="icon-sm" variant="default" onClick={onSave} disabled={!canUpdateWorkflows || isSavingGraph || nodesCount === 0} aria-busy={isSavingGraph || undefined} label={isSavingGraph ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장 (Ctrl+S)', en: 'Save (Ctrl+S)' })}>
-        {isSavingGraph ? <Loader2 className="animate-spin" /> : <Save />}
-      </IconButton>
+      <Button size="sm" onClick={onSave} disabled={!canUpdateWorkflows || isSavingGraph || nodesCount === 0} aria-busy={isSavingGraph || undefined} aria-keyshortcuts="Control+S">
+        {isSavingGraph ? <Loader2 className="animate-spin" /> : <Save />}{isSavingGraph ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '저장', en: 'Save' })}
+      </Button>
     </div>
   )
 
@@ -254,9 +255,9 @@ export function ModuleWorkflowEditorView({
   }, [])
 
   if (!isWideLayout) {
-    // Phone: the editor takes the whole screen under the app header; the dock is a bottom sheet.
+    // Phone: the editor takes the whole screen between the app header and the bottom tabs; the dock is a bottom sheet.
     return (
-      <div className="fixed inset-x-0 bottom-0 top-(--theme-shell-header-height) z-[45] flex flex-col bg-background">
+      <div className="fixed inset-x-0 bottom-(--shell-bottom-inset) top-(--theme-shell-header-height) z-[45] flex flex-col bg-background">
         {bar}
         <div className="relative min-h-0 flex-1">
           {graphCanvas}

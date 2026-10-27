@@ -11,7 +11,7 @@ import { Modal, ModalFooter } from '@/components/ui/modal'
 import { RowGroup } from '@/components/ui/row-group'
 import { SettingRow } from '@/components/ui/setting-row'
 import { ErrorState } from '@/components/ui/error-state'
-import { ChatFilledLabel } from '@/features/codex-chat/chat-page-context'
+import { ChatFilledLabel } from './settings-filled-label'
 import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { cn } from '@/lib/utils'
@@ -102,7 +102,7 @@ export function ContentEvaluationSettingsRows({ draft, onPatch, isSaving, dirty,
     <div className="space-y-8">
       <RowGroup>
         {leadingRows}
-        <SettingRow label={<ChatFilledLabel fieldId="modelSlotId">{t({ ko: '판단 모델', en: 'Judge model' })}</ChatFilledLabel>}>
+        <SettingRow label={<ChatFilledLabel fieldId="modelSlotId" settingId="contentEvaluation.modelSlotId" />}>
           {modelState ? <span role="img" aria-label={modelState} title={modelState} className={cn('size-2 shrink-0 rounded-full', draft.modelReady ? 'bg-success' : 'bg-warning')} /> : null}
           <JudgeModelSelect enabled slotId={draft.modelSlotId} emptyLabel={defaultJudgeLabel} ariaLabel={t({ ko: '주제 관련도 판단 모델', en: 'Topic relevance judge model' })} onChange={modelSlotId => onPatch({ modelSlotId })} />
         </SettingRow>
@@ -125,7 +125,7 @@ export function ContentEvaluationSettingsRows({ draft, onPatch, isSaving, dirty,
         ))}
       </RowGroup>
       {footer}
-      <Modal open={editing !== null} title={t({ ko: '평가 주제 편집', en: 'Edit evaluation topic' })} onClose={() => setEditing(null)} size="narrow" sidePanelInset={CHAT_DOCK_INSET} dirty={Boolean(editing && JSON.stringify(editing) !== JSON.stringify(original))} onSave={valid ? apply : undefined}>
+      <Modal open={editing !== null} title={t({ ko: '평가 주제 편집', en: 'Edit evaluation topic' })} onClose={() => setEditing(null)} size="md" sidePanelInset={CHAT_DOCK_INSET} dirty={Boolean(editing && JSON.stringify(editing) !== JSON.stringify(original))} onSave={valid ? apply : undefined}>
         {editing ? <div className="space-y-5">
           <Field label={<ChatFilledLabel fieldId="name">{t({ ko: '주제 이름', en: 'Topic name' })}</ChatFilledLabel>}><Input value={editing.name} maxLength={40} onChange={event => setEditing({ ...editing, name: event.target.value })} /></Field>
           <Field label={<ChatFilledLabel fieldId="description">{t({ ko: '판단 기준', en: 'Criteria' })}</ChatFilledLabel>}><Textarea value={editing.description} maxLength={1000} rows={5} onChange={event => setEditing({ ...editing, description: event.target.value })} /></Field>

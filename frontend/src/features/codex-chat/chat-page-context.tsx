@@ -4,7 +4,6 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Monitor } from 'lucide-react'
 import { CHAT_PAGE_ACTION_LIMITS, CHAT_PAGE_ACTION_PERMISSIONS, chatPageActionAllowed, normalizeChatPageValue, chatPageActionLeavesScreen, chatPageActionTier, chatPagePatch, chatPagePermission, chatPageTarget, validateChatPageArguments, type ChatPageCommandEvent, normalizeChatPageSnapshot, requireChatPageTarget, requireChatPageActionState, type ChatPageAction, type ChatPageData, type ChatPageField, type ChatPageSnapshot, type ChatPageValue, type ChatProposal, type ChatWorkflowSnapshot } from '@conai/shared'
-import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
@@ -18,6 +17,7 @@ import { SETTINGS_TAB_ITEMS } from '@/features/settings/settings-tabs'
 import { IMAGE_GENERATION_TAB_ORDER } from '@/features/image-generation/image-generation-tabs'
 import { PROMPT_PAGE_VIEWS } from '@/features/prompts/prompt-page-view'
 import { pageAction, pageChoice, pageObject } from './page-action-helpers'
+import { ToggleChip } from '@/components/ui/chip'
 
 type PageProposal = Extract<ChatProposal, { kind: 'page_fields' }>
 export type PageActionProposal = Extract<ChatProposal, { kind: 'page_action' }>
@@ -93,14 +93,17 @@ const PAGE_VIEWS: Record<string, { param: string; values: readonly string[] }> =
   '/generation': { param: 'tab', values: IMAGE_GENERATION_TAB_ORDER },
   '/prompts': { param: 'tab', values: PROMPT_PAGE_VIEWS },
   '/sprite': { param: 'tab', values: ['extract', 'normalize', 'animation'] },
+  '/characters': { param: 'view', values: ['appearance', 'profiles'] },
 }
 /** Views nested inside one of those views (settings › chat and › LLM keep their own ?view=). */
 const NESTED_VIEWS: Record<string, string[]> = {
   '/settings': [
-    ...['resources', 'mine'].map((view) => `/settings?section=chat&view=${view}`),
-    ...['connections', 'prompts', 'log'].map((view) => `/settings?section=llm&view=${view}`),
-    ...['topics', 'knowledge'].map((view) => `/settings?section=posts&view=${view}`),
+    '/settings?section=mine',
+    ...['connections', 'prompts', 'log', 'dashboard'].map((group) => `/settings?section=llm&group=${group}`),
+    ...['topics', 'knowledge'].map((group) => `/settings?section=posts&group=${group}`),
+    ...['nai', 'comfyui', 'pacing', 'schedules'].map((group) => `/settings?section=generation&group=${group}`),
   ],
+  '/chat': ['/chat/resources', ...['presets', 'blocks', 'lorebooks', 'routines'].map((tab) => `/chat/resources?tab=${tab}`), '/settings?section=mine'],
 }
 
 function withNavigation(editor: Editor | null, navigation: Editor | undefined): Editor | null {
@@ -161,7 +164,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   const workflowUndos = useRef(new Map<number, WorkflowUndo>())
   const actionUndos = useRef(new Map<number, WorkflowUndo>())
   const instanceId = useMemo(() => ({ key: `${location.key}:${location.pathname}:${accountKey}`, id: createRandomUuid() }), [location.key, location.pathname, accountKey]).id
-  const permission = chatPagePermission(location.pathname)
+  const permission = chatPagePermission(`${location.pathname}${location.search}`)
   const available = !!auth?.authenticated && permission !== null && (permission === '' || auth.permissionKeys.includes(permission))
   const enabled = available && connection?.accountKey === accountKey
   const primaryEditor = editors.filter((item) => item.path === location.pathname).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))[0] ?? null
@@ -414,7 +417,7 @@ function PageNavigationRegistration({ title }: { title: string }) {
   const { t } = useI18n()
   const destinations = PAGE_ACCESS_CATALOG.filter((item) => auth?.permissionKeys.includes(item.permissionKey)).flatMap((item) => {
     const views = PAGE_VIEWS[item.path]
-    return [item.path, ...(views ? views.values.map((value) => `${item.path}?${views.param}=${value}`) : []), ...(NESTED_VIEWS[item.path] ?? [])]
+    return [item.path, ...(views ? views.values.map((value) => `${item.path}?${views.param}=${value}`) : []), ...(NESTED_VIEWS[item.path] ?? [])].filter((destination) => auth?.isAdmin || (!destination.startsWith('/chat/resources') && destination !== '/characters?view=profiles'))
   })
   const actions = destinations.length ? [pageAction('page.navigate', t({ ko: '내부 페이지 이동', en: 'Navigate within CoNAI' }), t({ ko: '접근 가능한 CoNAI 페이지나 그 탭으로 이동해. 설정은 ?section=, 다른 페이지는 ?tab= 이 탭이야.', en: 'Open an accessible CoNAI page or one of its tabs. Settings sections use ?section=, other pages ?tab=.' }), pageObject({ to: pageChoice(destinations) }, ['to']))] : []
   if (settings.scopes.length && !settings.scope) actions.push(pageAction('page.settings_open', t({ ko: '현재 페이지 설정 열기', en: 'Open current page settings' }), t({ ko: '이 페이지에 적용되는 앱 공용 설정 창(저장 형식, 생성 속도 제한, 화면 테마 등)을 열어. 화면의 입력 칸(프롬프트 등)은 여기서 바꾸지 말고 page_fill로 채워.', en: 'Open the app-wide settings that apply to this page (save format, generation throttle, appearance, etc.). Never use it to change the screen\'s own inputs such as prompts; fill those with page_fill.' }), pageObject({ scope: pageChoice(settings.scopes) }, ['scope'])))
@@ -458,12 +461,13 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
   }, [register, description, revision, instanceId, location.pathname])
 }
 
+/** The composer's page link chip: says whether the chat sees the current page, and turns that on or off. */
 export function ChatPageConnectButton({ disabled }: { disabled: boolean }) {
   const page = useChatPage()
   const { t } = useI18n()
   if (!page?.available) return null
-  const label = t(page.driving ? { ko: '어시스턴트가 조작 중', en: 'Assistant is operating the page' } : page.enabled ? { ko: '현재 페이지 연결 해제', en: 'Disconnect current page' } : { ko: '현재 페이지 연결', en: 'Connect current page' })
-  return <IconButton variant="ghost" size="icon-sm" active={page.enabled} disabled={disabled} onClick={page.toggle} label={label}><Monitor className={page.driving ? 'animate-pulse motion-reduce:animate-none' : undefined} /></IconButton>
+  const label = t(page.driving ? { ko: '페이지 조작 중', en: 'Operating the page' } : page.enabled ? { ko: '페이지 연결 켜짐', en: 'Page linked' } : { ko: '페이지 연결', en: 'Link page' })
+  return <ToggleChip pressed={page.enabled} disabled={disabled} onClick={page.toggle}><Monitor className={page.driving ? 'animate-pulse motion-reduce:animate-none' : undefined} />{label}</ToggleChip>
 }
 
 export function ChatPageConnectionNotice() {

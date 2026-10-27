@@ -96,7 +96,7 @@ export function WallpaperLivelyConnectModal({ open, onClose, presets, initialIss
   }
 
   return (
-    <Modal open={open} onClose={onClose} widthClassName="max-w-xl" title={t({ ko: 'Lively 연결', en: 'Connect Lively' })}>
+    <Modal open={open} onClose={onClose} size="md" title={t({ ko: 'Lively 연결', en: 'Connect Lively' })}>
       <div className="space-y-5">
         {issued ? (
           <div className="space-y-2">

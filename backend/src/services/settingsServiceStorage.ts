@@ -14,6 +14,8 @@ import {
   createDefaultAppearancePresetSlots as getDefaultAppearancePresetSlots,
   getDefaultHeaderNavigationSettings,
   HEADER_NAVIGATION_PAGE_KEYS,
+  HEADER_NAVIGATION_TOOL_KEYS,
+  HEADER_NAVIGATION_VERSION,
   isHeaderNavigationItemKey,
   normalizeHeaderNavigationOrder,
   normalizeRecycleBinRetentionDays,
@@ -46,16 +48,20 @@ function normalizeDeleteProtectionSettings(raw: unknown, defaults: DeleteProtect
   };
 }
 
-/** Keep persisted partial/legacy navigation settings complete and boolean-only. */
-function normalizeHeaderNavigationSettings(rawNavigation: unknown): HeaderNavigationSettings {
+/**
+ * Keep persisted navigation settings complete and boolean-only. Flags stored before the pin version meant shown or
+ * hidden, so only the right-side tools carry over and the pages start from the default pins.
+ */
+function normalizeHeaderNavigationSettings(rawNavigation: unknown, storedAsPins: boolean): HeaderNavigationSettings {
   const defaults = getDefaultHeaderNavigationSettings();
   if (!rawNavigation || typeof rawNavigation !== 'object') {
     return defaults;
   }
 
   const record = rawNavigation as Record<string, unknown>;
+  const tools: readonly string[] = HEADER_NAVIGATION_TOOL_KEYS;
   for (const key of Object.keys(record)) {
-    if (isHeaderNavigationItemKey(key) && typeof record[key] === 'boolean') {
+    if (isHeaderNavigationItemKey(key) && typeof record[key] === 'boolean' && (storedAsPins || tools.includes(key))) {
       defaults[key] = record[key];
     }
   }
@@ -366,6 +372,7 @@ export function getDefaultSettingsFromEnvironment(): AppSettings {
       },
       headerNavigation: getDefaultHeaderNavigationSettings(),
       headerNavigationOrder: [...HEADER_NAVIGATION_PAGE_KEYS],
+      headerNavigationVersion: HEADER_NAVIGATION_VERSION,
       enableGallery: true,
       autoCleanupCanvasOnShutdown: false,
       showRatingBadges: true,
@@ -531,13 +538,15 @@ export function mergeLoadedSettingsWithDefaults(loadedSettings: any, defaults: A
     searchDrawerWidth: _searchDrawerWidth,
     ...loadedAppearanceWithoutLegacySearchWidths
   } = loadedSettings.appearance || {};
+  const navigationStoredAsPins = loadedSettings.general?.headerNavigationVersion === HEADER_NAVIGATION_VERSION;
 
   return {
     general: {
       ...defaults.general,
       ...loadedSettings.general,
-      headerNavigation: normalizeHeaderNavigationSettings(loadedSettings.general?.headerNavigation),
-      headerNavigationOrder: normalizeHeaderNavigationOrder(loadedSettings.general?.headerNavigationOrder),
+      headerNavigation: normalizeHeaderNavigationSettings(loadedSettings.general?.headerNavigation, navigationStoredAsPins),
+      headerNavigationOrder: normalizeHeaderNavigationOrder(navigationStoredAsPins ? loadedSettings.general?.headerNavigationOrder : undefined),
+      headerNavigationVersion: HEADER_NAVIGATION_VERSION,
       deleteProtection: normalizeDeleteProtectionSettings(loadedSettings.general?.deleteProtection, defaults.general.deleteProtection),
     },
     aiRuntime: normalizeAiRuntimeSettings(loadedSettings.aiRuntime, loadedSettings.tagger?.pythonPath, defaults.aiRuntime),

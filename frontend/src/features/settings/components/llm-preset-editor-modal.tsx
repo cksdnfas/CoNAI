@@ -33,7 +33,7 @@ export function LlmPresetEditorModal({ state, isSaving, isDeleting, onClose, onT
   const save = () => onSave(draft)
 
   return (
-    <Modal open onClose={onClose} title={preset ? t({ ko: '{heading} 수정', en: 'Edit {heading}' }, { heading: t(section.heading) }) : t({ ko: '프롬프트 프리셋 추가', en: 'Add prompt preset' })} size="narrow" dirty={dirty} onSave={canSave ? save : undefined}>
+    <Modal open onClose={onClose} title={preset ? t({ ko: '{heading} 수정', en: 'Edit {heading}' }, { heading: t(section.heading) }) : t({ ko: '프롬프트 프리셋 추가', en: 'Add prompt preset' })} size="md" dirty={dirty} onSave={canSave ? save : undefined}>
       <ModalBody>
         {!preset ? <SegmentedControl
           className="mb-4"

@@ -127,7 +127,6 @@
   --animate-chat-flag-drop: chat-flag-drop 180ms ease-in both;
   --animate-chat-flag-fade: chat-flag-fade 120ms ease-out both;
   --animate-chat-flag-tap: chat-flag-tap 240ms cubic-bezier(0.2, 0.9, 0.3, 1.5);
-  --animate-chat-flag-badge: chat-flag-badge 300ms cubic-bezier(0.2, 0.9, 0.3, 1.6);
 
   @keyframes chat-flag-pop {
     0% {
@@ -167,15 +166,6 @@
   @keyframes chat-flag-tap {
     45% {
       transform: scale(0.86);
-    }
-  }
-
-  @keyframes chat-flag-badge {
-    0% {
-      transform: scale(0.3);
-    }
-    70% {
-      transform: scale(1.25);
     }
   }
 }
@@ -226,8 +216,16 @@
   --content-gutter: 2rem;
   --content-gutter-narrow: var(--theme-shell-inline-padding);
   --page-gutter: var(--content-gutter-narrow);
-  /* The shell's content height under the app header: full-height pages and sticky sidebar columns. */
-  --shell-content-height: calc(100dvh - var(--theme-shell-header-height));
+  /*
+   * The phone's bottom tabs (AppBottomNav, below md): the bar's height, and the room it takes at the bottom of the
+   * viewport, home indicator included (0px without the tabs). The shell, full-height pages and everything anchored to
+   * the bottom keep --shell-bottom-inset free; a floating bar rests on --shell-float-bottom.
+   */
+  --shell-bottom-nav-height: 3.5rem;
+  --shell-bottom-inset: 0px;
+  --shell-float-bottom: max(var(--shell-bottom-inset), env(safe-area-inset-bottom));
+  /* The shell's content height between the app header and the bottom tabs: full-height pages and sticky sidebar columns. */
+  --shell-content-height: calc(100dvh - var(--theme-shell-header-height) - var(--shell-bottom-inset));
   --field: color-mix(in srgb, var(--foreground) 4.5%, transparent);
   --fill: color-mix(in srgb, var(--foreground) 6%, transparent);
   --surface-lowest: #0e0e0e;
@@ -599,7 +597,15 @@
   .theme-shell-main {
     padding-inline: var(--theme-shell-inline-padding);
     padding-top: var(--theme-shell-header-height);
-    padding-bottom: var(--theme-shell-main-padding-bottom);
+    padding-bottom: calc(var(--theme-shell-main-padding-bottom) + var(--shell-bottom-inset));
+  }
+
+  /* The phone's bottom tabs: the header's glass and hairline, mirrored, over the home indicator's safe area. */
+  .app-bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom);
+    border-top: 1px solid var(--line);
+    background: var(--theme-shell-surface);
+    backdrop-filter: blur(var(--theme-header-blur));
   }
 
   /* Header icon keys (Button `shell`): flat like ghost; only open / pressed gets the primary tint. */
@@ -1184,9 +1190,9 @@ html:lang(ko) {
 }
 
 /*
- * Fixed-height modal body: the frame stays put and this area scrolls. A form wrapping the body is flattened so its
- * footer lines up with direct-child footers; the footer at the end is pinned to the bottom. Unlayered on purpose so the
- * pin wins over a footer's own margin utilities.
+ * Modal body: it scrolls under the fixed header. A form wrapping the body is flattened so its footer lines up with
+ * direct-child footers; the footer at the end is pinned to the bottom (above the home indicator on a phone sheet).
+ * Unlayered on purpose so the pin wins over a footer's own margin utilities.
  */
 [data-slot="modal-scroll"] > form:has(> [data-slot="modal-footer"]) {
   display: contents;
@@ -1202,14 +1208,21 @@ html:lang(ko) {
   bottom: 0;
   z-index: 10;
   margin-top: auto;
-  background-color: var(--background);
-  padding-bottom: calc(var(--spacing) * 4);
+  background-color: var(--surface-low);
+  padding-bottom: calc(var(--spacing) * 4 + env(safe-area-inset-bottom));
 }
 
 @media (width >= 48rem) {
   [data-slot="modal-scroll"] > [data-slot="modal-footer"],
   [data-slot="modal-scroll"] > form > [data-slot="modal-footer"] {
-    padding-bottom: calc(var(--spacing) * 5);
+    padding-bottom: calc(var(--spacing) * 5 + env(safe-area-inset-bottom));
+  }
+}
+
+/* Phones show the bottom tabs (AppBottomNav sets data-bottom-nav): the shell and bottom-anchored bars keep clear of them. */
+@media (width < 48rem) {
+  html[data-bottom-nav] {
+    --shell-bottom-inset: calc(var(--shell-bottom-nav-height) + env(safe-area-inset-bottom));
   }
 }
 

@@ -835,7 +835,7 @@ export function UiCatalogPage() {
         </CatalogSection>
       </main>
 
-      <Modal open={modalOpen} title="Modal title" description="Radix dialog with Esc / backdrop / back close." onClose={() => setModalOpen(false)} widthClassName="max-w-lg">
+      <Modal open={modalOpen} title="Modal title" description="Radix dialog with Esc / backdrop / back close." onClose={() => setModalOpen(false)} size="md">
         <ModalBody>
           <Field label="Name"><Input autoFocus placeholder="Type here" /></Field>
           <ToggleRow variant="detail"><Checkbox defaultChecked />Remember choice</ToggleRow>
@@ -847,7 +847,7 @@ export function UiCatalogPage() {
         </ModalBody>
       </Modal>
 
-      <Modal
+      <Modal size="lg"
         open={wideModalOpen}
         title="Wide modal"
         headerContent={<SegmentedControl ariaLabel="Modal tabs" size="sm" value={segment} onChange={setSegment} items={[{ value: 'grid', label: 'Grid' }, { value: 'list', label: 'List' }]} />}

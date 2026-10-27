@@ -229,6 +229,7 @@ export function HomePage() {
     // Leave room under the list for the fixed selection bar while it is up.
     <div className={cn('space-y-4', selectedIds.length > 0 && 'pb-24')}>
       <PageToolbar
+        title={t('pageAccessCatalog.home')}
         start={hasFeedData ? (
           <div className="flex items-center gap-3 text-sm">
             {/* The one count on Home: the real total ("계산 중" until the deferred count arrives). */}

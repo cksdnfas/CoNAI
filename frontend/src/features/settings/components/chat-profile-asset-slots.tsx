@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, MoreHorizontal, Sparkles, Square, Trash2 } from 'lucide-react'
+import { AlertTriangle, MoreHorizontal, Plus, Square, Wand } from 'lucide-react'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { Select } from '@/components/ui/select'
@@ -197,9 +198,20 @@ export function AssetCandidateTray({ runs, slotKey, title, currentHash, referenc
   )
 }
 
+/** What the open slot's image menu may do: import an image, generate it again, clear it. */
+export type ExpressionSlotInput = {
+  onPick: (hash: string) => void
+  onGenerate?: () => void
+  generateBlocked: string | null
+  onClear?: () => void
+  /** The slot's own write is running. */
+  busy: boolean
+}
+
 /**
  * The character's expressions as a row of slots, one per emotion of the expression list (plus emotions the group
- * already has). An empty slot generates with ✦; clicking a slot opens its candidates, library input and clear below.
+ * already has). An empty slot makes its image with "+ 만들기", every empty one at once with "빈 칸 n개 만들기";
+ * clicking a slot opens its candidates and its image menu below.
  */
 export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate, blockedReason, onSet, onClear, renderInput, editable = true }: {
   runs: AssetRuns
@@ -210,8 +222,8 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
   blockedReason: string | null
   onSet: (name: string, hash: string) => Promise<void>
   onClear: (name: string) => Promise<void>
-  /** The library / upload input for one slot. */
-  renderInput: (onPick: (hash: string) => void) => ReactNode
+  /** The image menu of the open slot. */
+  renderInput: (slot: ExpressionSlotInput) => ReactNode
   /** False: the slots only show (no generation, input or clearing). */
   editable?: boolean
 }) {
@@ -223,7 +235,6 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
   const filled = new Map(names.map((name) => [name, groups.entries.find((entry) => entry.keywords.includes(name))?.compositeHash ?? null]))
   const images = useSafeAssetImages([...filled.values()].filter((hash): hash is string => Boolean(hash)))
   const emptyNames = names.filter((name) => !filled.get(name) && !runs.slotState(name).working && !runs.isPending(name) && runs.emotionNames.includes(name))
-  const generateLabel = blockedReason ?? t({ ko: '만들기', en: 'Generate' })
   const fillAll = () => { if (emptyNames.length) void runs.start({ kind: 'expressions', names: emptyNames }, true) }
   const run = async (name: string, task: () => Promise<void>) => { setBusy(name); try { await task() } finally { setBusy(null) } }
 
@@ -237,7 +248,10 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
           <AssetPresetPicker runs={runs} showExpressionMenu />
           <Tip content={blockedReason}>
             <span className="inline-flex" tabIndex={blockedReason ? 0 : -1}>
-              <IconButton variant="default" size="icon-sm" disabled={!canGenerate || !emptyNames.length} onClick={fillAll} tooltip={!blockedReason} label={t({ ko: '빈 칸 채우기 {count}', en: 'Fill {count} empty' }, { count: emptyNames.length })}><Sparkles /></IconButton>
+              <Button variant="secondary" size="sm" disabled={!canGenerate || !emptyNames.length} onClick={fillAll}>
+                <Wand />
+                {emptyNames.length ? t({ ko: '빈 칸 {count}개 만들기', en: 'Make {count} empty' }, { count: emptyNames.length }) : t({ ko: '빈 칸 없음', en: 'No empty slots' })}
+              </Button>
             </span>
           </Tip>
         </> : null}
@@ -258,7 +272,11 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
                 {state.candidates.length > 1 ? <Badge variant="overlay" size="xs" className="pointer-events-none absolute top-1 right-1 tabular-nums">{state.candidates.length}</Badge> : null}
                 {editable && !hash && !working ? (
                   <span className="pointer-events-none absolute inset-0 flex items-center justify-center [&>*]:pointer-events-auto">
-                    <IconButton size="icon-sm" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(name)} label={generateLabel} onClick={() => void runs.start({ kind: 'expressions', names: [name] }, true)}><Sparkles /></IconButton>
+                    <Tip content={blockedReason}>
+                      <span className="inline-flex" tabIndex={blockedReason ? 0 : -1}>
+                        <Button size="xs" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(name)} aria-label={t({ ko: '{name} 만들기', en: 'Make {name}' }, { name })} onClick={() => void runs.start({ kind: 'expressions', names: [name] }, true)}><Plus />{t({ ko: '만들기', en: 'Make' })}</Button>
+                      </span>
+                    </Tip>
                   </span>
                 ) : null}
               </div>
@@ -274,13 +292,13 @@ export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate,
           title={selected}
           currentHash={filled.get(selected) ?? null}
           referenceHash={referenceHash}
-          actions={editable ? (
-            <>
-              <IconButton size="icon-sm" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(selected) || runs.slotState(selected).working} label={blockedReason ?? t({ ko: '다시 만들기', en: 'Generate again' })} onClick={() => void runs.start({ kind: 'expressions', names: [selected] }, !filled.get(selected))}><Sparkles /></IconButton>
-              {renderInput((hash) => void run(selected, () => onSet(selected, hash)))}
-              {filled.get(selected) ? <IconButton size="icon-sm" variant="ghost" disabled={busy === selected} label={t({ ko: '비우기', en: 'Clear' })} onClick={() => void run(selected, () => onClear(selected))}><Trash2 /></IconButton> : null}
-            </>
-          ) : null}
+          actions={editable ? renderInput({
+            onPick: (hash) => void run(selected, () => onSet(selected, hash)),
+            onGenerate: runs.emotionNames.includes(selected) ? () => void runs.start({ kind: 'expressions', names: [selected] }, !filled.get(selected)) : undefined,
+            generateBlocked: blockedReason ?? (!canGenerate || runs.slotState(selected).working ? t({ ko: '지금은 만들 수 없어', en: 'Not available now' }) : null),
+            onClear: filled.get(selected) ? () => void run(selected, () => onClear(selected)) : undefined,
+            busy: busy === selected,
+          }) : null}
         />
       ) : null}
       {images.lightbox}

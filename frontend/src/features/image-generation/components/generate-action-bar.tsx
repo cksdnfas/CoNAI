@@ -1,14 +1,16 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
-import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
-import { AlertTriangle, Loader2, RotateCcw, Sparkles } from 'lucide-react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { AlertTriangle, Loader2, MoreHorizontal, RotateCcw, Wand } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { Tip } from '@/components/ui/tooltip'
 import { GenerationTargetGroupControl } from '@/features/groups/components/generation-target-group-control'
-import { PluginGenerationActions } from '@/features/plugins/plugin-generation-actions'
+import { PluginGenerationActions, usePluginGenerationButtons } from '@/features/plugins/plugin-generation-actions'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { GenerateActionBarIconButton, GenerateActionBarVariantContext, type GenerateActionBarVariant } from './generate-action-bar-icon-button'
+import { GenerateActionBarIconButton, GenerateActionBarMenuContext, GenerateActionBarVariantContext, type GenerateActionBarVariant } from './generate-action-bar-icon-button'
 
 export { GenerateActionBarIconButton, type GenerateActionBarVariant }
 
@@ -150,6 +152,8 @@ export function GenerateActionBar({
 }: GenerateActionBarProps) {
   const { t } = useI18n()
   const isSticky = variant === 'sticky'
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [pluginBusy, setPluginBusy] = useState(false)
   const { canExecuteGeneration } = useFeaturePermissions()
   const canGenerate = canExecuteGeneration && !generateDisabled && !isGenerating
   const shortcutHint = isMacPlatform() ? '⌘ Enter' : 'Ctrl+Enter'
@@ -168,27 +172,19 @@ export function GenerateActionBar({
       : 'text-warning'
 
   const generateButton = (
-    <>
-      {generateSuffix && !isGenerating ? (
-        <Tip content={generateSuffixHint}>
-          <span className={cn('shrink-0 text-sm font-normal text-muted-foreground', isSticky && 'hidden sm:inline')}>{generateSuffix}</span>
-        </Tip>
-      ) : null}
       <Tip content={<>{`${actionLabel} (${shortcutHint})`}{generateSuffix && !isGenerating ? <> · {generateSuffix}{generateSuffixHint ? <> · {generateSuffixHint}</> : null}</> : null}</>}>
-        <IconButton
+        <Button
           variant="default"
-          size={isSticky ? 'icon-touch' : 'icon'}
-          label={typeof generateSuffix === 'string' && !isGenerating ? [actionLabel, generateSuffix, generateSuffixHint].filter(Boolean).join(' · ') : actionLabel}
-          tooltip={false}
+          size={isSticky ? 'touch' : 'default'}
           onClick={onGenerate}
           disabled={!canGenerate}
           aria-busy={isGenerating || undefined}
           aria-keyshortcuts="Control+Enter Meta+Enter"
         >
-          {isGenerating ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
-        </IconButton>
+          {isGenerating ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Wand aria-hidden="true" />}
+          {actionLabel}{generateSuffix && !isGenerating ? <> · {generateSuffix}</> : null}
+        </Button>
       </Tip>
-    </>
   )
 
   const repeatStepper = repeat ? (
@@ -218,6 +214,24 @@ export function GenerateActionBar({
 
   // Buttons enabled plugins add for this screen's layout surface.
   const pluginActions = <PluginGenerationActions disabled={isGenerating} />
+  const hasPluginActions = usePluginGenerationButtons().shown.length > 0
+  const moreActions = secondaryActions || onReset || hasPluginActions ? (
+    <DropdownMenu modal={false} open={menuOpen} onOpenChange={(open) => { if (open || !pluginBusy) setMenuOpen(open) }}>
+      <DropdownMenuTrigger asChild>
+        <IconButton size={isSticky ? 'icon-touch' : 'icon'} variant="ghost" label={t({ ko: '생성 작업 더 보기', en: 'More generation actions' })}>
+          <MoreHorizontal />
+        </IconButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <GenerateActionBarMenuContext.Provider value={{ kind: 'menu' }}>
+          {secondaryActions}
+          {/* Keep the plugin mounted while its async action is running, so it cannot be started twice. */}
+          <GenerateActionBarMenuContext.Provider value={{ kind: 'plugin', reportBusy: setPluginBusy }}>{pluginActions}</GenerateActionBarMenuContext.Provider>
+          {resetButton}
+        </GenerateActionBarMenuContext.Provider>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  ) : null
 
   const groupPicker = targetGroupStorageKey ? (
     <GenerationTargetGroupControl
@@ -246,9 +260,7 @@ export function GenerateActionBar({
             </div>
           ) : null}
           <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
-            {secondaryActions}
-            {pluginActions}
-            {resetButton}
+            {moreActions}
             {leading}
             {groupPicker}
             {repeatStepper}
@@ -263,11 +275,7 @@ export function GenerateActionBar({
     <GenerateActionBarVariantContext.Provider value="inline">
       <section data-slot="generate-action-bar" data-variant="inline" className={cn('space-y-2', className)}>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 empty:hidden">
-            {secondaryActions}
-            {pluginActions}
-            {resetButton}
-          </div>
+          {moreActions}
           <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
             {leading}
             {groupPicker}
@@ -289,7 +297,7 @@ export function GenerateActionBar({
 /** Bottom dock for the inline bar in the split-pane layout: stays put while the controls above it scroll. */
 export function GenerateActionDock({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div data-slot="generate-action-dock" className={cn('sticky bottom-0 z-sticky shrink-0 rounded-md bg-surface-container p-3 shadow-elevation-1', className)}>
+    <div data-slot="generate-action-dock" className={cn('sticky bottom-(--shell-bottom-inset) z-sticky shrink-0 rounded-md bg-surface-container p-3 shadow-elevation-1', className)}>
       {children}
     </div>
   )

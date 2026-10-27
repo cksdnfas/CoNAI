@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { TextTabs } from '@/components/common/text-tabs'
-import { TabsContent } from '@/components/ui/tabs'
+import { PageToolbar } from '@/components/common/page-toolbar'
+import { SegmentedControl } from '@/components/common/segmented-control'
 import { GenerationLayoutControls } from '@/features/image-generation/layout/generation-layout-controls'
 import { GenerationLayoutProvider } from '@/features/image-generation/layout/generation-layout-context'
 import { useI18n } from '@/i18n'
@@ -42,36 +42,43 @@ export function SpritePage() {
     }, { replace: true })
   }, [setSearchParams])
 
-  // All three stay mounted so switching tabs keeps each form and result; each tab has its own layout presets.
+  // All three stay mounted so switching tabs keeps each form and result; each tab has its own layout presets. Like the
+  // generation page, the row does not stick: the workspace below scrolls on its own.
   return (
     <GenerationLayoutProvider>
-      <TextTabs
-        value={tab}
-        onChange={setTab}
-        ariaLabel={t({ ko: '스프라이트 메뉴', en: 'Sprite sections' })}
-        stripClassName="min-h-14 pt-2"
+      <PageToolbar
+        sticky={false}
+        title={t('pageAccessCatalog.sprite')}
+        start={(
+          <SegmentedControl
+            value={tab}
+            onChange={setTab}
+            size="sm"
+            semantics="tabs"
+            ariaLabel={t({ ko: '스프라이트 메뉴', en: 'Sprite sections' })}
+            items={[
+              { value: 'extract', label: t({ ko: '추출', en: 'Extract' }) },
+              { value: 'normalize', label: t({ ko: '정규화', en: 'Normalize' }) },
+              { value: 'animation', label: t({ ko: '애니메이션', en: 'Animation' }) },
+            ]}
+          />
+        )}
         actions={(
-          <div className="flex items-center gap-1">
+          <>
             <div ref={setToolbarSlot} className={tab === 'extract' ? 'flex items-center gap-1' : 'hidden'} />
             <GenerationLayoutControls wide={isWide} />
-          </div>
+          </>
         )}
-        items={[
-          { value: 'extract', label: t({ ko: '추출', en: 'Extract' }) },
-          { value: 'normalize', label: t({ ko: '정규화', en: 'Normalize' }) },
-          { value: 'animation', label: t({ ko: '애니메이션', en: 'Animation' }) },
-        ]}
-      >
-        <TabsContent value="extract" forceMount className="data-[state=inactive]:hidden">
-          <SpriteExtractTab active={tab === 'extract'} initialVideoHash={videoHash} onVideoChange={onVideoChange} toolbarSlot={toolbarSlot} />
-        </TabsContent>
-        <TabsContent value="normalize" forceMount className="data-[state=inactive]:hidden">
-          <SpriteNormalizeTab active={tab === 'normalize'} />
-        </TabsContent>
-        <TabsContent value="animation" forceMount className="data-[state=inactive]:hidden">
-          <SpriteAnimationTab active={tab === 'animation'} />
-        </TabsContent>
-      </TextTabs>
+      />
+      <div className={tab === 'extract' ? undefined : 'hidden'}>
+        <SpriteExtractTab active={tab === 'extract'} initialVideoHash={videoHash} onVideoChange={onVideoChange} toolbarSlot={toolbarSlot} />
+      </div>
+      <div className={tab === 'normalize' ? undefined : 'hidden'}>
+        <SpriteNormalizeTab active={tab === 'normalize'} />
+      </div>
+      <div className={tab === 'animation' ? undefined : 'hidden'}>
+        <SpriteAnimationTab active={tab === 'animation'} />
+      </div>
     </GenerationLayoutProvider>
   )
 }

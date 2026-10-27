@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ImageOff, Plus, Star } from 'lucide-react'
+import { ImageOff, Star } from 'lucide-react'
 import { AvatarButton } from '@/components/ui/avatar-button'
-import { EmptyState } from '@/components/ui/empty-state'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Field } from '@/components/ui/field'
@@ -120,7 +119,7 @@ export function ChatUserProfileEditorModal({ open, profile, onClose }: { open: b
       open={open}
       onClose={onClose}
       title={profile ? t({ ko: '사용자 프로필 편집', en: 'Edit user profile' }) : t({ ko: '사용자 프로필 추가', en: 'Add user profile' })}
-      size="narrow"
+      size="md"
       dirty={dirty}
       onSave={canSave ? () => saveMutation.mutate() : undefined}
     >
@@ -202,37 +201,6 @@ export function ChatUserProfileRows({ profiles, onEdit }: { profiles: ChatUserPr
   )
 }
 
-/** From the chat: the account's user profiles, to add and edit without leaving the conversation. */
-export function ChatUserProfileManagerModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { t } = useI18n()
-  const profilesQuery = useChatUserProfiles(open)
-  const [editor, setEditor] = useState<{ profile: ChatUserProfile | null } | null>(null)
-  const profiles = profilesQuery.data ?? []
-  const full = profiles.length >= CHAT_USER_PROFILE_LIMITS.perAccount
-
-  return (
-    <>
-      <Modal
-        open={open}
-        onClose={onClose}
-        title={t({ ko: '사용자 프로필', en: 'User profiles' })}
-        size="narrow"
-        height="medium"
-        headerActions={<IconButton size="icon-sm" variant="ghost" disabled={full} onClick={() => setEditor({ profile: null })} label={t({ ko: '사용자 프로필 추가', en: 'Add user profile' })}><Plus /></IconButton>}
-      >
-        <ModalBody>
-          {profilesQuery.isSuccess && profiles.length === 0 ? (
-            <EmptyState size="compact" className="justify-center" title={t({ ko: '아직 사용자 프로필이 없어', en: 'No user profiles yet' })} />
-          ) : (
-            <ChatUserProfileRows profiles={profiles} onEdit={(profile) => setEditor({ profile })} />
-          )}
-        </ModalBody>
-      </Modal>
-      <ChatUserProfileEditorModal open={editor !== null} profile={editor?.profile ?? null} onClose={() => setEditor(null)} />
-    </>
-  )
-}
-
 /** Before a new chat when several user profiles exist and none is the default: who am I in this chat? */
 export function ChatUserProfilePickModal({ open, profiles, onPick, onClose }: {
   open: boolean
@@ -242,7 +210,7 @@ export function ChatUserProfilePickModal({ open, profiles, onPick, onClose }: {
 }) {
   const { t } = useI18n()
   return (
-    <Modal open={open} onClose={onClose} title={t({ ko: '누구로 참여할까?', en: 'Who are you in this chat?' })} widthClassName="max-w-sm">
+    <Modal open={open} onClose={onClose} title={t({ ko: '누구로 참여할까?', en: 'Who are you in this chat?' })} size="sm">
       <ModalBody spacing="none">
         {profiles.map((profile) => (
           <ListRow key={profile.id} asChild interactive>

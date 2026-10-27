@@ -78,7 +78,7 @@ export function WorkspaceProjectDialog({ open, project, canEdit, onClose, onSave
       open={open}
       title={base ? base.name : t({ ko: '새 프로젝트', en: 'New project' })}
       onClose={() => { if (!save.isPending) onClose() }}
-      widthClassName="max-w-2xl"
+      size="md"
       dirty={canEdit && dirty}
       onSave={canSave ? () => save.mutate(undefined) : undefined}
     >
@@ -143,7 +143,7 @@ export function WorkspaceChangesDialog({ open, projectId, onClose }: { open: boo
     </div>
   )
   return (
-    <Modal open={open} title={t({ ko: '변경 내역', en: 'Change history' })} onClose={onClose} widthClassName="max-w-xl">
+    <Modal open={open} title={t({ ko: '변경 내역', en: 'Change history' })} onClose={onClose} size="md">
       <ModalBody>{body}</ModalBody>
     </Modal>
   )

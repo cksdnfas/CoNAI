@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { ChatFilledMark } from '@/features/codex-chat/chat-page-context'
 import { ChatFilledLabel } from './settings-filled-label'
-import { Archive, AudioLines, CircleUserRound, Contact, Film, FolderTree, Images, ListTodo, Map as MapIcon, MessageSquareText, Newspaper, Search, Settings2, Sparkles, Tags, Upload, Wallpaper, type LucideIcon } from 'lucide-react'
+import { CircleUserRound, ListTodo, Search, type LucideIcon } from 'lucide-react'
+import { HEADER_PAGE_PATHS } from '@/components/layout/app-navigation'
+import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
@@ -9,7 +11,7 @@ import { RowGroup } from '@/components/ui/row-group'
 import { ToggleChip } from '@/components/ui/chip'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { useI18n } from '@/i18n'
-import { MAX_RECYCLE_BIN_RETENTION_DAYS, normalizeHeaderNavigationOrder, type GeneralSettings, type HeaderNavigationItemKey, type HeaderNavigationPageKey } from '@conai/shared'
+import { HEADER_NAVIGATION_TOOL_KEYS, MAX_RECYCLE_BIN_RETENTION_DAYS, normalizeHeaderNavigationOrder, type GeneralSettings, type HeaderNavigationItemKey, type HeaderNavigationPageKey } from '@conai/shared'
 import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
 import { cn } from '@/lib/utils'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
@@ -31,28 +33,12 @@ interface GeneralPreferencesSectionsProps {
   isSectionDirty: (section: GeneralPreferenceSection) => boolean
 }
 
-const HEADER_NAVIGATION_OPTIONS: Record<HeaderNavigationItemKey, { icon: LucideIcon; label: { ko: string; en: string } }> = {
-  access: { icon: MapIcon, label: { ko: '이용 가능 페이지', en: 'Available pages' } },
-  home: { icon: Images, label: { ko: '홈', en: 'Home' } },
-  groups: { icon: FolderTree, label: { ko: '그룹', en: 'Groups' } },
-  upload: { icon: Upload, label: { ko: '업로드', en: 'Upload' } },
-  files: { icon: Archive, label: { ko: '파일 보관함', en: 'Files' } },
-  prompts: { icon: Tags, label: { ko: '프롬프트', en: 'Prompts' } },
-  characters: { icon: Contact, label: { ko: '캐릭터', en: 'Characters' } },
-  generation: { icon: Sparkles, label: { ko: '생성', en: 'Generation' } },
-  audio: { icon: AudioLines, label: { ko: '오디오', en: 'Audio' } },
-  sprite: { icon: Film, label: { ko: '스프라이트', en: 'Sprites' } },
-  chat: { icon: MessageSquareText, label: { ko: '채팅', en: 'Chat' } },
-  posts: { icon: Newspaper, label: { ko: '게시판', en: 'Posts' } },
-  wallpaper: { icon: Wallpaper, label: { ko: '월페이퍼', en: 'Wallpaper' } },
-  settings: { icon: Settings2, label: { ko: '설정', en: 'Settings' } },
-  search: { icon: Search, label: { ko: '검색', en: 'Search' } },
+/** The header's right-side tools keep their place; only the pinned pages reorder. */
+const HEADER_TOOL_OPTIONS: Record<typeof HEADER_NAVIGATION_TOOL_KEYS[number], { icon: LucideIcon; label: { ko: string; en: string } }> = {
   queue: { icon: ListTodo, label: { ko: '대기열', en: 'Queue' } },
+  search: { icon: Search, label: { ko: '검색', en: 'Search' } },
   account: { icon: CircleUserRound, label: { ko: '사용자', en: 'User' } },
 }
-
-/** Header tools on the right keep their place; only the page links reorder. */
-const HEADER_TOOL_KEYS = ['queue', 'search', 'account'] as const
 
 /** Render app-wide preferences in their user-facing settings category, as flat hairline rows. */
 export function GeneralPreferencesSections({
@@ -64,9 +50,12 @@ export function GeneralPreferencesSections({
 }: GeneralPreferencesSectionsProps) {
   const { t, languageOverride } = useI18n()
   const pluginPages = usePluginPages()
-  const navigationOptions = { ...HEADER_NAVIGATION_OPTIONS }
-  for (const page of pluginPages) {
-    navigationOptions[page.id] = { icon: page.icon, label: { ko: page.title, en: page.title } }
+  // A pinnable page's chip: the catalog's name and icon (a plugin page: its own).
+  const pageOption = (key: HeaderNavigationPageKey): { icon: LucideIcon; label: string } | null => {
+    const plugin = pluginPages.find((page) => page.id === key)
+    if (plugin) return { icon: plugin.icon, label: plugin.title }
+    const entry = PAGE_ACCESS_CATALOG.find((item) => item.path === HEADER_PAGE_PATHS[key as keyof typeof HEADER_PAGE_PATHS])
+    return entry ? { icon: entry.icon, label: t(entry.labelKey) } : null
   }
   const visibleSections = new Set(sections)
   const [draggedPage, setDraggedPage] = useState<HeaderNavigationPageKey | null>(null)
@@ -97,7 +86,7 @@ export function GeneralPreferencesSections({
 
   const headerNavigation = generalDraft.headerNavigation ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
   const headerNavigationOrder = normalizeHeaderNavigationOrder(generalDraft.headerNavigationOrder, pluginPages.map((page) => page.id))
-  const headerMenuLabel = t({ ko: '상단 메뉴', en: 'Header menu' })
+  const headerMenuLabel = t({ ko: '상단 고정 페이지', en: 'Pinned pages' })
   const languageLabel = t({ ko: '언어', en: 'Language' })
   const similarityLabel = t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })
   const retentionLabel = t({ ko: '휴지통 보관 기간 (일)', en: 'Keep in recycle bin (days)' })
@@ -145,15 +134,16 @@ export function GeneralPreferencesSections({
             label={<ChatFilledLabel fieldId="showRatingBadges">{t({ ko: '등급 배지 표시', en: 'Show rating badges' })}</ChatFilledLabel>}
           />
           <SettingRow
-            label={<SettingsLabelTip label={headerMenuLabel} tip={t({ ko: '눌러서 켜고 끄기, 끌어서 순서 바꾸기', en: 'Click to show or hide, drag to reorder' })} />}
+            label={<ChatFilledLabel fieldId="headerNavigation">{headerMenuLabel}</ChatFilledLabel>}
             align="start"
             controlClassName="justify-start sm:max-w-xl sm:justify-end"
           >
             {headerNavigationOrder.map((key) => {
-              const option = navigationOptions[key]
+              const option = pageOption(key)
               if (!option) return null
               const Icon = option.icon
-              const pressed = headerNavigation[key] ?? true
+              // Pressed = pinned; a page left unpinned (plugin pages by default) sits in its menu group.
+              const pressed = headerNavigation[key] === true
               return (
                 <span key={key} className={cn('inline-flex cursor-grab active:cursor-grabbing', draggedPage === key && 'opacity-50', dropTargetPage === key && draggedPage !== key && 'ring-2 ring-primary/60')}>
                 <ToggleChip
@@ -168,7 +158,7 @@ export function GeneralPreferencesSections({
                   onDrop={(event) => { event.preventDefault(); if (draggedPage) moveHeaderPage(draggedPage, key); setDraggedPage(null); setDropTargetPage(null) }}
                 >
                   <Icon aria-hidden />
-                  {t(option.label)}
+                  {option.label}
                   <ChatFilledMark fieldId={`headerNavigation.${key}`} />
                 </ToggleChip>
                 </span>
@@ -176,11 +166,11 @@ export function GeneralPreferencesSections({
             })}
           </SettingRow>
           <SettingRow
-            label={<SettingsLabelTip label={t({ ko: '오른쪽 고정 메뉴', en: 'Fixed right-side menu' })} tip={t({ ko: '헤더 오른쪽에 고정되는 메뉴야. 눌러서 표시 여부를 바꿔.', en: 'These controls stay on the right of the header. Click to show or hide them.' })} />}
+            label={<ChatFilledLabel fieldId="headerTools" />}
             controlClassName="justify-start sm:max-w-xl sm:justify-end"
           >
-            {HEADER_TOOL_KEYS.map((key) => {
-              const { icon: Icon, label } = HEADER_NAVIGATION_OPTIONS[key]
+            {HEADER_NAVIGATION_TOOL_KEYS.map((key) => {
+              const { icon: Icon, label } = HEADER_TOOL_OPTIONS[key]
               const pressed = headerNavigation[key] ?? true
               return (
                 <ToggleChip key={key} tone="neutral" pressed={pressed} onClick={() => updateHeaderNavigationItem(key, !pressed)}>

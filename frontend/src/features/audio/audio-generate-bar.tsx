@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, Dices, Link2, Lock, Plus, RefreshCw, Server, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { ChevronDown, Dices, Link2, Lock, Plus, RefreshCw, Server, SlidersHorizontal, Wand } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
@@ -336,9 +336,10 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
             {chip}
             {fix}
           </div>
-          <IconButton type="submit" variant="default" size="icon-sm" disabled={!runnable || !valid || busy !== null} label={t({ ko: '{count}개 생성', en: 'Generate {count}' }, { count: Number.isInteger(count) && count > 0 ? count : 0 })}>
-            <Sparkles />
-          </IconButton>
+          <Button type="submit" size="sm" disabled={!runnable || !valid || busy !== null}>
+            <Wand />
+            {t({ ko: '{count}개 생성', en: 'Generate {count}' }, { count: Number.isInteger(count) && count > 0 ? count : 0 })}
+          </Button>
         </div>
       </div>
     </form>

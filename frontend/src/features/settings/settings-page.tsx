@@ -2,9 +2,10 @@ import { useSettingsRevision } from './use-settings-revision'
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShieldAlert } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
+import { HEADER_NAVIGATION_QUERY_KEY } from '@/components/layout/app-navigation'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { reextractAllImageMetadata, updateGenerationThrottleSettings, updateImageSaveSettings, updateMetadataSettings, updateThumbnailSettings, updateVideoOptimizationSettings } from '@/lib/api-settings'
@@ -31,9 +32,12 @@ import type {
 import type { GeneralPreferenceSection } from './components/general-preferences-sections'
 import { SettingsSaveBar } from './components/settings-save-bar'
 import { SettingsTabNav } from './components/settings-tab-nav'
-import { SettingsAdvancedSwitch } from './components/settings-advanced'
+import { RegistrySettingsGroup, SettingsContents, SettingsGroup, SettingsJumpTarget, SettingsSearch } from './components/settings-navigation'
+import { ChatSettingsMine } from './components/chat-settings-mine'
+import { GenerationConnections } from './components/generation-connections'
+import { PageSettingsSection } from './page-settings-dialog'
 import { areSettingsDraftsEqual, saveSettingsDraftSections, type SettingsDraftSection } from './settings-draft-sections'
-import { parseSettingsTab, SETTINGS_TAB_LABELS, type SettingsTab } from './settings-tabs'
+import { parseSettingsTab, resolveSettingsLocation, SETTINGS_TAB_LABELS, type SettingsTab } from './settings-tabs'
 import { useFolderSettingsTab } from './use-folder-settings-tab'
 import { useAppearanceSettingsTab } from './use-appearance-settings-tab'
 import { useAutoSettingsTab } from './use-auto-settings-tab'
@@ -128,8 +132,6 @@ const GENERAL_SECTION_TABS: Record<GeneralPreferenceSection, SettingsTab> = {
 }
 
 const GENERAL_SECTIONS = Object.keys(GENERAL_SECTION_FIELDS) as GeneralPreferenceSection[]
-/** Sections with fields behind the shared 고급 switch. */
-const ADVANCED_TABS = new Set<SettingsTab>(['llm', 'chat', 'posts'])
 
 function pickGeneralFields(settings: GeneralSettings, fields: ReadonlyArray<keyof GeneralSettings>): Partial<GeneralSettings> {
   return Object.fromEntries(fields.map((field) => [field, settings[field]])) as Partial<GeneralSettings>
@@ -152,6 +154,7 @@ export function SettingsPage() {
   const pluginPages = usePluginPages()
   const authStatusQuery = useAuthStatusQuery()
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const rawSection = searchParams.get('section')
   const activeTab = parseSettingsTab(rawSection)
   const [generalDraft, setGeneralDraft] = useState<GeneralSettings | null>(null)
@@ -167,32 +170,16 @@ export function SettingsPage() {
   const setActiveTab = (tab: SettingsTab) => {
     const nextSearchParams = new URLSearchParams(searchParams)
     // `?view=` is the inner tab of one section; carried over, LLM's `view=judge` trips Chat's old-link redirect back to LLM.
-    if (tab !== activeTab) nextSearchParams.delete('view')
-    if (tab === 'general') {
-      nextSearchParams.delete('section')
-    } else {
-      nextSearchParams.set('section', tab)
-    }
+    if (tab !== activeTab) { nextSearchParams.delete('view'); nextSearchParams.delete('group'); nextSearchParams.delete('setting') }
+    nextSearchParams.set('section', tab)
     setSearchParams(nextSearchParams, { replace: true })
   }
 
   // Rewrite legacy or unknown `?section=` ids to the canonical tab so the address bar matches what is shown.
   useEffect(() => {
-    const canonicalSection = activeTab === 'general' ? null : activeTab
-    if (rawSection === canonicalSection) {
-      return
-    }
-
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      if (canonicalSection) {
-        next.set('section', canonicalSection)
-      } else {
-        next.delete('section')
-      }
-      return next
-    }, { replace: true })
-  }, [activeTab, rawSection, setSearchParams])
+    const destination = resolveSettingsLocation(searchParams)
+    if (destination) navigate(destination, { replace: true })
+  }, [searchParams, navigate])
 
   const settingsQuery = useQuery({
     queryKey: ['app-settings'],
@@ -218,7 +205,7 @@ export function SettingsPage() {
     queryClient.setQueryData(GLOBAL_APPEARANCE_QUERY_KEY, nextSettings.appearance)
     queryClient.setQueryData(['runtime-appearance-settings'], nextSettings.appearance)
     queryClient.setQueryData(['runtime-appearance'], nextSettings.appearance)
-    queryClient.setQueryData(['public-header-navigation-settings'], { items: nextSettings.general.headerNavigation, order: nextSettings.general.headerNavigationOrder })
+    queryClient.setQueryData(HEADER_NAVIGATION_QUERY_KEY, { items: nextSettings.general.headerNavigation, order: nextSettings.general.headerNavigationOrder })
     queryClient.setQueryData(['runtime-generation-history-settings'], {
       applyRatingSafetyToGenerationHistory: nextSettings.general.applyRatingSafetyToGenerationHistory,
     })
@@ -422,7 +409,7 @@ export function SettingsPage() {
     },
     {
       id: 'video-optimization',
-      label: t({ ko: '비디오 최적화', en: 'Video optimization' }),
+      label: t({ ko: '영상 저장', en: 'Video saving' }),
       tab: 'media',
       isDirty: isVideoOptimizationDraftDirty,
       save: async () => {
@@ -533,7 +520,7 @@ export function SettingsPage() {
       isReextracting: metadataReextractMutation.isPending,
     },
   }
-  useChatPageRegistration(canOpenSettings ? {
+  useChatPageRegistration(canOpenSettings && activeTab !== 'mine' ? {
     kind: 'settings', title: t({ ko: '설정 · {section}', en: 'Settings · {section}' }, { section: t(SETTINGS_TAB_LABELS[activeTab]) }), resourceId: activeTab,
     fields: settingsChatFields(activeTab, chatSources, t),
     data: { section: activeTab, ...chatFolderData, ...settingsChatData(chatActionContext), ...(activeTab === 'general' ? { appMark: { configured: Boolean(savedAppearance.appIconDataUrl), outputSize: 128, saving: appearanceTabProps.isSavingAppIcon } } : {}) },
@@ -589,7 +576,7 @@ export function SettingsPage() {
     return <div className="min-h-screen bg-surface-low animate-pulse" />
   }
 
-  if (!canOpenSettings) {
+  if (!canOpenSettings && activeTab !== 'mine') {
     // An account whose admin role was removed while the page was open gets an explanation instead of a silent bounce.
     return (
       <div className="space-y-4">
@@ -700,33 +687,39 @@ export function SettingsPage() {
       sidebarLabel={t({ ko: '설정 항목', en: 'Settings sections' })}
       sidebar={<SettingsTabNav activeTab={activeTab} onChange={setActiveTab} />}
       sidebarFooter={<span className="tabular-nums" title={APP_BRAND_TOOLTIP}>{APP_VERSION_LABEL}</span>}
-      toolbar={<PageToolbar title={t(SETTINGS_TAB_LABELS[activeTab])} actions={ADVANCED_TABS.has(activeTab) ? <SettingsAdvancedSwitch /> : undefined} />}
+      toolbar={<PageToolbar title={t(SETTINGS_TAB_LABELS[activeTab])}><SettingsSearch /></PageToolbar>}
     >
-      <div>
+      <SettingsJumpTarget>
+        <p className="mb-4 text-xs text-muted-foreground">{activeTab === 'mine' ? t({ ko: '나에게만 적용돼. 공용 플래그 원본은 따로 표시돼.', en: 'Applies to you. Shared flag originals are marked separately.' }) : t({ ko: '공용 · 저장하면 모든 사용자에게 적용돼.', en: 'Shared · changes apply to all users.' })}</p>
         <Suspense fallback={<SettingsSectionFallback />}>
+          {activeTab === 'mine' ? <ChatSettingsMine /> : null}
           {activeTab === 'general' ? (
             <div className="space-y-8">
-              <GeneralPreferencesSectionsLazy sections={['basic', 'appearance']} {...generalSectionsProps} />
-              <AppearanceTabLazy {...appearanceTabProps} />
+              <SettingsContents groups={[{ id: 'display', label: t({ ko: '언어·공용 표시', en: 'Language and shared display' }) }, { id: 'appearance', label: t({ ko: '테마', en: 'Theme' }) }]} />
+              <SettingsGroup id="display" title={t({ ko: '언어·공용 표시', en: 'Language and shared display' })}><GeneralPreferencesSectionsLazy sections={['basic', 'appearance']} {...generalSectionsProps} /></SettingsGroup>
+              <SettingsGroup id="appearance" title={t({ ko: '테마', en: 'Theme' })}><AppearanceTabLazy {...appearanceTabProps} /></SettingsGroup>
             </div>
           ) : null}
 
           {activeTab === 'library' ? (
             <div className="space-y-8">
-              <GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} />
-              <FoldersTabLazy {...foldersTabProps} />
+              <SettingsContents groups={[{ id: 'similarity', label: t({ ko: '유사도', en: 'Similarity' }) }, { id: 'folders', label: t({ ko: '폴더', en: 'Folders' }) }, { id: 'metadata', label: t({ ko: '메타데이터', en: 'Metadata' }) }]} />
+              <SettingsGroup id="similarity" title={t({ ko: '유사도', en: 'Similarity' })}><GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} /><PageSettingsSection scope="similarity" /></SettingsGroup>
+              <RegistrySettingsGroup id="library.folders"><FoldersTabLazy {...foldersTabProps} /></RegistrySettingsGroup>
+              <SettingsGroup id="metadata" title={t({ ko: '메타데이터', en: 'Metadata' })}>
               <MetadataTabLazy
                 metadataDraft={effectiveMetadataDraft}
                 onPatchMetadata={patchMetadataDraft}
                 hasChanges={isMetadataDraftDirty}
               />
+              </SettingsGroup>
             </div>
           ) : null}
 
           {activeTab === 'media' ? (
             <ImageSaveTabLazy
               {...imageSaveTabProps}
-              showGenerationThrottle={false}
+              throttle="none"
             />
           ) : null}
 
@@ -740,28 +733,41 @@ export function SettingsPage() {
 
           {activeTab === 'generation' ? (
             <div className="space-y-8">
+              <SettingsContents groups={[{ id: 'nai', label: 'NovelAI' }, { id: 'comfyui', label: 'ComfyUI' }, { id: 'pacing', label: t({ ko: '실행 간격', en: 'Pacing' }) }, { id: 'schedules', label: t({ ko: '예약 작업', en: 'Schedules' }) }]} />
+              <GenerationConnections comfyExtra={<IntegrationToolsTabLazy />} />
+              <SettingsGroup id="pacing" title={t({ ko: '실행 간격', en: 'Pacing' })}>
               <ImageSaveTabLazy
                 {...imageSaveTabProps}
+                throttle="pacing"
                 showMediaSettings={false}
               />
-              <IntegrationToolsTabLazy />
+              </SettingsGroup>
+              <SettingsGroup id="schedules" title={t({ ko: '예약 작업', en: 'Schedules' })}>
+              <ImageSaveTabLazy
+                {...imageSaveTabProps}
+                throttle="reservations"
+                showMediaSettings={false}
+              />
+              </SettingsGroup>
             </div>
           ) : null}
 
           {activeTab === 'chat' ? <ChatSettingsTabLazy /> : null}
           {activeTab === 'llm' ? <LlmSettingsTabLazy /> : null}
 
-          {activeTab === 'accounts' ? <SecurityTabLazy /> : null}
-          {activeTab === 'plugins' ? <PluginsTabLazy /> : null}
+          {activeTab === 'accounts' ? <RegistrySettingsGroup id="accounts.access" contents><SecurityTabLazy /></RegistrySettingsGroup> : null}
+          {activeTab === 'plugins' ? <RegistrySettingsGroup id="plugins.management" contents><PluginsTabLazy /></RegistrySettingsGroup> : null}
 
           {activeTab === 'system' ? (
             <div className="space-y-8">
-              <McpHttpSettingsCardLazy />
-              <GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} />
+              <SettingsContents groups={[{ id: 'mcp', label: 'MCP' }, { id: 'safety', label: t({ ko: '안전·정리', en: 'Safety and cleanup' }) }]} />
+              <RegistrySettingsGroup id="system.mcp"><McpHttpSettingsCardLazy /></RegistrySettingsGroup>
+              <SettingsGroup id="safety" title={t({ ko: '안전·정리', en: 'Safety and cleanup' })}><GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} /></SettingsGroup>
             </div>
           ) : null}
 
           {activeTab === 'maintenance' ? (
+            <RegistrySettingsGroup id="maintenance.operations" contents>
             <MaintenanceTabLazy
               onScanAll={foldersTabProps.onScanAll}
               isScanningAll={foldersTabProps.isScanningAll}
@@ -777,6 +783,7 @@ export function SettingsPage() {
               isReextracting={metadataReextractMutation.isPending}
               autoTabProps={autoTabProps}
             />
+            </RegistrySettingsGroup>
           ) : null}
         </Suspense>
         <SettingsSaveBar
@@ -786,7 +793,7 @@ export function SettingsPage() {
           onDiscard={handleDiscardAll}
           onOpenTab={setActiveTab}
         />
-      </div>
+      </SettingsJumpTarget>
     </PageWithSidebar>
   )
 }

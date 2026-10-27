@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, Settings2 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { getBuiltinNodeFamily, getBuiltinNodeVariant, listBuiltinNodeVariants, type BuiltinNodeVariant } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { ToggleChip } from '@/components/ui/chip'
@@ -259,9 +260,11 @@ export function ModuleGraphQuickCreateMenu({
 
         <div ref={listRef} role="listbox" aria-label={t({ ko: '노드', en: 'Nodes' })} className="min-h-0 flex-1 overflow-y-auto py-1">
           {groups.length === 0 ? (
-            <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-              {mode === 'connect' && !query && !kindFilter ? t({ ko: '이 연결을 받을 노드가 없어.', en: 'No node takes this link.' }) : t({ ko: '맞는 노드가 없어.', en: 'No matching node.' })}
-            </div>
+            <EmptyState
+              size="compact"
+              icon={Search}
+              title={mode === 'connect' && !query && !kindFilter ? t({ ko: '이 연결을 받을 노드가 없어', en: 'No node takes this link' }) : t({ ko: '맞는 노드가 없어', en: 'No matching node' })}
+            />
           ) : groups.map((group) => (
             <div key={group.key} role="group" aria-label={group.label}>
               <div className="px-3.5 pt-2.5 pb-1 text-2xs font-bold tracking-wider text-muted-foreground">{group.label}</div>

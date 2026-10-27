@@ -9,8 +9,8 @@ type FloatingBottomActionProps = ComponentProps<typeof Button> & {
 
 export function FloatingBottomAction({ className, containerClassName, innerClassName, ...props }: FloatingBottomActionProps) {
   return (
-    // Centred in the page area: a docked chat panel (--chat-dock-width) takes the right edge.
-    <div className={cn('pointer-events-none fixed bottom-6 left-0 right-[var(--chat-dock-width,0px)] z-50 flex justify-center px-4', containerClassName)}>
+    // Centred in the page area: a docked chat panel (--chat-dock-width) takes the right edge, the phone's tabs the bottom.
+    <div className={cn('pointer-events-none fixed bottom-[calc(var(--shell-bottom-inset)+1.5rem)] left-0 right-[var(--chat-dock-width,0px)] z-50 flex justify-center px-4', containerClassName)}>
       <div className={cn('flex w-full justify-center', innerClassName)}>
         <Button
           size="sm"

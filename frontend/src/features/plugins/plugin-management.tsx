@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Code, Download, ExternalLink, FileText, GitBranch, Puzzle, RefreshCw, ServerCog, Trash2, Upload, Webhook, Wrench } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import type { InstalledPlugin, PluginInstallResult, PluginServerStatus, PluginSourceProvider } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
@@ -180,7 +181,7 @@ export function PluginManagement() {
         ) : undefined}
       >
         {plugins.error ? <ErrorState error={plugins.error} onRetry={() => void plugins.refetch()} /> : null}
-        {plugins.data?.length === 0 ? <p className="py-3 text-sm text-muted-foreground">{t({ ko: '아직 설치한 플러그인이 없어.', en: 'No plugins installed yet.' })}</p> : null}
+        {plugins.data?.length === 0 ? <EmptyState size="compact" icon={Puzzle} title={t({ ko: '아직 설치한 플러그인이 없어', en: 'No plugins installed yet' })} description={t({ ko: '.zip 패키지나 Git 주소로 설치할 수 있어.', en: 'Install one from a .zip package or a Git address.' })} /> : null}
         {plugins.data?.map((plugin) => {
           const { manifest, enabled } = plugin
           return (
@@ -213,7 +214,7 @@ export function PluginManagement() {
       {isAdmin ? <PluginAuthoring page={sourcePage} /> : null}
       {isAdmin ? <PluginSourceInstall state={sourceInstall} /> : null}
 
-      <Modal open={opened !== null} onClose={() => setDetail(null)} title={opened ? <span className="flex items-center gap-2">{opened.manifest.name}<Chip size="sm" tone="muted" mono>{opened.manifest.version}</Chip></span> : ''} widthClassName="max-w-lg">
+      <Modal open={opened !== null} onClose={() => setDetail(null)} title={opened ? <span className="flex items-center gap-2">{opened.manifest.name}<Chip size="sm" tone="muted" mono>{opened.manifest.version}</Chip></span> : ''} size="md">
         {opened ? (
           <>
             <ModalBody spacing="lg">

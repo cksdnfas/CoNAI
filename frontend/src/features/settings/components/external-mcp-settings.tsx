@@ -15,6 +15,7 @@ import { RowGroup } from '@/components/ui/row-group'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Switch } from '@/components/ui/switch'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -215,18 +216,14 @@ function ExternalMcpEditorModal({ open, server, seed = null, onClose }: { open: 
       open={open}
       onClose={onClose}
       title={server ? server.name : t({ ko: '외부 MCP 서버 추가', en: 'Add external MCP server' })}
-      size="normal"
+      size="lg"
       height="tall"
       dirty={dirty}
       onSave={canSave ? save : undefined}
-      headerActions={(
-        <Tip content={draft.enabled ? t({ ko: '사용 중', en: 'On' }) : t({ ko: '꺼짐', en: 'Off' })}>
-          <span className="inline-flex px-1.5"><Switch checked={draft.enabled} onCheckedChange={(enabled) => change({ enabled })} aria-label={t({ ko: '서버 사용', en: 'Server on' })} /></span>
-        </Tip>
-      )}
     >
       <ModalBody>
         <div className="space-y-4">
+          <SwitchLine label={t({ ko: '이 서버 사용', en: 'Use this server' })} checked={draft.enabled} onCheckedChange={(enabled) => change({ enabled })} />
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t({ ko: '이름', en: 'Name' })}>
               <Input variant="settings" value={draft.name} maxLength={60} onChange={(event) => change({ name: event.target.value, ...(!server && (!draft.id || draft.id === idFromName(draft.name)) ? { id: idFromName(event.target.value) } : {}) })} />

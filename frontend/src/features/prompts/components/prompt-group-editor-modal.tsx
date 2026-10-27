@@ -89,7 +89,7 @@ export function PromptGroupEditorModal({
       open={open}
       onClose={onClose}
       title={mode === 'create' ? t({ ko: '{typeLabel} 그룹 만들기', en: '{typeLabel} group' }, { typeLabel }) : t({ ko: '{typeLabel} 그룹 편집', en: '{typeLabel} group edit' }, { typeLabel })}
-      size="narrow"
+      size="md"
       height="medium"
       dirty={dirty}
       onSave={canSave ? () => formRef.current?.requestSubmit() : undefined}

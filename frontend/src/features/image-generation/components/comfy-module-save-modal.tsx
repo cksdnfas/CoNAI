@@ -51,7 +51,7 @@ export function ComfyModuleSaveModal({
       open={open}
       onClose={onClose}
       title={t({ ko: 'ComfyUI 모듈 저장', en: 'Save ComfyUI module' })}
-      widthClassName="max-w-3xl"
+      size="lg"
     >
       <ModalBody spacing="lg">
         <div className="grid gap-4 md:grid-cols-2">

@@ -48,7 +48,7 @@ export function PostRevisionsDialog({ post, onClose }: { post: PostDetail; onClo
   })
 
   return (
-    <Modal open onClose={onClose} title={t({ ko: '이전 판', en: 'Earlier versions' })} widthClassName="max-w-4xl">
+    <Modal open onClose={onClose} title={t({ ko: '이전 판', en: 'Earlier versions' })} size="lg">
       <ModalBody spacing="none">
         <div className="grid min-h-0 gap-4 md:grid-cols-[14rem_1fr]">
         <div className="flex max-h-[60vh] min-w-0 flex-col overflow-y-auto">

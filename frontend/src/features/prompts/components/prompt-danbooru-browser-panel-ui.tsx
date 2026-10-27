@@ -389,7 +389,7 @@ export function RelatedTagsTranslationModal({ item, onClose }: { item: DanbooruB
   const translatedText = item.relatedTags.map((tag) => tag.translatedName || '—').join(', ')
 
   return (
-    <Modal open onClose={onClose} title={item.displayName} widthClassName="max-w-xl">
+    <Modal open onClose={onClose} title={item.displayName} size="md">
       <ModalBody>
         <section className="space-y-1.5">
           <Text as="div" variant="overline">{t({ ko: '원문', en: 'Original' })}</Text>

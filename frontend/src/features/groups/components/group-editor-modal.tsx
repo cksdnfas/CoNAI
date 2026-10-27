@@ -165,13 +165,12 @@ export function GroupEditorModal({
     <Modal
       open={open}
       onClose={onClose}
-      appearance="card"
       title={mode === 'create' ? t({ ko: '새 그룹', en: 'New group' }) : t({ ko: '그룹 편집', en: 'Edit group' })}
       description={editedGroup ? summary : undefined}
       leading={editedGroup ? (
         <GroupCoverMosaic groupId={editedGroup.id} sourceKey="custom" imageCount={imageTotal} loadPreviewImages={getGroupPreviewImages} className="size-10 rounded-lg" />
       ) : undefined}
-      widthClassName={showDetails ? 'max-w-lg' : 'max-w-md'}
+      size="md"
       dirty={dirty}
       onSave={canSave ? () => formRef.current?.requestSubmit() : undefined}
     >

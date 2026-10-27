@@ -75,7 +75,7 @@ export function ChatDeleteDialog({ open, count = 1, book, pending, onConfirm, on
   const withBook = count === 1 && book !== null && book.entries.length > 0
 
   return (
-    <Modal open={open} onClose={onClose} title={count > 1 ? t({ ko: '채팅 {count}개를 지울까?', en: 'Delete {count} chats?' }, { count }) : t({ ko: '채팅을 지울까?', en: 'Delete this chat?' })} widthClassName="max-w-md">
+    <Modal open={open} onClose={onClose} title={count > 1 ? t({ ko: '채팅 {count}개를 지울까?', en: 'Delete {count} chats?' }, { count }) : t({ ko: '채팅을 지울까?', en: 'Delete this chat?' })} size="sm">
       <ModalBody>
         <div role="radiogroup" aria-label={t({ ko: '백업', en: 'Backup' })} className="flex flex-col gap-1.5">
           {radio(backup, () => setBackup(true), t({ ko: '백업하고 지우기', en: 'Back up, then delete' }), <span className="block truncate font-mono text-xs text-muted-foreground">{t({ ko: '파일 보관함', en: 'Files' })}/{CHAT_BACKUP_FOLDER}/{backupDate}</span>)}

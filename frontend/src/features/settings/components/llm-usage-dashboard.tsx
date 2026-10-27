@@ -12,6 +12,8 @@ import { Tip } from '@/components/ui/tooltip'
 import { DataTable, DataTd, DataTh, DataTr } from '@/components/ui/data-table'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useSettingsGroupActive } from './settings-navigation'
+import { SETTINGS_ROW_BY_ID } from '@conai/shared'
 import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { CHAT_JUDGE_STATS_QUERY_KEY, getChatJudgeStats } from '@/lib/api-chat-judge'
 import { EXTERNAL_API_PROVIDERS_QUERY_KEY, getExternalApiProviders } from '@/lib/api-external-api'
@@ -215,8 +217,9 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
     judge: judgeQuery.isSuccess ? { runs: judgeRuns, uncertain: judgeUnsure, failed: judgeFailed, overThirtyPercentUnsure: unsureItems.map((entry) => entry.name) } : null,
     subscriptions: agentCli,
   }
-  useChatPageRegistration({
-    kind: 'settings', title: t({ ko: '설정 · LLM 계기판', en: 'Settings · LLM dashboard' }), resourceId: 'llm', priority: 5, fields: [], data: chatData,
+  const groupActive = useSettingsGroupActive('dashboard', 'connections')
+  useChatPageRegistration(groupActive ? {
+    kind: 'settings', title: t(SETTINGS_ROW_BY_ID['llm.dashboard'].label), resourceId: 'llm', priority: 5, fields: [], data: chatData,
     actions: [pageAction('settings.usage_period', t({ ko: '기간 바꾸기', en: 'Change the period' }), t({ ko: '최근 7일 또는 30일로 바꿔.', en: 'Show the last 7 or 30 days.' }), pageObject({ days: pageChoice([7, 30]) }, ['days']))],
     apply: () => {},
     applyAction: (id, args, assertCurrent) => {
@@ -224,7 +227,7 @@ export function LlmUsageDashboard({ onOpenJudge }: { onOpenJudge: () => void }) 
       if (id !== 'settings.usage_period') throw new Error('이 화면에 없는 작업이야.')
       setDays(Number(args.days))
     },
-  }, { preserveOnSearchChange: true })
+  } : null, { preserveOnSearchChange: true })
 
   return (
     <div className="space-y-8">

@@ -3,7 +3,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 import type { ChatGenerationFinishedEventPayload, ChatGenerationUpdatedEventPayload, GraphExecutionEventPayload, GraphExecutionProgressEventPayload, HistoryRecordEventPayload, QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
 import { refreshChatGenerationQueries, refreshRuntimeQueryKeys, type ChatGenerationRefresh } from './chat-generation-query-updates'
-import type { CharactersChangedEventPayload } from '@conai/shared'
+import type { CharactersChangedEventPayload, ChatThreadUpdatedEventPayload } from '@conai/shared'
 import { AUDIO_QUERY_KEY } from '@/lib/api-audio'
 import { CHARACTER_LIBRARY_QUERY_KEY, invalidateCharacterLibrary } from '@/lib/api-character-library'
 import { invalidateChatProfileViews } from '@/lib/api-codex-chat'
@@ -348,6 +348,11 @@ export function useRuntimeEventQueryBridge() {
         void refreshRuntimeQueryKeys(queryClient, [
           ['codex-chat-threads'], ['codex-chat-task', threadId], ['codex-chat-thread', threadId],
         ])
+        return
+      }
+      case 'chat.thread.updated': {
+        const { threadId } = envelope.payload as ChatThreadUpdatedEventPayload
+        void refreshRuntimeQueryKeys(queryClient, [['codex-chat-threads'], ['codex-chat-thread', threadId]])
         return
       }
       case 'graph.schedule.changed': {

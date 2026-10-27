@@ -139,7 +139,7 @@ function GenerationTargetGroupModal({
   }
 
   return (
-    <Modal open onClose={onClose} title={t({ ko: '결과 그룹 지정', en: 'Set result group' })} widthClassName="max-w-xl">
+    <Modal open onClose={onClose} title={t({ ko: '결과 그룹 지정', en: 'Set result group' })} size="md">
       <form onSubmit={handleSubmit}>
         <ModalBody>
           <div className="space-y-2">

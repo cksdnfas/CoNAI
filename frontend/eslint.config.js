@@ -43,6 +43,15 @@ const DESIGN_SYSTEM_GUARDS = [
     selector: "JSXOpeningElement[name.name='Search'] > JSXAttribute[name.name='className'] Literal[value=/absolute/]",
     message: '[ds/search] Search icon placed over an Input by hand: use SearchField / ToolbarSearchField from components/common/search-field.',
   },
+  // A main action says what it does, in dialogs and on pages alike; an IconButton without a variant is a primary
+  // (default) Button too. Spread props carry their own variant.
+  ...[
+    "JSXOpeningElement[name.name='IconButton']:has(JSXAttribute[name.name='variant'][value.value='default'])",
+    "JSXOpeningElement[name.name='IconButton']:not(:has(JSXAttribute[name.name='variant'])):not(:has(JSXSpreadAttribute))",
+  ].map((selector) => ({
+    selector,
+    message: '[ds/icon-primary] Icon-only primary action: use a Button with a verb ("저장", "업로드", "새 글"). Icons alone are for small repeated tools; the chat composer\'s send arrow is the one exception.',
+  })),
 ]
 
 // Primitives that only components/common may compose; features use the shared composition.

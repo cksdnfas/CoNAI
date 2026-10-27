@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
-import { GripVertical, Search, Sparkles, TriangleAlert, X } from 'lucide-react'
+import { GripVertical, ListPlus, Search, TriangleAlert, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { SearchField } from '@/components/common/search-field'
@@ -129,7 +129,7 @@ export function ComfyWorkflowMarkedFieldList({
             <span className="flex-1" />
             {onSuggestFields ? (
               <IconButton size="icon-sm" variant="ghost" onClick={onSuggestFields} label={t({ ko: '자주 쓰는 필드 추가', en: 'Add common fields' })}>
-                <Sparkles />
+                <ListPlus />
               </IconButton>
             ) : null}
           </>

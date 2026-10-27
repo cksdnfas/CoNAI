@@ -119,7 +119,7 @@ export function CharacterFolderPickerModal({ title, folders, value, excludeIds, 
   const [picked, setPicked] = useState(value)
   const items = excludeIds ? folders.filter((folder) => !excludeIds.has(folder.id)) : folders
   return (
-    <Modal open appearance="card" widthClassName="max-w-md" title={title} onClose={() => { if (!busy) onClose() }}>
+    <Modal open size="md" title={title} onClose={() => { if (!busy) onClose() }}>
       <ModalBody>
         <HierarchyPicker
           items={items}

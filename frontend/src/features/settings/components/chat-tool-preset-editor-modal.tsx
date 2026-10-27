@@ -112,7 +112,7 @@ export function ChatToolPresetEditorModal({ open, preset, initial, onClose, onSa
       open={open}
       onClose={onClose}
       title={preset ? t({ ko: '도구 프리셋 편집', en: 'Edit tool preset' }) : t({ ko: '도구 프리셋 추가', en: 'Add tool preset' })}
-      size="normal"
+      size="lg"
       height="tall"
       sidePanelInset={CHAT_DOCK_INSET}
       dirty={dirty}

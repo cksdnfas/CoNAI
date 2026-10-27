@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Download, FolderInput, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { AudioLines, ChevronDown, ChevronUp, Download, FolderInput, FolderPlus, MessageSquare, MoreHorizontal, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
@@ -20,10 +20,10 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { NameDialog } from '@/components/common/entry-dialogs'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
-import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -632,9 +632,9 @@ function AudioPageContent() {
     { value: 'rejected', label: t({ ko: '보류', en: 'Rejected' }), count: Math.max(0, group.candidate_count - group.selected_count - group.pending_review_count) },
   ] : []
   const inbox = group?.is_inbox === true
-  const groupTitle = group
-    ? (inbox ? t({ ko: '받은 파일', en: 'Inbox' }) : folder ? <><span className="font-normal text-muted-foreground">{folder.name} / </span>{group.name}</> : group.name)
-    : project?.name ?? t({ ko: '오디오', en: 'Audio' })
+  // Where you are, after the page title: the project, then the folder and the effect (or 받은 파일) in it.
+  const location = [project?.name, ...(group ? (inbox ? [t({ ko: '받은 파일', en: 'Inbox' })] : [folder?.name, group.name]) : [])]
+    .filter((name): name is string => Boolean(name))
   // Takes move within their project: to its effects, or back to its 받은 파일.
   const moveTargets = group ? projectGroups.filter((entry) => entry.id !== group.id && (!entry.is_inbox || !inbox)) : []
   const inboxEffects = moveTargets.filter((entry) => !entry.is_inbox)
@@ -773,7 +773,15 @@ function AudioPageContent() {
       toolbar={(
         // The file name chip shares the actions' row: on a phone the title takes the first line and chip + icons the
         // second, instead of title, chip and icons each taking their own.
-        <PageToolbar title={groupTitle}>
+        <PageToolbar
+          title={t('pageAccessCatalog.audio')}
+          start={location.length ? (
+            <span className="min-w-0 truncate text-sm text-muted-foreground">
+              {location.slice(0, -1).map((name) => `${name} / `).join('')}
+              <span className="font-medium text-foreground">{location[location.length - 1]}</span>
+            </span>
+          ) : undefined}
+        >
           {group?.label && !inbox ? (
             <Tip content={permissions.canEdit ? t({ ko: '내보낼 파일명: 눌러서 바꾸기', en: 'Export file name: click to change' }) : t({ ko: '내보낼 파일명', en: 'Export file name' })}>
               {/* The span carries the tooltip while the button is disabled (a disabled button gets no pointer events). */}
@@ -812,13 +820,19 @@ function AudioPageContent() {
       {exportJob.job ? <RuntimeJobProgress job={exportJob.job} cancel={exportJob.cancel} isCancelling={exportJob.isCancelling} className="mb-4" /> : null}
 
       {projectsQuery.isSuccess && projects.length === 0 ? (
-        <EmptyAudio title={t({ ko: '아직 프로젝트가 없어', en: 'No projects yet' })}>
-          {permissions.canEdit ? <Button onClick={() => setDialog('project-new')}><FolderPlus />{t({ ko: '새 프로젝트', en: 'New project' })}</Button> : null}
-        </EmptyAudio>
+        <EmptyState
+          icon={AudioLines}
+          title={t({ ko: '아직 프로젝트가 없어', en: 'No projects yet' })}
+          description={t({ ko: '프로젝트를 만들면 그 안에 효과음을 추가하고 파일을 모을 수 있어.', en: 'A project holds your effects and their files.' })}
+          action={permissions.canEdit ? <Button onClick={() => setDialog('project-new')}><FolderPlus />{t({ ko: '새 프로젝트', en: 'New project' })}</Button> : undefined}
+        />
       ) : !group && project && projectGroupsQuery.isSuccess && effects.length === 0 && !groupId ? (
-        <EmptyAudio title={t({ ko: '아직 효과음이 없어', en: 'No effects yet' })}>
-          {permissions.canEdit ? <NewEffectInput key={project.id} onCreate={(name) => createEffect(project.id, name)} /> : null}
-        </EmptyAudio>
+        <EmptyState
+          icon={AudioLines}
+          title={t({ ko: '아직 효과음이 없어', en: 'No effects yet' })}
+          description={t({ ko: '효과음을 추가하면 프롬프트로 후보를 만들고 골라 쓸 수 있어.', en: 'Add an effect to make takes from a prompt and pick one.' })}
+          action={permissions.canEdit ? <NewEffectButton key={project.id} onCreate={(name) => createEffect(project.id, name)} /> : undefined}
+        />
       ) : null}
 
       {group ? (
@@ -1010,44 +1024,33 @@ function EffectDescription({ text }: { text: string }) {
   )
 }
 
-function EmptyAudio({ title, children }: { title: string; children?: ReactNode }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
-      <p className="text-sm text-muted-foreground">{title}</p>
-      {children}
-    </div>
-  )
-}
-
-/** "효과음 이름 + 추가" for a project without effects; the new effect opens with its prompt focused. */
-function NewEffectInput({ onCreate }: { onCreate: (name: string) => Promise<boolean> }) {
+/** The empty project's one action: name a new effect in a dialog; the new effect opens with its prompt focused. */
+function NewEffectButton({ onCreate }: { onCreate: (name: string) => Promise<boolean> }) {
   const { t } = useI18n()
-  const [name, setName] = useState('')
+  const [name, setName] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const submit = async () => {
-    if (!name.trim() || busy) return
+    if (!name?.trim() || busy) return
     setBusy(true)
-    if (await onCreate(name.trim())) setName('')
+    const created = await onCreate(name.trim())
     setBusy(false)
+    if (created) setName(null)
   }
-  return (
-    <div className="flex items-center gap-2">
-      <Input
-        autoFocus
-        className="w-56"
+  return <>
+    <Button onClick={() => setName('')}><Plus />{t({ ko: '효과음 추가', en: 'Add effect' })}</Button>
+    {name !== null ? (
+      <NameDialog
+        open
+        title={t({ ko: '새 효과음', en: 'New effect' })}
+        label={t({ ko: '새 효과음 이름', en: 'New effect name' })}
+        submitLabel={t({ ko: '추가', en: 'Add' })}
         maxLength={120}
-        placeholder={t({ ko: '효과음 이름', en: 'Effect name' })}
-        aria-label={t({ ko: '새 효과음 이름', en: 'New effect name' })}
         value={name}
-        onChange={(event) => setName(event.target.value)}
-        onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-          if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
-            event.preventDefault()
-            void submit()
-          }
-        }}
+        onChange={setName}
+        onSubmit={() => void submit()}
+        onClose={() => setName(null)}
+        busy={busy}
       />
-      <Button disabled={!name.trim() || busy} onClick={() => void submit()}><Plus />{t({ ko: '추가', en: 'Add' })}</Button>
-    </div>
-  )
+    ) : null}
+  </>
 }

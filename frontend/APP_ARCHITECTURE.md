@@ -24,18 +24,19 @@ current screen state. See `components/layout/app-shell.tsx`; these providers are
 | `/access` | `features/auth` | shell |
 | `/groups`, `/groups/:groupId` | `features/groups` | `page.groups.view` |
 | `/prompts` | `features/prompts` | `page.prompts.view` |
-| `/characters` (`?folder=`, `?q=`, `?page=`, `?setting=`, `?new=`) | `features/characters` (character library) | `page.characters.view` |
+| `/characters` (`?view=profiles`, `?folder=`, `?q=`, `?page=`, `?setting=`, `?new=`) | `features/characters` (appearance library + existing chat profile editors) | `page.characters.view`; profiles admin-only |
 | `/generation` (NAI, ComfyUI, workflows, queue) | `features/image-generation`, `features/module-graph` | `page.generation.view` |
 | `/wildcards` | `features/image-generation` | `page.wildcards.view` |
 | `/public/workflows/:slug` | `features/image-generation` | public workflow page |
 | `/images/:compositeHash`, `/images/:compositeHash/metadata` | `features/images`, `features/metadata` | `page.image-detail.view`, `page.metadata-editor.view` |
 | `/upload` | `features/upload` | `page.upload.view` |
 | `/chat` | `features/codex-chat` | `page.chat.view` |
+| `/chat/resources?tab=presets|blocks|lorebooks|routines` | `features/codex-chat` reuses settings resource editors | administrator, unchanged |
 | `/files` | `features/files` | `page.files.view` |
 | `/posts` | `features/posts` (board and knowledge) | `page.posts.view` |
 | `/audio` | `features/audio` | `page.audio.view` |
 | `/sprite` | `features/sprite` | `page.sprite.view` |
-| `/settings` | `features/settings` | `page.settings.view` |
+| `/settings` | `features/settings` | `page.settings.view`; `section=mine` uses `page.chat.view` |
 | `/wallpaper` | `features/wallpaper` | `page.wallpaper.view` |
 | `/wallpaper/runtime` | `features/wallpaper` | separate runtime access flow; outside app shell |
 | `/graph` | redirect to `/generation?tab=workflows` | |
@@ -44,7 +45,29 @@ current screen state. See `components/layout/app-shell.tsx`; these providers are
 Everything except `/login`, `/dev/ui` and `/wallpaper/runtime` renders inside `ProtectedAppShell` → `components/layout/app-shell.tsx`.
 The public workflow route has its own access flow; being inside the shell does not make it a private workflow.
 
+## App shell navigation
+
+`components/layout/app-navigation.ts` is the one navigation model: each built-in page's path, pinnable header key,
+menu group (라이브러리 · 만들기 · 확장, or none for `/access` and `/settings`) and one-line description, plus the
+enabled plugin pages, filtered by the account's page permissions (names and icons from `page-access-catalog.tsx`).
+The header shows the pinned pages and `AppNavGroupMenu` (`app-nav-menu.tsx`); below md `AppBottomNav`
+(`app-bottom-nav.tsx`) shows the first four pins and 전체 (`/access`, which lists the same groups). Settings and
+내 설정 are in the account menu. The pins are the shared `general.headerNavigation` page flags in
+`headerNavigationOrder` (tool flags show queue, search and account); before `HEADER_NAVIGATION_VERSION` 2 the page flags
+meant shown/hidden, so loading an older settings file keeps only the tool flags and starts from the default pins
+(`settingsServiceStorage.ts`). While mounted, the bottom tabs set `data-bottom-nav` on `<html>`, and
+`--shell-bottom-inset` reserves their room for the shell, full-height pages and bottom-anchored bars (DESIGN_PRESET
+"Page layout").
+
 ## Layers
+
+Settings use a **Mine / Shared administration** sidebar and scrolling sections with group links, not inner tabs.
+`section`, `group` and `setting` select a section, scroll group and highlighted registry row. `settings-tabs.ts`
+normalizes legacy section/view links, including moved chat resources. `shared/src/constants/pageSettings.ts`
+defines names, descriptions, synonyms, storage scope, permission and advanced metadata. Page search, Ctrl K and the
+right-side contextual settings sheet reuse it. `SettingsAdvanced` is local to its group; editor-dialog switches
+remain independent of page disclosure state. Generation's `nai`, `comfyui`, `pacing`, `schedules` anchors are stable;
+connection controllers and dialogs are imported from image-generation without duplicating their API operations.
 - `src/components/ui/` — design-system primitives (Button, IconButton, Panel, Section, Modal, Input, …). No feature
   knowledge, no API calls. Visual rules live here.
 - `src/components/common/` — shared composites built from `ui` (segmented controls, page-with-sidebar / sidebar

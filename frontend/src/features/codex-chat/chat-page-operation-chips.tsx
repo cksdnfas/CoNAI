@@ -17,6 +17,8 @@ function useDestinationLabel() {
     const page = PAGE_ACCESS_CATALOG.find((item) => item.path === path)
     const name = page ? t(page.labelKey) : path
     const view = new URLSearchParams(query)
+    if (path === '/characters' && view.get('view') === 'profiles') return t({ ko: '캐릭터 › 채팅 프로필', en: 'Characters › Chat profiles' })
+    if (path === '/chat/resources') return t({ ko: '채팅 › 자원', en: 'Chat › Resources' })
     const section = view.get('section') as SettingsTab | null
     const tab = section && SETTINGS_TAB_LABELS[section] ? t(SETTINGS_TAB_LABELS[section]) : view.get('tab')
     return tab ? `${name} › ${tab}` : name

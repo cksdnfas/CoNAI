@@ -58,7 +58,7 @@ export function WallpaperTemplateModal({ open, onClose, onApply }: WallpaperTemp
       open={open}
       onClose={onClose}
       title={t({ ko: '빠른 시작 템플릿', en: 'Quick-start templates' })}
-      widthClassName="max-w-4xl"
+      size="lg"
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {WALLPAPER_TEMPLATES.map((template) => (

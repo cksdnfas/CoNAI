@@ -7,6 +7,7 @@ import { useParams } from 'react-router-dom'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { CollapsibleRow } from '@/components/ui/collapsible-row'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -224,12 +225,12 @@ export function ImageMetadataEditPage() {
             <IconButton size="icon-sm" variant="ghost" onClick={handleDownload} disabled={!canEditMetadata || !draft || busy || !isEditableImage || Boolean(draftValidationError)} label={t({ ko: '다운로드', en: 'Download' })}>
               <Download className="size-4" />
             </IconButton>
-            <Tip content={draft && isEditableImage && !hasUnsavedChanges ? t({ ko: '바뀐 게 없어', en: 'No changes to save' }) : t({ ko: '저장', en: 'Save' })}>
+            <Tip content={draft && isEditableImage && !hasUnsavedChanges ? t({ ko: '바뀐 게 없어', en: 'No changes to save' }) : null}>
               {/* The span carries the tooltip: a disabled button gets no pointer events. */}
               <span className="inline-flex" tabIndex={draft && isEditableImage && !hasUnsavedChanges ? 0 : undefined}>
-                <IconButton variant="default" size="icon-sm" onClick={handleSave} disabled={!canSave} tooltip={false} label={t({ ko: '저장', en: 'Save' })}>
-                  <Save className="size-4" />
-                </IconButton>
+                <Button size="sm" onClick={handleSave} disabled={!canSave}>
+                  <Save />{t({ ko: '저장', en: 'Save' })}
+                </Button>
               </span>
             </Tip>
           </>

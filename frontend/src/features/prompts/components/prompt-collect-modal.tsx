@@ -47,7 +47,7 @@ export function PromptCollectModal({ open, isSubmitting = false, onClose, onSubm
       open={open}
       onClose={onClose}
       title={t('prompts.components.prompt.collect.modal.collect.prompts.manually')}
-      widthClassName="max-w-3xl"
+      size="lg"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
         {formError ? (

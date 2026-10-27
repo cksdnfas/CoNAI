@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import { SegmentedControl } from '@/components/common/segmented-control'
+import { ChatProfileEditorPage } from '@/features/settings/components/chat-profile-editor'
+import { ChatSettingsProfiles } from '@/features/settings/components/chat-settings-profiles'
+import { registerTranslationCatalog } from '@/i18n'
+import { settingsCatalog } from '@/i18n/resources/settings'
 import { Folder, FolderInput, FolderPlus, Pencil, Plus, SquarePen, Trash2, UserRound } from 'lucide-react'
 import { NameDialog } from '@/components/common/entry-dialogs'
 import { PageToolbar } from '@/components/common/page-toolbar'
@@ -19,6 +24,7 @@ import { useI18n } from '@/i18n'
 import {
   CHARACTER_SETTINGS_PAGE_SIZE,
   createCharacterFolder,
+  createCharacterSetting,
   deleteCharacterFolder,
   deleteCharacterSetting,
   getCharacterFolderDeletePreview,
@@ -35,7 +41,8 @@ import { folderPath, folderSubtreeIds, refreshCharacterViews, sortFoldersByName,
 import { CharacterFolderPickerModal, CharacterFolderSidebar } from './components/character-folder-nav'
 import { CharacterSettingCard } from './components/character-setting-card'
 import { CharacterSettingGrid } from './components/character-setting-grid'
-import { CharacterSettingEditorModal } from './components/character-setting-editor-modal'
+import { CharacterSettingEditorPage } from './components/character-setting-editor-page'
+import { CharacterSettingSaveDialog } from './components/character-setting-save-dialog'
 import { useCharacterLibraryChatPage } from './use-character-library-chat-page'
 import { useCharacterSettingEditor, type SettingEditorTarget } from './use-character-setting-editor'
 
@@ -45,11 +52,49 @@ type MoveState = { kind: 'folder'; folder: CharacterFolder } | { kind: 'setting'
 const positiveId = (value: string | null) => (value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : null)
 
 /**
- * 캐릭터 라이브러리: appearance settings filed in nested folders (work › character › looks). The URL holds the open
- * folder (`folder`), the name search across the library (`q`), the page (`page`), the open setting (`setting`) and a
- * new setting's draft (`new`: its folder id or `root`).
+ * 캐릭터: the appearance library and (administrators) the chat profiles. The library's URL holds the open folder
+ * (`folder`), the name search across the library (`q`), the page (`page`), the setting open in its editor page
+ * (`setting`) and a new setting's draft (`new`: its folder id or `root`); the profiles' the profile open in its editor
+ * page (`profile`: an id or `new`). An open editor replaces the list and its tabs.
  */
+registerTranslationCatalog(settingsCatalog)
+
 export function CharacterLibraryPage() {
+  const { t } = useI18n()
+  const permissions = useFeaturePermissions()
+  const [params] = useSearchParams()
+  if (!permissions.isAdmin || params.get('view') !== 'profiles' || params.has('setting')) return <AppearanceLibraryPage />
+  if (params.has('profile')) return <ChatProfileEditorPage />
+  return (
+    <div className="space-y-6">
+      <PageToolbar start={<CharacterViewSwitch />} actions={<Button asChild variant="ghost"><Link to="/chat">{t({ ko: '채팅 열기', en: 'Open chat' })}</Link></Button>} />
+      <ChatSettingsProfiles />
+    </div>
+  )
+}
+
+/** Administrators switch the page between the appearance library and the chat profiles; the switch leads the toolbar. */
+function CharacterViewSwitch() {
+  const { t } = useI18n()
+  const permissions = useFeaturePermissions()
+  const [params, setParams] = useSearchParams()
+  if (!permissions.isAdmin) return null
+  return (
+    <SegmentedControl
+      value={params.get('view') === 'profiles' ? 'profiles' : 'appearance'}
+      onChange={(value) => setParams(value === 'profiles' ? { view: 'profiles' } : {})}
+      size="sm"
+      semantics="tabs"
+      ariaLabel={t({ ko: '캐릭터 보기', en: 'Character views' })}
+      items={[
+        { value: 'appearance', label: t({ ko: '외형 라이브러리', en: 'Appearance library' }) },
+        { value: 'profiles', label: t({ ko: '채팅 프로필', en: 'Chat profiles' }) },
+      ]}
+    />
+  )
+}
+
+function AppearanceLibraryPage() {
   const { t } = useI18n()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
@@ -66,6 +111,8 @@ export function CharacterLibraryPage() {
   const newIn = openSettingId === null && newParam !== null && (newParam === 'root' || positiveId(newParam) !== null) ? { folderId: positiveId(newParam) } : null
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
   const [moving, setMoving] = useState<MoveState | null>(null)
+  /** A new setting's name and folder, asked before it is made and opened in its editor page. */
+  const [creating, setCreating] = useState<{ folderId: number | null } | null>(null)
   const [searchText, setSearchText] = useState(query)
   const [syncedQuery, setSyncedQuery] = useState(query)
   if (syncedQuery !== query) { setSyncedQuery(query); setSearchText(query) }
@@ -109,6 +156,15 @@ export function CharacterLibraryPage() {
   })
 
   const onError = (error: unknown, fallback: string) => showSnackbar({ message: getErrorMessage(error, fallback), tone: 'error' })
+  const createMutation = useMutation({
+    mutationFn: (input: { folderId: number | null; name: string }) => createCharacterSetting({ ...input, appearance: '' }),
+    onSuccess: (setting) => {
+      setCreating(null)
+      void refreshCharacterViews(queryClient, { folderIds: [setting.folderId], settingIds: [setting.id] })
+      openSetting(setting.id)
+    },
+    onError: (error) => onError(error, t({ ko: '외형 설정을 만들지 못했어.', en: 'Could not create the setting.' })),
+  })
   const nameMutation = useMutation({
     mutationFn: (state: NameDialogState) => state.mode === 'create'
       ? createCharacterFolder({ parentId: state.parentId, name: state.name.trim() })
@@ -173,7 +229,7 @@ export function CharacterLibraryPage() {
 
   const folderMenu = (folder: CharacterFolder): ActionMenuEntry[] => canEdit ? [
     { key: 'subfolder', label: t({ ko: '하위 폴더 추가', en: 'Add subfolder' }), icon: FolderPlus, onSelect: () => setNameDialog({ mode: 'create', parentId: folder.id, name: '' }) },
-    { key: 'setting', label: t({ ko: '외형 설정 추가', en: 'Add appearance setting' }), icon: Plus, onSelect: () => newSetting(folder.id) },
+    { key: 'setting', label: t({ ko: '외형 설정 추가', en: 'Add appearance setting' }), icon: Plus, onSelect: () => setCreating({ folderId: folder.id }) },
     { key: 'rename', label: t({ ko: '이름 바꾸기', en: 'Rename' }), icon: Pencil, onSelect: () => setNameDialog({ mode: 'rename', folder, name: folder.name }) },
     { key: 'move', label: t({ ko: '다른 위치로 옮기기', en: 'Move to…' }), icon: FolderInput, onSelect: () => setMoving({ kind: 'folder', folder }) },
     '-',
@@ -192,19 +248,25 @@ export function CharacterLibraryPage() {
   })
 
   const rootLabel = t('characterLibraryPage.title')
+  if (editor.open) {
+    return <CharacterSettingEditorPage editor={editor} folders={folders} canEdit={canEdit} admin={permissions.isAdmin} rootLabel={rootLabel} onOpenFolder={(id) => openFolder(id)} />
+  }
   const toolbar = (
     <PageToolbar
-      start={query ? <h1 className="truncate text-base font-bold tracking-tight text-foreground">{t({ ko: '‘{query}’ 검색 결과', en: 'Results for ‘{query}’' }, { query })}</h1> : (
-        <PathBreadcrumbs
-          ariaLabel={t({ ko: '폴더 경로', en: 'Folder path' })}
-          items={[{ key: 'root', label: rootLabel, onClick: () => openFolder(null) }, ...path.map((folder) => ({ key: String(folder.id), label: folder.name, onClick: () => openFolder(folder.id) }))]}
-        />
-      )}
+      start={<>
+        <CharacterViewSwitch />
+        {query ? <h1 className="truncate text-base font-bold tracking-tight text-foreground">{t({ ko: '‘{query}’ 검색 결과', en: 'Results for ‘{query}’' }, { query })}</h1> : (
+          <PathBreadcrumbs
+            ariaLabel={t({ ko: '폴더 경로', en: 'Folder path' })}
+            items={[{ key: 'root', label: rootLabel, onClick: () => openFolder(null) }, ...path.map((folder) => ({ key: String(folder.id), label: folder.name, onClick: () => openFolder(folder.id) }))]}
+          />
+        )}
+      </>}
       actions={(
         <>
           {canEdit ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '새 폴더', en: 'New folder' })} onClick={() => setNameDialog({ mode: 'create', parentId: query ? null : folderId, name: '' })}><FolderPlus /></IconButton> : null}
-          {canEdit ? <IconButton variant="ghost" size="icon-sm" label={t({ ko: '새 외형 설정', en: 'New appearance setting' })} onClick={() => newSetting(query ? null : folderId)}><Plus /></IconButton> : null}
           {currentFolder && !query && canEdit ? <ActionMenuButton entries={folderMenu(currentFolder)} label={t({ ko: '폴더 작업', en: 'Folder actions' })} /> : null}
+          {canEdit ? <Button size="sm" onClick={() => setCreating({ folderId: query ? null : folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : null}
         </>
       )}
     >
@@ -249,7 +311,7 @@ export function CharacterLibraryPage() {
                   icon={UserRound}
                   title={query ? t({ ko: '맞는 외형 설정이 없어', en: 'No matching settings' }) : t({ ko: '여기엔 외형 설정이 없어', en: 'No appearance settings here' })}
                   description={!query && canEdit ? t({ ko: '캐릭터 외형을 한 번 등록해 두면 채팅 프로필과 생성에서 다시 쓸 수 있어.', en: 'Register a look once and reuse it in chat profiles and generation.' }) : undefined}
-                  action={!query && canEdit ? <Button size="sm" onClick={() => newSetting(folderId)}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : undefined}
+                  action={!query && canEdit ? <Button size="sm" onClick={() => setCreating({ folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : undefined}
                 />
               )}
             />
@@ -257,7 +319,17 @@ export function CharacterLibraryPage() {
         </>}
       </section>
 
-      {editor.open ? <CharacterSettingEditorModal editor={editor} folders={folders} canEdit={canEdit} admin={permissions.isAdmin} onClose={closeEditor} /> : null}
+      {creating ? (
+        <CharacterSettingSaveDialog
+          title={t({ ko: '새 외형 설정', en: 'New appearance setting' })}
+          initialName=""
+          initialFolderId={creating.folderId}
+          submitLabel={t({ ko: '만들고 편집하기', en: 'Create and edit' })}
+          busy={createMutation.isPending}
+          onSubmit={(input) => createMutation.mutate(input)}
+          onClose={() => setCreating(null)}
+        />
+      ) : null}
       {nameDialog ? (
         <NameDialog
           open

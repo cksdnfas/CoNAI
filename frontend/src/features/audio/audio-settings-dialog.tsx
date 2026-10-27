@@ -52,7 +52,7 @@ export function AudioSettingsDialog({ open, onClose, canManage, focusWorkflowId 
   // Each tab saves its own thing (a workflow link, the export settings, shortcuts as they change), so each ends in its
   // own footer; it sits at the dialog's end like every editor footer.
   return (
-    <Modal open={open} title={t({ ko: '오디오 설정', en: 'Audio settings' })} onClose={onClose} size="narrow">
+    <Modal open={open} title={t({ ko: '오디오 설정', en: 'Audio settings' })} onClose={onClose} size="md">
       <TextTabs value={tab} items={tabs} onChange={setTab} className="mb-4" />
       {tab === 'workflows' ? <WorkflowTab key={focusWorkflowId ?? 'all'} focusWorkflowId={focusWorkflowId} /> : tab === 'export' ? <ExportTab /> : <ShortcutTab />}
     </Modal>

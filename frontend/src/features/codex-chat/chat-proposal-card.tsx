@@ -59,7 +59,7 @@ import { TaskPlanCard } from './chat-task-ui'
 
 // The settings editors are large and only open on demand, so they stay out of the chat bundle until then.
 const ChatBlockEditorModal = lazy(() => import('@/features/settings/components/chat-block-editor-modal').then((module) => ({ default: module.ChatBlockEditorModal })))
-const ChatProfileEditorModal = lazy(() => import('@/features/settings/components/chat-profile-editor-modal').then((module) => ({ default: module.ChatProfileEditorModal })))
+const ChatProfileEditorModal = lazy(() => import('@/features/settings/components/chat-profile-editor').then((module) => ({ default: module.ChatProfileEditorModal })))
 
 const LONG_TEXT = 160
 
@@ -213,7 +213,7 @@ function BlockProposalCard({ proposal, threadId }: { proposal: BlockProposal; th
           {chips.map((chip) => <Chip key={chip} size="sm" tone="muted" mono>{chip}</Chip>)}
         </div>
       ) : null}
-      <Footer saved={saved} savedLink="/settings?section=chat&view=resources" admin={admin}>
+      <Footer saved={saved} savedLink="/chat/resources" admin={admin}>
         {canLink ? (
           <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
             <Checkbox checked={link} onCheckedChange={(checked) => setLink(checked === true)} />
@@ -275,7 +275,7 @@ function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal
         </div>
       </div>
       {input.characterLink !== undefined ? <ChatProfileLinkChange after={input.characterLink} profileId={null} showBefore={false} /> : null}
-      <Footer saved={saved} savedLink="/settings?section=chat" admin={admin}>
+      <Footer saved={saved} savedLink="/characters?view=profiles" admin={admin}>
         <span className="flex-1" />
         <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending} />
         <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
@@ -461,7 +461,7 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
           />
         ))}
       </div>
-      <Footer saved={saved} savedLink="/settings?section=chat" admin={admin}>
+      <Footer saved={saved} savedLink="/characters?view=profiles" admin={admin}>
         <span className="flex-1" />
         <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending || checking} />
         <SaveButton pending={saveMutation.isPending || checking} onClick={() => void handleSave()} />

@@ -11,11 +11,13 @@ import { folderPath, useCharacterFolders } from '../character-library-shared'
 import { CharacterFolderPickerModal } from './character-folder-nav'
 
 /** Where a new appearance setting goes: its folder and name (Enter saves). */
-export function CharacterSettingSaveDialog({ title, initialName, initialFolderId = null, busy = false, onSubmit, onClose }: {
+export function CharacterSettingSaveDialog({ title, initialName, initialFolderId = null, busy = false, submitLabel, onSubmit, onClose }: {
   title: string
   initialName: string
   initialFolderId?: number | null
   busy?: boolean
+  /** The verb of the submit key (default 저장). */
+  submitLabel?: string
   onSubmit: (target: { folderId: number | null; name: string }) => void
   onClose: () => void
 }) {
@@ -27,7 +29,7 @@ export function CharacterSettingSaveDialog({ title, initialName, initialFolderId
   const folders = foldersQuery.data ?? []
   const pathLabel = [t({ ko: '최상위', en: 'Top level' }), ...folderPath(new Map(folders.map((folder) => [folder.id, folder])), folderId).map((folder) => folder.name)].join(' / ')
   return (
-    <Modal open title={title} onClose={() => { if (!busy) onClose() }} widthClassName="max-w-md">
+    <Modal open title={title} onClose={() => { if (!busy) onClose() }} size="md">
       <form onSubmit={(event) => { event.preventDefault(); if (!busy && name.trim()) onSubmit({ folderId, name: name.trim() }) }}>
         <ModalBody>
           <div className="space-y-4">
@@ -44,7 +46,7 @@ export function CharacterSettingSaveDialog({ title, initialName, initialFolderId
         </ModalBody>
         <ModalFooter>
           <span className="flex-1" />
-          <Button type="submit" disabled={busy || !name.trim()}>{busy ? <Spinner className="size-3" /> : null}{t({ ko: '저장', en: 'Save' })}</Button>
+          <Button type="submit" disabled={busy || !name.trim()}>{busy ? <Spinner className="size-3" /> : null}{submitLabel ?? t({ ko: '저장', en: 'Save' })}</Button>
         </ModalFooter>
       </form>
       {picking ? (

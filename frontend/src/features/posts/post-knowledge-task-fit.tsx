@@ -41,7 +41,7 @@ function TaskFitDialog({ post, context, taskFit, onClose }: { post: PostDetail; 
     onSuccess: async () => { await invalidatePostScope(queryClient, post.id, 'post'); onClose() },
     onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '검색 의견을 저장하지 못했어.', en: 'Could not save search feedback.' })) }),
   })
-  return <Modal open onClose={onClose} title={taskFit === 'useful' ? t({ ko: '이 검색에 유용했어', en: 'Useful for this search' }) : t({ ko: '이 검색엔 맞지 않아', en: 'Unsuitable for this search' })} size="narrow">
+  return <Modal open onClose={onClose} title={taskFit === 'useful' ? t({ ko: '이 검색에 유용했어', en: 'Useful for this search' }) : t({ ko: '이 검색엔 맞지 않아', en: 'Unsuitable for this search' })} size="md">
     <ModalBody>
       <p className="whitespace-pre-wrap text-sm">{t({ ko: '검색: {query}', en: 'Search: {query}' }, { query: context.receipt.query })}</p>
       <Field label={t({ ko: '설명 (선택)', en: 'Explanation (optional)' })}><Textarea rows={3} maxLength={2000} value={reason} onChange={(event) => setReason(event.target.value)} /></Field>

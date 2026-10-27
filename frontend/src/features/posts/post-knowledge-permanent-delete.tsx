@@ -66,7 +66,7 @@ export function PostKnowledgePermanentDeleteDialog({ post, onClose, onDeleted }:
   const expired = data ? Date.parse(data.expiresAt) <= Date.now() : false
   const confirmed = data !== undefined && confirmedToken === data.previewToken
   const canDelete = Boolean(data && !data.blocked && !expired && confirmed && !preview.isFetching && !remove.isPending)
-  return <Modal open onClose={() => { if (!remove.isPending) onClose() }} title={t({ ko: '지식 문서 영구 삭제', en: 'Permanently delete knowledge' })} size="normal" height="medium">
+  return <Modal open onClose={() => { if (!remove.isPending) onClose() }} title={t({ ko: '지식 문서 영구 삭제', en: 'Permanently delete knowledge' })} size="md">
     <ModalBody>
       <p className="text-sm font-semibold">{post.title}</p>
       {data ? <p className="text-xs text-muted-foreground">{t({ ko: '문서 #{id} · 내용 {version}판', en: 'Document #{id} · content version {version}' }, { id: data.postId, version: data.contentVersion })}</p> : null}

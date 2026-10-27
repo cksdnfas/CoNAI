@@ -287,7 +287,7 @@ export function ModuleWorkflowSchedulesPanel({
         open={editorMode !== null}
         onClose={closeEditor}
         title={editorMode === 'edit' ? t({ ko: '자동 실행 수정', en: 'Edit autorun' }) : t({ ko: '자동 실행 추가', en: 'Add autorun' })}
-        size="normal"
+        size="lg"
         height="tall"
         dirty={draftDirty}
         onSave={canSaveDraft ? () => void handleSubmit() : undefined}

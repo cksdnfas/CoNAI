@@ -1,8 +1,9 @@
 import type { TranslationDictionary } from '@/i18n'
+import { SETTINGS_ROW_BY_ID } from '@conai/shared'
 
-export type SettingsTab = 'general' | 'library' | 'media' | 'auto' | 'generation' | 'chat' | 'posts' | 'llm' | 'plugins' | 'accounts' | 'system' | 'maintenance'
+export type SettingsTab = 'mine' | 'general' | 'library' | 'media' | 'auto' | 'generation' | 'chat' | 'posts' | 'llm' | 'plugins' | 'accounts' | 'system' | 'maintenance'
 
-export type SettingsTabGroup = 'personalization' | 'library' | 'services' | 'administration'
+export type SettingsTabGroup = 'mine' | 'shared'
 
 export interface SettingsTabItem {
   value: SettingsTab
@@ -10,30 +11,32 @@ export interface SettingsTabItem {
 }
 
 export const SETTINGS_TAB_ITEMS: SettingsTabItem[] = [
-  { value: 'general', group: 'personalization' },
-  { value: 'library', group: 'library' },
-  { value: 'media', group: 'library' },
-  { value: 'auto', group: 'services' },
-  { value: 'generation', group: 'services' },
-  { value: 'llm', group: 'services' },
-  { value: 'chat', group: 'services' },
-  { value: 'posts', group: 'services' },
-  { value: 'accounts', group: 'administration' },
-  { value: 'plugins', group: 'administration' },
-  { value: 'system', group: 'administration' },
-  { value: 'maintenance', group: 'administration' },
+  { value: 'mine', group: 'mine' },
+  { value: 'general', group: 'shared' },
+  { value: 'library', group: 'shared' },
+  { value: 'media', group: 'shared' },
+  { value: 'generation', group: 'shared' },
+  { value: 'llm', group: 'shared' },
+  { value: 'chat', group: 'shared' },
+  { value: 'posts', group: 'shared' },
+  { value: 'auto', group: 'shared' },
+  { value: 'accounts', group: 'shared' },
+  { value: 'plugins', group: 'shared' },
+  { value: 'system', group: 'shared' },
+  { value: 'maintenance', group: 'shared' },
 ]
 
 /** Sidebar row label and toolbar title of each section. */
 export const SETTINGS_TAB_LABELS: Record<SettingsTab, TranslationDictionary> = {
-  general: { ko: '일반 및 화면', en: 'General and appearance' },
+  mine: { ko: '페르소나·플래그', en: 'Personas and flags' },
+  general: { ko: '공용 화면 테마', en: 'Shared appearance' },
   library: { ko: '라이브러리', en: 'Library' },
   media: { ko: '미디어 처리', en: 'Media processing' },
-  auto: { ko: '자동화 및 분석', en: 'Automation and analysis' },
-  generation: { ko: '생성 및 AI', en: 'Generation and AI' },
-  llm: { ko: 'LLM', en: 'LLM' },
+  auto: { ko: '자동 분석', en: 'Automatic analysis' },
+  generation: { ko: '생성 엔진', en: 'Generation engines' },
+  llm: { ko: 'AI 연결', en: 'AI connections' },
   chat: { ko: '채팅', en: 'Chat' },
-  posts: { ko: '게시판', en: 'Posts' },
+  posts: { ko: '게시판·지식', en: 'Posts and knowledge' },
   accounts: { ko: '계정·권한', en: 'Accounts and access' },
   plugins: { ko: '플러그인 관리', en: 'Plugin management' },
   system: { ko: '시스템', en: 'System' },
@@ -43,7 +46,7 @@ export const SETTINGS_TAB_LABELS: Record<SettingsTab, TranslationDictionary> = {
 const SETTINGS_TAB_VALUES = new Set<SettingsTab>(SETTINGS_TAB_ITEMS.map((item) => item.value))
 
 /** Old `?section=` ids (earlier layouts and bookmarks) mapped to the tab that now holds their content. */
-const LEGACY_SETTINGS_TAB_MAP: Record<string, SettingsTab> = {
+export const LEGACY_SETTINGS_TAB_MAP: Record<string, SettingsTab> = {
   appearance: 'general',
   integration: 'generation',
   'integration-tools': 'generation',
@@ -59,4 +62,32 @@ export function parseSettingsTab(value: string | null): SettingsTab {
   if (!value) return 'general'
   if (SETTINGS_TAB_VALUES.has(value as SettingsTab)) return value as SettingsTab
   return LEGACY_SETTINGS_TAB_MAP[value] ?? 'general'
+}
+
+/** Canonicalize old bookmarks without losing unrelated editor parameters. */
+export function resolveSettingsLocation(params: URLSearchParams): string | null {
+  const next = new URLSearchParams(params)
+  const raw = params.get('section')
+  const section = parseSettingsTab(raw)
+  const view = params.get('view')
+  if (section === 'chat') {
+    if (view === 'resources') return '/chat/resources'
+    if (view === 'routines') return '/chat/resources?tab=routines'
+    if (view === 'profiles') return '/characters?view=profiles'
+    if (view === 'mine') { next.set('section', 'mine'); next.delete('view') }
+    else if (view === 'judge') { next.set('section', 'llm'); next.set('group', 'log'); next.delete('view') }
+  }
+  if (section === 'llm' && view === 'content-evaluation') {
+    next.set('section', 'posts'); next.set('group', 'topics'); next.delete('view')
+  } else if ((section === 'llm' || section === 'posts') && view) {
+    next.set('group', view === 'judge' ? 'log' : view); next.delete('view')
+  }
+  if (!next.has('section') || (raw && LEGACY_SETTINGS_TAB_MAP[raw])) {
+    next.set('section', section)
+    const groups: Record<string, string> = { appearance: 'appearance', folders: 'folders', metadata: 'metadata', 'image-save': 'image-save', 'llm-connections': 'connections', integration: 'pacing', 'integration-tools': 'comfyui' }
+    if (raw && groups[raw] && !next.has('group')) next.set('group', groups[raw])
+  }
+  const row = SETTINGS_ROW_BY_ID[next.get('setting') ?? '']
+  if (row && row.section === parseSettingsTab(next.get('section')) && !next.has('group')) next.set('group', row.group)
+  return next.toString() === params.toString() ? null : `/settings?${next}`
 }

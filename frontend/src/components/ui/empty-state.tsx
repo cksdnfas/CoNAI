@@ -48,11 +48,14 @@ function EmptyState({ icon, title, description, action, size, className, ...prop
     return (
       <div data-slot="empty-state" data-size="compact" className={cn(emptyStateVariants({ size }), className)} {...props}>
         {renderIcon(icon, 'mt-0.5 size-4 shrink-0 text-muted-foreground')}
-        <div className="min-w-0 flex-1 space-y-0.5">
-          <Text as="div" variant="muted">{title}</Text>
-          {description ? <Text as="div" variant="caption">{description}</Text> : null}
+        {/* The action sits at the row end and drops under the text where the row is narrow (a sidebar). */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-start gap-x-2.5 gap-y-2">
+          <div className="min-w-0 flex-1 basis-40 space-y-0.5">
+            <Text as="div" variant="muted">{title}</Text>
+            {description ? <Text as="div" variant="caption">{description}</Text> : null}
+          </div>
+          {action ? <div className="shrink-0">{action}</div> : null}
         </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
       </div>
     )
   }

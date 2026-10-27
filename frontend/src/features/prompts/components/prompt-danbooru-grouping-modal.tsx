@@ -93,7 +93,7 @@ export function PromptDanbooruGroupingModal({ open, onClose, onInfo, onError }: 
       open={open}
       onClose={onClose}
       title={t({ ko: 'Danbooru 기준 자동 그룹 구성', en: 'Danbooru-based group setup' })}
-      size="normal"
+      size="lg"
       height="tall"
     >
       <div className="space-y-4">

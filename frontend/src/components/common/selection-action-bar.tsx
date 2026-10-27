@@ -65,7 +65,7 @@ export function SelectionActionBar({
 
   return (
     // Drawer layer +6: above bottom drawers and page floating controls, below the image viewer's later portal and modals.
-    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom))] z-[calc(var(--z-index-drawer)+6)] flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[max(1.5rem,env(safe-area-inset-bottom),calc(var(--shell-bottom-inset)+1rem))] z-[calc(var(--z-index-drawer)+6)] flex justify-center px-4">
       <div
         className={cn(
           'theme-floating-panel theme-selection-bar pointer-events-auto flex max-w-full flex-wrap items-center gap-3 text-sm text-foreground',

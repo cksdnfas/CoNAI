@@ -107,7 +107,7 @@ export function NodeArtifactOutputs({
       <Modal
         open={Boolean(artifactTextModal)}
         title={artifactTextModal?.title ?? t({ ko: '출력 내용', en: 'Output content' })}
-        widthClassName="max-w-3xl"
+        size="lg"
         onClose={() => setArtifactTextModal(null)}
       >
         <CodeBlock maxHeight="screen">

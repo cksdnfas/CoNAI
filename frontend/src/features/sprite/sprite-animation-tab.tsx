@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Clapperboard, Download, Loader2, Pause, Play, Save } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
@@ -108,9 +109,9 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
       <SpriteActionBar>
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">{t({ ko: '{count}프레임', en: '{count} frames' }, { count: options.frameCount })} · {options.fps}fps · {options.outputFormat.toUpperCase()}</span>
         <IconButton variant="ghost" size="icon-sm" disabled={!canRun} label={t({ ko: '파일로 받기', en: 'Download file' })} onClick={() => void run(false)}><Download /></IconButton>
-        <IconButton variant="default" disabled={!canRun || !has('images.upload')} onClick={() => void run(true)} aria-busy={running || undefined} label={running ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '라이브러리에 저장', en: 'Save to library' })}>
-          {running ? <Loader2 className="animate-spin" /> : <Save />}
-        </IconButton>
+        <Button disabled={!canRun || !has('images.upload')} onClick={() => void run(true)} aria-busy={running || undefined}>
+          {running ? <Loader2 className="animate-spin" /> : <Save />}{running ? t({ ko: '저장 중', en: 'Saving' }) : t({ ko: '라이브러리에 저장', en: 'Save to library' })}
+        </Button>
       </SpriteActionBar>
     </div>
   )

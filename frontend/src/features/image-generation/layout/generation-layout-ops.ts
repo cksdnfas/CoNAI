@@ -78,7 +78,8 @@ export function resolveRecentStripPlacement(preset: GenerationLayoutPreset): 'to
 
 /**
  * The preset with the plugin blocks that exist now: blocks of plugins that are gone drop out, and a plugin block the
- * preset has never placed joins the end of the last column (before the Generate button).
+ * preset has never placed joins the end of the last column (before the Generate button). The bundled prompt snippets
+ * join the prompt/fields on first placement; explicitly placed plugin blocks stay where the preset put them.
  */
 export function withPluginBlocks(preset: GenerationLayoutPreset, available: readonly GenerationLayoutPluginBlock[]): GenerationLayoutPreset {
   const keep = (block: GenerationLayoutBlock) => !isGenerationLayoutPluginBlock(block) || available.includes(block)
@@ -86,12 +87,35 @@ export function withPluginBlocks(preset: GenerationLayoutPreset, available: read
   const missing = available.filter((block) => !placed.has(block)).slice(0, GENERATION_LAYOUT_LIMITS.pluginBlocks)
   if (!missing.length && [...placed, ...preset.hidden].every(keep)) return preset
   const columns = preset.columns.map((column) => ({ ...column, blocks: column.blocks.filter(keep) }))
+  const snippets = 'plugin:generation-helper:snippets'
+  const promptColumn = columns.find((column) => column.blocks.includes('prompt') || column.blocks.includes('fields'))
+  if (missing.includes(snippets) && promptColumn) {
+    const anchor = promptColumn.blocks.includes('prompt') ? 'prompt' : 'fields'
+    promptColumn.blocks.splice(promptColumn.blocks.indexOf(anchor) + 1, 0, snippets)
+  }
+  const remaining = missing.filter((block) => block !== snippets || !promptColumn)
   const last = columns[columns.length - 1]
-  if (last && missing.length) {
+  if (last && remaining.length) {
     const actionIndex = last.blocks.indexOf('action')
-    last.blocks.splice(actionIndex === -1 ? last.blocks.length : actionIndex, 0, ...missing)
+    last.blocks.splice(actionIndex === -1 ? last.blocks.length : actionIndex, 0, ...remaining)
   }
   return { ...preset, columns, hidden: preset.hidden.filter(keep) }
+}
+
+/** Refresh the unmodified NAI default without moving blocks in a custom layout. */
+export function withNaiSettingsAbovePrompt(surface: GenerationLayoutSurface, preset: GenerationLayoutPreset): GenerationLayoutPreset {
+  if (surface !== 'nai' || preset.columns.length !== 2 || preset.columns.some((column) => column.tabs)) return preset
+  const defaults = createDefaultGenerationLayoutPreset('nai').columns
+  const sameBuiltins = preset.columns.every((column, index) => {
+    const builtins = column.blocks.filter((block) => !isGenerationLayoutPluginBlock(block))
+    return builtins.length === defaults[index].blocks.length && builtins.every((block, position) => block === defaults[index].blocks[position])
+  })
+  if (!sameBuiltins) return preset
+  const columns = preset.columns.map((column) => ({ ...column, blocks: [...column.blocks] }))
+  const first = columns[0].blocks
+  first.splice(first.indexOf('settings'), 1)
+  first.splice(first.indexOf('prompt'), 0, 'settings')
+  return { ...preset, columns }
 }
 
 /** Narrow screens stack the visible blocks in column order. */

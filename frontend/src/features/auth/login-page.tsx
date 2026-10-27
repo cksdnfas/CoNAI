@@ -231,7 +231,7 @@ export function LoginPage() {
         open={isRecoveryModalOpen}
         onClose={() => setIsRecoveryModalOpen(false)}
         title={t('loginPage.recoveryGuide')}
-        widthClassName="max-w-lg"
+        size="md"
       >
         <ModalBody>
           <div className="text-sm text-muted-foreground">{t('loginPage.recoveryForgotPassword')}</div>
@@ -249,7 +249,7 @@ export function LoginPage() {
           setIsGuestModalOpen(false)
         }}
         title={t('loginPage.createGuestAccount')}
-        widthClassName="max-w-lg"
+        size="md"
       >
         <form
           className="space-y-4"

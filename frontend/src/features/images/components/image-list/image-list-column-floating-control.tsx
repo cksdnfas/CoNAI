@@ -37,7 +37,7 @@ export function ImageListColumnFloatingControl({
 
   return (
     // Keeps clear of a docked chat panel (--chat-dock-width) on the right edge.
-    <div ref={containerRef} className={cn('pointer-events-none fixed bottom-6 right-[calc(1rem+var(--chat-dock-width,0px))] z-50', className)}>
+    <div ref={containerRef} className={cn('pointer-events-none fixed bottom-[calc(var(--shell-bottom-inset)+1.5rem)] right-[calc(1rem+var(--chat-dock-width,0px))] z-50', className)}>
       <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="top" closeOnBack>
         <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`}>
           {onReset ? (

@@ -1,4 +1,5 @@
-import { Folder, History, Plus, Upload } from 'lucide-react'
+import { Folder, History, Plus, Search, Shuffle, Upload } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -111,19 +112,21 @@ export function WildcardExplorerSidebarPanel({
               />
             ))
           ) : (
-            <p className="px-2.5 py-2 text-sm text-muted-foreground">{t('image-generation.components.wildcard.explorer.sidebar.panel.no.search.results')}</p>
+            <EmptyState size="compact" icon={Search} title={t('image-generation.components.wildcard.explorer.sidebar.panel.no.search.results')} />
           )
         ) : browserTreeNodes.length > 0 ? (
           <WildcardTree entries={browserEntries} selectedId={selectedWildcardId} onSelect={onSelectWildcard} />
         ) : (
-          <div className="space-y-2 px-2.5 py-2">
-            <p className="text-sm text-muted-foreground">{t('image-generation.components.wildcard.explorer.sidebar.panel.no.items.to.display.yet')}</p>
-            {activeWorkspaceTab !== 'lora' && canEditInActiveTab && canCreateInActiveTab ? (
+          <EmptyState
+            size="compact"
+            icon={Shuffle}
+            title={t('image-generation.components.wildcard.explorer.sidebar.panel.no.items.to.display.yet')}
+            action={activeWorkspaceTab !== 'lora' && canEditInActiveTab && canCreateInActiveTab ? (
               <Button size="sm" variant="secondary" onClick={() => onOpenCreate(null)}>
                 <Plus />{t('image-generation.components.wildcard.explorer.sidebar.panel.add.item')}
               </Button>
-            ) : null}
-          </div>
+            ) : undefined}
+          />
         )
       ) : null}
     </SidebarNav>

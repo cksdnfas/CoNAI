@@ -1,7 +1,5 @@
 import { Fragment } from 'react'
-import { Sparkles } from 'lucide-react'
 import { ToggleChip } from '@/components/ui/chip'
-import { IconButton } from '@/components/ui/icon-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { ChatProfile, ChatSharedBlock, ChatStyle } from '@/lib/api-codex-chat'
@@ -51,11 +49,8 @@ export function ChatProfileLookPanel({ draft, patch, defaults, backgroundUrl, bl
           onBusyChange={onBusyChange}
           busy={busy}
           onBackgroundChange={(background) => patch({ background, backgroundHash: null })}
-          backgroundActions={(
-            <IconButton size="icon-sm" variant="ghost" disabled={busy || Boolean(generateBlocked) || background.working || runs.isPending(BACKGROUND_SLOT)} label={generateBlocked ?? t({ ko: '배경 만들기', en: 'Generate background' })} onClick={() => void runs.start({ kind: 'background' }, !draft.backgroundHash && !backgroundUrl)}>
-              <Sparkles />
-            </IconButton>
-          )}
+          onGenerateBackground={() => void runs.start({ kind: 'background' }, !draft.backgroundHash && !backgroundUrl)}
+          generateBackgroundBlocked={generateBlocked ?? (background.working || runs.isPending(BACKGROUND_SLOT) ? t({ ko: '만드는 중이야', en: 'Generating' }) : null)}
         />
         {background.working || background.failed || background.candidates.length ? (
           <AssetCandidateTray runs={runs} slotKey={BACKGROUND_SLOT} title={t({ ko: '배경', en: 'Background' })} currentHash={draft.backgroundHash ?? null} referenceHash={null} actions={<AssetPresetPicker runs={runs} />} wide />

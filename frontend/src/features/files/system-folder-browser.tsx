@@ -412,7 +412,7 @@ export function SystemFolderBrowser({ location, onNavigate, sidebar }: {
         />
       ) : null}
 
-      <Modal open={conflicts.length > 0} title={t({ ko: '원래 자리에 같은 이름 파일이 있어', en: 'A file with the same name is already there' })} onClose={() => { if (!busy) setConflicts([]) }} widthClassName="max-w-md">
+      <Modal open={conflicts.length > 0} title={t({ ko: '원래 자리에 같은 이름 파일이 있어', en: 'A file with the same name is already there' })} onClose={() => { if (!busy) setConflicts([]) }} size="sm">
         <ModalBody>
           <ul className="max-h-72 overflow-y-auto">
             {conflicts.map((entry) => (
@@ -454,7 +454,7 @@ function SystemFilePreview({ root, entry, files, onClose, onNavigate }: {
   const previous = index > 0 ? files[index - 1] : null
   const next = index >= 0 && index < files.length - 1 ? files[index + 1] : null
   return (
-    <Modal open title={displayName(entry)} onClose={onClose} widthClassName="max-w-5xl" headerContent={(
+    <Modal open title={displayName(entry)} onClose={onClose} size="xl" headerContent={(
       <div className="flex items-center gap-1">
         <FilePreviewNavigation previous={previous} next={next} onNavigate={onNavigate} />
         <span className="flex-1 text-xs text-muted-foreground">{formatFileSize(entry.size)}</span>

@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { ArrowUp, BookmarkPlus, ExternalLink, LogIn } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Chip } from '@/components/ui/chip'
 import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { Progress } from '@/components/ui/progress'
@@ -92,7 +93,7 @@ export function NaiToolbarStatus({ connected, tierName, anlasBalance, opusRemain
 
   return (
     <GenerationToolbarStatus tone={connected ? 'ready' : 'off'} label={statusLabel}>
-      {connected && anlasBalance !== undefined ? <Badge variant="outline" className="shrink-0 tabular-nums">Anlas {formatNumber(anlasBalance)}</Badge> : null}
+      {connected && anlasBalance !== undefined ? <Chip size="sm" mono>Anlas {formatNumber(anlasBalance)}</Chip> : null}
       {connected && tierName === 'Opus' && opusRemainingPercent != null ? <NaiOpusUsage percent={opusRemainingPercent} /> : null}
       {!connected ? (
         <IconButton size="icon-sm" variant="ghost" onClick={onOpenAuth} label={t('image-generation.components.nai.auth.modal.log.in')}>

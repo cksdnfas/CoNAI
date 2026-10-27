@@ -233,7 +233,7 @@ export function LoraAutoCollectModal({ open, isSubmitting = false, onClose, onSu
         }
       }}
       title={t({ ko: 'LoRA 자동 수집', en: 'LoRA auto-collection' })}
-      widthClassName="max-w-3xl"
+      size="lg"
     >
       <ModalBody spacing="lg">
         {formError ? (

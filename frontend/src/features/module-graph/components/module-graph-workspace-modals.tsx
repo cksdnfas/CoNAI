@@ -69,7 +69,7 @@ export function ModuleGraphWorkspaceModals({
         open={workflowView === 'browse' && isBrowseManageModalOpen}
         title={browseManageModalTitle}
         onClose={onCloseBrowseManage}
-        size="normal"
+        size="lg"
       >
         {workflowView === 'browse' && isBrowseManageModalOpen ? (
           <Suspense fallback={<WorkspaceModalFallback />}>
@@ -94,7 +94,7 @@ export function ModuleGraphWorkspaceModals({
         open={folderDeleteTarget !== null}
         title={t({ ko: '폴더 삭제', en: 'Delete folder' })}
         onClose={onCloseFolderDelete}
-        size="narrow"
+        size="sm"
       >
         <p className="text-sm text-foreground">
           {folderDeleteTarget ? t({ ko: '"{name}" 폴더를 어떻게 삭제할지 골라줘.', en: 'Choose how to delete the "{name}" folder.' }, { name: folderDeleteTarget.name }) : null}
@@ -117,7 +117,7 @@ export function ModuleGraphWorkspaceModals({
         open={isCustomNodeManagerOpen}
         title={t({ ko: '커스텀 노드 관리', en: 'Manage custom nodes' })}
         onClose={onCloseCustomNodeManager}
-        size="wide"
+        size="xl"
         height="tall"
       >
         {isCustomNodeManagerOpen ? (

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
+import { CalendarClock, Plus, Trash2 } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
 import type { WallpaperSchedule, WallpaperScheduleEntry } from '@conai/shared'
 import { Button } from '@/components/ui/button'
 import { ToggleChip } from '@/components/ui/chip'
@@ -9,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Modal, ModalFooter } from '@/components/ui/modal'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Switch } from '@/components/ui/switch'
+import { SwitchLine } from '@/components/ui/switch-line'
 import { useI18n } from '@/i18n'
 import { updateAppearanceSettings } from '@/lib/api-settings-appearance'
 import type { WallpaperLayoutPreset } from './wallpaper-types'
@@ -59,16 +60,16 @@ export function WallpaperScheduleModal({ onClose, presets, schedule }: Wallpaper
     <Modal
       open
       onClose={onClose}
-      size="normal"
+      size="lg"
       height="medium"
       dirty={dirty}
       onSave={saveMutation.isPending ? undefined : () => saveMutation.mutate()}
       title={t({ ko: '월페이퍼 일정', en: 'Wallpaper schedule' })}
-      headerActions={<Switch checked={enabled} onCheckedChange={setEnabled} aria-label={t({ ko: '일정 사용', en: 'Use the schedule' })} />}
     >
+      <SwitchLine label={t({ ko: '일정 사용', en: 'Use the schedule' })} checked={enabled} onCheckedChange={setEnabled} />
       <div className={enabled ? undefined : 'opacity-60'}>
         {entries.length === 0 ? (
-          <div className="py-6 text-center text-sm text-muted-foreground">{t({ ko: '시간대를 추가해줘.', en: 'Add a time window.' })}</div>
+          <EmptyState size="compact" icon={CalendarClock} title={t({ ko: '아직 시간대가 없어', en: 'No time windows yet' })} description={t({ ko: '시간대를 추가해줘.', en: 'Add a time window.' })} />
         ) : entries.map((entry) => {
           const everyDay = entry.days.length === 0
           return (

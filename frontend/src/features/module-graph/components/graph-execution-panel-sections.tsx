@@ -79,7 +79,7 @@ export function ExecutionOutputGroupCard({
       <Modal
         open={modalType === 'text'}
         title={group.nodeLabel}
-        widthClassName="max-w-4xl"
+        size="lg"
         onClose={() => setModalType(null)}
       >
         <CodeBlock fill={false} maxHeight="screen">
@@ -90,7 +90,7 @@ export function ExecutionOutputGroupCard({
       <Modal
         open={modalType === 'image'}
         title={group.nodeLabel}
-        widthClassName="max-w-6xl"
+        size="xl"
         onClose={() => setModalType(null)}
       >
         {previewUrl && primaryArtifact ? (

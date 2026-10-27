@@ -91,7 +91,7 @@ export function WorkspaceProjectPicker({ open, onClose, projectId, write, writeL
     </ListRow>
   )
   return (
-    <Modal open={open} onClose={() => { if (!busy) onClose() }} title={title ?? t({ ko: '프로젝트 연결', en: 'Connect a project' })} widthClassName="max-w-md">
+    <Modal open={open} onClose={() => { if (!busy) onClose() }} title={title ?? t({ ko: '프로젝트 연결', en: 'Connect a project' })} size="md">
       <ModalBody spacing="sm">
         <SearchField value={search} onChange={setSearch} placeholder={t({ ko: '프로젝트 찾기', en: 'Find a project' })} />
         {query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}

@@ -81,7 +81,7 @@ export function PluginReviewModal({ open, onClose, proposals, requests, initialK
   useEffect(() => { if (open && items.length === 0) onClose() }, [open, items.length, onClose])
   const working = busy || actions.busy !== null
   return (
-    <Modal open={open} onClose={onClose} title={t({ ko: '검토 대기 {count}', en: '{count} awaiting review' }, { count: items.length })} widthClassName="max-w-4xl">
+    <Modal open={open} onClose={onClose} title={t({ ko: '검토 대기 {count}', en: '{count} awaiting review' }, { count: items.length })} size="lg">
       <ModalBody spacing="none">
         {current ? (
           <div className="grid min-h-0 md:grid-cols-[14rem_minmax(0,1fr)]">

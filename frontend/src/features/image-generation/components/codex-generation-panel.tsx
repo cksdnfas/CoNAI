@@ -775,8 +775,7 @@ export function CodexGenerationPanel({
   // Narrow screens stack the preset's visible editor blocks in column order; the generate bar keeps its own slot.
   const { preset: layoutPreset } = useGenerationLayoutSurface('codex')
   const stackedEditorBlocks = stackedLayoutBlocks(layoutPreset)
-    .filter((block): block is CodexEditorBlock => block in editorBlocks)
-    .map((block) => <Fragment key={block}>{editorBlocks[block]}</Fragment>)
+    .map((block) => <Fragment key={block}>{block in editorBlocks ? editorBlocks[block as CodexEditorBlock] : <StackedPluginBlocks surface="codex" block={block} />}</Fragment>)
 
   if (blockLayout) {
     return (
@@ -809,7 +808,6 @@ export function CodexGenerationPanel({
           useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
         )}>
         {stackedEditorBlocks}
-        <StackedPluginBlocks surface="codex" />
 
           {!useInlineActionBar && !useStickyActionBar ? actionSection : null}
           {useStickyActionBar && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}

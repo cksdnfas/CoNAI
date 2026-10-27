@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Check, ImageOff, RefreshCw, ScanEye, Sparkles, Square } from 'lucide-react'
+import { AlertTriangle, Check, ImageOff, RefreshCw, ScanEye, Square, Wand } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Chip, ToggleChip } from '@/components/ui/chip'
 import { Field } from '@/components/ui/field'
@@ -215,8 +215,8 @@ export function ChatAssetBatchModal({ target, initialBatchId, referenceOnly = fa
   const selected = batch?.slots.filter((slot) => slot.kind !== 'full' && slot.chosenHash && slot.attempts.some((attempt) => attempt.candidates.some((candidate) => candidate.compositeHash === slot.chosenHash))).length ?? 0
   const complete = batch?.slots.filter((slot) => terminal(slot.status)).length ?? 0
   const displayedPresetId = batch?.presetId ?? presetId
-  // eslint-disable-next-line shadcn/no-restyle -- on phones this dialog is a full-screen sheet, so it drops the card radius
-  return <Modal open onClose={onClose} widthClassName="max-w-5xl max-sm:fixed max-sm:inset-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:rounded-none" height="tall" sidePanelInset={CHAT_DOCK_INSET} title={<>{t({ ko: '자산 만들기', en: 'Create assets' })}<span className="ml-3 text-sm font-normal text-muted-foreground">{savedTarget?.name ?? target?.name}</span></>}>
+  // `xl` is already a full-screen sheet on phones.
+  return <Modal open onClose={onClose} size="xl" height="tall" sidePanelInset={CHAT_DOCK_INSET} title={t({ ko: '자산 만들기', en: 'Create assets' })} description={savedTarget?.name ?? target?.name}>
     <ModalBody>
       <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-line pb-3">
         <Field label={t({ ko: '생성 프리셋', en: 'Generation preset' })} className="min-w-0">
@@ -248,7 +248,7 @@ export function ChatAssetBatchModal({ target, initialBatchId, referenceOnly = fa
         </div>
         <span className="flex-1" />
         {isRunning ? <span aria-live="polite" className="text-xs tabular-nums text-muted-foreground">{complete} / {batch?.slots.length}</span> : null}
-        <Tip content={batchId !== null ? t({ ko: '새 묶음 만들기', en: 'Create a new batch' }) : onPrepare ? t({ ko: '이름·외형·기준 이미지를 저장하고 만들기', en: 'Save name, appearance and reference, then create' }) : t({ ko: '만들기', en: 'Create' })}><IconButton variant="default" size="icon-sm" tooltip={false} label={batchId !== null ? t({ ko: '새 묶음 만들기', en: 'Create a new batch' }) : t({ ko: '만들기', en: 'Create' })} aria-busy={create.isPending || undefined} disabled={busy || isRunning || !savedTarget?.name.trim() || (batchId === null && (!presetId || !preview.length || preview.length > 32 || (expressions && !emotionNames.length) || (preset?.kind === 'comfyui' && !promptField)))} onClick={() => { if (batchId !== null) { setBatchId(null); request.current = null } else if (!creating.current) { creating.current = true; create.mutate() } }}>{create.isPending ? <Spinner /> : <Sparkles />}</IconButton></Tip>
+        <Tip content={batchId !== null ? t({ ko: '새 묶음 만들기', en: 'Create a new batch' }) : onPrepare ? t({ ko: '이름·외형·기준 이미지를 저장하고 만들기', en: 'Save name, appearance and reference, then create' }) : t({ ko: '만들기', en: 'Create' })}><Button size="sm" aria-busy={create.isPending || undefined} disabled={busy || isRunning || !savedTarget?.name.trim() || (batchId === null && (!presetId || !preview.length || preview.length > 32 || (expressions && !emotionNames.length) || (preset?.kind === 'comfyui' && !promptField)))} onClick={() => { if (batchId !== null) { setBatchId(null); request.current = null } else if (!creating.current) { creating.current = true; create.mutate() } }}>{create.isPending ? <Spinner /> : <Wand />}{batchId !== null ? t({ ko: '새 묶음', en: 'New batch' }) : t({ ko: '만들기', en: 'Create' })}</Button></Tip>
       </div>
       {[presets, expressionPresets, workflows, modelSlots, batchQuery].filter((query) => query.isError).map((query, index) => <div key={index} role="alert" className="flex items-center gap-2 text-sm text-destructive">{getErrorMessage(query.error, t({ ko: '불러오지 못했어.', en: 'Could not load.' }))}<Button size="xs" variant="ghost" onClick={() => void query.refetch()}>{t({ ko: '다시 시도', en: 'Retry' })}</Button></div>)}
       {batchQuery.isPending && batchId !== null ? <Spinner /> : null}

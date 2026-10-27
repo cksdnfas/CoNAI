@@ -146,7 +146,7 @@ export function CharacterSettingLoadButton({
       )}
       <CharacterSettingPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} onPick={handlePick} title={label} />
       {step ? (
-        <Modal open size="narrow" title={t({ ko: '‘{name}’ 불러오기', en: 'Load ‘{name}’' }, { name: step.setting.name })} onClose={() => { if (!loading) setStep(null) }}>
+        <Modal open size="md" title={t({ ko: '‘{name}’ 불러오기', en: 'Load ‘{name}’' }, { name: step.setting.name })} onClose={() => { if (!loading) setStep(null) }}>
           <ModalBody spacing="sm">
             {step.setting.path.length > 0 ? <Text as="p" variant="caption" className="truncate">{step.setting.path.join(' / ')}</Text> : null}
             <Text as="p" variant="muted" className="line-clamp-4 break-words">

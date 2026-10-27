@@ -14,6 +14,7 @@ import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SettingsLabelTip } from './settings-label-tip'
 import { ChatFilledLabel } from './settings-filled-label'
+import { SettingsContents } from './settings-navigation'
 import { SettingsRowsSkeleton } from './settings-rows'
 
 const IMAGE_SAVE_SIZE_PRESETS = [
@@ -51,7 +52,8 @@ type GenerationThrottleDraftPatch = {
 }
 
 interface ImageSaveTabProps {
-  showGenerationThrottle?: boolean
+  /** Which generation-throttle groups to show: the reservation policy (예약 작업), the provider pacing (실행 간격), both or none. */
+  throttle?: 'all' | 'reservations' | 'pacing' | 'none'
   showMediaSettings?: boolean
   imageSaveDraft: ImageSaveSettings | null
   onPatchImageSave: (patch: Partial<ImageSaveSettings>) => void
@@ -132,7 +134,7 @@ function ProviderHeading({ icon, children }: { icon: ReactNode; children: ReactN
 
 /** Render generation pacing and media-processing sections for settings composition. */
 export function ImageSaveTab({
-  showGenerationThrottle = true,
+  throttle = 'all',
   showMediaSettings = true,
   imageSaveDraft,
   onPatchImageSave,
@@ -160,13 +162,17 @@ export function ImageSaveTab({
     thumbnailQuality: t({ ko: '썸네일 품질', en: 'Thumbnail quality' }),
   }
 
+  const showReservations = throttle === 'all' || throttle === 'reservations'
+  const showPacing = throttle === 'all' || throttle === 'pacing'
+
   return (
     <div className="space-y-8">
-      {showGenerationThrottle ? (
+      {throttle !== 'none' ? (
         generationThrottleDraft ? (
           <>
+            {showReservations ? (
             <RowGroup
-              heading={t({ ko: '예약 작업', en: 'Reservations' })}
+              heading={t({ ko: '예약 실행 정책', en: 'Reservation policy' })}
               actions={(
                 <>
                   <SectionDirtyBadge dirty={hasGenerationThrottleChanges} />
@@ -196,7 +202,10 @@ export function ImageSaveTab({
                 </Select>
               </SettingRow>
             </RowGroup>
+            ) : null}
 
+            {showPacing ? (
+            <>
             <RowGroup
               heading={<ProviderHeading icon={<NovelAIIcon className="size-4" />}>{t({ ko: 'NovelAI 생성 텀', en: 'NovelAI pacing' })}</ProviderHeading>}
               actions={(
@@ -228,17 +237,18 @@ export function ImageSaveTab({
             >
               <ProviderPacingRows value={generationThrottleDraft.codex} fieldPrefix="generationThrottle.codex" maxConcurrent={8} onPatch={(patch) => onPatchGenerationThrottle({ codex: patch })} t={t} />
             </RowGroup>
+            </>
+            ) : null}
           </>
         ) : (
-          <RowGroup heading={t({ ko: '예약 작업', en: 'Reservations' })}>
-            <SettingsRowsSkeleton rows={4} />
-          </RowGroup>
+          <SettingsRowsSkeleton rows={4} />
         )
       ) : null}
 
       {showMediaSettings ? (
         <>
-          <RowGroup heading={t({ ko: '이미지 저장', en: 'Image saving' })} actions={<SectionDirtyBadge dirty={hasImageSaveChanges} />}>
+          <SettingsContents groups={[{ id: 'image-save', label: t({ ko: '이미지 저장', en: 'Image saving' }) }, { id: 'thumbnail', label: t({ ko: '썸네일', en: 'Thumbnails' }) }, { id: 'video-optimization', label: t({ ko: '영상 저장', en: 'Video saving' }) }]} />
+          <RowGroup data-settings-group="image-save" heading={t({ ko: '이미지 저장', en: 'Image saving' })} actions={<SectionDirtyBadge dirty={hasImageSaveChanges} />}>
             {imageSaveDraft ? (
               <>
                 <SettingRow label={<ChatFilledLabel fieldId="imageSave.defaultFormat">{labels.format}</ChatFilledLabel>} controlWidth="standard">
@@ -328,7 +338,7 @@ export function ImageSaveTab({
             )}
           </RowGroup>
 
-          <RowGroup heading={t({ ko: '썸네일', en: 'Thumbnail' })} actions={<SectionDirtyBadge dirty={hasThumbnailChanges} />}>
+          <RowGroup data-settings-group="thumbnail" heading={t({ ko: '썸네일', en: 'Thumbnail' })} actions={<SectionDirtyBadge dirty={hasThumbnailChanges} />}>
             {thumbnailDraft ? (
               <>
                 <SettingRow label={<ChatFilledLabel fieldId="thumbnail.size">{labels.thumbnailSize}</ChatFilledLabel>} controlWidth="standard">

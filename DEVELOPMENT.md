@@ -197,7 +197,7 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 워크플로 진행 카드는 노드 시작·완료·실패 로그가 기록될 때 발행되는 `graph.execution.progress`로 `/api/graph-workflows/executions/:id/progress`를 다시 읽고, 스트림이 끊기면 3초 폴링으로 돌아간다. 실행 상태 SSE는 해당 워크플로 목록·실행 조회를 갱신한다. 플러그인 서버 상태는 `plugin.server.changed`(식별자 없음), 채팅 루틴은 `chat.routine.changed`(관리자 한정), 지식 평가 요청 상태는 `posts.changed`(kind `run`)로 갱신하고 기존 폴링은 폴백으로만 남긴다. `posts.changed`는 변경된 글의 상세 캐시와 공용 목록을 갱신한다. SSE 구독자의 미전송 버퍼가 256KB를 넘으면 연결을 닫고 기존 재연결·재생 경로로 복구한다.
 
-`chat.task.updated`는 공용 이벤트 브리지가 작업·채팅 상세·목록을 갱신하며, 변경 전 시작된 최초 조회도 취소하고 다시 읽는다. 연결 복구 시 작업 상태를 포함해 재조회하고 한 연결의 `hello`·`reset`은 재동기화를 한 번만 요청한다. 생성 이력과 채팅 생성 이벤트는 200ms 디바운스·기존 최대 대기 시간 안에서 묶어 대상별로 갱신하며, 대기 항목이 256개에 도달하면 즉시 비운다. 화면 종료 시 남은 갱신 타이머와 대기 항목을 정리한다.
+`chat.task.updated`는 공용 이벤트 브리지가 작업·채팅 상세·목록을 갱신하며, 변경 전 시작된 최초 조회도 취소하고 다시 읽는다. `chat.thread.updated`(소유자 한정)는 답변 스트림 밖에서 채팅이 바뀐 것을 알리고 브리지가 채팅 목록과 그 채팅 상세를 다시 읽는다. 지금은 자동 제목이 쓴다: 새 채팅은 첫 메시지로 이름이 붙고, 대화 요약이 켜져 있고 요약 모델이 있으면 첫 답변 저장 뒤 `chatAutoTitle.ts`가 요약 모델로 제목을 만든다. 저장은 `renameThreadIf`로 제목이 아직 첫 메시지일 때만 바꿔 그 사이 사용자가 바꾼 이름을 덮지 않는다. 연결 복구 시 작업 상태를 포함해 재조회하고 한 연결의 `hello`·`reset`은 재동기화를 한 번만 요청한다. 생성 이력과 채팅 생성 이벤트는 200ms 디바운스·기존 최대 대기 시간 안에서 묶어 대상별로 갱신하며, 대기 항목이 256개에 도달하면 즉시 비운다. 화면 종료 시 남은 갱신 타이머와 대기 항목을 정리한다.
 
 워크플로 실행 이력의 더 보기는 20개 단위 offset 조회를 이어 붙인다. 서버의 요청당 200개 제한을 전체 이력 제한으로 사용하지 않으며, 목록 갱신 중 다음 페이지 요청을 겹치지 않는다. 선택한 실행 상태의 폴링은 SSE가 살아 있으면 중지하고 연결이 끊기면 재개한다. `files.changed`의 파일함 재조회는 400ms 지연·최대 2.5초 대기로 병합한다.
 
@@ -229,7 +229,9 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 ## 페이지 설정 연결
 
-페이지별 공용 설정 항목·필드 허용 목록·권한·경로 매핑은 `shared/src/constants/pageSettings.ts`가 정의한다. 앱 셸의 `PageSettingsProvider`와 상단 `PageSettingsButton`은 현재 페이지에 맞는 모달을 열며, `page-settings-dialog.tsx`는 필요한 항목만 조회하고 변경 필드만 저장한다. 오디오의 작업 설정 등 기존 기능 모달은 별도로 유지한다.
+페이지별 공용 설정 항목·필드 허용 목록·권한·경로 매핑과 설정 행 레지스트리는 `shared/src/constants/pageSettings.ts`가 정의한다. `SETTINGS_ROWS`의 ID·한/영 이름·설명·동의어·section/group·mine/shared·권한·advanced 메타데이터를 설정 행, 검색, Ctrl K, 페이지 설정 시트와 어시스턴트가 공유한다. 앱 셸의 `PageSettingsProvider`와 글자 버튼 `PageSettingsButton`은 관리자의 현재 페이지에 맞는 오른쪽 시트를 열며, `page-settings-dialog.tsx`는 선택한 항목만 조회하고 변경 필드만 저장한다. 시트는 Modal의 포커스·닫기·미저장 확인을 재사용한다. 오디오의 작업 설정 등 기존 기능 모달은 별도로 유지한다.
+
+설정 주소는 `/settings?section=<id>&group=<id>&setting=<row-id>`다. `settings-tabs.ts`가 이전 section/view 주소를 정규화하고 `SettingsJumpTarget`은 지연 렌더된 행이 나타나면 상위 고급 접기를 펼쳐 이동·강조한다. 개인 사용자 프로필·플래그는 `section=mine`, 공유 기본 언어와 테마는 `general`이다. 채팅 프로필은 `/characters?view=profiles`, 프리셋·표시 블록·로어북·루틴은 `/chat/resources?tab=presets|blocks|lorebooks|routines`에서 기존 편집기·저장 서비스를 재사용한다. 새 경로의 어시스턴트 계약은 shared의 chatPage/chatPageAction과 서버 chatPageContext가 같은 관리자·계정 경계를 유지한다.
 
 `/api/page-settings/:scope`는 명시적 설정 권한과 `If-Match`를 요구한다. 일반·미디어·분석·외형은 기존 설정 라우터를 재사용하되 허용된 필드만 입력·응답에 통과시킨다. 비동기 의존성 검사 뒤에도 실제 저장 직전에 권한과 버전을 재확인한다. 네이티브 설정 응답의 `pageSettingsRevisions`는 전송용 정보이며 저장 파일에 쓰지 않는다. 중앙 설정 편집기도 초안 시작 시 버전을 유지해 같은 공용 항목의 오래된 저장을 막는다.
 

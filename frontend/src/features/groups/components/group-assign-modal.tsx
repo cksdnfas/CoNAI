@@ -122,10 +122,9 @@ export function GroupAssignModal({
     <Modal
       open={open}
       onClose={onClose}
-      appearance="card"
       title={t({ ko: '그룹에 추가', en: 'Add to group' })}
       description={t({ ko: '{count}장', en: '{count} images' }, { count: formatNumber(selectedCount) })}
-      widthClassName="max-w-md"
+      size="md"
     >
       <form onSubmit={(event) => void handleSubmit(event)}>
         <ModalBody spacing="sm">

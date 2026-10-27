@@ -126,7 +126,7 @@ export function ImageBatchResizeAction({ compositeHashes, referenceSize }: Image
         open={open}
         onClose={() => setOpen(false)}
         title={t({ ko: `크기 변경 · ${formatNumber(compositeHashes.length)}개`, en: `Resize · ${formatNumber(compositeHashes.length)}` })}
-        widthClassName="max-w-md"
+        size="md"
       >
         <form onSubmit={handleSubmit}>
           <ModalBody>

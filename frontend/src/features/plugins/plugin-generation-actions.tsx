@@ -8,6 +8,13 @@ import { useI18n } from '@/i18n'
 import { runPluginGenerationAction } from '@/lib/api-plugins'
 import { usePluginGenerationContributions } from './plugin-generation'
 
+/** The enabled plugins' buttons for the screen's layout surface (none outside a generation surface). */
+export function usePluginGenerationButtons() {
+  const surface = useActiveGenerationLayoutSurface()
+  const { buttons } = usePluginGenerationContributions()
+  return { surface, shown: surface ? buttons.filter((button) => button.action.surfaces.includes(surface)) : [] }
+}
+
 /**
  * Plugin buttons next to Generate on the screen's layout surface. A click sends the screen's form to the plugin's
  * server module; the values it answers with are checked against the same fields before the form changes.
@@ -15,11 +22,9 @@ import { usePluginGenerationContributions } from './plugin-generation'
 export function PluginGenerationActions({ disabled = false }: { disabled?: boolean }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
-  const surface = useActiveGenerationLayoutSurface()
   const page = useChatPage()
-  const { buttons } = usePluginGenerationContributions()
+  const { surface, shown } = usePluginGenerationButtons()
   const [running, setRunning] = useState<string | null>(null)
-  const shown = surface ? buttons.filter((button) => button.action.surfaces.includes(surface)) : []
   if (!surface || shown.length === 0) return null
 
   const run = async (button: (typeof shown)[number]) => {

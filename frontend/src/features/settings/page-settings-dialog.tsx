@@ -2,10 +2,9 @@ import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { ExternalLink, RotateCcw } from 'lucide-react'
-import { PAGE_SETTINGS_SCOPES, pageSettingsPatch, type PageSettingField, type PageSettingValue, type PageSettingsScopeId, type PageSettingsSnapshot } from '@conai/shared'
+import { PAGE_SETTINGS_SCOPES, pageSettingsPatch, pageSettingRow, type PageSettingField, type PageSettingValue, type PageSettingsScopeId, type PageSettingsSnapshot } from '@conai/shared'
 import { usePageSettings } from '@/components/common/page-settings-context'
-import { TextTabs } from '@/components/common/text-tabs'
-import { Modal } from '@/components/ui/modal'
+import { Sheet } from '@/components/ui/sheet'
 import { EditorFooter } from '@/components/ui/editor-footer'
 import { Button } from '@/components/ui/button'
 import { IconButton } from '@/components/ui/icon-button'
@@ -40,7 +39,12 @@ export default function PageSettingsDialog({ title }: { title: string }) {
   return scope ? <SettingsEditor key={scope} scope={scope} scopes={scopes} title={title} onSelect={open} onClose={close} /> : null
 }
 
-function SettingsEditor({ scope, scopes, title, onSelect, onClose }: { scope: PageSettingsScopeId; scopes: PageSettingsScopeId[]; title: string; onSelect: (scope: PageSettingsScopeId) => void; onClose: () => void }) {
+export function PageSettingsSection({ scope }: { scope: PageSettingsScopeId }) {
+  const { t } = useI18n()
+  return <SettingsEditor scope={scope} scopes={[scope]} title={t(PAGE_SETTINGS_SCOPES[scope].label)} onSelect={() => {}} onClose={() => {}} inline />
+}
+
+function SettingsEditor({ scope, scopes, title, onSelect, onClose, inline = false }: { scope: PageSettingsScopeId; scopes: PageSettingsScopeId[]; title: string; onSelect: (scope: PageSettingsScopeId) => void; onClose: () => void; inline?: boolean }) {
   const { t } = useI18n()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
@@ -97,9 +101,9 @@ function SettingsEditor({ scope, scopes, title, onSelect, onClose }: { scope: Pa
     if (savingRef.current || next === scope || !scopes.includes(next)) return
     if (!dirty || await confirm({ title: discardMessage })) onSelect(next)
   }
-  useChatPageRegistration(snapshot ? {
+  useChatPageRegistration(!inline && snapshot ? {
     kind: 'page_settings', title: `${title} · ${t(definition.label)}`, resourceId: scope, priority: 30, dirty,
-    fields: definition.fields.map((field) => ({ id: field.id, label: t(field.label), type: field.options ? 'select' : field.type === 'string' ? 'text' : field.type, value: values[field.id], ...(field.options ? { options: field.options.map(String) } : {}), min: field.min, max: field.max, integer: field.integer })),
+    fields: definition.fields.map((field) => ({ id: field.id, label: t(pageSettingRow(scope, field).label), hint: t(pageSettingRow(scope, field).description) || undefined, type: field.options ? 'select' : field.type === 'string' ? 'text' : field.type, value: values[field.id], ...(field.options ? { options: field.options.map(String) } : {}), min: field.min, max: field.max, integer: field.integer })),
     data: { scope, revision: snapshot.revision, appliesTo: 'all users' },
     actions: [pageAction('page_settings.save', t({ ko: '설정 저장', en: 'Save settings' }), t({ ko: '현재 설정의 변경사항을 저장해. 모든 사용자에게 적용돼.', en: 'Save this settings draft for all users.' }), undefined, 'save'),
       pageAction('page_settings.select', t({ ko: '설정 항목 선택', en: 'Select settings section' }), '', pageObject({ scope: pageChoice(scopes) }, ['scope'])),
@@ -115,26 +119,37 @@ function SettingsEditor({ scope, scopes, title, onSelect, onClose }: { scope: Pa
     },
   } : null)
   const onSave = () => { void save().catch(() => {}) }
-  return <Modal open title={title} description={t({ ko: '공용 설정 · 저장하면 모든 사용자에게 적용돼.', en: 'Shared settings · changes apply to all users.' })} onClose={() => { if (!savingRef.current) onClose() }} dirty={dirty} onSave={dirty && !saving ? onSave : undefined} size="normal" height="tall" sidePanelInset="var(--chat-dock-width, 0px)">
-    <TextTabs value={scope} items={scopes.map((id) => ({ value: id, label: t(PAGE_SETTINGS_SCOPES[id].label) }))} onChange={(id) => void select(id as PageSettingsScopeId)} />
+  const destination = pageSettingRow(scope, definition.fields[0])
+  const body = <>
     {scope === 'embedding' || scope === 'tagger' || scope === 'kaloscope' ? <p className="my-3 text-sm text-muted-foreground">{t({ ko: '활성화하면 모델을 내려받거나 색인·분석 작업이 시작될 수 있어.', en: 'Enabling can download models or start indexing and analysis.' })}</p> : null}
     {snapshot ? scope === 'video-optimization'
       ? <VideoOptimizationTab videoOptimizationDraft={values as unknown as VideoOptimizationSettings} onPatchVideoOptimization={(changes) => apply(changes as Record<string, PageSettingValue>)} hasChanges={dirty} />
-      : <div className="mt-4 divide-y divide-line">{definition.fields.map((field) => <SettingField key={field.id} field={field} value={values[field.id]} disabled={saving} onChange={(value) => apply({ [field.id]: value })} />)}</div>
+      : <div className="mt-4 divide-y divide-line">{definition.fields.map((field) => <SettingField key={field.id} scope={scope} field={field} value={values[field.id]} disabled={saving} onChange={(value) => apply({ [field.id]: value })} />)}</div>
       : query.isPending ? <p className="py-6">{t({ ko: '설정 불러오는 중…', en: 'Loading settings…' })}</p> : null}
     {error || query.error ? <p role="alert" className="mt-4 text-sm text-destructive">{error ?? query.error?.message}</p> : null}
+  </>
+  if (inline) return <div>{body}<div className="mt-4 flex justify-end gap-2"><Button variant="ghost" disabled={saving} onClick={() => void reload()}>{t({ ko: '최신 설정 불러오기', en: 'Reload settings' })}</Button><Button disabled={!dirty || saving || !snapshot} onClick={onSave}>{t({ ko: '저장', en: 'Save' })}</Button></div></div>
+  return <Sheet open title={title} description={t({ ko: '공용 설정 · 저장하면 모든 사용자에게 적용돼.', en: 'Shared settings · changes apply to all users.' })} onClose={() => { if (!savingRef.current) onClose() }} dirty={dirty} onSave={dirty && !saving ? onSave : undefined} sidePanelInset="var(--chat-dock-width, 0px)">
+    <div className="divide-y divide-line">
+      {scopes.map((id) => <section key={id} className="py-2"><h2><Button variant="ghost" size="sm" onClick={() => void select(id)} aria-expanded={scope === id}>{t(PAGE_SETTINGS_SCOPES[id].label)}</Button></h2>
+        {id === scope ? <><p className="text-xs text-muted-foreground">{t({ ko: '공용 · 모든 사용자', en: 'Shared · all users' })}</p>{body}</> : null}
+      </section>)}
+    </div>
     <EditorFooter onSave={onSave} canSave={dirty && Boolean(snapshot)} saving={saving}>
       <IconButton label={t({ ko: '최신 설정 불러오기', en: 'Reload settings' })} variant="ghost" disabled={saving} onClick={() => void reload()}><RotateCcw /></IconButton>
-      {admin ? <Button asChild variant="ghost" size="sm"><Link to={`/settings?section=${definition.section}`} onClick={(event) => { if (saving) event.preventDefault() }}>{t({ ko: '전체 설정', en: 'All settings' })}<ExternalLink className="size-4" /></Link></Button> : null}
+      {admin ? <Button asChild variant="ghost" size="sm"><Link to={`/settings?section=${destination.section}&group=${destination.group}`} onClick={(event) => { if (saving) event.preventDefault() }}>{t({ ko: '설정에서 모두 보기', en: 'View all in settings' })}<ExternalLink className="size-4" /></Link></Button> : null}
     </EditorFooter>
-  </Modal>
+  </Sheet>
 }
 
-function SettingField({ field, value, disabled, onChange }: { field: PageSettingField; value: PageSettingValue; disabled: boolean; onChange: (value: PageSettingValue) => void }) {
+function SettingField({ scope, field, value, disabled, onChange }: { scope: PageSettingsScopeId; field: PageSettingField; value: PageSettingValue; disabled: boolean; onChange: (value: PageSettingValue) => void }) {
   const { t } = useI18n()
-  const label = t(field.label)
-  if (field.type === 'boolean') return <SettingsSwitchRow label={label} checked={value === true} disabled={disabled} onCheckedChange={onChange} />
-  return <SettingRow label={label}>
+  const row = pageSettingRow(scope, field)
+  const label = t(row.label)
+  const description = t(row.description)
+  const rowLabel = <span data-setting-id={row.id}>{label}{description ? <span className="block text-xs font-normal text-muted-foreground">{description}</span> : null}</span>
+  if (field.type === 'boolean') return <SettingsSwitchRow label={rowLabel} checked={value === true} disabled={disabled} onCheckedChange={onChange} />
+  return <SettingRow label={rowLabel}>
     {field.options ? <Select variant="settings" aria-label={label} value={String(value)} disabled={disabled} onChange={(event) => onChange(field.type === 'number' ? Number(event.target.value) : event.target.value)}>{field.options.map((option) => <option key={option} value={option}>{OPTION_LABELS[String(option)] ? t(OPTION_LABELS[String(option)]) : option}</option>)}</Select>
       : <NumberStepperInput variant="settings" className="w-32" aria-label={label} value={value as number} disabled={disabled} min={field.min} max={field.max} precision={field.integer ? 0 : 2} step={field.integer ? 1 : 0.05} onValueCommit={(next) => { const parsed = Number(next); if (next.trim() && Number.isFinite(parsed)) onChange(parsed) }} />}
   </SettingRow>

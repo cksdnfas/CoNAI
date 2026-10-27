@@ -10,6 +10,7 @@ import { RatingWeightSettingsCard } from './rating-weight-settings-card'
 import { RatingTierSettingsCard } from './rating-tier-settings-card'
 import type { AutoTabProps } from './auto-tab-types'
 import { useI18n } from '@/i18n'
+import { SettingsContents } from './settings-navigation'
 
 export function AutoTab({
   aiRuntimeDraft,
@@ -56,7 +57,8 @@ export function AutoTab({
 
   return (
     <div className="space-y-8">
-      <section>
+      <SettingsContents groups={[{ id: 'runtime', label: t({ ko: 'AI 런타임', en: 'AI runtime' }) }, { id: 'kaloscope', label: 'Kaloscope' }, { id: 'tagger', label: t({ ko: '태거', en: 'Tagger' }) }, { id: 'embedding', label: t({ ko: '의미 검색', en: 'Semantic search' }) }, { id: 'ratings', label: t({ ko: '평가', en: 'Ratings' }) }]} />
+      <section data-settings-group="runtime">
         <AiRuntimeSettingsCard
           heading={t({ ko: 'AI 런타임', en: 'AI runtime' })}
           actions={<SectionDirtyBadge dirty={hasAiRuntimeChanges} />}
@@ -81,7 +83,7 @@ export function AutoTab({
         />
       </section>
 
-      <section>
+      <section data-settings-group="kaloscope">
         <KaloscopeSettingsCard
           heading="Kaloscope"
           actions={<SectionDirtyBadge dirty={hasKaloscopeChanges} />}
@@ -93,7 +95,7 @@ export function AutoTab({
         />
       </section>
 
-      <section>
+      <section data-settings-group="tagger">
         <TaggerSettingsCard
           heading={t({ ko: '태거', en: 'Tagger' })}
           actions={(
@@ -108,7 +110,7 @@ export function AutoTab({
         />
       </section>
 
-      <section>
+      <section data-settings-group="embedding">
         <EmbeddingSettingsCard
           heading="임베딩 · EmbeddingGemma 2"
           actions={<SectionDirtyBadge dirty={hasEmbeddingChanges} />}
@@ -118,7 +120,7 @@ export function AutoTab({
         />
       </section>
 
-      <section>
+      <section data-settings-group="ratings">
         <RatingWeightSettingsCard
           heading={t({ ko: '평가 가중치', en: 'Rating weights' })}
           actions={<SectionDirtyBadge dirty={hasRatingWeightsChanges} />}

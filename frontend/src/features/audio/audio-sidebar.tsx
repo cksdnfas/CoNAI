@@ -15,8 +15,8 @@ import {
   Pencil,
   Plus,
   SlidersHorizontal,
-  Sparkles,
   Trash2,
+  Wand,
 } from 'lucide-react'
 import { SearchField } from '@/components/common/search-field'
 import { ActionContextMenu } from '@/components/ui/action-menu'
@@ -247,7 +247,7 @@ export function AudioSidebar({
                 data-drop-target={dropTarget === 'project' ? 'true' : undefined}
                 {...dropProps('project', hasFiles, (event) => onDropFiles({ projectId: project.id }, Array.from(event.dataTransfer.files)))}
               >
-                {project.name === GENERATION_TAB_PROJECT ? <Sparkles className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : null}
+                {project.name === GENERATION_TAB_PROJECT ? <Wand className="size-3.5 shrink-0 text-muted-foreground" aria-hidden /> : null}
                 <span className="min-w-0 flex-1 truncate">{project.name}</span>
                 <span className="shrink-0 text-xs font-normal text-muted-foreground/75 tabular-nums">{project.candidate_count}</span>
                 <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -257,7 +257,7 @@ export function AudioSidebar({
               <DropdownMenuRadioGroup value={project.id} onValueChange={onSelectProject}>
                 {projects.map((entry) => (
                   <DropdownMenuRadioItem key={entry.id} value={entry.id}>
-                    {entry.name === GENERATION_TAB_PROJECT ? <Sparkles className="size-3.5 text-muted-foreground" aria-hidden /> : null}
+                    {entry.name === GENERATION_TAB_PROJECT ? <Wand className="size-3.5 text-muted-foreground" aria-hidden /> : null}
                     <span className="min-w-0 flex-1 truncate">{entry.name}</span>
                     <span className="ml-3 text-xs text-muted-foreground/75 tabular-nums">{entry.candidate_count}</span>
                   </DropdownMenuRadioItem>

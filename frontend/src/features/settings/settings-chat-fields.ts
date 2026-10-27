@@ -1,4 +1,4 @@
-import { CHAT_PAGE_LIMITS, HEADER_NAVIGATION_ITEM_KEYS, MAX_RECYCLE_BIN_RETENTION_DAYS, POSTS_SAFETY_LIMITS } from '@conai/shared'
+import { CHAT_PAGE_LIMITS, HEADER_NAVIGATION_PAGE_KEYS, HEADER_NAVIGATION_TOOL_KEYS, MAX_RECYCLE_BIN_RETENTION_DAYS, POSTS_SAFETY_LIMITS, SETTINGS_ROW_BY_ID } from '@conai/shared'
 import type {
   AiRuntimeSettings,
   AppearanceSettings,
@@ -79,9 +79,11 @@ const FIELD_HINTS: Record<string, string> = {
   'embedding.imageSearch': 'Library 설명 search and 내용 유사; ~0.7 s per image on CPU, more RAM',
 }
 
+const PINNED_PAGES_GROUP: TranslationDictionary = { ko: '상단 고정 페이지', en: 'Pinned pages' }
+
 const HEADER_NAVIGATION_LABELS: Record<HeaderNavigationItemKey, TranslationDictionary> = {
   access: { ko: '이용 가능 페이지', en: 'Available pages' },
-  home: { ko: '홈', en: 'Home' },
+  home: { ko: '갤러리', en: 'Gallery' },
   groups: { ko: '그룹', en: 'Groups' },
   prompts: { ko: '프롬프트', en: 'Prompts' },
   characters: { ko: '캐릭터', en: 'Characters' },
@@ -104,7 +106,9 @@ const GENERAL_BASIC: FieldSpec[] = [
   toggle('promptForDownloadLocation', { ko: '다운로드할 때 파일명과 위치 확인', en: 'Ask for file name and save location' }),
   { ...toggle('enableGallery', { ko: '갤러리 기능 사용', en: 'Enable gallery features' }), fallback: true },
   { ...toggle('showRatingBadges', { ko: '등급 배지 표시', en: 'Show rating badges' }), fallback: true },
-  ...HEADER_NAVIGATION_ITEM_KEYS.map((key): FieldSpec => ({ ...toggle(`headerNavigation.${key}`, HEADER_NAVIGATION_LABELS[key]), fallback: DEFAULT_HEADER_NAVIGATION_SETTINGS[key], group: { ko: '상단 메뉴', en: 'Header menu' } })),
+  // A page's flag pins it to the top bar (the rest sit in the grouped menus); a tool's flag shows it on the right.
+  ...HEADER_NAVIGATION_PAGE_KEYS.map((key): FieldSpec => ({ ...toggle(`headerNavigation.${key}`, HEADER_NAVIGATION_LABELS[key]), fallback: DEFAULT_HEADER_NAVIGATION_SETTINGS[key], group: PINNED_PAGES_GROUP })),
+  ...HEADER_NAVIGATION_TOOL_KEYS.map((key): FieldSpec => ({ ...toggle(`headerNavigation.${key}`, HEADER_NAVIGATION_LABELS[key]), fallback: DEFAULT_HEADER_NAVIGATION_SETTINGS[key], group: { ko: '오른쪽 고정 메뉴', en: 'Fixed right-side menu' } })),
 ]
 
 const APPEARANCE: FieldSpec[] = grouped({ ko: '테마', en: 'Theme' }, [
@@ -174,7 +178,7 @@ const THUMBNAIL: FieldSpec[] = grouped({ ko: '썸네일', en: 'Thumbnail' }, [
   count('quality', { ko: '썸네일 품질', en: 'Thumbnail quality' }, 60, 100),
 ])
 
-const VIDEO_OPTIMIZATION: FieldSpec[] = grouped({ ko: '비디오 최적화', en: 'Video optimization' }, [
+const VIDEO_OPTIMIZATION: FieldSpec[] = grouped({ ko: '영상 저장', en: 'Video saving' }, [
   toggle('enabled', { ko: '비디오 최적화 사용', en: 'Enable video optimization' }),
   choice('preset', { ko: '프리셋 (고르면 화질·오디오도 그 값으로)', en: 'Preset (also sets quality and audio)' }, VIDEO_OPTIMIZATION_PRESETS.map((preset) => preset.value)),
   count('audioBitrateKbps', { ko: '오디오 비트레이트(kbps)', en: 'Audio bitrate (kbps)' }, 32, 320),
@@ -338,7 +342,9 @@ function buildField(section: ObjectSection, source: object, spec: FieldSpec, t: 
   const { path, label, fallback, group, ...rest } = spec
   const current = readPath(source, path)
   const id = fieldId(section, path)
-  return { ...rest, id, label: group ? `${t(group)} · ${t(label)}` : t(label), value: (current ?? fallback ?? '') as ChatPageValue, ...(FIELD_HINTS[id] ? { hint: FIELD_HINTS[id] } : {}) }
+  const row = SETTINGS_ROW_BY_ID[id]
+  const description = row ? t(row.description) : ''
+  return { ...rest, id, label: row ? t(row.label) : group ? `${t(group)} · ${t(label)}` : t(label), value: (current ?? fallback ?? '') as ChatPageValue, ...(description ? { hint: description } : {}), ...(FIELD_HINTS[id] ? { hint: FIELD_HINTS[id] } : {}) }
 }
 
 /** The registered inputs for one settings tab; sections whose draft has not loaded yet are left out. */
@@ -357,9 +363,10 @@ export function settingsChatFields(tab: SettingsTab, sources: SettingsChatSource
     for (const page of (sources.pluginPages ?? []).slice(0, room)) {
       fields.push({
         id: `headerNavigation.${page.id}`,
-        label: `${t({ ko: '상단 메뉴', en: 'Header menu' })} · ${page.title} · ${page.pluginName}`.slice(0, 160),
+        label: `${t(PINNED_PAGES_GROUP)} · ${page.title} · ${page.pluginName}`.slice(0, 160),
         type: 'boolean',
-        value: sources.general.headerNavigation[page.id] ?? true,
+        // Plugin pages start unpinned, in 확장.
+        value: sources.general.headerNavigation[page.id] === true,
       })
     }
   }
@@ -404,7 +411,7 @@ export function applySettingsChatPatch(patch: Record<string, ChatPageValue>, sou
     let base = next.get(target.section) ?? sources[target.section]
     if (!base) continue
     if (target.section === 'general' && target.path.startsWith('headerNavigation.')) {
-      // Older saved settings may miss newer menu keys; the editor treats a missing key as shown.
+      // Older saved settings may miss newer keys; the editor reads a missing key as its default (plugin pages unpinned).
       base = writePath(base, 'headerNavigation', { ...DEFAULT_HEADER_NAVIGATION_SETTINGS, ...(base as GeneralSettings).headerNavigation })
     }
     const stored = target.section === 'appearance' && OPTIONAL_APPEARANCE_COLORS.has(target.path) && value === '' ? undefined : value

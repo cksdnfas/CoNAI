@@ -2,9 +2,7 @@ import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { GenerationLayoutSurface } from '@conai/shared'
 import { Navigate, useSearchParams } from 'react-router-dom'
-import { CalendarClock, Workflow } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
-import { ProviderIcon } from '@/components/common/provider-icons'
 import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
@@ -23,7 +21,7 @@ import {
   IMAGE_GENERATION_GRAPH_EDIT_PARAM,
   IMAGE_GENERATION_GRAPH_PARAM,
   IMAGE_GENERATION_WORKFLOW_PARAM,
-  getImageGenerationTabLabel,
+  getImageGenerationTabs,
   parseImageGenerationTab,
   parseImageGenerationWorkflowId,
   type ImageGenerationTab,
@@ -280,22 +278,14 @@ function ImageGenerationPageContent() {
         : null
 
   // 제공자 3개와 워크플로우·예약작업을 한 줄의 탭으로 나란히 둔다.
-  const tabItems = [
-    ...PROVIDER_TABS.map((value) => ({
-      value,
-      label: <ProviderIcon provider={value} className="size-4" />,
-      ariaLabel: getImageGenerationTabLabel(value, t),
-    })),
-    { value: 'workflows', label: <Workflow className="size-4" />, ariaLabel: getImageGenerationTabLabel('workflows', t) },
-    { value: 'reservations', label: <CalendarClock className="size-4" />, ariaLabel: getImageGenerationTabLabel('reservations', t) },
-  ]
+  const tabItems = getImageGenerationTabs(t)
   const historyTotal = historyFeed.historyQuery.data?.pages[0]?.total
   const resultCountLabel = shouldShowHistory && historyTotal !== undefined
     ? formatCountDisplay(countStateFromQuery({ total: historyTotal, isError: historyFeed.historyQuery.isError }), { t, formatNumber }).text
     : null
 
   const toolbar = (
-    <div data-slot="page-toolbar" className="flex min-h-14 shrink-0 items-center gap-2 py-2 max-sm:flex-wrap max-sm:content-start sm:gap-3">
+    <div data-slot="page-toolbar" className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 py-2 sm:gap-3">
       <SegmentedControl
         value={activeTab}
         items={tabItems}
@@ -303,12 +293,12 @@ function ImageGenerationPageContent() {
         size={isWideLayout ? 'sm' : 'xs'}
         semantics="tabs"
         ariaLabel={t({ ko: '생성 메뉴', en: 'Generation sections' })}
-        className="shrink-0"
+        className="max-w-full"
       />
       {/* 폰 폭에서는 연결 상태를 탭 아랫줄로 내린다. 비어 있으면(워크플로우·예약작업) 줄을 차지하지 않는다. */}
       <div
         id={GENERATION_TOOLBAR_STATUS_SLOT_ID}
-        className={cn('flex min-w-0 flex-1 items-center overflow-hidden max-sm:order-last max-sm:basis-full max-sm:empty:hidden', !isProviderTab && 'invisible')}
+        className={cn('flex min-w-0 flex-1 flex-wrap items-center max-sm:order-last max-sm:basis-full max-sm:empty:hidden', !isProviderTab && 'invisible')}
       />
       {/* 레이아웃 버튼은 폰 폭에서도 탭 줄 오른쪽 끝에 남는다(상태 줄 뒤로 밀려 혼자 한 줄을 차지하지 않게). */}
       <div className="ml-auto flex shrink-0 items-center empty:hidden">
@@ -324,7 +314,7 @@ function ImageGenerationPageContent() {
       <div
         className={cn(
           isWideLayout
-            ? 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col overflow-hidden'
+            ? 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom)-var(--shell-bottom-inset))] min-h-0 flex-col overflow-hidden'
             : 'space-y-4 pb-28',
         )}
       >
@@ -345,7 +335,7 @@ function ImageGenerationPageContent() {
       className={cn(
         'space-y-4',
         useNarrowTabs && narrowView === 'edit' ? 'pb-28' : isWideLayout ? 'pb-0' : 'pb-6',
-        useFixedHeightLayout && 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom))] min-h-0 flex-col space-y-0 overflow-hidden',
+        useFixedHeightLayout && 'flex h-[calc(100vh-var(--theme-shell-header-height)-var(--theme-shell-main-padding-bottom)-var(--shell-bottom-inset))] min-h-0 flex-col space-y-0 overflow-hidden',
       )}
     >
       <div className={cn(useFixedHeightLayout && 'shrink-0 pb-2')}>

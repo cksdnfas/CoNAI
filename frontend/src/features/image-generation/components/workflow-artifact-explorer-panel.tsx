@@ -300,7 +300,7 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
         open={artifactModal !== null}
         onClose={() => setArtifactModal(null)}
         title={<span className="block truncate">{artifactModal?.entry.name}</span>}
-        widthClassName={artifactModal?.kind === 'text' ? 'max-w-[860px]' : 'max-w-[min(92vw,1400px)]'}
+        size={artifactModal?.kind === 'text' ? 'lg' : 'xl'}
       >
         {artifactModal ? (
           <>

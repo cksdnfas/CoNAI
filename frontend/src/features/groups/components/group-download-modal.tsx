@@ -65,10 +65,9 @@ export function GroupDownloadModal({
     <Modal
       open={open}
       onClose={onClose}
-      appearance="card"
       title={t({ ko: '다운로드', en: 'Download' })}
       description={description}
-      widthClassName="max-w-md"
+      size="md"
     >
       <ModalBody spacing="none" role="radiogroup" aria-label={t({ ko: '받을 파일', en: 'Files to download' })}>
         {downloadCards.map((card) => {

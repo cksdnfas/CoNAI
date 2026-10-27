@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, LogIn, ShieldAlert, ShieldCheck, Sparkles, X, type LucideIcon } from 'lucide-react'
-import { usePluginPages } from '@/features/plugins/use-plugin-pages'
+import { ArrowRight, LogIn, ShieldAlert, ShieldCheck, Wand, X, type LucideIcon } from 'lucide-react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { PageToolbar } from '@/components/common/page-toolbar'
+import { useAppNavigation, type AppNavLink } from '@/components/layout/app-navigation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -14,7 +15,7 @@ import { useI18n } from '@/i18n'
 import { getPublicGenerationWorkflows } from '@/lib/api-public-workflows'
 import { cn } from '@/lib/utils'
 import { resolveRoutePermissionKey } from './auth-route-permissions'
-import { PAGE_ACCESS_CATALOG, listAccessiblePageAccessItems } from './page-access-catalog'
+import { PAGE_ACCESS_CATALOG } from './page-access-catalog'
 import { useAuthStatusQuery } from './use-auth-status-query'
 
 interface AccessEntryCardProps {
@@ -24,13 +25,15 @@ interface AccessEntryCardProps {
   icon: LucideIcon
 }
 
-/** One cell of the flat access grid: icon, label, arrow; hairline below, hover wash. The description is the row's tooltip. */
+/**
+ * One cell of the flat access grid: icon, label with its one line (cut short, whole in the tooltip), arrow; hairline
+ * below, hover wash.
+ */
 function AccessEntryCard({ label, description, href, icon: Icon }: AccessEntryCardProps) {
   return (
     <Tip content={description || null} side="bottom" align="start">
       <Link
         to={href}
-        aria-description={description || undefined}
         className={cn(
           'group flex min-h-12 items-center gap-3 border-b border-line px-2 py-2.5 transition-colors',
           'hover:bg-fill focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40',
@@ -38,7 +41,10 @@ function AccessEntryCard({ label, description, href, icon: Icon }: AccessEntryCa
       >
         <Icon className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" aria-hidden />
 
-        <Text as="div" variant="title" className="min-w-0 flex-1 truncate">{label}</Text>
+        <span className="min-w-0 flex-1">
+          <Text as="div" variant="title" className="truncate">{label}</Text>
+          {description ? <Text as="div" variant="caption" className="truncate">{description}</Text> : null}
+        </span>
 
         <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       </Link>
@@ -107,14 +113,17 @@ function BlockedRouteNotice({ path, permissionKey, isAnonymous, onDismiss }: { p
   )
 }
 
-/** Render one compact landing page for the pages the current account can use. */
+/**
+ * Every page the current account can use, in the header's groups (라이브러리·만들기·확장), then the public workflows.
+ * The logo and the phone's 전체 tab open it; a blocked route lands here with its reason.
+ */
 export function AccessOverviewPage() {
   const { t } = useI18n()
   const location = useLocation()
   const navigate = useNavigate()
   const authStatusQuery = useAuthStatusQuery()
   const authStatus = authStatusQuery.data
-  const pluginPages = usePluginPages()
+  const { groups, ungrouped } = useAppNavigation()
   const blockedRoute = readBlockedRoute(location.state)
   const publicWorkflowsQuery = useQuery({
     queryKey: ['public-generation-workflows', 'access-overview'],
@@ -127,17 +136,17 @@ export function AccessOverviewPage() {
     return <div className="min-h-[40vh] rounded-sm bg-fill animate-pulse" />
   }
 
-  const accessibleItems = listAccessiblePageAccessItems(authStatus?.permissionKeys ?? [])
-  // Primary pages first, then the pages reached from them; users don't need the distinction spelled out.
-  const pageItems = [
-    ...accessibleItems.filter((item) => item.category === 'primary'),
-    ...accessibleItems.filter((item) => item.category !== 'primary'),
+  // Pages outside the menus (Settings) close the list; this page itself is left out.
+  const others = ungrouped.filter((link) => link.to !== '/access')
+  const sections: Array<{ id: string; label: string; links: AppNavLink[] }> = [
+    ...groups,
+    ...(others.length ? [{ id: 'manage', label: t({ ko: '관리', en: 'Manage' }), links: others }] : []),
   ]
   const publicWorkflows = publicWorkflowsQuery.data ?? []
 
   return (
-    <div className="space-y-8 pt-2">
-      <h1 className="sr-only">{t('appShell.availablePages')}</h1>
+    <div className="space-y-6">
+      <PageToolbar title={t('appShell.availablePages')} />
 
       {blockedRoute ? (
         <BlockedRouteNotice
@@ -148,38 +157,20 @@ export function AccessOverviewPage() {
         />
       ) : null}
 
-      {accessibleItems.length === 0 && publicWorkflows.length === 0 && pluginPages.length === 0 ? (
+      {sections.length === 0 && publicWorkflows.length === 0 ? (
         <EmptyState icon={ShieldCheck} title={t({ ko: '지금 열 수 있는 페이지가 없어', en: 'There are no pages available right now' })} />
       ) : (
         <div className="space-y-10">
-          {pageItems.length > 0 ? (
-            <section className="space-y-2">
-              {publicWorkflows.length > 0 || pluginPages.length > 0 ? (
-                <Heading level={3}>{t({ ko: '페이지', en: 'Pages' })}</Heading>
-              ) : null}
+          {sections.map((section) => (
+            <section key={section.id} className="space-y-2">
+              <Heading level={3}>{section.label}</Heading>
               <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
-                {pageItems.map(({ path, labelKey, icon }) => (
-                  <AccessEntryCard
-                    key={path}
-                    href={path}
-                    label={t(labelKey)}
-                    icon={icon}
-                  />
+                {section.links.map((link) => (
+                  <AccessEntryCard key={link.key} href={link.to} label={link.label} description={link.description} icon={link.icon} />
                 ))}
               </div>
             </section>
-          ) : null}
-
-          {pluginPages.length > 0 ? (
-            <section className="space-y-2">
-              <Heading level={3}>{t({ ko: '플러그인 페이지', en: 'Plugin pages' })}</Heading>
-              <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
-                {pluginPages.map((page) => (
-                  <AccessEntryCard key={page.id} href={page.to} label={page.title} description={page.pluginName} icon={page.icon} />
-                ))}
-              </div>
-            </section>
-          ) : null}
+          ))}
 
           {publicWorkflowsQuery.isLoading ? (
             <LoadingState variant="inline" label={t({ ko: '공용 워크플로우 불러오는 중…', en: 'Loading public workflows…' })} />
@@ -195,7 +186,7 @@ export function AccessOverviewPage() {
                     href={`/public/workflows/${workflow.public_slug}`}
                     label={workflow.name}
                     description={workflow.description?.trim()}
-                    icon={Sparkles}
+                    icon={Wand}
                   />
                 ))}
               </div>

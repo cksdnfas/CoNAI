@@ -147,7 +147,7 @@ export function SecurityPermissionGroupEditorModal({
       open={open}
       onClose={onClose}
       title={title}
-      size="wide"
+      size="xl"
       height="tall"
       dirty={dirty}
       onSave={canSave ? onSave : undefined}

@@ -1,4 +1,4 @@
-import { Navigate, createHashRouter, type RouteObject } from 'react-router-dom'
+import { Navigate, createHashRouter, useSearchParams, type RouteObject } from 'react-router-dom'
 import { RouteErrorBoundary } from '@/app/route-error-boundary'
 import { ProtectedAppShell } from '@/features/auth/protected-app-shell'
 import { RequireAuthPermission } from '@/features/auth/require-auth-permission'
@@ -40,6 +40,12 @@ function normalizeLegacyWallpaperRuntimeLocation() {
 }
 
 normalizeLegacyWallpaperRuntimeLocation()
+
+function SettingsAccess() {
+  const [params] = useSearchParams()
+  const personal = params.get('section') === 'mine' || (params.get('section') === 'chat' && params.get('view') === 'mine')
+  return <RequireAuthPermission permissionKey={personal ? 'page.chat.view' : 'page.settings.view'}><SettingsRoute /></RequireAuthPermission>
+}
 
 /**
  * Dev-only routes. `import.meta.env.DEV` is replaced with `false` in production builds, so the branch (and the
@@ -135,6 +141,13 @@ export const appRouter = createHashRouter([
         element: <RequireAuthPermission permissionKey="page.characters.view"><CharacterLibraryRoute /></RequireAuthPermission>,
       },
       {
+        path: 'chat/resources',
+        lazy: async () => {
+          const { ChatResourcesPage } = await import('@/features/codex-chat/chat-resources-page')
+          return { Component: ChatResourcesPage }
+        },
+      },
+      {
         path: 'chat',
         element: <RequireAuthPermission permissionKey="page.chat.view"><CodexChatRoute /></RequireAuthPermission>,
       },
@@ -164,7 +177,7 @@ export const appRouter = createHashRouter([
       },
       {
         path: 'settings',
-        element: <RequireAuthPermission permissionKey="page.settings.view"><SettingsRoute /></RequireAuthPermission>,
+        element: <SettingsAccess />,
       },
       {
         path: 'wallpaper',

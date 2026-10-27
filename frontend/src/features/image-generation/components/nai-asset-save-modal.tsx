@@ -38,7 +38,7 @@ export function NaiAssetSaveModal({
   const effectiveSubmitLabel = submitLabel ?? t('image-generation.components.nai.asset.save.modal.save')
 
   return (
-    <Modal open={open} onClose={onClose} title={title} widthClassName="max-w-xl">
+    <Modal open={open} onClose={onClose} title={title} size="md">
       <ModalBody>
         <Field label={t('image-generation.components.nai.asset.save.modal.name')}>
           <Input value={name} onChange={(event) => onNameChange(event.target.value)} placeholder={t('image-generation.components.nai.asset.save.modal.save.name')} />

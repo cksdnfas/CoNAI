@@ -103,7 +103,7 @@ export function MiniMaxH3DirectorPackPanel({ value, onChange, allowFiles, allowP
   if (!allowFiles && !allowPrompt) return null
   return <>
     <IconButton size="icon-sm" variant="secondary" disabled={disabled} onClick={() => setOpen(true)} label={t({ ko: '참조 팩 저장·불러오기', en: 'Save or load reference pack' })}><FolderOpen className="h-4 w-4" /></IconButton>
-    <Modal open={open} title={t({ ko: '참조 팩', en: 'Reference pack' })} onClose={() => { if (!busy) setOpen(false) }} widthClassName="max-w-xl">
+    <Modal open={open} title={t({ ko: '참조 팩', en: 'Reference pack' })} onClose={() => { if (!busy) setOpen(false) }} size="md">
       <div className="space-y-4 p-4">
         <div className="flex flex-wrap items-center gap-2">
           <Select aria-label={t({ ko: '데이터 범위', en: 'Data scope' })} value={effectiveScope} disabled={busy} onChange={(event) => setScope(event.target.value as MiniMaxDirectorPackScope)}>

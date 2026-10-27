@@ -171,7 +171,7 @@ function PromptPresetEditorModal({
       open={open}
       sidePanelInset="var(--chat-dock-width, 0px)"
       title={mode === 'create' ? t('prompts.components.prompt.preset.panel.add.preset') : t('prompts.components.prompt.preset.panel.edit.preset')}
-      size="wide"
+      size="xl"
       height="tall"
       dirty={chatDirty}
       onSave={canSave ? () => formRef.current?.requestSubmit() : undefined}

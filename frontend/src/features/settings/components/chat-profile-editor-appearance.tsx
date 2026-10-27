@@ -51,7 +51,7 @@ function useAppearanceWarning(draft: Draft, appearance: string | undefined) {
   const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: draft.mcpEnabled && draft.generationPresetIds.length > 0 })
   const missing = draft.mcpEnabled && !appearance?.trim()
     && (generationPresetsQuery.data ?? []).some((preset) => draft.generationPresetIds.includes(preset.id) && preset.prompting.timing === 'after')
-  return missing ? t({ ko: '답변 끝난 뒤 이미지는 여기만 보고 캐릭터를 그려. ✨로 초안을 써줘.', en: 'After-reply pictures draw the character from this text alone. Draft it with ✨.' }) : null
+  return missing ? t({ ko: '답변이 끝난 뒤 그리는 이미지는 이 설명만 보고 캐릭터를 그려. 비어 있으니 직접 쓰거나 \'AI 초안\'으로 채워 줘.', en: 'After-reply pictures draw the character from this text alone. Write it, or fill it with “AI draft”.' }) : null
 }
 
 /** Other emoticon groups the profile's chats may use (a profile field in every link state). */

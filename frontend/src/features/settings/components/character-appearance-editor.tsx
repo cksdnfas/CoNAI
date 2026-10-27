@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CHAT_PROFILE_TEXT_LIMITS } from '@conai/shared'
 import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Crop, ImagePlus, Sparkles, X } from 'lucide-react'
+import { Crop, ImagePlus, Sparkles } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorGroup } from '@/components/ui/editor-group'
-import { IconButton } from '@/components/ui/icon-button'
 import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
@@ -23,11 +23,13 @@ import { ChatProfileAvatarCrop } from './chat-profile-avatar-crop'
 export type AppearanceValue = { name: string; appearance?: string; referenceHash?: string | null; avatarHash?: string | null; avatarCrop?: ChatAvatarCrop | null }
 
 /**
- * Everything a character looks like, for any owner (a chat profile or a character library setting): the reference
- * image, the avatar cut from it, the appearance tags, the expression slots generated from them and the candidate
- * archive. The owner supplies its storage (upload target, group ids, expression writes) and its own extras.
+ * Everything a character looks like, for any owner (a chat profile or a character library setting), in two columns:
+ * the images on the left (the reference image, the avatar cut from it, then the owner's `aside`), the words and what
+ * is made from them on the right (the appearance tags, the expression slots, the owner's extras, the candidate
+ * archive). Every image changes through the same "이미지 바꾸기" menu. The owner supplies its storage (upload target,
+ * group ids, expression writes).
  */
-export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, referenceUrl, avatar, hasAvatar, uploadTarget, groupSource, runs, busy, onBusyChange, draftAppearance, draftNeedsName = false, onSetExpression, onClearExpression, appearanceWarning = null, appearanceInvalid = false, editable = true, generation = true, expressionsEditable = true, expressionsNote = null, children }: {
+export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, referenceUrl, avatar, hasAvatar, uploadTarget, groupSource, runs, busy, onBusyChange, draftAppearance, draftNeedsName = false, onSetExpression, onClearExpression, appearanceWarning = null, appearanceInvalid = false, appearanceNote = null, editable = true, generation = true, expressionsEditable = true, expressionsNote = null, aside, children }: {
   value: AppearanceValue
   onChange: (patch: { appearance?: string; referenceHash?: string | null }) => void
   /** A picked or cropped avatar; null clears it. */
@@ -50,6 +52,10 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
   onClearExpression: (name: string) => Promise<void>
   appearanceWarning?: string | null
   appearanceInvalid?: boolean
+  /** A quiet line under the appearance text (who else a change reaches). */
+  appearanceNote?: ReactNode
+  /** Under the avatar in the image column (the profiles synced to a library setting). */
+  aside?: ReactNode
   /** False: everything only shows. */
   editable?: boolean
   /** Image generation and expression writes (administrators). */
@@ -110,69 +116,112 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
     }
   }
 
+  const referenceWorking = reference.working || runs.isPending(REFERENCE_SLOT)
   return (
-    <div className="space-y-5">
-      <div className="grid gap-5 sm:grid-cols-[200px_1fr]">
-        <div className="space-y-2">
-          <div className="relative aspect-[3/4] w-[200px] max-w-full overflow-hidden rounded-lg bg-fill">
-            <ChatProfileImage src={referenceUrl} fallback={<span className="flex size-full items-center justify-center pb-10 text-muted-foreground"><ImagePlus className="size-6" /></span>} />
-            {reference.working || runs.isPending(REFERENCE_SLOT) ? <span className="absolute inset-0 flex items-center justify-center bg-background/50"><Spinner /></span> : null}
-            {editable && value.referenceHash ? <IconButton size="icon-xs" variant="secondary" disabled={busy} className="absolute right-1.5 top-1.5" label={t({ ko: '기준 이미지 지우기', en: 'Remove reference image' })} onClick={() => onChange({ referenceHash: null })}><X /></IconButton> : null}
+    <div className="grid gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+      <div className="min-w-0 space-y-5">
+        <div className="relative aspect-[3/4] w-full max-w-60 overflow-hidden rounded-lg bg-fill">
+          <ChatProfileImage src={referenceUrl} fallback={<span className="flex size-full items-center justify-center pb-10 text-muted-foreground"><ImagePlus className="size-6" /></span>} />
+          {referenceWorking ? <span className="absolute inset-0 flex items-center justify-center bg-background/50"><Spinner /></span> : null}
+          {editable ? (
+            <div className="absolute right-2 bottom-2">
+              <ChatProfileAssetInput
+                target={uploadTarget}
+                libraryGroupId={libraryGroupId}
+                onChange={(referenceHash) => onChange({ referenceHash })}
+                onBusyChange={onBusyChange}
+                busy={busy}
+                variant="overlay"
+                size="compact"
+                onGenerate={generation ? () => void runs.start({ kind: 'reference' }, !value.referenceHash) : undefined}
+                generateLabel={t({ ko: '기준 이미지 새로 생성', en: 'Generate a reference image' })}
+                generateBlocked={presetBlocked ?? nameBlocked ?? (referenceWorking ? t({ ko: '만드는 중이야', en: 'Generating' }) : null)}
+                onClear={value.referenceHash ? () => onChange({ referenceHash: null }) : undefined}
+              />
+            </div>
+          ) : null}
+        </div>
+        <EditorGroup label={t({ ko: '아바타', en: 'Avatar' })}>
+          {/* The 15rem column is narrower than avatar + crop key, so the keys wrap below the avatar there. */}
+          <div className="flex flex-wrap items-center gap-3">
+            {avatar}
             {editable ? (
-              <div className="absolute inset-x-0 bottom-0 flex items-center gap-0.5 bg-gradient-to-t from-black/75 to-transparent p-1.5 pt-6 text-white [&_button]:text-white">
-                <ChatProfileAssetInput target={uploadTarget} libraryGroupId={libraryGroupId} onChange={(referenceHash) => onChange({ referenceHash })} onBusyChange={onBusyChange} busy={busy} />
-                <span className="flex-1" />
-                {generation ? <IconButton size="icon-sm" variant="ghost" disabled={busy || Boolean(presetBlocked ?? nameBlocked) || reference.working} label={presetBlocked ?? nameBlocked ?? t({ ko: '기준 이미지 만들기', en: 'Generate reference image' })} onClick={() => void runs.start({ kind: 'reference' }, !value.referenceHash)}><Sparkles /></IconButton> : null}
+              <div className="flex min-w-0 flex-col items-start gap-1">
+                <Button size="sm" variant="secondary" disabled={busy || !referenceUrl || !value.referenceHash} onClick={() => setCropOpen(true)}><Crop />{t({ ko: '기준 이미지에서 자르기', en: 'Crop the reference' })}</Button>
+                <ChatProfileAssetInput
+                  target={uploadTarget}
+                  libraryGroupId={libraryGroupId}
+                  onChange={(avatarHash) => onAvatarChange(avatarHash, null)}
+                  onBusyChange={onBusyChange}
+                  busy={busy}
+                  variant="ghost"
+                  onClear={hasAvatar ? () => onAvatarChange(null, null) : undefined}
+                  clearLabel={t({ ko: '아바타 지우기', en: 'Remove avatar' })}
+                />
               </div>
             ) : null}
           </div>
-        </div>
-        <div className="min-w-0 space-y-4">
-          <div className="flex items-center gap-3">
-            {avatar}
-            <div className="space-y-1">
-              <span className="text-xs text-muted-foreground">{t({ ko: '아바타', en: 'Avatar' })}</span>
-              {editable ? (
-                <div className="flex items-center gap-0.5">
-                  <IconButton size="icon-sm" variant="secondary" disabled={busy || !referenceUrl || !value.referenceHash} label={t({ ko: '기준 이미지에서 자르기', en: 'Crop reference image' })} onClick={() => setCropOpen(true)}><Crop /></IconButton>
-                  <ChatProfileAssetInput target={uploadTarget} libraryGroupId={libraryGroupId} extraInputs={false} onChange={(avatarHash) => onAvatarChange(avatarHash, null)} onBusyChange={onBusyChange} busy={busy} />
-                  {hasAvatar ? <IconButton size="icon-sm" variant="ghost" disabled={busy} label={t({ ko: '아바타 지우기', en: 'Remove avatar' })} onClick={() => onAvatarChange(null, null)}><X /></IconButton> : null}
-                </div>
-              ) : null}
-            </div>
-          </div>
-          <EditorGroup
-            label={<>{t({ ko: '외형 설명', en: 'Appearance' })}{appearanceWarning ? <Tip content={appearanceWarning}><span className="inline-flex normal-case tracking-normal text-warning" tabIndex={0} aria-label={appearanceWarning}><AlertTriangle className="size-3.5" /></span></Tip> : null}</>}
-            actions={editable && draftAppearance ? <IconButton size="icon-xs" variant="ghost" disabled={busy || appearance.isPending || Boolean(draftBlocked)} label={draftBlocked ?? t({ ko: '기준 이미지나 프롬프트 보고 초안 쓰기', en: 'Draft from the reference image or prompt' })} onClick={() => void writeAppearance()}>{appearance.isPending ? <Spinner /> : <Sparkles />}</IconButton> : undefined}
-          >
-            <Textarea variant="settings" disabled={appearance.isPending} readOnly={!editable} className="min-h-[120px]" rows={5} value={value.appearance ?? ''} maxLength={CHAT_PROFILE_TEXT_LIMITS.text} aria-invalid={appearanceInvalid || undefined} aria-label={t({ ko: '외형 설명', en: 'Appearance' })} onChange={(event) => onChange({ appearance: event.target.value })} />
-          </EditorGroup>
-        </div>
+        </EditorGroup>
+        {aside}
       </div>
 
-      {reference.working || reference.failed || reference.candidates.length ? (
-        <AssetCandidateTray runs={runs} slotKey={REFERENCE_SLOT} title={t({ ko: '기준 이미지', en: 'Reference image' })} currentHash={value.referenceHash ?? null} referenceHash={null} />
-      ) : null}
+      <div className="min-w-0 space-y-6">
+        <EditorGroup
+          label={t({ ko: '외형 설명', en: 'Appearance' })}
+          description={t({ ko: '이미지를 만들 때 넣는 외형 태그야', en: 'The look tags used when making images' })}
+          actions={editable && draftAppearance ? (
+            <Tip content={draftBlocked}>
+              <span className="inline-flex" tabIndex={draftBlocked ? 0 : -1}>
+                <Button size="sm" variant="ghost" disabled={busy || appearance.isPending || Boolean(draftBlocked)} onClick={() => void writeAppearance()}>
+                  {appearance.isPending ? <Spinner className="size-3.5" /> : <Sparkles />}{t({ ko: 'AI 초안', en: 'AI draft' })}
+                </Button>
+              </span>
+            </Tip>
+          ) : undefined}
+        >
+          <Textarea variant="settings" disabled={appearance.isPending} readOnly={!editable} className="min-h-[120px]" rows={5} value={value.appearance ?? ''} maxLength={CHAT_PROFILE_TEXT_LIMITS.text} aria-invalid={appearanceInvalid || undefined} aria-label={t({ ko: '외형 설명', en: 'Appearance' })} onChange={(event) => onChange({ appearance: event.target.value })} />
+          {appearanceWarning ? <p role="note" className="text-xs text-warning">{appearanceWarning}</p> : null}
+          {appearanceNote ? <p className="text-xs text-muted-foreground">{appearanceNote}</p> : null}
+        </EditorGroup>
 
-      <div className="border-t border-line pt-4">
-        {expressionsNote ? <p className="text-sm text-muted-foreground">{expressionsNote}</p> : (
-          <ExpressionSlots
-            runs={runs}
-            groupSource={groupSource}
-            referenceHash={value.referenceHash ?? null}
-            canGenerate={!expressionBlocked && !busy}
-            blockedReason={expressionBlocked}
-            onSet={setExpression}
-            onClear={clearExpression}
-            renderInput={(onPick) => <ChatProfileAssetInput target={uploadTarget} libraryGroupId={libraryGroupId} extraInputs={false} onChange={onPick} onBusyChange={onBusyChange} busy={busy} />}
-            editable={generating && expressionsEditable}
-          />
-        )}
-      </div>
+        {reference.working || reference.failed || reference.candidates.length ? (
+          <AssetCandidateTray runs={runs} slotKey={REFERENCE_SLOT} title={t({ ko: '기준 이미지 후보', en: 'Reference candidates' })} currentHash={value.referenceHash ?? null} referenceHash={null} />
+        ) : null}
 
-      {children}
-      <div className="border-t border-line">
-        <ChatProfileCandidateArchive source={groupSource} generated={runs.candidateTotal} />
+        <div className="border-t border-line pt-4">
+          {expressionsNote ? <p className="text-sm text-muted-foreground">{expressionsNote}</p> : (
+            <ExpressionSlots
+              runs={runs}
+              groupSource={groupSource}
+              referenceHash={value.referenceHash ?? null}
+              canGenerate={!expressionBlocked && !busy}
+              blockedReason={expressionBlocked}
+              onSet={setExpression}
+              onClear={clearExpression}
+              renderInput={(slot) => (
+                <ChatProfileAssetInput
+                  target={uploadTarget}
+                  libraryGroupId={libraryGroupId}
+                  onChange={slot.onPick}
+                  onBusyChange={onBusyChange}
+                  busy={busy || slot.busy}
+                  size="compact"
+                  onGenerate={slot.onGenerate}
+                  generateLabel={t({ ko: '다시 만들기', en: 'Generate again' })}
+                  generateBlocked={slot.generateBlocked}
+                  onClear={slot.onClear}
+                  clearLabel={t({ ko: '비우기', en: 'Clear' })}
+                />
+              )}
+              editable={generating && expressionsEditable}
+            />
+          )}
+        </div>
+
+        {children}
+        <div className="border-t border-line">
+          <ChatProfileCandidateArchive source={groupSource} generated={runs.candidateTotal} />
+        </div>
       </div>
 
       {cropOpen && referenceUrl ? <ChatProfileAvatarCrop src={referenceUrl} initial={value.avatarHash === value.referenceHash ? value.avatarCrop : null} onClose={() => setCropOpen(false)} onApply={(avatarCrop) => { onAvatarChange(value.referenceHash ?? null, avatarCrop); setCropOpen(false) }} /> : null}

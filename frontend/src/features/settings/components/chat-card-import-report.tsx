@@ -12,7 +12,7 @@ export function ChatCardImportReportModal({ report, onClose }: { report: ChatCar
     { label: t({ ko: '빠짐', en: 'Left out' }), items: report.dropped },
   ].filter((group) => group.items.length > 0) : []
   return (
-    <Modal open={report !== null} onClose={onClose} title={t({ ko: '카드 가져오기 결과', en: 'Card import' })} widthClassName="max-w-lg">
+    <Modal open={report !== null} onClose={onClose} title={t({ ko: '카드 가져오기 결과', en: 'Card import' })} size="md">
       <ModalBody>
         {groups.map((group) => (
           <section key={group.label} className="space-y-1.5">

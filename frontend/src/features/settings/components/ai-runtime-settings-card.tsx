@@ -218,11 +218,9 @@ export function AiRuntimeSettingsCard({
             </Select>
           </SettingRow>
 
-          {draft.pythonSource === 'custom' ? (
-            <SettingRow label={labels.pythonPath} controlWidth="wide">
-              <Input variant="settings" mono aria-label={labels.pythonPath} className="min-w-0 flex-1" value={draft.customPythonPath} placeholder="python" onChange={(event) => onPatch({ customPythonPath: event.target.value })} />
-            </SettingRow>
-          ) : null}
+          <SettingRow label={<ChatFilledLabel fieldId="aiRuntime.customPythonPath">{labels.pythonPath}</ChatFilledLabel>} controlWidth="wide">
+            <Input variant="settings" mono aria-label={labels.pythonPath} className="min-w-0 flex-1" disabled={draft.pythonSource !== 'custom'} value={draft.customPythonPath} placeholder="python" onChange={(event) => onPatch({ customPythonPath: event.target.value })} />
+          </SettingRow>
 
           <SettingRow
             label={<ChatFilledLabel fieldId="aiRuntime.cpuThreads">{labels.threads}</ChatFilledLabel>}

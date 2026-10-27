@@ -367,7 +367,7 @@ export function ChatGenerationPresetEditorModal({ open, preset, onClose, onDupli
       open={open}
       onClose={onClose}
       title={preset ? t({ ko: '생성 프리셋 편집', en: 'Edit generation preset' }) : t({ ko: '생성 프리셋 추가', en: 'Add generation preset' })}
-      size="normal"
+      size="lg"
       height="tall"
       sidePanelInset={CHAT_DOCK_INSET}
       dirty={dirty}

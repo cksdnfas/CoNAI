@@ -1,5 +1,5 @@
-import { useRef, type ReactNode } from 'react'
-import { ImagePlus, RotateCcw, X } from 'lucide-react'
+import { useRef } from 'react'
+import { ImagePlus, RotateCcw } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { FieldGroup } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
@@ -39,7 +39,7 @@ function ColorField({ label, value, fallback, onChange }: { label: string; value
 }
 
 /** The profile's look: typeface, background, roleplay colours, with a sample line rendered as the chat would. */
-export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange, onBackgroundChange, characterName, hasBackground, onBackgroundHashChange, onBusyChange, busy, backgroundActions }: {
+export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange, onBackgroundChange, characterName, hasBackground, onBackgroundHashChange, onBusyChange, busy, onGenerateBackground, generateBackgroundBlocked = null }: {
   style: ChatStyle
   defaults: ChatStyle | undefined
   /** What the background shows now (saved image, or a newly picked one); null when there is none. */
@@ -52,8 +52,10 @@ export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange,
   busy: boolean
   /** Clear the legacy image alongside its library hash. */
   onBackgroundChange: (background: string | null) => void
-  /** Extra controls after the background's inputs (the profile editor's generate button). */
-  backgroundActions?: ReactNode
+  /** "새로 생성" in the background's image menu (the profile editor's background run). */
+  onGenerateBackground?: () => void
+  /** Why the background cannot be generated now. */
+  generateBackgroundBlocked?: string | null
 }) {
   const { t } = useI18n()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -96,14 +98,19 @@ export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange,
                 <ChatProfileImage src={backgroundUrl} fallback={<ImagePlus className="size-5" />} />
               </button>
             </Tip>
-            {hasBackground ? (
-              <IconButton size="icon-xs" variant="secondary" disabled={busy} className="absolute right-1.5 top-1.5" onClick={() => onBackgroundChange(null)} label={t({ ko: '배경 지우기', en: 'Remove background' })}>
-                <X />
-              </IconButton>
-            ) : null}
-            <div className="flex items-center">
-              <ChatProfileAssetInput target={{ characterName }} onChange={onBackgroundHashChange} onBusyChange={onBusyChange} busy={busy} uploadRef={fileInputRef} />
-              {backgroundActions}
+            <div className="mt-2">
+              <ChatProfileAssetInput
+                target={{ characterName }}
+                onChange={onBackgroundHashChange}
+                onBusyChange={onBusyChange}
+                busy={busy}
+                uploadRef={fileInputRef}
+                onGenerate={onGenerateBackground}
+                generateLabel={t({ ko: '배경 새로 생성', en: 'Generate a background' })}
+                generateBlocked={generateBackgroundBlocked}
+                onClear={hasBackground ? () => onBackgroundChange(null) : undefined}
+                clearLabel={t({ ko: '배경 지우기', en: 'Remove background' })}
+              />
             </div>
           </div>
         </FieldGroup>

@@ -15,18 +15,17 @@ import { EditorGroup } from '@/components/ui/editor-group'
 import { ChatProfileAgentSetting, ChatProfileToolLimits } from './chat-profile-tools'
 import { ChatToolPicker, useChatToolGroups } from './chat-tool-picker'
 import { ChatToolPresetEditorModal } from './chat-tool-preset-editor-modal'
+import { SettingsAdvanced } from './settings-navigation'
 
 /**
  * CoNAI tools (MCP) for the profile: the switch, the profile's own scopes and tools (a tool preset only loads a copy),
- * the linked generation presets, and (advanced) the tool-call limits for API LLM profiles.
+ * the linked generation presets, and (folded advanced settings) the tool-call limits for API LLM profiles.
  */
-export function ChatProfileToolsPanel({ open, draft, patch, defaults, advanced }: {
+export function ChatProfileToolsPanel({ open, draft, patch, defaults }: {
   open: boolean
   draft: Draft
   patch: PatchDraft
   defaults: ChatProfileDefaults | undefined
-  /** Shows the tool-call limits. */
-  advanced: boolean
 }) {
   const { t } = useI18n()
   const presetsQuery = useQuery({ queryKey: CHAT_TOOL_PRESETS_QUERY_KEY, queryFn: listChatToolPresets, enabled: open && draft.mcpEnabled })
@@ -132,10 +131,10 @@ export function ChatProfileToolsPanel({ open, draft, patch, defaults, advanced }
             </CollapsibleRow>
           </div>
         ) : null}
-        {advanced && draft.mcpEnabled && draft.engine !== 'codex' ? (
-          <div className="border-t border-line pt-3">
+        {draft.mcpEnabled && draft.engine !== 'codex' ? (
+          <SettingsAdvanced count={1}>
             <ChatProfileToolLimits toolOutputLimit={draft.toolOutputLimit} onChange={patch} />
-          </div>
+          </SettingsAdvanced>
         ) : null}
       </EditorGroup>
       <EditorGroup label={t({ ko: '에이전트', en: 'Agent' })}>

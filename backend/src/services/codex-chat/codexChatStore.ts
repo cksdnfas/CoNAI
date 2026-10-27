@@ -496,6 +496,12 @@ export const CodexChatStore = {
     `).run(title.slice(0, TITLE_MAX_LENGTH), threadId)
   },
 
+  /** Renames only while the title is still `expected`, so an automatic title never replaces a rename; true when it did. */
+  renameThreadIf(threadId: number, expected: string, title: string) {
+    return getUserSettingsDb().prepare('UPDATE codex_chat_threads SET title = ? WHERE id = ? AND title = ?')
+      .run(title.slice(0, TITLE_MAX_LENGTH), threadId, expected.slice(0, TITLE_MAX_LENGTH)).changes > 0
+  },
+
   touchThread(threadId: number) {
     getUserSettingsDb().prepare('UPDATE codex_chat_threads SET updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(threadId)
   },

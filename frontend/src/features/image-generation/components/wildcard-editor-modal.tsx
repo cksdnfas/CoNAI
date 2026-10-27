@@ -675,7 +675,7 @@ export function WildcardEditorModal({
       title={mode === 'create'
         ? t(wildcardEditorKey('create.tab.item'), { tab: tabLabel })
         : t(wildcardEditorKey('edit.tab.item'), { tab: tabLabel })}
-      size="wide"
+      size="xl"
       height="tall"
       dirty={chatDirty}
       onSave={canSave ? () => formRef.current?.requestSubmit() : undefined}

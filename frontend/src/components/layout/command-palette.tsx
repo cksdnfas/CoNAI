@@ -1,12 +1,15 @@
 import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Zap, type LucideIcon } from 'lucide-react'
+import { Search, Settings2, Zap, type LucideIcon } from 'lucide-react'
+import { EmptyState } from '@/components/ui/empty-state'
+import { searchSettingsRows, settingRowHref } from '@conai/shared'
 import { SearchField } from '@/components/common/search-field'
 import { ListRow } from '@/components/ui/list-row'
 import { Modal } from '@/components/ui/modal'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { listAccessiblePageAccessItems } from '@/features/auth/page-access-catalog'
+import { SETTINGS_TAB_LABELS, type SettingsTab } from '@/features/settings/settings-tabs'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatPage } from '@/features/codex-chat/chat-page-context'
 import { authCatalog } from '@/i18n/resources/auth'
@@ -48,7 +51,7 @@ function filterItems(items: PaletteItem[], query: string) {
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n()
   return (
-    <Modal open={open} onClose={onClose} title={t({ ko: '빠른 실행', en: 'Command palette' })} size="narrow" height="medium" appearance="card">
+    <Modal open={open} onClose={onClose} title={t({ ko: '빠른 실행', en: 'Command palette' })} size="md" height="medium">
       <CommandPaletteBody onClose={onClose} />
     </Modal>
   )
@@ -60,7 +63,8 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { showSnackbar } = useSnackbar()
-  const permissionKeys = useAuthStatusQuery().data?.permissionKeys ?? []
+  const auth = useAuthStatusQuery().data
+  const permissionKeys = auth?.permissionKeys ?? []
   const page = useChatPage()
   const watchCommandActions = page?.watchCommandActions
   const runCommandAction = page?.runCommandAction
@@ -103,6 +107,9 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
   const normalizedQuery = query.trim().toLowerCase()
   const groups: PaletteGroup[] = [
     { id: 'actions', heading: t({ ko: '이 화면', en: 'This screen' }), items: filterItems(actionItems, normalizedQuery) },
+    { id: 'settings', heading: t({ ko: '설정', en: 'Settings' }), items: normalizedQuery ? searchSettingsRows(normalizedQuery, auth ?? {}).map((row) => ({
+      id: `setting:${row.id}`, label: `${t(row.label)} · ${t(SETTINGS_TAB_LABELS[row.section as SettingsTab])}`, terms: [], icon: Settings2, run: () => run(() => navigate(settingRowHref(row))),
+    })) : [] },
     { id: 'pages', heading: t({ ko: '페이지 이동', en: 'Go to page' }), items: filterItems(pageItems, normalizedQuery) },
   ].filter((group) => group.items.length > 0)
   const items = groups.flatMap((group) => group.items)
@@ -157,7 +164,7 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
             })}
           </RowGroup>
         ))}
-        {items.length === 0 ? <p className="py-6 text-center text-sm text-muted-foreground">{t({ ko: '맞는 항목이 없어.', en: 'Nothing matches.' })}</p> : null}
+        {items.length === 0 ? <EmptyState size="compact" icon={Search} title={t({ ko: '맞는 항목이 없어', en: 'Nothing matches' })} /> : null}
       </div>
       <p className="text-xs text-muted-foreground">{t({ ko: '↑↓ 이동 · Enter 실행 · Esc 닫기 · {keys} 열기', en: '↑↓ move · Enter run · Esc close · {keys} open' }, { keys: formatShortcut('Mod+K') })}</p>
     </div>

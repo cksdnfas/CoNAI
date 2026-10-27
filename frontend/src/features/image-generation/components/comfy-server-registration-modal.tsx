@@ -36,7 +36,7 @@ export function ComfyServerRegistrationModal({
   const canSelectRepresentative = form.backendType !== 'modal'
 
   return (
-    <Modal open={open} onClose={onClose} title={title} widthClassName="max-w-2xl">
+    <Modal open={open} onClose={onClose} title={title} size="md">
       <ModalBody spacing="lg">
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t({ ko: '서버 이름', en: 'Server name' })}>

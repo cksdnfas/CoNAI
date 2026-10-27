@@ -512,7 +512,7 @@ export function ImageAttachmentPickerButton({
           }
         }}
         title={effectiveModalTitle}
-        widthClassName="max-w-7xl" height="tall"
+        size="xl" height="tall"
       >
         <div className={source === 'system' ? 'flex min-h-0 flex-1 flex-col gap-3' : 'space-y-5'}>
           <input ref={inputRef} type="file" accept="image/*" hidden onChange={(event) => void handleUploadFileChange(event)} />
