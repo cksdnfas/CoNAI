@@ -24,6 +24,7 @@ current screen state. See `components/layout/app-shell.tsx`; these providers are
 | `/access` | `features/auth` | shell |
 | `/groups`, `/groups/:groupId` | `features/groups` | `page.groups.view` |
 | `/prompts` | `features/prompts` | `page.prompts.view` |
+| `/characters` (`?folder=`, `?q=`, `?page=`, `?setting=`, `?new=`) | `features/characters` (character library) | `page.characters.view` |
 | `/generation` (NAI, ComfyUI, workflows, queue) | `features/image-generation`, `features/module-graph` | `page.generation.view` |
 | `/wildcards` | `features/image-generation` | `page.wildcards.view` |
 | `/public/workflows/:slug` | `features/image-generation` | public workflow page |
@@ -53,6 +54,37 @@ The public workflow route has its own access flow; being inside the shell does n
   `images`, `search`, `groups`, `auth`); when something is reused widely, move it down to `components/common` or `lib`.
 - `src/lib/` — API clients (`api-*.ts`), query client, appearance/theme system, formatting utilities.
 - `src/types/` — frontend-only view types.
+
+## Character library
+
+`features/characters/character-library-page.tsx` owns the folder tree, paged name search and editor URL state.
+`lib/api-character-library.ts` uses `/api/character-library`; shared contracts live in
+`shared/src/types/characterLibrary.ts`. Access is `characters.view`/`characters.edit`, header key `characters`;
+image fields additionally require `images.view`, candidate generation administrator access plus edit permission.
+
+- `use-character-setting-editor.ts` preserves drafts and checks revisions; on a stale revision it merges non-overlapping
+  changes and retries once, otherwise asks the user to resolve the conflict.
+- `components/character-setting-appearance.tsx` reuses settings' `character-appearance-editor.tsx` and
+  `use-character-setting-runs.ts` for setting-owned asset batches and expression groups.
+- Settings' `chat-profile-character-link.tsx` and `use-profile-character-link.ts` distinguish no link, synced look and
+  detached copy. A synced profile edits the setting first, then saves the profile; unresolved conflicts stop that save.
+  Background and its generation remain profile-owned.
+  Detached/unlinked drafts show the source expression group read-only until saving copies it; missing/inaccessible
+  groups show a note. `ensureProfile` persists pending link changes before dependent stores/profile-owned generation.
+  Proposal cards refuse synced look-only changes and confirm saving only the remaining fields in mixed proposals.
+- Generation's `character-setting-load-button.tsx` copies tags and optional reference into NAI/Codex/ComfyUI forms;
+  later library changes do not update those forms. NAI reference placement is independent of character prompt rows.
+- `module-graph-character-setting-input.tsx` selects `character_setting_id` on a node card/inspector, mutually exclusive
+  with `profile_id`. Workflow run inputs still use a numeric field rather than this picker.
+- `use-character-library-chat-page.ts` registers `character.*`; the profile adapter exposes `profile.draft` with
+  `characterLink` and reviewed `profile.character_save`. Generation adapters expose `character_setting.insert` through
+  `use-chat-character-setting-insertion.ts`. Shared action permissions and path checks remain authoritative.
+  The profile adapter refuses switching settings over a dirty synced draft, requires `characters.edit` for synced
+  appearance edits, exposes up to 50 `syncedProfiles` names and separates background from setting-owned `profile.assets`.
+- Runtime topic `characters`, event `characters.changed`, refreshes affected library/profile queries through
+  `features/runtime-events/use-runtime-event-query-bridge.ts`.
+
+See the [user guide](../docs/GUIDE/CHARACTER_LIBRARY.md) and [backend/code map](../DEVELOPMENT.md#캐릭터-라이브러리와-외형-재사용).
 
 ## i18n
 - `useI18n().t(...)` with inline `{ ko, en }` dictionaries, or catalog keys from `src/i18n/resources/<feature>.ts`.

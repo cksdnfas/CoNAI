@@ -30,7 +30,7 @@ const PATTERN_CLASSIFIED = 'generate_image(_N): isChatGenerationTool -> scope "g
  * - FEATURE_UNCLASSIFIED_ALLOWED: account-bound tools that may lack a TOOL_FEATURE_PERMISSIONS entry.
  * - STALE_SCOPE_ALLOWED / STALE_FEATURE_ALLOWED: map keys allowed without a registration in the contexts built below.
  */
-const CHAT_ROOM_TOOL_NAMES = ['chat_reply_to', 'room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit', 'task_propose', 'task_status', 'task_update', 'task_wait', 'task_finish', 'get_proposal_status', 'offer_choices']
+const CHAT_ROOM_TOOL_NAMES = ['call_agent', 'chat_reply_to','room_call_member', 'room_history_search', 'room_history_read', 'read_lore_file', 'save_lore', 'edit_lore_file', 'linked_list', 'linked_search', 'linked_read', 'linked_write', 'linked_edit', 'task_propose', 'task_status', 'task_update', 'task_wait', 'task_finish', 'get_proposal_status', 'offer_choices']
 const UNSCOPED_ALLOWED = new Set<string>([
   // Chat room/lore tools are offered by CHAT_ROOM_TOOLS regardless of scopes (isContextToolAllowed returns before scopes).
   ...CHAT_ROOM_TOOL_NAMES,
@@ -134,11 +134,12 @@ test('mcp tool classification: every registered tool has a scope and a feature p
     }
   }
 
-  // Fixtures for chat contexts: a profile that allows lore proposals, a thread, and two kinds of connected pages. Web
-  // research on, so the web tools register.
+  // Fixtures for chat contexts: a profile that allows lore proposals, an agent profile it can delegate to (call_agent),
+  // a thread, and two kinds of connected pages. Web research on, so the web tools register.
   ;(await import('../src/services/codex-chat/chatSettings')).updateChatSettings({ webResearch: { engine: 'claude' } })
   ExternalApiProvider.create({ provider_name: 'conn', display_name: 'Conn', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'm' } })
   const profile = ChatProfileStore.create({ name: 'Classifier', engine: 'llm', providerName: 'conn', mcpEnabled: true, mcpScopes: [...CHAT_SCOPES], allowLoreProposals: true })
+  ChatProfileStore.create({ name: 'Classifier agent', engine: 'llm', providerName: 'conn', agentEnabled: true, agentDescription: 'Classification' })
   const threadId = CodexChatStore.createThread(null, 'classification chat', 'llm', profile.id)
   const basePage = { instanceId: 'page-classification', connectionId: 'connection-classification', title: 'Classification', fields: [] }
   const workflowPage = normalizeChatPageSnapshot({ ...basePage, path: '/generation', kind: 'workflow', resourceId: 'workflow:draft:classification',

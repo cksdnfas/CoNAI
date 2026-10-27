@@ -21,9 +21,10 @@ const CATALOG_CALL_TIMEOUT_MS = 30 * 60_000;
 /** Page at tool boundaries; a single larger definition is kept intact. */
 const CATALOG_PAGE_CHARS = 12_000;
 
-export type ToolCategoryId = 'images' | 'image_groups' | 'emoticons' | 'wallpaper' | 'generation' | 'workflows' | 'prompts' | 'files' | 'posts' | 'audio' | 'sprite' | 'chat_setup' | 'web' | 'external' | 'plugins' | 'guide' | 'chat';
+export type ToolCategoryId = 'images' | 'image_groups' | 'characters' | 'emoticons' | 'wallpaper' | 'generation' | 'workflows' | 'prompts' | 'files' | 'posts' | 'audio' | 'sprite' | 'chat_setup' | 'web' | 'external' | 'plugins' | 'guide' | 'chat';
 
 export const TOOL_CATEGORIES: Record<ToolCategoryId, string> = {
+  characters: 'Character library: folders, appearance settings, reference images, avatars and expressions',
   images: 'Library images/videos: search, metadata, history, downloads, resize',
   image_groups: 'Image groups: list, create, edit, add/move/remove images, auto-collect',
   emoticons: 'Emoticons: list, view, keywords, groups',

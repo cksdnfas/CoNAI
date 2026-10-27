@@ -4,6 +4,7 @@ import { ProtectedAppShell } from '@/features/auth/protected-app-shell'
 import { RequireAuthPermission } from '@/features/auth/require-auth-permission'
 import {
   AccessOverviewRoute,
+  CharacterLibraryRoute,
   CodexChatRoute,
   GroupRoute,
   HomeRoute,
@@ -128,6 +129,10 @@ export const appRouter = createHashRouter([
       {
         path: 'wildcards',
         element: <RequireAuthPermission permissionKey="page.wildcards.view"><WildcardRoute /></RequireAuthPermission>,
+      },
+      {
+        path: 'characters',
+        element: <RequireAuthPermission permissionKey="page.characters.view"><CharacterLibraryRoute /></RequireAuthPermission>,
       },
       {
         path: 'chat',

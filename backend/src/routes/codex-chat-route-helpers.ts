@@ -20,6 +20,7 @@ import { ChatFlagError } from '../services/codex-chat/chatFlags'
 import { ChatUserProfileError } from '../services/codex-chat/chatUserProfiles'
 import { ChatAppearanceError } from '../services/codex-chat/chatAppearance'
 import { ChatSuggestError } from '../services/codex-chat/chatSuggestions'
+import { CharacterLibraryError } from '../services/characterLibrary'
 
 /** Request parsing, access checks and error responses shared by the /api/codex-chat routers. */
 
@@ -46,6 +47,10 @@ export function isGroupThread(req: Request, threadId: number) {
 }
 
 export function sendChatError(res: Response, error: unknown) {
+  if (error instanceof CharacterLibraryError) {
+    res.status(error.status).json({ success: false, error: error.message, ...(error.code ? { code: error.code } : {}), ...(error.revision !== undefined ? { revision: error.revision } : {}) })
+    return
+  }
   if (error instanceof ChatDiagnosticsError || error instanceof ChatPageContextError || error instanceof CodexChatError || error instanceof LlmChatError || error instanceof FileStoreError || error instanceof ChatReplyError || error instanceof ChatSuggestError || error instanceof LorebookError || error instanceof LinkedFileError || error instanceof ChatFileChangeError) {
     res.status(error.status).json({ success: false, error: error.message })
     return

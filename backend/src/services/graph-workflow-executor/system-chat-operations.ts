@@ -14,6 +14,9 @@ import { MEDIA_MIME_TYPES } from '../codex-chat/chatMediaLinks'
 import { fillCharacterPlaceholders } from '../codex-chat/chatPlaceholders'
 import { resolveProfileAsset, type ChatProfileAssetKind } from '../codex-chat/chatProfileAssets'
 import { ChatProfileStore, type ChatProfile } from '../codex-chat/chatProfiles'
+import { getCharacterSetting } from '../characterLibrary'
+import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { canRequesterViewImages } from '../../middleware/imageAccess'
 import { CodexChatStore } from '../codex-chat/codexChatStore'
 import { ensureAutomationRoom, wakeChatRoom, wakeReplyText, ChatWakeBusyError } from '../codex-chat/chatRoomWake'
 import { resolveAutomationRunAs } from '../automationRunAs'
@@ -238,10 +241,20 @@ export async function executeGenerateWithChatPresetNode(
   const prompt = optionalText(resolvedInputs.prompt)
   if (!prompt) throw new Error('프롬프트를 넣어줘.')
   const hasProfile = resolvedInputs.profile_id !== undefined && resolvedInputs.profile_id !== null && resolvedInputs.profile_id !== ''
+  const hasSetting = resolvedInputs.character_setting_id !== undefined && resolvedInputs.character_setting_id !== null && resolvedInputs.character_setting_id !== ''
+  if (hasProfile && hasSetting) throw new Error('profile_id와 character_setting_id 중 하나만 골라줘.')
+  const settingId = hasSetting ? parsePositiveIntegerish(resolvedInputs.character_setting_id) : null
+  if (hasSetting && settingId === null) throw new Error('캐릭터 외형 설정 id를 확인해줘.')
+  const requester = runRequester(context)
+  if (hasSetting && requester !== null) requireRequesterPermission({ accountId: requester, accountType: null }, 'characters.view')
   const profile = hasProfile ? requireWorkflowProfile(context, resolvedInputs.profile_id) : null
   const explicitReference = await libraryHashOfImageInput(resolvedInputs.reference_image)
-  const referenceHash = explicitReference ?? profile?.referenceHash ?? null
-  const fullPrompt = joinPrompt([profile?.appearance ?? '', prompt])
+  // Connected images have their own input boundary. Only borrow a stored reference when it is visible;
+  // otherwise the setting still lends its tags. Account-less scheduled runs retain their existing access.
+  const setting = settingId === null ? null : getCharacterSetting(settingId,
+    explicitReference === null && (requester === null || canRequesterViewImages({ accountId: requester, accountType: null })))
+  const referenceHash = explicitReference ?? setting?.referenceHash ?? profile?.referenceHash ?? null
+  const fullPrompt = joinPrompt([setting?.appearance ?? profile?.appearance ?? '', prompt])
   // The builder reads only the reference from the profile; a connected reference image stands in for the character's.
   const referenceSource = profile ? { ...profile, referenceHash } : ({ referenceHash } as ChatProfile)
   const options = { forceReference: explicitReference !== null, omitReference: referenceHash === null }
@@ -271,7 +284,7 @@ export async function executeGenerateWithChatPresetNode(
 
   const metadata = context.artifactsByNode.get(node.id)?.metadata
   if (metadata && metadata.value && typeof metadata.value === 'object' && !Array.isArray(metadata.value)) {
-    metadata.value = { ...metadata.value, chat_preset: { id: preset.id, name: preset.name, kind: preset.kind }, profile_id: profile?.id ?? null, reference_hash: referenceHash }
+    metadata.value = { ...metadata.value, chat_preset: { id: preset.id, name: preset.name, kind: preset.kind }, profile_id: profile?.id ?? null, character_setting_id: setting?.id ?? null, reference_hash: referenceHash }
   }
 }
 

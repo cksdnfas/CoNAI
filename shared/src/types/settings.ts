@@ -28,6 +28,7 @@ export const HEADER_NAVIGATION_PAGE_KEYS = [
   'upload',
   'files',
   'prompts',
+  'characters',
   'generation',
   'audio',
   'sprite',

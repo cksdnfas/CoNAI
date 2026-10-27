@@ -49,6 +49,7 @@ const HEADER_PAGE_PATHS: Record<Exclude<HeaderNavigationPageKey, 'access'>, stri
   upload: '/upload',
   files: '/files',
   prompts: '/prompts',
+  characters: '/characters',
   generation: '/generation',
   audio: '/audio',
   sprite: '/sprite',

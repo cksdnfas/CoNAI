@@ -238,6 +238,14 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     // Plugins read every saved profile setting, persona included; profiles hold no credentials.
     assert.equal((listed.find(item => item.id === profile.id) as unknown as import('@conai/shared').PluginLlmProfile).details.systemPrompt, 'You are a village resident.')
     assert.doesNotMatch(JSON.stringify(listed), /apiKey/)
+    // A synced look is the library's; plugins get the setting id, never library names or folders without characters.view.
+    const library = await import('../src/services/characterLibrary')
+    const look = library.createCharacterSetting({ folderId: null, name: 'Plugin look', appearance: 'silver hair' })
+    ChatProfileStore.update(profile.id, { characterLink: { settingId: look.id, synced: true } })
+    const linked = (await bridge('profiles') as import('@conai/shared').PluginLlmProfile[]).find(item => item.id === profile.id)!
+    assert.deepEqual([linked.appearance, linked.character], ['silver hair', { settingId: look.id, synced: true }])
+    assert.equal('characterLink' in linked.details, false)
+    ChatProfileStore.update(profile.id, { characterLink: null })
     const detail = await bridge('profile', { profileId: profile.id }) as import('@conai/shared').PluginLlmProfileDetail
     assert.equal(detail.details.systemPrompt, 'You are a village resident.'); assert.deepEqual(detail.lorebooks, []); assert.equal(detail.judgePreset, null)
     await assert.rejects(bridge('profile', { profileId: off.id }), /사용할 수 없는 프로필/)

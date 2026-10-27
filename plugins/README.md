@@ -178,6 +178,41 @@ For compatibility, `/:id/prompts` clamps positive integer `limit` values above 1
 
 These are the existing HTTP contracts, not new MCP tool names. Their input schemas, revisions, response envelopes and permission rules remain native. Native calls never retry automatically: after an interrupted mutation, query the affected resource/job before issuing another write. For durable idempotent tool execution use `api.app.call/run` with a retained request ID. `api.app.wait(result.id, { signal, timeoutMs })` waits for a plugin app request; `api.app.cancel(result.id)` requests cancellation. A `pending` review is returned immediately by wait. A native job UUID uses `/api/jobs`, and an LLM job uses `api.llm.get/wait/cancel`.
 
+#### Character library APIs
+
+Character-library pages can reuse the native REST API instead of maintaining their own look store:
+`api.app.fetch('/api/character-library/...')`. This requires a host whose `api.host.nativeApiRoots` includes
+`/api/character-library`; `api.supports('app.fetch')` alone does not establish that. Older hosts reject the root.
+No new SDK method or API version is required for an existing fetch bridge.
+
+| Native path under `/api/character-library` | Contract |
+| --- | --- |
+| `GET /folders` | Folder tree rows. `POST /folders` takes `{parentId: number \| null, name}`; `PATCH /folders/:id` renames/moves with `{name?, parentId?}`. |
+| `GET /settings` | `folderId=root` for root, a numeric folder ID for that folder, omitted for all; `query`, `limit`, `offset` page settings. |
+| `GET /settings/:id` | Full setting: appearance tags, reference/avatar hashes and crop, expression/candidate group IDs, path, revision and synced-profile count. |
+| `POST /settings`, `PATCH /settings/:id` | Create with `{folderId, name, appearance?, referenceHash?, avatarHash?, avatarCrop?}`; patch only changed fields and the read `revision`. |
+| `GET /folders/:id/delete-preview`, `GET /settings/:id/delete-preview` | Affected folder/setting counts and `linkedProfileCount`; linked profile names are administrator-only. |
+| `DELETE /folders/:id`, `DELETE /settings/:id?revision=...` | Delete the subtree/setting; synced profiles retain copied values and are unlinked. Send the read revision for setting deletion. |
+
+Responses use `{success: true, data}` or `{success: false, error, code?, revision?}`. Source contracts are
+[`characterLibrary.ts`](../shared/src/types/characterLibrary.ts), the [REST router](../backend/src/routes/character-library.routes.ts)
+and [domain service](../backend/src/services/characterLibrary.ts).
+Reads need `characters.view`, writes `characters.edit`; image fields also require `images.view`.
+Candidate generation remains administrator-only plus `characters.edit` and reuses setting-owned chat asset batches.
+Profile management does not become available to non-administrators.
+
+Like other native roots, non-GET/HEAD requests pass through the host review boundary: a connected assistant's command
+requires confirmation, direct page interaction uses normal account permissions. A declined review sends no mutation.
+Use the ordinary fetch `signal` for cancellation; aborting transport does not undo an already committed write.
+There is no automatic write replay: on 409 `revision_conflict`, read the setting again and review the new change;
+on `name_conflict`, choose a different sibling name/location. Folder moves reject cycles.
+
+The app-tool bridge (`api.app.call` / `conai.tools.call`) also exposes `list_character_library` and
+`get_character_setting` (`characters.view`), and `manage_character_folders` (`characters.edit`).
+Their snake_case arguments are documented in the [MCP guide](../docs/GUIDE/MCP_GUIDE.md#캐릭터-라이브러리);
+folder organization applies immediately. `propose_character_library` requires an active chat and is **not** a plugin app tool.
+These additions need an updated host; discover available app tools rather than assuming an older host has them.
+
 #### Audio directory pagination
 
 `GET /api/audio/projects`, `GET /api/audio/projects/:projectId/groups` and `GET /api/audio/groups` have two native response forms:
@@ -295,8 +330,8 @@ Enabled plugins can generate a single character reply or ask a profile's judge t
 | Method | Contract |
 | --- | --- |
 | `llm.measure(input)` | Synchronous host preflight, awaited over either SDK bridge; no job or model call. Text-mode fields without `requestId`, `mode`, `research`, `timeoutMs`; returns `PluginLlmMeasurement` below. Requires updated SDK/host feature `llm.measure`. |
-| `llm.profiles()` | Enabled profiles this account can use: `id`, `name`, `tagline`, `engine`, `appearance` (image-prompt tags of the character's look), `translation`, `assetVersion`, `avatarCrop`, `assets`, `judge` settings and `statusBlocks` below, plus `details` — every saved profile setting as the profile editor holds it (persona `systemPrompt` and `promptSections`, greetings and opening history, lore/summary/context/judge settings, `style` with its blocks, model rows) — and the app-wide `loreSelectionLimit` (Settings › 채팅 › 자원 › 기억: keyword lore entries one selection keeps, best matches first; always-on entries are not counted). Only image bytes are left out (read them with `llm.asset`); profiles hold no credentials. Normal chat users do not need administrator access. |
-| `llm.profile({ profileId })` | `PluginLlmProfileDetail`: the same profile entry plus `lorebooks` (the profile's shared account books, then global ones, each `{id,name,kind,entries}` with every entry) and `judgePreset` (the whole judge preset, or null). Same account/profile access as `profiles()`. |
+| `llm.profiles()` | Enabled profiles this account can use: `id`, `name`, `tagline`, `engine`, `appearance` (effective image-prompt tags), `character: {settingId: number, synced: boolean} \| null` (look source), `translation`, `assetVersion`, `avatarCrop`, `assets`, `judge` settings and `statusBlocks` below, plus `details` — profile settings as the editor holds them (persona `systemPrompt` and `promptSections`, greetings and opening history, lore/summary/context/judge settings, `style` with its blocks, model rows), excluding image bytes and the library's `characterLink`/internal expression-group field — and the app-wide `loreSelectionLimit` (Settings › 채팅 › 자원 › 기억: keyword lore entries one selection keeps, best matches first; always-on entries are not counted). Read images with `llm.asset`; profiles hold no credentials. Normal chat users do not need administrator access. |
+| `llm.profile({ profileId })` | `PluginLlmProfileDetail`: the same profile entry, including `character`, plus `lorebooks` (the profile's shared account books, then global ones, each `{id,name,kind,entries}` with every entry) and `judgePreset` (the whole judge preset, or null). Same account/profile access as `profiles()`. |
 | `llm.decide(input)` | Await `PluginLlmDecision` for plugin-supplied typed questions on the profile's judge model; no preset or thread required. |
 | `llm.judgeTurn(input)` | Await `PluginJudgeTurn` from the profile's own preset items for a supplied conversation; no native chat thread. |
 | `llm.asset({profileId, kind?, maxSize?})` | Reads a native profile image with the caller's profile and `images.view` permissions. `kind`: `avatar` (default), `background`, `reference`. `maxSize`: 64–512, default 256. Returns `PluginProfileAsset` with `state` (`ready`, `missing`, `hidden`), `version`, `crop`, and, when ready, base64 `data`, `mimeType: image/webp`, `width`, `height`. |
@@ -322,6 +357,13 @@ const state = await api.llm.get(job.jobId);
 if (state.status === 'completed') showReply(state.result.text);
 // A stop button uses: await api.llm.cancel(job.jobId).
 ```
+
+`character: null` means a profile-owned look; `synced: false` remembers the origin of a detached copy.
+When synced, `appearance`, reference/avatar assets and crop resolve to the setting's live values, and `assetVersion`
+includes its revision when images are visible. Background remains profile-owned. Setting names and folder paths are
+not exposed in `details.characterLink`: use the [library APIs](#character-library-apis) with `characters.view`.
+The additive `character` field is absent on older hosts; absence is not proof that a profile has no library link.
+Implementation is `backend/src/services/plugins/pluginLlm.ts` (`pluginProfileOf`), typed in `shared/src/types/plugin.ts`.
 
 ### Stateless profile judging
 

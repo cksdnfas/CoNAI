@@ -453,6 +453,23 @@ ComfyUI 시드(`seed`·`noise_seed`)는 실행마다 새로 뽑힙니다. marked
 
 - 채팅 봇이 앱 기능을 설명하거나 조언하기 전에 실제 화면·설정 설명을 확인하는 용도입니다. 모든 빌드(Docker·포터블·SEA)에 가이드 파일이 같이 들어갑니다.
 
+### 캐릭터 라이브러리
+
+[캐릭터 라이브러리](CHARACTER_LIBRARY.md)의 REST API·화면과 같은 서비스와 검증을 사용합니다.
+
+| Tool | 주요 인자와 결과 | 도구 범위 / 계정 권한 |
+| --- | --- | --- |
+| `list_character_library` | `folder_id`(생략: 전체 설정, `null`: 최상위), `query`, `limit`, `offset`. 경로·바로 아래 폴더·페이지형 설정 요약을 반환하며 외형 본문은 제외합니다. | `read` / `characters.view` |
+| `get_character_setting` | `setting_id`. 외형 태그·이미지 해시·표정 키워드 맵·그룹·`revision`을 조회합니다. | `read` / `characters.view` |
+| `manage_character_folders` | `action: create`는 `name`, 선택 `parent_id`; `rename`은 `folder_id`, `name`; `move`는 `folder_id`, `parent_id`(`null`: 최상위). 즉시 정리하며 순환 이동·형제 이름 중복을 거부합니다. | `organize` / `characters.edit` |
+| `propose_character_library` | `save_setting`, `delete_setting`, `delete_folder` 검토 카드. **채팅 전용**이며 카드 저장 전에는 변경하지 않습니다. | `organize` / `characters.edit` |
+
+`save_setting`의 생성은 `input: {folderId, name, ...}`이며 `folderId: null`은 최상위입니다. 수정은 `setting_id`, 현재 `revision`, 바꿀 `input`을 전달합니다. `input` 필드명은 REST와 같은 camelCase입니다. `delete_setting`은 `setting_id`와 `revision`, `delete_folder`는 `folder_id`를 받습니다.
+
+이미지 해시·표정 조회에는 `images.view`도 필요합니다. 연결 프로필 이름은 관리자에게만 보입니다. 오래된 설정 저장은 `409 revision_conflict`, 이름 중복은 `409 name_conflict`로 거부합니다. 충돌 후에는 설정을 다시 읽어 변경안을 확인하고 재제안하며, 사라진 폴더는 목록부터 다시 조회합니다. 설정·폴더 삭제는 동기화 프로필에 현재 외형을 복사하고 연결을 해제합니다.
+
+`propose_profile_assets` / `get_asset_batch`는 동기화된 프로필을 지정하면 연결 설정의 배치를 사용합니다. 단, **배경만 생성하는 제안은 프로필 소유**이며 명시한 프로필 소유 `batch_id`의 조회·적용도 그 배치를 유지합니다. 명시적인 `setting_id`도 지원하며 `profile_id`와 함께 지정하지 않습니다. 설정 자산에는 배경 슬롯을 넣을 수 없고 배경은 프로필에서 관리합니다. 생성과 후보 적용은 각각 별도 승인 카드이며, 이 채팅 자산 도구는 기존 관리자 경계를 유지합니다.
+
 ### 채팅 설정 (configure)
 
 채팅 에이전트가 채팅 프로필과 표시 블록의 설정을 읽고, 새 설정을 **제안**하는 도구입니다. `configure` 권한은 채팅 전용이며 관리자 전용입니다(계정 권한 `chat.tools.configure`). HTTP MCP 키에는 이 권한이 없습니다.

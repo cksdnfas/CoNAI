@@ -24,13 +24,15 @@ export interface MediaLibraryPickerProps {
   applyLabel?: string
   note?: string | null
   initialGroupPath?: string
+  /** Opens at this group (wins over `initialGroupPath`). */
+  initialGroupId?: number
   mediaKind?: MediaLibraryKind
   /** Chat can apply an empty selection to remove its existing attachments. */
   allowEmpty?: boolean
 }
 
 /** Modal wrapper for callers that select library references rather than embedding the browser. */
-export function MediaLibraryPicker({ initial, maxCount, onPick, onClose, title, applyLabel, note, initialGroupPath, mediaKind = 'all', allowEmpty = false }: MediaLibraryPickerProps) {
+export function MediaLibraryPicker({ initial, maxCount, onPick, onClose, title, applyLabel, note, initialGroupPath, initialGroupId, mediaKind = 'all', allowEmpty = false }: MediaLibraryPickerProps) {
   const { t } = useI18n()
   const { canViewImages } = useImagePermissions()
   const [selected, setSelected] = useState(() => new Map(initial.map((item) => [item.compositeHash, item])))
@@ -41,6 +43,7 @@ export function MediaLibraryPicker({ initial, maxCount, onPick, onClose, title, 
       maxCount={maxCount}
       mediaKind={mediaKind}
       initialGroupPath={initialGroupPath}
+      initialGroupId={initialGroupId}
       onSelectedIdsChange={(ids, items) => {
         const available = new Map(selected)
         for (const item of items) {

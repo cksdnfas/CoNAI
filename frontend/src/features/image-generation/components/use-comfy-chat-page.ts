@@ -13,6 +13,7 @@ import { buildMiniMaxH3DirectorNodeValue, normalizeMiniMaxH3DirectorNodeValue, p
 import { fitsMiniMaxDirectorMedia, getMiniMaxDirectorFreeSlot } from './minimax-h3-director-media'
 import { probeMediaDuration, probeMediaDimensions } from './minimax-h3-director-media-probe'
 import { useChatPresetInsertion } from './use-chat-preset-insertion'
+import { useChatCharacterSettingInsertion } from './use-chat-character-setting-insertion'
 
 type Options = { enabled?: boolean; workflows?: Array<{ id: number; name: string }>; loraOptions?: string[]; onSelect?: (id: number) => void; onOpenCreate?: () => void; onOpenEdit?: (id: number, assertCurrent: () => void) => Promise<void>; onRefresh?: () => Promise<void> }
 const SEED_JSON_PATH = /\.inputs\.(seed|noise_seed)$/
@@ -30,6 +31,12 @@ export function useComfyChatPage(workflow: { id: number; name: string } | null |
   const media = useChatPageMedia(mediaFields.map((field) => field.id))
   const promptTargets = safe.filter((field) => field.type === 'text' || field.type === 'textarea').map((field) => field.id)
   const presets = useChatPresetInsertion(promptTargets)
+  const characterSettings = useChatCharacterSettingInsertion()
+  const referenceTargets = characterSettings.canReference ? safe.filter((field) => field.type === 'image').map((field) => field.id) : []
+  const characterSettingActions = promptTargets.length ? characterSettings.actions({
+    target: pageChoice(promptTargets),
+    ...(referenceTargets.length ? { referenceTarget: pageChoice(referenceTargets) } : {}),
+  }, ['target'], 'target = a text field id. referenceTarget = an image field id that gets the reference image; omit it for tags only.') : []
   const commit = useChatDraftTransaction(draft, (next) => { for (const [id, value] of Object.entries(next)) onChange(id, value) })
   const fields: ChatPageField[] = safe.filter((field) => field.type !== 'image' && field.type !== 'node').slice(0, CHAT_PAGE_LIMITS.fields).flatMap((field) => {
     const value = draft[field.id] ?? ''
@@ -45,7 +52,7 @@ export function useComfyChatPage(workflow: { id: number; name: string } | null |
     kind: 'comfyui', title: workflow ? t({ ko: 'ComfyUI · {name}', en: 'ComfyUI · {name}' }, { name: workflow.name }).slice(0, 160) : 'ComfyUI', resourceId: workflow ? String(workflow.id) : 'comfy-picker', fields, localRevision: getImageDraftRevision(draft),
     data: { workflows: workflowChoices.map((item) => ({ id: item.id, name: item.name })), seedFields: seedFields.map((field) => field.id), nodes: nodeFields.map((field) => comfyNodeChatData(field, draft[field.id])), media: media.candidates, presets: presets.candidates,
       options: { ...Object.fromEntries(safe.filter((field) => field.options?.length).map((field) => [field.id, field.options!.slice(0, 512)])), loras: (options.loraOptions ?? []).slice(0, 512) }, selected: { workflowId: workflow?.id ?? 0, name: workflow?.name ?? '', images: mediaFields.map((field) => ({ fieldId: field.id, label: field.label, name: mediaName(draft[field.id]) })) } },
-    actions: [...media.actions, ...presets.actions,
+    actions: [...media.actions, ...presets.actions, ...characterSettingActions,
       ...(nodeFields.length ? [pageAction('comfy.node', t({ ko: 'H3·LoRA 노드 입력', en: 'Edit H3 or LoRA inputs' }), t({ ko: 'nodes에 나온 노드별 schema에 맞춰 patch를 입력해. 타임라인은 기존 미디어 ID만 편집하고 새 미디어는 media.attach로 등록해.', en: 'Match patch to the node-specific schema in nodes. Edit existing timeline media IDs; attach new media with media.attach.' }), pageObject({ fieldId: pageChoice(nodeFields.map((field) => field.id)), patch: COMFY_NODE_PATCH_SCHEMA }, ['fieldId', 'patch']))] : []),
       ...(options.onSelect && workflowChoices.length ? [pageAction('comfy.select', t({ ko: '워크플로 선택', en: 'Select workflow' }), t({ ko: '등록된 워크플로를 선택해. 선택한 화면이 바로 돌아오니 이어서 입력을 채워.', en: 'Select a registered workflow; the new screen comes back so you can fill its inputs next.' }), pageObject({ id: pageChoice(workflowChoices.map((item) => item.id)) }, ['id']))] : []),
       ...(options.onRefresh ? [pageAction('comfy.refresh', t({ ko: '워크플로·선택 목록 최신화', en: 'Refresh workflow and options' }), t({ ko: '서버에 저장된 최신 워크플로와 선택 목록을 다시 읽어.', en: 'Reload the latest saved workflow and input options.' }))] : []),
@@ -63,6 +70,17 @@ export function useComfyChatPage(workflow: { id: number; name: string } | null |
       if (id === 'comfy.open_create') { options.onOpenCreate?.(); return }
       if (id === 'comfy.open_edit' && workflow) { await options.onOpenEdit?.(workflow.id, assertCurrent); return }
       if (id === 'comfy.refresh') { await options.onRefresh?.(); return }
+      if (id === 'character_setting.insert') {
+        const textField = promptTargets.includes(String(args.target)) ? String(args.target) : null
+        const imageField = args.referenceTarget === undefined ? null : referenceTargets.includes(String(args.referenceTarget)) ? String(args.referenceTarget) : undefined
+        if (!textField || imageField === undefined) throw new Error('입력 필드가 바뀌었어.')
+        const loaded = await characterSettings.load(args, imageField ? 'required' : 'off')
+        assertCurrent()
+        const before = draft[textField]
+        const next = { ...draft, [textField]: characterSettings.text(args, typeof before === 'string' || Array.isArray(before) ? before : '', loaded.appearance) }
+        if (imageField && loaded.reference) next[imageField] = loaded.reference
+        return commit(next)
+      }
       const field = safe.find((item) => item.id === args.fieldId)
       if (!field) throw new Error('입력 필드가 바뀌었어.')
       const next = { ...draft }

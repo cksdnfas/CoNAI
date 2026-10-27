@@ -17,6 +17,7 @@ const SECTION_LABELS: Record<CatalogSection, TranslationInput> = {
   settings: { ko: '공용 페이지 설정', en: 'Shared page settings' },
   images: { ko: '이미지', en: 'Images' },
   prompts: { ko: '프롬프트', en: 'Prompts' },
+  characters: { ko: '캐릭터 라이브러리', en: 'Character library' },
   generation: { ko: '생성', en: 'Generation' },
   files: { ko: '파일 보관함', en: 'Files' },
   audio: { ko: '오디오', en: 'Audio' },

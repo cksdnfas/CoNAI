@@ -26,6 +26,7 @@ import { getActiveModuleInputPorts } from './module-graph-minimax-director-ports
 import { toWorkflowImageValue } from './module-graph-image-values'
 import { resolveInitialOptionValues } from './module-graph-node-option-values'
 import { changeModuleGraphNodeVariant } from './module-graph-node-variants'
+import { setExclusiveNodeInputValue } from './module-graph-exclusive-inputs'
 
 /** Own local canvas/editor interactions for the module-graph page. */
 export function useModuleGraphEditorInteractions({
@@ -486,10 +487,7 @@ export function useModuleGraphEditorInteractions({
               ...node,
               data: {
                 ...node.data,
-                inputValues: {
-                  ...node.data.inputValues,
-                  [portKey]: value,
-                },
+                inputValues: setExclusiveNodeInputValue(node, portKey, value),
               },
             }
           : node,

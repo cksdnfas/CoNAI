@@ -6,20 +6,23 @@ import { Spinner } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
-import { applyChatProfileAssetsProposal, dismissChatProposal, type CodexChatToolCall } from '@/lib/api-codex-chat'
+import { applyChatProfileAssetsProposal, dismissChatProposal, type ChatAssetOwner, type CodexChatToolCall } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { getPromptPresets } from '@/lib/api-prompt-presets'
 import { codexChatThreadQueryKey } from './codex-chat-context'
 import { ChatMediaAttachments } from './chat-media-picker'
 import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
-import { refreshProfileAssets } from '@/features/settings/components/chat-profile-asset-runs'
+import { refreshOwnerAssets } from '@/features/settings/components/chat-profile-asset-runs'
 
 // Opened on demand from an approved card; keeps the settings asset editor out of the chat bundle.
 const ChatAssetBatchModal = lazy(() => import('@/features/settings/components/chat-asset-batch-modal').then((module) => ({ default: module.ChatAssetBatchModal })))
 
-type AssetsProposal = Extract<NonNullable<CodexChatToolCall['proposal']>, { kind: 'profile_assets' }>
+type AssetsProposal = Extract<NonNullable<CodexChatToolCall['proposal']>, { kind: 'profile_assets' | 'character_assets' }>
 
-/** Generation and application use separate server approvals; only administrators can act. */
+/**
+ * Generation and application use separate server approvals; only administrators can act. The same card serves a
+ * chat profile's assets and a character library setting's (no background slot).
+ */
 export function ChatAssetProposalCard({ proposal, threadId }: { proposal: AssetsProposal; threadId?: number }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -30,6 +33,8 @@ export function ChatAssetProposalCard({ proposal, threadId }: { proposal: Assets
   const [batchId, setBatchId] = useState<number | null>(proposal.savedId ?? null)
   const [open, setOpen] = useState(false)
   const saved = state === 'saved' || proposal.savedId !== undefined
+  const owner: ChatAssetOwner = proposal.kind === 'profile_assets' ? { kind: 'profile', id: proposal.profileId } : { kind: 'setting', id: proposal.settingId }
+  const ownerName = proposal.kind === 'profile_assets' ? proposal.profileName : proposal.settingName
   const dismissed = !saved && (state === 'dismissed' || proposal.dismissed === true)
   const refresh = () => Promise.all([
     ...(threadId === undefined ? [] : [queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) })]),
@@ -44,7 +49,7 @@ export function ChatAssetProposalCard({ proposal, threadId }: { proposal: Assets
       // The proposal is already applied: a failed refresh only leaves the views stale until their next fetch.
       await Promise.all([
         refresh(),
-        ...(response.result ? [refreshProfileAssets(queryClient, response.result.profileId, [response.result.applied], nextBatchId)] : []),
+        ...(response.result ? [refreshOwnerAssets(queryClient, response.result.owner, [response.result.applied], nextBatchId)] : []),
       ]).catch(() => undefined)
     },
     onError,
@@ -57,10 +62,10 @@ export function ChatAssetProposalCard({ proposal, threadId }: { proposal: Assets
     ...(proposal.input.slots ?? []).map((slot) => slot.kind === 'background' ? t({ ko: '배경', en: 'Background' }) : slot.kind === 'full' ? t({ ko: '전신', en: 'Full body' }) : slot.kind === 'reference' ? t({ ko: '기준 이미지', en: 'Reference image' }) : t({ ko: '아바타', en: 'Avatar' })),
   ] : Object.keys(proposal.chosenHashes)
   return <ProposalFrame>
-    <div className="flex items-baseline gap-2"><span className="text-xs font-semibold text-muted-foreground">{proposal.action === 'create' ? t({ ko: '자산 만들기', en: 'Create assets' }) : t({ ko: '자산 적용', en: 'Apply assets' })}</span><span className="truncate text-xs text-muted-foreground">{proposal.profileName}</span></div>
+    <div className="flex items-baseline gap-2"><span className="text-xs font-semibold text-muted-foreground">{proposal.action === 'create' ? t({ ko: '자산 만들기', en: 'Create assets' }) : t({ ko: '자산 적용', en: 'Apply assets' })}</span><span className="truncate text-xs text-muted-foreground">{ownerName}</span></div>
     <div className="text-sm">{parts.join(' · ')}</div>
     {proposal.action === 'apply' ? <ChatMediaAttachments items={[...new Map(Object.entries(proposal.chosenHashes).map(([name, compositeHash]) => [compositeHash, { name, compositeHash, mimeType: null }])).values()]} /> : null}
     {saved || dismissed ? <ProposalFooter status><span>{saved ? t({ ko: '승인됨', en: 'Approved' }) : t({ ko: '거절됨', en: 'Dismissed' })}</span>{admin && saved && (batchId ?? proposal.savedId) ? <Button variant="link" size="xs" onClick={() => setOpen(true)}>{t({ ko: '자산 창 열기', en: 'Open assets' })}</Button> : null}</ProposalFooter> : admin ? <ProposalFooter className="justify-end"><Button size="xs" variant="ghost" disabled={busy} onClick={() => dismiss.mutate()}>{t({ ko: '거절', en: 'Dismiss' })}</Button><Button size="xs" disabled={busy} onClick={() => approve.mutate()}>{approve.isPending ? <Spinner /> : proposal.action === 'create' ? <Sparkles /> : <Check />}{t({ ko: '승인', en: 'Approve' })}</Button></ProposalFooter> : null}
-    {admin && open ? <Suspense fallback={null}><ChatAssetBatchModal profile={{ id: proposal.profileId, name: proposal.profileName }} initialBatchId={batchId ?? proposal.savedId} onClose={() => setOpen(false)} /></Suspense> : null}
+    {admin && open ? <Suspense fallback={null}><ChatAssetBatchModal target={{ owner, name: ownerName }} initialBatchId={batchId ?? proposal.savedId} onClose={() => setOpen(false)} /></Suspense> : null}
   </ProposalFrame>
 }

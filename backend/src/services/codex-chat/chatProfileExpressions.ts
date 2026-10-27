@@ -9,6 +9,9 @@ import { ChatAssetError, requireChatAssetAdmin } from './chatAssetAccess'
 import { chatCharacterGroupPath, normalizeProfileAssetHash } from './chatProfileAssets'
 import { ChatProfileStore, type ChatProfile } from './chatProfiles'
 import { normalizeChatStyle } from './chatStyle'
+import type { ChatAssetOwner } from '@conai/shared'
+import { chatAssetOwner } from './chatAssetOwner'
+import { characterSettingRow, getCharacterSetting, ensureCharacterGroups, updateCharacterSetting, characterChanged } from '../characterLibrary'
 
 /**
  * A character's expressions are the keyworded images of its "채팅 캐릭터/<name>/표정" group: one image per emotion
@@ -23,12 +26,15 @@ export function expressionGroupId(profile: Pick<ChatProfile, 'name'>, database: 
 /** Take these keywords off every image of the group other than `keep`; an image left without keywords leaves the group. */
 function releaseKeywords(groupId: number, keywords: string[], keep: string | null, database: Database.Database) {
   const wanted = new Set(keywords.map((keyword) => keyword.toLowerCase()))
+  let changed = false
   for (const entry of EmoticonService.listEntries(groupId, database)) {
     if (entry.compositeHash === keep || !entry.keywords.some((keyword) => wanted.has(keyword.toLowerCase()))) continue
     const rest = entry.keywords.filter((keyword) => !wanted.has(keyword.toLowerCase()))
     if (rest.length) EmoticonService.setKeywords(groupId, [{ compositeHash: entry.compositeHash, keywords: rest }], database)
     else database.prepare('DELETE FROM image_groups WHERE group_id = ? AND composite_hash = ?').run(groupId, entry.compositeHash)
+    changed = true
   }
+  return changed
 }
 
 /**
@@ -52,6 +58,16 @@ export function styleWithExpressionGroup(profile: ChatProfile, groupId: number) 
   return style
 }
 
+/** Replace memberships, never the underlying images. Used when detaching or saving a profile into the library. */
+export function copyExpressionGroup(source: number | null, target: number, database: Database.Database) {
+  if (source === target) return
+  const entries = source ? EmoticonService.listEntries(source, database) : []
+  database.prepare('DELETE FROM image_groups WHERE group_id = ?').run(target)
+  database.prepare('UPDATE groups SET emoticon_enabled = 1 WHERE id = ? AND emoticon_enabled IS NOT 1').run(target)
+  const result = EmoticonService.addImages(target, entries.map((entry) => ({ compositeHash: entry.compositeHash, keywords: entry.explicit ? entry.keywords : undefined })), database)
+  if (result.conflicts.length || result.missing.length) throw new ChatAssetError('표정 그룹을 복사하지 못했어.', 409)
+}
+
 function emotionName(value: unknown) {
   const name = normalizeKeyword(value)
   if (!name || typeof value !== 'string' || name !== value.trim()) throw new ChatAssetError('감정 이름이 올바르지 않아.')
@@ -63,11 +79,16 @@ function writableProfile(requester: McpRequester, profileId: number) {
   requireRequesterPermission(requester, 'images.edit')
   const profile = ChatProfileStore.find(profileId)
   if (!profile) throw new ChatAssetError('프로필을 찾을 수 없어.', 404)
+  if (profile.characterLink?.synced) throw new ChatAssetError('라이브러리와 동기화된 프로필이야. 연결된 외형 설정의 표정을 수정하거나 연결을 분리해줘.', 409)
   return profile
 }
 
 /** Put a library image (uploaded or picked) on one emotion, replacing the image it had. */
-export function setProfileExpression(requester: McpRequester, profileId: number, name: unknown, compositeHash: unknown) {
+export function setProfileExpression(requester: McpRequester, profileId: ChatAssetOwner | number, name: unknown, compositeHash: unknown) {
+  if (typeof compositeHash !== 'string') throw new ChatAssetError('이미지를 골라줘.')
+  const owner = chatAssetOwner(profileId)
+  if (owner.kind === 'setting') return changeSettingExpression(requester, owner.id, name, compositeHash)
+  profileId = owner.id
   const profile = writableProfile(requester, profileId)
   const emotion = emotionName(name)
   if (typeof compositeHash !== 'string') throw new ChatAssetError('이미지를 골라줘.')
@@ -95,10 +116,7 @@ export function copyProfileExpressions(source: ChatProfile, copy: ChatProfile) {
     const from = expressionGroupId(source, database)
     if (!from || chatCharacterGroupPath(source.name) === chatCharacterGroupPath(copy.name) || expressionGroupId(copy, database)) return copy
     const group = GroupPathService.resolveOrCreate(`${chatCharacterGroupPath(copy.name)}/표정`, database)
-    database.prepare('UPDATE groups SET emoticon_enabled = 1 WHERE id = ?').run(group.groupId)
-    const entries = EmoticonService.listEntries(from, database)
-    const result = EmoticonService.addImages(group.groupId, entries.map((entry) => ({ compositeHash: entry.compositeHash, keywords: entry.explicit ? entry.keywords : undefined })), database)
-    if (result.conflicts.length) throw new ChatAssetError('표정 그룹을 복사하지 못했어.', 409, { conflicts: result.conflicts })
+    copyExpressionGroup(from, group.groupId, database)
     if (!copy.style.emoticonGroupIds.includes(from)) return copy
     const emoticonGroupIds = copy.style.emoticonGroupIds.map((id) => id === from ? group.groupId : id)
     return ChatProfileStore.update(copy.id, { style: { ...copy.style, emoticonGroupIds } }, database) ?? copy
@@ -106,7 +124,10 @@ export function copyProfileExpressions(source: ChatProfile, copy: ChatProfile) {
 }
 
 /** Empty one emotion: its image loses the keyword (and leaves the group when it has no other). */
-export function clearProfileExpression(requester: McpRequester, profileId: number, name: unknown) {
+export function clearProfileExpression(requester: McpRequester, profileId: ChatAssetOwner | number, name: unknown) {
+  const owner = chatAssetOwner(profileId)
+  if (owner.kind === 'setting') return changeSettingExpression(requester, owner.id, name, null)
+  profileId = owner.id
   const profile = writableProfile(requester, profileId)
   const emotion = emotionName(name)
   const database = getUserSettingsDb()
@@ -116,4 +137,29 @@ export function clearProfileExpression(requester: McpRequester, profileId: numbe
     if (groupId) releaseKeywords(groupId, [emotion], null, database)
   }).immediate()
   return { expressionGroupId: expressionGroupId(profile, database) }
+}
+
+function changeSettingExpression(requester: McpRequester, settingId: number, name: unknown, hash: string | null) {
+  requireChatAssetAdmin(requester)
+  requireRequesterPermission(requester, 'characters.edit')
+  requireRequesterPermission(requester, 'images.edit')
+  const emotion = emotionName(name)
+  const compositeHash = normalizeProfileAssetHash(hash)
+  if (hash !== null && !compositeHash) throw new ChatAssetError('이미지를 골라줘.')
+  const database = getUserSettingsDb()
+  attachMainImagesDatabase(database)
+  let changed = false
+  const result = database.transaction(() => {
+    const before = characterSettingRow(settingId)
+    let groupId = before.expression_group_id
+    if (compositeHash) {
+      groupId = ensureCharacterGroups(settingId, database).expressionGroupId
+      assignExpressionKeywords(groupId, [{ compositeHash, keywords: [emotion] }], database)
+      changed = true
+    } else if (groupId && database.prepare('SELECT 1 FROM groups WHERE id = ?').get(groupId)) changed = releaseKeywords(groupId, [emotion], null, database)
+    const setting = changed ? updateCharacterSetting(settingId, { revision: before.revision }, database) : getCharacterSetting(settingId)
+    return { expressionGroupId: groupId, setting }
+  }).immediate()
+  if (changed) characterChanged([result.setting.folderId], [settingId])
+  return result
 }

@@ -241,6 +241,8 @@ function proposalName(proposal: ChatProposal) {
     case 'profile_update': return `프로필 수정 "${proposal.profileName}"`
     case 'chat_settings': return `채팅 설정 (${Object.keys(proposal.patch).join(', ')})`
     case 'profile_assets': return `이미지 ${proposal.action === 'apply' ? '적용' : '생성'} "${proposal.profileName}"`
+    case 'character_assets': return `캐릭터 이미지 ${proposal.action === 'apply' ? '적용' : '생성'} "${proposal.settingName}"`
+    case 'character_library': return proposal.action === 'delete_folder' ? `캐릭터 폴더 삭제 "${proposal.folderName}"` : `캐릭터 외형 ${proposal.action === 'delete_setting' ? '삭제' : '저장'} "${proposal.settingName}"`
     case 'display_block': return `표시 블록 "${proposal.name}"`
     case 'lore': return `로어 "${proposal.title}"`
     case 'page_action': return `페이지 작업 "${proposal.action.label}"`

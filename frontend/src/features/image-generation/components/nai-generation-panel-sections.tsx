@@ -15,6 +15,7 @@ import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-
 import { GenerationToolbarStatus } from './generation-toolbar-status'
 import { PromptToggleField } from './prompt-toggle-field'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
+import type { PromptCharacterLoadOptions } from './text-segment-spreadsheet-input'
 
 interface NaiConnectionHeaderProps {
   connected: boolean
@@ -127,6 +128,7 @@ interface NaiPromptSectionProps {
   onNegativePromptChange: (value: string) => void
   /** The model fixes the negative prompt (V5 Full Medium): shown read-only. */
   negativeLock?: { value: string; hint: string }
+  characterLoad?: PromptCharacterLoadOptions
 }
 
 /** Render the primary prompt section for NovelAI generation. */
@@ -137,6 +139,7 @@ export function NaiPromptSection({
   onPromptChange,
   onNegativePromptChange,
   negativeLock,
+  characterLoad,
 }: NaiPromptSectionProps) {
   return (
     <PromptToggleField
@@ -146,6 +149,7 @@ export function NaiPromptSection({
       onPositiveChange={onPromptChange}
       onNegativeChange={onNegativePromptChange}
       negativeLock={negativeLock}
+      characterLoad={characterLoad}
     />
   )
 }

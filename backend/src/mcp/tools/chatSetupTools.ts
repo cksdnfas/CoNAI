@@ -16,13 +16,14 @@ import { modelLabelOf } from '../../services/codex-chat/chatModelRoles';
 import { normalizeBlock } from '../../services/codex-chat/chatStyle';
 import type { McpRequestContext } from '../context';
 import { proposeProfileAssets } from '../../services/codex-chat/chatAssetProposals';
-import { chatAssetBatchInputSchema, getChatAssetBatch, latestChatAssetBatchId } from '../../services/codex-chat/chatAssetBatches';
+import { chatAssetBatchInputSchema, getChatAssetBatch, latestChatAssetBatchId, resolveChatAssetTarget } from '../../services/codex-chat/chatAssetBatches';
 import { ChatGenerationPresetStore, resolvePresetWorkflow } from '../../services/codex-chat/chatGenerationPresets';
 import { PromptPresetModel } from '../../models/PromptPreset';
 import { parseMcpMarkedFields } from '../../services/comfyui/comfyWorkflowInputs';
 import { errorResult, textResult } from '../toolResults';
 
 const BLOCK_KEY_ERROR = 'block.key must match /^[a-z][a-z0-9_-]{0,31}$/';
+import { normalizeCharacterLink, refuseSyncedCharacterProposal } from '../../services/codex-chat/chatProfileCharacters';
 const PROPOSAL_NOTE = 'The card is shown to the user; nothing is saved until they press 저장.';
 const NO_CHAT_ERROR = 'Proposals need an active chat reply.';
 
@@ -38,11 +39,12 @@ const PROPOSABLE_KEYS = [
   'translationModelLanguage', 'translationDisplayLanguage', 'translationInstructions',
   'suggestEnabled', 'suggestProfileId',
   'visionEnabled', 'contentRatingMode', 'contentRatingTierId',
-  'loreRecursionDepth', 'allowLoreProposals', 'agentEnabled', 'agentDescription', 'linkedFiles',
+  'loreRecursionDepth', 'allowLoreProposals', 'agentEnabled', 'agentDescription', 'linkedFiles', 'characterLink',
 ] as const;
 type ProposableKey = typeof PROPOSABLE_KEYS[number];
 
 const KEY_ALIASES: Record<string, ProposableKey> = {
+  character_link: 'characterLink',
   system_prompt: 'systemPrompt',
   prompt_sections: 'promptSections',
   alternate_greetings: 'alternateGreetings',
@@ -132,6 +134,7 @@ function profileGuide() {
     'CHAT PROFILE reference',
     '',
     'A profile is a character/persona the user chats with. propose_chat_profile proposes a NEW profile; propose_profile_update proposes changes to an existing one. Both only show a card; the user saves it with the 저장 button.',
+    'characterLink: null (own appearance), or {settingId, synced:true} (shared appearance) / {settingId, synced:false} (detached copy). get_chat_profile also returns settingName, path, revision and linkedProfileCount. Synced appearance edits must use propose_character_library with setting_id; all linkedProfileCount profiles change. Detach first to edit only this profile.',
     '',
     'Fields (propose_chat_profile):',
     `- name (required, max ${limits.name}), tagline (max ${limits.tagline}, one-line intro shown on the profile card).`,
@@ -277,6 +280,7 @@ type FieldContext = { owner?: string | null; current?: ChatProfile | null; openi
 /** Validates one proposable field and returns its normalized value (what the admin REST would store). */
 function normalizeProposedField(key: ProposableKey, value: unknown, fieldContext: FieldContext = {}): unknown {
   switch (key) {
+    case 'characterLink': return normalizeCharacterLink(value);
     case 'name':
     case 'tagline':
     case 'agentDescription':
@@ -421,6 +425,8 @@ export function buildProfileProposal(args: ProfileProposalArgs, owner: string | 
     if (PROFILE_ARG_KEYS.has(key)) throw new Error(`settings.${key}: give it as its own argument instead.`);
     input[key] = normalizeProposedField(key, raw, { owner, current: null });
   }
+  if (args.appearance === undefined) delete input.appearance;
+  refuseSyncedCharacterProposal(input);
   const warnings: string[] = [];
   if (input.modelSlotId === null) warnings.push('No model_slot given; the user must pick a model before saving.');
   const proposal: NewChatProposal = { kind: 'profile', input };
@@ -445,9 +451,10 @@ export function readProfilePatch(patch: Record<string, unknown>) {
 export function buildProfileUpdateProposal(args: { profile_id?: number; patch: Record<string, unknown> }, defaultProfileId: number | undefined, owner: string | null = null) {
   const profileId = args.profile_id ?? defaultProfileId;
   if (profileId === undefined) throw new Error('profile_id is required.');
-  const mapped = readProfilePatch(args.patch);
   const current = ChatProfileStore.find(profileId);
   if (!current) throw new Error(`Chat profile not found: ${profileId}`);
+  refuseSyncedCharacterProposal({ ...args.patch, ...(args.patch.character_link !== undefined ? { characterLink: args.patch.character_link } : {}) }, current);
+  const mapped = readProfilePatch(args.patch);
   const openingHistory = mapped.has('openingHistory') ? resolveOpeningHistory(mapped.get('openingHistory')) : current.openingHistory;
   // Shrinking the history may also move the greeting, even when the patch leaves its position implicit.
   if (mapped.has('openingHistory') && !mapped.has('greetingPosition')) mapped.set('greetingPosition', current.greetingPosition);
@@ -502,6 +509,7 @@ export function profileSetupView(profile: ChatProfile, owner: string | null = nu
     greetingPosition: profile.greetingPosition,
     authorNote: profile.authorNote,
     appearance: profile.appearance,
+    characterLink: profile.characterLink,
     modelSlotId: profile.modelSlotId,
     summarySlotId: profile.summarySlotId,
     translationSlotId: profile.translationSlotId,
@@ -561,17 +569,18 @@ function profileAssetsGuide(context: McpRequestContext) {
 
 /** Chat setup tools (scope `configure`, chat accounts with admin rights only): read the setup, propose changes as cards. */
 export function registerChatSetupTools(server: McpServer, context: McpRequestContext): void {
-  server.registerTool('get_asset_batch', { description: 'Read a character asset batch: each slot with its status (waiting, queued, processing, completed, failed, blocked), chosen candidate and candidates with review results (expression match, hair/eye match with the reference, judge pick). Without batch_id: the newest batch of the profile (default: your speaking profile). Use it to follow generation and choose candidates for propose_profile_assets(action=apply, picks).', inputSchema: z.object({
-    batch_id: z.number().int().positive().optional(), profile_id: z.number().int().positive().optional(),
-  }) }, async ({ batch_id, profile_id }) => {
+  server.registerTool('get_asset_batch', { description: 'Read a character asset batch: each slot with its status (waiting, queued, processing, completed, failed, blocked), chosen candidate and candidates with review results (expression match, hair/eye match with the reference, judge pick). Without batch_id: the newest batch of the profile (default: your speaking profile), or of its linked setting when synced (a synced profile\'s own background batches are read by batch_id). Use batch_id to inspect a particular batch. Follow generation and choose candidates for propose_profile_assets(action=apply, picks).', inputSchema: z.object({
+    batch_id: z.number().int().positive().optional(), profile_id: z.number().int().positive().optional(), setting_id: z.number().int().positive().optional(),
+  }) }, async ({ batch_id, profile_id, setting_id }) => {
     try {
       if (!context.chatContext || !context.requester) throw new Error(NO_CHAT_ERROR);
-      const profileId = profile_id ?? context.chatContext.profileId;
+      if (profile_id !== undefined && setting_id !== undefined) throw new Error('Choose exactly one of profile_id / setting_id.');
+      const profileId = resolveChatAssetTarget(profile_id ?? context.chatContext.profileId, setting_id, batch_id);
       const id = batch_id ?? latestChatAssetBatchId(profileId);
-      if (!id) return textResult({ batch: null, note: 'This profile has no asset batch yet.' });
-      const batch = getChatAssetBatch(context.requester, id, batch_id ? undefined : profileId);
+      if (!id) return textResult({ batch: null, note: profileId.kind === 'profile' ? 'This profile has no asset batch yet.' : setting_id !== undefined ? 'This setting has no asset batch yet.' : "This synced profile's linked setting has no asset batch yet; the profile's own background batches are read by batch_id." });
+      const batch = getChatAssetBatch(context.requester, id, batch_id && profile_id === undefined && setting_id === undefined ? undefined : profileId);
       return textResult({
-        id: batch.id, profileId: batch.profileId, createdAt: batch.createdAt,
+        id: batch.id, owner: batch.owner, createdAt: batch.createdAt,
         slots: batch.slots.map((slot) => ({
           slotKey: slot.slotKey, kind: slot.kind, status: slot.status, chosen: slot.chosenHash,
           candidates: slot.attempts.flatMap((attempt) => attempt.candidates.map((candidate) => ({
@@ -583,8 +592,8 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
       });
     } catch (error) { return errorResult(error); }
   });
-  server.registerTool('propose_profile_assets', { description: 'Propose character asset generation (action=create), or application of already chosen batch candidates (action=apply), as separate approval cards. Read get_chat_setup_guide(topic=profile_assets) first for real preset IDs and ComfyUI prompt fields. Administrators must approve each card; this tool starts no jobs and changes no profile or group. For create, input uses presetId, expressionPresetId (prompt preset descriptions are emotion keywords), optional expressions and slots; ComfyUI needs promptField. For apply, give batch_id. Default target is your speaking profile.', inputSchema: z.object({
-    action: z.enum(['create', 'apply']).optional(), profile_id: z.number().int().positive().optional(),
+  server.registerTool('propose_profile_assets', { description: 'Propose character asset generation (action=create), or application of chosen batch candidates (action=apply), as separate approval cards. Choose profile_id OR setting_id; omitted means your speaking profile. setting_id produces a character_assets card and forbids background slots. Read get_chat_setup_guide(topic=profile_assets) for preset IDs and ComfyUI prompt fields. Administrators approve each card; proposing starts no jobs and changes no data. Create input uses presetId, expressionPresetId, optional expressions and slots; ComfyUI needs promptField. Apply takes batch_id and optional picks. On stale candidates, read get_asset_batch again before proposing.', inputSchema: z.object({
+    action: z.enum(['create', 'apply']).optional(), profile_id: z.number().int().positive().optional(), setting_id: z.number().int().positive().optional(),
     input: chatAssetBatchInputSchema.omit({ idempotencyKey: true }).optional(), batch_id: z.number().int().positive().optional(),
     picks: z.record(z.string().max(40), z.string().max(200)).optional().describe('apply only: slotKey → compositeHash of a candidate from get_asset_batch to choose for that slot.'),
     avatarCrop: z.object({ x: z.number(), y: z.number(), scale: z.number().positive() }).nullable().optional(),
@@ -592,7 +601,7 @@ export function registerChatSetupTools(server: McpServer, context: McpRequestCon
     try {
       if (!context.chatContext || !context.requester) throw new Error(NO_CHAT_ERROR);
       const proposal = proposeProfileAssets(context.requester, context.chatContext, args);
-      return textResult({ proposalId: proposal.id, note: 'Review and approve this card; creation and application need separate approvals.' }, { structuredContent: { proposal } });
+      return textResult({ proposalId: proposal.id, note: proposal.kind === 'character_assets' && args.setting_id === undefined ? 'This profile is synced: the card targets its library setting and changes every synced profile. Review and approve; creation and application need separate approvals.' : 'Review and approve this card; creation and application need separate approvals.' }, { structuredContent: { proposal } });
     } catch (error) { return errorResult(error); }
   });
   server.registerTool(

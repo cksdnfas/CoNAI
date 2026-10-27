@@ -6,6 +6,7 @@ import path from 'path';
 import { imageRoutes } from '../routes/images/index';
 import { isImageUploadPayloadRequest } from '../routes/images/uploadSecurity';
 import promptCollectionRoutes from '../routes/promptCollection';
+import characterLibraryRoutes from '../routes/character-library.routes';
 import promptGroupRoutes from '../routes/promptGroups';
 import negativePromptGroupRoutes from '../routes/negativePromptGroups';
 import { groupRoutes } from '../routes/groups';
@@ -223,6 +224,7 @@ export function registerAppRoutes(app: Express, options: RegisterAppRoutesOption
     optionalAuth(req, res, next);
   }, imageRoutes);
   app.use('/api/prompt-collection', options.readOnlyLimiter, requireReadAccess('prompts.view', ['/resolve-groups']), promptCollectionRoutes);
+  app.use('/api/character-library', options.readOnlyLimiter, characterLibraryRoutes);
   app.use('/api/danbooru-browser', options.readOnlyLimiter, requireReadAccess('prompts.view'), danbooruBrowserRoutes);
   app.use('/api/prompt-groups', options.readOnlyLimiter, requireReadAccess('prompts.view'), promptGroupRoutes);
   app.use('/api/negative-prompt-groups', options.readOnlyLimiter, requireReadAccess('prompts.view'), negativePromptGroupRoutes);

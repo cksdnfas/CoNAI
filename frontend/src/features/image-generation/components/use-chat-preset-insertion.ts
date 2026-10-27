@@ -4,7 +4,8 @@ import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-a
 import { useChatPagePermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { buildPromptPresetInsertionText, getPromptPresets } from '@/lib/api-prompt-presets'
 import { useI18n } from '@/i18n'
-import type { ChatPageData } from '@conai/shared'
+import { CHAT_PAGE_LIMITS, type ChatPageData } from '@conai/shared'
+import type { TextSegmentSpreadsheetValue } from './prompt-text-segment-helpers'
 
 export function useChatPresetInsertion(targets: string[]) {
   const page = useChatPage()
@@ -20,9 +21,17 @@ export function useChatPresetInsertion(targets: string[]) {
       const preset = records.find((item) => item.id === args.presetId)
       if (!preset) throw new Error('프리셋이 바뀌었어. 다시 읽어줘.')
       const value = buildPromptPresetInsertionText(preset)
-      const result = args.mode === 'replace' || !before ? value : `${before}\n\n${value}`
-      if (result.length > 8000) throw new Error('프리셋을 적용하면 입력이 너무 길어져.')
-      return result
+      return insertChatPageText(args.mode, before, value, (current) => (current ? `${current}\n\n${value}` : value), '프리셋을 적용하면 입력이 너무 길어져.')
     },
   }
+}
+
+/**
+ * Assistant text insertion into a page input: `replace` puts `replacement` in, anything else appends with the
+ * action's own separator rule (`append`). The result must fit the page text limit.
+ */
+export function insertChatPageText<T extends TextSegmentSpreadsheetValue>(mode: ChatPageData | undefined, before: T, replacement: T, append: (before: T) => T, tooLong: string): T {
+  const value = mode === 'replace' ? replacement : append(before)
+  if ((Array.isArray(value) ? value.join('\n') : value).length > CHAT_PAGE_LIMITS.text) throw new Error(tooLong)
+  return value
 }

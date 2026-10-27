@@ -328,6 +328,34 @@ test('workflow chat nodes: run requester, characters, presets, lorebooks and cha
   assert.equal(naiJob.payload.width, 832)
   assert.equal(naiJob.payload.character_refs.length, 1, 'the character lends its reference')
   assert.ok(String(naiJob.payload.character_refs[0].image).startsWith('data:image/png;base64,'))
+  const { createCharacterSetting } = await import('../src/services/characterLibrary')
+  const look = createCharacterSetting({ folderId: null, name: 'Workflow look', appearance: 'gold hair', referenceHash: ChatProfileStore.find(mina.id)!.referenceHash })
+  const generateModule = moduleFor('system.generate_with_chat_preset')
+  assert.match(JSON.stringify(generateModule.exposed_inputs), /character_setting_id/)
+  await assert.rejects(run('system.generate_with_chat_preset', { preset_id: naiPreset.id, prompt: 'smiling', character_setting_id: look.id }, { aborted: true }), /__GRAPH_EXECUTION_CANCELLED__/)
+  assert.equal(latestJob().payload.prompt, 'masterpiece, gold hair, smiling')
+  assert.equal(latestJob().payload.character_refs.length, 1)
+  await withAuthConfigured(async () => {
+    await assert.rejects(run('system.generate_with_chat_preset', { preset_id: naiPreset.id, prompt: 'scheduled', character_setting_id: look.id }, { requester: null, aborted: true }), /__GRAPH_EXECUTION_CANCELLED__/)
+    assert.equal(latestJob().payload.prompt, 'masterpiece, gold hair, scheduled')
+  })
+  {
+    const findAccount = t.mock.method(AuthAccount, 'findById', (id: number) => ({ id, status: 'active', account_type: 'guest' }) as any)
+    const access = t.mock.method(AuthAccessControlService, 'resolveForAccountId', () => ({ permissionKeys: ['characters.view'], groupKeys: [] }) as any)
+    try {
+      await assert.rejects(run('system.generate_with_chat_preset', { preset_id: naiPreset.id, prompt: 'tags only', character_setting_id: look.id }, { requester: 5, aborted: true }), /__GRAPH_EXECUTION_CANCELLED__/)
+      assert.equal(latestJob().payload.prompt, 'masterpiece, gold hair, tags only')
+      assert.equal(latestJob().payload.character_refs, undefined, 'hidden setting references fall back to tags')
+      await assert.rejects(run('system.generate_with_chat_preset', { preset_id: naiPreset.id, prompt: 'connected', character_setting_id: look.id, reference_image: postedImage }, { requester: 5, aborted: true }), /__GRAPH_EXECUTION_CANCELLED__/)
+      assert.equal(latestJob().payload.prompt, 'masterpiece, gold hair, connected')
+      assert.equal(latestJob().payload.character_refs.length, 1)
+      assert.notEqual(latestJob().payload.character_refs[0].image, naiJob.payload.character_refs[0].image, 'the connected image replaces the setting reference')
+    } finally {
+      findAccount.mock.restore()
+      access.mock.restore()
+    }
+  }
+  await assert.rejects(run('system.generate_with_chat_preset', { preset_id: naiPreset.id, prompt: 'smiling', profile_id: mina.id, character_setting_id: look.id }), /중 하나/)
   await assert.rejects(run('system.generate_with_chat_preset', { preset_id: naiPreset.id, prompt: 'smiling' }, { aborted: true }), /__GRAPH_EXECUTION_CANCELLED__/)
   assert.equal(latestJob().payload.character_refs, undefined, 'no character and no image: the text alone')
   await assert.rejects(run('system.generate_with_chat_preset', { preset_id: plainNaiPreset.id, prompt: 'smiling', profile_id: mina.id }, { aborted: true }), /__GRAPH_EXECUTION_CANCELLED__/)

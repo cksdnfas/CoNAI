@@ -39,6 +39,7 @@ export default {
           { text: '이미지 메타데이터 편집', link: '/GUIDE/EDIT_IMAGE_METADATA' },
           { text: '그룹 관리', link: '/GUIDE/GROUPS_GUIDE' },
           { text: '프롬프트 관리', link: '/GUIDE/PROMPTS_GUIDE' },
+          { text: '캐릭터 라이브러리', link: '/GUIDE/CHARACTER_LIBRARY' },
           { text: '이미지 생성 개요', link: '/GUIDE/GENERATION_OVERVIEW' },
           { text: 'NAI 생성', link: '/GUIDE/NAI_GENERATION' },
           { text: 'Codex 생성', link: '/GUIDE/CODEX_GENERATION' },

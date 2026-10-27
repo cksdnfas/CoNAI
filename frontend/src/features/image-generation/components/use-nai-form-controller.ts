@@ -21,6 +21,7 @@ import {
   supportsNaiCharacterPrompts,
   supportsNaiCharacterReferences,
   type NAICharacterPromptDraft,
+  type NAICharacterReferenceDraft,
   type NAIFormDraft,
   type SelectedImageDraft,
 } from '../image-generation-shared'
@@ -52,6 +53,38 @@ export function applyNaiFormPatch(current: NAIFormDraft, patch: Partial<NAIFormD
     nextForm.noise = patch.noise ?? String(NAI_ENHANCE_DEFAULT_NOISE)
   }
   return nextForm
+}
+
+/** Append one character-prompt row (empty, or a loaded character's tags) with normalized grid positions. */
+export function appendNaiCharacterPrompt(characters: NAICharacterPromptDraft[], prompt = '') {
+  return normalizeNaiCharacterPromptDrafts([...characters, { ...EMPTY_NAI_CHARACTER_PROMPT, prompt }])
+}
+
+/**
+ * Place a loaded character setting's reference image where the person (or assistant) chose: `referenceIndex` null
+ * adds a new reference row, a number replaces that row's image. NAI does not tie references to characters, so this
+ * is never derived from a character's position; a row that vanished meanwhile becomes a new row, never another one.
+ */
+export function placeNaiCharacterReference(references: NAICharacterReferenceDraft[], referenceIndex: number | null, image: SelectedImageDraft) {
+  if (referenceIndex !== null && references[referenceIndex]) {
+    return references.map((reference, index) => (index === referenceIndex ? { ...reference, image } : reference))
+  }
+  return [...references, { ...EMPTY_NAI_CHARACTER_REFERENCE, image }]
+}
+
+/**
+ * A loaded setting's reference image and the reference row it replaces, by identity (the row's image, or the row
+ * itself when it has none); null adds a new row.
+ */
+export type NaiCharacterReferencePlacement = { replaces: object | null; image: SelectedImageDraft }
+
+/** The row identity a reference-row choice remembers (see `NaiCharacterReferencePlacement`). */
+export const naiCharacterReferenceIdentity = (reference: NAICharacterReferenceDraft): object => reference.image ?? reference
+
+/** Place by identity inside the state update, so rows moved meanwhile never redirect it; a vanished row becomes a new row. */
+function placeNaiCharacterReferenceByIdentity(references: NAICharacterReferenceDraft[], { replaces, image }: NaiCharacterReferencePlacement) {
+  const index = replaces ? references.findIndex((reference) => naiCharacterReferenceIdentity(reference) === replaces) : -1
+  return placeNaiCharacterReference(references, index >= 0 ? index : null, image)
 }
 
 /** Own the editable NAI form state and all local form-manipulation handlers for the panel. */
@@ -206,14 +239,18 @@ export function useNaiFormController({
     }))
   }
 
-  /** Add one new character-prompt row and select it immediately. */
-  const handleAddCharacterPrompt = () => {
+  /**
+   * Add one new character-prompt row (empty, or a loaded character's tags) and select it immediately; a loaded
+   * character's reference image goes in with it in the same update.
+   */
+  const handleAddCharacterPrompt = (prompt = '', reference?: NaiCharacterReferencePlacement) => {
     setNaiForm((current) => {
-      const nextCharacters = normalizeNaiCharacterPromptDrafts([...current.characters, { ...EMPTY_NAI_CHARACTER_PROMPT }])
+      const nextCharacters = appendNaiCharacterPrompt(current.characters, prompt)
       setSelectedCharacterIndex(nextCharacters.length - 1)
       return {
         ...current,
         characters: nextCharacters,
+        ...(reference ? { characterReferences: placeNaiCharacterReferenceByIdentity(current.characterReferences, reference) } : {}),
       }
     })
   }
@@ -326,6 +363,14 @@ export function useNaiFormController({
     }))
   }
 
+  /** Put a loaded character setting's reference image into the chosen reference row (or a new one). */
+  const handleLoadCharacterReference = (placement: NaiCharacterReferencePlacement) => {
+    setNaiForm((current) => ({
+      ...current,
+      characterReferences: placeNaiCharacterReferenceByIdentity(current.characterReferences, placement),
+    }))
+  }
+
   /** Replace one character-reference image. */
   const handleCharacterReferenceImageChange = (index: number, image?: SelectedImageDraft) => {
     setNaiForm((current) => ({
@@ -373,6 +418,7 @@ export function useNaiFormController({
     handleAddCharacterReference,
     handleCharacterReferenceFieldChange,
     handleCharacterReferenceImageChange,
+    handleLoadCharacterReference,
     handleRemoveCharacterReference,
   }
 }

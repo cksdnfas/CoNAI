@@ -3,6 +3,8 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { useChatPageMedia } from '@/features/codex-chat/use-chat-page-media'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { useChatPresetInsertion } from './use-chat-preset-insertion'
+import { useChatCharacterSettingInsertion } from './use-chat-character-setting-insertion'
+import { pageChoice } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
 import type { CodexFormDraft } from './codex-generation-panel'
 import { getImageDraftRevision } from '../image-generation-shared'
@@ -14,6 +16,9 @@ export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStat
   const capacity = codexReferenceCapacity(form)
   const media = useChatPageMedia(['referenceImage', 'maskImage', ...(form.references.length < capacity ? ['reference:new'] : []), ...form.references.map((_, index) => `reference:${index}`)])
   const presets = useChatPresetInsertion(['prompt', 'negativePrompt'])
+  const characterSettings = useChatCharacterSettingInsertion()
+  // In edit mode the image slot is the source to edit, so a setting's reference goes in only as a reference.
+  const characterReference = characterSettings.canReference && form.imageMode === 'reference'
   const commit = useChatDraftTransaction(form, setForm)
   useChatPageRegistration({
     kind: 'codex', title: t({ ko: 'Codex 이미지 생성', en: 'Codex image generation' }), resourceId: 'codex', localRevision: getImageDraftRevision(form),
@@ -33,12 +38,21 @@ export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStat
         { id: `reference${index}Order`, label: `Reference ${index + 1} position`, type: 'number', value: index + 1, min: 1, max: form.references.length, integer: true },
       ]),
     ],
-    actions: [...media.actions, ...presets.actions], data: { media: media.candidates, presets: presets.candidates, limits: '5 attachments including source/mask; 10 MiB each, 32 MiB total, 4096px per side. Size is requested, not guaranteed.', selected: { referenceImage: form.referenceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', references: form.references.map((reference) => ({ role: reference.role, label: reference.label, fileName: reference.image?.fileName ?? '' })) } },
+    actions: [...media.actions, ...presets.actions, ...characterSettings.actions({
+      target: pageChoice(['prompt']),
+      ...(characterReference ? { includeReference: { type: 'boolean' as const } } : {}),
+    }, ['target'], 'target prompt = the positive prompt. includeReference (default: when the setting has one) sets its reference image as referenceImage (reference image mode only).')], data: { media: media.candidates, presets: presets.candidates, limits: '5 attachments including source/mask; 10 MiB each, 32 MiB total, 4096px per side. Size is requested, not guaranteed.', selected: { referenceImage: form.referenceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', references: form.references.map((reference) => ({ role: reference.role, label: reference.label, fileName: reference.image?.fileName ?? '' })) } },
     apply: (patch) => { const next = applyCodexDraftPatch(form, patch); setForm(next) },
     applyAction: async (id, args, assertCurrent) => {
       const next = { ...form, references: form.references.map((reference) => ({ ...reference })) }
       const target = String(args.fieldId)
       if (id === 'preset.insert') next[target as 'prompt' | 'negativePrompt'] = presets.value(args, form[target as 'prompt' | 'negativePrompt'])
+      else if (id === 'character_setting.insert') {
+        const loaded = await characterSettings.load(args, characterSettings.referenceMode(args.includeReference, characterReference))
+        assertCurrent()
+        next.prompt = characterSettings.text(args, form.prompt, loaded.appearance)
+        if (loaded.reference) { next.referenceImage = loaded.reference; next.maskImage = undefined }
+      }
       else if (id === 'media.clear' || id === 'media.attach') {
         const image = id === 'media.attach' ? await (await media.load(args)).toImage() : undefined
         assertCurrent()

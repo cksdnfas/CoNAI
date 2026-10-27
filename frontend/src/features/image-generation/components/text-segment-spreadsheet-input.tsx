@@ -5,8 +5,10 @@ import { Separator } from '@/components/ui/separator'
 import { useI18n } from '@/i18n'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { cn } from '@/lib/utils'
-import { getTextSegmentSpreadsheetRows, type TextSegmentSpreadsheetValue } from './prompt-text-segment-helpers'
+import { appendPromptRowText, getTextSegmentSpreadsheetRows, type TextSegmentSpreadsheetValue } from './prompt-text-segment-helpers'
 import { PromptPresetInlinePicker } from './prompt-preset-inline-picker'
+import { CharacterSettingLoadButton, type CharacterSettingLoadTarget } from './character-setting-load-button'
+import type { SelectedImageDraft } from '../image-generation-shared'
 import { WildcardInlinePickerField } from './wildcard-inline-picker-field'
 import type { PromptTypeFilter } from '@/types/prompt'
 import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
@@ -14,6 +16,14 @@ import type { PromptWildcardTool } from './wildcard-inline-picker-helpers'
 export { getTextSegmentSpreadsheetRows, joinTextSegmentSpreadsheetRows, normalizeTextSegmentSpreadsheetText, TEXT_SEGMENT_SPREADSHEET_ROW_SEPARATOR, type TextSegmentSpreadsheetValue } from './prompt-text-segment-helpers'
 
 export const DEFAULT_PROMPT_TEXTAREA_ROWS = 5
+
+/**
+ * Offer "캐릭터 불러오기" on each row: a character library setting's appearance tags go into that row like a preset;
+ * with `reference`, its reference image can go to one of `targets` too (chosen when confirming).
+ */
+export type PromptCharacterLoadOptions = {
+  reference?: { targets: CharacterSettingLoadTarget[]; onLoad: (target: CharacterSettingLoadTarget, image: SelectedImageDraft) => void } | null
+}
 
 type TextSegmentSpreadsheetInputProps = {
   tool: PromptWildcardTool
@@ -26,6 +36,7 @@ type TextSegmentSpreadsheetInputProps = {
   errorMessageId?: string
   /** Accessible name of the rows; each row adds its number ("Positive prompt 1"). */
   ariaLabel?: string
+  characterLoad?: PromptCharacterLoadOptions
   onChange: (value: string[]) => void
 }
 
@@ -40,6 +51,7 @@ export function TextSegmentSpreadsheetInput({
   invalid = false,
   errorMessageId,
   ariaLabel,
+  characterLoad,
   onChange,
 }: TextSegmentSpreadsheetInputProps) {
   const { t } = useI18n()
@@ -58,9 +70,7 @@ export function TextSegmentSpreadsheetInput({
 
   const handleInsertPreset = (index: number, insertionText: string) => {
     if (!canViewPrompts) return
-    const currentValue = rows[index] ?? ''
-    const separator = currentValue.trim().length > 0 && !currentValue.endsWith('\n') ? '\n' : ''
-    handleRowChange(index, `${currentValue}${separator}${insertionText}`)
+    handleRowChange(index, appendPromptRowText(rows[index] ?? '', insertionText))
   }
 
   const handleRemoveRow = (index: number) => {
@@ -116,6 +126,17 @@ export function TextSegmentSpreadsheetInput({
                 >
                   <BookmarkPlus />
                 </IconButton>
+                {characterLoad ? (
+                  <CharacterSettingLoadButton
+                    label={t({ ko: '{row}행에 캐릭터 불러오기', en: 'Load a character into row {row}' }, { row: index + 1 })}
+                    tooltipSide="left"
+                    referenceTargets={characterLoad.reference?.targets ?? []}
+                    onLoad={({ appearance, reference, referenceTarget }) => {
+                      if (appearance) handleRowChange(index, appendPromptRowText(rows[index] ?? '', appearance))
+                      if (reference && referenceTarget) characterLoad.reference?.onLoad(referenceTarget, reference)
+                    }}
+                  />
+                ) : null}
                 <IconButton
                   size="icon-sm"
                   variant="destructive-ghost"

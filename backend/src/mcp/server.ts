@@ -10,6 +10,7 @@ import { ALL_MCP_HTTP_SCOPES, isChatMcpSource, type McpRequestContext } from './
 import { registerChatGenerationTools } from './tools/chatGenerationTools';
 import { registerWorkflowTransferTools } from './tools/workflowTransferTools';
 import { registerPromptPresetTools } from './tools/promptPresetTools';
+import { registerCharacterLibraryTools } from './tools/characterLibraryTools';
 import { registerFileStoreTools } from './tools/fileStoreTools';
 import { registerPluginTools } from './tools/pluginTools';
 import { registerPluginAuthoringTools } from './tools/pluginAuthoringTools';
@@ -93,6 +94,7 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
     registerPromptOrganizationTools(server);
     registerResourceTools(server);
   });
+  inCategory('characters', () => registerCharacterLibraryTools(server, context));
   inCategory('generation', () => {
     registerGenerationTools(server, context);
     registerChatGenerationTools(server, context);

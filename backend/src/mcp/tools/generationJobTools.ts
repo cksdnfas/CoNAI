@@ -1,4 +1,6 @@
 import crypto from 'crypto';
+import type { ChatAssetOwner } from '@conai/shared';
+import { chatAssetOwner } from '../../services/codex-chat/chatAssetOwner';
 import { linkChatGeneration, requireActiveChatReply } from '../../services/codex-chat/chatReplyRegistry';
 import { audioCandidatesByQueueJob } from '../../services/audio/audioJobCandidates';
 import { McpServer } from '@modelcontextprotocol/server';
@@ -124,12 +126,12 @@ export async function enqueueMcpGenerationJob(context: McpRequestContext, input:
 }
 
 /** Admin asset jobs use the same normalization/routing without claiming an active chat reply. */
-export async function enqueueProfileAssetGenerationJob(requester: McpRequester, profileId: number, input: McpGenerationJobInput, recordJob: (jobId: number) => void, maxPayloadBytes?: number) {
+export async function enqueueProfileAssetGenerationJob(requester: McpRequester, profileId: ChatAssetOwner | number, input: McpGenerationJobInput, recordJob: (jobId: number) => void, maxPayloadBytes?: number) {
   requireChatAssetGeneration(requester, profileId, input.service_type);
-  return enqueueGenerationJob({ scopes: ['generate'], requester }, input, 'profile_assets', { assetProfileId: profileId, recordJob, maxPayloadBytes });
+  return enqueueGenerationJob({ scopes: ['generate'], requester }, input, 'profile_assets', { assetOwner: chatAssetOwner(profileId), recordJob, maxPayloadBytes });
 }
 
-async function enqueueGenerationJob(context: McpRequestContext, input: McpGenerationJobInput, toolName: string, options: { maxPayloadBytes?: number; assetProfileId?: number; recordJob?: (jobId: number) => void; afterReply?: boolean }) {
+async function enqueueGenerationJob(context: McpRequestContext, input: McpGenerationJobInput, toolName: string, options: { maxPayloadBytes?: number; assetOwner?: ChatAssetOwner; recordJob?: (jobId: number) => void; afterReply?: boolean }) {
   // An `after` picture is queued once its reply ended; the tool call that asked for it ran while the reply did.
   if (context.chatContext && !options.afterReply) requireActiveChatReply(context.chatContext);
   if (isChatMcpSource(context.source)) requireMcpToolAccess(context, toolName, input, options.afterReply ? 'after-reply' : 'reply');
@@ -145,7 +147,7 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
   if (service_type !== 'comfyui' && (server_id != null || normalizedServerTag !== undefined)) {
     throw new Error('server_id and server_tag are only valid for comfyui jobs');
   }
-  const idempotencyScope = idempotency_key ? options.assetProfileId ? 'chat-assets' : resolveIdempotencyScope(context) : null;
+  const idempotencyScope = idempotency_key ? options.assetOwner ? 'chat-assets' : resolveIdempotencyScope(context) : null;
   const requestHash = idempotency_key
     ? buildIdempotencyRequestHash({
         service_type,
@@ -237,10 +239,10 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
     // Delayed jobs recheck this server-issued grant before dispatch, rather than retaining submission authority.
     payload = { ...payload, __conaiChatGrant: { toolName, context, usesImages } };
   }
-  if (options.assetProfileId) {
-    requireChatAssetGeneration(context.requester!, options.assetProfileId, service_type);
+  if (options.assetOwner) {
+    requireChatAssetGeneration(context.requester!, options.assetOwner, service_type);
     if (service_type === 'novelai' && payload.n_samples !== 1) throw new Error('자산 생성은 n_samples: 1이어야 해.');
-    payload = { ...payload, __conaiAssetGrant: { profileId: options.assetProfileId } };
+    payload = { ...payload, __conaiAssetGrant: options.assetOwner.kind === 'profile' ? { profileId: options.assetOwner.id } : { settingId: options.assetOwner.id } };
   }
   if (options.maxPayloadBytes && Buffer.byteLength(JSON.stringify(payload)) > options.maxPayloadBytes) {
     throw new Error('NAI 기준 이미지가 포함된 작업 입력은 8MB까지 쓸 수 있어.');

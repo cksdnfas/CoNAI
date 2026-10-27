@@ -14,6 +14,7 @@ import { buildInputSourceKey, useModuleGraphCanvasContext, useModuleGraphNodeAct
 import { ModuleGraphPortHandle } from './module-graph-port-handle'
 import { NodeNumberControl, NodeSelectControl, NodeSwitchControl, NodeTextControl, NodeWidgetContext, stopNodeEvent } from './module-graph-node-controls'
 import { NodeOptionSourceSelect } from './module-graph-node-option-source'
+import { CharacterSettingIdInput, isCharacterSettingInput } from './module-graph-character-setting-input'
 import { getModuleOperationKey, normalizeModulePortDescription, type ModuleGraphConditionalOutputState, type ModuleGraphNode } from '../module-graph-shared'
 
 type Translate = ReturnType<typeof useI18n>['t']
@@ -325,6 +326,10 @@ export function useNodeValueEditor({
   const change = (value: unknown) => actions.changeValue(nodeId, valueKey, value)
   const llm = getLlmNumberOverrides(t, data, valueKey)
   const inline = (node: ReactNode): NodeValueEditor => ({ inline: node, below: null, blockText: null })
+
+  if (isCharacterSettingInput(valueKey)) {
+    return inline(<CharacterSettingIdInput compact value={rawValue} onChange={change} onClear={() => actions.clearValue(nodeId, valueKey)} />)
+  }
 
   if (uiField?.options_source) {
     return inline(

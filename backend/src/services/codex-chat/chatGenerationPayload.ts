@@ -12,7 +12,7 @@ function joinPrompt(parts: string[]) {
 }
 
 /** Assemble the queue input without contacting a generation service; shared by both preset handlers. */
-export async function buildChatGenerationPresetJob(preset: ChatGenerationPreset, args: Record<string, unknown>, profile: ChatProfile | null = null, options: { forceReference?: boolean; omitReference?: boolean } = {}) {
+export async function buildChatGenerationPresetJob(preset: ChatGenerationPreset, args: Record<string, unknown>, profile: Pick<ChatProfile, 'referenceHash' | 'avatarHash' | 'backgroundHash' | 'avatar' | 'background'> | null = null, options: { forceReference?: boolean; omitReference?: boolean } = {}) {
   const summary = `채팅 프리셋 · ${preset.name}`;
   const reference = () => {
     if (!profile?.referenceHash) throw new Error('프로필에 기준 이미지를 골라줘.');

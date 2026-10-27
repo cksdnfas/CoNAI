@@ -33,6 +33,7 @@ export const BUILTIN_CHAT_NODE_DEFINITIONS: BuiltinSystemModuleDefinition[] = [
       { key: 'preset_id', label: '프리셋', direction: 'input', data_type: 'number', required: true, multiple: false },
       { key: 'prompt', label: '프롬프트', direction: 'input', data_type: 'prompt', required: true, multiple: false },
       { key: 'profile_id', label: '캐릭터', direction: 'input', data_type: 'number', required: false, multiple: false },
+      { key: 'character_setting_id', label: '캐릭터 외형 설정', direction: 'input', data_type: 'number', required: false, multiple: false },
       { key: 'reference_image', label: '참조 이미지', direction: 'input', data_type: 'image', required: false, multiple: false },
     ],
     outputPorts: [
@@ -44,6 +45,7 @@ export const BUILTIN_CHAT_NODE_DEFINITIONS: BuiltinSystemModuleDefinition[] = [
       { key: 'preset_id', label: '프리셋', data_type: 'number', options_source: 'chat_generation_presets' },
       { key: 'prompt', label: '프롬프트', data_type: 'prompt' },
       { key: 'profile_id', label: '캐릭터', data_type: 'number', options_source: 'chat_profiles' },
+      { key: 'character_setting_id', label: '캐릭터 외형 설정 (프로필과 함께 선택 불가)', data_type: 'number' },
       { key: 'reference_image', label: '참조 이미지', data_type: 'image' },
     ],
     color: '#ab47bc',

@@ -57,7 +57,7 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
     grant('agent', 'chat.codex.use'); grant('agent', 'chat.tools.read')
     seedAccessControlDefaults(db)
     const keys = (group: string) => (db.prepare('SELECT p.permission_key AS key FROM auth_group_permissions gp JOIN auth_permissions p ON p.id = gp.permission_id JOIN auth_permission_groups g ON g.id = gp.group_id WHERE g.group_key = ? AND gp.allowed = 1 ORDER BY key').all(group) as Array<{ key: string }>).map((row) => row.key)
-    assert.deepEqual(keys('editor'), ['images.edit', 'prompts.edit', 'wildcards.edit', 'workflows.edit'])
+    assert.deepEqual(keys('editor'), ['characters.edit', 'images.edit', 'prompts.edit', 'wildcards.edit', 'workflows.edit'], 'new character keys follow the prompt grants once')
     assert.deepEqual(keys('uploader'), ['files.edit', 'images.upload'])
     assert.deepEqual(keys('agent'), ['chat.agent.use', 'chat.diagnostics.view', 'images.view'], 'older conversions still run first; bot tool keys are gone')
     assert.deepEqual(keys('anonymous'), ['auth.guest.create', 'images.view'], 'visitors keep only what a signed-out visitor can use')

@@ -13,6 +13,8 @@ import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 import { CHAT_BLOCKED_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_TOOLS, CHAT_VISION_BUILTIN_TOOLS, GENERATION_PRESET_BLOCKED_TOOLS, GROUP_ONLY_CHAT_TOOLS, getMcpToolScope, isChatGenerationTool, isChatMcpSource, isConnectedChatPageTool, isMcpToolAllowed, type McpRequestContext, type McpRequester } from './context';
 
 export const TOOL_FEATURE_PERMISSIONS: Record<string, string | readonly string[]> = {
+  list_character_library: 'characters.view', get_character_setting: 'characters.view',
+  manage_character_folders: 'characters.edit', propose_character_library: 'characters.edit',
   call_agent: [],
   workspace_publish_resources: ['files.view', 'files.edit', 'images.view', 'images.edit'],
   list_group_resources: 'images.view',

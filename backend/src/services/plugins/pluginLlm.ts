@@ -174,12 +174,14 @@ function profileContext(profile: ChatProfile) {
 }
 
 function pluginProfileOf(profile: ChatProfile, images: boolean, loreSelectionLimit: number): PluginLlmProfile {
-  // Image bytes are served by `asset()`; every other saved setting is the plugin's to read.
-  const { avatar: _avatar, background: _background, ...details } = profile
+  // Image bytes are served by `asset()`; every other saved setting is the plugin's to read. The library link is only its id:
+  // setting names and folders are read through the library, which checks `characters.view`.
+  const { avatar: _avatar, background: _background, characterLink, characterExpressionGroupId: _expressionGroupId, ...details } = profile
   return { id: profile.id, name: profile.name, tagline: profile.tagline, engine: profile.engine, appearance: profile.appearance ?? '',
+    character: characterLink ? { settingId: characterLink.settingId, synced: characterLink.synced } : null,
     context: profileContext(profile),
     translation: { enabled: hasTranslation(profile), modelLanguage: profile.translationModelLanguage, displayLanguage: profile.translationDisplayLanguage },
-    assetVersion: images ? `${profile.updatedDate}:${profile.avatarHash ?? ''}:${profile.backgroundHash ?? ''}:${profile.referenceHash ?? ''}` : null,
+    assetVersion: images ? `${profile.updatedDate}:${profile.avatarHash ?? ''}:${profile.backgroundHash ?? ''}:${profile.referenceHash ?? ''}${profile.characterLink?.synced ? `:setting:${profile.characterLink.settingId}:${profile.characterLink.revision}` : ''}` : null,
     avatarCrop: images ? profile.avatarCrop : null,
     assets: { avatar: images && Boolean(profile.avatarHash || profile.avatar), background: images && Boolean(profile.backgroundHash || profile.background), reference: images && Boolean(profile.referenceHash) },
     judge: pluginJudgeSettings(profile),
@@ -216,7 +218,7 @@ export async function readPluginProfileAsset(pluginId: string, requester: McpReq
   const input = z.object({ profileId: z.number().int().positive(), kind: z.enum(['avatar','background','reference']).default('avatar'), maxSize: z.number().int().min(64).max(512).default(256) }).strict().parse(raw)
   const { profile } = profileAccess(pluginId, requester, input.profileId)
   requireRequesterImagePermission(requester)
-  const versionOf = (p: typeof profile) => sha256(JSON.stringify([p.updatedDate, p.avatarHash, p.backgroundHash, p.referenceHash, p.avatarCrop, p.avatar, p.background]))
+  const versionOf = (p: typeof profile) => sha256(JSON.stringify([p.updatedDate, p.avatarHash, p.backgroundHash, p.referenceHash, p.avatarCrop, p.avatar, p.background, p.characterLink?.synced ? [p.characterLink.settingId, p.characterLink.revision] : null]))
   const version = versionOf(profile), asset = resolveProfileAsset(profile, input.kind)
   const base = { profileId: profile.id, kind: input.kind, version, crop: input.kind === 'avatar' ? profile.avatarCrop : null }
   if (asset.state === 'missing' || asset.state === 'hidden') return { ...base, state: asset.state }

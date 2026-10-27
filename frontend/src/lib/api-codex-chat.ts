@@ -1,61 +1,70 @@
 import { requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
-import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
-export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult } from '@conai/shared'
+import type { QueryClient } from '@tanstack/react-query'
+import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult, ChatAssetOwner, CharacterSetting, ChatProfileCharacterLink, ChatProfileCharacterLinkInput } from '@conai/shared'
+export type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetKind, ChatAssetReview, ChatAssetVisionReview, ChatAssetCandidate, ChatAssetAttempt, ChatAssetApplyInput, ChatAssetApplyResult, ChatAssetOwner } from '@conai/shared'
 import type { ChatJudgeDiagnostics, ChatFileChange, ChatProfileAgentSettings } from '@conai/shared'
 import type { ChatStreamEvent, ChatTranslationLanguage, CodexReasoningEffort, StoredFileEntry, ChatMessageRouting, ChatPageSnapshot, ChatProposal, ChatTask, ChatChoiceAnswer } from '@conai/shared'
 
 export type ChatScope = 'read' | 'generate' | 'organize' | 'configure'
-const assetBatchPath = (profileId: number, batchId?: number) => `/api/codex-chat/admin/profiles/${profileId}/asset-batches${batchId === undefined ? '' : `/${batchId}`}`
+/** The admin route of an asset owner: a chat profile, or a character library setting (same sub-routes and bodies). */
+const assetOwnerPath = (owner: ChatAssetOwner) => owner.kind === 'profile' ? `/api/codex-chat/admin/profiles/${owner.id}` : `/api/character-library/settings/${owner.id}`
+const assetBatchPath = (owner: ChatAssetOwner, batchId?: number) => `${assetOwnerPath(owner)}/asset-batches${batchId === undefined ? '' : `/${batchId}`}`
+/** Browser storage key of an owner; profiles keep their bare id. */
+export const chatAssetOwnerKey = (owner: ChatAssetOwner) => owner.kind === 'profile' ? String(owner.id) : `setting:${owner.id}`
 export class ChatAssetSubmissionError extends Error {
-  readonly profileId: number
+  readonly owner: ChatAssetOwner
   readonly batchId: number | null
-  constructor(message: string, profileId: number, batchId: number | null) {
+  constructor(message: string, owner: ChatAssetOwner, batchId: number | null) {
     super(message)
-    this.profileId = profileId
+    this.owner = owner
     this.batchId = batchId
   }
 }
 /** Keep the durable batch identity when submission stopped after creating some jobs. */
-export async function createChatAssetBatch(profileId: number, input: ChatAssetBatchInput) {
-  const response = await fetch(buildApiUrl(assetBatchPath(profileId)), { method: 'POST', credentials: 'include', signal: AbortSignal.timeout(30000), headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+export async function createChatAssetBatch(owner: ChatAssetOwner, input: ChatAssetBatchInput) {
+  const response = await fetch(buildApiUrl(assetBatchPath(owner)), { method: 'POST', credentials: 'include', signal: AbortSignal.timeout(30000), headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
   const payload = (response.headers.get('content-type') ?? '').includes('application/json') ? await response.json() as { success?: boolean; data?: ChatAssetBatch; error?: string; batchId?: number } : null
-  if (!response.ok || !payload?.success || !payload.data) throw new ChatAssetSubmissionError(payload?.error || `Request failed: ${response.status}`, profileId, Number.isSafeInteger(payload?.batchId) && payload!.batchId! > 0 ? payload!.batchId! : null)
+  if (!response.ok || !payload?.success || !payload.data) throw new ChatAssetSubmissionError(payload?.error || `Request failed: ${response.status}`, owner, Number.isSafeInteger(payload?.batchId) && payload!.batchId! > 0 ? payload!.batchId! : null)
   return payload.data
 }
-export function getChatAssetBatch(profileId: number, batchId: number, signal?: AbortSignal) {
-  return requestApiData<ChatAssetBatch>(assetBatchPath(profileId, batchId), { signal, cache: 'no-store' })
+export function getChatAssetBatch(owner: ChatAssetOwner, batchId: number, signal?: AbortSignal) {
+  return requestApiData<ChatAssetBatch>(assetBatchPath(owner, batchId), { signal, cache: 'no-store' })
 }
-export const chatAssetBatchQueryKey = (profileId: number, batchId: number) => ['chat-asset-batch', profileId, batchId] as const
+export const chatAssetBatchQueryKey = (owner: ChatAssetOwner, batchId: number) => ['chat-asset-batch', owner.kind, owner.id, batchId] as const
+/** A candidates group's images in the candidate archive; its visible count sits under the same prefix. */
+export const chatAssetCandidatesQueryKey = (groupId: number) => ['chat-asset-candidates', groupId] as const
 export function draftChatAppearance(profile: ChatProfileInput, signal?: AbortSignal) {
   return requestApiData<{ appearance: string }>('/api/codex-chat/admin/profiles/appearance-draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile }), signal }, { timeoutMs: 120000 })
 }
-export function regenerateChatAssetSlot(profileId: number, batchId: number, slotKey: string, attempt: number, useCurrentPreset = false) {
-  return requestApiData<ChatAssetBatch>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/regenerate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attempt, useCurrentPreset }) })
+export function regenerateChatAssetSlot(owner: ChatAssetOwner, batchId: number, slotKey: string, attempt: number, useCurrentPreset = false) {
+  return requestApiData<ChatAssetBatch>(`${assetBatchPath(owner, batchId)}/slots/${encodeURIComponent(slotKey)}/regenerate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attempt, useCurrentPreset }) })
 }
-export function cancelChatAssetSlot(profileId: number, batchId: number, slotKey: string) {
-  return requestApiData<ChatAssetBatch>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/cancel`, { method: 'POST' })
+export function cancelChatAssetSlot(owner: ChatAssetOwner, batchId: number, slotKey: string) {
+  return requestApiData<ChatAssetBatch>(`${assetBatchPath(owner, batchId)}/slots/${encodeURIComponent(slotKey)}/cancel`, { method: 'POST' })
 }
-export function chooseChatAssetSlot(profileId: number, batchId: number, slotKey: string, compositeHash: string) {
-  return requestApiData<ChatAssetBatch>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/choose`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compositeHash }) })
+export function chooseChatAssetSlot(owner: ChatAssetOwner, batchId: number, slotKey: string, compositeHash: string) {
+  return requestApiData<ChatAssetBatch>(`${assetBatchPath(owner, batchId)}/slots/${encodeURIComponent(slotKey)}/choose`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compositeHash }) })
 }
-export function reviewChatAssetVision(profileId: number, batchId: number, slotKey: string, modelSlotId: number, compositeHash: string, signal?: AbortSignal) {
-  return requestApiData<ChatAssetVisionReview>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/vision-review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modelSlotId, compositeHash }), signal })
+export function reviewChatAssetVision(owner: ChatAssetOwner, batchId: number, slotKey: string, modelSlotId: number, compositeHash: string, signal?: AbortSignal) {
+  return requestApiData<ChatAssetVisionReview>(`${assetBatchPath(owner, batchId)}/slots/${encodeURIComponent(slotKey)}/vision-review`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modelSlotId, compositeHash }), signal })
 }
-export function applyChatAssetBatch(profileId: number, batchId: number, input: ChatAssetApplyInput = {}) {
-  return requestApiData<ChatAssetApplyResult>(`${assetBatchPath(profileId, batchId)}/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+export function applyChatAssetBatch(owner: ChatAssetOwner, batchId: number, input: ChatAssetApplyInput = {}) {
+  return requestApiData<ChatAssetApplyResult>(`${assetBatchPath(owner, batchId)}/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
 }
 /** Choose one slot's candidate and apply only that slot. */
-export function applyChatAssetSlot(profileId: number, batchId: number, slotKey: string, compositeHash: string) {
-  return requestApiData<ChatAssetApplyResult>(`${assetBatchPath(profileId, batchId)}/slots/${encodeURIComponent(slotKey)}/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compositeHash }) })
+export function applyChatAssetSlot(owner: ChatAssetOwner, batchId: number, slotKey: string, compositeHash: string) {
+  return requestApiData<ChatAssetApplyResult>(`${assetBatchPath(owner, batchId)}/slots/${encodeURIComponent(slotKey)}/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compositeHash }) })
 }
-/** Put a library image on one emotion of the profile's expression group, replacing the one it had. */
-export function setChatProfileExpression(profileId: number, name: string, compositeHash: string) {
-  return requestApiData<{ expressionGroupId: number; profile: ChatProfile }>(`/api/codex-chat/admin/profiles/${profileId}/expressions/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compositeHash }) })
+/** Put a library image on one emotion of the owner's expression group, replacing the one it had. */
+export function setChatProfileExpression(owner: Extract<ChatAssetOwner, { kind: 'profile' }>, name: string, compositeHash: string): Promise<{ expressionGroupId: number; profile: ChatProfile }>
+export function setChatProfileExpression(owner: Extract<ChatAssetOwner, { kind: 'setting' }>, name: string, compositeHash: string): Promise<{ expressionGroupId: number; setting: CharacterSetting }>
+export function setChatProfileExpression(owner: ChatAssetOwner, name: string, compositeHash: string) {
+  return requestApiData<unknown>(`${assetOwnerPath(owner)}/expressions/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ compositeHash }) })
 }
-/** Empty one emotion of the profile's expression group. */
-export function clearChatProfileExpression(profileId: number, name: string) {
-  return requestApiData<{ expressionGroupId: number | null }>(`/api/codex-chat/admin/profiles/${profileId}/expressions/${encodeURIComponent(name)}`, { method: 'DELETE' })
+/** Empty one emotion of the owner's expression group. */
+export function clearChatProfileExpression(owner: ChatAssetOwner, name: string) {
+  return requestApiData<{ expressionGroupId: number | null }>(`${assetOwnerPath(owner)}/expressions/${encodeURIComponent(name)}`, { method: 'DELETE' })
 }
 export function applyChatProfileAssetsProposal(proposalId: number) {
   return requestApiData<{ proposal: ChatProposal; batch?: ChatAssetBatch; result?: ChatAssetApplyResult }>(`/api/chat-proposals/${proposalId}/apply`, { method: 'POST' })
@@ -382,20 +391,23 @@ export function chatProfileAssetUrl(profileId: number, kind: ChatProfileAssetKin
 }
 
 export type ChatProfileAssetResult = { compositeHash: string; extension: string }
+/** Where an imported image lands: a profile's character group (by name, the profile may be unsaved) or a library setting. */
+export type ChatAssetUploadTarget = { characterName: string } | { settingId: number }
 
-export function uploadChatProfileAsset(file: File, characterName: string) {
+export function uploadChatProfileAsset(file: File, target: ChatAssetUploadTarget) {
   const body = new FormData()
   body.append('file', file)
-  body.append('characterName', characterName)
+  if ('settingId' in target) body.append('settingId', String(target.settingId))
+  else body.append('characterName', target.characterName)
   return requestApiData<ChatProfileAssetResult>('/api/codex-chat/admin/chat-assets/upload', { method: 'POST', body })
 }
 
-export function downloadChatProfileAsset(url: string, characterName: string) {
-  return requestApiData<ChatProfileAssetResult>('/api/codex-chat/admin/chat-assets/url', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ url, characterName }) })
+export function downloadChatProfileAsset(url: string, target: ChatAssetUploadTarget) {
+  return requestApiData<ChatProfileAssetResult>('/api/codex-chat/admin/chat-assets/url', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ url, ...target }) })
 }
 
-export function importChatProfileAssetFromFileStore(fileId: string, characterName: string) {
-  return requestApiData<ChatProfileAssetResult>('/api/codex-chat/admin/chat-assets/from-file-store', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ fileId, characterName }) })
+export function importChatProfileAssetFromFileStore(fileId: string, target: ChatAssetUploadTarget) {
+  return requestApiData<ChatProfileAssetResult>('/api/codex-chat/admin/chat-assets/from-file-store', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ fileId, ...target }) })
 }
 
 /** A user-defined prompt block: `text` joins the system prompt under its title, `dialogue` is example conversation. */
@@ -740,6 +752,11 @@ export interface ChatProfile extends ChatProfileAssetFields, ChatProfileAgentSet
   sortOrder: number
   createdDate: string
   updatedDate: string
+  /**
+   * Admin responses: the character library setting the profile links to. While synced, the appearance, reference,
+   * avatar and expressions above are the setting's.
+   */
+  characterLink?: ChatProfileCharacterLink | null
 }
 
 /** What a card import kept as it was, kept in another form, and left out. */
@@ -750,7 +767,53 @@ export interface ChatCardImportReport {
 }
 
 /** `background`: a new image (data URL), null to remove it, left out to keep the current one. */
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl'>> & { background?: string | null }
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl' | 'characterLink'>> & {
+  background?: string | null
+  /** The library link to set (null removes it; left out keeps it). While synced the appearance fields are not sent. */
+  characterLink?: ChatProfileCharacterLinkInput
+}
+
+/** The profile fields that are the linked setting's while synced (the server ignores them in a save then). */
+export const CHAT_PROFILE_SYNCED_KEYS = ['appearance', 'referenceHash', 'avatarHash', 'avatarCrop', 'avatar'] as const satisfies ReadonlyArray<keyof ChatProfileInput>
+
+/** Two library links name the same setting and sync (a stored link's name and path aside). */
+export function sameCharacterLink(left: ChatProfileCharacterLinkInput | undefined, right: ChatProfileCharacterLinkInput | undefined) {
+  return (left?.settingId ?? null) === (right?.settingId ?? null) && Boolean(left?.synced) === Boolean(right?.synced)
+}
+
+/**
+ * A draft's emoticon groups after the server changed the stored list from `previous` to `updated` (a link change
+ * swaps expression groups): the groups it added go first, the ones it removed go, the draft's other edits stay.
+ */
+export function emoticonGroupsAfterServerChange(previous: readonly number[], updated: readonly number[], current: readonly number[]) {
+  const added = updated.filter((id) => !previous.includes(id))
+  const removed = previous.filter((id) => !updated.includes(id))
+  return [...added, ...current.filter((id) => !added.includes(id) && !removed.includes(id))]
+}
+
+/**
+ * What a profile save sends: while synced to a library setting, none of the look's fields (they are the setting's).
+ * Given the `stored` link, the link is sent only when it changes (so a link made elsewhere meanwhile stays).
+ */
+export function chatProfileSaveInput(input: ChatProfileInput, stored?: ChatProfileCharacterLinkInput): ChatProfileInput {
+  const next: ChatProfileInput = { ...input }
+  if (stored !== undefined && sameCharacterLink(input.characterLink, stored)) delete next.characterLink
+  if (input.characterLink?.synced) for (const key of CHAT_PROFILE_SYNCED_KEYS) delete next[key]
+  return next
+}
+
+/**
+ * Profiles whose look changed elsewhere (synced to a changed library setting): refetch the profile lists that hold
+ * one of them and their emoticons; portraits follow the lists' asset versions.
+ */
+export function invalidateChatProfileViews(queryClient: QueryClient, profileIds: ReadonlySet<number>) {
+  const holds = (data: unknown) => Array.isArray(data) && data.some((entry) => profileIds.has((entry as { id?: number }).id ?? 0))
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, predicate: ({ state }) => holds(state.data) }),
+    queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY, predicate: ({ state }) => holds(state.data) }),
+    ...[...profileIds].map((id) => queryClient.invalidateQueries({ queryKey: chatProfileEmoticonsQueryKey(id) })),
+  ])
+}
 
 export interface ChatProfileDefaults {
   /** The chat representative model's default prompt: a new profile starts with it. */

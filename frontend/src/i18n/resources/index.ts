@@ -12,6 +12,7 @@ import { searchResources, searchCatalog } from './search'
 import { wallpaperResources, wallpaperCatalog } from './wallpaper'
 import { imageGenerationResources, imageGenerationCatalog } from './image-generation'
 import { moduleGraphResources, moduleGraphCatalog } from './module-graph'
+import { charactersResources, charactersCatalog } from './characters'
 
 export { shellResources, shellCatalog } from './shell'
 export { authResources, authCatalog } from './auth'
@@ -27,6 +28,7 @@ export { searchResources, searchCatalog } from './search'
 export { wallpaperResources, wallpaperCatalog } from './wallpaper'
 export { imageGenerationResources, imageGenerationCatalog } from './image-generation'
 export { moduleGraphResources, moduleGraphCatalog } from './module-graph'
+export { charactersResources, charactersCatalog } from './characters'
 export type { LocaleCode, ScopedLocaleResources, TranslationCatalog, TranslationDictionary } from './types'
 
 export const featureLocaleResources = {
@@ -44,6 +46,7 @@ export const featureLocaleResources = {
   "wallpaper": wallpaperResources,
   "image-generation": imageGenerationResources,
   "module-graph": moduleGraphResources,
+  "characters": charactersResources,
 } as const
 
 export const featureLocaleCatalog = {
@@ -61,6 +64,7 @@ export const featureLocaleCatalog = {
   ...wallpaperCatalog,
   ...imageGenerationCatalog,
   ...moduleGraphCatalog,
+  ...charactersCatalog,
 } as const
 
 export type FeatureLocaleResourceScope = keyof typeof featureLocaleResources

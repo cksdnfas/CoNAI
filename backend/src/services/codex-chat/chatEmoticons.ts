@@ -2,9 +2,14 @@ import { EMOTICON_PROMPT_BUDGET, EmoticonService } from '../emoticonService'
 import type { ChatStyle } from './chatStyle'
 import { GroupPathService } from '../groupPathService'
 import { chatCharacterGroupPath } from './chatProfileAssets'
+import type { ChatProfileCharacterLink } from '@conai/shared'
 
 /** Only the character's linked, enabled expression group drives its portrait. */
-export function chatExpressionGroupId(profile: { name: string; style: Pick<ChatStyle, 'emoticonGroupIds'> }) {
+export function chatExpressionGroupId(profile: { name: string; style: Pick<ChatStyle, 'emoticonGroupIds'>; characterLink?: ChatProfileCharacterLink | null; characterExpressionGroupId?: number | null }) {
+  if (profile.characterLink?.synced) {
+    const id = profile.characterExpressionGroupId
+    return id && EmoticonService.findGroup(id)?.emoticon_enabled === 1 ? id : null
+  }
   const id = GroupPathService.resolve(`${chatCharacterGroupPath(profile.name)}/표정`, { create: false })?.groupId
   return id && profile.style.emoticonGroupIds.includes(id) && EmoticonService.findGroup(id)?.emoticon_enabled === 1 ? id : null
 }

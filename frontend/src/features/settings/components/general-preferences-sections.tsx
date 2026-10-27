@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ChatFilledMark } from '@/features/codex-chat/chat-page-context'
 import { ChatFilledLabel } from './settings-filled-label'
-import { Archive, AudioLines, CircleUserRound, Film, FolderTree, Images, ListTodo, Map as MapIcon, MessageSquareText, Newspaper, Search, Settings2, Sparkles, Tags, Upload, Wallpaper, type LucideIcon } from 'lucide-react'
+import { Archive, AudioLines, CircleUserRound, Contact, Film, FolderTree, Images, ListTodo, Map as MapIcon, MessageSquareText, Newspaper, Search, Settings2, Sparkles, Tags, Upload, Wallpaper, type LucideIcon } from 'lucide-react'
 import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { Select } from '@/components/ui/select'
 import { SettingRow } from '@/components/ui/setting-row'
@@ -38,6 +38,7 @@ const HEADER_NAVIGATION_OPTIONS: Record<HeaderNavigationItemKey, { icon: LucideI
   upload: { icon: Upload, label: { ko: '업로드', en: 'Upload' } },
   files: { icon: Archive, label: { ko: '파일 보관함', en: 'Files' } },
   prompts: { icon: Tags, label: { ko: '프롬프트', en: 'Prompts' } },
+  characters: { icon: Contact, label: { ko: '캐릭터', en: 'Characters' } },
   generation: { icon: Sparkles, label: { ko: '생성', en: 'Generation' } },
   audio: { icon: AudioLines, label: { ko: '오디오', en: 'Audio' } },
   sprite: { icon: Film, label: { ko: '스프라이트', en: 'Sprites' } },

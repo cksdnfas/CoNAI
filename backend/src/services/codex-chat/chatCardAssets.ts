@@ -228,7 +228,7 @@ export function characterMediaGroupPath(characterName: string, root = CHAT_CARD_
 const downloads = new Map<string, Promise<LocalizedMediaItem>>()
 
 /** Reuse the card downloader and URL cache for a single library asset. */
-export async function downloadToLibrary(url: string, groupPath: string, options: { imagesOnly?: boolean; download?: typeof download } = {}): Promise<LocalizedMediaItem> {
+export async function downloadToLibrary(url: string, groupPath: string | number | null, options: { imagesOnly?: boolean; download?: typeof download } = {}): Promise<LocalizedMediaItem> {
   const target = new URL(url)
   if (target.protocol !== 'https:' && target.protocol !== 'http:') throw new Error('unsupported protocol')
   let pending = downloads.get(url)
@@ -250,7 +250,8 @@ export async function downloadToLibrary(url: string, groupPath: string, options:
   let item: LocalizedMediaItem
   try { item = await pending } finally { if (downloads.get(url) === pending) downloads.delete(url) }
   if (options.imagesOnly && !activeMediaFile(item.compositeHash)?.mimeType.startsWith('image/')) throw new Error('not an image')
-  fileLibraryMediaUnderGroup(groupPath, [item.compositeHash])
+  if (typeof groupPath === 'number') assignGeneratedMediaToGroup(groupPath, [item.compositeHash])
+  else if (groupPath !== null) fileLibraryMediaUnderGroup(groupPath, [item.compositeHash])
   return item
 }
 
@@ -377,6 +378,8 @@ export function chatMediaUsage(compositeHashes: string[]) {
   const profileMatch = PROFILE_TEXT_COLUMNS.flatMap((column) => needles.map(() => `instr(COALESCE(${column}, ''), ?) > 0`)).join(' OR ')
   const assetMatch = ['avatar_hash', 'background_hash', 'reference_hash'].map((column) => `${column} IN (${hashes.map(() => '?').join(',')})`).join(' OR ')
   const profiles = (db.prepare(`SELECT name FROM llm_chat_profiles WHERE ${profileMatch} OR ${assetMatch} ORDER BY name`).all(...PROFILE_TEXT_COLUMNS.flatMap(() => needles), ...hashes, ...hashes, ...hashes) as Array<{ name: string }>).map((row) => row.name)
+  const settings = db.prepare(`SELECT name FROM character_settings WHERE reference_hash IN (${hashes.map(() => '?').join(',')}) OR avatar_hash IN (${hashes.map(() => '?').join(',')}) ORDER BY name`).all(...hashes, ...hashes) as Array<{ name: string }>
+  profiles.push(...settings.map((setting) => `캐릭터 라이브러리 / ${setting.name}`))
   const messages = (db.prepare(`SELECT COUNT(*) AS count FROM codex_chat_messages WHERE ${needles.map(() => 'instr(content, ?) > 0').join(' OR ')}`).get(...needles) as { count: number }).count
   return { profiles, messages }
 }

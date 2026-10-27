@@ -624,6 +624,13 @@ export function CodexGenerationPanel({
           negativePrompt={codexForm.negativePrompt}
           onPromptChange={(value) => handleFieldChange('prompt', value)}
           onNegativePromptChange={(value) => handleFieldChange('negativePrompt', value)}
+          characterLoad={{
+            // In edit mode the image slot is the source to edit, not a reference.
+            reference: codexForm.imageMode === 'reference' ? {
+              targets: [{ id: 'referenceImage', label: codexForm.referenceImage ? t({ ko: '참조 이미지 교체', en: 'Replace reference image' }) : t({ ko: '참조 이미지', en: 'Reference image' }) }],
+              onLoad: (_target, image) => setCodexForm((current) => ({ ...current, referenceImage: image, maskImage: undefined })),
+            } : null,
+          }}
         />
         <div className="flex justify-end">
           <CodexPromptPresetButton prompt={codexForm.prompt} negativePrompt={codexForm.negativePrompt} />

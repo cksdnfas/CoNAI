@@ -134,6 +134,12 @@ export type PluginLlmProfile = {
   context: { contextTokens: number | null; maxOutputTokens: number | null }
   /** Visible look as image-prompt tags (the profile's appearance field); empty when unset. */
   appearance: string
+  /**
+   * Where the look comes from: a character library setting (`synced`: `appearance` and the images are its live values;
+   * otherwise the profile keeps a detached copy), or null for the profile's own look. Read the setting through the
+   * `get_character_setting` app tool or `/api/character-library` (both need `characters.view`).
+   */
+  character: { settingId: number; synced: boolean } | null
   translation?: { enabled: boolean; modelLanguage: 'en' | 'ko' | 'ja' | 'zh'; displayLanguage: 'en' | 'ko' | 'ja' | 'zh' }
   assetVersion: string | null; avatarCrop: { x: number; y: number; scale: number } | null
   assets: { avatar: boolean; background: boolean; reference: boolean }

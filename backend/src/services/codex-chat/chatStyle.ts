@@ -96,7 +96,7 @@ export const DEFAULT_CHAT_STYLE: ChatStyle = {
   emoticonGroupIds: [],
 }
 
-const MAX_EMOTICON_GROUPS = 10
+export const MAX_EMOTICON_GROUPS = 10
 
 const MAX_CAST = 8
 const CAST_NAME_MAX_LENGTH = 40

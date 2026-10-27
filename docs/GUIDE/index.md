@@ -24,6 +24,7 @@ CoNAI는 이미지·영상·생성물 관리를 기반으로 지식을 축적하
 - [감시 폴더와 백업 소스](./WATCHED_FOLDERS.md)
 - [그룹 관리](./GROUPS_GUIDE.md)
 - [프롬프트 관리](./PROMPTS_GUIDE.md)
+- [캐릭터 라이브러리](./CHARACTER_LIBRARY.md)
 
 ## 생성
 

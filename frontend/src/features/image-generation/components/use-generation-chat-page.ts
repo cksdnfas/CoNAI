@@ -21,10 +21,11 @@ import {
   type NAIFormDraft,
   type NaiImageSize,
 } from '../image-generation-shared'
-import { applyNaiFormPatch } from './use-nai-form-controller'
+import { appendNaiCharacterPrompt, applyNaiFormPatch, placeNaiCharacterReference } from './use-nai-form-controller'
+import { useChatCharacterSettingInsertion } from './use-chat-character-setting-insertion'
 import { useChatPageMedia } from '@/features/codex-chat/use-chat-page-media'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
-import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
+import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useChatPresetInsertion } from './use-chat-preset-insertion'
 import { EMPTY_NAI_CHARACTER_REFERENCE, EMPTY_NAI_VIBE, supportsNaiCharacterPrompts, supportsNaiCharacterReferences } from '../image-generation-shared'
 
@@ -38,6 +39,17 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
   const fixedSettings = getNaiFixedModelSettings(form.model)
   const fixedField = fixedSettings ? { editable: false as const, hint: NAI_FIXED_MODEL_FIELD_HINT } : {}
   const presets = useChatPresetInsertion(fixedSettings ? ['prompt'] : ['prompt', 'negativePrompt'])
+  const characterSettings = useChatCharacterSettingInsertion()
+  const characterPrompts = supportsNaiCharacterPrompts(form.model)
+  const characterReferences = characterSettings.canReference && supportsNaiCharacterReferences(form.model)
+  const characterSettingActions = characterSettings.actions({
+    target: pageChoice(['prompt', ...(characterPrompts ? [...(form.characters.length ? ['character'] : []), 'newCharacter'] : [])]),
+    ...(characterPrompts && form.characters.length ? { characterIndex: pageNumber(0, form.characters.length - 1, true) } : {}),
+    ...(characterReferences ? {
+      includeReference: { type: 'boolean' as const },
+      ...(form.characterReferences.length ? { referenceIndex: pageNumber(0, form.characterReferences.length - 1, true) } : {}),
+    } : {}),
+  }, ['target'], 'target prompt = main prompt; character = data.characters[characterIndex] (0-based); newCharacter = add a character with the tags. includeReference (default: when the setting has one) also sets its reference image as a character reference: omit referenceIndex to add a new reference row, or give referenceIndex (0-based) to replace that row\'s image (then the setting must have a reference). NAI does not tie references to characters (several character references blend), so the row never follows characterIndex.')
   const commit = useChatDraftTransaction(form, setForm)
   const promptPresets = resolveNaiPromptPresets(form)
   const sampling = resolveNaiSamplingSettings(form)
@@ -68,7 +80,7 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
   useChatPageRegistration({
     kind: 'nai', title: t({ ko: 'NovelAI 생성', en: 'NovelAI generation' }), resourceId: 'novelai', fields, localRevision: getImageDraftRevision(form),
     data: { media: media.candidates, presets: presets.candidates, characters: form.characters.map((item) => ({ ...item })), enhance: { sourceSize: sourceImageSize ? `${sourceImageSize.width}x${sourceImageSize.height}` : '', amounts: Object.fromEntries(NAI_ENHANCE_AMOUNTS.map((amount) => [amount, planNaiFormEnhance(form, sourceImageSize, amount).issue ?? 'available'])) }, selected: { sourceImage: form.sourceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', vibes: form.vibes.map((item) => ({ image: item.image?.fileName ?? '', strength: item.strength, informationExtracted: item.informationExtracted })), characterReferences: form.characterReferences.map((item) => ({ image: item.image?.fileName ?? '', type: item.type, strength: item.strength, fidelity: item.fidelity })) } },
-    actions: [...media.actions, ...presets.actions, ...(supportsNaiCharacterPrompts(form.model) ? [pageAction('nai.characters', t({ ko: '캐릭터 프롬프트 편집', en: 'Edit character prompts' }), t({ ko: '캐릭터별 프롬프트·네거티브 프롬프트·위치의 전체 목록을 입력해.', en: 'Set the complete list of character prompts, negative prompts and positions.' }), pageObject({ characters: pageArray(pageObject({ prompt: pageText(), uc: pageText(), centerX: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']), centerY: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']) }, ['prompt', 'uc', 'centerX', 'centerY']), 6) }, ['characters']))] : [])],
+    actions: [...media.actions, ...presets.actions, ...characterSettingActions, ...(supportsNaiCharacterPrompts(form.model) ? [pageAction('nai.characters', t({ ko: '캐릭터 프롬프트 편집', en: 'Edit character prompts' }), t({ ko: '캐릭터별 프롬프트·네거티브 프롬프트·위치의 전체 목록을 입력해.', en: 'Set the complete list of character prompts, negative prompts and positions.' }), pageObject({ characters: pageArray(pageObject({ prompt: pageText(), uc: pageText(), centerX: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']), centerY: pageChoice(['0.1', '0.3', '0.5', '0.7', '0.9']) }, ['prompt', 'uc', 'centerX', 'centerY']), 6) }, ['characters']))] : [])],
     apply: (values) => {
       const patch = values as Partial<NAIFormDraft>
       const model = patch.model ?? form.model
@@ -87,6 +99,20 @@ export function useNaiChatPage(form: NAIFormDraft, setForm: Dispatch<SetStateAct
     applyAction: async (id, args, assertCurrent) => {
       const next = { ...form, vibes: [...form.vibes], characterReferences: [...form.characterReferences] }
       if (id === 'preset.insert') next[String(args.fieldId) as 'prompt' | 'negativePrompt'] = presets.value(args, form[String(args.fieldId) as 'prompt' | 'negativePrompt'])
+      else if (id === 'character_setting.insert') {
+        const target = String(args.target)
+        const characterIndex = target === 'character' ? Number(args.characterIndex) : null
+        if (target !== 'prompt' && !characterPrompts) throw new Error(t({ ko: '선택한 모델은 캐릭터 프롬프트를 지원하지 않아.', en: 'The selected model does not support character prompts.' }))
+        if (target === 'character' && (args.characterIndex === undefined || !form.characters[characterIndex ?? -1])) throw new Error(t({ ko: '캐릭터 번호(characterIndex)를 확인해줘.', en: 'Check characterIndex.' }))
+        const referenceIndex = args.referenceIndex === undefined ? null : Number(args.referenceIndex)
+        if (referenceIndex !== null && (args.includeReference === false || !form.characterReferences[referenceIndex])) throw new Error(t({ ko: '참조 번호(referenceIndex)를 확인해줘.', en: 'Check referenceIndex.' }))
+        const loaded = await characterSettings.load(args, characterSettings.referenceMode(referenceIndex !== null ? true : args.includeReference, characterReferences))
+        assertCurrent()
+        if (target === 'prompt') next.prompt = characterSettings.text(args, form.prompt, loaded.appearance)
+        else if (target === 'newCharacter') next.characters = appendNaiCharacterPrompt(form.characters, characterSettings.text(args, '', loaded.appearance))
+        else next.characters = form.characters.map((character, index) => (index === characterIndex ? { ...character, prompt: characterSettings.text(args, character.prompt, loaded.appearance) } : character))
+        if (loaded.reference) next.characterReferences = placeNaiCharacterReference(next.characterReferences, referenceIndex, loaded.reference)
+      }
       else if (id === 'nai.characters') {
         const characters = args.characters as unknown as NAIFormDraft['characters']
         // The model drops character negatives; a stored value sent back unchanged (also after reordering) is kept for switching models back.

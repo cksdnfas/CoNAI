@@ -84,6 +84,7 @@ const HEADER_NAVIGATION_LABELS: Record<HeaderNavigationItemKey, TranslationDicti
   home: { ko: '홈', en: 'Home' },
   groups: { ko: '그룹', en: 'Groups' },
   prompts: { ko: '프롬프트', en: 'Prompts' },
+  characters: { ko: '캐릭터', en: 'Characters' },
   generation: { ko: '생성', en: 'Generation' },
   audio: { ko: '오디오', en: 'Audio' },
   posts: { ko: '게시판', en: 'Posts' },

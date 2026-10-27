@@ -16,6 +16,8 @@ import { GenerationControllerFieldStack } from './shared-generation-controller'
 import { GenerateActionBar, GenerateActionBarIconButton, GenerateActionDock } from './generate-action-bar'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { WorkflowFieldGroupList } from './workflow-field-group-list'
+import { CharacterSettingLoadButton } from './character-setting-load-button'
+import { appendPromptText } from './prompt-text-segment-helpers'
 import { formatWorkflowFieldLabel } from './workflow-field-disclosure-card'
 import { FLOATING_DROPDOWN_MENU_CLASS, getFloatingDropdownStyle, resolveFloatingDropdownRect, type FloatingDropdownRect } from './floating-dropdown-utils'
 import {
@@ -289,6 +291,9 @@ export function ComfyWorkflowControllerPanel({
       : selectedServer
         ? isComfyWorkflowServerRoutable(selectedServer, serverTests[selectedServer.id])
         : false
+  // "캐릭터 불러오기": tags go into a marked text field, the reference optionally into a marked image field.
+  const characterTextTargets = workflowFields.filter((field) => field.type === 'text' || field.type === 'textarea').map((field) => ({ id: field.id, label: formatWorkflowFieldLabel(field) }))
+  const characterImageTargets = workflowFields.filter((field) => field.type === 'image').map((field) => ({ id: field.id, label: formatWorkflowFieldLabel(field) }))
   const missingRequiredFields = useMemo(
     () => workflowFields.filter((field) => field.required && !hasWorkflowFieldValue(workflowDraft[field.id])),
     [workflowDraft, workflowFields],
@@ -532,6 +537,23 @@ export function ComfyWorkflowControllerPanel({
       ) : null}
 
       <section className="space-y-3">
+        {characterTextTargets.length > 0 ? (
+          <div className="flex justify-end">
+            <CharacterSettingLoadButton
+              showLabel
+              label={t({ ko: '캐릭터 불러오기', en: 'Load character' })}
+              textTargets={characterTextTargets}
+              referenceTargets={characterImageTargets}
+              onLoad={({ appearance, textTargetId, reference, referenceTarget }) => {
+                if (appearance && textTargetId) {
+                  const current = workflowDraft[textTargetId]
+                  onFieldChange(textTargetId, appendPromptText(typeof current === 'string' || Array.isArray(current) ? current : '', appearance))
+                }
+                if (reference && referenceTarget) void onImageChange(referenceTarget.id, reference)
+              }}
+            />
+          </div>
+        ) : null}
         {workflowFields.length > 0 ? (
           <GenerationControllerFieldStack>
             <WorkflowFieldGroupList

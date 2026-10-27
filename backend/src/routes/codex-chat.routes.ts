@@ -66,6 +66,8 @@ import externalMcpRouter from './external-mcp.routes'
 import { draftChatAppearance } from '../services/codex-chat/chatAppearanceDraft'
 import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
 import { chatAccessOf, isGroupThread, parseId, parseThreadId, requesterFrom, requireChatAccess, sendChatError, sendMergeError } from './codex-chat-route-helpers'
+import { CharacterLibraryError, characterId, characterSettingRow } from '../services/characterLibrary'
+import { requesterPermissionKeys } from '../middleware/featureAccess'
 import chatLorebooksRouter from './codex-chat-lorebooks.routes'
 import chatAdminPresetsRouter from './codex-chat-admin-presets.routes'
 
@@ -120,7 +122,7 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null, hidden?
 /** Admin view of a profile: everything but the background image itself (served by its own route). */
 function toAdminProfile(profile: ChatProfile | null, hidden?: ReadonlySet<string>) {
   if (!profile) return null
-  const { background: _background, ...rest } = profile
+  const { background: _background, characterExpressionGroupId: _characterExpressionGroupId, ...rest } = profile
   // Whether it can write reply suggestions for a profile that links it (its model is set and its connection works).
   return { ...rest, ...profileAssetFields(profile, true, hidden), backgroundVersion: backgroundVersionOf(profile), suggestWriterReady: profileWriterReady(profile) }
 }
@@ -836,7 +838,14 @@ async function assertCodexEffortSupported(input: ChatProfileInput) {
 }
 
 const cardUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: CHAT_CARD_MAX_BYTES, files: 1, fields: 0, parts: 2 } }).single('file')
-const assetUpload = multer({ storage: createUploadStorage(MAX_UPLOAD_FILE_SIZE_BYTES), limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES, files: 1, fields: 1, parts: 3 } }).single('file')
+const assetUpload = multer({ storage: createUploadStorage(MAX_UPLOAD_FILE_SIZE_BYTES), limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES, files: 1, fields: 2, parts: 4 } }).single('file')
+function uploadSettingId(req: Request) {
+  if (req.body?.settingId === undefined) return undefined
+  if (!requesterPermissionKeys(requesterFrom(req)).includes('characters.edit')) throw new CharacterLibraryError('Permission required: characters.edit', 403)
+  const id = characterId(req.body.settingId)
+  characterSettingRow(id)
+  return id
+}
 
 router.post('/admin/profiles/appearance-draft', requireAdmin, requireImagesView, asyncHandler(async (req, res) => {
   const controller = new AbortController()
@@ -858,19 +867,20 @@ router.post('/admin/chat-assets/upload', requireAdmin, requireImagesView, (req, 
   })
 }, asyncHandler(async (req, res) => {
   try {
+    const settingId = uploadSettingId(req)
     if (!req.file) throw new ChatProfileError('이미지를 골라줘.')
-    res.json({ success: true, data: await ingestProfileAsset(await fs.promises.readFile(req.file.path), String(req.body?.characterName ?? '')) })
+    res.json({ success: true, data: await ingestProfileAsset(await fs.promises.readFile(req.file.path), String(req.body?.characterName ?? ''), settingId) })
   } catch (error) { sendChatError(res, error) }
   finally { if (req.file?.path) await fs.promises.unlink(req.file.path).catch(() => {}) }
 }))
 
 router.post('/admin/chat-assets/url', requireAdmin, requireImagesView, asyncHandler(async (req, res) => {
-  try { res.json({ success: true, data: await downloadProfileAsset(req.body?.url, String(req.body?.characterName ?? '')) }) }
+  try { res.json({ success: true, data: await downloadProfileAsset(req.body?.url, String(req.body?.characterName ?? ''), uploadSettingId(req)) }) }
   catch (error) { sendChatError(res, error) }
 }))
 
 router.post('/admin/chat-assets/from-file-store', requireAdmin, requireImagesView, asyncHandler(async (req, res) => {
-  try { res.json({ success: true, data: await importFileStoreProfileAsset(requesterFrom(req), req.body?.fileId, String(req.body?.characterName ?? '')) }) }
+  try { res.json({ success: true, data: await importFileStoreProfileAsset(requesterFrom(req), req.body?.fileId, String(req.body?.characterName ?? ''), uploadSettingId(req)) }) }
   catch (error) { sendChatError(res, error) }
 }))
 router.post('/admin/profiles/import-card', requireAdmin, (req, res, next) => {
@@ -903,8 +913,11 @@ router.post('/admin/profiles', requireAdmin, asyncHandler(async (req: Request, r
     assertLinkedFiles(fileOwnerKey(getRequesterAccountId(req)), normalizeLinkedFiles(input.linkedFiles), source?.linkedFiles)
     // A new profile joins the end of the list; a copy sits right after its source.
     input.sortOrder = source ? source.sortOrder : ChatProfileStore.nextSortOrder()
-    const created = ChatProfileStore.create(input)
-    res.status(201).json({ success: true, data: toAdminProfile(source ? copyProfileExpressions(source, created) : created) })
+    // A copy follows its source's link unless the draft chose its own (linked or unlinked before the first save).
+    if (source && input.characterLink === undefined) input.characterLink = source.characterLink ? { settingId: source.characterLink.settingId, synced: source.characterLink.synced } : null
+    const created = ChatProfileStore.create(input, source ?? undefined)
+    // A synced copy shows its setting's expressions; only an own-look copy takes the source's own ones.
+    res.status(201).json({ success: true, data: toAdminProfile(source && !source.characterLink?.synced && !created.characterLink?.synced ? copyProfileExpressions(source, created) : created) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -1017,7 +1030,9 @@ router.post('/admin/profiles/preview', requireAdmin, asyncHandler(async (req: Re
   try {
     const body = (req.body ?? {}) as ChatProfileInput & { id?: unknown }
     const profileId = parseId(body.id) ?? 0
-    const profile = ChatProfileStore.draft(body, profileId)
+    // A draft that leaves its link alone previews with the stored one (a synced profile shows its setting's look).
+    const stored = body.characterLink === undefined && profileId > 0 ? ChatProfileStore.find(profileId)?.characterLink : null
+    const profile = ChatProfileStore.draft(stored ? { ...body, characterLink: { settingId: stored.settingId, synced: stored.synced } } : body, profileId)
     const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requesterFrom(req).accountId))
     const bridge = scopes.length > 0
       ? await openChatMcpBridge(requesterFrom(req), scopes, toolAllowlist, { generationPresetIds: profile.generationPresetIds })

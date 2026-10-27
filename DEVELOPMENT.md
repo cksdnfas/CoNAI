@@ -81,6 +81,38 @@ API 연결의 일시적 장애 재시도와 출력 이후 재전송 금지는 `s
 
 `llmUsage.ts`의 서버 실행 문맥은 자동 작업 ID와 답변 ID를 보조 모델 호출에 전달한다. API 요청은 라운드·큐 대기·첫 출력 시간도 기록하고, 계기판과 페이지 연결에서 집계를 읽는다. 세션 엔진 내부 라운드와 관측하지 못한 시간은 비워 둔다. 선택적 작업 토큰 예산은 기록된 입력·출력 합계를 다음 자동 턴 전에 검사한다. 작업 누계는 사용량 원장과 같은 트랜잭션으로 갱신해 원장의 보존 기간과 별개로 유지하며, 재개로 초기화하지 않는다. 서버가 사용량을 보고하지 않는 호출과 진행 중인 호출 때문에 과금의 엄격한 상한으로 사용하지 않는다.
 
+## 캐릭터 라이브러리와 외형 재사용
+
+사용 흐름은 [캐릭터 라이브러리](docs/GUIDE/CHARACTER_LIBRARY.md)에 둔다. 폴더는 중첩되고 외형 설정은 폴더 또는 루트에 속한다. 별도의 캐릭터 엔터티를 만들지 않으며 한 캐릭터의 기본·수영복 등을 여러 설정으로 관리한다.
+
+| 변경 지점 | 코드 |
+| --- | --- |
+| 페이지·폴더 트리·설정 편집기·선택기 | `frontend/src/features/characters/`, [API 클라이언트](frontend/src/lib/api-character-library.ts). `/characters?folder=&q=&page=&setting=&new=` |
+| 타입·입력·저장 | [공유 계약](shared/src/types/characterLibrary.ts), [입력 검증](backend/src/services/characterLibraryInput.ts), [도메인 서비스](backend/src/services/characterLibrary.ts), [user.db 스키마](backend/src/database/characterLibrarySchema.ts) |
+| REST | [character-library.routes.ts](backend/src/routes/character-library.routes.ts), `/api/character-library`의 folders/settings, 삭제 미리보기, `settings/from-profile`, 자산 배치·표정 경로 |
+| 프로필의 유효 외형·독립 사본 | [chatProfileCharacters.ts](backend/src/services/codex-chat/chatProfileCharacters.ts)의 `effectiveCharacterProfile`·`detachedCharacterFields`, [chatProfiles.ts](backend/src/services/codex-chat/chatProfiles.ts) |
+| 프로필 연결 UI·저장 순서 | [chat-profile-character-link.tsx](frontend/src/features/settings/components/chat-profile-character-link.tsx), [use-profile-character-link.ts](frontend/src/features/settings/components/use-profile-character-link.ts), [chat-profile-editor-appearance.tsx](frontend/src/features/settings/components/chat-profile-editor-appearance.tsx) |
+| 공용 외형 편집·설정 소유 생성 | [character-appearance-editor.tsx](frontend/src/features/settings/components/character-appearance-editor.tsx), [use-character-setting-runs.ts](frontend/src/features/characters/use-character-setting-runs.ts), `backend/src/services/codex-chat/chatAssetOwner.ts`와 기존 chat asset 서비스 |
+| 생성 폼의 값 복사 | [character-setting-load-button.tsx](frontend/src/features/image-generation/components/character-setting-load-button.tsx), [character-setting-load.ts](frontend/src/features/image-generation/character-setting-load.ts), 각 NAI/Codex/ComfyUI 폼 |
+| 워크플로우 생성 프리셋 | [설정 선택기](frontend/src/features/module-graph/components/module-graph-character-setting-input.tsx), [system-chat-operations.ts](backend/src/services/graph-workflow-executor/system-chat-operations.ts)의 `executeGenerateWithChatPresetNode` |
+| 변경 이벤트·캐시 | `characters` 토픽의 `characters.changed`(`folderIds`, `settingIds`, `profileIds`), [query bridge](frontend/src/features/runtime-events/use-runtime-event-query-bridge.ts) |
+| MCP·검토 카드 | [characterLibraryTools.ts](backend/src/mcp/tools/characterLibraryTools.ts), [characterLibraryProposals.ts](backend/src/services/codex-chat/characterLibraryProposals.ts), [도구 권한](backend/src/mcp/toolAccess.ts)·[범위](backend/src/mcp/context.ts) |
+| 페이지 어시스턴트 | [use-character-library-chat-page.ts](frontend/src/features/characters/use-character-library-chat-page.ts), [프로필 어댑터](frontend/src/features/settings/components/use-profile-editor-chat-page.ts), [생성 삽입](frontend/src/features/image-generation/components/use-chat-character-setting-insertion.ts), [작업 계약](shared/src/utils/chatPageAction.ts)·[페이지 접근](shared/src/utils/chatPage.ts) |
+
+- 설정 수정은 `revision`을 요구하며 오래된 쓰기는 409 `revision_conflict`, 같은 위치 이름 중복은 409 `name_conflict`다. 폴더 이동은 순환과 형제 이름 중복을 검사한다. 편집기의 `use-character-setting-editor.ts`는 리비전 충돌 후 최신값과 초안을 합쳐 겹치지 않을 때 한 번만 재시도한다.
+- 프로필은 설정 하나에 연결한다. 미연결은 기존 로컬 외형, 동기화는 설정의 태그·기준 이미지·아바타/크롭·표정을 읽고 편집, 분리는 원본 ID를 기억하는 로컬 사본이다. 동기화 편집은 설정을 먼저 저장하며 해결되지 않은 충돌이면 프로필 저장을 중단한다. 배경은 항상 프로필 소유다.
+- 분리·해제 초안의 표정은 저장 전까지 원본 그룹을 읽기 전용으로 표시하고, 그룹이 없거나 조회할 수 없으면 안내로 대체한다. `chat-profile-editor-modal.tsx`의 `ensureProfile`이 연결 변경을 먼저 저장한 뒤 라이브러리 저장·프로필 소유 생성을 진행한다. `detachedCharacterFields`는 표정 그룹 연결 10개 초과 시 직접 분리/해제를 거부하되 설정 삭제 옵션은 이를 막지 않는다.
+- `chat-proposal-card.tsx`는 현재/제안 후 동기화 프로필의 외형 전용 변경을 거부하고 혼합 제안은 나머지 저장을 확인한다. 프로필 페이지 어댑터는 미저장 동기화 설정의 전환을 거부하고 동기화 `appearance`에 편집 권한을 요구한다. `characterLink.syncedProfiles`는 최대 50개 이름, `profile.assets`는 프로필 배경과 설정 자산을 구분한다.
+- `profile.draft`의 분리 연결이 다른 설정을 가리키면 `prime`으로 읽은 저장 외형을 `linkPatch`가 복사한다. 현재 동기화 설정에서 분리/해제하면 그 설정의 현재 초안을 복사한다. 표정 그룹 사본은 서버 저장에서 확정한다.
+- 삭제 미리보기는 영향받는 동기화 프로필을 계산하고 REST에서 비관리자에게 이름 대신 수만 반환한다. 삭제 서비스는 프로필에 외형·표정을 복사하고 연결을 해제한다.
+- 조회/편집은 `characters.view`/`characters.edit`, 페이지 식별자는 `page.characters.view`, 헤더 항목은 `characters`다. 이미지 필드는 `images.view`, 설정 후보 생성은 관리자와 `characters.edit`를 요구한다.
+- NAI/Codex/ComfyUI 폼은 불러온 순간의 사본이다. NAI 참조는 새 행 추가 또는 기존 행 교체이고 캐릭터 프롬프트에 귀속되지 않는다. 워크플로우의 `character_setting_id`는 `profile_id`와 배타적이며 실행 시 읽는다. 연결 참조가 우선하고 설정 참조는 이미지 권한이 있을 때만 빌린다. 예약 실행도 같은 경로지만 실행 입력 폼은 아직 숫자 ID 입력이다.
+- 페이지 작업 `character.*`는 탐색/초안과 검토 저장·삭제를 분리한다. 프로필은 `profile.draft.characterLink`(`settingId: 0` 해제), `profile.character_save`; 생성 폼은 `character_setting.insert`(`settingId`, `target`, `mode`, NAI `characterIndex`/`includeReference`/`referenceIndex`, ComfyUI `referenceTarget`)를 사용한다.
+- MCP `list_character_library`/`get_character_setting`은 read, `manage_character_folders`는 organize, `propose_character_library`는 채팅 전용 organize 검토 카드다. 기존 `chatSetupTools.ts`의 자산 제안·조회는 동기화 프로필이면 설정 소유 배치로 연결한다.
+- 자산 소유자 선택은 `chatAssetBatches.ts`의 `resolveChatAssetTarget`을 공유한다. 동기화 프로필도 배경 전용 생성은 프로필 소유이고 명시한 프로필 소유 배치의 조회·적용은 그대로 유지한다. 명시적 `setting_id` 배치에는 배경을 넣을 수 없다.
+
+플러그인은 `/api/character-library` 네이티브 루트와 위 세 조회/폴더 도구를 재사용한다. `pluginLlm.ts`의 `pluginProfileOf`는 `character: {settingId, synced} | null`만 공개하고 `details.characterLink`는 제외한다. 동기화 외형과 이미지 버전은 설정을 따르되 배경은 프로필 값이다. 상세 계약·호환성은 [SDK 계약](plugins/README.md#character-library-apis), 공용 연결 기록은 [제작 가이드](docs/GUIDE/PLUGIN_DEVELOPMENT.md#현재-공용-연결-목록)에 둔다.
+
 ## MCP와 화면 없는 자동화
 
 | 변경 지점 | 코드 |

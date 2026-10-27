@@ -11,10 +11,10 @@ type Copy = { ko: string; en: string }
  * description, so nothing is hidden by an outdated catalog.
  */
 export type ChatToolGroupId =
-  | 'images' | 'history' | 'prompts' | 'workflows' | 'files' | 'posts' | 'emoticons' | 'audio' | 'backups' | 'pages'
+  | 'images' | 'history' | 'prompts' | 'characters' | 'workflows' | 'files' | 'posts' | 'emoticons' | 'audio' | 'backups' | 'pages'
   | 'image-gen' | 'workflow-run' | 'audio-gen'
   | 'configure'
-  | 'image-groups' | 'prompt-groups' | 'file-ops' | 'post-ops' | 'emoticon-ops' | 'audio-ops'
+  | 'image-groups' | 'prompt-groups' | 'character-ops' | 'file-ops' | 'post-ops' | 'emoticon-ops' | 'audio-ops'
   | 'sprites' | 'sprite-ops'
   | 'wallpaper' | 'wallpaper-ops'
   | 'web'
@@ -27,6 +27,7 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'images', scope: 'read', label: { ko: '이미지 보기', en: 'Images' } },
   { id: 'history', scope: 'read', label: { ko: '생성 기록·작업', en: 'History and jobs' } },
   { id: 'prompts', scope: 'read', label: { ko: '프롬프트', en: 'Prompts' } },
+  { id: 'characters', scope: 'read', label: { ko: '캐릭터 라이브러리', en: 'Character library' } },
   { id: 'workflows', scope: 'read', label: { ko: '워크플로·서버', en: 'Workflows and servers' } },
   { id: 'files', scope: 'read', label: { ko: '파일 보관함', en: 'File store' } },
   { id: 'posts', scope: 'read', label: { ko: '게시판', en: 'Posts' } },
@@ -42,6 +43,7 @@ const GROUPS: Array<{ id: ChatToolGroupId; scope: ChatScope; label: Copy }> = [
   { id: 'sprite-ops', scope: 'generate', label: { ko: '스프라이트', en: 'Sprite' } },
   { id: 'image-groups', scope: 'organize', label: { ko: '이미지 그룹', en: 'Image groups' } },
   { id: 'prompt-groups', scope: 'organize', label: { ko: '프롬프트 정리', en: 'Prompt organizing' } },
+  { id: 'character-ops', scope: 'organize', label: { ko: '캐릭터 라이브러리 정리', en: 'Character library organizing' } },
   { id: 'file-ops', scope: 'organize', label: { ko: '파일 변경', en: 'File changes' } },
   { id: 'post-ops', scope: 'organize', label: { ko: '게시판 글쓰기', en: 'Posting' } },
   { id: 'emoticon-ops', scope: 'organize', label: { ko: '이모티콘 설정', en: 'Emoticon setup' } },
@@ -197,6 +199,10 @@ const TOOLS: Record<string, { group: ChatToolGroupId; label: Copy; ko: string }>
   propose_profile_update: { group: 'configure', label: { ko: '프로필 수정 제안', en: 'Propose profile update' }, ko: '기존 프로필의 수정을 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
   propose_profile_assets: { group: 'configure', label: { ko: '캐릭터 이미지 제안', en: 'Propose character images' }, ko: '캐릭터 이미지 생성이나 고른 후보 적용을 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
   get_asset_batch: { group: 'configure', label: { ko: '캐릭터 이미지 진행 읽기', en: 'Read character image batch' }, ko: '캐릭터 이미지 생성 진행과 후보·검토 결과를 읽어.' },
+  list_character_library: { group: 'characters', label: { ko: '캐릭터 라이브러리 목록', en: 'List character library' }, ko: '캐릭터 라이브러리의 폴더와 외형 설정을 둘러보거나 이름으로 찾아.' },
+  get_character_setting: { group: 'characters', label: { ko: '외형 설정 읽기', en: 'Read appearance setting' }, ko: '외형 설정 하나의 외형 태그·기준 이미지·아바타·표정을 읽어.' },
+  manage_character_folders: { group: 'character-ops', label: { ko: '캐릭터 폴더 정리', en: 'Organize character folders' }, ko: '캐릭터 라이브러리 폴더를 만들거나 이름을 바꾸거나 옮겨.' },
+  propose_character_library: { group: 'character-ops', label: { ko: '외형 설정 제안', en: 'Propose appearance setting' }, ko: '외형 설정 저장이나 설정·폴더 삭제를 제안해. 저장은 답변 밑 카드에서 네가 눌러.' },
 }
 
 export type ChatToolEntry = {

@@ -13,6 +13,10 @@ import { ChatJudgePresetStore } from './chatJudgePresets'
 import { normalizeLinkedFiles, type LinkedFileLink } from './chatLinkedFiles'
 import { chatCharacterGroupPath, fileProfileAssetsUnderGroup, renameCharacterGroup, normalizeAvatarCrop, normalizeProfileAssetHash, type ChatAvatarCrop } from './chatProfileAssets'
 import { keptGreetingPosition, normalizeGreetingPosition, normalizeOpeningHistory, TEXT_MAX_LENGTH, type ChatOpeningMessage } from './chatOpeningHistory'
+import type { ChatProfileCharacterLink, ChatProfileCharacterLinkInput } from '@conai/shared'
+import { CHARACTER_APPEARANCE_FIELDS, CHARACTER_PROFILE_COLUMNS, characterProfileDependencies, effectiveCharacterProfile, normalizeCharacterLink, detachedCharacterFields, storedCharacterStyle, type CharacterProfileRow } from './chatProfileCharacters'
+import { characterChanged } from '../characterLibrary'
+import { attachMainImagesDatabase } from '../../database/userSettingsBootstrap'
 
 const NAME_MAX_LENGTH = CHAT_PROFILE_TEXT_LIMITS.name
 const MODEL_MAX_LENGTH = 200
@@ -96,6 +100,9 @@ export type ChatContentRatingMode = 'model' | 'custom'
 
 export type ChatProfile = {
   id: number
+  characterLink: ChatProfileCharacterLink | null
+  /** Internal effective expression identity; the public link contract intentionally has no group id. */
+  characterExpressionGroupId: number | null
   name: string
   tagline: string
   /** Shared lorebooks (chat_lorebooks) this profile uses, in priority order. */
@@ -245,7 +252,7 @@ export type LegacyModelPairs = {
   judgeModel?: string | null
 }
 
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate'>> & LegacyModelPairs
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'characterLink' | 'characterExpressionGroupId'>> & { characterLink?: ChatProfileCharacterLinkInput } & LegacyModelPairs
 
 /** Each role's slot field and the legacy pair keys that stand for it. */
 const LEGACY_PAIR_KEYS: Array<[keyof ChatProfileInput, keyof LegacyModelPairs, keyof ChatProfileInput]> = [
@@ -256,7 +263,7 @@ const LEGACY_PAIR_KEYS: Array<[keyof ChatProfileInput, keyof LegacyModelPairs, k
   ['judgeSlotId', 'judgeProviderName', 'judgeModel'],
 ]
 
-type ProfileRow = {
+type ProfileRow = CharacterProfileRow & {
   id: number
   name: string
   tagline: string
@@ -409,6 +416,7 @@ type ProfileListDependencies = {
   judges: Set<number>
   generationPresets: Set<number>
   blocks: Map<number, ChatStyle['blocks'][number]>
+  characters: ReturnType<typeof characterProfileDependencies>
 }
 
 function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): ChatProfile {
@@ -421,8 +429,10 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
   const blocks = ChatSharedBlockStore.blocksOf(blockIds, dependencies?.blocks)
   let avatarCrop: ChatAvatarCrop | null = null
   try { avatarCrop = normalizeAvatarCrop(row.avatar_crop ? JSON.parse(row.avatar_crop) : null) } catch { /* Keep malformed legacy crops unset. */ }
-  return {
+  const profile: ChatProfile = {
     id: row.id,
+    characterLink: null,
+    characterExpressionGroupId: null,
     name: row.name,
     tagline: row.tagline ?? '',
     lorebookIds: normalizeLorebookIds(row.lorebook_ids),
@@ -492,6 +502,7 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
     createdDate: row.created_date,
     updatedDate: row.updated_date,
   }
+  return effectiveCharacterProfile(profile, row, dependencies?.characters)
 }
 
 function text(value: unknown, maxLength: number) {
@@ -658,8 +669,11 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
   }
 
   const openingHistory = normalizeOpeningHistory(input.openingHistory)
+  const characterLink = normalizeCharacterLink(input.characterLink)
   const columns = {
     name,
+    character_setting_id: characterLink?.settingId ?? null,
+    character_sync: characterLink?.synced ? 1 : 0,
     tagline: text(input.tagline, CHAT_PROFILE_TEXT_LIMITS.tagline),
     lorebook_ids: JSON.stringify(ChatLorebookStore.existing(normalizeLorebookIds(input.lorebookIds))),
     block_ids: JSON.stringify(ChatSharedBlockStore.existing(normalizeBlockIds(input.blockIds))),
@@ -783,10 +797,15 @@ export const ChatProfileStore = {
       generationPresetIds: ChatGenerationPresetStore.existing(normalizeGenerationPresetIds(row.generation_preset_ids)) }
   },
 
-  /** A profile as it would be saved, without saving it (prompt preview of an unsaved draft). */
+  /**
+   * A profile as it would be saved, without saving it (prompt preview of an unsaved draft). Only a linked draft reads
+   * its setting; a caller previewing a stored profile passes the stored link when the draft keeps it.
+   */
   draft(input: ChatProfileInput, profileId = 0): ChatProfile {
     const now = new Date().toISOString()
-    return toProfile({ ...toColumns(input, { draft: true }), id: profileId, created_date: now, updated_date: now } as ProfileRow)
+    const columns = toColumns(input, { draft: true })
+    const linked = columns.character_setting_id === null ? {} : getUserSettingsDb().prepare(`SELECT ${CHARACTER_PROFILE_COLUMNS} FROM character_settings s WHERE s.id = ?`).get(columns.character_setting_id) as CharacterProfileRow
+    return toProfile({ ...columns, ...linked, id: profileId, created_date: now, updated_date: now } as ProfileRow)
   },
 
   /** Name-only directory callers must not hydrate prompts, model roles, presets or blocks. */
@@ -813,7 +832,9 @@ export const ChatProfileStore = {
       CASE WHEN avatar IS NOT NULL AND avatar != '' THEN 'present' ELSE NULL END AS avatar,
       CASE WHEN background_image IS NOT NULL AND background_image != '' THEN 'present' ELSE NULL END AS background_image` : options.admin ? ADMIN_PROFILE_COLUMNS : '*'
     const rows = db.prepare(`
-      SELECT ${projection} FROM llm_chat_profiles ${options.enabledOnly ? 'WHERE is_enabled = 1' : ''} ORDER BY sort_order ASC, id ASC
+      SELECT p.*, ${CHARACTER_PROFILE_COLUMNS} FROM
+        (SELECT ${projection}${projection === '*' ? '' : ', character_setting_id, character_sync'} FROM llm_chat_profiles ${options.enabledOnly ? 'WHERE is_enabled = 1' : ''}) p
+        LEFT JOIN character_settings s ON s.id = p.character_setting_id ORDER BY p.sort_order ASC, p.id ASC
     `).all() as ProfileRow[]
     if (!rows.length) return []
     const slots = new Set(ModelSlotStore.existingIds(rows.flatMap((row) =>
@@ -823,7 +844,7 @@ export const ChatProfileStore = {
     const generationPresets = new Set(ChatGenerationPresetStore.existing([...new Set(rows.flatMap((row) => normalizeGenerationPresetIds(row.generation_preset_ids)))]))
     const blockIds = new Set(rows.flatMap((row) => normalizeBlockIds(row.block_ids)))
     const blocks = ChatSharedBlockStore.byIds([...blockIds])
-    const dependencies = { slots, judges, generationPresets, blocks }
+    const dependencies = { slots, judges, generationPresets, blocks, characters: characterProfileDependencies(rows) }
     return rows.map((row) => toProfile(row, dependencies))
   },
 
@@ -834,8 +855,9 @@ export const ChatProfileStore = {
 
   /** Workflow picker still exposes its legacy avatar field, but never loads prompts or backgrounds. */
   workflowOptions() {
-    const rows = getUserSettingsDb().prepare(`SELECT id, name, avatar, model_slot_id, is_enabled FROM llm_chat_profiles
-      WHERE engine IS NULL OR engine NOT IN ('codex', 'claude') ORDER BY sort_order ASC, id ASC`).all() as Array<{ id: number; name: string; avatar: string | null; model_slot_id: number | null; is_enabled: number }>
+    const rows = getUserSettingsDb().prepare(`SELECT p.id, p.name, CASE WHEN p.character_sync = 1 AND s.id IS NOT NULL THEN NULL ELSE p.avatar END AS avatar, p.model_slot_id, p.is_enabled
+      FROM llm_chat_profiles p LEFT JOIN character_settings s ON s.id = p.character_setting_id
+      WHERE p.engine IS NULL OR p.engine NOT IN ('codex', 'claude') ORDER BY p.sort_order ASC, p.id ASC`).all() as Array<{ id: number; name: string; avatar: string | null; model_slot_id: number | null; is_enabled: number }>
     return ModelSlotStore.withReadSnapshot(() => rows.map((row) => {
       const target = ModelSlotStore.target(row.model_slot_id) ?? ModelSlotStore.defaultTarget()
       return { id: row.id, name: row.name, avatar: row.avatar, provider_name: target?.providerName ?? '', model: target?.model || null, is_enabled: row.is_enabled === 1 }
@@ -843,36 +865,65 @@ export const ChatProfileStore = {
   },
 
   find(profileId: number): ChatProfile | null {
-    const row = getUserSettingsDb().prepare('SELECT * FROM llm_chat_profiles WHERE id = ?').get(profileId) as ProfileRow | undefined
+    const row = getUserSettingsDb().prepare(`SELECT p.*, ${CHARACTER_PROFILE_COLUMNS} FROM llm_chat_profiles p LEFT JOIN character_settings s ON s.id = p.character_setting_id WHERE p.id = ?`).get(profileId) as ProfileRow | undefined
     return row ? toProfile(row) : null
   },
 
-  create(input: ChatProfileInput): ChatProfile {
-    return getUserSettingsDb().transaction(() => {
-    const columns = toColumns(input)
-    fileProfileAssetsUnderGroup(columns.name, [columns.avatar_hash, columns.background_hash, columns.reference_hash])
+  create(input: ChatProfileInput, copyOf?: ChatProfile): ChatProfile {
+    const db = getUserSettingsDb(), nested = db.inTransaction
+    const result = db.transaction(() => {
+    const link = normalizeCharacterLink(input.characterLink)
+    const initial = { ...input }
+    if (link?.synced) for (const key of CHARACTER_APPEARANCE_FIELDS) delete initial[key]
+    if (link?.synced && initial.style !== undefined) initial.style = storedCharacterStyle(input.name ?? '', normalizeChatStyle(undefined), initial.style, null, link, db)
+    if (link && !link.synced && !copyOf) {
+      attachMainImagesDatabase(db)
+      Object.assign(initial, detachedCharacterFields(link.settingId, { name: input.name ?? '', style: normalizeChatStyle(input.style) }, input, db))
+    }
+    const columns = toColumns(initial)
+    fileProfileAssetsUnderGroup(columns.name, [columns.avatar_hash, columns.background_hash, columns.reference_hash], link && !link.synced && !copyOf ? db : undefined)
     const names = Object.keys(columns)
     const result = getUserSettingsDb().prepare(`
       INSERT INTO llm_chat_profiles (${names.join(', ')}) VALUES (${names.map((name) => `@${name}`).join(', ')})
     `).run(columns)
     return ChatProfileStore.find(Number(result.lastInsertRowid)) as ChatProfile
     })()
+    if (!nested && result.characterLink) characterChanged([], [result.characterLink.settingId], [result.id])
+    return result
   },
 
-  update(profileId: number, patch: ChatProfileInput, assetDatabase?: ReturnType<typeof getUserSettingsDb>): ChatProfile | null {
-    return getUserSettingsDb().transaction(() => {
+  update(profileId: number, patch: ChatProfileInput, assetDatabase?: ReturnType<typeof getUserSettingsDb>, options: { deletingCharacterSetting?: boolean } = {}): ChatProfile | null {
+    const db = getUserSettingsDb(), nested = db.inTransaction
+    let previousSettingId: number | null = null
+    let linkChanged = false
+    const result = db.transaction(() => {
     const stored = getUserSettingsDb().prepare('SELECT * FROM llm_chat_profiles WHERE id = ?').get(profileId) as ProfileRow | undefined
     if (!stored) {
       return null
     }
     const current = toProfile(stored)
+    previousSettingId = stored.character_setting_id ?? null
+    const previousLink = previousSettingId === null ? null : { settingId: previousSettingId, synced: stored.character_sync === 1 }
+    const nextLink = patch.characterLink === undefined ? previousLink : normalizeCharacterLink(patch.characterLink)
+    linkChanged = previousLink?.settingId !== nextLink?.settingId || previousLink?.synced !== nextLink?.synced
+    patch = { ...patch }
+    if ((previousLink?.synced || nextLink?.synced) && patch.style !== undefined) patch.style = storedCharacterStyle(current.name, current.style, patch.style, previousLink, nextLink, db)
+    let copyingCharacter = false
+    if (nextLink?.synced) for (const key of CHARACTER_APPEARANCE_FIELDS) delete patch[key]
+    else if ((nextLink && (!previousLink || previousLink.synced || nextLink.settingId !== previousLink.settingId)) || (!nextLink && previousLink?.synced)) {
+      attachMainImagesDatabase(db)
+      Object.assign(patch, detachedCharacterFields(nextLink?.settingId ?? previousLink!.settingId, { name: patch.name ?? current.name, style: normalizeChatStyle(patch.style ?? current.style) }, patch, db, options.deletingCharacterSetting === true))
+      copyingCharacter = true
+      assetDatabase = db
+    }
+    patch.characterLink = nextLink
     const merged: ChatProfileInput = { ...current, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) }
     // A legacy pair in the patch replaces the role's current row unless the patch names a row too.
     for (const [slotKey, providerKey] of LEGACY_PAIR_KEYS) {
       if (typeof patch[providerKey] === 'string' && patch[providerKey] && patch[slotKey] === undefined) delete merged[slotKey]
     }
     // The current editor still writes legacy images; changing one invalidates its migrated hash.
-    if (patch.avatar !== undefined && patch.avatar !== current.avatar && (patch.avatarHash === undefined || patch.avatarHash === current.avatarHash)) merged.avatarHash = null
+    if (!copyingCharacter && patch.avatar !== undefined && patch.avatar !== current.avatar && (patch.avatarHash === undefined || patch.avatarHash === current.avatarHash)) merged.avatarHash = null
     if (patch.background !== undefined && patch.background !== current.background && (patch.backgroundHash === undefined || patch.backgroundHash === current.backgroundHash)) merged.backgroundHash = null
     const strictKeys = new Set(Object.entries(patch).filter(([, value]) => value !== undefined).map(([key]) => key))
     const columns = toColumns(merged, { strictKeys })
@@ -902,11 +953,20 @@ export const ChatProfileStore = {
     `).run({ ...columns, id: profileId })
     return ChatProfileStore.find(profileId)
     })()
+    if (!nested && linkChanged && result) characterChanged([], [previousSettingId, result.characterLink?.settingId ?? null].filter((id): id is number => id !== null), [profileId])
+    return result
   },
 
   /** Chats that used the profile stay readable; they just can't send until another profile replaces it. */
   delete(profileId: number) {
-    return getUserSettingsDb().prepare('DELETE FROM llm_chat_profiles WHERE id = ?').run(profileId).changes > 0
+    const db = getUserSettingsDb()
+    const row = db.transaction(() => {
+      const row = db.prepare('SELECT character_setting_id, character_sync FROM llm_chat_profiles WHERE id = ?').get(profileId) as { character_setting_id: number | null; character_sync: number } | undefined
+      if (row) db.prepare('DELETE FROM llm_chat_profiles WHERE id = ?').run(profileId)
+      return row
+    })()
+    if (row?.character_sync === 1 && row.character_setting_id !== null) characterChanged([], [row.character_setting_id], [profileId])
+    return Boolean(row)
   },
 
   /** The sort order after every current profile: a new profile joins the end of the list. */

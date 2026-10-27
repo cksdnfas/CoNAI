@@ -79,6 +79,9 @@ const nativeActionPermissions = {
   'prompt.create': 'prompts.edit', 'prompt.update': 'prompts.edit', 'prompt.select': 'prompts.view',
   'preset.create': 'prompts.edit', 'preset.update': 'prompts.edit', 'preset.select': 'prompts.view', 'preset.draft': 'prompts.view', 'preset.insert': 'prompts.view',
   'wildcard.create': 'wildcards.edit', 'wildcard.update': 'wildcards.edit', 'wildcard.select': 'wildcards.view', 'wildcard.draft': 'wildcards.view',
+  // Character library (/characters): folder and setting navigation, the open editor's draft, and review-card saves/deletes.
+  'character.open_folder': 'characters.view', 'character.search': 'characters.view', 'character.open_setting': 'characters.view',
+  'character.new_setting': 'characters.edit', 'character.draft': 'characters.edit', 'character.save': 'characters.edit', 'character.delete': 'characters.edit',
   'comfy.select': 'workflows.view', 'comfy.refresh': 'workflows.view', 'comfy.open_create': 'workflows.edit', 'comfy.open_edit': 'workflows.edit',
   'comfy.author': 'workflows.view', 'comfy.save': 'workflows.edit', 'comfy.register': 'workflows.edit', 'comfy.node': null,
   // The server check uses the editor's own check route (workflows.edit); suggested fields only mark inputs in the draft.
@@ -94,6 +97,10 @@ const nativeActionPermissions = {
   'group.move': 'images.edit', 'group.delete': 'images.delete',
   // Chat profile editor (settings › chat). Saving goes through the editor's own admin-only API.
   'profile.open_create': null, 'profile.open_edit': null, 'profile.copy': null, 'profile.section': null, 'profile.draft': null, 'profile.save': null, 'profile.assets': 'generation.execute',
+  // Saves the profile's own appearance into the character library (new setting, or over its detached origin).
+  'profile.character_save': 'characters.edit',
+  // Generation pages: copy a character library setting's tags (and reference image) into the form.
+  'character_setting.insert': 'characters.view',
   'library.search': 'images.view', 'library.history': 'images.view', 'library.open': 'images.view', 'library.select': 'images.view', 'library.hide_groups': 'images.view', 'files.open': 'files.view', 'files.preview': 'files.view',
   // File store: names and moves run directly; deletes, restores and document saves use review cards.
   'files.select': 'files.view', 'files.new_folder': 'files.edit', 'files.rename': 'files.edit', 'files.move': 'files.edit', 'files.new_document': 'files.edit', 'files.edit_document': 'files.edit',
@@ -163,6 +170,8 @@ for (const id of ['workspace.open', 'workspace.new', 'workspace.search', 'worksp
 IN_PLACE_VIEW_ACTIONS.add('workspace.mkdir')
 for (const id of ['posts.comments_more', 'posts.comments_at']) { VIEW_ACTIONS.add(id); IN_PLACE_VIEW_ACTIONS.add(id) }
 COMMIT_ACTIONS.add('image_editor.save')
+for (const id of ['character.open_folder', 'character.search', 'character.open_setting', 'character.new_setting']) VIEW_ACTIONS.add(id)
+for (const id of ['character.save', 'character.delete', 'profile.character_save']) COMMIT_ACTIONS.add(id)
 export function chatPageActionTier(id: string, action?: { tier?: ChatPageActionTier }): ChatPageActionTier {
   if (!own(CHAT_PAGE_ACTION_PERMISSIONS, id)) {
     if (action?.tier === 'view' || action?.tier === 'draft') return action.tier
@@ -199,8 +208,9 @@ export function chatPageActionAllowed(path: string, id: string): boolean {
   if (id.startsWith('metadata.')) return /^\/images\/[\w.-]+\/metadata$/.test(path)
   if (id.startsWith('prompt.') || id === 'preset.create' || id === 'preset.update' || id === 'preset.select' || id === 'preset.draft') return path === '/prompts'
   if (id.startsWith('wildcard.')) return path === '/wildcards'
+  if (id.startsWith('character.')) return path === '/characters'
   if (id.startsWith('group.')) return /^\/groups(?:\/[\w-]+)?$/.test(path)
-  if (id === 'media.attach' || id === 'media.clear' || id === 'preset.insert') return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
+  if (id === 'media.attach' || id === 'media.clear' || id === 'preset.insert' || id === 'character_setting.insert') return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
   if (['comfy.node', 'comfy.refresh', 'comfy.open_create', 'comfy.open_edit', 'comfy.author', 'comfy.register', 'comfy.save', 'comfy.check', 'comfy.suggest_fields'].includes(id)) return path === '/generation' || /^\/public\/workflows\/[\w-]+$/.test(path)
   return path === '/generation'
 }

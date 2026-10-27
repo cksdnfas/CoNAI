@@ -102,7 +102,7 @@ export function ChatProfileLook({ style, defaults, backgroundUrl, onStyleChange,
               </IconButton>
             ) : null}
             <div className="flex items-center">
-              <ChatProfileAssetInput characterName={characterName} onChange={onBackgroundHashChange} onBusyChange={onBusyChange} busy={busy} uploadRef={fileInputRef} />
+              <ChatProfileAssetInput target={{ characterName }} onChange={onBackgroundHashChange} onBusyChange={onBusyChange} busy={busy} uploadRef={fileInputRef} />
               {backgroundActions}
             </div>
           </div>

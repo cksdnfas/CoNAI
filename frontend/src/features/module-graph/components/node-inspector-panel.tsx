@@ -50,6 +50,7 @@ import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import { isEditedOnNodeCard } from '../module-graph-node-field-placement'
 import { resolveModuleGraphNodeLayout } from './module-graph-node-card-operation-registry'
 import { OptionSourceFieldInput } from './module-graph-node-option-source'
+import { CharacterSettingIdInput, isCharacterSettingInput } from './module-graph-character-setting-input'
 
 const MODULE_ENGINE_LABELS: Record<ModuleEngineType, TranslationInput> = {
   nai: 'NovelAI',
@@ -232,6 +233,10 @@ export function NodeInspectorPanel({
           ) : null}
         </>,
       )
+    }
+
+    if (isCharacterSettingInput(port.key)) {
+      return renderPortCard(<CharacterSettingIdInput value={rawValue} onChange={changePortValue} onClear={clearPortValue} />)
     }
 
     if (uiField?.options_source) {

@@ -74,6 +74,7 @@ CoNAI는 로컬 계정과 권한 그룹으로 페이지 접근과 주요 작업�
 | `images.delete` | 라이브러리 이미지와 그룹 삭제 |
 | `images.upload` | 라이브러리에 이미지·영상 업로드 |
 | `prompts.view` / `prompts.edit` | 프롬프트·그룹·프리셋 보기 / 추가·수정·삭제·가져오기 |
+| `characters.view` / `characters.edit` | 캐릭터 라이브러리 탐색·외형 설정 불러오기 / 폴더·설정 추가·수정·이동·삭제 |
 | `wildcards.view` / `wildcards.edit` | 와일드카드 보기·확장 / 추가·수정·삭제, LoRA 폴더 스캔 |
 | `generation.execute` | NAI·ComfyUI·워크플로 생성 실행 |
 | `workflows.view` / `workflows.edit` | 워크플로·그래프 보기 / 편집·예약 |
@@ -89,7 +90,15 @@ CoNAI는 로컬 계정과 권한 그룹으로 페이지 접근과 주요 작업�
 
 ### 페이지는 권한을 따로 주지 않습니다
 
-메뉴와 페이지는 보여 주는 기능의 권한을 따라 열립니다. 예를 들어 `prompts.view`가 있으면 프롬프트 페이지가, `images.view`가 있으면 홈·그룹·이미지 상세가 열립니다. 게시판은 `posts.view`, 생성 페이지는 `generation.execute`나 `workflows.view` 중 하나, 채팅 페이지는 `chat.use`나 `chat.agent.use` 중 하나, 설정은 관리자일 때 열립니다. 페이지를 숨기려면 그 기능 권한을 빼면 됩니다. 헤더 메뉴 표시 여부는 설정의 헤더 메뉴에서 따로 고릅니다.
+메뉴와 페이지는 보여 주는 기능의 권한을 따라 열립니다. 예를 들어 `prompts.view`가 있으면 프롬프트 페이지가, `characters.view`가 있으면 캐릭터 라이브러리가, `images.view`가 있으면 홈·그룹·이미지 상세가 열립니다. 게시판은 `posts.view`, 생성 페이지는 `generation.execute`나 `workflows.view` 중 하나, 채팅 페이지는 `chat.use`나 `chat.agent.use` 중 하나, 설정은 관리자일 때 열립니다. 페이지를 숨기려면 그 기능 권한을 빼면 됩니다. 헤더 메뉴 표시 여부는 설정의 헤더 메뉴에서 따로 고릅니다.
+
+### 캐릭터 라이브러리의 권한 경계
+
+[캐릭터 라이브러리](CHARACTER_LIBRARY.md)의 페이지 접근 식별자는 `page.characters.view`, 헤더 메뉴 항목은 `characters`입니다. 라이브러리 권한이 이미지 조회를 허용하지는 않으며 기준 이미지·아바타·표정과 생성 화면의 참조 이미지 옵션에는 `images.view`도 필요합니다.
+
+폴더·외형 설정 편집은 `characters.edit`, 후보 생성은 **관리자 + `characters.edit`**입니다. 채팅 프로필 관리는 계속 관리자 전용입니다. 삭제 미리보기 API는 연결 프로필 수를 반환하지만 이름 목록은 관리자에게만 공개합니다. 삭제하면 동기화 프로필에 현재 외형을 복사하고 연결을 해제합니다.
+
+화면·MCP·플러그인은 같은 계정 권한과 저장 리비전 검사를 사용합니다. `propose_character_library`는 채팅의 검토 카드로만 적용하며 플러그인 앱 도구로는 제공하지 않습니다. 프로필을 사용할 수 있다는 이유만으로 연결 설정의 이름·폴더까지 볼 수 있는 것은 아닙니다.
 
 ### 익명·게스트
 

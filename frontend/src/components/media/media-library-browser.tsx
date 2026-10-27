@@ -35,6 +35,8 @@ interface MediaLibraryBrowserProps {
   mediaKind?: MediaLibraryKind
   maxCount?: number
   initialGroupPath?: string
+  /** Opens at this group (wins over `initialGroupPath`). */
+  initialGroupId?: number
   disabled?: boolean
   /** Posts number media together with their other attachment tabs. */
   selectionOrder?: ReadonlyMap<string, number>
@@ -44,7 +46,7 @@ interface MediaLibraryBrowserProps {
 
 /** The app's library selector: group tree, server search, filters and the shared virtualized media list. */
 export function MediaLibraryBrowser({
-  selectedIds, onSelectedIdsChange, mediaKind = 'all', maxCount = Infinity, initialGroupPath,
+  selectedIds, onSelectedIdsChange, mediaKind = 'all', maxCount = Infinity, initialGroupPath, initialGroupId,
   disabled = false, selectionOrder, getGroupMenu, pickedGroupIds,
 }: MediaLibraryBrowserProps) {
   const { t, formatNumber } = useI18n()
@@ -69,7 +71,7 @@ export function MediaLibraryBrowser({
     })
   }, [groups])
   const [chosenGroupId, setGroupId] = useState<number | null | undefined>(undefined)
-  const groupId = chosenGroupId === undefined ? groupPaths.find((group) => group.path === initialGroupPath)?.id ?? null : chosenGroupId
+  const groupId = chosenGroupId === undefined ? initialGroupId ?? groupPaths.find((group) => group.path === initialGroupPath)?.id ?? null : chosenGroupId
   const [input, setInput] = useState('')
   const [search, setSearch] = useState('')
   const [tool, setTool] = useState('')

@@ -1,5 +1,5 @@
 import fs from 'fs'
-import type { ChatAssetVisionReview } from '@conai/shared'
+import type { ChatAssetOwner, ChatAssetVisionReview } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
 import { previewImage } from '../imagePreview'
 import { libraryMediaAllowed } from '../contentRating'
@@ -24,7 +24,7 @@ export function parseChatAssetVisionReview(text: string): Pick<ChatAssetVisionRe
 }
 
 /** One user-triggered call; no expected emotion, automatic exclusion, persistence or model fallback. */
-export async function reviewChatAssetVision(requester: McpRequester, profileId: number, batchId: number, slotKey: string, input: { modelSlotId?: unknown; compositeHash?: unknown }, signal?: AbortSignal): Promise<ChatAssetVisionReview> {
+export async function reviewChatAssetVision(requester: McpRequester, profileId: ChatAssetOwner | number, batchId: number, slotKey: string, input: { modelSlotId?: unknown; compositeHash?: unknown }, signal?: AbortSignal): Promise<ChatAssetVisionReview> {
   requireChatAssetAdmin(requester)
   const id = Number(input.modelSlotId)
   const model = Number.isSafeInteger(id) && id > 0 ? ModelSlotStore.target(id) : null

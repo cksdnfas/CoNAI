@@ -8,7 +8,7 @@ export const PLUGIN_NATIVE_API_ROOTS = [
   '/api/settings/general', '/api/settings/appearance',
   '/api/codex-chat/profiles', '/api/codex-chat/threads', '/api/codex-chat/lorebooks',
   '/api/codex-chat/admin/profiles', '/api/codex-chat/admin/lorebooks', '/api/codex-chat/admin/blocks', '/api/codex-chat/admin/chat-assets',
-  '/api/chat-routines',
+  '/api/chat-routines', '/api/character-library',
 ] as const
 
 /** Check the original path before URL normalization, so encoded traversal cannot cross a feature boundary. */

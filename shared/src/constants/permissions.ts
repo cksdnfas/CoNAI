@@ -16,6 +16,8 @@ export const PERMISSION_CATALOG = [
   { key: 'prompts.edit', section: 'prompts', label: { ko: '프롬프트·프리셋 편집', en: 'Edit prompts and presets' }, description: 'Add, edit, delete and import prompts, groups and presets.' },
   { key: 'wildcards.view', section: 'prompts', label: { ko: '와일드카드 보기', en: 'View wildcards' }, description: 'Read and expand wildcards.' },
   { key: 'wildcards.edit', section: 'prompts', label: { ko: '와일드카드 편집', en: 'Edit wildcards' }, description: 'Add, edit and delete wildcards and scan the LoRA folder.' },
+  { key: 'characters.view', section: 'characters', label: { ko: '캐릭터 라이브러리 보기', en: 'View character library' }, description: 'Browse character folders and appearance settings and load them into chat profiles and generation.' },
+  { key: 'characters.edit', section: 'characters', label: { ko: '캐릭터 라이브러리 편집', en: 'Edit character library' }, description: 'Create, edit, move and delete character folders and appearance settings.' },
   { key: 'generation.execute', section: 'generation', label: { ko: '이미지 생성', en: 'Generate images' }, description: 'Queue NovelAI, ComfyUI and workflow generations.' },
   { key: 'workflows.view', section: 'generation', label: { ko: '워크플로 보기', en: 'View workflows' }, description: 'Read workflows, graphs, modules and dropdown lists.' },
   { key: 'workflows.edit', section: 'generation', label: { ko: '워크플로 편집', en: 'Edit workflows' }, description: 'Create and edit workflows, graphs and schedules.' },
@@ -37,7 +39,7 @@ export const PERMISSION_CATALOG = [
   { key: 'auth.guest.create', section: 'account', anonymousOnly: true, anonymous: true, label: { ko: '게스트 가입', en: 'Guest signup' }, description: 'Create a guest account from the login page.' },
 ] as const satisfies ReadonlyArray<{
   key: string
-  section: 'images' | 'prompts' | 'generation' | 'files' | 'audio' | 'posts' | 'chat' | 'account' | 'settings'
+  section: 'images' | 'prompts' | 'characters' | 'generation' | 'files' | 'audio' | 'posts' | 'chat' | 'account' | 'settings'
   label: { ko: string; en: string }
   description: string
   /** Visitors who are not signed in can use it. */
@@ -66,6 +68,7 @@ export const PAGE_PERMISSION_RULES = {
   'page.audio.view': { all: ['audio.view'] },
   'page.prompts.view': { all: ['prompts.view'] },
   'page.wildcards.view': { all: ['wildcards.view'] },
+  'page.characters.view': { all: ['characters.view'] },
   'page.generation.view': { any: ['generation.execute', 'workflows.view'] },
   'page.sprite.view': { all: ['images.view', 'images.edit'] },
   'page.files.view': { all: ['files.view'] },

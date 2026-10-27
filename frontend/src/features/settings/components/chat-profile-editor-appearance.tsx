@@ -1,25 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
-import { CHAT_PROFILE_TEXT_LIMITS } from '@conai/shared'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Crop, ImagePlus, Sparkles, X } from 'lucide-react'
-import { useConfirm } from '@/components/ui/confirm-dialog'
-import { IconButton } from '@/components/ui/icon-button'
-import { Spinner } from '@/components/ui/loading-state'
-import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Textarea } from '@/components/ui/textarea'
-import { Tip } from '@/components/ui/tooltip'
+import { useQuery } from '@tanstack/react-query'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
-import { ChatProfileImage } from '@/features/codex-chat/chat-profile-image'
 import { useI18n } from '@/i18n'
-import { CHAT_GENERATION_PRESETS_QUERY_KEY, clearChatProfileExpression, draftChatAppearance, listChatGenerationPresets, setChatProfileExpression, type ChatProfile } from '@/lib/api-codex-chat'
-import { getErrorMessage } from '@/lib/error-message'
-import { ChatProfileCandidateArchive } from './chat-profile-asset-groups'
-import { ChatProfileAssetInput } from './chat-profile-asset-input'
-import { REFERENCE_SLOT, type ProfileAssetRuns } from './chat-profile-asset-runs'
-import { AssetCandidateTray, ExpressionSlots } from './chat-profile-asset-slots'
-import { ChatProfileAvatarCrop } from './chat-profile-avatar-crop'
+import { CHAT_GENERATION_PRESETS_QUERY_KEY, clearChatProfileExpression, draftChatAppearance, listChatGenerationPresets, sameCharacterLink, setChatProfileExpression, type ChatProfile } from '@/lib/api-codex-chat'
+import { ErrorState } from '@/components/ui/error-state'
+import { LoadingState } from '@/components/ui/loading-state'
+import { CharacterSettingAppearanceEditor } from '@/features/characters/components/character-setting-appearance'
+import { characterSettingQueryKey, getCharacterSetting } from '@/lib/api-character-library'
+import { CharacterAppearanceEditor } from './character-appearance-editor'
+import { type AssetRuns } from './chat-profile-asset-runs'
+import type { CharacterGroupSource } from './chat-profile-asset-slots'
+import { ChatProfileCharacterLinkBar } from './chat-profile-character-link'
+import type { ProfileCharacterLink } from './use-profile-character-link'
 import { type Draft, type PatchDraft } from './chat-profile-editor-fields'
-import { EditorGroup } from '@/components/ui/editor-group'
 import { ChatEmoticonGroupPicker } from './chat-profile-emoticons'
 import { draftProfileAssetUrl } from './chat-profile-images'
 
@@ -27,139 +19,153 @@ import { draftProfileAssetUrl } from './chat-profile-images'
  * Everything the character looks like: the reference image, the avatar cut from it, the appearance text, and the
  * expression slots generated from them (the character's emoticons), plus other emoticon groups its chats may use.
  */
-export function ChatProfileAppearancePanel({ draft, patch, profile, onBusyChange, busy, runs, ensureProfile, onProfileChange }: {
+export function ChatProfileAppearancePanel({ draft, patch, profile, dirty, onBusyChange, busy, runs, ensureProfile, onProfileChange, link }: {
+  draft: Draft
+  patch: PatchDraft
+  profile: ChatProfile | null
+  /** Unsaved edits in the editor (the profile's or the synced setting's). */
+  dirty: boolean
+  onBusyChange: (busy: boolean) => void
+  busy: boolean
+  runs: AssetRuns
+  /** Saves name, appearance and reference (creating a new profile) before anything is generated or linked. */
+  ensureProfile: () => Promise<ChatProfile>
+  onProfileChange: (profile: ChatProfile) => void
+  /** The library link: while synced the look shown and edited here is the setting's. */
+  link: ProfileCharacterLink
+}) {
+  const bar = link.canView ? <ChatProfileCharacterLinkBar link={link} profileName={draft.name} dirty={dirty} busy={busy} onBusyChange={onBusyChange} /> : null
+  return (
+    <div className="space-y-5">
+      {bar}
+      {link.synced && link.canView ? <SyncedAppearance link={link} draft={draft} patch={patch} busy={busy} onBusyChange={onBusyChange} /> : (
+        <OwnAppearance draft={draft} patch={patch} profile={profile} onBusyChange={onBusyChange} busy={busy} runs={runs} ensureProfile={ensureProfile} onProfileChange={onProfileChange} link={link} />
+      )}
+    </div>
+  )
+}
+
+/** An `after` preset's prompt writer sees only the appearance text of the character (not the system prompt or sections). */
+function useAppearanceWarning(draft: Draft, appearance: string | undefined) {
+  const { t } = useI18n()
+  const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: draft.mcpEnabled && draft.generationPresetIds.length > 0 })
+  const missing = draft.mcpEnabled && !appearance?.trim()
+    && (generationPresetsQuery.data ?? []).some((preset) => draft.generationPresetIds.includes(preset.id) && preset.prompting.timing === 'after')
+  return missing ? t({ ko: '답변 끝난 뒤 이미지는 여기만 보고 캐릭터를 그려. ✨로 초안을 써줘.', en: 'After-reply pictures draw the character from this text alone. Draft it with ✨.' }) : null
+}
+
+/** Other emoticon groups the profile's chats may use (a profile field in every link state). */
+function EmoticonGroupsRow({ draft, patch }: { draft: Draft; patch: PatchDraft }) {
+  const { t } = useI18n()
+  return (
+    <div className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3">
+      <span className="shrink-0 text-sm">{t({ ko: '이모티콘 그룹', en: 'Emoticon groups' })}</span>
+      <div className="min-w-0 flex-1"><ChatEmoticonGroupPicker selected={draft.style.emoticonGroupIds} onChange={(emoticonGroupIds) => patch({ style: { ...draft.style, emoticonGroupIds } })} /></div>
+    </div>
+  )
+}
+
+/** Synced: the linked setting's look, edited as the setting's draft (stored before the profile on save). */
+function SyncedAppearance({ link, draft, patch, busy, onBusyChange }: { link: ProfileCharacterLink; draft: Draft; patch: PatchDraft; busy: boolean; onBusyChange: (busy: boolean) => void }) {
+  const { t } = useI18n()
+  const { setting } = link
+  const appearanceWarning = useAppearanceWarning(draft, setting.draft.appearance)
+  if (setting.loading || !setting.ready) return setting.error
+    ? <ErrorState title={t({ ko: '외형 설정을 불러오지 못했어', en: 'Could not load the setting' })} error={setting.error} onRetry={setting.retry} />
+    : <LoadingState variant="inline" />
+  return (
+    <CharacterSettingAppearanceEditor editor={setting} runs={link.runs} editable={link.canEdit} generation={link.generation} busy={busy} onBusyChange={onBusyChange} appearanceWarning={appearanceWarning}>
+      <EmoticonGroupsRow draft={draft} patch={patch} />
+    </CharacterSettingAppearanceEditor>
+  )
+}
+
+/**
+ * No link or detached: the profile's own look, as before the library. Synced but the library hidden: shown read-only.
+ * The expression slots show the group the profile has once saved: while the look is (or until saved, was) a library
+ * setting's, that setting's expression group, read-only (a note when it cannot be read or has none yet); else the
+ * profile's own.
+ */
+function OwnAppearance({ draft, patch, profile, onBusyChange, busy, runs, ensureProfile, onProfileChange, link }: {
   draft: Draft
   patch: PatchDraft
   profile: ChatProfile | null
   onBusyChange: (busy: boolean) => void
   busy: boolean
-  runs: ProfileAssetRuns
-  /** Saves name, appearance and reference (creating a new profile) before anything is generated or linked. */
+  runs: AssetRuns
   ensureProfile: () => Promise<ChatProfile>
   onProfileChange: (profile: ChatProfile) => void
+  link: ProfileCharacterLink
 }) {
   const { t } = useI18n()
-  const confirm = useConfirm()
-  const { showSnackbar } = useSnackbar()
-  const [cropOpen, setCropOpen] = useState(false)
-  const active = useRef(true)
-  const controller = useRef<AbortController | null>(null)
-  const reportBusy = useRef(onBusyChange)
-  reportBusy.current = onBusyChange
-  useEffect(() => {
-    active.current = true
-    return () => { active.current = false; if (controller.current) { controller.current.abort(); controller.current = null; reportBusy.current(false) } }
-  }, [])
-  const appearance = useMutation({
-    mutationFn: () => { controller.current = new AbortController(); reportBusy.current(true); return draftChatAppearance(draft, controller.current.signal) },
-    onSuccess: (result) => { if (active.current) patch({ appearance: result.appearance }) },
-    onError: (error) => { if (active.current) showSnackbar({ message: getErrorMessage(error, t({ ko: '외형 초안을 쓰지 못했어.', en: 'Could not draft appearance.' })), tone: 'error' }) },
-    onSettled: () => { if (controller.current) { controller.current = null; reportBusy.current(false) } },
-  })
-  const writeAppearance = async () => {
-    if (draft.appearance?.trim() && !await confirm({ title: t({ ko: '외형 설명 덮어쓰기', en: 'Replace appearance' }), description: t({ ko: '지금 설명을 새 초안으로 바꿀까?', en: 'Replace the current description with a new draft?' }), confirmLabel: t({ ko: '초안 쓰기', en: 'Draft' }) })) return
-    if (active.current) appearance.mutate()
-  }
-
+  const readOnly = link.synced
   const referenceUrl = draftProfileAssetUrl(draft, profile, 'reference')
   const avatarUrl = draftProfileAssetUrl(draft, profile, 'avatar')
   const characterName = profile?.name ?? draft.name
-  const mode = runs.preset?.assetSupport?.mode ?? null
-  const reference = runs.slotState(REFERENCE_SLOT)
-  const nameMissing = !draft.name.trim()
-  const presetBlocked = !runs.preset ? t({ ko: '자산을 만들 수 있는 생성 프리셋이 없어', en: 'No generation preset can make assets' }) : null
-  const nameBlocked = nameMissing ? t({ ko: '이름을 먼저 적어줘', en: 'Enter a name first' }) : null
-  const expressionBlocked = presetBlocked ?? nameBlocked ?? (mode === 'reference' && !draft.referenceHash ? t({ ko: '기준 이미지를 먼저 정해줘', en: 'Set the reference image first' }) : null)
-  // An `after` preset's prompt writer sees only this text of the character (not the system prompt or sections).
-  const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: draft.mcpEnabled && draft.generationPresetIds.length > 0 })
-  const appearanceMissing = draft.mcpEnabled && !draft.appearance?.trim()
-    && (generationPresetsQuery.data ?? []).some((preset) => draft.generationPresetIds.includes(preset.id) && preset.prompting.timing === 'after')
-  const appearanceWarning = appearanceMissing ? t({ ko: '답변 끝난 뒤 이미지는 여기만 보고 캐릭터를 그려. ✨로 초안을 써줘.', en: 'After-reply pictures draw the character from this text alone. Draft it with ✨.' }) : null
+  const appearanceWarning = useAppearanceWarning(draft, draft.appearance)
+  const storedLink = profile?.characterLink ?? null
+  const linkPending = !sameCharacterLink(draft.characterLink, storedLink)
+  // The library setting whose expressions the profile has (synced) or gets once saved (detached or unlinked: the
+  // server copies them); null: the profile's own group.
+  const expressionSettingId = linkPending && draft.characterLink && !draft.characterLink.synced ? draft.characterLink.settingId
+    : storedLink?.synced ? storedLink.settingId
+      : link.synced ? draft.characterLink?.settingId ?? null : null
+  // Shares the link's origin read (same key) when it is that setting.
+  const expressionSettingQuery = useQuery({
+    queryKey: characterSettingQueryKey(expressionSettingId ?? 0),
+    queryFn: ({ signal }) => getCharacterSetting(expressionSettingId!, signal),
+    enabled: link.canView && expressionSettingId !== null,
+  })
+  const expressionSetting = expressionSettingQuery.data?.id === expressionSettingId ? expressionSettingQuery.data : null
+  const settingGroupId = expressionSetting?.expressionGroupId ?? null
+  const groupSource: CharacterGroupSource = expressionSettingId === null ? { characterName } : { expressionGroupId: settingGroupId, candidateGroupId: null }
+  const expressionsNote = expressionSettingId === null || settingGroupId !== null ? null
+    : expressionSetting
+      ? t({ ko: '표정은 연결된 라이브러리 설정 거야. 그 설정엔 아직 표정이 없어.', en: 'Expressions come from the linked library setting, which has none yet.' })
+      : t({ ko: '표정은 연결된 라이브러리 설정 거야.', en: 'Expressions come from the linked library setting.' })
 
+  // Errors surface in the shared editor's snackbar.
   const setExpression = async (name: string, hash: string) => {
-    try {
-      const current = await ensureProfile()
-      const result = await setChatProfileExpression(current.id, name, hash)
-      onProfileChange(result.profile)
-      patch({ style: { ...draft.style, emoticonGroupIds: [result.expressionGroupId, ...draft.style.emoticonGroupIds.filter((id) => id !== result.expressionGroupId)] } })
-      await runs.refreshAfterApply(current.id, result.expressionGroupId)
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '표정을 넣지 못했어.', en: 'Could not set the expression.' })), tone: 'error' })
-    }
+    const current = await ensureProfile()
+    const result = await setChatProfileExpression({ kind: 'profile', id: current.id }, name, hash)
+    onProfileChange(result.profile)
+    patch({ style: { ...draft.style, emoticonGroupIds: [result.expressionGroupId, ...draft.style.emoticonGroupIds.filter((id) => id !== result.expressionGroupId)] } })
+    await runs.refreshAfterApply({ kind: 'profile', id: current.id }, result.expressionGroupId)
   }
   const clearExpression = async (name: string) => {
     if (!profile) return
-    try {
-      const result = await clearChatProfileExpression(profile.id, name)
-      await runs.refreshAfterApply(profile.id, result.expressionGroupId)
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '표정을 비우지 못했어.', en: 'Could not clear the expression.' })), tone: 'error' })
-    }
+    const result = await clearChatProfileExpression({ kind: 'profile', id: profile.id }, name)
+    await runs.refreshAfterApply({ kind: 'profile', id: profile.id }, result.expressionGroupId)
   }
+  // A picked or cropped library avatar keeps the legacy picture only while it is still the saved avatar.
+  const setAvatar = (avatarHash: string | null, avatarCrop: Draft['avatarCrop'] | null) => patch(avatarHash
+    ? { avatarHash, avatarCrop, avatar: avatarHash === (profile?.avatarHash ?? draft.avatarHash) ? profile?.avatar ?? draft.avatar : null }
+    : { avatar: null, avatarHash: null, avatarCrop: null })
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-5 sm:grid-cols-[200px_1fr]">
-        <div className="space-y-2">
-          <div className="relative aspect-[3/4] w-[200px] max-w-full overflow-hidden rounded-lg bg-fill">
-            <ChatProfileImage src={referenceUrl} fallback={<span className="flex size-full items-center justify-center pb-10 text-muted-foreground"><ImagePlus className="size-6" /></span>} />
-            {reference.working || runs.isPending(REFERENCE_SLOT) ? <span className="absolute inset-0 flex items-center justify-center bg-background/50"><Spinner /></span> : null}
-            {draft.referenceHash ? <IconButton size="icon-xs" variant="secondary" disabled={busy} className="absolute right-1.5 top-1.5" label={t({ ko: '기준 이미지 지우기', en: 'Remove reference image' })} onClick={() => patch({ referenceHash: null })}><X /></IconButton> : null}
-            <div className="absolute inset-x-0 bottom-0 flex items-center gap-0.5 bg-gradient-to-t from-black/75 to-transparent p-1.5 pt-6 text-white [&_button]:text-white">
-              <ChatProfileAssetInput characterName={characterName} onChange={(referenceHash) => patch({ referenceHash })} onBusyChange={onBusyChange} busy={busy} />
-              <span className="flex-1" />
-              <IconButton size="icon-sm" variant="ghost" disabled={busy || Boolean(presetBlocked ?? nameBlocked) || reference.working} label={presetBlocked ?? nameBlocked ?? t({ ko: '기준 이미지 만들기', en: 'Generate reference image' })} onClick={() => void runs.start({ kind: 'reference' }, !draft.referenceHash)}><Sparkles /></IconButton>
-            </div>
-          </div>
-        </div>
-        <div className="min-w-0 space-y-4">
-          <div className="flex items-center gap-3">
-            <ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} imageUrl={avatarUrl} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine={draft.engine} className="size-[72px]" size="xl" />
-            <div className="space-y-1">
-              <span className="text-xs text-muted-foreground">{t({ ko: '아바타', en: 'Avatar' })}</span>
-              <div className="flex items-center gap-0.5">
-                <IconButton size="icon-sm" variant="secondary" disabled={busy || !referenceUrl || !draft.referenceHash} label={t({ ko: '기준 이미지에서 자르기', en: 'Crop reference image' })} onClick={() => setCropOpen(true)}><Crop /></IconButton>
-                <ChatProfileAssetInput characterName={characterName} extraInputs={false} onChange={(avatarHash) => patch({ avatarHash, avatarCrop: null, avatar: avatarHash === (profile?.avatarHash ?? draft.avatarHash) ? profile?.avatar ?? draft.avatar : null })} onBusyChange={onBusyChange} busy={busy} />
-                {draft.avatarHash || draft.avatar ? <IconButton size="icon-sm" variant="ghost" disabled={busy} label={t({ ko: '아바타 지우기', en: 'Remove avatar' })} onClick={() => patch({ avatar: null, avatarHash: null, avatarCrop: null })}><X /></IconButton> : null}
-              </div>
-            </div>
-          </div>
-          <EditorGroup
-            label={<>{t({ ko: '외형 설명', en: 'Appearance' })}{appearanceWarning ? <Tip content={appearanceWarning}><span className="inline-flex normal-case tracking-normal text-warning" tabIndex={0} aria-label={appearanceWarning}><AlertTriangle className="size-3.5" /></span></Tip> : null}</>}
-            actions={<IconButton size="icon-xs" variant="ghost" disabled={busy || appearance.isPending} label={t({ ko: '기준 이미지나 프롬프트 보고 초안 쓰기', en: 'Draft from the reference image or prompt' })} onClick={() => void writeAppearance()}>{appearance.isPending ? <Spinner /> : <Sparkles />}</IconButton>}
-          >
-            <Textarea variant="settings" disabled={appearance.isPending} className="min-h-[120px]" rows={5} value={draft.appearance ?? ''} maxLength={CHAT_PROFILE_TEXT_LIMITS.text} aria-invalid={appearanceMissing || undefined} aria-label={t({ ko: '외형 설명', en: 'Appearance' })} onChange={(event) => patch({ appearance: event.target.value })} />
-          </EditorGroup>
-        </div>
-      </div>
-
-      {reference.working || reference.failed || reference.candidates.length ? (
-        <AssetCandidateTray runs={runs} slotKey={REFERENCE_SLOT} title={t({ ko: '기준 이미지', en: 'Reference image' })} currentHash={draft.referenceHash ?? null} referenceHash={null} profileId={profile?.id ?? null} />
-      ) : null}
-
-      <div className="border-t border-line pt-4">
-        <ExpressionSlots
-          runs={runs}
-          characterName={characterName}
-          profileId={profile?.id ?? null}
-          referenceHash={draft.referenceHash ?? null}
-          canGenerate={!expressionBlocked && !busy}
-          blockedReason={expressionBlocked}
-          onSet={setExpression}
-          onClear={clearExpression}
-          renderInput={(onPick) => <ChatProfileAssetInput characterName={characterName} extraInputs={false} onChange={onPick} onBusyChange={onBusyChange} busy={busy} />}
-        />
-      </div>
-
-      <div className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2 border-t border-line pt-3">
-        <span className="shrink-0 text-sm">{t({ ko: '이모티콘 그룹', en: 'Emoticon groups' })}</span>
-        <div className="min-w-0 flex-1"><ChatEmoticonGroupPicker selected={draft.style.emoticonGroupIds} onChange={(emoticonGroupIds) => patch({ style: { ...draft.style, emoticonGroupIds } })} /></div>
-      </div>
-      <div className="border-t border-line">
-        <ChatProfileCandidateArchive characterName={characterName} />
-      </div>
-
-      {cropOpen && referenceUrl ? <ChatProfileAvatarCrop src={referenceUrl} initial={draft.avatarHash === draft.referenceHash ? draft.avatarCrop : null} onClose={() => setCropOpen(false)} onApply={(avatarCrop) => { patch({ avatarHash: draft.referenceHash, avatarCrop, avatar: draft.referenceHash === (profile?.avatarHash ?? draft.avatarHash) ? profile?.avatar ?? draft.avatar : null }); setCropOpen(false) }} /> : null}
-    </div>
+    <CharacterAppearanceEditor
+      value={draft}
+      onChange={patch}
+      onAvatarChange={setAvatar}
+      referenceUrl={referenceUrl}
+      avatar={<ChatProfileAvatar name={draft.name || '?'} avatar={draft.avatar} imageUrl={avatarUrl} avatarCrop={draft.avatarHash ? draft.avatarCrop : null} engine={draft.engine} className="size-[72px]" size="xl" />}
+      hasAvatar={Boolean(draft.avatarHash || draft.avatar)}
+      uploadTarget={{ characterName }}
+      groupSource={groupSource}
+      runs={runs}
+      busy={busy}
+      onBusyChange={onBusyChange}
+      draftAppearance={(signal) => draftChatAppearance(draft, signal)}
+      onSetExpression={setExpression}
+      onClearExpression={clearExpression}
+      appearanceWarning={appearanceWarning}
+      appearanceInvalid={Boolean(appearanceWarning)}
+      editable={!readOnly}
+      generation={!readOnly}
+      expressionsEditable={'characterName' in groupSource}
+      expressionsNote={expressionsNote}
+    >
+      <EmoticonGroupsRow draft={draft} patch={patch} />
+    </CharacterAppearanceEditor>
   )
 }

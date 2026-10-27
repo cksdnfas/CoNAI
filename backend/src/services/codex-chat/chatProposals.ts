@@ -37,6 +37,7 @@ function toProposal(row: ProposalRow): ChatProposal {
     if (row.saved === 1) merged.saved = true
   } else if (row.saved === 1) {
     merged.savedId = row.saved_id
+    if (row.kind === 'character_library') merged.saved = true
   }
   if (row.dismissed === 1) merged.dismissed = true
   return merged as ChatProposal
@@ -142,6 +143,7 @@ export const ChatProposalStore = {
 
 /** These tools enforce one stored proposal per reply, including proposals already saved or dismissed. */
 export function isChatProposalToolAvailable(context: ChatExecutionContext | undefined, toolName: string) {
+  if (toolName === 'propose_profile_assets' && context?.replyId && ChatProposalStore.forReply(context.threadId, context.replyId, 'character_assets').length) return false
   const kind = toolName === 'save_lore' ? 'lore' : toolName === 'propose_profile_assets' ? 'profile_assets' : null
   return !kind || !context?.replyId || ChatProposalStore.forReply(context.threadId, context.replyId, kind).length === 0
 }

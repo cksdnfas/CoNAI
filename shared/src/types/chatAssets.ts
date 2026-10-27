@@ -36,16 +36,19 @@ export type ChatAssetAttempt = {
   cancelRequested: boolean
   candidates: ChatAssetCandidate[]
 }
+/** Who an asset batch draws for and writes to: a chat profile, or a character library setting. */
+export type ChatAssetOwner = { kind: 'profile'; id: number } | { kind: 'setting'; id: number }
 export type ChatAssetBatch = {
   id: number
   accountId: number | null
-  profileId: number
+  owner: ChatAssetOwner
   presetId: number
   createdAt: string
   snapshot: { preset: Record<string, unknown>; appearance: string; referenceHash: string | null; slots: Array<{ slotKey: string; kind: ChatAssetKind; prompt: string }> }
   slots: Array<{ slotKey: string; kind: ChatAssetKind; prompt: string; chosenHash: string | null; status: string; attempts: ChatAssetAttempt[] }>
 }
-export type ChatAssetApplyResult = { profileId: number; applied: { profileFields: string[]; expressionSlots: string[]; expressionGroupId: number | null; backgroundGroupId: number | null } }
+/** `profileFields`: the owner's fields written (a profile's or a setting's). Settings take no background slot. */
+export type ChatAssetApplyResult = { owner: ChatAssetOwner; applied: { profileFields: string[]; expressionSlots: string[]; expressionGroupId: number | null; backgroundGroupId: number | null } }
 
 /** Creation and application are separate approvals; applying binds the chosen hashes shown on the card. */
 export type ChatProfileAssetsProposal = {
@@ -56,5 +59,16 @@ export type ChatProfileAssetsProposal = {
 } & (
   | { action: 'create'; input: ChatAssetBatchInput }
   /** `picks`: candidates the chat chose (slot → hash); approving picks them first, then applies every chosen slot. */
+  | { action: 'apply'; batchId: number; chosenHashes: Record<string, string>; picks?: Record<string, string>; input: ChatAssetApplyInput }
+)
+
+/** The same two approvals for a character library setting (no background slots). */
+export type ChatCharacterAssetsProposal = {
+  kind: 'character_assets'
+  settingId: number
+  settingName: string
+  savedId?: number | null
+} & (
+  | { action: 'create'; input: ChatAssetBatchInput }
   | { action: 'apply'; batchId: number; chosenHashes: Record<string, string>; picks?: Record<string, string>; input: ChatAssetApplyInput }
 )

@@ -15,6 +15,7 @@ export type RuntimeEventTopic =
   | 'plugins'
   | 'files'
   | 'audio'
+  | 'characters'
 
 export type RuntimeEventName =
   | 'queue.job.created'
@@ -41,6 +42,7 @@ export type RuntimeEventName =
   | 'chat.routine.changed'
   | 'files.changed'
   | 'audio.changed'
+  | 'characters.changed'
 
 export const RUNTIME_EVENT_TOPICS: readonly RuntimeEventTopic[] = [
   'generation-queue',
@@ -53,6 +55,7 @@ export const RUNTIME_EVENT_TOPICS: readonly RuntimeEventTopic[] = [
   'plugins',
   'files',
   'audio',
+  'characters',
 ]
 
 /** Topic rights match the corresponding REST surface; null means an owner-filtered authenticated session. */
@@ -67,6 +70,7 @@ export const RUNTIME_EVENT_TOPIC_PERMISSIONS: Record<RuntimeEventTopic, string |
   plugins: null,
   files: 'files.view',
   audio: 'audio.view',
+  characters: 'characters.view',
 }
 
 
@@ -183,6 +187,14 @@ export interface GraphExecutionEventPayload {
 /** A node of one execution started, finished or failed: only that run's progress card refetches. */
 export interface GraphExecutionProgressEventPayload {
   execution_id: number
+}
+
+/** Character library folders or settings changed (images and expressions included): views refetch only these ids. */
+export interface CharactersChangedEventPayload {
+  folderIds: number[]
+  settingIds: number[]
+  /** Chat profiles synced to the changed settings (their appearance, avatar or expressions changed too). */
+  profileIds: number[]
 }
 
 /**

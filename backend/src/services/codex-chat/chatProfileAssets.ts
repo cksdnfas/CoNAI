@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import fs from 'fs'
+import { createHash } from 'crypto'
 import { db as imagesDb } from '../../database/init'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../../middleware/upload'
@@ -12,6 +13,7 @@ import { activeMediaFile, characterMediaGroupPath, downloadToLibrary, fileLibrar
 import { MEDIA_HASH_PATTERN, MEDIA_MIME_TYPES, sniffMediaExtension } from './chatMediaLinks'
 import { ChatProfileError } from './chatProfileError'
 import type { ChatProfile } from './chatProfiles'
+import { characterId, characterSettingRow, fileCharacterAssets } from '../characterLibrary'
 
 export type ChatProfileAssetKind = 'avatar' | 'background' | 'reference'
 export type ChatAvatarCrop = { x: number; y: number; scale: number }
@@ -58,7 +60,7 @@ export function hiddenProfileAssets(profiles: Array<Pick<ChatProfile, 'avatarHas
 }
 
 /** Pending postprocess does not block a profile's original; safety always does, including legacy fallback. */
-export function resolveProfileAsset(profile: ChatProfile, kind: ChatProfileAssetKind) {
+export function resolveProfileAsset(profile: Pick<ChatProfile, 'referenceHash' | 'avatarHash' | 'backgroundHash' | 'avatar' | 'background'>, kind: ChatProfileAssetKind) {
   const hash = kind === 'avatar' ? profile.avatarHash : kind === 'background' ? profile.backgroundHash : profile.referenceHash
   if (isProfileAssetHidden(hash)) return { state: 'hidden' as const }
   const file = hash ? activeMediaFile(hash) : null
@@ -76,7 +78,7 @@ export function profileAssetFields(profile: ChatProfile, canViewImages: boolean,
     avatarHash: canViewImages ? profile.avatarHash : null,
     avatarCrop: profile.avatarCrop,
     backgroundHash: canViewImages ? profile.backgroundHash : null,
-    assetVersion: canViewImages ? [profile.avatarHash, profile.backgroundHash, profile.referenceHash].map((hash) => hash?.slice(0, 8) ?? '').join('-') + `-${Date.parse(profile.updatedDate) || 0}` : null,
+    assetVersion: canViewImages ? [profile.avatarHash, profile.backgroundHash, profile.referenceHash].map((hash) => hash?.slice(0, 8) ?? '').join('-') + `-${Date.parse(profile.updatedDate) || 0}${profile.characterLink?.synced ? `-${createHash('sha256').update(JSON.stringify([profile.characterLink.settingId, profile.characterLink.revision])).digest('hex')}` : ''}` : null,
     // Whether the avatar asset route has anything to serve (a library image or a legacy data URL); clients skip the request otherwise.
     hasAvatar: canViewImages && Boolean(profile.avatarHash || profile.avatar),
     avatarThumbnailUrl: canViewImages && profile.avatarHash && !(hidden ? hidden.has(profile.avatarHash) : isProfileAssetHidden(profile.avatarHash)) ? `/api/images/${profile.avatarHash}/thumbnail` : null,
@@ -102,20 +104,24 @@ export function fileProfileAssetsUnderGroup(name: string, hashes: Array<string |
 }
 
 /** Decode and register an image; the pipeline keeps its library identity and original bytes. */
-export async function ingestProfileAsset(buffer: Buffer, characterName: string) {
+export async function ingestProfileAsset(buffer: Buffer, characterName: string, settingId?: number) {
+  if (settingId !== undefined) characterSettingRow(characterId(settingId))
   if (buffer.length > MAX_UPLOAD_FILE_SIZE_BYTES) throw new ChatProfileError('이미지는 500MB까지 넣을 수 있어.')
   let extension: string
   try { extension = await sniffMediaExtension(buffer) } catch { throw new ChatProfileError('PNG, JPEG, WebP 또는 GIF 이미지를 골라줘.') }
   if (!MEDIA_MIME_TYPES[extension]?.startsWith('image/')) throw new ChatProfileError('이미지 파일만 넣을 수 있어.')
   const stored = await ingestMedia(buffer)
-  fileProfileAssetsUnderGroup(characterName, [stored.compositeHash])
+  if (settingId !== undefined) fileCharacterAssets(settingId, [stored.compositeHash])
+  else fileProfileAssetsUnderGroup(characterName, [stored.compositeHash])
   return stored
 }
 
-export async function downloadProfileAsset(url: unknown, characterName: string) {
+export async function downloadProfileAsset(url: unknown, characterName: string, settingId?: number) {
+  if (settingId !== undefined) characterSettingRow(characterId(settingId))
   if (typeof url !== 'string' || !url.trim()) throw new ChatProfileError('이미지 URL을 넣어줘.')
+  let stored: Awaited<ReturnType<typeof downloadToLibrary>>
   try {
-    return await downloadToLibrary(url.trim(), chatCharacterGroupPath(characterName), { imagesOnly: true })
+    stored = await downloadToLibrary(url.trim(), settingId === undefined ? chatCharacterGroupPath(characterName) : null, { imagesOnly: true })
   } catch (error) {
     const reason = error instanceof Error ? error.message : ''
     if (reason === 'private address') throw new ChatProfileError('사설 주소에서는 이미지를 받을 수 없어.')
@@ -124,16 +130,18 @@ export async function downloadProfileAsset(url: unknown, characterName: string) 
     if (reason === 'not an image') throw new ChatProfileError('이미지 형식이 올바르지 않아.')
     throw new ChatProfileError('이미지 URL을 받지 못했어.')
   }
+  if (settingId !== undefined) fileCharacterAssets(settingId, [stored.compositeHash])
+  return stored
 }
 
-export async function importFileStoreProfileAsset(requester: McpRequester, fileId: unknown, characterName: string) {
+export async function importFileStoreProfileAsset(requester: McpRequester, fileId: unknown, characterName: string, settingId?: number) {
   const owner = requireFileStoreOwner(requester)
   const id = parseFileId(fileId)
   if (!id) throw new ChatProfileError('파일을 골라줘.')
   const { entry, filePath } = FileStoreService.resolveFile(owner, id)
   if (!entry.mimeType?.startsWith('image/')) throw new ChatProfileError('이미지 파일만 넣을 수 있어.')
   if (fs.statSync(filePath).size > MAX_UPLOAD_FILE_SIZE_BYTES) throw new ChatProfileError('이미지는 500MB까지 넣을 수 있어.')
-  return ingestProfileAsset(await fs.promises.readFile(filePath), characterName)
+  return ingestProfileAsset(await fs.promises.readFile(filePath), characterName, settingId)
 }
 
 /** Safe on every boot; conditional writes cannot overwrite a profile edited during ingestion. */

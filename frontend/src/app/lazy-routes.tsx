@@ -46,6 +46,10 @@ const routeModuleLoaders = {
     () => import('@/features/image-generation/wildcard-page'),
     [() => import('@/i18n/resources/image-generation').then((module) => module.imageGenerationCatalog)],
   ),
+  'character-library-page': () => loadRouteModuleWithCatalog(
+    () => import('@/features/characters/character-library-page'),
+    [() => import('@/i18n/resources/characters').then((module) => module.charactersCatalog)],
+  ),
   'codex-chat-page': () => import('@/features/codex-chat/codex-chat-page'),
   'image-detail-page': () => loadRouteModuleWithCatalog(
     () => import('@/features/images/image-detail-page'),
@@ -158,6 +162,10 @@ function getRouteModuleLoader(to: string): RouteModuleLoader | null {
     return routeModuleLoaders['wildcard-page']
   }
 
+  if (pathname === '/characters') {
+    return routeModuleLoaders['character-library-page']
+  }
+
   if (pathname === '/chat') {
     return routeModuleLoaders['codex-chat-page']
   }
@@ -253,6 +261,11 @@ const PublicComfyWorkflowPageLazy = lazy(async () => {
 const WildcardPageLazy = lazy(async () => {
   const module = await loadLazyRoute('wildcard-page', routeModuleLoaders['wildcard-page'])
   return { default: module.WildcardPage }
+})
+
+const CharacterLibraryPageLazy = lazy(async () => {
+  const module = await loadLazyRoute('character-library-page', routeModuleLoaders['character-library-page'])
+  return { default: module.CharacterLibraryPage }
 })
 
 const CodexChatPageLazy = lazy(async () => {
@@ -370,6 +383,10 @@ export function PublicComfyWorkflowRoute() {
 
 export function WildcardRoute() {
   return withSuspense(<WildcardPageLazy />)
+}
+
+export function CharacterLibraryRoute() {
+  return withSuspense(<CharacterLibraryPageLazy />)
 }
 
 export function CodexChatRoute() {

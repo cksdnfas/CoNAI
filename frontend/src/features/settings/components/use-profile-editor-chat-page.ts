@@ -4,10 +4,13 @@ import { useI18n } from '@/i18n'
 import { useChatPageRegistration, type WorkflowUndo } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageArray, pageChoice, pageNumber, pageObject, pageRecord, pageText } from '@/features/codex-chat/page-action-helpers'
 import type { ChatProfile, ModelSlot } from '@/lib/api-codex-chat'
+import type { CharacterSetting } from '@/lib/api-character-library'
+import { settingDraftOf } from '@/features/characters/character-library-shared'
 import { enginePatch, judgePresetPatch, type Draft } from './chat-profile-editor-fields'
 import { applyRoleChoice } from './chat-model-role-select'
-import { BACKGROUND_SLOT, REFERENCE_SLOT, type ProfileAssetRuns } from './chat-profile-asset-runs'
+import { BACKGROUND_SLOT, REFERENCE_SLOT, type AssetRuns } from './chat-profile-asset-runs'
 import { newPromptSectionId } from './chat-profile-sections'
+import type { ProfileCharacterLink } from './use-profile-character-link'
 
 export type ProfileEditorSection = 'character' | 'appearance' | 'model' | 'memory' | 'tools' | 'look'
 
@@ -81,7 +84,7 @@ export const useProfileAssist = () => useContext(ProfileAssistContext)
  * Registers the open profile editor with a connected chat: it reads the draft, fills it (draft: nothing is saved),
  * switches sections, and asks to save or generate images through review cards.
  */
-export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty, section, go, slots, lorebooks, blocks, runs, save }: {
+export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty, section, go, slots, lorebooks, blocks, runs, link, save }: {
   open: boolean
   profile: ChatProfile | null
   draft: Draft
@@ -92,12 +95,17 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
   slots: ModelSlot[]
   lorebooks?: Array<{ id: number; name: string }>
   blocks?: Array<{ id: number; name: string }>
-  runs: ProfileAssetRuns
+  runs: AssetRuns
+  /** The library link; while synced the look (appearance, images, generation) is the setting's. */
+  link: ProfileCharacterLink
   save: () => Promise<unknown>
 }) {
   const { t } = useI18n()
   const draftRef = useRef(draft)
   draftRef.current = draft
+  // While synced (and loaded) the look read and filled here is the linked setting's draft.
+  const look = link.synced && link.setting.ready ? link.setting.draft : draft
+  const lookRuns = link.synced ? link.runs : runs
   const [filledValues, setFilledValues] = useState(new Map<DraftKey, string>())
 
   const assist = useMemo(() => {
@@ -108,15 +116,32 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     return { filled, sectionFilled: (target: ProfileEditorSection) => (Object.keys(DRAFT_KEYS) as DraftKey[]).some((key) => DRAFT_KEYS[key] === target && filled(key)) }
   }, [draft, filledValues])
 
-  const assetKeys = [REFERENCE_SLOT, BACKGROUND_SLOT, ...runs.emotionNames]
+  const slotRuns = (key: string) => (key === BACKGROUND_SLOT ? runs : lookRuns)
+  const assetKeys = [REFERENCE_SLOT, BACKGROUND_SLOT, ...lookRuns.emotionNames]
   const assets = {
-    preset: runs.preset?.name ?? null,
-    hasReference: Boolean(draft.referenceHash),
-    hasAvatar: Boolean(draft.avatarHash ?? draft.avatar),
+    preset: lookRuns.preset?.name ?? null,
+    hasReference: Boolean(look.referenceHash),
+    hasAvatar: Boolean(look.avatarHash ?? (link.synced ? null : draft.avatar)),
     hasBackground: Boolean(draft.backgroundHash),
-    expressionNames: runs.emotionNames,
-    slots: Object.fromEntries(assetKeys.map((key) => { const state = runs.slotState(key); return [key, { working: state.working, failed: state.failed, candidates: state.candidates.length }] })),
+    expressionNames: lookRuns.emotionNames,
+    slots: Object.fromEntries(assetKeys.map((key) => { const state = slotRuns(key).slotState(key); return [key, { working: state.working, failed: state.failed, candidates: state.candidates.length }] })),
   }
+  // The synced profiles a change of the setting reaches (an overwrite's review card names them).
+  const syncedProfiles = link.otherSyncedProfiles.slice(0, 50).map((entry) => entry.name)
+  const characterLink = draft.characterLink
+    ? { settingId: draft.characterLink.settingId, synced: draft.characterLink.synced, setting: link.label, linkedProfileCount: link.linkedCount, syncedProfiles, loaded: !draft.characterLink.synced || link.setting.ready }
+    : null
+  // Background stays the profile's (its own runs, also while synced); reference and expressions follow the look.
+  const assetKinds = [...(lookRuns.preset ? ['reference'] : []), ...(runs.preset ? ['background'] : []), ...(lookRuns.preset ? ['expressions'] : [])]
+  const linkSchema = {
+    ...pageObject({ settingId: { ...pageNumber(0, undefined, true), description: '0 removes the link (the profile keeps its own look)' }, synced: { type: 'boolean', description: 'true (default): the look is the setting’s, edits reach every synced profile; false: an own copy remembering the origin' } }, ['settingId']),
+    description: 'Character library setting the look links to',
+  }
+  const storeSchema = pageObject({
+    mode: pageChoice(characterLink && !characterLink.synced ? ['create', 'overwrite'] : ['create']),
+    folderId: { ...pageNumber(0, undefined, true), description: 'create: library folder id (0: top level)' },
+    name: { ...pageText(CHAT_PROFILE_TEXT_LIMITS.name), description: 'create: the new setting’s name (default: the profile name)' },
+  }, ['mode'])
   const ids = <T extends { id: number }>(items: T[] | undefined) => (items ?? []).map((item) => item.id)
   const draftSchema = pageObject({
     name: pageText(CHAT_PROFILE_TEXT_LIMITS.name), tagline: pageText(CHAT_PROFILE_TEXT_LIMITS.tagline), systemPrompt: pageText(CHAT_PROFILE_TEXT_LIMITS.text),
@@ -157,6 +182,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
     linkedFiles: pageArray(pageObject({ id: pageText(32), write: { type: 'boolean' } }, ['id']), 20),
     toolOutputLimit: pageNumber(CHAT_PROFILE_LIMITS.toolOutputLimit.min, CHAT_PROFILE_LIMITS.toolOutputLimit.max, true),
     agentDescription: { ...pageText(CHAT_PROFILE_TEXT_LIMITS.agentDescription), description: 'What it can do and when to call it (used while agentEnabled, which the user turns on)' },
+    ...(link.canView ? { characterLink: linkSchema } : {}),
   })
 
   useChatPageRegistration(open ? {
@@ -171,7 +197,8 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       profile: {
         saved: Boolean(profile), id: profile?.id ?? null, name: draft.name, tagline: draft.tagline, systemPrompt: cut(draft.systemPrompt),
         promptSections: draft.promptSections.map((entry) => ({ id: entry.id, title: entry.title, content: cut(entry.content), kind: entry.kind, enabled: entry.enabled !== false })),
-        greeting: cut(draft.greeting), alternateGreetings: draft.alternateGreetings.map(cut), authorNote: draft.authorNote, appearance: cut(draft.appearance ?? ''),
+        greeting: cut(draft.greeting), alternateGreetings: draft.alternateGreetings.map(cut), authorNote: draft.authorNote, appearance: cut(look.appearance ?? ''),
+        characterLink,
         openingHistory: draft.openingHistory.map((message) => ({ role: message.role, content: cut(message.content) })), greetingPosition: draft.greetingPosition,
         engine: draft.engine, modelSlotId: draft.modelSlotId, lorebookIds: draft.lorebookIds, blockIds: draft.blockIds, isEnabled: draft.isEnabled,
         temperature: draft.temperature, maxTokens: draft.maxTokens, contextTokens: draft.contextTokens, reasoningBudgetTokens: draft.reasoningBudgetTokens, visionEnabled: draft.visionEnabled, contentRatingMode: draft.contentRatingMode, contentRatingTierId: draft.contentRatingTierId,
@@ -185,7 +212,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
         pageAssist: draft.pageAssist,
       },
       // What a save card shows as the contents it will store.
-      selected: { name: draft.name, tagline: draft.tagline, engine: draft.engine, modelSlotId: draft.modelSlotId, greeting: draft.greeting.slice(0, 200), appearance: (draft.appearance ?? '').slice(0, 200) },
+      selected: { name: draft.name, tagline: draft.tagline, engine: draft.engine, modelSlotId: draft.modelSlotId, greeting: draft.greeting.slice(0, 200), appearance: (look.appearance ?? '').slice(0, 200), characterLink },
       modelSlots: slots.map((slot) => ({ id: slot.id, label: slot.label, ...(slot.kind === 'route' ? { reaches: slot.model || null } : {}), ...(slot.isDefault ? { isDefault: true } : {}) })),
       lorebooks: (lorebooks ?? []).map((book) => ({ id: book.id, name: book.name })),
       blocks: (blocks ?? []).map((block) => ({ id: block.id, name: block.name })),
@@ -195,29 +222,70 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       pageAction('profile.section', t({ ko: '편집 항목 열기', en: 'Open editor section' }), t({ ko: '편집기의 항목(캐릭터·외형·모델·기억·도구·꾸미기)을 열어.', en: 'Open an editor section.' }), pageObject({ section: pageChoice(['character', 'appearance', 'model', 'memory', 'tools', 'look']) }, ['section'])),
       pageAction('profile.draft', t({ ko: '프로필 초안 채우기', en: 'Fill profile draft' }), t({ ko: '주어진 항목만 편집기 초안에 채워. 저장하지 않아. appearance는 이미지 프롬프트용 외형 태그야.', en: 'Fill only the given keys into the editor draft; nothing is saved. appearance is image-prompt tags for the look.' }), draftSchema),
       pageAction('profile.save', t({ ko: '프로필 저장', en: 'Save profile' }), t({ ko: '편집기의 현재 초안을 저장해.', en: 'Save the editor draft as it is.' }), pageObject({}), 'save'),
-      ...(runs.preset ? [pageAction('profile.assets', t({ ko: '캐릭터 이미지 생성', en: 'Generate character images' }), t({ ko: '기준 이미지(reference)·배경(background)·표정(expressions, names는 assets.expressionNames 중에서)을 생성해. 새 프로필이면 먼저 저장되고, 빈 칸에는 첫 결과가 바로 들어가.', en: 'Generate the reference, background or expressions (names from assets.expressionNames). A new profile is saved first; empty slots take the first result.' }), pageObject({ kind: pageChoice(['reference', 'background', 'expressions']), names: pageArray(pageChoice(runs.emotionNames.length ? runs.emotionNames : ['-']), 32) }, ['kind']), 'save')] : []),
+      ...(link.canEdit && !characterLink?.synced ? [pageAction('profile.character_save', t({ ko: '외형을 라이브러리에 저장', en: 'Store look in library' }), t({ ko: '편집기의 지금 외형(외형 태그·기준 이미지·아바타)을 캐릭터 라이브러리에 저장하고 프로필을 그 설정과 동기화해. create는 새 설정(folderId·name), overwrite는 동기화가 끊긴 원본에 덮어써(그 설정과 동기화 중인 프로필도 바뀌어). 새 프로필이면 먼저 저장돼.', en: 'Store the editor’s current look in the character library and sync the profile to it: create makes a new setting (folderId, name); overwrite writes over the detached origin (its synced profiles change too). A new profile is saved first.' }), storeSchema, 'save')] : []),
+      ...(assetKinds.length ? [pageAction('profile.assets', t({ ko: '캐릭터 이미지 생성', en: 'Generate character images' }), t({ ko: '기준 이미지(reference)·배경(background)·표정(expressions, names는 assets.expressionNames 중에서)을 생성해. 새 프로필이면 먼저 저장되고, 빈 칸에는 첫 결과가 바로 들어가.', en: 'Generate the reference, background or expressions (names from assets.expressionNames). A new profile is saved first; empty slots take the first result.' }), pageObject({ kind: pageChoice(assetKinds), names: pageArray(pageChoice(lookRuns.emotionNames.length ? lookRuns.emotionNames : ['-']), 32) }, ['kind']), 'save')] : []),
     ],
     apply: () => {},
     applyAction: async (id, args, assertCurrent): Promise<WorkflowUndo | void> => {
       assertCurrent()
       if (id === 'profile.section') { go(String(args.section) as ProfileEditorSection); return }
       if (id === 'profile.save') { await save(); return }
+      if (id === 'profile.character_save') {
+        const mode = String(args.mode)
+        if (mode === 'overwrite') await link.store({ mode: 'overwrite' })
+        else await link.store({ mode: 'create', folderId: Number(args.folderId) > 0 ? Number(args.folderId) : null, name: String(args.name ?? '').trim() || draftRef.current.name })
+        return
+      }
       if (id === 'profile.assets') {
         const kind = String(args.kind)
+        if (!assetKinds.includes(kind)) throw new Error('이 이미지를 만들 수 있는 생성 프리셋이 없어.')
+        if (link.synced && !link.setting.ready && kind !== 'background') throw new Error('연결된 외형 설정을 아직 불러오는 중이야. 잠시 뒤 다시 해줘.')
         if (kind === 'expressions') {
-          const names = Array.isArray(args.names) && args.names.length ? args.names.map(String) : runs.emotionNames
+          const names = Array.isArray(args.names) && args.names.length ? args.names.map(String) : lookRuns.emotionNames
           if (!names.length) throw new Error('생성할 표정 이름이 없어.')
-          await runs.start({ kind: 'expressions', names }, true)
-        } else await runs.start({ kind: kind as 'reference' | 'background' }, true)
+          await lookRuns.start({ kind: 'expressions', names }, true)
+        } else await slotRuns(kind === 'background' ? BACKGROUND_SLOT : REFERENCE_SLOT).start({ kind: kind as 'reference' | 'background' }, true)
         return
       }
       if (id !== 'profile.draft') throw new Error('프로필 편집기에 없는 작업이야.')
       const input = pageRecord(args)
-      const keys = (Object.keys(input) as DraftKey[]).filter((key) => key in DRAFT_KEYS)
-      if (!keys.length) throw new Error('채울 항목이 없어.')
       const before = draftRef.current
-      const filled: Partial<Draft> = {}
+      const beforeLink = before.characterLink
+      // The synced setting's draft as it was (an undo of a link change brings back its unsaved edits).
+      const settingBase = link.setting.baseRef.current
+      const settingSnapshot = beforeLink?.synced && settingBase?.id === beforeLink.settingId ? { base: settingBase, draft: link.setting.draftRef.current } : null
+      // The link first: a synced link's look is the setting's, which then takes a filled appearance.
+      let linkChange: Partial<Draft> | null = null
+      let primed: CharacterSetting | null = null
+      if (input.characterLink !== undefined && link.canView) {
+        const raw = input.characterLink === null ? null : pageRecord(input.characterLink)
+        const next = raw && Number(raw.settingId) > 0 ? { settingId: Number(raw.settingId), synced: raw.synced !== false } : null
+        if (link.dirty && beforeLink && next && next.settingId !== beforeLink.settingId) {
+          throw new Error('연결된 외형 설정에 저장 안 한 변경이 있어. 다른 설정으로 바꾸면 사라지니 먼저 저장하거나 사람이 직접 바꾸게 해줘.')
+        }
+        if (next) primed = await link.prime(next.settingId)
+        assertCurrent()
+        linkChange = link.linkPatch(next, primed)
+      }
+      const resultLink = linkChange ? linkChange.characterLink ?? null : beforeLink
+      // The link's setting changes (synced to another one, or no longer synced): the setting editor reloads.
+      const settingSwitched = linkChange !== null && !(resultLink?.synced && beforeLink?.synced && resultLink.settingId === beforeLink.settingId)
+      const settingAppearance = input.appearance !== undefined && Boolean(resultLink?.synced)
+      if (settingAppearance && !link.canEdit) throw new Error('라이브러리 편집 권한이 없어서 동기화 중인 외형은 고칠 수 없어.')
+      if (settingAppearance && !(link.synced && link.setting.ready && resultLink?.settingId === link.link?.settingId)) {
+        throw new Error('새로 연결한 외형 설정은 불러온 뒤에 appearance를 채워줘 (그 설정의 초안에 들어가).')
+      }
+      const keys = (Object.keys(input) as DraftKey[]).filter((key) => key in DRAFT_KEYS && !(settingAppearance && key === 'appearance'))
+      if (!keys.length && !linkChange && !settingAppearance) throw new Error('채울 항목이 없어.')
+      const filled: Partial<Draft> = { ...linkChange }
       for (const key of keys) (filled as Record<string, unknown>)[key] = draftValue(key, input[key], before)
+      const settingBefore = link.setting.draftRef.current.appearance
+      const settingValue = settingAppearance ? String(input.appearance) : null
+      if (settingValue !== null) link.setting.patch({ appearance: settingValue })
+      // The setting draft right after this fill, when the fill touched it: a later edit there ends the undo.
+      const settingAfter = !resultLink?.synced || (!linkChange && settingValue === null) ? null
+        : settingSwitched ? (primed ? settingDraftOf(primed) : null)
+          : { ...link.setting.draftRef.current, ...(settingValue !== null ? { appearance: settingValue } : {}) }
       const next: Partial<Draft> = { ...(filled.engine ? enginePatch(filled.engine, before) : {}), ...filled }
       if (keys.includes('suggestProfileId')) {
         Object.assign(next, filled.suggestProfileId == null ? { suggestProfileId: null } : applyRoleChoice('suggest', `profile:${filled.suggestProfileId}`))
@@ -237,11 +305,15 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       const changedKeys = Object.keys(next) as (keyof Draft)[]
       setDraft((current) => ({ ...current, ...next }))
       setFilledValues((old) => { const map = new Map(old); keys.forEach((key) => map.set(key, JSON.stringify(next[key]))); return map })
-      const first = DRAFT_KEYS[keys[0]]
+      const first = keys.length ? DRAFT_KEYS[keys[0]] : 'appearance'
       if (first !== section) go(first)
       return {
-        isCurrent: () => changedKeys.every((key) => JSON.stringify(draftRef.current[key]) === JSON.stringify(next[key])),
+        isCurrent: () => changedKeys.every((key) => JSON.stringify(draftRef.current[key]) === JSON.stringify(next[key]))
+          && (settingAfter === null || JSON.stringify(link.setting.draftRef.current) === JSON.stringify(settingAfter)),
         restore: () => {
+          // Back to the setting the profile was synced to: its editor reloads it from the draft it had.
+          if (settingSwitched && settingSnapshot) link.setting.seed(settingSnapshot.base, settingSnapshot.draft)
+          else if (settingValue !== null) link.setting.patch({ appearance: settingBefore })
           setDraft((current) => ({ ...current, ...Object.fromEntries(changedKeys.map((key) => [key, before[key]])) }))
           setFilledValues((old) => { const map = new Map(old); keys.forEach((key) => map.delete(key)); return map })
         },

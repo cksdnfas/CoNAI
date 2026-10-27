@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 import { z } from 'zod'
-import type { ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult, ChatAssetKind, ChatAssetAttempt, ChatAssetCandidate } from '@conai/shared'
+import type { ChatAssetOwner, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult, ChatAssetKind, ChatAssetAttempt, ChatAssetCandidate, CharacterSettingPatch } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import type { McpRequester } from '../../mcp/context'
 import { enqueueProfileAssetGenerationJob } from '../../mcp/tools/generationJobTools'
@@ -16,11 +16,13 @@ import { ChatGenerationPresetStore, comfyAssetFields, resolvePresetWorkflow, typ
 import { buildChatGenerationPresetJob, CHAT_NAI_PAYLOAD_MAX_BYTES } from './chatGenerationPayload'
 import { chatCharacterGroupPath, normalizeAvatarCrop, normalizeProfileAssetHash, isProfileAssetHidden } from './chatProfileAssets'
 import { activeMediaFile } from './chatCardAssets'
-import { ChatAssetError, requireChatAssetAdmin, requireChatAssetGeneration } from './chatAssetAccess'
+import { ChatAssetError, requireChatAssetAdmin, requireChatAssetGeneration, requireLocalProfileAssets } from './chatAssetAccess'
 import { assetTaggerEnabled, tagAsset, reviewAsset, type AssetTagCache } from './chatAssetReview'
 import { assetJudgeSetup, judgeExpression, type ExpressionJudgement } from './chatJudgeAssets'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
 import { assignExpressionKeywords, styleWithExpressionGroup } from './chatProfileExpressions'
+import { chatAssetOwner, chatAssetOwnerProfile, chatAssetRowOwner } from './chatAssetOwner'
+import { characterSettingRow, ensureCharacterGroups, updateCharacterSetting, characterChanged } from '../characterLibrary'
 
 const positiveId = z.number().int().positive().safe()
 const promptText = z.string().trim().min(1).max(8000)
@@ -33,7 +35,7 @@ export const chatAssetBatchInputSchema = z.object({
 
 type SlotRecipe = { slotKey: string; kind: ChatAssetKind; prompt: string; size?: string; inputs?: Record<string, unknown> }
 type Snapshot = { requestKey: string; request: string; preset: ChatGenerationPreset; appearance: string; referenceHash: string | null; slots: SlotRecipe[]; promptField?: string; groupPath: string }
-type BatchRow = { id: number; account_id: number | null; profile_id: number; preset_id: number; snapshot: string; created_at: string }
+type BatchRow = { id: number; account_id: number | null; profile_id: number | null; setting_id: number | null; preset_id: number; snapshot: string; created_at: string }
 type StoredAttempt = { jobId: number; createdAt: string; useCurrentPreset: boolean; referenceHash: string | null; tags?: Record<string, AssetTagCache>; tagCheckedAt?: Record<string, number>; judged?: Record<string, ExpressionJudgement> }
 type SlotRow = { batch_id: number; slot_key: string; kind: ChatAssetKind; prompt: string; attempts: string; chosen_hash: string | null }
 
@@ -55,16 +57,20 @@ function slotRow(id: number, key: string) {
 }
 function attemptsOf(slot: SlotRow): StoredAttempt[] { return JSON.parse(slot.attempts) as StoredAttempt[] }
 function snapshotOf(row: BatchRow): Snapshot { return JSON.parse(row.snapshot) as Snapshot }
-function authorize(requester: McpRequester, id: number, profileId?: number) {
+function authorize(requester: McpRequester, id: number, target?: ChatAssetOwner | number, readOnly = false) {
   requireChatAssetAdmin(requester)
   const row = batchRow(id)
-  if (profileId !== undefined && row.profile_id !== profileId) throw new ChatAssetError('자산 묶음을 찾을 수 없어.', 404)
-  if (!ChatProfileStore.find(row.profile_id)) throw new ChatAssetError('프로필을 찾을 수 없어.', 404)
+  const owner = chatAssetRowOwner(row)
+  if (target !== undefined && (chatAssetOwner(target).kind !== owner.kind || chatAssetOwner(target).id !== owner.id)) throw new ChatAssetError('자산 묶음을 찾을 수 없어.', 404)
+  if (owner.kind === 'setting') requireRequesterPermission(requester, 'characters.edit')
+  if (!chatAssetOwnerProfile(owner)) throw new ChatAssetError('프로필을 찾을 수 없어.', 404)
+  if (!readOnly) requireLocalProfileAssets(owner, slotRows(id).every((slot) => slot.kind === 'background'))
   return row
 }
 
 /** Same-process serialization is an optimization; queue+attempt writes below share a durable transaction. */
 export const assertChatAssetBatchProfile = authorize
+export const assertChatAssetBatchOwner = authorize
 
 const operations = new Map<number, Promise<unknown>>()
 async function serialized<T>(batchId: number, run: () => Promise<T>): Promise<T> {
@@ -122,37 +128,52 @@ function assetFields(preset: ChatGenerationPreset, promptField?: string) {
 const followsReference = (slot: { kind: ChatAssetKind }) => slot.kind !== 'reference' && slot.kind !== 'background'
 
 /** Validate a creation proposal without writing a batch or job. */
-export function validateChatAssetBatchProposal(requester: McpRequester, profileId: number, value: unknown) {
+export function resolveChatAssetTarget(profileId: number, settingId?: number, batchId?: number, input?: unknown): ChatAssetOwner {
+  if (settingId !== undefined) return { kind: 'setting', id: settingId }
+  // An explicit profile-owned batch, or background-only creation, stays with the profile.
+  if ((batchId !== undefined && batchRow(batchId).profile_id === profileId) || (input !== undefined && recipes(parseInput(input)).every((slot) => slot.kind === 'background'))) return { kind: 'profile', id: profileId }
+  const link = ChatProfileStore.find(profileId)?.characterLink
+  return link?.synced ? { kind: 'setting', id: link.settingId } : { kind: 'profile', id: profileId }
+}
+
+export function validateChatAssetBatchProposal(requester: McpRequester, profileId: ChatAssetOwner | number, value: unknown) {
   requireChatAssetAdmin(requester)
   const input = parseInput(value)
   const preset = ChatGenerationPresetStore.find(input.presetId)
   if (!preset) throw new ChatAssetError('생성 프리셋을 찾을 수 없어.')
   const profile = requireChatAssetGeneration(requester, profileId, preset.kind === 'nai' ? 'novelai' : 'comfyui')
   const slots = recipes(input)
+  requireLocalProfileAssets(profileId, slots.every((slot) => slot.kind === 'background'))
+  if (chatAssetOwner(profileId).kind === 'setting' && slots.some((slot) => slot.kind === 'background')) throw new ChatAssetError('외형 설정에는 배경 슬롯을 넣을 수 없어.')
   const fields = assetFields(preset, input.promptField)
   if (fields.drawsReference && !profile.referenceHash && slots.some(followsReference) && !slots.some((slot) => slot.kind === 'reference')) throw new ChatAssetError('기준 이미지를 고르거나 기준 이미지 슬롯을 먼저 만들어줘.')
   return input
 }
 
-export async function createChatAssetBatch(requester: McpRequester, profileId: number, value: unknown): Promise<ChatAssetBatch> {
+export async function createChatAssetBatch(requester: McpRequester, profileId: ChatAssetOwner | number, value: unknown): Promise<ChatAssetBatch> {
   requireChatAssetAdmin(requester)
   const input = parseInput(value)
   const request = JSON.stringify(input)
   const db = getUserSettingsDb()
+  const owner = chatAssetOwner(profileId)
+  if (owner.kind === 'setting') requireRequesterPermission(requester, 'characters.edit')
   const id = db.transaction(() => {
-    const existing = db.prepare("SELECT * FROM chat_asset_batches WHERE account_id IS ? AND profile_id = ? AND json_extract(snapshot, '$.requestKey') = ?").get(requester.accountId, profileId, input.idempotencyKey) as BatchRow | undefined
+    const existing = db.prepare(`SELECT * FROM chat_asset_batches WHERE account_id IS ? AND ${owner.kind === 'profile' ? 'profile_id' : 'setting_id'} = ? AND json_extract(snapshot, '$.requestKey') = ?`).get(requester.accountId, owner.id, input.idempotencyKey) as BatchRow | undefined
     if (existing) {
       if (snapshotOf(existing).request !== request) throw new ChatAssetError('같은 멱등 키로 다른 묶음을 만들 수 없어.', 409)
+      requireLocalProfileAssets(owner, slotRows(existing.id).every((slot) => slot.kind === 'background'))
       return existing.id
     }
     const preset = ChatGenerationPresetStore.find(input.presetId)
     if (!preset) throw new ChatAssetError('생성 프리셋을 찾을 수 없어.')
     const profile = requireChatAssetGeneration(requester, profileId, preset.kind === 'nai' ? 'novelai' : 'comfyui')
     const slots = recipes(input)
+    requireLocalProfileAssets(profileId, slots.every((slot) => slot.kind === 'background'))
+    if (owner.kind === 'setting' && slots.some((slot) => slot.kind === 'background')) throw new ChatAssetError('외형 설정에는 배경 슬롯을 넣을 수 없어.')
     const fields = assetFields(preset, input.promptField)
     if (fields.drawsReference && !profile.referenceHash && slots.some(followsReference) && !slots.some((slot) => slot.kind === 'reference')) throw new ChatAssetError('기준 이미지를 고르거나 기준 이미지 슬롯을 먼저 만들어줘.')
     const snapshot: Snapshot = { requestKey: input.idempotencyKey, request, preset, appearance: profile.appearance, referenceHash: profile.referenceHash, slots, promptField: fields.promptField, groupPath: `${chatCharacterGroupPath(profile.name)}/후보` }
-    const batchId = Number(db.prepare('INSERT INTO chat_asset_batches(account_id, profile_id, preset_id, snapshot) VALUES (?, ?, ?, ?)').run(requester.accountId, profileId, preset.id, JSON.stringify(snapshot)).lastInsertRowid)
+    const batchId = Number(db.prepare('INSERT INTO chat_asset_batches(account_id, profile_id, setting_id, preset_id, snapshot) VALUES (?, ?, ?, ?, ?)').run(requester.accountId, owner.kind === 'profile' ? owner.id : null, owner.kind === 'setting' ? owner.id : null, preset.id, JSON.stringify(snapshot)).lastInsertRowid)
     const insert = db.prepare('INSERT INTO chat_asset_slots(batch_id, slot_key, kind, prompt) VALUES (?, ?, ?, ?)')
     slots.forEach((slot) => insert.run(batchId, slot.slotKey, slot.kind, slot.prompt))
     return batchId
@@ -179,7 +200,9 @@ async function submitSlot(requester: McpRequester, row: BatchRow, slot: SlotRow,
   const snapshot = snapshotOf(row)
   const preset = useCurrentPreset ? ChatGenerationPresetStore.find(row.preset_id) : snapshot.preset
   if (!preset) throw new ChatAssetError('현재 생성 프리셋을 찾을 수 없어.')
-  const profile = requireChatAssetGeneration(requester, row.profile_id, preset.kind === 'nai' ? 'novelai' : 'comfyui')
+  const owner = chatAssetRowOwner(row)
+  const profile = requireChatAssetGeneration(requester, owner, preset.kind === 'nai' ? 'novelai' : 'comfyui')
+  requireLocalProfileAssets(owner, slotRows(row.id).every((entry) => entry.kind === 'background'))
   const fields = assetFields(preset, snapshot.promptField)
   // Only character slots draw from the reference: a new reference and a background start from the text alone.
   const drawsReference = fields.drawsReference && followsReference(slot)
@@ -200,8 +223,9 @@ async function submitSlot(requester: McpRequester, row: BatchRow, slot: SlotRow,
       if (field.type === 'number' && /(?:^|[._])(?:noise_seed|seed)$/.test(field.jsonPath)) input.inputs[field.id] = crypto.randomInt(1, 4294967288)
     }
   }
-  const next = { ...input, request_summary: `캐릭터 자산 · ${profile.name} · ${slot.slot_key}`, group_path: snapshot.groupPath, idempotency_key: `asset:${row.id}:${slot.slot_key}:${attempt}` }
-  await enqueueProfileAssetGenerationJob(requester, row.profile_id, next, (jobId) => {
+  const destination = owner.kind === 'setting' ? { group_id: ensureCharacterGroups(owner.id).candidateGroupId, group_path: undefined } : { group_path: snapshot.groupPath }
+  const next = { ...input, request_summary: `캐릭터 자산 · ${profile.name} · ${slot.slot_key}`, ...destination, idempotency_key: `asset:${row.id}:${slot.slot_key}:${attempt}` }
+  await enqueueProfileAssetGenerationJob(requester, owner, next, (jobId) => {
     authorize(requester, row.id)
     const live = slotRow(row.id, slot.slot_key)
     const liveAttempts = attemptsOf(live)
@@ -232,13 +256,14 @@ function candidatesOf(jobId: number): ChatAssetCandidate[] {
 
 /** Queue rows are the only progress authority; attempts retain job identities and tag caches only. */
 /** The newest batch made for a profile, for a chat that only knows the profile. */
-export function latestChatAssetBatchId(profileId: number): number | null {
-  const row = getUserSettingsDb().prepare('SELECT id FROM chat_asset_batches WHERE profile_id = ? ORDER BY id DESC LIMIT 1').get(profileId) as { id: number } | undefined
+export function latestChatAssetBatchId(target: ChatAssetOwner | number): number | null {
+  const owner = chatAssetOwner(target)
+  const row = getUserSettingsDb().prepare(`SELECT id FROM chat_asset_batches WHERE ${owner.kind === 'profile' ? 'profile_id' : 'setting_id'} = ? ORDER BY id DESC LIMIT 1`).get(owner.id) as { id: number } | undefined
   return row?.id ?? null
 }
 
-export function getChatAssetBatch(requester: McpRequester, id: number, profileId?: number): ChatAssetBatch {
-  const row = authorize(requester, id, profileId)
+export function getChatAssetBatch(requester: McpRequester, id: number, profileId?: ChatAssetOwner | number): ChatAssetBatch {
+  const row = authorize(requester, id, profileId, true)
   const snapshot = snapshotOf(row)
   const rows = slotRows(id)
   const allCandidates = rows.flatMap((slot) => attemptsOf(slot).flatMap((attempt) => candidatesOf(attempt.jobId).map((candidate) => ({ slotKey: slot.slot_key, compositeHash: candidate.compositeHash }))))
@@ -258,7 +283,7 @@ export function getChatAssetBatch(requester: McpRequester, id: number, profileId
     slots.forEach((slot) => { if (!slot.attempts.length) slot.status = 'blocked' })
   }
   if (enabled) scheduleReview(id)
-  return { id: row.id, accountId: row.account_id, profileId: row.profile_id, presetId: row.preset_id, createdAt: row.created_at, snapshot: { preset: { ...snapshot.preset }, appearance: snapshot.appearance, referenceHash: snapshot.referenceHash, slots: snapshot.slots }, slots }
+  return { id: row.id, accountId: row.account_id, owner: chatAssetRowOwner(row), presetId: row.preset_id, createdAt: row.created_at, snapshot: { preset: { ...snapshot.preset }, appearance: snapshot.appearance, referenceHash: snapshot.referenceHash, slots: snapshot.slots }, slots }
 }
 
 export async function regenerateChatAssetSlot(requester: McpRequester, id: number, key: string, value: unknown) {
@@ -339,8 +364,8 @@ const JUDGE_RETRY_MS = 5 * 60_000
 
 /** Expression candidates with tags and no reading yet: the profile's judge says which emotion they show (cached on the attempt). */
 async function judgeExpressionCandidates(id: number, tags: Record<string, AssetTagCache>) {
-  const batch = getUserSettingsDb().prepare('SELECT profile_id FROM chat_asset_batches WHERE id = ?').get(id) as { profile_id: number } | undefined
-  const profile = batch ? ChatProfileStore.find(batch.profile_id) : null
+  const batch = getUserSettingsDb().prepare('SELECT profile_id FROM chat_asset_batches WHERE id = ?').get(id) as { profile_id: number | null } | undefined
+  const profile = batch?.profile_id ? ChatProfileStore.find(batch.profile_id) : null
   if (!profile || !assetJudgeSetup(profile)) return
   const rows = slotRows(id)
   const emotions = rows.filter((slot) => slot.kind === 'expression').map((slot) => slot.slot_key)
@@ -393,7 +418,27 @@ export function applyChatAssetBatch(requester: McpRequester, id: number, value: 
     database.transaction(() => {
       const liveChosen = Object.fromEntries(slotRows(id).filter(inScope).map((slot) => [slot.slot_key, slot.chosen_hash]))
       if (JSON.stringify(liveChosen) !== JSON.stringify(chosen)) throw new ChatAssetError('고른 후보가 다른 요청에서 바뀌었어. 다시 읽어줘.', 409)
-      const profile = ChatProfileStore.find(row.profile_id)!
+      if (row.setting_id !== null) {
+        const setting = characterSettingRow(row.setting_id)
+        const patch: CharacterSettingPatch = { revision: setting.revision }
+        const expressions = selected.filter((slot) => slot.kind === 'expression')
+        for (const slot of selected) {
+          if (slot.kind === 'background') throw new ChatAssetError('외형 설정에는 배경 슬롯을 넣을 수 없어.')
+          if (slot.kind === 'reference') { patch.referenceHash = slot.chosen_hash; applied.profileFields.push('referenceHash') }
+          if (slot.kind === 'avatar') { patch.avatarHash = slot.chosen_hash; patch.avatarCrop = crop; applied.profileFields.push('avatarHash', 'avatarCrop') }
+        }
+        if (expressions.length) {
+          const group = ensureCharacterGroups(row.setting_id, database)
+          const byHash = new Map<string, string[]>()
+          expressions.forEach((slot) => byHash.set(slot.chosen_hash!, [...(byHash.get(slot.chosen_hash!) ?? []), slot.slot_key]))
+          assignExpressionKeywords(group.expressionGroupId, [...byHash].map(([compositeHash, keywords]) => ({ compositeHash, keywords })), database)
+          applied.expressionGroupId = group.expressionGroupId
+          applied.expressionSlots = expressions.map((slot) => slot.slot_key)
+        }
+        updateCharacterSetting(row.setting_id, patch, database)
+        return
+      }
+      const profile = ChatProfileStore.find(row.profile_id!)!
       const path = chatCharacterGroupPath(profile.name)
       const patch: ChatProfileInput = {}
       for (const slot of selected) {
@@ -423,9 +468,10 @@ export function applyChatAssetBatch(requester: McpRequester, id: number, value: 
         applied.profileFields.push('style.emoticonGroupIds')
       }
       // Full-body art remains a library candidate until the later standing-image feature.
-      if (Object.keys(patch).length) ChatProfileStore.update(row.profile_id, patch, database)
+      if (Object.keys(patch).length) ChatProfileStore.update(row.profile_id!, patch, database)
     }).immediate()
-    return { profileId: row.profile_id, applied }
+    if (row.setting_id !== null) characterChanged([characterSettingRow(row.setting_id).folder_id], [row.setting_id])
+    return { owner: chatAssetRowOwner(row), applied }
   } catch (error) {
     throw new ChatAssetError(error instanceof Error ? error.message : '자산을 적용하지 못했어.', error instanceof ChatAssetError ? error.status : 400, {
       ...(error instanceof ChatAssetError ? error.details : {}), rolledBack: true,

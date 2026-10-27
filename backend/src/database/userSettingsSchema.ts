@@ -1,4 +1,5 @@
 import { ensureChatAssetSchema } from './chatAssetSchema';
+import { ensureCharacterLibrarySchema } from './characterLibrarySchema';
 import Database from 'better-sqlite3';
 import {
   applyGenerationQueueDebugColumns,
@@ -15,6 +16,7 @@ import { normalizeOpeningHistory, OPENING_HISTORY_MAX_ENTRIES, type ChatOpeningM
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
+  ensureCharacterLibrarySchema(db);
   console.log('📊 Creating user settings tables...');
   db.exec(`CREATE TABLE IF NOT EXISTS chat_settings_migrations (
     name TEXT PRIMARY KEY,
@@ -1001,6 +1003,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['reference_hash', 'TEXT'],
     ['avatar_hash', 'TEXT'],
     ['avatar_crop', 'TEXT'],
+    ['character_setting_id', 'INTEGER REFERENCES character_settings(id) ON DELETE SET NULL'],
+    ['character_sync', 'INTEGER NOT NULL DEFAULT 0 CHECK(character_sync IN (0, 1))'],
     ['background_hash', 'TEXT'],
     ['vision_enabled', 'INTEGER'],
     // Page assistant: the chat may be connected to the current CoNAI page (the monitor button). Off unless switched on.

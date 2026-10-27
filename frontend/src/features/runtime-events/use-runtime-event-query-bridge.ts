@@ -3,7 +3,10 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 import type { ChatGenerationFinishedEventPayload, ChatGenerationUpdatedEventPayload, GraphExecutionEventPayload, GraphExecutionProgressEventPayload, HistoryRecordEventPayload, QueueJobEventPayload, QueueJobProgressEventPayload, RuntimeEventEnvelope, RuntimeJobHintPayload } from '@/lib/runtime-events-types'
 import { refreshChatGenerationQueries, refreshRuntimeQueryKeys, type ChatGenerationRefresh } from './chat-generation-query-updates'
+import type { CharactersChangedEventPayload } from '@conai/shared'
 import { AUDIO_QUERY_KEY } from '@/lib/api-audio'
+import { CHARACTER_LIBRARY_QUERY_KEY, invalidateCharacterLibrary } from '@/lib/api-character-library'
+import { invalidateChatProfileViews } from '@/lib/api-codex-chat'
 import { CHAT_ROUTINES_QUERY_KEY } from '@/lib/api-chat-routines'
 import { PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { POSTS_QUERY_KEY, invalidatePostScopes } from '@/lib/api-posts'
@@ -182,6 +185,7 @@ export function useRuntimeEventQueryBridge() {
   const progressFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingPostChangesRef = useRef(new Map<number, string>())
   const pendingAudioScopesRef = useRef(new Map<string, string>())
+  const pendingCharacterChangesRef = useRef({ folderIds: new Set<number>(), settingIds: new Set<number>(), profileIds: new Set<number>() })
   const pendingGraphProgressIdsRef = useRef(new Set<number>())
   const pendingGenerationRef = useRef(new Map<string, ChatGenerationRefresh>())
 
@@ -229,6 +233,14 @@ export function useRuntimeEventQueryBridge() {
         if (progressIds) pendingGraphProgressIdsRef.current.clear()
         if (changes?.size) {
           void invalidatePostScopes(queryClient, changes)
+          return
+        }
+        if (prefix === CHARACTER_LIBRARY_QUERY_KEY) {
+          const characterChanges = pendingCharacterChangesRef.current
+          pendingCharacterChangesRef.current = { folderIds: new Set(), settingIds: new Set(), profileIds: new Set() }
+          void invalidateCharacterLibrary(queryClient, characterChanges)
+          // Profiles synced to a changed setting show its look: only views holding those profiles refetch.
+          if (characterChanges.profileIds.size) void invalidateChatProfileViews(queryClient, characterChanges.profileIds)
           return
         }
         void queryClient.invalidateQueries({ queryKey: [prefix], refetchType: 'active', predicate: ({ queryKey, state }) => {
@@ -385,6 +397,14 @@ export function useRuntimeEventQueryBridge() {
         scheduleInvalidate(['file-store'], 400)
         return
       }
+      case 'characters.changed': {
+        const { folderIds, settingIds, profileIds } = envelope.payload as CharactersChangedEventPayload
+        folderIds.forEach((id) => pendingCharacterChangesRef.current.folderIds.add(id))
+        settingIds.forEach((id) => pendingCharacterChangesRef.current.settingIds.add(id))
+        profileIds?.forEach((id) => pendingCharacterChangesRef.current.profileIds.add(id))
+        scheduleInvalidate([CHARACTER_LIBRARY_QUERY_KEY], 400)
+        return
+      }
       case 'workspace.changed': {
         const { projectId } = envelope.payload as { projectId: string }
         if (/^[a-f0-9]{32}$/.test(projectId)) void queryClient.invalidateQueries({ queryKey: ['workspaces', projectId], refetchType: 'active' })
@@ -445,6 +465,7 @@ export function useRuntimeEventQueryBridge() {
       'workspaces',
       'file-store',
       'workspace-binding',
+      CHARACTER_LIBRARY_QUERY_KEY,
     ])
     // Cancel only observed initial reads: imperative fetchQuery/prefetch callers must keep their promises.
     await queryClient.cancelQueries({

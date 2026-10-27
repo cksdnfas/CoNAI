@@ -110,6 +110,7 @@ export function NaiGenerationPanel({
     handleAddCharacterReference,
     handleCharacterReferenceFieldChange,
     handleCharacterReferenceImageChange,
+    handleLoadCharacterReference,
     handleRemoveCharacterReference,
   } = useNaiFormController({ showSnackbar })
 
@@ -503,6 +504,7 @@ export function NaiGenerationPanel({
       handleAddCharacterReference={handleAddCharacterReference}
       handleCharacterReferenceFieldChange={handleCharacterReferenceFieldChange}
       handleCharacterReferenceImageChange={handleCharacterReferenceImageChange}
+      handleLoadCharacterReference={handleLoadCharacterReference}
       handleRemoveCharacterReference={handleRemoveCharacterReference}
       handleOpenCharacterReferenceSaveModal={handleOpenCharacterReferenceSaveModal}
       handleLoadCharacterReferenceFromStore={handleLoadCharacterReferenceFromStore}

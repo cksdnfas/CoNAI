@@ -1,6 +1,8 @@
 import express, { type Request, type Response } from 'express'
 import { asyncHandler } from '../middleware/asyncHandler'
-import { requireAdmin } from '../middleware/authMiddleware'
+import { requireAdmin, requirePermission } from '../middleware/authMiddleware'
+import { canRequesterViewImages } from '../middleware/imageAccess'
+import { requireCharacterImageAccess } from '../services/characterLibrary'
 import { ChatProposalStore } from '../services/codex-chat/chatProposals'
 import { applyLoreProposal, undoLoreProposal, LoreProposalError } from '../services/codex-chat/chatLoreProposals'
 import { LorebookError } from '../services/codex-chat/chatLorebookFiles'
@@ -86,7 +88,10 @@ function visibleProposalId(req: Request, res: Response) {
  * this records it so the card shows as saved after a reload. Display block and profile proposals carry the id of
  * what was created; profile updates need none.
  */
-router.post('/:proposalId/saved', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/:proposalId/saved', (req, res, next) => {
+  const proposal = ChatProposalStore.find(Number(req.params.proposalId))
+  return (proposal?.kind === 'character_library' ? requirePermission('characters.edit') : requireAdmin)(req, res, next)
+}, asyncHandler(async (req: Request, res: Response) => {
   const proposalId = parseId(req.params.proposalId)
   const threadId = proposalId === null ? null : ChatProposalStore.threadIdOf(proposalId)
   // A proposal in someone else's chat is indistinguishable from a missing one.
@@ -96,7 +101,11 @@ router.post('/:proposalId/saved', requireAdmin, asyncHandler(async (req: Request
   }
   const proposal = ChatProposalStore.find(proposalId)
   const rawSavedId = (req.body as { savedId?: unknown } | undefined)?.savedId
-  if (proposal?.kind === 'profile_assets') {
+  if (proposal?.kind === 'character_library' && proposal.action === 'save_setting') {
+    try { requireCharacterImageAccess(proposal.input, canRequesterViewImages(getRequester(req))) }
+    catch (error) { res.status(403).json({ success: false, error: error instanceof Error ? error.message : 'Permission required: images.view' }); return }
+  }
+  if (proposal?.kind === 'profile_assets' || proposal?.kind === 'character_assets') {
     res.status(400).json({ success: false, error: '자산 제안은 승인 경로에서 적용해줘.' })
     return
   }
@@ -105,7 +114,7 @@ router.post('/:proposalId/saved', requireAdmin, asyncHandler(async (req: Request
     res.status(400).json({ success: false, error: '저장한 항목의 id가 올바르지 않아.' })
     return
   }
-  if (proposal?.kind !== 'profile_update' && savedId === null) {
+  if (proposal?.kind !== 'profile_update' && proposal?.kind !== 'character_library' && savedId === null) {
     res.status(400).json({ success: false, error: '저장한 항목의 id가 필요해.' })
     return
   }
@@ -131,7 +140,7 @@ router.post('/:proposalId/apply', asyncHandler(async (req: Request, res: Respons
       }
       return
     }
-    if (ChatProposalStore.find(proposalId)?.kind === 'profile_assets') {
+    if (['profile_assets', 'character_assets'].includes(ChatProposalStore.find(proposalId)?.kind ?? '')) {
       if (!hasAdminAccess(req)) { res.status(403).json({ success: false, error: '자산을 승인할 관리자 권한이 없어.' }); return }
       try {
         res.json({ success: true, data: await applyProfileAssetsProposal({ accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }, proposalId) })

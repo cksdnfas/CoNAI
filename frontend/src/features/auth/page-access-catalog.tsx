@@ -1,4 +1,4 @@
-import { Archive, AudioLines, Blocks, Film, FolderTree, Image as ImageIcon, Images, MessageSquareText, Newspaper, Settings2, Sparkles, Tags, Upload, Wallpaper, WandSparkles, type LucideIcon } from 'lucide-react'
+import { Archive, AudioLines, Blocks, Contact, Film, FolderTree, Image as ImageIcon, Images, MessageSquareText, Newspaper, Settings2, Sparkles, Tags, Upload, Wallpaper, WandSparkles, type LucideIcon } from 'lucide-react'
 import { chatPagePermission } from '@conai/shared'
 import { hasAuthPermission } from './auth-permissions'
 
@@ -48,6 +48,12 @@ const PAGE_ACCESS_ENTRIES: Omit<PageAccessCatalogItem, 'permissionKey'>[] = [
     labelKey: 'pageAccessCatalog.wildcards',
     icon: WandSparkles,
     category: 'derived',
+  },
+  {
+    path: '/characters',
+    labelKey: 'pageAccessCatalog.characters',
+    icon: Contact,
+    category: 'primary',
   },
   {
     path: '/generation',

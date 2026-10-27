@@ -16,12 +16,14 @@ import {
   CHAT_BLOCKS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
   CHAT_PROFILE_DEFAULTS_QUERY_KEY as DEFAULTS_QUERY_KEY,
+  CHAT_PROFILE_SYNCED_KEYS,
   MODEL_SLOTS_QUERY_KEY,
   applyChatProposal,
   undoChatLoreProposal,
   createChatBlock,
   dismissChatProposal,
   threadLorebooksQueryKey,
+  chatProfileSaveInput,
   createChatProfile,
   getChatProfileDefaults,
   listChatAdminProfiles,
@@ -42,6 +44,8 @@ import { ChatPageProposalCard } from './chat-page-proposal-card'
 import { ChatWorkflowProposalCard } from './chat-workflow-proposal-card'
 import { ChatPageActionCard } from './chat-page-action-card'
 import { ChatAssetProposalCard } from './chat-asset-proposal-card'
+import { ChatCharacterLibraryProposalCard } from './chat-character-library-proposal-card'
+import { ChatProfileLinkChange } from './chat-profile-link-change'
 import { ProposalFooter, ProposalFrame } from './chat-proposal-parts'
 
 type Proposal = NonNullable<CodexChatToolCall['proposal']>
@@ -82,7 +86,8 @@ function ProposalCard({ proposal, threadId }: { proposal: Proposal; threadId?: n
   if (proposal.kind === 'page_fields') return <ChatPageProposalCard proposal={proposal} />
   if (proposal.kind === 'workflow_graph') return <ChatWorkflowProposalCard proposal={proposal} />
   if (proposal.kind === 'page_action') return <ChatPageActionCard proposal={proposal} />
-  if (proposal.kind === 'profile_assets') return <ChatAssetProposalCard proposal={proposal} threadId={threadId} />
+  if (proposal.kind === 'profile_assets' || proposal.kind === 'character_assets') return <ChatAssetProposalCard proposal={proposal} threadId={threadId} />
+  if (proposal.kind === 'character_library') return <ChatCharacterLibraryProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'display_block') return <BlockProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'profile') return <ProfileProposalCard proposal={proposal} threadId={threadId} />
   if (proposal.kind === 'lore') return <LoreProposalCard proposal={proposal} threadId={threadId} />
@@ -241,7 +246,7 @@ function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const created = await createChatProfile({ ...input, engine: 'llm', mcpEnabled: false, isEnabled: true })
+      const created = await createChatProfile(chatProfileSaveInput({ ...input, engine: 'llm', mcpEnabled: false, isEnabled: true }))
       await markChatProposalSaved(proposal.id, created.id)
       return created
     },
@@ -269,6 +274,7 @@ function ProfileProposalCard({ proposal, threadId }: { proposal: ProfileProposal
           <div className="truncate text-xs text-muted-foreground">{meta}</div>
         </div>
       </div>
+      {input.characterLink !== undefined ? <ChatProfileLinkChange after={input.characterLink} profileId={null} showBefore={false} /> : null}
       <Footer saved={saved} savedLink="/settings?section=chat" admin={admin}>
         <span className="flex-1" />
         <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending} />
@@ -369,11 +375,49 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
   const slotNames = useMemo(() => new Map((slotsQuery.data ?? []).map((slot) => [slot.id, slot.label])), [slotsQuery.data])
   const current = profilesQuery.data?.find((profile) => profile.id === proposal.profileId) ?? null
   const keys = Object.keys(proposal.patch)
-  const editorProfile = useMemo(() => current ? ({ ...current, ...proposal.patch } as ChatProfile) : null, [current, proposal.patch])
+  // The proposed link rides the editor's draft; the profile keeps its stored link (with its name and path).
+  const rawLink = proposal.patch.characterLink as { settingId?: number; synced?: boolean } | null | undefined
+  const proposedLink = rawLink === undefined ? undefined : rawLink && Number(rawLink.settingId) > 0 ? { settingId: Number(rawLink.settingId), synced: rawLink.synced !== false } : null
+  const editorProfile = useMemo(() => current ? ({ ...current, ...proposal.patch, characterLink: current.characterLink } as ChatProfile) : null, [current, proposal.patch])
+  const confirm = useConfirm()
+  const [checking, setChecking] = useState(false)
+
+  // A profile synced to a library setting (now, or by this proposal) takes no look fields: the server drops them.
+  const handleSave = async () => {
+    const lookKeys = keys.filter((key) => (CHAT_PROFILE_SYNCED_KEYS as readonly string[]).includes(key))
+    if (!lookKeys.length) { saveMutation.mutate(); return }
+    setChecking(true)
+    let stored: ChatProfile | undefined
+    try {
+      const profiles = await listChatAdminProfiles()
+      queryClient.setQueryData(CHAT_ADMIN_PROFILES_QUERY_KEY, profiles)
+      stored = profiles.find((entry) => entry.id === proposal.profileId)
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '프로필을 다시 읽지 못했어.', en: 'Could not re-read the profile.' })), tone: 'error' })
+      return
+    } finally {
+      setChecking(false)
+    }
+    const storedLink = stored?.characterLink ?? null
+    const linkAfter = proposedLink !== undefined ? proposedLink : storedLink
+    if (!linkAfter?.synced) { saveMutation.mutate(); return }
+    const setting = storedLink && storedLink.settingId === linkAfter.settingId ? [...(storedLink.path ?? []), storedLink.settingName ?? `#${storedLink.settingId}`].join(' / ') : `#${linkAfter.settingId}`
+    const fields = lookKeys.map((key) => UPDATE_LABELS[key] ? t(UPDATE_LABELS[key]) : key).join(', ')
+    if (lookKeys.length === keys.length) {
+      showSnackbar({ message: t({ ko: '이 프로필은 ‘{setting}’ 설정과 동기화 중이라 외형 항목({fields})은 그 설정 것이야. 라이브러리에서 그 설정을 고쳐줘.', en: 'This profile is synced with ‘{setting}’, so its look ({fields}) is that setting’s. Edit the setting in the library.' }, { setting, fields }), tone: 'error' })
+      return
+    }
+    const ok = await confirm({
+      title: t({ ko: '외형 항목은 저장 안 돼', en: 'The look is not saved' }),
+      description: t({ ko: '이 프로필은 ‘{setting}’ 설정과 동기화 중이라 외형 항목({fields})은 그 설정 것이야. 나머지만 저장할까? 외형은 라이브러리에서 그 설정을 고쳐줘.', en: 'This profile is synced with ‘{setting}’, so its look ({fields}) is that setting’s. Save the rest only? Edit the look in the library.' }, { setting, fields }),
+      confirmLabel: t({ ko: '나머지 저장', en: 'Save the rest' }),
+    })
+    if (ok) saveMutation.mutate()
+  }
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const updated = await updateChatProfile(proposal.profileId, proposal.patch as ChatProfileInput)
+      const updated = await updateChatProfile(proposal.profileId, chatProfileSaveInput(proposal.patch as ChatProfileInput))
       await markChatProposalSaved(proposal.id, proposal.profileId)
       return updated
     },
@@ -390,7 +434,12 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
     void listChatAdminProfiles().then(async (profiles) => {
       queryClient.setQueryData(CHAT_ADMIN_PROFILES_QUERY_KEY, profiles)
       const profile = profiles.find((entry) => entry.id === proposal.profileId) as unknown as Record<string, unknown> | undefined
-      if (!profile || !keys.every((key) => JSON.stringify(profile[key]) === JSON.stringify(proposal.patch[key]))) return
+      // A stored link carries its name and path besides the proposed setting and sync.
+      const stored = (key: string) => {
+        const value = profile?.[key] as { settingId?: number; synced?: boolean } | null | undefined
+        return key === 'characterLink' && value ? { settingId: value.settingId, synced: value.synced } : value
+      }
+      if (!profile || !keys.every((key) => JSON.stringify(stored(key)) === JSON.stringify(proposal.patch[key]))) return
       setSavedNow(true)
       await markChatProposalSaved(proposal.id, proposal.profileId)
       await refresh()
@@ -401,7 +450,9 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
     <ProposalFrame>
       <Header label={t({ ko: '프로필 수정 제안', en: 'Profile update proposal' })} name={proposal.profileName} />
       <div className="space-y-1.5">
-        {keys.map((key) => (
+        {keys.map((key) => key === 'characterLink' ? (
+          <ChatProfileLinkChange key={key} after={proposal.patch[key]} before={proposal.before[key]} profileId={proposal.profileId} showBefore />
+        ) : (
           <UpdateRow
             key={key}
             label={UPDATE_LABELS[key] ? t(UPDATE_LABELS[key]) : key}
@@ -412,10 +463,10 @@ function ProfileUpdateCard({ proposal, threadId }: { proposal: UpdateProposal; t
       </div>
       <Footer saved={saved} savedLink="/settings?section=chat" admin={admin}>
         <span className="flex-1" />
-        <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending} />
-        <SaveButton pending={saveMutation.isPending} onClick={() => saveMutation.mutate()} />
+        <OpenEditorButton onClick={() => setEditorOpen(true)} disabled={saveMutation.isPending || checking} />
+        <SaveButton pending={saveMutation.isPending || checking} onClick={() => void handleSave()} />
       </Footer>
-      {admin && editorOpen && editorProfile ? <Suspense fallback={null}><ChatProfileEditorModal open profile={editorProfile} defaults={defaultsQuery.data} onClose={handleEditorClose} /></Suspense> : null}
+      {admin && editorOpen && editorProfile ? <Suspense fallback={null}><ChatProfileEditorModal open profile={editorProfile} draftLink={proposedLink} defaults={defaultsQuery.data} onClose={handleEditorClose} /></Suspense> : null}
     </ProposalFrame>
   )
 }

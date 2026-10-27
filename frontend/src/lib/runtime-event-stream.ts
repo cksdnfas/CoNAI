@@ -48,6 +48,7 @@ const RUNTIME_EVENT_NAMES: readonly RuntimeEventName[] = [
   'plugin.server.changed',
   'chat.routine.changed',
   'files.changed',
+  'characters.changed',
 ]
 
 export interface RuntimeEventStreamHandlers {

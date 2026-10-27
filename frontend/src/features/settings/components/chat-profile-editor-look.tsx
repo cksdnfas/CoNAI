@@ -10,7 +10,7 @@ import { type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { ChatProfileLook } from './chat-profile-look'
 import { CollapsibleRow } from '@/components/ui/collapsible-row'
-import { BACKGROUND_SLOT, type ProfileAssetRuns } from './chat-profile-asset-runs'
+import { BACKGROUND_SLOT, type AssetRuns } from './chat-profile-asset-runs'
 import { AssetCandidateTray, AssetPresetPicker } from './chat-profile-asset-slots'
 
 /**
@@ -27,7 +27,7 @@ export function ChatProfileLookPanel({ draft, patch, defaults, backgroundUrl, bl
   onBusyChange: (busy: boolean) => void
   busy: boolean
   profile: ChatProfile | null
-  runs: ProfileAssetRuns
+  runs: AssetRuns
 }) {
   const { t } = useI18n()
   const { style } = draft
@@ -58,7 +58,7 @@ export function ChatProfileLookPanel({ draft, patch, defaults, backgroundUrl, bl
           )}
         />
         {background.working || background.failed || background.candidates.length ? (
-          <AssetCandidateTray runs={runs} slotKey={BACKGROUND_SLOT} title={t({ ko: '배경', en: 'Background' })} currentHash={draft.backgroundHash ?? null} referenceHash={null} profileId={profile?.id ?? null} actions={<AssetPresetPicker runs={runs} />} wide />
+          <AssetCandidateTray runs={runs} slotKey={BACKGROUND_SLOT} title={t({ ko: '배경', en: 'Background' })} currentHash={draft.backgroundHash ?? null} referenceHash={null} actions={<AssetPresetPicker runs={runs} />} wide />
         ) : null}
       </EditorGroup>
       <div className="border-t border-line">

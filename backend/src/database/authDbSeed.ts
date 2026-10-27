@@ -55,6 +55,8 @@ export const PERMISSIONS_V2_SOURCES: Record<PermissionKey, readonly string[]> = 
   'images.delete': ['images.delete', 'groups.delete'],
   'images.upload': ['upload.create'],
   'prompts.view': ['prompts.view'],
+  'characters.view': [],
+  'characters.edit': [],
   'prompts.edit': ['prompts.create', 'prompts.update', 'prompts.delete'],
   'wildcards.view': ['wildcards.view'],
   'wildcards.edit': ['wildcards.edit', 'wildcards.delete', 'wildcards.lora.scan'],
@@ -143,6 +145,18 @@ export function seedAccessControlDefaults(db: Database.Database): void {
   migratePermissionsV2(db);
   removeUncataloguedPermissions(db);
   grantAllCatalogPermissionsToAdminGroup(db);
+  db.transaction(() => {
+    const key = 'character_library_permissions_v1';
+    if (db.prepare('SELECT 1 FROM auth_seed_state WHERE seed_key = ?').get(key)) return;
+    for (const action of ['view', 'edit']) {
+      db.prepare(`INSERT OR IGNORE INTO auth_group_permissions(group_id, permission_id, allowed)
+        SELECT gp.group_id, target.id, gp.allowed FROM auth_group_permissions gp
+        JOIN auth_permissions source ON source.id = gp.permission_id
+        JOIN auth_permissions target ON target.permission_key = ?
+        WHERE source.permission_key = ?`).run(`characters.${action}`, `prompts.${action}`);
+    }
+    db.prepare('INSERT INTO auth_seed_state(seed_key) VALUES (?)').run(key);
+  })();
   applyAnonymousGuestSignupDefault(db);
 }
 

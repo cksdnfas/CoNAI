@@ -6,6 +6,7 @@ import { ChatAssetError } from '../services/codex-chat/chatAssetAccess'
 import { createChatAssetBatch, getChatAssetBatch, regenerateChatAssetSlot, cancelChatAssetSlot, chooseChatAssetSlot, applyChatAssetBatch, applyChatAssetSlot, assertChatAssetBatchProfile } from '../services/codex-chat/chatAssetBatches'
 import { clearProfileExpression, setProfileExpression } from '../services/codex-chat/chatProfileExpressions'
 import { reviewChatAssetVision } from '../services/codex-chat/chatAssetVision'
+import type { ChatAssetOwner } from '@conai/shared'
 
 const router = express.Router({ mergeParams: true })
 router.use(requireAdmin)
@@ -15,7 +16,7 @@ function idOf(value: unknown) {
   if (!Number.isSafeInteger(id) || id <= 0) throw new ChatAssetError('자산 묶음 또는 프로필 id가 올바르지 않아.')
   return id
 }
-function handle(run: (req: Request, requester: { accountId: number | null; accountType: ReturnType<typeof getRequesterAccountType> }, profileId: number, signal: AbortSignal) => unknown | Promise<unknown>, created = false) {
+function handle(run: (req: Request, requester: { accountId: number | null; accountType: ReturnType<typeof getRequesterAccountType> }, profileId: ChatAssetOwner, signal: AbortSignal) => unknown | Promise<unknown>, created = false) {
   return asyncHandler(async (req: Request, res: Response) => {
     const controller = new AbortController()
     const abort = () => { if (!res.writableEnded) controller.abort() }
@@ -23,8 +24,8 @@ function handle(run: (req: Request, requester: { accountId: number | null; accou
     res.on?.('close', abort)
     try {
       const requester = { accountId: getRequesterAccountId(req), accountType: getRequesterAccountType(req) }
-      const profileId = idOf(req.params.profileId)
-      if (req.params.batchId !== undefined) assertChatAssetBatchProfile(requester, idOf(req.params.batchId), profileId)
+      const profileId: ChatAssetOwner = req.params.settingId !== undefined ? { kind: 'setting', id: idOf(req.params.settingId) } : { kind: 'profile', id: idOf(req.params.profileId) }
+      if (req.params.batchId !== undefined) assertChatAssetBatchProfile(requester, idOf(req.params.batchId), profileId, req.method === 'GET')
       res.status(created ? 201 : 200).json({ success: true, data: await run(req, requester, profileId, controller.signal) })
     } catch (error) {
       if (error instanceof ChatAssetError) { res.status(error.status).json({ success: false, error: error.message, ...error.details }); return }

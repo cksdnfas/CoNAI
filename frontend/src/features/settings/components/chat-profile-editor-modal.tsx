@@ -23,6 +23,10 @@ import {
   CHAT_PROFILES_QUERY_KEY,
   CHAT_USER_PROFILES_QUERY_KEY,
   MODEL_SLOTS_QUERY_KEY,
+  CHAT_PROFILE_SYNCED_KEYS,
+  chatProfileSaveInput,
+  emoticonGroupsAfterServerChange,
+  sameCharacterLink,
   createChatProfile,
   deleteChatProfile,
   getChatProfileDefaults,
@@ -42,7 +46,7 @@ import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getClaudeModels } from '@/lib/api-agent-cli'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
-import { CHAT_PROFILE_DEFAULTS, CHAT_TRANSLATION_DEFAULTS } from '@conai/shared'
+import { CHAT_PROFILE_DEFAULTS, CHAT_TRANSLATION_DEFAULTS, type ChatProfileCharacterLinkInput } from '@conai/shared'
 import { useProfileAssetRuns } from './chat-profile-asset-runs'
 import { ChatProfileAppearancePanel } from './chat-profile-editor-appearance'
 import { draftProfileAssetUrl } from './chat-profile-images'
@@ -55,6 +59,7 @@ import { ChatProfileToolsPanel } from './chat-profile-editor-tools'
 import { ChatProfilePreviewModal } from './chat-profile-preview-modal'
 import { SettingsAdvancedSwitch, useSettingsAdvanced } from './settings-advanced'
 import { ProfileAssistContext, useProfileEditorChatPage } from './use-profile-editor-chat-page'
+import { useProfileCharacterLink } from './use-profile-character-link'
 import { CHAT_DOCK_INSET } from './use-settings-editor-chat-page'
 
 type EditorSection = 'character' | 'appearance' | 'model' | 'memory' | 'tools' | 'look'
@@ -71,6 +76,7 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     loreRecursionDepth: profile?.loreRecursionDepth ?? defaults?.loreRecursionDepth ?? CHAT_PROFILE_DEFAULTS.loreRecursionDepth,
     authorNote: profile?.authorNote ?? '',
     avatar: profile?.avatar ?? null,
+    characterLink: profile?.characterLink ? { settingId: profile.characterLink.settingId, synced: profile.characterLink.synced } : null,
     appearance: profile?.appearance,
     referenceHash: profile?.referenceHash,
     avatarHash: profile?.avatarHash,
@@ -174,18 +180,23 @@ type ProfileEditorProps = {
   initialDraft?: ChatProfileInput
   /** The profile a new one copies (initialDraft holds its settings). */
   copyOf?: number
+  /** A library link the draft starts with over the stored profile's (a proposal's, not stored yet). */
+  draftLink?: ChatProfileCharacterLinkInput
   defaults: ChatProfileDefaults | undefined
   onClose: () => void
 }
 
 /** Keep one dialog (and its focus trap) while the server defaults load, fail or retry. */
-export function ChatProfileEditorModal({ open, profile: initialProfile, initialDraft, copyOf, defaults, onClose }: ProfileEditorProps) {
+export function ChatProfileEditorModal({ open, profile: initialProfile, initialDraft, copyOf, draftLink, defaults, onClose }: ProfileEditorProps) {
   const { t } = useI18n()
   const defaultsQuery = useQuery({ queryKey: CHAT_PROFILE_DEFAULTS_QUERY_KEY, queryFn: getChatProfileDefaults, enabled: open && !defaults, staleTime: Infinity })
   const currentDefaults = defaults ?? defaultsQuery.data
   const [profile, setProfile] = useState(initialProfile)
   const editorSession = useRef({ open: false, id: initialProfile?.id ?? null })
-  const [draft, setDraft] = useState<Draft | null>(() => profile || currentDefaults ? buildDraft(profile ?? initialDraft ?? null, currentDefaults) : null)
+  const [draft, setDraft] = useState<Draft | null>(() => {
+    const built = profile || currentDefaults ? buildDraft(profile ?? initialDraft ?? null, currentDefaults) : null
+    return built && profile && draftLink !== undefined ? { ...built, characterLink: draftLink } : built
+  })
   const [draftDefaults, setDraftDefaults] = useState(currentDefaults)
   const editor = useRef<{ save: () => void }>(null)
   if (currentDefaults !== draftDefaults) {
@@ -197,18 +208,21 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
   useEffect(() => {
     if (open && (!editorSession.current.open || editorSession.current.id !== (initialProfile?.id ?? null))) {
       setProfile(initialProfile)
-      setDraft(initialProfile || currentDefaults ? buildDraft(initialProfile ?? initialDraft ?? null, currentDefaults) : null)
+      const built = initialProfile || currentDefaults ? buildDraft(initialProfile ?? initialDraft ?? null, currentDefaults) : null
+      setDraft(built && initialProfile && draftLink !== undefined ? { ...built, characterLink: draftLink } : built)
     }
     editorSession.current = { open, id: initialProfile?.id ?? null }
-  }, [currentDefaults, initialDraft, open, initialProfile])
+  }, [currentDefaults, initialDraft, open, initialProfile, draftLink])
 
   const patch = (next: Partial<Draft>) => setDraft((current) => current ? { ...current, ...next } : current)
   const dirty = open && ((!profile && Boolean(initialDraft)) || (draft !== null && JSON.stringify(draft) !== JSON.stringify(buildDraft(profile ?? initialDraft ?? null, currentDefaults))))
+  // Unsaved edits of a synced library setting's look (held by the editor below).
+  const [settingDirty, setSettingDirty] = useState(false)
   return (
     <Modal
       open={open}
       onClose={onClose}
-      dirty={dirty}
+      dirty={dirty || (open && settingDirty)}
       onSave={draft ? () => editor.current?.save() : undefined}
       title={profile ? t({ ko: '프로필 편집', en: 'Edit profile' }) : t({ ko: '프로필 추가', en: 'Add profile' })}
       widthClassName="max-w-5xl"
@@ -233,6 +247,7 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
         draft={draft}
         setDraft={(update) => setDraft((current) => typeof update === 'function' ? (current ? update(current) : current) : update)}
         dirty={dirty}
+        onSettingDirtyChange={setSettingDirty}
         copyOf={copyOf}
         defaults={currentDefaults}
         onClose={onClose}
@@ -246,11 +261,12 @@ export function ChatProfileEditorModal({ open, profile: initialProfile, initialD
   )
 }
 
-function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty, copyOf, defaults, onClose, ref }: ProfileEditorProps & {
+function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty: profileDirty, onSettingDirtyChange, copyOf, defaults, onClose, ref }: ProfileEditorProps & {
   draft: Draft
   setDraft: Dispatch<SetStateAction<Draft>>
   setProfile: Dispatch<SetStateAction<ChatProfile | null>>
   dirty: boolean
+  onSettingDirtyChange: (dirty: boolean) => void
   ref: Ref<{ save: () => void }>
 }) {
   const { t } = useI18n()
@@ -270,10 +286,28 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty, copy
     queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
     ...(lorebooksChanged ? [queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY })] : []),
   ])
-  /** Saves what generation reads (name, appearance, reference); a new profile is created whole first. */
+  /**
+   * Saves what generation reads (name, appearance, reference); a new profile is created whole first. A changed library
+   * link is stored too (with the look a detached profile keeps), so the server has detached it and copied the
+   * expressions before any library store or profile-owned batch runs.
+   */
   const ensureProfile = async () => {
-    const updated = profile ? await updateChatProfile(profile.id, { name: draft.name, appearance: draft.appearance, referenceHash: draft.referenceHash }) : await createChatProfile(draft, copyOf)
+    const linkChanged = profile !== null && !sameCharacterLink(draft.characterLink, profile.characterLink ?? null)
+    const syncedAfter = Boolean((linkChanged ? draft.characterLink : profile?.characterLink)?.synced)
+    const look = { appearance: draft.appearance, referenceHash: draft.referenceHash }
+    const updated = profile
+      // A synced profile's look is its setting's: only the name (and the link) is sent then.
+      ? await updateChatProfile(profile.id, linkChanged
+        ? chatProfileSaveInput({ name: draft.name, characterLink: draft.characterLink, ...(syncedAfter ? {} : { ...look, avatarHash: draft.avatarHash, avatarCrop: draft.avatarCrop }) })
+        : syncedAfter ? { name: draft.name } : { name: draft.name, ...look })
+      : await createChatProfile(chatProfileSaveInput(draft), copyOf)
     setProfile(updated)
+    if (profile && linkChanged) {
+      // The server swapped the expression groups the link brings; the draft's list takes just that change.
+      // Synced now: the stored look is the setting's, so the draft takes it (the profile reads as unchanged there).
+      const storedLook = syncedAfter ? Object.fromEntries(CHAT_PROFILE_SYNCED_KEYS.map((key) => [key, updated[key]])) as Partial<Draft> : {}
+      setDraft((current) => ({ ...current, ...storedLook, style: { ...current.style, emoticonGroupIds: emoticonGroupsAfterServerChange(profile.style.emoticonGroupIds, updated.style.emoticonGroupIds, current.style.emoticonGroupIds) } }))
+    }
     if (!profile) {
       setDraft(buildDraft(updated, defaults))
       showSnackbar({ message: t({ ko: '프로필을 저장했어.', en: 'Profile saved.' }), tone: 'info' })
@@ -296,6 +330,12 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty, copy
     })
   }
   const runs = useProfileAssetRuns({ open, profileId: profile?.id ?? null, ensureProfile, onApplied: assetApplied })
+  const link = useProfileCharacterLink({ open, profile, draft, setDraft, setProfile, ensureProfile })
+  const dirty = profileDirty || link.dirty
+  useEffect(() => {
+    onSettingDirtyChange(link.dirty)
+    return () => onSettingDirtyChange(false)
+  }, [link.dirty, onSettingDirtyChange])
   const isLlm = draft.engine === 'llm'
 
   const slotsQuery = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: open })
@@ -320,7 +360,13 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty, copy
   // An unset chat model follows the representative model; keep the draft unset until the person picks one.
   const defaultSlotId = slots.find((slot) => slot.isDefault)?.id ?? null
   const saveMutation = useMutation({
-    mutationFn: () => (profile ? updateChatProfile(profile.id, draft) : createChatProfile(draft, copyOf)),
+    // Synced: the setting's changed look is stored first (a conflict stops here with both drafts kept), then the
+    // profile without the look's fields.
+    mutationFn: async () => {
+      await link.beforeSave()
+      const input = chatProfileSaveInput(draft, profile?.characterLink ?? null)
+      return profile ? updateChatProfile(profile.id, input) : createChatProfile(input, copyOf)
+    },
     onSuccess: async (savedProfile) => {
       const previous = profile?.lorebookIds ?? []
       // Lorebooks list their profiles by name: a link change or a rename of a linked profile refreshes them.
@@ -369,7 +415,7 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty, copy
   // A connected chat reads and fills this draft, opens sections, and asks (by card) to save or generate images.
   const assist = useProfileEditorChatPage({
     open, profile, draft, setDraft, dirty, section, go, slots,
-    lorebooks: linkableLorebooks, blocks: blocksQuery.data, runs, save: () => saveMutation.mutateAsync(),
+    lorebooks: linkableLorebooks, blocks: blocksQuery.data, runs, link, save: () => saveMutation.mutateAsync(),
   })
 
   return (
@@ -408,7 +454,7 @@ function ProfileEditor({ open, profile, setProfile, draft, setDraft, dirty, copy
             <ChatProfileCharacterPanel open={open} draft={draft} patch={patch} onPreview={() => setPreviewDraft({ ...draft, id: profile?.id })} profile={profile} onOpenAppearance={() => go('appearance')} />
           ) : null}
           {section === 'appearance' ? (
-            <ChatProfileAppearancePanel draft={draft} patch={patch} profile={profile} onBusyChange={onAssetBusyChange} busy={assetBusy} runs={runs} ensureProfile={ensureProfile} onProfileChange={setProfile} />
+            <ChatProfileAppearancePanel draft={draft} patch={patch} profile={profile} dirty={dirty} onBusyChange={onAssetBusyChange} busy={assetBusy} runs={runs} ensureProfile={ensureProfile} onProfileChange={setProfile} link={link} />
           ) : null}
           {section === 'model' ? (
             <ChatProfileModelPanel

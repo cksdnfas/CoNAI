@@ -36,6 +36,8 @@ import {
   type SelectedImageDraft,
 } from '../image-generation-shared'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
+import { CharacterSettingLoadButton, type CharacterSettingLoadTarget } from './character-setting-load-button'
+import { naiCharacterReferenceIdentity, type NaiCharacterReferencePlacement } from './use-nai-form-controller'
 import { NaiCharacterPositionBoard } from './nai-character-position-board'
 import { Section } from '@/components/ui/section'
 import { NaiControllerInsetBlock, NaiPromptSection } from './nai-generation-panel-sections'
@@ -83,6 +85,7 @@ export function NaiGenerationEditorSections({
   handleAddCharacterReference,
   handleCharacterReferenceFieldChange,
   handleCharacterReferenceImageChange,
+  handleLoadCharacterReference,
   handleRemoveCharacterReference,
   handleOpenCharacterReferenceSaveModal,
   handleLoadCharacterReferenceFromStore,
@@ -127,12 +130,15 @@ export function NaiGenerationEditorSections({
   handleResolutionPresetChange: (presetKey: string) => void
   handleOpenImageEditor: () => void
   handleNaiImageChange: (field: 'sourceImage' | 'maskImage', image?: SelectedImageDraft) => void
-  handleAddCharacterPrompt: () => void
+  /** Adds an empty character, or one with a loaded character setting's tags (and its reference, in one update). */
+  handleAddCharacterPrompt: (prompt?: string, reference?: NaiCharacterReferencePlacement) => void
   handleCharacterPromptChange: (index: number, field: 'prompt' | 'uc' | 'centerX' | 'centerY', value: string) => void
   handleRemoveCharacterPrompt: (index: number) => void
   handleAddCharacterReference: (image: SelectedImageDraft) => void
   handleCharacterReferenceFieldChange: (index: number, field: 'type' | 'strength' | 'fidelity', value: string) => void
   handleCharacterReferenceImageChange: (index: number, image?: SelectedImageDraft) => void
+  /** A loaded character setting's reference: into the chosen reference row, or a new row. */
+  handleLoadCharacterReference: (placement: NaiCharacterReferencePlacement) => void
   handleRemoveCharacterReference: (index: number) => void
   handleOpenCharacterReferenceSaveModal: (index: number) => void
   handleLoadCharacterReferenceFromStore: (assetId: string) => Promise<void>
@@ -156,6 +162,21 @@ export function NaiGenerationEditorSections({
   const enhance = resolveNaiFormEnhance(naiForm, sourceImageSize)
   // A model with fixed settings (V5 Full Medium) uses only its UC preset text; the typed negatives are not used.
   const fixedSettings = getNaiFixedModelSettings(naiForm.model)
+  // "캐릭터 불러오기": a setting's reference can go into the character references when the model takes them. NAI
+  // does not tie references to characters, so the row is always chosen: a new row (default) or one existing row.
+  const characterReferenceTargets = supportsCharacterReference ? [
+    { id: 'new', label: t({ ko: '새 참조로 추가', en: 'Add as a new reference' }) },
+    ...naiForm.characterReferences.map((reference, index) => {
+      const label = t({ ko: '참조 {index} 교체', en: 'Replace reference {index}' }, { index: index + 1 })
+      // The choice follows the row itself, not its position (rows can move while the dialog is open).
+      return { id: String(index), label: reference.image?.fileName ? `${label} · ${reference.image.fileName}` : label, identity: naiCharacterReferenceIdentity(reference) }
+    }),
+  ] : []
+  const toReferencePlacement = (target: CharacterSettingLoadTarget, image: SelectedImageDraft) => ({ replaces: target.identity ?? null, image })
+  const characterReferenceLoad = supportsCharacterReference ? {
+    targets: characterReferenceTargets,
+    onLoad: (target: CharacterSettingLoadTarget, image: SelectedImageDraft) => handleLoadCharacterReference(toReferencePlacement(target, image)),
+  } : null
 
   const prompt = (
     <div className="min-w-0 space-y-3">
@@ -168,6 +189,7 @@ export function NaiGenerationEditorSections({
           value: getNaiUcPresetText(naiForm.model, fixedSettings.ucPreset) ?? '',
           hint: getNaiFixedNegativeHint(t),
         } : undefined}
+        characterLoad={{ reference: characterReferenceLoad }}
       />
       <NaiPromptPresetControls naiForm={naiForm} onChange={handleNaiOptionChange} />
     </div>
@@ -185,14 +207,25 @@ export function NaiGenerationEditorSections({
         <>
           <span className="px-1 text-xs tabular-nums text-muted-foreground">{naiForm.characters.length}</span>
           {supportsCharacterPrompts ? (
-            <IconButton
-              size="icon-sm"
-              variant="ghost"
-              onClick={handleAddCharacterPrompt}
-              label={t('image-generation.components.nai.generation.editor.sections.add.character')}
-            >
-              <Plus className="h-4 w-4" />
-            </IconButton>
+            <>
+              <CharacterSettingLoadButton
+                icon="add"
+                label={t({ ko: '캐릭터 불러와서 추가', en: 'Add a character from the library' })}
+                referenceTargets={characterReferenceTargets}
+                onLoad={({ appearance, reference, referenceTarget }) => handleAddCharacterPrompt(
+                  appearance,
+                  reference && referenceTarget ? toReferencePlacement(referenceTarget, reference) : undefined,
+                )}
+              />
+              <IconButton
+                size="icon-sm"
+                variant="ghost"
+                onClick={() => handleAddCharacterPrompt()}
+                label={t('image-generation.components.nai.generation.editor.sections.add.character')}
+              >
+                <Plus className="h-4 w-4" />
+              </IconButton>
+            </>
           ) : (
             // A disabled button swallows hover, so the span carries the "why" tooltip.
             <Tip content={t('image-generation.components.nai.generation.editor.sections.character.prompt.is.not.available.for.the')}>
@@ -280,6 +313,7 @@ export function NaiGenerationEditorSections({
                       value: '',
                       hint: t({ ko: '이 모델은 캐릭터 네거티브 프롬프트를 쓰지 않아.', en: 'This model does not use character negative prompts.' }),
                     } : undefined}
+                    characterLoad={{ reference: characterReferenceLoad }}
                   />
                 </div>
               ))}

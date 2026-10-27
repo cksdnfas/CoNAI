@@ -20,7 +20,7 @@ import { libraryThumbnailUrl } from '@/lib/api-sprite'
 import { cn } from '@/lib/utils'
 import { ChosenCheckBadge, ReviewChips, SlotVisionReview } from './chat-asset-batch-modal'
 import { chatModelRows, useRouteOptionLabel } from './chat-model-role-select'
-import type { ProfileAssetRuns } from './chat-profile-asset-runs'
+import type { AssetRuns } from './chat-profile-asset-runs'
 
 /** The library group name the server uses for a character (characterMediaGroupPath). */
 export function characterGroupName(name: string) {
@@ -28,17 +28,32 @@ export function characterGroupName(name: string) {
   return name.replace(/[/\\]/g, '-').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 100) || '이름 없음'
 }
 
-/** The character's "채팅 캐릭터/<name>" groups: its expressions (with their keyworded images) and generated candidates. */
-export function useCharacterGroups(characterName: string) {
+/**
+ * Where a character's expression and candidate groups are: a chat profile finds its "채팅 캐릭터/<name>" groups by
+ * name; a library setting carries their ids.
+ */
+export type CharacterGroupSource = { characterName: string } | { expressionGroupId: number | null; candidateGroupId: number | null }
+
+/** The character's expressions (with their keyworded images) and its generated candidates group. */
+export function useCharacterGroups(source: CharacterGroupSource) {
   const { canViewImages } = useImagePermissions()
-  const groups = useQuery({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY, queryFn: getGroupsHierarchyAll, enabled: canViewImages, staleTime: 30000 })
-  const name = characterGroupName(characterName)
-  const root = groups.data?.find((group) => group.name === '채팅 캐릭터' && !group.parent_id)
+  const byName = 'characterName' in source
+  const groups = useQuery({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY, queryFn: getGroupsHierarchyAll, enabled: canViewImages && byName, staleTime: 30000 })
+  const name = byName ? characterGroupName(source.characterName) : ''
+  const root = byName ? groups.data?.find((group) => group.name === '채팅 캐릭터' && !group.parent_id) : undefined
   const character = root ? groups.data?.find((group) => group.name === name && group.parent_id === root.id) : undefined
   const expressionGroup = character ? groups.data?.find((group) => group.name === '표정' && group.parent_id === character.id) : undefined
   const candidateGroup = character ? groups.data?.find((group) => group.name === '후보' && group.parent_id === character.id) : undefined
-  const emoticons = useQuery({ queryKey: groupEmoticonsQueryKey(expressionGroup?.id ?? 0), queryFn: () => getGroupEmoticons(expressionGroup!.id), enabled: canViewImages && !!expressionGroup })
-  return { expressionGroupId: expressionGroup?.id ?? null, candidateGroup, entries: emoticons.data?.entries ?? [], loading: groups.isPending || (Boolean(expressionGroup) && emoticons.isPending) }
+  const expressionGroupId = byName ? expressionGroup?.id ?? null : source.expressionGroupId
+  const emoticons = useQuery({ queryKey: groupEmoticonsQueryKey(expressionGroupId ?? 0), queryFn: () => getGroupEmoticons(expressionGroupId!), enabled: canViewImages && expressionGroupId !== null })
+  return {
+    expressionGroupId,
+    candidateGroupId: byName ? candidateGroup?.id ?? null : source.candidateGroupId,
+    /** Known for groups found by name (from the group tree); otherwise read by the archive. */
+    candidateCount: candidateGroup ? candidateGroup.visible_image_count ?? candidateGroup.image_count : undefined,
+    entries: emoticons.data?.entries ?? [],
+    loading: (byName && groups.isPending) || (expressionGroupId !== null && emoticons.isPending),
+  }
 }
 
 /** Library images with the feed's safety rules (blur / hide by rating), plus a lightbox over them. */
@@ -65,7 +80,7 @@ export function useSafeAssetImages(hashes: string[]) {
  * The generation preset assets use, with a warning when it cannot draw from the reference image (a text-to-image
  * workflow) or needs setting up, and a ⋯ menu for the rarely changed choices: the expression list and the vision model.
  */
-export function AssetPresetPicker({ runs, showExpressionMenu = false }: { runs: ProfileAssetRuns; showExpressionMenu?: boolean }) {
+export function AssetPresetPicker({ runs, showExpressionMenu = false }: { runs: AssetRuns; showExpressionMenu?: boolean }) {
   const { t } = useI18n()
   const modelSlots = useQuery({ queryKey: MODEL_SLOTS_QUERY_KEY, queryFn: listModelSlots, enabled: showExpressionMenu })
   const visionRows = chatModelRows(modelSlots.data ?? [])
@@ -119,13 +134,12 @@ export function AssetPresetPicker({ runs, showExpressionMenu = false }: { runs: 
  * One slot's candidates in a row: the one in use is checked; clicking another applies it to the slot; double-click
  * opens it large. Working jobs show as spinners. `actions` sit at the right of the header.
  */
-export function AssetCandidateTray({ runs, slotKey, title, currentHash, referenceHash, profileId, actions, wide = false }: {
-  runs: ProfileAssetRuns
+export function AssetCandidateTray({ runs, slotKey, title, currentHash, referenceHash, actions, wide = false }: {
+  runs: AssetRuns
   slotKey: string
   title: ReactNode
   currentHash: string | null
   referenceHash: string | null
-  profileId: number | null
   actions?: ReactNode
   wide?: boolean
 }) {
@@ -148,8 +162,8 @@ export function AssetCandidateTray({ runs, slotKey, title, currentHash, referenc
         ) : null}
         <ReviewChips review={shown?.review} />
         <span className="flex-1" />
-        {shown && batch && profileId && runs.visionSlotId ? (
-          <SlotVisionReview key={`${batch.id}:${slotKey}:${shown.hash}:${runs.visionSlotId}`} profileId={profileId} batchId={batch.id} slotKey={slotKey} hash={shown.hash} referenceHash={referenceHash} modelSlotId={runs.visionSlotId} disabled={applying} />
+        {shown && batch && runs.owner && runs.visionSlotId ? (
+          <SlotVisionReview key={`${batch.id}:${slotKey}:${shown.hash}:${runs.visionSlotId}`} owner={runs.owner} batchId={batch.id} slotKey={slotKey} hash={shown.hash} referenceHash={referenceHash} modelSlotId={runs.visionSlotId} disabled={applying} />
         ) : null}
         {state.working ? <IconButton size="icon-sm" variant="ghost" onClick={() => void runs.cancel(slotKey)} label={t({ ko: '취소', en: 'Cancel' })}><Square /></IconButton> : null}
         {actions}
@@ -187,10 +201,9 @@ export function AssetCandidateTray({ runs, slotKey, title, currentHash, referenc
  * The character's expressions as a row of slots, one per emotion of the expression list (plus emotions the group
  * already has). An empty slot generates with ✦; clicking a slot opens its candidates, library input and clear below.
  */
-export function ExpressionSlots({ runs, characterName, profileId, referenceHash, canGenerate, blockedReason, onSet, onClear, renderInput }: {
-  runs: ProfileAssetRuns
-  characterName: string
-  profileId: number | null
+export function ExpressionSlots({ runs, groupSource, referenceHash, canGenerate, blockedReason, onSet, onClear, renderInput, editable = true }: {
+  runs: AssetRuns
+  groupSource: CharacterGroupSource
   referenceHash: string | null
   canGenerate: boolean
   /** Why generating is unavailable (shown on the disabled buttons). */
@@ -199,9 +212,11 @@ export function ExpressionSlots({ runs, characterName, profileId, referenceHash,
   onClear: (name: string) => Promise<void>
   /** The library / upload input for one slot. */
   renderInput: (onPick: (hash: string) => void) => ReactNode
+  /** False: the slots only show (no generation, input or clearing). */
+  editable?: boolean
 }) {
   const { t } = useI18n()
-  const groups = useCharacterGroups(characterName)
+  const groups = useCharacterGroups(groupSource)
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const names = [...new Set([...runs.emotionNames, ...groups.entries.flatMap((entry) => entry.keywords)])]
@@ -218,12 +233,14 @@ export function ExpressionSlots({ runs, characterName, profileId, referenceHash,
         <h3 className={textVariants({ variant: 'overline' })}>{t({ ko: '표정', en: 'Expressions' })}</h3>
         <span className="text-xs font-semibold tabular-nums">{names.filter((name) => filled.get(name)).length}/{names.length}</span>
         <span className="flex-1" />
-        <AssetPresetPicker runs={runs} showExpressionMenu />
-        <Tip content={blockedReason}>
-          <span className="inline-flex" tabIndex={blockedReason ? 0 : -1}>
-            <IconButton variant="default" size="icon-sm" disabled={!canGenerate || !emptyNames.length} onClick={fillAll} tooltip={!blockedReason} label={t({ ko: '빈 칸 채우기 {count}', en: 'Fill {count} empty' }, { count: emptyNames.length })}><Sparkles /></IconButton>
-          </span>
-        </Tip>
+        {editable ? <>
+          <AssetPresetPicker runs={runs} showExpressionMenu />
+          <Tip content={blockedReason}>
+            <span className="inline-flex" tabIndex={blockedReason ? 0 : -1}>
+              <IconButton variant="default" size="icon-sm" disabled={!canGenerate || !emptyNames.length} onClick={fillAll} tooltip={!blockedReason} label={t({ ko: '빈 칸 채우기 {count}', en: 'Fill {count} empty' }, { count: emptyNames.length })}><Sparkles /></IconButton>
+            </span>
+          </Tip>
+        </> : null}
       </div>
       <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
         {names.map((name) => {
@@ -239,7 +256,7 @@ export function ExpressionSlots({ runs, characterName, profileId, referenceHash,
                 {working ? <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-background/50"><Spinner /></span> : null}
                 {!working && state.failed ? <span className="pointer-events-none absolute left-1 top-1 text-warning"><AlertTriangle className="size-4" /></span> : null}
                 {state.candidates.length > 1 ? <Badge variant="overlay" size="xs" className="pointer-events-none absolute top-1 right-1 tabular-nums">{state.candidates.length}</Badge> : null}
-                {!hash && !working ? (
+                {editable && !hash && !working ? (
                   <span className="pointer-events-none absolute inset-0 flex items-center justify-center [&>*]:pointer-events-auto">
                     <IconButton size="icon-sm" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(name)} label={generateLabel} onClick={() => void runs.start({ kind: 'expressions', names: [name] }, true)}><Sparkles /></IconButton>
                   </span>
@@ -257,14 +274,13 @@ export function ExpressionSlots({ runs, characterName, profileId, referenceHash,
           title={selected}
           currentHash={filled.get(selected) ?? null}
           referenceHash={referenceHash}
-          profileId={profileId}
-          actions={(
+          actions={editable ? (
             <>
               <IconButton size="icon-sm" variant="ghost" disabled={!canGenerate || !runs.emotionNames.includes(selected) || runs.slotState(selected).working} label={blockedReason ?? t({ ko: '다시 만들기', en: 'Generate again' })} onClick={() => void runs.start({ kind: 'expressions', names: [selected] }, !filled.get(selected))}><Sparkles /></IconButton>
               {renderInput((hash) => void run(selected, () => onSet(selected, hash)))}
               {filled.get(selected) ? <IconButton size="icon-sm" variant="ghost" disabled={busy === selected} label={t({ ko: '비우기', en: 'Clear' })} onClick={() => void run(selected, () => onClear(selected))}><Trash2 /></IconButton> : null}
             </>
-          )}
+          ) : null}
         />
       ) : null}
       {images.lightbox}

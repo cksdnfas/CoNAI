@@ -11,6 +11,7 @@ import {
   cancelChatAssetSlot,
   chatAssetBatchQueryKey,
   chatProfileEmoticonsQueryKey,
+  chatAssetOwnerKey,
   createChatAssetBatch,
   getChatAssetBatch,
   listChatAdminProfiles,
@@ -19,6 +20,7 @@ import {
   type ChatAssetBatch,
   type ChatAssetBatchInput,
   type ChatAssetKind,
+  type ChatAssetOwner,
   type ChatGenerationPreset,
   type ChatProfile,
 } from '@/lib/api-codex-chat'
@@ -26,6 +28,7 @@ import { getErrorMessage } from '@/lib/error-message'
 import { getPromptPresets } from '@/lib/api-prompt-presets'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { GROUPS_HIERARCHY_ALL_QUERY_KEY, groupEmoticonsQueryKey } from '@/lib/api-groups'
+import { refreshCharacterSettingAssets } from '@/lib/api-character-library'
 
 type Attempt = ChatAssetBatch['slots'][number]['attempts'][number]
 type Run = { id: number; auto: boolean }
@@ -44,16 +47,16 @@ const SLOT_RECIPES: Record<'reference' | 'background', { slotKey: string; prompt
 }
 const DEFAULT_EXPRESSION_PRESET = '기본 캐릭터 표정'
 
-function storageKey(profileId: number) { return `conai:chat-asset-runs:${profileId}` }
-function readRuns(profileId: number | null): Run[] {
-  if (!profileId) return []
+function storageKey(owner: ChatAssetOwner) { return `conai:chat-asset-runs:${chatAssetOwnerKey(owner)}` }
+function readRuns(owner: ChatAssetOwner | null): Run[] {
+  if (!owner) return []
   try {
-    const parsed: unknown = JSON.parse(sessionStorage.getItem(storageKey(profileId)) ?? '[]')
+    const parsed: unknown = JSON.parse(sessionStorage.getItem(storageKey(owner)) ?? '[]')
     return Array.isArray(parsed) ? parsed.filter((run): run is Run => Number.isSafeInteger(run?.id) && run.id > 0).map((run) => ({ id: run.id, auto: run.auto === true })) : []
   } catch { return [] }
 }
-function writeRuns(profileId: number, runs: Run[]) {
-  try { sessionStorage.setItem(storageKey(profileId), JSON.stringify(runs)) } catch { /* Storage can be unavailable. */ }
+function writeRuns(owner: ChatAssetOwner, runs: Run[]) {
+  try { sessionStorage.setItem(storageKey(owner), JSON.stringify(runs)) } catch { /* Storage can be unavailable. */ }
 }
 function readChoice(key: string) {
   try { const value = Number(localStorage.getItem(key)); return Number.isSafeInteger(value) && value > 0 ? value : null } catch { return null }
@@ -85,7 +88,7 @@ export async function refreshProfileAssets(queryClient: QueryClient, profileId: 
   const groupsChanged = results.some((result) => result.expressionGroupId || result.backgroundGroupId)
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
-    ...(batchId === undefined ? [] : [queryClient.invalidateQueries({ queryKey: chatAssetBatchQueryKey(profileId, batchId) })]),
+    ...(batchId === undefined ? [] : [queryClient.invalidateQueries({ queryKey: chatAssetBatchQueryKey({ kind: 'profile', id: profileId }, batchId) })]),
     ...(groupsChanged ? [queryClient.invalidateQueries({ queryKey: GROUPS_HIERARCHY_ALL_QUERY_KEY })] : []),
     ...expressionGroups.map((id) => queryClient.invalidateQueries({ queryKey: groupEmoticonsQueryKey(id) })),
     ...(expressionGroups.length ? [queryClient.invalidateQueries({ queryKey: chatProfileEmoticonsQueryKey(profileId) })] : []),
@@ -93,26 +96,36 @@ export async function refreshProfileAssets(queryClient: QueryClient, profileId: 
   return profiles.find((entry) => entry.id === profileId)
 }
 
+type AppliedGroups = Pick<ChatAssetApplyResult['applied'], 'expressionGroupId' | 'backgroundGroupId'>
+/** The refresh after an applied batch for either owner; returns the owner as it is now. */
+export function refreshOwnerAssets(queryClient: QueryClient, owner: ChatAssetOwner, results: AppliedGroups[], batchId?: number) {
+  return owner.kind === 'profile' ? refreshProfileAssets(queryClient, owner.id, results, batchId) : refreshCharacterSettingAssets(queryClient, owner.id, results, batchId)
+}
+
 /**
- * Character asset generation inside the profile editor. Each request is a batch the server tracks; this keeps the
- * session's batch ids, polls the ones still working, puts the first result straight into slots that were empty when
- * asked (`auto`), and applies a picked candidate to just its slot.
+ * Character asset generation inside an appearance editor (a chat profile's or a library setting's). Each request is a
+ * batch the server tracks; this keeps the session's batch ids, polls the ones still working, puts the first result
+ * straight into slots that were empty when asked (`auto`), and applies a picked candidate to just its slot.
  */
-export function useProfileAssetRuns({ open, profileId, ensureProfile, onApplied }: {
+export function useAssetRuns<T>({ open, owner, ensureOwner, refresh, onApplied }: {
   open: boolean
-  profileId: number | null
-  /** Saves the profile (name, appearance, reference) and returns it; a new profile is created here. */
-  ensureProfile: () => Promise<ChatProfile>
-  onApplied: (result: ChatAssetApplyResult, slot: { kind: ChatAssetKind; hash: string }, profile?: ChatProfile) => void
+  /** The saved owner; null while it is new. */
+  owner: ChatAssetOwner | null
+  /** Saves what generation reads (name, appearance, reference) and returns the owner; a new one is created here. */
+  ensureOwner: () => Promise<ChatAssetOwner>
+  /** Re-reads the owner and the groups applied results changed; returns the owner as it is now. */
+  refresh: (owner: ChatAssetOwner, results: AppliedGroups[], batchId?: number) => Promise<T | undefined>
+  onApplied: (result: ChatAssetApplyResult, slot: { kind: ChatAssetKind; hash: string }, updated?: T) => void
 }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const { canViewImages } = useImagePermissions()
   const queryClient = useQueryClient()
-  const [runs, setRuns] = useState<Run[]>(() => readRuns(profileId))
+  const [runs, setRuns] = useState<Run[]>(() => readRuns(owner))
   const [pending, setPending] = useState<string[]>([])
-  const [loadedFor, setLoadedFor] = useState(profileId)
-  if (loadedFor !== profileId) { setLoadedFor(profileId); setRuns(readRuns(profileId)) }
+  const ownerKey = owner ? chatAssetOwnerKey(owner) : null
+  const [loadedFor, setLoadedFor] = useState(ownerKey)
+  if (loadedFor !== ownerKey) { setLoadedFor(ownerKey); setRuns(readRuns(owner)) }
 
   const presetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: open && canViewImages })
   const presets = useMemo(() => [...(presetsQuery.data ?? [])].sort((a, b) => assetPresetRank(a) - assetPresetRank(b)), [presetsQuery.data])
@@ -127,9 +140,9 @@ export function useProfileAssetRuns({ open, profileId, ensureProfile, onApplied 
 
   const queries = useQueries({
     queries: runs.map((run) => ({
-      queryKey: chatAssetBatchQueryKey(profileId ?? 0, run.id),
-      queryFn: ({ signal }: { signal: AbortSignal }) => getChatAssetBatch(profileId!, run.id, signal),
-      enabled: open && Boolean(profileId),
+      queryKey: chatAssetBatchQueryKey(owner ?? { kind: 'profile', id: 0 }, run.id),
+      queryFn: ({ signal }: { signal: AbortSignal }) => getChatAssetBatch(owner!, run.id, signal),
+      enabled: open && Boolean(owner),
       retry: false,
       refetchInterval: (query: { state: { data?: ChatAssetBatch } }) => (running(query.state.data) ? 3000 : false),
     })),
@@ -140,10 +153,11 @@ export function useProfileAssetRuns({ open, profileId, ensureProfile, onApplied 
   // A run whose batch is gone (profile reset, other session) is dropped.
   const missing = runs.filter((_, index) => queries[index]?.isError).map((run) => run.id).join(',')
   useEffect(() => {
-    if (!missing || !profileId) return
+    if (!missing || !owner) return
     const gone = new Set(missing.split(',').map(Number))
-    setRuns((current) => { const next = current.filter((run) => !gone.has(run.id)); writeRuns(profileId, next); return next })
-  }, [missing, profileId])
+    setRuns((current) => { const next = current.filter((run) => !gone.has(run.id)); writeRuns(owner, next); return next })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ownerKey identifies the owner
+  }, [missing, ownerKey])
 
   const slotState = useMemo(() => {
     const states = new Map<string, AssetSlotState>()
@@ -168,14 +182,14 @@ export function useProfileAssetRuns({ open, profileId, ensureProfile, onApplied 
   }, [batchKey])
 
   const applySlots = async (batch: ChatAssetBatch, slots: Array<{ slotKey: string; kind: ChatAssetKind; hash: string }>) => {
-    if (!profileId) return
+    if (!owner) return
     const keys = slots.map((slot) => slot.slotKey)
     setPending((current) => [...current, ...keys])
     const applied: Array<{ result: ChatAssetApplyResult; slot: typeof slots[number] }> = []
     try {
       for (const slot of slots) {
         try {
-          const result = await applyChatAssetSlot(profileId, batch.id, slot.slotKey, slot.hash)
+          const result = await applyChatAssetSlot(owner, batch.id, slot.slotKey, slot.hash)
           applied.push({ result, slot })
           onApplied(result, slot)
         } catch (error) {
@@ -185,11 +199,11 @@ export function useProfileAssetRuns({ open, profileId, ensureProfile, onApplied 
     } finally {
       try {
         if (applied.length) {
-          const updated = await refreshProfileAssets(queryClient, profileId, applied.map((entry) => entry.result.applied), batch.id)
+          const updated = await refresh(owner, applied.map((entry) => entry.result.applied), batch.id)
           for (const { result, slot } of applied) onApplied(result, slot, updated)
         }
       } catch (error) {
-        showSnackbar({ message: getErrorMessage(error, t({ ko: '적용한 프로필을 새로 읽지 못했어.', en: 'Could not refresh the applied profile.' })), tone: 'error' })
+        showSnackbar({ message: getErrorMessage(error, owner.kind === 'profile' ? t({ ko: '적용한 프로필을 새로 읽지 못했어.', en: 'Could not refresh the applied profile.' }) : t({ ko: '적용한 외형 설정을 새로 읽지 못했어.', en: 'Could not refresh the applied setting.' })), tone: 'error' })
       } finally {
         setPending((current) => current.filter((key) => !keys.includes(key)))
       }
@@ -228,15 +242,15 @@ export function useProfileAssetRuns({ open, profileId, ensureProfile, onApplied 
     const keys = request.kind === 'expressions' ? request.names : [SLOT_RECIPES[request.kind].slotKey]
     setPending((current) => [...current, ...keys])
     try {
-      const current = await ensureProfile()
+      const current = await ensureOwner()
       const input: ChatAssetBatchInput = request.kind === 'expressions'
         ? { idempotencyKey: createRandomUuid(), presetId: preset.id, expressionPresetId: expressionPreset?.id, expressions: request.names }
         : { idempotencyKey: createRandomUuid(), presetId: preset.id, slots: [{ slotKey: SLOT_RECIPES[request.kind].slotKey, kind: request.kind, prompt: SLOT_RECIPES[request.kind].prompt }] }
-      const batch = await createChatAssetBatch(current.id, input)
-      queryClient.setQueryData(chatAssetBatchQueryKey(current.id, batch.id), batch)
-      const next = [...readRuns(current.id), { id: batch.id, auto }].slice(-MAX_RUNS)
-      writeRuns(current.id, next)
-      setLoadedFor(current.id)
+      const batch = await createChatAssetBatch(current, input)
+      queryClient.setQueryData(chatAssetBatchQueryKey(current, batch.id), batch)
+      const next = [...readRuns(current), { id: batch.id, auto }].slice(-MAX_RUNS)
+      writeRuns(current, next)
+      setLoadedFor(chatAssetOwnerKey(current))
       setRuns(next)
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '생성을 시작하지 못했어.', en: 'Could not start generating.' })), tone: 'error' })
@@ -246,16 +260,18 @@ export function useProfileAssetRuns({ open, profileId, ensureProfile, onApplied 
   }
 
   const cancel = async (slotKey: string) => {
-    if (!profileId) return
+    if (!owner) return
     const targets = batches.filter((batch) => batch?.slots.some((slot) => slot.slotKey === slotKey && slot.attempts.some(live)))
     try {
-      for (const batch of targets) if (batch) queryClient.setQueryData(chatAssetBatchQueryKey(profileId, batch.id), await cancelChatAssetSlot(profileId, batch.id, slotKey))
+      for (const batch of targets) if (batch) queryClient.setQueryData(chatAssetBatchQueryKey(owner, batch.id), await cancelChatAssetSlot(owner, batch.id, slotKey))
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '취소하지 못했어.', en: 'Could not cancel.' })), tone: 'error' })
     }
   }
 
   return {
+    /** Who the runs draw for; null while the owner is new. */
+    owner,
     presets,
     presetsLoaded: presetsQuery.isSuccess,
     preset,
@@ -267,14 +283,34 @@ export function useProfileAssetRuns({ open, profileId, ensureProfile, onApplied 
     visionSlotId: visionChoice,
     chooseVision: (id: number | null) => { setVisionChoice(id); writeChoice('conai:chat-asset-vision', id) },
     slotState,
+    /** Candidates the session's runs have produced (they land in the owner's candidates group). */
+    candidateTotal: batches.reduce((sum, batch) => sum + (batch?.slots.reduce((slots, slot) => slots + slot.attempts.reduce((attempts, attempt) => attempts + attempt.candidates.length, 0), 0) ?? 0), 0),
     isPending: (slotKey: string) => pending.includes(slotKey),
     start,
     apply,
     cancel,
-    refreshAfterApply: (id: number, expressionGroupId: number | null) => refreshProfileAssets(queryClient, id, [{ expressionGroupId, backgroundGroupId: null }]),
+    refreshAfterApply: (target: ChatAssetOwner, expressionGroupId: number | null) => refresh(target, [{ expressionGroupId, backgroundGroupId: null }]),
     /** The batch a candidate came from (vision review needs it). */
     batchOf: (hash: string) => batches.find((batch) => batch?.slots.some((slot) => slot.attempts.some((attempt) => attempt.candidates.some((candidate) => candidate.compositeHash === hash)))) ?? null,
   }
 }
 
-export type ProfileAssetRuns = ReturnType<typeof useProfileAssetRuns>
+export type AssetRuns = ReturnType<typeof useAssetRuns<unknown>>
+
+/** The profile editor's runs: owner `{ kind: 'profile' }`, refreshed through the profile list. */
+export function useProfileAssetRuns({ open, profileId, ensureProfile, onApplied }: {
+  open: boolean
+  profileId: number | null
+  /** Saves the profile (name, appearance, reference) and returns it; a new profile is created here. */
+  ensureProfile: () => Promise<ChatProfile>
+  onApplied: (result: ChatAssetApplyResult, slot: { kind: ChatAssetKind; hash: string }, profile?: ChatProfile) => void
+}) {
+  const queryClient = useQueryClient()
+  return useAssetRuns<ChatProfile>({
+    open,
+    owner: profileId ? { kind: 'profile', id: profileId } : null,
+    ensureOwner: async () => ({ kind: 'profile', id: (await ensureProfile()).id }),
+    refresh: (owner, results, batchId) => refreshProfileAssets(queryClient, owner.id, results, batchId),
+    onApplied,
+  })
+}

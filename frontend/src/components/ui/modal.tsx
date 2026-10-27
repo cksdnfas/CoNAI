@@ -211,6 +211,8 @@ function Modal({ open, title, description, headerContent, headerActions, leading
     event.preventDefault()
     const target = returnFocusRef.current
     returnFocusRef.current = null
+    // A dialog opened as this one closed (a pick leading to its confirm step) keeps the focus it already took.
+    if (document.activeElement instanceof HTMLElement && document.activeElement.closest('[role="dialog"]')) return
     if (target?.isConnected) {
       target.focus({ preventScroll: true })
     }

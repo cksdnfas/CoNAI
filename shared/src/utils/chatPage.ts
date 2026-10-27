@@ -28,6 +28,7 @@ export function chatPagePermission(path: string): string | null {
   if (path === '/prompts') return 'page.prompts.view'
   if (path === '/groups' || /^\/groups\/[\w-]+$/.test(path)) return 'page.groups.view'
   if (path === '/wildcards') return 'page.wildcards.view'
+  if (path === '/characters') return 'page.characters.view'
   if (path === '/files') return 'page.files.view'
   if (path === '/extensions' || /^\/ext\/[a-z][a-z0-9-]{1,47}\/[a-z][a-z0-9-]{1,47}$/.test(path)) return ''
   if (path === '/audio') return 'page.audio.view'
