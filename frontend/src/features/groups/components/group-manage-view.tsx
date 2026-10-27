@@ -88,9 +88,6 @@ export function GroupManageView({ groups, countMaps, selectedIds, onSelectedIdsC
     <section className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <SearchField className="sm:max-w-80" value={filterText} onChange={setFilterText} placeholder={t({ ko: '그룹 검색', en: 'Search groups' })} />
-        <span className="text-xs text-muted-foreground">
-          {t({ ko: 'Shift+클릭으로 범위 선택', en: 'Shift+click selects a range' })}
-        </span>
       </div>
 
       {rows.length === 0 ? (

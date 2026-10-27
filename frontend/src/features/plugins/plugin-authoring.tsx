@@ -80,7 +80,7 @@ export function PluginAuthoring({ page }: { page?: PluginManagementPage }) {
       <Button size="sm" onClick={() => setCreating(true)}><Plus />{t({ ko: '새 플러그인', en: 'New plugin' })}</Button>
     </>}>
       {error || drafts.error ? <p role="alert" className="text-sm text-destructive">{error || getErrorMessage(drafts.error, t({ ko: '초안을 읽지 못했어.', en: 'Could not load drafts.' }))}</p> : null}
-      {!drafts.data?.length ? <EmptyState size="compact" icon={Code} title={t({ ko: '제작 중인 플러그인이 없어', en: 'No plugin drafts' })} description={t({ ko: '새 플러그인을 만들거나 설치한 플러그인의 소스 수정을 열어줘.', en: 'Create a plugin or open an installed plugin for source editing.' })} /> : null}
+      {!drafts.data?.length ? <EmptyState size="compact" icon={Code} title={t({ ko: '제작 중인 플러그인이 없어', en: 'No plugin drafts' })} /> : null}
       {drafts.data?.map(item => <ResourceRow key={item.id} leading={<Code />} name={item.name} aside={<span className="text-xs text-muted-foreground">{item.pluginId} · r{item.revision}</span>} onOpen={() => open(item.id)} />)}
     </RowGroup>
     <Modal open={creating} onClose={() => setCreating(false)} title={t({ ko: '새 플러그인', en: 'New plugin' })} size="md">

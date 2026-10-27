@@ -329,9 +329,7 @@ export function ComfyWorkflowAuthoringModal({
     </div>
   ) : (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-      <div className="text-sm text-muted-foreground">
-        {jsonError ? jsonError : t({ ko: 'workflow JSON을 불러오면 그래프가 보여.', en: 'Load a workflow JSON to see the graph.' })}
-      </div>
+      {jsonError ? <div className="text-sm text-muted-foreground">{jsonError}</div> : null}
       <Button type="button" size="sm" variant="secondary" onClick={openFilePicker}>
         <Upload className="size-4" />
         {t({ ko: 'JSON 불러오기', en: 'Load JSON' })}

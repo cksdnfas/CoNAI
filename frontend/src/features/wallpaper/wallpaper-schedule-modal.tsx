@@ -69,7 +69,7 @@ export function WallpaperScheduleModal({ onClose, presets, schedule }: Wallpaper
       <SwitchLine label={t({ ko: '일정 사용', en: 'Use the schedule' })} checked={enabled} onCheckedChange={setEnabled} />
       <div className={enabled ? undefined : 'opacity-60'}>
         {entries.length === 0 ? (
-          <EmptyState size="compact" icon={CalendarClock} title={t({ ko: '아직 시간대가 없어', en: 'No time windows yet' })} description={t({ ko: '시간대를 추가해줘.', en: 'Add a time window.' })} />
+          <EmptyState size="compact" icon={CalendarClock} title={t({ ko: '아직 시간대가 없어', en: 'No time windows yet' })} />
         ) : entries.map((entry) => {
           const everyDay = entry.days.length === 0
           return (

@@ -30,7 +30,7 @@ export function AppNavGroupMenu({ group }: { group: AppNavGroup }) {
           <ChevronDown className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72">
+      <DropdownMenuContent align="start" className="w-56">
         {links.map((link) => {
           const active = isAppNavLinkActive(link.to, pathname)
           const Icon = link.icon
@@ -38,10 +38,7 @@ export function AppNavGroupMenu({ group }: { group: AppNavGroup }) {
             <DropdownMenuItem key={link.key} asChild>
               <Link to={link.to} aria-current={active ? 'page' : undefined} onMouseEnter={() => prefetchAppRoute(link.to)} onFocus={() => prefetchAppRoute(link.to)}>
                 <Icon className={cn(active && 'text-primary')} />
-                <span className="flex min-w-0 flex-col">
-                  <span className={cn('truncate font-medium', active && 'text-primary')}>{link.label}</span>
-                  {link.description ? <span className="truncate text-xs text-muted-foreground">{link.description}</span> : null}
-                </span>
+                <span className={cn('truncate', active && 'text-primary')}>{link.label}</span>
               </Link>
             </DropdownMenuItem>
           )
@@ -51,7 +48,7 @@ export function AppNavGroupMenu({ group }: { group: AppNavGroup }) {
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => navigate(HEADER_PIN_SETTING_PATH)}>
               <Pin />
-              <span className="text-xs text-muted-foreground">{t({ ko: '자주 가는 곳은 상단에 고정할 수 있어', en: 'Pin the pages you visit often' })}</span>
+              {t({ ko: '고정 페이지 바꾸기', en: 'Change pinned pages' })}
             </DropdownMenuItem>
           </>
         ) : null}

@@ -310,7 +310,6 @@ function AppearanceLibraryPage() {
                 <EmptyState
                   icon={UserRound}
                   title={query ? t({ ko: '맞는 외형 설정이 없어', en: 'No matching settings' }) : t({ ko: '여기엔 외형 설정이 없어', en: 'No appearance settings here' })}
-                  description={!query && canEdit ? t({ ko: '캐릭터 외형을 한 번 등록해 두면 채팅 프로필과 생성에서 다시 쓸 수 있어.', en: 'Register a look once and reuse it in chat profiles and generation.' }) : undefined}
                   action={!query && canEdit ? <Button size="sm" onClick={() => setCreating({ folderId })}><Plus />{t({ ko: '새 외형 설정', en: 'New appearance setting' })}</Button> : undefined}
                 />
               )}

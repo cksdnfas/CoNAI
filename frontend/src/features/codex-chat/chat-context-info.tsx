@@ -243,7 +243,7 @@ export function ChatContextInfo({ meta, previous, threadId, messageId, alternati
             {selectedTab === 'composition' ? <>
               {inSession ? <div className="space-y-2">
                 <div className="flex justify-between"><span>{t({ ko: '보낸 입력', en: 'Sent input' })}</span><span className="tabular-nums">{t({ ko: '키 {n}개', en: '{n} keys' }, { n: meta.codexKeys?.length ?? 0 })}</span></div>
-                <p className="text-muted-foreground">{t({ ko: '이번에 세션에 보낸 입력을 표시해. 세션이 보관한 전체 대화와 압축 요약은 포함되지 않아.', en: 'Shows input sent to the session this turn. The full conversation and compacted summary stored in the session are not included.' })}</p>
+                <p className="text-muted-foreground">{t({ ko: '세션이 보관한 전체 대화와 압축 요약은 포함되지 않아.', en: 'The full conversation and compacted summary stored in the session are not included.' })}</p>
               </div> : <div className="space-y-2">
                 <div className="flex h-2.5 gap-px overflow-hidden rounded-sm" aria-hidden="true">
                   {GROUPS.map((group, index) => totals[index] > 0 ? <span key={group.id} style={{ flex: `${totals[index]} 1 0%`, backgroundColor: `var(--chat-diagnostics-${group.id})` }} /> : null)}

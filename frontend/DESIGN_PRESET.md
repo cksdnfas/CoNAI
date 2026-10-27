@@ -286,9 +286,9 @@ buttons up one tone.
   lead with their view switch instead, since it names the page. A page root takes the full content width (no
   `mx-auto max-w-*`); a form inside may narrow itself.
 - Empty states: a page, list, menu or picker with nothing in it shows `EmptyState`, never a hand-written muted line.
-  The title says what is missing (아직 효과음이 없어), the description says in one line what fills it, and the action is
-  one Button that does it. `default` for a page or its main pane; `compact` in sidebars, lists inside editors, menus
-  and pickers. A no-results state keeps the search icon and has no action.
+  The title says what is missing (아직 효과음이 없어) and the action is one Button that does it; no description line
+  (see Helper text). `default` for a page or its main pane; `compact` in sidebars, lists inside editors, menus and
+  pickers. A no-results state keeps the search icon and has no action.
 - Header → content gap: the shell's main starts right under the app header (no extra top padding). The page's first
   row is its PageToolbar (or a 56px row like a tab strip), and that row's height is the gap. Don't add `pt-*` / `-mt-*`
   at a page root, and don't subtract a top gap in `calc(100dvh - header …)` heights.
@@ -345,8 +345,8 @@ Dialogs are for short jobs: a question, a name, a choice, a small form. An edito
 - `size` is required and has four steps: `sm` 26rem (a question and two buttons; `ConfirmDialog` uses this look),
   `md` 36rem (one to six fields), `lg` 56rem (choosing from a list or tree, one-column editors), `xl` 72rem (a work
   surface: viewer, media library, split editors). There is no free width.
-- Header: `title` says what the dialog does, `description` is one muted line on where the thing lives and what the
-  action affects, `status` holds a state chip (linked, synced). No switches, menus or buttons in the header; they go in
+- Header: `title` says what the dialog does, `description` only carries the data it acts on (a count, a path, a name) or
+  a consequence the user must know (what is deleted or kept), `status` holds a state chip (linked, synced). No switches, menus or buttons in the header; they go in
   the body or the footer.
 - Footer (`EditorFooter`): Delete in words on the left (asks first), the editor's other actions, then on the right the
   unsaved status (`Ctrl S`), Cancel and the primary action as a verb (저장 · 만들기 · 불러오기). An icon-only primary
@@ -358,8 +358,8 @@ Dialogs are for short jobs: a question, a name, a choice, a small form. An edito
 ### Editor pages (`EditorPage`, `FloatingSaveBar`)
 A large editor (chat profile, appearance setting, lorebook) is a page with its own address, not a dialog.
 - `EditorPage` (`components/common/editor-page`): the path back (`crumbs`), the title with `status` chips and `actions`
-  (one `⋯` menu), an optional `nav` (`EditorSectionNav`: the sections with a one-line summary each; a drawer on a
-  phone) and the `saveBar`. Ctrl/⌘ S calls `onSave` while no dialog is open over it.
+  (one `⋯` menu), an optional `nav` (`EditorSectionNav`: each section's icon and name, with a mark where input is
+  needed; a drawer on a phone) and the `saveBar`. Ctrl/⌘ S calls `onSave` while no dialog is open over it.
 - `FloatingSaveBar` (`components/ui/floating-save-bar`): shown only while something is unsaved or saving — what is
   unsaved on the left, 되돌리기 and 저장 in words on the right. `SettingsSaveBar` is the settings page's use of it.
 - Leaving with unsaved changes asks first (`useUnsavedSettingsGuard` with the page's own address check, so a new item
@@ -442,6 +442,15 @@ Do not restyle buttons with `bg-*`, `border`, `rounded-*` or `shadow-*` override
   vertical scrollbar (`[ds/scroll-x]`).
 - When a piece repeats in two places and no shared component fits, add one to `components/common` (or a feature-local
   shared file) instead of copying the class string.
+
+### Helper text
+No explanatory line under a title, a section, a group, a setting, a menu item or an empty state: the label is the
+explanation, and a label that needs a sentence gets a better label. Write visible text only when the user cannot act
+correctly without it: an irreversible, cost or security consequence (what is deleted, what stays, Anlas use, a key shown
+once), an error or a blocked or filtered state and its reason, a validation that stops saving, progress and counts, a
+conditional warning about the input itself, or a setup step in another app. Background for one control goes in its ⓘ
+(`Field` info, `SettingRow` / `Section` `description`), never in a visible paragraph. Settings registry descriptions
+feed search and the assistant; never render them as a visible line.
 
 ### Labels
 Overline-style labels (use `<Text variant="overline">` or the structural component; hand-rolled `tracking-overline`

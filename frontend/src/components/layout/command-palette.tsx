@@ -14,7 +14,6 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatPage } from '@/features/codex-chat/chat-page-context'
 import { authCatalog } from '@/i18n/resources/auth'
 import { useI18n } from '@/i18n'
-import { formatShortcut } from '@/lib/keyboard-shortcut'
 
 type PaletteItem = { id: string; label: string; terms: string[]; icon: LucideIcon; current?: boolean; run: () => void }
 type PaletteGroup = { id: string; heading: string; items: PaletteItem[] }
@@ -165,8 +164,6 @@ function CommandPaletteBody({ onClose }: { onClose: () => void }) {
           </RowGroup>
         ))}
         {items.length === 0 ? <EmptyState size="compact" icon={Search} title={t({ ko: '맞는 항목이 없어', en: 'Nothing matches' })} /> : null}
-      </div>
-      <p className="text-xs text-muted-foreground">{t({ ko: '↑↓ 이동 · Enter 실행 · Esc 닫기 · {keys} 열기', en: '↑↓ move · Enter run · Esc close · {keys} open' }, { keys: formatShortcut('Mod+K') })}</p>
-    </div>
+      </div>    </div>
   )
 }

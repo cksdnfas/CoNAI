@@ -8,7 +8,7 @@ import { SegmentedControl } from '@/components/common/segmented-control'
 import { TextTabs } from '@/components/common/text-tabs'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
-import { Text } from '@/components/ui/text'
+import { EmptyState } from '@/components/ui/empty-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { GenerationHistoryPanelView } from '@/features/image-generation/components/generation-history-panel'
 import { useGenerationHistoryFeed } from '@/features/image-generation/components/use-generation-history-feed'
@@ -671,7 +671,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
               onInputImageChange={handleWorkflowRunInputImageChange}
             />
           ) : (
-            <Text variant="caption">{t({ ko: '노드 입력에서 "실행 입력"을 켜면 여기에 나와.', en: 'Inputs marked as run inputs on nodes show up here.' })}</Text>
+            <EmptyState size="compact" title={t({ ko: '실행 입력이 없어', en: 'No run inputs' })} />
           )}
           runsPanel={selectedGraphId !== null ? (
             <div className="space-y-3">
@@ -687,7 +687,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
               {runHistory}
             </div>
           ) : (
-            <Text variant="caption">{t({ ko: '저장한 뒤 실행하면 여기에 쌓여.', en: 'Runs appear here once the workflow is saved and run.' })}</Text>
+            <EmptyState size="compact" title={t({ ko: '아직 실행 기록이 없어', en: 'No runs yet' })} />
           )}
           workflowSaveModal={workflowSaveModal}
           workflowDebugMode={workflowDebugMode}

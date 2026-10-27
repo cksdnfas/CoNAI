@@ -9,12 +9,11 @@ import { PageToolbar } from './page-toolbar'
 import { PageWithSidebar } from './page-with-sidebar'
 import { PathBreadcrumbs, type PathCrumb } from './path-breadcrumbs'
 
-/** One entry of an editor's section list: what it holds in one line under its name. */
+/** One entry of an editor's section list: its icon and name. */
 export type EditorSectionEntry<T extends string> = {
   value: T
   label: string
   icon: ComponentType<{ className?: string }>
-  summary?: string
   /** A dot or mark at the right (input needed, filled by the assistant). */
   mark?: ReactNode
   disabled?: boolean
@@ -50,7 +49,7 @@ export function EditorTitleInput({ value, onChange, label, placeholder, maxLengt
   )
 }
 
-/** The section list of an editor page: icon, name and a one-line summary of what is inside. */
+/** The section list of an editor page: icon and name, with a mark where input is needed. */
 export function EditorSectionNav<T extends string>({ sections, value, onChange, label, header }: {
   sections: Array<EditorSectionEntry<T>>
   value: T
@@ -70,12 +69,7 @@ export function EditorSectionNav<T extends string>({ sections, value, onChange, 
               disabled={entry.disabled}
               onClick={() => onChange(entry.value)}
               icon={entry.icon}
-              label={(
-                <span className="flex min-w-0 flex-col py-1">
-                  <span className="truncate">{entry.label}</span>
-                  {entry.summary ? <span className="truncate text-xs font-normal text-muted-foreground">{entry.summary}</span> : null}
-                </span>
-              )}
+              label={entry.label}
               trailing={entry.mark}
             />
           </li>

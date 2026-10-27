@@ -17,7 +17,7 @@ export function ChatSettingsTab() {
   return <div className="space-y-8">
     <SettingsContents groups={groups} />
     <div className="flex flex-wrap gap-2">
-      <Button asChild variant="ghost" size="sm"><Link to="/characters?view=profiles">{t({ ko: '채팅 프로필은 캐릭터 화면으로 옮겼어 → 열기', en: 'Chat profiles moved to Characters → Open' })}</Link></Button>
+      <Button asChild variant="ghost" size="sm"><Link to="/characters?view=profiles">{t({ ko: '채팅 프로필 열기', en: 'Open chat profiles' })}</Link></Button>
       <Button asChild variant="ghost" size="sm"><Link to="/chat/resources">{t({ ko: '채팅 자원 열기', en: 'Open chat resources' })}</Link></Button>
     </div>
     {settingsQuery.data ? <SettingsSwitchRow label={<ChatFilledLabel fieldId="chat.enabled" />} checked={settingsQuery.data.enabled} disabled={settingsMutation.isPending} onCheckedChange={(enabled) => settingsMutation.mutate({ enabled })} /> : null}

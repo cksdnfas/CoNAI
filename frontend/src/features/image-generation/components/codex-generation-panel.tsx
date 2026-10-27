@@ -639,9 +639,7 @@ export function CodexGenerationPanel({
     ),
     output: (
       <Section variant="settings" heading={t({ ko: '출력', en: 'Output' })} className="@container">
-        <Text variant="muted">{codexForm.strictPreservation
-          ? t({ ko: '엄격 보존: 출력 크기는 원본 이미지 크기로 고정돼. 다른 요청 크기는 무시해.', en: 'Strict preservation: output size is locked to the source image. Other requested sizes are overridden.' })
-          : t({ ko: '요청 크기 · 실제 크기는 다를 수 있어.', en: 'Requested size · actual size may differ.' })}</Text>
+        {codexForm.strictPreservation ? <Text variant="muted">{t({ ko: '엄격 보존: 출력 크기는 원본 이미지 크기로 고정돼. 다른 요청 크기는 무시해.', en: 'Strict preservation: output size is locked to the source image. Other requested sizes are overridden.' })}</Text> : null}
         {!codexForm.strictPreservation ? <div className="grid gap-4 @sm:grid-cols-2 @3xl:grid-cols-3">
           <ResolutionPicker
             mode="ratio"

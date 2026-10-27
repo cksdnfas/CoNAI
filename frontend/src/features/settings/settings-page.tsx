@@ -690,7 +690,6 @@ export function SettingsPage() {
       toolbar={<PageToolbar title={t(SETTINGS_TAB_LABELS[activeTab])}><SettingsSearch /></PageToolbar>}
     >
       <SettingsJumpTarget>
-        <p className="mb-4 text-xs text-muted-foreground">{activeTab === 'mine' ? t({ ko: '나에게만 적용돼. 공용 플래그 원본은 따로 표시돼.', en: 'Applies to you. Shared flag originals are marked separately.' }) : t({ ko: '공용 · 저장하면 모든 사용자에게 적용돼.', en: 'Shared · changes apply to all users.' })}</p>
         <Suspense fallback={<SettingsSectionFallback />}>
           {activeTab === 'mine' ? <ChatSettingsMine /> : null}
           {activeTab === 'general' ? (

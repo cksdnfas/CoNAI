@@ -124,9 +124,7 @@ function ContentRatingField({ draft, patch, slots }: { draft: Draft; patch: Patc
  */
 function TokenFields({ draft, patch, serverDefault }: { draft: Draft; patch: PatchDraft; serverDefault: string }) {
   const { t } = useI18n()
-  if (draft.engine === 'codex') {
-    return <p className="text-xs text-muted-foreground">{t({ ko: 'Codex는 컨텍스트를 스스로 관리하고, 출력 토큰·추론 예산 대신 추론 강도만 받아.', en: 'Codex manages its own context and takes only a reasoning effort, not output or reasoning token limits.' })}</p>
-  }
+  if (draft.engine === 'codex') return null
   const isLlm = draft.engine === 'llm'
   return (
     <EditorGroup label={t({ ko: '토큰', en: 'Tokens' })}>

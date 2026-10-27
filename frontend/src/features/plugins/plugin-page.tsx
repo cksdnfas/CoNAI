@@ -97,7 +97,7 @@ export function PluginPage() {
       start={<div className="flex min-w-0 flex-wrap items-center gap-1">{contextButtons}</div>}
       actions={<IconButton variant="ghost" label={t({ ko: '다시 열기', en: 'Reopen' })} onClick={() => { void (async () => { if (await discardDraft()) setReload(value => value + 1) })() }}><RefreshCw /></IconButton>}
     />
-    {files || projectId || page.accepts.length === 0 ? <PluginConnection key={`${pluginId}/${pageId}/${files}/${projectId}/${write}/${reload}`} pluginId={pluginId} pageId={pageId} fileIds={files} projectId={projectId} write={write} onDirty={setHasDraft} /> : <EmptyState icon={Files} title={t({ ko: '열린 파일이 없어', en: 'No files open' })} description={t({ ko: '이 도구로 열 파일을 골라줘.', en: 'Choose files to open in this tool.' })} action={canFiles ? <Button onClick={() => setPicker(true)}><Files />{t({ ko: '파일 고르기', en: 'Choose files' })}</Button> : undefined} />}
+    {files || projectId || page.accepts.length === 0 ? <PluginConnection key={`${pluginId}/${pageId}/${files}/${projectId}/${write}/${reload}`} pluginId={pluginId} pageId={pageId} fileIds={files} projectId={projectId} write={write} onDirty={setHasDraft} /> : <EmptyState icon={Files} title={t({ ko: '열린 파일이 없어', en: 'No files open' })} action={canFiles ? <Button onClick={() => setPicker(true)}><Files />{t({ ko: '파일 고르기', en: 'Choose files' })}</Button> : undefined} />}
     <WorkspaceProjectPicker
       open={projectPicker}
       onClose={() => setProjectPicker(false)}

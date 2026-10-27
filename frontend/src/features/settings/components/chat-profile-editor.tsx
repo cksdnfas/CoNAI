@@ -218,21 +218,9 @@ function ChatProfileBasicPanel({ draft, patch, profile, audience, onOpenAppearan
         </div>
       </EditorGroup>
       <EditorGroup label={t({ ko: '사용', en: 'Use' })}>
-        <SwitchLine
-          label={(
-            <span className="flex min-w-0 flex-col py-1">
-              <span>{t({ ko: '채팅에서 사용', en: 'Use in chat' })}</span>
-              <span className="text-xs text-muted-foreground">{t({ ko: '끄면 새 채팅을 시작할 때 이 프로필을 고를 수 없어.', en: 'When off, new chats cannot pick this profile.' })}</span>
-            </span>
-          )}
-          checked={draft.isEnabled}
-          onCheckedChange={(isEnabled) => patch({ isEnabled })}
-        />
+        <SwitchLine label={t({ ko: '채팅에서 사용', en: 'Use in chat' })} checked={draft.isEnabled} onCheckedChange={(isEnabled) => patch({ isEnabled })} />
         <div className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2 text-sm">
-          <span className="flex min-w-0 flex-1 basis-56 flex-col">
-            <span>{t({ ko: '사용할 수 있는 사람', en: 'Who can use it' })}</span>
-            <span className="text-xs text-muted-foreground">{t({ ko: '그룹을 고르면 그 그룹 사용자만 이 프로필로 채팅해. 관리자는 늘 쓸 수 있어.', en: 'Picking groups limits chats to their members. Administrators always can.' })}</span>
-          </span>
+          <span className="min-w-0 flex-1 basis-56">{t({ ko: '사용할 수 있는 사람', en: 'Who can use it' })}</span>
           <AudienceMenu patch={patch} audience={audience} />
         </div>
       </EditorGroup>
@@ -579,30 +567,6 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
     : draft.engine === 'claude' ? `Claude Code · ${draft.model || 'sonnet'}`
       : draft.modelSlotId !== null ? slots.find((slot) => slot.id === draft.modelSlotId)?.label ?? t({ ko: '모델 없음', en: 'No model' })
         : defaultSlot ? t({ ko: '대표 모델 · {label}', en: 'Default · {label}' }, { label: defaultSlot.label }) : t({ ko: '모델 없음', en: 'No model' })
-  const promptCount = (draft.systemPrompt.trim() ? 1 : 0) + draft.promptSections.filter((entry) => entry.kind !== 'dialogue').length + (draft.authorNote.trim() ? 1 : 0)
-  const hasGreeting = [draft.greeting, ...draft.alternateGreetings].some((text) => text.trim())
-  const lookLink = draft.characterLink
-  const join = (parts: Array<string | null | false>, empty: string) => parts.filter(Boolean).join(' · ') || empty
-  const summaries: Record<ProfileEditorSection, string> = {
-    basic: `${draft.isEnabled ? t({ ko: '채팅에서 사용', en: 'In use' }) : t({ ko: '꺼짐', en: 'Off' })} · ${audience.summary}`,
-    character: join([t({ ko: '프롬프트 {count}개', en: '{count} prompts' }, { count: promptCount }), hasGreeting && t({ ko: '첫 대화', en: 'Opening' })], ''),
-    appearance: lookLink
-      ? (lookLink.synced ? t({ ko: '{label} 동기화', en: 'Synced with {label}' }, { label: link.label ?? `#${lookLink.settingId}` }) : t({ ko: '직접 수정 · {label}', en: 'Own copy · {label}' }, { label: link.label ?? `#${lookLink.settingId}` }))
-      : draft.appearance?.trim() ? t({ ko: '직접 입력', en: 'Written here' }) : t({ ko: '비어 있음', en: 'Empty' }),
-    model: modelLine,
-    memory: join([isLlm && draft.llmRuntime !== 'pi' && t({ ko: '최근 {count}턴', en: '{count} recent turns' }, { count: draft.contextTurns }), draft.lorebookIds.length > 0 && t({ ko: '로어북 {count}개', en: '{count} lorebooks' }, { count: draft.lorebookIds.length }), draft.linkedFiles.length > 0 && t({ ko: '파일 {count}개', en: '{count} files' }, { count: draft.linkedFiles.length })], t({ ko: '기본값', en: 'Defaults' })),
-    tools: join([draft.mcpEnabled ? t({ ko: 'CoNAI 도구', en: 'CoNAI tools' }) : t({ ko: '도구 끔', en: 'Tools off' }), draft.pageAssist && t({ ko: '페이지 어시스턴트', en: 'Page assistant' }), draft.agentEnabled && t({ ko: '에이전트', en: 'Agent' })], ''),
-    look: join([backgroundUrl && t({ ko: '배경', en: 'Background' }), draft.style.roleplay && t({ ko: '롤플레이 색', en: 'Roleplay colours' }), draft.blockIds.length > 0 && t({ ko: '표시 블록 {count}개', en: '{count} display blocks' }, { count: draft.blockIds.length })], t({ ko: '기본 모양', en: 'Default look' })),
-  }
-  const descriptions: Record<ProfileEditorSection, string> = {
-    basic: t({ ko: '이름과, 누가 이 프로필로 채팅할 수 있는지 정해.', en: 'The name, and who can chat with this profile.' }),
-    character: t({ ko: '모델에 들어가는 프롬프트와 새 채팅이 시작하는 대화야.', en: 'The prompt the model reads and how a new chat starts.' }),
-    appearance: t({ ko: '이미지를 만들 때 쓰는 외형과 표정이야.', en: 'The look and expressions used to make images.' }),
-    model: t({ ko: '대화에 쓰는 모델과 요약·번역 같은 역할이야.', en: 'The chat model and the roles other models play.' }),
-    memory: t({ ko: '지난 대화와 로어북을 얼마나 넘길지 정해.', en: 'How much of the past and of the lorebooks the model gets.' }),
-    tools: t({ ko: 'CoNAI 도구와 생성 프리셋, 에이전트 사용을 정해.', en: 'CoNAI tools, generation presets and agent use.' }),
-    look: t({ ko: '채팅 화면의 글꼴·배경·색이야.', en: 'The chat screen’s typeface, background and colours.' }),
-  }
   const sections: Array<{ value: ProfileEditorSection; label: string; icon: typeof UserRound; incomplete?: boolean }> = [
     { value: 'basic', label: t({ ko: '기본 정보', en: 'Basics' }), icon: UserRound, incomplete: nameMissing },
     { value: 'character', label: t({ ko: '캐릭터', en: 'Character' }), icon: FileText },
@@ -652,7 +616,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   const preview = previewDraft ? <ChatProfilePreviewModal open draft={previewDraft} onClose={() => setPreviewDraft(null)} /> : null
 
   if (page) {
-    const navSections: Array<EditorSectionEntry<ProfileEditorSection>> = sections.map((entry) => ({ value: entry.value, label: entry.label, icon: entry.icon, summary: summaries[entry.value], mark: mark(entry), disabled: assetBusy && entry.value !== section }))
+    const navSections: Array<EditorSectionEntry<ProfileEditorSection>> = sections.map((entry) => ({ value: entry.value, label: entry.label, icon: entry.icon, mark: mark(entry), disabled: assetBusy && entry.value !== section }))
     return (
       <ProfileAssistContext.Provider value={assist}>
         <EditorPage
@@ -706,10 +670,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
             </FloatingSaveBar>
           ) : null}
         >
-          <div className="space-y-1">
-            <h2 className="text-base font-semibold text-foreground">{current.label}</h2>
-            <p className="text-sm text-muted-foreground">{descriptions[section]}</p>
-          </div>
+          <h2 className="text-base font-semibold text-foreground">{current.label}</h2>
           <div className="min-w-0 space-y-4">{panel}</div>
           {preview}
         </EditorPage>

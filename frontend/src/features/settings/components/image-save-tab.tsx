@@ -12,7 +12,6 @@ import { VideoOptimizationTab } from './video-optimization-tab'
 import { NumberStepperInput } from '@/components/ui/number-stepper-input'
 import { SectionDirtyBadge } from './settings-section-status'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
-import { SettingsLabelTip } from './settings-label-tip'
 import { ChatFilledLabel } from './settings-filled-label'
 import { SettingsContents } from './settings-navigation'
 import { SettingsRowsSkeleton } from './settings-rows'
@@ -357,7 +356,8 @@ export function ImageSaveTab({
                 </SettingRow>
 
                 <SettingRow
-                  label={<ChatFilledLabel fieldId="thumbnail.quality"><SettingsLabelTip label={labels.thumbnailQuality} tip={t({ ko: '기존 썸네일은 재생성 필요. 유지보수 탭의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch in the Maintenance tab.' })} /></ChatFilledLabel>}
+                  label={<ChatFilledLabel fieldId="thumbnail.quality">{labels.thumbnailQuality}</ChatFilledLabel>}
+                  info={t({ ko: '기존 썸네일은 재생성 필요. 유지보수 탭의 데이터 재매칭에서 새 품질로 다시 만들 수 있어.', en: 'Existing thumbnails need regeneration. Rebuild them from Data rematch in the Maintenance tab.' })}
                   controlWidth="standard"
                 >
                   <NumberStepperInput min={60} max={100} variant="settings" aria-label={labels.thumbnailQuality} value={thumbnailDraft.quality} onValueCommit={(nextValue) => onPatchThumbnail({ quality: Number(nextValue) || 60 })} />

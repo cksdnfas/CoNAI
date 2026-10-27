@@ -181,7 +181,7 @@ export function PluginManagement() {
         ) : undefined}
       >
         {plugins.error ? <ErrorState error={plugins.error} onRetry={() => void plugins.refetch()} /> : null}
-        {plugins.data?.length === 0 ? <EmptyState size="compact" icon={Puzzle} title={t({ ko: '아직 설치한 플러그인이 없어', en: 'No plugins installed yet' })} description={t({ ko: '.zip 패키지나 Git 주소로 설치할 수 있어.', en: 'Install one from a .zip package or a Git address.' })} /> : null}
+        {plugins.data?.length === 0 ? <EmptyState size="compact" icon={Puzzle} title={t({ ko: '아직 설치한 플러그인이 없어', en: 'No plugins installed yet' })} /> : null}
         {plugins.data?.map((plugin) => {
           const { manifest, enabled } = plugin
           return (

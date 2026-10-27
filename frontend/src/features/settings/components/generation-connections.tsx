@@ -33,7 +33,6 @@ export function GenerationConnections({ comfyExtra }: { comfyExtra?: ReactNode }
   return <>
     <SettingsGroup id="nai" title={t(SETTINGS_ROW_BY_ID['generation.nai'].label)}>
       <div data-setting-id="generation.nai">
-        <p className="mb-3 text-sm text-muted-foreground">{t(SETTINGS_ROW_BY_ID['generation.nai'].description)}</p>
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="secondary" onClick={() => nai.setIsAuthModalOpen(true)}>{t({ ko: 'NovelAI 토큰 연결', en: 'Connect NovelAI token' })}</Button>
           <NaiToolbarStatus
@@ -49,7 +48,6 @@ export function GenerationConnections({ comfyExtra }: { comfyExtra?: ReactNode }
     </SettingsGroup>
     <SettingsGroup id="comfyui" title={t(SETTINGS_ROW_BY_ID['generation.comfyui'].label)}>
       <div data-setting-id="generation.comfyui">
-        <p className="mb-3 text-sm text-muted-foreground">{t(SETTINGS_ROW_BY_ID['generation.comfyui'].description)}</p>
         <Button variant="secondary" onClick={comfy.handleOpenCreateServer}>{t({ ko: '서버 등록', en: 'Register server' })}</Button>
         {servers.map((server) => <ResourceRow key={server.id} name={server.name} onOpen={() => comfy.handleEditServer(server.id)} aside={<>
           <Button variant="ghost" size="sm" onClick={() => void comfy.handleTestComfyServer(server.id)}>{t({ ko: '연결 확인', en: 'Test connection' })}</Button>

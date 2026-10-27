@@ -166,7 +166,7 @@ export function AccessOverviewPage() {
               <Heading level={3}>{section.label}</Heading>
               <div className="grid md:grid-cols-2 md:gap-x-8 xl:grid-cols-3">
                 {section.links.map((link) => (
-                  <AccessEntryCard key={link.key} href={link.to} label={link.label} description={link.description} icon={link.icon} />
+                  <AccessEntryCard key={link.key} href={link.to} label={link.label} icon={link.icon} />
                 ))}
               </div>
             </section>

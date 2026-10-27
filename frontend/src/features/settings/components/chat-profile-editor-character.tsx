@@ -166,7 +166,6 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
   const emptyText = t({ ko: '비어 있어 · 눌러서 쓰기', en: 'Empty · click to write' })
 
   // The examples' group says how they are sent once, instead of every example card.
-  const examplesNote = llm ? t({ ko: '말투 참고용 · 실제 대화로는 안 들어가', en: 'For tone only · not part of the conversation' }) : t({ ko: '지시문 뒤에 글로 들어가', en: 'Sent as text after the instructions' })
   const meta: Record<ChatPromptSection['kind'], string | undefined> = {
     text: undefined,
     post: t({ ko: '매번 마지막 메시지 뒤에 붙어', en: 'Added after the last message every time' }),
@@ -374,7 +373,6 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
     <div ref={chatRef} className="space-y-4" onFocusCapture={lastTextarea.onFocusCapture}>
       <EditorGroup
         label={t({ ko: '프롬프트', en: 'Prompt' })}
-        description={t({ ko: '위에서부터 순서대로 모델에 들어가', en: 'The model reads it top to bottom' })}
         actions={(
           <div className="flex items-center gap-0.5">
             {instructionTokens ? <Chip size="sm" tone="muted" className="mr-1 tabular-nums">{t({ ko: '약 {count} 토큰', en: '~{count} tokens' }, { count: formatNumber(instructionTokens) })}</Chip> : null}
@@ -415,9 +413,7 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
               flash={flash?.key === 'author-note'}
               editing={editing === 'note'}
               onEditingChange={(next) => openItem(next ? 'note' : null)}
-              onTextChange={(authorNote) => patch({ authorNote })}
-              note={editing === 'note' ? <Text variant="caption">{t({ ko: '모든 채팅에 매 요청 들어가는 장면 지시야. 채팅마다 헤더의 컨텍스트에서 따로 쓰면 그쪽이 우선이야.', en: 'A scene instruction added to every request in every chat. A note written per chat under Context in the chat header takes precedence.' })}</Text> : undefined}
-              kind={kindSwitch('note', draft.authorNote, (kind) => { if (kind !== 'note') noteToSection(kind) })}
+              onTextChange={(authorNote) => patch({ authorNote })}              kind={kindSwitch('note', draft.authorNote, (kind) => { if (kind !== 'note') noteToSection(kind) })}
               remove={<RemoveButton onClick={() => { patch({ authorNote: '' }); setEditing(null) }} />}
             />
           ) : null}
@@ -446,20 +442,20 @@ export function ChatProfileCharacterPanel({ open, draft, patch, onPreview, profi
         </div>
       </EditorGroup>
 
-      <EditorGroup label={t({ ko: '예시', en: 'Examples' })} description={examplesNote}>
+      <EditorGroup label={t({ ko: '예시', en: 'Examples' })}>
         {exampleSections.length ? (
           <div className="flex flex-col divide-y divide-line">
             {exampleSections.map((section, index) => sectionCard(section, index, exampleSections))}
           </div>
-        ) : <EmptyState size="compact" icon={MessagesSquare} title={t({ ko: '아직 예시가 없어', en: 'No examples yet' })} description={t({ ko: '말투를 보여 주는 대화를 넣으면 모델이 따라 해.', en: 'A sample conversation shows the model the voice.' })} />}
+        ) : <EmptyState size="compact" icon={MessagesSquare} title={t({ ko: '아직 예시가 없어', en: 'No examples yet' })} />}
         <PromptAdder label={t({ ko: '예시 추가', en: 'Add example' })} disabled={sectionLimitReached} onAdd={() => addSection('dialogue')} />
       </EditorGroup>
 
-      <EditorGroup label={t({ ko: '첫 대화', en: 'Opening' })} description={t({ ko: '새 채팅이 이렇게 시작해', en: 'How a new chat starts' })}>
+      <EditorGroup label={t({ ko: '첫 대화', en: 'Opening' })}>
         <div className="flex flex-col gap-2.5">
           {items.length ? items.map((item, index) => (item.kind === 'greeting'
             ? greetingItem(index === 0, index === items.length - 1)
-            : turnItem(item.index, index === 0, index === items.length - 1))) : <EmptyState size="compact" icon={MessageSquare} title={t({ ko: '아직 첫 대화가 없어', en: 'No opening yet' })} description={t({ ko: '비워 두면 사용자가 먼저 말을 걸어.', en: 'Left empty, the user speaks first.' })} />}
+            : turnItem(item.index, index === 0, index === items.length - 1))) : <EmptyState size="compact" icon={MessageSquare} title={t({ ko: '아직 첫 대화가 없어', en: 'No opening yet' })} />}
           <PromptAdder
             label={t({ ko: '대화 추가', en: 'Add message' })}
             disabled={history.length >= CHAT_PROFILE_TEXT_LIMITS.openingHistory && hasGreeting && draft.alternateGreetings.length >= CHAT_PROFILE_TEXT_LIMITS.alternateGreetings}

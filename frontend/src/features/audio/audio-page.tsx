@@ -823,14 +823,12 @@ function AudioPageContent() {
         <EmptyState
           icon={AudioLines}
           title={t({ ko: '아직 프로젝트가 없어', en: 'No projects yet' })}
-          description={t({ ko: '프로젝트를 만들면 그 안에 효과음을 추가하고 파일을 모을 수 있어.', en: 'A project holds your effects and their files.' })}
           action={permissions.canEdit ? <Button onClick={() => setDialog('project-new')}><FolderPlus />{t({ ko: '새 프로젝트', en: 'New project' })}</Button> : undefined}
         />
       ) : !group && project && projectGroupsQuery.isSuccess && effects.length === 0 && !groupId ? (
         <EmptyState
           icon={AudioLines}
           title={t({ ko: '아직 효과음이 없어', en: 'No effects yet' })}
-          description={t({ ko: '효과음을 추가하면 프롬프트로 후보를 만들고 골라 쓸 수 있어.', en: 'Add an effect to make takes from a prompt and pick one.' })}
           action={permissions.canEdit ? <NewEffectButton key={project.id} onCreate={(name) => createEffect(project.id, name)} /> : undefined}
         />
       ) : null}

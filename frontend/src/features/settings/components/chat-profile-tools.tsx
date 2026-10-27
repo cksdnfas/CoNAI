@@ -17,9 +17,7 @@ export function ChatProfileAgentSetting({ agentEnabled, agentDescription, onChan
   const { filled } = useProfileAssist()
   return (
     <div className="space-y-2">
-      <SwitchLine label={t({ ko: '에이전트로 사용', en: 'Use as an agent' })} checked={agentEnabled} onCheckedChange={(next) => onChange({ agentEnabled: next })} />
-      <p className="text-xs text-muted-foreground">{t({ ko: '대화 중에 다른 프로필이 이 프로필을 불러 일을 맡기고, 결과를 돌려받을 수 있어.', en: 'Other profiles can call this profile during a chat to do work and get the result back.' })}</p>
-      {agentEnabled || filled('agentDescription') ? (
+      <SwitchLine label={t({ ko: '에이전트로 사용', en: 'Use as an agent' })} checked={agentEnabled} onCheckedChange={(next) => onChange({ agentEnabled: next })} />      {agentEnabled || filled('agentDescription') ? (
         <Field label={t({ ko: '에이전트 설명', en: 'Agent description' })}>
           <Textarea
             variant="settings"

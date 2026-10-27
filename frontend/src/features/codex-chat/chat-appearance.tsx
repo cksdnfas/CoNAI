@@ -722,9 +722,6 @@ export function ChatAppearancePopover({ threadId, style, layout = 'page', side =
                   <CompactChoice label={t({ ko: '플래그 모양', en: 'Flag style' })} value={appearance.flagStyle} onChange={(flagStyle) => update({ flagStyle })}
                     choices={[{ value: 'icon', label: t({ ko: '아이콘', en: 'Icon' }) }, { value: 'label', label: t({ ko: '아이콘+이름', en: 'Icon + name' }) }]} />
                 </AppearanceRow>
-                <p className="pb-1 text-xs text-muted-foreground">
-                  {t({ ko: '입력창 위로 펼쳐지는 플래그를 아이콘만, 또는 이름과 함께 보여 줘.', en: 'Flags above the composer show as icons only, or with their names.' })}
-                </p>
               </RowGroup>
             ) : null}
           </div>

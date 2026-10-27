@@ -131,7 +131,6 @@ export function AppIconEditor({ source, isSaving, onRegister, onClose }: {
   return (
     <Modal open title={title} onClose={() => { if (!savingRef.current && !isSaving) onClose() }} onSave={disabled ? undefined : register} size="md" sidePanelInset={CHAT_DOCK_INSET}>
       <ModalBody>
-        <div className="text-sm text-muted-foreground">{t({ ko: '드래그해서 위치를 맞춰줘. 체크무늬는 투명 영역이야.', en: 'Drag to position the image. The checkerboard shows transparent areas.' })}</div>
         <div
           role="application" tabIndex={disabled ? -1 : 0}
           aria-label={t({ ko: '자르기 영역: 드래그하거나 방향키로 위치 이동', en: 'Crop area: drag or use arrow keys to move' })}

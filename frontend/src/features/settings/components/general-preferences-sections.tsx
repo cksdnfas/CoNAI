@@ -16,7 +16,6 @@ import { DEFAULT_HEADER_NAVIGATION_SETTINGS } from '@/lib/settings-defaults'
 import { cn } from '@/lib/utils'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { SectionDirtyBadge } from './settings-section-status'
-import { SettingsLabelTip } from './settings-label-tip'
 import { SettingsRowsSkeleton } from './settings-rows'
 
 export type GeneralPreferenceSection = 'basic' | 'appearance' | 'library' | 'safety'
@@ -98,9 +97,8 @@ export function GeneralPreferencesSections({
       {visibleSections.has('basic') ? (
         <RowGroup heading={t({ ko: '기본', en: 'Basics' })} actions={<SectionDirtyBadge dirty={isSectionDirty('basic')} />}>
           <SettingRow
-            label={<ChatFilledLabel fieldId="language">{languageOverride
-              ? <SettingsLabelTip label={languageLabel} tip={t({ ko: '이 브라우저는 계정 메뉴의 언어 선택이 우선', en: 'This browser uses its account-menu choice' })} />
-              : languageLabel}</ChatFilledLabel>}
+            label={<ChatFilledLabel fieldId="language">{languageLabel}</ChatFilledLabel>}
+            info={languageOverride ? t({ ko: '이 브라우저는 계정 메뉴의 언어 선택이 우선', en: 'This browser uses its account-menu choice' }) : undefined}
             controlWidth="standard"
           >
             <Select
@@ -135,6 +133,7 @@ export function GeneralPreferencesSections({
           />
           <SettingRow
             label={<ChatFilledLabel fieldId="headerNavigation">{headerMenuLabel}</ChatFilledLabel>}
+            info={t({ ko: '휴대폰에서는 앞 4개가 하단 탭이 돼. 끌어서 순서를 바꿔.', en: 'On phones the first four become the bottom tabs. Drag to reorder.' })}
             align="start"
             controlClassName="justify-start sm:max-w-xl sm:justify-end"
           >

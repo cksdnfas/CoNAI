@@ -132,7 +132,7 @@ function SettingsEditor({ scope, scopes, title, onSelect, onClose, inline = fals
   return <Sheet open title={title} description={t({ ko: '공용 설정 · 저장하면 모든 사용자에게 적용돼.', en: 'Shared settings · changes apply to all users.' })} onClose={() => { if (!savingRef.current) onClose() }} dirty={dirty} onSave={dirty && !saving ? onSave : undefined} sidePanelInset="var(--chat-dock-width, 0px)">
     <div className="divide-y divide-line">
       {scopes.map((id) => <section key={id} className="py-2"><h2><Button variant="ghost" size="sm" onClick={() => void select(id)} aria-expanded={scope === id}>{t(PAGE_SETTINGS_SCOPES[id].label)}</Button></h2>
-        {id === scope ? <><p className="text-xs text-muted-foreground">{t({ ko: '공용 · 모든 사용자', en: 'Shared · all users' })}</p>{body}</> : null}
+        {id === scope ? body : null}
       </section>)}
     </div>
     <EditorFooter onSave={onSave} canSave={dirty && Boolean(snapshot)} saving={saving}>
@@ -146,10 +146,10 @@ function SettingField({ scope, field, value, disabled, onChange }: { scope: Page
   const { t } = useI18n()
   const row = pageSettingRow(scope, field)
   const label = t(row.label)
-  const description = t(row.description)
-  const rowLabel = <span data-setting-id={row.id}>{label}{description ? <span className="block text-xs font-normal text-muted-foreground">{description}</span> : null}</span>
-  if (field.type === 'boolean') return <SettingsSwitchRow label={rowLabel} checked={value === true} disabled={disabled} onCheckedChange={onChange} />
-  return <SettingRow label={rowLabel}>
+  const info = t(row.description)
+  const rowLabel = <span data-setting-id={row.id}>{label}</span>
+  if (field.type === 'boolean') return <SettingsSwitchRow label={rowLabel} info={info} checked={value === true} disabled={disabled} onCheckedChange={onChange} />
+  return <SettingRow label={rowLabel} info={info}>
     {field.options ? <Select variant="settings" aria-label={label} value={String(value)} disabled={disabled} onChange={(event) => onChange(field.type === 'number' ? Number(event.target.value) : event.target.value)}>{field.options.map((option) => <option key={option} value={option}>{OPTION_LABELS[String(option)] ? t(OPTION_LABELS[String(option)]) : option}</option>)}</Select>
       : <NumberStepperInput variant="settings" className="w-32" aria-label={label} value={value as number} disabled={disabled} min={field.min} max={field.max} precision={field.integer ? 0 : 2} step={field.integer ? 1 : 0.05} onValueCommit={(next) => { const parsed = Number(next); if (next.trim() && Number.isFinite(parsed)) onChange(parsed) }} />}
   </SettingRow>

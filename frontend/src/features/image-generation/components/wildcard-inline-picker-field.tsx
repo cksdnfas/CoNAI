@@ -705,6 +705,7 @@ export function WildcardInlinePickerField({
                 size="icon-xs"
                 variant={isRollPreviewOpen ? 'secondary' : 'ghost'}
                 aria-pressed={isRollPreviewOpen}
+                disabled={!value.trim()}
                 label={t({ ko: '실제로 들어갈 프롬프트 미리보기', en: 'Preview resolved prompts' })}
                 onClick={() => setIsRollPreviewOpen((current) => !current)}
               >
@@ -765,7 +766,7 @@ export function WildcardInlinePickerField({
         </div>
       ) : null}
 
-      {isRollPreviewOpen && canViewWildcards ? (
+      {isRollPreviewOpen && canViewWildcards && value.trim() ? (
         <div className="space-y-1 rounded-sm bg-surface-low px-3 py-2 text-xs">
           <div className="flex items-center justify-between text-2xs text-muted-foreground">
             <span>{t({ ko: '실제로 들어갈 프롬프트 · 예시 3개', en: 'Resolved prompts · 3 samples' })}</span>
@@ -773,9 +774,7 @@ export function WildcardInlinePickerField({
               {t({ ko: '다시 굴리기', en: 'Roll again' })}
             </Button>
           </div>
-          {!value.trim() ? (
-            <div className="text-muted-foreground">{t({ ko: '프롬프트를 입력하면 미리 굴려볼 수 있어요.', en: 'Type a prompt to preview it.' })}</div>
-          ) : rollPreviewQuery.isLoading ? (
+          {rollPreviewQuery.isLoading ? (
             <div className="text-muted-foreground">{t({ ko: '굴리는 중…', en: 'Rolling…' })}</div>
           ) : rollPreviewQuery.isError ? (
             <div className="text-destructive">{t({ ko: '미리보기를 불러오지 못했어요.', en: 'Could not load the preview.' })}</div>

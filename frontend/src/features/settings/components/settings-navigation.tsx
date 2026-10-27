@@ -17,7 +17,7 @@ export function SettingsSearch() {
   return <div className="min-w-0 flex-1">
     <SearchField value={query} onChange={setQuery} placeholder={t({ ko: '설정 검색', en: 'Search settings' })} onSubmit={() => { if (results[0]) { navigate(settingRowHref(results[0])); setQuery('') } }} />
     {query.trim() ? <div className="absolute z-20 max-h-80 overflow-y-auto border border-line bg-surface-low shadow-elevation-2">
-      {results.map((row) => <ListRow key={row.id} asChild interactive><Link to={settingRowHref(row)} onClick={() => setQuery('')}><span>{t(row.label)} <span className="text-xs text-muted-foreground">· {t(SETTINGS_TAB_LABELS[row.section as SettingsTab])}</span></span>{t(row.description) ? <span className="text-xs text-muted-foreground">{t(row.description)}</span> : null}</Link></ListRow>)}
+      {results.map((row) => <ListRow key={row.id} asChild interactive><Link to={settingRowHref(row)} onClick={() => setQuery('')}><span>{t(row.label)} <span className="text-xs text-muted-foreground">· {t(SETTINGS_TAB_LABELS[row.section as SettingsTab])}</span></span></Link></ListRow>)}
       {!results.length ? <p className="p-3 text-sm">{t({ ko: '맞는 설정이 없어.', en: 'No matching settings.' })}</p> : null}
     </div> : null}
   </div>
@@ -33,7 +33,7 @@ export function RegistrySettingsGroup({ id, contents = false, children }: PropsW
   const row = SETTINGS_ROW_BY_ID[id]
   return <div className="space-y-4">
     {contents ? <SettingsContents groups={[{ id: row.group, label: t(row.label) }]} /> : null}
-    <SettingsGroup id={row.group} title={t(row.label)}><div data-setting-id={id}><p className="mb-4 text-sm text-muted-foreground">{t(row.description)}</p>{children}</div></SettingsGroup>
+    <SettingsGroup id={row.group} title={t(row.label)}><div data-setting-id={id}>{children}</div></SettingsGroup>
   </div>
 }
 

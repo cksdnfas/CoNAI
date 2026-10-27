@@ -168,7 +168,6 @@ export function CharacterAppearanceEditor({ value, onChange, onAvatarChange, ref
       <div className="min-w-0 space-y-6">
         <EditorGroup
           label={t({ ko: '외형 설명', en: 'Appearance' })}
-          description={t({ ko: '이미지를 만들 때 넣는 외형 태그야', en: 'The look tags used when making images' })}
           actions={editable && draftAppearance ? (
             <Tip content={draftBlocked}>
               <span className="inline-flex" tabIndex={draftBlocked ? 0 : -1}>

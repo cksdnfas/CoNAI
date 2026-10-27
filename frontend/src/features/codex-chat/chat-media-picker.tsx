@@ -19,7 +19,7 @@ export function ChatMediaPicker(props: Pick<MediaLibraryPickerProps, 'initial' |
   const { t } = useI18n()
   return <MediaLibraryPicker {...props} allowEmpty
     applyLabel={t({ ko: '첨부 적용', en: 'Apply attachments' })}
-    note={t({ ko: '원본을 참조해 첨부해. 이미지·영상·움짤을 보려면 이미지 보기·프레임 보기 도구와 비전 모델이 필요하고, 오디오 내용 분석은 지원하지 않아.', en: 'Attachments reference the originals. Seeing images, videos and animations requires the image/frame tools and a vision model; audio analysis is not supported.' })}
+    note={t({ ko: '이미지·영상은 보기 도구와 비전 모델이 있어야 봐. 오디오 내용은 분석하지 않아.', en: 'Images and videos need the viewing tools and a vision model. Audio content is not analysed.' })}
   />
 }
 

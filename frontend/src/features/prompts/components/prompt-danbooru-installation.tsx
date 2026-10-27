@@ -80,8 +80,6 @@ export function PromptDanbooruInstallation({ available }: { available: boolean }
           <p className="text-xs text-muted-foreground">{phaseLabel}{status?.phase === 'downloading' ? ` · ${megabytes(status.downloadedBytes)} / ${megabytes(status.totalBytes)} MB` : ''}</p>
         </div>
       ) : null}
-      {error ? <p className="text-xs text-destructive" role="alert">{error}</p> : null}
-      {!available && !busy ? <p className="text-xs text-muted-foreground">{t({ ko: '최신 릴리스를 받아 자동으로 설정해. 설치가 끝나면 목록이 바로 열려.', en: 'Downloads and configures the latest release. The browser opens when installation finishes.' })}</p> : null}
-    </div>
+      {error ? <p className="text-xs text-destructive" role="alert">{error}</p> : null}    </div>
   )
 }

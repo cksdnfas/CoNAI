@@ -261,7 +261,7 @@ export function ChatLorebookEditor({ entries, onChange, filePlace = { kind: 'glo
       <Switch checked={entry.enabled} onCheckedChange={(enabled) => update(entry.id, { enabled })} aria-label={t({ ko: '로어 사용', en: 'Enable lore' })} />
       <IconButton size="icon-sm" variant="ghost" label={t({ ko: '로어 삭제', en: 'Delete lore' })} onClick={() => onChange(entries.filter((item) => item.id !== entry.id))}><Trash2 /></IconButton>
     </>}><ChatLoreEntryFields entry={entry} filePlace={filePlace} keyLanguage={keyLanguage} onChange={(patch) => update(entry.id, patch)} /></CollapsibleRow>)}
-    {entries.length ? null : <EmptyState size="compact" icon={BookOpen} title={t({ ko: '아직 항목이 없어', en: 'No entries yet' })} description={t({ ko: '키워드가 대화에 나오면 그 항목의 내용이 모델에 들어가.', en: 'When an entry’s keyword comes up in the chat, its content goes to the model.' })} />}
+    {entries.length ? null : <EmptyState size="compact" icon={BookOpen} title={t({ ko: '아직 항목이 없어', en: 'No entries yet' })} />}
     <PromptAdder label={t({ ko: '항목 추가', en: 'Add entry' })} disabled={entries.length >= 500} onAdd={() => {
       const entry = newLoreEntry(entries.length)
       onChange([...entries, entry]); setOpenId(entry.id)
