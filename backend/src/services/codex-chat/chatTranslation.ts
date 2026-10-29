@@ -1,9 +1,10 @@
 import { CHAT_TRANSLATION_DEFAULTS, CHAT_TRANSLATION_LANGUAGES, narrationLineCount, type ChatTranslationLanguage } from '@conai/shared'
 import { hasTranslation, resolveProfileModel, type ModelRoleProfile } from './chatModelRoles'
 import type { ChatProfile } from './chatProfiles'
+import { auxiliaryMaxTokens } from './chatAuxiliarySettings'
 import { completeChat, resolveChatCompletionTarget, type ChatCompletionMessage, type ChatCompletionTarget } from './llmChatCompletion'
 import { DEFAULT_REPLY_RESERVE_TOKENS, rawMessagesEstimate } from './llmChatContext'
-import { cachedServerContextLimit } from './serverContextLimit'
+import { cachedServerContextLimit, summaryContextRoom } from './serverContextLimit'
 import type { LlmUsageTag } from '../llmUsage'
 import { ModelSlotStore } from './modelSlots'
 import type { ChatFlagSnapshot } from './chatFlags'
@@ -23,8 +24,6 @@ function translationNotesOf(profile?: { translationInstructions?: string } | nul
  * Translation never blocks a chat: when it fails, times out, or would damage the markup the chat relies on, the
  * message goes through untranslated. User-turn callers keep a visible notice when that happens.
  */
-
-const TRANSLATION_TIMEOUT_MS = 90_000
 
 /** The letters each language is written in; the Han characters Japanese borrows count for both. */
 const SCRIPTS = {
@@ -88,8 +87,8 @@ export function structuredProseIn(input: unknown, paths: string[], language: Cha
 }
 
 /** Plan the actual numbered JSON requests without calling a model (also used by plugin measure). */
-export function planStructuredTranslation(profile: ModelRoleProfile & TranslationLanguages & { id?: number; translationInstructions?: string }, input: unknown, paths: string[], language: ChatTranslationLanguage, userInput = false) {
-  const target = translationTargetOf(profile)
+export function planStructuredTranslation(profile: ModelRoleProfile & TranslationLanguages & { id?: number; translationInstructions?: string }, input: unknown, paths: string[], language: ChatTranslationLanguage, userInput = false, threadId?: number | null) {
+  const target = translationTargetOf(profile, threadId)
   if (!target) return null
   const contextTokens = cachedServerContextLimit(target)
   const outputReserve = target.generation.maxTokens ?? Math.min(DEFAULT_REPLY_RESERVE_TOKENS, contextTokens === null ? DEFAULT_REPLY_RESERVE_TOKENS : Math.floor(contextTokens / 2))
@@ -115,9 +114,15 @@ export function planStructuredTranslation(profile: ModelRoleProfile & Translatio
     // Reserve expansion room for translated JSON; this is a budget multiplier, not a separate tokenizer.
     const outputTokens = 2 * rawMessagesEstimate([{ role: 'user', content }])
     const configuredCap = target.generation.maxTokens ?? null
-    return { from, count, messages, inputTokens,
-      fits: (configuredCap === null || outputTokens <= configuredCap) && (contextTokens === null || inputTokens + (configuredCap ?? 0) <= contextTokens),
-      preferred: contextTokens === null && configuredCap === null || outputTokens <= outputReserve && (contextTokens === null || inputTokens + outputReserve <= contextTokens) }
+    const room = summaryContextRoom(contextTokens, messages)
+    const available = room === false ? 0 : room
+    const cap = available === null ? configuredCap : Math.min(configuredCap ?? available, available)
+    // An unset allowance still means the server default unless the planning reserve itself needs fitting.
+    const maxTokens = configuredCap !== null ? cap : available !== null && outputReserve > available ? available : null
+    const reserve = cap === null ? outputReserve : Math.min(outputReserve, cap)
+    return { from, count, messages, inputTokens, maxTokens,
+      fits: room !== false && (cap === null || outputTokens <= cap),
+      preferred: contextTokens === null && configuredCap === null || outputTokens <= reserve }
   }
   const chunks: ReturnType<typeof chunk>[] = []
   for (let from = 0; from < batches.length;) {
@@ -134,16 +139,16 @@ export function planStructuredTranslation(profile: ModelRoleProfile & Translatio
 }
 
 /** Translate selected prose in bounded chunks. Never publish a partly translated object. */
-export async function translateStructuredFields(profile: ModelRoleProfile & TranslationLanguages & { id?: number; translationInstructions?: string }, input: unknown, paths: string[], language: ChatTranslationLanguage, signal?: AbortSignal, attribution?: Omit<LlmUsageTag, 'purpose'>, userInput = false, options: { followConnectionTimeout?: boolean } = {}): Promise<unknown | null> {
+export async function translateStructuredFields(profile: ModelRoleProfile & TranslationLanguages & { id?: number; translationInstructions?: string }, input: unknown, paths: string[], language: ChatTranslationLanguage, signal?: AbortSignal, attribution?: Omit<LlmUsageTag, 'purpose'>, userInput = false): Promise<unknown | null> {
   try {
-    const plan = planStructuredTranslation(profile, input, paths, language, userInput)
+    const plan = planStructuredTranslation(profile, input, paths, language, userInput, attribution?.threadId)
     if (!plan || plan.chunks.some(chunk => !chunk.fits)) return null
     const { batches, masked } = plan
     for (const chunk of plan.chunks) {
-      const boundedSignal = options.followConnectionTimeout ? signal ?? new AbortController().signal
-        : signal ? AbortSignal.any([signal, AbortSignal.timeout(TRANSLATION_TIMEOUT_MS)]) : AbortSignal.timeout(TRANSLATION_TIMEOUT_MS)
+      const boundedSignal = signal ?? new AbortController().signal
       boundedSignal.throwIfAborted()
-      const answer = await completeChat(plan.target, chunk.messages, boundedSignal, { ...attribution, purpose: 'translation', profileId: profile.id })
+      const target = { ...plan.target, generation: { ...plan.target.generation, maxTokens: chunk.maxTokens } }
+      const answer = await completeChat(target, chunk.messages, boundedSignal, { ...attribution, purpose: 'translation', profileId: profile.id })
       boundedSignal.throwIfAborted()
       const result = JSON.parse(answer.trim().replace(/^```(?:json)?\s*|\s*```$/g, '')) as Record<string, unknown>
       if (!result || typeof result !== 'object' || Array.isArray(result) || Object.keys(result).length !== chunk.count) return null
@@ -261,13 +266,13 @@ function letterCounts(text: string, language: ChatTranslationLanguage) {
 }
 
 /** The connection and model a profile translates with, or null when it does not translate. */
-export function translationTargetOf(profile: ModelRoleProfile): ChatCompletionTarget | null {
+export function translationTargetOf(profile: ModelRoleProfile & { maxTokens?: number | null }, threadId?: number | null): ChatCompletionTarget | null {
   const resolved = resolveProfileModel(profile, 'translation')
   if (!resolved) return null
   try {
     return resolveChatCompletionTarget(resolved.providerName, {
       model: resolved.model,
-      generation: { temperature: 0.2, reasoningEffort: 'none' },
+      generation: { temperature: 0.2, reasoningEffort: 'none', maxTokens: auxiliaryMaxTokens(profile, threadId) },
     })
   } catch (error) {
     // A removed or disabled connection must not stop the chat: it just goes untranslated.
@@ -340,7 +345,6 @@ function splitTrailingBlocks(masked: string) {
 }
 
 async function translate(target: ChatCompletionTarget, system: string, text: string, signal?: AbortSignal, attribution?: Omit<LlmUsageTag, 'purpose'>) {
-  const timeout = AbortSignal.timeout(TRANSLATION_TIMEOUT_MS)
   try {
     const masked = maskCodeBlocks(text)
     const { body, tail } = splitTrailingBlocks(masked.text)
@@ -348,7 +352,7 @@ async function translate(target: ChatCompletionTarget, system: string, text: str
     const answer = (await completeChat(target, [
       { role: 'system', content: system },
       { role: 'user', content: body },
-    ], signal ? AbortSignal.any([signal, timeout]) : timeout, { ...attribution, purpose: 'translation' })).trim()
+    ], signal ?? new AbortController().signal, { ...attribution, purpose: 'translation' })).trim()
     if (!answer) return null
     const output = answer + tail
     const translated = keepsMarkup(masked.text, output) ? restoreCodeBlocks(output, masked.blocks) : null
@@ -374,7 +378,7 @@ function userTextNeedsTranslation(profile: TranslationLanguages | null | undefin
 
 /** Model-language text, or null when unnecessary or unsuccessful; user turns use translateUserMessage for notices. */
 export async function translateUserInput(profile: (ModelRoleProfile & TranslationLanguages & { id?: number }) | null | undefined, text: string, signal?: AbortSignal, attribution?: Omit<LlmUsageTag, 'purpose'>) {
-  const target = profile ? translationTargetOf(profile) : null
+  const target = profile ? translationTargetOf(profile, attribution?.threadId) : null
   const trimmed = text.trim()
   if (!target || !trimmed || !userTextNeedsTranslation(profile, trimmed)) return null
   const translated = await translate(target, userTranslationPrompt(profile), trimmed, signal, { profileId: profile?.id, ...attribution })
@@ -414,7 +418,7 @@ export async function translateUserMessage(profile: ChatProfile | null | undefin
  * translator is told who speaks and the profile's translation notes (`userName` fills their `{{user}}`).
  */
 export async function translateReply(profile: (ModelRoleProfile & TranslationLanguages & { id?: number; name?: string; translationInstructions?: string }) | null | undefined, text: string, signal?: AbortSignal, userName?: string, attribution?: Omit<LlmUsageTag, 'purpose'>) {
-  const target = profile ? translationTargetOf(profile) : null
+  const target = profile ? translationTargetOf(profile, attribution?.threadId) : null
   const trimmed = text.trim()
   if (!profile || !target || !trimmed) return null
   const letters = letterCounts(proseOf(trimmed), languagesOf(profile).display)

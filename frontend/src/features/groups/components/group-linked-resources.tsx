@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { fetchJson, buildApiUrl } from '@/lib/api-client'
+import { buildApiUrl } from '@/lib/api-client'
+import { requestJson } from '@/lib/api-request'
 import { useI18n } from '@/i18n'
 
 type Entry = { id: number; source: 'audio' | 'workspace' | 'files'; label: string; available: boolean; candidateId?: string; projectId?: string; target?: string; fileId?: string }
@@ -11,7 +12,7 @@ export function GroupLinkedResources({ groupId }: { groupId: number }) {
   const navigate = useNavigate()
   const [offset, setOffset] = useState(0)
   const [playing, setPlaying] = useState<number | null>(null)
-  const query = useQuery({ queryKey: ['group-linked-resources', groupId, offset], queryFn: async () => (await fetchJson<{ data: { entries: Entry[]; nextOffset: number | null } }>(`/api/groups/${groupId}/resources?offset=${offset}`)).data })
+  const query = useQuery({ queryKey: ['group-linked-resources', groupId, offset], queryFn: async () => (await requestJson<{ data: { entries: Entry[]; nextOffset: number | null } }>(`/api/groups/${groupId}/resources?offset=${offset}`)).data })
   if (query.isPending) return null
   if (query.isError) return <p role="status">{t({ ko: '연결 자료를 불러오지 못했어.', en: 'Could not load linked resources.' })} <Button variant="ghost" onClick={() => void query.refetch()}>{t({ ko: '다시 시도', en: 'Retry' })}</Button></p>
   if (!query.data.entries.length && offset === 0 && query.data.nextOffset === null) return null

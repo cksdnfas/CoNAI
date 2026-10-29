@@ -2,6 +2,8 @@
 
 CoNAI는 MCP(Model Context Protocol) 서버를 제공합니다. Claude Code, Hermes Agent, Cursor류 MCP 클라이언트에서 CoNAI의 프롬프트, 이미지, 생성 이력, ComfyUI/NAI 생성 기능을 도구처럼 호출할 수 있습니다.
 
+그래프 워크플로 MCP 도구는 조회·실행만 하며 저장 API의 리비전 검사를 우회하는 변경 도구는 없습니다. 예약 목록은 설정·상태 리비전과 현재 워크플로 버전을 제공하고, HTTP 예약 일시정지·재개도 선택적 예상 리비전·워크플로 버전을 검사합니다. 실행 시각 등 일상 처리 기록은 예약 리비전을 바꾸지 않습니다. HTTP/플러그인 저장과 ComfyUI `If-Match` 계약은 [플러그인 제작 가이드](./PLUGIN_DEVELOPMENT.md#현재-공용-연결-목록)를 참고하세요. 토큰을 생략한 기존 호출은 조건 없는 쓰기입니다.
+
 ## 핵심 요약
 
 ### 채팅 전용 `call_agent`

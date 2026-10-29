@@ -9,8 +9,8 @@ interface UseOverlayBackCloseOptions {
 const OVERLAY_HISTORY_BACK_BYPASS_WINDOW_MS = 1000
 let overlayHistoryBackBypassUntil = 0
 
-/** Temporarily suppress unsaved-change guards while one overlay closes via its own history entry rewind. */
-export function shouldBypassOverlayHistoryBackNavigation() {
+/** While one overlay closes by rewinding its own history entry, other open overlays ignore that back navigation. */
+function shouldBypassOverlayHistoryBackNavigation() {
   return overlayHistoryBackBypassUntil > Date.now()
 }
 

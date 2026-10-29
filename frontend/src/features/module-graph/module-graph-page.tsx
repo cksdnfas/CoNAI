@@ -1,6 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { FeaturePermissionNotice } from '@/features/auth/feature-permission-notice'
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -36,6 +36,7 @@ import { useModuleGraphWorkspaceSync } from './use-module-graph-workspace-sync'
 import { useModuleGraphEditorShell } from './use-module-graph-editor-shell'
 import { useModuleGraphPageEditorPanels } from './use-module-graph-page-editor-panels'
 import { useModuleGraphPageActions } from './use-module-graph-page-actions'
+import type { GraphNavigationRevision } from './use-module-graph-browse-actions'
 import { useWorkflowChatPage } from './use-workflow-chat-page'
 import { useModuleGraphHistory } from './use-module-graph-history'
 
@@ -114,10 +115,8 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     setIsBrowseManageModalOpen,
     folderDeleteTarget,
     setFolderDeleteTarget,
-    setIsEditorSupportOpen,
     isWorkflowSaveModalOpen,
     setIsWorkflowSaveModalOpen,
-    setActiveEditorSupportSection,
     workflowExposedInputs,
     setWorkflowExposedInputs,
     workflowRunInputValues,
@@ -154,6 +153,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
   })
 
   const {
+    currentSnapshot,
     isDirty,
     shouldBlockGraphExit,
     selectedGraphRecord,
@@ -189,6 +189,42 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     workflowRunInputValues,
   })
 
+  const graphLoadRequestRef = useRef(0)
+  const editorRevision: GraphNavigationRevision = {
+    snapshot: currentSnapshot, sessionId: editorSessionId, graphId: selectedGraphId, view: workflowView,
+    draftFolderId: draftWorkflowFolderId, name: workflowName,
+    description: workflowDescription, runInputs: workflowRunInputValues,
+  }
+  const editorRevisionRef = useRef(editorRevision)
+  useLayoutEffect(() => {
+    editorRevisionRef.current = editorRevision
+  })
+  const isHydratedRef = useRef(false)
+  const lastWrittenUrlRef = useRef<{ graph: number | null; edit: boolean } | null>(null)
+  const isApplyingUrlRef = useRef<number | null>(null)
+  const writeUrl = useCallback((graph: number | null, edit: boolean, replace: boolean) => {
+    lastWrittenUrlRef.current = { graph, edit }
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      if (graph === null) next.delete(IMAGE_GENERATION_GRAPH_PARAM)
+      else next.set(IMAGE_GENERATION_GRAPH_PARAM, String(graph))
+      if (edit) next.set(IMAGE_GENERATION_GRAPH_EDIT_PARAM, '1')
+      else next.delete(IMAGE_GENERATION_GRAPH_EDIT_PARAM)
+      return next
+    }, { replace })
+  }, [setSearchParams])
+  const restoreCurrentUrl = useCallback(() => {
+    const current = editorRevisionRef.current
+    const edit = current.view === 'edit'
+    const last = lastWrittenUrlRef.current
+    if (!last || last.graph !== current.graphId || last.edit !== edit) writeUrl(current.graphId, edit, true)
+  }, [writeUrl])
+  const onDirectGraphNavigation = useCallback(() => {
+    if (isApplyingUrlRef.current === null) return
+    isApplyingUrlRef.current = null
+    restoreCurrentUrl()
+  }, [restoreCurrentUrl])
+
   useModuleGraphWorkspaceSync({
     selectedGraphId,
     nodes,
@@ -214,8 +250,6 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     reactFlow,
     confirmMessage: unsavedChangesConfirmMessage,
     setWorkflowView,
-    setIsEditorSupportOpen,
-    setActiveEditorSupportSection,
     setSelectedNodeId,
     setSelectedEdgeId,
     setSelectedValidationPortKey,
@@ -266,6 +300,9 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     confirmMessage: unsavedChangesConfirmMessage,
     reactFlow,
     isDirty,
+    editorRevisionRef,
+    graphLoadRequestRef,
+    onDirectGraphNavigation,
     workflowView,
     nodes,
     edges,
@@ -303,8 +340,6 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
     setLastSavedSnapshot,
     onEditorGraphReplaced: bumpHistoryEpoch,
     setWorkflowView,
-    setIsEditorSupportOpen,
-    setActiveEditorSupportSection,
     setIsBrowseManageModalOpen,
     setFolderDeleteTarget,
     refetchModules: modulesQuery.refetch,
@@ -327,7 +362,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
 
   useWorkflowChatPage({
     enabled: workflowView === 'edit' && !modulesQuery.isLoading && !isSavingGraph && executingGraphId === null && !isWorkflowSaveModalOpen && executionList[0]?.status !== 'running' && executionList[0]?.status !== 'queued',
-    dirty: isDirty, editorSessionId, selectedGraphId, name: workflowName, description: workflowDescription, debugMode: workflowDebugMode,
+    dirty: isDirty, currentSnapshot, editorSessionId, selectedGraphId, name: workflowName, description: workflowDescription, debugMode: workflowDebugMode,
     nodes, edges, modules, runInputs: workflowRunInputValues, setNodes, setEdges,
     setName: setWorkflowName, setDescription: setWorkflowDescription, setRunInputs: setWorkflowRunInputValues, setExposedInputs: setWorkflowExposedInputs, setSelectedNodeId, setSelectedEdgeId,
   })
@@ -342,36 +377,25 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
   // ------------------------------------------------------------------ URL ⇄ state (?graph=<id>&edit=1)
   const urlGraphId = parseImageGenerationWorkflowId(searchParams.get(IMAGE_GENERATION_GRAPH_PARAM))
   const urlEdit = searchParams.get(IMAGE_GENERATION_GRAPH_EDIT_PARAM) === '1'
-  const isHydratedRef = useRef(false)
-  const lastWrittenUrlRef = useRef<{ graph: number | null; edit: boolean } | null>(null)
-  const isApplyingUrlRef = useRef(false)
-
-  const writeUrl = useCallback((graph: number | null, edit: boolean, replace: boolean) => {
-    lastWrittenUrlRef.current = { graph, edit }
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      if (graph === null) next.delete(IMAGE_GENERATION_GRAPH_PARAM)
-      else next.set(IMAGE_GENERATION_GRAPH_PARAM, String(graph))
-      if (edit) next.set(IMAGE_GENERATION_GRAPH_EDIT_PARAM, '1')
-      else next.delete(IMAGE_GENERATION_GRAPH_EDIT_PARAM)
-      return next
-    }, { replace })
-  }, [setSearchParams])
-
   // Apply a URL that this workspace did not write (first load, back/forward). Discard confirmations happen inside the
   // handlers; a cancelled one puts the current state back into the URL.
   const applyUrlState = useCallback(async (graph: number | null, edit: boolean) => {
-    isApplyingUrlRef.current = true
+    const requestId = ++graphLoadRequestRef.current
+    isApplyingUrlRef.current = requestId
+    const restoreUrlAfterFailure = () => {
+      if (graphLoadRequestRef.current === requestId) restoreCurrentUrl()
+    }
     try {
       const isEditing = workflowView === 'edit'
       if (graph === null) {
         if (isEditing && !edit) {
-          if (!(await handleLeaveWorkflowEditor())) {
-            writeUrl(selectedGraphId, true, true)
+          if (!(await handleLeaveWorkflowEditor({ requestId }))) {
+            restoreUrlAfterFailure()
             return
           }
-        } else if (!isEditing && edit) {
-          await handleCreateWorkflow()
+          if (graphLoadRequestRef.current !== requestId) return
+        } else if (edit && (!isEditing || selectedGraphId !== null)) {
+          if (!(await handleCreateWorkflow({ requestId }))) restoreUrlAfterFailure()
           return
         }
         if (!edit) {
@@ -382,9 +406,10 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
       }
 
       if (graph !== selectedGraphId) {
-        const loaded = await handleLoadGraph({ id: graph } as GraphWorkflowSummaryRecord, { silent: true, openEditor: edit })
+        const loaded = await handleLoadGraph({ id: graph } as GraphWorkflowSummaryRecord, { silent: true, openEditor: edit, requestId })
+        if (graphLoadRequestRef.current !== requestId) return
         if (!loaded) {
-          writeUrl(selectedGraphId, isEditing, true)
+          restoreUrlAfterFailure()
           return
         }
         if (!edit && isEditing) setWorkflowView('browse')
@@ -392,14 +417,14 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
       }
 
       if (edit && !isEditing) {
-        enterWorkflowEditor('setup')
-      } else if (!edit && isEditing && !(await handleLeaveWorkflowEditor())) {
-        writeUrl(selectedGraphId, true, true)
+        enterWorkflowEditor()
+      } else if (!edit && isEditing && !(await handleLeaveWorkflowEditor({ requestId }))) {
+        restoreUrlAfterFailure()
       }
     } finally {
-      isApplyingUrlRef.current = false
+      if (isApplyingUrlRef.current === requestId) isApplyingUrlRef.current = null
     }
-  }, [enterWorkflowEditor, handleCreateWorkflow, handleLeaveWorkflowEditor, handleLoadGraph, selectedGraphId, setSelectedExecutionId, setSelectedGraphId, setWorkflowView, workflowView, writeUrl])
+  }, [enterWorkflowEditor, handleCreateWorkflow, handleLeaveWorkflowEditor, handleLoadGraph, restoreCurrentUrl, selectedGraphId, setSelectedExecutionId, setSelectedGraphId, setWorkflowView, workflowView])
 
   useEffect(() => {
     if (isHydratedRef.current || modulesQuery.isLoading) return
@@ -411,10 +436,10 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
   // Only a URL change (back/forward, a pasted link) reaches the state, never a re-render with the old URL: the URL this
   // workspace pushes lands a render later than the state that caused it.
   const applyUrlStateRef = useRef(applyUrlState)
-  useEffect(() => {
+  useLayoutEffect(() => {
     applyUrlStateRef.current = applyUrlState
   })
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isHydratedRef.current) return
     const last = lastWrittenUrlRef.current
     if (last && last.graph === urlGraphId && last.edit === urlEdit) return
@@ -424,7 +449,7 @@ function ModuleWorkflowWorkspaceInner({ isWideLayout }: ModuleWorkflowWorkspaceP
 
   const isEditing = workflowView === 'edit'
   useEffect(() => {
-    if (!isHydratedRef.current || isApplyingUrlRef.current) return
+    if (!isHydratedRef.current || (isApplyingUrlRef.current !== null && isApplyingUrlRef.current === graphLoadRequestRef.current)) return
     const last = lastWrittenUrlRef.current
     if (last && last.graph === selectedGraphId && last.edit === isEditing) return
     // Opening a workflow or the editor is a step back can return from; saving a new draft only names it.

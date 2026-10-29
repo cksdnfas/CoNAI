@@ -10,6 +10,7 @@ import { resolveProfileAsset } from './chatProfileAssets'
 import { MEDIA_MAX_PIXELS } from './chatMediaLinks'
 import { resolveProfileModel } from './chatModelRoles'
 import { stripThinking } from './llmChatContext'
+import { auxiliaryMaxTokens, fitAuxiliaryTarget } from './chatAuxiliarySettings'
 import { completeChat, resolveChatCompletionTarget, type ChatContentPart } from './llmChatCompletion'
 
 /** The appearance draft's instructions; the chat profile editor and the workflow node ask the same way. */
@@ -25,7 +26,7 @@ export function appearanceDescriptionOf(profile: Pick<ChatProfile, 'promptSectio
 
 /** The text part of the draft request; `name` null when there is no character to name. */
 export function appearanceSourceText(name: string | null, description: string) {
-  return name === null ? description.slice(0, 20000) : `Character: ${name}\n${description.slice(0, 20000)}`
+  return name === null ? description : `Character: ${name}\n${description}`
 }
 
 /** An image (file path or bytes) as the draft sees it: upright, at most 1024px, JPEG. */
@@ -45,7 +46,7 @@ export async function profileReferenceImageDataUrl(profile: ChatProfile) {
 
 /** Summary-style generation (cool, no thinking where it can be switched off) with room for a tag list. */
 export function appearanceGenerationOptions(profileGeneration: LlmGenerationOptions, thinkingSwitch?: LlmThinkingSwitch): LlmGenerationOptions {
-  return { ...summaryGenerationOptions(profileGeneration, thinkingSwitch), maxTokens: 1024 }
+  return { ...summaryGenerationOptions(profileGeneration, thinkingSwitch), maxTokens: auxiliaryMaxTokens(profileGeneration) }
 }
 
 /** One explicit summary-role call; returns an unsaved appearance draft and never retries. */
@@ -62,11 +63,9 @@ export async function draftChatAppearance(requester: McpRequester, input: ChatPr
   const image = blocked ? null : await profileReferenceImageDataUrl(profile)
   if (image) content.push({ type: 'image_url', image_url: { url: image } })
   else if (!description.trim()) throw new ChatAssetError(blocked ? '기준 이미지가 요약 모델의 허용 등급을 넘어. 캐릭터 설명을 써줘.' : '캐릭터 설명을 쓰거나 비전을 켜고 기준 이미지를 골라줘.')
-  const timeout = AbortSignal.timeout(120000)
-  const appearance = stripThinking(await completeChat({ ...connection, promptCacheMarks: false, generation: appearanceGenerationOptions(profileGenerationOptions(profile), connection.thinkingSwitch) }, [
-    { role: 'system', content: APPEARANCE_DRAFT_PROMPT },
-    { role: 'user', content },
-  ], signal ? AbortSignal.any([signal, timeout]) : timeout, { purpose: 'appearance', profileId: profile.id })).trim()
+  const messages = [{ role: 'system' as const, content: APPEARANCE_DRAFT_PROMPT }, { role: 'user' as const, content }]
+  const target = await fitAuxiliaryTarget({ ...connection, promptCacheMarks: false, generation: appearanceGenerationOptions(profileGenerationOptions(profile), connection.thinkingSwitch) }, messages)
+  const appearance = stripThinking(await completeChat(target, messages, signal ?? new AbortController().signal, { purpose: 'appearance', profileId: profile.id })).trim()
   if (!appearance || appearance.length > APPEARANCE_DRAFT_MAX_LENGTH) throw new ChatAssetError('외형 초안 결과가 비었거나 너무 길어.')
   return { appearance }
 }

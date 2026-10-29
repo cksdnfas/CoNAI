@@ -12,12 +12,13 @@ import { useI18n } from '@/i18n'
 import { acknowledgeChatPageProposal, answerChatPageCommand, checkChatPageProposal } from '@/lib/api-codex-chat'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
 import { createRandomUuid } from '@/lib/random-uuid'
-import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
+import { listAccessiblePageAccessItems } from '@/features/auth/page-access-catalog'
 import { SETTINGS_TAB_ITEMS } from '@/features/settings/settings-tabs'
 import { IMAGE_GENERATION_TAB_ORDER } from '@/features/image-generation/image-generation-tabs'
 import { PROMPT_PAGE_VIEWS } from '@/features/prompts/prompt-page-view'
 import { pageAction, pageChoice, pageObject } from './page-action-helpers'
 import { ToggleChip } from '@/components/ui/chip'
+import { chatDraftEqual } from './chat-draft-equal'
 
 type PageProposal = Extract<ChatProposal, { kind: 'page_fields' }>
 export type PageActionProposal = Extract<ChatProposal, { kind: 'page_action' }>
@@ -98,7 +99,6 @@ const PAGE_VIEWS: Record<string, { param: string; values: readonly string[] }> =
 /** Views nested inside one of those views (settings › chat and › LLM keep their own ?view=). */
 const NESTED_VIEWS: Record<string, string[]> = {
   '/settings': [
-    '/settings?section=mine',
     ...['connections', 'prompts', 'log', 'dashboard'].map((group) => `/settings?section=llm&group=${group}`),
     ...['topics', 'knowledge'].map((group) => `/settings?section=posts&group=${group}`),
     ...['nai', 'comfyui', 'pacing', 'schedules'].map((group) => `/settings?section=generation&group=${group}`),
@@ -204,7 +204,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     ...(activeEditor?.revision ? { revision: activeEditor.revision } : {}),
     ...(activeEditor?.actions ? { actions: activeEditor.actions } : {}),
     ...(activeEditor?.dirty ? { dirty: true as const } : {}),
-    data: { view: new URLSearchParams(location.search).get('tab') ?? new URLSearchParams(location.search).get('section') ?? '', ...(activeEditor?.data ?? {}) },
+    data: { view: new URLSearchParams(location.search).get('tab') ?? new URLSearchParams(location.search).get('section') ?? new URLSearchParams(location.search).get('view') ?? '', ...(activeEditor?.data ?? {}) },
   } : null, [enabled, connection, activeEditor, instanceId, location.pathname, location.search, title])
   const current = useRef({ snapshot, editor: activeEditor, commandActions })
   useLayoutEffect(() => { current.current = { snapshot, editor: activeEditor, commandActions } })
@@ -415,11 +415,11 @@ function PageNavigationRegistration({ title }: { title: string }) {
   const auth = useAuthStatusQuery().data
   const navigate = useNavigate()
   const { t } = useI18n()
-  const destinations = PAGE_ACCESS_CATALOG.filter((item) => auth?.permissionKeys.includes(item.permissionKey)).flatMap((item) => {
+  const destinations = [...new Set((auth ? listAccessiblePageAccessItems(auth.permissionKeys) : []).flatMap((item) => {
     const views = PAGE_VIEWS[item.path]
     return [item.path, ...(views ? views.values.map((value) => `${item.path}?${views.param}=${value}`) : []), ...(NESTED_VIEWS[item.path] ?? [])].filter((destination) => auth?.isAdmin || (!destination.startsWith('/chat/resources') && destination !== '/characters?view=profiles'))
-  })
-  const actions = destinations.length ? [pageAction('page.navigate', t({ ko: '내부 페이지 이동', en: 'Navigate within CoNAI' }), t({ ko: '접근 가능한 CoNAI 페이지나 그 탭으로 이동해. 설정은 ?section=, 다른 페이지는 ?tab= 이 탭이야.', en: 'Open an accessible CoNAI page or one of its tabs. Settings sections use ?section=, other pages ?tab=.' }), pageObject({ to: pageChoice(destinations) }, ['to']))] : []
+  }))]
+  const actions = destinations.length ? [pageAction('page.navigate', t({ ko: '내부 페이지 이동', en: 'Navigate within CoNAI' }), t({ ko: '접근 가능한 CoNAI 페이지나 그 탭으로 이동해. 설정은 ?section=, 생성과 프롬프트는 ?tab=, 캐릭터는 ?view=를 써.', en: 'Open an accessible CoNAI page or one of its tabs. Settings use ?section=, generation and prompts use ?tab=, and characters use ?view=.' }), pageObject({ to: pageChoice(destinations) }, ['to']))] : []
   if (settings.scopes.length && !settings.scope) actions.push(pageAction('page.settings_open', t({ ko: '현재 페이지 설정 열기', en: 'Open current page settings' }), t({ ko: '이 페이지에 적용되는 앱 공용 설정 창(저장 형식, 생성 속도 제한, 화면 테마 등)을 열어. 화면의 입력 칸(프롬프트 등)은 여기서 바꾸지 말고 page_fill로 채워.', en: 'Open the app-wide settings that apply to this page (save format, generation throttle, appearance, etc.). Never use it to change the screen\'s own inputs such as prompts; fill those with page_fill.' }), pageObject({ scope: pageChoice(settings.scopes) }, ['scope'])))
   useChatPageRegistration({ kind: 'page', title, resourceId: null, priority: NAVIGATION_PRIORITY, fields: [], actions, apply: () => {}, applyAction: (id, args, assertCurrent) => { assertCurrent(); if (id === 'page.settings_open') settings.open(args.scope as PageSettingsScopeId); else void navigate(String(args.to)) } })
   return null
@@ -440,9 +440,12 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
   const connected = page?.enabled === true
   // The command palette also needs the operations and unsaved state, only while it is open.
   const listsActions = page?.actionsWanted === true
-  const description = input && register ? JSON.stringify({ title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields, priority: input.priority, ...(connected ? { workflow: input.workflow, data: input.data } : {}), ...(listsActions ? { actions: input.actions, dirty: input.dirty } : {}) }) : null
-  const revisionKey = `${description}:${connected ? input?.localRevision ?? '' : ''}`
-  const revision = useMemo(() => ({ key: revisionKey, id: createRandomUuid() }), [revisionKey]).id
+  const nextDescription = input && register ? { title: input.title, kind: input.kind, resourceId: input.resourceId, fields: input.fields, priority: input.priority, ...(connected ? { workflow: input.workflow, data: input.data, localRevision: input.localRevision } : {}), ...(listsActions ? { actions: input.actions, dirty: input.dirty } : {}) } : null
+  const [registration, setRegistration] = useState(() => ({ description: nextDescription, revision: createRandomUuid() }))
+  // Immutable branches compare by identity; equal re-renders never serialize or re-register a payload.
+  // Fields/data still participate even when a caller supplies localRevision: direct actions must reject stale state.
+  if (!chatDraftEqual(registration.description, nextDescription)) setRegistration({ description: nextDescription, revision: createRandomUuid() })
+  const { description, revision } = registration
   const kind = input?.kind
   const resourceId = input?.resourceId
   // View controls that write URL search params retain undo within the same mounted view.
@@ -450,8 +453,7 @@ export function useChatPageRegistration(input: (Omit<Editor, 'instanceId' | 'pat
   const instanceId = useMemo(() => ({ key: `${navigationKey}:${location.pathname}:${kind}:${resourceId}`, id: createRandomUuid() }), [navigationKey, location.pathname, kind, resourceId]).id
   useLayoutEffect(() => {
     if (!register || !description) return
-    const data = JSON.parse(description) as Omit<Editor, 'instanceId' | 'path' | 'apply' | 'applyWorkflow' | 'applyAction'>
-    return register({ ...data, revision, instanceId, path: location.pathname, apply: (patch) => applyRef.current?.(patch), applyAction: async (id, args, assertCurrent, nativeRevision) => {
+    return register({ ...description, revision, instanceId, path: location.pathname, apply: (patch) => applyRef.current?.(patch), applyAction: async (id, args, assertCurrent, nativeRevision) => {
       if (!actionApplyRef.current) throw new Error('페이지 작업 편집기가 닫혔어.')
       return actionApplyRef.current(id, args, assertCurrent, nativeRevision)
     }, applyWorkflow: (proposal) => {

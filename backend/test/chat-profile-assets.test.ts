@@ -91,6 +91,60 @@ test('chat profile assets: library migration, access, imports and generation ref
     })
   }
 
+  await t.test('profile editor revisions reject stale writes and include synced setting changes', async () => {
+    const profile = ChatProfileStore.create({ name: 'Revision profile', engine: 'codex' })
+    ChatProfileStore.update(profile.id, { tagline: 'Changed elsewhere' })
+    const conflict = await call('/admin/profiles/:profileId', { profileId: String(profile.id) }, {
+      method: 'put', body: { name: 'Stale name', revision: profile.revision },
+    })
+    assert.equal(conflict.status, 409)
+    assert.equal(conflict.body.code, 'revision_conflict')
+    assert.equal(conflict.body.data.tagline, 'Changed elsewhere')
+    assert.equal(ChatProfileStore.find(profile.id)?.name, 'Revision profile')
+    const invalid = await call('/admin/profiles/:profileId', { profileId: String(profile.id) }, {
+      method: 'put', body: { name: 'Invalid revision', revision: null },
+    })
+    assert.equal(invalid.status, 400)
+    assert.equal(ChatProfileStore.find(profile.id)?.name, 'Revision profile')
+    const legacy = await call('/admin/profiles/:profileId', { profileId: String(profile.id) }, {
+      method: 'put', body: { name: 'No revision' },
+    })
+    assert.equal(legacy.status, 200)
+    assert.equal(legacy.body.data.name, 'No revision')
+    const saved = await call('/admin/profiles/:profileId', { profileId: String(profile.id) }, {
+      method: 'put', body: { tagline: 'Checked', revision: legacy.body.data.revision },
+    })
+    assert.equal(saved.status, 200)
+    assert.notEqual(saved.body.data.revision, legacy.body.data.revision)
+    const ownGroup = GroupPathService.resolveOrCreate(`${assets.chatCharacterGroupPath(saved.body.data.name)}/표정`).groupId
+    const detail = await call('/admin/profiles/:profileId', { profileId: String(profile.id) })
+    assert.equal(detail.status, 200)
+    assert.equal(detail.body.data.revision, saved.body.data.revision)
+    assert.equal(detail.body.data.expressionGroupId, ownGroup)
+    const beforeBackground = ChatProfileStore.find(profile.id)!
+    const withBackground = ChatProfileStore.update(profile.id, { background: dataUrl })!
+    assert.notEqual(withBackground.backgroundRevision, beforeBackground.backgroundRevision)
+    assert.equal(ChatProfileStore.update(profile.id, { tagline: 'Unrelated' })!.backgroundRevision, withBackground.backgroundRevision)
+
+    const { createCharacterSetting, patchCharacterSetting } = await import('../src/services/characterLibrary')
+    const setting = createCharacterSetting({ name: 'Revision setting', folderId: null })
+    const linked = ChatProfileStore.create({ name: 'Linked revision profile', engine: 'codex', characterLink: { settingId: setting.id, synced: true } })
+    const listed = (await call('/admin/profiles')).body.data.find((entry: { id: number }) => entry.id === linked.id)
+    assert.equal(listed.expressionGroupId, setting.expressionGroupId)
+    patchCharacterSetting(setting.id, { revision: setting.revision, appearance: 'New look' })
+    const linkedConflict = await call('/admin/profiles/:profileId', { profileId: String(linked.id) }, {
+      method: 'put', body: { name: 'Stale linked profile', revision: linked.revision },
+    })
+    assert.equal(linkedConflict.status, 409)
+    assert.equal(linkedConflict.body.data.appearance, 'New look')
+    assert.equal(ChatProfileStore.find(linked.id)?.name, 'Linked revision profile')
+    const linkedSave = await call('/admin/profiles/:profileId', { profileId: String(linked.id) }, {
+      method: 'put', body: { tagline: 'Synced save', revision: linkedConflict.body.data.revision },
+    })
+    assert.equal(linkedSave.status, 200)
+    assert.equal(linkedSave.body.data.appearance, 'New look')
+  })
+
   await t.test('migration is idempotent across profiles and encodings, keeps data URLs and public hashes', async () => {
     await assets.migrateLegacyProfileAssets()
     hash = ChatProfileStore.find(first.id)!.avatarHash!
@@ -316,6 +370,10 @@ test('chat profile assets: library migration, access, imports and generation ref
     await assert.rejects(buildChatGenerationPresetJob(bloated, { prompt: 'smile' }, profile), /8MB/)
     const other = await assets.ingestProfileAsset(await sharp({ create: { width: 8, height: 8, channels: 3, background: '#446699' } }).png().toBuffer(), first.name)
     const changedProfile = ChatProfileStore.update(first.id, { referenceHash: other.compositeHash })!
+    const checked = await call('/admin/profiles/:profileId', { profileId: String(first.id) }, {
+      method: 'put', body: { tagline: 'Checked with assets', revision: changedProfile.revision },
+    })
+    assert.equal(checked.status, 200)
     assert.notDeepEqual((await buildChatGenerationPresetJob(configured, { prompt: 'smile' }, changedProfile)).request_payload!.character_refs, (await buildChatGenerationPresetJob(configured, { prompt: 'smile' }, profile)).request_payload!.character_refs)
     const fields = [{ id: 'reference', label: 'Reference', jsonPath: '1.inputs.image', type: 'image' as const, required: true }, { id: 'prompt', label: 'Prompt', jsonPath: '2.inputs.text', type: 'text' as const }]
     const workflowId = WorkflowModel.create({ name: '기준 이미지 테스트', workflow_json: '{}', marked_fields: fields })
@@ -331,7 +389,9 @@ test('chat profile assets: library migration, access, imports and generation ref
 
   await t.test('appearance drafts use the summary role once, include vision only when enabled and leave profiles untouched', async (sub) => {
     const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
-    const { draftChatAppearance } = await import('../src/services/codex-chat/chatAppearanceDraft')
+    const { draftChatAppearance, appearanceSourceText } = await import('../src/services/codex-chat/chatAppearanceDraft')
+    const fullDescription = 'Complete character description. '.repeat(1000)
+    assert.equal(appearanceSourceText('Character', fullDescription), `Character: Character\n${fullDescription}`)
     const requests: Array<{ model: string; messages: any[]; stream: boolean; max_tokens: number }> = []
     sub.mock.method(ExternalApiProvider, 'findByName', (name: string) => ({ provider_name: name, display_name: name, is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', additional_config: {} }))
     sub.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
@@ -349,12 +409,12 @@ test('chat profile assets: library migration, access, imports and generation ref
     assert.equal(requests[0].model, 'small')
     assert.ok(requests[0].messages[1].content[0].text.includes('파란 머리'))
     assert.equal(requests[0].messages[1].content.length, 1)
-    const vision = await draftChatAppearance({ accountId: null, accountType: 'admin' }, { ...input, visionEnabled: true })
+    const vision = await draftChatAppearance({ accountId: null, accountType: 'admin' }, { ...input, visionEnabled: true, maxTokens: 8192 })
     assert.equal(vision.appearance, plain.body.data.appearance)
     assert.equal(requests.length, 2)
     assert.equal(requests[1].messages[1].content[1].type, 'image_url')
     assert.match(requests[1].messages[1].content[1].image_url.url, /^data:image\/jpeg;base64,/)
-    assert.equal(requests[1].max_tokens, 1024)
+    assert.equal(requests[1].max_tokens, 8192)
     assert.deepEqual(ChatProfileStore.find(first.id), before)
     await assert.rejects(draftChatAppearance({ accountId: 999999, accountType: 'admin' }, input), /관리자 권한/)
     const { ImageSafetyService } = await import('../src/services/imageSafetyService')

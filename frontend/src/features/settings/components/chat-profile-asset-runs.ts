@@ -7,6 +7,7 @@ import {
   CHAT_ADMIN_PROFILES_QUERY_KEY,
   CHAT_GENERATION_PRESETS_QUERY_KEY,
   CHAT_PROFILES_QUERY_KEY,
+  ChatEditorResolution,
   applyChatAssetSlot,
   cancelChatAssetSlot,
   chatAssetBatchQueryKey,
@@ -107,7 +108,7 @@ export function refreshOwnerAssets(queryClient: QueryClient, owner: ChatAssetOwn
  * batch the server tracks; this keeps the session's batch ids, polls the ones still working, puts the first result
  * straight into slots that were empty when asked (`auto`), and applies a picked candidate to just its slot.
  */
-export function useAssetRuns<T>({ open, owner, ensureOwner, refresh, onApplied }: {
+export function useAssetRuns<T>({ open, owner, ensureOwner, refresh, onApplied, captureOwner }: {
   open: boolean
   /** The saved owner; null while it is new. */
   owner: ChatAssetOwner | null
@@ -115,7 +116,8 @@ export function useAssetRuns<T>({ open, owner, ensureOwner, refresh, onApplied }
   ensureOwner: () => Promise<ChatAssetOwner>
   /** Re-reads the owner and the groups applied results changed; returns the owner as it is now. */
   refresh: (owner: ChatAssetOwner, results: AppliedGroups[], batchId?: number) => Promise<T | undefined>
-  onApplied: (result: ChatAssetApplyResult, slot: { kind: ChatAssetKind; hash: string }, updated?: T) => void
+  onApplied: (result: ChatAssetApplyResult, slot: { kind: ChatAssetKind; hash: string }, updated?: T, source?: T | null) => void
+  captureOwner?: () => T | null
 }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
@@ -185,13 +187,14 @@ export function useAssetRuns<T>({ open, owner, ensureOwner, refresh, onApplied }
     if (!owner) return
     const keys = slots.map((slot) => slot.slotKey)
     setPending((current) => [...current, ...keys])
-    const applied: Array<{ result: ChatAssetApplyResult; slot: typeof slots[number] }> = []
+    const applied: Array<{ result: ChatAssetApplyResult; slot: typeof slots[number]; source?: T | null }> = []
     try {
       for (const slot of slots) {
         try {
+          const source = captureOwner?.()
           const result = await applyChatAssetSlot(owner, batch.id, slot.slotKey, slot.hash)
-          applied.push({ result, slot })
-          onApplied(result, slot)
+          applied.push({ result, slot, source })
+          onApplied(result, slot, undefined, source)
         } catch (error) {
           showSnackbar({ message: getErrorMessage(error, t({ ko: '적용하지 못했어.', en: 'Could not apply.' })), tone: 'error' })
         }
@@ -200,7 +203,7 @@ export function useAssetRuns<T>({ open, owner, ensureOwner, refresh, onApplied }
       try {
         if (applied.length) {
           const updated = await refresh(owner, applied.map((entry) => entry.result.applied), batch.id)
-          for (const { result, slot } of applied) onApplied(result, slot, updated)
+          for (const { result, slot, source } of applied) onApplied(result, slot, updated, source)
         }
       } catch (error) {
         showSnackbar({ message: getErrorMessage(error, owner.kind === 'profile' ? t({ ko: '적용한 프로필을 새로 읽지 못했어.', en: 'Could not refresh the applied profile.' }) : t({ ko: '적용한 외형 설정을 새로 읽지 못했어.', en: 'Could not refresh the applied setting.' })), tone: 'error' })
@@ -253,7 +256,7 @@ export function useAssetRuns<T>({ open, owner, ensureOwner, refresh, onApplied }
       setLoadedFor(chatAssetOwnerKey(current))
       setRuns(next)
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '생성을 시작하지 못했어.', en: 'Could not start generating.' })), tone: 'error' })
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '생성을 시작하지 못했어.', en: 'Could not start generating.' })), tone: error instanceof ChatEditorResolution ? 'info' : 'error' })
     } finally {
       setPending((current) => current.filter((key) => !keys.includes(key)))
     }
@@ -298,18 +301,20 @@ export function useAssetRuns<T>({ open, owner, ensureOwner, refresh, onApplied }
 export type AssetRuns = ReturnType<typeof useAssetRuns<unknown>>
 
 /** The profile editor's runs: owner `{ kind: 'profile' }`, refreshed through the profile list. */
-export function useProfileAssetRuns({ open, profileId, ensureProfile, onApplied }: {
+export function useProfileAssetRuns({ open, profileId, ensureProfile, currentProfile, onApplied }: {
   open: boolean
   profileId: number | null
   /** Saves the profile (name, appearance, reference) and returns it; a new profile is created here. */
   ensureProfile: () => Promise<ChatProfile>
-  onApplied: (result: ChatAssetApplyResult, slot: { kind: ChatAssetKind; hash: string }, profile?: ChatProfile) => void
+  currentProfile: () => ChatProfile | null
+  onApplied: (result: ChatAssetApplyResult, slot: { kind: ChatAssetKind; hash: string }, profile?: ChatProfile, source?: ChatProfile | null) => void
 }) {
   const queryClient = useQueryClient()
   return useAssetRuns<ChatProfile>({
     open,
     owner: profileId ? { kind: 'profile', id: profileId } : null,
     ensureOwner: async () => ({ kind: 'profile', id: (await ensureProfile()).id }),
+    captureOwner: currentProfile,
     refresh: (owner, results, batchId) => refreshProfileAssets(queryClient, owner.id, results, batchId),
     onApplied,
   })

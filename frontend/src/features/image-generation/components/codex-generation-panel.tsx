@@ -1,9 +1,9 @@
 import { CodexIcon } from '@/components/common/provider-icons'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { createPortal } from 'react-dom'
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowUp, ArrowDown, LogIn, RefreshCw, RotateCcw, X } from 'lucide-react'
+import { ArrowUp, ArrowDown, LogIn, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -14,13 +14,10 @@ import { useCodexChatPage } from './use-codex-chat-page'
 import { Text } from '@/components/ui/text'
 import { Tip } from '@/components/ui/tooltip'
 import { Select } from '@/components/ui/select'
-import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
 import { createGenerationQueueJob, getCodexGenerationModels, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { useI18n } from '@/i18n'
-import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
 import { getErrorMessage, type SelectedImageDraft } from '../image-generation-shared'
-import { consumeHistorySettingsLoad, usePendingHistorySettingsLoad } from '../history-settings-load-store'
 import { confirmHistorySettingsOverwrite, getHistorySettingsLoadedMessage } from '../history-settings-mapping'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
@@ -30,6 +27,8 @@ import { NaiSelectedImageCard } from './nai-selected-image-card'
 import { normalizeTextSegmentSpreadsheetText } from './text-segment-spreadsheet-input'
 import { GenerateActionBar, GenerateActionDock } from './generate-action-bar'
 import { GenerationToolbarStatus, usePortalTargetById } from './generation-toolbar-status'
+import { useGenerationImageSaveOptions } from './use-generation-image-save-options'
+import { useHistorySettingsLoad } from './use-history-settings-load'
 import { ResolutionPicker } from './resolution-picker'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 import { CodexPromptPresetButton } from './codex-prompt-preset-button'
@@ -45,7 +44,6 @@ import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 type CodexGenerationPanelProps = {
   onHistoryRefresh: () => void
   splitPaneScroll?: boolean
-  headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
   /** Page toolbar slot for the Codex status; replaces the inline Codex header row. */
   statusPortalTargetId?: string
@@ -245,7 +243,6 @@ function buildCodexFormFromHistoryPayload(payload: Record<string, unknown>, curr
 export function CodexGenerationPanel({
   onHistoryRefresh,
   splitPaneScroll = false,
-  headerPortalTargetId,
   compactActionBarContentTargetId,
   statusPortalTargetId,
   blockLayout,
@@ -259,19 +256,8 @@ export function CodexGenerationPanel({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const modelOptionsQuery = useQuery({ queryKey: ['codex-generation-models'], queryFn: getCodexGenerationModels, staleTime: 60_000, retry: false })
   useCodexChatPage(codexForm, setCodexForm, modelOptionsQuery.data?.data.models ?? [])
-  const [, setPortalRevision] = useState(0)
-
   const confirm = useConfirm()
-  const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
-  const handledHistorySettingsLoadNonceRef = useRef(0)
-  useEffect(() => {
-    const request = pendingHistorySettingsLoad
-    if (!request || request.serviceType !== 'codex' || handledHistorySettingsLoadNonceRef.current === request.nonce) {
-      return
-    }
-
-    handledHistorySettingsLoadNonceRef.current = request.nonce
-    consumeHistorySettingsLoad(request.nonce)
+  useHistorySettingsLoad('codex', (request) => {
     const { form: nextForm, hasImageInputs } = buildCodexFormFromHistoryPayload(request.payload, codexForm)
     void (async () => {
       if (shouldConfirmCodexHistoryLoad(codexForm, nextForm) && !(await confirmHistorySettingsOverwrite(confirm, t))) {
@@ -281,12 +267,8 @@ export function CodexGenerationPanel({
       setCodexForm(nextForm)
       showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, hasImageInputs), tone: 'info' })
     })()
-  }, [codexForm, confirm, pendingHistorySettingsLoad, showSnackbar, t])
-
-  const appSettingsQuery = useQuery({
-    queryKey: ['runtime-image-save-settings'],
-    queryFn: getRuntimeImageSaveSettings,
   })
+  const { options: generationImageSaveOptions } = useGenerationImageSaveOptions()
 
   const codexStatusQuery = useQuery({
     queryKey: ['codex-generation-status'],
@@ -294,19 +276,6 @@ export function CodexGenerationPanel({
     retry: false,
   })
   const refetchCodexStatus = codexStatusQuery.refetch
-
-  const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
-
-  useEffect(() => {
-    if ((!headerPortalTargetId && !compactActionBarContentTargetId) || typeof document === 'undefined') {
-      return
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      setPortalRevision((current) => current + 1)
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [compactActionBarContentTargetId, headerPortalTargetId])
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -333,15 +302,9 @@ export function CodexGenerationPanel({
   const attachmentLimitExceeded = attachmentUsage.count > 5 || attachmentUsage.bytes > 32 * 1024 * 1024 || attachmentUsage.oversized
   const outputSize = useMemo(() => resolveCodexSize(codexForm.aspectRatio, codexForm.resolution), [codexForm.aspectRatio, codexForm.resolution])
   const outputSizeHint = codexForm.aspectRatio === 'random' ? t({ ko: '랜덤 비율', en: 'Random ratio' }) : outputSize
-  const useDrawerCompactChrome = Boolean(headerPortalTargetId)
   const useStickyActionBar = Boolean(compactActionBarContentTargetId) && !splitPaneScroll
   const statusPortalTarget = usePortalTargetById(statusPortalTargetId)
-  const headerPortalTarget = headerPortalTargetId && typeof document !== 'undefined'
-    ? document.getElementById(headerPortalTargetId)
-    : null
-  const compactActionBarPortalTarget = compactActionBarContentTargetId && typeof document !== 'undefined'
-    ? document.getElementById(compactActionBarContentTargetId)
-    : null
+  const compactActionBarPortalTarget = usePortalTargetById(compactActionBarContentTargetId)
   const codexStatus = codexStatusQuery.data?.data ?? null
   const canGenerateWithCodex = codexStatusQuery.isSuccess ? Boolean(codexStatus?.available) : false
   const showStatusRecovery = codexStatusQuery.isError || (codexStatusQuery.isSuccess && !codexStatus?.available)
@@ -446,7 +409,7 @@ export function CodexGenerationPanel({
       if (codexForm.strictPreservation && (codexForm.imageMode !== 'edit' || !codexForm.maskImage)) {
         throw new Error(t({ ko: '엄격 보존에는 원본과 마스크를 다시 첨부해야 해.', en: 'Strict preservation requires a source and mask to be attached.' }))
       }
-      const references = codexReferencePayload(codexForm.references)
+      const references = codexReferencePayload(codexForm.references, t({ ko: '참조 이미지를 모두 다시 첨부하거나 빈 칸을 지워줘.', en: 'Reattach every reference image or remove its empty slot.' }))
       setIsSubmitting(true)
       const response = await createGenerationQueueJob({
         service_type: 'codex',
@@ -463,13 +426,7 @@ export function CodexGenerationPanel({
           mask: codexForm.imageMode === 'edit' ? codexForm.maskImage?.dataUrl : undefined,
           references,
           preserve: codexForm.strictPreservation ? 'strict' : undefined,
-          imageSaveOptions: {
-            format: generationSaveSettings.defaultFormat,
-            quality: generationSaveSettings.quality,
-            resizeEnabled: generationSaveSettings.resizeEnabled,
-            maxWidth: generationSaveSettings.maxWidth,
-            maxHeight: generationSaveSettings.maxHeight,
-          },
+          imageSaveOptions: generationImageSaveOptions,
         },
       })
 
@@ -486,11 +443,7 @@ export function CodexGenerationPanel({
     codexStatus?.available,
     codexStatus?.installed,
     codexStatusQuery.isSuccess,
-    generationSaveSettings.defaultFormat,
-    generationSaveSettings.maxHeight,
-    generationSaveSettings.maxWidth,
-    generationSaveSettings.quality,
-    generationSaveSettings.resizeEnabled,
+    generationImageSaveOptions,
     isSubmitting,
     onHistoryRefresh,
     operationLabel,
@@ -520,11 +473,6 @@ export function CodexGenerationPanel({
         ) : null}
         {codexLoginButton}
         {codexUpdateButton}
-        {useDrawerCompactChrome ? (
-          <IconButton variant="ghost" size="icon-sm" onClick={() => void handleReset()} disabled={isSubmitting} label={t({ ko: '초기화', en: 'Reset' })}>
-            <RotateCcw />
-          </IconButton>
-        ) : null}
       </div>
     </div>
   )
@@ -561,7 +509,7 @@ export function CodexGenerationPanel({
       generateDisabled={codexGenerateDisabled}
       isGenerating={isSubmitting}
       repeat={codexRepeat}
-      onReset={useDrawerCompactChrome ? undefined : () => void handleReset()}
+      onReset={() => void handleReset()}
       targetGroupStorageKey={IMAGE_GENERATION_TARGET_GROUP_KEY}
     />
   )
@@ -792,8 +740,6 @@ export function CodexGenerationPanel({
       <div className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6')}>
         {statusPortalTargetId
           ? (statusPortalTarget ? createPortal(toolbarStatusContent, statusPortalTarget) : null)
-          : useDrawerCompactChrome
-          ? (headerPortalTarget ? createPortal(headerToolbarContent, headerPortalTarget) : null)
           : (
             <div className="shrink-0 space-y-3">
               {inlineHeaderContent}
@@ -803,7 +749,6 @@ export function CodexGenerationPanel({
         <div className={cn(
           'space-y-6',
           splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
-          useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
         )}>
         {stackedEditorBlocks}
 

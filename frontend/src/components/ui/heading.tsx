@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 const headingVariants = cva('font-semibold tracking-tight text-foreground', {
   variants: {
     level: {
-      /** Page title (PageHeader). */
+      /** Page title. */
       1: 'text-2xl',
       /** Section title (SectionHeading, Section). */
       2: 'text-xl',

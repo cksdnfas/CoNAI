@@ -15,6 +15,7 @@ import { ChatFilledLabel } from './settings-filled-label'
 import { SettingsValidationAlert } from './settings-rows'
 
 interface RatingTierSettingsCardProps {
+  draftLocked?: boolean
   heading: ReactNode
   actions?: ReactNode
   ratingTiersDraft: RatingTierRecord[] | null
@@ -32,6 +33,7 @@ interface RatingTierSettingsCardProps {
 const FALLBACK_TIER_COLOR = '#a78bfa'
 
 export function RatingTierSettingsCard({
+  draftLocked = false,
   heading,
   actions,
   ratingTiersDraft,
@@ -55,7 +57,7 @@ export function RatingTierSettingsCard({
   }
 
   const handleTierDragOver = (tierId: number) => (event: DragEvent<HTMLDivElement>) => {
-    if (draggedTierId == null || draggedTierId === tierId) {
+    if (draftLocked || draggedTierId == null || draggedTierId === tierId) {
       return
     }
 
@@ -66,7 +68,7 @@ export function RatingTierSettingsCard({
 
   const handleTierDrop = (tierId: number) => (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
-    if (draggedTierId != null && draggedTierId !== tierId) {
+    if (!draftLocked && draggedTierId != null && draggedTierId !== tierId) {
       onReorderRatingTier(draggedTierId, tierId)
     }
     setDraggedTierId(null)
@@ -119,7 +121,8 @@ export function RatingTierSettingsCard({
                     <IconButton
                       variant="ghost"
                       size="icon-xs"
-                      draggable
+                      draggable={!draftLocked}
+                      disabled={draftLocked}
                       onDragStart={handleTierDragStart(tier.id)}
                       onDragEnd={handleTierDragEnd}
                       className="cursor-grab"
@@ -144,19 +147,20 @@ export function RatingTierSettingsCard({
                   </div>
 
                   <div className="flex items-center gap-0.5">
-                    <IconButton size="icon-sm" variant="ghost" onClick={() => onMoveRatingTierUp(tier.id)} disabled={isFirst} label={t({ ko: '위로 이동', en: 'Move up' })}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => onMoveRatingTierUp(tier.id)} disabled={isFirst || draftLocked} label={t({ ko: '위로 이동', en: 'Move up' })}>
                       <ArrowUp className="h-4 w-4" />
                     </IconButton>
-                    <IconButton size="icon-sm" variant="ghost" onClick={() => onMoveRatingTierDown(tier.id)} disabled={isLast} label={t({ ko: '아래로 이동', en: 'Move down' })}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => onMoveRatingTierDown(tier.id)} disabled={isLast || draftLocked} label={t({ ko: '아래로 이동', en: 'Move down' })}>
                       <ArrowDown className="h-4 w-4" />
                     </IconButton>
-                    <IconButton size="icon-sm" variant="ghost" onClick={() => onDeleteRatingTier(tier.id)} disabled={ratingTiersDraft.length <= 1} label={t({ ko: '등급 삭제', en: 'Delete tier' })}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => onDeleteRatingTier(tier.id)} disabled={ratingTiersDraft.length <= 1 || draftLocked} label={t({ ko: '등급 삭제', en: 'Delete tier' })}>
                       <Trash2 className="h-4 w-4" />
                     </IconButton>
                   </div>
                 </div>
 
                 {isExpanded ? (
+                  <fieldset disabled={draftLocked} className="contents">
                   <div className="border-t border-line pb-1 pl-4 sm:pl-14">
                     <SettingRow label={<ChatFilledLabel fieldId={`ratingTiers.${tier.id}.tier_name`}>{labels.name}</ChatFilledLabel>} controlWidth="standard">
                       <Input
@@ -220,6 +224,7 @@ export function RatingTierSettingsCard({
                       </Select>
                     </SettingRow>
                   </div>
+                  </fieldset>
                 ) : null}
               </div>
             )

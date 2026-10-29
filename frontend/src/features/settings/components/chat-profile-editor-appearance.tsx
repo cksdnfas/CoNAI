@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { useI18n } from '@/i18n'
-import { CHAT_GENERATION_PRESETS_QUERY_KEY, clearChatProfileExpression, draftChatAppearance, listChatGenerationPresets, sameCharacterLink, setChatProfileExpression, type ChatProfile } from '@/lib/api-codex-chat'
+import { CHAT_GENERATION_PRESETS_QUERY_KEY, ChatEditorResolution, clearChatProfileExpression, draftChatAppearance, listChatGenerationPresets, sameCharacterLink, setChatProfileExpression, type ChatProfile } from '@/lib/api-codex-chat'
 import { ErrorState } from '@/components/ui/error-state'
 import { LoadingState } from '@/components/ui/loading-state'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { CharacterSettingAppearanceEditor } from '@/features/characters/components/character-setting-appearance'
 import { characterSettingQueryKey, getCharacterSetting } from '@/lib/api-character-library'
 import { CharacterAppearanceEditor } from './character-appearance-editor'
@@ -11,6 +12,7 @@ import { type AssetRuns } from './chat-profile-asset-runs'
 import type { CharacterGroupSource } from './chat-profile-asset-slots'
 import { ChatProfileCharacterLinkBar } from './chat-profile-character-link'
 import type { ProfileCharacterLink } from './use-profile-character-link'
+import type { ProfileOwnEffect } from './chat-profile-editor'
 import { type Draft, type PatchDraft } from './chat-profile-editor-fields'
 import { ChatEmoticonGroupPicker } from './chat-profile-emoticons'
 import { draftProfileAssetUrl } from './chat-profile-images'
@@ -30,7 +32,7 @@ export function ChatProfileAppearancePanel({ draft, patch, profile, dirty, onBus
   runs: AssetRuns
   /** Saves name, appearance and reference (creating a new profile) before anything is generated or linked. */
   ensureProfile: () => Promise<ChatProfile>
-  onProfileChange: (profile: ChatProfile) => void
+  onProfileChange: (profile: ChatProfile | null, effect: ProfileOwnEffect, source?: ChatProfile | null) => boolean
   /** The library link: while synced the look shown and edited here is the setting's. */
   link: ProfileCharacterLink
 }) {
@@ -94,10 +96,11 @@ function OwnAppearance({ draft, patch, profile, onBusyChange, busy, runs, ensure
   busy: boolean
   runs: AssetRuns
   ensureProfile: () => Promise<ChatProfile>
-  onProfileChange: (profile: ChatProfile) => void
+  onProfileChange: (profile: ChatProfile | null, effect: ProfileOwnEffect, source?: ChatProfile | null) => boolean
   link: ProfileCharacterLink
 }) {
   const { t } = useI18n()
+  const { showSnackbar } = useSnackbar()
   const readOnly = link.synced
   const referenceUrl = draftProfileAssetUrl(draft, profile, 'reference')
   const avatarUrl = draftProfileAssetUrl(draft, profile, 'avatar')
@@ -126,11 +129,17 @@ function OwnAppearance({ draft, patch, profile, onBusyChange, busy, runs, ensure
 
   // Errors surface in the shared editor's snackbar.
   const setExpression = async (name: string, hash: string) => {
-    const current = await ensureProfile()
-    const result = await setChatProfileExpression({ kind: 'profile', id: current.id }, name, hash)
-    onProfileChange(result.profile)
-    patch({ style: { ...draft.style, emoticonGroupIds: [result.expressionGroupId, ...draft.style.emoticonGroupIds.filter((id) => id !== result.expressionGroupId)] } })
-    await runs.refreshAfterApply({ kind: 'profile', id: current.id }, result.expressionGroupId)
+    try {
+      const current = await ensureProfile()
+      const result = await setChatProfileExpression({ kind: 'profile', id: current.id }, name, hash)
+      const effect = { kind: 'expression' as const, groupId: result.expressionGroupId }
+      onProfileChange({ ...current, ...result.profile, expressionGroupId: result.expressionGroupId }, effect, current)
+      const refreshed = await runs.refreshAfterApply({ kind: 'profile', id: current.id }, result.expressionGroupId) as ChatProfile | undefined
+      if (refreshed) onProfileChange(refreshed, effect)
+    } catch (error) {
+      if (!(error instanceof ChatEditorResolution)) throw error
+      showSnackbar({ message: error.message, tone: 'info' })
+    }
   }
   const clearExpression = async (name: string) => {
     if (!profile) return

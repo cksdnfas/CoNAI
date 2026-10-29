@@ -6,6 +6,8 @@ import { callTypesafeSystemOne, TYPESAFE_DEFAULT_MODEL, type TypesafeQuestion, t
 import { readUsageCounts, recordLlmUsage, type LlmUsageTag } from '../llmUsage'
 import { resolveChatCompletionTarget, streamChatCompletion, type ChatCompletionTarget } from '../codex-chat/llmChatCompletion'
 import { ModelSlotStore, primaryModelOf } from '../codex-chat/modelSlots'
+import { ChatProfileStore } from '../codex-chat/chatProfiles'
+import { auxiliaryMaxTokens } from '../codex-chat/chatAuxiliarySettings'
 
 /**
  * The judge: typed questions about a state (any JSON — a conversation, an image's tags), answered either by the
@@ -32,8 +34,6 @@ export type JudgeConnection =
   | { engine: 'llm'; providerName: string; model: string; target: ChatCompletionTarget }
 
 export class JudgeError extends Error {}
-
-const LLM_JUDGE_TIMEOUT_MS = 60_000
 
 // Plugin judging reuses native preset batching/escalation, but its caller owns the deadline.
 // Async context carries that contract through nested runJudgeItems calls without changing native callers.
@@ -181,10 +181,9 @@ async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, s
   }]))
   const request = { model: connection.model, state, questions: asked }
   const caller = callerSettings.getStore()
-  const target = caller ? { ...connection.target, timeoutMs: caller.timeoutMs ?? connection.target.timeoutMs }
-    : { ...connection.target, generation: { ...connection.target.generation, maxTokens: 200 + (strict ? 140 : 60) * questions.length } }
-  const timeoutMs = caller ? caller.timeoutMs ?? connection.target.timeoutMs : connection.target.timeoutMs ?? LLM_JUDGE_TIMEOUT_MS
-  const timeout = timeoutMs == null ? null : AbortSignal.timeout(timeoutMs)
+  const profile = usage.profileId == null ? null : ChatProfileStore.find(usage.profileId)
+  const target = { ...connection.target, timeoutMs: caller?.timeoutMs ?? connection.target.timeoutMs,
+    generation: { ...connection.target.generation, maxTokens: auxiliaryMaxTokens(profile, usage.threadId) } }
   const result = await streamChatCompletion({
     target,
     messages: [
@@ -192,11 +191,13 @@ async function askLlm(connection: Extract<JudgeConnection, { engine: 'llm' }>, s
       { role: 'system', content: [LLM_JUDGE_PROMPT, ModelSlotStore.routePrompt('judge')].filter(Boolean).join('\n\n') },
       { role: 'user', content: JSON.stringify({ state, questions: asked }) },
     ],
-    signal: timeout ? signal ? AbortSignal.any([signal, timeout]) : timeout : signal ?? new AbortController().signal,
+    signal: signal ?? new AbortController().signal,
     usage,
     onRequestBody: beforeRequest,
+    stopLoops: true,
   })
   const parsed = parseJudgeJson(result.content.trim())
+  if (!parsed && result.finishReason === 'repetition') throw new JudgeError('판단 모델의 반복 출력을 중단했어.')
   if (!parsed) throw new JudgeError('판단 LLM이 JSON으로 답하지 않았어.')
   const answers = new Map<string, JudgeAnswer>()
   for (const question of questions) {

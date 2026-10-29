@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Database, Download, Eye, Play, Shrink, Trash2, Eraser, RefreshCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { formatFileSize } from '@/lib/format-size'
+import { useNow } from '@/lib/use-now'
 import { listRuntimeJobs } from '@/lib/api-runtime-jobs'
 import { runtimeJobQueryKey, useRuntimeJob } from '@/lib/use-runtime-job'
 import {
@@ -54,12 +55,7 @@ function useLatestRuntimeJob<TResult>(kind: RuntimeJobKind, onSettled: () => voi
 }
 
 function useElapsedSeconds(since: string | null | undefined, running: boolean) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!running) return
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [running])
+  const now = useNow(1000, running)
   if (!since) return 0
   const started = parseServerDate(since).getTime()
   return Number.isFinite(started) ? Math.max(0, Math.round((now - started) / 1000)) : 0

@@ -71,7 +71,7 @@ export function useGroupPageActions({
   setManagedGroupIds: (ids: number[]) => void
   setIsAssignModalOpen: (open: boolean) => void
   setDownloadScope: (scope: 'group' | 'selection' | null) => void
-  refreshCustomGroupQueries: (options?: { skipGroupIds?: ReadonlySet<number> }) => Promise<unknown>
+  refreshCustomGroupQueries: (options?: { skipGroupIds?: ReadonlySet<number>; includeMedia?: boolean }) => Promise<unknown>
   refreshFolderGroupQueries: () => Promise<unknown>
 }) {
   const { t, formatNumber } = useI18n()
@@ -83,10 +83,11 @@ export function useGroupPageActions({
 
   const createGroupMutation = useMutation({
     mutationFn: createGroup,
-    onSuccess: async (result) => {
+    onSuccess: async (result, input) => {
       setEditorState(null)
       showSnackbar({ message: t('groups.use.group.page.actions.custom.group.created'), tone: 'info' })
-      await refreshCustomGroupQueries()
+      // Creation can also start auto-collection, which changes ancestor image lists.
+      await refreshCustomGroupQueries({ includeMedia: Boolean(input.auto_collect_enabled && input.auto_collect_conditions) })
       navigate(`/groups/${result.id}?tab=custom`)
     },
     onError: (error) => {
@@ -328,7 +329,7 @@ export function useGroupPageActions({
     if (ids.length === 0) return
     // A group made elsewhere (another tab, an assistant) may be missing from the cached tree; the dialog opens once it loads.
     if (ids.some((id) => !allGroups.some((group) => group.id === id))) {
-      void refreshCustomGroupQueries()
+      void refreshCustomGroupQueries({ includeMedia: false })
     }
     setGroupDialog({ kind, ids })
   }

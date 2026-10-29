@@ -3,11 +3,12 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import { ChatProfileError, ChatProfileStore } from '../services/codex-chat/chatProfiles'
+import { ChatRevisionConflict } from '../services/codex-chat/chatProfileError'
 import { canUseChatProfile, resolveChatAccess } from '../services/codex-chat/codexChatAccess'
-import { ChatLorebookStore } from '../services/codex-chat/chatLorebook'
+import { ChatLorebookStore, linkedProfiles } from '../services/codex-chat/chatLorebook'
 import { LorebookError, OwnedLorebookStore } from '../services/codex-chat/chatLorebookFiles'
 import { describeLinkedFiles, LinkedFileError, normalizeLinkedFiles, threadLinkedFiles } from '../services/codex-chat/chatLinkedFiles'
-import { threadLorebooks } from '../services/codex-chat/chatLoreContext'
+import { threadLorebooks, threadLorebookSummary } from '../services/codex-chat/chatLoreContext'
 import { applyMerge, draftMerge, hasDuplicates, previewMerge, type MergeResult } from '../services/codex-chat/chatLorebookMerge'
 import { fillLoreKeys } from '../services/codex-chat/chatLoreKeyFill'
 import { bilingualLore } from '../services/codex-chat/loreTranslation'
@@ -30,10 +31,26 @@ const router = express.Router()
  */
 router.get('/lorebooks', requireChatAccess, (req: Request, res: Response) => {
   try {
-    const own = OwnedLorebookStore.list(lorebookOwner(req)).map((book) => ({ ...book, entryCount: book.entries.length }))
-    const global = ChatLorebookStore.list().map(({ entries, ...book }) => ({ ...book, entries: [], entryCount: entries.length, threadId: null, folderId: null }))
-    const books = [...own, ...global]
-    res.json({ success: true, data: req.query.summary === '1' ? books.map(({ entries: _entries, ...book }) => book) : books })
+    const profiles = linkedProfiles()
+    const owner = lorebookOwner(req)
+    const own = req.query.summary === '1'
+      ? OwnedLorebookStore.listSummary(owner, ['account'], profiles)
+      : OwnedLorebookStore.list(owner, ['account'], profiles).map((book) => ({ ...book, entryCount: book.entries.length }))
+    const global = ChatLorebookStore.listSummary(profiles).map((book) => ({
+      ...book, ...(req.query.summary === '1' ? {} : { entries: [] }), threadId: null, folderId: null,
+    }))
+    res.json({ success: true, data: [...own, ...global] })
+  } catch (error) { sendChatError(res, error) }
+})
+
+/** One shared account book, with its entries; chat books remain accessible only through their chat. */
+router.get('/lorebooks/:lorebookId', requireChatAccess, (req: Request, res: Response) => {
+  const lorebookId = parseId(req.params.lorebookId)
+  if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
+  try {
+    const book = OwnedLorebookStore.requireOwn(lorebookId, lorebookOwner(req))
+    if (book.kind !== 'account') throw new LorebookError('로어북을 찾을 수 없어.', 404)
+    res.json({ success: true, data: book })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -49,11 +66,15 @@ router.post('/lorebooks', requireChatAccess, (req: Request, res: Response) => {
 router.patch('/lorebooks/:lorebookId', requireChatAccess, (req: Request, res: Response) => {
   const lorebookId = parseId(req.params.lorebookId)
   if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
-  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown }
+  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown; revision?: unknown }
   if (body.entries !== undefined && !Array.isArray(body.entries)) { sendRouteBadRequest(res, 'entries must be a list'); return }
+  if (body.revision !== undefined && typeof body.revision !== 'string') { sendRouteBadRequest(res, 'revision must be a string'); return }
   try {
-    res.json({ success: true, data: OwnedLorebookStore.update(lorebookId, lorebookOwner(req), { name: body.name, entries: body.entries }) })
-  } catch (error) { sendChatError(res, error) }
+    res.json({ success: true, data: OwnedLorebookStore.update(lorebookId, lorebookOwner(req), { name: body.name, entries: body.entries }, body.revision) })
+  } catch (error) {
+    if (error instanceof ChatRevisionConflict) { res.status(409).json({ success: false, code: 'revision_conflict', error: error.message, data: error.current }); return }
+    sendChatError(res, error)
+  }
 })
 
 /** DELETE /api/codex-chat/lorebooks/:lorebookId — an own account or chat book with its folder and files. */
@@ -250,6 +271,7 @@ router.post('/threads/:threadId/lorebooks', requireChatAccess, (req: Request, re
 /**
  * GET /api/codex-chat/threads/:threadId/lorebooks — the context tab's books: the chat's own book (null until its
  * first entry), the account books linked to this chat, and the books the profile (a room: every member) brings.
+ * `summary=1` returns only the book and entry counts for the info panel.
  */
 router.get('/threads/:threadId/lorebooks', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
@@ -259,25 +281,43 @@ router.get('/threads/:threadId/lorebooks', requireChatAccess, (req: Request, res
     if (!thread) throw new LorebookError('채팅을 찾을 수 없어.', 404)
     const profileIds = thread.kind === 'group' ? ChatGroupStore.members(threadId).map((member) => member.profile_id) : thread.profile_id ? [thread.profile_id] : []
     const profiles = profileIds.flatMap((id) => ChatProfileStore.find(id) ?? [])
+    if (req.query.summary === '1') {
+      res.json({ success: true, data: threadLorebookSummary(thread, profiles) })
+      return
+    }
     res.json({ success: true, data: threadLorebooks(thread, profiles) })
   } catch (error) { sendChatError(res, error) }
 })
 
-/** PUT /api/codex-chat/threads/:threadId/lorebook — `{ entries }`: the chat's own book (made with its first entry; null once emptied). */
+/** PUT /api/codex-chat/threads/:threadId/lorebook — `{ entries, revision? }`; "absent" expects no book. */
 router.put('/threads/:threadId/lorebook', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   const entries = (req.body as { entries?: unknown } | undefined)?.entries
   if (!Array.isArray(entries)) { sendRouteBadRequest(res, 'entries must be a list'); return }
+  const revision: unknown = req.body?.revision
+  if (revision !== undefined && typeof revision !== 'string') { sendRouteBadRequest(res, 'revision must be a string'); return }
   try {
     if (!CodexChatStore.findThread(threadId, getRequesterAccountId(req))) throw new LorebookError('채팅을 찾을 수 없어.', 404)
-    res.json({ success: true, data: OwnedLorebookStore.saveChatBook(threadId, entries) })
-  } catch (error) { sendChatError(res, error) }
+    res.json({ success: true, data: OwnedLorebookStore.saveChatBook(threadId, entries, revision) })
+  } catch (error) {
+    if (error instanceof ChatRevisionConflict) { res.status(409).json({ success: false, code: 'revision_conflict', error: error.message, data: error.current }); return }
+    sendChatError(res, error)
+  }
 })
 
 /** Shared lorebooks. Profiles link them by id, so an edit or a re-import reaches every linked profile at once. */
 router.get('/admin/lorebooks', requireAdmin, (_req: Request, res: Response) => {
   res.json({ success: true, data: ChatLorebookStore.list() })
+})
+
+/** One global book, with the same administrator boundary as the full list. */
+router.get('/admin/lorebooks/:lorebookId', requireAdmin, (req: Request, res: Response) => {
+  const lorebookId = parseId(req.params.lorebookId)
+  if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
+  const book = ChatLorebookStore.find(lorebookId)
+  if (!book || book.kind !== 'global') { res.status(404).json({ success: false, error: '로어북을 찾을 수 없어.' }); return }
+  res.json({ success: true, data: book })
 })
 
 router.post('/admin/lorebooks', requireAdmin, (req: Request, res: Response) => {
@@ -307,7 +347,9 @@ router.post('/admin/lorebooks/:lorebookId/import', requireAdmin, receiveLorebook
   if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
   try {
     if (!req.file) throw new ChatProfileError('로어북 파일을 골라줘.')
-    const updated = ChatLorebookStore.update(lorebookId, { entries: readLorebookFile(req.file.buffer, req.file.originalname).entries })
+    const current = ChatLorebookStore.find(lorebookId)
+    if (!current || current.kind !== 'global') { res.status(404).json({ success: false, error: '로어북을 찾을 수 없어.' }); return }
+    const updated = ChatLorebookStore.update(lorebookId, { entries: readLorebookFile(req.file.buffer, req.file.originalname, current.entries).entries })
     if (!updated) { res.status(404).json({ success: false, error: '로어북을 찾을 수 없어.' }); return }
     res.json({ success: true, data: updated })
   } catch (error) { sendChatError(res, error) }
@@ -316,10 +358,16 @@ router.post('/admin/lorebooks/:lorebookId/import', requireAdmin, receiveLorebook
 router.put('/admin/lorebooks/:lorebookId', requireAdmin, (req: Request, res: Response) => {
   const lorebookId = parseId(req.params.lorebookId)
   if (lorebookId === null) { sendRouteBadRequest(res, 'Invalid lorebook id'); return }
-  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown }
-  const updated = ChatLorebookStore.update(lorebookId, { name: body.name, entries: body.entries })
-  if (!updated) { res.status(404).json({ success: false, error: '로어북을 찾을 수 없어.' }); return }
-  res.json({ success: true, data: updated })
+  const body = (req.body ?? {}) as { name?: unknown; entries?: unknown; revision?: unknown }
+  if (body.revision !== undefined && typeof body.revision !== 'string') { sendRouteBadRequest(res, 'revision must be a string'); return }
+  try {
+    const updated = ChatLorebookStore.update(lorebookId, { name: body.name, entries: body.entries }, body.revision)
+    if (!updated) { res.status(404).json({ success: false, error: '로어북을 찾을 수 없어.' }); return }
+    res.json({ success: true, data: updated })
+  } catch (error) {
+    if (error instanceof ChatRevisionConflict) { res.status(409).json({ success: false, code: 'revision_conflict', error: error.message, data: error.current }); return }
+    sendChatError(res, error)
+  }
 })
 
 router.delete('/admin/lorebooks/:lorebookId', requireAdmin, (req: Request, res: Response) => {

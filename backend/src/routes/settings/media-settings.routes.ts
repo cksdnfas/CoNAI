@@ -1,9 +1,6 @@
 import { verifyPageSettingsWrite } from '../../services/pageSettings';
 import { Router, Request, Response } from 'express';
-import fs from 'fs';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import { db } from '../../database/init';
-import { resolveUploadsPath } from '../../config/runtimePaths';
 import {
   validateBooleanIfDefined,
   validateIntegerInRangeIfDefined,
@@ -11,7 +8,9 @@ import {
   validateNumberInRangeIfDefined,
   validateStringEnumIfDefined,
 } from '../routeValidation';
-import { BackgroundQueueService } from '../../services/backgroundQueue';
+import { RuntimeJobRunner } from '../../services/runtimeJobs/runtimeJobRunner';
+import { RuntimeJobConflictError } from '../../services/runtimeJobs/runtimeJobStore';
+import { getRequesterAccountId } from '../requester-session-helpers';
 import { settingsService } from '../../services/settingsService';
 import { GenerationThrottleSettings, ImageSaveSettings, MetadataExtractionSettings, SimilaritySettings, ThumbnailSettings, VideoOptimizationSettings } from '@conai/shared';
 
@@ -109,51 +108,20 @@ router.put(
 
 router.post(
   '/metadata/reextract-all',
-  asyncHandler(async (_req: Request, res: Response) => {
-    const rows = db.prepare(`
-      SELECT f.composite_hash, f.original_file_path
-      FROM image_files f
-      WHERE f.file_status = 'active'
-        AND f.file_type = 'image'
-        AND f.composite_hash IS NOT NULL
-        AND f.original_file_path IS NOT NULL
-        AND f.id = (
-          SELECT f2.id
-          FROM image_files f2
-          WHERE f2.composite_hash = f.composite_hash
-            AND f2.file_status = 'active'
-            AND f2.file_type = 'image'
-            AND f2.original_file_path IS NOT NULL
-          ORDER BY f2.last_verified_date DESC, f2.id DESC
-          LIMIT 1
-        )
-      ORDER BY f.scan_date DESC, f.id DESC
-    `).all() as Array<{ composite_hash: string; original_file_path: string }>;
-
-    let queuedCount = 0;
-    let skippedMissingCount = 0;
-
-    for (const row of rows) {
-      const filePath = resolveUploadsPath(row.original_file_path);
-      if (!fs.existsSync(filePath)) {
-        skippedMissingCount += 1;
-        continue;
+  asyncHandler(async (req: Request, res: Response) => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const job = RuntimeJobRunner.start('metadata-reextract-all', {}, { requestedByAccountId: getRequesterAccountId(req) });
+        return res.status(202).json({ success: true, data: job });
+      } catch (error) {
+        if (error instanceof RuntimeJobConflictError) {
+          if (error.liveJob) return res.status(202).json({ success: true, data: error.liveJob });
+          // The previous owner can finish between the unique-key conflict and its lookup.
+          if (attempt === 0) continue;
+        }
+        throw error;
       }
-
-      BackgroundQueueService.addMetadataExtractionTask(filePath, row.composite_hash);
-      queuedCount += 1;
     }
-
-    res.json({
-      success: true,
-      data: {
-        queuedCount,
-        skippedMissingCount,
-        totalCandidates: rows.length,
-      },
-      message: 'Metadata re-extraction queued successfully',
-    });
-    return;
   }),
 );
 

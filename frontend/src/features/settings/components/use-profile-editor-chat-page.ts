@@ -111,10 +111,10 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
   const assist = useMemo(() => {
     const filled = (key: keyof Draft) => {
       const value = filledValues.get(key as DraftKey)
-      return value !== undefined && JSON.stringify(draft[key]) === value
+      return value !== undefined && JSON.stringify(key === 'appearance' ? look.appearance : draft[key]) === value
     }
     return { filled, sectionFilled: (target: ProfileEditorSection) => (Object.keys(DRAFT_KEYS) as DraftKey[]).some((key) => DRAFT_KEYS[key] === target && filled(key)) }
-  }, [draft, filledValues])
+  }, [draft, filledValues, look.appearance])
 
   const slotRuns = (key: string) => (key === BACKGROUND_SLOT ? runs : lookRuns)
   const assetKeys = [REFERENCE_SLOT, BACKGROUND_SLOT, ...lookRuns.emotionNames]
@@ -304,7 +304,12 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
       }
       const changedKeys = Object.keys(next) as (keyof Draft)[]
       setDraft((current) => ({ ...current, ...next }))
-      setFilledValues((old) => { const map = new Map(old); keys.forEach((key) => map.set(key, JSON.stringify(next[key]))); return map })
+      setFilledValues((old) => {
+        const map = new Map(old)
+        keys.forEach((key) => map.set(key, JSON.stringify(next[key])))
+        if (settingValue !== null) map.set('appearance', JSON.stringify(settingValue))
+        return map
+      })
       const first = keys.length ? DRAFT_KEYS[keys[0]] : 'appearance'
       if (first !== section) go(first)
       return {
@@ -315,7 +320,7 @@ export function useProfileEditorChatPage({ open, profile, draft, setDraft, dirty
           if (settingSwitched && settingSnapshot) link.setting.seed(settingSnapshot.base, settingSnapshot.draft)
           else if (settingValue !== null) link.setting.patch({ appearance: settingBefore })
           setDraft((current) => ({ ...current, ...Object.fromEntries(changedKeys.map((key) => [key, before[key]])) }))
-          setFilledValues((old) => { const map = new Map(old); keys.forEach((key) => map.delete(key)); return map })
+          setFilledValues((old) => { const map = new Map(old); keys.forEach((key) => map.delete(key)); if (settingValue !== null) map.delete('appearance'); return map })
         },
       }
     },

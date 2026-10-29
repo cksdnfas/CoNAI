@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useI18n } from '@/i18n'
+import { useNow } from '@/lib/use-now'
 import { cn } from '@/lib/utils'
 import type { WallpaperServiceType } from '@/lib/api-wallpaper-runtime'
 import type { WallpaperWidgetInstance } from './wallpaper-types'
@@ -16,16 +17,6 @@ const SERVICE_COLOR: Record<WallpaperServiceType, string> = {
   novelai: 'var(--primary)',
   comfyui: 'color-mix(in srgb, var(--primary) 45%, #6f8ab0)',
   codex: 'color-mix(in srgb, var(--foreground) 55%, transparent)',
-}
-
-function useNow(intervalMs: number, enabled: boolean) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!enabled) return undefined
-    const timer = window.setInterval(() => setNow(Date.now()), intervalMs)
-    return () => window.clearInterval(timer)
-  }, [enabled, intervalMs])
-  return now
 }
 
 function formatElapsed(ms: number) {

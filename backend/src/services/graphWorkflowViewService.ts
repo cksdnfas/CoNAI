@@ -4,7 +4,7 @@ import { GraphExecutionFinalResultModel } from '../models/GraphExecutionFinalRes
 import { GraphExecutionModel } from '../models/GraphExecution'
 import { GraphWorkflowFolderModel } from '../models/GraphWorkflowFolder'
 import { GraphWorkflowModel, getGraphWorkflowRevision } from '../models/GraphWorkflow'
-import { GraphWorkflowScheduleModel } from '../models/GraphWorkflowSchedule'
+import { GraphWorkflowScheduleModel, getGraphWorkflowScheduleWriteRevision } from '../models/GraphWorkflowSchedule'
 import type {
   GraphExecutionRecord,
   GraphWorkflowNameRecord,
@@ -111,6 +111,11 @@ export function decorateGraphExecutionRecord(record: any) {
 /** Decorate schedule rows with execution progress counters for reservation UI. */
 export function decorateGraphWorkflowScheduleRecords(schedules: GraphWorkflowScheduleRecord[]) {
   const scheduleIds = schedules.map((schedule) => schedule.id)
+  const workflowIds = [...new Set(schedules.map((schedule) => schedule.graph_workflow_id))]
+  const versions = workflowIds.length > 0
+    ? getUserSettingsDb().prepare(`SELECT id, version FROM graph_workflows WHERE id IN (${workflowIds.map(() => '?').join(', ')})`).all(...workflowIds) as Array<{ id: number; version: number }>
+    : []
+  const versionById = new Map(versions.map((workflow) => [workflow.id, workflow.version]))
   const countsByScheduleId = GraphExecutionModel.countStatusesByScheduleIds(scheduleIds)
   const accountNames = new Map<number, string | null>()
   const accountName = (id: number | null | undefined) => {
@@ -134,6 +139,7 @@ export function decorateGraphWorkflowScheduleRecords(schedules: GraphWorkflowSch
 
     return {
       ...schedule,
+      workflow_version: versionById.get(schedule.graph_workflow_id) ?? null,
       completed_run_count: summary.completed,
       queued_run_count: summary.queued,
       running_run_count: summary.running,
@@ -237,8 +243,8 @@ let reservationSnapshot: GraphWorkflowReservationSnapshot | null = null
 /**
  * Cheap change probe for reservation data.
  *
- * 워크플로우 쓰기는 이미 인메모리 리비전(`getGraphWorkflowRevision`)이 잡아주고,
- * 실행/일정 테이블은 행 수·최대 id·최신 updated_date 만 읽어 변화를 감지한다.
+ * 모델 쓰기 카운터와 행 리비전, 다른 DB 연결의 data_version을 함께 검사한다.
+ * 실행 테이블은 행 수·최대 id·최신 updated_date 를 읽어 변화를 감지한다.
  * 두 테이블은 보존 정책(`graphWorkflowOutputRetentionService`)이 수백 행 규모로 유지하므로
  * 이 프로브는 사실상 상수 비용이다. 프로브가 변화를 놓치더라도
  * `RESERVATION_SNAPSHOT_MAX_AGE_MS` 상한이 정합을 보장한다.
@@ -250,14 +256,19 @@ function readReservationDataRevision() {
     FROM graph_executions
   `).get() as { total: number; max_id: number; latest: string }
   const schedules = db.prepare(`
-    SELECT COUNT(*) AS total, COALESCE(MAX(id), 0) AS max_id, COALESCE(MAX(updated_date), '') AS latest
+    SELECT COUNT(*) AS total, COALESCE(MAX(id), 0) AS max_id, COALESCE(MAX(updated_date), '') AS latest, COALESCE(SUM(revision), 0) AS revisions
     FROM graph_workflow_schedules
-  `).get() as { total: number; max_id: number; latest: string }
+  `).get() as { total: number; max_id: number; latest: string; revisions: number }
+  const workflows = db.prepare('SELECT COUNT(*) AS total, COALESCE(MAX(id), 0) AS max_id, COALESCE(SUM(revision), 0) AS revisions FROM graph_workflows')
+    .get() as { total: number; max_id: number; revisions: number }
 
   return [
     getGraphWorkflowRevision(),
+    getGraphWorkflowScheduleWriteRevision(),
+    db.pragma('data_version', { simple: true }),
+    workflows.total, workflows.max_id, workflows.revisions,
     executions.total, executions.max_id, executions.latest,
-    schedules.total, schedules.max_id, schedules.latest,
+    schedules.total, schedules.max_id, schedules.latest, schedules.revisions,
   ].join('|')
 }
 

@@ -3,7 +3,7 @@ import { ChatProfileError } from './chatProfileError'
 import { ChatProfileStore } from './chatProfiles'
 import { translationTargetOf } from './chatTranslation'
 import { completeChat } from './llmChatCompletion'
-import { completeSummary, stripThinking, SUMMARY_TIMEOUT_MS } from './llmChatContext'
+import { completeSummary, stripThinking } from './llmChatContext'
 
 /**
  * "빠진 키 채우기": a profile's model writes, for entries that have English keywords only, the keywords of the lore
@@ -15,7 +15,6 @@ const FILL_BATCH = 20
 const FILL_MAX_ENTRIES = 500
 const FILL_MAX_KEYS = 8
 const FILL_CONTENT_CHARS = 300
-const FILL_MAX_TOKENS = 4000
 
 const LANGUAGE_NAMES: Record<string, string> = { ko: 'Korean', ja: 'Japanese', zh: 'Chinese' }
 
@@ -69,8 +68,7 @@ export async function fillLoreKeys(input: { profileId?: unknown; language?: unkn
   const languageName = LANGUAGE_NAMES[language] ?? language
   const translation = translationTargetOf(profile)
   const system = systemPrompt(languageName)
-  const timeout = AbortSignal.timeout(SUMMARY_TIMEOUT_MS)
-  const bounded = signal ? AbortSignal.any([signal, timeout]) : timeout
+  const bounded = signal ?? new AbortController().signal
   const keys: Record<string, string[]> = {}
   const failed: string[] = []
   for (let start = 0; start < entries.length; start += FILL_BATCH) {
@@ -81,7 +79,7 @@ export async function fillLoreKeys(input: { profileId?: unknown; language?: unkn
     try {
       const text = translation
         ? await completeChat(translation, [{ role: 'system', content: system }, { role: 'user', content }], bounded, { purpose: 'translation', profileId: profile.id })
-        : await completeSummary(profile, system, content, bounded, FILL_MAX_TOKENS)
+        : await completeSummary(profile, system, content, bounded)
       reply = parseReply(text)
     } catch (error) {
       if (signal?.aborted) throw error

@@ -14,6 +14,7 @@ import { ChatFilledLabel } from './settings-filled-label'
 import { SettingsRowsSkeleton, SettingsStatLine } from './settings-rows'
 
 interface KaloscopeSettingsCardProps {
+  draftLocked?: boolean
   heading: ReactNode
   actions?: ReactNode
   kaloscopeDraft: KaloscopeSettings | null
@@ -30,6 +31,7 @@ function formatKaloscopeDependencyLabel(status: KaloscopeServerStatus | undefine
 }
 
 export function KaloscopeSettingsCard({
+  draftLocked = false,
   heading,
   actions,
   kaloscopeDraft,
@@ -68,13 +70,14 @@ export function KaloscopeSettingsCard({
         <>
           <SettingsSwitchRow
             checked={kaloscopeDraft.enabled}
+            disabled={draftLocked}
             onCheckedChange={(checked) => onPatchKaloscope({ enabled: checked })}
             label={<ChatFilledLabel fieldId="kaloscope.enabled">{t({ ko: 'Kaloscope 활성화', en: 'Enable Kaloscope' })}</ChatFilledLabel>}
           />
 
           <SettingsSwitchRow
             checked={kaloscopeDraft.autoTagOnUpload}
-            disabled={!isEnabled}
+            disabled={!isEnabled || draftLocked}
             onCheckedChange={(checked) => onPatchKaloscope({ autoTagOnUpload: checked })}
             label={<ChatFilledLabel fieldId="kaloscope.autoTagOnUpload">{t({ ko: '새 이미지 자동 처리', en: 'Process new images automatically' })}</ChatFilledLabel>}
           />
@@ -84,7 +87,7 @@ export function KaloscopeSettingsCard({
           </SettingRow>
 
           <SettingRow label={<ChatFilledLabel fieldId="kaloscope.device">{labels.device}</ChatFilledLabel>} controlWidth="standard">
-            <Select variant="settings" aria-label={labels.device} value={kaloscopeDraft.device} disabled={!isEnabled} onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}>
+            <Select variant="settings" aria-label={labels.device} value={kaloscopeDraft.device} disabled={!isEnabled || draftLocked} onChange={(event) => onPatchKaloscope({ device: event.target.value as KaloscopeSettings['device'] })}>
               <option value="auto">{t({ ko: '자동 (GPU 우선)', en: 'Auto (GPU if available)' })}</option>
               <option value="cpu">{t({ ko: 'CPU (느림, GPU 불필요)', en: 'CPU (slower, no GPU needed)' })}</option>
               <option value="cuda">{t({ ko: 'GPU (NVIDIA CUDA)', en: 'GPU (NVIDIA CUDA)' })}</option>
@@ -92,12 +95,12 @@ export function KaloscopeSettingsCard({
           </SettingRow>
 
           <SettingRow label={<ChatFilledLabel fieldId="kaloscope.topK">{labels.topK}</ChatFilledLabel>} controlWidth="standard">
-            <NumberStepperInput min={1} max={200} variant="settings" aria-label={labels.topK} disabled={!isEnabled} value={kaloscopeDraft.topK} onValueCommit={(nextValue) => onPatchKaloscope({ topK: Number(nextValue) || 1 })} />
+            <NumberStepperInput min={1} max={200} variant="settings" aria-label={labels.topK} disabled={!isEnabled || draftLocked} value={kaloscopeDraft.topK} onValueCommit={(nextValue) => onPatchKaloscope({ topK: Number(nextValue) || 1 })} />
           </SettingRow>
 
           <SettingsSwitchRow
             checked={kaloscopeDraft.styleVectors !== false}
-            disabled={!isEnabled}
+            disabled={!isEnabled || draftLocked}
             onCheckedChange={(checked) => onPatchKaloscope({ styleVectors: checked })}
             label={<ChatFilledLabel fieldId="kaloscope.styleVectors">{t({ ko: '화풍 벡터 저장', en: 'Keep style vectors' })}</ChatFilledLabel>}
             info={t({ ko: '비슷한 화풍 찾기에 쓰는 256차원 벡터.', en: 'The 256-d vector used to find images in a similar style.' })}
@@ -117,7 +120,7 @@ export function KaloscopeSettingsCard({
 
           <SettingsSwitchRow
             checked={kaloscopeDraft.keepModelLoaded}
-            disabled={!isEnabled}
+            disabled={!isEnabled || draftLocked}
             onCheckedChange={(checked) => onPatchKaloscope({ keepModelLoaded: checked })}
             label={<ChatFilledLabel fieldId="kaloscope.keepModelLoaded">{t({ ko: '모델 메모리 유지', en: 'Keep model in memory' })}</ChatFilledLabel>}
           />
@@ -127,7 +130,7 @@ export function KaloscopeSettingsCard({
               min={1}
               variant="settings"
               aria-label={labels.unload}
-              disabled={!isEnabled || kaloscopeDraft.keepModelLoaded}
+              disabled={!isEnabled || kaloscopeDraft.keepModelLoaded || draftLocked}
               value={kaloscopeDraft.autoUnloadMinutes}
               onValueCommit={(nextValue) => onPatchKaloscope({ autoUnloadMinutes: Number(nextValue) || 1 })}
             />
@@ -139,10 +142,11 @@ export function KaloscopeSettingsCard({
               aria-label={labels.artistLink}
               className="min-w-0 flex-1"
               value={kaloscopeDraft.artistLinkUrlTemplate}
+              disabled={draftLocked}
               onChange={(event) => onPatchKaloscope({ artistLinkUrlTemplate: event.target.value })}
               placeholder={DEFAULT_ARTIST_LINK_URL_TEMPLATE}
             />
-            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '기본값', en: 'Default' })} onClick={() => onPatchKaloscope({ artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE })}>
+            <IconButton size="icon-sm" variant="ghost" label={t({ ko: '기본값', en: 'Default' })} disabled={draftLocked} onClick={() => onPatchKaloscope({ artistLinkUrlTemplate: DEFAULT_ARTIST_LINK_URL_TEMPLATE })}>
               <RotateCcw className="h-4 w-4" />
             </IconButton>
           </SettingRow>

@@ -6,6 +6,7 @@ import { parseBlockEdits, type BlockEdit } from './chatBlockState'
 import { parseFlagSnapshots, type ChatFlagSnapshot } from './chatFlags'
 import { parseChatMediaAttachments, type ChatMediaAttachment } from './chatMediaAttachments'
 import { ChatSummaryStore } from './chatMemory'
+import { cancelThreadSummary } from './chatSummaryRuns'
 import { OwnedLorebookStore } from './chatLorebookFiles'
 import { ChatProposalStore } from './chatProposals'
 import { forgetReplyFileChanges, forgetThreadFileChanges } from './chatFileChanges'
@@ -217,6 +218,10 @@ const MESSAGE_WHITESPACE = '\u0009\u000a\u000b\u000c\u000d\u0020\u00a0\u1680\u20
 const CONTEXT_MESSAGE_COLUMNS = `id, thread_id, role, content, display_content, speaker_profile_id,
   tool_calls, status, error, finish_reason, flags, media_attachments, routing, created_date,
   active_alternative, NULL AS alternatives, NULL AS context_meta`
+const SENDABLE_MESSAGE_SQL = `(length(trim(content, ?)) > 0
+  OR COALESCE(tool_calls, '[]') != '[]' OR COALESCE(media_attachments, '[]') != '[]'
+  OR EXISTS(SELECT 1 FROM chat_file_attachments a JOIN stored_file_entries e ON e.id = a.file_id
+    WHERE a.message_id = codex_chat_messages.id AND e.deleted_at IS NULL))`
 
 export function parseMessageRouting(value: string | null): ChatMessageRouting | null {
   try {
@@ -316,6 +321,9 @@ function removeMessagesAfter(threadId: number, messageId: number) {
   }
 }
 
+/** Active title jobs only; a manual rename invalidates the job even if the title is later changed back. */
+const pendingAutomaticTitles = new Map<number, symbol>()
+
 export const CodexChatStore = {
   searchMessages(accountId: number | null, query: string) {
     return getUserSettingsDb().prepare(`SELECT m.id AS messageId, m.thread_id AS threadId, t.title, t.profile_id AS profileId,
@@ -370,7 +378,10 @@ export const CodexChatStore = {
   updateListState(threadId: number, patch: { title?: string; pinned?: boolean; archived?: boolean; notify?: boolean }) {
     const db = getUserSettingsDb()
     if (patch.notify !== undefined) db.prepare('UPDATE codex_chat_threads SET notify = ? WHERE id = ?').run(patch.notify ? 1 : 0, threadId)
-    if (patch.title !== undefined) db.prepare('UPDATE codex_chat_threads SET title = ? WHERE id = ?').run(patch.title.slice(0, TITLE_MAX_LENGTH), threadId)
+    if (patch.title !== undefined) {
+      db.prepare('UPDATE codex_chat_threads SET title = ? WHERE id = ?').run(patch.title.slice(0, TITLE_MAX_LENGTH), threadId)
+      pendingAutomaticTitles.delete(threadId)
+    }
     if (patch.pinned !== undefined) db.prepare('UPDATE codex_chat_threads SET pinned = ? WHERE id = ?').run(patch.pinned ? 1 : 0, threadId)
     if (patch.archived !== undefined) db.prepare('UPDATE codex_chat_threads SET archived = ? WHERE id = ?').run(patch.archived ? 1 : 0, threadId)
   },
@@ -494,6 +505,16 @@ export const CodexChatStore = {
     getUserSettingsDb().prepare(`
       UPDATE codex_chat_threads SET title = ? WHERE id = ?
     `).run(title.slice(0, TITLE_MAX_LENGTH), threadId)
+    pendingAutomaticTitles.delete(threadId)
+  },
+
+  watchAutomaticTitle(threadId: number) {
+    const token = Symbol()
+    pendingAutomaticTitles.set(threadId, token)
+    return {
+      current: () => pendingAutomaticTitles.get(threadId) === token,
+      release: () => { if (pendingAutomaticTitles.get(threadId) === token) pendingAutomaticTitles.delete(threadId) },
+    }
   },
 
   /** Renames only while the title is still `expected`, so an automatic title never replaces a rename; true when it did. */
@@ -512,6 +533,7 @@ export const CodexChatStore = {
    * this (see the thread delete route); a kept book is no longer the chat's, so it stays.
    */
   deleteThread(threadId: number) {
+    cancelThreadSummary(threadId)
     const db = getUserSettingsDb()
     db.transaction(() => {
       cancelAgentCallsForThread(threadId)
@@ -526,6 +548,7 @@ export const CodexChatStore = {
       db.prepare('UPDATE codex_chat_threads SET branched_from_thread_id = NULL, branched_at_message_id = NULL WHERE branched_from_thread_id = ?').run(threadId)
       db.prepare('DELETE FROM codex_chat_threads WHERE id = ?').run(threadId)
     })()
+    pendingAutomaticTitles.delete(threadId)
     try {
       OwnedLorebookStore.threadDeleted(threadId)
     } catch (error) {
@@ -547,6 +570,23 @@ export const CodexChatStore = {
     return Boolean(getUserSettingsDb().prepare('SELECT 1 FROM codex_chat_messages WHERE thread_id = ? AND id < ? LIMIT 1').get(threadId, before))
   },
 
+  outputTokenLimit(threadId: number, profileMaxTokens?: number | null) {
+    const row = getUserSettingsDb().prepare(`SELECT t.max_tokens, p.max_tokens AS profile_max_tokens
+      FROM codex_chat_threads t LEFT JOIN llm_chat_profiles p ON p.id = t.profile_id WHERE t.id = ?`)
+      .get(threadId) as { max_tokens: number | null; profile_max_tokens: number | null } | undefined
+    return row?.max_tokens ?? (profileMaxTokens === undefined ? row?.profile_max_tokens : profileMaxTokens) ?? null
+  },
+
+  /** Count the whole backlog without materializing its bodies; an assistant-only opening is a turn too. */
+  countSummaryItems(source: ChatHistorySource, afterId: number, byTurn = true) {
+    const row = getUserSettingsDb().prepare(`WITH pending AS (
+      SELECT id, role FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id <= ? AND id > ? AND ${SENDABLE_MESSAGE_SQL}
+    ) SELECT count(*) AS messages, coalesce(sum(role = 'user'), 0) AS users,
+      (SELECT role FROM pending ORDER BY id LIMIT 1) AS first_role FROM pending`)
+      .get(source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? Number.MAX_SAFE_INTEGER, afterId, MESSAGE_WHITESPACE) as { messages: number; users: number; first_role: string | null }
+    return byTurn ? row.users + (row.first_role !== null && row.first_role !== 'user' ? 1 : 0) : row.messages
+  },
+
   /** Explicit historical range for summaries and orders; never includes alternatives/diagnostics or later turns. */
   listContextRange(threadId: number, afterId: number, untilId = Number.MAX_SAFE_INTEGER) {
     const rows = getUserSettingsDb().prepare(`SELECT ${CONTEXT_MESSAGE_COLUMNS} FROM codex_chat_messages WHERE thread_id = ? AND id > ? AND id <= ? ORDER BY id`)
@@ -554,20 +594,41 @@ export const CodexChatStore = {
     return readMessageRows(threadId, rows)
   },
 
-  /** All unsummarized rows, plus the exact recent suffix needed by lore/judges and the last user's flags.
+  /** One forward summary page, ending before the next user turn rather than cutting a turn in half. */
+  listSummaryPage(source: ChatHistorySource, afterId: number, count: number, byTurn = true) {
+    const db = getUserSettingsDb()
+    const args = [source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? Number.MAX_SAFE_INTEGER, afterId]
+    const first = byTurn ? db.prepare(`SELECT role FROM codex_chat_messages
+      WHERE thread_id = ? AND id != ? AND id <= ? AND id > ? AND ${SENDABLE_MESSAGE_SQL} ORDER BY id LIMIT 1`)
+      .get(...args, MESSAGE_WHITESPACE) as { role: string } | undefined : undefined
+    const next = db.prepare(`SELECT id FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id <= ? AND id > ?
+      ${byTurn ? "AND role = 'user'" : ''} AND ${SENDABLE_MESSAGE_SQL} ORDER BY id LIMIT 1 OFFSET ?`)
+      .get(...args, MESSAGE_WHITESPACE, count - (first && first.role !== 'user' ? 1 : 0)) as { id: number } | undefined
+    const rows = db.prepare(`SELECT ${CONTEXT_MESSAGE_COLUMNS} FROM codex_chat_messages
+      WHERE thread_id = ? AND id != ? AND id <= ? AND id > ? AND id < ? ORDER BY id`)
+      .all(...args, next?.id ?? Number.MAX_SAFE_INTEGER) as StoredMessageRow[]
+    return readMessageRows(source.threadId, rows)
+  },
+
+  /** Requested turns/range plus the exact recent suffix needed by lore/judges and the last user's flags.
    * Diagnostics and alternative bodies are not completion input; consumers needing those use the source below. */
-  listContextMessages(source: ChatHistorySource, options: { afterId: number; recentMessages: number; textMessages: number }) {
+  listContextMessages(source: ChatHistorySource, options: { afterId: number; recentMessages: number; textMessages: number; recentTurns?: number; completeTurns?: boolean }) {
     const db = getUserSettingsDb()
     const args = [source.threadId, source.excludeMessageId ?? -1, source.untilMessageId ?? Number.MAX_SAFE_INTEGER]
-    const boundary = (filter: string, count: number, extra: string[] = []) =>
+    const boundary = (filter: string, count: number, extra: string[] = []) => count <= 0 ? Number.MAX_SAFE_INTEGER :
       (db.prepare(`SELECT id FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id <= ? ${filter} ORDER BY id DESC LIMIT 1 OFFSET ?`)
-        .get(...args, ...extra, Math.max(0, count - 1)) as { id: number } | undefined)?.id ?? 0
+        .get(...args, ...extra, count - 1) as { id: number } | undefined)?.id ?? 0
     const recent = boundary('', options.recentMessages)
     // Both original-language judging and model-language semantic retrieval filter blank text before taking a suffix.
     const text = boundary('AND length(trim(content, ?)) > 0', options.textMessages, [MESSAGE_WHITESPACE])
     const original = boundary("AND length(trim(CASE WHEN role = 'user' THEN COALESCE(display_content, content) ELSE content END, ?)) > 0", options.textMessages, [MESSAGE_WHITESPACE])
     const user = boundary("AND role = 'user'", 1)
-    const from = Math.min(options.afterId + 1, recent, text, original, user)
+    const turns = options.recentTurns === undefined ? Number.MAX_SAFE_INTEGER
+      : boundary(`AND role = 'user' AND ${SENDABLE_MESSAGE_SQL}`, options.recentTurns, [MESSAGE_WHITESPACE])
+    let from = Math.min(options.afterId + 1, turns, recent, text, original, user)
+    if (options.completeTurns) from = (db.prepare(`SELECT id FROM codex_chat_messages
+      WHERE thread_id = ? AND id != ? AND id <= ? AND id <= ? AND role = 'user' ORDER BY id DESC LIMIT 1`)
+      .get(...args, from) as { id: number } | undefined)?.id ?? 0
     const rows = db.prepare(`SELECT ${CONTEXT_MESSAGE_COLUMNS} FROM codex_chat_messages WHERE thread_id = ? AND id != ? AND id <= ? AND id >= ? ORDER BY id`)
       .all(...args, from) as StoredMessageRow[]
     return readMessageRows(source.threadId, rows)
@@ -791,6 +852,7 @@ export const CodexChatStore = {
   },
 
   clearThread(threadId: number, opening: (() => void) | '') {
+    cancelThreadSummary(threadId)
     const db = getUserSettingsDb()
     db.transaction(() => {
       db.prepare('DELETE FROM chat_generation_links WHERE thread_id = ?').run(threadId)
@@ -856,6 +918,7 @@ export const CodexChatStore = {
       if (alternatives[row.active_alternative]) alternatives[row.active_alternative] = { ...alternatives[row.active_alternative], context_meta: json }
       db.prepare('UPDATE codex_chat_messages SET context_meta = ?, alternatives = ? WHERE id = ?').run(json, alternatives.length > 0 ? JSON.stringify(alternatives) : row.alternatives, messageId)
     })()
+    return json
   },
 
   setMessageRouting(threadId: number, messageId: number, routing: ChatMessageRouting | null) {

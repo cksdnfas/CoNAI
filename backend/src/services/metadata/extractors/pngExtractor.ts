@@ -125,7 +125,7 @@ export class PngExtractor {
       }
 
       if (filePath) {
-        const standardMetadata = await StandardMetadataExtractor.extract(filePath);
+        const standardMetadata = await StandardMetadataExtractor.extract(buffer);
         if (Object.keys(standardMetadata).length > 0) {
           return standardMetadata;
         }

@@ -17,6 +17,7 @@ import { ChatFilledLabel } from './settings-filled-label'
 import { SettingsRowsSkeleton } from './settings-rows'
 
 interface AiRuntimeSettingsCardProps {
+  draftLocked?: boolean
   heading: ReactNode
   /** Extra heading actions (the unsaved badge). */
   actions?: ReactNode
@@ -53,6 +54,7 @@ function stepLabel(step: AiRuntimeInstallStep, t: (input: TranslationInput) => s
 }
 
 export function AiRuntimeSettingsCard({
+  draftLocked = false,
   heading,
   actions,
   draft,
@@ -199,7 +201,7 @@ export function AiRuntimeSettingsCard({
               : t({ ko: '자동은 GPU 세대와 드라이버를 보고 골라. 바꾼 빌드는 설치해야 적용돼.', en: 'Auto picks from the GPU generation and driver. A changed build applies after installing.' })}
             controlWidth="standard"
           >
-            <Select variant="settings" aria-label={labels.build} value={draft.torchBackend} disabled={installing} onChange={(event) => onPatch({ torchBackend: event.target.value as AiTorchBackendPreference })}>
+            <Select variant="settings" aria-label={labels.build} value={draft.torchBackend} disabled={installing || draftLocked} onChange={(event) => onPatch({ torchBackend: event.target.value as AiTorchBackendPreference })}>
               <option value="auto">{t({ ko: '자동', en: 'Auto' })} ({backendLabel(status.effectiveBackend, t).split(' · ')[0]})</option>
               {(['cpu', 'cu126', 'cu130', 'cu132'] as const).map((backend) => (
                 <option key={backend} value={backend}>{backendLabel(backend, t)}</option>
@@ -212,14 +214,14 @@ export function AiRuntimeSettingsCard({
             info={t({ ko: '직접 지정하면 앱이 설치한 환경 대신 그 Python을 써.', en: 'A custom Python is used instead of the app-installed environment.' })}
             controlWidth="standard"
           >
-            <Select variant="settings" aria-label={labels.python} value={draft.pythonSource} onChange={(event) => onPatch({ pythonSource: event.target.value as AiRuntimeSettings['pythonSource'] })}>
+            <Select variant="settings" aria-label={labels.python} value={draft.pythonSource} disabled={draftLocked} onChange={(event) => onPatch({ pythonSource: event.target.value as AiRuntimeSettings['pythonSource'] })}>
               <option value="auto">{t({ ko: '앱이 설치한 환경', en: 'App-installed environment' })}</option>
               <option value="custom">{t({ ko: '직접 지정', en: 'Custom' })}</option>
             </Select>
           </SettingRow>
 
           <SettingRow label={<ChatFilledLabel fieldId="aiRuntime.customPythonPath">{labels.pythonPath}</ChatFilledLabel>} controlWidth="wide">
-            <Input variant="settings" mono aria-label={labels.pythonPath} className="min-w-0 flex-1" disabled={draft.pythonSource !== 'custom'} value={draft.customPythonPath} placeholder="python" onChange={(event) => onPatch({ customPythonPath: event.target.value })} />
+            <Input variant="settings" mono aria-label={labels.pythonPath} className="min-w-0 flex-1" disabled={draft.pythonSource !== 'custom' || draftLocked} value={draft.customPythonPath} placeholder="python" onChange={(event) => onPatch({ customPythonPath: event.target.value })} />
           </SettingRow>
 
           <SettingRow
@@ -227,7 +229,7 @@ export function AiRuntimeSettingsCard({
             info={t({ ko: '모델 프로세스 하나가 쓰는 CPU 스레드. 0이면 코어 절반(최대 8).', en: 'CPU threads per model process. 0 = half the cores (at most 8).' })}
             controlWidth="standard"
           >
-            <NumberStepperInput min={0} max={256} variant="settings" aria-label={labels.threads} value={draft.cpuThreads} onValueCommit={(nextValue) => onPatch({ cpuThreads: Math.max(0, Math.round(Number(nextValue) || 0)) })} />
+            <NumberStepperInput min={0} max={256} variant="settings" aria-label={labels.threads} value={draft.cpuThreads} disabled={draftLocked} onValueCommit={(nextValue) => onPatch({ cpuThreads: Math.max(0, Math.round(Number(nextValue) || 0)) })} />
           </SettingRow>
         </>
       ) : (

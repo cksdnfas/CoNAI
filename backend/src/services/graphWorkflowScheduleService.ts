@@ -9,7 +9,7 @@ import { GraphWorkflowExecutionQueue, RUNNING_EXECUTION_RESTART_MESSAGE } from '
 import { buildRuntimeInputSignature } from './graph-workflow-executor/shared'
 import { resolveAutomationRunAs } from './automationRunAs'
 import { AutomationSwitch } from './automationSwitch'
-import { DEFAULT_SCHEDULE_TIMEZONE, followingRunAt, initialRunAt } from './scheduleTiming'
+import { followingRunAt, initialRunAt } from './scheduleTiming'
 
 const DEFAULT_POLL_INTERVAL_MS = 15_000
 
@@ -168,6 +168,10 @@ export class GraphWorkflowScheduleService {
 
   /** Validate one due schedule and enqueue the configured number of next executions when allowed. */
   private static async handleDueSchedule(schedule: GraphWorkflowScheduleRecord, now: Date) {
+    const current = GraphWorkflowScheduleModel.findById(schedule.id)
+    if (!current || current.revision !== schedule.revision || current.status !== 'active' || current.next_run_at !== schedule.next_run_at) return
+    // Run bookkeeping no longer changes the editor revision, so consume its latest values separately.
+    schedule = current
     const workflow = GraphWorkflowModel.findById(schedule.graph_workflow_id)
     if (!workflow) {
       GraphWorkflowScheduleModel.update(schedule.id, {
@@ -175,7 +179,7 @@ export class GraphWorkflowScheduleService {
         stop_reason_code: 'workflow_missing',
         stop_reason_message: '연결된 워크플로우가 더 이상 없어.',
         next_run_at: null,
-      })
+      }, schedule.revision)
       return
     }
 
@@ -184,7 +188,7 @@ export class GraphWorkflowScheduleService {
         status: 'paused',
         stop_reason_code: 'workflow_changed',
         stop_reason_message: '워크플로우가 바뀌어서 다시 시작 전에 검토가 필요해.',
-      })
+      }, schedule.revision)
       GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds([schedule.id])
       return
     }
@@ -208,7 +212,7 @@ export class GraphWorkflowScheduleService {
         stop_reason_code: 'execution_failed',
         stop_reason_message: lastExecution?.error_message || '예약 실행에 실패했어.',
         next_run_at: null,
-      })
+      }, schedule.revision)
       return
     }
 
@@ -218,7 +222,7 @@ export class GraphWorkflowScheduleService {
         stop_reason_code: 'max_run_count_reached',
         stop_reason_message: '최대 예약 횟수에 도달했어.',
         next_run_at: null,
-      })
+      }, schedule.revision)
       return
     }
 
@@ -232,7 +236,7 @@ export class GraphWorkflowScheduleService {
         stop_reason_code: runAs.code,
         stop_reason_message: runAs.message,
         next_run_at: null,
-      })
+      }, schedule.revision)
       return
     }
 
@@ -244,7 +248,7 @@ export class GraphWorkflowScheduleService {
         next_run_at: deferredNextRunAt,
         stop_reason_code: null,
         stop_reason_message: null,
-      })
+      }, schedule.revision)
       return
     }
 
@@ -286,12 +290,11 @@ export class GraphWorkflowScheduleService {
 
     GraphWorkflowScheduleModel.update(schedule.id, {
       status: nextStatus,
-      timezone: schedule.timezone ?? DEFAULT_SCHEDULE_TIMEZONE,
       last_execution_id: executionIds.at(-1) ?? schedule.last_execution_id ?? null,
       last_enqueued_at: executionIds.length > 0 ? now.toISOString() : schedule.last_enqueued_at ?? null,
       next_run_at: nextStatus === 'completed' ? null : nextRunAt,
       stop_reason_code: completionReasonCode,
       stop_reason_message: completionReasonMessage,
-    })
+    }, schedule.revision)
   }
 }

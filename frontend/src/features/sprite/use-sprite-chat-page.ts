@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react'
+import { useLayoutEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import type { ChatPageAction, ChatPageField, ChatPageValue } from '@conai/shared'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
@@ -81,7 +81,7 @@ export function useSpriteChatPage({ active, videoHash, videos, setVideos, maxVid
       pageAction('sprite.add_videos', t({ ko: '영상 넣기', en: 'Add videos' }), t({ ko: `라이브러리 영상 해시를 추출 목록 끝에 넣어 (최대 ${maxVideos}개). search_images(media_type video)로 찾은 해시를 써.`, en: `Append library video hashes to the extract list (up to ${maxVideos}). Use hashes from search_images with media_type video.` }), pageObject({ hashes: hashList(maxVideos) }, ['hashes'])),
       ...(videos.length ? [pageAction('sprite.remove_videos', t({ ko: '목록에서 빼기', en: 'Remove videos' }), t({ ko: '추출 목록에서 영상을 빼. all이면 목록을 비워.', en: 'Remove videos from the extract list; all clears it.' }), pageObject({ hashes: hashList(maxVideos), all: { type: 'boolean' } }))] : []),
     ] : []),
-    ...(canPreview ? [pageAction('sprite.preview', t({ ko: '이 영상만 미리보기', en: 'Preview this video' }), t({ ko: '지금 고른 영상 하나로 저장 없이 시트를 만들어 결과 보기에 띄워. 끝나면 data.lastBuild에 나와.', en: 'Build a sheet from the selected video only, without saving, and show it in the result view; data.lastBuild holds it when done.' }))] : []),
+    ...(canPreview && videoHash ? [pageAction('sprite.preview', t({ ko: '이 영상만 미리보기', en: 'Preview this video' }), t({ ko: '지금 고른 영상의 해시를 넣어 저장 없이 시트를 만들어. 끝나면 data.lastBuild에 나와.', en: 'Pass the selected video hash to build a sheet without saving; data.lastBuild holds it when done.' }), pageObject({ hash: pageChoice([videoHash]) }, ['hash']))] : []),
     ...(canRunAll ? [pageAction('sprite.run', t({ ko: '전체 생성', en: 'Build all' }), t({ ko: '목록의 모든 영상을 지금 설정으로 만들어 라이브러리(saveGroup)에 저장해. zip이면 ZIP도 받아. 진행 상태는 data.batch에 나와.', en: 'Build every listed video with the current settings and save the sheets to the library (saveGroup); zip also downloads a ZIP. data.batch shows the progress.' }), pageObject({}), 'save')] : []),
     ...(batchRunning ? [pageAction('sprite.stop', t({ ko: '지금 영상 끝나고 멈추기', en: 'Stop after this video' }), t({ ko: '진행 중인 전체 생성을 지금 영상까지만 하고 멈춰.', en: 'Finish the current video, then end the running batch.' }), pageObject({}), 'save')] : []),
     ...(zipReady && !batchRunning ? [pageAction('sprite.download_zip', t({ ko: 'ZIP 다시 받기', en: 'Download the ZIP again' }), t({ ko: '지난 전체 생성의 ZIP을 브라우저로 다시 받아.', en: 'Download the last batch ZIP in the browser again.' }))] : []),
@@ -91,7 +91,7 @@ export function useSpriteChatPage({ active, videoHash, videos, setVideos, maxVid
   useChatPageRegistration(active ? {
     kind: 'sprite',
     title: t({ ko: '스프라이트 · 추출', en: 'Sprites · Extract' }),
-    resourceId: videoHash,
+    resourceId: 'extract',
     fields,
     data: {
       tab: 'extract',
@@ -148,7 +148,7 @@ export function useSpriteChatPage({ active, videoHash, videos, setVideos, maxVid
       if (id === 'sprite.download_zip') { downloadZip(); return }
       throw new Error('스프라이트 추출 화면에 없는 작업이야.')
     },
-  } : null)
+  } : null, { preserveOnSearchChange: true })
 }
 
 function applySpritePatch(current: ExtractForm, patch: Record<string, ChatPageValue>): ExtractForm {
@@ -182,13 +182,13 @@ type NormalizeSheetEntry = { hash: string; name: string; width: number; height: 
  * The normalize tab: the sheet list with each sheet's grid, the shared normalization options, and running it (saved to
  * the library through a review card, or as a ZIP download).
  */
-export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected, setSelected, addSheets, options, setOptions, problems, running, canRun, canSave, run, savedHashes, failures }: {
+export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected, setSelected, prepareSheets, options, setOptions, problems, running, canRun, canSave, run, savedHashes, failures }: {
   active: boolean
   sheets: NormalizeSheetEntry[]
   setSheets: (sheets: NormalizeSheetEntry[]) => void
   selected: string | null
   setSelected: (hash: string | null) => void
-  addSheets: (hashes: string[]) => Promise<void>
+  prepareSheets: (hashes: string[]) => Promise<NormalizeSheetEntry[]>
   options: SpriteNormalizeOptions
   setOptions: Dispatch<SetStateAction<SpriteNormalizeOptions>>
   problems: string[]
@@ -200,7 +200,14 @@ export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected
   failures: Array<{ source: string; error: string }>
 }) {
   const { t } = useI18n()
-  const commitSheets = useChatDraftTransaction(sheets, setSheets)
+  const currentSheets = useRef(sheets)
+  useLayoutEffect(() => { currentSheets.current = sheets }, [sheets])
+  const commitSheetList = useChatDraftTransaction(sheets, setSheets)
+  const commitSheets = (next: { sheets: NormalizeSheetEntry[]; selected: string | null }) => {
+    const undo = commitSheetList(next.sheets)
+    setSelected(next.selected)
+    return { isCurrent: undo.isCurrent, restore: () => { undo.restore(); setSelected(selected) } }
+  }
   const fields: ChatPageField[] = [
     { id: 'mode', label: t({ ko: '모드 (per_sheet = 시트별, group = 묶음 공통 셀 크기)', en: 'Mode (per_sheet = each sheet, group = one shared cell size)' }), type: 'select', value: options.mode, options: ['per_sheet', 'group'] },
     { id: 'anchorPolicy', label: t({ ko: '기준점', en: 'Anchor' }), type: 'select', value: options.anchorPolicy, options: ['center', 'bottom_center', 'custom'] },
@@ -263,16 +270,18 @@ export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected
       if (id === 'sprite.add_sheets') {
         const list = (Array.isArray(args.hashes) ? args.hashes : []).map(String)
         if (list.some((hash) => !HASH.test(hash))) throw new Error('라이브러리 이미지 해시가 아니야.')
-        await addSheets(list)
-        return
+        const added = await prepareSheets(list)
+        assertCurrent()
+        if (currentSheets.current !== sheets) throw new Error(t({ ko: '그사이 시트 목록이 바뀌었어.', en: 'The sheet list changed while loading.' }))
+        if (!added.length) throw new Error(t({ ko: '넣을 새 시트가 없어.', en: 'There are no new sheets to add.' }))
+        return commitSheets({ sheets: [...sheets, ...added], selected: selected ?? added[0].hash })
       }
       if (id === 'sprite.remove_sheets') {
         const before = sheets
         const drop = (Array.isArray(args.hashes) ? args.hashes : []).map(String)
         const next = args.all === true ? [] : before.filter((sheet) => !drop.includes(sheet.hash))
         if (next.length === before.length) throw new Error('목록에 없는 시트야.')
-        if (selected && !next.some((sheet) => sheet.hash === selected)) setSelected(next[0]?.hash ?? null)
-        return commitSheets(next)
+        return commitSheets({ sheets: next, selected: selected && !next.some((sheet) => sheet.hash === selected) ? next[0]?.hash ?? null : selected })
       }
       if (id === 'sprite.sheet') {
         const target = sheets.find((sheet) => sheet.hash === String(args.hash))
@@ -280,8 +289,7 @@ export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected
         const { hash: _hash, ...patch } = args
         void _hash
         const next = sheets.map((sheet) => sheet.hash === target.hash ? { ...sheet, options: { ...sheet.options, ...patch as Partial<SpriteNormalizeSheet['options']> } } : sheet)
-        setSelected(target.hash)
-        return commitSheets(next)
+        return commitSheets({ sheets: next, selected: target.hash })
       }
       if (id === 'sprite.select') {
         if (!hashes.includes(String(args.hash))) throw new Error('목록에 없는 시트야.')
@@ -296,10 +304,11 @@ export function useSpriteNormalizeChatPage({ active, sheets, setSheets, selected
 }
 
 /** The animation tab: one sheet, its grid and the output (fps, format, background), run as a file or into the library. */
-export function useSpriteAnimationChatPage({ active, sheet, pickSheet, options, setOptions, invalid, running, canRun, canSave, run, savedHashes }: {
+export function useSpriteAnimationChatPage({ active, sheet, setSheet, prepareSheet, options, setOptions, invalid, running, canRun, canSave, run, savedHashes }: {
   active: boolean
   sheet: { hash: string; name: string; width: number; height: number } | null
-  pickSheet: (hash: string) => Promise<void>
+  setSheet: (sheet: { hash: string; name: string; width: number; height: number } | null) => void
+  prepareSheet: (hash: string) => Promise<{ sheet: { hash: string; name: string; width: number; height: number }; grid: { columns: number; rows: number; frameCount: number } } | null>
   options: SpriteAnimationOptions
   setOptions: Dispatch<SetStateAction<SpriteAnimationOptions>>
   invalid: boolean
@@ -310,6 +319,7 @@ export function useSpriteAnimationChatPage({ active, sheet, pickSheet, options, 
   savedHashes: string[]
 }) {
   const { t } = useI18n()
+  const commitSheet = useChatDraftTransaction({ sheet, options }, (next) => { setSheet(next.sheet); setOptions(next.options) })
   const fields: ChatPageField[] = [
     { id: 'columns', label: t({ ko: '열', en: 'Columns' }), type: 'number', value: options.columns, min: 1, max: 64, integer: true },
     { id: 'rows', label: t({ ko: '행', en: 'Rows' }), type: 'number', value: options.rows, min: 1, max: 64, integer: true },
@@ -351,8 +361,10 @@ export function useSpriteAnimationChatPage({ active, sheet, pickSheet, options, 
       if (id === 'sprite.add_sheets') {
         const hash = String((Array.isArray(args.hashes) ? args.hashes : [])[0] ?? '')
         if (!HASH.test(hash)) throw new Error('라이브러리 이미지 해시가 아니야.')
-        await pickSheet(hash)
-        return
+        const prepared = await prepareSheet(hash)
+        assertCurrent()
+        if (!prepared) throw new Error(t({ ko: '시트를 읽지 못했어.', en: 'Could not read the sheet.' }))
+        return commitSheet({ sheet: prepared.sheet, options: { ...options, ...prepared.grid, spacing: 0 } })
       }
       if (id === 'sprite.download') { await run(false); return }
       if (id === 'sprite.run') { await run(true); return }

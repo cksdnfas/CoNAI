@@ -6,7 +6,7 @@ import type {
   TaggerServerStatus,
   TaggerSettings,
 } from '@conai/shared'
-import { fetchApiData } from '@/lib/api-client'
+import { requestApiData } from '@/lib/api-request'
 
 export interface AutoTestTaggerResult {
   caption?: string
@@ -22,7 +22,7 @@ export interface AutoTestTaggerResult {
 }
 
 export async function updateTaggerSettings(settings: Partial<TaggerSettings>, revision?: string) {
-  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/tagger', 'settings.tagger.update', {
+  return requestApiData<AppSettings & PageSettingsVersions>('/api/settings/tagger', 'settings.tagger.update', {
     method: 'PUT',
     headers: { ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
@@ -30,21 +30,21 @@ export async function updateTaggerSettings(settings: Partial<TaggerSettings>, re
 }
 
 export async function getTaggerModels() {
-  return fetchApiData<TaggerModelInfo[]>('/api/settings/tagger/models', 'settings.taggerModels.load')
+  return requestApiData<TaggerModelInfo[]>('/api/settings/tagger/models', 'settings.taggerModels.load')
 }
 
 export async function getTaggerStatus() {
-  return fetchApiData<TaggerServerStatus>('/api/settings/tagger/status', 'settings.taggerStatus.load')
+  return requestApiData<TaggerServerStatus>('/api/settings/tagger/status', 'settings.taggerStatus.load')
 }
 
 export async function checkTaggerDependencies() {
-  return fetchApiData<TaggerDependencyCheckResult>('/api/settings/tagger/check-dependencies', 'settings.taggerDependencies.check', {
+  return requestApiData<TaggerDependencyCheckResult>('/api/settings/tagger/check-dependencies', 'settings.taggerDependencies.check', {
     method: 'POST',
   })
 }
 
 export async function runTaggerAutoTest(imageId: string) {
-  return fetchApiData<AutoTestTaggerResult>('/api/settings/tagger/test', 'settings.taggerAutoTest.run', {
+  return requestApiData<AutoTestTaggerResult>('/api/settings/tagger/test', 'settings.taggerAutoTest.run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageId }),

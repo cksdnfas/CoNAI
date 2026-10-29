@@ -133,7 +133,7 @@ export function GenerationQueueHeaderWidget() {
     queryKey: ['image-generation-workflows'],
     queryFn: () => getGenerationWorkflows(true, 'all'),
     staleTime: 60_000,
-    enabled: canViewWorkflows,
+    enabled: isOpen && canViewWorkflows,
   })
 
   const workflows = useMemo(() => workflowsQuery.data ?? [], [workflowsQuery.data])

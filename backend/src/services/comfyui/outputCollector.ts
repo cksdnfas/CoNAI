@@ -1,5 +1,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { runtimePaths } from '../../config/runtimePaths';
 import type { ComfyUIHistoryResponse, ComfyUIOutputFile } from '../../types/workflow';
 
@@ -151,21 +154,44 @@ export function extractComfyAudioOutputs(history: ComfyUIHistoryResponse, prompt
   return deduplicateComfyOutputs(outputs);
 }
 
-export function writeModalOutputToTemp(file: ModalComfyFile, fallbackName: string, kind: ComfyOutputKind): CollectedComfyOutput & { tempPath: string } {
+export async function writeModalOutputToTemp(file: ModalComfyFile, fallbackName: string, kind: ComfyOutputKind, signal?: AbortSignal): Promise<CollectedComfyOutput & { tempPath: string }> {
   const encoded = typeof file.data_base64 === 'string' ? file.data_base64 : '';
   if (!encoded) {
     throw new Error(`Modal ComfyUI output ${file.filename ?? fallbackName} did not include data_base64`);
   }
 
   const filename = path.basename(file.filename || fallbackName);
-  const tempDir = runtimePaths.tempDir;
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
-
   const ext = path.extname(filename) || (kind === 'video' ? '.mp4' : '.png');
-  const tempFilePath = path.join(tempDir, `modal_comfyui_${Date.now()}_${Math.random().toString(36).slice(2, 9)}${ext}`);
-  fs.writeFileSync(tempFilePath, Buffer.from(encoded, 'base64'));
+  const tempFilePath = path.join(runtimePaths.tempDir, `modal_comfyui_${randomUUID()}${ext}`);
+  await fs.promises.mkdir(runtimePaths.tempDir, { recursive: true });
+  const handle = await fs.promises.open(tempFilePath, 'wx');
+  // Decode bounded chunks, keeping incomplete base64 groups between reads.
+  async function* decoded() {
+    let remainder = '';
+    for (let offset = 0; offset < encoded.length; offset += 64 * 1024) {
+      signal?.throwIfAborted();
+      const part = remainder + encoded.slice(offset, offset + 64 * 1024).replace(/[^A-Za-z0-9+/_=-]/g, '');
+      const padding = part.indexOf('=');
+      if (padding !== -1) {
+        yield Buffer.from(part.slice(0, padding), 'base64');
+        return;
+      }
+      const end = part.length - part.length % 4;
+      if (end) yield Buffer.from(part.slice(0, end), 'base64');
+      remainder = part.slice(end);
+    }
+    if (remainder) yield Buffer.from(remainder, 'base64');
+  }
+  try {
+    await pipeline(Readable.from(decoded()), handle.createWriteStream(), { signal });
+  } catch (error) {
+    try { await fs.promises.rm(tempFilePath, { force: true }); }
+    catch (cleanupError) {
+      console.warn(`⚠️ Failed to remove temp Modal ComfyUI output ${tempFilePath}:`, cleanupError);
+      if (error && typeof error === 'object') Object.assign(error, { cleanupError });
+    }
+    throw error;
+  }
 
   return {
     filename,

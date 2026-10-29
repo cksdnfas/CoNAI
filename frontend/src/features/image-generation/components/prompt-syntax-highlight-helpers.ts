@@ -95,13 +95,8 @@ function adjustTrimmedRange(value: string, start: number, end: number) {
   }
 }
 
-/** Detect recognized preprocess, comment, and LoRA syntax ranges inside one prompt-like field value. */
-export function detectPromptSyntaxTokens(value: string, records: FlattenedWildcardRecord[], tool: PromptWildcardTool) {
-  if (!value) {
-    return []
-  }
-
-  // 와일드카드·태그 그룹 토큰은 입력창 칩(prompt-random-token)이 담당한다
+/** Index library names independently of the prompt text. */
+export function buildPromptSyntaxNameMaps(records: FlattenedWildcardRecord[]) {
   const preprocessByName = new Map(
     records
       .filter((record) => record.type === 'chain' && !record.isAutoCollected)
@@ -112,7 +107,16 @@ export function detectPromptSyntaxTokens(value: string, records: FlattenedWildca
       .filter((record) => record.isAutoCollected)
       .map((record) => [normalizePromptSyntaxName(record.name), record]),
   )
+  return { preprocessByName, loraByName }
+}
 
+/** Detect recognized preprocess, comment, and LoRA syntax ranges inside one prompt-like field value. */
+export function detectPromptSyntaxTokens(value: string, { preprocessByName, loraByName }: ReturnType<typeof buildPromptSyntaxNameMaps>, tool: PromptWildcardTool) {
+  if (!value) {
+    return []
+  }
+
+  // 와일드카드·태그 그룹 토큰은 입력창 칩(prompt-random-token)이 담당한다
   const tokens: PromptSyntaxToken[] = []
 
   for (const match of value.matchAll(PROMPT_COMMENT_TOKEN_REGEX)) {

@@ -9,6 +9,8 @@ import type { CodexChatMessageRecord, CodexChatThreadRecord } from './codexChatS
 import { resolveChatAccess } from './codexChatAccess'
 import { translateDisplayFields, translatorOf } from './chatTranslation'
 import { ChatGroupStore } from './chatGroupStore'
+import { fitAuxiliaryHistory } from './chatAuxiliarySettings'
+import { splitTurns } from './llmChatContext'
 
 /**
  * Reply suggestions: the composer's sparkle button asks a model for a few things the user might say next. Nothing
@@ -22,12 +24,9 @@ import { ChatGroupStore } from './chatGroupStore'
  */
 
 export const SUGGESTION_COUNT = 3
-const SUGGESTION_TIMEOUT_MS = 60_000
 /** The chat's own Codex model, asked only for a few short lines. */
 const CODEX_SUGGESTION_EFFORT = 'low'
 const TRANSCRIPT_TURNS = 12
-const TURN_MAX_CHARS = 1200
-const SUGGESTION_MAX_CHARS = 300
 
 export class ChatSuggestError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -157,14 +156,13 @@ function readerText(message: CodexChatMessageRecord, keys: ReadonlySet<string>) 
   const stripped = message.role === 'assistant' ? stripBlockFences(text, keys) : text
   // The app's own reply labels are not part of what was said.
   const clean = stripped.replace(/^\[message_id=[^\]\n]*\]\n?/gm, '').trim()
-  return clean.length > TURN_MAX_CHARS ? `…${clean.slice(-TURN_MAX_CHARS)}` : clean
+  return clean
 }
 
-/** The last turns as `Name: text` lines (the reader's text, without block fences), oldest first. */
+/** Complete supplied turns as `Name: text` lines, oldest first; callers select/fold history at turn boundaries. */
 export function buildSuggestionTranscript(messages: CodexChatMessageRecord[], userName: string, nameOf: (message: CodexChatMessageRecord) => string, keys: ReadonlySet<string>) {
   return messages
     .filter((message) => message.status === 'completed')
-    .slice(-TRANSCRIPT_TURNS)
     .map((message) => ({ name: message.role === 'user' ? userName : nameOf(message), text: readerText(message, keys) }))
     .filter((turn) => turn.text)
     .map((turn) => `${turn.name}: ${turn.text}`)
@@ -192,7 +190,7 @@ export function parseSuggestions(text: string): string[] {
   const suggestions: string[] = []
   for (const item of items) {
     const value = typeof item === 'string' ? item : item && typeof item === 'object' && typeof (item as { text?: unknown }).text === 'string' ? (item as { text: string }).text : ''
-    const clean = value.replace(/\s+/g, ' ').trim().slice(0, SUGGESTION_MAX_CHARS)
+    const clean = value.replace(/\s+/g, ' ').trim()
     if (!clean || seen.has(clean)) continue
     seen.add(clean)
     suggestions.push(clean)
@@ -218,8 +216,12 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
   if (runner.target.transport === 'claude-code' && !resolveChatAccess(thread.account_id).claude) throw new ChatSuggestError('Claude Code를 사용할 권한이 없어.', 403)
 
   const user = userPersonaForThread(thread)
-  const transcript = buildSuggestionTranscript(messages, user.name, nameOf, usableBlockKeys(profile.style.blocks))
-  if (!transcript) throw new ChatSuggestError('아직 대화가 없어서 추천할 게 없어.', 409)
+  const allTurns = splitTurns(messages.filter(message => message.status === 'completed'))
+  let first = allTurns.length, count = 0
+  while (first > 0 && count < TRANSCRIPT_TURNS) count += allTurns[--first].length
+  const keys = usableBlockKeys(profile.style.blocks)
+  const turns = allTurns.slice(first).map(turn => buildSuggestionTranscript(turn, user.name, nameOf, keys))
+  if (!turns.some(Boolean)) throw new ChatSuggestError('아직 대화가 없어서 추천할 게 없어.', 409)
 
   const system = [
     SYSTEM_PROMPT,
@@ -231,19 +233,21 @@ export async function suggestReplies(profile: ChatProfile, thread: CodexChatThre
     suggestionDirection(),
     runner.writer ? writerDirection(runner.writer, profile, user, thread.user_profile_id ?? null) : '',
   ].filter(Boolean).join('\n')
-  const prompt = `${transcript}\n\n---\n${user.name}이(가) 다음에 할 말 ${SUGGESTION_COUNT}개를 JSON 배열로.`
 
-  const timeout = AbortSignal.timeout(SUGGESTION_TIMEOUT_MS)
-  const combined = signal ? AbortSignal.any([signal, timeout]) : timeout
+  const combined = signal ?? new AbortController().signal
+  const writerProfile = runner.writer?.kind === 'profile' ? runner.writer.profile : profile
+  const target = { ...runner.target, generation: { ...runner.target.generation, maxTokens: thread.max_tokens ?? writerProfile.maxTokens } }
   let answer: string
   try {
-    answer = await completeChat(runner.target, [
-        { role: 'system', content: system },
-        { role: 'user', content: prompt },
-      ], combined, { purpose: 'suggestion' })
+    const request = await fitAuxiliaryHistory(target, turns, history => [
+      { role: 'system', content: system },
+      { role: 'user', content: `${history.join('\n\n')}\n\n---\n${user.name}이(가) 다음에 할 말 ${SUGGESTION_COUNT}개를 JSON 배열로.` },
+    ])
+    answer = await completeChat(request.target, request.messages,
+      combined, { purpose: 'suggestion', profileId: writerProfile.id, threadId: thread.id })
   } catch (error) {
     if (signal?.aborted) throw new ChatSuggestError('추천을 멈췄어.', 499)
-    if (timeout.aborted) throw new ChatSuggestError('추천이 너무 오래 걸려서 멈췄어.', 504)
+    if (error instanceof Error && error.name === 'TimeoutError') throw new ChatSuggestError('추천 연결의 요청 제한 시간을 넘었어.', 504)
     throw new ChatSuggestError(`추천을 받지 못했어: ${error instanceof Error ? error.message : String(error)}`, 502)
   }
   const suggestions = parseSuggestions(answer)

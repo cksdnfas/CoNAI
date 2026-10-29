@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { LoadingState } from '@/components/ui/loading-state'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
@@ -11,14 +10,15 @@ import { useI18n } from '@/i18n'
 import type { GenerationWorkflowDetail, WorkflowMarkedField } from '@/lib/api-image-generation-types'
 import { DEFAULT_COMFY_MODEL_API_PATHS, getGenerationWorkflow, getGenerationCustomDropdownLists, scanGenerationComfyUIModelDropdownLists } from '@/lib/api-image-generation-workflows'
 import { getPublicGenerationWorkflow, queuePublicGenerationWorkflowJob } from '@/lib/api-public-workflows'
-import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
-import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import { refreshGenerationQueueViews } from './components/generation-queue-actions'
 import { GenerationNarrowSplit, type GenerationNarrowView } from './components/generation-narrow-split'
 import { GenerationResultArea, type GenerationResultView } from './components/generation-result-area'
 import { ComfyWorkflowControllerPanel } from './components/comfy-workflow-controller-panel'
+import { useGenerationImageSaveOptions } from './components/use-generation-image-save-options'
+import { useComfyWorkflowDraft } from './components/use-comfy-workflow-draft'
+import { useComfyFieldValidation } from './components/use-comfy-field-validation'
 import { WorkflowArtifactExplorerPanel } from './components/workflow-artifact-explorer-panel'
 import { useComfyChatPage } from './components/use-comfy-chat-page'
 import { ComfyWorkflowAuthoringModal } from './components/comfy-workflow-authoring-modal'
@@ -29,15 +29,7 @@ import { GenerationLayoutProvider, useGenerationLayout } from './layout/generati
 import { GenerationLayoutListEditor } from './layout/generation-layout-list-editor'
 import { resolveRecentStripPlacement } from './layout/generation-layout-ops'
 import {
-  buildWorkflowDraft,
   buildWorkflowPromptData,
-  collectWorkflowNodeDraftIssues,
-  clearPersistedComfyWorkflowDraft,
-  deleteComfyWorkflowDraftInputAssets,
-  findInvalidWorkflowNumberField,
-  hasWorkflowFieldValue,
-  loadPersistedComfyWorkflowDraft,
-  persistComfyWorkflowDraft,
 } from './image-generation-drafts'
 import {
   getErrorMessage,
@@ -46,7 +38,6 @@ import {
   type SelectedImageDraft,
   type WorkflowFieldDraftValue,
 } from './image-generation-shared'
-import { hasWorkflowDraftDifference } from './history-settings-mapping'
 
 const PUBLIC_QUEUE_REGISTRATION_MIN = 1
 const PUBLIC_QUEUE_REGISTRATION_MAX_FALLBACK = 32
@@ -88,7 +79,6 @@ function PublicComfyWorkflowPageContent() {
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const { t, formatNumber } = useI18n()
-  const confirm = useConfirm()
   const generationLayout = useGenerationLayout()
   const authStatusQuery = useAuthStatusQuery()
   const draftStorageOwner = resolveAccountDraftOwner(authStatusQuery.data)
@@ -96,8 +86,6 @@ function PublicComfyWorkflowPageContent() {
   const [resultView, setResultView] = useState<GenerationResultView>('stage')
   const [narrowView, setNarrowView] = useState<GenerationNarrowView>('edit')
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
-  const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
-  const [workflowDraftOwnerId, setWorkflowDraftOwnerId] = useState<number | null>(null)
   const [authoringWorkflow, setAuthoringWorkflow] = useState<GenerationWorkflowDetail | null>(null)
   const [isAuthoringOpen, setIsAuthoringOpen] = useState(false)
   const authoringDropdowns = useQuery({ queryKey: ['image-generation-custom-dropdown-lists'], queryFn: getGenerationCustomDropdownLists, enabled: isAuthoringOpen || authStatusQuery.data?.permissionKeys.includes('workflows.view') === true })
@@ -110,14 +98,12 @@ function PublicComfyWorkflowPageContent() {
     enabled: slug.trim().length > 0 && authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated === true,
   })
 
-  const appSettingsQuery = useQuery({
-    queryKey: ['runtime-image-save-settings'],
-    queryFn: getRuntimeImageSaveSettings,
-    enabled: authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated === true,
-  })
+  const { options: generationImageSaveOptions } = useGenerationImageSaveOptions(authStatusQuery.data?.hasCredentials === true && authStatusQuery.data?.authenticated === true)
 
   const workflow = workflowQuery.data ?? null
   const workflowFields = useMemo(() => (workflow?.marked_fields ?? []) as WorkflowMarkedField[], [workflow?.marked_fields])
+  const { workflowDraft, setWorkflowDraft, workflowDraftOwnerId, resetDraft } = useComfyWorkflowDraft(draftStorageOwner, workflow, workflowFields)
+  const { fieldIssues, clearFieldIssue, clearFieldIssues, validate } = useComfyFieldValidation(workflow?.id ?? null, workflowFields, workflowDraft, showSnackbar)
   const shouldShowArtifactExplorer = workflow?.result_view_mode === 'artifact_explorer'
   const publicQueueMaxCount = resolvePublicQueueMaxCount(workflow?.public_queue_max_count)
   // 등급별 회원 1인당 동시 대기열 제한(조회 시점 스냅샷). 최종 판정은 서버가 한다.
@@ -126,7 +112,6 @@ function PublicComfyWorkflowPageContent() {
   const viewerQueueRoleLabel = workflow?.viewer_queue_role_label ?? null
   const viewerQueueRoleLimitReached = viewerQueueRoleLimit !== null
     && (viewerQueueRoleLimit <= 0 || viewerQueueRoleActive >= viewerQueueRoleLimit)
-  const generationSaveOptions = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
   const historyFeed = useGenerationHistoryFeed({
     refreshNonce: historyRefreshNonce,
     serviceType: 'comfyui',
@@ -136,50 +121,19 @@ function PublicComfyWorkflowPageContent() {
   })
 
   useEffect(() => {
-    if (!workflow) {
-      return
-    }
-
-    const baseDraft = buildWorkflowDraft(workflowFields)
-    const persistedDraft = loadPersistedComfyWorkflowDraft(draftStorageOwner, workflow.id, workflowFields)
-    setWorkflowDraft({ ...baseDraft, ...persistedDraft })
-    setWorkflowDraftOwnerId(workflow.id)
-  }, [draftStorageOwner, workflow, workflowFields])
-
-  useEffect(() => {
-    if (!workflow) {
-      return
-    }
-
-    if (workflowDraftOwnerId !== workflow.id) return
-    persistComfyWorkflowDraft(draftStorageOwner, workflow.id, workflowDraft)
-  }, [draftStorageOwner, workflow, workflowDraft, workflowDraftOwnerId])
-
-  useEffect(() => {
     setQueueRegistrationCount((current) => String(clampQueueRegistrationCount(current, publicQueueMaxCount)))
   }, [publicQueueMaxCount])
-
-  const missingRequiredField = useMemo(
-    () => workflowFields.find((field) => field.required && !hasWorkflowFieldValue(workflowDraft[field.id])),
-    [workflowDraft, workflowFields],
-  )
-  const workflowNodeIssues = useMemo(
-    () => collectWorkflowNodeDraftIssues(workflowFields, workflowDraft),
-    [workflowDraft, workflowFields],
-  )
 
   const handleFieldChange = (fieldId: string, value: WorkflowFieldDraftValue) => {
     setWorkflowDraft((current) => ({
       ...current,
       [fieldId]: value,
     }))
+    clearFieldIssue(fieldId)
   }
 
   const handleImageChange = (fieldId: string, image?: SelectedImageDraft) => {
-    setWorkflowDraft((current) => ({
-      ...current,
-      [fieldId]: image ?? '',
-    }))
+    handleFieldChange(fieldId, image ?? '')
   }
 
   const loraOptions = findAutoCollectedPowerLoraOptions(authoringDropdowns.data ?? [])
@@ -192,29 +146,7 @@ function PublicComfyWorkflowPageContent() {
   })
 
   const handleResetDraft = async () => {
-    if (!workflow) {
-      return
-    }
-
-    const baseDraft = buildWorkflowDraft(workflowFields)
-    if (hasWorkflowDraftDifference(workflowFields, workflowDraft, baseDraft)) {
-      const confirmed = await confirm({
-        title: t({ ko: '워크플로우 입력을 초기화할까?', en: 'Reset the workflow inputs?' }),
-        description: t({
-          ko: '{name}의 입력값이 기본값으로 돌아가고 저장된 초안도 지워져. 업로드한 입력 이미지는 서버에서도 삭제돼. 되돌릴 수 없어.',
-          en: 'All inputs of {name} go back to their defaults and the saved draft is cleared. Uploaded input images are also deleted from the server. This cannot be undone.',
-        }, { name: workflow.name }),
-        confirmLabel: t({ ko: '초기화', en: 'Reset' }),
-        tone: 'destructive',
-      })
-      if (!confirmed) {
-        return
-      }
-    }
-
-    void deleteComfyWorkflowDraftInputAssets(workflowDraft)
-    clearPersistedComfyWorkflowDraft(draftStorageOwner, workflow.id)
-    setWorkflowDraft(baseDraft)
+    if (await resetDraft()) clearFieldIssues()
   }
 
   const handleRefreshDropdownLists = async () => {
@@ -242,40 +174,7 @@ function PublicComfyWorkflowPageContent() {
       return
     }
 
-    if (missingRequiredField) {
-      showSnackbar({
-        message: t(
-          { ko: '필수 필드가 비어 있어: {label}', en: 'Required field is empty: {label}' },
-          { label: missingRequiredField.label },
-        ),
-        tone: 'error',
-      })
-      return
-    }
-
-    const invalidNumberField = findInvalidWorkflowNumberField(workflowFields, workflowDraft)
-    if (invalidNumberField) {
-      showSnackbar({
-        message: t(
-          { ko: '숫자 필드 값이 올바르지 않아: {label}', en: 'Invalid numeric field value: {label}' },
-          { label: invalidNumberField.label },
-        ),
-        tone: 'error',
-      })
-      return
-    }
-
-    const invalidNodeField = workflowNodeIssues[0]
-    if (invalidNodeField) {
-      showSnackbar({
-        message: t(
-          { ko: '{label}: {message}', en: '{label}: {message}' },
-          { label: invalidNodeField.field.label, message: t({ ko: invalidNodeField.issue.ko, en: invalidNodeField.issue.en }) },
-        ),
-        tone: 'error',
-      })
-      return
-    }
+    if (!validate()) return
 
     const promptData = buildWorkflowPromptData(workflowFields, workflowDraft)
     const registrationCount = clampQueueRegistrationCount(queueRegistrationCount, publicQueueMaxCount)
@@ -287,13 +186,7 @@ function PublicComfyWorkflowPageContent() {
         request_summary: `${workflow.name} public queue job`,
         request_payload: {
           prompt_data: promptData,
-          imageSaveOptions: {
-            format: generationSaveOptions.defaultFormat,
-            quality: generationSaveOptions.quality,
-            resizeEnabled: generationSaveOptions.resizeEnabled,
-            maxWidth: generationSaveOptions.maxWidth,
-            maxHeight: generationSaveOptions.maxHeight,
-          },
+          imageSaveOptions: generationImageSaveOptions,
         },
       })
 
@@ -392,6 +285,7 @@ function PublicComfyWorkflowPageContent() {
       isGenerating={isQueueSubmitting}
       loraOptions={loraOptions}
       isRefreshingDropdownLists={isRefreshingDropdownLists}
+      fieldIssues={fieldIssues}
       splitPaneScroll={isWideLayout}
       compactActionBarContentTargetId={isWideLayout ? undefined : PUBLIC_STICKY_ACTION_BAR_SLOT_ID}
       blockLayout={isWideLayout ? { result: resultPanel } : undefined}
@@ -403,6 +297,7 @@ function PublicComfyWorkflowPageContent() {
       onRefreshDropdownLists={handleRefreshDropdownLists}
       onResetDraft={() => void handleResetDraft()}
       onGenerateSelected={() => void handleQueueSubmit()}
+      onRevealFieldIssues={() => { validate() }}
     />
   ) : null
 

@@ -56,6 +56,44 @@ export function useHotkey(keys: string, handler: (event: KeyboardEvent) => void,
   }, [enabled, keys])
 }
 
+/** Save a page after the focused field commits; dialogs and the chat dock own their own shortcuts. */
+export function usePageSaveShortcut(onSave: (() => void) | undefined, saving = false) {
+  const saveRef = useRef(onSave)
+  const savingRef = useRef(saving)
+  const timerRef = useRef<number | null>(null)
+  const enabled = Boolean(onSave)
+
+  useLayoutEffect(() => {
+    saveRef.current = onSave
+    savingRef.current = saving
+  }, [onSave, saving])
+
+  useEffect(() => {
+    if (!enabled) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || (event.key.toLowerCase() !== 's' && event.code !== 'KeyS')) return
+      if (event.defaultPrevented || (event.target instanceof Element && event.target.closest('[data-chat-dock]')) || hasOpenDialog()) return
+      event.preventDefault()
+      if (event.repeat || savingRef.current || timerRef.current !== null) return
+      const active = document.activeElement
+      const typing = active instanceof HTMLElement && isTypingTarget({ target: active }) ? active : null
+      typing?.blur()
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null
+        if (!savingRef.current && !hasOpenDialog()) saveRef.current?.()
+        // The blur only commits the field: typing continues there unless something else took focus.
+        if (typing?.isConnected && (!document.activeElement || document.activeElement === document.body)) typing.focus({ preventScroll: true })
+      }, 0)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+  }, [enabled])
+}
+
 const MAC_KEYS: Record<string, string> = { Mod: '⌘', Ctrl: '⌃', Alt: '⌥', Shift: '⇧' }
 
 /** "Mod+Alt+1" → "Ctrl+Alt+1", or "⌘⌥1" on Apple devices, for tooltips and menus. */

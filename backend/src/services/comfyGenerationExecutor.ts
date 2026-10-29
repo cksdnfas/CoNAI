@@ -158,8 +158,31 @@ export async function executeComfyGeneration(
   const progressMonitor = !comfyService.isModalBackend() && queueJobId != null && onProgress
     ? comfyService.createProgressMonitor(queueJobId, normalizedWorkflow, onProgress)
     : null
+  const pendingTempPaths = new Set<string>()
+  const cancelled = async () => {
+    if (signal?.aborted) return true
+    const requested = await shouldCancel?.()
+    return Boolean(requested || signal?.aborted)
+  }
+  const cleanupTempPaths = async (cause?: unknown) => {
+    const failures: Array<{ tempPath: string; error: unknown }> = []
+    for (const tempPath of pendingTempPaths) {
+      try {
+        await fs.promises.rm(tempPath, { force: true })
+        pendingTempPaths.delete(tempPath)
+      } catch (error) {
+        failures.push({ tempPath, error })
+        console.warn(`⚠️ Failed to remove temp ComfyUI output ${tempPath}:`, error)
+      }
+    }
+    if (failures.length && cause && typeof cause === 'object') {
+      const previous = (cause as { cleanupFailures?: unknown[] }).cleanupFailures ?? []
+      Object.assign(cause, { cleanupFailures: [...previous, ...failures] })
+    }
+  }
   let promptId: string
   let collectedOutputs: Awaited<ReturnType<ComfyUIService['collectGeneratedOutputs']>>
+  let collectionFailure: unknown
   try {
     // Open /ws first so a fast workflow cannot finish before its first progress frame is observed.
     await progressMonitor?.start(signal)
@@ -182,7 +205,7 @@ export async function executeComfyGeneration(
 
     await onPromptSubmitted?.(promptId)
 
-    if (await shouldCancel?.()) {
+    if (await cancelled()) {
       await onCancelRequested?.(promptId)
       throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
     }
@@ -201,13 +224,23 @@ export async function executeComfyGeneration(
         onlyFinalOutput: !isArtifactWorkflow,
         audioOutputs: Boolean(outputSink),
       })
+    for (const output of collectedOutputs) pendingTempPaths.add(output.tempPath)
+  } catch (error) {
+    collectionFailure = error
+    throw error
   } finally {
-    progressMonitor?.close()
+    try {
+      progressMonitor?.close()
+    } catch (error) {
+      console.warn('⚠️ Failed to close ComfyUI progress monitor:', error)
+      if (collectionFailure && typeof collectionFailure === 'object') Object.assign(collectionFailure, { closeError: error })
+    }
   }
 
   if (outputSink) {
+    let handlingFailure: unknown
     try {
-      if (await shouldCancel?.()) {
+      if (await cancelled()) {
         throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
       }
       const sinkResult = await outputSink(collectedOutputs, promptId)
@@ -223,15 +256,12 @@ export async function executeComfyGeneration(
         savedAudioCandidateIds: [],
         sinkResult,
       }
+    } catch (error) {
+      handlingFailure = error
+      throw error
     } finally {
-      for (const output of collectedOutputs) {
-        await fs.promises.rm(output.tempPath, { force: true }).catch(() => undefined)
-      }
+      await cleanupTempPaths(handlingFailure)
     }
-  }
-
-  if (await shouldCancel?.()) {
-    throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
   }
 
   let savedImageCount = 0
@@ -239,15 +269,18 @@ export async function executeComfyGeneration(
   const artifactRunStartedAt = new Date()
   let representativeImage: ComfyGenerationRepresentativeImage | null = null
   const savedImageHashes: string[] = []
-  const pendingTempPaths = new Set(collectedOutputs.map((output) => output.tempPath))
   const savedArtifactOutputs: SavedArtifactOutput[] = []
   // Library runs hand sounds to the audio store instead of the image pipeline; artifact runs keep every file.
   const audioOutputs: ComfyCollectedOutputFile[] = []
   let savedAudioCandidateIds: string[] = []
 
+  let handlingFailure: unknown
   try {
+    if (await cancelled()) {
+      throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
+    }
     for (const [index, output] of collectedOutputs.entries()) {
-      if (await shouldCancel?.()) {
+      if (await cancelled()) {
         throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
       }
       if (!isArtifactWorkflow && output.kind === 'audio') {
@@ -264,6 +297,7 @@ export async function executeComfyGeneration(
             promptId,
             runStartedAt: artifactRunStartedAt,
           })
+          pendingTempPaths.delete(output.tempPath)
           savedArtifacts.push(savedArtifact)
           savedArtifactOutputs.push({
             artifact: savedArtifact,
@@ -298,19 +332,19 @@ export async function executeComfyGeneration(
       } catch (error) {
         console.error(`❌ Failed to save ComfyUI output ${output.tempPath}:`, error)
       } finally {
-        pendingTempPaths.delete(output.tempPath)
         if (!isArtifactWorkflow) {
           try {
-            await fs.promises.unlink(output.tempPath)
-          } catch (cleanupError) {
-            console.warn(`⚠️ Failed to remove temp ComfyUI output ${output.tempPath}:`, cleanupError)
+            await fs.promises.rm(output.tempPath, { force: true })
+            pendingTempPaths.delete(output.tempPath)
+          } catch (error) {
+            console.warn(`⚠️ Failed to remove temp ComfyUI output ${output.tempPath}:`, error)
           }
         }
       }
     }
 
     if (audioOutputs.length > 0 && onAudioOutputs) {
-      if (await shouldCancel?.()) {
+      if (await cancelled()) {
         throw new Error(COMFYUI_EXECUTION_CANCELLED_MESSAGE)
       }
       try {
@@ -319,14 +353,11 @@ export async function executeComfyGeneration(
         console.error(`❌ Failed to store ${audioOutputs.length} ComfyUI audio output(s):`, error)
       }
     }
+  } catch (error) {
+    handlingFailure = error
+    throw error
   } finally {
-    for (const tempPath of pendingTempPaths) {
-      try {
-        await fs.promises.unlink(tempPath)
-      } catch {
-        // Ignore best-effort cleanup for already-removed temp files.
-      }
-    }
+    await cleanupTempPaths(handlingFailure)
   }
 
   if (isArtifactWorkflow && savedArtifactOutputs.length > 0) {

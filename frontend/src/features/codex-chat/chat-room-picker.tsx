@@ -3,7 +3,8 @@ import { Chip } from '@/components/ui/chip'
 import { RowPicker, type RowPickerItem } from '@/components/ui/row-picker'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import type { ChatProfileSummary, CodexChatThreadSummary } from '@/lib/api-codex-chat'
+import type { ChatProfileConnectionDown, ChatProfileSummary, CodexChatThreadSummary } from '@/lib/api-codex-chat'
+import { ChatHealthDot } from './chat-health'
 import { GroupAvatarStack } from './chat-group'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { parseServerDate } from '@/lib/server-time'
@@ -15,16 +16,43 @@ export function chatRoomName(thread: Pick<CodexChatThreadSummary, 'id' | 'title'
   return thread.title.trim() || (thread.profile_id !== null ? profilesById.get(thread.profile_id)?.name : undefined) || untitled
 }
 
+export function chatRoomPreviewText(thread: CodexChatThreadSummary, t: ReturnType<typeof useI18n>['t']) {
+  const preview = thread.preview
+  return preview ? preview.text || (preview.media ? t({ ko: '이미지', en: 'Image' }) : preview.files ? t({ ko: '파일', en: 'File' }) : '') : ''
+}
+
+export function chatRoomActivityLabel(date: Date, formatDate: ReturnType<typeof useI18n>['formatDate'], t: ReturnType<typeof useI18n>['t'], relativeDays = false) {
+  const today = new Date()
+  const days = Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() - new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / 86_400_000)
+  if (days === 0 || (relativeDays && days < 0)) return formatDate(date, { hour: 'numeric', minute: '2-digit' })
+  if (relativeDays && days === 1) return t({ ko: '어제', en: 'Yesterday' })
+  if (relativeDays && days < 7) return formatDate(date, { weekday: 'short' })
+  return formatDate(date, date.getFullYear() === today.getFullYear() ? { month: 'short', day: 'numeric' } : { dateStyle: 'medium' })
+}
+
 /** The face of a room: its character, or the first members of a group. */
-export function ChatRoomFace({ thread, profilesById, size = 'md', ringClassName = 'ring-surface-high' }: {
+export function ChatRoomFace({ down = null, variant = 'picker', ...props }: {
   thread: Pick<CodexChatThreadSummary, 'kind' | 'profile_id' | 'member_profile_ids'>
   profilesById: ReadonlyMap<number, ChatProfileSummary>
   size?: 'sm' | 'md'
   /** The surface behind a group's overlapping faces. */
   ringClassName?: string
+  down?: ChatProfileConnectionDown | null
+  variant?: 'picker' | 'thread'
+}) {
+  const missing = variant === 'thread' && props.thread.kind !== 'group' && !props.profilesById.has(props.thread.profile_id ?? -1)
+  return <ChatHealthDot down={missing ? null : down}><RoomFace {...props} variant={variant} /></ChatHealthDot>
+}
+
+function RoomFace({ thread, profilesById, size = 'md', ringClassName = 'ring-surface-high', variant }: {
+  thread: Pick<CodexChatThreadSummary, 'kind' | 'profile_id' | 'member_profile_ids'>
+  profilesById: ReadonlyMap<number, ChatProfileSummary>
+  size?: 'sm' | 'md'; ringClassName?: string
+  variant: 'picker' | 'thread'
 }) {
   if (thread.kind === 'group') {
     const members = (thread.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])
+    if (variant === 'thread') return <GroupAvatarStack profiles={members} size={size === 'md' ? 'sm' : 'xs'} ringClassName={ringClassName} />
     if (size !== 'md' || members.length < 2) return <GroupAvatarStack profiles={members} size="xs" ringClassName={ringClassName} />
     // Two faces corner to corner, in the same square as a single face, so names line up down a list.
     const [first, second] = members
@@ -36,8 +64,9 @@ export function ChatRoomFace({ thread, profilesById, size = 'md', ringClassName 
     )
   }
   const profile = thread.profile_id !== null ? profilesById.get(thread.profile_id) : undefined
+  if (!profile && variant === 'thread') return <span className={size === 'md' ? 'size-8' : 'size-6'} aria-hidden="true" />
   return profile
-    ? <ChatProfileAvatar name={profile.name} profile={profile} engine={profile.engine} size={size} />
+    ? <ChatProfileAvatar name={profile.name} avatar={variant === 'thread' ? profile.avatar : undefined} profile={profile} engine={profile.engine} size={size} />
     : <span className={size === 'md' ? 'size-8 rounded-full bg-surface-highest' : 'size-6 rounded-full bg-surface-highest'} aria-hidden="true" />
 }
 
@@ -59,10 +88,7 @@ export function ChatRoomPicker({ profilesById, value, onChange, disabled, kind }
   const pageIds = new Set(page.rooms.map((room) => String(room.id)))
   const items = useMemo<RowPickerItem[]>(() => {
     const untitled = t({ ko: '새 채팅', en: 'New chat' })
-    const today = new Date()
-    const whenLabel = (date: Date) => date.toDateString() === today.toDateString()
-      ? formatDate(date, { hour: 'numeric', minute: '2-digit' })
-      : formatDate(date, date.getFullYear() === today.getFullYear() ? { month: 'short', day: 'numeric' } : { dateStyle: 'medium' })
+    const whenLabel = (date: Date) => chatRoomActivityLabel(date, formatDate, t)
     // The server lists the latest activity first; pinned rooms go on top and the archive to the end, as in the chat list.
     const order = (thread: CodexChatThreadSummary) => (thread.archived ? 2 : thread.pinned ? 0 : 1)
     return [...threads].sort((a, b) => order(a) - order(b)).map((thread) => {
@@ -70,7 +96,7 @@ export function ChatRoomPicker({ profilesById, value, onChange, disabled, kind }
       const people = thread.kind === 'group'
         ? (thread.member_profile_ids ?? []).flatMap((id) => profilesById.get(id)?.name ?? []).join(', ')
         : thread.profile_id !== null ? profilesById.get(thread.profile_id)?.name ?? '' : ''
-      const preview = thread.preview ? thread.preview.text || (thread.preview.media ? t({ ko: '이미지', en: 'Image' }) : thread.preview.files ? t({ ko: '파일', en: 'File' }) : '') : ''
+      const preview = chatRoomPreviewText(thread, t)
       const movedAt = parseServerDate(thread.updated_date)
       return {
         id: String(thread.id),
@@ -105,7 +131,7 @@ export function ChatRoomPicker({ profilesById, value, onChange, disabled, kind }
 }
 
 /** Pick one character by its face. */
-export function ChatProfilePicker({ profiles, value, onChange, disabled }: {
+export function ChatProfileSelect({ profiles, value, onChange, disabled }: {
   profiles: ChatProfileSummary[]
   value: string
   onChange: (profileId: string) => void

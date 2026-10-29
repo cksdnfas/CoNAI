@@ -15,6 +15,7 @@ interface ImageListColumnFloatingControlProps {
   max?: number
   title?: string
   className?: string
+  aboveSelectionBar?: boolean
   onChange: (value: number) => void
   onReset?: () => void
 }
@@ -26,6 +27,7 @@ export function ImageListColumnFloatingControl({
   max = 8,
   title,
   className,
+  aboveSelectionBar = false,
   onChange,
   onReset,
 }: ImageListColumnFloatingControlProps) {
@@ -37,7 +39,7 @@ export function ImageListColumnFloatingControl({
 
   return (
     // Keeps clear of a docked chat panel (--chat-dock-width) on the right edge.
-    <div ref={containerRef} className={cn('pointer-events-none fixed bottom-[calc(var(--shell-bottom-inset)+1.5rem)] right-[calc(1rem+var(--chat-dock-width,0px))] z-50', className)}>
+    <div ref={containerRef} className={cn('pointer-events-none fixed right-[calc(1rem+var(--chat-dock-width,0px))] z-50', aboveSelectionBar ? 'bottom-[calc(var(--shell-bottom-inset)+6rem)]' : 'bottom-[calc(var(--shell-bottom-inset)+1.5rem)]', className)}>
       <AnchoredPopup open={isOpen} anchorRef={containerRef} onClose={() => setIsOpen(false)} align="end" side="top" closeOnBack>
         <div className={`w-[220px] space-y-3 ${anchoredPopupBodyClassName}`}>
           {onReset ? (

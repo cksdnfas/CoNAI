@@ -31,6 +31,7 @@ import { createWildcardNameMatcher, usePromptRandomSources, type PromptRandomSou
 import type { PromptTypeFilter } from '@/types/prompt'
 import { flattenWildcardRecords, type PromptWildcardTool } from './wildcard-inline-picker-helpers'
 import {
+  buildPromptSyntaxNameMaps,
   detectPromptSyntaxTokens,
   summarizePromptSyntaxTokens,
 } from './prompt-syntax-highlight-helpers'
@@ -153,9 +154,10 @@ export function WildcardInlinePickerField({
     flattenedWildcards,
     tool,
   })
+  const syntaxNameMaps = buildPromptSyntaxNameMaps(flattenedWildcards)
   const detectedTokens = useMemo(
-    () => detectPromptSyntaxTokens(value, flattenedWildcards, tool),
-    [flattenedWildcards, tool, value],
+    () => detectPromptSyntaxTokens(value, syntaxNameMaps, tool),
+    [syntaxNameMaps, tool, value],
   )
   const detectedTokenSummaries = useMemo(
     () => summarizePromptSyntaxTokens(detectedTokens),

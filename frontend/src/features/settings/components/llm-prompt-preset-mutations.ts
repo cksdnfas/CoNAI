@@ -1,23 +1,25 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import type { LlmPresetRecord, LlmSettings } from '@conai/shared'
+import type { LlmPresetRecord } from '@conai/shared'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { LLM_PRESET_OPTIONS_QUERY_KEY, updateLlmSettings } from '@/lib/api-settings-llm'
+import { LLM_PRESET_EDITOR_QUERY_KEY, LLM_PRESET_OPTIONS_QUERY_KEY, updateLlmSettings, type LlmPresetSnapshot } from '@/lib/api-settings-llm'
 import { LLM_PRESET_SECTIONS, normalizePresetJson, type LlmPresetCollectionKey, type LlmPresetDraft } from './llm-connections-tab-utils'
 
 /** Native editors and page assistants validate and persist the same preset collections. */
-export function useLlmPresetMutations(collections: Pick<LlmSettings, LlmPresetCollectionKey>, { reportErrors = true }: { reportErrors?: boolean } = {}) {
+export function useLlmPresetMutations(snapshot: LlmPresetSnapshot | undefined, { reportErrors = true }: { reportErrors?: boolean } = {}) {
   const queryClient = useQueryClient()
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const saved = (settings: Awaited<ReturnType<typeof updateLlmSettings>>, message: string) => {
     queryClient.setQueryData(['app-settings'], settings)
+    void queryClient.invalidateQueries({ queryKey: LLM_PRESET_EDITOR_QUERY_KEY })
     void queryClient.invalidateQueries({ queryKey: LLM_PRESET_OPTIONS_QUERY_KEY })
     showSnackbar({ message, tone: 'info' })
   }
   const saveMutation = useMutation({
     mutationFn: async ({ kind, draft }: { kind: LlmPresetCollectionKey; draft: LlmPresetDraft }) => {
-      const current = collections[kind]
+      if (!snapshot?.collectionRevisions[kind]) throw new Error('최신 프리셋을 먼저 불러와줘.')
+      const current = snapshot[kind]
       const name = draft.name.trim()
       if (!name) throw new Error(t('llmConnectionsTab.presetNameIsRequired'))
       let content = draft.content
@@ -31,14 +33,16 @@ export function useLlmPresetMutations(collections: Pick<LlmSettings, LlmPresetCo
       const now = new Date().toISOString()
       const record: LlmPresetRecord = { id: draft.id, name, content, createdAt: existing?.createdAt ?? draft.createdAt ?? now, updatedAt: now }
       const next = existing ? current.map((preset) => preset.id === existing.id ? record : preset) : [...current, record]
-      return updateLlmSettings({ [kind]: next })
+      return updateLlmSettings({ [kind]: next }, snapshot.collectionRevisions[kind])
     },
     onSuccess: (settings) => saved(settings, t('llmConnectionsTab.llmPresetSaved')),
     onError: (error) => { if (reportErrors) showSnackbar({ message: error instanceof Error ? error.message : t('llmConnectionsTab.failedToSaveLlmPreset'), tone: 'error' }) },
   })
   const deleteMutation = useMutation({
-    mutationFn: ({ kind, id }: { kind: LlmPresetCollectionKey; id: string }) =>
-      updateLlmSettings({ [kind]: collections[kind].filter((preset) => preset.id !== id) }),
+    mutationFn: ({ kind, id }: { kind: LlmPresetCollectionKey; id: string }) => {
+      if (!snapshot?.collectionRevisions[kind]) throw new Error('최신 프리셋을 먼저 불러와줘.')
+      return updateLlmSettings({ [kind]: snapshot[kind].filter((preset) => preset.id !== id) }, snapshot.collectionRevisions[kind])
+    },
     onSuccess: (settings) => saved(settings, t('llmConnectionsTab.llmPresetDeleted')),
     onError: (error) => { if (reportErrors) showSnackbar({ message: error instanceof Error ? error.message : t('llmConnectionsTab.failedToDeleteLlmPreset'), tone: 'error' }) },
   })

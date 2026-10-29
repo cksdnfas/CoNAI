@@ -230,6 +230,99 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     assert.equal(CodexChatStore.findThreadById(id)!.pinned, 1)
   })
 
+  await t.test('automatic titles preserve a concurrent rename and only call the configured model while needed', async (s) => {
+    const { titleAfterFirstReply } = await import('../src/services/codex-chat/chatAutoTitle')
+    const { ModelSlotStore } = await import('../src/services/codex-chat/modelSlots')
+    const { ExternalApiProvider } = await import('../src/models/ExternalApiProvider')
+    const { rawMessagesEstimate } = await import('../src/services/llmUsage')
+    ExternalApiProvider.create({ provider_name: 'title-test', display_name: 'Title', provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', is_enabled: true, additional_config: { default_model: 'title-m', thinking_switch: 'enable_thinking' } })
+    const slot = ModelSlotStore.ensure('title-test', 'title-m', { create: true })
+    assert.ok(slot)
+    const titleProfile = { ...profile, summaryEnabled: true, summarySlotId: slot, maxTokens: 345, temperature: 0.7, contextTokens: null, reasoningEffort: 'high' as const, reasoningBudgetTokens: 128, extraParams: '{"chat_template_kwargs":{"foo":1}}' }
+    const create = () => {
+      const id = CodexChatStore.createThread(1, '', 'llm', profile.id)
+      CodexChatStore.updateThreadContext(id, { maxTokens: 321 })
+      const messageId = say(id, 'assistant', 'A completed answer')
+      return { id, message: CodexChatStore.findMessage(id, messageId)! }
+    }
+    const stale = create()
+    CodexChatStore.updateListState(stale.id, { title: 'Chosen during startup' })
+    assert.equal(CodexChatStore.renameThreadIf(stale.id, '', 'Opening message'), false)
+    assert.equal(CodexChatStore.findThreadById(stale.id)?.title, 'Chosen during startup')
+
+    let entered!: () => void
+    let release!: () => void
+    const started = new Promise<void>((resolve) => { entered = resolve })
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const requests: Array<Record<string, unknown>> = []
+    s.mock.method(globalThis, 'fetch', async (url: unknown, init: RequestInit) => {
+      if (String(url).endsWith('/props')) return Response.json({ default_generation_settings: { n_ctx: 8192 } })
+      requests.push(JSON.parse(String(init.body)) as Record<string, unknown>)
+      entered()
+      await gate
+      return Response.json({ choices: [{ message: { content: 'Automatic title' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } })
+    })
+
+    const before = create()
+    CodexChatStore.renameThread(before.id, 'Opening message')
+    let resolveReply!: (message: typeof before.message) => void
+    const pendingReply = new Promise<typeof before.message>((resolve) => { resolveReply = resolve })
+    const skipped = titleAfterFirstReply(titleProfile, CodexChatStore.findThreadById(before.id)!, 'Opening message', 'Hello', pendingReply)
+    CodexChatStore.updateListState(before.id, { title: 'Chosen before reply' })
+    CodexChatStore.updateListState(before.id, { title: 'Opening message' })
+    resolveReply(before.message)
+    await skipped
+    assert.equal(requests.length, 0)
+    assert.equal(CodexChatStore.findThreadById(before.id)?.title, 'Opening message')
+
+    const during = create()
+    CodexChatStore.renameThread(during.id, 'Opening message')
+    const running = titleAfterFirstReply(titleProfile, CodexChatStore.findThreadById(during.id)!, 'Opening message', 'Hello', Promise.resolve(during.message))
+    await started
+    CodexChatStore.updateListState(during.id, { title: 'Chosen during request' })
+    CodexChatStore.updateListState(during.id, { title: 'Opening message' })
+    release()
+    await running
+    assert.equal(CodexChatStore.findThreadById(during.id)?.title, 'Opening message')
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].max_tokens, 321)
+    assert.equal(requests[0].temperature, 0.7)
+    assert.deepEqual(requests[0].chat_template_kwargs, { foo: 1, enable_thinking: false })
+    assert.equal(requests[0].reasoning_effort, undefined)
+    assert.equal(requests[0].reasoning_budget_tokens, undefined)
+
+    const success = create()
+    CodexChatStore.renameThread(success.id, 'Opening message')
+    await titleAfterFirstReply(titleProfile, CodexChatStore.findThreadById(success.id)!, 'Opening message', 'Hello', Promise.resolve(success.message))
+    assert.equal(CodexChatStore.findThreadById(success.id)?.title, 'Automatic title')
+    const usage = dbModule.getUserSettingsDb().prepare('SELECT purpose, input_tokens, output_tokens FROM llm_usage_events WHERE thread_id = ?').get(success.id)
+    assert.deepEqual(usage, { purpose: 'summary', input_tokens: 10, output_tokens: 5 })
+
+    const narrowChat = create()
+    CodexChatStore.renameThread(narrowChat.id, 'Opening message')
+    await titleAfterFirstReply({ ...titleProfile, contextTokens: 512, reasoningEffort: '' }, CodexChatStore.findThreadById(narrowChat.id)!, 'Opening message', 'Hello', Promise.resolve(narrowChat.message))
+    assert.equal(CodexChatStore.findThreadById(narrowChat.id)?.title, 'Automatic title', 'the chat model context does not size the summary model')
+    assert.deepEqual(requests[2].chat_template_kwargs, { foo: 1, enable_thinking: false }, 'the connection disables thinking even without a profile effort')
+
+    const capped = create()
+    CodexChatStore.renameThread(capped.id, 'Opening message')
+    CodexChatStore.updateThreadContext(capped.id, { maxTokens: 7000 })
+    await titleAfterFirstReply(titleProfile, CodexChatStore.findThreadById(capped.id)!, 'Opening message', '가'.repeat(2000), Promise.resolve(capped.message))
+    const sent = requests[3]
+    const room = 8192 - Math.ceil(rawMessagesEstimate(sent.messages as Array<{ role: string; content: unknown }>) * 1.05)
+    assert.ok(room >= 256 && room < 7000)
+    assert.equal(sent.max_tokens, room, 'the configured cap fits the summary server context')
+
+    const beforeOversized = requests.length
+    for (const engine of ['llm', 'codex'] as const) {
+      const oversized = create()
+      CodexChatStore.renameThread(oversized.id, 'Opening message')
+      await titleAfterFirstReply({ ...titleProfile, engine }, CodexChatStore.findThreadById(oversized.id)!, 'Opening message', '가'.repeat(20_000), Promise.resolve(oversized.message))
+      assert.equal(CodexChatStore.findThreadById(oversized.id)?.title, 'Opening message')
+    }
+    assert.equal(requests.length, beforeOversized, 'oversized title requests are not sent or retried')
+  })
+
   await t.test('greeting preview: the chat saved later opens with the previewed greeting', () => {
     const greeter = ChatProfileStore.create({ name: '하늘', engine: 'llm', providerName: 'test', model: 'm', mcpEnabled: false, summaryEnabled: false,
       greeting: '안녕, {{user}}.', alternateGreetings: ['또 왔네.', '여행 준비됐어?'] })

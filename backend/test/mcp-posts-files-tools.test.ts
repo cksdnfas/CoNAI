@@ -393,4 +393,34 @@ test('mcp posts and file version tools', { timeout: 120000 }, async (t) => {
     await assert.rejects(call(noFiles, 'read_file_text', { file_id: file.id }), /not found/)
   })
 
+  await t.test('cancelling an MCP post search stops in-progress ranking', { timeout: 15000 }, async t => {
+    const { PostStore } = await import('../src/services/posts/postStore')
+    const db = user.getUserSettingsDb()
+    const category = Number(db.prepare("INSERT INTO post_categories(name,name_key) VALUES('Cancellation fixture','cancellation fixture')").run().lastInsertRowid)
+    const insert = db.prepare("INSERT INTO posts(category_id,title,status,author_type,author_name,owner_account_id) VALUES(?,?,'published','account','test',?)")
+    db.transaction(() => {
+      for (let i = 0; i < 6000; i++) insert.run(category, `cancellation ${i}`, writerId)
+    })()
+    let entered!: (signal: AbortSignal | undefined) => void
+    let stopped!: (error: unknown) => void
+    const started = new Promise<AbortSignal | undefined>(resolve => { entered = resolve })
+    const ended = new Promise<unknown>(resolve => { stopped = resolve })
+    const list = PostStore.list.bind(PostStore)
+    t.mock.method(PostStore, 'list', async (actor, query, options) => {
+      entered(options?.signal)
+      try { return await list(actor, query, options) }
+      catch (error) { stopped(error); throw error }
+    })
+    const controller = new AbortController()
+    const request = writer.callTool({ name: 'posts_search', arguments: { category_id: category, sort: 'relevance' } }, { signal: controller.signal })
+    const rejected = assert.rejects(request)
+    const serverSignal = await started
+    assert.ok(serverSignal, 'MCP request signal reaches the post store')
+    controller.abort()
+    await rejected
+    const error = await ended
+    assert.equal(serverSignal.aborted, true)
+    assert.equal(error, serverSignal.reason, 'ranking exits at its cancellation checkpoint')
+  })
+
 })

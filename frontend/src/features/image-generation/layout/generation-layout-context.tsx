@@ -14,6 +14,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { GENERATION_LAYOUTS_QUERY_KEY, getGenerationLayouts, saveGenerationLayouts } from '@/lib/api-generation-layouts'
+import { listPlugins, PLUGINS_QUERY_KEY } from '@/lib/api-plugins'
 import { usePluginGenerationContributions, type PluginLayoutBlock } from '@/features/plugins/plugin-generation'
 import { GENERATION_LAYOUT_BLOCK_LABELS } from './generation-layout-labels'
 import { stackedLayoutBlocks, withNaiSettingsAbovePrompt, withPluginBlocks } from './generation-layout-ops'
@@ -71,6 +72,13 @@ export function GenerationLayoutProvider({ children }: PropsWithChildren) {
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const canEdit = useAuthStatusQuery().data?.isAdmin === true
+  // Only admins receive disabled plugins in the list; an incomplete or unloaded list cannot prove removal.
+  const installedPluginsQuery = useQuery({
+    queryKey: PLUGINS_QUERY_KEY,
+    queryFn: listPlugins,
+    enabled: canEdit,
+    staleTime: 30_000,
+  })
   const layoutsQuery = useQuery({
     queryKey: GENERATION_LAYOUTS_QUERY_KEY,
     queryFn: ({ signal }) => getGenerationLayouts(signal),
@@ -83,8 +91,19 @@ export function GenerationLayoutProvider({ children }: PropsWithChildren) {
   const pluginBlocksOf = useCallback((surface: GenerationLayoutSurface) => pluginBlocks.filter((block) => block.surfaces.includes(surface)), [pluginBlocks])
   const withPlugins = useCallback((surface: GenerationLayoutSurface, presets: GenerationLayoutPreset[]) => {
     const available = pluginBlocksOf(surface).map((block) => block.key)
-    return presets.map((preset) => withPluginBlocks(withNaiSettingsAbovePrompt(surface, preset), available))
-  }, [pluginBlocksOf])
+    const installed = canEdit && installedPluginsQuery.data ? installedPluginsQuery.data.map(({ manifest }) => manifest.id) : undefined
+    return presets.map((preset) => withPluginBlocks(withNaiSettingsAbovePrompt(surface, preset), available, installed))
+  }, [canEdit, installedPluginsQuery.data, pluginBlocksOf])
+  // A list can finish loading while an admin is editing; reconcile the current draft without losing its other edits.
+  useEffect(() => {
+    setDraft((current) => {
+      if (!current) return current
+      const available = pluginBlocksOf(current.surface).map((block) => block.key)
+      const installed = canEdit && installedPluginsQuery.data ? installedPluginsQuery.data.map(({ manifest }) => manifest.id) : undefined
+      const presets = current.presets.map((preset) => withPluginBlocks(preset, available, installed))
+      return presets.some((preset, index) => preset !== current.presets[index]) ? { ...current, presets } : current
+    })
+  }, [canEdit, installedPluginsQuery.data, pluginBlocksOf])
   const blockLabel = useCallback((block: GenerationLayoutBlock) => {
     if (!isGenerationLayoutPluginBlock(block)) return t(GENERATION_LAYOUT_BLOCK_LABELS[block])
     return pluginBlocks.find((item) => item.key === block)?.page.title ?? block.split(':')[1]

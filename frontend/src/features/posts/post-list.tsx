@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { VirtuosoMasonry, type ItemContent } from '@virtuoso.dev/masonry'
 import type { PostCategory, PostSummary } from '@conai/shared'
 import { EyeOff, FileClock, Images, MessageCircle, MessageSquare, Pin } from 'lucide-react'
@@ -9,10 +8,10 @@ import { Badge } from '@/components/ui/badge'
 import { ToggleChip } from '@/components/ui/chip'
 import { useImageListColumnCount } from '@/features/images/components/image-list/use-image-list-column-count'
 import { useI18n } from '@/i18n'
-import { getImage } from '@/lib/api-images'
 import { buildApiUrl } from '@/lib/api-url'
 import { cn } from '@/lib/utils'
-import { libraryMediaKind, postCoverUrl as coverUrl } from './post-media'
+import type { ImageRecord } from '@/types/image'
+import { libraryMediaKind, postCoverUrl as coverUrl, usePostMediaRecords } from './post-media'
 import { PostAuthorAvatar, PostAuthorName, useRelativeTime } from './post-author'
 import { usePostPermissions } from './use-post-permissions'
 import { PostKnowledgeStatus } from './post-knowledge-status'
@@ -161,10 +160,9 @@ export function PostCards({ posts, categories, onOpen, onTag, menu, menuOnClick 
 }
 
 /** One library item filling an SNS slide; moving media plays while the slide is on screen. */
-function SnsMedia({ hash, active }: { hash: string; active: boolean }) {
-  const query = useQuery({ queryKey: ['post-media', hash], queryFn: ({ signal }) => getImage(hash, { signal }), staleTime: 5 * 60_000, retry: false })
+function SnsMedia({ hash, active, record }: { hash: string; active: boolean; record?: ImageRecord }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const kind = libraryMediaKind(query.data)
+  const kind = libraryMediaKind(record)
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
@@ -184,6 +182,7 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible, loadMedia }: Omi
   const [active, setActive] = useState(false)
   const [index, setIndex] = useState(0)
   const media = canViewImages ? post.media.filter((item) => item.kind === 'media') : []
+  const records = usePostMediaRecords(media.map((item) => item.ref), canViewImages && loadMedia)
   useEffect(() => {
     const node = ref.current
     if (!node) return
@@ -217,7 +216,7 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible, loadMedia }: Omi
             >
               {media.map((item, mediaIndex) => (
                 <div key={item.ref} role="button" tabIndex={0} className="size-full shrink-0 cursor-pointer snap-center" onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }} aria-label={post.title}>
-                  {loadMedia && Math.abs(mediaIndex - index) <= 1 ? <SnsMedia hash={item.ref} active={active && mediaIndex === index} /> : null}
+                  {loadMedia && Math.abs(mediaIndex - index) <= 1 ? <SnsMedia hash={item.ref} record={records.data?.[item.ref]} active={active && mediaIndex === index} /> : null}
                 </div>
               ))}
             </div>

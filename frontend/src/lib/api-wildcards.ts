@@ -1,5 +1,5 @@
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { fetchJson, fetchRequiredApiData as requestWildcardData } from '@/lib/api-client'
+import { requestApiData, requestJson } from '@/lib/api-request'
 
 interface ApiResponse<T> {
   success: boolean
@@ -10,7 +10,7 @@ interface ApiResponse<T> {
 type WildcardFallbackKey = Parameters<typeof createApiFallbackError>[1]
 
 async function requestWildcardAction<T>(path: string, fallbackKey: WildcardFallbackKey, init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<T>>(path, init)
+  const response = await requestJson<ApiResponse<T>>(path, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, fallbackKey)
   }
@@ -126,7 +126,7 @@ export async function getWildcards(params?: { hierarchical?: boolean; rootsOnly?
   }
 
   const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
-  return requestWildcardData<WildcardRecord[]>(`/api/wildcards${suffix}`, 'wildcards.list.load')
+  return requestApiData<WildcardRecord[]>(`/api/wildcards${suffix}`, 'wildcards.list.load', undefined, { requireData: true })
 }
 
 /** Shared browsing projection: counts and metadata, never the library's item content. */
@@ -140,7 +140,7 @@ export const wildcardLibraryQueryOptions = {
 export function wildcardDetailQueryOptions(wildcardId: number | null) {
   return {
     queryKey: ['wildcards', 'detail', wildcardId] as const,
-    queryFn: ({ signal }: { signal: AbortSignal }) => requestWildcardData<WildcardRecord>(`/api/wildcards/${wildcardId}`, 'wildcards.list.load', { signal }),
+    queryFn: ({ signal }: { signal: AbortSignal }) => requestApiData<WildcardRecord>(`/api/wildcards/${wildcardId}`, 'wildcards.list.load', { signal }, { requireData: true }),
     enabled: wildcardId !== null,
     staleTime: 60_000,
     gcTime: 60_000,
@@ -151,7 +151,7 @@ export function wildcardDetailQueryOptions(wildcardId: number | null) {
 export function wildcardItemsQueryOptions(wildcardId: number | null, tool: WildcardTool | 'codex', limit = 50) {
   return {
     queryKey: ['wildcards', 'items', wildcardId, tool, limit] as const,
-    queryFn: ({ signal }: { signal: AbortSignal }) => requestWildcardData<WildcardItemRecord[]>(`/api/wildcards/${wildcardId}/items?tool=${tool}&limit=${limit}`, 'wildcards.list.load', { signal }),
+    queryFn: ({ signal }: { signal: AbortSignal }) => requestApiData<WildcardItemRecord[]>(`/api/wildcards/${wildcardId}/items?tool=${tool}&limit=${limit}`, 'wildcards.list.load', { signal }, { requireData: true }),
     enabled: wildcardId !== null,
     staleTime: 60_000,
     gcTime: 60_000,
@@ -160,25 +160,25 @@ export function wildcardItemsQueryOptions(wildcardId: number | null, tool: Wildc
 
 /** Create a new wildcard-like record in the shared wildcard store. */
 export async function createWildcard(input: WildcardMutationInput) {
-  return requestWildcardData<WildcardRecord>('/api/wildcards', 'wildcards.create', {
+  return requestApiData<WildcardRecord>('/api/wildcards', 'wildcards.create', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
-  })
+  }, { requireData: true })
 }
 
 /** Update an existing wildcard-like record in the shared wildcard store. */
 export async function updateWildcard(wildcardId: number, input: WildcardMutationInput, revision?: string) {
-  return requestWildcardData<WildcardRecord>(`/api/wildcards/${wildcardId}`, 'wildcards.update', {
+  return requestApiData<WildcardRecord>(`/api/wildcards/${wildcardId}`, 'wildcards.update', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       ...(revision ? { 'If-Match': revision } : {}),
     },
     body: JSON.stringify(input),
-  })
+  }, { requireData: true })
 }
 
 /** Remove a wildcard-like record, optionally cascading through its children. */
@@ -196,7 +196,7 @@ export async function deleteWildcard(wildcardId: number, options?: { cascade?: b
 
 /** Load the latest auto-generated LoRA scan summary when available. */
 export async function getWildcardLastScanLog() {
-  const response = await fetchJson<ApiResponse<WildcardScanLog | null>>('/api/wildcards/last-scan-log')
+  const response = await requestJson<ApiResponse<WildcardScanLog | null>>('/api/wildcards/last-scan-log')
   if (!response.success) {
     throw createApiFallbackError(response.error, 'wildcards.lastScanLog.load')
   }
@@ -206,18 +206,18 @@ export async function getWildcardLastScanLog() {
 
 /** Scan a LoRA folder dump and rebuild the auto-collected wildcard tree. */
 export async function scanWildcardLoraFolder(input: LoraScanRequest) {
-  return requestWildcardData<LoraScanResponse>('/api/wildcards/scan-lora-folder', 'wildcards.loraScan.run', {
+  return requestApiData<LoraScanResponse>('/api/wildcards/scan-lora-folder', 'wildcards.loraScan.run', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(input),
-  })
+  }, { requireData: true })
 }
 
 /** Ask the backend wildcard parser to preview one or more resolved prompt results. */
 export async function parseWildcards(input: { text: string; tool: WildcardTool | 'codex'; count?: number; promptType?: 'positive' | 'negative' }) {
-  return requestWildcardData<WildcardParseResponse>('/api/wildcards/parse', 'wildcards.preview.parse', {
+  return requestApiData<WildcardParseResponse>('/api/wildcards/parse', 'wildcards.preview.parse', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -228,5 +228,5 @@ export async function parseWildcards(input: { text: string; tool: WildcardTool |
       count: input.count ?? 5,
       promptType: input.promptType,
     }),
-  })
+  }, { requireData: true })
 }

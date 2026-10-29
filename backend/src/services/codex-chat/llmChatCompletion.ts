@@ -496,7 +496,8 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
       meter.usage = read.usage ?? null
       signal.throwIfAborted()
       const unlooped = params.stopLoops ? withoutRepetition(read.content) : read.content
-      const result = unlooped === read.content ? read : { ...read, content: unlooped, toolCalls: [], finishReason: 'repetition' }
+      const reasoning = params.stopLoops ? withoutRepetition(read.reasoning) : read.reasoning
+      const result = unlooped === read.content && reasoning === read.reasoning ? read : { ...read, content: unlooped, reasoning, toolCalls: [], finishReason: 'repetition' }
       if (result.content) params.onContent?.(result.content)
       if (result.reasoning) params.onReasoning?.(result.reasoning)
       return result
@@ -511,7 +512,12 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
     reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
     let buffer = ''
     const watch = createRepetitionWatch()
+    const reasoningWatch = params.stopLoops ? createRepetitionWatch() : null
     let looping = false
+    const loopResult = () => {
+      const kept = withoutRepetition(content)
+      return { content: kept, reasoning: withoutRepetition(reasoning), toolCalls: [], finishReason: 'repetition', promptTokens, usage, loopCut: content.length - kept.length }
+    }
 
     const handleEvent = (data: string) => {
       if (!data || data === '[DONE]') {
@@ -545,6 +551,7 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
       if (reasoningDelta) {
         reasoning += reasoningDelta
         params.onReasoning?.(reasoningDelta)
+        if (reasoningWatch?.looping(reasoning)) looping = true
       }
       for (const call of Array.isArray(delta.tool_calls) ? delta.tool_calls as Array<Record<string, unknown>> : []) {
         const index = typeof call.index === 'number' ? call.index : drafts.size
@@ -579,15 +586,14 @@ async function requestChatCompletion(meter: { sent: boolean; usage: LlmTokenCoun
       // A looping model would write on to the cap: hang up and keep what came before the loop.
       if (looping) {
         await reader.cancel().catch(() => {})
-        const kept = withoutRepetition(content)
-        return { content: kept, reasoning, toolCalls: [], finishReason: 'repetition', promptTokens, usage, loopCut: content.length - kept.length }
+        return loopResult()
       }
     }
     if (buffer.trim()) {
       handleEvent(buffer.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n'))
     }
 
-    return { content, reasoning, toolCalls: finalizeToolCalls(drafts), finishReason, promptTokens, usage }
+    return looping ? loopResult() : { content, reasoning, toolCalls: finalizeToolCalls(drafts), finishReason, promptTokens, usage }
   } catch (error) {
     // Parsing/provider errors must close the transport before its slot can be reused.
     controller.abort(error)

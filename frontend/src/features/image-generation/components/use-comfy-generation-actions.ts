@@ -1,17 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useI18n } from '@/i18n'
 import { createGenerationQueueJob } from '@/lib/api-image-generation-queue'
 import type { GenerationImageSaveOptions, WorkflowMarkedField } from '@/lib/api-image-generation'
 import { refreshGenerationQueueViews } from './generation-queue-actions'
-import { revealFirstInvalidField } from './focus-invalid-field'
-import { WORKFLOW_FIELD_INVALID_SELECTOR } from './workflow-field-disclosure-card'
+import { useComfyFieldValidation } from './use-comfy-field-validation'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY, useGenerationTargetGroupPath } from '@/features/groups/generation-target-group-store'
 import {
   buildWorkflowPromptData,
-  collectWorkflowNodeDraftIssues,
-  hasWorkflowFieldValue,
-  isValidWorkflowNumberDraftValue,
 } from '../image-generation-drafts'
 import {
   getErrorMessage,
@@ -79,44 +75,9 @@ export function useComfyGenerationActions({
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const [isComfyGenerating, setIsComfyGenerating] = useState(false)
-  // 마지막 생성 시도에서 걸린 필드별 메시지. 필드를 고치면 해당 항목만 지운다.
-  const [fieldIssues, setFieldIssues] = useState<Record<string, string>>({})
-  const [fieldIssueRevealNonce, setFieldIssueRevealNonce] = useState(0)
   const { requestPath: targetGroupPath } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
   const selectedWorkflowId = selectedWorkflow?.id ?? null
-
-  useEffect(() => {
-    setFieldIssues({})
-  }, [selectedWorkflowId])
-
-  useEffect(() => {
-    if (fieldIssueRevealNonce === 0) {
-      return
-    }
-
-    // 카드가 펼쳐진 다음 프레임에 첫 번째 문제 필드로 스크롤/포커스한다.
-    const frame = window.requestAnimationFrame(() => {
-      revealFirstInvalidField(WORKFLOW_FIELD_INVALID_SELECTOR)
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [fieldIssueRevealNonce])
-
-  /** Drop the validation mark of one field once the user edits it. */
-  const clearFieldIssue = useCallback((fieldId: string) => {
-    setFieldIssues((current) => {
-      if (!(fieldId in current)) {
-        return current
-      }
-
-      const next = { ...current }
-      delete next[fieldId]
-      return next
-    })
-  }, [])
-
-  const clearFieldIssues = useCallback(() => {
-    setFieldIssues({})
-  }, [])
+  const { fieldIssues, clearFieldIssue, clearFieldIssues, validate } = useComfyFieldValidation(selectedWorkflowId, selectedWorkflowFields, workflowDraft, showSnackbar)
 
   /**
    * Validate the currently selected workflow fields before any generation request.
@@ -128,42 +89,7 @@ export function useComfyGenerationActions({
       return false
     }
 
-    const nextFieldIssues: Record<string, string> = {}
-    const summaries: string[] = []
-    const nodeIssuesByFieldId = new Map(
-      collectWorkflowNodeDraftIssues(selectedWorkflowFields, workflowDraft).map((entry) => [entry.field.id, entry.issue] as const),
-    )
-
-    for (const field of selectedWorkflowFields) {
-      const value = workflowDraft[field.id]
-      const nodeIssue = nodeIssuesByFieldId.get(field.id)
-      if (field.required && !hasWorkflowFieldValue(value)) {
-        nextFieldIssues[field.id] = t({ ko: '필수 입력이야.', en: 'This field is required.' })
-        summaries.push(t({ ko: '필수 필드가 비어 있어: {label}', en: 'A required field is empty: {label}' }, { label: field.label }))
-      } else if (field.type === 'number' && hasWorkflowFieldValue(value) && !isValidWorkflowNumberDraftValue(value)) {
-        nextFieldIssues[field.id] = t({ ko: '올바른 숫자를 입력해줘.', en: 'Enter a valid number.' })
-        summaries.push(t({ ko: '숫자 필드 값이 올바르지 않아: {label}', en: 'Invalid number field value: {label}' }, { label: field.label }))
-      } else if (nodeIssue) {
-        const issueMessage = t({ ko: nodeIssue.ko, en: nodeIssue.en })
-        nextFieldIssues[field.id] = issueMessage
-        summaries.push(`${field.label}: ${issueMessage}`)
-      }
-    }
-
-    setFieldIssues(nextFieldIssues)
-    if (summaries.length === 0) {
-      return true
-    }
-
-    setFieldIssueRevealNonce((current) => current + 1)
-    const extraCount = summaries.length - 1
-    showSnackbar({
-      message: extraCount > 0
-        ? t({ ko: '{message} (외 {count}개)', en: '{message} (+{count} more)' }, { message: summaries[0], count: extraCount })
-        : summaries[0],
-      tone: 'error',
-    })
-    return false
+    return validate()
   }
 
   /** Mark and focus the invalid fields without submitting (used while Generate is disabled). */

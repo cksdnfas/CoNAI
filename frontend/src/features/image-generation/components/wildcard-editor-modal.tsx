@@ -17,6 +17,7 @@ import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsSegmentedTable } from '@/features/settings/components/settings-resource-shared'
 import { useI18n, type TranslationParams } from '@/i18n'
+import { triggerBlobDownload } from '@/lib/api-client'
 import type { WildcardRecord, WildcardTool } from '@/lib/api-wildcards'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { useDirtyBaseline } from '@/features/codex-chat/use-dirty-baseline'
@@ -230,14 +231,7 @@ function createSimpleJsonItems(items: WildcardJsonItem[]) {
 
 function downloadJsonFile(filename: string, payload: unknown) {
   const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+  triggerBlobDownload(blob, filename)
 }
 
 function createSafeFilenamePart(value: string, fallback: string) {
@@ -650,19 +644,23 @@ export function WildcardEditorModal({
     }
 
     setFormError(null)
-    await onSubmit({
-      name: trimmedName,
-      description: description.trim() || undefined,
-      parent_id: parentValue === 'root' ? null : Number(parentValue),
-      include_children: includeChildren ? 1 : 0,
-      only_children: onlyChildren ? 1 : 0,
-      chain_option: chainOption,
-      items: {
-        general: generalItems,
-        comfyui: comfyuiItems,
-        nai: naiItems,
-      },
-    })
+    try {
+      await onSubmit({
+        name: trimmedName,
+        description: description.trim() || undefined,
+        parent_id: parentValue === 'root' ? null : Number(parentValue),
+        include_children: includeChildren ? 1 : 0,
+        only_children: onlyChildren ? 1 : 0,
+        chain_option: chainOption,
+        items: {
+          general: generalItems,
+          comfyui: comfyuiItems,
+          nai: naiItems,
+        },
+      })
+    } catch {
+      // The mutation reports the error; keep the editor and its draft open.
+    }
   }
 
   const canSave = !isSubmitting && (mode === 'create' || chatDirty)

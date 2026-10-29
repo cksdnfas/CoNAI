@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
 import { useI18n } from '@/i18n'
+import { usePageSaveShortcut } from '@/lib/keyboard-shortcut'
 import type { SettingsDraftSection } from '../settings-draft-sections'
 import type { SettingsTab } from '../settings-tabs'
 
@@ -17,6 +18,7 @@ interface SettingsSaveBarProps {
 export function SettingsSaveBar({ dirtySections, isSaving, onSave, onDiscard, onOpenTab }: SettingsSaveBarProps) {
   const { t, formatNumber } = useI18n()
   const confirm = useConfirm()
+  usePageSaveShortcut(dirtySections.length ? onSave : undefined, isSaving)
 
   if (dirtySections.length === 0 && !isSaving) {
     return null

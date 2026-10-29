@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { useEdgesState, useNodesState } from '@xyflow/react'
 import type { GraphWorkflowExposedInput, GraphWorkflowFolderRecord } from '@/lib/api-module-graph'
 import { createRandomUuid } from '@/lib/random-uuid'
-import type { EditorSupportSectionKey } from './module-graph-types'
 import { buildGraphEditorSnapshot, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { persistWorkflowRunnerDraft } from './workflow-runner-draft-storage'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
@@ -48,9 +47,7 @@ export function useModuleGraphPageState() {
   const [isCustomNodeManagerOpen, setIsCustomNodeManagerOpen] = useState(false)
   const [isBrowseManageModalOpen, setIsBrowseManageModalOpen] = useState(false)
   const [folderDeleteTarget, setFolderDeleteTarget] = useState<GraphWorkflowFolderRecord | null>(null)
-  const [isEditorSupportOpen, setIsEditorSupportOpen] = useState(false)
   const [isWorkflowSaveModalOpen, setIsWorkflowSaveModalOpen] = useState(false)
-  const [activeEditorSupportSection, setActiveEditorSupportSection] = useState<EditorSupportSectionKey>('setup')
   const [workflowExposedInputs, setWorkflowExposedInputs] = useState<GraphWorkflowExposedInput[]>([])
   const [workflowRunInputValues, setWorkflowRunInputValues] = useState<Record<string, unknown>>({})
   const [nodes, setNodes, onNodesChange] = useNodesState<ModuleGraphNode>([])
@@ -118,12 +115,8 @@ export function useModuleGraphPageState() {
     setIsBrowseManageModalOpen,
     folderDeleteTarget,
     setFolderDeleteTarget,
-    isEditorSupportOpen,
-    setIsEditorSupportOpen,
     isWorkflowSaveModalOpen,
     setIsWorkflowSaveModalOpen,
-    activeEditorSupportSection,
-    setActiveEditorSupportSection,
     workflowExposedInputs,
     setWorkflowExposedInputs,
     workflowRunInputValues,

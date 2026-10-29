@@ -17,6 +17,7 @@ import { externalizeQueueInputDataUrls } from '../services/generation-queue/queu
 import { resolveWorkflowRoleQueueLimitState } from '../services/generation-queue/queueRoleLimitPolicy';
 import { settingsService } from '../services/settingsService';
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../services/workflowArtifactService';
+import { parseDirectoryPageRequest } from '../services/directoryListingSnapshot';
 import { AUTO_COLLECT_SOURCE_PATH } from '../services/comfyDropdownAutoCollectionService';
 import {
   normalizeWorkflowNumericPromptValues,
@@ -256,12 +257,20 @@ router.get('/:slug/artifacts', requireImagesView, asyncHandler(async (req: Reque
     return;
   }
 
+  let options: ReturnType<typeof parseDirectoryPageRequest>;
+  try {
+    options = parseDirectoryPageRequest(req.query);
+  } catch (error) {
+    return res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'Invalid listing parameters' });
+  }
+
   try {
     const publicSlug = workflow.public_slug ?? String(req.params.slug || '');
     const listing = await listWorkflowArtifacts(
       workflow,
       typeof req.query.path === 'string' ? req.query.path : '',
       { kind: 'public', publicSlug },
+      options,
     );
     return res.json({
       success: true,
@@ -271,6 +280,7 @@ router.get('/:slug/artifacts', requireImagesView, asyncHandler(async (req: Reque
         artifactDirectoryMode: workflow.artifact_directory_mode,
         relativePath: listing.relativePath,
         entries: listing.entries,
+        ...(listing.total !== undefined ? { total: listing.total, nextCursor: listing.nextCursor, snapshot: listing.snapshot } : {}),
       },
     });
   } catch (error) {

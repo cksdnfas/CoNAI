@@ -1,6 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { FeaturePermissionNotice } from '@/features/auth/feature-permission-notice'
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -14,26 +14,17 @@ import {
   getGenerationWorkflow,
   getGenerationWorkflows,
 } from '@/lib/api-image-generation-workflows'
-import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
-import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { cn } from '@/lib/utils'
-import { ChatGenerationPresetSaveModal } from '@/features/settings/components/chat-generation-preset-save-modal'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
 import {
   buildWorkflowDraft,
-  buildWorkflowPromptData,
-  clearPersistedComfyWorkflowDraft,
-  deleteComfyWorkflowDraftInputAssets,
-  loadPersistedComfyWorkflowDraft,
-  persistComfyWorkflowDraft,
 } from '../image-generation-drafts'
 import {
   getErrorMessage,
   type SelectedImageDraft,
   type WorkflowFieldDraftValue,
 } from '../image-generation-shared'
-import { consumeHistorySettingsLoad, usePendingHistorySettingsLoad } from '../history-settings-load-store'
 import {
   buildComfyDraftFromHistoryPayload,
   confirmHistorySettingsOverwrite,
@@ -52,6 +43,9 @@ import { GenerationBlockLayout } from '../layout/generation-block-layout'
 import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
 import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 import { GenerationToolbarStatus, usePortalTargetById } from './generation-toolbar-status'
+import { useGenerationImageSaveOptions } from './use-generation-image-save-options'
+import { useHistorySettingsLoad } from './use-history-settings-load'
+import { useComfyWorkflowDraft } from './use-comfy-workflow-draft'
 import { findAutoCollectedPowerLoraOptions } from './power-lora-loader-utils'
 import { useComfyDropdownListActions } from './use-comfy-dropdown-list-actions'
 import { useComfyChatPage } from './use-generation-chat-page'
@@ -64,7 +58,6 @@ type ComfyGenerationPanelProps = {
   selectedWorkflowId: number | null
   onSelectedWorkflowChange: (workflowId: number | null, options?: { replace?: boolean }) => void
   splitPaneScroll?: boolean
-  headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
   /** Page toolbar slot for the server connection summary. */
   statusPortalTargetId?: string
@@ -109,7 +102,6 @@ function ComfyGenerationPanelContent({
   selectedWorkflowId,
   onSelectedWorkflowChange,
   splitPaneScroll = false,
-  headerPortalTargetId,
   compactActionBarContentTargetId,
   statusPortalTargetId,
   blockLayout,
@@ -118,22 +110,14 @@ function ComfyGenerationPanelContent({
   const { showSnackbar } = useSnackbar()
   const { t } = useI18n()
   const confirm = useConfirm()
-  const [workflowDraft, setWorkflowDraft] = useState<Record<string, WorkflowFieldDraftValue>>({})
-  // Which workflow the current draft belongs to; history loads wait until the target workflow's draft is initialized.
-  const [workflowDraftOwnerId, setWorkflowDraftOwnerId] = useState<number | null>(null)
   const [queueRegistrationCount, setQueueRegistrationCount] = useState('1')
   const [isAuthoringModalOpen, setIsAuthoringModalOpen] = useState(false)
-  const [isChatPresetModalOpen, setIsChatPresetModalOpen] = useState(false)
   const authStatus = useAuthStatusQuery().data
   const draftStorageOwner = resolveAccountDraftOwner(authStatus)
-  const canSaveChatPreset = authStatus?.isAdmin === true
   const [workflowEditorState, setWorkflowEditorState] = useState<ComfyWorkflowEditorState | null>(null)
   const activeWorkflowId = selectedWorkflowId !== null ? String(selectedWorkflowId) : ''
 
-  const appSettingsQuery = useQuery({
-    queryKey: ['runtime-image-save-settings'],
-    queryFn: getRuntimeImageSaveSettings,
-  })
+  const { options: generationImageSaveOptions } = useGenerationImageSaveOptions()
 
   const workflowsQuery = useQuery({
     queryKey: ['image-generation-workflows'],
@@ -202,6 +186,7 @@ function ComfyGenerationPanelContent({
   }, [buildDropdownSelectOptions, dropdownListByName])
 
   const selectedWorkflowFields = useMemo(() => resolveWorkflowFields(selectedWorkflow), [resolveWorkflowFields, selectedWorkflow])
+  const { workflowDraft, setWorkflowDraft, workflowDraftOwnerId, persistDraft, resetDraft } = useComfyWorkflowDraft(draftStorageOwner, selectedWorkflow, selectedWorkflowFields)
   const { handleOpenModuleSave, moduleSaveModalProps } = useComfyModuleSave({
     workflowById,
     resolveWorkflowFields,
@@ -232,8 +217,6 @@ function ComfyGenerationPanelContent({
     refetchServers: serversQuery.refetch,
     showSnackbar,
   })
-  const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
-
   const connectedServers = useMemo(
     () => activeServers.filter((server) => comfyServerTests[server.id]?.status?.is_connected === true),
     [activeServers, comfyServerTests],
@@ -254,13 +237,7 @@ function ComfyGenerationPanelContent({
     activeServers,
     connectedServers,
     comfyServerTests,
-    imageSaveOptions: {
-      format: generationSaveSettings.defaultFormat,
-      quality: generationSaveSettings.quality,
-      resizeEnabled: generationSaveSettings.resizeEnabled,
-      maxWidth: generationSaveSettings.maxWidth,
-      maxHeight: generationSaveSettings.maxHeight,
-    },
+    imageSaveOptions: generationImageSaveOptions,
     onHistoryRefresh,
     showSnackbar,
   })
@@ -278,50 +255,18 @@ function ComfyGenerationPanelContent({
     refetchDropdownLists,
   })
 
-  useEffect(() => {
-    if (!selectedWorkflow) {
-      setWorkflowDraft({})
-      setWorkflowDraftOwnerId(null)
-      return
-    }
-
-    const baseDraft = buildWorkflowDraft(selectedWorkflowFields)
-    const persistedDraft = loadPersistedComfyWorkflowDraft(draftStorageOwner, selectedWorkflow.id, selectedWorkflowFields)
-    const validFieldIds = new Set(selectedWorkflowFields.map((field) => field.id))
-    const filteredPersistedDraft = Object.fromEntries(
-      Object.entries(persistedDraft).filter(([fieldId]) => validFieldIds.has(fieldId)),
-    )
-
-    setWorkflowDraft({
-      ...baseDraft,
-      ...filteredPersistedDraft,
-    })
-    setWorkflowDraftOwnerId(selectedWorkflow.id)
-  }, [draftStorageOwner, selectedWorkflow, selectedWorkflowFields])
-
-  const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
-  const handledHistorySettingsLoadNonceRef = useRef(0)
-  useEffect(() => {
-    const request = pendingHistorySettingsLoad
-    if (!request || request.serviceType !== 'comfyui' || handledHistorySettingsLoadNonceRef.current === request.nonce) {
-      return
-    }
-
+  useHistorySettingsLoad('comfyui', (request) => {
     const targetWorkflowId = request.workflowId
     if (targetWorkflowId === null || (workflowsQuery.isSuccess && !workflowById.has(targetWorkflowId))) {
-      handledHistorySettingsLoadNonceRef.current = request.nonce
-      consumeHistorySettingsLoad(request.nonce)
       showSnackbar({ message: t({ ko: '이 기록의 워크플로우를 찾지 못했어. 삭제됐거나 비활성 상태일 수 있어.', en: 'Could not find the workflow of this record. It may be deleted or inactive.' }), tone: 'error' })
       return
     }
 
     // 페이지가 워크플로우를 바꾸고 그 워크플로우의 초안이 초기화될 때까지 기다린다.
     if (selectedWorkflow?.id !== targetWorkflowId || workflowDraftOwnerId !== targetWorkflowId) {
-      return
+      return false
     }
 
-    handledHistorySettingsLoadNonceRef.current = request.nonce
-    consumeHistorySettingsLoad(request.nonce)
     const result = buildComfyDraftFromHistoryPayload(request.payload, selectedWorkflowFields, workflowDraft)
     if (!result) {
       showSnackbar({ message: t({ ko: '이 기록에는 불러올 워크플로우 입력이 없어.', en: 'This record has no workflow inputs to load.' }), tone: 'error' })
@@ -334,26 +279,13 @@ function ComfyGenerationPanelContent({
         return
       }
 
-      setWorkflowDraft(result.draft)
       // 드롭다운 목록 갱신 등으로 초안이 저장본에서 다시 초기화돼도 불러온 값이 남도록 바로 저장한다.
-      persistComfyWorkflowDraft(draftStorageOwner, targetWorkflowId, result.draft)
+      if (!persistDraft(result.draft)) return
+      setWorkflowDraft(result.draft)
       clearWorkflowFieldIssues()
       showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, result.hasImageInputs), tone: 'info' })
     })()
-  }, [
-    clearWorkflowFieldIssues,
-    confirm,
-    draftStorageOwner,
-    pendingHistorySettingsLoad,
-    selectedWorkflow?.id,
-    selectedWorkflowFields,
-    showSnackbar,
-    t,
-    workflowById,
-    workflowDraft,
-    workflowDraftOwnerId,
-    workflowsQuery.isSuccess,
-  ])
+  })
 
 
   useEffect(() => {
@@ -373,7 +305,7 @@ function ComfyGenerationPanelContent({
       [fieldId]: value,
     }))
     clearWorkflowFieldIssue(fieldId)
-  }, [clearWorkflowFieldIssue])
+  }, [clearWorkflowFieldIssue, setWorkflowDraft])
 
   useComfyChatPage(selectedWorkflow, selectedWorkflowFields, workflowDraft, workflowDraftOwnerId, handleWorkflowFieldChange, {
     enabled: !isAuthoringModalOpen, workflows: workflowsQuery.data ?? [], loraOptions, onSelect: onSelectedWorkflowChange,
@@ -381,18 +313,6 @@ function ComfyGenerationPanelContent({
     onOpenEdit: async (id, assertCurrent) => { const workflow = await getGenerationWorkflow(id); assertCurrent(); setWorkflowEditorState({ workflow }); setIsAuthoringModalOpen(true) },
     onRefresh: async () => { const result = await workflowsQuery.refetch(); if (result.error) throw result.error; const options = await dropdownListsQuery.refetch(); if (options.error) throw options.error },
   })
-
-  useEffect(() => {
-    if (!selectedWorkflowId) {
-      return
-    }
-
-    const timeout = window.setTimeout(() => {
-      persistComfyWorkflowDraft(draftStorageOwner, selectedWorkflowId, workflowDraft)
-    }, 250)
-
-    return () => window.clearTimeout(timeout)
-  }, [draftStorageOwner, selectedWorkflowId, workflowDraft])
 
   const handleWorkflowImageChange = useCallback(async (fieldId: string, image?: SelectedImageDraft) => {
     handleWorkflowFieldChange(fieldId, image ?? '')
@@ -489,30 +409,9 @@ function ComfyGenerationPanelContent({
   }
 
 
-  const handleResetWorkflowDraft = useCallback(async () => {
-    const baseDraft = buildWorkflowDraft(selectedWorkflowFields)
-    if (hasWorkflowDraftDifference(selectedWorkflowFields, workflowDraft, baseDraft)) {
-      const confirmed = await confirm({
-        title: t({ ko: '워크플로우 입력을 초기화할까?', en: 'Reset the workflow inputs?' }),
-        description: t({
-          ko: '{name}의 입력값이 기본값으로 돌아가고 저장된 초안도 지워져. 업로드한 입력 이미지는 서버에서도 삭제돼. 되돌릴 수 없어.',
-          en: 'All inputs of {name} go back to their defaults and the saved draft is cleared. Uploaded input images are also deleted from the server. This cannot be undone.',
-        }, { name: selectedWorkflow?.name ?? '' }),
-        confirmLabel: t({ ko: '초기화', en: 'Reset' }),
-        tone: 'destructive',
-      })
-      if (!confirmed) {
-        return
-      }
-    }
-
-    void deleteComfyWorkflowDraftInputAssets(workflowDraft)
-    if (selectedWorkflow) {
-      clearPersistedComfyWorkflowDraft(draftStorageOwner, selectedWorkflow.id)
-    }
-    setWorkflowDraft(baseDraft)
-    clearWorkflowFieldIssues()
-  }, [clearWorkflowFieldIssues, confirm, draftStorageOwner, selectedWorkflow, selectedWorkflowFields, t, workflowDraft])
+  const handleResetWorkflowDraft = async () => {
+    if (await resetDraft()) clearWorkflowFieldIssues()
+  }
 
   const handleOpenSelectedModuleSave = useCallback(() => {
     if (selectedWorkflow) {
@@ -610,7 +509,6 @@ function ComfyGenerationPanelContent({
             isRefreshingDropdownLists={isRefreshingDropdownLists}
             fieldIssues={workflowFieldIssues}
             splitPaneScroll={splitPaneScroll}
-            headerPortalTargetId={headerPortalTargetId}
             compactActionBarContentTargetId={compactActionBarContentTargetId}
             blockLayout={blockLayout}
             onBack={() => onSelectedWorkflowChange(null)}
@@ -620,7 +518,6 @@ function ComfyGenerationPanelContent({
             onImageChange={handleWorkflowImageChange}
             onRefreshDropdownLists={handleRefreshDropdownLists}
             onResetDraft={() => void handleResetWorkflowDraft()}
-            onSaveChatPreset={canSaveChatPreset ? () => setIsChatPresetModalOpen(true) : undefined}
             onOpenModuleSave={handleOpenSelectedModuleSave}
             onGenerateSelected={handleGenerateSelectedWorkflow}
             onRevealFieldIssues={revealComfyFieldIssues}
@@ -652,19 +549,6 @@ function ComfyGenerationPanelContent({
       />
 
       <ComfyModuleSaveModal {...moduleSaveModalProps} />
-      <ChatGenerationPresetSaveModal
-        open={isChatPresetModalOpen}
-        build={async () => {
-          if (!selectedWorkflow) return null
-          // Text fields start as the model's; everything else keeps the panel's value. Adjust in settings › chat.
-          const promptData = buildWorkflowPromptData(selectedWorkflowFields, workflowDraft)
-          const exposedFieldIds = selectedWorkflowFields.filter((field) => field.type === 'text' || field.type === 'textarea').map((field) => field.id)
-          const fixedInputs = Object.fromEntries(Object.entries(promptData).filter(([key]) => !exposedFieldIds.includes(key)))
-          return { kind: 'comfyui' as const, nai: null, comfyui: { workflowId: selectedWorkflow.id, serverId: null, serverTag: null, fixedInputs, exposedFieldIds } }
-        }}
-        summary={selectedWorkflow ? t({ ko: '워크플로 {name}', en: 'Workflow {name}' }, { name: selectedWorkflow.name ?? String(selectedWorkflow.id) }) : null}
-        onClose={() => setIsChatPresetModalOpen(false)}
-      />
     </>
   )
 }

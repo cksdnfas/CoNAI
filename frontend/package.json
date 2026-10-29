@@ -18,6 +18,7 @@
     "test:chat-page": "tsx --tsconfig tsconfig.test.json --test test/chat-page-context.test.ts",
     "test:image-pagination": "tsx --tsconfig tsconfig.test.json --test test/image-list-pagination.test.ts",
     "test:generation-layout": "tsx --tsconfig tsconfig.test.json --test test/generation-layout.test.ts",
+    "test:module-graph": "tsx --tsconfig tsconfig.test.json --test test/module-graph-loading.test.ts",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -2,7 +2,7 @@ import './support/testTemp'
 import assert from 'node:assert/strict'
 import { test, type TestContext } from 'node:test'
 import { ExternalApiProvider } from '../src/models/ExternalApiProvider'
-import { maskCodeBlocks, modelLanguageGuidance, restoreCodeBlocks, structuredProseIn, translateReply, translateUserInput, translateUserMessage, translatorOf, translateStructuredFields } from '../src/services/codex-chat/chatTranslation'
+import { maskCodeBlocks, modelLanguageGuidance, planStructuredTranslation, restoreCodeBlocks, structuredProseIn, translateReply, translateUserInput, translateUserMessage, translatorOf, translateStructuredFields } from '../src/services/codex-chat/chatTranslation'
 import type { ChatProfile } from '../src/services/codex-chat/chatProfiles'
 import { mockModelRows } from './modelRowMocks'
 import { buildFlagDirective } from '../src/services/codex-chat/chatFlags'
@@ -40,7 +40,21 @@ test('structured translation sizes chunks for the translator context, not the ch
   const translated = await translateStructuredFields(translating, original, ['entries.*.text'], 'en')
   assert.deepEqual(translated, original)
   assert.ok(requests.length > 1)
-  assert.ok(requests.every(request => rawMessagesEstimate(request.messages as import('../src/services/codex-chat/llmChatCompletion').ChatCompletionMessage[]) + 512 <= 1024))
+  assert.ok(requests.every(request => request.max_tokens === undefined || Math.ceil(rawMessagesEstimate(request.messages as import('../src/services/codex-chat/llmChatCompletion').ChatCompletionMessage[]) * 1.05) + request.max_tokens <= 1024))
+  learnServerContextLimit({ providerName: 'translator', model: 'budgeted' }, 'context length (1024 tokens)')
+  for (const maxTokens of [null, 512, 1024, 8192]) {
+    requests.length = 0
+    const profile = { ...translating, maxTokens }
+    const input = { first: 'Hello', second: 'Good morning' }
+    const plan = planStructuredTranslation(profile, input, ['first', 'second'], 'en')!
+    assert.ok(plan.chunks.every(chunk => chunk.fits), `allowance ${maxTokens} must not book the whole context`)
+    assert.deepEqual(await translateStructuredFields(profile, input, ['first', 'second'], 'en'), input)
+    if (maxTokens === null) assert.ok(requests.every(request => request.max_tokens === undefined), 'an unset allowance keeps the server default when fitting is unnecessary')
+    else {
+      assert.ok(requests.every(request => request.max_tokens! <= 1024 - Math.ceil(rawMessagesEstimate(request.messages as import('../src/services/codex-chat/llmChatCompletion').ChatCompletionMessage[]) * 1.05)))
+      assert.ok(requests.every(request => request.max_tokens! <= maxTokens))
+    }
+  }
 })
 
 test('an unknown translation output budget does not reject a single long leaf', async t => {
@@ -72,7 +86,7 @@ test('structured translation changes prose leaves only and rejects incomplete tr
 
 /** The translation connection answers `reply`; `requests` collects what was sent to it. */
 function mockTranslator(t: TestContext, reply: string | (() => Response), model = 'small') {
-  const requests: Array<{ model: string; messages: Array<{ role: string; content: string }> }> = []
+  const requests: Array<{ model: string; max_tokens?: number; messages: Array<{ role: string; content: string }> }> = []
   mockModelRows(t, { 1: ['translator', model], 2: ['gone', 'x'], 3: ['test', 'test'] })
   t.mock.method(ExternalApiProvider, 'findByName', (name: string) => name === 'translator'
     ? { provider_name: 'translator', display_name: 'Translator', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid', additional_config: {} }

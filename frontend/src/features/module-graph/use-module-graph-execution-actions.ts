@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState, type RefObject } from 'react'
 import { useI18n } from '@/i18n'
 import {
   cancelGraphExecution,
@@ -24,6 +24,7 @@ export function useModuleGraphExecutionActions({
   draftWorkflowFolderId,
   selectedGraphId,
   selectedGraphRecord,
+  editorBaseRevisionRef,
   selectedNode,
   selectedExecution,
   selectedWorkflowValidationIssues,
@@ -50,6 +51,7 @@ export function useModuleGraphExecutionActions({
   draftWorkflowFolderId: number | null
   selectedGraphId: number | null
   selectedGraphRecord: GraphWorkflowRecord | null
+  editorBaseRevisionRef: RefObject<{ id: number; revision: number } | null>
   selectedNode: ModuleGraphNode | null
   selectedExecution: GraphExecutionRecord | null
   selectedWorkflowValidationIssues: Array<{ severity: 'error' | 'warning' | 'info'; nodeLabel: string; title: string }>
@@ -73,9 +75,13 @@ export function useModuleGraphExecutionActions({
   const [isSavingGraph, setIsSavingGraph] = useState(false)
   const [executingGraphId, setExecutingGraphId] = useState<number | null>(null)
   const [cancellingExecutionId, setCancellingExecutionId] = useState<number | null>(null)
+  const pendingSaveRef = useRef<{
+    snapshot: string
+    promise: Promise<{ graphId: number; created: boolean; name: string } | null>
+  } | null>(null)
 
   /** Persist the current in-editor graph and return the saved workflow identity. */
-  const persistCurrentGraph = useCallback(async (options?: { silent?: boolean }) => {
+  const saveCurrentGraph = useCallback(async (options?: { silent?: boolean }, createdGraphId?: number) => {
     const silent = options?.silent === true
 
     if (nodes.length === 0) {
@@ -104,11 +110,18 @@ export function useModuleGraphExecutionActions({
 
     let graphId: number
     let created: boolean
+    let savedRevision: number
 
-    if (selectedGraphId !== null) {
-      const updateResult = await updateGraphWorkflow(selectedGraphId, payload)
-      graphId = selectedGraphId
+    const targetGraphId = selectedGraphId ?? createdGraphId ?? null
+    if (targetGraphId !== null) {
+      const base = editorBaseRevisionRef.current
+      if (!base || base.id !== targetGraphId || !Number.isSafeInteger(base.revision)) {
+        throw new Error(t({ ko: '워크플로를 새로 불러와줘.', en: 'Reload the workflow first.' }))
+      }
+      const updateResult = await updateGraphWorkflow(targetGraphId, { ...payload, expected_revision: base.revision })
+      graphId = targetGraphId
       created = false
+      savedRevision = updateResult.revision
 
       const pausedScheduleCount = updateResult.schedule_maintenance?.pausedScheduleCount ?? 0
       if (!silent && pausedScheduleCount > 0) {
@@ -121,8 +134,10 @@ export function useModuleGraphExecutionActions({
       const createdResult = await createGraphWorkflow(payload)
       graphId = createdResult.id
       created = true
+      savedRevision = 1
     }
 
+    editorBaseRevisionRef.current = { id: graphId, revision: savedRevision }
     if (imageReplacements.length > 0) {
       onNodeImagesMoved(imageReplacements)
     }
@@ -153,7 +168,39 @@ export function useModuleGraphExecutionActions({
       created,
       name: resolvedName,
     }
-  }, [draftWorkflowFolderId, edges, formatNumber, nodes, onExecutionSelected, onGraphSelected, onNodeImagesMoved, onSnapshotSaved, onWorkflowNameResolved, refetchGraphWorkflows, selectedGraphId, selectedGraphRecord?.name, showSnackbar, t, workflowDebugMode, workflowDescription, workflowName])
+  }, [draftWorkflowFolderId, edges, editorBaseRevisionRef, formatNumber, nodes, onExecutionSelected, onGraphSelected, onNodeImagesMoved, onSnapshotSaved, onWorkflowNameResolved, refetchGraphWorkflows, selectedGraphId, selectedGraphRecord?.name, showSnackbar, t, workflowDebugMode, workflowDescription, workflowName])
+
+  /** Share identical in-flight saves; serialize a newer draft behind the earlier save. */
+  const persistCurrentGraph = useCallback(async (options?: { silent?: boolean }) => {
+    const snapshot = JSON.stringify({
+      graphId: selectedGraphId,
+      folderId: draftWorkflowFolderId,
+      draft: buildGraphEditorSnapshot({
+        name: workflowName,
+        description: workflowDescription,
+        nodes,
+        edges,
+        workflowMetadata: {
+          exposed_inputs: deriveWorkflowExposedInputsFromNodes(nodes),
+          debug_mode: workflowDebugMode,
+        },
+      }),
+    })
+    let createdGraphId: number | undefined
+    while (pendingSaveRef.current) {
+      const pending = pendingSaveRef.current
+      const result = await pending.promise
+      if (!result || pending.snapshot === snapshot) return result
+      if (selectedGraphId === null) createdGraphId = result.graphId
+    }
+    const promise = saveCurrentGraph(options, createdGraphId)
+    pendingSaveRef.current = { snapshot, promise }
+    try {
+      return await promise
+    } finally {
+      if (pendingSaveRef.current?.promise === promise) pendingSaveRef.current = null
+    }
+  }, [draftWorkflowFolderId, edges, nodes, saveCurrentGraph, selectedGraphId, workflowDebugMode, workflowDescription, workflowName])
 
   /** Save the current graph workflow draft and show one user-facing result message. */
   const handleSaveGraph = useCallback(async () => {

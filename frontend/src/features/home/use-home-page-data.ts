@@ -321,13 +321,14 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
   const hiddenGroupIdSet = new Set(hiddenGroupIds)
   const hiddenGroups = (groupsQuery.data ?? []).filter((group) => hiddenGroupIdSet.has(group.id))
 
-  const emptyStateTitle = isSearchMode ? t('useHomePageData.noSearchResults') : t('useHomePageData.noImagesToShowYet')
-  // Only filters the user cannot see in the list need a line: the feed is filtered, not empty.
-  const emptyStateDescription = hasOnlyHiddenItems
+  const hiddenGroupsEmpty = !hasOnlyHiddenItems && excludeGroupIds.length > 0 && hiddenGroups.length > 0
+  const emptyStateTitle = hasOnlyHiddenItems
     ? t('useHomePageData.itemsAreHiddenInThis')
-    : excludeGroupIds.length > 0 && hiddenGroups.length > 0
-      ? t({ ko: '숨긴 그룹의 이미지는 빠져 있어. 갤러리 옵션에서 다시 보이게 할 수 있어.', en: 'Images in hidden groups are left out. Show them again from Gallery options.' })
-      : undefined
+    : hiddenGroupsEmpty
+      ? isSearchMode
+        ? t({ ko: '숨긴 그룹을 제외하면 검색 결과가 없어', en: 'No search results outside hidden groups' })
+        : t({ ko: '숨긴 그룹을 제외하면 이미지가 없어', en: 'No images outside hidden groups' })
+      : isSearchMode ? t('useHomePageData.noSearchResults') : t('useHomePageData.noImagesToShowYet')
   const errorTitle = isSearchMode ? t('useHomePageData.failedToLoadSearchResults') : t('useHomePageData.failedToLoadTheHome')
   const loadMoreErrorMessage =
     imagesQuery.error instanceof Error
@@ -460,7 +461,7 @@ export function useHomePageData({ notifyInfo, notifyError }: UseHomePageDataOpti
     isAssignModalOpen,
     setIsAssignModalOpen,
     emptyStateTitle,
-    emptyStateDescription,
+    hiddenGroupsEmpty,
     errorTitle,
     loadMoreErrorMessage,
     handleRetryInitialLoad,

@@ -22,9 +22,9 @@ export function codexAttachmentUsage(images: Array<SelectedImageDraft | undefine
   return { count: bytes.length, bytes: bytes.reduce((sum, value) => sum + value, 0), oversized: bytes.some((value) => value > 10 * 1024 * 1024) }
 }
 
-export function codexReferencePayload(references: CodexReferenceDraft[]) {
+export function codexReferencePayload(references: CodexReferenceDraft[], missingImageMessage: string) {
   return references.map((reference) => {
-    if (!reference.image) throw new Error('Reattach every reference image or remove its empty slot.')
+    if (!reference.image) throw new Error(missingImageMessage)
     return { role: reference.role, label: reference.label || undefined, data_url: reference.image.dataUrl }
   })
 }
@@ -44,7 +44,7 @@ export function shouldConfirmCodexHistoryLoad(current: CodexFormDraft, next: Cod
 }
 
 /** Shared assistant draft mutation: no hidden strict state and no reference slots beyond the attachment budget. */
-export function applyCodexDraftPatch(current: CodexFormDraft, patch: Record<string, ChatPageValue>): CodexFormDraft {
+export function applyCodexDraftPatch(current: CodexFormDraft, patch: Record<string, ChatPageValue>, t: (text: { ko: string; en: string }) => string): CodexFormDraft {
   const next = { ...current, references: current.references.map((reference) => ({ ...reference })) }
   if ('imageMode' in patch) next.imageMode = patch.imageMode === 'edit' ? 'edit' : 'reference'
   if (next.imageMode !== current.imageMode) { next.maskImage = undefined; next.strictPreservation = false }
@@ -52,28 +52,28 @@ export function applyCodexDraftPatch(current: CodexFormDraft, patch: Record<stri
     const referenceField = /^reference(\d+)(Role|Label|Order)$/.exec(key)
     if (key === 'referenceCount') {
       const count = Number(value)
-      if (!Number.isInteger(count)) throw new Error('Reference count must be an integer')
+      if (!Number.isInteger(count)) throw new Error(t({ ko: '참조 칸 수는 정수여야 해.', en: 'Reference count must be an integer' }))
       next.references = Array.from({ length: Math.max(0, Math.min(codexReferenceCapacity(next), count)) }, (_, index) => next.references[index] ?? { role: 'reference', label: '' })
     } else if (referenceField) {
       const index = Number(referenceField[1])
       const reference = next.references[index]
-      if (!reference) throw new Error('Reference slot not found')
+      if (!reference) throw new Error(t({ ko: '참조 칸을 찾지 못했어.', en: 'Reference slot not found' }))
       if (referenceField[2] === 'Role') {
-        if (!CODEX_REFERENCE_ROLES.includes(value as CodexReferenceDraft['role'])) throw new Error('Invalid reference role')
+        if (!CODEX_REFERENCE_ROLES.includes(value as CodexReferenceDraft['role'])) throw new Error(t({ ko: '참조 역할이 올바르지 않아.', en: 'Invalid reference role' }))
         reference.role = value as CodexReferenceDraft['role']
       } else if (referenceField[2] === 'Label') {
-        if (String(value).length > 128) throw new Error('Reference label exceeds 128 characters')
+        if (String(value).length > 128) throw new Error(t({ ko: '참조 설명은 128자를 넘을 수 없어.', en: 'Reference label exceeds 128 characters' }))
         reference.label = String(value)
       } else {
         const order = Number(value)
-        if (!Number.isInteger(order) || order < 1 || order > next.references.length) throw new Error('Invalid reference order')
+        if (!Number.isInteger(order) || order < 1 || order > next.references.length) throw new Error(t({ ko: '참조 순서가 올바르지 않아.', en: 'Invalid reference order' }))
         next.references.splice(index, 1)
         next.references.splice(order - 1, 0, reference)
       }
     } else if (key !== 'imageMode') Object.assign(next, { [key]: value })
   }
   if (patch.strictPreservation === true && !canEnableCodexStrict(next)) {
-    throw new Error('Strict preservation requires edit mode, source and mask')
+    throw new Error(t({ ko: '엄격 보존에는 편집 모드와 원본, 마스크가 필요해.', en: 'Strict preservation requires edit mode, source and mask' }))
   }
   if (next.imageMode !== 'edit') next.strictPreservation = false
   return next

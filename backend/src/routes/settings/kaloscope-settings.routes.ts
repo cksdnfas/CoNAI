@@ -59,13 +59,13 @@ router.put(
     }
 
     if (!verifyPageSettingsWrite(res)) return;
-    const updatedSettings = settingsService.updateKaloscopeSettings(kaloscopeSettings);
+    settingsService.updateKaloscopeSettings(kaloscopeSettings);
     await kaloscopeTaggerService.reloadConfig();
     autoTagScheduler.restart();
 
     res.json({
       success: true,
-      data: updatedSettings,
+      data: settingsService.loadSettings(),
       message: 'Kaloscope settings updated successfully',
     });
     return;

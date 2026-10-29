@@ -276,7 +276,7 @@ buttons up one tone.
   In the mobile drawer an item click closes the drawer.
 - `PageToolbar` (`components/common/page-toolbar`): one 56px row, no surface. `title?` · `start?` (segmented…) ·
   `children` (flexible middle, e.g. search) · `actions?` (ghost IconButtons, at most one primary Button that names its
-  action). Adds the sidebar toggle itself inside PageWithSidebar. `PageHeader` is deprecated.
+  action). Adds the sidebar toggle itself inside PageWithSidebar.
 - Page first row: every page opens with its PageToolbar, and its left end says where you are. `title` is the page's
   menu name (`t('pageAccessCatalog.<page>')`) followed by the count; views of the whole page are a SegmentedControl in
   `start` after the title (prompts, wildcards, sprite); a sidebar page names the open item after the title as a muted
@@ -359,12 +359,14 @@ Dialogs are for short jobs: a question, a name, a choice, a small form. An edito
 A large editor (chat profile, appearance setting, lorebook) is a page with its own address, not a dialog.
 - `EditorPage` (`components/common/editor-page`): the path back (`crumbs`), the title with `status` chips and `actions`
   (one `⋯` menu), an optional `nav` (`EditorSectionNav`: each section's icon and name, with a mark where input is
-  needed; a drawer on a phone) and the `saveBar`. Ctrl/⌘ S calls `onSave` while no dialog is open over it.
+  needed; a drawer on a phone) and the `saveBar`. Ctrl/⌘ S (`usePageSaveShortcut`) commits the focused field, then
+  calls `onSave`; not while a dialog is open over the page, nor from the chat dock. `SettingsSaveBar` uses the same
+  shortcut while a section is unsaved.
 - `FloatingSaveBar` (`components/ui/floating-save-bar`): shown only while something is unsaved or saving — what is
   unsaved on the left, 되돌리기 and 저장 in words on the right. `SettingsSaveBar` is the settings page's use of it.
-- Leaving with unsaved changes asks first (`useUnsavedSettingsGuard` with the page's own address check, so a new item
-  moving to its id after the first save does not ask). The page keeps the assistant field and action IDs of the
-  dialog it replaced.
+- Leaving with unsaved changes asks first (`useEditorPageGuard` with the page's own address check; the editor's own
+  move after a save or delete goes through `allowNavigation`, so a new item moving to its id does not ask). The page
+  keeps the assistant field and action IDs of the dialog it replaced.
 - A section folds its rarely changed fields into `SettingsAdvanced` in place; there is no page-wide advanced switch.
 
 ### Component → look
@@ -455,13 +457,13 @@ feed search and the assistant; never render them as a visible line.
 ### Labels
 Overline-style labels (use `<Text variant="overline">` or the structural component; hand-rolled `tracking-overline`
 is `[ds/overline]`) (Field label, StatTile label, Badge, RowGroup heading, Section `drawer` / `settings` heading,
-anchored-popup label, PageHeader eyebrow) are `text-2xs` + `tracking-overline`. `--overline-tracking` is 0.16em for Latin and
-0.02em under `html:lang(ko)`, so never hard-code `tracking-[0.1Xem]` or `text-[11px]` on a label. The PageHeader eyebrow
-is a muted overline (no accent colour, no rule line); the RowGroup heading is the one overline with a rule under it.
+anchored-popup label) are `text-2xs` + `tracking-overline`. `--overline-tracking` is 0.16em for Latin and
+0.02em under `html:lang(ko)`, so never hard-code `tracking-[0.1Xem]` or `text-[11px]` on a label. Overlines are muted
+(no accent colour, no rule line); the RowGroup heading is the one overline with a rule under it.
 
 ### Navigation rows
-Current row = `bg-fill` + 2px primary bar on the left + `foreground` text (SidebarItem, Button `nav`, `HierarchyNav`,
-`getNavigationItemClassName`). Hover = `bg-fill`. Only the top app nav uses primary text for the active item.
+Current row = `bg-fill` + 2px primary bar on the left + `foreground` text (SidebarItem, Button `nav`, `HierarchyNav`).
+Hover = `bg-fill`. Only the top app nav uses primary text for the active item.
 
 ### Icons: one meaning each
 | Icon (lucide) | Means | Never |

@@ -247,7 +247,7 @@ test('workflow LLM nodes: model resolution, chat-path requests, usage, new nodes
     await assert.rejects(Promise.resolve(LLM_NODE_HANDLERS['system.chat_profile_reply'](context(), node, definition, { message: 'hi' })), /프로필을 골라줘/)
   })
 
-  await t.test('외형 태그 uses the appearance prompt with the image as JPEG and a tag-sized output limit', async () => {
+  await t.test('외형 태그 uses the appearance prompt with the image as JPEG and no feature-imposed output cap', async () => {
     answer = 'silver hair, red eyes'
     const ctx = context()
     await LLM_NODE_HANDLERS['system.draft_appearance_tags'](ctx, node, definition, { image: pngDataUrl, description: 'a girl' })
@@ -257,7 +257,7 @@ test('workflow LLM nodes: model resolution, chat-path requests, usage, new nodes
     assert.ok(Array.isArray(content))
     assert.equal(content[0].type === 'text' && content[0].text, 'a girl')
     assert.ok(content.some((part) => part.type === 'image_url' && part.image_url.url.startsWith('data:image/jpeg;base64,')))
-    assert.equal(body.max_tokens, 1024)
+    assert.equal(body.max_tokens, undefined, 'no profile or chat allowance, so the provider default applies')
     assert.equal(ctx.artifactsByNode.get('n1')!.tags.value, 'silver hair, red eyes')
     await LLM_NODE_HANDLERS['system.draft_appearance_tags'](context(), node, definition, { profile_id: sera.id })
     assert.match(textOf(lastRequest().messages[1]), /Character: 세라\nYou are Sera\./, 'the profile fills an empty description')

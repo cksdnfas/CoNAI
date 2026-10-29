@@ -1,5 +1,5 @@
 import { ProviderIcon } from '@/components/common/provider-icons'
-import { memo, useEffect, useState } from 'react'
+import { memo } from 'react'
 import { Square, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { IconButton } from '@/components/ui/icon-button'
@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress'
 import { Select } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { useI18n } from '@/i18n'
+import { useNow } from '@/lib/use-now'
 import type { GenerationQueueJobRecord, GenerationWorkflow } from '@/lib/api-image-generation-types'
 import { getErrorMessage } from '../image-generation-shared'
 import {
@@ -42,22 +43,6 @@ type QueueJobRowProps = {
   locale: string
 }
 
-/** Tick a local clock for time-derived labels; only the row that needs it re-renders, so the memoized list stays cheap. */
-function useQueueRowNow(enabled: boolean) {
-  const [nowMs, setNowMs] = useState(() => Date.now())
-
-  useEffect(() => {
-    if (!enabled) {
-      return
-    }
-
-    const timer = window.setInterval(() => setNowMs(Date.now()), QUEUE_ROW_CLOCK_INTERVAL_MS)
-    return () => window.clearInterval(timer)
-  }, [enabled])
-
-  return nowMs
-}
-
 /**
  * 진행률 이벤트가 레코드 하나만 patch 해도 나머지 행이 리렌더되지 않도록 행 단위로 memo 한다.
  * react-query 구조 공유와 브리지의 단일 레코드 교체가 무변경 레코드의 identity 를 보존하므로
@@ -68,7 +53,7 @@ const QueueJobRow = memo(function QueueJobRow({ record, isBusy, isAdmin, onCance
   const workflowLabel = getGenerationQueueWorkflowLabel(record, t)
   const creatorLabel = getGenerationQueueRequesterLabel(record, t)
   const isRunning = record.status === 'running'
-  const nowMs = useQueueRowNow(isRunning)
+  const nowMs = useNow(QUEUE_ROW_CLOCK_INTERVAL_MS, isRunning)
   const isLiveProgress = hasGenerationQueueLiveProgress(record)
   const progressPercent = getGenerationQueueProgressPercent(record, nowMs)
   const progressStageLabel = getGenerationQueueProgressStageLabel(record, t, formatNumber)

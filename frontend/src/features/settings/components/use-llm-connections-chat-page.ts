@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import type { AgentCliName, ChatPageData, LlmSettings } from '@conai/shared'
+import type { AgentCliName, ChatPageData } from '@conai/shared'
 import { useI18n } from '@/i18n'
 import { useChatPageRegistration, type WorkflowUndo } from '@/features/codex-chat/chat-page-context'
 import { useSettingsGroupActive } from './settings-navigation'
@@ -14,6 +14,7 @@ import {
 import { chatPageText } from '../settings-chat-actions'
 import { buildPresetId, LLM_PRESET_SECTIONS } from './llm-connections-tab-utils'
 import { useLlmPresetMutations } from './llm-prompt-preset-mutations'
+import type { LlmPresetSnapshot } from '@/lib/api-settings-llm'
 import { useAgentCliQueries } from './llm-agent-cli-queries'
 
 type LlmPresetKind = (typeof LLM_PRESET_SECTIONS)[number]['key']
@@ -167,15 +168,16 @@ export function useLlmConnectionsChatPage({ providers, slots, onPointRoute, onDr
 }
 
 /** Settings › LLM › 프롬프트 for a connected chat: the workflow text presets of each kind, and saving or deleting one. */
-export function useLlmPromptPresetsChatPage(presets: Pick<LlmSettings, LlmPresetKind>) {
+export function useLlmPromptPresetsChatPage(snapshot: LlmPresetSnapshot | undefined) {
   const { t } = useI18n()
-  const { saveMutation, deleteMutation } = useLlmPresetMutations(presets, { reportErrors: false })
+  const { saveMutation, deleteMutation } = useLlmPresetMutations(snapshot, { reportErrors: false })
   const presetKinds = LLM_PRESET_SECTIONS.map((section) => section.key)
-  const data: Record<string, ChatPageData> = Object.fromEntries(presetKinds.map((kind) => [kind, presets[kind].map((preset) => ({ id: preset.id, name: preset.name, content: chatPageText(preset.content, 300) }))]))
+  const data: Record<string, ChatPageData> = Object.fromEntries(presetKinds.map((kind) => [kind, (snapshot?.[kind] ?? []).map((preset) => ({ id: preset.id, name: preset.name, content: chatPageText(preset.content, 300) }))]))
 
   const savePreset = async (args: Record<string, ChatPageData>) => {
+    if (!snapshot) throw new Error('최신 프리셋을 먼저 불러와줘.')
     const kind = args.kind as LlmPresetKind
-    const current = presets[kind]
+    const current = snapshot[kind]
     const existing = typeof args.id === 'string' && args.id ? current.find((preset) => preset.id === args.id) : undefined
     if (typeof args.id === 'string' && args.id && !existing) throw new Error('목록에 없는 프리셋이야.')
     if (args.operation === 'delete') {
@@ -192,7 +194,7 @@ export function useLlmPromptPresetsChatPage(presets: Pick<LlmSettings, LlmPreset
   }
 
   const groupActive = useSettingsGroupActive('prompts', 'connections')
-  useChatPageRegistration(groupActive ? {
+  useChatPageRegistration(groupActive && snapshot ? {
     kind: 'settings', title: t(SETTINGS_ROW_BY_ID['llm.prompts'].label), resourceId: 'llm', priority: 5, fields: [], data,
     actions: [pageAction('settings.llm_preset', t({ ko: 'LLM 프리셋 저장·삭제', en: 'Save or delete an LLM preset' }), t({
       ko: 'kind 목록(data의 같은 이름)의 프리셋. save: id 있으면 수정, 없으면 추가(name·content). structuredOutputJsonPresets 내용은 JSON.',

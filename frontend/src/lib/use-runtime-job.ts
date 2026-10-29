@@ -131,7 +131,7 @@ export function useRuntimeJob<TResult = unknown>(
 }
 
 export interface UseRuntimeJobActionResult<TResult> extends UseRuntimeJobResult<TResult> {
-  run: () => Promise<void>
+  run: () => Promise<RuntimeJobRecord<TResult> | undefined>
   isStarting: boolean
 }
 
@@ -177,7 +177,7 @@ export function useRuntimeJobAction<TResult = unknown>(
   })
 
   const run = useCallback(async () => {
-    await startMutation.mutateAsync().catch(() => undefined)
+    return startMutation.mutateAsync().catch(() => undefined)
   }, [startMutation])
 
   return {

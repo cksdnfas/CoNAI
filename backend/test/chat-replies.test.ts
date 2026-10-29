@@ -225,9 +225,6 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     const room = GroupChatService.create(requester, { profileIds: [a.id, translator.id], representativeId: a.id, userProfileId: null })
     const representative = { ...a, suggestEnabled: true }
     const history = [{ id: 1, thread_id: room.id, role: 'user', content: '안녕', tool_calls: [], status: 'completed', error: null } as CodexChatMessageRecord]
-    const timeout = AbortSignal.timeout.bind(AbortSignal)
-    let deadline = new AbortController()
-    s.mock.method(AbortSignal, 'timeout', (ms: number) => ms === 60_000 ? deadline.signal : timeout(ms))
     let expire = false
     let cancel: AbortController | undefined
     let translations = 0
@@ -235,7 +232,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
       const request = JSON.parse(init.body as string)
       if (request.model !== 'room-translator') return response('["Go", "Stay"]')
       translations++
-      if (expire) deadline.abort(new DOMException('Suggestion deadline', 'TimeoutError'))
+      if (expire) throw new DOMException('Configured translation deadline', 'TimeoutError')
       cancel?.abort()
       init.signal!.throwIfAborted()
       return response('{"0":"가자","1":"기다려"}')
@@ -245,7 +242,6 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     expire = true
     assert.deepEqual(await suggestReplies(representative, room, history, () => 'A'), ['Go', 'Stay'])
     expire = false
-    deadline = new AbortController()
     cancel = new AbortController()
     await assert.rejects(suggestReplies(representative, room, history, () => 'A', cancel.signal), error => error instanceof ChatSuggestError && error.status === 499)
   })
@@ -356,6 +352,7 @@ test('message replies: storage, delivery, context, and generation ownership', { 
 
   await t.test('a summarized direct quote brings back its surrounding turn, with bounded text and no tool execution', async (s) => {
     const threadId = LlmChatService.createThread(requester, a.id, null)
+    CodexChatStore.updateListState(threadId, { title: 'Existing conversation' })
     for (let index = 0; index < 14; index += 1) CodexChatStore.addMessage({ thread_id: threadId, role: index % 2 ? 'assistant' : 'user', content: `old-${index} ${'scene '.repeat(30)}`, tool_calls: [], status: 'completed', error: null })
     const target = CodexChatStore.listMessages(threadId)[3]
     ChatSummaryStore.replaceAll(threadId, 'Earlier conversation summarized.', CodexChatStore.listMessages(threadId)[11].id)
@@ -405,6 +402,12 @@ test('message replies: storage, delivery, context, and generation ownership', { 
     assert.equal(restored, buildReplyContext(full, routing))
     assert.match(restored, /message-1\b/)
     assert.match(restored, /message-30\b/)
+    // Turning summaries off must not turn the bounded history read back into a full transcript load.
+    const recent = CodexChatStore.listContextMessages(source, { afterId: Number.MAX_SAFE_INTEGER, recentMessages: 4, textMessages: 4, recentTurns: 2 })
+    const unsummarized = { ...CodexChatStore.findThreadById(id)!, summary_enabled: 0 }
+    const withoutSummary = { profile: a, thread: unsummarized, config: resolveContextConfig(unsummarized, a), tools: [] }
+    assert.deepEqual(buildChatMessages({ ...withoutSummary, messages: recent, historySource: source }), buildChatMessages({ ...withoutSummary, messages: full }))
+    s.diagnostic(`summary-off hydrated bodies: ${full.length} -> ${recent.length}`)
     const current = CodexChatStore.findThreadById(id)!
     const params = { profile: a, thread: current, config: resolveContextConfig(current, a), tools: [] }
     const positions = s.mock.method(CodexChatStore, 'listMessagePositions')

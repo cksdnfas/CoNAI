@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { useQueries } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { Images, Loader2, Upload } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -7,8 +7,9 @@ import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { MediaLibraryPicker } from '@/components/media/media-library-picker'
 import { ImageList } from '@/features/images/components/image-list/image-list'
 import { useI18n } from '@/i18n'
-import { getImage, getImageDetailQueryKey, uploadMultipleImages } from '@/lib/api-images'
+import { getImagesBatch, IMAGE_BATCH_MAX_COUNT, uploadMultipleImages } from '@/lib/api-images'
 import { getErrorMessage } from '@/lib/error-message'
+import type { ImageRecord } from '@/types/image'
 
 /**
  * Pick library media (masonry picker) or upload new files through the normal library upload, then hand back hashes.
@@ -77,13 +78,31 @@ export function LibraryMediaButtons({ kind, maxCount, onPick, initialHashes = []
 
 /** Saved outputs shown the library way: the masonry list, opening the viewer on click. */
 export function LibraryResults({ hashes }: { hashes: string[] }) {
-  const queries = useQueries({ queries: hashes.map((hash) => ({ queryKey: getImageDetailQueryKey(hash), queryFn: ({ signal }: { signal: AbortSignal }) => getImage(hash, { signal }), retry: false })) })
-  const items = queries.flatMap((query) => query.data ? [query.data] : [])
-  if (!items.length) return null
+  const results = useQuery({
+    // An object in the hash position isolates the list from per-hash detail writes, while sharing their resync prefix.
+    queryKey: ['image-detail', { spriteLibrary: hashes }],
+    enabled: hashes.length > 0,
+    placeholderData: keepPreviousData,
+    gcTime: 0,
+    retry: false,
+    queryFn: async ({ signal }) => {
+      const items: ImageRecord[] = []
+      for (let i = 0; i < hashes.length; i += IMAGE_BATCH_MAX_COUNT) {
+        const batch = await getImagesBatch(hashes.slice(i, i + IMAGE_BATCH_MAX_COUNT), { signal }).catch((error: unknown) => {
+          if (signal.aborted) throw error
+          return []
+        })
+        items.push(...batch)
+      }
+      return items
+    },
+  })
+  const items = results.data ?? []
+  if (!hashes.length || !items.length) return null
   return (
     <ImageList
       items={items}
-      resetKey={hashes.join(',')}
+      resetKey={items.map((item) => item.composite_hash ?? item.id).join(',')}
       layout="masonry"
       activationMode="modal"
       scrollMode="container"

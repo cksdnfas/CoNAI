@@ -1,5 +1,5 @@
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { fetchJson, fetchRequiredApiData as requestPromptPresetData } from '@/lib/api-client'
+import { requestApiData, requestJson } from '@/lib/api-request'
 
 interface ApiResponse<T> {
   success: boolean
@@ -10,7 +10,7 @@ interface ApiResponse<T> {
 type PromptPresetFallbackKey = Parameters<typeof createApiFallbackError>[1]
 
 async function requestPromptPresetAction<T>(path: string, fallbackKey: PromptPresetFallbackKey, init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<T>>(path, init)
+  const response = await requestJson<ApiResponse<T>>(path, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, fallbackKey)
   }
@@ -64,23 +64,23 @@ export async function getPromptPresets(params?: { hierarchical?: boolean; rootsO
   }
 
   const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
-  return requestPromptPresetData<PromptPresetRecord[]>(`/api/prompt-presets${suffix}`, 'promptPresets.list.load')
+  return requestApiData<PromptPresetRecord[]>(`/api/prompt-presets${suffix}`, 'promptPresets.list.load', undefined, { requireData: true })
 }
 
 export async function createPromptPreset(input: PromptPresetMutationInput) {
-  return requestPromptPresetData<PromptPresetRecord>('/api/prompt-presets', 'promptPresets.create', {
+  return requestApiData<PromptPresetRecord>('/api/prompt-presets', 'promptPresets.create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
-  })
+  }, { requireData: true })
 }
 
 export async function updatePromptPreset(presetId: number, input: PromptPresetMutationInput, revision?: string) {
-  return requestPromptPresetData<PromptPresetRecord>(`/api/prompt-presets/${presetId}`, 'promptPresets.update', {
+  return requestApiData<PromptPresetRecord>(`/api/prompt-presets/${presetId}`, 'promptPresets.update', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...(revision ? { 'If-Match': revision } : {}) },
     body: JSON.stringify(input),
-  })
+  }, { requireData: true })
 }
 
 export async function deletePromptPreset(presetId: number, options?: { cascade?: boolean }) {

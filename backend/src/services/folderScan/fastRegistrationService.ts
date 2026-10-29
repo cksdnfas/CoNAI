@@ -16,6 +16,7 @@ export type { ScanResult };
  */
 interface FastRegistrationOptions {
   quietIfIdle?: boolean;
+  verifyUnchanged?: boolean;
 }
 
 interface ExistingFileScanRecord {
@@ -66,7 +67,11 @@ function getScanStatements(): ScanStatements {
       ),
       touchDeletedFile: db.prepare(`
         UPDATE image_files
-        SET last_verified_date = ?,
+        SET last_verified_date = CASE
+              WHEN julianday(last_verified_date) >= julianday(?)
+                THEN strftime('%Y-%m-%dT%H:%M:%fZ', last_verified_date, '+0.001 seconds')
+              ELSE ?
+            END,
             file_modified_date = ?,
             file_size = ?,
             mime_type = COALESCE(?, mime_type)
@@ -75,7 +80,11 @@ function getScanStatements(): ScanStatements {
       reactivateFile: db.prepare(`
         UPDATE image_files
         SET file_status = 'active',
-            last_verified_date = ?,
+            last_verified_date = CASE
+              WHEN julianday(last_verified_date) >= julianday(?)
+                THEN strftime('%Y-%m-%dT%H:%M:%fZ', last_verified_date, '+0.001 seconds')
+              ELSE ?
+            END,
             file_modified_date = ?,
             file_size = ?,
             mime_type = COALESCE(?, mime_type)
@@ -266,12 +275,13 @@ export class FastRegistrationService {
     folderId: number,
     state: { writeBatchSize: number; maxPauseMs: number; writtenRows: number }
   ): Promise<void> {
-    const now = new Date().toISOString();
+    const now = new Date();
+    const verifiedAt = now.toISOString();
 
     const runBatch = db.transaction((batch: PlannedWrite[]) => {
       for (const item of batch) {
         if (item.kind === 'update') {
-          item.statement.run(now, item.stats.mtime.toISOString(), item.stats.size, item.mimeType, item.existingId);
+          item.statement.run(verifiedAt, verifiedAt, item.stats.mtime.toISOString(), item.stats.size, item.mimeType, item.existingId);
         } else {
           getScanStatements().insertFile.run(
             item.fileType,
@@ -352,7 +362,8 @@ export class FastRegistrationService {
             ?? (statements.selectFileByPath.get(entry.filePath) as ExistingFileScanRecord | undefined);
 
           if (existingFile) {
-            if (needsScanWrite(existingFile, entry.stats, mimeType)) {
+            if (needsScanWrite(existingFile, entry.stats, mimeType)
+              || (options.verifyUnchanged && existingFile.file_status === 'active')) {
               planned.push(planExistingFileWrite(statements, existingFile, entry.stats, mimeType));
             } else {
               unchangedCount++;

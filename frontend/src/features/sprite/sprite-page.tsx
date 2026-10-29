@@ -33,14 +33,14 @@ export function SpritePage() {
   }, { replace: true })
 
   const onVideoChange = useCallback((hash: string | null) => {
+    if (videoHash === hash) return
     setSearchParams((params) => {
-      if ((params.get('video') ?? null) === hash) return params
       const copy = new URLSearchParams(params)
       if (hash) copy.set('video', hash)
       else copy.delete('video')
       return copy
     }, { replace: true })
-  }, [setSearchParams])
+  }, [setSearchParams, videoHash])
 
   // All three stay mounted so switching tabs keeps each form and result; each tab has its own layout presets. Like the
   // generation page, the row does not stick: the workspace below scrolls on its own.

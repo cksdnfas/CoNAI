@@ -49,7 +49,7 @@ export function GenerationResultArea({
 }: GenerationResultAreaProps) {
   const { t } = useI18n()
   const { canViewImages } = useImagePermissions()
-  const { activeJob, activeJobCount, nowMs } = useGenerationStageQueue({ serviceType, workflowId })
+  const { activeJob, activeJobCount } = useGenerationStageQueue({ serviceType, workflowId })
   const historySafetySettingsQuery = useQuery({
     queryKey: ['runtime-generation-history-settings'],
     queryFn: getRuntimeGenerationHistorySettings,
@@ -116,12 +116,10 @@ export function GenerationResultArea({
 
   return (
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-3 overflow-hidden' : 'space-y-3')}>
-      {compact && !backButton ? null : (
-        <div className="flex shrink-0 items-center gap-2">
-          {backButton}
-          {compact ? null : toggle}
-        </div>
-      )}
+      <div className="flex shrink-0 items-center gap-2">
+        {backButton}
+        {toggle}
+      </div>
       {!canViewImages ? <ImagePermissionNotice /> : (
         <GenerationResultStage
           items={visibleItems}
@@ -130,11 +128,10 @@ export function GenerationResultArea({
           isLoading={feed.isHistoryLoading}
           activeJob={activeJob}
           activeJobCount={activeJobCount}
-          nowMs={nowMs}
           compact={compact}
           shouldBlur={shouldBlurItemPreview}
           onDeleted={() => void feed.refreshHistory()}
-          onShowHistory={() => onViewChange('history')}
+          onShowHistory={compact ? undefined : () => onViewChange('history')}
           stripPlacement={recentStrip}
         />
       )}

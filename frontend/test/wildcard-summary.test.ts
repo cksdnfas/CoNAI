@@ -6,7 +6,7 @@ import {
   flattenWildcardRecords,
   resolvePreferredWildcardItemTool,
 } from '../src/features/image-generation/components/wildcard-inline-picker-helpers'
-import { detectPromptSyntaxTokens } from '../src/features/image-generation/components/prompt-syntax-highlight-helpers'
+import { buildPromptSyntaxNameMaps, detectPromptSyntaxTokens } from '../src/features/image-generation/components/prompt-syntax-highlight-helpers'
 
 test('summary-only wildcards retain inline counts, fallback tools and lazy preview targets', () => {
   const base: WildcardRecord = {
@@ -28,7 +28,7 @@ test('summary-only wildcards retain inline counts, fallback tools and lazy previ
   assert.equal(countWildcardItemsForTool(records[0].itemCounts, 'codex'), 12)
   assert.equal(resolvePreferredWildcardItemTool(records[0].itemCounts, 'nai'), 'nai')
   assert.equal(resolvePreferredWildcardItemTool(records[0].itemCounts, 'comfyui'), 'general')
-  const tokens = detectPromptSyntaxTokens('pose, //note//', records, 'comfyui')
+  const tokens = detectPromptSyntaxTokens('pose, //note//', buildPromptSyntaxNameMaps(records), 'comfyui')
   assert.equal(tokens[0].wildcardId, 1, 'only the opened token needs its item pool')
   assert.equal(tokens[0].toolItemCount, 12)
   assert.equal(tokens[0].naiItemCount, 4)

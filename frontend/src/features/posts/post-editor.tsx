@@ -123,6 +123,8 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const [status, setStatus] = useState<PostStatus>(post?.status ?? 'published')
   const [commentMode, setCommentMode] = useState<PostCommentMode>(post?.commentMode ?? 'open')
   const [pinned, setPinned] = useState(post?.pinned ?? false)
+  // The draft's own base: a refreshed post must not lend its newer revision to this older draft.
+  const [baseRevision] = useState(post?.revision)
   const [tab, setTab] = useState<'write' | 'source' | 'preview'>('write')
   const [bodyOffset, setBodyOffset] = useState(0)
   const commitBody = useChatDraftTransaction(body, setBody)
@@ -136,7 +138,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const save = useMutation({
     mutationFn: () => {
       const input = { title, body, categoryId, tags, status, commentMode, ...(isAdmin ? { pinned } : {}) }
-      return post ? updatePost(post.id, { ...input, expectedRevision: post.revision }) : createPost(input)
+      return post ? updatePost(post.id, { ...input, expectedRevision: baseRevision ?? post.revision }) : createPost(input)
     },
     onSuccess: async (saved) => {
       await invalidatePostScope(queryClient, saved.id, 'post')

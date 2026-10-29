@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { BookPlus, BookUp, ChevronDown, ChevronRight, Ellipsis, FileText, FolderOpen, Merge, PenLine, Plus } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { EditorFooter } from '@/components/ui/editor-footer'
@@ -18,17 +19,21 @@ import {
   CHAT_LOREBOOKS_QUERY_KEY,
   CHAT_STATUS_QUERY_KEY,
   OWN_LOREBOOKS_QUERY_KEY,
+  ChatEditorResolution,
   createThreadLorebook,
   getCodexChatStatus,
   getThreadLorebooks,
   keepThreadLorebook,
   listOwnLorebooks,
   loreEntryTitle,
+  isChatRevisionConflict,
+  mergeLoreEntries,
   saveThreadLorebook,
   threadLorebooksQueryKey,
   updateCodexChatThreadContext,
   updateOwnLorebook,
   type ChatLoreEntry,
+  type OwnedChatLorebook,
   type ThreadLoreBook,
 } from '@/lib/api-codex-chat'
 import { listStoredFolders } from '@/lib/api-files'
@@ -40,7 +45,7 @@ import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey, useCodexChat } f
 const CHAT_BOOK = 'chat'
 const LOREBOOK_ROOT_FOLDER = '로어북'
 
-type EditTarget = { book: typeof CHAT_BOOK | ThreadLoreBook; entry: ChatLoreEntry; isNew: boolean }
+type EditTarget = { book: typeof CHAT_BOOK | ThreadLoreBook; entry: ChatLoreEntry; isNew: boolean; base: { entries: ChatLoreEntry[]; revision: string } }
 type MergeTarget = { entryIds?: string[]; targetId?: number | null }
 
 function fileCount(entries: ChatLoreEntry[]) {
@@ -61,6 +66,7 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
 }) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
+  const confirm = useConfirm()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const chat = useCodexChat()
@@ -90,10 +96,42 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
       queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY }),
     ])
   }
-  const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
+  const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: error instanceof ChatEditorResolution ? 'info' : 'error' })
 
   const entriesMutation = useMutation({
-    mutationFn: ({ book, entries }: { book: EditTarget['book']; entries: ChatLoreEntry[] }) => (book === CHAT_BOOK ? saveThreadLorebook(threadId, entries) : updateOwnLorebook(book.id, { entries })),
+    mutationFn: async ({ target, entries }: { target: EditTarget; entries: ChatLoreEntry[] }) => {
+      const write = (value: ChatLoreEntry[], revision: string) => {
+        if (value.length > 500) throw new Error(t({ ko: '합친 항목이 500개를 넘었어. 로어북에서 항목을 줄여줘.', en: 'The merged book exceeds 500 entries. Remove some in the lorebook editor.' }))
+        return target.book === CHAT_BOOK
+          ? saveThreadLorebook(threadId, value, revision)
+          : updateOwnLorebook(target.book.id, { entries: value, revision })
+      }
+      try {
+        return await write(entries, target.base.revision)
+      } catch (error) {
+        if (!isChatRevisionConflict(error)) throw error
+        const latest = error.current as OwnedChatLorebook | null
+        const merged = mergeLoreEntries(target.base.entries, latest?.entries ?? [], entries)
+        if (merged.conflicts.includes(target.entry.id)) {
+          const title = loreEntryTitle(target.entry) || t({ ko: '새 항목', en: 'New entry' })
+          const load = await confirm({
+            title: t({ ko: '“{title}” 항목이 다른 곳에서 바뀌었어', en: '“{title}” changed elsewhere' }, { title }),
+            description: t({ ko: '이 항목만 고를게. 다른 항목 변경은 남아.', en: 'Choose only this entry. Other entry changes stay.' }),
+            confirmLabel: t({ ko: '최신 불러오기', en: 'Load latest' }),
+            cancelLabel: t({ ko: '덮어쓰기', en: 'Overwrite' }),
+          })
+          if (load) return latest
+          const overwrite = await confirm({
+            title: t({ ko: '“{title}” 항목을 내 변경으로 덮어쓸까?', en: 'Overwrite “{title}” with your change?' }, { title }),
+            confirmLabel: t({ ko: '덮어쓰기', en: 'Overwrite' }),
+            cancelLabel: t({ ko: '계속 편집', en: 'Keep editing' }),
+            tone: 'destructive',
+          })
+          if (!overwrite) throw new ChatEditorResolution(t({ ko: '저장을 멈췄어.', en: 'Save stopped.' }), error)
+        }
+        return write(merged.entries, latest?.revision ?? 'absent')
+      }
+    },
     onSuccess: async () => {
       setEditing(null)
       await refresh()
@@ -144,12 +182,16 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
     ? t({ ko: '설정 따름', en: 'Settings' })
     : t({ ko: '설정 따름 ({state})', en: 'Settings ({state})' }, { state: settingsDefault ? t({ ko: '켬', en: 'on' }) : t({ ko: '끔', en: 'off' }) })
 
-  const entriesOf = (book: EditTarget['book']) => (book === CHAT_BOOK ? chatEntries : book.entries)
-  const saveEntry = (target: EditTarget, entry: ChatLoreEntry) => {
-    const entries = entriesOf(target.book)
-    entriesMutation.mutate({ book: target.book, entries: target.isNew ? [...entries, entry] : entries.map((item) => (item.id === entry.id ? entry : item)) })
+  const openEntry = (book: EditTarget['book'], entry: ChatLoreEntry, isNew: boolean) => {
+    if (entriesMutation.isPending) return
+    const base = book === CHAT_BOOK ? { entries: chatEntries, revision: chatBook?.revision ?? 'absent' } : book
+    setEditing({ book, entry, isNew, base })
   }
-  const deleteEntry = (target: EditTarget) => entriesMutation.mutate({ book: target.book, entries: entriesOf(target.book).filter((item) => item.id !== target.entry.id) })
+  const saveEntry = (target: EditTarget, entry: ChatLoreEntry) => {
+    const entries = target.base.entries
+    entriesMutation.mutate({ target, entries: target.isNew ? [...entries, entry] : entries.map((item) => (item.id === entry.id ? entry : item)) })
+  }
+  const deleteEntry = (target: EditTarget) => entriesMutation.mutate({ target, entries: target.base.entries.filter((item) => item.id !== target.entry.id) })
   const toggle = (key: number | typeof CHAT_BOOK) => setExpanded((current) => {
     const next = new Set(current)
     if (next.has(key)) next.delete(key)
@@ -227,11 +269,11 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
           actions={(
             <>
               {chatBook ? <IconButton variant="ghost" size="icon-xs" disabled={keepMutation.isPending} onClick={() => keepMutation.mutate()} label={t({ ko: '계정 로어북으로 남기기', en: 'Keep as an account lorebook' })}><BookUp /></IconButton> : null}
-              <IconButton variant="ghost" size="icon-xs" disabled={chatEntries.length >= 500} onClick={() => setEditing({ book: CHAT_BOOK, entry: newLoreEntry(chatEntries.length), isNew: true })} label={t({ ko: '항목 추가', en: 'Add entry' })}><Plus /></IconButton>
+              <IconButton variant="ghost" size="icon-xs" disabled={chatEntries.length >= 500} onClick={() => openEntry(CHAT_BOOK, newLoreEntry(chatEntries.length), true)} label={t({ ko: '항목 추가', en: 'Add entry' })}><Plus /></IconButton>
             </>
           )}
         />
-        {expanded.has(CHAT_BOOK) ? chatEntries.map((entry) => <EntryRow key={entry.id} entry={entry} onOpen={() => setEditing({ book: CHAT_BOOK, entry, isNew: false })} />) : null}
+        {expanded.has(CHAT_BOOK) ? chatEntries.map((entry) => <EntryRow key={entry.id} entry={entry} onOpen={() => openEntry(CHAT_BOOK, entry, false)} />) : null}
         {books.map((book) => {
           const editable = book.kind !== 'global'
           return (
@@ -246,7 +288,7 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
                 record={book.id === recordBookId ? recordTip : undefined}
                 actions={book.via === 'thread' ? (
                   <>
-                    <IconButton variant="ghost" size="icon-xs" disabled={book.entries.length >= 500} onClick={() => setEditing({ book, entry: newLoreEntry(book.entries.length), isNew: true })} label={t({ ko: '항목 추가', en: 'Add entry' })}><Plus /></IconButton>
+                    <IconButton variant="ghost" size="icon-xs" disabled={book.entries.length >= 500} onClick={() => openEntry(book, newLoreEntry(book.entries.length), true)} label={t({ ko: '항목 추가', en: 'Add entry' })}><Plus /></IconButton>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <IconButton variant="ghost" size="icon-xs" label={t({ ko: '더 보기', en: 'More' })}><Ellipsis /></IconButton>
@@ -261,7 +303,7 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
                   </>
                 ) : undefined}
               />
-              {expanded.has(book.id) ? book.entries.map((entry) => <EntryRow key={entry.id} entry={entry} onOpen={editable ? () => setEditing({ book, entry, isNew: false }) : undefined} />) : null}
+              {expanded.has(book.id) ? book.entries.map((entry) => <EntryRow key={entry.id} entry={entry} onOpen={editable ? () => openEntry(book, entry, false) : undefined} />) : null}
             </div>
           )
         })}
@@ -287,7 +329,7 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
           setMerging({ entryIds: [editing.entry.id], targetId: promoteBook?.id ?? null })
           setEditing(null)
         }}
-        onClose={() => setEditing(null)}
+        onClose={() => { if (!entriesMutation.isPending) setEditing(null) }}
       />
       {chatBook ? (
         <LorebookMergeDialog
@@ -427,8 +469,10 @@ function LoreEntryModal({ target, filePlace, keyLanguage, promoteLabel, saving, 
       {entry && target ? (
         <>
           <ModalBody>
-            <SwitchLine label={t({ ko: '이 로어 사용', en: 'Use this lore' })} checked={entry.enabled} onCheckedChange={(enabled) => setDraft((current) => current ? { ...current, enabled } : current)} />
-            <ChatLoreEntryFields entry={entry} filePlace={filePlace} keyLanguage={keyLanguage} onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))} />
+            <fieldset disabled={saving}>
+              <SwitchLine label={t({ ko: '이 로어 사용', en: 'Use this lore' })} checked={entry.enabled} onCheckedChange={(enabled) => { if (!saving) setDraft((current) => current ? { ...current, enabled } : current) }} />
+              <ChatLoreEntryFields entry={entry} filePlace={filePlace} keyLanguage={keyLanguage} onChange={(patch) => { if (!saving) setDraft((current) => (current ? { ...current, ...patch } : current)) }} />
+            </fieldset>
           </ModalBody>
           <EditorFooter onDelete={target.isNew ? undefined : onDelete} deleting={saving} onSave={() => onSave(entry)} canSave={canSave} saving={saving}>
             {promoteLabel ? <IconButton size="icon-sm" variant="ghost" disabled={saving} onClick={onPromote} label={promoteLabel}><BookUp /></IconButton> : null}

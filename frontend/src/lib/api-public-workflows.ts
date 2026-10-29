@@ -1,4 +1,5 @@
 import { requestJson } from './api-image-generation-request'
+import { appendDirectoryListingParams, type DirectoryListingParams, type DirectoryPage } from './api-directory-listing'
 import type { GenerationHistoryRecord, PublicGenerationWorkflow, WorkflowArtifactListing } from './api-image-generation-types'
 
 interface PublicWorkflowListResponse {
@@ -50,14 +51,17 @@ export async function getPublicGenerationWorkflow(publicSlug: string) {
   return response.data
 }
 
-export async function getPublicGenerationWorkflowArtifacts(publicSlug: string, path?: string) {
+export function getPublicGenerationWorkflowArtifacts(publicSlug: string, path: string, params: DirectoryListingParams): Promise<WorkflowArtifactListing & DirectoryPage>
+export function getPublicGenerationWorkflowArtifacts(publicSlug: string, path?: string): Promise<WorkflowArtifactListing>
+export async function getPublicGenerationWorkflowArtifacts(publicSlug: string, path?: string, params?: DirectoryListingParams) {
   const searchParams = new URLSearchParams()
   if (path) {
     searchParams.set('path', path)
   }
+  if (params) appendDirectoryListingParams(searchParams, params)
 
   const suffix = searchParams.size > 0 ? `?${searchParams.toString()}` : ''
-  const response = await requestJson<PublicWorkflowArtifactsResponse>(`/api/public-workflows/${encodeURIComponent(publicSlug)}/artifacts${suffix}`)
+  const response = await requestJson<PublicWorkflowArtifactsResponse & { data: WorkflowArtifactListing & DirectoryPage }>(`/api/public-workflows/${encodeURIComponent(publicSlug)}/artifacts${suffix}`)
   return response.data
 }
 

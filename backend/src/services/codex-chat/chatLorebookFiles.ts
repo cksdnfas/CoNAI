@@ -1,4 +1,5 @@
 import { WINDOWS_RESERVED_NAME } from '../../utils/pathResolver'
+import { statRevision } from '../../utils/fileHash'
 import fs from 'fs'
 import path from 'path'
 import type Database from 'better-sqlite3'
@@ -13,17 +14,23 @@ import {
   PROFILE_MAX_LOREBOOKS,
   isSafeLoreFilePath,
   linkedProfiles,
+  lorebookSummaryColumns,
   loreEntryTitle,
   normalizeLorebook,
   normalizeLorebookIds,
   sortLorebookKeys,
   toLorebook,
+  toLorebookSummary,
   type ChatLoreEntry,
   type ChatLorebook,
+  type ChatLorebookSummary,
   type LoreFileText,
   type LorebookRow,
+  type LorebookSummaryRow,
 } from './chatLorebook'
 import { loadChatSettings } from './chatSettings'
+import { ChatRevisionConflict } from './chatProfileError'
+import { stampLoreEntryIds } from './chatLorebookIds'
 
 /**
  * Account and chat lorebooks as folders of the owner's file store:
@@ -52,6 +59,7 @@ export class LorebookError extends Error {
 
 /** An account or chat book as its owner sees it. */
 export type OwnedLorebook = ChatLorebook & { threadId: number | null; folderId: string | null }
+export type OwnedLorebookSummary = ChatLorebookSummary & { threadId: number | null; folderId: string | null }
 
 type OwnedKind = 'account' | 'chat'
 
@@ -134,33 +142,57 @@ function relink(owner: string, folderId: string, entries: ChatLoreEntry[]) {
 
 // ---- lorebook.json / lorebook.md ------------------------------------------------------------------------------
 
-function stampOf(file: StoredFileEntry) {
-  return `${file.id}:${file.updatedAt}:${file.size}`
+function stampOf(owner: string, file: StoredFileEntry) {
+  let revision = file.revision
+  if (!revision) {
+    try { revision = statRevision(fs.statSync(storedFilePath(owner, file.id), { bigint: true })) }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      revision = 'missing'
+    }
+  }
+  return `${file.id}:${file.updatedAt}:${file.size}:${revision}`
 }
 
 /** This app's `{ name, entries }`, a bare entry list, or world info (entries keyed by uid). Null: not a lorebook. */
-function parseLorebookJson(value: unknown): ChatLoreEntry[] | null {
-  if (Array.isArray(value)) return normalizeLorebook(value)
+function parseLorebookJson(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) return value
   if (value && typeof value === 'object') {
     const entries = (value as { entries?: unknown }).entries
-    if (Array.isArray(entries)) return normalizeLorebook(entries)
-    if (entries && typeof entries === 'object') return normalizeLorebook(Object.values(entries))
+    if (Array.isArray(entries)) return entries
+    if (entries && typeof entries === 'object') return Object.values(entries)
   }
   return null
 }
 
 /** The book's lorebook.json: null when there is none; `entries` null when it cannot be read as a lorebook. */
-function readLorebookJson(owner: string, folderId: string): { stamp: string; entries: ChatLoreEntry[] | null } | null {
+function readLorebookJson(owner: string, folderId: string, existing: ChatLoreEntry[]): { stamp: string; entries: ChatLoreEntry[] | null } | null {
   const file = FileStoreService.findChild(owner, folderId, LOREBOOK_JSON)
   if (!file || file.kind !== 'file') return null
-  const stamp = stampOf(file)
+  let revision: string
+  try { revision = statRevision(fs.statSync(storedFilePath(owner, file.id), { bigint: true })) }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    return { stamp: stampOf(owner, file), entries: null }
+  }
+  let stamp = stampOf(owner, { ...file, revision })
   if (file.size > LOREBOOK_JSON_MAX_BYTES) return { stamp, entries: null }
+  let value: unknown
   try {
-    const value = JSON.parse(fs.readFileSync(storedFilePath(owner, file.id), 'utf8').replace(/^﻿/, '')) as unknown
-    return { stamp, entries: parseLorebookJson(value) }
+    value = JSON.parse(fs.readFileSync(storedFilePath(owner, file.id), 'utf8').replace(/^﻿/, '')) as unknown
   } catch {
     return { stamp, entries: null }
   }
+  const raw = parseLorebookJson(value)
+  if (!raw) return { stamp, entries: null }
+  if (stampLoreEntryIds(raw, existing)) {
+    // Preserve the source format and unknown fields. Never replace a newer file while assigning identities.
+    const written = FileStoreService.writeText(owner, folderId, LOREBOOK_JSON, `${JSON.stringify(value, null, 2)}\n`, {
+      silent: true, history: false, replaceId: file.id, expectedRevision: revision,
+    })
+    stamp = stampOf(owner, written)
+  }
+  return { stamp, entries: normalizeLorebook(raw) }
 }
 
 function renderJson(name: string, entries: ChatLoreEntry[]) {
@@ -196,8 +228,8 @@ function rowById(id: number) {
   return getUserSettingsDb().prepare('SELECT * FROM chat_lorebooks WHERE id = ?').get(id) as LorebookRow | undefined
 }
 
-function toOwned(row: LorebookRow): OwnedLorebook {
-  return { ...toLorebook(row, linkedProfiles()), threadId: row.thread_id, folderId: row.folder_id }
+function toOwned(row: LorebookRow, profiles = linkedProfiles()): OwnedLorebook {
+  return { ...toLorebook(row, profiles), threadId: row.thread_id, folderId: row.folder_id }
 }
 
 /** Write the book's files, then its cache. */
@@ -209,7 +241,7 @@ function writeBook(row: LorebookRow, value: ChatLoreEntry[]) {
   const json = FileStoreService.writeText(owner, folderId, LOREBOOK_JSON, renderJson(row.name, entries), { silent: true, history: false })
   FileStoreService.writeText(owner, folderId, LOREBOOK_MARKDOWN, renderMarkdown(row.name, entries), { silent: true, history: false })
   getUserSettingsDb().prepare('UPDATE chat_lorebooks SET entries = ?, source_stamp = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?')
-    .run(JSON.stringify(entries), stampOf(json), row.id)
+    .run(JSON.stringify(entries), stampOf(owner, json), row.id)
   notifySemanticChange('lore')
 }
 
@@ -219,10 +251,15 @@ function writeBook(row: LorebookRow, value: ChatLoreEntry[]) {
  */
 function refreshBook(row: LorebookRow): LorebookRow {
   if (row.kind === 'global' || !row.owner_key || !row.folder_id) return row
-  const read = readLorebookJson(row.owner_key, row.folder_id)
-  if (!read) return row
+  const existing = normalizeLorebook(row.entries)
+  const read = readLorebookJson(row.owner_key, row.folder_id, existing)
+  if (!read) {
+    if (row.source_stamp === null) return row
+    getUserSettingsDb().prepare('UPDATE chat_lorebooks SET source_stamp = NULL WHERE id = ?').run(row.id)
+    return rowById(row.id) ?? row
+  }
   if (read.entries === null) console.warn(`[lorebook] Book ${row.id}: lorebook.json is not a readable lorebook; keeping the cached entries`)
-  const base = read.entries === null ? normalizeLorebook(row.entries) : withSafeFiles(read.entries, `Book ${row.id}`)
+  const base = read.entries === null ? existing : withSafeFiles(read.entries, `Book ${row.id}`)
   const { entries, changed } = relink(row.owner_key, row.folder_id, base)
   if (changed && read.entries !== null) {
     writeBook(row, entries)
@@ -239,12 +276,15 @@ function refreshBook(row: LorebookRow): LorebookRow {
   return rowById(row.id) ?? row
 }
 
+function sourceChanged(row: Pick<LorebookRow, 'kind' | 'owner_key' | 'folder_id' | 'source_stamp'>) {
+  if (row.kind === 'global' || !row.owner_key || !row.folder_id) return false
+  const file = FileStoreService.findChild(row.owner_key, row.folder_id, LOREBOOK_JSON)
+  return file ? stampOf(row.owner_key, file) !== row.source_stamp : row.source_stamp !== null
+}
+
 /** Re-read lorebook.json only when it is not the file the cache came from. */
 function refreshIfStale(row: LorebookRow): LorebookRow {
-  if (row.kind === 'global' || !row.owner_key || !row.folder_id) return row
-  const file = FileStoreService.findChild(row.owner_key, row.folder_id, LOREBOOK_JSON)
-  if (!file || stampOf(file) === row.source_stamp) return row
-  return refreshBook(row)
+  return sourceChanged(row) ? refreshBook(row) : row
 }
 
 /** Drop a book row and every link to it (profiles, chats). Its folder is the caller's business. */
@@ -404,10 +444,14 @@ export function reconcileLorebookFolders() {
 // ---- Store ----------------------------------------------------------------------------------------------------
 
 /** Account books live in the shared file store, so every account may use them; a chat book stays with its chat's owner. */
-function requireOwn(bookId: number, owner: string): LorebookRow {
+function requireOwnRow(bookId: number, owner: string): LorebookRow {
   const row = rowById(bookId)
   if (!row || row.kind === 'global' || (row.kind === 'chat' && row.owner_key !== owner) || !row.folder_id) throw new LorebookError('로어북을 찾을 수 없어.', 404)
-  return refreshIfStale(row)
+  return row
+}
+
+function requireOwn(bookId: number, owner: string): LorebookRow {
+  return refreshIfStale(requireOwnRow(bookId, owner))
 }
 
 /** A folder name under `parentId` that nothing else uses: the name, else with the chat id, else counted. */
@@ -428,7 +472,7 @@ function accountBookName(value: unknown) {
 
 /** Entries as saved by a person or a model: validated links, then ids resolved inside the book folder. */
 function preparedEntries(row: LorebookRow, value: unknown) {
-  const entries = normalizeLorebook(value)
+  const entries = normalizeLorebook(value, normalizeLorebook(row.entries))
   assertEntryFiles(entries)
   return relink(row.owner_key as string, row.folder_id as string, entries).entries
 }
@@ -470,15 +514,71 @@ function isDisposable(row: LorebookRow) {
 
 export const OwnedLorebookStore = {
   /** Books of these kinds, by name (every account book, the owner's chat books); caches refreshed first where lorebook.json changed. */
-  list(owner: string, kinds: OwnedKind[] = ['account']): OwnedLorebook[] {
+  list(owner: string, kinds: OwnedKind[] = ['account'], profiles?: ReturnType<typeof linkedProfiles>): OwnedLorebook[] {
     if (kinds.length === 0) return []
     const rows = getUserSettingsDb().prepare(`SELECT * FROM chat_lorebooks WHERE (kind = 'account' OR owner_key = ?) AND kind IN (${kinds.map(() => '?').join(', ')}) AND folder_id IS NOT NULL ORDER BY name COLLATE NOCASE ASC, id ASC`)
       .all(owner, ...kinds) as LorebookRow[]
-    return rows.map((row) => toOwned(refreshIfStale(row)))
+    const links = profiles ?? linkedProfiles()
+    return rows.map((row) => toOwned(refreshIfStale(row), links))
+  },
+
+  /** Do not fetch or normalize entry bodies unless the source file has changed. */
+  listSummary(owner: string, kinds: OwnedKind[] = ['account'], profiles?: ReturnType<typeof linkedProfiles>): OwnedLorebookSummary[] {
+    if (kinds.length === 0) return []
+    const db = getUserSettingsDb()
+    const rows = db.prepare(`SELECT ${lorebookSummaryColumns} FROM chat_lorebooks WHERE (kind = 'account' OR owner_key = ?) AND kind IN (${kinds.map(() => '?').join(', ')}) AND folder_id IS NOT NULL ORDER BY name COLLATE NOCASE ASC, id ASC`)
+      .all(owner, ...kinds) as LorebookSummaryRow[]
+    const links = profiles ?? linkedProfiles()
+    return rows.map((row) => {
+      if (sourceChanged(row)) {
+        const full = rowById(row.id)
+        if (full) {
+          refreshBook(full)
+          row = db.prepare(`SELECT ${lorebookSummaryColumns} FROM chat_lorebooks WHERE id = ?`).get(row.id) as LorebookSummaryRow
+        }
+      }
+      return { ...toLorebookSummary(row, links), threadId: row.thread_id, folderId: row.folder_id }
+    })
+  },
+
+  /** The request-book union without hydrating entries or resolving profile display links. */
+  threadSummary(threadId: number, profileBookIds: number[]) {
+    const profileIds = new Set(profileBookIds)
+    const ids = [...new Set([...OwnedLorebookStore.threadLinks(threadId), ...profileIds])]
+    const db = getUserSettingsDb()
+    const rows = db.prepare(`SELECT id, kind, owner_key, folder_id, thread_id, source_stamp FROM chat_lorebooks
+      WHERE (kind = 'chat' AND thread_id = ?)${ids.length ? ` OR id IN (${ids.map(() => '?').join(', ')})` : ''}`)
+      .all(threadId, ...ids) as Array<Pick<LorebookRow, 'id' | 'kind' | 'owner_key' | 'folder_id' | 'thread_id' | 'source_stamp'>>
+    const selected: number[] = []
+    for (const row of rows) {
+      const chat = row.kind === 'chat' && row.thread_id === threadId
+      const account = row.kind === 'account' && Boolean(row.folder_id)
+      const global = (row.kind ?? 'global') === 'global' && profileIds.has(row.id)
+      if (!chat && !account && !global) continue
+      try {
+        if (!global && sourceChanged(row)) {
+          const full = rowById(row.id)
+          if (full) refreshBook(full)
+        }
+      } catch (error) {
+        // Match booksForRequest: an unreadable linked account book is omitted; the chat book surfaces its error.
+        if (chat) throw error
+        continue
+      }
+      selected.push(row.id)
+    }
+    if (selected.length === 0) return { bookCount: 0, entryCount: 0 }
+    const summaries = db.prepare(`SELECT ${lorebookSummaryColumns} FROM chat_lorebooks WHERE id IN (${selected.map(() => '?').join(', ')})`)
+      .all(...selected) as LorebookSummaryRow[]
+    return { bookCount: summaries.length, entryCount: summaries.reduce((total, row) => total + row.entry_count, 0) }
+  },
+
+  requireOwn(bookId: number, owner: string): OwnedLorebook {
+    return toOwned(requireOwn(bookId, owner))
   },
 
   find(bookId: number, owner: string): OwnedLorebook | null {
-    try { return toOwned(requireOwn(bookId, owner)) } catch { return null }
+    try { return this.requireOwn(bookId, owner) } catch { return null }
   },
 
   /** A new account book: `로어북/<name>/` with lorebook.json, lorebook.md and an empty 자료/. */
@@ -502,10 +602,18 @@ export const OwnedLorebookStore = {
    * Rename (the folder follows) and/or replace the entries: lorebook.json is written first, then the cache. A chat
    * book left empty is removed (null).
    */
-  update(bookId: number, owner: string, patch: { name?: unknown; entries?: unknown }): OwnedLorebook | null {
-    let row = requireOwn(bookId, owner)
+  update(bookId: number, owner: string, patch: { name?: unknown; entries?: unknown }, revision?: string): OwnedLorebook | null {
     const db = getUserSettingsDb()
-    return db.transaction(() => {
+    // Refresh may rewrite files; complete it before a later conflict or validation error can roll back the cache.
+    requireOwn(bookId, owner)
+    const result = db.transaction(() => {
+      let row = requireOwnRow(bookId, owner)
+      if (revision !== undefined) {
+        // A file writer can win between refresh and the transaction. Re-read it after releasing the lock.
+        if (sourceChanged(row)) return undefined
+        const current = toOwned(row)
+        if (current.revision !== revision) throw new ChatRevisionConflict(current)
+      }
       if (patch.name !== undefined) {
         const name = row.kind === 'account' ? accountBookName(patch.name) : folderName(patch.name, CHAT_FOLDER_NAME_MAX_LENGTH)
         if (!name) throw new LorebookError('로어북 이름을 입력해줘.')
@@ -524,6 +632,8 @@ export const OwnedLorebookStore = {
       writeBook(row, entries)
       return toOwned(rowById(row.id) as LorebookRow)
     }).immediate()
+    if (result === undefined) throw new ChatRevisionConflict(toOwned(requireOwn(bookId, owner)))
+    return result
   },
 
   /** The book, its folder (files included) and every link to it. */
@@ -639,13 +749,22 @@ export const OwnedLorebookStore = {
   },
 
   /** Replace the chat book's entries; the book (and its folder) comes into being with its first entry. */
-  saveChatBook(threadId: number, value: unknown): OwnedLorebook | null {
-    const current = chatBookRow(threadId)
-    if (current) return OwnedLorebookStore.update(current.id, current.owner_key as string, { entries: value })
-    const entries = normalizeLorebook(value)
-    if (entries.length === 0) return null
-    assertEntryFiles(entries)
-    return toOwned(createChatBook(threadId, entries))
+  saveChatBook(threadId: number, value: unknown, revision?: string): OwnedLorebook | null {
+    // Refresh file sources before the checked transaction, as for account-book saves.
+    OwnedLorebookStore.chatBookOf(threadId)
+    const result = getUserSettingsDb().transaction(() => {
+      const row = chatBookRow(threadId)
+      if (row && sourceChanged(row)) return undefined
+      const current = row ? toOwned(row) : null
+      if (revision !== undefined && revision !== (current?.revision ?? 'absent')) throw new ChatRevisionConflict(current)
+      if (row) return OwnedLorebookStore.update(row.id, row.owner_key as string, { entries: value }, revision)
+      const entries = normalizeLorebook(value)
+      if (entries.length === 0) return null
+      assertEntryFiles(entries)
+      return toOwned(createChatBook(threadId, entries))
+    }).immediate()
+    if (result === undefined) throw new ChatRevisionConflict(OwnedLorebookStore.chatBookOf(threadId))
+    return result
   },
 
   /** Copy a branch's entries and linked files into its own book folder. */

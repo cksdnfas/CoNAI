@@ -6,6 +6,7 @@ import { asyncHandler } from '../../middleware/asyncHandler';
 import { getWorkflowNumericFieldDefinitionError } from '../../services/workflowNumericFieldPolicy';
 import { requirePermission } from '../../middleware/authMiddleware';
 import { nativeEditRevision, requireNativeEditRevision } from '../../services/nativeEditRevision';
+import { getUserSettingsDb } from '../../database/userSettingsDb';
 import {
   ComfyUiWorkflowConversionError,
   convertComfyUiWorkflowWithServers,
@@ -461,8 +462,11 @@ router.put('/:id', requirePermission('workflows.edit'), asyncHandler(async (req:
       color
     };
 
-    if (!requireNativeEditRevision(req, res, WorkflowModel.findById(id))) return;
-    const updated = await WorkflowModel.update(id, workflowData);
+    const updated = getUserSettingsDb().transaction(() => {
+      if (!requireNativeEditRevision(req, res, WorkflowModel.findById(id))) return null;
+      return WorkflowModel.update(id, workflowData);
+    }).immediate();
+    if (updated === null) return;
 
     if (!updated) {
       return res.status(404).json({

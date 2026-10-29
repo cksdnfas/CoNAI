@@ -157,16 +157,22 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     ])
     assert.deepEqual([result.added, result.updated, result.skipped], [2, 2, 1])
     const merged = book(target.id).entries
-    assert.deepEqual(merged.map((entry) => [entry.id, entry.title, entry.content, entry.keys.join(',')]), [
-      ['a', 'A', 'a-new', 'a1,a2'],
-      ['b', 'B', 'b-old', 'b1'],
-      ['c', 'C', 'c-old', 'c1'],
-      ['d', 'D', 'd-merged', 'd1,d2'],
-      ['c-2', 'C (2)', 'c-new', 'c2'],
-      ['e', 'E', 'e-new', 'e1'],
+    assert.deepEqual(merged.map((entry) => [entry.title, entry.content, entry.keys.join(',')]), [
+      ['A', 'a-new', 'a1,a2'],
+      ['B', 'b-old', 'b1'],
+      ['C', 'c-old', 'c1'],
+      ['D', 'd-merged', 'd1,d2'],
+      ['C (2)', 'c-new', 'c2'],
+      ['E', 'e-new', 'e1'],
     ])
+    assert.deepEqual(merged.slice(0, 4).map((entry) => entry.id), ['a', 'b', 'c', 'd'])
+    assert.equal(merged[5].id, 'e')
+    assert.match(merged[4].id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
     assert.ok(merged[4].order > merged[3].order && merged[5].order > merged[4].order, 'appended after the target entries')
     assert.deepEqual(book(source.id).entries.map((entry) => entry.content), ['a-new', 'b-new', 'c-new', 'd-new', 'e-new'], 'the source is left as it was')
+    OwnedLorebookStore.update(target.id, me, { entries: merged.filter((entry) => entry.id !== merged[4].id) })
+    const readded = applyMerge(source.id, target.id, me, [{ entryId: 'c', choice: 'both' }], { entryIds: ['c'] })
+    assert.notEqual(readded.book.entries.find((entry) => entry.title === 'C (2)')!.id, merged[4].id, 'a later collision never recycles the deleted copy’s ID')
   })
 
   await t.test('merge route: preview first, then files copied with a suffix and links re-pointed, source deleted', async () => {
@@ -268,7 +274,7 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     assert.deepEqual(book(target.id).entries.map((entry) => [entry.title, entry.content, entry.keys.join(',')]), [['항구', '안개 낀 항구. 배가 많다.', '항구,배'], ['노을', '노을이 진다.', '노을']])
   })
 
-  await t.test('merge draft: the profile model writes merged texts, per-entry errors, nothing saved', async () => {
+  await t.test('merge draft: the profile model writes merged texts, per-entry errors, nothing saved', async (s) => {
     const target = OwnedLorebookStore.create(me, { name: '초안 대상', entries: [
       { id: 'cat', title: '먹물', keys: ['먹물'], content: '검은 고양이.' },
       { id: 'dog', title: '바둑이', keys: ['바둑이'], content: '흰 개.' },
@@ -278,7 +284,22 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
       { id: 'dog2', title: '바둑이', keys: ['개'], content: '짖는다.' },
     ])
     const bodies: string[] = []
-    t.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+    const deadlines: number[] = []
+    const findProvider = ExternalApiProvider.findByName.bind(ExternalApiProvider)
+    s.mock.method(ExternalApiProvider, 'findByName', (name: string) => {
+      const found = findProvider(name)
+      return name === 'conn' && found ? { ...found, additional_config: { default_model: 'm', request_timeout_ms: 1800000 } } : found
+    })
+    const findProfile = ChatProfileStore.find.bind(ChatProfileStore)
+    s.mock.method(ChatProfileStore, 'find', (id: number) => {
+      const found = findProfile(id)
+      return id === profile.id && found ? { ...found, maxTokens: 8192 } : found
+    })
+    const timeout = AbortSignal.timeout
+    s.mock.method(AbortSignal, 'timeout', (ms: number) => { deadlines.push(ms); return timeout(ms) })
+    const timer = globalThis.setTimeout
+    s.mock.method(globalThis, 'setTimeout', (...args: Parameters<typeof setTimeout>) => { deadlines.push(Number(args[1])); return timer(...args) })
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
       if (init?.method !== 'POST') return new Response('', { status: 404 })
       const body = String(init.body)
       bodies.push(body)
@@ -287,16 +308,24 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     })
     const before = book(target.id)
     const { drafts } = await draftMerge(chatBook.id, target.id, me, { profileId: profile.id, instruction: '짧게 써.' })
-    t.mock.restoreAll()
     assert.deepEqual(drafts[0], { entryId: 'cat2', content: '검은 고양이. 사흘째 안 보인다.' })
     assert.equal(drafts[1].entryId, 'dog2')
     assert.ok('error' in drafts[1] && drafts[1].error.length > 0)
     assert.equal(bodies.length, 2, 'only model generation requests are captured')
-    const first = JSON.parse(bodies[0]) as { messages: Array<{ role: string; content: string }> }
+    const first = JSON.parse(bodies[0]) as { max_tokens: number; messages: Array<{ role: string; content: string }> }
+    assert.equal(first.max_tokens, 8192, 'the profile supplies the output allowance')
+    assert.ok(deadlines.includes(1800000), 'the connection supplies the request deadline')
+    assert.ok(!deadlines.includes(600000), 'the merge adds no shorter overall deadline')
     assert.equal(first.messages[0].content, '짧게 써.', 'the rewritten instruction replaces the default')
     assert.match(first.messages[1].content, /^## A \(채팅 책\)\n제목: 먹물\n키워드: 고양이\n\n사흘째 안 보인다\.\n\n## B \(대상 책\)\n제목: 먹물\n키워드: 먹물\n\n검은 고양이\.$/)
     assert.deepEqual(book(target.id).entries, before.entries, 'drafts are not saved')
+    assert.equal(book(target.id).revision, before.revision)
     assert.equal(book(target.id).updatedDate, before.updatedDate)
+    const cancelled = new AbortController()
+    cancelled.abort(new Error('caller cancelled'))
+    assert.deepEqual((await draftMerge(chatBook.id, target.id, me, { profileId: profile.id }, cancelled.signal)).drafts,
+      [{ entryId: 'cat2', error: 'caller cancelled' }, { entryId: 'dog2', error: 'caller cancelled' }])
+    assert.equal(bodies.length, 2, 'caller cancellation starts no further model requests')
     await assert.rejects(draftMerge(chatBook.id, target.id, me, { profileId: 999 }), /프로필을 찾을 수 없어/)
   })
 

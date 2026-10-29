@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { ChatFilledMark } from '@/features/codex-chat/chat-page-context'
 import { ChatFilledLabel } from './settings-filled-label'
-import { CircleUserRound, ListTodo, Search, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CircleUserRound, ListTodo, Search, type LucideIcon } from 'lucide-react'
 import { HEADER_PAGE_PATHS } from '@/components/layout/app-navigation'
 import { PAGE_ACCESS_CATALOG } from '@/features/auth/page-access-catalog'
 import { usePluginPages } from '@/features/plugins/use-plugin-pages'
 import { Select } from '@/components/ui/select'
+import { IconButton } from '@/components/ui/icon-button'
 import { SettingRow } from '@/components/ui/setting-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { ToggleChip } from '@/components/ui/chip'
@@ -59,6 +60,7 @@ export function GeneralPreferencesSections({
   const visibleSections = new Set(sections)
   const [draggedPage, setDraggedPage] = useState<HeaderNavigationPageKey | null>(null)
   const [dropTargetPage, setDropTargetPage] = useState<HeaderNavigationPageKey | null>(null)
+  const [selectedPage, setSelectedPage] = useState<HeaderNavigationPageKey | null>(null)
 
   const updateHeaderNavigationItem = (key: HeaderNavigationItemKey, checked: boolean) => {
     if (!generalDraft) return
@@ -85,6 +87,12 @@ export function GeneralPreferencesSections({
 
   const headerNavigation = generalDraft.headerNavigation ?? DEFAULT_HEADER_NAVIGATION_SETTINGS
   const headerNavigationOrder = normalizeHeaderNavigationOrder(generalDraft.headerNavigationOrder, pluginPages.map((page) => page.id))
+  const pageOptions = headerNavigationOrder.flatMap((key) => {
+    const option = pageOption(key)
+    return option ? [{ key, ...option }] : []
+  })
+  const selectedIndex = Math.max(0, pageOptions.findIndex((option) => option.key === selectedPage))
+  const selectedOption = pageOptions[selectedIndex]
   const headerMenuLabel = t({ ko: '상단 고정 페이지', en: 'Pinned pages' })
   const languageLabel = t({ ko: '언어', en: 'Language' })
   const similarityLabel = t({ ko: '유사/중복 검사', en: 'Similar/duplicate check' })
@@ -133,13 +141,12 @@ export function GeneralPreferencesSections({
           />
           <SettingRow
             label={<ChatFilledLabel fieldId="headerNavigation">{headerMenuLabel}</ChatFilledLabel>}
-            info={t({ ko: '휴대폰에서는 앞 4개가 하단 탭이 돼. 끌어서 순서를 바꿔.', en: 'On phones the first four become the bottom tabs. Drag to reorder.' })}
+            info={t({ ko: '휴대폰에서는 고정한 앞 4개가 하단 탭이 돼. 끌거나 순서 버튼으로 바꿔.', en: 'On phones the first four pinned pages become the bottom tabs. Drag or use the order buttons to reorder.' })}
             align="start"
             controlClassName="justify-start sm:max-w-xl sm:justify-end"
           >
-            {headerNavigationOrder.map((key) => {
-              const option = pageOption(key)
-              if (!option) return null
+            {pageOptions.map((option) => {
+              const { key } = option
               const Icon = option.icon
               // Pressed = pinned; a page left unpinned (plugin pages by default) sits in its menu group.
               const pressed = headerNavigation[key] === true
@@ -163,6 +170,15 @@ export function GeneralPreferencesSections({
                 </span>
               )
             })}
+            {selectedOption ? (
+              <div className="flex w-full items-center justify-end gap-1">
+                <Select variant="settings" className="w-auto max-w-48" aria-label={t({ ko: '순서 바꿀 페이지', en: 'Page to reorder' })} value={selectedOption.key} onChange={(event) => setSelectedPage(event.target.value as HeaderNavigationPageKey)}>
+                  {pageOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+                </Select>
+                <IconButton size="icon-sm" variant="ghost" label={t({ ko: '{page} 앞으로 이동', en: 'Move {page} earlier' }, { page: selectedOption.label })} disabled={selectedIndex === 0} onClick={() => { setSelectedPage(selectedOption.key); moveHeaderPage(selectedOption.key, pageOptions[selectedIndex - 1].key) }}><ChevronLeft /></IconButton>
+                <IconButton size="icon-sm" variant="ghost" label={t({ ko: '{page} 뒤로 이동', en: 'Move {page} later' }, { page: selectedOption.label })} disabled={selectedIndex === pageOptions.length - 1} onClick={() => { setSelectedPage(selectedOption.key); moveHeaderPage(selectedOption.key, pageOptions[selectedIndex + 1].key) }}><ChevronRight /></IconButton>
+              </div>
+            ) : null}
           </SettingRow>
           <SettingRow
             label={<ChatFilledLabel fieldId="headerTools" />}

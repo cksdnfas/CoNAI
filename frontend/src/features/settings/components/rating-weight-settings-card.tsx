@@ -10,6 +10,7 @@ import { ChatFilledLabel } from './settings-filled-label'
 import { SettingsValidationAlert } from './settings-rows'
 
 interface RatingWeightSettingsCardProps {
+  draftLocked?: boolean
   heading: ReactNode
   actions?: ReactNode
   ratingWeightsDraft: RatingWeightsRecord | null
@@ -35,6 +36,7 @@ const DEFAULT_PREVIEW_STATE: RatingPreviewState = {
 }
 
 export function RatingWeightSettingsCard({
+  draftLocked = false,
   heading,
   actions,
   ratingWeightsDraft,
@@ -98,6 +100,7 @@ export function RatingWeightSettingsCard({
                 variant="settings"
                 aria-label={field.label}
                 value={ratingWeightsDraft[field.key]}
+                disabled={draftLocked}
                 onValueCommit={(value) => onPatchRatingWeights({ [field.key]: Number(value) || 0 })}
               />
             </SettingRow>

@@ -140,6 +140,7 @@ export interface CodexChatApi {
    * useCodexChatLiveTurn: it changes with every token, and the rest of the API must not re-render the app shell then.
    */
   currentLiveTurn: () => CodexChatLiveTurn | null
+  currentDrafts: () => Record<number, string>
   draftAttachments: StoredFileEntry[]
   draftMediaAttachments: ChatMediaAttachment[]
   setMediaAttachments: (items: ChatMediaAttachment[]) => boolean
@@ -198,6 +199,16 @@ export function useCodexChatDrafts() {
 export const CodexChatLiveContext = createContext<CodexChatLiveTurn | null>(null)
 export function useCodexChatLiveTurn() {
   return useContext(CodexChatLiveContext)
+}
+
+/** Only turn/speaker transitions, never text frames; the shell and stored transcript subscribe here. */
+export type CodexChatLiveState = {
+  threadId: number; replacingMessageId?: number; speakerIds: string; queueIds: string
+  portraitProfileId: number | null; hasText: boolean
+}
+export const CodexChatLiveStateContext = createContext<CodexChatLiveState | null>(null)
+export function useCodexChatLiveState() {
+  return useContext(CodexChatLiveStateContext)
 }
 
 export function useCodexChatReference() {

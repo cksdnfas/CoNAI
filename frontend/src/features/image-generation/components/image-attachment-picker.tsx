@@ -1,6 +1,6 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { ImagePlus, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { SegmentedTabBar } from '@/components/common/segmented-tab-bar'
 import { MediaFileDropSurface } from '@/components/media/media-file-drop-surface'
@@ -20,6 +20,7 @@ import { useI18n } from '@/i18n'
 import { useDropZoneState } from '@/features/upload/use-drop-zone-state'
 import { listGenerationSaveImages } from '@/lib/api-image-generation-history'
 import type { SaveBrowserImageRecord } from '@/lib/api-image-generation-types'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 import { getImageViewerSettings } from '@/lib/api-settings'
 import {
   DEFAULT_IMAGE_SAVE_SETTINGS,
@@ -66,11 +67,6 @@ type PendingImageSaveState = {
   sourceInfo: ImageSaveSourceInfo
 }
 
-type SearchableImageAttachmentRecord = {
-  image: ImageRecord
-  searchLabel: string
-}
-
 type ImageAttachmentBrowserSectionProps = {
   searchValue: string
   searchPlaceholder: string
@@ -98,14 +94,6 @@ function toSaveBrowserImageRecord(item: SaveBrowserImageRecord): ImageRecord {
     mime_type: item.mime_type,
     file_size: item.file_size,
     first_seen_date: item.modified_at,
-  }
-}
-
-/** Cache normalized display text so picker search does not rebuild labels on every keystroke. */
-function toSearchableImageAttachmentRecord(image: ImageRecord): SearchableImageAttachmentRecord {
-  return {
-    image,
-    searchLabel: getImageListDisplayName(image).toLowerCase(),
   }
 }
 
@@ -216,6 +204,10 @@ export function ImageAttachmentPickerButton({
   const [selectedLibraryImage, setSelectedLibraryImage] = useState<ImageRecord | null>(null)
   const [selectedSaveIds, setSelectedSaveIds] = useState<string[]>([])
   const [saveSearch, setSaveSearch] = useState('')
+  const debouncedSaveSearch = useDebouncedValue(saveSearch.trim())
+  const [saveSession, setSaveSession] = useState(0)
+  const refreshSaveOnOpen = useRef(false)
+  const saveSnapshot = useRef<{ session: number; id: string | null } | null>(null)
   const [imageSaveOptions, setImageSaveOptions] = useState<ImageSaveSettings>(DEFAULT_IMAGE_SAVE_SETTINGS)
   const [pendingImageSave, setPendingImageSave] = useState<PendingImageSaveState | null>(null)
   const sourceItems = useMemo(() => {
@@ -241,14 +233,32 @@ export function ImageAttachmentPickerButton({
     queryFn: getImageViewerSettings,
   })
 
-  const saveImagesQuery = useQuery({
-    queryKey: ['image-attachment-save-images'],
-    queryFn: () => listGenerationSaveImages(),
-    enabled: canViewImages && isOpen && !uploadOnly && source === 'save',
+  const saveImagesQuery = useInfiniteQuery({
+    queryKey: ['image-attachment-save-images', saveSession, debouncedSaveSearch],
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) => {
+      if (saveSnapshot.current?.session !== saveSession) saveSnapshot.current = { session: saveSession, id: null }
+      const refresh = pageParam === null && refreshSaveOnOpen.current
+      if (refresh) refreshSaveOnOpen.current = false
+      const page = await listGenerationSaveImages({
+        limit: 60,
+        search: debouncedSaveSearch,
+        cursor: pageParam,
+        snapshot: !refresh && pageParam === null ? saveSnapshot.current.id : undefined,
+        refresh,
+      })
+      if (saveSnapshot.current?.session === saveSession) saveSnapshot.current.id = page.snapshot
+      return page
+    },
+    getNextPageParam: (page) => page.nextCursor,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    enabled: canViewImages && isOpen && !uploadOnly && source === 'save' && saveSearch.trim() === debouncedSaveSearch,
   })
 
   useEffect(() => {
     if (!isOpen) {
+      setSource('upload')
       return
     }
 
@@ -264,18 +274,7 @@ export function ImageAttachmentPickerButton({
     }
   }, [source, uploadOnly])
 
-  const saveImageRecords = useMemo(() => (saveImagesQuery.data ?? []).map(toSaveBrowserImageRecord), [saveImagesQuery.data])
-
-  const saveImageSearchEntries = useMemo(() => saveImageRecords.map(toSearchableImageAttachmentRecord), [saveImageRecords])
-
-  const filteredSaveImages = useMemo(() => {
-    const search = saveSearch.trim().toLowerCase()
-    if (!search) {
-      return saveImageRecords
-    }
-
-    return saveImageSearchEntries.filter((entry) => entry.searchLabel.includes(search)).map((entry) => entry.image)
-  }, [saveImageRecords, saveImageSearchEntries, saveSearch])
+  const saveImageRecords = useMemo(() => (saveImagesQuery.data?.pages ?? []).flatMap((page) => page.items.map(toSaveBrowserImageRecord)), [saveImagesQuery.data])
 
   const effectiveImageSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
   const effectiveModalTitle = modalTitle ?? t({ ko: '이미지 선택', en: 'Select image' })
@@ -519,7 +518,14 @@ export function ImageAttachmentPickerButton({
 
           {!uploadOnly ? (
             <div>
-              <SegmentedTabBar value={source} items={sourceItems} onChange={(nextSource) => setSource(nextSource as ImageAttachmentSource)} />
+              <SegmentedTabBar value={source} items={sourceItems} onChange={(value) => {
+                const nextSource = value as ImageAttachmentSource
+                if (nextSource === 'save' && source !== 'save') {
+                  refreshSaveOnOpen.current = true
+                  setSaveSession((session) => session + 1)
+                }
+                setSource(nextSource)
+              }} />
             </div>
           ) : null}
 
@@ -565,11 +571,14 @@ export function ImageAttachmentPickerButton({
             <ImageAttachmentBrowserSection
               searchValue={saveSearch}
               searchPlaceholder={t({ ko: 'save 이미지 이름 검색', en: 'Search save images by name' })}
-              items={filteredSaveImages}
+              items={saveImageRecords}
               selectedIds={selectedSaveIds}
               onSelectedIdsChange={handleSaveSelectionChange}
               onSearchChange={setSaveSearch}
               isLoading={saveImagesQuery.isLoading}
+              hasMore={saveImagesQuery.hasNextPage}
+              isLoadingMore={saveImagesQuery.isFetching}
+              onLoadMore={() => saveImagesQuery.fetchNextPage()}
               renderSelectedAction={(image) => (
                 <Button
                   type="button"

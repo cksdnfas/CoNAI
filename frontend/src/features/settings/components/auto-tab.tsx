@@ -13,6 +13,7 @@ import { useI18n } from '@/i18n'
 import { SettingsContents } from './settings-navigation'
 
 export function AutoTab({
+  draftLocked = false,
   aiRuntimeDraft,
   aiRuntimeStatus,
   onPatchAiRuntime,
@@ -52,7 +53,7 @@ export function AutoTab({
   hasRatingWeightsChanges,
   hasRatingTiersChanges,
   isCheckingTaggerDependencies,
-}: AutoTabProps) {
+}: AutoTabProps & { draftLocked?: boolean }) {
   const { t } = useI18n()
 
   return (
@@ -60,6 +61,7 @@ export function AutoTab({
       <SettingsContents groups={[{ id: 'runtime', label: t({ ko: 'AI 런타임', en: 'AI runtime' }) }, { id: 'kaloscope', label: 'Kaloscope' }, { id: 'tagger', label: t({ ko: '태거', en: 'Tagger' }) }, { id: 'embedding', label: t({ ko: '의미 검색', en: 'Semantic search' }) }, { id: 'ratings', label: t({ ko: '평가', en: 'Ratings' }) }]} />
       <section data-settings-group="runtime">
         <AiRuntimeSettingsCard
+          draftLocked={draftLocked}
           heading={t({ ko: 'AI 런타임', en: 'AI runtime' })}
           actions={<SectionDirtyBadge dirty={hasAiRuntimeChanges} />}
           draft={aiRuntimeDraft}
@@ -85,6 +87,7 @@ export function AutoTab({
 
       <section data-settings-group="kaloscope">
         <KaloscopeSettingsCard
+          draftLocked={draftLocked}
           heading="Kaloscope"
           actions={<SectionDirtyBadge dirty={hasKaloscopeChanges} />}
           kaloscopeDraft={kaloscopeDraft}
@@ -96,7 +99,7 @@ export function AutoTab({
       </section>
 
       <section data-settings-group="tagger">
-        <TaggerSettingsCard
+        <fieldset disabled={draftLocked} className="contents"><TaggerSettingsCard
           heading={t({ ko: '태거', en: 'Tagger' })}
           actions={(
             <>
@@ -107,21 +110,22 @@ export function AutoTab({
           taggerDraft={taggerDraft}
           taggerModels={taggerModels}
           onPatchTagger={onPatchTagger}
-        />
+        /></fieldset>
       </section>
 
       <section data-settings-group="embedding">
-        <EmbeddingSettingsCard
+        <fieldset disabled={draftLocked} className="contents"><EmbeddingSettingsCard
           heading="임베딩 · EmbeddingGemma 2"
           actions={<SectionDirtyBadge dirty={hasEmbeddingChanges} />}
           draft={embeddingDraft}
           status={embeddingStatus}
           onPatch={onPatchEmbedding}
-        />
+        /></fieldset>
       </section>
 
       <section data-settings-group="ratings">
         <RatingWeightSettingsCard
+          draftLocked={draftLocked}
           heading={t({ ko: '평가 가중치', en: 'Rating weights' })}
           actions={<SectionDirtyBadge dirty={hasRatingWeightsChanges} />}
           ratingWeightsDraft={ratingWeightsDraft}
@@ -133,11 +137,12 @@ export function AutoTab({
 
       <section>
         <RatingTierSettingsCard
+          draftLocked={draftLocked}
           heading={t({ ko: '평가 등급', en: 'Rating tiers' })}
           actions={(
             <>
               <SectionDirtyBadge dirty={hasRatingTiersChanges} />
-              <IconButton size="icon-sm" variant="ghost" onClick={onAddRatingTier} label={t({ ko: '등급 추가', en: 'Add tier' })}>
+              <IconButton size="icon-sm" variant="ghost" onClick={onAddRatingTier} disabled={draftLocked} label={t({ ko: '등급 추가', en: 'Add tier' })}>
                 <Plus className="h-4 w-4" />
               </IconButton>
             </>

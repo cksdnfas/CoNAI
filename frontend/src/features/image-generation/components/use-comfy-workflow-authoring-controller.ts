@@ -37,6 +37,7 @@ import {
 } from './comfy-workflow-public-settings'
 import { applyMarkedFieldPatch } from './comfy-workflow-marked-field-utils'
 import { extractComfyWorkflowFromMedia, isComfyMediaFile } from './comfy-workflow-media-import'
+import { ApiRequestError } from '@/lib/api-request'
 
 export type ComfyWorkflowAuthoringModalInitialData = {
   workflow: GenerationWorkflowDetail
@@ -141,6 +142,8 @@ export function useComfyWorkflowAuthoringController({
   const appearanceQuery = useGlobalAppearanceSettingsQuery()
   const invalidJsonMessage = t({ ko: '유효한 workflow JSON이 아니야.', en: 'This is not a valid workflow JSON.' })
   const [draft, setDraft] = useState<ComfyWorkflowDraft>(() => draftFromWorkflow(null))
+  const [loadedWorkflow, setLoadedWorkflow] = useState<GenerationWorkflowDetail | null>(null)
+  const openedWorkflowRef = useRef<string | null>(null)
   const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(draftFromWorkflow(null)))
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [editorTab, setEditorTabState] = useState<ComfyWorkflowEditorTab>('graph')
@@ -191,8 +194,16 @@ export function useComfyWorkflowAuthoringController({
 
   // Reset everything each time the editor opens, from the workflow being edited or an empty draft.
   useEffect(() => {
-    if (!open) return
-    const nextDraft = draftFromWorkflow(mode === 'edit' ? initialData?.workflow : null)
+    if (!open) {
+      openedWorkflowRef.current = null
+      return
+    }
+    const key = mode === 'edit' ? `edit:${initialData?.workflow.id ?? ''}` : 'create'
+    if (openedWorkflowRef.current === key) return
+    openedWorkflowRef.current = key
+    const workflow = mode === 'edit' ? initialData?.workflow ?? null : null
+    setLoadedWorkflow(workflow ? { ...workflow } : null)
+    const nextDraft = draftFromWorkflow(workflow)
     setDraft(nextDraft)
     setSavedSnapshot(JSON.stringify(nextDraft))
     setJsonError(null)
@@ -522,10 +533,10 @@ export function useComfyWorkflowAuthoringController({
       const payload = buildComfyWorkflowPayload({
         artifactDirectoryMode: draft.artifactDirectoryMode,
         artifactRootPath: draft.artifactRootPath,
-        color: initialData?.workflow.color ?? '#2196f3',
+        color: loadedWorkflow?.color ?? '#2196f3',
         kind: draft.kind,
         description: draft.description,
-        isActive: initialData?.workflow.is_active ?? true,
+        isActive: loadedWorkflow?.is_active ?? true,
         isPublicPage: draft.isPublicPage,
         markedFields: markedFieldsWithNodeSources,
         publicQueueMaxCount: draft.publicQueueMaxCount,
@@ -535,9 +546,15 @@ export function useComfyWorkflowAuthoringController({
         workflowJson: draft.workflowJson,
         workflowName: draft.name,
       })
-      let workflowId = initialData?.workflow.id
+      let workflowId = loadedWorkflow?.id
       if (mode === 'edit' && workflowId) {
-        await updateGenerationWorkflow(workflowId, payload, revision)
+        const loadedRevision = loadedWorkflow?.assistant_revision
+        if (!loadedRevision || (revision && revision !== loadedRevision)) {
+          throw new Error(t({ ko: '워크플로를 새로 불러와줘.', en: 'Reload the workflow first.' }))
+        }
+        await updateGenerationWorkflow(workflowId, payload, loadedRevision)
+      } else if (mode === 'edit') {
+        throw new Error(t({ ko: '워크플로를 새로 불러와줘.', en: 'Reload the workflow first.' }))
       } else {
         const response = await createGenerationWorkflow(payload)
         workflowId = response.data.id
@@ -547,7 +564,8 @@ export function useComfyWorkflowAuthoringController({
       onSaved?.(workflowId as number)
       onClose()
     } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, mode === 'edit' ? t({ ko: '워크플로우 수정에 실패했어.', en: 'Failed to update the workflow.' }) : t({ ko: '워크플로우 저장에 실패했어.', en: 'Failed to save the workflow.' })), tone: 'error' })
+      const conflict = error instanceof ApiRequestError && error.status === 409 && error.code === 'revision_conflict'
+      showSnackbar({ message: conflict ? t({ ko: '워크플로가 바뀌었어. 새로 불러와줘.', en: 'The workflow changed. Reload it.' }) : getErrorMessage(error, mode === 'edit' ? t({ ko: '워크플로우 수정에 실패했어.', en: 'Failed to update the workflow.' }) : t({ ko: '워크플로우 저장에 실패했어.', en: 'Failed to save the workflow.' })), tone: 'error' })
       if (propagate) throw error
     } finally {
       setIsSaving(false)
@@ -555,7 +573,7 @@ export function useComfyWorkflowAuthoringController({
   }
 
   useComfyAuthorChatPage({
-    enabled: open && !isSaving, dirty: isDirty, graph: parsedGraph, saved: mode === 'edit' ? initialData?.workflow ?? null : null,
+    enabled: open && !isSaving, dirty: isDirty, graph: parsedGraph, saved: mode === 'edit' ? loadedWorkflow : null,
     draft: { name: draft.name, description: draft.description, workflowJson: draft.workflowJson, markedFields: draft.markedFields, isPublicPage: draft.isPublicPage, publicSlug: draft.publicSlug, publicQueueMaxCount: draft.publicQueueMaxCount },
     setDraft: (next) => {
       setDraft((current) => ({ ...current, name: next.name, description: next.description, workflowJson: next.workflowJson, markedFields: next.markedFields, isPublicPage: next.isPublicPage, publicSlug: next.publicSlug, publicQueueMaxCount: next.publicQueueMaxCount }))

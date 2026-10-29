@@ -92,25 +92,20 @@ export function useImageFeedSafety({
 
   const itemSafetyById = useMemo(() => {
     const cache = safetyCacheRef.current
-    if (cache.tiers !== ratingTiersQuery.data) {
-      // 정책 자체가 바뀌면(로드 포함) 전체 재계산이 맞다.
-      cache.tiers = ratingTiersQuery.data
-      cache.entries.clear()
-    }
-
+    const previousEntries = cache.tiers === ratingTiersQuery.data ? cache.entries : new Map()
+    const nextEntries = new Map<string, { score: number | null | undefined; safety: ResolvedImageFeedSafety }>()
     const safetyById = new Map<string, ResolvedImageFeedSafety>()
     for (const image of items) {
       const key = getImageFeedSafetyKey(image)
-      const cached = cache.entries.get(key)
-      if (cached && cached.score === image.rating_score) {
-        safetyById.set(key, cached.safety)
-        continue
-      }
-
-      const safety = resolveImageFeedSafety(image, ratingTiersQuery.data)
-      cache.entries.set(key, { score: image.rating_score, safety })
-      safetyById.set(key, safety)
+      const cached = nextEntries.get(key) ?? previousEntries.get(key)
+      const entry = cached && cached.score === image.rating_score
+        ? cached
+        : { score: image.rating_score, safety: resolveImageFeedSafety(image, ratingTiersQuery.data) }
+      nextEntries.set(key, entry)
+      safetyById.set(key, entry.safety)
     }
+    cache.tiers = ratingTiersQuery.data
+    cache.entries = nextEntries
     return safetyById
   }, [items, ratingTiersQuery.data])
 
@@ -144,6 +139,7 @@ export function useImageFeedSafety({
 
   const persistentOverlayByKey = useMemo(() => {
     const elementCache = overlayElementCacheRef.current
+    const nextElementCache = new Map<string, { safety: ResolvedImageFeedSafety; visibilityMode: 'feed' | 'badge-only'; element: ReactNode }>()
     const overlays = new Map<string, ReactNode>()
     for (const [key, safety] of itemSafetyById) {
       if (!safety?.tier) {
@@ -152,14 +148,16 @@ export function useImageFeedSafety({
 
       const cached = elementCache.get(key)
       if (cached && cached.safety === safety && cached.visibilityMode === visibilityMode) {
+        nextElementCache.set(key, cached)
         overlays.set(key, cached.element)
         continue
       }
 
       const element = <ImageRatingSafetyBadge tier={safety.tier} visibility={visibilityMode === 'badge-only' ? 'show' : safety.visibility} />
-      elementCache.set(key, { safety, visibilityMode, element })
+      nextElementCache.set(key, { safety, visibilityMode, element })
       overlays.set(key, element)
     }
+    overlayElementCacheRef.current = nextElementCache
     return overlays
   }, [itemSafetyById, visibilityMode])
 

@@ -194,6 +194,17 @@ function withDefaultDateTimeOptions(
  * 키는 options 의 JSON 직렬화 — 호출부가 리터럴 옵션을 쓰므로 조합 수는 소수로 유계다.
  */
 const numberFormatCache = new Map<string, Intl.NumberFormat>()
+const dateFormatCache = new Map<string, Intl.DateTimeFormat>()
+
+function getCachedDateFormat(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${locale}|${JSON.stringify(options)}`
+  let format = dateFormatCache.get(key)
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale, options)
+    dateFormatCache.set(key, format)
+  }
+  return format
+}
 
 function getCachedNumberFormat(locale: string, options?: Intl.NumberFormatOptions): Intl.NumberFormat {
   const cacheKey = options ? `${locale}|${JSON.stringify(options)}` : locale
@@ -264,12 +275,12 @@ export function I18nProvider({ children, catalog = DEFAULT_CATALOG }: PropsWithC
   )
 
   const formatDate = useCallback<I18nContextValue['formatDate']>(
-    (value, options) => new Intl.DateTimeFormat(locale, withDefaultDateTimeOptions(options, { dateStyle: 'medium' })).format(coerceDate(value)),
+    (value, options) => getCachedDateFormat(locale, withDefaultDateTimeOptions(options, { dateStyle: 'medium' })).format(coerceDate(value)),
     [locale],
   )
 
   const formatDateTime = useCallback<I18nContextValue['formatDateTime']>(
-    (value, options) => new Intl.DateTimeFormat(locale, withDefaultDateTimeOptions(options, { dateStyle: 'medium', timeStyle: 'short' })).format(coerceDate(value)),
+    (value, options) => getCachedDateFormat(locale, withDefaultDateTimeOptions(options, { dateStyle: 'medium', timeStyle: 'short' })).format(coerceDate(value)),
     [locale],
   )
 
@@ -287,12 +298,4 @@ export function useI18n(): I18nContextValue {
     throw new Error('useI18n must be used within I18nProvider')
   }
   return context
-}
-
-export function useLanguage(): AppLanguage {
-  return useI18n().language
-}
-
-export function useLocale(): string {
-  return useI18n().locale
 }

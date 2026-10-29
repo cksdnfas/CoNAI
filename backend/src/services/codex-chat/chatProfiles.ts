@@ -5,7 +5,7 @@ import { isClaudeReasoningEffort, isLlmReasoningEffort, parseLlmExtraParams, typ
 import { BACKGROUND_MAX_LENGTH, BACKGROUND_PATTERN, normalizeChatStyle, type ChatStyle } from './chatStyle'
 import { ChatLorebookStore, normalizeLorebookIds } from './chatLorebook'
 import { ChatSharedBlockStore, normalizeBlockIds } from './chatDisplayBlocks'
-import { ChatProfileError } from './chatProfileError'
+import { ChatProfileError, ChatRevisionConflict } from './chatProfileError'
 import { AuthPermissionGroup } from '../../models/AuthPermissionGroup'
 import { ChatGenerationPresetStore, normalizeGenerationPresetIds } from './chatGenerationPresets'
 import { contentRatingTier, LLM_CONNECTION_TYPES, MODEL_CONNECTION_TYPES, ModelSlotStore } from './modelSlots'
@@ -100,6 +100,10 @@ export type ChatContentRatingMode = 'model' | 'custom'
 
 export type ChatProfile = {
   id: number
+  /** Opaque editor revision, including the synced character setting. */
+  revision: string
+  /** The omitted background image's own revision for editor merges. */
+  backgroundRevision: number
   characterLink: ChatProfileCharacterLink | null
   /** Internal effective expression identity; the public link contract intentionally has no group id. */
   characterExpressionGroupId: number | null
@@ -252,7 +256,7 @@ export type LegacyModelPairs = {
   judgeModel?: string | null
 }
 
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'characterLink' | 'characterExpressionGroupId'>> & { characterLink?: ChatProfileCharacterLinkInput } & LegacyModelPairs
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'revision' | 'backgroundRevision' | 'createdDate' | 'updatedDate' | 'characterLink' | 'characterExpressionGroupId'>> & { characterLink?: ChatProfileCharacterLinkInput } & LegacyModelPairs
 
 /** Each role's slot field and the legacy pair keys that stand for it. */
 const LEGACY_PAIR_KEYS: Array<[keyof ChatProfileInput, keyof LegacyModelPairs, keyof ChatProfileInput]> = [
@@ -265,6 +269,8 @@ const LEGACY_PAIR_KEYS: Array<[keyof ChatProfileInput, keyof LegacyModelPairs, k
 
 type ProfileRow = CharacterProfileRow & {
   id: number
+  revision: number
+  background_revision: number
   name: string
   tagline: string
   lorebook_ids: string | null
@@ -431,6 +437,8 @@ function toProfile(row: ProfileRow, dependencies?: ProfileListDependencies): Cha
   try { avatarCrop = normalizeAvatarCrop(row.avatar_crop ? JSON.parse(row.avatar_crop) : null) } catch { /* Keep malformed legacy crops unset. */ }
   const profile: ChatProfile = {
     id: row.id,
+    revision: `${row.revision ?? 0}:${row.character_sync === 1 ? row.linked_revision ?? '' : ''}`,
+    backgroundRevision: row.background_revision ?? 0,
     characterLink: null,
     characterExpressionGroupId: null,
     name: row.name,
@@ -762,7 +770,7 @@ function toColumns(input: ChatProfileInput, options: { draft?: boolean; strictKe
   return columns
 }
 
-const ADMIN_PROFILE_COLUMNS = `id, name, tagline, lorebook_ids, block_ids, lore_scan_depth, lore_token_budget,
+const ADMIN_PROFILE_COLUMNS = `id, revision, background_revision, name, tagline, lorebook_ids, block_ids, lore_scan_depth, lore_token_budget,
   lore_depth, lore_recursion_depth, author_note, avatar, appearance, reference_hash, avatar_hash, avatar_crop,
   background_hash, engine, model, llm_runtime, reasoning_effort, reasoning_budget_tokens, extra_params, system_prompt,
   prompt_sections, tool_allowlist, tool_output_limit, character_description, example_dialogue, user_persona, greeting,
@@ -824,7 +832,7 @@ export const ChatProfileStore = {
     const db = getUserSettingsDb()
     // The public directory never sends prompts, greetings, linked-file contents or inline images.
     // Presence sentinels retain the legacy asset URLs without hydrating the base64 payloads.
-    const projection = options.directory ? `id, name, tagline, engine, model, llm_runtime, model_slot_id, summary_slot_id,
+    const projection = options.directory ? `id, revision, background_revision, name, tagline, engine, model, llm_runtime, model_slot_id, summary_slot_id,
       translation_slot_id, suggest_slot_id, suggest_profile_id, suggest_user_profile_id, suggest_enabled,
       reasoning_effort, reasoning_budget_tokens, temperature, max_tokens, context_turns, context_tokens, summary_enabled,
       lore_depth, author_note, appearance, avatar_hash, avatar_crop, background_hash, reference_hash, chat_style, block_ids,
@@ -892,14 +900,23 @@ export const ChatProfileStore = {
     return result
   },
 
-  update(profileId: number, patch: ChatProfileInput, assetDatabase?: ReturnType<typeof getUserSettingsDb>, options: { deletingCharacterSetting?: boolean } = {}): ChatProfile | null {
+  update(profileId: number, patch: ChatProfileInput, assetDatabase?: ReturnType<typeof getUserSettingsDb>, options: { deletingCharacterSetting?: boolean; revision?: string } = {}): ChatProfile | null {
     const db = getUserSettingsDb(), nested = db.inTransaction
+    // Checked saves lock the record before reading it; asset grouping must use the same attached connection.
+    if (options.revision !== undefined && !assetDatabase) {
+      attachMainImagesDatabase(db)
+      assetDatabase = db
+    }
     let previousSettingId: number | null = null
     let linkChanged = false
-    const result = db.transaction(() => {
+    const transaction = db.transaction(() => {
     const stored = getUserSettingsDb().prepare('SELECT * FROM llm_chat_profiles WHERE id = ?').get(profileId) as ProfileRow | undefined
     if (!stored) {
       return null
+    }
+    if (options.revision !== undefined) {
+      const latest = ChatProfileStore.find(profileId) as ChatProfile
+      if (latest.revision !== options.revision) throw new ChatRevisionConflict(latest)
     }
     const current = toProfile(stored)
     previousSettingId = stored.character_setting_id ?? null
@@ -952,7 +969,8 @@ export const ChatProfileStore = {
       WHERE id = @id
     `).run({ ...columns, id: profileId })
     return ChatProfileStore.find(profileId)
-    })()
+    })
+    const result = options.revision === undefined ? transaction() : transaction.immediate()
     if (!nested && linkChanged && result) characterChanged([], [previousSettingId, result.characterLink?.settingId ?? null].filter((id): id is number => id !== null), [profileId])
     return result
   },

@@ -1,15 +1,15 @@
-import { validateChatMediaAttachments } from './chatMediaAttachments'
+import { prepareChatSend } from './chatSendPreparation'
+import { requestChatModel, withChatTokenModel } from './llmChatContext'
 import { addChatOpening } from './chatGreeting'
 import type { ChatExecutionContext, ChatPageSnapshot, ChatProposal } from '@conai/shared'
 import { isCodexChatCreationTool } from '@conai/shared'
 import { ChatProposalStore, isChatProposalToolAvailable } from './chatProposals'
-import { beginDirectReply, userReplyRouting } from './chatReplies'
+import { beginDirectReply } from './chatReplies'
 import type { McpRequester } from '../../mcp/context'
 import type { LlmGenerationOptions } from '../llmGenerationOptions'
 import { profileGenerationOptions } from './chatProfiles'
-import { inlineTextsForChat, loadAttachedImages, validateChatAttachments, withLatestMediaGeneration } from './chatAttachments'
-import { ChatFlagStore, parseFlagIds, parsePicks } from './chatFlags'
-import { readChoiceAnswer } from './chatChoices'
+import { inlineTextsForChat, loadAttachedImages, withLatestMediaGeneration } from './chatAttachments'
+import { ChatFlagStore } from './chatFlags'
 import { profileContentLimit } from './chatContentRating'
 import { openChatMcpBridge, type ChatMcpBridge } from './chatMcpBridge'
 import { chatWorkspace, workspaceInstructions } from './chatWorkspace'
@@ -35,7 +35,7 @@ import { ChatSummaryStore } from './chatMemory'
 import { appendUserDirective, buildChatMessages, cutToolOutput, directContextTurns, estimateMessagesTokens, estimateTokens, type ChatContextMeta, fillCharacterPlaceholders, fitChatContext, fitThreadSummary, fitWorkspaceRead, latestWindow, prefixUserContent, rawMessagesEstimate, recordPromptUsage, replyCapFor, resolveContextConfig, sendableMessages, stripThinking, summarizeAhead, summarizeAll, unsummarizedMessages, wrapUpRequest } from './llmChatContext'
 import { addressLabelFilter, restatement, roundSeparator } from './chatReplyText'
 import { noteTextToolCalls, recoverTextToolCalls, textToolCallFilter } from './textToolCalls'
-import { chatPageReference, NO_PAGE_NOTE, parseChatPageContext, proposalOutcomeNote } from './chatPageContext'
+import { chatPageReference, NO_PAGE_NOTE, proposalOutcomeNote } from './chatPageContext'
 import { knowledgePageForExecution, recordQuotedBoardKnowledge } from '../posts/knowledge/knowledgePage'
 import type { ChatSendOptions } from './chatTasks'
 import { rememberChatPage } from './chatPageBridge'
@@ -90,7 +90,7 @@ export class LlmChatError extends Error {
 
 /** The connection an API LLM profile chats through (its model slot, direct connection or the default slot). */
 function chatConnectionOf(profile: ChatProfile) {
-  const resolved = resolveProfileModel(profile, 'chat')
+  const resolved = requestChatModel(profile)
   if (!resolved) throw new LlmChatError('LLM 연결을 찾을 수 없어. 프로필의 모델을 골라줘.')
   return resolved.providerName
 }
@@ -448,7 +448,7 @@ async function replySemanticContext(threadId: number, profile: ChatProfile, mess
 async function streamReply(turn: LlmTurn, requester: McpRequester, profile: ChatProfile, buildMessages: (tools: ChatCompletionTool[], judged: JudgedContext | null) => ChatCompletionMessage[] | Promise<ChatCompletionMessage[]>, generation: Partial<LlmGenerationOptions> = {}, prepare?: (tools: ChatCompletionTool[]) => Promise<unknown>) {
   requireProfileAccess(requester, profile)
   if (turn.research) requireResearchProfile(profile)
-  const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: resolveProfileModel(profile, 'chat')?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
+  const target = resolveChatCompletionTarget(chatConnectionOf(profile), { model: requestChatModel(profile)?.model ?? null, generation: { ...profileGenerationOptions(profile), ...generation } })
   if (target.transport === 'claude-code' && !resolveChatAccess(requester.accountId).claude) throw new LlmChatError('Claude Code를 사용할 권한이 없어.', 403)
   const { scopes, toolAllowlist } = resolveChatProfileToolGrant(profile, resolveChatAccess(requester.accountId), turn.threadId)
   const chatContext = turn.chatContext ?? turn.delivery?.context
@@ -782,6 +782,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   prepare: null, replacingMessageId: undefined, continuing: undefined, page: undefined, reaction: GenerationReaction): Promise<CodexChatMessageRecord | null>
 function startReply(requester: McpRequester, thread: CodexChatThreadRecord, profile: ChatProfile, listener: (event: CodexChatStreamEvent) => void,
   prepare: (() => CodexChatStreamEvent) | null, replacingMessageId?: number, continuing?: CodexChatMessageRecord, page?: ChatPageSnapshot, reaction?: GenerationReaction) {
+  return withChatTokenModel(profile, () => {
   if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
   let resolveFinished: (message: CodexChatMessageRecord | null) => void = () => {}
   let rejectFinished: (error: unknown) => void = () => {}
@@ -812,7 +813,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
   const config = resolveContextConfig(updatedThread, profile)
   const group = updatedThread.kind === 'group' ? readGroupReplyHistory(updatedThread, profile, source) : null
   const inSession = sessionRuntimeOf(profile) && !reaction && continuing === undefined
-  const history = group?.messages ?? readReplyHistory(profile, source, inSession ? Number.MAX_SAFE_INTEGER : config.summaryEnabled ? updatedThread.summary_until_message_id ?? 0 : 0)
+  const history = group?.messages ?? readReplyHistory(profile, source, Number.MAX_SAFE_INTEGER, inSession ? undefined : config.contextTurns)
   turn.historySource = source
   turn.groupHistory = group?.history
   turn.history = history
@@ -850,6 +851,7 @@ function startReply(requester: McpRequester, thread: CodexChatThreadRecord, prof
       })
     }))
   return turn.finished
+  })
 }
 
 /**
@@ -919,7 +921,7 @@ async function runHeadlessReply(params: HeadlessReplyParams, order?: LlmTurn['or
   let status: CodexChatMessageRecord['status'] = 'completed'
   let error: string | null = null
   try {
-    await withLlmUsageContext({ threadId: params.threadId, replyId: params.chatContext?.replyId }, () => streamReply(turn, params.requester, params.profile, (tools, judged) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }, judged, (session) => { turn.engineSession = session }), params.generation ?? {}))
+    await withChatTokenModel(params.profile, () => withLlmUsageContext({ threadId: params.threadId, replyId: params.chatContext?.replyId }, () => streamReply(turn, params.requester, params.profile, (tools, judged) => params.buildMessages(tools, (meta) => { turn.contextMeta = { ...meta, model: resolveProfileModel(params.profile, 'chat')?.model ?? null } }, judged, (session) => { turn.engineSession = session }), params.generation ?? {})))
     if (controller.signal.aborted) status = 'interrupted'
   } catch (caught) {
     status = controller.signal.aborted ? 'interrupted' : 'failed'
@@ -982,39 +984,29 @@ export const LlmChatService = {
   async sendMessage(requester: McpRequester, thread: CodexChatThreadRecord, text: string, listener: (event: CodexChatStreamEvent) => void, fileIds?: unknown, flagIds?: unknown, picks?: unknown, mediaHashes?: unknown, replyToMessageId?: unknown, pageContext?: unknown, options: ChatSendOptions = {}) {
     assertLlmChatAvailable(requester)
     const profile = requireUsableProfile(thread.profile_id, requester)
-    if (pageContext != null && !profile.pageAssist) throw new LlmChatError('이 프로필은 페이지 어시스턴트가 꺼져 있어.', 400)
-    const choice = readChoiceAnswer(thread.id, options.choice)
-    if (choice && 'error' in choice) throw new LlmChatError(choice.error, 409)
-    // An answer that asked to go without the page sends this one message without it.
-    const page = choice?.withoutPage ? undefined : parseChatPageContext(pageContext, requester)
-    rememberChatPage(requester, page, thread.id)
-    if (!options.task && !options.routine) notifyChatUserSend(thread.id, Boolean(page))
-    const attachments = validateChatAttachments(requester, fileIds)
-    const mediaAttachments = validateChatMediaAttachments(requester, mediaHashes, attachments.length)
-    const flags = [...ChatFlagStore.resolve(requester, parseFlagIds(flagIds)), ...parsePicks(picks), ...(choice?.flags ?? [])]
-    const trimmed = text.trim()
-    if (!trimmed && attachments.length === 0 && mediaAttachments.length === 0) {
-      throw new LlmChatError('메시지를 입력해줘.')
-    }
-    const routing = { ...userReplyRouting(thread, replyToMessageId), ...(options.task ? { task: options.task } : {}), ...(options.routine ? { routine: options.routine } : {}) }
+    const { page, attachments, mediaAttachments, flags, trimmed, routing } = prepareChatSend(requester, thread, profile, text,
+      { fileIds, flagIds, picks, mediaHashes, replyToMessageId, pageContext, options }, LlmChatError)
     LlmChatService.skipReaction(thread.id)
     cancelJudgeFollowUp(thread.id)
     if (busy(thread.id)) throw new LlmChatError('이전 답변이 아직 진행 중이야.', 409)
     skipThreadGenerationReactions(thread.id)
     // An untitled chat is named after this message now, and after what was said once the reply is stored.
     const firstTitle = thread.title ? null : (withoutNarrationMarks(trimmed) || attachments[0]?.name || mediaAttachments[0]?.name || '').replace(/\s+/g, ' ')
+    let namedFromMessage = false
     const reply = startReply(requester, thread, profile, listener, () => {
       const userMessageId = CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: trimmed, display_content: null, tool_calls: [], status: 'completed', error: null, flags, mediaAttachments, routing }, attachments.map((file) => file.id))
+      rememberChatPage(requester, page, thread.id)
+      if (!options.task && !options.routine) notifyChatUserSend(thread.id, Boolean(page))
       options.onDelivered?.(userMessageId)
       // The model reads the message in English; the reader keeps their own words. The message is shown right away and
       // translated beside the judge (the turn is already reserved here, see startReply).
       const turn = activeTurns.get(thread.id)
       if (turn) translateTurnInput(turn, profile, userMessageId, trimmed)
       ChatFlagStore.setThreadFlags(thread.id, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
-      if (firstTitle !== null) CodexChatStore.renameThread(thread.id, firstTitle)
+      if (firstTitle !== null) namedFromMessage = CodexChatStore.renameThreadIf(thread.id, '', firstTitle)
       return { type: 'user', message: CodexChatStore.findMessage(thread.id, userMessageId) as CodexChatMessageRecord }
     }, undefined, undefined, page)
-    if (firstTitle !== null) titleAfterFirstReply(profile, thread, firstTitle, trimmed, reply)
+    if (firstTitle !== null && namedFromMessage) void titleAfterFirstReply(profile, thread, firstTitle, trimmed, reply)
     return reply
   },
 

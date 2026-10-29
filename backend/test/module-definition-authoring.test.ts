@@ -70,8 +70,10 @@ test('snapshot module routes preserve authoring data, versions and engine isolat
       assert.equal(record.color, '#123456')
       assert.equal(Boolean(record.is_active), false)
       assert.equal(record.version, 1)
-      assert.deepEqual(JSON.parse(record.template_defaults), snapshot)
-      assert.deepEqual(JSON.parse(record.internal_fixed_values), { steps: 12 })
+      // Codex snapshots are stored with the form's reference/preserve defaults filled in.
+      const engineDefaults = engine === 'codex' ? { references: [], preserve: '' } : {}
+      assert.deepEqual(JSON.parse(record.template_defaults), { ...engineDefaults, ...snapshot })
+      assert.deepEqual(JSON.parse(record.internal_fixed_values), { ...engineDefaults, steps: 12 })
       assert.deepEqual(JSON.parse(record.exposed_inputs).map((port: { key: string; source_path: string; default_value: unknown }) => ({
         key: port.key, source: port.source_path, value: port.default_value,
       })), [{ key: 'prompt', source: 'prompt', value: 'blue sky' }, { key: 'seed', source: 'seed', value: 7 }])
@@ -102,7 +104,7 @@ test('snapshot module routes preserve authoring data, versions and engine isolat
       assert.equal(updated.category, 'custom')
       assert.equal(Boolean(updated.is_active), true)
       assert.equal(updated.version, 2)
-      assert.deepEqual(JSON.parse(updated.internal_fixed_values), { steps: 24 })
+      assert.deepEqual(JSON.parse(updated.internal_fixed_values), { ...engineDefaults, steps: 24 })
       assert.deepEqual(JSON.parse(updated.output_ports), outputPorts)
       assert.deepEqual(JSON.parse(updated.ui_schema), uiSchema)
     })

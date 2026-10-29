@@ -6,9 +6,10 @@ import { testCustomNode } from '../src/lib/api-custom-nodes'
 import { deleteWatchedFolder, getWatchedFolders } from '../src/lib/api-folders'
 import { uploadStoredFiles } from '../src/lib/api-files'
 import { getPromptPresets } from '../src/lib/api-prompt-presets'
+import { ApiRequestError, requestApiData } from '../src/lib/api-request'
 import { getSearchHistory } from '../src/lib/api-search'
 import { updateMetadataSettings } from '../src/lib/api-settings'
-import { updateEmbeddingSettings } from '../src/lib/api-settings-ai'
+import { updateAiRuntimeSettings, updateEmbeddingSettings } from '../src/lib/api-settings-ai'
 import { updateAppearanceSettings } from '../src/lib/api-settings-appearance'
 import { updateGeneralSettings } from '../src/lib/api-settings-general'
 import { updateKaloscopeSettings } from '../src/lib/api-settings-kaloscope'
@@ -63,6 +64,23 @@ test('HTTP failures retain the status and machine-readable code instead of becom
   for (const client of clients) {
     await assert.rejects(client.remove(), { status: 409, code: 'conflict', message: 'Resource changed' })
   }
+})
+
+test('revision conflict data and request abort signals survive localized envelope handling', async t => {
+  const controller = new AbortController()
+  const current = { revision: 'remote-v2', value: 'remote edit' }
+  t.mock.method(globalThis, 'fetch', async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    assert.equal(init?.signal, controller.signal)
+    return Response.json({ error: 'Resource changed', code: 'revision_conflict', data: current }, { status: 409 })
+  })
+  await assert.rejects(
+    requestApiData('/api/settings/metadata', 'settings.metadata.update', { signal: controller.signal }, { timeoutMs: 0 }),
+    (error) => error instanceof ApiRequestError
+      && error.status === 409
+      && error.code === 'revision_conflict'
+      && error.message === 'Resource changed'
+      && assert.deepEqual(error.data, current) === undefined,
+  )
 })
 
 test('required-data clients preserve empty lists but reject missing or malformed data with the server error', async t => {
@@ -127,10 +145,11 @@ test('settings saves preserve revision headers, request bodies and both envelope
   const cases = [
     { call: (revision?: string) => updateMetadataSettings({}, revision), path: 'metadata', key: 'settings.metadata.update', body: {}, revisioned: true },
     { call: (revision?: string) => updateEmbeddingSettings({}, revision), path: 'embedding', key: 'settings.embedding.update', body: {}, revisioned: true },
+    { call: (revision?: string) => updateAiRuntimeSettings({}, revision), path: 'ai-runtime', key: 'settings.aiRuntime.update', body: {}, revisioned: true },
     { call: (revision?: string) => updateAppearanceSettings({}, revision), path: 'appearance', key: 'settings.appearance.update', body: {}, revisioned: true },
     { call: (revision?: string) => updateGeneralSettings({ language: 'en' }, revision), path: 'general', key: 'settings.general.update', body: { language: 'en' }, revisioned: true },
     { call: (revision?: string) => updateKaloscopeSettings({}, revision), path: 'kaloscope', key: 'settings.kaloscope.update', body: {}, revisioned: true },
-    { call: () => updateLlmSettings({}), path: 'llm', key: 'settings.llm.update', body: {}, revisioned: false },
+    { call: (revision?: string) => updateLlmSettings({}, revision), path: 'llm', key: 'settings.llm.update', body: {}, revisioned: true },
     { call: () => updateMcpHttpEnabled(true), path: 'mcp-http', key: 'settings.mcp.update', body: { enabled: true }, revisioned: false },
     { call: (revision?: string) => updateTaggerSettings({}, revision), path: 'tagger', key: 'settings.tagger.update', body: {}, revisioned: true },
   ]

@@ -32,31 +32,43 @@ export function useChatThreadData({ selectedThreadId, settleSelection, keepDraft
     queryKey: codexChatThreadQueryKey(activeThreadId),
     queryFn: async ({ signal }) => {
       const id = activeThreadId as number
-      const cached = queryClient.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(id))
+      const key = codexChatThreadQueryKey(id)
+      const cached = queryClient.getQueryData<CodexChatThreadDetail>(key)
       // A result event may concern an older message outside the polled tail.
-      const invalidated = queryClient.getQueryState(codexChatThreadQueryKey(id))?.isInvalidated === true
+      const invalidated = queryClient.getQueryState(key)?.isInvalidated === true
       if (!invalidated && cached?.running && !cached.pendingJobs) {
         const status = await getCodexChatRunning(id)
-        if (status.running && status.latestMessageId === (cached.messages.at(-1)?.id ?? null)) return { ...cached, running: status.running }
+        const latest = queryClient.getQueryData<CodexChatThreadDetail>(key)
+        if (latest && latest.thread.context_revision > cached.thread.context_revision) return latest
+        if (latest && latest.thread.context_revision === cached.thread.context_revision && status.running && status.latestMessageId === (latest.messages.at(-1)?.id ?? null)) return { ...latest, running: status.running }
       }
       // Routine reads start at the tail. Refresh only the older range the reader explicitly loaded.
       if (!invalidated && cached && (cached.running || cached.pendingJobs)) {
-        const merged = mergeThreadTail(cached, await getCodexChatThread(id, POLL_TAIL_MESSAGES, undefined, signal))
+        const tail = await getCodexChatThread(id, POLL_TAIL_MESSAGES, undefined, signal)
+        const latest = queryClient.getQueryData<CodexChatThreadDetail>(key)
+        if (latest && latest.thread.context_revision > tail.thread.context_revision) return latest
+        const merged = latest ? mergeThreadTail(latest, tail) : tail
         if (merged) return merged
       }
       let detail = await getCodexChatThread(id, MESSAGE_PAGE_SIZE, undefined, signal)
-      if (!cached || cached.thread.context_revision !== detail.thread.context_revision) return detail
-      if (!invalidated) return mergeThreadTail(cached, detail) ?? detail
-      if (!cached.historyLoaded) return detail
-      const first = cached.messages[0]?.id
-      while (first !== undefined && detail.hasMoreBefore && detail.messages[0].id > first) {
+      // Loading earlier pages can finish while this request is on the wire, including after cancelling
+      // the read that preceded it. Merge against the current cache, never the request-start snapshot.
+      const latest = queryClient.getQueryData<CodexChatThreadDetail>(key)
+      if (latest && latest.thread.context_revision > detail.thread.context_revision) return latest
+      if (!latest || latest.thread.context_revision !== detail.thread.context_revision) return detail
+      if (!invalidated) return mergeThreadTail(latest, detail) ?? detail
+      while (detail.hasMoreBefore) {
+        const current = queryClient.getQueryData<CodexChatThreadDetail>(key)
+        const first = current?.historyLoaded && current.thread.context_revision === detail.thread.context_revision ? current.messages[0]?.id : undefined
+        if (first === undefined || detail.messages[0].id <= first) break
         const before = detail.messages[0].id
         const page = await getCodexChatThread(id, MESSAGE_PAGE_SIZE, before, signal)
         const merged = mergeThreadBefore(detail, page, before)
         if (!merged) break
         detail = merged
       }
-      return detail
+      const current = queryClient.getQueryData<CodexChatThreadDetail>(key)
+      return current && current.thread.context_revision > detail.thread.context_revision ? current : detail
     },
     enabled: activeThreadId !== null,
     refetchInterval: (query) => (query.state.data?.running && liveThreadId !== activeThreadId ? RUNNING_POLL_MS : query.state.data?.pendingJobs ? chatGenerationPollInterval(streamStatus) : false),
@@ -93,8 +105,9 @@ export function useChatThreadData({ selectedThreadId, settleSelection, keepDraft
   }, [activeThreadId, mutateAsync])
   const preserveHistory = useCallback(() => {
     if (activeThreadId === null) return
-    queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(activeThreadId), (current) =>
-      current && !current.historyLoaded ? { ...current, historyLoaded: true } : current)
+    const key = codexChatThreadQueryKey(activeThreadId)
+    const current = queryClient.getQueryData<CodexChatThreadDetail>(key)
+    if (current && !current.historyLoaded) queryClient.setQueryData(key, { ...current, historyLoaded: true })
   }, [activeThreadId, queryClient])
   return { threadsQuery, threads, activeThreadId, activeThread, threadQuery, thread: threadQuery.data?.thread ?? null,
     displayThread: threadQuery.data?.thread ?? activeThread,

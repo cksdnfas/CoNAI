@@ -37,6 +37,7 @@ export const CHAT_BOOK_LABEL = '이 채팅'
 
 export type AttachedLoreBook = {
   id: number
+  revision: string
   name: string
   /** CHAT_BOOK_LABEL for the chat's own book, else its name. */
   label: string
@@ -54,7 +55,7 @@ export type AttachedLoreBook = {
 type RequestThread = Pick<CodexChatThreadRecord, 'id' | 'account_id'>
 
 function ownedBook(book: OwnedLorebook, owner: string, via: AttachedLoreBook['via']): AttachedLoreBook {
-  return { id: book.id, name: book.name, label: via === 'chat' ? CHAT_BOOK_LABEL : book.name, kind: book.kind, via, owner, folderId: book.folderId, entries: book.entries }
+  return { id: book.id, revision: book.revision, name: book.name, label: via === 'chat' ? CHAT_BOOK_LABEL : book.name, kind: book.kind, via, owner, folderId: book.folderId, entries: book.entries }
 }
 
 /**
@@ -85,15 +86,15 @@ export function booksForRequest({ thread, profile, profileOwner }: { thread: Req
   }
   const ids = profile.lorebookIds
   if (ids.length > 0) {
-    const rows = getUserSettingsDb().prepare(`SELECT id, name, kind, owner_key, entries FROM chat_lorebooks WHERE id IN (${ids.map(() => '?').join(', ')})`)
-      .all(...ids) as Array<{ id: number; name: string; kind: ChatLorebookKind | null; owner_key: string | null; entries: string }>
+    const rows = getUserSettingsDb().prepare(`SELECT id, revision, name, kind, owner_key, entries FROM chat_lorebooks WHERE id IN (${ids.map(() => '?').join(', ')})`)
+      .all(...ids) as Array<{ id: number; revision: number; name: string; kind: ChatLorebookKind | null; owner_key: string | null; entries: string }>
     const byId = new Map(rows.map((row) => [row.id, row]))
     const global: AttachedLoreBook[] = []
     for (const id of ids) {
       const row = byId.get(id)
       if (!row) continue
       if ((row.kind ?? 'global') === 'global') {
-        global.push({ id, name: row.name, label: row.name, kind: 'global', via: 'profile', owner: null, folderId: null, entries: normalizeLorebook(row.entries) })
+        global.push({ id, revision: `${row.revision}:`, name: row.name, label: row.name, kind: 'global', via: 'profile', owner: null, folderId: null, entries: normalizeLorebook(row.entries) })
       } else if (row.kind === 'account' && owner) {
         const book = OwnedLorebookStore.find(id, owner)
         if (book) add(ownedBook(book, owner, 'profile'))
@@ -107,6 +108,7 @@ export function booksForRequest({ thread, profile, profileOwner }: { thread: Req
 /** A book the context tab lists beside the chat's own one: where it comes from and the profiles that bring it. */
 export type ThreadLoreBookView = {
   id: number
+  revision: string
   name: string
   kind: ChatLorebookKind
   via: 'thread' | 'profile'
@@ -128,6 +130,11 @@ export type ThreadLorebooks = {
   books: ThreadLoreBookView[]
 }
 
+/** The info panel needs only the union's counts, not entry bodies or transcript usage. */
+export function threadLorebookSummary(thread: RequestThread, profiles: Array<Pick<ChatProfile, 'lorebookIds'>>) {
+  return OwnedLorebookStore.threadSummary(thread.id, profiles.flatMap(profile => profile.lorebookIds))
+}
+
 /**
  * What the context tab shows: the chat's own book and every other book its requests attach — for a room, the union
  * of the members' books (each book once, naming the members that bring it).
@@ -141,7 +148,7 @@ export function threadLorebooks(thread: RequestThread, profiles: Array<Pick<Chat
       if (book.via === 'chat') continue
       const via = book.via === 'thread' ? 'thread' : 'profile'
       const seen = byId.get(book.id)
-      const view = seen ?? { id: book.id, name: book.name, kind: book.kind, via, folderId: book.folderId, entries: book.entries, profiles: [] }
+      const view = seen ?? { id: book.id, revision: book.revision, name: book.name, kind: book.kind, via, folderId: book.folderId, entries: book.entries, profiles: [] }
       if (via === 'profile' && profile.id > 0 && !view.profiles.some((entry) => entry.id === profile.id)) view.profiles.push({ id: profile.id, name: profile.name })
       if (!seen) byId.set(book.id, view)
     }

@@ -38,10 +38,22 @@ type SpaceCache = {
  * place, so a backfill does not make every search reload the whole space.
  */
 const caches = new Map<string, SpaceCache>()
+const activeCaches = new Map<SpaceCache, number>()
+const spaceRevisions = new Map<string, number>()
+let invalidationRevision = 0
+let loadingBytes = 0
+type LoadingSpace = { promise: Promise<SpaceCache | { dim: number } | null | undefined>; controller: AbortController; consumers: number }
+const loadingSpaces = new Map<string, LoadingSpace>()
 /** Internal resource policy; changing it invalidates loaded matrices on the next search. */
 export const vectorCachePolicy = {
   maxMatrixBytes: 256 * 1024 * 1024,
-  get matrixBytes() { return [...caches.values()].reduce((sum, cache) => sum + cache.matrix.byteLength, 0) },
+  get matrixBytes() {
+    const cached = new Set(caches.values())
+    let bytes = loadingBytes
+    for (const cache of cached) bytes += cache.matrix.byteLength
+    for (const cache of activeCaches.keys()) if (!cached.has(cache)) bytes += cache.matrix.byteLength
+    return bytes
+  },
 }
 let cacheDb: ReturnType<typeof getUserSettingsDb> | null = null
 let cacheVersion = -1
@@ -57,12 +69,35 @@ function syncCaches() {
 
 /** Matrices have a hard total bound; oversized spaces are searched through the DB iterator. */
 function trimCaches() {
-  let bytes = [...caches.values()].reduce((sum, cache) => sum + cache.matrix.byteLength, 0)
+  let bytes = vectorCachePolicy.matrixBytes
   for (const [key, cache] of caches) {
     if (bytes <= vectorCachePolicy.maxMatrixBytes && caches.size <= 16) break
+    if (activeCaches.has(cache)) continue
     caches.delete(key)
     bytes -= cache.matrix.byteLength
   }
+}
+
+function markSpaceChanged(space: string) {
+  spaceRevisions.set(space, (spaceRevisions.get(space) ?? 0) + 1)
+}
+
+/** Same-connection writes are scoped by space; data_version covers other connections. */
+export function vectorSpaceVersion(space: string) {
+  return `${invalidationRevision}:${spaceRevisions.get(space) ?? 0}:${getUserSettingsDb().pragma('vector_db.data_version', { simple: true })}`
+}
+
+function reserveMatrix(bytes: number) {
+  let activeBytes = 0
+  for (const cache of activeCaches.keys()) activeBytes += cache.matrix.byteLength
+  if (loadingBytes + activeBytes + bytes > vectorCachePolicy.maxMatrixBytes) return false
+  for (const [key, cache] of caches) {
+    if (vectorCachePolicy.matrixBytes + bytes <= vectorCachePolicy.maxMatrixBytes) break
+    if (!activeCaches.has(cache)) caches.delete(key)
+  }
+  if (vectorCachePolicy.matrixBytes + bytes > vectorCachePolicy.maxMatrixBytes) return false
+  loadingBytes += bytes
+  return true
 }
 /** Removed slots tolerated before a matrix is rebuilt without them. */
 const COMPACT_MIN_DEAD = 1024
@@ -169,6 +204,7 @@ export const vectorStore = {
       db.prepare(`INSERT OR REPLACE INTO vector_db.file_progress (source_key, revision, model_key, next_offset, next_chunk, complete, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)`).run(sourceKey, revision, modelKey, progress.offset, progress.chunk, Number(progress.complete), Date.now())
     })()
+    markSpaceChanged('file')
     // Preserve every other document's loaded vectors. Replace only retried chunks of this source.
     for (const [key, cache] of spaceCaches('file')) {
       if (reset) dropSource(cache, sourceKey)
@@ -206,6 +242,7 @@ export const vectorStore = {
         written.push({ row, vector })
       })
     })()
+    markSpaceChanged(space)
     // The source's rows of every model are gone; the new ones join the loaded matrix of their model.
     for (const [key, cache] of spaceCaches(space)) {
       dropSource(cache, sourceKey)
@@ -225,6 +262,7 @@ export const vectorStore = {
     syncCaches()
     const changes = getUserSettingsDb().prepare('DELETE FROM vector_db.vectors WHERE space = ? AND source_key = ?').run(space, sourceKey).changes
     if (changes > 0) {
+      markSpaceChanged(space)
       for (const [, cache] of spaceCaches(space)) {
         dropSource(cache, sourceKey)
         compact(cache)
@@ -238,6 +276,7 @@ export const vectorStore = {
     syncCaches()
     const changes = getUserSettingsDb().prepare('DELETE FROM vector_db.vectors WHERE space = ? AND model_key != ?').run(space, modelKey).changes
     if (changes > 0) {
+      markSpaceChanged(space)
       for (const [key, cache] of spaceCaches(space)) if (cache.modelKey !== modelKey) caches.delete(key)
     }
     return changes
@@ -246,6 +285,7 @@ export const vectorStore = {
   /** Drop every loaded matrix (after rows were deleted with plain SQL). */
   invalidateAll() {
     caches.clear()
+    invalidationRevision++
   },
 
   get(space: string, sourceKey: string, modelKey: string): Array<VectorRow & { vector: Float32Array }> {
@@ -278,6 +318,88 @@ export const vectorStore = {
       ? db.prepare('SELECT COUNT(DISTINCT source_key) AS n FROM vector_db.vectors WHERE space = ? AND model_key = ?').get(space, modelKey)
       : db.prepare('SELECT COUNT(DISTINCT source_key) AS n FROM vector_db.vectors WHERE space = ?').get(space)) as { n: number }
     return row.n
+  },
+
+  /**
+   * Exact current-hash maxima for post search. Null asks the caller to recheck its authorization
+   * snapshot after a write occurred while the scan was yielded.
+   */
+  async searchBestCurrent(space: string, modelKey: string, query: ArrayLike<number>, hashes: ReadonlyMap<string, string | null>, signal?: AbortSignal): Promise<VectorHit[] | null> {
+    signal?.throwIfAborted()
+    if (!hashes.size) return []
+    const db = getUserSettingsDb()
+    const version = () => vectorSpaceVersion(space)
+    const initial = version()
+    const yieldBatch = async () => {
+      await new Promise<void>(resolve => setImmediate(resolve))
+      signal?.throwIfAborted()
+      return initial === version()
+    }
+    let loaded = await loadSpaceShared(space, modelKey, signal)
+    signal?.throwIfAborted()
+    if (loaded === undefined || initial !== version()) return null
+    if (!loaded) return []
+    let active: SpaceCache | undefined
+    if ('matrix' in loaded) {
+      if (caches.get(cacheKey(space, modelKey)) !== loaded) loaded = { dim: loaded.dim }
+      else {
+        active = loaded
+        activeCaches.set(active, (activeCaches.get(active) ?? 0) + 1)
+      }
+    }
+    try {
+    const normalized = normalizeVector(query)
+    if (normalized.length !== loaded.dim) throw new Error(`vector size ${normalized.length} does not match ${space} (${loaded.dim})`)
+    const best = new Map<string, VectorHit>()
+    const keep = (row: VectorRow, score: number) => {
+      if (!hashes.has(row.sourceKey) || hashes.get(row.sourceKey) !== row.contentHash) return
+      const previous = best.get(row.sourceKey)
+      if (!previous || score > previous.score || (score === previous.score && row.chunk < previous.chunk)) best.set(row.sourceKey, { ...row, score })
+    }
+    let scanned = 0
+    if ('matrix' in loaded) {
+      for (const source of hashes.keys()) {
+        if (++scanned % 1024 === 0 && !await yieldBatch()) return null
+        for (const slot of loaded.bySource.get(source) ?? []) {
+          const row = loaded.rows[slot]
+          if (!row) continue
+          let score = 0
+          const offset = slot * loaded.dim
+          for (let i = 0; i < loaded.dim; i++) score += loaded.matrix[offset + i] * normalized[i]
+          if (score >= -Infinity) keep(row, score)
+          if (++scanned % 1024 === 0 && !await yieldBatch()) return null
+        }
+      }
+    } else {
+      const page = db.prepare(`SELECT rowid AS cursor, source_key, chunk, owner_key, content_hash, span_start, span_end, vector
+        FROM vector_db.vectors WHERE space=@space AND model_key=@model AND dim=@dim AND rowid>@cursor
+          AND source_key IN (SELECT value FROM json_each(@sources))
+        ORDER BY rowid LIMIT 512`)
+      const sources = JSON.stringify([...hashes.keys()])
+      let cursor = 0
+      for (;;) {
+        const rows = page.all({ space, model: modelKey, dim: loaded.dim, cursor, sources }) as Array<StoredRow & { cursor: number; vector: Buffer }>
+        if (!rows.length) break
+        for (const row of rows) {
+          const vector = fromBlob(row.vector)
+          let score = 0
+          for (let i = 0; i < loaded.dim; i++) score += vector[i] * normalized[i]
+          if (score >= -Infinity) keep(toRow(row), score)
+        }
+        cursor = rows[rows.length - 1].cursor
+        if (rows.length < 512) break
+        if (!await yieldBatch()) return null
+      }
+    }
+    signal?.throwIfAborted()
+    return initial === version() ? [...best.values()] : null
+    } finally {
+      if (active) {
+        const remaining = activeCaches.get(active)! - 1
+        if (remaining) activeCaches.set(active, remaining)
+        else { activeCaches.delete(active); trimCaches() }
+      }
+    }
   },
 
   /**
@@ -332,7 +454,10 @@ export const vectorStore = {
     }
     if (cache) {
       const { dim, matrix, rows } = cache
-      const slots: Iterable<number> = sources ? [...sources].flatMap(source => cache.bySource.get(source) ?? []) : rows.keys()
+      function* sourceSlots() {
+        for (const source of sources!) yield* cache!.bySource.get(source) ?? []
+      }
+      const slots: Iterable<number> = sources ? sourceSlots() : rows.keys()
       for (const r of slots) {
         const row = rows[r]
         if (!row || (owners && !owners.has(row.ownerKey))) continue
@@ -378,13 +503,101 @@ function loadSpace(space: string, modelKey: string): SpaceCache | { dim: number 
   if (!first) return null
   const dim = first.dim
   const { count } = db.prepare('SELECT COUNT(*) AS count FROM vector_db.vectors WHERE space=? AND model_key=? AND dim=?').get(space, modelKey, dim) as { count: number }
-  if ((count + 64) * dim * 4 > vectorCachePolicy.maxMatrixBytes) return { dim }
-  const rows = db.prepare(`
-    SELECT source_key, chunk, owner_key, content_hash, span_start, span_end, dim, vector FROM vector_db.vectors WHERE space = ? AND model_key = ?
-  `).iterate(space, modelKey) as Iterable<StoredRow & { dim: number; vector: Buffer }>
-  const cache: SpaceCache = { modelKey, dim, rows: [], matrix: new Float32Array((count + 64) * dim), bySource: new Map(), dead: 0 }
-  for (const row of rows) if (row.dim === dim && !appendRow(cache, toRow(row), fromBlob(row.vector))) return { dim }
-  caches.set(key, cache)
+  const bytes = (count + 64) * dim * 4
+  if (loadingSpaces.has(key) || !reserveMatrix(bytes)) return { dim }
+  let reserved = true
+  try {
+    const rows = db.prepare(`
+      SELECT source_key, chunk, owner_key, content_hash, span_start, span_end, dim, vector FROM vector_db.vectors WHERE space = ? AND model_key = ?
+    `).iterate(space, modelKey) as Iterable<StoredRow & { dim: number; vector: Buffer }>
+    const cache: SpaceCache = { modelKey, dim, rows: [], matrix: new Float32Array((count + 64) * dim), bySource: new Map(), dead: 0 }
+    for (const row of rows) if (row.dim === dim && !appendRow(cache, toRow(row), fromBlob(row.vector))) return { dim }
+    loadingBytes -= bytes
+    reserved = false
+    caches.set(key, cache)
+    trimCaches()
+    return cache
+  } finally {
+    if (reserved) loadingBytes -= bytes
+  }
+}
+
+/** Concurrent searches share the same cold load; one cancelled consumer does not cancel the others. */
+async function loadSpaceShared(space: string, modelKey: string, signal?: AbortSignal): Promise<SpaceCache | { dim: number } | null | undefined> {
+  syncCaches()
   trimCaches()
-  return cache
+  const key = cacheKey(space, modelKey)
+  const cached = caches.get(key)
+  if (cached) { caches.delete(key); caches.set(key, cached); return cached }
+  let loading = loadingSpaces.get(key)
+  if (!loading) {
+    const controller = new AbortController()
+    const version = vectorSpaceVersion(space)
+    const entry: LoadingSpace = { controller, consumers: 0, promise: Promise.resolve(undefined) }
+    entry.promise = loadSpaceCooperatively(space, modelKey, async () => {
+      await new Promise<void>(resolve => setImmediate(resolve))
+      return !controller.signal.aborted && version === vectorSpaceVersion(space)
+    }).finally(() => { if (loadingSpaces.get(key) === entry) loadingSpaces.delete(key) })
+    loadingSpaces.set(key, entry)
+    loading = entry
+  }
+  loading.consumers++
+  try {
+    if (!signal) return await loading.promise
+    signal.throwIfAborted()
+    return await new Promise<SpaceCache | { dim: number } | null | undefined>((resolve, reject) => {
+      const aborted = () => reject(signal.reason)
+      signal.addEventListener('abort', aborted, { once: true })
+      loading!.promise.then(
+        value => { signal.removeEventListener('abort', aborted); resolve(value) },
+        error => { signal.removeEventListener('abort', aborted); reject(error) },
+      )
+    })
+  } finally {
+    loading.consumers--
+    if (!loading.consumers && loadingSpaces.get(key) === loading) loading.controller.abort()
+  }
+}
+
+/** Cold post-search caches are loaded in bounded pages without holding a SQLite iterator across yields. */
+async function loadSpaceCooperatively(space: string, modelKey: string, yieldBatch: () => Promise<boolean>): Promise<SpaceCache | { dim: number } | null | undefined> {
+  syncCaches()
+  trimCaches()
+  const key = cacheKey(space, modelKey)
+  const cached = caches.get(key)
+  if (cached) { caches.delete(key); caches.set(key, cached); return cached }
+  const db = getUserSettingsDb()
+  const first = db.prepare('SELECT dim FROM vector_db.vectors WHERE space=? AND model_key=? LIMIT 1').get(space, modelKey) as { dim: number } | undefined
+  if (!first) return null
+  const dim = first.dim
+  const { count } = db.prepare('SELECT COUNT(*) AS count FROM vector_db.vectors WHERE space=? AND model_key=? AND dim=?').get(space, modelKey, dim) as { count: number }
+  const bytes = (count + 64) * dim * 4
+  if (!reserveMatrix(bytes)) return { dim }
+  let reserved = true
+  try {
+    const page = db.prepare(`SELECT rowid AS cursor, source_key, chunk, owner_key, content_hash, span_start, span_end, dim, vector
+      FROM vector_db.vectors WHERE space=? AND model_key=? AND rowid>? ORDER BY rowid LIMIT 512`)
+    const cache: SpaceCache = { modelKey, dim, rows: [], matrix: new Float32Array((count + 64) * dim), bySource: new Map(), dead: 0 }
+    let cursor = 0
+    for (;;) {
+      const rows = page.all(space, modelKey, cursor) as Array<StoredRow & { cursor: number; dim: number; vector: Buffer }>
+      if (!rows.length) break
+      for (const row of rows) {
+        if (row.dim !== dim) continue
+        if (cache.rows.length >= count) return undefined
+        if (!appendRow(cache, toRow(row), fromBlob(row.vector))) return { dim }
+      }
+      cursor = rows[rows.length - 1].cursor
+      if (rows.length < 512) break
+      if (!await yieldBatch()) return undefined
+    }
+    if (cache.matrix.byteLength > vectorCachePolicy.maxMatrixBytes) return { dim }
+    loadingBytes -= bytes
+    reserved = false
+    caches.set(key, cache)
+    trimCaches()
+    return cache
+  } finally {
+    if (reserved) loadingBytes -= bytes
+  }
 }

@@ -63,7 +63,7 @@ export function CharacterLibraryPage() {
   const { t } = useI18n()
   const permissions = useFeaturePermissions()
   const [params] = useSearchParams()
-  if (!permissions.isAdmin || params.get('view') !== 'profiles' || params.has('setting')) return <AppearanceLibraryPage />
+  if (!permissions.isAdmin || params.get('view') !== 'profiles' || params.has('setting') || params.has('new')) return <AppearanceLibraryPage />
   if (params.has('profile')) return <ChatProfileEditorPage />
   return (
     <div className="space-y-6">
@@ -109,6 +109,7 @@ function AppearanceLibraryPage() {
   // `new`: a new setting drafted in a folder (`root` for the top level); an open saved setting wins.
   const newParam = searchParams.get('new')
   const newIn = openSettingId === null && newParam !== null && (newParam === 'root' || positiveId(newParam) !== null) ? { folderId: positiveId(newParam) } : null
+  const editing = openSettingId !== null || newIn !== null
   const [nameDialog, setNameDialog] = useState<NameDialogState | null>(null)
   const [moving, setMoving] = useState<MoveState | null>(null)
   /** A new setting's name and folder, asked before it is made and opened in its editor page. */
@@ -131,11 +132,11 @@ function AppearanceLibraryPage() {
 
   // Live name search: the URL follows the field after a short pause.
   useEffect(() => {
-    if (searchText.trim() === query) return
+    if (editing || searchText.trim() === query) return
     const timer = window.setTimeout(() => update({ q: searchText.trim() || null, page: null, setting: null, new: null }, true), 300)
     return () => window.clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the typed text schedules the URL change
-  }, [searchText])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- typed text schedules the change; opening an editor cancels it
+  }, [searchText, editing])
 
   const foldersQuery = useCharacterFolders()
   const folders = foldersQuery.data ?? []

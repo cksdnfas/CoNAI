@@ -132,16 +132,10 @@ export function useNaiAssetLibrary({
         model: naiForm.model,
         information_extracted: parseNumberInput(vibe.informationExtracted, 1),
       })
-      setNaiForm((current) => ({
+      // Strength does not affect encoding; image, information extraction and model do.
+      setNaiForm((current) => current.model !== naiForm.model ? current : ({
         ...current,
-        vibes: current.vibes.map((entry, vibeIndex) => (
-          vibeIndex === index
-            ? {
-              ...entry,
-              encoded: response.encoded,
-            }
-            : entry
-        )),
+        vibes: current.vibes.map((entry) => entry.image === vibe.image && entry.informationExtracted === vibe.informationExtracted ? { ...entry, encoded: response.encoded } : entry),
       }))
       if (options?.refetchUserData !== false) {
         await refetchUserData()

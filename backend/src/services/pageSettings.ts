@@ -3,7 +3,7 @@ import { selectPageSettings, PAGE_SETTINGS_SCOPES, type PageSettingsScopeId, typ
 import { settingsService } from './settingsService';
 import { loadPostsSettings } from './posts/postsSettings';
 import { loadChatSettings } from './codex-chat/chatSettings';
-import { nativeEditRevision } from './nativeEditRevision';
+import { nativeSettingsRevision } from './nativeEditRevision';
 
 export function readPageSettings(scope: PageSettingsScopeId): PageSettingsSnapshot {
   const settings = settingsService.loadSettings();
@@ -11,7 +11,11 @@ export function readPageSettings(scope: PageSettingsScopeId): PageSettingsSnapsh
     : scope === 'metadata' ? settings.metadataExtraction : scope === 'image-save' ? settings.imageSave
       : scope === 'video-optimization' ? settings.videoOptimization : scope === 'generation-throttle' ? settings.generationThrottle : settings[scope];
   const values = selectPageSettings(scope, source);
-  return { values, revision: nativeEditRevision(values) };
+  // Group colours have their own immediate writer and are never part of a checked general draft.
+  const revisionSource = scope === 'general'
+    ? Object.fromEntries(Object.entries(settings.general).filter(([key]) => key !== 'permissionGroupColors'))
+    : source;
+  return { values, revision: nativeSettingsRevision(revisionSource) };
 }
 
 /** Called again immediately before mutation, after any asynchronous dependency checks. */
@@ -29,5 +33,8 @@ export function verifyNativePageSettingsRevision(req: Request, res: Response, sc
   return true;
 }
 export function pageSettingsRevisions() {
-  return Object.fromEntries((Object.keys(PAGE_SETTINGS_SCOPES) as PageSettingsScopeId[]).map((scope) => [scope, readPageSettings(scope).revision]));
+  return {
+    ...Object.fromEntries((Object.keys(PAGE_SETTINGS_SCOPES) as PageSettingsScopeId[]).map((scope) => [scope, readPageSettings(scope).revision])),
+    'ai-runtime': nativeSettingsRevision(settingsService.loadSettings().aiRuntime),
+  };
 }

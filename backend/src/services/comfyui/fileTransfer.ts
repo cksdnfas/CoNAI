@@ -1,6 +1,8 @@
 import axios, { type AxiosInstance } from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
+import { pipeline } from 'stream/promises';
 import FormData from 'form-data';
 import { runtimePaths } from '../../config/runtimePaths';
 
@@ -8,8 +10,11 @@ export async function downloadComfyOutputFile(
   axiosInstance: AxiosInstance,
   filename: string,
   subfolder: string = '',
-  type: string = 'output'
+  type: string = 'output',
+  signal?: AbortSignal,
 ): Promise<string> {
+  const tempFilePath = path.join(runtimePaths.tempDir, `comfyui_${randomUUID()}${path.extname(filename)}`);
+  let created = false;
   try {
     const params = new URLSearchParams({
       filename,
@@ -18,24 +23,37 @@ export async function downloadComfyOutputFile(
     });
     const url = `/view?${params.toString()}`;
 
-    const response = await axiosInstance.get(url, {
-      responseType: 'arraybuffer',
-    });
-
-    const tempDir = runtimePaths.tempDir;
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
+    await fs.promises.mkdir(runtimePaths.tempDir, { recursive: true });
+    const file = await fs.promises.open(tempFilePath, 'wx');
+    created = true;
+    let response;
+    try {
+      response = await axiosInstance.get(url, { responseType: 'stream', signal });
+    } catch (error) {
+      if (axios.isAxiosError(error)) error.response?.data?.destroy?.();
+      try { await file.close(); }
+      catch (cleanupError) {
+        console.warn(`⚠️ Failed to close temp ComfyUI output ${tempFilePath}:`, cleanupError);
+        if (error && typeof error === 'object') Object.assign(error, { cleanupError });
+      }
+      throw error;
     }
-
-    const ext = path.extname(filename);
-    const uniqueFilename = `comfyui_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${ext}`;
-    const tempFilePath = path.join(tempDir, uniqueFilename);
-    fs.writeFileSync(tempFilePath, Buffer.from(response.data));
+    await pipeline(response.data, file.createWriteStream(), { signal });
 
     return tempFilePath;
   } catch (error) {
+    if (created) {
+      try { await fs.promises.rm(tempFilePath, { force: true }); }
+      catch (failure) {
+        console.warn(`⚠️ Failed to remove temp ComfyUI output ${tempFilePath}:`, failure);
+        if (error && typeof error === 'object') {
+          const previous = (error as { cleanupError?: unknown }).cleanupError;
+          Object.assign(error, { cleanupError: previous ? [previous, failure] : failure });
+        }
+      }
+    }
     if (axios.isAxiosError(error)) {
-      throw new Error(`ComfyUI output download error: ${error.message}`);
+      throw Object.assign(new Error(`ComfyUI output download error: ${error.message}`), (error as { cleanupError?: unknown }).cleanupError ? { cleanupError: (error as { cleanupError?: unknown }).cleanupError } : {});
     }
     throw error;
   }

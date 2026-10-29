@@ -1,32 +1,9 @@
-import type { TranslationInput, TranslationParams } from '@/i18n'
 import type { ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { getBuiltinNodeFamily } from '@conai/shared'
-
-type TranslateFunction = (input: TranslationInput, values?: TranslationParams) => string
 
 type ModuleGroupLabel = {
   key: string
   label: string
-}
-
-export const SYSTEM_GROUP_ORDER = ['input', 'generation', 'logic', 'utility', 'get', 'llm', 'output', 'other']
-export const SAVED_MODULE_GROUP_ORDER = ['generation', 'other']
-export const CUSTOM_NODE_GROUP_ORDER = ['custom-js', 'other']
-export const CUSTOM_GROUP_ORDER = SAVED_MODULE_GROUP_ORDER
-
-const MODULE_GROUP_FALLBACK_ORDER = Number.MAX_SAFE_INTEGER
-
-function buildModuleGroupOrderIndex(groupOrder: readonly string[]) {
-  return new Map(groupOrder.map((key, index) => [key, index]))
-}
-
-export const SYSTEM_GROUP_ORDER_INDEX = buildModuleGroupOrderIndex(SYSTEM_GROUP_ORDER)
-export const SAVED_MODULE_GROUP_ORDER_INDEX = buildModuleGroupOrderIndex(SAVED_MODULE_GROUP_ORDER)
-export const CUSTOM_NODE_GROUP_ORDER_INDEX = buildModuleGroupOrderIndex(CUSTOM_NODE_GROUP_ORDER)
-
-/** Resolve sortable group priority without scanning order arrays inside render-sort comparators. */
-export function getModuleGroupSortIndex(groupOrderIndex: ReadonlyMap<string, number>, groupKey: string) {
-  return groupOrderIndex.get(groupKey) ?? MODULE_GROUP_FALLBACK_ORDER
 }
 
 const GET_MODULE_OPERATION_KEYS = new Set([
@@ -185,51 +162,6 @@ export function getSystemModuleGroup(module: ModuleDefinitionRecord): ModuleGrou
   }
 
   return { key: 'other', label: category ? toTitleCase(category) : 'Other' }
-}
-
-/** Build a user-facing group for saved generation modules with minimal noise. */
-export function getSavedModuleGroup(module: ModuleDefinitionRecord): ModuleGroupLabel {
-  const category = (module.category ?? '').trim().toLowerCase()
-  if (category === 'generation' || category === 'image' || module.engine_type === 'nai' || module.engine_type === 'codex' || module.engine_type === 'comfyui') {
-    return { key: 'generation', label: 'Generation' }
-  }
-
-  return { key: 'other', label: category ? toTitleCase(category) : 'Other' }
-}
-
-/** Build a user-facing group for custom-code nodes. */
-export function getCustomNodeGroup(module: ModuleDefinitionRecord): ModuleGroupLabel {
-  if (module.engine_type === 'custom_js' || module.authoring_source === 'custom_node_fs') {
-    return { key: 'custom-js', label: 'Custom JS' }
-  }
-
-  const category = (module.category ?? '').toLowerCase()
-  return { key: 'other', label: category ? toTitleCase(category) : 'Other' }
-}
-
-export const getCustomModuleGroup = getSavedModuleGroup
-
-export function localizeModuleGroupLabel(label: string, t: TranslateFunction) {
-  switch (label) {
-    case 'Input':
-      return t({ ko: '입력', en: 'Input' })
-    case 'Get':
-      return t({ ko: '가져오기', en: 'Get' })
-    case 'Logic':
-      return t({ ko: '로직', en: 'Logic' })
-    case 'Utility':
-      return t({ ko: '유틸리티', en: 'Utility' })
-    case 'Generation':
-      return t({ ko: '생성', en: 'Generation' })
-    case 'Other':
-      return t({ ko: '기타', en: 'Other' })
-    case 'END':
-      return t({ ko: '최종 결과', en: 'END' })
-    case 'Custom JS':
-      return t({ ko: '커스텀 JS', en: 'Custom JS' })
-    default:
-      return label
-  }
 }
 
 export function isCustomNodeModule(module: ModuleDefinitionRecord) {

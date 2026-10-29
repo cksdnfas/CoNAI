@@ -762,4 +762,135 @@ test('posts: categories, posts, tags, media refs, comments, visibility and searc
     assert.equal(view(blocked.id).reasonCode,'daily_budget')
     assert.equal(calls,beforeBudget)
   })
+
+  await t.test('relevance ranking yields, restarts on concurrent edits, and honors cancellation', async () => {
+    const category = PostCategoryStore.create(admin, { name: 'cooperative ranking fixture' })
+    const insert = db.prepare("INSERT INTO posts(category_id,title,status,author_type,author_name,owner_account_id) VALUES(?,?,'published','account','test',2)")
+    const ids: number[] = []
+    db.transaction(() => {
+      for (let i = 0; i < 450; i++) ids.push(Number(insert.run(category.id, `rank ${i}`).lastInsertRowid))
+    })()
+    setImmediate(() => db.prepare('UPDATE posts SET pinned=1 WHERE id=?').run(ids[0]))
+    const first = await PostStore.list(reader, { categoryId: category.id, sort: 'relevance', limit: 1 })
+    assert.equal(first.items[0]?.id, ids[0], 'an edit during a yield cannot leave a mixed ranking snapshot')
+    const next = await PostStore.list(reader, { categoryId: category.id, sort: 'relevance', limit: 1, offset: 1, snapshot: first.snapshot })
+    assert.equal(next.items[0]?.id, ids[ids.length - 1])
+    const controller = new AbortController()
+    setImmediate(() => controller.abort())
+    await assert.rejects(PostStore.list(reader, { categoryId: category.id, sort: 'relevance' }, { signal: controller.signal }), { name: 'AbortError' })
+    const child = PostCategoryStore.create(admin, { name: 'moving ranking fixture', parentId: category.id })
+    const childPost = Number(insert.run(child.id, 'rank child').lastInsertRowid)
+    let writes = 0
+    let writing = true
+    const write = () => {
+      if (!writing) return
+      writes++
+      db.prepare('UPDATE posts SET pinned=? WHERE id=?').run(writes % 2, ids[0])
+      db.prepare('UPDATE post_categories SET parent_id=? WHERE id=?').run(writes % 2 ? null : category.id, child.id)
+      setImmediate(write)
+    }
+    setImmediate(write)
+    try {
+      const result = await PostStore.list(reader, { categoryId: category.id, q: 'rank', sort: 'relevance', limit: 1 })
+      const pinned = (db.prepare('SELECT pinned FROM posts WHERE id=?').get(ids[0]) as { pinned: number }).pinned
+      const parent = (db.prepare('SELECT parent_id FROM post_categories WHERE id=?').get(child.id) as { parent_id: number | null }).parent_id
+      assert.ok(writes > 0)
+      assert.equal(result.total, ids.length + Number(parent === category.id))
+      assert.equal(result.items[0]?.id, pinned ? ids[0] : parent === category.id ? childPost : ids[ids.length - 1], 'the bounded fallback ranks a consistent snapshot')
+    } finally { writing = false }
+  })
+
+  await t.test('search-index catch-up does not cause a ranking retry', async t => {
+    const category = PostCategoryStore.create(admin, { name: 'catch-up ranking fixture' })
+    const insert = db.prepare("INSERT INTO posts(category_id,title,status,author_type,author_name,owner_account_id) VALUES(?,?,'published','account','test',1)")
+    const ids: number[] = []
+    db.transaction(() => {
+      for (let i = 0; i < 10; i++) ids.push(Number(insert.run(category.id, `catchupfixture ${i}`).lastInsertRowid))
+    })()
+    await assert.rejects(PostStore.list(reader, { q: 'catchupfixture', kind: 'invalid' }))
+    const indexed = db.prepare("SELECT COUNT(*) AS count FROM search_db.search_documents WHERE source='post' AND source_id IN (SELECT value FROM json_each(?))")
+      .get(JSON.stringify(ids.map(String))) as { count: number }
+    assert.equal(indexed.count, 0, 'invalid filters are rejected before index catch-up')
+    const list = PostStore.list
+    const calls = t.mock.method(PostStore, 'list', (...args: Parameters<typeof list>) => list(...args))
+    const result = await PostStore.list(reader, { categoryId: category.id, q: 'catchupfixture', sort: 'relevance', limit: 10 })
+    assert.equal(calls.mock.callCount(), 1, 'refreshing stale documents happens before the monitored ranking snapshot')
+    assert.deepEqual(result.items.map(item => item.id), ids.reverse())
+  })
+
+  await t.test('ranking fallback stays read-only while other connections hold writer locks', async () => {
+    const previous = loadPostsSettings().knowledge
+    updatePostsSettings({ knowledge: { rankingEnabled: true } })
+    const Database = (await import('better-sqlite3')).default
+    const category = PostCategoryStore.create(admin, { name: 'read-only ranking fixture' })
+    const make = (title: string) => {
+      const post = PostStore.create(alice, { categoryId: category.id, title, body: 'lockfallback procedure' })
+      return KnowledgeStore.patch(alice, post.id, { expectedRevision: post.revision })
+    }
+    const good = make('good document'), bad = make('bad document')
+    KnowledgeAssessmentStore.vote(voter, bad.id, { contentVersion: 1, quality: 'down', idempotencyKey: 'readonly-rank-down' })
+    const query = { categoryId: category.id, q: 'lockfallback', kind: 'knowledge', sort: 'relevance', limit: 10 }
+    const automation: Actor = { ...reader, origin: 'mcp' }
+    const expected = await PostStore.list(automation, query)
+    assert.deepEqual(expected.items.map(item => item.id), [good.id, bad.id])
+    db.prepare('DELETE FROM post_quality_stats WHERE post_id IN (?,?)').run(good.id, bad.id)
+    const attachImages = !(db.pragma('database_list') as Array<{ name: string }>).some(item => item.name === 'main_db')
+    if (attachImages) {
+      const imagesPath = path.join(root, 'database', 'ranking-images.db')
+      const images = new Database(imagesPath)
+      images.pragma('journal_mode = WAL')
+      images.exec('CREATE TABLE images (id INTEGER PRIMARY KEY)')
+      images.close()
+      db.prepare('ATTACH DATABASE ? AS main_db').run(imagesPath)
+    }
+    const databases = db.pragma('database_list') as Array<{ name: string; file: string }>
+    const writers = databases.filter(item => ['main', 'main_db', 'search_db', 'vector_db'].includes(item.name))
+      .map(item => ({ name: item.name, db: new Database(item.file) }))
+    const timeout = db.pragma('busy_timeout', { simple: true }) as number
+    try {
+      for (const writer of writers) writer.db.exec('BEGIN IMMEDIATE')
+      db.pragma('busy_timeout = 0')
+      const result = await PostStore.list(automation, query, { rankingRetries: 2, semanticMemo: { vector: null } })
+      assert.deepEqual(result.items.map(item => item.id), [good.id, bad.id], 'uncached assessments are scored rather than silently neutralized')
+      const cached = db.prepare('SELECT COUNT(*) AS count FROM post_quality_stats WHERE post_id IN (?,?)').get(good.id, bad.id) as { count: number }
+      assert.equal(cached.count, 0, 'fallback computes stale derived quality without writing')
+      writers.find(writer => writer.name === 'main')!.db.exec('ROLLBACK')
+      const human = await PostStore.list(reader, query, { rankingRetries: 2, semanticMemo: { vector: null } })
+      assert.deepEqual(human.items.map(item => item.id), [good.id, bad.id])
+      assert.ok(human.items.every(item => item.knowledgeSearchReceipt?.token), 'human receipts remain writable while other databases have writers')
+    } finally {
+      db.pragma(`busy_timeout = ${timeout}`)
+      for (const writer of writers) { if (writer.db.inTransaction) writer.db.exec('ROLLBACK'); writer.db.close() }
+      if (attachImages) db.exec('DETACH DATABASE main_db')
+      updatePostsSettings({ knowledge: previous })
+    }
+  })
+
+  await t.test('knowledge ranking does not mix policies across yielded batches', async () => {
+    const previous = loadPostsSettings().knowledge
+    try {
+      updatePostsSettings({ knowledge: { rankingEnabled: true, humanWeight: 0 } })
+      const category = PostCategoryStore.create(admin, { name: 'ranking policy fixture' })
+      const insert = db.prepare("INSERT INTO posts(category_id,title,body,status,author_type,author_name,owner_account_id) VALUES(?,?,'body','published','account','test',1)")
+      const knowledge = db.prepare("INSERT INTO post_knowledge(post_id,content_hash) VALUES(?,'hash')")
+      const version = db.prepare("INSERT INTO post_knowledge_versions(post_id,content_version,content_hash,post_revision,title,body,post_status,changed_by) VALUES(?,1,'hash',1,?,'body','published','test')")
+      const ids: number[] = []
+      db.transaction(() => {
+        for (let i = 0; i < 220; i++) {
+          const title = `policy ${i}`
+          const id = Number(insert.run(category.id, title).lastInsertRowid)
+          ids.push(id)
+          knowledge.run(id)
+          version.run(id, title)
+        }
+      })()
+      for (const id of ids) KnowledgeAssessmentStore.vote(admin, id, { contentVersion: 1, quality: 'down', idempotencyKey: `policy-vote-${id}` })
+      db.prepare('DELETE FROM post_quality_stats WHERE post_id IN (SELECT value FROM json_each(?))').run(JSON.stringify(ids))
+      setImmediate(() => updatePostsSettings({ knowledge: { humanWeight: 10 } }))
+      const result = await PostStore.list(admin, { categoryId: category.id, kind: 'knowledge', sort: 'relevance', limit: 50 })
+      assert.deepEqual(result.items.map(item => item.id), [...ids].reverse().slice(0, 50), 'all scores use one policy version')
+    } finally {
+      updatePostsSettings({ knowledge: previous })
+    }
+  })
 })

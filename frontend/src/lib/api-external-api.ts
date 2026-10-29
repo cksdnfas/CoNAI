@@ -1,4 +1,5 @@
-import { buildApiUrl, fetchJson } from './api-client'
+import { buildApiUrl } from './api-client'
+import { requestJson } from './api-request'
 
 export const EXTERNAL_API_PROVIDERS_QUERY_KEY = ['external-api-providers'] as const
 
@@ -50,12 +51,12 @@ type ExternalApiConnectionTestResponse = {
 }
 
 export async function getExternalApiProviders() {
-  const response = await fetchJson<ExternalApiProvidersResponse>('/api/external-api/providers')
+  const response = await requestJson<ExternalApiProvidersResponse>('/api/external-api/providers')
   return Array.isArray(response.data) ? response.data : []
 }
 
 export async function createExternalApiProvider(input: ExternalApiProviderUpsertInput) {
-  const response = await fetchJson<ExternalApiProviderResponse>('/api/external-api/providers', {
+  const response = await requestJson<ExternalApiProviderResponse>('/api/external-api/providers', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -64,7 +65,7 @@ export async function createExternalApiProvider(input: ExternalApiProviderUpsert
 }
 
 export async function updateExternalApiProvider(providerName: string, input: Omit<ExternalApiProviderUpsertInput, 'provider_name'>) {
-  const response = await fetchJson<ExternalApiProviderResponse>(`/api/external-api/providers/${encodeURIComponent(providerName)}`, {
+  const response = await requestJson<ExternalApiProviderResponse>(`/api/external-api/providers/${encodeURIComponent(providerName)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -96,7 +97,7 @@ export async function deleteExternalApiProvider(providerName: string) {
 
 /** Model ids the LLM server at these (possibly unsaved) connection values lists. */
 export async function listExternalApiLlmModels(input: { provider_type: ExternalApiProviderType; base_url: string; api_key?: string; provider_name?: string }) {
-  const response = await fetchJson<{ success: boolean; data: { models: string[] } }>('/api/external-api/llm-models', {
+  const response = await requestJson<{ success: boolean; data: { models: string[] } }>('/api/external-api/llm-models', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -105,7 +106,7 @@ export async function listExternalApiLlmModels(input: { provider_type: ExternalA
 }
 
 export async function testExternalApiProvider(providerName: string) {
-  return await fetchJson<ExternalApiConnectionTestResponse>(`/api/external-api/providers/${encodeURIComponent(providerName)}/test`, {
+  return await requestJson<ExternalApiConnectionTestResponse>(`/api/external-api/providers/${encodeURIComponent(providerName)}/test`, {
     method: 'POST',
   })
 }

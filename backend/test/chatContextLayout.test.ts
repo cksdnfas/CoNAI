@@ -313,7 +313,15 @@ test('new chats and resets save the filled history around the greeting as ordina
     let codexId = ''
     let chatId = 0
     let preparing = false
-    let failBeforeStart: 'failure' | 'cancellation' | null = null
+    let failBeforeStart: 'failure' | 'cancellation' | 'registration' | null = null
+    const rename = CodexChatStore.renameThreadIf
+    s.mock.method(CodexChatStore, 'renameThreadIf', (...args: Parameters<typeof rename>) => {
+      if (failBeforeStart === 'registration') {
+        failBeforeStart = null
+        throw new Error('failure immediately after turn registration')
+      }
+      return rename(...args)
+    })
     const inputs: string[] = []
     s.mock.method(CodexAppServerClient, 'start', async (options: Parameters<typeof CodexAppServerClient.start>[0]) => {
       const client = Object.assign(new EventEmitter(), { whenExited: Promise.resolve(), close: () => {}, isAlive: true,
@@ -349,19 +357,30 @@ test('new chats and resets save the filled history around the greeting as ordina
       return client as unknown as CodexAppServerClient
     })
     const saved = ChatProfileStore.create({ name: '카이', engine: 'codex', openingHistory, greetingPosition: 1, greeting: expected[1].content })
-    for (const failure of ['failure', 'cancellation'] as const) {
+    for (const failure of ['failure', 'cancellation', 'registration'] as const) {
       chatId = CodexChatService.createThread(requester, saved.id, user.id).id
       failBeforeStart = failure
       const before = inputs.length
       assert.equal((await CodexChatService.sendMessage(requester, chatId, '첫 시도', () => {})).status, 'failed')
+      assert.equal(CodexChatService.isRunning(chatId), false, 'every post-registration failure releases the turn')
       assert.equal(inputs.length, before, 'the failed/cancelled preparation never starts a Codex turn')
       assert.equal(CodexChatStore.findThreadById(chatId)!.codex_thread_id, null, 'an unused memory is not committed')
-      assert.equal((await CodexChatService.sendMessage(requester, chatId, '다시 시도', () => {})).status, 'completed')
+      const resumed = await CodexChatService.sendMessage(requester, chatId, '다시 시도', () => {})
+      assert.equal(resumed.status, 'completed')
+      assert.equal(resumed.context_meta, CodexChatStore.findMessage(chatId, resumed.id)?.context_meta, 'done includes the persisted diagnostics')
       for (const message of expected) assert.ok(inputs[before].includes(message.content), 'the first accepted turn contains the whole opening')
       assert.equal(CodexChatStore.findThreadById(chatId)!.codex_thread_id, codexId)
       await CodexChatService.sendMessage(requester, chatId, '계속', () => {})
       assert.ok(!inputs[before + 1].includes(expected[0].content), 'a successfully started memory does not repeat the recap')
     }
+    const other = ChatProfileStore.create({ name: '동행 Codex', engine: 'codex' })
+    const room = GroupChatService.create(requester, { profileIds: [saved.id, other.id], representativeId: saved.id })
+    s.mock.method(CodexChatStore, 'setContextMeta', () => { throw new Error('metadata persistence failed after the reply was stored') })
+    await GroupChatService.sendMessage(requester, room.id, '한 번만 답해줘', () => {})
+    const answers = CodexChatStore.listMessages(room.id).filter(message => message.role === 'assistant')
+    assert.equal(answers.length, 1, 'metadata failure cannot cause a second failed room reply')
+    assert.equal(answers[0].status, 'completed')
+    assert.equal(answers[0].content, '답장')
   })
 
   await t.test('legacy history sections migrate once, preserving disabled or unparseable sections as examples', async () => {

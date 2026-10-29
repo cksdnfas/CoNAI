@@ -4,6 +4,7 @@ import sharp from 'sharp'
 import { runtimePaths } from '../config/runtimePaths'
 import { isPathInside } from '../utils/pathResolver'
 import type { WorkflowArtifactDirectoryMode, WorkflowRecord } from '../types/workflow'
+import { DirectoryListingSnapshots, pageDirectorySnapshot, sortDirectoryItems, type DirectoryPageRequest } from './directoryListingSnapshot'
 
 export type WorkflowArtifactEntry = {
   name: string
@@ -15,6 +16,29 @@ export type WorkflowArtifactEntry = {
   fileUrl?: string
   downloadUrl?: string
   thumbnailUrl?: string
+}
+
+type ArtifactSnapshotEntry = Pick<WorkflowArtifactEntry, 'name' | 'relativePath' | 'kind' | 'size' | 'modifiedAt' | 'mimeType'> & {
+  thumbnail?: Promise<string | null>
+}
+
+const artifactSnapshots = new DirectoryListingSnapshots<ArtifactSnapshotEntry>()
+
+function artifactSnapshotKey(root: string, target: string) {
+  return JSON.stringify([root, target])
+}
+
+function invalidateArtifactAncestors(root: string, target: string) {
+  let directory = target
+  while (isSubPath(directory, root)) {
+    artifactSnapshots.invalidate(artifactSnapshotKey(root, directory))
+    if (directory === root) break
+    directory = path.dirname(directory)
+  }
+}
+
+function artifactOrder(item: ArtifactSnapshotEntry) {
+  return { name: item.name, key: item.relativePath, modifiedAt: item.modifiedAt }
 }
 
 const MIME_BY_EXTENSION: Record<string, string> = {
@@ -228,7 +252,7 @@ function buildArtifactArchiveUrl(scope: WorkflowArtifactUrlScope, relativePath: 
   return `${artifactUrlBase(scope)}/archive?${params.toString()}`
 }
 
-export async function listWorkflowArtifacts(workflow: WorkflowRecord, relativePath?: string | null, urlScope: WorkflowArtifactUrlScope = { kind: 'workflow', workflowId: workflow.id }) {
+export async function listWorkflowArtifacts(workflow: WorkflowRecord, relativePath?: string | null, urlScope: WorkflowArtifactUrlScope = { kind: 'workflow', workflowId: workflow.id }, options?: DirectoryPageRequest) {
   const resolved = resolveWorkflowArtifactPath(workflow, relativePath)
   await fs.promises.mkdir(resolved.root, { recursive: true })
 
@@ -238,6 +262,7 @@ export async function listWorkflowArtifacts(workflow: WorkflowRecord, relativePa
       root: resolved.root,
       relativePath: resolved.relativePath,
       entries: [] as WorkflowArtifactEntry[],
+      ...(options ? { total: 0, nextCursor: null, snapshot: null } : {}),
     }
   }
 
@@ -245,31 +270,39 @@ export async function listWorkflowArtifacts(workflow: WorkflowRecord, relativePa
     throw new Error('Artifact path is not a directory')
   }
 
-  const dirents = (await fs.promises.readdir(resolved.target, { withFileTypes: true }))
-    .filter((dirent) => !isInternalArtifactEntry(dirent.name))
-  const entries = await Promise.all(dirents.map(async (dirent) => {
-    const absolutePath = path.join(resolved.target, dirent.name)
-    const itemStat = await fs.promises.stat(absolutePath)
-    const itemRelativePath = path.relative(resolved.root, absolutePath).replace(/\\/g, '/')
-    const isDirectory = dirent.isDirectory()
-    const entry: WorkflowArtifactEntry = {
-      name: dirent.name,
-      relativePath: itemRelativePath,
-      kind: isDirectory ? 'directory' : 'file',
-      size: isDirectory ? 0 : itemStat.size,
-      modifiedAt: itemStat.mtime.toISOString(),
-      mimeType: isDirectory ? null : getMimeType(absolutePath),
-    }
-
-    if (isDirectory) {
-      entry.downloadUrl = buildArtifactArchiveUrl(urlScope, itemRelativePath)
-      const thumbnailRelativePath = await findDirectoryThumbnail(resolved.root, absolutePath)
+  const scanDirectory = async () => {
+    const dirents = (await fs.promises.readdir(resolved.target, { withFileTypes: true }))
+      .filter((dirent) => !isInternalArtifactEntry(dirent.name))
+    const items = await Promise.all(dirents.map(async (dirent): Promise<ArtifactSnapshotEntry> => {
+      const absolutePath = path.join(resolved.target, dirent.name)
+      const itemStat = await fs.promises.stat(absolutePath)
+      const isDirectory = dirent.isDirectory()
+      return {
+        name: dirent.name,
+        relativePath: path.relative(resolved.root, absolutePath).replace(/\\/g, '/'),
+        kind: isDirectory ? 'directory' : 'file',
+        size: isDirectory ? 0 : itemStat.size,
+        modifiedAt: itemStat.mtime.toISOString(),
+        mimeType: isDirectory ? null : getMimeType(absolutePath),
+      }
+    }))
+    return sortDirectoryItems(items, artifactOrder)
+  }
+  const snapshot = options ? await artifactSnapshots.read(artifactSnapshotKey(resolved.root, resolved.target), scanDirectory, options) : null
+  const page = snapshot && options ? pageDirectorySnapshot(snapshot, options, artifactOrder) : null
+  const entries = await Promise.all((page?.items ?? await scanDirectory()).map(async (item): Promise<WorkflowArtifactEntry> => {
+    const { thumbnail: _thumbnail, ...fields } = item
+    const entry: WorkflowArtifactEntry = fields
+    if (entry.kind === 'directory') {
+      entry.downloadUrl = buildArtifactArchiveUrl(urlScope, entry.relativePath)
+      item.thumbnail ??= findDirectoryThumbnail(resolved.root, path.join(resolved.root, entry.relativePath))
+      const thumbnailRelativePath = await item.thumbnail
       if (thumbnailRelativePath) {
         entry.thumbnailUrl = buildArtifactUrl(urlScope, thumbnailRelativePath)
       }
     } else {
-      entry.fileUrl = buildArtifactUrl(urlScope, itemRelativePath)
-      entry.downloadUrl = buildArtifactUrl(urlScope, itemRelativePath, true)
+      entry.fileUrl = buildArtifactUrl(urlScope, entry.relativePath)
+      entry.downloadUrl = buildArtifactUrl(urlScope, entry.relativePath, true)
       if (isImageMimeType(entry.mimeType)) {
         entry.thumbnailUrl = entry.fileUrl
       }
@@ -278,18 +311,11 @@ export async function listWorkflowArtifacts(workflow: WorkflowRecord, relativePa
     return entry
   }))
 
-  entries.sort((a, b) => {
-    const dateDiff = new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime()
-    if (dateDiff !== 0) {
-      return dateDiff
-    }
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
-  })
-
   return {
     root: resolved.root,
     relativePath: resolved.relativePath,
     entries,
+    ...(page ? { total: page.total, nextCursor: page.nextCursor, snapshot: page.snapshot } : {}),
   }
 }
 
@@ -375,6 +401,7 @@ export async function moveFileIntoWorkflowArtifacts(input: {
     await fs.promises.copyFile(input.sourcePath, targetPath)
     await fs.promises.unlink(input.sourcePath)
   })
+  invalidateArtifactAncestors(root, targetSubdirectory)
 
   return {
     absolutePath: targetPath,
@@ -414,6 +441,7 @@ export async function writeWorkflowArtifactDirectoryThumbnail(input: {
     JSON.stringify({ strategy: 'comfy-save-image-node', sourceRelativePath, createdAt: new Date().toISOString() }, null, 2),
     'utf8',
   )
+  invalidateArtifactAncestors(root, targetDirectory)
 
   return {
     absolutePath: thumbnailPath,

@@ -27,6 +27,7 @@ import { Modal, ModalBody } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { buildPromptPresetInsertionText, createPromptPreset, deletePromptPreset, getPromptPresets, updatePromptPreset, type PromptPresetMutationInput, type PromptPresetRecord } from '@/lib/api-prompt-presets'
+import { ApiRequestError } from '@/lib/api-request'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { SettingsResourceTable } from '@/features/settings/components/settings-resource-shared'
 import { getErrorMessage } from '@/features/image-generation/image-generation-shared'
@@ -35,7 +36,7 @@ import { SidebarTree } from './sidebar-tree'
 
 type PromptPresetEditorState =
   | { mode: 'create'; defaultParentId: number | null }
-  | { mode: 'edit'; preset: PromptPresetRecord }
+  | { mode: 'edit'; preset: PromptPresetRecord; revision: string }
   | null
 
 type PromptPresetItemDraft = {
@@ -161,7 +162,11 @@ function PromptPresetEditorModal({
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
-    await onSubmit(normalizePromptPresetInput(name, description, parentId, drafts))
+    try {
+      await onSubmit(normalizePromptPresetInput(name, description, parentId, drafts))
+    } catch {
+      // The mutation reports the error; keep the editor and its draft open.
+    }
   }
 
   const canSave = !isSubmitting && (mode === 'create' || chatDirty)
@@ -282,14 +287,24 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ presetId, input }: { presetId: number; input: PromptPresetMutationInput }) => updatePromptPreset(presetId, input),
+    mutationFn: ({ presetId, input, revision }: { presetId: number; input: PromptPresetMutationInput; revision: string }) => updatePromptPreset(presetId, input, revision),
     onSuccess: async (result) => {
       setEditorState(null)
       setSelectedPresetId(result.id)
       showSnackbar({ message: t('prompts.components.prompt.preset.panel.saved.preset'), tone: 'info' })
       await queryClient.invalidateQueries({ queryKey: ['prompt-presets'] })
     },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t('prompts.components.prompt.preset.panel.failed.to.save.preset')), tone: 'error' }),
+    onError: (error) => {
+      const conflict = error instanceof ApiRequestError && error.status === 409 && error.code === 'revision_conflict'
+      // The open draft keeps its own token; an editor opened later starts from the current record.
+      if (conflict) void queryClient.invalidateQueries({ queryKey: ['prompt-presets'] })
+      showSnackbar({
+        message: conflict
+          ? t({ ko: '저장된 내용이 바뀌었어. 초안은 그대로야.', en: 'The saved content changed. Your draft is intact.' })
+          : getErrorMessage(error, t('prompts.components.prompt.preset.panel.failed.to.save.preset')),
+        tone: 'error',
+      })
+    },
   })
 
   const deleteMutation = useMutation({
@@ -313,6 +328,14 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('prompts.components.prompt.preset.panel.copy.failed')), tone: 'error' })
     }
+  }
+
+  const handleOpenEdit = (preset: PromptPresetRecord) => {
+    if (!preset.assistant_revision) {
+      showSnackbar({ message: t({ ko: '편집 정보를 불러오지 못했어. 새로고침해줘.', en: 'Could not load edit information. Refresh and try again.' }), tone: 'error' })
+      return
+    }
+    setEditorState({ mode: 'edit', preset, revision: preset.assistant_revision })
   }
 
   const handleDeleteSelected = async () => {
@@ -381,7 +404,7 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
               actions={(
                 <>
                   {canUpdatePresets ? (
-                    <IconButton size="icon-sm" variant="ghost" onClick={() => setEditorState({ mode: 'edit', preset: selectedPreset })} label={t('prompts.components.prompt.preset.panel.edit.preset')}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => handleOpenEdit(selectedPreset)} label={t('prompts.components.prompt.preset.panel.edit.preset')}>
                       <Pencil />
                     </IconButton>
                   ) : null}
@@ -441,7 +464,7 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
           }
 
           if (editorState?.mode === 'edit') {
-            await updateMutation.mutateAsync({ presetId: editorState.preset.id, input })
+            await updateMutation.mutateAsync({ presetId: editorState.preset.id, input, revision: editorState.revision })
             return
           }
 

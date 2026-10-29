@@ -1,6 +1,6 @@
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Pause, Play, Plus, Rocket, SquarePen, Trash2 } from 'lucide-react'
 import { FieldTabs, FramedField } from '@/components/common/field-tabs'
 import { ScheduleField, toDateTimeLocal, type ScheduleValue } from '@/components/common/schedule-field'
@@ -11,11 +11,14 @@ import type { SelectedImageDraft } from '@/features/image-generation/image-gener
 import { Field } from '@/components/ui/field'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal } from '@/components/ui/modal'
+import { useSnackbar } from '@/components/ui/snackbar-context'
 import { SettingsSwitchRow } from '@/components/ui/settings-switch-row'
 import { useI18n } from '@/i18n'
-import { getGraphWorkflow } from '@/lib/api-module-graph'
+import { createRandomUuid } from '@/lib/random-uuid'
+import { createGraphWorkflowSchedule, getGraphWorkflow, updateGraphWorkflowSchedule } from '@/lib/api-module-graph'
 import type {
   GraphWorkflowNameRecord,
+  GraphWorkflowRecord,
   GraphWorkflowScheduleFailurePolicy,
   GraphWorkflowScheduleRecord,
   GraphWorkflowScheduleType,
@@ -133,8 +136,7 @@ export function ModuleWorkflowSchedulesPanel({
   workflows,
   workflowNameById,
   isMutating,
-  onCreateSchedule,
-  onUpdateSchedule,
+  onSavingChange,
   onPauseSchedule,
   onResumeSchedule,
   onDeleteSchedule,
@@ -147,34 +149,45 @@ export function ModuleWorkflowSchedulesPanel({
   workflows: GraphWorkflowNameRecord[]
   workflowNameById: Map<number, string>
   isMutating: boolean
-  onCreateSchedule: (payload: { graph_workflow_id: number } & ScheduleMutationPayload) => Promise<void> | void
-  onUpdateSchedule: (scheduleId: number, payload: ScheduleMutationPayload) => Promise<void> | void
-  onPauseSchedule: (scheduleId: number) => Promise<void> | void
-  onResumeSchedule: (scheduleId: number) => Promise<void> | void
+  onSavingChange: (saving: boolean) => void
+  onPauseSchedule: (schedule: GraphWorkflowScheduleRecord) => Promise<void> | void
+  onResumeSchedule: (schedule: GraphWorkflowScheduleRecord) => Promise<void> | void
   onDeleteSchedule: (scheduleId: number) => Promise<void> | void
   onRunNow: (scheduleId: number) => Promise<void> | void
 }) {
   const { canExecuteGeneration, canUpdateWorkflows } = useFeaturePermissions()
   const { t, formatNumber } = useI18n()
+  const { showSnackbar } = useSnackbar()
+  const queryClient = useQueryClient()
   const [editorMode, setEditorMode] = useState<'create' | 'edit' | null>(null)
-  const [editingScheduleId, setEditingScheduleId] = useState<number | null>(null)
+  const [editingSchedule, setEditingSchedule] = useState<{ id: number; revision: number; active: boolean } | null>(null)
+  const [reviewedWorkflow, setReviewedWorkflow] = useState<GraphWorkflowRecord | null>(null)
+  const [reviewOwner] = useState(createRandomUuid)
+  const [reviewSession, setReviewSession] = useState(0)
+  const [isSaving, setIsSaving] = useState(false)
   const [draft, setDraft] = useState<Draft>(() => newDraft(''))
   /** The draft as the editor opened, to tell unsaved edits (null until the opened values have rendered). */
   const [openedSnapshot, setOpenedSnapshot] = useState<string | null>(null)
   const draftSnapshot = JSON.stringify(draft)
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((current) => ({ ...current, [key]: value }))
 
-  // WF-1: 예약 목록 응답에는 그래프 문서가 없다. 편집기를 열 때 선택한 워크플로우만 by-id 로 받아
-  // 노출 입력 정의를 구성한다(모듈그래프 페이지 상세 쿼리와 키가 같아 캐시를 함께 쓴다).
+  // Each opening or workflow switch starts a fresh review, never a cached detail from an earlier session.
   const draftWorkflowNumericId = Number(draft.workflowId)
   const hasDraftWorkflowId = Number.isInteger(draftWorkflowNumericId) && draftWorkflowNumericId > 0
   const selectedWorkflowDetailQuery = useQuery({
-    queryKey: ['module-graph-workflow-detail', hasDraftWorkflowId ? draftWorkflowNumericId : null],
+    queryKey: ['schedule-editor-workflow-detail', reviewOwner, hasDraftWorkflowId ? draftWorkflowNumericId : null, reviewSession],
     queryFn: () => getGraphWorkflow(draftWorkflowNumericId),
     enabled: editorMode !== null && hasDraftWorkflowId,
-    staleTime: 30_000,
+    staleTime: Infinity,
+    gcTime: 0,
   })
-  const selectedInputDefinitions = selectedWorkflowDetailQuery.data?.graph.metadata?.exposed_inputs ?? []
+  useEffect(() => {
+    const workflow = selectedWorkflowDetailQuery.data
+    if (editorMode !== null && reviewedWorkflow === null && workflow?.id === draftWorkflowNumericId) {
+      setReviewedWorkflow(workflow)
+    }
+  }, [draftWorkflowNumericId, editorMode, reviewedWorkflow, selectedWorkflowDetailQuery.data])
+  const selectedInputDefinitions = reviewedWorkflow?.graph.metadata?.exposed_inputs ?? []
 
   // How many autoruns each workflow already has (a line under it in the picker).
   const scheduleCountByWorkflow = useMemo(() => {
@@ -189,7 +202,8 @@ export function ModuleWorkflowSchedulesPanel({
 
   const closeEditor = () => {
     setEditorMode(null)
-    setEditingScheduleId(null)
+    setEditingSchedule(null)
+    setReviewedWorkflow(null)
     setOpenedSnapshot(null)
   }
 
@@ -200,15 +214,19 @@ export function ModuleWorkflowSchedulesPanel({
   }, [draftSnapshot, editorMode, openedSnapshot])
 
   const openCreateEditor = () => {
+    setReviewSession((current) => current + 1)
     setDraft(newDraft(workflows[0] ? String(workflows[0].id) : ''))
-    setEditingScheduleId(null)
+    setEditingSchedule(null)
+    setReviewedWorkflow(null)
     setOpenedSnapshot(null)
     setEditorMode('create')
   }
 
   const openEditEditor = (schedule: GraphWorkflowScheduleRecord) => {
+    setReviewSession((current) => current + 1)
     setDraft(draftOf(schedule))
-    setEditingScheduleId(schedule.id)
+    setEditingSchedule({ id: schedule.id, revision: schedule.revision, active: schedule.status === 'active' })
+    setReviewedWorkflow(null)
     setOpenedSnapshot(null)
     setEditorMode('edit')
   }
@@ -217,25 +235,42 @@ export function ModuleWorkflowSchedulesPanel({
 
   const handleSubmit = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault()
-    if (!payload) {
+    if (!payload || !reviewedWorkflow || isSaving) {
       return
     }
 
-    if (editorMode === 'edit' && editingScheduleId !== null) {
-      await onUpdateSchedule(editingScheduleId, payload)
-    } else {
-      await onCreateSchedule({
-        graph_workflow_id: Number(draft.workflowId),
-        ...payload,
-      })
+    try {
+      setIsSaving(true)
+      onSavingChange(true)
+      if (editorMode === 'edit' && editingSchedule) {
+        const { status, ...configuration } = payload
+        await updateGraphWorkflowSchedule(editingSchedule.id, {
+          ...configuration,
+          ...(draft.active !== editingSchedule.active ? { status } : {}),
+          expected_revision: editingSchedule.revision,
+          expected_graph_version: reviewedWorkflow.version,
+        })
+      } else {
+        await createGraphWorkflowSchedule({
+          graph_workflow_id: Number(draft.workflowId),
+          ...payload,
+          expected_graph_version: reviewedWorkflow.version,
+        })
+      }
+      closeEditor()
+      showSnackbar({ message: t({ ko: '자동 실행을 저장했어.', en: 'Saved the autorun.' }), tone: 'info' })
+      await queryClient.invalidateQueries({ queryKey: ['graph-workflow-reservations'] })
+    } catch (error) {
+      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '자동 실행을 저장하지 못했어.', en: 'Could not save the autorun.' }), tone: 'error' })
+    } finally {
+      setIsSaving(false)
+      onSavingChange(false)
     }
-
-    closeEditor()
   }
 
   const draftDirty = editorMode !== null && openedSnapshot !== null && draftSnapshot !== openedSnapshot
   const canManage = canExecuteGeneration && canUpdateWorkflows
-  const canSaveDraft = canManage && !isMutating && payload !== null && (draftDirty || editorMode === 'create')
+  const canSaveDraft = canManage && !isMutating && !isSaving && reviewedWorkflow !== null && payload !== null && (draftDirty || editorMode === 'create')
 
   return (
     <>
@@ -262,11 +297,11 @@ export function ModuleWorkflowSchedulesPanel({
                     <SquarePen />
                   </IconButton>
                   {schedule.status === 'active' ? (
-                    <IconButton size="icon-sm" variant="ghost" onClick={() => void onPauseSchedule(schedule.id)} disabled={!canExecuteGeneration || isMutating} label={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => void onPauseSchedule(schedule)} disabled={!canExecuteGeneration || isMutating} label={t({ ko: '자동 실행 일시정지', en: 'Pause autorun' })}>
                       <Pause />
                     </IconButton>
                   ) : (
-                    <IconButton size="icon-sm" variant="ghost" onClick={() => void onResumeSchedule(schedule.id)} disabled={!canExecuteGeneration || isMutating} label={t({ ko: '자동 실행 재개', en: 'Resume autorun' })}>
+                    <IconButton size="icon-sm" variant="ghost" onClick={() => void onResumeSchedule(schedule)} disabled={!canExecuteGeneration || isMutating} label={t({ ko: '자동 실행 재개', en: 'Resume autorun' })}>
                       <Play />
                     </IconButton>
                   )}
@@ -285,7 +320,7 @@ export function ModuleWorkflowSchedulesPanel({
 
       <Modal
         open={editorMode !== null}
-        onClose={closeEditor}
+        onClose={() => { if (!isSaving) closeEditor() }}
         title={editorMode === 'edit' ? t({ ko: '자동 실행 수정', en: 'Edit autorun' }) : t({ ko: '자동 실행 추가', en: 'Add autorun' })}
         size="lg"
         height="tall"
@@ -293,6 +328,7 @@ export function ModuleWorkflowSchedulesPanel({
         onSave={canSaveDraft ? () => void handleSubmit() : undefined}
       >
         <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
+          <fieldset disabled={isMutating || isSaving} className="space-y-5">
           <Field label={t({ ko: '이름', en: 'Name' })}>
             <Input variant="settings" value={draft.name} onChange={(event) => set('name', event.target.value)} disabled={isMutating} />
           </Field>
@@ -301,7 +337,12 @@ export function ModuleWorkflowSchedulesPanel({
               workflows={workflows}
               covers={covers}
               value={draft.workflowId}
-              onChange={(workflowId) => setDraft((current) => ({ ...current, workflowId, inputValues: {} }))}
+              onChange={(workflowId) => {
+                if (workflowId === draft.workflowId) return
+                setReviewSession((current) => current + 1)
+                setReviewedWorkflow(null)
+                setDraft((current) => ({ ...current, workflowId, inputValues: {} }))
+              }}
               disabled={editorMode === 'edit' || isMutating}
               detailOf={workflowDetail}
             />
@@ -366,11 +407,12 @@ export function ModuleWorkflowSchedulesPanel({
               />
             </EditorGroup>
           ) : null}
+          </fieldset>
 
           <EditorFooter
             saveSubmit
             canSave={canSaveDraft}
-            saving={isMutating}
+            saving={isMutating || isSaving}
             saveLabel={editorMode === 'edit' ? t({ ko: '저장', en: 'Save' }) : t({ ko: '추가', en: 'Add' })}
           />
         </form>

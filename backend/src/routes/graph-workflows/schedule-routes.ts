@@ -31,6 +31,17 @@ import {
   parseScheduleType,
 } from './route-helpers'
 
+function readExpectedScheduleVersions(req: Request, res: Response) {
+  const expectedRevision = req.body?.expected_revision
+  const expectedGraphVersion = req.body?.expected_graph_version
+  if ((expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1))
+    || (expectedGraphVersion !== undefined && (!Number.isSafeInteger(expectedGraphVersion) || expectedGraphVersion < 1))) {
+    sendRouteBadRequest(res, '잘못된 리비전이야.')
+    return null
+  }
+  return { expectedRevision: expectedRevision as number | undefined, expectedGraphVersion: expectedGraphVersion as number | undefined }
+}
+
 export function createGraphWorkflowScheduleRoutes() {
   const router = Router()
 
@@ -79,6 +90,11 @@ export function createGraphWorkflowScheduleRoutes() {
     const timezone = resolveScheduleTimezone(parseOptionalTrimmedString(req.body?.timezone) ?? DEFAULT_SCHEDULE_TIMEZONE)
     const inputValues = parseScheduleInputValues(req.body?.input_values)
     const runEnqueueCount = parseScheduleRunEnqueueCount(req.body?.run_enqueue_count)
+    const expectedGraphVersion = req.body?.expected_graph_version
+
+    if (expectedGraphVersion !== undefined && (!Number.isSafeInteger(expectedGraphVersion) || expectedGraphVersion < 1)) {
+      return sendRouteBadRequest(res, '잘못된 워크플로 버전이야.')
+    }
 
     if (!Number.isFinite(workflowId)) {
       return sendRouteBadRequest(res, '워크플로우 ID가 필요해.')
@@ -99,6 +115,9 @@ export function createGraphWorkflowScheduleRoutes() {
     const workflow = findGraphWorkflowOrRespond(res, workflowId)
     if (!workflow) {
       return
+    }
+    if (expectedGraphVersion !== undefined && workflow.version !== expectedGraphVersion) {
+      return res.status(409).json({ success: false, error: '워크플로가 바뀌었어. 새로 불러와줘.' })
     }
 
     if (scheduleType === 'once' && !runAt) {
@@ -132,7 +151,7 @@ export function createGraphWorkflowScheduleRoutes() {
         })
         : null
 
-      const scheduleId = GraphWorkflowScheduleModel.create({
+      const createData = {
         graph_workflow_id: workflow.id,
         name,
         schedule_type: scheduleType,
@@ -151,7 +170,13 @@ export function createGraphWorkflowScheduleRoutes() {
         stop_reason_code: status === 'active' ? null : 'manual_pause',
         stop_reason_message: status === 'active' ? null : '예약작업이 일시정지 상태로 생성됐어.',
         run_as_account_id: getRequesterAccountId(req),
-      })
+      }
+      const scheduleId = expectedGraphVersion === undefined
+        ? GraphWorkflowScheduleModel.create(createData)
+        : GraphWorkflowScheduleModel.create(createData, expectedGraphVersion)
+      if (scheduleId === null) {
+        return res.status(409).json({ success: false, error: '워크플로가 바뀌었어. 새로 불러와줘.' })
+      }
 
       return res.status(201).json({ success: true, data: { id: scheduleId, message: '예약작업을 생성했어.' } } as ModuleGraphResponse)
     } catch (error) {
@@ -172,6 +197,19 @@ export function createGraphWorkflowScheduleRoutes() {
     }
 
     const { schedule, workflow } = scheduleContext
+    const expectedRevision = req.body?.expected_revision
+    const expectedGraphVersion = req.body?.expected_graph_version
+    const expectedStatus = req.body?.expected_status
+    if ((expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1))
+      || (expectedGraphVersion !== undefined && (!Number.isSafeInteger(expectedGraphVersion) || expectedGraphVersion < 1))
+      || (expectedStatus !== undefined && !parseScheduleStatus(expectedStatus))) {
+      return sendRouteBadRequest(res, '잘못된 리비전이야.')
+    }
+    if ((expectedRevision !== undefined && expectedRevision !== schedule.revision)
+      || (expectedGraphVersion !== undefined && expectedGraphVersion !== workflow.version)
+      || (expectedStatus !== undefined && expectedStatus !== schedule.status)) {
+      return res.status(409).json({ success: false, error: '자동 실행이나 워크플로가 바뀌었어. 새로 불러와줘.' })
+    }
 
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : undefined
     const scheduleType = req.body?.schedule_type !== undefined ? parseScheduleType(req.body.schedule_type) : undefined
@@ -208,14 +246,25 @@ export function createGraphWorkflowScheduleRoutes() {
 
     try {
       const finalScheduleType = scheduleType ?? schedule.schedule_type
-      const finalStatus = requestedStatus ?? schedule.status
+      const resuming = requestedStatus === 'active' && schedule.status !== 'active'
+      const finalStatus = requestedStatus === 'paused' && schedule.status !== 'active'
+        ? schedule.status
+        : requestedStatus ?? schedule.status
       const finalRunAt = runAt === undefined ? schedule.run_at ?? null : runAt
       const finalIntervalMinutes = intervalMinutes === undefined ? schedule.interval_minutes ?? null : intervalMinutes
       const finalDailyTime = dailyTime === undefined ? schedule.daily_time ?? null : dailyTime
-      const finalInputValues = inputValues === undefined
-        ? (schedule.input_values ? JSON.parse(schedule.input_values) as Record<string, unknown> : null)
-        : inputValues
-      const nextRunAt = finalStatus === 'active'
+      const currentInputValues = schedule.input_values ? JSON.parse(schedule.input_values) as Record<string, unknown> : null
+      const finalInputValues = inputValues === undefined ? currentInputValues : inputValues
+      const inputSignature = GraphWorkflowScheduleService.buildInputSignature(finalInputValues)
+      const inputChanged = inputValues !== undefined
+        && inputSignature !== GraphWorkflowScheduleService.buildInputSignature(currentInputValues)
+      const sameRunAt = finalRunAt === (schedule.run_at ?? null)
+        || (finalRunAt !== null && schedule.run_at != null && Date.parse(finalRunAt) === Date.parse(schedule.run_at))
+      const timingChanged = finalScheduleType !== schedule.schedule_type || !sameRunAt
+        || finalIntervalMinutes !== (schedule.interval_minutes ?? null)
+        || finalDailyTime !== (schedule.daily_time ?? null)
+        || (timezone !== undefined && timezone !== resolveScheduleTimezone(schedule.timezone))
+      const nextRunAt = finalStatus === 'active' && (resuming || timingChanged)
         ? GraphWorkflowScheduleService.buildInitialNextRunAt({
           scheduleType: finalScheduleType,
           runAt: finalRunAt,
@@ -223,28 +272,32 @@ export function createGraphWorkflowScheduleRoutes() {
           dailyTime: finalDailyTime,
           timezone: timezone ?? schedule.timezone,
         })
-        : null
+        : finalStatus !== 'active' && schedule.status === 'active' ? null : undefined
 
       const updated = GraphWorkflowScheduleModel.update(scheduleId, {
         name,
         schedule_type: scheduleType ?? undefined,
         status: finalStatus,
-        timezone,
-        run_at: runAt,
+        timezone: timezone !== undefined && timezone !== resolveScheduleTimezone(schedule.timezone) ? timezone : undefined,
+        run_at: sameRunAt ? undefined : runAt,
         interval_minutes: intervalMinutes,
         daily_time: dailyTime,
         max_run_count: maxRunCount,
         run_enqueue_count: runEnqueueCount,
         failure_policy: failurePolicy,
-        input_values: inputValues,
-        confirmed_graph_version: workflow.version,
-        confirmed_input_signature: GraphWorkflowScheduleService.buildInputSignature(finalInputValues),
+        input_values: inputChanged ? inputValues : undefined,
+        confirmed_graph_version: resuming ? workflow.version : schedule.confirmed_graph_version,
+        confirmed_input_signature: inputChanged || resuming ? inputSignature : undefined,
         next_run_at: nextRunAt,
-        stop_reason_code: finalStatus === 'active' ? null : schedule.stop_reason_code ?? 'manual_pause',
-        stop_reason_message: finalStatus === 'active' ? null : schedule.stop_reason_message ?? '예약작업이 일시정지 상태야.',
+        stop_reason_code: finalStatus === 'active' ? (resuming ? null : schedule.stop_reason_code) : schedule.status === 'active' ? 'manual_pause' : schedule.stop_reason_code,
+        stop_reason_message: finalStatus === 'active' ? (resuming ? null : schedule.stop_reason_message) : schedule.status === 'active' ? '사용자가 예약작업을 일시정지했어.' : schedule.stop_reason_message,
         // Saving takes the schedule over: from now on it runs as the account that saved it.
         run_as_account_id: getRequesterAccountId(req),
-      })
+      }, expectedRevision ?? schedule.revision, expectedGraphVersion ?? (resuming ? workflow.version : undefined))
+
+      if (!updated) {
+        return res.status(409).json({ success: false, error: '자동 실행이나 워크플로가 바뀌었어. 새로 불러와줘.' })
+      }
 
       return res.json({ success: updated, data: { id: scheduleId, message: updated ? '예약작업을 업데이트했어.' : '예약작업 변경사항이 없어.' } } as ModuleGraphResponse)
     } catch (error) {
@@ -259,16 +312,20 @@ export function createGraphWorkflowScheduleRoutes() {
       return
     }
 
-    if (!findGraphWorkflowScheduleOrRespond(res, scheduleId)) {
+    const schedule = findGraphWorkflowScheduleOrRespond(res, scheduleId)
+    if (!schedule) {
       return
     }
+    const expected = readExpectedScheduleVersions(req, res)
+    if (!expected) return
 
     const updated = GraphWorkflowScheduleModel.update(scheduleId, {
       status: 'paused',
       next_run_at: null,
       stop_reason_code: 'manual_pause',
       stop_reason_message: '사용자가 예약작업을 일시정지했어.',
-    })
+    }, expected.expectedRevision ?? schedule.revision, expected.expectedGraphVersion)
+    if (!updated) return res.status(409).json({ success: false, error: '자동 실행이나 워크플로가 바뀌었어. 새로 불러와줘.' })
     const queueCleanup = GraphWorkflowExecutionQueue.cancelQueuedByScheduleIds([scheduleId])
 
     return res.json({ success: updated, data: { id: scheduleId, message: '예약작업을 일시정지했어.', queue_cleanup: queueCleanup } } as ModuleGraphResponse)
@@ -286,6 +343,8 @@ export function createGraphWorkflowScheduleRoutes() {
     }
 
     const { schedule, workflow } = scheduleContext
+    const expected = readExpectedScheduleVersions(req, res)
+    if (!expected) return
 
     const nextRunAt = GraphWorkflowScheduleService.buildInitialNextRunAt({
       scheduleType: schedule.schedule_type,
@@ -301,7 +360,8 @@ export function createGraphWorkflowScheduleRoutes() {
       next_run_at: nextRunAt,
       stop_reason_code: null,
       stop_reason_message: null,
-    })
+    }, expected.expectedRevision ?? schedule.revision, expected.expectedGraphVersion ?? workflow.version)
+    if (!updated) return res.status(409).json({ success: false, error: '자동 실행이나 워크플로가 바뀌었어. 새로 불러와줘.' })
 
     return res.json({ success: updated, data: { id: scheduleId, message: '예약작업을 다시 켰어.' } } as ModuleGraphResponse)
   }))

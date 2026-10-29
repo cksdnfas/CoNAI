@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import type { PostMediaRef } from '@conai/shared'
 import { Download, ExternalLink, File as FileIcon, FileText, ImageOff, Lock, Music, Pause, Play } from 'lucide-react'
@@ -11,7 +11,7 @@ import { audioPlayer, useAudioPlayer } from '@/features/audio/audio-player'
 import { useI18n } from '@/i18n'
 import { getAudioCandidate } from '@/lib/api-audio'
 import { getGroup, getGroupImages } from '@/lib/api-groups'
-import { getImage } from '@/lib/api-images'
+import { getImagesBatch, IMAGE_BATCH_MAX_COUNT } from '@/lib/api-images'
 import { formatFileSize } from '@/lib/format-size'
 import { getPost, getPostFile, POSTS_QUERY_KEY, postFileUrl } from '@/lib/api-posts'
 import { buildApiUrl } from '@/lib/api-url'
@@ -43,6 +43,59 @@ export function libraryMediaKind(record: Pick<ImageRecord, 'mime_type' | 'file_t
 const fileUrl = (hash: string) => buildApiUrl(`/api/images/${hash}/file`)
 const thumbnailUrl = (hash: string) => buildApiUrl(`/api/images/${hash}/thumbnail`)
 
+type PostMediaBatch = {
+  data?: Record<string, ImageRecord>
+  isError: boolean
+  isSuccess: boolean
+  isPlaceholderData: boolean
+}
+
+const POST_MEDIA_STALE_MS = 5 * 60_000
+
+/**
+ * Records other hash lists already loaded (and still fresh), keyed per hash so lists that differ share them.
+ * A plain object, so React Query's structural sharing keeps the same placeholder while its records are unchanged.
+ */
+function cachedPostMedia(queryClient: QueryClient, hashes: string[]) {
+  const records: Record<string, ImageRecord> = {}
+  const now = Date.now()
+  for (const hash of hashes) {
+    const state = queryClient.getQueryState<ImageRecord>(['post-media', hash])
+    if (state?.data && now - state.dataUpdatedAt < POST_MEDIA_STALE_MS) records[hash] = state.data
+  }
+  return records
+}
+
+/** Share one request per post/gallery for the records not cached yet, splitting only at the API's batch limit. */
+export function usePostMediaRecords(hashes: string[], enabled: boolean) {
+  const queryClient = useQueryClient()
+  const uniqueHashes = [...new Set(hashes)]
+  return useQuery<Record<string, ImageRecord>>({
+    queryKey: ['post-media-batch', hashes],
+    enabled: enabled && hashes.length > 0,
+    staleTime: POST_MEDIA_STALE_MS,
+    retry: false,
+    // Already-loaded items stay on screen while a changed hash list fetches only its new hashes.
+    placeholderData: () => {
+      const records = cachedPostMedia(queryClient, uniqueHashes)
+      return Object.keys(records).length > 0 ? records : undefined
+    },
+    queryFn: async ({ signal }) => {
+      const records = cachedPostMedia(queryClient, uniqueHashes)
+      const missing = uniqueHashes.filter((hash) => !Object.hasOwn(records, hash))
+      for (let offset = 0; offset < missing.length; offset += IMAGE_BATCH_MAX_COUNT) {
+        const batch = await getImagesBatch(missing.slice(offset, offset + IMAGE_BATCH_MAX_COUNT), { signal })
+        for (const image of batch) {
+          if (!image.composite_hash) continue
+          records[image.composite_hash] = image
+          queryClient.setQueryData(['post-media', image.composite_hash], image)
+        }
+      }
+      return records
+    },
+  })
+}
+
 function MediaPlaceholder({ icon, label, className }: { icon: ReactNode; label: string; className?: string }) {
   return (
     <span className={cn('flex min-h-24 w-full items-center justify-center gap-2 rounded-sm bg-surface-low px-3 py-6 text-xs text-muted-foreground', className)}>
@@ -56,9 +109,9 @@ function MediaPlaceholder({ icon, label, className }: { icon: ReactNode; label: 
  * One library item. Videos and animated images play muted on a loop while on screen; a click opens the lightbox
  * over every library item of the post (or over `gallery` when the caller already listed its items, e.g. a group).
  */
-export function LibraryMedia({ hash, caption, tile = false, autoPlay = true, className, record, gallery }: {
+export function LibraryMedia({ hash, caption, tile = false, autoPlay = true, className, record, gallery, batch }: {
   hash: string; caption?: string; tile?: boolean; autoPlay?: boolean; className?: string
-  record?: ImageRecord; gallery?: { hashes: string[]; items: ImageRecord[] }
+  record?: ImageRecord; gallery?: { hashes: string[]; items: ImageRecord[] }; batch?: PostMediaBatch
 }) {
   const { t } = useI18n()
   const { canViewImages } = usePostPermissions()
@@ -66,8 +119,14 @@ export function LibraryMedia({ hash, caption, tile = false, autoPlay = true, cla
   const { mediaHashes } = useContext(PostMediaContext)
   const [ref, view] = useInView<HTMLDivElement>()
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const fetched = useQuery({ queryKey: ['post-media', hash], queryFn: () => getImage(hash), enabled: canViewImages && view.seen && !record, staleTime: 5 * 60_000, retry: false })
-  const query = record ? { data: record, isError: false } : fetched
+  const hashes = record || batch ? [] : mediaHashes.includes(hash) ? mediaHashes : [hash]
+  const fetched = usePostMediaRecords(hashes, canViewImages && view.seen && !record && !batch)
+  const records = batch ?? fetched
+  // Own keys only: a malformed `media:constructor` embed must read as missing, not as an inherited Object member.
+  const batched = records.data && Object.hasOwn(records.data, hash) ? records.data[hash] : undefined
+  const query = record
+    ? { data: record, isError: false }
+    : { data: batched, isError: records.isError || (records.isSuccess && !records.isPlaceholderData && !batched) }
   const kind = libraryMediaKind(query.data)
 
   useEffect(() => {
@@ -122,10 +181,17 @@ export function LibraryMedia({ hash, caption, tile = false, autoPlay = true, cla
 
 /** Several library items in a row of the body: a masonry gallery. */
 export function MediaGallery({ items }: { items: Array<{ hash: string; caption?: string }> }) {
+  const { canViewImages } = usePostPermissions()
+  const { mediaHashes } = useContext(PostMediaContext)
+  const [ref, view] = useInView<HTMLDivElement>('200px', { once: true })
+  const galleryHashes = items.map((item) => item.hash)
+  const postHashes = new Set(mediaHashes)
+  const hashes = galleryHashes.length > 0 && galleryHashes.every((hash) => postHashes.has(hash)) ? mediaHashes : galleryHashes
+  const records = usePostMediaRecords(hashes, canViewImages && view.seen)
   return (
-    <div className={cn('post-media my-3 gap-1.5', items.length === 2 ? 'columns-2' : 'columns-2 sm:columns-3')}>
+    <div ref={ref} className={cn('post-media my-3 gap-1.5', items.length === 2 ? 'columns-2' : 'columns-2 sm:columns-3')}>
       {items.map((item, index) => (
-        <LibraryMedia key={`${item.hash}-${index}`} hash={item.hash} caption={item.caption} tile className="mb-1.5 break-inside-avoid" />
+        <LibraryMedia key={`${item.hash}-${index}`} hash={item.hash} caption={item.caption} batch={records} tile className="mb-1.5 break-inside-avoid" />
       ))}
     </div>
   )

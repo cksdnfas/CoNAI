@@ -30,19 +30,19 @@ export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStat
       { id: 'aspectRatio', label: t({ ko: '화면 비율', en: 'Aspect ratio' }), type: 'select', value: form.aspectRatio, options: ['random', '1:1', '4:3', '3:4', '16:9', '9:16'], ...(form.strictPreservation ? { editable: false as const } : {}) },
       { id: 'resolution', label: t({ ko: '해상도', en: 'Resolution' }), type: 'select', value: form.resolution, options: ['1024', '1536', '2048'], ...(form.strictPreservation ? { editable: false as const } : {}) },
       { id: 'imageMode', label: t({ ko: '이미지 모드', en: 'Image mode' }), type: 'select', value: form.imageMode, options: ['reference', 'edit'] },
-      { id: 'strictPreservation', label: 'Strict masked preservation (source and mask required)', type: 'boolean', value: form.strictPreservation, ...(!canEnableCodexStrict(form) && !form.strictPreservation ? { editable: false as const } : {}) },
-      { id: 'referenceCount', label: 'Reference slots (reattach empty slots)', type: 'number', value: form.references.length, min: 0, max: capacity, integer: true },
+      { id: 'strictPreservation', label: t({ ko: '엄격 마스크 보존 (원본과 마스크 필요)', en: 'Strict masked preservation (source and mask required)' }), type: 'boolean', value: form.strictPreservation, ...(!canEnableCodexStrict(form) && !form.strictPreservation ? { editable: false as const } : {}) },
+      { id: 'referenceCount', label: t({ ko: '참조 칸 수 (빈 칸은 다시 첨부)', en: 'Reference slots (reattach empty slots)' }), type: 'number', value: form.references.length, min: 0, max: capacity, integer: true },
       ...form.references.flatMap((reference, index): ChatPageField[] => [
-        { id: `reference${index}Role`, label: `Reference ${index + 1} role`, type: 'select', value: reference.role, options: [...CODEX_REFERENCE_ROLES] },
-        { id: `reference${index}Label`, label: `Reference ${index + 1} label (max 128)`, type: 'text', value: reference.label },
-        { id: `reference${index}Order`, label: `Reference ${index + 1} position`, type: 'number', value: index + 1, min: 1, max: form.references.length, integer: true },
+        { id: `reference${index}Role`, label: t({ ko: '참조 {index} 역할', en: 'Reference {index} role' }, { index: index + 1 }), type: 'select', value: reference.role, options: [...CODEX_REFERENCE_ROLES] },
+        { id: `reference${index}Label`, label: t({ ko: '참조 {index} 설명 (최대 128자)', en: 'Reference {index} label (max 128)' }, { index: index + 1 }), type: 'text', value: reference.label },
+        { id: `reference${index}Order`, label: t({ ko: '참조 {index} 순서', en: 'Reference {index} position' }, { index: index + 1 }), type: 'number', value: index + 1, min: 1, max: form.references.length, integer: true },
       ]),
     ],
     actions: [...media.actions, ...presets.actions, ...characterSettings.actions({
       target: pageChoice(['prompt']),
       ...(characterReference ? { includeReference: { type: 'boolean' as const } } : {}),
     }, ['target'], 'target prompt = the positive prompt. includeReference (default: when the setting has one) sets its reference image as referenceImage (reference image mode only).')], data: { media: media.candidates, presets: presets.candidates, limits: '5 attachments including source/mask; 10 MiB each, 32 MiB total, 4096px per side. Size is requested, not guaranteed.', selected: { referenceImage: form.referenceImage?.fileName ?? '', maskImage: form.maskImage?.fileName ?? '', references: form.references.map((reference) => ({ role: reference.role, label: reference.label, fileName: reference.image?.fileName ?? '' })) } },
-    apply: (patch) => { const next = applyCodexDraftPatch(form, patch); setForm(next) },
+    apply: (patch) => { const next = applyCodexDraftPatch(form, patch, t); setForm(next) },
     applyAction: async (id, args, assertCurrent) => {
       const next = { ...form, references: form.references.map((reference) => ({ ...reference })) }
       const target = String(args.fieldId)
@@ -58,19 +58,19 @@ export function useCodexChatPage(form: CodexFormDraft, setForm: Dispatch<SetStat
         assertCurrent()
         if (target === 'referenceImage') { next.referenceImage = image; next.maskImage = undefined }
         else if (target === 'maskImage') {
-          if (image && (!next.referenceImage || next.imageMode !== 'edit')) throw new Error('A mask requires an edit source')
+          if (image && (!next.referenceImage || next.imageMode !== 'edit')) throw new Error(t({ ko: '마스크를 쓰려면 편집 원본이 필요해.', en: 'A mask requires an edit source' }))
           next.maskImage = image
         } else if (target === 'reference:new') {
-          if (!image || next.references.length >= codexReferenceCapacity(next)) throw new Error('Cannot add reference: attachment limit')
+          if (!image || next.references.length >= codexReferenceCapacity(next)) throw new Error(t({ ko: '참조를 추가할 수 없어. 이미지와 첨부 개수 제한을 확인해줘.', en: 'Cannot add reference: check the image and attachment limit' }))
           next.references.push({ role: 'reference', label: '', image })
         } else {
           const index = Number(target.split(':')[1])
-          if (!next.references[index]) throw new Error('Reference slot not found')
+          if (!next.references[index]) throw new Error(t({ ko: '참조 칸을 찾지 못했어.', en: 'Reference slot not found' }))
           next.references[index].image = image
         }
       }
-      else throw new Error('등록되지 않은 Codex 입력 작업이야.')
-      if (next.references.length > codexReferenceCapacity(next)) throw new Error('Remove a reference before adding another source or mask')
+      else throw new Error(t({ ko: '등록되지 않은 Codex 입력 작업이야.', en: 'This Codex input action is not registered.' }))
+      if (next.references.length > codexReferenceCapacity(next)) throw new Error(t({ ko: '원본이나 마스크를 추가하기 전에 참조를 하나 지워줘.', en: 'Remove a reference before adding another source or mask' }))
       assertCurrent()
       return commit(next)
     },

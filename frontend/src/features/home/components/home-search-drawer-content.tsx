@@ -106,7 +106,7 @@ function HomeSearchSuggestionPanel({
 }
 
 /** Render the full search drawer body only after the drawer path has been requested. */
-export function HomeSearchDrawerContent({ active }: { active: boolean }) {
+export function HomeSearchDrawerContent({ active, onReturnFocus }: { active: boolean; onReturnFocus: () => void }) {
   const {
     isDrawerOpen,
     searchScope,
@@ -167,10 +167,15 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
     setIsSuggestionPanelOpen(false)
   }
 
+  const closeFromDrawer = () => {
+    onReturnFocus()
+    closeDrawer()
+  }
+
   const handleSubmitSearchFromInput = () => {
     submitSearchFromInput()
     setIsSuggestionPanelOpen(false)
-    closeDrawer()
+    closeFromDrawer()
   }
 
   const handleAddSuggestionChip = (value: string) => {
@@ -191,13 +196,13 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
   const handleApplySearch = () => {
     applySearch()
     setIsSuggestionPanelOpen(false)
-    closeDrawer()
+    closeFromDrawer()
   }
 
   const handleClearSearch = () => {
     clearSearch()
     setIsSuggestionPanelOpen(false)
-    closeDrawer()
+    closeFromDrawer()
   }
 
   return (
@@ -211,15 +216,16 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
       />
 
       <aside
+        inert={!isDrawerOpen}
         className={cn(
-          'theme-floating-panel fixed bottom-(--shell-bottom-inset) right-0 top-[var(--theme-shell-header-height)] z-40 flex h-[calc(100vh-var(--theme-shell-header-height)-var(--shell-bottom-inset))] max-w-full flex-col bg-background/94 transition-transform duration-300',
+          'theme-floating-panel fixed bottom-(--shell-bottom-inset) right-0 top-[var(--theme-shell-header-height)] z-40 flex max-w-full flex-col bg-background/94 transition-transform duration-300',
           isDrawerOpen ? 'translate-x-0' : 'translate-x-full',
         )}
         style={{ width: 'min(calc(100vw - 0.75rem), 420px)' }}
       >
         <div className="theme-drawer-header flex items-center justify-between">
           <Heading level={2}>{t({ ko: '라이브러리 검색', en: 'Search library' })}</Heading>
-          <IconButton variant="ghost" onClick={closeDrawer} label={t('homeSearchDrawerContent.closeSearchDrawer')} tooltipSide="left">
+          <IconButton variant="ghost" onClick={closeFromDrawer} label={t('homeSearchDrawerContent.closeSearchDrawer')} tooltipSide="left">
             <X className="h-5 w-5" />
           </IconButton>
         </div>
@@ -295,7 +301,7 @@ export function HomeSearchDrawerContent({ active }: { active: boolean }) {
                           onClick={() => {
                             selectHistoryEntry(entry)
                             setIsSuggestionPanelOpen(false)
-                            closeDrawer()
+                            closeFromDrawer()
                           }}
                         >
                           <div className="flex min-w-0 flex-1 flex-wrap gap-2 pr-10">

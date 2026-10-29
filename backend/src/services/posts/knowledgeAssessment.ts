@@ -186,7 +186,7 @@ export function cachedKnowledgeMultipliers(postIds: number[], policy: PostsKnowl
   return result;
 }
 
-export function getKnowledgeQuality(actor: PostActor, postId: number): PostQualityStats {
+export function getKnowledgeQuality(actor: PostActor, postId: number, options?: { writeCache?: boolean }): PostQualityStats {
   const knowledge = requireKnowledgeRow(actor,postId,{ allowDeleted: true });
   const rows = db().prepare('SELECT e.* FROM post_assessment_heads h JOIN post_assessment_events e ON e.id=h.event_id WHERE e.post_id=? ORDER BY e.id').all(postId) as AssessmentRow[];
   const policy = loadPostsSettings().knowledge;
@@ -207,10 +207,12 @@ export function getKnowledgeQuality(actor: PostActor, postId: number): PostQuali
   stats.ownVote = own ? { eventId: own.id,quality: own.quality,taskFit: own.task_fit,reasonCode: own.reason_code,reason: own.reason,contentHash: own.content_hash,contentVersion: own.content_version,createdAt: own.created_at } : null;
   stats.reasons = rows.filter(row => row.purpose!=='task_fit' && row.phase === 'final' && (row.public_reason || row.actor_key === accountKey) && (row.reason || row.evidence_quote || row.reason_code))
     .slice(-50).reverse().map(row => ({ eventId: row.id,evaluator: row.evaluator,quality: row.quality,reasonCode: row.reason_code,reason: row.reason,evidenceQuote: row.evidence_quote,contentVersion: row.content_version,current: row.content_hash===knowledge.content_hash,createdAt: row.created_at }));
-  const publicStats = { ...stats, ownVote: null, reasons: [] };
-  if (fresh) db().prepare(`INSERT INTO post_quality_stats(post_id,content_hash,policy_version,settings_hash,last_event_id,stats_json) VALUES(?,?,?,?,?,?)
-    ON CONFLICT(post_id) DO UPDATE SET content_hash=excluded.content_hash,policy_version=excluded.policy_version,settings_hash=excluded.settings_hash,last_event_id=excluded.last_event_id,stats_json=excluded.stats_json,updated_at=CURRENT_TIMESTAMP`)
-    .run(postId,knowledge.content_hash,policy.policyVersion,settingsHash,lastEventId,JSON.stringify(publicStats));
+  if (fresh && options?.writeCache !== false) {
+    const publicStats = { ...stats, ownVote: null, reasons: [] };
+    db().prepare(`INSERT INTO post_quality_stats(post_id,content_hash,policy_version,settings_hash,last_event_id,stats_json) VALUES(?,?,?,?,?,?)
+      ON CONFLICT(post_id) DO UPDATE SET content_hash=excluded.content_hash,policy_version=excluded.policy_version,settings_hash=excluded.settings_hash,last_event_id=excluded.last_event_id,stats_json=excluded.stats_json,updated_at=CURRENT_TIMESTAMP`)
+      .run(postId,knowledge.content_hash,policy.policyVersion,settingsHash,lastEventId,JSON.stringify(publicStats));
+  }
   return stats;
 }
 
@@ -235,7 +237,7 @@ export function issueKnowledgeSearchReceipts(actor: PostActor,postIds: number[],
         .get(accountKey,postId,knowledge.content_hash,taskKey) as {token:string;query_text:string;expires_at:string};
       result.set(postId,{token:receipt.token,query:receipt.query_text,expiresAt:receipt.expires_at});
     }
-  }).immediate();
+  })();
   return result;
 }
 

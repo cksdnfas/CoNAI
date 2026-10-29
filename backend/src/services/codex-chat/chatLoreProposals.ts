@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import type { ChatExecutionContext, ChatProposal } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { FileStoreService, TEXT_EXTENSIONS, fileOwnerKey } from '../fileStoreService'
@@ -254,8 +254,7 @@ export function applyLoreProposal(proposalId: number): { proposal: ChatProposal;
       const replyId = ChatProposalStore.replyIdOf(proposalId)!
       // The proposal's keywords replace both languages' lists; saving sorts them by the lore key language.
       const fields = { title: proposal.title, keys: proposal.keys, localKeys: [], content: proposal.content, language: proposal.language, translation: proposal.translation ?? null, constant: proposal.constant, source: { threadId, replyId, proposalId } }
-      let entryId = replaced?.id ?? `lore-p${proposal.id}`
-      while (!replaced && entries.some((entry) => entry.id === entryId)) entryId += '-'
+      const entryId = replaced?.id ?? randomUUID()
       const next = replaced
         ? entries.map((entry) => (entry.id === replaced.id ? { ...entry, ...fields } : entry))
         : [...entries, { id: entryId, ...fields, enabled: true, order: entries.reduce((max, entry) => Math.max(max, entry.order), -1) + 1 }]

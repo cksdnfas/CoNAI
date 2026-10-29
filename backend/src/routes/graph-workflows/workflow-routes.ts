@@ -450,6 +450,10 @@ export function createGraphWorkflowCrudRoutes() {
     if (isNaN(id)) {
       return sendRouteBadRequest(res, 'Invalid graph workflow ID')
     }
+    const expectedRevision = req.body?.expected_revision
+    if (expectedRevision !== undefined && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)) {
+      return sendRouteBadRequest(res, '잘못된 워크플로 리비전이야.')
+    }
 
     try {
       const existing = GraphWorkflowModel.findById(id)
@@ -466,7 +470,10 @@ export function createGraphWorkflowCrudRoutes() {
         is_active: req.body.is_active,
       }
 
-      const { updated, versionChanged } = GraphWorkflowModel.update(id, updateData)
+      const { updated, versionChanged, conflict, revision } = GraphWorkflowModel.update(id, updateData, expectedRevision)
+      if (conflict) {
+        return res.status(409).json({ success: false, error: '워크플로가 바뀌었어. 새로 불러와줘.' })
+      }
       // Schedules only need review when the stored version actually changed; identical-graph
       // auto-saves must not pause schedules or cancel queued runs.
       const scheduleMaintenance = versionChanged
@@ -476,6 +483,7 @@ export function createGraphWorkflowCrudRoutes() {
         success: true,
         data: {
           id,
+          revision,
           message: updated ? 'Graph workflow updated successfully' : 'No changes applied',
           schedule_maintenance: scheduleMaintenance,
         },

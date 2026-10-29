@@ -1,15 +1,13 @@
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { Fragment, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, Suspense, lazy, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ImageSaveOptionsModal } from '@/components/media/image-save-options-modal'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { DEFAULT_IMAGE_SAVE_SETTINGS } from '@/lib/image-save-output'
 import { getNaiCostEstimate, getNaiUserData } from '@/lib/api-image-generation-nai'
-import { getRuntimeImageSaveSettings } from '@/lib/api-settings'
 import {
   NAI_QUEUE_COUNT_MAX,
   NAI_QUEUE_COUNT_MIN,
@@ -31,7 +29,6 @@ import {
   supportsNaiVibes,
 } from '../image-generation-shared'
 import { getNaiFixedModelSettings, getNaiQualityTags, prependNaiUcPreset } from '@conai/shared'
-import { consumeHistorySettingsLoad, usePendingHistorySettingsLoad } from '../history-settings-load-store'
 import {
   buildNaiFormFromHistoryPayload,
   confirmHistorySettingsOverwrite,
@@ -47,6 +44,8 @@ import { useGenerationLayoutSurface } from '../layout/generation-layout-context'
 import { stackedLayoutBlocks } from '../layout/generation-layout-ops'
 import { NaiActionSection, NaiConnectionHeader, NaiToolbarStatus } from './nai-generation-panel-sections'
 import { usePortalTargetById } from './generation-toolbar-status'
+import { useGenerationImageSaveOptions } from './use-generation-image-save-options'
+import { useHistorySettingsLoad } from './use-history-settings-load'
 import { GenerateActionDock } from './generate-action-bar'
 import { useNaiAssetLibrary } from './use-nai-asset-library'
 import { useNaiAuthController } from './use-nai-auth-controller'
@@ -65,7 +64,6 @@ type NaiGenerationPanelProps = {
   onHistoryRefresh: () => void
   splitPaneScroll?: boolean
   compactActionBar?: boolean
-  headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
   /** Page toolbar slot for the connection status; replaces the inline NovelAI header row. */
   statusPortalTargetId?: string
@@ -78,7 +76,6 @@ export function NaiGenerationPanel({
   onHistoryRefresh,
   splitPaneScroll = false,
   compactActionBar = false,
-  headerPortalTargetId,
   compactActionBarContentTargetId,
   statusPortalTargetId,
   blockLayout,
@@ -122,16 +119,7 @@ export function NaiGenerationPanel({
   useNaiChatPage(naiForm, setNaiForm, sourceImageSize)
 
   const confirm = useConfirm()
-  const pendingHistorySettingsLoad = usePendingHistorySettingsLoad()
-  const handledHistorySettingsLoadNonceRef = useRef(0)
-  useEffect(() => {
-    const request = pendingHistorySettingsLoad
-    if (!request || request.serviceType !== 'novelai' || handledHistorySettingsLoadNonceRef.current === request.nonce) {
-      return
-    }
-
-    handledHistorySettingsLoadNonceRef.current = request.nonce
-    consumeHistorySettingsLoad(request.nonce)
+  useHistorySettingsLoad('novelai', (request) => {
     const { form: nextForm, hasImageInputs } = buildNaiFormFromHistoryPayload(request.payload, naiForm)
     void (async () => {
       if (hasNaiPromptContent(naiForm) && hasNaiPromptDifference(naiForm, nextForm) && !(await confirmHistorySettingsOverwrite(confirm, t))) {
@@ -142,7 +130,7 @@ export function NaiGenerationPanel({
       setSelectedCharacterIndex(null)
       showSnackbar({ message: getHistorySettingsLoadedMessage(t, request.historyId, hasImageInputs), tone: 'info' })
     })()
-  }, [confirm, naiForm, pendingHistorySettingsLoad, setNaiForm, setSelectedCharacterIndex, showSnackbar, t])
+  })
 
   const naiUserQuery = useQuery({
     queryKey: ['image-generation-nai-user'],
@@ -151,13 +139,8 @@ export function NaiGenerationPanel({
     refetchInterval: (query) => query.state.data?.connected ? 60_000 : false,
   })
 
-  const appSettingsQuery = useQuery({
-    queryKey: ['runtime-image-save-settings'],
-    queryFn: getRuntimeImageSaveSettings,
-  })
-
   const connected = naiUserQuery.data?.connected === true
-  const generationSaveSettings = appSettingsQuery.data?.imageSave ?? DEFAULT_IMAGE_SAVE_SETTINGS
+  const { settings: generationSaveSettings, options: generationImageSaveOptions } = useGenerationImageSaveOptions()
 
   const {
     tokenInput: naiTokenInput,
@@ -298,20 +281,6 @@ export function NaiGenerationPanel({
   const naiCostErrorMessage = naiCostQuery.isError
     ? getErrorMessage(naiCostQuery.error, t('image-generation.components.nai.generation.panel.failed.to.estimate.the.cost'))
     : naiCostWarningMessage
-  const generationImageSaveOptions = useMemo(() => ({
-    format: generationSaveSettings.defaultFormat,
-    quality: generationSaveSettings.quality,
-    resizeEnabled: generationSaveSettings.resizeEnabled,
-    maxWidth: generationSaveSettings.maxWidth,
-    maxHeight: generationSaveSettings.maxHeight,
-  }), [
-    generationSaveSettings.defaultFormat,
-    generationSaveSettings.maxHeight,
-    generationSaveSettings.maxWidth,
-    generationSaveSettings.quality,
-    generationSaveSettings.resizeEnabled,
-  ])
-
   const {
     isNaiGenerating,
     isUpscaling,
@@ -367,26 +336,7 @@ export function NaiGenerationPanel({
   }
   const useInlineActionBar = splitPaneScroll || compactActionBar
   const useDrawerCompactChrome = compactActionBar && !splitPaneScroll
-  const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null)
-  const [compactActionBarPortalTarget, setCompactActionBarPortalTarget] = useState<HTMLElement | null>(null)
-
-  useEffect(() => {
-    if (!useDrawerCompactChrome || typeof document === 'undefined') {
-      setHeaderPortalTarget(null)
-      setCompactActionBarPortalTarget(null)
-      return
-    }
-
-    const resolveTargets = () => {
-      setHeaderPortalTarget(headerPortalTargetId ? document.getElementById(headerPortalTargetId) : null)
-      setCompactActionBarPortalTarget(compactActionBarContentTargetId ? document.getElementById(compactActionBarContentTargetId) : null)
-    }
-
-    resolveTargets()
-    const frame = window.requestAnimationFrame(resolveTargets)
-    return () => window.cancelAnimationFrame(frame)
-  }, [compactActionBarContentTargetId, headerPortalTargetId, useDrawerCompactChrome])
-
+  const compactActionBarPortalTarget = usePortalTargetById(useDrawerCompactChrome ? compactActionBarContentTargetId : undefined)
   const statusPortalTarget = usePortalTargetById(statusPortalTargetId)
 
   const [isChatPresetModalOpen, setIsChatPresetModalOpen] = useState(false)
@@ -432,7 +382,7 @@ export function NaiGenerationPanel({
     canUpscale: naiForm.action !== 'generate' && Boolean(naiForm.sourceImage),
     isUpscaling,
     isGenerating: isNaiGenerating,
-    canGenerate: naiForm.prompt.trim().length > 0,
+    canGenerate: connected && naiForm.prompt.trim().length > 0,
     generateButtonLabel: naiGenerateButtonLabel,
     generateButtonSuffix: naiGenerateButtonSuffix,
     generateButtonSuffixHint: naiGenerateButtonSuffixHint,
@@ -568,9 +518,7 @@ export function NaiGenerationPanel({
             statusPortalTarget,
           ) : null)
           : useInlineActionBar
-          ? useDrawerCompactChrome
-            ? (headerPortalTarget ? createPortal(compactHeaderContent, headerPortalTarget) : null)
-            : (
+          ? (
               <div className="shrink-0 space-y-3">
                 {compactHeaderContent}
               </div>
@@ -588,7 +536,6 @@ export function NaiGenerationPanel({
         <div className={cn(
           'space-y-6',
           splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
-          useDrawerCompactChrome && headerPortalTargetId && 'px-5 pb-5',
         )}>
           {useDrawerCompactChrome && compactActionBarPortalTarget ? createPortal(compactActionSection, compactActionBarPortalTarget) : null}
           {editorSections}

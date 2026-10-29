@@ -5,6 +5,8 @@ import { notifySemanticChange } from '../embeddings/semanticSignal'
 import { loadChatSettings } from './chatSettings'
 import { normalizeLoreTranslation } from './loreTranslation'
 import { isChatTranslationLanguage, type BilingualLore } from '@conai/shared'
+import { ChatRevisionConflict } from './chatProfileError'
+import { loreEntryText, stampLoreEntryIds } from './chatLorebookIds'
 
 /**
  * How secondary keywords narrow a match on the primary ones (SillyTavern's selective logic): any of them also
@@ -60,6 +62,7 @@ export type ChatLorebookKind = 'global' | 'account' | 'chat'
 /** A shared lorebook. Profiles link it by id, so editing or re-importing it reaches every linked profile. */
 export type ChatLorebook = {
   id: number
+  revision: string
   name: string
   kind: ChatLorebookKind
   entries: ChatLoreEntry[]
@@ -72,7 +75,6 @@ export type ChatLorebook = {
 export const LOREBOOK_MAX_ENTRIES = 500
 export const PROFILE_MAX_LOREBOOKS = 20
 export const LOREBOOK_NAME_MAX_LENGTH = 80
-const LORE_TITLE_MAX_LENGTH = 80
 const LORE_FILE_MAX_LENGTH = 300
 
 /** The entry's title as the index shows it: its own, else the first keyword, else the start of its text. */
@@ -127,40 +129,36 @@ function loreMessageCount(value: unknown) {
  * caseSensitive) and NovelAI lorebooks (text / forceActivation). Secondary keywords count only on a selective entry,
  * as in SillyTavern; this app's own entries are always selective.
  */
-export function normalizeLorebook(value: unknown): ChatLoreEntry[] {
+export function normalizeLorebook(value: unknown, existing: ChatLoreEntry[] = []): ChatLoreEntry[] {
   if (typeof value === 'string') {
     try { value = JSON.parse(value) } catch { return [] }
   }
   if (!Array.isArray(value)) return []
-  const ids = new Set<string>()
-  return value.slice(0, LOREBOOK_MAX_ENTRIES).flatMap((entry, index) => {
+  const stamped = value.slice(0, LOREBOOK_MAX_ENTRIES).map((entry) => entry && typeof entry === 'object' && !Array.isArray(entry) ? { ...entry } : entry)
+  stampLoreEntryIds(stamped, existing)
+  return stamped.flatMap((entry, index) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return []
     const row = entry as Record<string, unknown>
     const extensions = row.extensions && typeof row.extensions === 'object' ? row.extensions as Record<string, unknown> : {}
-    let id = typeof row.id === 'string' ? row.id.trim().slice(0, 80) : ''
-    if (!id || ids.has(id)) id = `lore-${index}-${ids.size}`
-    while (ids.has(id)) id += '-'
-    ids.add(id)
+    const id = row.id as string
     const keys = Array.isArray(row.keys) ? row.keys : Array.isArray(row.key) ? row.key : []
     const selective = row.selective === undefined || row.selective === true
     const secondary = selective ? row.secondaryKeys ?? row.secondary_keys ?? row.keysecondary : undefined
-    const content = typeof row.content === 'string' ? row.content : typeof row.text === 'string' ? row.text : ''
+    const { title, content } = loreEntryText(row)
     const order = typeof row.order === 'number' ? row.order : row.insertion_order
-    // SillyTavern keeps an entry's title in `comment`.
-    const title = typeof row.title === 'string' ? row.title : typeof row.comment === 'string' ? row.comment : ''
     const file = loreFilePath(row.file)
     const source = row.source as Partial<import('@conai/shared').ChatLoreSource> | null | undefined
-    const canonical = { title: title.trim().replace(/\s+/g, ' ').slice(0, LORE_TITLE_MAX_LENGTH), keys: keywordList(keys), content: content.trim().slice(0, 20_000) }
+    const canonical = { title, keys: keywordList(keys), content }
     return [{
       id,
       ...(source && Number.isSafeInteger(source.threadId) && source.threadId! > 0 && typeof source.replyId === 'string' && source.replyId.length > 0 && source.replyId.length <= 200 && Number.isSafeInteger(source.proposalId) && source.proposalId! > 0 ? { source: { threadId: source.threadId!, replyId: source.replyId, proposalId: source.proposalId! } } : {}),
-      title: title.trim().replace(/\s+/g, ' ').slice(0, LORE_TITLE_MAX_LENGTH),
+      title,
       keys: keywordList(keys),
       secondaryKeys: keywordList(secondary),
       localKeys: keywordList(row.localKeys),
       localSecondaryKeys: keywordList(selective ? row.localSecondaryKeys : undefined),
       secondaryLogic: secondaryLogicOf(row),
-      content: content.trim().slice(0, 20_000),
+      content,
       ...(isChatTranslationLanguage(row.language) ? { language: row.language } : {}),
       ...(row.translation !== undefined ? { translation: normalizeLoreTranslation(canonical, row.translation) } : {}),
       enabled: row.enabled !== false && row.disable !== true,
@@ -204,6 +202,7 @@ export function normalizeLorebookIds(value: unknown): number[] {
 
 export type LorebookRow = {
   id: number
+  revision: number
   name: string
   entries: string
   kind: ChatLorebookKind
@@ -219,6 +218,15 @@ export type LorebookRow = {
   updated_date: string
 }
 
+export type LorebookSummaryRow = Omit<LorebookRow, 'entries'> & { entry_count: number }
+export type ChatLorebookSummary = Omit<ChatLorebook, 'entries'> & { entryCount: number }
+
+/** Count the same valid objects in the same first 500 positions that normalizeLorebook would return. */
+export const lorebookSummaryColumns = `id, revision, name, kind, owner_key, folder_id, thread_id, source_stamp, created_date, updated_date,
+  CASE WHEN json_valid(entries) THEN CASE WHEN json_type(entries) = 'array' THEN
+    (SELECT count(*) FROM json_each(entries) WHERE key < ${LOREBOOK_MAX_ENTRIES} AND type = 'object')
+  ELSE 0 END ELSE 0 END AS entry_count`
+
 function lorebookName(value: unknown) {
   return (typeof value === 'string' ? value.trim().slice(0, LOREBOOK_NAME_MAX_LENGTH) : '') || '로어북'
 }
@@ -231,9 +239,23 @@ export function linkedProfiles() {
 export function toLorebook(row: LorebookRow, profiles: ReturnType<typeof linkedProfiles>): ChatLorebook {
   return {
     id: row.id,
+    revision: `${row.revision}:${row.source_stamp ?? ''}`,
     name: row.name,
     kind: row.kind ?? 'global',
     entries: normalizeLorebook(row.entries),
+    profiles: profiles.filter((profile) => profile.lorebookIds.includes(row.id)).map(({ id, name }) => ({ id, name })),
+    createdDate: row.created_date,
+    updatedDate: row.updated_date,
+  }
+}
+
+export function toLorebookSummary(row: LorebookSummaryRow, profiles: ReturnType<typeof linkedProfiles>): ChatLorebookSummary {
+  return {
+    id: row.id,
+    revision: `${row.revision}:${row.source_stamp ?? ''}`,
+    name: row.name,
+    kind: row.kind ?? 'global',
+    entryCount: row.entry_count,
     profiles: profiles.filter((profile) => profile.lorebookIds.includes(row.id)).map(({ id, name }) => ({ id, name })),
     createdDate: row.created_date,
     updatedDate: row.updated_date,
@@ -245,10 +267,14 @@ export function toLorebook(row: LorebookRow, profiles: ReturnType<typeof linkedP
  * chatLorebookFiles.ts for those.
  */
 export const ChatLorebookStore = {
-  list() {
+  list(profiles = linkedProfiles()) {
     const rows = getUserSettingsDb().prepare("SELECT * FROM chat_lorebooks WHERE kind = 'global' ORDER BY name COLLATE NOCASE ASC, id ASC").all() as LorebookRow[]
-    const profiles = linkedProfiles()
     return rows.map((row) => toLorebook(row, profiles))
+  },
+
+  listSummary(profiles = linkedProfiles()): ChatLorebookSummary[] {
+    const rows = getUserSettingsDb().prepare(`SELECT ${lorebookSummaryColumns} FROM chat_lorebooks WHERE kind = 'global' ORDER BY name COLLATE NOCASE ASC, id ASC`).all() as LorebookSummaryRow[]
+    return rows.map((row) => toLorebookSummary(row, profiles))
   },
 
   find(lorebookId: number) {
@@ -282,17 +308,21 @@ export const ChatLorebookStore = {
   },
 
   /** Global books only (null for any other): account and chat books are written through their files. */
-  update(lorebookId: number, patch: { name?: unknown; entries?: unknown }) {
+  update(lorebookId: number, patch: { name?: unknown; entries?: unknown }, revision?: string) {
+    const db = getUserSettingsDb()
+    return db.transaction(() => {
     const current = ChatLorebookStore.find(lorebookId)
     if (!current || current.kind !== 'global') return null
-    const entries = patch.entries === undefined ? current.entries : withoutFiles(normalizeLorebook(patch.entries))
-    getUserSettingsDb().prepare('UPDATE chat_lorebooks SET name = ?, entries = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(
+    if (revision !== undefined && revision !== current.revision) throw new ChatRevisionConflict(current)
+    const entries = patch.entries === undefined ? current.entries : withoutFiles(normalizeLorebook(patch.entries, current.entries))
+    db.prepare('UPDATE chat_lorebooks SET name = ?, entries = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?').run(
       patch.name === undefined ? current.name : lorebookName(patch.name),
       JSON.stringify(sortLorebookKeys(entries)),
       lorebookId,
     )
     if (patch.entries !== undefined) notifySemanticChange('lore')
     return ChatLorebookStore.find(lorebookId)
+    }).immediate()
   },
 
   /** Global books only. Also unlinks the book from every profile. */

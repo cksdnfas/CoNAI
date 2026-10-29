@@ -2,9 +2,10 @@ import { useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
+import { triggerBlobDownload } from '@/lib/api-client'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
-import type { Dispatch, SetStateAction } from 'react'
+import type { Dispatch, RefObject, SetStateAction } from 'react'
 import {
   createGraphWorkflow,
   createGraphWorkflowFolder,
@@ -25,8 +26,19 @@ import {
 } from '@/lib/api-module-graph'
 import { buildFlowFromGraphRecord, buildGraphEditorSnapshot, type ModuleGraphEdge, type ModuleGraphNode } from './module-graph-shared'
 import { deriveWorkflowExposedInputsFromNodes } from './module-graph-workflow-inputs'
-import type { EditorSupportSectionKey } from './module-graph-types'
 import { clearPersistedWorkflowRunnerDraft, loadPersistedWorkflowRunnerDraft } from './workflow-runner-draft-storage'
+
+/** The existing editor snapshot and session, plus draft values a graph load replaces. */
+export type GraphNavigationRevision = {
+  snapshot: string
+  sessionId: string
+  graphId: number | null
+  view: 'browse' | 'edit'
+  draftFolderId: number | null
+  name: string
+  description: string
+  runInputs: Record<string, unknown>
+}
 
 /** Own workflow/folder browse-management actions for the module-graph page. */
 export function useModuleGraphBrowseActions({
@@ -54,14 +66,16 @@ export function useModuleGraphBrowseActions({
   setLastSavedSnapshot,
   onEditorGraphReplaced,
   setWorkflowView,
-  setIsEditorSupportOpen,
-  setActiveEditorSupportSection,
   setIsBrowseManageModalOpen,
   setFolderDeleteTarget,
   refetchGraphWorkflowFolders,
   refetchGraphWorkflows,
   refetchModules,
   confirmDiscardUnsavedChanges,
+  editorRevisionRef,
+  graphLoadRequestRef,
+  onGraphRevisionLoaded,
+  onDirectGraphNavigation,
   resetWorkflowDraft,
   enterWorkflowEditor,
   showSnackbar,
@@ -91,22 +105,40 @@ export function useModuleGraphBrowseActions({
   setLastSavedSnapshot: Dispatch<SetStateAction<string>>
   onEditorGraphReplaced: () => void
   setWorkflowView: Dispatch<SetStateAction<'browse' | 'edit'>>
-  setIsEditorSupportOpen: Dispatch<SetStateAction<boolean>>
-  setActiveEditorSupportSection: Dispatch<SetStateAction<EditorSupportSectionKey>>
   setIsBrowseManageModalOpen: Dispatch<SetStateAction<boolean>>
   setFolderDeleteTarget: Dispatch<SetStateAction<GraphWorkflowFolderRecord | null>>
   refetchGraphWorkflowFolders: () => Promise<unknown>
   refetchGraphWorkflows: () => Promise<unknown>
   refetchModules: () => Promise<unknown>
   confirmDiscardUnsavedChanges: () => Promise<boolean>
+  editorRevisionRef: RefObject<GraphNavigationRevision>
+  graphLoadRequestRef: RefObject<number>
+  onGraphRevisionLoaded?: (id: number, revision: number) => void
+  onDirectGraphNavigation: () => void
   resetWorkflowDraft: () => void
-  enterWorkflowEditor: (section?: EditorSupportSectionKey) => void
+  enterWorkflowEditor: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const { t, formatNumber } = useI18n()
   const draftStorageOwner = resolveAccountDraftOwner(useAuthStatusQuery().data)
   const queryClient = useQueryClient()
   const confirm = useConfirm()
+
+  const canApplyGraphNavigation = useCallback((requestId: number, started: GraphNavigationRevision) => {
+    if (graphLoadRequestRef.current !== requestId) return false
+    const current = editorRevisionRef.current
+    if (
+      current.snapshot !== started.snapshot || current.sessionId !== started.sessionId ||
+      current.graphId !== started.graphId || current.view !== started.view ||
+      (started.view === 'edit' && current.draftFolderId !== started.draftFolderId) ||
+      current.name !== started.name || current.description !== started.description ||
+      (current.runInputs !== started.runInputs && JSON.stringify(current.runInputs) !== JSON.stringify(started.runInputs))
+    ) {
+      showSnackbar({ message: t({ ko: '워크플로를 불러오는 동안 편집 상태가 바뀌었어. 다시 선택해줘.', en: 'The workflow changed while loading. Select it again.' }), tone: 'error' })
+      return false
+    }
+    return true
+  }, [editorRevisionRef, graphLoadRequestRef, showSnackbar, t])
 
   /** Resolve the full record of a list row (or the selected workflow when no row is given). */
   const resolveTargetGraph = useCallback(async (target?: GraphWorkflowSummaryRecord | GraphWorkflowRecord | null): Promise<GraphWorkflowRecord | null> => {
@@ -137,6 +169,7 @@ export function useModuleGraphBrowseActions({
     const defaultInputValues = buildWorkflowRunInputDefaults(exposedInputs)
     const persistedInputValues = loadPersistedWorkflowRunnerDraft(draftStorageOwner, graph.id, exposedInputs)
 
+    onGraphRevisionLoaded?.(graph.id, graph.revision)
     onEditorGraphReplaced()
     setNodes(nextNodes)
     setEdges(nextEdges)
@@ -166,7 +199,7 @@ export function useModuleGraphBrowseActions({
         },
       }),
     )
-  }, [draftStorageOwner, modules, onEditorGraphReplaced, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedFolderId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
+  }, [draftStorageOwner, modules, onEditorGraphReplaced, onGraphRevisionLoaded, setDraftWorkflowFolderId, setEdges, setLastSavedSnapshot, setNodes, setSelectedEdgeId, setSelectedExecutionId, setSelectedFolderId, setSelectedGraphId, setSelectedNodeId, setWorkflowDebugMode, setWorkflowDescription, setWorkflowExposedInputs, setWorkflowName, setWorkflowRunInputValues])
 
   /**
    * Load one saved workflow into the editor, optionally opening editor mode immediately.
@@ -176,11 +209,15 @@ export function useModuleGraphBrowseActions({
    */
   const handleLoadGraph = useCallback(async (
     graph: GraphWorkflowSummaryRecord | GraphWorkflowRecord,
-    options?: { openEditor?: boolean; silent?: boolean },
+    options?: { openEditor?: boolean; silent?: boolean; requestId?: number },
   ) => {
+    const requestId = options?.requestId ?? ++graphLoadRequestRef.current
+    if (options?.requestId === undefined) onDirectGraphNavigation()
+    const revision = editorRevisionRef.current
     if (!(await confirmDiscardUnsavedChanges())) {
       return false
     }
+    if (!canApplyGraphNavigation(requestId, revision)) return false
 
     let fullGraph: GraphWorkflowRecord
     if ('graph' in graph) {
@@ -193,33 +230,41 @@ export function useModuleGraphBrowseActions({
           queryFn: () => getGraphWorkflow(graph.id),
         })
       } catch (error) {
-        showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '워크플로우를 불러오지 못했어.', en: 'Failed to load the workflow.' }), tone: 'error' })
+        if (graphLoadRequestRef.current === requestId) {
+          showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '워크플로우를 불러오지 못했어.', en: 'Failed to load the workflow.' }), tone: 'error' })
+        }
         return false
       }
     }
 
+    if (!canApplyGraphNavigation(requestId, revision)) return false
     applyGraphRecordToEditor(fullGraph)
     if (options?.openEditor) {
-      enterWorkflowEditor('setup')
+      enterWorkflowEditor()
     }
     if (!options?.silent) {
       showSnackbar({ message: t({ ko: '저장된 워크플로우를 불러왔어.', en: 'Loaded the saved workflow.' }), tone: 'info' })
     }
 
     return true
-  }, [applyGraphRecordToEditor, confirmDiscardUnsavedChanges, enterWorkflowEditor, queryClient, showSnackbar, t])
+  }, [applyGraphRecordToEditor, canApplyGraphNavigation, confirmDiscardUnsavedChanges, editorRevisionRef, enterWorkflowEditor, graphLoadRequestRef, onDirectGraphNavigation, queryClient, showSnackbar, t])
 
   /** Start one fresh workflow draft from the current folder context. */
-  const handleCreateWorkflow = useCallback(async () => {
+  const handleCreateWorkflow = useCallback(async (options?: { requestId?: number }) => {
+    const requestId = options?.requestId ?? ++graphLoadRequestRef.current
+    if (options?.requestId === undefined) onDirectGraphNavigation()
+    const revision = editorRevisionRef.current
     if (!(await confirmDiscardUnsavedChanges())) {
-      return
+      return false
     }
+    if (!canApplyGraphNavigation(requestId, revision)) return false
 
     resetWorkflowDraft()
     setDraftWorkflowFolderId(selectedFolderId)
-    enterWorkflowEditor('setup')
+    enterWorkflowEditor()
     showSnackbar({ message: t({ ko: '새 워크플로우 초안을 열었어.', en: 'Opened a new workflow draft.' }), tone: 'info' })
-  }, [confirmDiscardUnsavedChanges, enterWorkflowEditor, resetWorkflowDraft, selectedFolderId, setDraftWorkflowFolderId, showSnackbar, t])
+    return true
+  }, [canApplyGraphNavigation, confirmDiscardUnsavedChanges, editorRevisionRef, enterWorkflowEditor, graphLoadRequestRef, onDirectGraphNavigation, resetWorkflowDraft, selectedFolderId, setDraftWorkflowFolderId, showSnackbar, t])
 
   /** Create one workflow folder and optionally assign the selected workflow into it. */
   const handleCreateWorkflowFolder = useCallback(async (input?: { name?: string; description?: string; parent_id?: number | null; assignToWorkflow?: boolean }) => {
@@ -378,19 +423,12 @@ export function useModuleGraphBrowseActions({
     try {
       const exportPayload = await exportGraphWorkflow(exportTarget.id)
       const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' })
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
       const safeName = exportTarget.name
         .trim()
         .replace(/[^a-zA-Z0-9가-힣_-]+/g, '-')
         .replace(/^-+|-+$/g, '')
         || `workflow-${exportTarget.id}`
-      link.href = url
-      link.download = `${safeName}.conai-workflow.json`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
+      triggerBlobDownload(blob, `${safeName}.conai-workflow.json`)
       showSnackbar({ message: t({ ko: '워크플로우 내보내기 파일을 만들었어.', en: 'Created the workflow export file.' }), tone: 'info' })
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '워크플로우 내보내기에 실패했어.', en: 'Failed to export the workflow.' }), tone: 'error' })
@@ -450,7 +488,6 @@ export function useModuleGraphBrowseActions({
       if (isOpenWorkflow) {
         resetWorkflowDraft()
         setWorkflowView('browse')
-        setIsEditorSupportOpen(false)
       }
       await refetchGraphWorkflows()
       const deletedScheduleCount = result.schedule_maintenance?.deletedScheduleCount ?? 0
@@ -467,19 +504,22 @@ export function useModuleGraphBrowseActions({
     } catch (error) {
       showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '워크플로우 삭제에 실패했어.', en: 'Failed to delete the workflow.' }), tone: 'error' })
     }
-  }, [confirm, draftStorageOwner, formatNumber, refetchGraphWorkflows, resetWorkflowDraft, selectedGraphRecord, setIsEditorSupportOpen, setWorkflowView, showSnackbar, t])
+  }, [confirm, draftStorageOwner, formatNumber, refetchGraphWorkflows, resetWorkflowDraft, selectedGraphRecord, setWorkflowView, showSnackbar, t])
 
   /** Leave editor mode, restoring the selected saved workflow when needed. */
-  const handleLeaveWorkflowEditor = useCallback(async () => {
+  const handleLeaveWorkflowEditor = useCallback(async (options?: { requestId?: number }) => {
+    const requestId = options?.requestId ?? ++graphLoadRequestRef.current
+    if (options?.requestId === undefined) onDirectGraphNavigation()
+    const revision = editorRevisionRef.current
     if (workflowView !== 'edit') {
       setWorkflowView('browse')
-      setIsEditorSupportOpen(false)
       return true
     }
 
     if (!(await confirmDiscardUnsavedChanges())) {
       return false
     }
+    if (!canApplyGraphNavigation(requestId, revision)) return false
 
     if (selectedGraphRecord) {
       applyGraphRecordToEditor(selectedGraphRecord)
@@ -488,10 +528,8 @@ export function useModuleGraphBrowseActions({
     }
 
     setWorkflowView('browse')
-    setIsEditorSupportOpen(false)
-    setActiveEditorSupportSection('setup')
     return true
-  }, [applyGraphRecordToEditor, confirmDiscardUnsavedChanges, resetWorkflowDraft, selectedGraphRecord, setActiveEditorSupportSection, setIsEditorSupportOpen, setWorkflowView, workflowView])
+  }, [applyGraphRecordToEditor, canApplyGraphNavigation, confirmDiscardUnsavedChanges, editorRevisionRef, graphLoadRequestRef, onDirectGraphNavigation, resetWorkflowDraft, selectedGraphRecord, setWorkflowView, workflowView])
 
   /** Refresh browse data sources and selected execution list when available. */
   const handleRefreshWorkspace = useCallback(async (refetchGraphExecutions?: () => Promise<unknown>) => {

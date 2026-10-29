@@ -55,6 +55,8 @@ import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { getGroupsHierarchyAll, GROUPS_HIERARCHY_ALL_QUERY_KEY } from '@/lib/api-groups'
 import { getWallpaperRuntimeSettings, updateAppearanceSettings } from '@/lib/api-settings-appearance'
+import { getAppSettings } from '@/lib/api-settings-general'
+import { subscribeOwnPageSettingsSave } from '@/features/settings/use-settings-revision'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { isTypingTarget } from '@/lib/keyboard-shortcut'
 import { triggerBlobDownload } from '@/lib/api-client'
@@ -72,14 +74,17 @@ import {
   buildWallpaperStarterLayout,
   clampWallpaperWidgetInstance,
   cloneWallpaperPresetToDraft,
+  createWallpaperDraftBase,
   deleteWallpaperLayoutPreset,
   distributeWallpaperWidgets,
   duplicateWallpaperWidgets,
   loadWallpaperActivePresetId,
+  loadWallpaperDraftBase,
   loadWallpaperLayoutDraft,
   loadWallpaperLayoutPresets,
   normalizeWallpaperBackground,
   normalizeWallpaperLayoutPreset,
+  matchesWallpaperDraftBase,
   nudgeWallpaperWidgets,
   pasteWallpaperWidgets,
   getWallpaperCopyOffset,
@@ -87,6 +92,7 @@ import {
   reorderWallpaperWidgets,
   resizeWallpaperLayoutCanvas,
   type WallpaperAlignMode,
+  type WallpaperDraftBase,
   saveWallpaperActivePresetId,
   saveWallpaperLayoutDraft,
   saveWallpaperLayoutPresets,
@@ -272,6 +278,8 @@ export function WallpaperEditorPage() {
   const confirm = useConfirm()
   const { showSnackbar, closeSnackbar } = useSnackbar()
   const hasHydratedServerPresetsRef = useRef(false)
+  const wallpaperRevisionRef = useRef<string | null>(null)
+  const draftSessionRef = useRef(0)
   // Widget edits go through a bounded undo history; loading a preset, a new canvas or a template resets it.
   const {
     value: layoutPreset,
@@ -288,6 +296,17 @@ export function WallpaperEditorPage() {
   // The preset being edited (this browser) and the one the live wallpaper shows (server) are separate:
   // opening, saving or replacing the draft never moves the live wallpaper; only "make live" does.
   const [activePresetId, setActivePresetId] = useState<string | null>(() => loadWallpaperActivePresetId())
+  const [draftBase, setDraftBase] = useState<WallpaperDraftBase | null>(() => {
+    const presetId = loadWallpaperActivePresetId()
+    if (!presetId) return null
+    const stored = loadWallpaperDraftBase()
+    if (stored !== undefined) return stored?.presetId === presetId ? stored : { presetId, signature: null }
+    // Older drafts have no recorded base. Only an unchanged draft proves its cached preset was its base.
+    const cached = loadWallpaperLayoutPresets().find((preset) => preset.id === presetId)
+    const base = cached ? createWallpaperDraftBase(cached) : null
+    return base && createWallpaperDraftBase({ ...layoutPreset, id: presetId }).signature === base.signature
+      ? base : { presetId, signature: null }
+  })
   const [livePresetId, setLivePresetId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [zoom, setZoom] = useState<WallpaperStageZoom>('fit')
@@ -326,6 +345,14 @@ export function WallpaperEditorPage() {
     queryFn: getWallpaperRuntimeSettings,
     staleTime: 60_000,
   })
+  // Share the settings cache, but never hydrate from a response cached before this mount.
+  const wallpaperEditorSettingsQuery = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: getAppSettings,
+    enabled: isAdmin,
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
 
   // For a connected chat: issued keys (names only) and the schedules a quick-run widget can press.
   const runtimeKeysQuery = useQuery({
@@ -342,12 +369,11 @@ export function WallpaperEditorPage() {
   })
 
   const wallpaperPresetMutation = useMutation({
-    // `wallpaperActivePresetId` undefined leaves the server's live wallpaper as it is.
-    mutationFn: ({ wallpaperLayoutPresets, wallpaperActivePresetId }: { wallpaperLayoutPresets: WallpaperLayoutPreset[]; wallpaperActivePresetId?: string | null }) => (
+    mutationFn: ({ wallpaperLayoutPresets, wallpaperActivePresetId, revision }: { wallpaperLayoutPresets?: WallpaperLayoutPreset[]; wallpaperActivePresetId?: string | null; revision: string }) => (
       updateAppearanceSettings({
-        wallpaperLayoutPresets: toWallpaperLayoutPresetWireModels(wallpaperLayoutPresets),
+        ...(wallpaperLayoutPresets === undefined ? {} : { wallpaperLayoutPresets: toWallpaperLayoutPresetWireModels(wallpaperLayoutPresets) }),
         ...(wallpaperActivePresetId === undefined ? {} : { wallpaperActivePresetId }),
-      })
+      }, revision)
     ),
   })
 
@@ -365,7 +391,7 @@ export function WallpaperEditorPage() {
   // With a saved preset, only differences from it count. Without one, the draft already lives in this browser,
   // so leaving only warns about edits made in this visit, while replacing the canvas warns whenever it has widgets.
   const hasUnsavedEdits = activePreset ? hasUnsavedPresetChanges : canUndo
-  const hasDiscardableEdits = activePreset ? hasUnsavedPresetChanges : layoutPreset.widgets.length > 0
+  const hasDiscardableEdits = activePreset ? hasUnsavedPresetChanges : Boolean(draftBase) || layoutPreset.widgets.length > 0
   useWallpaperLeaveGuard(
     hasUnsavedEdits,
     t({ ko: '프리셋에 저장하지 않은 월페이퍼 변경이 있어. 초안은 이 브라우저에 남지만 저장된 월페이퍼에는 반영되지 않아. 나갈까?', en: 'You have wallpaper changes that are not saved to a preset. The draft stays in this browser, but the saved wallpaper does not change. Leave?' }),
@@ -378,16 +404,21 @@ export function WallpaperEditorPage() {
   const activePresetRuntimePath = activePreset ? buildWallpaperRuntimePath(activePreset) : null
 
   useEffect(() => {
-    saveWallpaperLayoutDraft(layoutPreset)
-  }, [layoutPreset])
+    saveWallpaperLayoutDraft(layoutPreset, draftBase)
+  }, [layoutPreset, draftBase])
+
+  useEffect(() => subscribeOwnPageSettingsSave(({ scope, before, after }) => {
+    // Delegated appearance fields never replace a wallpaper collection.
+    if (scope === 'appearance' && wallpaperRevisionRef.current === before) wallpaperRevisionRef.current = after
+  }), [])
 
   useEffect(() => {
     saveWallpaperLayoutPresets(savedPresets)
   }, [savedPresets])
 
   useEffect(() => {
-    saveWallpaperActivePresetId(effectiveActivePresetId)
-  }, [effectiveActivePresetId])
+    saveWallpaperActivePresetId(activePresetId)
+  }, [activePresetId])
 
   useEffect(() => {
     try {
@@ -398,29 +429,31 @@ export function WallpaperEditorPage() {
   }, [snap])
 
   useEffect(() => {
-    if (hasHydratedServerPresetsRef.current || !wallpaperSettingsQuery.data) {
-      return
-    }
-
+    const adminSnapshot = wallpaperEditorSettingsQuery.data
+    const source = isAdmin ? adminSnapshot?.appearance : wallpaperSettingsQuery.data
+    const revision = adminSnapshot?.pageSettingsRevisions?.appearance
+    if (isAdmin && (!wallpaperEditorSettingsQuery.isFetchedAfterMount || wallpaperEditorSettingsQuery.isFetching || wallpaperEditorSettingsQuery.isError)) return
+    if (!source || (isAdmin ? !revision || wallpaperRevisionRef.current !== null : hasHydratedServerPresetsRef.current)) return
+    const wasHydrated = hasHydratedServerPresetsRef.current
     hasHydratedServerPresetsRef.current = true
-    const serverPresets = toWallpaperLayoutPresetViewModels(wallpaperSettingsQuery.data.wallpaperLayoutPresets)
-    const serverActivePresetId = wallpaperSettingsQuery.data.wallpaperActivePresetId
-
-    if (serverPresets.length === 0 && serverActivePresetId === null) {
-      return
-    }
+    if (isAdmin) wallpaperRevisionRef.current = revision!
+    const serverPresets = toWallpaperLayoutPresetViewModels(source.wallpaperLayoutPresets)
+    const serverActivePresetId = source.wallpaperActivePresetId
 
     const serverActivePreset = serverPresets.find((preset) => preset.id === serverActivePresetId) ?? null
-    // Keep editing what this browser had open when the server still has it; otherwise open the live one.
-    const editingPresetId = startedWithoutDraft || !serverPresets.some((preset) => preset.id === activePresetId) ? serverActivePresetId : activePresetId
+    // Retain a missing preset's identity so its draft cannot silently become a different preset.
+    const editingPresetId = startedWithoutDraft ? serverActivePresetId : activePresetId
     queueMicrotask(() => {
       setSavedPresets(serverPresets)
       setActivePresetId(editingPresetId)
-      if (startedWithoutDraft && serverActivePreset) resetLayoutPreset(cloneWallpaperPresetToDraft(serverActivePreset))
+      if (!wasHydrated && startedWithoutDraft && serverActivePreset) {
+        setDraftBase(createWallpaperDraftBase(serverActivePreset))
+        resetLayoutPreset(cloneWallpaperPresetToDraft(serverActivePreset))
+      }
     })
     saveWallpaperLayoutPresets(serverPresets)
     saveWallpaperActivePresetId(editingPresetId)
-  }, [activePresetId, resetLayoutPreset, startedWithoutDraft, wallpaperSettingsQuery.data])
+  }, [activePresetId, isAdmin, resetLayoutPreset, startedWithoutDraft, wallpaperEditorSettingsQuery.data, wallpaperEditorSettingsQuery.isError, wallpaperEditorSettingsQuery.isFetchedAfterMount, wallpaperEditorSettingsQuery.isFetching, wallpaperSettingsQuery.data])
 
   // The live wallpaper follows the server, including changes made from another browser.
   useEffect(() => {
@@ -429,32 +462,33 @@ export function WallpaperEditorPage() {
   }, [wallpaperSettingsQuery.data?.wallpaperActivePresetId])
 
   /** Write the saved presets; `nextLivePresetId` undefined keeps the live wallpaper where it is. */
-  const syncWallpaperPresetState = (
-    nextPresets: WallpaperLayoutPreset[],
+  const syncWallpaperPresetState = async (
+    nextPresets: WallpaperLayoutPreset[] | undefined,
     nextLivePresetId: string | null | undefined,
     successMessage?: string,
   ) => {
-    if (!isAdmin) { notifyError(t({ ko: '서버 설정 변경은 관리자 권한이 필요해.', en: 'Changing server settings requires an administrator.' })); return }
-    wallpaperPresetMutation.mutate(
-      {
+    try {
+      if (!isAdmin) throw new Error(t({ ko: '서버 설정 변경은 관리자 권한이 필요해.', en: 'Changing server settings requires an administrator.' }))
+      const revision = wallpaperRevisionRef.current
+      if (!revision) throw new Error(t({ ko: '최신 월페이퍼를 먼저 불러와줘.', en: 'Load the latest wallpapers first.' }))
+      const settings = await wallpaperPresetMutation.mutateAsync({
         wallpaperLayoutPresets: nextPresets,
         wallpaperActivePresetId: nextLivePresetId,
-      },
-      {
-        onSuccess: (settings) => {
-          setSavedPresets(toWallpaperLayoutPresetViewModels(settings.appearance.wallpaperLayoutPresets))
-          setLivePresetId(settings.appearance.wallpaperActivePresetId)
-          void queryClient.invalidateQueries({ queryKey: ['wallpaper-runtime-settings'] })
-          if (successMessage) {
-            notifyInfo(successMessage)
-          }
-        },
-        onError: (error) => {
-          notifyError(error instanceof Error ? error.message : t({ ko: '월페이퍼 프리셋을 서버에 저장하지 못했어.', en: 'Failed to save the wallpaper preset to the server.' }))
-        },
-      },
-    )
+        revision,
+      })
+      wallpaperRevisionRef.current = settings.pageSettingsRevisions?.appearance ?? null
+      if (nextPresets !== undefined) setSavedPresets(toWallpaperLayoutPresetViewModels(settings.appearance.wallpaperLayoutPresets))
+      setLivePresetId(settings.appearance.wallpaperActivePresetId)
+      queryClient.setQueryData(['app-settings'], settings)
+      void queryClient.invalidateQueries({ queryKey: ['wallpaper-runtime-settings'] })
+      if (successMessage) notifyInfo(successMessage)
+      return settings
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : t({ ko: '월페이퍼 프리셋을 서버에 저장하지 못했어.', en: 'Failed to save the wallpaper preset to the server.' }))
+      throw error
+    }
   }
+  const runPresetAction = (action: Promise<void>) => { void action.catch(() => {}) }
 
   /**
    * Swap the whole canvas (open a preset, new canvas, template, import). The undo history starts over because its
@@ -463,7 +497,11 @@ export function WallpaperEditorPage() {
   const replaceCanvas = (next: WallpaperLayoutPreset, nextPresetId: string | null, message: string) => {
     const before = layoutPreset
     const beforePresetId = activePresetId
+    const beforeBase = draftBase
+    draftSessionRef.current += 1
     setActivePresetId(nextPresetId)
+    const nextSavedPreset = nextPresetId ? savedPresetById.get(nextPresetId) : undefined
+    setDraftBase(nextSavedPreset ? createWallpaperDraftBase(nextSavedPreset) : null)
     resetLayoutPreset(next)
     setSelectedIds([])
     showSnackbar({
@@ -479,7 +517,9 @@ export function WallpaperEditorPage() {
             size="compact"
             className="shrink-0"
             onClick={() => {
+              draftSessionRef.current += 1
               setActivePresetId(beforePresetId)
+              setDraftBase(beforeBase)
               resetLayoutPreset(before)
               setSelectedIds([])
               closeSnackbar()
@@ -517,7 +557,9 @@ export function WallpaperEditorPage() {
     }
 
     if (!presetId) {
+      draftSessionRef.current += 1
       setActivePresetId(null)
+      setDraftBase(null)
       return
     }
 
@@ -529,26 +571,39 @@ export function WallpaperEditorPage() {
     replaceCanvas(cloneWallpaperPresetToDraft(nextPreset), nextPreset.id, t({ ko: "'{name}'을 열었어.", en: "Opened '{name}'." }, { name: nextPreset.name }))
   }
 
-  const handleMakeLive = () => {
+  const handleMakeLive = async () => {
     if (!effectiveActivePresetId || hasUnsavedPresetChanges) return
-    syncWallpaperPresetState(savedPresets, effectiveActivePresetId, t({ ko: "'{name}'을 라이브 월페이퍼로 지정했어.", en: "'{name}' is now the live wallpaper." }, { name: activePreset?.name ?? '' }))
+    await syncWallpaperPresetState(undefined, effectiveActivePresetId, t({ ko: "'{name}'을 라이브 월페이퍼로 지정했어.", en: "'{name}' is now the live wallpaper." }, { name: activePreset?.name ?? '' }))
   }
 
-  const handleSavePreset = (options?: { saveAsNew?: boolean }) => {
+  const assertDraftBaseCurrent = (presetId: string | null) => {
+    if (!presetId) return
+    if (draftBase?.presetId === presetId && matchesWallpaperDraftBase(draftBase, savedPresetById.get(presetId))) return
+    const message = t({ ko: '다른 곳에서 프리셋이 바뀌었어. 새로 저장하거나 최신 프리셋을 열어줘.', en: 'The preset changed elsewhere. Save as new or open the latest preset.' })
+    notifyError(message)
+    throw new Error(message)
+  }
+
+  const handleSavePreset = async (options?: { saveAsNew?: boolean }) => {
+    if (!options?.saveAsNew) assertDraftBaseCurrent(draftBase?.presetId ?? activePresetId)
+    const session = draftSessionRef.current
     const nextResult = upsertWallpaperLayoutPreset(savedPresets, layoutPreset, {
       presetId: options?.saveAsNew ? null : effectiveActivePresetId,
       name: layoutPreset.name,
     })
 
-    setSavedPresets(nextResult.presets)
-    setActivePresetId(nextResult.presetId)
-    syncWallpaperPresetState(
+    const settings = await syncWallpaperPresetState(
       nextResult.presets,
       undefined,
       options?.saveAsNew
         ? t({ ko: '프리셋을 새로 저장했어.', en: 'Saved the preset as a new one.' })
         : t({ ko: '프리셋을 저장했어.', en: 'Saved the preset.' }),
     )
+    if (draftSessionRef.current === session) {
+      const savedPreset = toWallpaperLayoutPresetViewModels(settings.appearance.wallpaperLayoutPresets).find((preset) => preset.id === nextResult.presetId)!
+      setDraftBase(createWallpaperDraftBase(savedPreset))
+      setActivePresetId(nextResult.presetId)
+    }
   }
 
   const handleDeletePreset = async () => {
@@ -569,13 +624,18 @@ export function WallpaperEditorPage() {
       return
     }
 
-    deleteSavedPreset(effectiveActivePresetId)
+    await deleteSavedPreset(effectiveActivePresetId)
   }
 
   /** Deleting the live preset clears the live choice (the server requires it to name a saved preset). */
-  const deleteSavedPreset = (presetId: string) => {
-    syncWallpaperPresetState(deleteWallpaperLayoutPreset(savedPresets, presetId), presetId === livePresetId ? null : undefined, t({ ko: '프리셋을 삭제했어.', en: 'Deleted the preset.' }))
-    if (presetId === effectiveActivePresetId) setActivePresetId(null)
+  const deleteSavedPreset = async (presetId: string) => {
+    if (presetId === (draftBase?.presetId ?? activePresetId)) assertDraftBaseCurrent(presetId)
+    const session = draftSessionRef.current
+    await syncWallpaperPresetState(deleteWallpaperLayoutPreset(savedPresets, presetId), presetId === livePresetId ? null : undefined, t({ ko: '프리셋을 삭제했어.', en: 'Deleted the preset.' }))
+    if (presetId === activePresetId && draftSessionRef.current === session) {
+      setActivePresetId(null)
+      setDraftBase(null)
+    }
   }
 
   const handleCopyRuntimeUrl = async () => {
@@ -760,7 +820,7 @@ export function WallpaperEditorPage() {
     if (mod && event.altKey && event.code === 'KeyV' && styleClipboard) { event.preventDefault(); pasteSelectionStyle(); return }
 
     if (mod && !event.altKey) {
-      if (event.code === 'KeyS') { event.preventDefault(); if (isAdmin && !wallpaperPresetMutation.isPending) handleSavePreset({ saveAsNew: event.shiftKey }); return }
+      if (event.code === 'KeyS') { event.preventDefault(); if (isAdmin && !wallpaperPresetMutation.isPending) runPresetAction(handleSavePreset({ saveAsNew: event.shiftKey })); return }
       if (key === 'z' && !event.shiftKey) { event.preventDefault(); undoLayoutEdit(); return }
       if ((key === 'z' && event.shiftKey) || key === 'y') { event.preventDefault(); redoLayoutEdit(); return }
       if (key === 'a') { event.preventDefault(); setSelectedIds(layoutPreset.widgets.map((widget) => widget.id)); return }
@@ -818,7 +878,7 @@ export function WallpaperEditorPage() {
     savedPresets,
     activePresetId: effectiveActivePresetId,
     livePresetId: effectiveLivePresetId,
-    schedule: wallpaperSettingsQuery.data?.wallpaperSchedule,
+    schedule: (isAdmin ? wallpaperEditorSettingsQuery.data?.appearance.wallpaperSchedule : wallpaperSettingsQuery.data?.wallpaperSchedule),
     runtimeKeys,
     quickRunSchedules: (quickRunSchedulesQuery.data ?? []).map((schedule) => ({ id: schedule.id, name: schedule.name })),
     isAdmin,
@@ -845,10 +905,13 @@ export function WallpaperEditorPage() {
   const replaceDraft = (next: WallpaperLayoutPreset) => {
     const before = layoutRef.current
     const beforeActive = activePresetId
+    const beforeBase = draftBase
+    draftSessionRef.current += 1
     setActivePresetId(null)
+    setDraftBase(null)
     resetLayoutPreset(next)
     setSelectedIds([])
-    return { isCurrent: () => JSON.stringify(layoutRef.current) === JSON.stringify(next), restore: () => { resetLayoutPreset(before); setActivePresetId(beforeActive) } }
+    return { isCurrent: () => JSON.stringify(layoutRef.current) === JSON.stringify(next), restore: () => { draftSessionRef.current += 1; resetLayoutPreset(before); setActivePresetId(beforeActive); setDraftBase(beforeBase) } }
   }
   useChatPageRegistration({
     kind: 'wallpaper', title: t({ ko: '배경화면 편집', en: 'Wallpaper editor' }), resourceId: layoutPreset.id, localRevision: JSON.stringify(layoutPreset),
@@ -914,24 +977,29 @@ export function WallpaperEditorPage() {
           if (args.dialog === 'export') { handleExportFile(); return }
           if (!isAdmin) throw new Error('관리자만 열 수 있어.')
           if (args.dialog === 'schedule') {
-            if (savedPresets.length === 0 || !wallpaperSettingsQuery.data) throw new Error('저장된 배경화면이 있어야 일정을 정할 수 있어.')
+            if (savedPresets.length === 0 || !wallpaperEditorSettingsQuery.data?.pageSettingsRevisions?.appearance) throw new Error('저장된 배경화면이 있어야 일정을 정할 수 있어.')
             setIsScheduleOpen(true)
             return
           }
           setLivelyIssued(null)
           setIsLivelyOpen(true)
           return
-        case 'wallpaper.save': handleSavePreset({ saveAsNew: args.asNew === true }); return
+        case 'wallpaper.save': await handleSavePreset({ saveAsNew: args.asNew === true }); return
         case 'wallpaper.delete_preset': {
           const presetId = requirePresetId(args.presetId)
-          deleteSavedPreset(presetId)
+          await deleteSavedPreset(presetId)
           return
         }
-        case 'wallpaper.save_schedule':
-          await updateAppearanceSettings({ wallpaperSchedule: readWallpaperSchedule(readWallpaperPatch({ enabled: args.enabled, entries: args.entries }, WALLPAPER_SCHEDULE_SCHEMA(savedPresets.map((preset) => preset.id)), 'schedule')) })
+        case 'wallpaper.save_schedule': {
+          const revision = wallpaperEditorSettingsQuery.data?.pageSettingsRevisions?.appearance
+          if (!revision) throw new Error('최신 월페이퍼를 먼저 불러와줘.')
+          const settings = await updateAppearanceSettings({ wallpaperSchedule: readWallpaperSchedule(readWallpaperPatch({ enabled: args.enabled, entries: args.entries }, WALLPAPER_SCHEDULE_SCHEMA(savedPresets.map((preset) => preset.id)), 'schedule')) }, revision)
+          if (wallpaperRevisionRef.current === revision) wallpaperRevisionRef.current = settings.pageSettingsRevisions?.appearance ?? null
+          queryClient.setQueryData(['app-settings'], settings)
           await queryClient.invalidateQueries({ queryKey: ['wallpaper-runtime-settings'] })
           notifyInfo(t({ ko: '일정을 저장했어.', en: 'Saved the schedule.' }))
           return
+        }
         case 'wallpaper.issue_key': {
           const name = String(args.name).trim()
           if (!name) throw new Error('기기 이름이 필요해.')
@@ -1016,7 +1084,7 @@ export function WallpaperEditorPage() {
           {activePreset && hasUnsavedPresetChanges ? (
             <span className="ml-1 size-2 shrink-0 rounded-full bg-primary" role="status" aria-label={unsavedLabel} title={unsavedLabel} />
           ) : null}
-          <Button size="sm" className="ml-1" disabled={!isAdmin || wallpaperPresetMutation.isPending} onClick={() => handleSavePreset()} aria-busy={wallpaperPresetMutation.isPending || undefined}>
+          <Button size="sm" className="ml-1" disabled={!isAdmin || !wallpaperRevisionRef.current || wallpaperPresetMutation.isPending} onClick={() => runPresetAction(handleSavePreset())} aria-busy={wallpaperPresetMutation.isPending || undefined}>
             <Save />{t({ ko: '저장', en: 'Save' })}
           </Button>
         </>
@@ -1101,25 +1169,25 @@ export function WallpaperEditorPage() {
               { icon: Plus, label: t({ ko: '새 캔버스', en: 'New canvas' }), action: () => void handleCreateBlankCanvas() },
               { icon: LayoutTemplate, label: t({ ko: '템플릿', en: 'Templates' }), action: () => setIsTemplateModalOpen(true) },
               'separator',
-              { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: !isAdmin || wallpaperPresetMutation.isPending, action: () => handleSavePreset({ saveAsNew: true }) },
+              { icon: Copy, label: t({ ko: '다른 이름으로 저장', en: 'Save as new' }), disabled: !isAdmin || !wallpaperRevisionRef.current || wallpaperPresetMutation.isPending, action: () => runPresetAction(handleSavePreset({ saveAsNew: true })) },
               { icon: Download, label: t({ ko: '파일로 내보내기', en: 'Export to file' }), action: handleExportFile },
               { icon: Upload, label: t({ ko: '파일에서 가져오기', en: 'Import from file' }), action: () => importInputRef.current?.click() },
               'separator',
               ...(activePreset && !isLivePreset ? [{
                 icon: Radio,
                 label: hasUnsavedPresetChanges ? t({ ko: '저장 후 라이브로 지정', en: 'Save first to make live' }) : t({ ko: '라이브로 지정', en: 'Make live' }),
-                disabled: !isAdmin || hasUnsavedPresetChanges || wallpaperPresetMutation.isPending,
-                action: handleMakeLive,
+                disabled: !isAdmin || !wallpaperRevisionRef.current || hasUnsavedPresetChanges || wallpaperPresetMutation.isPending,
+                action: () => runPresetAction(handleMakeLive()),
               }] : []),
               { icon: Eye, label: t({ ko: '실행 미리보기', en: 'Live preview' }), action: () => window.open(draftRuntimePath, '_blank', 'noopener,noreferrer') },
               { icon: MonitorPlay, label: t({ ko: 'Lively 연결', en: 'Connect Lively' }), disabled: !isAdmin, action: () => setIsLivelyOpen(true) },
-              { icon: CalendarClock, label: t({ ko: '시간대별 월페이퍼', en: 'Wallpaper schedule' }), disabled: !isAdmin || savedPresets.length === 0 || !wallpaperSettingsQuery.data, action: () => setIsScheduleOpen(true) },
+              { icon: CalendarClock, label: t({ ko: '시간대별 월페이퍼', en: 'Wallpaper schedule' }), disabled: !isAdmin || savedPresets.length === 0 || !wallpaperEditorSettingsQuery.data?.pageSettingsRevisions?.appearance, action: () => setIsScheduleOpen(true) },
               { icon: ClipboardCopy, label: t({ ko: '월페이퍼 URL 복사', en: 'Copy wallpaper URL' }), disabled: !activePresetRuntimePath, action: () => void handleCopyRuntimeUrl() },
               { icon: ExternalLink, label: t({ ko: '저장 월페이퍼 열기', en: 'Open saved wallpaper' }), disabled: !activePresetRuntimePath, action: () => activePresetRuntimePath && window.open(activePresetRuntimePath, '_blank', 'noopener,noreferrer') },
               'separator',
               { icon: Magnet, label: snap ? t({ ko: '스냅 끄기', en: 'Turn off snap' }) : t({ ko: '스냅 켜기', en: 'Turn on snap' }), action: () => setSnap((current) => !current) },
               'separator',
-              { icon: Trash2, label: t({ ko: '프리셋 삭제', en: 'Delete preset' }), disabled: !isAdmin || !activePreset || wallpaperPresetMutation.isPending, action: handleDeletePreset, destructive: true },
+              { icon: Trash2, label: t({ ko: '프리셋 삭제', en: 'Delete preset' }), disabled: !isAdmin || !wallpaperRevisionRef.current || !activePreset || wallpaperPresetMutation.isPending, action: () => runPresetAction(handleDeletePreset()), destructive: true },
             ]}
             onDone={() => setIsWorkspaceMenuOpen(false)}
           />
@@ -1286,7 +1354,12 @@ export function WallpaperEditorPage() {
           <WallpaperScheduleModal
             onClose={() => setIsScheduleOpen(false)}
             presets={savedPresets}
-            schedule={wallpaperSettingsQuery.data?.wallpaperSchedule}
+            schedule={wallpaperEditorSettingsQuery.data?.appearance.wallpaperSchedule}
+            revision={wallpaperEditorSettingsQuery.data?.pageSettingsRevisions?.appearance}
+            onSaved={(baseRevision, settings) => {
+              if (wallpaperRevisionRef.current === baseRevision) wallpaperRevisionRef.current = settings.pageSettingsRevisions?.appearance ?? null
+              queryClient.setQueryData(['app-settings'], settings)
+            }}
           />
         ) : null}
         <WallpaperTemplateModal

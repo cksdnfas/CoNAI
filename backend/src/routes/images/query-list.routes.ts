@@ -358,7 +358,7 @@ router.get('/batch/thumbnails', asyncHandler(async (req: Request, res: Response)
   try {
     return res.json({
       success: true,
-      data: buildBatchThumbnailLookupResults(hashes)
+      data: await buildBatchThumbnailLookupResults(hashes)
     });
   } catch (error) {
     console.error('Batch thumbnails error:', error);

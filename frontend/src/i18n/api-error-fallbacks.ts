@@ -71,10 +71,6 @@ export const API_ERROR_FALLBACKS = {
     ko: '이미지 삭제에 실패했어.',
     en: 'Failed to delete images.',
   },
-  'images.batchTag': {
-    ko: '선택 이미지 태그/등급 재점검에 실패했어.',
-    en: 'Failed to recheck tags and ratings for the selected images.',
-  },
   'images.duplicates.load': {
     ko: '중복 이미지를 불러오지 못했어.',
     en: 'Failed to load duplicate images.',
@@ -538,10 +534,6 @@ export const API_ERROR_FALLBACKS = {
   'folders.watcher.restart': {
     ko: '워처를 재시작하지 못했어.',
     en: 'Failed to restart the watcher.',
-  },
-  'wallpaperRuntime.browseContent.load': {
-    ko: '월페이퍼 라이브 데이터를 불러오지 못했어.',
-    en: 'Failed to load wallpaper live data.',
   },
   'wallpaperRuntime.groupPreview.load': {
     ko: '월페이퍼 라이브 그룹 미리보기를 불러오지 못했어.',

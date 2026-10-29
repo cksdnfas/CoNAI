@@ -140,7 +140,7 @@ export function GroupImageSection({
           max={maxColumnCount}
           onChange={onColumnCountChange}
           onReset={onColumnCountReset}
-          className={selectedIds.length > 0 ? 'bottom-24' : undefined}
+          aboveSelectionBar={selectedIds.length > 0}
         />
       ) : null}
 

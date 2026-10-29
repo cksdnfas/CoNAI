@@ -7,6 +7,13 @@ import {
 import { buildUpdateQuery, filterDefined, sqlLiteral } from '../utils/dynamicUpdate'
 import { publishGraphScheduleEvent } from '../services/runtime-events/runtimeEventPublishers'
 
+let scheduleWriteRevision = 0
+
+/** Invalidate cached reservation snapshots on every schedule write, including runtime bookkeeping. */
+export function getGraphWorkflowScheduleWriteRevision() {
+  return scheduleWriteRevision
+}
+
 /**
  * Publish one schedule change event for the stored row.
  *
@@ -145,7 +152,9 @@ export class GraphWorkflowScheduleModel {
   }
 
   /** Create one persisted workflow schedule. */
-  static create(data: GraphWorkflowScheduleCreateData) {
+  static create(data: GraphWorkflowScheduleCreateData): number
+  static create(data: GraphWorkflowScheduleCreateData, expectedGraphVersion: number): number | null
+  static create(data: GraphWorkflowScheduleCreateData, expectedGraphVersion?: number) {
     const db = getUserSettingsDb()
     const info = db.prepare(`
       INSERT INTO graph_workflow_schedules (
@@ -154,7 +163,8 @@ export class GraphWorkflowScheduleModel {
         confirmed_graph_version, confirmed_input_signature,
         stop_reason_code, stop_reason_message,
         last_execution_id, next_run_at, last_enqueued_at, run_as_account_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ${expectedGraphVersion === undefined ? '' : 'WHERE EXISTS (SELECT 1 FROM graph_workflows WHERE id = ? AND version = ?)'}
     `).run(
       data.graph_workflow_id,
       data.name,
@@ -176,16 +186,19 @@ export class GraphWorkflowScheduleModel {
       data.next_run_at ?? null,
       data.last_enqueued_at ?? null,
       data.run_as_account_id ?? null,
+      ...(expectedGraphVersion === undefined ? [] : [data.graph_workflow_id, expectedGraphVersion]),
     )
 
+    if (info.changes === 0) return null
     const scheduleId = info.lastInsertRowid as number
+    scheduleWriteRevision += 1
     // E15: 신규 예약
     publishScheduleChangedById(scheduleId)
     return scheduleId
   }
 
   /** Update one schedule row. */
-  static update(id: number, data: GraphWorkflowScheduleUpdateData) {
+  static update(id: number, data: GraphWorkflowScheduleUpdateData, expectedRevision?: number, expectedGraphVersion?: number) {
     const db = getUserSettingsDb()
     const updates = filterDefined({
       ...data,
@@ -197,9 +210,16 @@ export class GraphWorkflowScheduleModel {
       return false
     }
 
-    const { sql, values } = buildUpdateQuery('graph_workflow_schedules', updates, { id })
-    const info = db.prepare(sql).run(...values)
+    const { sql, values } = buildUpdateQuery('graph_workflow_schedules', updates, {
+      id,
+      ...(expectedRevision !== undefined ? { revision: expectedRevision } : {}),
+    })
+    const versionCondition = expectedGraphVersion === undefined
+      ? ''
+      : ' AND EXISTS (SELECT 1 FROM graph_workflows WHERE id = graph_workflow_schedules.graph_workflow_id AND version = ?)'
+    const info = db.prepare(sql + versionCondition).run(...values, ...(expectedGraphVersion === undefined ? [] : [expectedGraphVersion]))
     if (info.changes > 0) {
+      scheduleWriteRevision += 1
       // E14: status / next_run_at / stop_reason 변경
       publishScheduleChangedById(id)
     }
@@ -211,6 +231,7 @@ export class GraphWorkflowScheduleModel {
   static delete(id: number) {
     const db = getUserSettingsDb()
     const info = db.prepare('DELETE FROM graph_workflow_schedules WHERE id = ?').run(id)
+    if (info.changes > 0) scheduleWriteRevision += 1
     return info.changes > 0
   }
 
@@ -223,6 +244,7 @@ export class GraphWorkflowScheduleModel {
     const db = getUserSettingsDb()
     const placeholders = workflowIds.map(() => '?').join(', ')
     const info = db.prepare(`DELETE FROM graph_workflow_schedules WHERE graph_workflow_id IN (${placeholders})`).run(...workflowIds)
+    if (info.changes > 0) scheduleWriteRevision += 1
     return info.changes
   }
 }

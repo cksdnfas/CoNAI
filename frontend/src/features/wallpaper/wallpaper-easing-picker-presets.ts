@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { triggerBlobDownload } from '@/lib/api-client'
 import type { WallpaperAnimationEasing } from './wallpaper-types'
 import { normalizeWallpaperAnimationEasing } from './wallpaper-widget-utils'
 
@@ -213,12 +214,7 @@ export function useWallpaperEasingPresetManager() {
       presets: sortedSavedPresets,
     }
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
-    const objectUrl = window.URL.createObjectURL(blob)
-    const link = window.document.createElement('a')
-    link.href = objectUrl
-    link.download = 'conai-wallpaper-easing-presets.json'
-    link.click()
-    window.URL.revokeObjectURL(objectUrl)
+    triggerBlobDownload(blob, 'conai-wallpaper-easing-presets.json')
     setImportExportError(null)
     setImportExportMessage(`${sortedSavedPresets.length}개 프리셋을 내보냈어.`)
     return true

@@ -133,6 +133,43 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
   const group = AuthPermissionGroup.createCustomGroup({ name: 'image-reader', permissionKeys: ['images.view'] })
   const accountId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('reader', 'unused', 'guest')").run().lastInsertRowid)
   AuthPermissionGroup.addAccountMembership(group.id, accountId)
+  await t.test('paged listings validate input after their existing access checks', async () => {
+    const { WorkflowModel } = await import('../src/models/Workflow')
+    const workflowId = WorkflowModel.create({ name: 'Paged artifacts', workflow_json: '{}', is_public_page: true, public_slug: 'paged-artifacts', result_view_mode: 'artifact_explorer' })
+    const urls = ['/api/image-editor/save-images', `/api/workflows/${workflowId}/artifacts`, '/api/public-workflows/paged-artifacts/artifacts']
+    const originalError = console.error
+    let listingErrors = 0
+    console.error = (...args: unknown[]) => {
+      if (String(args[0]).startsWith('Error listing')) listingErrors += 1
+      else originalError(...args)
+    }
+    try {
+      for (const url of urls) {
+        for (const query of ['limit=0', 'cursor=invalid', 'snapshot=']) {
+          assert.equal(await status(`${url}?${query}`, adminId), 400, `${url}: ${query}`)
+        }
+      }
+    } finally {
+      console.error = originalError
+    }
+    assert.equal(listingErrors, 0, 'invalid input is not logged as a server error')
+    for (const url of urls) {
+      const response = await fetch(`${origin}${url}?limit=2`, { headers: { 'x-test-account': String(adminId) } })
+      const payload = await response.json() as { data: { snapshot: string | null; total: number } }
+      assert.equal(response.status, 200)
+      assert.equal(typeof payload.data.snapshot, 'string')
+      assert.equal(payload.data.total, 0)
+    }
+    AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: [] })
+    try {
+      assert.equal(await status('/api/image-editor/save-images?limit=0', accountId), 403)
+      assert.equal(await status('/api/public-workflows/paged-artifacts/artifacts?limit=0', accountId), 403)
+    } finally {
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
+    }
+    WorkflowModel.update(workflowId, { is_public_page: false })
+    assert.equal(await status('/api/public-workflows/paged-artifacts/artifacts?limit=2', adminId), 404)
+  })
   await t.test('group merge needs edit AND delete; ordinary moves and deletes keep independent grants', async () => {
     const { GroupModel } = await import('../src/models/Group')
     const { moveCustomGroups } = await import('../src/services/groupMutationService')

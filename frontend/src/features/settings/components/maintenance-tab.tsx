@@ -1,18 +1,20 @@
 import type { ReactNode } from 'react'
-import { FileSearch, Play, RefreshCcw, ScanSearch, Search, ShieldCheck, Shuffle } from 'lucide-react'
+import { FileSearch, LoaderCircle, Play, RefreshCcw, ScanSearch, Search, ShieldCheck, Shuffle, X } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
+import { Progress } from '@/components/ui/progress'
 import { RowGroup } from '@/components/ui/row-group'
 import { useConfirm, type ConfirmOptions } from '@/components/ui/confirm-dialog'
 import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
 import type { ScanAllSummary } from '@/types/folder'
-import type { FileVerificationRunResult } from '@/lib/api-settings'
+import type { FileVerificationRunResult, MetadataReextractAllResult } from '@/lib/api-settings'
 import { useI18n } from '@/i18n'
 import { AutoTestCard } from './auto-test-card'
 import type { AutoTabProps } from './auto-tab-types'
 import { DataRematchSection } from './data-rematch-section'
 import { DatabaseMaintenanceSection } from './database-maintenance-section'
 import { MaintenanceRow } from './maintenance-row'
+import { SettingsStatLine } from './settings-rows'
 
 interface MaintenanceActionRowProps {
   icon: ReactNode
@@ -68,6 +70,9 @@ interface MaintenanceTabProps {
   isCancellingVerifyAllFiles: boolean
   onReextractAll: () => void
   isReextracting: boolean
+  reextractJob: RuntimeJobRecord<MetadataReextractAllResult> | undefined
+  onCancelReextractAll: () => void
+  isCancellingReextractAll: boolean
   autoTabProps: AutoTabProps
 }
 
@@ -85,9 +90,12 @@ export function MaintenanceTab({
   isCancellingVerifyAllFiles,
   onReextractAll,
   isReextracting,
+  reextractJob,
+  onCancelReextractAll,
+  isCancellingReextractAll,
   autoTabProps,
 }: MaintenanceTabProps) {
-  const { t } = useI18n()
+  const { t, formatNumber } = useI18n()
 
   return (
     <div className="space-y-8">
@@ -130,15 +138,42 @@ export function MaintenanceTab({
           icon={<FileSearch className="h-4 w-4" />}
           title={t({ ko: '메타데이터 전체 재추출', en: 'Re-extract all metadata' })}
           actionLabel={t({ ko: '메타데이터 재추출 실행', en: 'Run metadata re-extraction' })}
-          busyLabel={t({ ko: '등록 중', en: 'Queuing' })}
+          busyLabel={t({ ko: '다시 추출 중', en: 'Re-extracting' })}
           isBusy={isReextracting}
           confirmOptions={{
             title: t({ ko: 'AI 메타데이터 다시 추출', en: 'Re-extract AI metadata' }),
-            description: t('metadataTab.reExtractAiMetadataFor'),
+            description: t({ ko: '모든 이미지의 AI 메타데이터를 다시 추출할까? 중단해도 이미 등록한 항목은 마저 처리해.', en: 'Re-extract AI metadata for every image? Already queued items finish if you stop.' }),
             confirmLabel: t({ ko: '다시 추출', en: 'Re-extract' }),
           }}
           onRun={onReextractAll}
-        />
+        >
+          {reextractJob ? (
+            <div className="space-y-2">
+              <SettingsStatLine items={[
+                { label: reextractJob.status === 'queued' || reextractJob.status === 'running' ? t({ ko: '지금까지 찾은', en: 'Found so far' }) : t({ ko: '찾은', en: 'Found' }), value: formatNumber(reextractJob.progress.total) },
+                { label: t({ ko: '등록', en: 'Queued' }), value: formatNumber(reextractJob.progress.total - reextractJob.progress.skipped) },
+                { label: t({ ko: '누락', en: 'Missing' }), value: formatNumber(reextractJob.progress.skipped) },
+                { label: t({ ko: '처리', en: 'Processed' }), value: formatNumber(reextractJob.progress.succeeded + reextractJob.progress.failed) },
+              ]} />
+              {reextractJob.status === 'queued' || reextractJob.status === 'running' ? (
+                <div className="space-y-2">
+                  <div className="flex justify-end">
+                    <IconButton
+                      size="icon-xs"
+                      variant="ghost"
+                      disabled={isCancellingReextractAll}
+                      label={isCancellingReextractAll ? t({ ko: '취소하는 중...', en: 'Cancelling...' }) : t({ ko: '취소', en: 'Cancel' })}
+                      onClick={onCancelReextractAll}
+                    >
+                      {isCancellingReextractAll ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                    </IconButton>
+                  </div>
+                  <Progress size="lg" value={null} />
+                </div>
+              ) : <RuntimeJobProgress job={reextractJob} />}
+            </div>
+          ) : null}
+        </MaintenanceActionRow>
       </RowGroup>
 
       <DatabaseMaintenanceSection />

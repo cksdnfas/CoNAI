@@ -141,6 +141,20 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     while (await semanticIndexer.sweep() > 0) { /* drain */ }
   })
 
+  await t.test('id-less replacements and re-imports preserve lore vectors without new embeddings', async () => {
+    const { readLorebookFile } = await import('../src/services/codex-chat/chatCardImport')
+    const raw = book.entries.map((entry) => ({ ...entry, id: undefined }))
+    const before = requests.length
+    const saved = ChatLorebookStore.update(book.id, { entries: raw })!
+    assert.deepEqual(saved.entries.map((entry) => entry.id), book.entries.map((entry) => entry.id))
+    await indexLoreNow(new Set([book.id]), 16)
+    const imported = readLorebookFile(Buffer.from(JSON.stringify({ entries: raw })), 'same.json', saved.entries)
+    ChatLorebookStore.update(book.id, { entries: imported.entries })
+    await indexLoreNow(new Set([book.id]), 16)
+    assert.equal(vectorStore.count('chat-lore', embedding.EMBEDDING_MODEL_KEY), 6)
+    assert.equal(requests.length, before, 'unchanged entries reuse existing vectors, including after file-import replacement')
+  })
+
   await t.test('session recall resolves older active-path messages outside a bounded input and excludes the replaced reply', async () => {
     const sessionProfile = { ...profile, engine: 'claude' as const }
     const id = CodexChatStore.createThread(null, 'session recall', 'llm', profile.id)
@@ -241,7 +255,7 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     semanticIndexInternals.pruneVectors()
   })
 
-  await t.test('the loaded vectors follow writes without a reload', () => {
+  await t.test('the loaded vectors follow writes without a reload', async () => {
     const space = 'test-cache'
     const axis = (i: number) => Array.from({ length: DIM }, (_, k) => (k === i ? 1 : 0))
     vectorStore.replace(space, 'a', 'm', [{ vector: axis(0) }])
@@ -264,6 +278,21 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     for (const limit of [1, 5, 20]) {
       assert.deepEqual(vectorStore.search(space, 'm', axis(1), { ...options, limit }), all.slice(0, limit), 'top K retains stable tie order and owner/source filtering')
     }
+    vectorStore.replace(space, 'hash-a', 'm', [
+      { vector: axis(1), contentHash: 'stale' },
+      { vector: axis(0), contentHash: 'current' },
+    ])
+    vectorStore.replace(space, 'hash-b', 'm', [
+      { vector: axis(1), contentHash: 'current' },
+      { vector: axis(1), contentHash: 'current' },
+    ])
+    const hashes = new Map([['hash-a', 'current'], ['hash-b', 'current']])
+    const expected = new Map<string, number>()
+    for (const hit of vectorStore.search(space, 'm', axis(1), { sourceKeys: [...hashes.keys()] })) {
+      if (hit.contentHash === hashes.get(hit.sourceKey)) expected.set(hit.sourceKey, Math.max(expected.get(hit.sourceKey) ?? -Infinity, hit.score))
+    }
+    const reduced = (await vectorStore.searchBestCurrent(space, 'm', axis(1), hashes))!
+    assert.deepEqual(new Map(reduced.map(hit => [hit.sourceKey, hit.score])), expected, 'a stale stronger chunk cannot hide a current chunk')
   })
 
   await t.test('versions: an older library is below the pinned one', () => {
@@ -272,6 +301,97 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     assert.equal(embedding.versionBelow('5.19.0.dev0', '5.19.0'), false)
     assert.equal(embedding.versionBelow('5.20.1', '5.19.0'), false)
     assert.equal(embedding.versionBelow('6.0.0+cpu', '6.1.0'), true)
+  })
+
+  await t.test('cooperative per-source scoring preserves results, detects writes, and cancels', async () => {
+    const { vectorCachePolicy } = await import('../src/services/vectors/vectorStore')
+    const space = 'cooperative-best'
+    const hashes = new Map<string, string>()
+    for (let source = 0; source < 40; source++) {
+      const key = String(source)
+      hashes.set(key, 'current')
+      vectorStore.replace(space, key, 'm', Array.from({ length: 64 }, (_, chunk) => ({
+        vector: chunk % 2 ? [1, 0] : [0, 1],
+        contentHash: chunk % 7 ? 'current' : 'stale',
+      })))
+    }
+    const best = new Map<string, ReturnType<typeof vectorStore.search>[number]>()
+    for (const hit of vectorStore.search(space, 'm', [1, 0], { sourceKeys: [...hashes.keys()] })) {
+      if (hit.contentHash === hashes.get(hit.sourceKey) && !best.has(hit.sourceKey)) best.set(hit.sourceKey, hit)
+    }
+    const expected = [...best.values()]
+    const normalized = (hits: typeof expected) => hits.sort((a, b) => a.sourceKey.localeCompare(b.sourceKey))
+    vectorStore.invalidateAll()
+    let yielded = false
+    setImmediate(() => { yielded = true })
+    const cold = await vectorStore.searchBestCurrent(space, 'm', [1, 0], hashes)
+    assert.equal(yielded, true)
+    assert.deepEqual(normalized(cold!), normalized(expected))
+    assert.deepEqual(normalized((await vectorStore.searchBestCurrent(space, 'm', [1, 0], hashes))!), normalized(expected))
+    vectorStore.invalidateAll()
+    const sharedAbort = new AbortController()
+    const abandoned = vectorStore.searchBestCurrent(space, 'm', [1, 0], hashes, sharedAbort.signal)
+    const shared = vectorStore.searchBestCurrent(space, 'm', [1, 0], hashes)
+    assert.equal(vectorCachePolicy.matrixBytes, (40 * 64 + 64) * 2 * 4, 'concurrent cold searches reserve one matrix')
+    setImmediate(() => sharedAbort.abort())
+    await assert.rejects(abandoned, { name: 'AbortError' })
+    assert.deepEqual(normalized((await shared)!), normalized(expected), 'one cancelled consumer does not cancel the shared cold load')
+    vectorStore.invalidateAll()
+    setImmediate(() => vectorStore.replace('unrelated-space', '0', 'm', [{ vector: [1, 0] }]))
+    assert.deepEqual(normalized((await vectorStore.searchBestCurrent(space, 'm', [1, 0], hashes))!), normalized(expected), 'unrelated vector writes do not restart a cold load')
+    const budget = vectorCachePolicy.maxMatrixBytes
+    try {
+      vectorCachePolicy.maxMatrixBytes = 1
+      vectorStore.invalidateAll()
+      assert.deepEqual(normalized((await vectorStore.searchBestCurrent(space, 'm', [1, 0], hashes))!), normalized(expected), 'oversized DB pages match cached scores')
+    } finally { vectorCachePolicy.maxMatrixBytes = budget; vectorStore.invalidateAll() }
+    const controller = new AbortController()
+    setImmediate(() => controller.abort())
+    await assert.rejects(vectorStore.searchBestCurrent(space, 'm', [1, 0], hashes, controller.signal), { name: 'AbortError' })
+    setImmediate(() => vectorStore.replace(space, '0', 'm', [{ vector: [0, 1], contentHash: 'current' }]))
+    assert.equal(await vectorStore.searchBestCurrent(space, 'm', [1, 0], hashes), null, 'a write during a yielded scan requires a fresh snapshot')
+  })
+
+  await t.test('matrix reservations retain cached and in-use spaces when a new space cannot fit', async () => {
+    const { vectorCachePolicy } = await import('../src/services/vectors/vectorStore')
+    const budget = vectorCachePolicy.maxMatrixBytes
+    const vector = new Float32Array(256)
+    vector[0] = 1
+    const add = (space: string, count: number) => vectorStore.replace(space, 'source', 'm', Array.from({ length: count }, () => ({ vector })))
+    try {
+      vectorStore.invalidateAll()
+      add('budget-small', 100)
+      add('budget-oversized', 2000)
+      add('budget-loading', 600)
+      add('budget-competing', 400)
+      add('budget-active', 1100)
+      add('budget-next', 900)
+      vectorCachePolicy.maxMatrixBytes = 1024 * 1024
+      vectorStore.search('budget-small', 'm', vector, { limit: 1 })
+      const smallBytes = (100 + 64) * 256 * 4
+      assert.equal(vectorCachePolicy.matrixBytes, smallBytes)
+      assert.equal(vectorStore.search('budget-oversized', 'm', vector, { limit: 1 })[0].score, 1)
+      assert.equal(vectorCachePolicy.matrixBytes, smallBytes, 'oversized synchronous loads do not evict a fitting cache')
+      assert.equal((await vectorStore.searchBestCurrent('budget-oversized', 'm', vector, new Map([['source', null]])))![0].score, 1)
+      assert.equal(vectorCachePolicy.matrixBytes, smallBytes, 'oversized cooperative loads preserve the cache')
+      const loading = vectorStore.searchBestCurrent('budget-loading', 'm', vector, new Map([['source', null]]))
+      const loadingBytes = smallBytes + (600 + 64) * 256 * 4
+      assert.equal(vectorCachePolicy.matrixBytes, loadingBytes)
+      assert.equal(vectorStore.search('budget-competing', 'm', vector, { limit: 1 })[0].score, 1)
+      assert.equal(vectorCachePolicy.matrixBytes, loadingBytes, 'a reservation that cannot fit alongside an in-flight load evicts nothing')
+      assert.equal((await loading)![0].score, 1)
+
+      vectorStore.invalidateAll()
+      vectorCachePolicy.maxMatrixBytes = 2 * 1024 * 1024
+      vectorStore.search('budget-small', 'm', vector, { limit: 1 })
+      vectorStore.search('budget-active', 'm', vector, { limit: 1 })
+      const activeBytes = vectorCachePolicy.matrixBytes
+      const scan = vectorStore.searchBestCurrent('budget-active', 'm', vector, new Map([['source', null]]))
+      await new Promise<void>(resolve => setImmediate(resolve))
+      assert.equal(vectorStore.search('budget-next', 'm', vector, { limit: 1 })[0].score, 1)
+      assert.equal(vectorCachePolicy.matrixBytes, activeBytes, 'a yielded scan keeps its matrix accounted and prevents destructive eviction')
+      assert.equal((await scan)![0].score, 1)
+    } finally { vectorCachePolicy.maxMatrixBytes = budget; vectorStore.invalidateAll() }
   })
 
   await t.test('another DB connection refreshes the cache and oversized spaces retain owner/source filtering', async () => {
@@ -289,16 +409,26 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
       assert.equal(vectorStore.search(space, 'm', [0, 1]).length, 2)
       other.prepare("DELETE FROM vectors WHERE space = ? AND source_key = 'a'").run(space)
       assert.deepEqual(vectorStore.search(space, 'm', [0, 1]).map(hit => hit.sourceKey), ['b'])
+      vectorStore.replace(space, 'many', 'm', Array.from({ length: 1100 }, () => ({ vector: [1, 0] })))
+      setImmediate(() => other.prepare("UPDATE vectors SET vector=? WHERE space=? AND source_key='many'").run(Buffer.from(new Float32Array([0, 1]).buffer), space))
+      assert.equal(await vectorStore.searchBestCurrent(space, 'm', [1, 0], new Map([['many', null]])), null, 'external commits invalidate a yielded scoring snapshot')
     } finally { other.close() }
     vectorStore.replace(space, 'private', 'm', [{ vector: [0, 1], ownerKey: 'other' }])
     vectorStore.replace(space, 'public', 'm', [{ vector: [1, 0], ownerKey: null }])
     const budget = vectorCachePolicy.maxMatrixBytes
     const options = { sourceKeys: ['b', 'public', 'private'], ownerKeys: ['reader', null], limit: 2 }
     const expected = vectorStore.search(space, 'm', [0, 1], options)
+    const hashes = new Map([['b', null], ['public', null]])
+    const expectedBySource = new Map<string, ReturnType<typeof vectorStore.search>[number]>()
+    for (const hit of vectorStore.search(space, 'm', [0, 1], { sourceKeys: [...hashes.keys()] })) {
+      if (hit.contentHash === hashes.get(hit.sourceKey) && !expectedBySource.has(hit.sourceKey)) expectedBySource.set(hit.sourceKey, hit)
+    }
+    const expectedBest = [...expectedBySource.values()]
     assert.ok(vectorCachePolicy.matrixBytes > 0)
     try {
       vectorCachePolicy.maxMatrixBytes = 1
       assert.deepEqual(vectorStore.search(space, 'm', [0, 1], options), expected, 'streamed search preserves the same scores and boundaries')
+      assert.deepEqual((await vectorStore.searchBestCurrent(space, 'm', [0, 1], hashes))!.sort((a,b) => a.sourceKey.localeCompare(b.sourceKey)), expectedBest.sort((a,b) => a.sourceKey.localeCompare(b.sourceKey)))
       assert.equal(vectorCachePolicy.matrixBytes, 0, 'oversized matrices are evicted rather than exempted from the budget')
     } finally { vectorCachePolicy.maxMatrixBytes = budget; vectorStore.invalidateAll() }
   })
@@ -356,7 +486,7 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     } finally { clearTimeout(timer); release(); await indexMessagesNow([id], 32); CodexChatStore.deleteThread(id) }
   })
 
-  await t.test('knowledge semantics: optional, permissions before ranking, and current content only', async () => {
+  await t.test('knowledge semantics: optional, permissions before ranking, and current content only', async t => {
     const { PostStore } = await import('../src/services/posts/postStore')
     const { KnowledgeStore } = await import('../src/services/posts/knowledgeStore')
     const { semanticPostCandidates, postSemanticStatus } = await import('../src/services/embeddings/postSemantic')
@@ -377,6 +507,61 @@ test('chat semantic: index, recall, lore, history search', { timeout: 60000 }, a
     assert.ok(vectorStore.get('post-knowledge', String(privatePost.id), embedding.EMBEDDING_MODEL_KEY).length)
     assert.deepEqual((await semanticPostCandidates(reader, '눈밭')).map(hit => hit.postId), [publicPost.id])
     assert.equal(postSemanticStatus(reader).indexed, 1)
+    await t.test('semantic search falls back after two conflicting scans', async t => {
+      const unstable = t.mock.method(vectorStore, 'searchBestCurrent', async () => null)
+      const hits = await semanticPostCandidates(reader, '눈밭')
+      assert.deepEqual(hits.map(hit => hit.postId), [publicPost.id])
+      assert.equal(unstable.mock.callCount(), 2)
+    })
+    await t.test('semantic fallback is read-only and pins vector data with post visibility', async t => {
+      const Database = (await import('better-sqlite3')).default
+      const { VECTOR_DB_PATH } = await import('../src/database/vectorDb')
+      const databases = db.pragma('database_list') as Array<{ name: string; file: string }>
+      const writers = databases.filter(item => ['main', 'main_db', 'search_db', 'vector_db'].includes(item.name))
+        .map(item => new Database(item.file))
+      const timeout = db.pragma('busy_timeout', { simple: true }) as number
+      try {
+        for (const writer of writers) writer.exec('BEGIN IMMEDIATE')
+        db.pragma('busy_timeout = 0')
+        const hits = await semanticPostCandidates(reader, '눈밭', undefined, { vector: fakeVector('눈밭') }, true)
+        assert.deepEqual(hits.map(hit => hit.postId), [publicPost.id], 'existing writers do not block the read-only fallback')
+      } finally {
+        db.pragma(`busy_timeout = ${timeout}`)
+        for (const writer of writers) { if (writer.inTransaction) writer.exec('ROLLBACK'); writer.close() }
+      }
+      const hash = vectorStore.contentHash('post-knowledge', String(publicPost.id), embedding.EMBEDDING_MODEL_KEY)
+      assert.ok(hash)
+      vectorStore.invalidateAll()
+      const external = new Database(VECTOR_DB_PATH)
+      const update = external.prepare("UPDATE vectors SET content_hash=? WHERE space='post-knowledge' AND source_key=?")
+      const search = vectorStore.search.bind(vectorStore)
+      t.mock.method(vectorStore, 'search', (...args: Parameters<typeof search>) => {
+        update.run('later-content', String(publicPost.id))
+        return search(...args)
+      })
+      try {
+        const hits = await semanticPostCandidates(reader, '눈밭', undefined, { vector: fakeVector('눈밭') }, true)
+        assert.deepEqual(hits.map(hit => hit.postId), [publicPost.id], 'a vector commit during the scan does not change its pinned snapshot')
+      } finally {
+        update.run(hash, String(publicPost.id))
+        external.close()
+        vectorStore.invalidateAll()
+      }
+    })
+    const hash = (db.prepare('SELECT content_hash FROM post_knowledge WHERE post_id=?').get(publicPost.id) as { content_hash: string }).content_hash
+    vectorStore.replace('post-knowledge', String(publicPost.id), embedding.EMBEDDING_MODEL_KEY,
+      Array.from({ length: 1100 }, () => ({ vector: fakeVector('눈밭'), contentHash: hash })))
+    const search = vectorStore.searchBestCurrent.bind(vectorStore)
+    let changed = false
+    t.mock.method(vectorStore, 'searchBestCurrent', (...args: Parameters<typeof search>) => {
+      if (!changed) {
+        changed = true
+        setImmediate(() => db.prepare("UPDATE posts SET status='hidden' WHERE id=?").run(publicPost.id))
+      }
+      return search(...args)
+    })
+    assert.deepEqual(await semanticPostCandidates(reader, '눈밭'), [], 'visibility is rechecked after a write during scoring')
+    db.prepare("UPDATE posts SET status='published' WHERE id=?").run(publicPost.id)
     publicPost = PostStore.update(owner, publicPost.id, { expectedRevision: publicPost.revision, body: '고춧가루를 넣고 스튜를 끓였다.' })
     assert.deepEqual(await semanticPostCandidates(reader, '눈밭'), [], 'a stale vector cannot return the old procedure')
     assert.equal(postSemanticStatus(reader).indexed, 0)

@@ -51,9 +51,11 @@ export function useAppearanceSettingsTab({
   const [appIconSource, setAppIconSource] = useState<AppIconSource | null>(null)
   const appIconRequestRef = useRef<AbortController | null>(null)
   const appIconRevisionRef = useRef(0)
+  const appIconSettingsRevisionRef = useRef<string | null>(null)
   // An imported package is only previewed on the live theme until the user applies or reverts it.
   const [importPreview, setImportPreview] = useState<{ appearance: AppearanceSettings; fileName: string } | null>(null)
   const effectiveAppearanceDraft = appearanceDraft ?? currentAppearance ?? null
+  const draftRevision = useSettingsRevision(revision, Boolean(effectiveAppearanceDraft && currentAppearance && !areSettingsDraftsEqual(effectiveAppearanceDraft, currentAppearance)))
 
   useEffect(() => () => {
     appIconRevisionRef.current += 1
@@ -65,8 +67,9 @@ export function useAppearanceSettingsTab({
   }, [appIconSource])
 
   const appIconMutation = useMutation({
-    mutationFn: (appIconDataUrl: string) => updateAppearanceSettings({ appIconDataUrl }),
+    mutationFn: ({ appIconDataUrl, expectedRevision }: { appIconDataUrl: string; expectedRevision: string }) => updateAppearanceSettings({ appIconDataUrl }, expectedRevision),
     onSuccess: (settings) => {
+      draftRevision(settings.pageSettingsRevisions?.appearance)
       syncSettingsCache(settings)
       // Registering the mark must preserve any other unsaved theme edits.
       setAppearanceDraft((draft) => draft ? { ...draft, appIconDataUrl: settings.appearance.appIconDataUrl } : settings.appearance)
@@ -86,8 +89,6 @@ export function useAppearanceSettingsTab({
     applyAppearanceTheme(savedAppearance)
   }, [effectiveAppearanceDraft, importPreview, isActive, savedAppearance])
 
-  const draftRevision = useSettingsRevision(revision, Boolean(effectiveAppearanceDraft && currentAppearance && !areSettingsDraftsEqual(effectiveAppearanceDraft, currentAppearance)))
-
   const appearanceMutation = useMutation({
     mutationFn: (patch: Partial<AppearanceSettings>) => updateAppearanceSettings(patch, draftRevision()),
     onSuccess: (settings) => {
@@ -97,8 +98,9 @@ export function useAppearanceSettingsTab({
   })
 
   const appearancePresetSlotsMutation = useMutation({
-    mutationFn: (presetSlots: AppearancePresetSlot[]) => updateAppearanceSettings({ presetSlots }),
+    mutationFn: (presetSlots: AppearancePresetSlot[]) => updateAppearanceSettings({ presetSlots }, draftRevision()),
     onSuccess: (settings) => {
+      draftRevision(settings.pageSettingsRevisions?.appearance)
       syncSettingsCache(settings)
       setAppearanceDraft((draft) =>
         draft
@@ -200,8 +202,8 @@ export function useAppearanceSettingsTab({
 
   const handleAppearancePresetSlotsSave = (presetSlots: AppearancePresetSlot[]) => {
     const normalizedPresetSlots = normalizeAppearancePresetSlots(presetSlots)
-    setAppearanceDraft((draft) => (draft ? { ...draft, presetSlots: normalizedPresetSlots } : draft))
-    void appearancePresetSlotsMutation.mutateAsync(normalizedPresetSlots)
+    setAppearanceDraft((draft) => ({ ...(draft ?? savedAppearance), presetSlots: normalizedPresetSlots }))
+    appearancePresetSlotsMutation.mutate(normalizedPresetSlots)
   }
 
   const handleAppearanceFontUpload = async (target: 'sans' | 'mono', file: File) => {
@@ -244,19 +246,20 @@ export function useAppearanceSettingsTab({
     notifyInfo(t({ ko: '{targetLabel} 업로드 폰트를 draft에서 해제했어. 저장하면 반영돼.', en: 'Cleared the {targetLabel} uploaded font from the draft. Save to apply.' }, { targetLabel: target === 'sans' ? t({ ko: '본문', en: 'body' }) : t({ ko: '모노', en: 'mono' }) }))
   }
 
-  const openAppIconFile = (file: File) => {
+  const openAppIconFile = (file: File, expectedRevision: string) => {
     if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif'].includes(file.type) || file.size > 20 * 1024 * 1024) {
       const message = t({ ko: '20MB 이하의 PNG, JPG, WebP, GIF, AVIF 이미지를 골라줘.', en: 'Choose a PNG, JPG, WebP, GIF, or AVIF image up to 20 MB.' })
       throw new Error(message)
     }
     appIconRequestRef.current?.abort()
     setIsLoadingAppIcon(false)
+    appIconSettingsRevisionRef.current = expectedRevision
     setAppIconSource({ id: ++appIconRevisionRef.current, url: URL.createObjectURL(file), name: file.name })
   }
 
   const handleAppIconUpload = async (file: File) => {
     try {
-      openAppIconFile(file)
+      openAppIconFile(file, draftRevision())
     } catch (error) {
       notifyError(error instanceof Error ? error.message : t({ ko: '이미지를 열지 못했어.', en: 'Could not open the image.' }))
       throw error
@@ -264,6 +267,7 @@ export function useAppearanceSettingsTab({
   }
 
   const handleLibraryAppIconSelect = async (compositeHash: string) => {
+    const expectedRevision = draftRevision()
     appIconRequestRef.current?.abort()
     const controller = new AbortController()
     appIconRequestRef.current = controller
@@ -282,7 +286,7 @@ export function useAppearanceSettingsTab({
       }
       const image = await response.blob()
       if (controller.signal.aborted || revision !== appIconRevisionRef.current) throw new DOMException('Canceled', 'AbortError')
-      openAppIconFile(new File([image], 'app-mark', { type: image.type }))
+      openAppIconFile(new File([image], 'app-mark', { type: image.type }), expectedRevision)
     } catch (error) {
       if (controller.signal.aborted || revision !== appIconRevisionRef.current) throw error
       notifyError(error instanceof Error ? error.message : t({ ko: '내부 이미지를 불러오지 못했어.', en: 'Could not load the app library image.' }))
@@ -299,6 +303,7 @@ export function useAppearanceSettingsTab({
     appIconRevisionRef.current += 1
     appIconRequestRef.current?.abort()
     setIsLoadingAppIcon(false)
+    appIconSettingsRevisionRef.current = null
     setAppIconSource(null)
   }
 
@@ -306,16 +311,17 @@ export function useAppearanceSettingsTab({
     if (appIconMutation.isPending) return
     appIconRequestRef.current?.abort()
     setIsLoadingAppIcon(false)
+    appIconSettingsRevisionRef.current = draftRevision()
     setAppIconSource({ id: ++appIconRevisionRef.current, url: effectiveAppearanceDraft?.appIconDataUrl || APP_ICON_SRC, name: 'app-mark' })
   }
 
   const handleAppIconRegister = async (dataUrl: string) => {
-    await appIconMutation.mutateAsync(dataUrl)
+    await appIconMutation.mutateAsync({ appIconDataUrl: dataUrl, expectedRevision: appIconSettingsRevisionRef.current ?? draftRevision() })
   }
 
   const handleAppIconReset = async () => {
     try {
-      await appIconMutation.mutateAsync('')
+      await appIconMutation.mutateAsync({ appIconDataUrl: '', expectedRevision: draftRevision() })
     } catch (error) {
       notifyError(error instanceof Error ? error.message : t({ ko: '앱 마크를 되돌리지 못했어.', en: 'Could not restore the app mark.' }))
       throw error

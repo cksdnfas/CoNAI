@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Download, Eye, Film, Locate, Settings2, Square } from 'lucide-react'
@@ -98,7 +98,8 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
   const info = infoQuery.data ?? null
 
   useEffect(() => { if (initialVideoHash) { setVideoHashes((current) => current.includes(initialVideoHash) ? current : [initialVideoHash, ...current]); setSelectedHash(initialVideoHash) } }, [initialVideoHash])
-  useEffect(() => { onVideoChange(selected) }, [selected, onVideoChange])
+  const syncVideoUrl = useEffectEvent((hash: string | null) => onVideoChange(hash))
+  useEffect(() => { syncVideoUrl(selected) }, [selected])
   useEffect(() => { writeStoredSpriteSettings({ form, output, save, presetId }) }, [form, output, save, presetId])
   // A size the user never set follows the selected video.
   useEffect(() => {
@@ -136,8 +137,14 @@ export function SpriteExtractTab({ active, initialVideoHash, onVideoChange, tool
     queryKey: ['sprite-batch-items', batchJobId],
     queryFn: () => getSpriteBatchItems(batchJobId as string),
     enabled: Boolean(batchJobId),
-    refetchInterval: 1000,
   })
+  const refetchLiveItems = liveItems.refetch
+  const batchPhase = batchJob.job?.phase
+  const batchProcessed = batchJob.job?.progress.processed
+  const batchCurrentLabel = batchJob.job?.progress.currentLabel
+  useEffect(() => {
+    if (batchJobId && batchProcessed !== undefined) void refetchLiveItems()
+  }, [batchJobId, batchPhase, batchProcessed, batchCurrentLabel, refetchLiveItems])
 
   const statuses = useMemo(() => {
     const items: SpriteBatchItem[] = batchJobId ? liveItems.data?.items ?? videoHashes.map((videoHash) => ({ videoHash, status: 'waiting' as const })) : batchResult?.items ?? []

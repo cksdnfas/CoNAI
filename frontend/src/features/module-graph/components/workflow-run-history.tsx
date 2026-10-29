@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Check, Loader2, RotateCcw, Square, X } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
@@ -10,6 +10,7 @@ import { ErrorState } from '@/components/ui/error-state'
 import { IconButton } from '@/components/ui/icon-button'
 import { Progress } from '@/components/ui/progress'
 import { useI18n } from '@/i18n'
+import { useNow } from '@/lib/use-now'
 import { getGraphExecutionProgress, type GraphExecutionProgress, type GraphExecutionArtifactRecord, type GraphExecutionListMeta, type GraphExecutionRecord, type GraphWorkflowRecord } from '@/lib/api-module-graph'
 import { cn } from '@/lib/utils'
 import { getArtifactPreviewUrl, getGraphExecutionStatusLabel, hasGraphArtifactVisualPreview, localizeGraphWorkflowErrorMessage } from '../module-graph-shared'
@@ -50,12 +51,7 @@ export function GraphExecutionStatusPill({ status, className }: { status: Execut
 }
 
 function useElapsedLabel(startIso: string | null | undefined, active: boolean) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    if (!active) return
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [active])
+  const now = useNow(1000, active)
   if (!startIso) return null
   const started = Date.parse(startIso)
   if (!Number.isFinite(started)) return null

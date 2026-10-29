@@ -13,6 +13,8 @@ import { migrateLlmModelRoutes } from './llmModelRoutesMigration';
 import { DEFAULT_JUDGE_PRESETS } from '../services/codex-chat/chatJudgeDefaults';
 import { splitExampleDialogue } from '@conai/shared';
 import { normalizeOpeningHistory, OPENING_HISTORY_MAX_ENTRIES, type ChatOpeningMessage } from '../services/codex-chat/chatOpeningHistory';
+import { migrateLoreEntryIds } from '../services/codex-chat/chatLorebookIds';
+import { ensureGraphWorkflowRevisionSchema } from './graphWorkflowRevisionSchema';
 
 /** Bootstrap core user-settings tables, indexes, and simple column backfills. */
 export function createUserSettingsSchema(db: Database.Database): void {
@@ -768,6 +770,7 @@ export function createUserSettingsSchema(db: Database.Database): void {
     ['folder_id', 'TEXT'],
     ['thread_id', 'INTEGER'],
     ['source_stamp', 'TEXT'],
+    ['revision', 'INTEGER NOT NULL DEFAULT 0'],
     // The book's own settings as JSON (key language); cached from lorebook.json for account and chat books.
     ['settings', 'TEXT'],
   ] as Array<[string, string]>) {
@@ -775,6 +778,10 @@ export function createUserSettingsSchema(db: Database.Database): void {
       db.exec(`ALTER TABLE chat_lorebooks ADD COLUMN ${columnName} ${definition}`);
     }
   }
+  db.exec(`CREATE TRIGGER IF NOT EXISTS chat_lorebooks_revision
+    AFTER UPDATE ON chat_lorebooks WHEN NEW.revision = OLD.revision
+    BEGIN UPDATE chat_lorebooks SET revision = OLD.revision + 1 WHERE id = NEW.id; END`);
+  migrateLoreEntryIds(db);
   db.exec('CREATE INDEX IF NOT EXISTS idx_chat_lorebooks_owner ON chat_lorebooks(owner_key, kind)');
   db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_lorebooks_folder ON chat_lorebooks(folder_id) WHERE folder_id IS NOT NULL');
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_lorebooks_thread ON chat_lorebooks(thread_id) WHERE kind = 'chat'");
@@ -971,6 +978,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     db.exec('ALTER TABLE chat_group_members ADD COLUMN max_tokens INTEGER');
   }
   const chatProfileColumns: Array<[string, string]> = [
+    ['revision', 'INTEGER NOT NULL DEFAULT 0'],
+    ['background_revision', 'INTEGER NOT NULL DEFAULT 0'],
     ['diagnostics_scope', "TEXT CHECK(diagnostics_scope IN ('view', 'content'))"],
     ['tagline', "TEXT NOT NULL DEFAULT ''"],
     ['lorebook_ids', 'TEXT'],
@@ -1058,6 +1067,13 @@ export function createUserSettingsSchema(db: Database.Database): void {
       db.exec(`ALTER TABLE llm_chat_profiles ADD COLUMN ${columnName} ${definition}`);
     }
   }
+  db.exec(`CREATE TRIGGER IF NOT EXISTS llm_chat_profiles_revision
+    AFTER UPDATE ON llm_chat_profiles WHEN NEW.revision = OLD.revision
+    BEGIN UPDATE llm_chat_profiles SET revision = OLD.revision + 1 WHERE id = NEW.id; END`);
+  db.exec(`CREATE TRIGGER IF NOT EXISTS llm_chat_profiles_background_revision
+    AFTER UPDATE OF background_image, background_hash ON llm_chat_profiles
+    WHEN NEW.background_image IS NOT OLD.background_image OR NEW.background_hash IS NOT OLD.background_hash
+    BEGIN UPDATE llm_chat_profiles SET background_revision = OLD.background_revision + 1 WHERE id = NEW.id; END`);
   migrateChatOpeningHistory(db);
   // The highest rating tier (rating_tiers.id) a model may be shown media of; null: no ceiling.
   if (!hasColumn('llm_model_slots', 'content_rating_tier_id')) {
@@ -1280,6 +1296,8 @@ export function createUserSettingsSchema(db: Database.Database): void {
     console.log('  Migrating graph_workflow_schedules: adding run_as_account_id column');
     db.exec('ALTER TABLE graph_workflow_schedules ADD COLUMN run_as_account_id INTEGER');
   }
+
+  ensureGraphWorkflowRevisionSchema(db);
 
   if (!hasColumn('generation_queue_jobs', 'requested_server_tag')) {
     console.log('  Migrating generation_queue_jobs: adding requested_server_tag column');

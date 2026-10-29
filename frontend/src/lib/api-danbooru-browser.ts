@@ -1,4 +1,4 @@
-import { fetchJson } from '@/lib/api-client'
+import { requestJson } from '@/lib/api-request'
 import type { ApiResponse } from '@/types/image'
 import type {
   DanbooruBrowserArtistRecord,
@@ -17,7 +17,7 @@ function appendPagingParams(searchParams: URLSearchParams, params?: { query?: st
 }
 
 async function requestDanbooruData<T>(path: string, fallbackMessage: string, init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<T>>(path, init)
+  const response = await requestJson<ApiResponse<T>>(path, init)
   if (!response.success) {
     throw new Error(response.error || fallbackMessage)
   }

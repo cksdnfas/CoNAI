@@ -8,6 +8,33 @@ const ALPHA_ON = 16
 /** Cell boundaries must be this much emptier than the sheet on average to count as a grid line. */
 const BOUNDARY_RATIO = 0.35
 
+// Share two decode slots across all tabs and overlapping selections. Each slot can hold a full source image
+// plus a canvas and pixel buffer of up to 2048² RGBA pixels each; this bounds memory, not selection size.
+const DECODE_SLOTS = 2
+let activeDecodes = 0
+const waitingDecodes = new Set<() => void>()
+
+function acquireDecodeSlot(signal?: AbortSignal) {
+  if (signal?.aborted) return Promise.resolve(false)
+  return new Promise<boolean>((resolve) => {
+    if (activeDecodes < DECODE_SLOTS) {
+      activeDecodes++
+      resolve(true)
+    } else {
+      const cancel = () => { waitingDecodes.delete(resume); resolve(false) }
+      const resume = () => { signal?.removeEventListener('abort', cancel); resolve(true) }
+      waitingDecodes.add(resume)
+      signal?.addEventListener('abort', cancel, { once: true })
+    }
+  })
+}
+
+function releaseDecodeSlot() {
+  const next = waitingDecodes.values().next().value
+  if (next) { waitingDecodes.delete(next); next() }
+  else activeDecodes--
+}
+
 /** Picks the finest exact split whose cell boundaries fall on (nearly) empty pixel lines. */
 function detectAxis(profile: Float32Array, size: number) {
   const mean = profile.reduce((sum, value) => sum + value, 0) / profile.length
@@ -31,16 +58,23 @@ function detectAxis(profile: Float32Array, size: number) {
  * Reads the sheet's alpha to find its grid (no spacing) and drops trailing empty cells from the frame count.
  * Opaque or unreadable images come back as one cell for the user to set.
  */
-export async function detectSheetGrid(hash: string, width: number, height: number): Promise<SheetGrid> {
+export async function detectSheetGrid(hash: string, width: number, height: number, signal?: AbortSignal): Promise<SheetGrid> {
   const fallback = (): SheetGrid => ({ columns: 1, rows: 1, frameCount: 1 })
+  if (!await acquireDecodeSlot(signal)) return fallback()
+  let image: HTMLImageElement | undefined
+  let canvas: HTMLCanvasElement | undefined
+  const cancelImage = () => image?.removeAttribute('src')
+  signal?.addEventListener('abort', cancelImage, { once: true })
   try {
-    const image = new Image()
+    if (signal?.aborted) return fallback()
+    image = new Image()
     image.src = libraryMediaFileUrl(hash)
     await image.decode()
+    if (signal?.aborted) return fallback()
     const scale = Math.min(1, MAX_SIDE / Math.max(width, height))
     const w = Math.max(1, Math.round(width * scale))
     const h = Math.max(1, Math.round(height * scale))
-    const canvas = document.createElement('canvas')
+    canvas = document.createElement('canvas')
     canvas.width = w
     canvas.height = h
     const context = canvas.getContext('2d', { willReadFrequently: true })
@@ -69,5 +103,10 @@ export async function detectSheetGrid(hash: string, width: number, height: numbe
     return { columns, rows, frameCount }
   } catch {
     return fallback()
+  } finally {
+    signal?.removeEventListener('abort', cancelImage)
+    if (canvas) { canvas.width = 0; canvas.height = 0 }
+    image?.removeAttribute('src')
+    releaseDecodeSlot()
   }
 }

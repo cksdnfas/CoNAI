@@ -10,7 +10,7 @@ import type { CodexChatMessageRecord, CodexChatThreadRecord } from '../src/servi
 
 /** The suggestion connection answers `reply`; `requests` collects what was sent to it. */
 function mockConnection(t: TestContext, reply: string | (() => Response)) {
-  const requests: Array<{ model: string; messages: Array<{ role: string; content: string }> }> = []
+  const requests: Array<{ model: string; max_tokens?: number; messages: Array<{ role: string; content: string }> }> = []
   // 1 chat, 2 suggestions, 3 a connection that is gone, 4 the writer profile's model, 9 the user profile's.
   mockModelRows(t, { 1: ['chat-llm', 'big'], 2: ['small-llm', 'tiny'], 3: ['gone', 'x'], 4: ['small-llm', 'writer-model'], 9: ['small-llm', 'slot-model'] })
   t.mock.method(ExternalApiProvider, 'findByName', (name: string) => name === 'small-llm' || name === 'chat-llm'
@@ -42,6 +42,8 @@ test('parseSuggestions: a JSON array, a fenced one, or lines; trimmed, deduplica
   assert.deepEqual(parseSuggestions('1. 첫째\n2. 둘째\n- 둘째\n'), ['첫째', '둘째'])
   assert.deepEqual(parseSuggestions('[{"text": "x"}, 3, ""]'), ['x'])
   assert.deepEqual(parseSuggestions('   '), [])
+  const long = 'A complete suggestion. '.repeat(80).trim()
+  assert.deepEqual(parseSuggestions(JSON.stringify([long])), [long])
 })
 
 const modelOf = (runner: ReturnType<typeof suggestionRunnerOf>) => runner?.kind === 'llm' ? [runner.target.providerName, runner.target.model] : runner ? ['codex', runner.model] : null
@@ -104,12 +106,27 @@ test('suggestReplies: a user profile writer adds its description, unless it is t
 test('suggestReplies: a writer profile adds its prompt, placeholders filled, disabled sections left out', async (t) => {
   const requests = mockConnection(t, '["a"]')
   t.mock.method(ChatProfileStore, 'find', (id: number) => (id === 2 ? writer : null))
-  await suggestReplies({ ...profile, suggestProfileId: 2 }, thread, [message(1, 'assistant', 'hi')], () => '유나')
+  await suggestReplies({ ...profile, suggestProfileId: 2 }, { ...thread, max_tokens: 1234 }, [message(1, 'assistant', 'hi')], () => '유나')
   assert.equal(requests[0].model, 'writer-model')
+  assert.equal(requests[0].max_tokens, 1234, 'the chat override also applies to a linked auxiliary writer')
   const system = requests[0].messages[0].content
   assert.match(system, /## 추천 지시 \(대필\)\n민수답게, 유나를 놀리는 쪽으로\./)
   assert.match(system, /### 말투\n짧게 끊어 말함\./)
   assert.doesNotMatch(system, /안 보임/)
+  const { learnServerContextLimit } = await import('../src/services/codex-chat/serverContextLimit')
+  learnServerContextLimit({ providerName: 'small-llm', model: 'writer-model' }, 'context length (2048 tokens)')
+  const newest = 'NEWEST-TURN ' + 'complete sentence. '.repeat(20).trim()
+  await suggestReplies({ ...profile, suggestProfileId: 2 }, thread, [
+    message(1, 'user', 'OLDER-TURN ' + 'old words '.repeat(3000)), message(2, 'assistant', 'OLDER-ANSWER'),
+    message(3, 'user', newest), message(4, 'assistant', 'NEWEST-ANSWER'),
+  ], () => '유나')
+  const fitted = requests.at(-1)!.messages[1].content
+  assert.doesNotMatch(fitted, /OLDER-TURN|OLDER-ANSWER/)
+  assert.ok(fitted.includes(newest))
+  assert.match(fitted, /NEWEST-ANSWER/)
+  const count = requests.length
+  await assert.rejects(suggestReplies({ ...profile, suggestProfileId: 2 }, thread, [message(1, 'user', 'too long '.repeat(5000))], () => '유나'), /최신 턴/)
+  assert.equal(requests.length, count, 'an oversized mandatory turn is rejected without a model request')
 })
 
 test('transcript: reader text, no block fences, no reply labels, last turns only', () => {
@@ -120,6 +137,8 @@ test('transcript: reader text, no block fences, no reply labels, last turns only
   ]
   const text = buildSuggestionTranscript(messages, '민수', () => '유나', new Set(['vitals']))
   assert.equal(text, '유나: "어서 와."\n\n민수: 안녕')
+  const long = 'Full input sentence. '.repeat(100) + 'LAST'
+  assert.ok(buildSuggestionTranscript([...messages, message(4, 'user', long)], '민수', () => '유나', new Set(['vitals'])).endsWith(long))
 })
 
 test('suggestReplies: asks the suggestion model with the persona and transcript, returns the parsed list', async (t) => {

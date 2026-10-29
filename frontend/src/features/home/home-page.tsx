@@ -102,7 +102,7 @@ export function HomePage() {
     isAssignModalOpen,
     setIsAssignModalOpen,
     emptyStateTitle,
-    emptyStateDescription,
+    hiddenGroupsEmpty,
     errorTitle,
     handleRetryInitialLoad,
     handleRetryNextPage,
@@ -304,8 +304,11 @@ export function HomePage() {
         <EmptyState
           icon={appliedChips.length > 0 ? SearchX : ImageOff}
           title={emptyStateTitle}
-          description={emptyStateDescription}
-          action={!isAnonymousSession && appliedChips.length > 0 ? (
+          action={hiddenGroupsEmpty ? (
+            <Button size="sm" variant="secondary" onClick={() => setHidingEnabled(false)}>
+              {t({ ko: '숨긴 그룹 보이기', en: 'Show hidden groups' })}
+            </Button>
+          ) : !isAnonymousSession && appliedChips.length > 0 ? (
             <Button size="sm" variant="secondary" onClick={clearAppliedChips}>
               {t({ ko: '필터 모두 지우기', en: 'Clear all filters' })}
             </Button>
@@ -323,7 +326,7 @@ export function HomePage() {
             max={maxHomeColumnCount}
             onChange={setHomeColumnCount}
             onReset={resetHomeColumnCount}
-            className={selectedIds.length > 0 ? 'bottom-24' : undefined}
+            aboveSelectionBar={selectedIds.length > 0}
           />
 
           <ImageList

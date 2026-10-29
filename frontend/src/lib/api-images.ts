@@ -1,4 +1,4 @@
-import { buildApiUrl, fetchJson, triggerBlobDownload } from '@/lib/api-client'
+import { buildApiUrl, triggerBlobDownload } from '@/lib/api-client'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import {
   downloadSingleMedia,
@@ -8,7 +8,7 @@ import {
   saveDownloadBlob,
   type SingleMediaDownloadSource,
 } from '@/lib/download-utils'
-import { requestApiData } from '@/lib/api-request'
+import { requestApiData, requestJson } from '@/lib/api-request'
 import type { ApiResponse, ImageListPayload, ImageRecord } from '@/types/image'
 import type { SimilaritySortBy, SimilaritySortOrder } from '@conai/shared'
 import type { PromptSimilarityQueryResult, SimilarityQueryResult } from '@/types/similarity'
@@ -66,7 +66,7 @@ export async function getImages(params?: {
     }
   }
 
-  const response = await fetchJson<ApiResponse<ImageListPayload>>(`/api/images?${searchParams.toString()}`, init)
+  const response = await requestJson<ApiResponse<ImageListPayload>>(`/api/images?${searchParams.toString()}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.list.load')
   }
@@ -82,7 +82,7 @@ export async function getImages(params?: {
  */
 export async function getImagesCount(excludeGroupIds: number[] = [], init?: RequestInit) {
   const query = excludeGroupIds.length > 0 ? `?exclude_group_ids=${excludeGroupIds.join(',')}` : ''
-  const response = await fetchJson<ApiResponse<{ total: number }>>(`/api/images/count${query}`, init)
+  const response = await requestJson<ApiResponse<{ total: number }>>(`/api/images/count${query}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.list.load')
   }
@@ -90,7 +90,7 @@ export async function getImagesCount(excludeGroupIds: number[] = [], init?: Requ
 }
 
 export async function searchImagesComplex(input: ComplexImageSearchRequest, init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<ImageListPayload>>(`/api/images/search/complex`, {
+  const response = await requestJson<ApiResponse<ImageListPayload>>(`/api/images/search/complex`, {
     ...init,
     method: 'POST',
     headers: {
@@ -105,6 +105,25 @@ export async function searchImagesComplex(input: ComplexImageSearchRequest, init
   }
 
   return response.data
+}
+
+export const IMAGE_BATCH_MAX_COUNT = 500
+
+/** Load compact library records in the requested order, up to IMAGE_BATCH_MAX_COUNT. */
+export async function getImagesBatch(compositeHashes: string[], init?: RequestInit) {
+  const response = await requestJson<ApiResponse<ImageListPayload>>('/api/images/batch', {
+    ...init,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers ?? {}),
+    },
+    body: JSON.stringify({ composite_hashes: compositeHashes }),
+  })
+  if (!response.success) {
+    throw createApiFallbackError(response.error, 'images.list.load')
+  }
+  return response.data.images
 }
 
 type ImageDetailRequestSource = Pick<ImageRecord, 'detail_url' | 'detail_scope_key'>
@@ -126,7 +145,7 @@ export function getImageDetailRequestUrl(compositeHash: string, source?: ImageDe
 }
 
 export async function getImage(compositeHash: string, init?: RequestInit, source?: ImageDetailRequestSource | null) {
-  const response = await fetchJson<ApiResponse<ImageRecord>>(getImageDetailRequestUrl(compositeHash, source), init)
+  const response = await requestJson<ApiResponse<ImageRecord>>(getImageDetailRequestUrl(compositeHash, source), init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.detail.load')
   }
@@ -142,7 +161,7 @@ function metadataRewriteHeaders(response: Response) {
 }
 
 export async function deleteImagesBulk(compositeHashes: string[]) {
-  const response = await fetchJson<ApiResponse<{
+  const response = await requestJson<ApiResponse<{
     message: string
     details: {
       deleted: number
@@ -165,39 +184,8 @@ export async function deleteImagesBulk(compositeHashes: string[]) {
   return response.data
 }
 
-export interface BatchImageTagResultItem {
-  composite_hash: string
-  success: boolean
-  auto_tags?: unknown
-  error?: string
-  error_type?: string
-}
-
-export interface BatchImageTagResult {
-  total: number
-  success_count: number
-  fail_count: number
-  results: BatchImageTagResultItem[]
-}
-
-export async function batchTagImages(compositeHashes: string[]) {
-  const response = await fetchJson<ApiResponse<BatchImageTagResult>>('/api/images/batch-tag', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ image_ids: compositeHashes }),
-  })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'images.batchTag')
-  }
-
-  return response.data
-}
-
 export async function getImageDuplicates(compositeHash: string, threshold = 5, init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/duplicates?threshold=${threshold}`, init)
+  const response = await requestJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/duplicates?threshold=${threshold}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.duplicates.load')
   }
@@ -240,7 +228,7 @@ export async function getSimilarImages(
   searchParams.set('sortBy', params?.sortBy ?? 'similarity')
   searchParams.set('sortOrder', params?.sortOrder ?? 'DESC')
 
-  const response = await fetchJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/similar?${searchParams.toString()}`, init)
+  const response = await requestJson<ApiResponse<SimilarityQueryResult>>(`/api/images/${compositeHash}/similar?${searchParams.toString()}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.similar.load')
   }
@@ -251,7 +239,7 @@ export type VectorSimilarityBasis = 'content' | 'style'
 
 /** Which embedding searches one image can take part in (it has an image vector / a style vector). */
 export async function getImageVectorAvailability(compositeHash: string, init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<Record<VectorSimilarityBasis, boolean>>>(`/api/images/${compositeHash}/vector-similarity`, init)
+  const response = await requestJson<ApiResponse<Record<VectorSimilarityBasis, boolean>>>(`/api/images/${compositeHash}/vector-similarity`, init)
   if (!response.success || !response.data) {
     throw createApiFallbackError(response.error, 'images.vectorSimilar.load')
   }
@@ -260,7 +248,7 @@ export async function getImageVectorAvailability(compositeHash: string, init?: R
 
 /** Images closest to one image by what it shows (content) or by its drawing style; `similarity` is cosine × 100. */
 export async function getVectorSimilarImages(compositeHash: string, basis: VectorSimilarityBasis, limit: number, init?: RequestInit) {
-  const response = await fetchJson<ApiResponse<{ similar: Array<{ image: ImageRecord; similarity: number }>; total: number }>>(
+  const response = await requestJson<ApiResponse<{ similar: Array<{ image: ImageRecord; similarity: number }>; total: number }>>(
     `/api/images/${compositeHash}/similar-${basis}?limit=${Math.max(1, Math.round(limit))}`,
     init,
   )
@@ -277,7 +265,7 @@ export async function getPromptSimilarImages(compositeHash: string, limit?: numb
   }
 
   const query = searchParams.toString()
-  const response = await fetchJson<ApiResponse<PromptSimilarityQueryResult>>(`/api/images/prompt-similarity/by-image/${compositeHash}${query ? `?${query}` : ''}`, init)
+  const response = await requestJson<ApiResponse<PromptSimilarityQueryResult>>(`/api/images/prompt-similarity/by-image/${compositeHash}${query ? `?${query}` : ''}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'images.promptSimilar.load')
   }

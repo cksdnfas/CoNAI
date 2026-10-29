@@ -37,10 +37,15 @@ import { registerAudioEditExportTools } from './tools/audioEditExportTools';
 import { registerWebTools } from './tools/webTools';
 import { registerExternalMcpTools } from './tools/externalMcpTools';
 import { registerPluginServerTools } from './tools/pluginServerTools';
+import { findPluginServerTool } from '../services/plugins/pluginServerTools';
 import { isContextToolAllowed, requireMcpToolAccess } from './toolAccess';
 import { ChatGenerationPresetStore } from '../services/codex-chat/chatGenerationPresets';
 import { createToolCatalog, isDirectChatTool, type ToolCategoryId } from './toolCatalog';
 import { registerAppGuideTools } from './tools/appGuideTools';
+
+type ToolRegistrar = (server: McpServer, context: McpRequestContext) => void;
+// Only names and registrar functions are shared; handlers and their account/workspace context are never cached.
+const pluginToolRegistrars = new Map<string, ToolRegistrar>();
 
 
 
@@ -58,6 +63,18 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
 
   const originalRegister = server.registerTool.bind(server) as (...toolArgs: unknown[]) => unknown;
   const registerDirect = (args: unknown[]) => { originalRegister(...args); };
+  const singlePluginTool = context.source === 'plugin' && context.omitPluginTools && context.toolAllowlist?.length === 1
+    ? context.toolAllowlist[0] : undefined;
+  const selectedRegistrar = singlePluginTool
+    ? findPluginServerTool(singlePluginTool) ? registerPluginServerTools
+      : singlePluginTool.startsWith('workspace_') ? registerWorkspaceTools : pluginToolRegistrars.get(singlePluginTool)
+    : undefined;
+  let currentRegistrar: ToolRegistrar | undefined;
+  const registerSelected = (registrar: ToolRegistrar) => {
+    if (selectedRegistrar && selectedRegistrar !== registrar) return;
+    currentRegistrar = registrar;
+    try { registrar(server, context); } finally { currentRegistrar = undefined; }
+  };
   // Chat agents get the app tools as a table of contents (toolCatalog.ts); other clients list every tool.
   const catalog = !context.research && isChatMcpSource(context.source) && context.toolCatalog !== false ? createToolCatalog(server, registerDirect, context.toolCatalogBudget, context.chatContext) : null;
   let category: ToolCategoryId = 'chat';
@@ -65,6 +82,9 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   if (isChatMcpSource(context.source) && context.generationPresetSnapshot === undefined) context.generationPresetSnapshot = JSON.stringify(ChatGenerationPresetStore.resolve(context.generationPresetIds ?? []));
   server.registerTool = ((...args: unknown[]) => {
     const toolName = typeof args[0] === 'string' ? args[0] : '';
+    if (context.source === 'plugin' && currentRegistrar && currentRegistrar !== registerPluginServerTools && currentRegistrar !== registerExternalMcpTools) {
+      pluginToolRegistrars.set(toolName, currentRegistrar);
+    }
     if (!isContextToolAllowed(context, toolName)) return undefined;
     const handler = args[args.length - 1];
     if (typeof handler === 'function' && (isChatMcpSource(context.source) || context.requester || context.keyGroup !== undefined)) {
@@ -89,52 +109,52 @@ export function createMcpServer(context: McpRequestContext = { scopes: ALL_MCP_H
   }) as typeof server.registerTool;
 
   inCategory('prompts', () => {
-    registerPromptTools(server);
-    registerPromptPresetTools(server);
-    registerPromptOrganizationTools(server);
-    registerResourceTools(server);
+    registerSelected(registerPromptTools);
+    registerSelected(registerPromptPresetTools);
+    registerSelected(registerPromptOrganizationTools);
+    registerSelected(registerResourceTools);
   });
-  inCategory('characters', () => registerCharacterLibraryTools(server, context));
+  inCategory('characters', () => registerSelected(registerCharacterLibraryTools));
   inCategory('generation', () => {
-    registerGenerationTools(server, context);
-    registerChatGenerationTools(server, context);
+    registerSelected(registerGenerationTools);
+    registerSelected(registerChatGenerationTools);
   });
   inCategory('workflows', () => {
-    registerGraphWorkflowTools(server, context);
-    registerWorkflowTransferTools(server);
+    registerSelected(registerGraphWorkflowTools);
+    registerSelected(registerWorkflowTransferTools);
   });
   inCategory('images', () => {
-    registerImageTools(server, context);
-    registerImageResizeTools(server, context);
+    registerSelected(registerImageTools);
+    registerSelected(registerImageResizeTools);
   });
-  inCategory('files', () => registerFileStoreTools(server, context));
-  inCategory('files', () => registerWorkspaceTools(server, context));
-  if (!context.omitPluginTools) inCategory('files', () => registerPluginTools(server, context));
-  if (!context.omitPluginTools) inCategory('plugins', () => registerPluginAuthoringTools(server, context));
-  inCategory('posts', () => registerPostTools(server, context));
-  inCategory('image_groups', () => registerImageGroupTools(server, context));
-  inCategory('emoticons', () => registerEmoticonTools(server, context));
-  inCategory('wallpaper', () => registerWallpaperTools(server));
+  inCategory('files', () => registerSelected(registerFileStoreTools));
+  inCategory('files', () => registerSelected(registerWorkspaceTools));
+  if (!context.omitPluginTools) inCategory('files', () => registerSelected(registerPluginTools));
+  if (!context.omitPluginTools) inCategory('plugins', () => registerSelected(registerPluginAuthoringTools));
+  inCategory('posts', () => registerSelected(registerPostTools));
+  inCategory('image_groups', () => registerSelected(registerImageGroupTools));
+  inCategory('emoticons', () => registerSelected(registerEmoticonTools));
+  inCategory('wallpaper', () => registerSelected(registerWallpaperTools));
   inCategory('audio', () => {
-    registerAudioTools(server, context);
-    registerAudioGenerationTools(server, context);
-    registerAudioEditExportTools(server, context);
+    registerSelected(registerAudioTools);
+    registerSelected(registerAudioGenerationTools);
+    registerSelected(registerAudioEditExportTools);
   });
-  registerChatRoomTools(server, context);
-  registerChatRoomListTools(server, context);
-  registerChatTaskTools(server, context);
-  registerChatChoiceTools(server, context);
-  registerChatAgentTools(server, context);
-  registerChatLoreTools(server, context);
-  registerChatLinkedFileTools(server, context);
-  registerChatSettingsTools(server, context);
-  inCategory('chat_setup', () => registerChatSetupTools(server, context));
-  registerChatPageTools(server, context);
-  inCategory('sprite', () => registerSpriteTools(server, context));
-  inCategory('web', () => registerWebTools(server, context));
-  inCategory('external', () => registerExternalMcpTools(server, context));
-  inCategory('plugins', () => registerPluginServerTools(server, context));
-  inCategory('guide', () => registerAppGuideTools(server));
+  registerSelected(registerChatRoomTools);
+  registerSelected(registerChatRoomListTools);
+  registerSelected(registerChatTaskTools);
+  registerSelected(registerChatChoiceTools);
+  registerSelected(registerChatAgentTools);
+  registerSelected(registerChatLoreTools);
+  registerSelected(registerChatLinkedFileTools);
+  registerSelected(registerChatSettingsTools);
+  inCategory('chat_setup', () => registerSelected(registerChatSetupTools));
+  registerSelected(registerChatPageTools);
+  inCategory('sprite', () => registerSelected(registerSpriteTools));
+  inCategory('web', () => registerSelected(registerWebTools));
+  inCategory('external', () => registerSelected(registerExternalMcpTools));
+  inCategory('plugins', () => registerSelected(registerPluginServerTools));
+  inCategory('guide', () => registerSelected(registerAppGuideTools));
   catalog?.install();
 
   return server;

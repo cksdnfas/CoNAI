@@ -16,7 +16,7 @@ const router = Router();
 
 router.get('/vibes', requirePermission('workflows.view'), requirePermission('images.view'), async (req: Request<{}, {}, {}, { model?: string }>, res: Response) => {
   const items = await listNaiVibeAssets(req.query.model);
-  res.json({ items: items.map(({ encoded, ...item }) => item) });
+  res.json({ items });
 });
 
 router.get('/vibes/:assetId', requirePermission('workflows.view'), requirePermission('images.view'), async (req: Request<{ assetId: string }>, res: Response) => {

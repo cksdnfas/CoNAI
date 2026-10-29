@@ -1,4 +1,4 @@
-import { fetchApiData as requestFolderData } from '@/lib/api-client'
+import { requestApiData as requestFolderData } from '@/lib/api-request'
 import type {
   FolderScanLog,
   FolderWatcherStatus,

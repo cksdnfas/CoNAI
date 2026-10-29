@@ -30,7 +30,7 @@ import {
 import { CHAT_PROFILES_QUERY_KEY, listChatProfiles } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { ChatProfileAvatar } from './chat-profile-avatar'
-import { ChatProfilePicker, ChatRoomFace, ChatRoomPicker } from './chat-room-picker'
+import { ChatProfileSelect, ChatRoomFace, ChatRoomPicker } from './chat-room-picker'
 import { useCodexChat } from './codex-chat-context'
 import { useChatPageRegistration } from './chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageObject, pageText } from './page-action-helpers'
@@ -290,7 +290,7 @@ export function ChatRoutineEditor({ open, routine, presetThreadId = null, onClos
             ]}
           />
           {draft.target === 'dedicated'
-            ? <ChatProfilePicker profiles={profiles} value={draft.profileId} onChange={(value) => set('profileId', value)} disabled={save.isPending} />
+            ? <ChatProfileSelect profiles={profiles} value={draft.profileId} onChange={(value) => set('profileId', value)} disabled={save.isPending} />
             : <ChatRoomPicker profilesById={profilesById} value={draft.threadId} onChange={(value) => set('threadId', value)} disabled={save.isPending} />}
         </FramedField>
         <Field label={t({ ko: '지시', en: 'Instruction' })}>

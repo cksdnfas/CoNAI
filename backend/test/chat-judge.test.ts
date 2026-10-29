@@ -93,11 +93,145 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
   })
 
+  await t.test('Codex finalization is shared, settles storage failure and holds deletion until persistence ends', async s => {
+    const { CodexChatService, finishTurn } = await import('../src/services/codex-chat/codexChatService')
+    const threadId = CodexChatStore.createThread(1, 'Finalization', 'codex', null)
+    let resolve!: (message: any) => void
+    let reject!: (error: unknown) => void
+    const finished = new Promise<any>((yes, no) => { resolve = yes; reject = no })
+    let release!: () => void
+    const held = new Promise<void>(done => { release = done })
+    let writes = 0
+    let closed = 0
+    const turn: any = {
+      chatThreadId: threadId, codexThreadId: 'test-finalization', turnId: null, controller: new AbortController(),
+      agentMessages: new Map([['answer', 'kept reply']]), commentaryItems: new Set(), toolCalls: new Map(), listeners: new Set(),
+      finished, resolveFinished: resolve, rejectFinished: reject, delivery: { close: () => { closed++ } },
+      persist: async (reply: any) => {
+        await held
+        assert.ok(CodexChatStore.findThreadById(threadId), 'the thread survives until its writer is done')
+        writes++
+        const id = CodexChatStore.addMessage({ thread_id: threadId, role: 'assistant', ...reply })
+        return CodexChatStore.findMessage(threadId, id)
+      },
+    }
+    const session: any = { activeTurns: new Map([[turn.codexThreadId, turn]]), idleTimer: null }
+    const finalization = finishTurn(session, turn, 'completed', null)
+    assert.equal(finishTurn(session, turn, 'interrupted', null), finalization)
+    let deleted = false
+    const deletion = CodexChatService.deleteThread(requester, threadId).then(() => { deleted = true })
+    await Promise.resolve()
+    assert.equal(deleted, false)
+    assert.ok(CodexChatService.isRunning(threadId))
+    release()
+    assert.equal((await finished).content, 'kept reply')
+    await deletion
+    assert.equal(writes, 1)
+    assert.equal(closed, 1)
+    assert.equal(CodexChatStore.findThreadById(threadId), undefined)
+    assert.equal(CodexChatService.isRunning(threadId), false)
+    clearTimeout(session.idleTimer)
+
+    const failedThread = CodexChatStore.createThread(1, 'Failed finalization', 'codex', null)
+    const failure = new Error('storage unavailable')
+    const failed = new Promise<any>((yes, no) => { resolve = yes; reject = no })
+    const rejected = assert.rejects(failed, failure)
+    const failedEvents: string[] = []
+    const broken: any = { ...turn, chatThreadId: failedThread, finalization: undefined, finished: failed,
+      controller: new AbortController(), resolveFinished: resolve, rejectFinished: reject,
+      listeners: new Set([(event: any) => failedEvents.push(event.type)]),
+      delivery: { close: () => { closed++; throw new Error('cleanup also failed') } },
+      persist: async () => { throw failure } }
+    session.activeTurns.set(broken.codexThreadId, broken)
+    await finishTurn(session, broken, 'completed', null)
+    await rejected
+    assert.deepEqual(failedEvents, [], 'only the caller reports the rejected completion')
+    assert.equal(closed, 2)
+    assert.ok(broken.controller.signal.aborted)
+    assert.equal(session.activeTurns.size, 0)
+    assert.equal(CodexChatService.isRunning(failedThread), false)
+    clearTimeout(session.idleTimer)
+
+    let translating!: () => void
+    const translatingStarted = new Promise<void>(done => { translating = done })
+    const interrupted = new Promise<any>((yes, no) => { resolve = yes; reject = no })
+    const translated: any = { ...turn, chatThreadId: failedThread, finalization: undefined, finished: interrupted,
+      controller: new AbortController(), resolveFinished: resolve, rejectFinished: reject, persist: undefined,
+      translate: () => new Promise((_resolve, rejectTranslation) => {
+        translating()
+        translated.controller.signal.addEventListener('abort', () => rejectTranslation(new Error('cancelled')), { once: true })
+      }) }
+    session.activeTurns.set(translated.codexThreadId, translated)
+    const interruptedFinalization = finishTurn(session, translated, 'completed', null)
+    await translatingStarted
+    await CodexChatService.interrupt(requester, failedThread)
+    assert.equal((await interrupted).status, 'interrupted')
+    assert.equal(CodexChatStore.latestMessage(failedThread)?.content, 'kept reply')
+    await interruptedFinalization
+    clearTimeout(session.idleTimer)
+
+    const stored = CodexChatStore.latestMessage(failedThread)!
+    const completed = new Promise<any>((yes, no) => { resolve = yes; reject = no })
+    const completedEvents: string[] = []
+    const cleanupFailure: any = { ...turn, chatThreadId: failedThread, finalization: undefined, finished: completed,
+      controller: new AbortController(), resolveFinished: resolve, rejectFinished: reject,
+      listeners: new Set([(event: any) => completedEvents.push(event.type)]),
+      persist: async () => stored, delivery: { close: () => { throw new Error('cleanup failed after storing') } } }
+    session.activeTurns.set(cleanupFailure.codexThreadId, cleanupFailure)
+    await finishTurn(session, cleanupFailure, 'completed', null)
+    assert.equal(await completed, stored, 'a stored reply stays successful even if cleanup fails')
+    assert.deepEqual(completedEvents, ['done'])
+    assert.equal(CodexChatService.isRunning(failedThread), false)
+  })
+
+  await t.test('rejected sends never resume waiting tasks; successful delivery notifies after the row exists', async s => {
+    const { ChatTaskRunner, ChatTaskStore } = await import('../src/services/codex-chat/chatTasks')
+    const { onChatUserSend } = await import('../src/services/codex-chat/chatSendEvents')
+    ChatTaskRunner.start()
+    const thread = threadOf(plain.id)
+    const task = ChatTaskStore.create(thread.id, 'Wait for input', [{ title: 'Continue' }])
+    ChatTaskStore.update(task.id, { status: 'waiting', wait: 'user' })
+    let notifications = 0
+    const unsubscribe = onChatUserSend(id => {
+      if (id !== thread.id) return
+      notifications++
+      assert.ok(CodexChatStore.latestMessage(id), 'delivery is already persisted')
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'running')
+      ChatTaskStore.update(task.id, { status: 'paused' })
+    })
+    s.after(unsubscribe)
+    for (const send of [
+      () => LlmChatService.sendMessage(requester, thread, ' ', () => {}),
+      () => LlmChatService.sendMessage(requester, thread, 'invalid attachment', () => {}, [-1]),
+      () => LlmChatService.sendMessage(requester, thread, 'invalid quote', () => {}, undefined, undefined, undefined, undefined, -1),
+    ]) {
+      await assert.rejects(send())
+      assert.equal(ChatTaskStore.find(task.id)?.status, 'waiting')
+      assert.equal(notifications, 0)
+    }
+    const failedSave = s.mock.method(CodexChatStore, 'addMessage', () => { throw new Error('save failed') })
+    await assert.rejects(LlmChatService.sendMessage(requester, thread, 'not saved', () => {}), /save failed/)
+    failedSave.mock.restore()
+    assert.equal(ChatTaskStore.find(task.id)?.status, 'waiting')
+    assert.equal(notifications, 0)
+    route(s, () => ({}), () => reply('done'))
+    const first = LlmChatService.sendMessage(requester, thread, 'accepted', () => {})
+    ChatTaskStore.update(task.id, { status: 'waiting', wait: 'user' })
+    await assert.rejects(LlmChatService.sendMessage(requester, thread, 'busy', () => {}), /진행 중/)
+    assert.equal(ChatTaskStore.find(task.id)?.status, 'waiting')
+    assert.equal(notifications, 1)
+    // Do not let this test's task runner schedule a continuation when the accepted reply finishes.
+    ChatTaskStore.update(task.id, { status: 'paused' })
+    await first
+  })
+
   await t.test('plugin judge calls follow caller deadlines and do not cap multi-option distributions', async s => {
     const { askJudge, choiceQuestion, resolveJudgeConnection, withJudgeCallerSettings } = await import('../src/services/judge/judgeEngine')
     const durations: number[] = []
     const originalTimeout = AbortSignal.timeout
     s.mock.method(AbortSignal, 'timeout', (ms: number) => { durations.push(ms); return originalTimeout(ms) })
+    const originalTimer = globalThis.setTimeout
+    s.mock.method(globalThis, 'setTimeout', (...args: Parameters<typeof setTimeout>) => { durations.push(Number(args[1])); return originalTimer(...args) })
     const options = Array.from({ length: 16 }, (_, i): [string, string, boolean] => [`option_${i}_${'x'.repeat(25)}`, 'description', true])
     const question = choiceQuestion('choice', 'Choose', options)
     const distribution = Object.fromEntries(options.map(([label]) => [label, 1 / 16]))
@@ -111,6 +245,10 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
       assert.ok(!durations.includes(20000) && !durations.includes(60000), 'no shorter native fallback overrides the caller')
     }
     assert.equal(calls.find(call => call.url.endsWith('/chat/completions'))!.body.max_tokens, undefined)
+    durations.length = 0
+    await askJudge(resolveJudgeConnection('chat', 'model'), {}, [question])
+    assert.equal(calls.at(-1)!.body.max_tokens, undefined, 'native judging also keeps the connection allowance')
+    assert.ok(!durations.includes(60000), 'native judging has no feature-specific timeout')
     durations.length = 0
     await withJudgeCallerSettings({}, () => askJudge(resolveJudgeConnection('jev', 'model'), {}, [question]))
     assert.deepEqual(durations, [20000], 'omitted TypeSafe timeout retains its native engine default')
@@ -127,6 +265,40 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
     assert.deepEqual(normalizeJudgeItems([{ instructions: 'a' }, { instructions: 'b' }]).map((entry) => entry.id), ['item-1', 'item-2'])
     assert.equal(typesafeApiBase('https://openrouter.ai/api/v1/systemone'), 'https://openrouter.ai/api')
     assert.deepEqual(parseJudgeJson('```json\n{"a": {"yes": 0.9}}\n```'), { a: { yes: 0.9 } })
+  })
+
+  await t.test('native judging accepts repetitive JSON structure but stops looping output', async s => {
+    const { askJudge, resolveJudgeConnection, yesNoQuestion } = await import('../src/services/judge/judgeEngine')
+    const questions = Array.from({ length: 60 }, (_, i) => yesNoQuestion(`question_${i}`, `Question ${i}`))
+    const json = JSON.stringify(Object.fromEntries(questions.map(question => [question.id, { yes: 0.5, no: 0.5 }])))
+    let looping = false
+    let trailingWhitespace = false
+    let cancelled = false
+    s.mock.method(globalThis, 'fetch', async () => {
+      let offset = 0
+      let count = 0
+      return new Response(new ReadableStream({
+        pull(controller) {
+          const content = looping ? '"question_0":{"yes":0.5,"no":0.5},'.repeat(12)
+            : offset < json.length ? json.slice(offset, offset += 37) : trailingWhitespace ? ' '.repeat(100) : ''
+          if (!content || ++count > 400) { controller.close(); return }
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`))
+        },
+        cancel() { cancelled = true },
+      }), { headers: { 'Content-Type': 'text/event-stream' } })
+    })
+    const connection = resolveJudgeConnection('chat', 'judge-loop-check')
+    const result = await askJudge(connection, {}, questions)
+    assert.equal(result.answers.size, 60)
+    assert.ok([...result.answers.values()].every(answer => answer.probability === 0.5))
+    trailingWhitespace = true
+    const withWhitespace = await askJudge(connection, {}, questions)
+    assert.equal(withWhitespace.answers.size, 60, 'a complete JSON answer survives trailing whitespace stopped by the guard')
+    assert.equal(cancelled, true)
+    cancelled = false
+    looping = true
+    await assert.rejects(askJudge(connection, {}, questions), /반복 출력/)
+    assert.equal(cancelled, true)
   })
 
   await t.test('a judge with no model of its own asks the judge representative model, whose row cannot be deleted while it points there', async () => {
@@ -180,6 +352,7 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
   await t.test('interrupting input translation cancels preparation in direct edits and group sends', async (s) => {
     const { mockModelRows } = await import('./modelRowMocks')
     const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
+    const { ChatTaskStore } = await import('../src/services/codex-chat/chatTasks')
     mockModelRows(s, { 1: ['chat', 'chat-model'], 2: ['chat', 'translator-model'] }, 1)
     const profile = ChatProfileStore.create({ name: '번역 중단', engine: 'llm', modelSlotId: 1, translationSlotId: 2, summaryEnabled: false, mcpEnabled: false })
     let block = false
@@ -209,6 +382,8 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
         messageId = CodexChatStore.listMessages(thread.id).find((message) => message.role === 'user')!.id
       }
       const translating = new Promise<void>((resolve) => { started = resolve })
+      const task = mode === 'group' ? ChatTaskStore.create(thread.id, 'Wait for user', [{ title: 'Continue' }]) : null
+      if (task) ChatTaskStore.update(task.id, { status: 'waiting', wait: 'user' })
       block = true
       const pending = mode === 'group'
         ? GroupChatService.sendMessage(requester, thread.id, '안녕', () => {})
@@ -221,6 +396,7 @@ test('judge presets: no-judge parity, original text, tool steering, fallback, lo
         await GroupChatService.stop(thread.id)
         await stopped
         assert.equal(CodexChatStore.listMessages(thread.id).length, 0)
+        assert.equal(ChatTaskStore.find(task!.id)?.status, 'waiting', 'cancelled preparation never resumes the room task')
       } else {
         LlmChatService.interrupt(thread.id)
         assert.equal((await pending)!.status, 'interrupted')

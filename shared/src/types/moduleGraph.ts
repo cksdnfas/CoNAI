@@ -1,7 +1,6 @@
 /**
  * 모듈 그래프 와이어 계약 중 백엔드와 프론트엔드가 똑같이 쓰는 모양.
- * 저장 형식이 갈리는 레코드(ModuleDefinitionRecord, GraphWorkflowRecord, GraphExecutionRecord,
- * GraphWorkflowScheduleRecord)는 각 쪽에 남는다.
+ * 저장 형식이 갈리는 레코드(ModuleDefinitionRecord, GraphWorkflowRecord, GraphExecutionRecord)는 각 쪽에 남는다.
  */
 
 export interface WorkflowNodeNumericBound {
@@ -30,6 +29,42 @@ export type GraphWorkflowScheduleType = 'once' | 'interval' | 'daily'
 export type GraphWorkflowScheduleStatus = 'active' | 'paused' | 'error_stopped' | 'overlap_stopped' | 'completed'
 
 export type GraphWorkflowScheduleFailurePolicy = 'stop' | 'continue'
+
+/** Stored schedule fields and optional response decorations shared by the API and UI. */
+export interface GraphWorkflowScheduleRecord {
+  id: number
+  revision: number
+  graph_workflow_id: number
+  workflow_version?: number | null
+  name: string
+  schedule_type: GraphWorkflowScheduleType
+  status: GraphWorkflowScheduleStatus
+  timezone?: string | null
+  run_at?: string | null
+  interval_minutes?: number | null
+  daily_time?: string | null
+  max_run_count?: number | null
+  run_enqueue_count?: number | null
+  failure_policy?: GraphWorkflowScheduleFailurePolicy | null
+  input_values?: string | null
+  confirmed_graph_version?: number | null
+  confirmed_input_signature?: string | null
+  stop_reason_code?: string | null
+  stop_reason_message?: string | null
+  last_execution_id?: number | null
+  next_run_at?: string | null
+  last_enqueued_at?: string | null
+  run_as_account_id?: number | null
+  run_as_account_name?: string | null
+  completed_run_count?: number
+  queued_run_count?: number
+  running_run_count?: number
+  failed_run_count?: number
+  reserved_run_count?: number
+  remaining_run_count?: number | null
+  created_date: string
+  updated_date: string
+}
 
 export interface ModulePortDefinition {
   key: string

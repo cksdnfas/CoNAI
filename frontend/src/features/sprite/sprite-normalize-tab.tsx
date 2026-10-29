@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CopyCheck, Download, LayoutGrid, Loader2, Save, X } from 'lucide-react'
 import { MediaCard } from '@/components/common/media-card'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,7 @@ import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { getImageListDisplayName } from '@/features/images/components/image-list/image-list-utils'
 import { useI18n } from '@/i18n'
 import { triggerBrowserDownload } from '@/lib/api-client'
-import { getImage } from '@/lib/api-images'
+import { getImagesBatch } from '@/lib/api-images'
 import { libraryMediaFileUrl, libraryThumbnailUrl, spriteResultDownloadUrl, startSpriteNormalize, type SpriteAnchorPolicy, type SpriteNormalizeOptions, type SpriteNormalizeResult, type SpriteNormalizeSheet } from '@/lib/api-sprite'
 import { getErrorMessage } from '@/lib/error-message'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
@@ -57,6 +57,12 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
   const [savedHashes, setSavedHashes] = useState<string[]>([])
   const [failures, setFailures] = useState<SpriteNormalizeResult['failures']>([])
   const [starting, setStarting] = useState(false)
+  const preparing = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    if (!active) return
+    return () => { preparing.current?.abort() }
+  }, [active])
 
   const job = useRuntimeJob<SpriteNormalizeResult>(jobId, {
     onCompleted: (completed) => {
@@ -71,19 +77,30 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
     onCancelled: () => setJobId(null),
   })
 
-  const add = async (hashes: string[]) => {
-    const records = await Promise.all(hashes.filter((hash) => !sheets.some((sheet) => sheet.hash === hash)).map((hash) => getImage(hash).catch(() => null)))
-    const added = (await Promise.all(records.map(async (image): Promise<SheetEntry[]> => {
+  const prepareSheets = async (hashes: string[]) => {
+    preparing.current?.abort()
+    const controller = new AbortController()
+    preparing.current = controller
+    const newHashes = [...new Set(hashes)].filter((hash) => !sheets.some((sheet) => sheet.hash === hash))
+    const records = newHashes.length ? await getImagesBatch(newHashes, { signal: controller.signal }).catch(() => []) : []
+    if (controller.signal.aborted) return []
+    const added = await Promise.all(records.map(async (image): Promise<SheetEntry[]> => {
       if (!image?.composite_hash || !image.width || !image.height) return []
-      const grid = await detectSheetGrid(image.composite_hash, image.width, image.height)
+      const grid = await detectSheetGrid(image.composite_hash, image.width, image.height, controller.signal)
+      if (controller.signal.aborted) return []
       const cell = cellSize(image.width, image.height, grid.columns, grid.rows, 0)
       return [{ hash: image.composite_hash, name: getImageListDisplayName(image), width: image.width, height: image.height, options: {
         columns: grid.columns, rows: grid.rows, frameCount: grid.frameCount, inputSpacing: 0, outputColumns: Math.min(grid.columns, grid.frameCount),
         readOrder: 'row_major', customAnchorX: Math.floor(cell.cellWidth / 2), customAnchorY: Math.floor(cell.cellHeight),
       } }]
-    }))).flat()
-    setSheets((current) => [...current, ...added])
-    if (!selected && added[0]) setSelected(added[0].hash)
+    }))
+    return controller.signal.aborted ? [] : added.flat()
+  }
+  const add = async (hashes: string[]) => {
+    const added = await prepareSheets(hashes)
+    if (!added.length) return
+    setSheets((current) => [...current, ...added.filter((entry) => !current.some((sheet) => sheet.hash === entry.hash))])
+    if (added[0]) setSelected((current) => current ?? added[0].hash)
   }
 
   const current = sheets.find((sheet) => sheet.hash === selected) ?? null
@@ -111,7 +128,7 @@ export function SpriteNormalizeTab({ active }: { active: boolean }) {
   }
 
   useSpriteNormalizeChatPage({
-    active, sheets, setSheets, selected, setSelected, addSheets: add, options, setOptions, problems: problemHashes, running, canRun, canSave: has('images.upload'), run, savedHashes, failures,
+    active, sheets, setSheets, selected, setSelected, prepareSheets, options, setOptions, problems: problemHashes, running, canRun, canSave: has('images.upload'), run, savedHashes, failures,
   })
 
   const left = (

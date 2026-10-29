@@ -10,8 +10,6 @@ export function pageRecord(value: ChatPageData | undefined): Record<string, Chat
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('객체 입력이 필요해.')
   return value
 }
-/** Native mutations use this server-issued revision to reject concurrent writes at the actual save boundary. */
-export function pageEditHeaders(revision?: string) { return { 'Content-Type': 'application/json', ...(revision ? { 'If-Match': revision } : {}) } }
 /**
  * Page data refuses strings that start like a link (media stays in the native page). Free text that does (a comment
  * that is only a URL, a document that opens with one) gets a zero-width space (U+200B) in front, not part of the text.

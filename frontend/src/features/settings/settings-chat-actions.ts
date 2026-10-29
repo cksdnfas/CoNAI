@@ -24,7 +24,9 @@ export type SettingsChatActionContext = {
     cancelVerifyAllFiles: () => void
     verifyAllFilesJob: RuntimeJobRecord | undefined
     isVerifyingAllFiles: boolean
-    reextractAll: () => Promise<unknown>
+    reextractAll: () => Promise<RuntimeJobRecord | undefined>
+    cancelReextractAll: () => Promise<void>
+    reextractJob: RuntimeJobRecord | undefined
     isReextracting: boolean
   }
 }
@@ -32,7 +34,7 @@ export type SettingsChatActionContext = {
 /** Tabs whose inputs the chat fills; the save bar saves them. */
 const FIELD_TABS = new Set<SettingsTab>(['general', 'library', 'media', 'auto', 'generation', 'posts', 'system'])
 const BUILDS: AiTorchBackendPreference[] = ['auto', 'cpu', 'cu126', 'cu130', 'cu132']
-const MAINTENANCE = ['scan_all', 'verify_files', 'reextract_metadata', 'cancel_scan', 'cancel_verify'] as const
+const MAINTENANCE = ['scan_all', 'verify_files', 'reextract_metadata', 'cancel_scan', 'cancel_verify', 'cancel_reextract'] as const
 
 /**
  * Text for page data: clipped, and without a leading link (page data refuses text that starts like one). Every
@@ -76,8 +78,8 @@ export function settingsChatActions(ctx: SettingsChatActionContext, t: Translate
   }
   if (ctx.tab === 'maintenance') {
     actions.push(pageAction('settings.maintenance', t({ ko: '유지보수 작업', en: 'Maintenance job' }), t({
-      ko: 'scan_all 전체 스캔 · verify_files 디스크에 없는 파일 기록 삭제(빠진 외장 드라이브도 지워지니 먼저 확인받아) · reextract_metadata 메타데이터 재추출 · cancel_scan/cancel_verify 중지.',
-      en: 'scan_all rescan · verify_files remove records of files missing on disk (an unplugged drive counts; confirm first) · reextract_metadata · cancel_scan/cancel_verify.',
+      ko: 'scan_all 전체 스캔 · verify_files 디스크에 없는 파일 기록 삭제(빠진 외장 드라이브도 지워지니 먼저 확인받아) · reextract_metadata 메타데이터 재추출 · cancel_scan/cancel_verify/cancel_reextract 중지. 재추출은 이미 등록한 항목을 마저 처리해.',
+      en: 'scan_all rescan · verify_files remove records of files missing on disk (an unplugged drive counts; confirm first) · reextract_metadata · cancel_scan/cancel_verify/cancel_reextract. Already queued re-extractions finish.',
     }), pageObject({ operation: pageChoice([...MAINTENANCE]) }, ['operation']), 'save'))
   }
   return actions
@@ -124,7 +126,9 @@ export function settingsChatData(ctx: SettingsChatActionContext): Record<string,
       jobs: {
         scanAll: jobView(maintenance.scanAllJob, maintenance.isScanningAll),
         verifyFiles: jobView(maintenance.verifyAllFilesJob, maintenance.isVerifyingAllFiles),
-        reextractMetadata: maintenance.isReextracting ? 'queuing' : null,
+        reextractMetadata: maintenance.reextractJob && (maintenance.reextractJob.status === 'queued' || maintenance.reextractJob.status === 'running')
+          ? { status: maintenance.reextractJob.status, phase: maintenance.reextractJob.phase }
+          : jobView(maintenance.reextractJob, maintenance.isReextracting),
       },
     }
   }
@@ -177,9 +181,17 @@ export async function applySettingsChatAction(id: string, args: Record<string, C
       switch (args.operation) {
         case 'scan_all': if (maintenance.isScanningAll) throw new Error('이미 스캔 중이야.'); maintenance.scanAll(); return true
         case 'verify_files': if (maintenance.isVerifyingAllFiles) throw new Error('이미 검증 중이야.'); maintenance.verifyAllFiles(); return true
-        case 'reextract_metadata': await maintenance.reextractAll(); return true
+        case 'reextract_metadata':
+          if (!(await maintenance.reextractAll())) throw new Error('메타데이터 재추출을 시작하지 못했어.')
+          return true
         case 'cancel_scan': maintenance.cancelScanAll(); return true
         case 'cancel_verify': maintenance.cancelVerifyAllFiles(); return true
+        case 'cancel_reextract':
+          if (!maintenance.reextractJob || (maintenance.reextractJob.status !== 'queued' && maintenance.reextractJob.status !== 'running')) {
+            throw new Error('진행 중인 재추출이 없어.')
+          }
+          await maintenance.cancelReextractAll()
+          return true
       }
       throw new Error('알 수 없는 유지보수 작업이야.')
   }

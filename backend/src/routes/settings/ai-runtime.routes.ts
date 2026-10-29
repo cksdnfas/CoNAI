@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import type { AiRuntimeSettings } from '@conai/shared';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { settingsService } from '../../services/settingsService';
+import { nativeSettingsRevision } from '../../services/nativeEditRevision';
 import { taggerDaemon } from '../../services/taggerDaemon';
 import { kaloscopeTaggerService } from '../../services/kaloscopeTaggerService';
 import { resetEmbeddingBackoff, textWorker } from '../../services/aiWorker/textEmbeddingService';
@@ -62,12 +63,19 @@ router.put(
       ...(patch.customPythonPath !== undefined && { customPythonPath: patch.customPythonPath.trim() || 'python' }),
     };
     const before = settingsService.loadSettings().aiRuntime;
+    const revision = req.get('If-Match');
+    if (revision && revision !== nativeSettingsRevision(before)) {
+      res.status(409).json({ success: false, error: '다른 곳에서 설정이 변경됐어. 최신 값을 불러온 뒤 다시 저장해줘.' });
+      return;
+    }
     settingsService.updateAiRuntimeSettings(next);
     if (before.pythonSource !== (next.pythonSource ?? before.pythonSource) || before.customPythonPath !== (next.customPythonPath ?? before.customPythonPath)) {
       // Workers pick the Python at spawn time.
       await stopAiWorkers();
     }
-    res.json({ success: true, data: await getAiRuntimeStatus() });
+    const status = await getAiRuntimeStatus();
+    const settings = settingsService.loadSettings().aiRuntime;
+    res.json({ success: true, data: { ...status, settings, pageSettingsRevisions: { 'ai-runtime': nativeSettingsRevision(settings) } } });
   })
 );
 

@@ -6,7 +6,7 @@ import { ListRow } from '@/components/ui/list-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { Switch } from '@/components/ui/switch'
 import { useI18n } from '@/i18n'
-import { getThreadLorebooks, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
+import { getThreadLorebookSummary, threadLorebookSummaryQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { ChatAppearancePopover } from './chat-appearance'
 import { useChatPage } from './chat-page-context'
 import { ChatProfileAvatar } from './chat-profile-avatar'
@@ -54,9 +54,7 @@ export function ChatInfoPanelBody({ threadId, profile, members, summaryCount, ca
   const { t, formatNumber } = useI18n()
   const page = useChatPage()
   const [appearanceOpen, setAppearanceOpen] = useState(false)
-  const lore = useQuery({ queryKey: threadLorebooksQueryKey(threadId), queryFn: () => getThreadLorebooks(threadId), staleTime: 30_000 })
-  const books = lore.data ? [...(lore.data.chatBook ? [lore.data.chatBook] : []), ...lore.data.books] : null
-  const entryCount = books?.reduce((total, book) => total + book.entries.length, 0) ?? 0
+  const lore = useQuery({ queryKey: threadLorebookSummaryQueryKey(threadId), queryFn: () => getThreadLorebookSummary(threadId), staleTime: 30_000 })
   const isRoom = members.length > 0
   const link = isRoom ? null : profile?.characterLink
   const openProfile = (id: number) => canEditProfiles ? <RowLink to={`/characters?view=profiles&profile=${id}`}>{t({ ko: '프로필 열기', en: 'Open profile' })}</RowLink> : null
@@ -91,7 +89,7 @@ export function ChatInfoPanelBody({ threadId, profile, members, summaryCount, ca
           </ValueRow>
         ) : null}
         <ValueRow label={t({ ko: '로어북', en: 'Lorebooks' })}>
-          {books ? books.length > 0 ? t({ ko: '{books}권 · 항목 {entries}개', en: '{books} books · {entries} entries' }, { books: formatNumber(books.length), entries: formatNumber(entryCount) }) : t({ ko: '없음', en: 'None' }) : null}
+          {lore.data ? lore.data.bookCount > 0 ? t({ ko: '{books}권 · 항목 {entries}개', en: '{books} books · {entries} entries' }, { books: formatNumber(lore.data.bookCount), entries: formatNumber(lore.data.entryCount) }) : t({ ko: '없음', en: 'None' }) : null}
         </ValueRow>
       </RowGroup>
       {!isRoom && profile?.pageAssist && page?.available ? (

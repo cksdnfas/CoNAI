@@ -13,16 +13,14 @@ import { useI18n } from '@/i18n'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
   cleanupGraphWorkflowEmptyExecutions,
-  createGraphWorkflowSchedule,
   deleteGraphWorkflowSchedule,
   getGraphWorkflowReservations,
   pauseGraphWorkflowSchedule,
   resumeGraphWorkflowSchedule,
   runGraphWorkflowScheduleNow,
-  updateGraphWorkflowSchedule,
   cancelGraphExecution,
 } from '@/lib/api-module-graph'
-import type { GraphWorkflowNameRecord } from '@/lib/api-module-graph'
+import type { GraphWorkflowNameRecord, GraphWorkflowScheduleRecord } from '@/lib/api-module-graph'
 import { getErrorMessage } from '../image-generation-shared'
 import { ModuleWorkflowEmptyRunsTab } from '@/features/module-graph/components/module-workflow-empty-runs-tab'
 import { useWorkflowReservationsChatPage } from './use-workflow-reservations-chat-page'
@@ -43,6 +41,7 @@ function WorkflowReservationsPanelContent() {
   const [selectedReservationExecutionIds, setSelectedReservationExecutionIds] = useState<number[]>([])
   const [isCleaningReservations, setIsCleaningReservations] = useState(false)
   const [isMutatingSchedules, setIsMutatingSchedules] = useState(false)
+  const [isSavingScheduleEditor, setIsSavingScheduleEditor] = useState(false)
   const [activeView, setActiveView] = useState<ReservationView>('schedules')
   // SSE 가 살아 있으면 폴링을 끄고, 끊기면 아래 2초 폴링이 그대로 되살아난다.
   const { status: runtimeStreamStatus } = useRuntimeEventStream()
@@ -100,7 +99,7 @@ function WorkflowReservationsPanelContent() {
   }
 
   useWorkflowReservationsChatPage({
-    enabled: !!reservationContent && !isMutatingSchedules && !isCleaningReservations,
+    enabled: !!reservationContent && !isMutatingSchedules && !isSavingScheduleEditor && !isCleaningReservations,
     view: activeView,
     automationPaused: automationSwitchQuery.data?.paused === true,
     workflows,
@@ -167,57 +166,10 @@ function WorkflowReservationsPanelContent() {
     }
   }
 
-  const handleCreateSchedule = async (payload: {
-    graph_workflow_id: number
-    name: string
-    schedule_type: 'once' | 'interval' | 'daily'
-    status?: 'active' | 'paused'
-    run_at?: string | null
-    interval_minutes?: number | null
-    daily_time?: string | null
-    max_run_count?: number | null
-    run_enqueue_count?: number | null
-    input_values?: Record<string, unknown> | null
-  }) => {
+  const handlePauseSchedule = async (schedule: GraphWorkflowScheduleRecord) => {
     try {
       setIsMutatingSchedules(true)
-      await createGraphWorkflowSchedule(payload)
-      showSnackbar({ message: t({ ko: '예약작업을 추가했어.', en: 'Added the reservation job.' }), tone: 'info' })
-      await handleRefresh()
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약작업 생성에 실패했어.', en: 'Failed to create the reservation job.' }), tone: 'error' })
-    } finally {
-      setIsMutatingSchedules(false)
-    }
-  }
-
-  const handleUpdateSchedule = async (scheduleId: number, payload: {
-    name: string
-    schedule_type: 'once' | 'interval' | 'daily'
-    status?: 'active' | 'paused'
-    run_at?: string | null
-    interval_minutes?: number | null
-    daily_time?: string | null
-    max_run_count?: number | null
-    run_enqueue_count?: number | null
-    input_values?: Record<string, unknown> | null
-  }) => {
-    try {
-      setIsMutatingSchedules(true)
-      await updateGraphWorkflowSchedule(scheduleId, payload)
-      showSnackbar({ message: t({ ko: '예약작업을 업데이트했어.', en: 'Updated the reservation job.' }), tone: 'info' })
-      await handleRefresh()
-    } catch (error) {
-      showSnackbar({ message: error instanceof Error ? error.message : t({ ko: '예약작업 수정에 실패했어.', en: 'Failed to update the reservation job.' }), tone: 'error' })
-    } finally {
-      setIsMutatingSchedules(false)
-    }
-  }
-
-  const handlePauseSchedule = async (scheduleId: number) => {
-    try {
-      setIsMutatingSchedules(true)
-      await pauseGraphWorkflowSchedule(scheduleId)
+      await pauseGraphWorkflowSchedule(schedule.id, { expected_revision: schedule.revision })
       showSnackbar({ message: t({ ko: '예약작업을 일시정지했어.', en: 'Paused the reservation job.' }), tone: 'info' })
       await handleRefresh()
     } catch (error) {
@@ -227,10 +179,14 @@ function WorkflowReservationsPanelContent() {
     }
   }
 
-  const handleResumeSchedule = async (scheduleId: number) => {
+  const handleResumeSchedule = async (schedule: GraphWorkflowScheduleRecord) => {
+    if (schedule.workflow_version == null) {
+      showSnackbar({ message: t({ ko: '워크플로를 새로 불러와줘.', en: 'Reload the workflow first.' }), tone: 'error' })
+      return
+    }
     try {
       setIsMutatingSchedules(true)
-      await resumeGraphWorkflowSchedule(scheduleId)
+      await resumeGraphWorkflowSchedule(schedule.id, { expected_revision: schedule.revision, expected_graph_version: schedule.workflow_version })
       showSnackbar({ message: t({ ko: '예약작업을 다시 켰어.', en: 'Resumed the reservation job.' }), tone: 'info' })
       await handleRefresh()
     } catch (error) {
@@ -334,7 +290,8 @@ function WorkflowReservationsPanelContent() {
           allQueueSelected={allVisibleSelected}
           workflowNameById={workflowNameById}
           isCleaningQueue={isCleaningReservations}
-          isMutatingSchedules={isMutatingSchedules}
+          isMutatingSchedules={isMutatingSchedules || isSavingScheduleEditor}
+          onEditorSavingChange={setIsSavingScheduleEditor}
           onToggleVisibleSelection={() => setSelectedReservationExecutionIds(allVisibleSelected ? [] : reservationExecutions.map((execution) => execution.id))}
           onToggleQueueSelection={(executionId) => {
             setSelectedReservationExecutionIds((current) => (
@@ -351,10 +308,8 @@ function WorkflowReservationsPanelContent() {
             setSelectedReservationExecutionIds([executionId])
             void handleCleanupSelectedReservations([executionId])
           }}
-          onCreateSchedule={(payload) => void handleCreateSchedule(payload)}
-          onUpdateSchedule={(scheduleId, payload) => void handleUpdateSchedule(scheduleId, payload)}
-          onPauseSchedule={(scheduleId) => void handlePauseSchedule(scheduleId)}
-          onResumeSchedule={(scheduleId) => void handleResumeSchedule(scheduleId)}
+          onPauseSchedule={(schedule) => void handlePauseSchedule(schedule)}
+          onResumeSchedule={(schedule) => void handleResumeSchedule(schedule)}
           onDeleteSchedule={(scheduleId) => void handleDeleteSchedule(scheduleId)}
           onRunScheduleNow={(scheduleId) => void handleRunScheduleNow(scheduleId)}
         />

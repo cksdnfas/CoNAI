@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowLeft, ChevronDown, Copy, Download, FolderInput, MoreHorizontal, PenSquare, Trash2 } from 'lucide-react'
 import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
@@ -8,6 +8,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { GenerateActionBar, GenerateActionDock } from '@/features/image-generation/components/generate-action-bar'
+import { usePortalTargetById } from '@/features/image-generation/components/generation-toolbar-status'
 import { buildGraphWorkflowTargetGroupKey } from '@/features/groups/generation-target-group-store'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -80,10 +81,7 @@ export function WorkflowRunnerPanel({
   const runDisabled = !canExecuteGeneration || !canExecute || isExecuting
   useWorkflowRunnerChatPage({ graph: selectedGraph, definitions: inputDefinitions, values: inputValues, change: onInputValueChange, clear: onInputValueClear, enabled: !isExecuting, canRun: !runDisabled, run: onExecute, recentRuns })
   // The slot is rendered by the workspace in the same commit, so look it up after mount.
-  const [stickyBarTarget, setStickyBarTarget] = useState<HTMLElement | null>(null)
-  useEffect(() => {
-    setStickyBarTarget(stickyBarTargetId ? document.getElementById(stickyBarTargetId) : null)
-  }, [stickyBarTargetId])
+  const stickyBarTarget = usePortalTargetById(stickyBarTargetId)
   const runBar = (variant: 'inline' | 'sticky') => (
     <GenerateActionBar
       variant={variant}

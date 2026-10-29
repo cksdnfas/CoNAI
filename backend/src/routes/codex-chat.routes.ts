@@ -11,11 +11,12 @@ import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
 import { asyncHandler } from '../middleware/asyncHandler'
 import { requireAdmin } from '../middleware/authMiddleware'
 import { AUTHOR_NOTE_MAX_LENGTH, CHAT_PROFILE_DEFAULTS, ChatProfileError, ChatProfileStore, DEFAULT_CHAT_SUMMARY_PROMPT, ensureCodexProfileMigrated, isVisionTool, type ChatProfile, type ChatProfileInput } from '../services/codex-chat/chatProfiles'
+import { ChatRevisionConflict } from '../services/codex-chat/chatProfileError'
 import { CHAT_SCOPES, LORE_SELECTION_LIMITS, MAX_CHAT_CAPTURE_LIMIT, TOOL_ROUND_LIMITS, WEB_RESEARCH_ENGINES, WEB_RESEARCH_MAX_DAILY_LIMIT, loadChatSettings, updateChatSettings } from '../services/codex-chat/chatSettings'
 import { exportChatDiagnostics, getChatDiagnostics, visibleContextMessages } from '../services/codex-chat/chatDiagnostics'
 import { DEFAULT_CHAT_STYLE } from '../services/codex-chat/chatStyle'
 import { chatExpressionGroupId, listProfileEmoticons } from '../services/codex-chat/chatEmoticons'
-import { copyProfileExpressions } from '../services/codex-chat/chatProfileExpressions'
+import { copyProfileExpressions, expressionGroupId as ownExpressionGroupId } from '../services/codex-chat/chatProfileExpressions'
 import { EmoticonService } from '../services/emoticonService'
 import { serveThumbnailOrOriginal, streamCacheableFile, streamRangeFile } from './images/query-file-helpers'
 import { ImageFileModel } from '../models/Image/ImageFileModel'
@@ -126,11 +127,12 @@ function toPublicProfile(profile: ChatProfile, accountId: number | null, canView
 }
 
 /** Admin view of a profile: everything but the background image itself (served by its own route). */
-function toAdminProfile(profile: ChatProfile | null, hidden?: ReadonlySet<string>) {
+function toAdminProfile(profile: ChatProfile | null, hidden?: ReadonlySet<string>, includeOwnExpression = false) {
   if (!profile) return null
   const { background: _background, characterExpressionGroupId: _characterExpressionGroupId, ...rest } = profile
   // Whether it can write reply suggestions for a profile that links it (its model is set and its connection works).
-  return { ...rest, ...profileAssetFields(profile, true, hidden), backgroundVersion: backgroundVersionOf(profile), suggestWriterReady: profileWriterReady(profile) }
+  return { ...rest, ...profileAssetFields(profile, true, hidden), backgroundVersion: backgroundVersionOf(profile), suggestWriterReady: profileWriterReady(profile),
+    ...(profile.characterLink?.synced ? { expressionGroupId: profile.characterExpressionGroupId } : includeOwnExpression ? { expressionGroupId: ownExpressionGroupId(profile) } : {}) }
 }
 
 /** GET /api/codex-chat/status — whether the chat (header key, panel, /chat) should appear, and which engines. */
@@ -826,6 +828,15 @@ router.get('/admin/profiles', requireAdmin, (_req: Request, res: Response) => {
   res.json({ success: true, data: adminProfileList() })
 })
 
+/** Read one profile without fetching the whole admin list. */
+router.get('/admin/profiles/:profileId', requireAdmin, (req: Request, res: Response) => {
+  const profileId = parseId(req.params.profileId)
+  if (profileId === null) { sendRouteBadRequest(res, 'Invalid profile id'); return }
+  const profile = ChatProfileStore.find(profileId)
+  if (!profile) { res.status(404).json({ success: false, error: '프로필을 찾을 수 없어.' }); return }
+  res.json({ success: true, data: toAdminProfile(profile, undefined, true) })
+})
+
 /** PUT /api/codex-chat/admin/profiles/order — `{ ids }`: every chat profile in this order (settings and chat pickers). */
 router.put('/admin/profiles/order', requireAdmin, (req: Request, res: Response) => {
   ChatProfileStore.reorder(parseFlagIds(req.body?.ids))
@@ -942,11 +953,17 @@ router.put('/admin/profiles/:profileId', requireAdmin, asyncHandler(async (req: 
       res.status(404).json({ success: false, error: '프로필을 찾을 수 없어.' })
       return
     }
-    const patch = (req.body ?? {}) as ChatProfileInput
+    const { revision, ...patch } = (req.body ?? {}) as ChatProfileInput & { revision?: unknown }
+    if (revision !== undefined && typeof revision !== 'string') { sendRouteBadRequest(res, 'revision must be a string'); return }
+    if (revision !== undefined && revision !== current.revision) throw new ChatRevisionConflict(current)
     await assertCodexEffortSupported({ ...current, ...patch })
     if (patch.linkedFiles !== undefined) assertLinkedFiles(fileOwnerKey(getRequesterAccountId(req)), normalizeLinkedFiles(patch.linkedFiles), current.linkedFiles)
-    res.json({ success: true, data: toAdminProfile(ChatProfileStore.update(profileId, patch)) })
+    res.json({ success: true, data: toAdminProfile(ChatProfileStore.update(profileId, patch, undefined, { revision })) })
   } catch (error) {
+    if (error instanceof ChatRevisionConflict) {
+      res.status(409).json({ success: false, code: 'revision_conflict', error: error.message, data: toAdminProfile(error.current as ChatProfile) })
+      return
+    }
     sendChatError(res, error)
   }
 }))

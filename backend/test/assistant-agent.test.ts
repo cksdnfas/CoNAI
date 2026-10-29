@@ -264,8 +264,9 @@ test('assistant agent: proposal outcomes, page operation records, task plan and 
     assert.match(ChatTaskStore.find(task.id)?.reason ?? '', /진전/)
     assert.equal(sent.length, 3)
 
-    ChatTaskRunner.resume(threadId)
+    // Mock scheduling first: a real resume schedules a continuation that would outlive the test's database.
     sub.mock.method(ChatTaskRunner, 'schedule', () => {})
+    ChatTaskRunner.resume(threadId)
     const spent = ChatTaskStore.create(threadId, '예산', [{ title: 'a' }], { continuations: 1 })
     assert.equal(ChatTaskStore.live(threadId)?.id, spent.id)
     ChatTaskStore.update(spent.id, { status: 'running', used: { continuations: 1, images: 0 } })

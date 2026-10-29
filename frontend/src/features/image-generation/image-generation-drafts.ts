@@ -302,18 +302,6 @@ export function isValidWorkflowNumberDraftValue(value: WorkflowFieldDraftValue |
   return Number.isFinite(Number(value))
 }
 
-/** Find the first populated number field whose draft cannot be submitted. */
-export function findInvalidWorkflowNumberField(
-  fields: WorkflowMarkedField[],
-  draft: Record<string, WorkflowFieldDraftValue>,
-) {
-  return fields.find((field) => (
-    field.type === 'number'
-    && hasWorkflowFieldValue(draft[field.id])
-    && !isValidWorkflowNumberDraftValue(draft[field.id])
-  ))
-}
-
 /** Mark private Director assets for delayed deletion after a draft is discarded. */
 export async function deleteComfyWorkflowDraftInputAssets(draft: Record<string, WorkflowFieldDraftValue>) {
   const assetIds = new Set<string>()

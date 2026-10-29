@@ -27,14 +27,17 @@ interface WallpaperScheduleModalProps {
   onClose: () => void
   presets: WallpaperLayoutPreset[]
   schedule: WallpaperSchedule | undefined
+  revision: string | undefined
+  onSaved: (baseRevision: string, settings: Awaited<ReturnType<typeof updateAppearanceSettings>>) => void
 }
 
 /** Switch the live wallpaper by time of day and weekday when no key or link pins a preset. */
-export function WallpaperScheduleModal({ onClose, presets, schedule }: WallpaperScheduleModalProps) {
+export function WallpaperScheduleModal({ onClose, presets, schedule, revision, onSaved }: WallpaperScheduleModalProps) {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const initial = schedule ?? { enabled: false, entries: [] }
+  const [initial] = useState(() => schedule ?? { enabled: false, entries: [] })
+  const [baseRevision] = useState(revision)
   const [enabled, setEnabled] = useState(initial.enabled)
   const [entries, setEntries] = useState<WallpaperScheduleEntry[]>(initial.entries)
   const dirty = enabled !== initial.enabled || JSON.stringify(entries) !== JSON.stringify(initial.entries)
@@ -44,8 +47,12 @@ export function WallpaperScheduleModal({ onClose, presets, schedule }: Wallpaper
   ]
 
   const saveMutation = useMutation({
-    mutationFn: () => updateAppearanceSettings({ wallpaperSchedule: { enabled, entries: entries.filter((entry) => entry.presetId) } }),
-    onSuccess: () => {
+    mutationFn: () => {
+      if (!baseRevision) throw new Error(t({ ko: '최신 월페이퍼를 먼저 불러와줘.', en: 'Load the latest wallpapers first.' }))
+      return updateAppearanceSettings({ wallpaperSchedule: { enabled, entries: entries.filter((entry) => entry.presetId) } }, baseRevision)
+    },
+    onSuccess: (settings) => {
+      onSaved(baseRevision!, settings)
       void queryClient.invalidateQueries({ queryKey: ['wallpaper-runtime-settings'] })
       showSnackbar({ message: t({ ko: '일정을 저장했어.', en: 'Saved the schedule.' }), tone: 'info' })
       onClose()

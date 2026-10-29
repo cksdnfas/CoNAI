@@ -1,6 +1,6 @@
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { fetchJson, triggerBlobDownload } from '@/lib/api-client'
-import { requestApiData } from '@/lib/api-request'
+import { triggerBlobDownload } from '@/lib/api-client'
+import { requestApiData, requestJson } from '@/lib/api-request'
 import type { ApiResponse } from '@/types/image'
 import type { DanbooruBrowserCharacterRecord, DanbooruBrowserTagRecord } from '@/types/danbooru-browser'
 import type {
@@ -66,7 +66,7 @@ export function updatePromptCollectionItem(id: number, input: PromptAuthorInput,
 
 export async function getPromptGroups(type: PromptTypeFilter = 'positive') {
   const route = `/api/prompt-groups/summaries?type=${type}`
-  const response = await fetchJson<{ success: boolean; data?: PromptGroupRecord[]; error?: string }>(route)
+  const response = await requestJson<{ success: boolean; data?: PromptGroupRecord[]; error?: string }>(route)
   if (!response.success || !response.data) {
     throw createApiFallbackError(response.error, 'prompts.groups.load')
   }
@@ -93,7 +93,7 @@ export async function searchPromptCollection(params?: {
     searchParams.set('group_id', params.groupId === null ? 'null' : String(params.groupId))
   }
 
-  const response = await fetchJson<{
+  const response = await requestJson<{
     success: boolean
     data?: PromptCollectionItem[]
     error?: string
@@ -115,7 +115,7 @@ export async function searchPromptCollection(params?: {
 }
 
 export async function getPromptStatistics() {
-  const response = await fetchJson<ApiResponse<PromptStatistics>>('/api/prompt-collection/statistics')
+  const response = await requestJson<ApiResponse<PromptStatistics>>('/api/prompt-collection/statistics')
   if (!response.success) {
     throw createApiFallbackError(response.error, 'prompts.statistics.load')
   }
@@ -131,7 +131,7 @@ export async function getDanbooruPromptGroupingPreview(options?: { mode?: Danboo
   if (options?.includeAssignedPrompts) {
     searchParams.set('includeAssignedPrompts', 'true')
   }
-  const response = await fetchJson<ApiResponse<DanbooruPromptGroupingResult>>(`/api/prompt-collection/danbooru-grouping/preview?${searchParams.toString()}`)
+  const response = await requestJson<ApiResponse<DanbooruPromptGroupingResult>>(`/api/prompt-collection/danbooru-grouping/preview?${searchParams.toString()}`)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'prompts.danbooruGrouping.preview')
   }
@@ -139,7 +139,7 @@ export async function getDanbooruPromptGroupingPreview(options?: { mode?: Danboo
 }
 
 export async function applyDanbooruPromptGrouping(options?: { mode?: DanbooruPromptGroupingMode; language?: 'ko' | 'en'; includeAssignedPrompts?: boolean }) {
-  const response = await fetchJson<ApiResponse<DanbooruPromptGroupingResult>>('/api/prompt-collection/danbooru-grouping/apply', {
+  const response = await requestJson<ApiResponse<DanbooruPromptGroupingResult>>('/api/prompt-collection/danbooru-grouping/apply', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -157,7 +157,7 @@ export async function applyDanbooruPromptGrouping(options?: { mode?: DanbooruPro
 }
 
 export async function resolvePromptGroups(prompts: string[], type: PromptTypeFilter = 'positive') {
-  const response = await fetchJson<ApiResponse<PromptGroupResolveItem[]>>('/api/prompt-collection/resolve-groups', {
+  const response = await requestJson<ApiResponse<PromptGroupResolveItem[]>>('/api/prompt-collection/resolve-groups', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -180,7 +180,7 @@ export async function getTopPrompts(params?: { type?: PromptTypeFilter; limit?: 
   searchParams.set('type', params?.type ?? 'positive')
   searchParams.set('limit', String(params?.limit ?? 8))
 
-  const response = await fetchJson<ApiResponse<PromptCollectionItem[]>>(`/api/prompt-collection/top?${searchParams.toString()}`)
+  const response = await requestJson<ApiResponse<PromptCollectionItem[]>>(`/api/prompt-collection/top?${searchParams.toString()}`)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'prompts.top.load')
   }
@@ -188,7 +188,7 @@ export async function getTopPrompts(params?: { type?: PromptTypeFilter; limit?: 
 }
 
 export async function assignPromptToGroup(promptId: number, groupId: number | null, type: PromptTypeFilter = 'positive') {
-  const response = await fetchJson<ApiResponse<{ message: string; assigned: boolean }>>('/api/prompt-collection/assign-group', {
+  const response = await requestJson<ApiResponse<{ message: string; assigned: boolean }>>('/api/prompt-collection/assign-group', {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -208,7 +208,7 @@ export async function assignPromptToGroup(promptId: number, groupId: number | nu
 }
 
 export async function batchAssignPromptsToGroup(prompts: string[], groupId: number | null, type: PromptTypeFilter = 'positive') {
-  const response = await fetchJson<ApiResponse<{ message: string; created: number; updated: number; failed: string[] }>>('/api/prompt-collection/batch-assign', {
+  const response = await requestJson<ApiResponse<{ message: string; created: number; updated: number; failed: string[] }>>('/api/prompt-collection/batch-assign', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -229,7 +229,7 @@ export async function batchAssignPromptsToGroup(prompts: string[], groupId: numb
 
 export async function createPromptGroup(input: { group_name: string; display_order?: number; is_visible?: boolean; parent_id?: number | null }, type: PromptTypeFilter = 'positive') {
   const route = type === 'negative' ? '/api/negative-prompt-groups' : '/api/prompt-groups'
-  const response = await fetchJson<{ success: boolean; data?: { id: number; message: string }; error?: string }>(route, {
+  const response = await requestJson<{ success: boolean; data?: { id: number; message: string }; error?: string }>(route, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -246,7 +246,7 @@ export async function createPromptGroup(input: { group_name: string; display_ord
 
 export async function updatePromptGroup(groupId: number, input: { group_name?: string; display_order?: number; is_visible?: boolean }, type: PromptTypeFilter = 'positive') {
   const route = type === 'negative' ? `/api/negative-prompt-groups/${groupId}` : `/api/prompt-groups/${groupId}`
-  const response = await fetchJson<{ success: boolean; data?: { updated: boolean; message: string }; error?: string }>(route, {
+  const response = await requestJson<{ success: boolean; data?: { updated: boolean; message: string }; error?: string }>(route, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -263,7 +263,7 @@ export async function updatePromptGroup(groupId: number, input: { group_name?: s
 
 export async function deletePromptGroup(groupId: number, type: PromptTypeFilter = 'positive') {
   const route = type === 'negative' ? `/api/negative-prompt-groups/${groupId}` : `/api/prompt-groups/${groupId}?type=${type}`
-  const response = await fetchJson<{ success: boolean; data?: { deleted: boolean; message: string }; error?: string }>(route, {
+  const response = await requestJson<{ success: boolean; data?: { deleted: boolean; message: string }; error?: string }>(route, {
     method: 'DELETE',
   })
 
@@ -276,7 +276,7 @@ export async function deletePromptGroup(groupId: number, type: PromptTypeFilter 
 
 export async function reorderPromptGroups(groupOrders: Array<{ id: number; display_order: number }>, type: PromptTypeFilter = 'positive') {
   const route = type === 'negative' ? '/api/negative-prompt-groups/reorder' : '/api/prompt-groups/reorder'
-  const response = await fetchJson<{ success: boolean; data?: { updated_count: number; message: string }; error?: string }>(route, {
+  const response = await requestJson<{ success: boolean; data?: { updated_count: number; message: string }; error?: string }>(route, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -293,7 +293,7 @@ export async function reorderPromptGroups(groupOrders: Array<{ id: number; displ
 
 export async function exportPromptGroups(type: PromptTypeFilter = 'positive') {
   const route = type === 'negative' ? '/api/negative-prompt-groups/export' : `/api/prompt-groups/export?type=${type}`
-  const response = await fetchJson<PromptGroupExportData>(route)
+  const response = await requestJson<PromptGroupExportData>(route)
   const blob = new Blob([JSON.stringify(response, null, 2)], { type: 'application/json' })
   const filename = `conai-prompt-groups-${type}.json`
   triggerBlobDownload(blob, filename)
@@ -302,7 +302,7 @@ export async function exportPromptGroups(type: PromptTypeFilter = 'positive') {
 
 export async function importPromptGroups(payload: PromptGroupExportData, type: PromptTypeFilter = 'positive') {
   const route = type === 'negative' ? '/api/negative-prompt-groups/import' : `/api/prompt-groups/import?type=${type}`
-  const response = await fetchJson<{ success: boolean; data?: PromptGroupImportResult; error?: string }>(route, {
+  const response = await requestJson<{ success: boolean; data?: PromptGroupImportResult; error?: string }>(route, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -326,7 +326,7 @@ export function deletePrompts(promptIds: number[], type: PromptTypeFilter = 'pos
 }
 
 export async function deletePrompt(promptId: number, type: PromptTypeFilter = 'positive') {
-  const response = await fetchJson<{ success: boolean; data?: { deleted: boolean; message: string }; error?: string }>(`/api/prompt-collection/${promptId}?type=${type}`, {
+  const response = await requestJson<{ success: boolean; data?: { deleted: boolean; message: string }; error?: string }>(`/api/prompt-collection/${promptId}?type=${type}`, {
     method: 'DELETE',
   })
 
@@ -338,7 +338,7 @@ export async function deletePrompt(promptId: number, type: PromptTypeFilter = 'p
 }
 
 export async function collectPrompts(input: { prompt?: string; negativePrompt?: string }) {
-  const response = await fetchJson<{ success: boolean; data?: { message: string }; error?: string }>('/api/prompt-collection/collect', {
+  const response = await requestJson<{ success: boolean; data?: { message: string }; error?: string }>('/api/prompt-collection/collect', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

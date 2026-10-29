@@ -23,12 +23,11 @@ export function ModuleWorkflowEmptyRunsTab({
   workflowNameById,
   isCleaningQueue,
   isMutatingSchedules,
+  onEditorSavingChange,
   onToggleVisibleSelection,
   onToggleQueueSelection,
   onCancelSingle,
   onDeleteSingle,
-  onCreateSchedule,
-  onUpdateSchedule,
   onPauseSchedule,
   onResumeSchedule,
   onDeleteSchedule,
@@ -44,35 +43,13 @@ export function ModuleWorkflowEmptyRunsTab({
   workflowNameById: Map<number, string>
   isCleaningQueue: boolean
   isMutatingSchedules: boolean
+  onEditorSavingChange: (saving: boolean) => void
   onToggleVisibleSelection: () => void
   onToggleQueueSelection: (executionId: number) => void
   onCancelSingle: (executionId: number) => void
   onDeleteSingle: (executionId: number) => void
-  onCreateSchedule: (payload: {
-    graph_workflow_id: number
-    name: string
-    schedule_type: 'once' | 'interval' | 'daily'
-    status?: 'active' | 'paused'
-    run_at?: string | null
-    interval_minutes?: number | null
-    daily_time?: string | null
-    max_run_count?: number | null
-    run_enqueue_count?: number | null
-    input_values?: Record<string, unknown> | null
-  }) => Promise<void> | void
-  onUpdateSchedule: (scheduleId: number, payload: {
-    name: string
-    schedule_type: 'once' | 'interval' | 'daily'
-    status?: 'active' | 'paused'
-    run_at?: string | null
-    interval_minutes?: number | null
-    daily_time?: string | null
-    max_run_count?: number | null
-    run_enqueue_count?: number | null
-    input_values?: Record<string, unknown> | null
-  }) => Promise<void> | void
-  onPauseSchedule: (scheduleId: number) => Promise<void> | void
-  onResumeSchedule: (scheduleId: number) => Promise<void> | void
+  onPauseSchedule: (schedule: GraphWorkflowScheduleRecord) => Promise<void> | void
+  onResumeSchedule: (schedule: GraphWorkflowScheduleRecord) => Promise<void> | void
   onDeleteSchedule: (scheduleId: number) => Promise<void> | void
   onRunScheduleNow: (scheduleId: number) => Promise<void> | void
 }) {
@@ -88,8 +65,7 @@ export function ModuleWorkflowEmptyRunsTab({
         workflows={workflows}
         workflowNameById={workflowNameById}
         isMutating={isMutatingSchedules}
-        onCreateSchedule={onCreateSchedule}
-        onUpdateSchedule={onUpdateSchedule}
+        onSavingChange={onEditorSavingChange}
         onPauseSchedule={onPauseSchedule}
         onResumeSchedule={onResumeSchedule}
         onDeleteSchedule={onDeleteSchedule}

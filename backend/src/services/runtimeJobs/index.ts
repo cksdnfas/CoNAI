@@ -10,6 +10,7 @@ import { registerRecycleBinRetentionJobHandlers } from './handlers/recycleBinRet
 import { registerDatabaseCompactionJobHandlers } from './handlers/databaseCompactionHandlers'
 import { registerDuplicateGroupScanJobHandlers } from './handlers/duplicateGroupScanHandlers'
 import { registerLibraryMaintenanceJobHandlers } from './handlers/libraryMaintenanceHandlers'
+import { registerMetadataReextractJobHandler } from './handlers/metadataReextractHandler'
 import { registerSpriteJobHandlers } from '../sprite/spriteService'
 import { registerAudioExportJobHandlers } from '../audio/audioExportJob'
 import { registerAudioLegacyImportJobHandlers } from '../audio/audioLegacyImportJob'
@@ -51,6 +52,7 @@ export function registerRuntimeJobHandlers(): void {
   registerDatabaseCompactionJobHandlers()
   registerDuplicateGroupScanJobHandlers()
   registerLibraryMaintenanceJobHandlers()
+  registerMetadataReextractJobHandler()
   registerSpriteJobHandlers()
   registerAudioExportJobHandlers()
   registerAudioLegacyImportJobHandlers()

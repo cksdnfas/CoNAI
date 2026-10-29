@@ -29,6 +29,7 @@ import { pageAction, pageArray, pageChoice, pageObject, pageText } from '@/featu
 import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
+import { triggerBrowserDownload } from '@/lib/api-client'
 import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, listStoredFileRevisions, listStoredFiles, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, retryStoredFileIndex, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
 import { formatFileSize } from '@/lib/format-size'
 import { getErrorMessage } from '@/lib/error-message'
@@ -297,10 +298,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
     if (confirmed) mutation.mutate(() => deleteStoredFiles(ids))
   }
   const download = (entry: StoredFileEntry) => {
-    const link = document.createElement('a')
-    link.href = storedFileDownloadUrl(entry.id)
-    link.download = ''
-    link.click()
+    triggerBrowserDownload(storedFileDownloadUrl(entry.id), entry.name)
   }
   /** One row's actions, for its ⋯ button and its right-click / long-press menu. */
   const rowEntries = (entry: StoredFileEntry): ActionMenuEntry[] => [

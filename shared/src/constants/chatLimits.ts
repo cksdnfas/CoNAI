@@ -15,6 +15,9 @@ export const CHAT_PROFILE_LIMITS = {
   toolOutputLimit: { min: 500, max: 100_000 },
 } as const
 
+/** Existing profile style limit, shared by server normalization and editor rebasing. */
+export const CHAT_MAX_EMOTICON_GROUPS = 10
+
 /** Character limits (array limits are named explicitly); shared by profile writes, card import and editors. */
 export const CHAT_PROFILE_TEXT_LIMITS = {
   name: 60, tagline: 200, agentDescription: 300, text: 20_000, authorNote: 4000,

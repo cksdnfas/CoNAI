@@ -1,5 +1,6 @@
 import { buildApiUrl } from './api-client'
 import { requestJson } from './api-image-generation-request'
+import { appendDirectoryListingParams, type DirectoryListingParams, type DirectoryPage } from './api-directory-listing'
 import type {
   ComfyUIServer,
   ComfyUIServerConnectionStatus,
@@ -147,13 +148,16 @@ export async function getGenerationWorkflow(workflowId: number) {
 }
 
 /** List filesystem artifacts for one artifact-explorer ComfyUI workflow. */
-export async function getGenerationWorkflowArtifacts(workflowId: number, relativePath = '') {
+export function getGenerationWorkflowArtifacts(workflowId: number, relativePath: string, params: DirectoryListingParams): Promise<WorkflowArtifactListing & DirectoryPage>
+export function getGenerationWorkflowArtifacts(workflowId: number, relativePath?: string): Promise<WorkflowArtifactListing>
+export async function getGenerationWorkflowArtifacts(workflowId: number, relativePath = '', params?: DirectoryListingParams) {
   const searchParams = new URLSearchParams()
   if (relativePath.trim().length > 0) {
     searchParams.set('path', relativePath)
   }
+  if (params) appendDirectoryListingParams(searchParams, params)
 
-  const response = await requestJson<WorkflowArtifactListingResponse>(`/api/workflows/${workflowId}/artifacts${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
+  const response = await requestJson<WorkflowArtifactListingResponse & { data: WorkflowArtifactListing & DirectoryPage }>(`/api/workflows/${workflowId}/artifacts${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
   return response.data
 }
 

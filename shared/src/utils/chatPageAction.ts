@@ -142,7 +142,7 @@ const nativeActionPermissions = {
   'settings.chat_options': null, 'settings.default_model': null, 'settings.default_judge': null, 'settings.llm_preset': null, 'settings.mcp_server': null, 'settings.mcp_server_draft': null,
   'settings.usage_period': null, 'settings.judge_filter': null,
   'settings.content_topic': null,
-  'settings.user_profile': 'chat.use', 'settings.flag': 'chat.use', 'settings.routine': null, 'settings.automation_switch': null,
+  'settings.user_profile': 'page.chat.view', 'settings.flag': 'page.chat.view', 'settings.routine': null, 'settings.automation_switch': null,
 } satisfies Record<string, string | null>
 /** Native adapters can only declare IDs present in the shared permission contract. */
 export type NativeChatPageActionId = keyof typeof nativeActionPermissions

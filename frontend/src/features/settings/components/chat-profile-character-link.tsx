@@ -10,6 +10,7 @@ import { CharacterSettingPickerDialog } from '@/features/characters/components/c
 import { CharacterSettingSaveDialog } from '@/features/characters/components/character-setting-save-dialog'
 import { useI18n } from '@/i18n'
 import { characterSettingQueryKey, isCharacterRevisionConflict, type CharacterSetting } from '@/lib/api-character-library'
+import { ChatEditorResolution, isChatRevisionConflict } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import type { CharacterLibraryStore, ProfileCharacterLink } from './use-profile-character-link'
 
@@ -20,7 +21,7 @@ import type { CharacterLibraryStore, ProfileCharacterLink } from './use-profile-
 export function ChatProfileCharacterLinkBar({ link, profileName, dirty, busy, onBusyChange }: {
   link: ProfileCharacterLink
   profileName: string
-  /** The editor has unsaved edits (the profile's or the synced setting's); leaving for the library asks first. */
+  /** A dialog has unsaved edits and needs its own confirmation before opening the library. */
   dirty: boolean
   busy: boolean
   onBusyChange: (busy: boolean) => void
@@ -41,12 +42,14 @@ export function ChatProfileCharacterLinkBar({ link, profileName, dirty, busy, on
       showSnackbar({ message: t({ ko: '라이브러리에 저장하고 동기화했어.', en: 'Stored in the library and synced.' }), tone: 'info' })
     },
     onError: (error) => {
-      if (isCharacterRevisionConflict(error) && link.link) void queryClient.invalidateQueries({ queryKey: characterSettingQueryKey(link.link.settingId) })
+      // A profile write conflict shares the 409 code; only the setting's own conflict reloads the origin.
+      const settingConflict = isCharacterRevisionConflict(error) && !isChatRevisionConflict(error)
+      if (settingConflict && link.link) void queryClient.invalidateQueries({ queryKey: characterSettingQueryKey(link.link.settingId) })
       showSnackbar({
-        message: isCharacterRevisionConflict(error)
+        message: settingConflict
           ? t({ ko: '원본이 그사이 바뀌었어. 새로 불러왔으니 확인하고 다시 덮어써줘.', en: 'The origin changed meanwhile. It is reloaded; check it and overwrite again.' })
           : getErrorMessage(error, t({ ko: '라이브러리에 저장하지 못했어.', en: 'Could not store it in the library.' })),
-        tone: 'error',
+        tone: error instanceof ChatEditorResolution ? 'info' : 'error',
       })
     },
   })

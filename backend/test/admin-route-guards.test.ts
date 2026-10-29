@@ -140,6 +140,165 @@ test('maintenance routes are admin-only and search history is per account', { ti
     AuthPermissionGroup.removeAccountMembership(delegated.id, guestId)
   })
 
+  await t.test('native and delegated revisions cover hidden settings without disclosing them', async () => {
+    const delegated = AuthPermissionGroup.createCustomGroup({ name: 'shared-settings-revision', permissionKeys: ['settings.library.manage', 'settings.appearance.manage'] })
+    AuthPermissionGroup.addAccountMembership(delegated.id, guestId)
+    const initial = (await call('/api/settings', adminId)).body.data
+    const general = (await call('/api/page-settings/general', guestId)).body.data
+    const protection = { ...initial.general.deleteProtection, enabled: !initial.general.deleteProtection.enabled }
+    assert.equal((await call('/api/settings/general', adminId, 'PUT', { deleteProtection: protection })).status, 200)
+    assert.equal((await call('/api/settings/general', adminId, 'PUT', { deleteProtection: initial.general.deleteProtection }, { 'If-Match': initial.pageSettingsRevisions.general })).status, 409)
+    assert.equal((await call('/api/page-settings/general', guestId, 'PUT', { enableGallery: !general.values.enableGallery }, { 'If-Match': general.revision })).status, 409)
+    const latestGeneral = (await call('/api/page-settings/general', guestId)).body.data
+    assert.equal('deleteProtection' in latestGeneral.values, false)
+    assert.equal((await call('/api/page-settings/general', guestId, 'PUT', { enableGallery: !latestGeneral.values.enableGallery }, { 'If-Match': latestGeneral.revision })).status, 200)
+    assert.deepEqual((await call('/api/settings', adminId)).body.data.general.deleteProtection, protection)
+
+    const appearance = (await call('/api/page-settings/appearance', guestId)).body.data
+    const native = (await call('/api/settings', adminId)).body.data
+    assert.equal((await call('/api/settings/appearance', adminId, 'PUT', { customPrimaryColor: '#123456' })).status, 200)
+    assert.equal((await call('/api/settings/appearance', adminId, 'PUT', { customPrimaryColor: native.appearance.customPrimaryColor }, { 'If-Match': native.pageSettingsRevisions.appearance })).status, 409)
+    assert.equal((await call('/api/page-settings/appearance', guestId, 'PUT', { themeMode: 'dark' }, { 'If-Match': appearance.revision })).status, 409)
+    const latestAppearance = (await call('/api/page-settings/appearance', guestId)).body.data
+    assert.equal('customPrimaryColor' in latestAppearance.values, false)
+    assert.equal((await call('/api/page-settings/appearance', guestId, 'PUT', { themeMode: 'dark' }, { 'If-Match': latestAppearance.revision })).status, 200)
+    assert.equal((await call('/api/settings', adminId)).body.data.appearance.customPrimaryColor, '#123456')
+    const runtimeSnapshot = (await call('/api/settings', adminId)).body.data
+    const { settingsService } = await import('../src/services/settingsService')
+    const cpuThreads = runtimeSnapshot.aiRuntime.cpuThreads === 2 ? 3 : 2
+    settingsService.updateAiRuntimeSettings({ cpuThreads })
+    assert.equal((await call('/api/settings/ai-runtime', adminId, 'PUT', { cpuThreads: runtimeSnapshot.aiRuntime.cpuThreads }, { 'If-Match': runtimeSnapshot.pageSettingsRevisions['ai-runtime'] })).status, 409)
+    assert.equal((await call('/api/settings/tagger', adminId, 'PUT', { pythonPath: runtimeSnapshot.tagger.pythonPath }, { 'If-Match': runtimeSnapshot.pageSettingsRevisions.tagger })).status, 400)
+    assert.equal((await call('/api/settings', adminId)).body.data.aiRuntime.cpuThreads, cpuThreads)
+    AuthPermissionGroup.removeAccountMembership(delegated.id, guestId)
+  })
+
+  await t.test('immediate group colors do not invalidate a general draft or get overwritten by it', async () => {
+    const before = (await call('/api/settings', adminId)).body.data
+    const colors = { 'revision-test': '#123abc' }
+    assert.equal((await call('/api/settings/general', adminId, 'PUT', { permissionGroupColors: colors })).status, 200)
+    const afterColors = (await call('/api/settings', adminId)).body.data
+    assert.equal(afterColors.pageSettingsRevisions.general, before.pageSettingsRevisions.general)
+    const saved = await call('/api/settings/general', adminId, 'PUT', { promptForDownloadLocation: !before.general.promptForDownloadLocation }, { 'If-Match': before.pageSettingsRevisions.general })
+    assert.equal(saved.status, 200)
+    assert.deepEqual(saved.body.data.general.permissionGroupColors, colors)
+    assert.equal((await call('/api/settings/general', adminId, 'PUT', { permissionGroupColors: {} }, { 'If-Match': before.pageSettingsRevisions.general })).status, 400)
+    assert.deepEqual((await call('/api/settings', adminId)).body.data.general.permissionGroupColors, colors)
+  })
+
+  await t.test('saving AI runtime and tagger together keeps both changes and rejects checked legacy paths', async () => {
+    const { settingsService } = await import('../src/services/settingsService')
+    const { taggerDaemon } = await import('../src/services/taggerDaemon')
+    const { kaloscopeTaggerService } = await import('../src/services/kaloscopeTaggerService')
+    const { textWorker } = await import('../src/services/aiWorker/textEmbeddingService')
+    const { semanticIndexer } = await import('../src/services/embeddings/semanticIndex')
+    const { imageTaggerService } = await import('../src/services/imageTaggerService')
+    const { autoTagScheduler } = await import('../src/services/autoTagScheduler')
+    settingsService.updateTaggerSettings({ enabled: false, model: 'vit' })
+    const mocks = [
+      t.mock.method(taggerDaemon, 'stop', async () => {}),
+      t.mock.method(kaloscopeTaggerService, 'stopDaemon', async () => {}),
+      t.mock.method(textWorker, 'stop', async () => {}),
+      t.mock.method(semanticIndexer, 'poke', () => {}),
+      t.mock.method(imageTaggerService, 'checkPythonDependencies', async () => ({ available: true, message: 'ready' })),
+      t.mock.method(imageTaggerService, 'reloadConfig', async () => {}),
+      t.mock.method(autoTagScheduler, 'restart', () => {}),
+    ]
+    try {
+      const before = (await call('/api/settings', adminId)).body.data
+      const runtime = await call('/api/settings/ai-runtime', adminId, 'PUT', { pythonSource: 'custom', customPythonPath: 'new-python' }, { 'If-Match': before.pageSettingsRevisions['ai-runtime'] })
+      assert.equal(runtime.status, 200)
+      const tagger = await call('/api/settings/tagger', adminId, 'PUT', { enabled: true }, { 'If-Match': before.pageSettingsRevisions.tagger })
+      assert.equal(tagger.status, 200)
+      assert.equal(tagger.body.data.aiRuntime.customPythonPath, 'new-python')
+      assert.equal(tagger.body.data.tagger.enabled, true)
+      assert.equal((await call('/api/settings/tagger', adminId, 'PUT', { enabled: false }, { 'If-Match': before.pageSettingsRevisions.tagger })).status, 409)
+      assert.equal((await call('/api/settings/tagger', adminId, 'PUT', { pythonPath: 'old-python' }, { 'If-Match': tagger.body.data.pageSettingsRevisions.tagger })).status, 400)
+      assert.equal((await call('/api/settings/tagger', adminId, 'PUT', { pythonPath: 'legacy-python' })).status, 200)
+      assert.equal((await call('/api/settings', adminId)).body.data.aiRuntime.customPythonPath, 'legacy-python')
+    } finally {
+      for (const mock of mocks) mock.mock.restore()
+    }
+  })
+
+  await t.test('wallpaper collection replacement detects additions and deletions; live changes preserve the collection', async () => {
+    const url = '/api/settings/appearance'
+    const date = '2026-10-11T00:00:00Z'
+    const first = { id: 'revision-first', name: 'First', canvasPresetId: 'custom', widgets: [], createdAt: date, updatedAt: date }
+    const second = { ...first, id: 'revision-second', name: 'Second' }
+    assert.equal((await call(url, adminId, 'PUT', { wallpaperLayoutPresets: [first], wallpaperActivePresetId: first.id })).status, 200)
+    const stale = (await call('/api/settings', adminId)).body.data
+    assert.equal((await call(url, adminId, 'PUT', { wallpaperLayoutPresets: [first, second] })).status, 200)
+    assert.equal((await call(url, adminId, 'PUT', { wallpaperLayoutPresets: [first] }, { 'If-Match': stale.pageSettingsRevisions.appearance })).status, 409)
+    const added = (await call('/api/settings', adminId)).body.data
+    assert.equal((await call(url, adminId, 'PUT', { wallpaperActivePresetId: second.id }, { 'If-Match': added.pageSettingsRevisions.appearance })).status, 200)
+    const live = (await call('/api/settings', adminId)).body.data
+    assert.deepEqual(live.appearance.wallpaperLayoutPresets.map((preset: { id: string }) => preset.id), [first.id, second.id])
+    assert.equal(live.appearance.wallpaperActivePresetId, second.id)
+    assert.equal((await call(url, adminId, 'PUT', { wallpaperLayoutPresets: [first], wallpaperActivePresetId: null })).status, 200)
+    assert.equal((await call(url, adminId, 'PUT', { wallpaperLayoutPresets: [first, second] }, { 'If-Match': live.pageSettingsRevisions.appearance })).status, 409)
+    const afterDelete = (await call('/api/settings', adminId)).body.data
+    assert.deepEqual(afterDelete.appearance.wallpaperLayoutPresets.map((preset: { id: string }) => preset.id), [first.id])
+    assert.equal(afterDelete.appearance.customPrimaryColor, '#123456')
+  })
+
+  await t.test('each LLM collection rejects stale saves and deletes while revision-less writers remain supported', async () => {
+    const url = '/api/settings/llm'
+    const kinds = ['systemPromptPresets', 'promptPresets', 'structuredOutputJsonPresets'] as const
+    const initial = (await call('/api/settings/llm-presets/options', adminId)).body.data
+    for (const kind of kinds) {
+      const before = (await call('/api/settings/llm-presets/options', adminId)).body.data
+      const preset = { id: `revision-${kind}`, name: `Revision ${kind}`, content: kind === 'structuredOutputJsonPresets' ? '{}' : 'content', createdAt: '2026-10-11T00:00:00Z', updatedAt: '2026-10-11T00:00:00Z' }
+      assert.equal((await call(url, adminId, 'PUT', { [kind]: [...initial[kind], preset] })).status, 200)
+      assert.equal((await call(url, adminId, 'PUT', { [kind]: initial[kind] }, { 'If-Match': initial.collectionRevisions[kind] })).status, 409)
+      const current = (await call('/api/settings/llm-presets/options', adminId)).body.data
+      assert.ok(current[kind].some((item: { id: string }) => item.id === preset.id))
+      for (const other of kinds.filter((key) => key !== kind)) {
+        assert.deepEqual(current[other], before[other])
+        assert.equal(current.collectionRevisions[other], before.collectionRevisions[other])
+      }
+      assert.equal((await call(url, adminId, 'PUT', { [kind]: current[kind].filter((item: { id: string }) => item.id !== preset.id) }, { 'If-Match': current.collectionRevisions[kind] })).status, 200)
+      assert.equal((await call(url, adminId, 'PUT', { [kind]: current[kind] }, { 'If-Match': current.collectionRevisions[kind] })).status, 409)
+    }
+    const latest = (await call('/api/settings/llm-presets/options', adminId)).body.data
+    assert.equal((await call(url, adminId, 'PUT', { systemPromptPresets: latest.systemPromptPresets, promptPresets: latest.promptPresets }, { 'If-Match': latest.collectionRevisions.promptPresets })).status, 400)
+    assert.deepEqual(latest.systemPromptPresets, initial.systemPromptPresets)
+    assert.deepEqual(latest.promptPresets, initial.promptPresets)
+    assert.deepEqual(latest.structuredOutputJsonPresets, initial.structuredOutputJsonPresets)
+  })
+
+  await t.test('a native settings response pairs the latest state with its revision after an async reload', async () => {
+    const { settingsService } = await import('../src/services/settingsService')
+    const { imageTaggerService } = await import('../src/services/imageTaggerService')
+    const { autoTagScheduler } = await import('../src/services/autoTagScheduler')
+    settingsService.updateTaggerSettings({ enabled: false, model: 'vit', generalThreshold: 0.4 })
+    settingsService.updateAiRuntimeSettings({ customPythonPath: 'different-runtime-python' })
+    const initial = (await call('/api/settings', adminId)).body.data
+    let started!: () => void
+    let release!: () => void
+    const entered = new Promise<void>((resolve) => { started = resolve })
+    const released = new Promise<void>((resolve) => { release = resolve })
+    const reload = t.mock.method(imageTaggerService, 'reloadConfig', async () => { started(); await released })
+    const restart = t.mock.method(autoTagScheduler, 'restart', () => {})
+    const pending = call('/api/settings/tagger', adminId, 'PUT', { generalThreshold: 0.5 }, { 'If-Match': initial.pageSettingsRevisions.tagger })
+    try {
+      await Promise.race([entered, pending.then(() => { throw new Error('The request never reached reload') })])
+      settingsService.updateTaggerSettings({ generalThreshold: 0.6 })
+      release()
+      const response = await pending
+      const latest = (await call('/api/settings', adminId)).body.data
+      assert.equal(response.status, 200)
+      assert.equal(response.body.data.tagger.generalThreshold, 0.6)
+      assert.equal(response.body.data.aiRuntime.customPythonPath, 'different-runtime-python')
+      assert.equal(response.body.data.pageSettingsRevisions.tagger, latest.pageSettingsRevisions.tagger)
+    } finally {
+      release()
+      await pending
+      reload.mock.restore()
+      restart.mock.restore()
+    }
+  })
+
   await t.test('contextual settings bind the resource to its host page and keep saves as review cards', async () => {
     const { normalizeChatPageSnapshot, chatPageActionTier, chatPageActionAllowed } = await import('@conai/shared')
     const admin = { accountId: adminId, accountType: 'admin' as const }

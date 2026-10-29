@@ -42,16 +42,17 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
 
   // The summary model: a segment repeats the stretch's keyword, a plot says it is one. Long enough (Korean, ~1 token
   // per character) that three segments outgrow the summary budget (15% of 8000), short enough to be recalled (8000/12).
-  const FILLER = '가'.repeat(500)
+  const FILLER = Array.from({ length: 500 }, (_, i) => String.fromCharCode(0xac00 + i)).join('')
   let failNext = false
   let failPlot = false
   let hold: Promise<void> | null = null
+  let requestStarted: (() => void) | null = null
   const requests: string[] = []
   t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
     if (init.method !== 'POST') return new Response('', { status: 404 })
     const body = String(init.body)
     requests.push(body)
-    if (hold) await hold
+    if (hold) { requestStarted?.(); await hold }
     if (failPlot && body.includes('구간 요약')) return new Response('plot boom', { status: 500 })
     if (failNext) {
       failNext = false
@@ -258,7 +259,108 @@ test('chat memory: pinned memories, summary segments, plot folding, recall', { t
     assert.equal(CodexChatStore.findThreadById(roomId)!.summary_error, null)
   })
 
-  await t.test('a request waits a limited time for its summary, which then finishes in the background', async () => {
+  await t.test('looping summaries stop, retain history and back off instead of holding future sends', async s => {
+    const id = CodexChatStore.createThread(null, 'looping-summary', 'llm', profile.id)
+    for (let i = 0; i < 6; i++) for (const role of ['user', 'assistant'] as const) {
+      CodexChatStore.addMessage({ thread_id: id, role, content: `${role} ${i}`, tool_calls: [], status: 'completed', error: null })
+    }
+    let requests = 0
+    let cancelled = false
+    let reasoningOnly = false
+    s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+      if (init?.method !== 'POST') return new Response('', { status: 404 })
+      requests++
+      let chunks = 0
+      return new Response(new ReadableStream({
+        pull(controller) {
+          if (++chunks > 400) { controller.close(); return }
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { [reasoningOnly ? 'reasoning_content' : 'content']: 'The same summary again. '.repeat(3) } }] })}\n\n`))
+        },
+        cancel() { cancelled = true },
+      }), { headers: { 'Content-Type': 'text/event-stream' } })
+    })
+    await assert.rejects(context.summarizeAhead(id, profile, []), /반복 출력/)
+    assert.ok(cancelled, 'the model response body is cancelled before it finishes')
+    assert.equal(context.isSummarizing(id), false)
+    assert.equal(ChatSummaryStore.list(id).length, 0)
+    assert.equal(CodexChatStore.findThreadById(id)!.summary_until_message_id, null)
+    assert.equal(CodexChatStore.listMessages(id).length, 12)
+    await context.summarizeAhead(id, profile, [])
+    assert.equal(requests, 1, 'the ordinary failure backoff prevents another immediate looping call')
+    const thinkingId = CodexChatStore.createThread(null, 'looping-summary-thinking', 'llm', profile.id)
+    for (const message of CodexChatStore.listMessages(id)) CodexChatStore.addMessage({
+      thread_id: thinkingId, role: message.role, content: message.content, tool_calls: [], status: 'completed', error: null,
+    })
+    reasoningOnly = true
+    cancelled = false
+    await assert.rejects(context.summarizeAhead(thinkingId, profile, []), /반복 출력/)
+    assert.ok(cancelled, 'reasoning-only loops cancel the stream too')
+    assert.equal(context.isSummarizing(thinkingId), false)
+    assert.equal(ChatSummaryStore.list(thinkingId).length, 0)
+  })
+
+  await t.test('reset and deletion abort background summary requests without publishing stale results', async s => {
+    for (const action of ['reset', 'delete'] as const) {
+      const id = CodexChatStore.createThread(null, action, 'llm', profile.id)
+      for (let i = 0; i < 6; i++) CodexChatStore.addMessage({ thread_id: id, role: 'user', content: `message ${i}`, tool_calls: [], status: 'completed', error: null })
+      let started!: () => void
+      const ready = new Promise<void>(resolve => { started = resolve })
+      let requestSignal!: AbortSignal
+      const fetch = s.mock.method(globalThis, 'fetch', async (_url: unknown, init?: RequestInit) => {
+        if (init?.method !== 'POST') return new Response('', { status: 404 })
+        requestSignal = init.signal as AbortSignal
+        return new Promise<Response>((_resolve, reject) => {
+          requestSignal.addEventListener('abort', () => reject(requestSignal.reason), { once: true })
+          started()
+        })
+      })
+      const stopped = assert.rejects(context.summarizeAhead(id, profile, []), { name: 'AbortError' })
+      await ready
+      if (action === 'reset') CodexChatStore.clearThread(id, '')
+      else CodexChatStore.deleteThread(id)
+      await stopped
+      assert.equal(requestSignal.aborted, true)
+      assert.equal(context.isSummarizing(id), false)
+      assert.equal(ChatSummaryStore.list(id).length, 0)
+      assert.equal(CodexChatStore.findThreadById(id)?.summary_error ?? null, null)
+      fetch.mock.restore()
+    }
+  })
+
+  await t.test('bounded reply history still waits when the unsummarized turn count exceeds its window', async () => {
+    const { readReplyHistory } = await import('../src/services/codex-chat/chatJudge')
+    const small = { ...profile, contextTurns: 4, contextTokens: null, loreScanDepth: 2 }
+    const roomId = CodexChatStore.createThread(null, 'bounded-summary-wait', 'llm', profile.id)
+    for (let turn = 0; turn < 5; turn++) {
+      for (const role of ['user', 'assistant'] as const) CodexChatStore.addMessage({
+        thread_id: roomId, role, content: `turn-${turn}-${role}`, tool_calls: [], status: 'completed', error: null,
+      })
+    }
+    let release!: () => void
+    hold = new Promise(resolve => { release = resolve })
+    const started = new Promise<void>(resolve => { requestStarted = resolve })
+    const running = context.summarizeAhead(roomId, small, [])
+    await started
+    const source = { threadId: roomId }
+    const bounded = readReplyHistory(small, source, Number.MAX_SAFE_INTEGER, 4)
+    assert.equal(bounded.length, 8)
+    let settled = false
+    const waiting = context.fitThreadSummary(roomId, small, bounded, new AbortController().signal, [], { historySource: source }).then(() => { settled = true })
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve))
+      assert.equal(settled, false, 'the fifth pending turn is counted even though its body is outside the reply read')
+    } finally {
+      hold = null
+      requestStarted = null
+      release()
+      await Promise.all([running, waiting])
+    }
+    const current = CodexChatStore.findThreadById(roomId)!
+    assert.ok(current.summary_until_message_id)
+    assert.ok(CodexChatStore.countSummaryItems(source, current.summary_until_message_id!) <= 4)
+  })
+
+  await t.test('an explicit caller wait budget can leave its summary finishing in the background', async () => {
     const roomId = CodexChatStore.createThread(null, 'slow-summary', 'llm', profile.id)
     const sayIn = (role: 'user' | 'assistant', content: string) => CodexChatStore.addMessage({ thread_id: roomId, role, content, tool_calls: [], status: 'completed', error: null })
     for (const keyword of ['일', '이', '삼', '사', '오', '육']) { sayIn('user', `키워드:${keyword}. 가자.`); sayIn('assistant', '응.') }

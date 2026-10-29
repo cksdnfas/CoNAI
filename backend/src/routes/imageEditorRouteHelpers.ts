@@ -1,8 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { publicUrls, runtimePaths } from '../config/runtimePaths';
+import { DirectoryListingSnapshots, pageDirectorySnapshot, sortDirectoryItems, type DirectoryPageRequest } from '../services/directoryListingSnapshot';
 
 const SAVE_BROWSER_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+const saveSnapshots = new DirectoryListingSnapshots<SaveBrowserImageListItem>();
 
 export type SaveBrowserImageListItem = {
   id: string;
@@ -41,8 +43,11 @@ async function collectSaveBrowserImagePaths(directoryPath: string): Promise<stri
   return collected;
 }
 
-/** List save-folder images for attachment picker UIs. */
-export async function listSaveBrowserImages(): Promise<SaveBrowserImageListItem[]> {
+function saveImageOrder(item: SaveBrowserImageListItem) {
+  return { name: item.file_name, key: item.relative_path, modifiedAt: item.modified_at };
+}
+
+async function scanSaveBrowserImages(): Promise<SaveBrowserImageListItem[]> {
   if (!fs.existsSync(runtimePaths.saveDir)) {
     return [];
   }
@@ -65,7 +70,15 @@ export async function listSaveBrowserImages(): Promise<SaveBrowserImageListItem[
     }),
   );
 
-  items.sort((left, right) => new Date(right.modified_at).getTime() - new Date(left.modified_at).getTime());
+  return sortDirectoryItems(items, saveImageOrder);
+}
 
-  return items;
+/** The no-argument form preserves the original complete listing. */
+export async function listSaveBrowserImages(): Promise<SaveBrowserImageListItem[]> {
+  return scanSaveBrowserImages();
+}
+
+export async function listSaveBrowserImagePage(options: DirectoryPageRequest) {
+  const snapshot = await saveSnapshots.read(runtimePaths.saveDir, scanSaveBrowserImages, options);
+  return pageDirectorySnapshot(snapshot, options, saveImageOrder);
 }

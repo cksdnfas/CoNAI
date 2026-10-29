@@ -1,5 +1,5 @@
 import { useSettingsRevision } from './use-settings-revision'
-import type { PageSettingsVersions } from '@conai/shared'
+import type { NativeSettingsVersions } from '@/lib/api-settings-general'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getImage } from '@/lib/api-images'
@@ -32,7 +32,7 @@ import { areSettingsDraftsEqual, type SettingsDraftSection } from './settings-dr
 import { useI18n } from '@/i18n'
 
 interface UseAutoSettingsTabOptions {
-  revisions?: PageSettingsVersions['pageSettingsRevisions']
+  revisions?: NativeSettingsVersions['pageSettingsRevisions']
   /** Whether the auto tab is currently active. */
   isActive: boolean
   /** Current saved-or-loaded tagger settings. */
@@ -242,9 +242,15 @@ export function useAutoSettingsTab({
   const taggerRevision = useSettingsRevision(revisions?.tagger, hasTaggerChanges)
   const kaloscopeRevision = useSettingsRevision(revisions?.kaloscope, hasKaloscopeChanges)
   const embeddingRevision = useSettingsRevision(revisions?.embedding, hasEmbeddingChanges)
+  const aiRuntimeRevision = useSettingsRevision(revisions?.['ai-runtime'], hasAiRuntimeChanges)
 
   const taggerMutation = useMutation({
-    mutationFn: (patch: Partial<TaggerSettings>) => updateTaggerSettings(patch, taggerRevision()),
+    mutationFn: (patch: Partial<TaggerSettings>) => {
+      // The Python path is edited in AI runtime; the legacy tagger field must not overwrite it.
+      const tagger = { ...patch }
+      delete tagger.pythonPath
+      return updateTaggerSettings(tagger, taggerRevision())
+    },
     onSuccess: async (settings) => {
       syncSettingsCache(settings)
       setTaggerDraft(settings.tagger)
@@ -264,15 +270,16 @@ export function useAutoSettingsTab({
   })
 
   /** These endpoints answer with their status, not the whole settings: patch the cached settings in place. */
-  const patchSettingsCache = (patch: Partial<AppSettings & PageSettingsVersions>) => {
-    queryClient.setQueryData<AppSettings & PageSettingsVersions>(['app-settings'], (current) => (current ? { ...current, ...patch, pageSettingsRevisions: { ...current.pageSettingsRevisions, ...patch.pageSettingsRevisions } } : current))
+  const patchSettingsCache = (patch: Partial<AppSettings & NativeSettingsVersions>) => {
+    queryClient.setQueryData<AppSettings & NativeSettingsVersions>(['app-settings'], (current) => (current ? { ...current, ...patch, pageSettingsRevisions: { ...current.pageSettingsRevisions, ...patch.pageSettingsRevisions } } : current))
   }
   const setAiRuntimeStatus = (status: AiRuntimeStatus) => queryClient.setQueryData(['ai-runtime-status'], status)
 
   const aiRuntimeMutation = useMutation({
-    mutationFn: updateAiRuntimeSettings,
+    mutationFn: (patch: Partial<AiRuntimeSettings>) => updateAiRuntimeSettings(patch, aiRuntimeRevision()),
     onSuccess: async (status) => {
-      patchSettingsCache({ aiRuntime: status.settings })
+      aiRuntimeRevision(status.pageSettingsRevisions['ai-runtime'])
+      patchSettingsCache({ aiRuntime: status.settings, pageSettingsRevisions: status.pageSettingsRevisions })
       setAiRuntimeDraft(status.settings)
       setAiRuntimeStatus(status)
       await refreshAutoQueries()

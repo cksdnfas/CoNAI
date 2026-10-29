@@ -414,7 +414,15 @@ export function ChatFlagRows({ flags: allFlags, onEdit }: { flags: ChatFlag[]; o
     if (dragId === null || dragId === targetId) return
     const ids = flags.map((flag) => flag.id).filter((id) => id !== dragId)
     ids.splice(ids.indexOf(targetId) + (flags.findIndex((flag) => flag.id === dragId) < flags.findIndex((flag) => flag.id === targetId) ? 1 : 0), 0, dragId)
-    reorderMutation.mutate(ids)
+    // Settings can show only one subset; keep every other visible flag in its current tray position.
+    const current = queryClient.getQueryData<ChatFlag[]>(CHAT_FLAGS_QUERY_KEY)
+    if (!current) return
+    const visible = current.filter((flag) => !flag.hidden)
+    const available = new Set(visible.map((flag) => flag.id))
+    const reordered = ids.filter((id) => available.has(id))
+    const affected = new Set(reordered)
+    let index = 0
+    reorderMutation.mutate(visible.map((flag) => affected.has(flag.id) ? reordered[index++] : flag.id))
   }
 
   return (

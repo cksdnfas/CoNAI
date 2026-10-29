@@ -85,7 +85,8 @@ router.put(
       }
       semanticIndexer.poke();
     }
-    res.json({ success: true, data: { settings: updated, status: await embeddingStatus(), pageSettingsRevisions: { embedding: readPageSettings('embedding').revision } } });
+    const status = await embeddingStatus();
+    res.json({ success: true, data: { settings: settingsService.loadSettings().embedding, status, pageSettingsRevisions: { embedding: readPageSettings('embedding').revision } } });
   })
 );
 

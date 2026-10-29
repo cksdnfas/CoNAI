@@ -4,7 +4,8 @@ import { allowImagesView, requireImageAction } from '../middleware/imageAccess';
 import multer from 'multer';
 import { AiWorkerError } from '../services/aiWorker/aiWorkerClient';
 import { inpaintImage } from '../services/aiWorker/aiInpaintService';
-import { listSaveBrowserImages } from './imageEditorRouteHelpers';
+import { listSaveBrowserImagePage, listSaveBrowserImages } from './imageEditorRouteHelpers';
+import { parseDirectoryPageRequest } from '../services/directoryListingSnapshot';
 
 const router = Router();
 router.use((req, res, next) => req.method === 'GET' || req.method === 'HEAD'
@@ -14,8 +15,18 @@ router.use((req, res, next) => req.method === 'GET' || req.method === 'HEAD'
  * List save-folder images for attachment picker UIs.
  * GET /api/image-editor/save-images
  */
-router.get('/save-images', asyncHandler(async (_req: Request, res: Response) => {
+router.get('/save-images', asyncHandler(async (req: Request, res: Response) => {
+  let options: ReturnType<typeof parseDirectoryPageRequest>;
   try {
+    options = parseDirectoryPageRequest(req.query);
+  } catch (error) {
+    return res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'Invalid listing parameters' });
+  }
+
+  try {
+    if (options) {
+      return res.json({ success: true, data: await listSaveBrowserImagePage(options) });
+    }
     const items = await listSaveBrowserImages();
 
     return res.json({

@@ -14,6 +14,7 @@ import type { ChatCompletionMessage, ChatCompletionResult, ChatCompletionTarget,
 import { CATALOG_RUN_TOOL } from '../../mcp/toolCatalog'
 import { chatToolRoundLimit, loadChatSettings } from './chatSettings'
 import { noteTextToolCalls, recoverTextToolCalls, textToolCallFilter, type TextToolCallTools } from './textToolCalls'
+import { createRepetitionWatch, withoutRepetition } from './repetitionGuard'
 
 /**
  * API LLM chats that run through pi (ChatLlmRuntime 'pi'): the pi agent SDK, embedded in-process, keeps the chat as
@@ -200,6 +201,7 @@ async function runPiChatCompletion(params: {
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
   catalogued?: ReadonlySet<string>
   maxToolRounds?: number
+  stopLoops?: boolean
   research?: import('./chatResearch').ChatResearchExecution
 }): Promise<ChatCompletionResult> {
   params.signal.throwIfAborted()
@@ -242,12 +244,16 @@ async function runPiChatCompletion(params: {
     images: { blockImages: !params.target.piVision },
   })
   let content = ''
+  let looping = false
+  let streamedText = ''
+  const textWatch = params.stopLoops ? createRepetitionWatch() : null
+  const reasoningWatch = params.stopLoops ? createRepetitionWatch() : null
   let separate = false
   // Tool calls written as text are recovered while the model has tools (they go once the budget is used up).
   let recovering = tools.length > 0
   // Each assistant message's text starts a paragraph of its own (a round's note, then the answer).
   const emitText = (text: string) => {
-    if (!text) return
+    if (!text || looping) return
     const delta = separate ? `${content.endsWith('\n') ? '\n' : '\n\n'}${text}` : text
     separate = false
     content += delta
@@ -265,7 +271,7 @@ async function runPiChatCompletion(params: {
       api.on('before_agent_start', () => ({ systemPrompt: system }))
       // Runs before the turn's tools: a replaced message is what pi executes and keeps (see recoverPiToolCalls).
       api.on('message_end', (event) => {
-        if (event.message.role !== 'assistant') return
+        if (event.message.role !== 'assistant' || looping) return
         const held = textFilter.end()
         const recovered = recovering ? recoverPiToolCalls(event.message, { tools, catalogued: params.catalogued ?? new Set() }, held) : null
         emitText(recovered ? recovered.tail : held.text)
@@ -290,6 +296,7 @@ async function runPiChatCompletion(params: {
     parameters: (tool.function.parameters ?? { type: 'object', properties: {} }) as ToolDefinition['parameters'],
     execute: async (toolCallId, args) => {
       params.signal.throwIfAborted()
+      if (looping) throw new Error('pi 응답 반복으로 도구 실행이 중단됐어.')
       params.onActivity?.()
       if (!params.callTool) throw new Error('Unknown or not permitted tool')
       if (round > toolRounds) return { content: [{ type: 'text' as const, text: TOOL_BUDGET_NOTE }], details: {}, isError: true }
@@ -359,13 +366,21 @@ async function runPiChatCompletion(params: {
       void agent.abort()
     }
     if (event.type === 'message_start' && content && !content.endsWith('\n\n')) separate = true
-    if (event.type === 'message_update') {
+    if (event.type === 'message_update' && !looping) {
       const update = event.assistantMessageEvent
-      if (update.type === 'text_delta' && update.delta) textFilter.push(update.delta)
+      if (update.type === 'text_delta' && update.delta) {
+        textFilter.push(update.delta)
+        if (textWatch) {
+          streamedText += update.delta
+          looping = textWatch.looping(streamedText)
+        }
+      }
       if (update.type === 'thinking_delta' && update.delta) {
         reasoning += update.delta
         params.onReasoning?.(update.delta)
+        looping = reasoningWatch?.looping(reasoning) ?? false
       }
+      if (looping) void agent.abort()
     }
     if (event.type === 'message_end' && event.message.role === 'assistant') {
       produced.push(event.message)
@@ -381,8 +396,17 @@ async function runPiChatCompletion(params: {
     verifyPiTools(agent.getActiveToolNames(), tools, codemode ? [CODEMODE_TOOL] : [])
     const input = piPromptInput(params.messages)
     params.signal.throwIfAborted()
-    await agent.prompt(input.text, { expandPromptTemplates: false, ...(input.images.length ? { images: input.images } : {}) })
+    try {
+      await agent.prompt(input.text, { expandPromptTemplates: false, ...(input.images.length ? { images: input.images } : {}) })
+    } catch (error) {
+      if (!looping) throw error
+    }
     params.signal.throwIfAborted()
+    if (looping) {
+      const kept = withoutRepetition(content)
+      // A stopped loop never advances the saved session; finally removes only this run's fork.
+      return { content: kept, reasoning: withoutRepetition(reasoning), toolCalls: [], finishReason: 'repetition', promptTokens: null, usage: reportedUsage ? usage : null, loopCut: content.length - kept.length }
+    }
     // Pi may append a synthetic aborted/error message while stopping its loop. A host budget stop retains
     // the preceding actual answer/evidence; an external cancellation still throws above.
     const last = budgetStopped ? [...produced].reverse().find(message => message.stopReason !== 'error' && message.stopReason !== 'aborted') : produced.at(-1)

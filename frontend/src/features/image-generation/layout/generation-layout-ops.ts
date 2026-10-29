@@ -77,15 +77,17 @@ export function resolveRecentStripPlacement(preset: GenerationLayoutPreset): 'to
 }
 
 /**
- * The preset with the plugin blocks that exist now: blocks of plugins that are gone drop out, and a plugin block the
- * preset has never placed joins the end of the last column (before the Generate button). The bundled prompt snippets
- * join the prompt/fields on first placement; explicitly placed plugin blocks stay where the preset put them.
+ * Add available plugin blocks the preset has never placed. Installed but disabled plugins keep their placement;
+ * blocks of uninstalled plugins are removed only when the full installed-plugin list is known.
  */
-export function withPluginBlocks(preset: GenerationLayoutPreset, available: readonly GenerationLayoutPluginBlock[]): GenerationLayoutPreset {
-  const keep = (block: GenerationLayoutBlock) => !isGenerationLayoutPluginBlock(block) || available.includes(block)
-  const placed = new Set(preset.columns.flatMap((column) => column.blocks))
-  const missing = available.filter((block) => !placed.has(block)).slice(0, GENERATION_LAYOUT_LIMITS.pluginBlocks)
-  if (!missing.length && [...placed, ...preset.hidden].every(keep)) return preset
+export function withPluginBlocks(preset: GenerationLayoutPreset, available: readonly GenerationLayoutPluginBlock[], installedPluginIds?: readonly string[]): GenerationLayoutPreset {
+  const installed = installedPluginIds && new Set(installedPluginIds)
+  const keep = (block: GenerationLayoutBlock) => !isGenerationLayoutPluginBlock(block) || !installed || installed.has(block.split(':')[1])
+  const placed = new Set(preset.columns.flatMap((column) => column.blocks).filter(keep))
+  const placedPluginCount = [...placed].filter(isGenerationLayoutPluginBlock).length
+  const missing = available.filter((block) => !placed.has(block)).slice(0, Math.max(0, GENERATION_LAYOUT_LIMITS.pluginBlocks - placedPluginCount))
+  const removed = preset.columns.some((column) => column.blocks.some((block) => !keep(block))) || preset.hidden.some((block) => !keep(block))
+  if (!missing.length && !removed) return preset
   const columns = preset.columns.map((column) => ({ ...column, blocks: column.blocks.filter(keep) }))
   const snippets = 'plugin:generation-helper:snippets'
   const promptColumn = columns.find((column) => column.blocks.includes('prompt') || column.blocks.includes('fields'))

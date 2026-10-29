@@ -106,9 +106,11 @@ export interface ChatMessageCreatedEventPayload {
 /** A stored reply changed after it was announced (the judge settled its status fields): its chat refetches. */
 export type ChatMessageUpdatedEventPayload = ChatMessageCreatedEventPayload
 
-/** A chat changed outside a reply stream (its automatic title arrived): the chat and the chat lists refetch. */
+/** A chat changed outside a reply stream (its automatic title arrived). */
 export interface ChatThreadUpdatedEventPayload {
   threadId: number
+  /** Absent from older servers; the stored title is already limited by the thread's title contract. */
+  title?: string
   requestedByAccountId: number | null
 }
 

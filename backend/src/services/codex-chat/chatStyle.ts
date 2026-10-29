@@ -2,7 +2,7 @@
  * How a profile's chats look: typeface, roleplay text colours and the chat background. The model only follows a
  * text convention (the guidance below); the browser does the styling, so nothing the model writes runs as code.
  */
-import type { ChatBlockTone } from '@conai/shared'
+import { CHAT_MAX_EMOTICON_GROUPS, type ChatBlockTone } from '@conai/shared'
 
 export type ChatTypeface = 'sans' | 'serif' | 'mono'
 
@@ -96,7 +96,7 @@ export const DEFAULT_CHAT_STYLE: ChatStyle = {
   emoticonGroupIds: [],
 }
 
-export const MAX_EMOTICON_GROUPS = 10
+export const MAX_EMOTICON_GROUPS = CHAT_MAX_EMOTICON_GROUPS
 
 const MAX_CAST = 8
 const CAST_NAME_MAX_LENGTH = 40

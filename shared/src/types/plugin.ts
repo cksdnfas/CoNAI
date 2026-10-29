@@ -125,7 +125,8 @@ export type PluginLlmForgetRoomsResult = { rooms: Array<{ threadId: number; stat
 export type PluginLlmDiscardInput = { jobId: string }
 export type PluginLlmDiscardResult = { jobId: string; deleted: number }
 export type PluginLlmMeasurement = {
-  /** outputReserve may be estimate-only when no cap is configured; available is then advisory, not a rejection rule. */
+  /** outputReserve may be estimate-only when no cap is configured; available is then advisory, not a rejection rule.
+   * Translation-only reports the largest input/reserve separately and the minimum per-chunk available, not their difference from contextTokens. */
   inputTokens: number; outputReserve: number; contextTokens: number | null; available: number | null
   engine: 'api' | 'claude-code' | 'codex'; estimator: 'tokenizer' | 'heuristic'
 }

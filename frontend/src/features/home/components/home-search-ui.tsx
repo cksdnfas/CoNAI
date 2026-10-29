@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { useHomeSearch } from '@/features/home/home-search-context'
@@ -104,6 +104,23 @@ export function HomeSearchHeaderBox({ active }: { active: boolean }) {
 export function HomeSearchDrawer({ active }: { active: boolean }) {
   const { isDrawerOpen } = useHomeSearch()
   const [shouldMountDrawer, setShouldMountDrawer] = useState(isDrawerOpen)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    if (!active || isDrawerOpen) return
+    const rememberTrigger = (event: Event) => {
+      if (event.target instanceof Element) {
+        const button = event.target.closest<HTMLButtonElement>('header button')
+        if (button) triggerRef.current = button
+      }
+    }
+    document.addEventListener('focusin', rememberTrigger)
+    document.addEventListener('pointerdown', rememberTrigger)
+    return () => {
+      document.removeEventListener('focusin', rememberTrigger)
+      document.removeEventListener('pointerdown', rememberTrigger)
+    }
+  }, [active, isDrawerOpen])
 
   useEffect(() => {
     if (isDrawerOpen) {
@@ -125,7 +142,7 @@ export function HomeSearchDrawer({ active }: { active: boolean }) {
 
   return (
     <Suspense fallback={null}>
-      <HomeSearchDrawerContentLazy active={active} />
+      <HomeSearchDrawerContentLazy active={active} onReturnFocus={() => triggerRef.current?.focus({ preventScroll: true })} />
     </Suspense>
   )
 }

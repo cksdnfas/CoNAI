@@ -29,13 +29,12 @@ import {
 import { GenerationHistoryHeader } from './generation-history-header'
 import { GenerationHistoryRecoveryPanel } from './generation-history-recovery-panel'
 import { useGenerationHistoryActions, useHistoryRecoveryAcknowledgement } from './use-generation-history-actions'
-import { useGenerationHistoryFeed, type GenerationHistoryFeed } from './use-generation-history-feed'
+import type { GenerationHistoryFeed } from './use-generation-history-feed'
 import { EmptyState } from '@/components/ui/empty-state'
 import { LoadingState } from '@/components/ui/loading-state'
 import { ErrorState } from '@/components/ui/error-state'
 
 type GenerationHistoryPanelProps = {
-  refreshNonce: number
   serviceType: GenerationServiceType
   workflowId?: number | null
   publicWorkflowSlug?: string | null
@@ -43,13 +42,7 @@ type GenerationHistoryPanelProps = {
   onBack?: () => void
 }
 
-/** Render generation history using the shared image-list surface instead of per-record cards. */
-export function GenerationHistoryPanel({ refreshNonce, serviceType, workflowId, publicWorkflowSlug, ...viewProps }: GenerationHistoryPanelProps) {
-  const feed = useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId, publicWorkflowSlug })
-  return <GenerationHistoryPanelView feed={feed} serviceType={serviceType} workflowId={workflowId} publicWorkflowSlug={publicWorkflowSlug} {...viewProps} />
-}
-
-type GenerationHistoryPanelViewProps = Omit<GenerationHistoryPanelProps, 'refreshNonce'> & {
+type GenerationHistoryPanelViewProps = GenerationHistoryPanelProps & {
   feed: GenerationHistoryFeed
   /** Replaces the heading and scope line (e.g. the result/history toggle); the scope actions stay. */
   headerLeading?: ReactNode

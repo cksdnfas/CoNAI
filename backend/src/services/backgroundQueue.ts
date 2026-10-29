@@ -78,6 +78,12 @@ export interface BackgroundTask {
   retries: number;
   maxRetries: number;
   createdAt: Date;
+  completion?: { promise: Promise<boolean>; resolve: (success: boolean) => void };
+}
+
+interface TaskBucket {
+  tasks: Array<BackgroundTask | undefined>;
+  head: number;
 }
 
 /**
@@ -90,10 +96,14 @@ export interface BackgroundTask {
  */
 export class BackgroundQueueService {
   private static recoveryTimer: ReturnType<typeof setInterval> | undefined;
-  private static queue: BackgroundTask[] = [];
+  private static readonly metadataQueue: TaskBucket = { tasks: [], head: 0 };
+  private static readonly promptQueue: TaskBucket = { tasks: [], head: 0 };
+  private static queueLength = 0;
   private static activeTasks: BackgroundTask[] = [];
-  private static activeMetadataTaskKeys = new Set<string>();
+  private static readonly metadataTasks = new Map<string, BackgroundTask>();
+  private static readonly queueChangeListeners = new Set<() => void>();
   private static processing = false;
+  private static processScheduled = false;
   private static lockRetryScheduled = false;
   private static readonly MAX_RETRIES = 3;
   private static readonly BATCH_SIZE = resolveBackgroundQueueBatchSize(); // 동시 처리 작업 수
@@ -126,29 +136,59 @@ export class BackgroundQueueService {
     return `${compositeHash}\u0000${path.resolve(filePath)}`;
   }
 
-  /** Check for an exact queued or active metadata task before adding duplicate work. */
-  private static hasQueuedOrActiveMetadataExtractionTask(filePath: string, compositeHash: string): boolean {
-    const metadataTaskKey = this.getMetadataExtractionTaskKey(filePath, compositeHash);
-    if (this.activeMetadataTaskKeys.has(metadataTaskKey)) {
-      return true;
-    }
+  private static enqueue(task: BackgroundTask): void {
+    const bucket = task.priority === 1 ? this.metadataQueue : this.promptQueue;
+    bucket.tasks.push(task);
+    this.queueLength++;
+  }
 
-    const normalizedFilePath = path.resolve(filePath);
-    return this.queue.some((task) => (
-      task.type === TaskType.METADATA_EXTRACTION
-      && task.compositeHash === compositeHash
-      && path.resolve(task.filePath) === normalizedFilePath
-    ));
+  private static takeBatch(): BackgroundTask[] {
+    const batch: BackgroundTask[] = [];
+    for (const bucket of [this.metadataQueue, this.promptQueue]) {
+      while (batch.length < this.BATCH_SIZE && bucket.head < bucket.tasks.length) {
+        batch.push(bucket.tasks[bucket.head]!);
+        bucket.tasks[bucket.head++] = undefined;
+        this.queueLength--;
+      }
+      if (bucket.head >= 1024 && bucket.head * 2 >= bucket.tasks.length) {
+        bucket.tasks = bucket.tasks.slice(bucket.head);
+        bucket.head = 0;
+      }
+    }
+    return batch;
   }
 
   /**
    * 메타데이터 추출 작업 추가
    */
   static addMetadataExtractionTask(filePath: string, compositeHash: string): void {
+    this.getOrAddMetadataExtractionTask(filePath, compositeHash);
+  }
+
+  /** Share the existing queued or active extraction and observe its final outcome, including retries. */
+  static trackMetadataExtractionTask(filePath: string, compositeHash: string): Promise<boolean> {
+    const task = this.getOrAddMetadataExtractionTask(filePath, compositeHash);
+    if (!task.completion) {
+      let resolve!: (success: boolean) => void;
+      const promise = new Promise<boolean>((done) => { resolve = done; });
+      task.completion = { promise, resolve };
+    }
+    return task.completion.promise;
+  }
+
+  /** Notify a backpressured producer when queued or active work settles. */
+  static onQueueChange(listener: () => void): () => void {
+    this.queueChangeListeners.add(listener);
+    return () => { this.queueChangeListeners.delete(listener); };
+  }
+
+  private static getOrAddMetadataExtractionTask(filePath: string, compositeHash: string): BackgroundTask {
     const resolvedFilePath = path.resolve(filePath);
-    if (this.hasQueuedOrActiveMetadataExtractionTask(resolvedFilePath, compositeHash)) {
+    const key = this.getMetadataExtractionTaskKey(resolvedFilePath, compositeHash);
+    const existing = this.metadataTasks.get(key);
+    if (existing) {
       logger.debug(`  ⏭️  백그라운드 메타데이터 작업 이미 대기 중: ${path.basename(resolvedFilePath)}`);
-      return;
+      return existing;
     }
 
     const task: BackgroundTask = {
@@ -162,13 +202,19 @@ export class BackgroundQueueService {
       createdAt: new Date()
     };
 
-    this.queue.push(task);
+    this.metadataTasks.set(key, task);
+    this.enqueue(task);
     logger.debug(`  📋 백그라운드 작업 추가: 메타데이터 추출 - ${path.basename(filePath)}`);
 
     // 큐 처리 시작
-    if (!this.processing) {
-      setImmediate(() => void this.processQueue());
+    if (!this.processing && !this.processScheduled) {
+      this.processScheduled = true;
+      setImmediate(() => {
+        this.processScheduled = false;
+        void this.processQueue();
+      });
     }
+    return task;
   }
 
 
@@ -187,7 +233,7 @@ export class BackgroundQueueService {
       createdAt: new Date()
     };
 
-    this.queue.push(task);
+    this.enqueue(task);
     logger.debug(`  📋 백그라운드 작업 추가: 프롬프트 수집 - ${path.basename(filePath)}`);
 
     // 큐 처리 시작
@@ -200,7 +246,7 @@ export class BackgroundQueueService {
    * 큐 처리 (배치 병렬 처리)
    */
   private static async processQueue(): Promise<void> {
-    if (this.processing || this.queue.length === 0) {
+    if (this.processing || this.queueLength === 0) {
       return;
     }
 
@@ -210,24 +256,16 @@ export class BackgroundQueueService {
     }
 
     this.processing = true;
-    logger.info(`\n🔄 백그라운드 큐 처리 시작: ${this.queue.length}개 작업`);
+    logger.info(`\n🔄 백그라운드 큐 처리 시작: ${this.queueLength}개 작업`);
 
-    while (this.queue.length > 0) {
+    while (this.queueLength > 0) {
       if (SystemMaintenanceLockService.isExclusiveActive()) {
         break;
       }
 
-      // 우선순위 정렬
-      this.queue.sort((a, b) => a.priority - b.priority);
-
-      // 배치 추출
-      const batch = this.queue.splice(0, this.BATCH_SIZE);
+      // Priority buckets retain FIFO ordering without sorting the remaining queue.
+      const batch = this.takeBatch();
       this.activeTasks.push(...batch);
-      batch.forEach((task) => {
-        if (task.type === TaskType.METADATA_EXTRACTION) {
-          this.activeMetadataTaskKeys.add(this.getMetadataExtractionTaskKey(task.filePath, task.compositeHash));
-        }
-      });
 
       // 배치 병렬 처리
       const results = await Promise.allSettled(
@@ -242,7 +280,8 @@ export class BackgroundQueueService {
 
           if (task.retries < task.maxRetries) {
             logger.warn(`  ⚠️  작업 재시도 (${task.retries}/${task.maxRetries}): ${task.id}`);
-            this.queue.push(task);
+            this.enqueue(task);
+            return;
           } else {
             logger.error(`  ❌ 작업 최종 실패: ${task.id}`, result.reason);
             if (task.type === TaskType.METADATA_EXTRACTION) {
@@ -251,13 +290,14 @@ export class BackgroundQueueService {
             }
           }
         }
-      });
-      this.activeTasks = this.activeTasks.filter((task) => !batch.includes(task));
-      batch.forEach((task) => {
+        const task = batch[index];
         if (task.type === TaskType.METADATA_EXTRACTION) {
-          this.activeMetadataTaskKeys.delete(this.getMetadataExtractionTaskKey(task.filePath, task.compositeHash));
+          this.metadataTasks.delete(this.getMetadataExtractionTaskKey(task.filePath, task.compositeHash));
+          task.completion?.resolve(result.status === 'fulfilled' && result.value);
         }
       });
+      this.activeTasks = this.activeTasks.filter((task) => !batch.includes(task));
+      this.queueChangeListeners.forEach((listener) => listener());
 
       // 짧은 대기 (CPU 부하 방지)
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -265,7 +305,7 @@ export class BackgroundQueueService {
 
     this.processing = false;
 
-    if (this.queue.length > 0 && SystemMaintenanceLockService.isExclusiveActive()) {
+    if (this.queueLength > 0 && SystemMaintenanceLockService.isExclusiveActive()) {
       this.scheduleProcessQueueAfterMaintenanceLock();
       logger.info('⏸️  백그라운드 큐 처리 대기: 시스템 유지보수 잠금 활성\n');
       return;
@@ -289,19 +329,19 @@ export class BackgroundQueueService {
   /**
    * 개별 작업 처리
    */
-  private static async processTask(task: BackgroundTask): Promise<void> {
+  private static async processTask(task: BackgroundTask): Promise<boolean> {
     try {
       switch (task.type) {
         case TaskType.METADATA_EXTRACTION:
-          await this.processMetadataExtraction(task);
-          break;
+          return await this.processMetadataExtraction(task);
 
         case TaskType.PROMPT_COLLECTION:
           await this.processPromptCollection(task);
-          break;
+          return true;
 
         default:
           logger.warn(`  ⚠️  알 수 없는 작업 타입: ${task.type}`);
+          return true;
       }
     } catch (error) {
       // MetadataExtractionError인 경우 재시도 여부 판단
@@ -312,7 +352,7 @@ export class BackgroundQueueService {
             MediaPostprocessVisibilityService.finishMetadataExtraction(task.compositeHash, 'failed');
             QueryCacheService.scheduleGalleryCacheInvalidation();
           }
-          return; // 재시도하지 않음 (성공으로 간주)
+          return false; // 재시도하지 않음
         }
         logger.error(`  ❌ 재시도 가능한 오류: ${error.type} - ${error.message}`);
       } else {
@@ -328,7 +368,7 @@ export class BackgroundQueueService {
    * This is shared by the background queue and the saved-media/folder-scan
    * pipeline so every path uses the exact same parser and persistence logic.
    */
-  static async extractAndPersistMetadata(filePath: string, compositeHash: string): Promise<void> {
+  static async extractAndPersistMetadata(filePath: string, compositeHash: string): Promise<boolean> {
     const file = db.prepare(`SELECT file_type FROM image_files WHERE composite_hash = ?
       AND original_file_path = ? AND file_status = 'active' LIMIT 1`).get(compositeHash, filePath) as { file_type: string } | undefined;
     if (file?.file_type === 'video') {
@@ -355,7 +395,7 @@ export class BackgroundQueueService {
         // RangeError는 재시도해도 해결되지 않으므로 throw하지 않고 스킵
         MediaPostprocessVisibilityService.finishMetadataExtraction(compositeHash, 'failed');
         QueryCacheService.scheduleGalleryCacheInvalidation();
-        return;
+        return false;
       }
       throw error;
     }
@@ -398,13 +438,14 @@ export class BackgroundQueueService {
 
     // 새 이미지가 추가되었으므로 갤러리 캐시 무효화
     QueryCacheService.scheduleGalleryCacheInvalidation();
+    return true;
   }
 
   /**
    * 메타데이터 추출 처리
    */
-  private static async processMetadataExtraction(task: BackgroundTask): Promise<void> {
-    await this.extractAndPersistMetadata(task.filePath, task.compositeHash);
+  private static async processMetadataExtraction(task: BackgroundTask): Promise<boolean> {
+    return await this.extractAndPersistMetadata(task.filePath, task.compositeHash);
   }
 
 
@@ -437,7 +478,7 @@ export class BackgroundQueueService {
    */
   static getQueueStatus(): { queueLength: number; activeCount: number; processing: boolean } {
     return {
-      queueLength: this.queue.length,
+      queueLength: this.queueLength,
       activeCount: this.activeTasks.length,
       processing: this.processing
     };

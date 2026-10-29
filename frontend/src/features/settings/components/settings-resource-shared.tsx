@@ -11,19 +11,6 @@ import { useI18n } from '@/i18n'
 
 type SettingsBadgeVariant = NonNullable<ComponentProps<typeof Badge>['variant']>
 
-export interface SettingsResourceBadge {
-  label: ReactNode
-  variant?: SettingsBadgeVariant
-}
-
-export interface SettingsResourceAction {
-  label: string
-  title: string
-  icon: ReactNode
-  onClick: () => void
-  disabled?: boolean
-}
-
 /** Return a consistent badge variant for watcher status surfaces. */
 export function getWatcherBadgeVariant(watcherState?: string | null): SettingsBadgeVariant {
   if (!watcherState) {

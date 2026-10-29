@@ -8,7 +8,7 @@ import { ChatProfileStore } from '../src/services/codex-chat/chatProfiles'
 import { normalizeChatStyle } from '../src/services/codex-chat/chatStyle'
 import { CodexChatStore, type CodexChatMessageRecord, type CodexChatThreadRecord } from '../src/services/codex-chat/codexChatStore'
 import { streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTarget, type ChatCompletionTool } from '../src/services/codex-chat/llmChatCompletion'
-import { buildChatMessages, buildChatPromptPreview, completeSummary, cutToolOutput, estimateMessagesTokens, fitChatContext, fitThreadSummary, groupTranscript, insertAtDepth, rawMessagesEstimate, resolveContextConfig, summaryTranscriptText, toCompletionMessages, wrapUpRequest } from '../src/services/codex-chat/llmChatContext'
+import { buildChatMessages, buildChatPromptPreview, completeSummary, cutToolOutput, estimateMessagesTokens, fitChatContext, fitThreadSummary, groupTranscript, insertAtDepth, rawMessagesEstimate, resolveContextConfig, splitTurns, summaryTranscriptText, toCompletionMessages, wrapUpRequest } from '../src/services/codex-chat/llmChatContext'
 import { applyGenerationOutcomes, generationOutcomeNote } from '../src/services/codex-chat/codexChatMedia'
 import { addressLabelFilter, restatement, roundSeparator } from '../src/services/codex-chat/chatReplyText'
 import { buildOpenAiGenerationFields, readLlmConnectionConfig, summaryGenerationOptions, thinkingIsOff } from '../src/services/llmGenerationOptions'
@@ -123,8 +123,9 @@ const target: ChatCompletionTarget = {
 }
 
 test('JSON fallback delivers text and reasoning once and preserves tool calls and usage', async (t) => {
+  let thought = 'reason'
   t.mock.method(globalThis, 'fetch', async () => Response.json({
-    choices: [{ message: { content: 'answer', reasoning_content: 'reason', tool_calls: [{ id: 'call1', type: 'function', function: { name: 'read', arguments: '{}' } }] }, finish_reason: 'tool_calls' }],
+    choices: [{ message: { content: 'answer', reasoning_content: thought, tool_calls: [{ id: 'call1', type: 'function', function: { name: 'read', arguments: '{}' } }] }, finish_reason: 'tool_calls' }],
     usage: { prompt_tokens: 42 },
   }))
   const content: string[] = []
@@ -136,6 +137,12 @@ test('JSON fallback delivers text and reasoning once and preserves tool calls an
   assert.equal(result.toolCalls[0].function.name, 'read')
   assert.equal(result.finishReason, 'tool_calls')
   assert.equal(result.promptTokens, 42)
+  thought = 'Repeated reasoning. '.repeat(60)
+  const guarded = await streamChatCompletion({ target, messages: [], signal: new AbortController().signal, stopLoops: true })
+  assert.equal(guarded.finishReason, 'repetition')
+  assert.equal(guarded.content, 'answer')
+  assert.equal(guarded.reasoning, '')
+  assert.deepEqual(guarded.toolCalls, [])
 })
 
 test('SSE text is delivered once without JSON fallback duplication', async (t) => {
@@ -265,6 +272,11 @@ test('summary includes tool schema cost before old turns leave the request', asy
   profile.contextTokens = estimateMessagesTokens(profile.id, full, tools) + 100 - 500
   t.mock.method(CodexChatStore, 'findThreadById', () => thread)
   t.mock.method(CodexChatStore, 'setSummaryError', () => {})
+  t.mock.method(CodexChatStore, 'outputTokenLimit', (_id: number, fallback: number | null) => thread.max_tokens ?? fallback)
+  t.mock.method(CodexChatStore, 'countSummaryItems', (_source: unknown, after: number) => splitTurns(messages.filter(message => message.id > after)).length)
+  t.mock.method(CodexChatStore, 'listSummaryPage', (_source: unknown, after: number, count: number) => splitTurns(messages.filter(message => message.id > after)).slice(0, count).flat())
+  t.mock.method(CodexChatStore, 'readLoreTiming', () => ({ messages, messageCount: messages.length }))
+  t.mock.method(CodexChatStore, 'listBlockMessages', () => messages)
   const segments: ChatSummarySegment[] = []
   t.mock.method(ChatSummaryStore, 'list', () => segments)
   t.mock.method(ChatSummaryStore, 'addSegment', (_id: number, segment: { from: number; until: number; content: string }, revision: number) => {
@@ -405,20 +417,25 @@ test("no reasoning goes out the way the connection's thinking switch says", () =
   assert.ok(!thinkingIsOff({ reasoningEffort: 'none' }, 'none'))
 })
 
-test('a summary on an enable_thinking connection sends chat_template_kwargs and keeps the 2048 cap', async (t) => {
+test('a summary on an enable_thinking connection keeps the profile output allowance', async (t) => {
   mockModelRows(t, { 1: ['test', 'test'] }, 1)
-  const profile = ChatProfileStore.draft({ name: 'Character' })
+  const profile = ChatProfileStore.draft({ name: 'Character', maxTokens: 8192 })
   t.mock.method(ExternalApiProvider, 'findByName', () => ({ provider_name: 'test', display_name: 'Test', is_enabled: true, provider_type: 'llm_openai_compatible', base_url: 'http://unused.invalid/v1', additional_config: { thinking_switch: 'enable_thinking' } }))
   t.mock.method(ExternalApiProvider, 'getDecryptedKey', () => null)
   const bodies: Record<string, unknown>[] = []
+  let finishReason = 'stop'
   t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
     bodies.push(JSON.parse(String(init.body)))
-    return sse({ choices: [{ delta: { content: '요약' }, finish_reason: 'stop' }] })
+    return sse({ choices: [{ delta: { content: '요약' }, finish_reason: finishReason }] })
   })
   assert.equal(await completeSummary(profile, '요약해', '대화'), '요약')
   assert.deepEqual(bodies[0].chat_template_kwargs, { enable_thinking: false })
   assert.equal(bodies[0].reasoning_effort, undefined)
-  assert.equal(bodies[0].max_tokens, 2048)
+  assert.equal(bodies[0].max_tokens, 8192)
+  assert.equal(await completeSummary({ ...profile, maxTokens: null }, '요약해', '대화'), '요약')
+  assert.equal(bodies[1].max_tokens, undefined)
+  finishReason = 'length'
+  await assert.rejects(completeSummary(profile, '요약해', '대화'), /설정된 출력 또는 컨텍스트 한도/)
 })
 
 test('an echoed address label never reaches the stream, whatever the chunking', () => {

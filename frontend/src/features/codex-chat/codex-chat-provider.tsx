@@ -7,10 +7,14 @@ import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_HEALTH_QUERY_KEY, CHAT_PROFILES_QUERY_KEY, CHAT_STATUS_QUERY_KEY, threadLorebooksQueryKey, type ChatProfileSummary } from '@/lib/api-codex-chat'
 import { summarizeChatError } from './chat-error-chip'
 import { postLink, type StoredFileEntry } from '@conai/shared'
-import { getCodexChatThreadMedia } from '@/lib/api-codex-chat'
+import type { CodexChatMediaItem } from '@/lib/api-codex-chat'
+import type { GenerationHistoryRecord } from '@/lib/api-image-generation-types'
 import { FILES_QUERY_KEY, uploadStoredFiles } from '@/lib/api-files'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatPage } from './chat-page-context'
+import { refetchActiveChatQuery, scheduleChatDirectoryRefresh } from './chat-query-refresh'
+import { patchChatRoomLists } from './use-chat-room-directory'
+import { ChatLiveStateProvider } from './chat-live-state-provider'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
   CodexChatContext,
@@ -83,6 +87,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   // What the user is typing, per chat: moving through the list must not carry one chat's text into another.
   const [drafts, setDrafts] = useState<Record<number, string>>({})
   const draftsRef = useRef(drafts)
+  const currentDrafts = useCallback(() => draftsRef.current, [])
   const setDraft = useCallback((threadId: number, next: string | ((current: string) => string)) => {
     const current = draftsRef.current[threadId] ?? ''
     const value = typeof next === 'function' ? next(current) : next
@@ -117,18 +122,27 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
   const [draftReply, updateDraftReply] = useState<CodexChatApi['draftReply']>(null)
   const draftReplyRef = useRef(draftReply)
   const setDraftReply = useCallback((reply: CodexChatApi['draftReply']) => {
+    if (reply && !reply.quote.media) {
+      const messageId = reply.quote.messageId
+      const detail = queryClient.getQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(reply.threadId))
+      const message = detail?.messages.find((message) => message.id === messageId)
+      let media = message?.mediaAttachments?.[0]
+      for (const call of message?.tool_calls ?? []) {
+        if (media) break
+        let hash = call.compositeHashes[0]
+        if (!hash) for (const id of call.historyIds) {
+          const record = queryClient.getQueryData<{ record: GenerationHistoryRecord }>(['codex-chat-history', id])?.record
+          const found = record?.actual_composite_hash ?? record?.composite_hash ?? Object.keys(detail?.media ?? {}).find((key) => detail?.media[key].historyId === id)
+          if (found) { hash = found; break }
+        }
+        if (hash) media = { compositeHash: hash, name: '이미지', mimeType: detail?.media[hash]?.mimeType ?? null }
+      }
+      const cached = queryClient.getQueryData<CodexChatMediaItem[]>(codexChatMediaQueryKey(reply.threadId))?.find((item) => item.messageId === messageId)
+      if (!media && cached) media = { compositeHash: cached.compositeHash, name: '이미지', mimeType: cached.mimeType }
+      if (media) reply = { ...reply, quote: { ...reply.quote, media } }
+    }
     draftReplyRef.current = reply
     updateDraftReply(reply)
-    if (reply && !reply.quote.media) {
-      void queryClient.fetchQuery({ queryKey: codexChatMediaQueryKey(reply.threadId), queryFn: () => getCodexChatThreadMedia(reply.threadId), staleTime: 3000 }).then((items) => {
-        const media = items.find((item) => item.messageId === reply.quote.messageId)
-        if (media && draftReplyRef.current === reply) {
-          const next = { ...reply, quote: { ...reply.quote, media: { compositeHash: media.compositeHash, name: '이미지', mimeType: media.mimeType } } }
-          draftReplyRef.current = next
-          updateDraftReply(next)
-        }
-      }).catch(() => undefined)
-    }
   }, [queryClient])
   const [picks, setPicks] = useState<string[]>([])
   const picksRef = useRef(picks)
@@ -437,6 +451,19 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         : [...current.messages, message],
     } : current)
 
+    const showUserActivity = (message: CodexChatMessage) => {
+      const found = patchChatRoomLists(queryClient, sentThreadId, {
+        updated_date: message.created_date,
+        running: true,
+        preview: {
+          text: (message.display_content || message.content).replace(/\s+/g, ' ').trim(),
+          role: 'user', media: Boolean(message.mediaAttachments?.length), files: Boolean(message.attachments?.length),
+        },
+      })
+      // An existing room's title is unchanged. An unnamed/new room still needs its server-generated title.
+      if (!found || !cachedThread?.title) void scheduleChatDirectoryRefresh(queryClient)
+    }
+
     try {
       const onEvent = (event: CodexChatStreamEvent) => {
         if (streamAbortRef.current !== controller || controller.signal.aborted) return
@@ -445,7 +472,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           putMessage(event.message)
           updateLiveTurn((current) => current ? { ...current, userText: '', userRouting: undefined, flags: [], attachments: [], mediaAttachments: [] } : current)
           flush()
-          void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+          showUserActivity(event.message)
         } else if (event.type === 'speaker') {
           updateReply(event.profileId, () => ({ profileId: event.profileId, text: '', reasoning: '', toolCalls: new Map() }))
           keepSpeakers(event.speakers, event.queue)
@@ -462,7 +489,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
         } else if (isGroup && event.type === 'done') {
           putMessage(event.message)
           // New jobs can finish while other members are still answering.
-          void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(sentThreadId) })
+          void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId))
           updateLiveTurn((current) => current ? {
             ...current,
             replies: (current.replies ?? []).filter((reply) => reply.profileId !== event.message.speaker_profile_id),
@@ -491,8 +518,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           })
         } else if (event.type === 'user') {
           accepted = true
-          // The server titles a new thread from its first message.
-          void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+          showUserActivity(event.message)
         } else if (event.type === 'rewind') {
           accepted = true
           queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(sentThreadId), (current) => current ? {
@@ -504,7 +530,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
           updateLiveTurn((current) => current ? { ...current, replacingMessageId: event.mode === 'regenerate' ? event.message.id : undefined } : current)
         } else if (event.type === 'done') {
           // Proposals are attached when the thread is read, so a reply that proposed something reloads it now.
-          if (event.message.tool_calls.some((call) => call.tool.startsWith('propose_') || call.tool === 'offer_choices')) void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(sentThreadId) })
+          if (event.message.tool_calls.some((call) => call.tool.startsWith('propose_') || call.tool === 'offer_choices')) void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId))
           updateLiveTurn((current) => current ? { ...current, replacingMessageId: event.message.id, text: event.message.display_content ?? event.message.content, userText: '', userRouting: undefined, flags: [], attachments: [], mediaAttachments: [] } : current)
         } else if (event.type === 'error') {
           // The full text stays on the failed message (its error chip); the toast only names the reason.
@@ -534,11 +560,13 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     } finally {
       flush()
       controller.signal.removeEventListener('abort', discard)
+      void scheduleChatDirectoryRefresh(queryClient)
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(sentThreadId) }),
+        rewrite
+          ? queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(sentThreadId), exact: true })
+          : refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(sentThreadId)),
         queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(sentThreadId) }),
         queryClient.invalidateQueries({ queryKey: threadLorebooksQueryKey(sentThreadId) }),
-        queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
       ])
       // A failed reply may have found the connection down, a working one may have brought it back (not awaited).
       void queryClient.invalidateQueries({ queryKey: CHAT_HEALTH_QUERY_KEY })
@@ -652,6 +680,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     toggleChoice,
     clearChoice,
     currentLiveTurn,
+    currentDrafts,
     draftAttachments,
     draftMediaAttachments,
     setMediaAttachments,
@@ -671,7 +700,7 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     messageFocus,
     focusMessage,
     clearMessageFocus,
-  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, togglePendingFlag, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
+  }), [draftReply, setDraftReply, canUse, clearMessageFocus, closePanel, setDraft, keepDrafts, focusMessage, isPanelOpen, isStartingChat, currentLiveTurn, currentDrafts, messageFocus, openPanel, picks, togglePick, removePick, choice, toggleChoice, clearChoice, selectThread, settleSelection, selectedThreadId, listOpen, showList, send, regenerate, continueReply, editMessage, pendingChat, prepareChat, selectPendingGreeting, togglePendingFlag, sendPending, stop, view, draftAttachments, draftMediaAttachments, setMediaAttachments, removeMediaAttachment, toggleMediaAttachment, draftPostRefs, togglePostReference, attachmentsUploading, addAttachments, removeAttachment, uploadAttachments])
 
   const referencePanelOpen = canUse && isPanelOpen
   const referenceApi = useMemo<CodexChatReferenceApi>(() => ({ panelOpen: referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage }), [referencePanelOpen, draftMediaAttachments, toggleMediaAttachment, draftPostRefs, togglePostReference, focusMessage])
@@ -680,7 +709,9 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     <CodexChatContext.Provider value={api}>
       <CodexChatDraftsContext.Provider value={drafts}>
         <CodexChatReferenceContext.Provider value={referenceApi}>
-          <CodexChatLiveContext.Provider value={liveTurn}>{children}</CodexChatLiveContext.Provider>
+          <ChatLiveStateProvider turn={liveTurn}>
+            <CodexChatLiveContext.Provider value={liveTurn}>{children}</CodexChatLiveContext.Provider>
+          </ChatLiveStateProvider>
         </CodexChatReferenceContext.Provider>
       </CodexChatDraftsContext.Provider>
     </CodexChatContext.Provider>

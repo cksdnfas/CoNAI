@@ -1,7 +1,9 @@
 import { useCallback, useMemo, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { SearchX } from 'lucide-react'
 import { SectionHeading } from '@/components/common/section-heading'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useImageViewModal } from '@/features/images/components/detail/image-view-modal-context'
 import { prepareImageSourceState } from '@/features/images/image-source-navigation'
@@ -134,7 +136,7 @@ export function RelatedImageGallerySection({
       ) : null}
 
       {!isLoading && !errorMessage && items.length === 0 && emptyMessage ? (
-        <p className="text-xs text-muted-foreground">{emptyMessage}</p>
+        <EmptyState size="compact" icon={SearchX} title={emptyMessage} />
       ) : null}
     </section>
   )

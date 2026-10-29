@@ -10,6 +10,7 @@ import {
 import { requestJson } from './api-image-generation-request'
 import type { ImageDownloadType } from './api-images'
 import type { GenerationHistoryRecord, GenerationServiceType, SaveBrowserImageRecord } from './api-image-generation-types'
+import { appendDirectoryListingParams, type DirectoryListingParams, type DirectoryPage } from './api-directory-listing'
 
 export interface GenerationHistoryResponse {
   success: boolean
@@ -211,7 +212,11 @@ export async function downloadGenerationHistorySelection(
 }
 
 /** Load browser-ready image entries from the runtime save directory. */
-export async function listGenerationSaveImages() {
-  const response = await requestJson<{ success: boolean; data: { items: SaveBrowserImageRecord[]; total: number } }>('/api/image-editor/save-images')
-  return response.data.items
+export function listGenerationSaveImages(): Promise<SaveBrowserImageRecord[]>
+export function listGenerationSaveImages(params: DirectoryListingParams): Promise<DirectoryPage & { items: SaveBrowserImageRecord[] }>
+export async function listGenerationSaveImages(params?: DirectoryListingParams) {
+  const searchParams = new URLSearchParams()
+  if (params) appendDirectoryListingParams(searchParams, params)
+  const response = await requestJson<{ success: boolean; data: DirectoryPage & { items: SaveBrowserImageRecord[] } }>(`/api/image-editor/save-images${searchParams.size ? `?${searchParams}` : ''}`)
+  return params ? response.data : response.data.items
 }

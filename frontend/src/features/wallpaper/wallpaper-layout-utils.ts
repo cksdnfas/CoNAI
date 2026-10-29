@@ -389,6 +389,27 @@ export function cloneWallpaperPresetToDraft(layoutPreset: WallpaperLayoutPreset)
   })
 }
 
+/** The saved preset from which this browser's draft was opened. */
+export interface WallpaperDraftBase {
+  presetId: string
+  signature: string | null
+}
+
+export function createWallpaperDraftBase(preset: WallpaperLayoutPreset): WallpaperDraftBase {
+  const stable = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(stable)
+    if (!value || typeof value !== 'object') return value
+    return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, stable(item)]))
+  }
+  const wire = toWallpaperLayoutPresetWireModel(normalizeWallpaperLayoutPreset(preset))
+  const content = Object.fromEntries(Object.entries(wire).filter(([key]) => key !== 'createdAt' && key !== 'updatedAt'))
+  return { presetId: preset.id, signature: JSON.stringify(stable(content)) }
+}
+
+export function matchesWallpaperDraftBase(base: WallpaperDraftBase, preset: WallpaperLayoutPreset | undefined) {
+  return Boolean(preset && base.signature !== null && base.presetId === preset.id && base.signature === createWallpaperDraftBase(preset).signature)
+}
+
 function readStorage(key: string) {
   try {
     return typeof window === 'undefined' ? null : window.localStorage.getItem(key)
@@ -417,9 +438,23 @@ export function loadWallpaperLayoutDraft(): WallpaperLayoutPreset | null {
   }
 }
 
+/** Undefined means a pre-revision draft; null means its saved base is unavailable. */
+export function loadWallpaperDraftBase(): WallpaperDraftBase | null | undefined {
+  const raw = readStorage(WALLPAPER_LAYOUT_DRAFT_STORAGE_KEY) ?? readStorage(LEGACY_DRAFT_STORAGE_KEY)
+  if (!raw) return undefined
+  try {
+    const record = JSON.parse(raw) as Record<string, unknown>
+    if (!Object.prototype.hasOwnProperty.call(record, 'editorBase')) return undefined
+    const base = record.editorBase as WallpaperDraftBase | null
+    return base && typeof base.presetId === 'string' && (typeof base.signature === 'string' || base.signature === null) ? base : null
+  } catch {
+    return null
+  }
+}
+
 /** Persist the current wallpaper draft locally for runtime preview. */
-export function saveWallpaperLayoutDraft(layoutPreset: WallpaperLayoutPreset) {
-  writeStorage(WALLPAPER_LAYOUT_DRAFT_STORAGE_KEY, JSON.stringify(toWallpaperLayoutPresetWireModel(layoutPreset)))
+export function saveWallpaperLayoutDraft(layoutPreset: WallpaperLayoutPreset, base: WallpaperDraftBase | null = null) {
+  writeStorage(WALLPAPER_LAYOUT_DRAFT_STORAGE_KEY, JSON.stringify({ ...toWallpaperLayoutPresetWireModel(layoutPreset), editorBase: base }))
 }
 
 /** Read all named wallpaper presets cached in this browser. */

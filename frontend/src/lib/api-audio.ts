@@ -266,7 +266,6 @@ export const getAudioCandidate = (id: string) => requestApiData<AudioCandidate>(
 export const audioCandidateFileUrl = (id: string, download = false) => buildApiUrl(`/api/audio/candidates/${enc(id)}/file${download ? '?download=1' : ''}`)
 export const setAudioReview = (id: string, input: { review?: AudioReview; notes?: string }) => requestApiData<AudioCandidate>(`/api/audio/candidates/${enc(id)}/review`, body(input, 'PATCH'))
 export const moveAudioCandidates = (ids: string[], groupId: string) => requestApiData<unknown>('/api/audio/candidates/move', body({ ids, groupId }))
-export const restoreAudioCandidates = (ids: string[]) => requestApiData<unknown>('/api/audio/candidates/restore', body({ ids }))
 export const audioDeletionPlan = (groupId: string, scope: 'all' | 'unselected', candidateId?: string) =>
   requestApiData<{ candidate_ids: string[]; count: number; selected_count: number }>(`/api/audio/groups/${enc(groupId)}/candidates/deletion?scope=${scope}${candidateId ? `&candidate_id=${enc(candidateId)}` : ''}`)
 export const deleteAudioGroupCandidates = (groupId: string, candidateIds: string[], includeSelected: boolean) =>

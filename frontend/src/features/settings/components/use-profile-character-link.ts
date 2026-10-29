@@ -11,9 +11,10 @@ import {
   getCharacterSetting,
   type CharacterSetting,
 } from '@/lib/api-character-library'
-import { CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_PROFILE_SYNCED_KEYS, emoticonGroupsAfterServerChange, listChatAdminProfiles, type ChatProfile } from '@/lib/api-codex-chat'
+import { CHAT_ADMIN_PROFILES_QUERY_KEY, CHAT_PROFILE_SYNCED_KEYS, getChatAdminProfile, listChatAdminProfiles, type ChatProfile } from '@/lib/api-codex-chat'
 import { settingDraftOf } from '@/features/characters/character-library-shared'
 import type { Draft } from './chat-profile-editor-fields'
+import type { ProfileOwnEffect } from './chat-profile-editor'
 
 /** Where a profile's look goes into the library: a new setting, or over the setting it is detached from. */
 export type CharacterLibraryStore = { mode: 'create'; folderId: number | null; name: string } | { mode: 'overwrite' }
@@ -23,12 +24,12 @@ export type CharacterLibraryStore = { mode: 'create'; folderId: number | null; n
  * appearance tab edits the setting (its draft, generation and expressions), stored before the profile on save, and
  * every synced profile changes with it. Detached: the profile's own copy, remembering its origin.
  */
-export function useProfileCharacterLink({ open, profile, draft, setDraft, setProfile, ensureProfile }: {
+export function useProfileCharacterLink({ open, profile, draft, setDraft, adoptOwnProfile, ensureProfile }: {
   open: boolean
   profile: ChatProfile | null
   draft: Draft
   setDraft: (update: (current: Draft) => Draft) => void
-  setProfile: (profile: ChatProfile) => void
+  adoptOwnProfile: (profile: ChatProfile | null, effect: ProfileOwnEffect, source?: ChatProfile | null) => boolean
   /** Saves the profile (a new one is created) before the library stores its look. */
   ensureProfile: () => Promise<ChatProfile>
 }) {
@@ -91,22 +92,21 @@ export function useProfileCharacterLink({ open, profile, draft, setDraft, setPro
     const look = { appearance: values.appearance ?? '', referenceHash: values.referenceHash ?? null, avatarHash: values.avatarHash ?? null, avatarCrop: values.avatarCrop ?? null }
     if (target.mode === 'overwrite' && (!link || !origin)) throw new Error('원본 외형 설정을 아직 불러오지 못했어.')
     const saved = await ensureProfile()
+    const source = await getChatAdminProfile(saved.id)
+    if (source.revision !== saved.revision) throw new Error('프로필이 바뀌었어. 다시 읽고 저장해줘.')
     const result = await createCharacterSettingFromProfile(target.mode === 'create'
       ? { profileId: saved.id, ...look, mode: 'create', folderId: target.folderId, name: target.name.trim() }
       : { profileId: saved.id, ...look, mode: 'overwrite', settingId: link!.settingId, revision: origin!.revision })
     queryClient.setQueryData(characterSettingQueryKey(result.id), result)
     void refreshCharacterViews(queryClient, { folderIds: [result.folderId], settingIds: [result.id] })
-    // The server has synced the profile: the draft says so at once, whatever the refresh below does.
-    setDraft((current) => ({ ...current, characterLink: { settingId: result.id, synced: true } }))
+    const effect: ProfileOwnEffect = { kind: 'setting', setting: result, submitted: values, previousGroupId: source.expressionGroupId ?? null }
+    // Keep this action's link and group swap even if the later profile refresh fails.
+    adoptOwnProfile(null, effect, saved)
     try {
       const profiles = await listChatAdminProfiles()
       queryClient.setQueryData(CHAT_ADMIN_PROFILES_QUERY_KEY, profiles)
       const fresh = profiles.find((entry) => entry.id === saved.id)
-      if (fresh) {
-        setProfile(fresh)
-        // The draft follows the stored look, so the stored profile reads as unchanged there.
-        setDraft((current) => ({ ...current, appearance: fresh.appearance, referenceHash: fresh.referenceHash, avatarHash: fresh.avatarHash, avatarCrop: fresh.avatarCrop, avatar: fresh.avatar, style: { ...current.style, emoticonGroupIds: emoticonGroupsAfterServerChange(saved.style.emoticonGroupIds, fresh.style.emoticonGroupIds, current.style.emoticonGroupIds) } }))
-      }
+      if (fresh) adoptOwnProfile(fresh, effect, saved)
     } catch {
       // Best effort: the profile list refreshes on its own later; the link above already holds.
     }

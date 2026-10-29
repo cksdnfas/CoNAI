@@ -722,10 +722,10 @@ function AgentResultCard({ agent, text, imageCount, children }: { agent: ChatAge
           <p className="truncate text-sm font-medium">{t({ ko: '위임 작업 · {title}', en: 'Delegated · {title}' }, { title: firstLineOf(text) || agent.name })}</p>
           <p className="truncate text-xs text-muted-foreground">{status}</p>
         </div>
-        <Button variant="ghost" size="xs" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen(!open)}>
+        {text ? <Button variant="ghost" size="xs" aria-expanded={open} aria-controls={open ? bodyId : undefined} onClick={() => setOpen(!open)}>
           {open ? t({ ko: '접기', en: 'Fold' }) : t({ ko: '펼치기', en: 'Open' })}
           <ChevronDown className={cn('transition-transform', open && 'rotate-180')} />
-        </Button>
+        </Button> : null}
       </div>
       {open ? <div id={bodyId} className="border-t border-line px-3 py-2.5">{children}</div> : null}
     </div>
@@ -802,7 +802,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
     )
   }
 
-  const segments = content && speaker?.cast?.length ? splitByCast(content, speaker.name, speaker.cast) : null
+  const segments = !agent && content && speaker?.cast?.length ? splitByCast(content, speaker.name, speaker.cast) : null
   const hasCast = segments?.some((segment) => segment.speaker !== null) ?? false
   // Without cast lines the whole reply is the profile's; with them, only the leading part (if any) is.
   const ownText = hasCast ? (segments?.[0]?.speaker === null ? segments[0].text : '') : content
@@ -811,10 +811,10 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   // A failed or empty reply has no body: nothing to draw a bubble around.
   // A proposal rides on a tool call, so `toolCalls.length` already counts it as content.
   // An agent's report folds into its card, above the pictures it made.
-  const agentCard = agent && ownText && !streaming
-    ? <AgentResultCard agent={agent} text={ownText} imageCount={new Set(toolCalls.flatMap((call) => call.compositeHashes)).size}>{markdown(ownText)}</AgentResultCard>
+  const agentCard = agent && !streaming
+    ? <AgentResultCard agent={agent} text={ownText} imageCount={new Set(toolCalls.flatMap((call) => call.compositeHashes)).size}>{ownText ? markdown(ownText) : null}</AgentResultCard>
     : null
-  const ownParts = !ownText && !showReasoning && toolCalls.length === 0 && !fileChanges?.length && !routing?.replyTo ? null : (
+  const ownParts = !agentCard && !ownText && !showReasoning && toolCalls.length === 0 && !fileChanges?.length && !routing?.replyTo ? null : (
     <div className="space-y-2">
       <ChatMessageReply routing={routing} recipientLabel={routing?.replyTo ? recipientLabel : undefined} />
       {showReasoning ? <ReasoningBlock text={reasoning as string} active={streaming && !content} /> : null}

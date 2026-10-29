@@ -48,6 +48,46 @@ interface ActiveFolderFileRow {
 export class FolderScanService {
   private static readonly MISSING_RECONCILE_PAGE_SIZE = 5000;
   private static readonly MISSING_RECONCILE_WRITE_BATCH_SIZE = 500;
+  private static readonly folderScans = new Map<number, Promise<void>>();
+
+  /** Capture active rows before discovery, without retaining the library in JS memory. */
+  private static async captureReconcileBaseline(folderId: number): Promise<void> {
+    const maxId = (db.prepare('SELECT MAX(id) AS id FROM image_files WHERE folder_id = ?')
+      .get(folderId) as { id: number | null }).id ?? 0;
+    const selectIds = db.prepare(`
+      SELECT id FROM image_files
+      WHERE folder_id = ? AND file_status = 'active' AND id > ? AND id <= ?
+      ORDER BY id LIMIT ?
+    `);
+    const capture = db.prepare(`
+      INSERT INTO temp.folder_scan_baseline
+        (folder_id, id, original_file_path, last_verified_date, file_size, file_modified_date, mime_type, composite_hash)
+      SELECT folder_id, id, original_file_path, last_verified_date, file_size, file_modified_date, mime_type, composite_hash
+      FROM image_files
+      WHERE folder_id = ? AND file_status = 'active' AND id > ? AND id <= ?
+    `);
+    let lastId = 0;
+    for (;;) {
+      const rows = selectIds.all(folderId, lastId, maxId, this.MISSING_RECONCILE_PAGE_SIZE) as Array<{ id: number }>;
+      if (rows.length === 0) break;
+      const endId = rows.at(-1)!.id;
+      capture.run(folderId, lastId, endId);
+      lastId = endId;
+      if (rows.length < this.MISSING_RECONCILE_PAGE_SIZE) break;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+  }
+
+  private static async clearReconcileBaseline(folderId: number): Promise<void> {
+    const clear = db.prepare(`
+      DELETE FROM temp.folder_scan_baseline WHERE folder_id = ? AND id IN (
+        SELECT id FROM temp.folder_scan_baseline WHERE folder_id = ? LIMIT ?
+      )
+    `);
+    while (clear.run(folderId, folderId, this.MISSING_RECONCILE_PAGE_SIZE).changes > 0) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+  }
 
   /**
    * Mark only active rows that were absent from one completely successful full scan.
@@ -60,12 +100,19 @@ export class FolderScanService {
   ): Promise<number> {
     const discoveredPaths = new Set(discoveredFiles);
     const selectPage = db.prepare(`
-      SELECT id, original_file_path
-      FROM image_files
-      WHERE folder_id = ?
-        AND file_status = 'active'
-        AND id > ?
-      ORDER BY id
+      SELECT f.id, f.original_file_path
+      FROM image_files f
+      JOIN temp.folder_scan_baseline s ON s.folder_id = f.folder_id AND s.id = f.id
+      WHERE f.folder_id = ?
+        AND f.file_status = 'active'
+        AND f.id > ?
+        AND f.original_file_path IS s.original_file_path
+        AND f.last_verified_date IS s.last_verified_date
+        AND f.file_size IS s.file_size
+        AND f.file_modified_date IS s.file_modified_date
+        AND f.mime_type IS s.mime_type
+        AND f.composite_hash IS s.composite_hash
+      ORDER BY f.id
       LIMIT ?
     `);
     const markMissing = db.prepare(`
@@ -74,6 +121,16 @@ export class FolderScanService {
       WHERE id = ?
         AND folder_id = ?
         AND file_status = 'active'
+        AND EXISTS (
+          SELECT 1 FROM temp.folder_scan_baseline s
+          WHERE s.folder_id = image_files.folder_id AND s.id = image_files.id
+            AND image_files.original_file_path IS s.original_file_path
+            AND image_files.last_verified_date IS s.last_verified_date
+            AND image_files.file_size IS s.file_size
+            AND image_files.file_modified_date IS s.file_modified_date
+            AND image_files.mime_type IS s.mime_type
+            AND image_files.composite_hash IS s.composite_hash
+        )
     `);
     const markBatch = db.transaction((ids: number[]) => {
       let changed = 0;
@@ -121,6 +178,24 @@ export class FolderScanService {
     fullRescan: boolean = false,
     options: ScanFolderOptions = {}
   ): Promise<ScanResult> {
+    const previous = this.folderScans.get(folderId);
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => { release = resolve; });
+    this.folderScans.set(folderId, current);
+    try {
+      if (previous) await previous;
+      return await this.scanFolderUnlocked(folderId, fullRescan, options);
+    } finally {
+      release();
+      if (this.folderScans.get(folderId) === current) this.folderScans.delete(folderId);
+    }
+  }
+
+  private static async scanFolderUnlocked(
+    folderId: number,
+    fullRescan: boolean,
+    options: ScanFolderOptions,
+  ): Promise<ScanResult> {
     if (SystemMaintenanceLockService.isExclusiveActive()) {
       throw new Error('시스템 유지보수 작업 중이라 폴더 스캔을 시작할 수 없습니다.');
     }
@@ -139,6 +214,7 @@ export class FolderScanService {
       backgroundTasks: 0
     };
 
+    let hasBaseline = false;
     try {
       // 1. 폴더 정보 조회
       const folder = await WatchedFolderService.getFolder(folderId);
@@ -168,6 +244,18 @@ export class FolderScanService {
       // 4. 스캔 상태 업데이트
       await WatchedFolderService.updateScanStatus(folderId, 'in_progress');
 
+      if (fullRescan && !options.candidateFiles) {
+        db.exec(`CREATE TEMP TABLE IF NOT EXISTS folder_scan_baseline (
+          folder_id INTEGER NOT NULL, id INTEGER NOT NULL, original_file_path TEXT NOT NULL,
+          last_verified_date TEXT, file_size INTEGER, file_modified_date TEXT, mime_type TEXT, composite_hash TEXT,
+          PRIMARY KEY (folder_id, id)
+        )`);
+        hasBaseline = true;
+        // Rows left by a scan whose cleanup failed would collide with this capture.
+        await this.clearReconcileBaseline(folderId);
+        await this.captureReconcileBaseline(folderId);
+      }
+
       // 5. 파일 목록 수집
       const files = options.candidateFiles
         ? Array.from(new Set(options.candidateFiles))
@@ -189,6 +277,9 @@ export class FolderScanService {
       // 6. 배치별로 파일 처리 (Phase 1: 빠른 등록)
       await FastRegistrationService.processFastRegistration(files, folderId, result, {
         quietIfIdle: options.quietIfNoChanges === true,
+        // A watcher in another process must leave a revision even when stat data
+        // is unchanged, so an overlapping full scan cannot hide its file.
+        verifyUnchanged: Boolean(options.candidateFiles),
       });
 
       // 7. 전체 재스캔의 누락 판정은 완전한 탐색과 모든 파일 stat/등록이
@@ -244,6 +335,8 @@ export class FolderScanService {
         error instanceof Error ? error.message : 'Unknown error'
       );
       throw error;
+    } finally {
+      if (hasBaseline) await this.clearReconcileBaseline(folderId);
     }
   }
 

@@ -315,10 +315,6 @@ export function getImagePromptTermItems(image: ImageRecord, type: 'positive' | '
   return getPromptTermItems(promptText)
 }
 
-export function getImagePromptTerms(image: ImageRecord, type: 'positive' | 'negative') {
-  return getImagePromptTermItems(image, type).map((term) => term.searchValue)
-}
-
 export function getImageLoraModels(image: ImageRecord) {
   const metadataLoraSource = image.ai_metadata?.lora_models
   const metadataLoraValues = Array.isArray(metadataLoraSource) ? metadataLoraSource : []

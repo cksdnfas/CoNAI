@@ -277,9 +277,13 @@ async function replyAs(run: GroupRun, requester: McpRequester, profile: ChatProf
   const others = [userPersonaForThread(thread).name, ...members.filter((member) => member.id !== profile.id).map((member) => member.name)]
   const persist = async ({ contextMeta, requestCapture, ...raw }: GroupReplyResult) => {
     const saveMeta = (id: number) => {
-      if (contextMeta) {
-        CodexChatStore.setContextMeta(id, loadChatSettings().diagnostics.enabled ? limitContextMeta(contextMeta) : legacyContextMeta(contextMeta))
-        saveChatRequestCapture(id, requestCapture)
+      try {
+        if (contextMeta) {
+          CodexChatStore.setContextMeta(id, loadChatSettings().diagnostics.enabled ? limitContextMeta(contextMeta) : legacyContextMeta(contextMeta))
+          saveChatRequestCapture(id, requestCapture)
+        }
+      } catch (error) {
+        console.warn(`[group-chat] Reply ${id} was stored; diagnostics could not be saved:`, error instanceof Error ? error.message : error)
       }
     }
     // Keep the reply as written when cutting other speakers' lines would leave nothing; an empty reply is a failure
@@ -598,9 +602,6 @@ export const GroupChatService = {
     LlmChatService.skipReaction(threadId)
     skipThreadGenerationReactions(threadId)
     if (!automatic) await GroupChatService.stop(threadId)
-    // The person's own message answers a task waiting for them (see ChatTaskRunner).
-    if (!automatic) notifyChatUserSend(threadId, false)
-
     await startRun(threadId, listener, async (run) => {
       // Reserve the room before translation so stop() also cancels preparation.
       const translated = await translateUserMessage(translatorOf(memberProfiles(threadId)), trimmed, flags, run.controller.signal, { threadId })
@@ -608,6 +609,8 @@ export const GroupChatService = {
       if (typeof options.chainLimit === 'number' && options.chainLimit >= 0) run.chainLimit = Math.min(run.chainLimit, Math.floor(options.chainLimit))
       if (routing.replyTo) requireReplyTarget(threadId, routing.replyTo.messageId)
       const userMessageId = CodexChatStore.addMessage({ thread_id: threadId, role: 'user', ...translated, tool_calls: [], status: 'completed', mediaAttachments, routing }, attachments.map((file) => file.id))
+      // Only a delivered user message can answer a task waiting for them.
+      if (!automatic) notifyChatUserSend(threadId, false)
       ChatFlagStore.setThreadFlags(threadId, flags.filter((flag) => !flag.pick).map((flag) => flag.id))
       if (judgeRoutes) await routeByJudge(run, requester, userMessageId, routing)
       emit(run, { type: 'user', message: findMessage(threadId, userMessageId) })

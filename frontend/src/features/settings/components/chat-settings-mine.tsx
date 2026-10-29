@@ -58,10 +58,10 @@ export function ChatSettingsMine({ sharedFlags = false, options }: { sharedFlags
     await Promise.all([queryClient.invalidateQueries({ queryKey: CHAT_USER_PROFILES_QUERY_KEY }), queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })])
   }
   const saveFlag = async (args: Record<string, ChatPageData>) => {
-    if (isAdmin && !sharedFlags) throw new Error('관리자의 공용 플래그는 설정 → 채팅에서 관리해줘.')
     const current = typeof args.id === 'number' ? flags.find((flag) => flag.id === args.id) : undefined
     if (typeof args.id === 'number' && !current) throw new Error('목록에 없는 플래그야.')
     if (args.operation === 'save') {
+      if (isAdmin && !sharedFlags && !current) throw new Error('새 공용 플래그는 설정 → 채팅에서 만들어줘.')
       const name = (typeof args.name === 'string' ? args.name : current?.name ?? '').trim()
       const content = typeof args.content === 'string' ? args.content : current?.content ?? ''
       if (!name || !content.trim()) throw new Error('플래그 이름과 내용이 필요해.')
@@ -81,11 +81,14 @@ export function ChatSettingsMine({ sharedFlags = false, options }: { sharedFlags
         ko: 'data.userProfiles(채팅에서 내가 누구인지). save: id 있으면 넘긴 것만 수정, 없으면 추가. 아바타·제안 모델은 사람이 편집기에서.',
         en: 'data.userProfiles (who the account is in chats). save: with id edits what is passed, without adds. Avatar and suggestion model stay in the editor.',
       }), pageObject({ operation: pageChoice(['save', 'delete']), id: pageNumber(0, undefined, true), name: pageText(CHAT_USER_PROFILE_LIMITS.name), persona: pageText(CHAT_USER_PROFILE_LIMITS.persona), isDefault: { type: 'boolean' } }, ['operation']), 'save'),
-      pageAction('settings.flag', t({ ko: '{name} 저장·삭제', en: 'Save or delete {name}' }, { name: t(SETTINGS_ROW_BY_ID[sharedFlags ? 'chat.flags' : 'mine.flags'].label) }), sharedFlags ? t(SETTINGS_ROW_BY_ID['chat.flags'].description) : t({
+      pageAction('settings.flag', t({ ko: '{name} 저장·삭제', en: 'Save or delete {name}' }, { name: t(SETTINGS_ROW_BY_ID[sharedFlags ? 'chat.flags' : 'mine.flags'].label) }), sharedFlags ? t(SETTINGS_ROW_BY_ID['chat.flags'].description) : isAdmin ? t({
+        ko: 'data.flags의 개인 플래그를 id로 수정하거나 지워. 새 공용 플래그는 설정 → 채팅에서 만들어.',
+        en: 'Edit or delete an existing personal flag from data.flags by id. Create new shared flags under Settings → Chat.',
+      }) : t({
         ko: 'data.flags(채팅마다 켜면 메시지에 붙는 지시문). save: id 있으면 수정(공용이면 내 사본), 없으면 추가. icon: 이모지나 lucide:<이름>. restore: 숨긴 공용 꺼내기, reset: 공용 원문으로.',
         en: 'data.flags (instructions switched on per chat). save: with id edits (a shared one becomes an own copy), without adds. icon: emoji or lucide:<name>. restore: unhide a shared one, reset: back to the shared text.',
-      }), pageObject({ operation: pageChoice(['save', 'delete', 'restore', 'reset']), id: pageNumber(0, undefined, true), icon: pageText(60), name: pageText(CHAT_FLAG_LIMITS.name), content: pageText(CHAT_FLAG_LIMITS.content) }, ['operation']), 'save'),
-    ].filter((action) => sharedFlags ? action.id !== 'settings.user_profile' : !isAdmin || action.id !== 'settings.flag'),
+      }), pageObject({ operation: pageChoice(isAdmin && !sharedFlags ? ['save', 'delete'] : ['save', 'delete', 'restore', 'reset']), id: pageNumber(0, undefined, true), icon: pageText(60), name: pageText(CHAT_FLAG_LIMITS.name), content: pageText(CHAT_FLAG_LIMITS.content) }, ['operation']), 'save'),
+    ].filter((action) => sharedFlags ? action.id !== 'settings.user_profile' : !isAdmin || flags.length > 0 || action.id !== 'settings.flag'),
     apply: () => {},
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()

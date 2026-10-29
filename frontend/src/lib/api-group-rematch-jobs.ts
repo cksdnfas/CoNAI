@@ -1,5 +1,5 @@
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { fetchJson } from '@/lib/api-client'
+import { requestJson } from '@/lib/api-request'
 import { resolveRuntimeJobPollIntervalMs, RUNTIME_JOB_WAIT_TIMEOUT_MS } from '@/lib/api-runtime-jobs'
 import type { ApiResponse } from '@/types/image'
 import type { GroupRematchJobRecord } from '@/types/group'
@@ -24,7 +24,7 @@ export function isGroupRematchJobRecord<T>(value: unknown): value is GroupRematc
 }
 
 export async function getGroupRematchJob<T>(jobId: string) {
-  const response = await fetchJson<ApiResponse<GroupRematchJobRecord<T>>>(`/api/groups/auto-collect-jobs/${jobId}`)
+  const response = await requestJson<ApiResponse<GroupRematchJobRecord<T>>>(`/api/groups/auto-collect-jobs/${jobId}`)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'groups.autoCollect.run')
   }

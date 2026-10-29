@@ -1,22 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useNow } from '@/lib/use-now'
 import type { ImageRecord } from '@/types/image'
 import type { WallpaperAnimationEasing, WallpaperAnimationEasingPreset, WallpaperImageHoverMotion, WallpaperImageTransitionSpeed } from './wallpaper-types'
 import { isWallpaperPlaybackRunning, useWallpaperPlayback } from './wallpaper-playback'
 
 /** Render one live clock string for the wallpaper clock widget. */
 export function useWallpaperClockText() {
-  const [currentTime, setCurrentTime] = useState(() => new Date())
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setCurrentTime(new Date())
-    }, 1000)
-    return () => {
-      window.clearInterval(timer)
-    }
-  }, [])
-
-  return currentTime
+  return new Date(useNow(1000, true))
 }
 
 /**

@@ -88,12 +88,37 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     // Through the file store (the file page): the change hook re-reads it.
     FileStoreService.writeText(me, book.folderId, 'lorebook.json', JSON.stringify({ name: '카이', entries: [{ keys: ['집'], content: '항구 근처 2층 집.' }] }))
     assert.deepEqual(cached(bookId).map((entry) => entry.content), ['항구 근처 2층 집.'])
+    const hookedJson = child(me, book.folderId, 'lorebook.json')!
+    assert.equal(JSON.parse(readBlob(me, hookedJson.id)).entries[0].id, cached(bookId)[0].id, 'file-tool writes persist the assigned ID in the source file')
     // Straight on disk while the app was down: the startup pass re-reads every book.
     const json = child(me, book.folderId, 'lorebook.json')!
     fs.writeFileSync(storedFilePath(me, json.id), JSON.stringify([{ keys: ['수리점'], content: '1층은 수리점.' }, { keys: ['집'], content: '항구 근처 2층 집.' }]))
     const result = reconcileLorebookFolders()
     assert.equal(result.refreshed, 1)
     assert.deepEqual(cached(bookId).map((entry) => entry.content), ['1층은 수리점.', '항구 근처 2층 집.'])
+    const stamped = JSON.parse(readBlob(me, json.id)) as Array<{ id: string }>
+    assert.deepEqual(stamped.map((entry) => entry.id), cached(bookId).map((entry) => entry.id), 'startup stamps bare-array source files')
+    const stable = OwnedLorebookStore.find(bookId, me)!
+    const bytes = readBlob(me, json.id)
+    for (let n = 0; n < 3; n++) assert.deepEqual(OwnedLorebookStore.find(bookId, me), stable)
+    reconcileLorebookFolders()
+    assert.equal(OwnedLorebookStore.find(bookId, me)!.revision, stable.revision, 'unchanged reads and startup passes do not write')
+    assert.equal(readBlob(me, json.id), bytes)
+    FileStoreService.writeText(me, book.folderId, 'lorebook.json', JSON.stringify({
+      custom: { keep: true },
+      entries: { first: stable.entries[0], second: { ...stable.entries[1], id: stable.entries[0].id, customEntry: 'keep' } },
+    }))
+    const repaired = JSON.parse(readBlob(me, json.id))
+    assert.deepEqual(repaired.custom, { keep: true })
+    assert.equal(repaired.entries.second.customEntry, 'keep')
+    assert.equal(repaired.entries.first.id, stable.entries[0].id)
+    assert.notEqual(repaired.entries.second.id, repaired.entries.first.id)
+    assert.deepEqual(cached(bookId).map((entry) => entry.id), [repaired.entries.first.id, repaired.entries.second.id])
+    const deletedId = repaired.entries.second.id
+    OwnedLorebookStore.update(bookId, me, { entries: [stable.entries[0]] })
+    FileStoreService.writeText(me, book.folderId, 'lorebook.json', JSON.stringify({ entries: [stable.entries[0], { content: 'B without ID' }] }))
+    assert.notEqual(cached(bookId)[1].id, deletedId)
+    assert.equal(JSON.parse(readBlob(me, json.id)).entries[1].id, cached(bookId)[1].id)
     // A broken file keeps the cache.
     fs.writeFileSync(storedFilePath(me, json.id), '{ not json')
     reconcileLorebookFolders()
@@ -108,6 +133,122 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     // Renaming the folder renames the book.
     FileStoreService.rename(me, added.id, '세계관 보강')
     assert.equal(OwnedLorebookStore.find(adopted!.id, me)?.name, '세계관 보강')
+  })
+
+  await t.test('summary counts preserve stale-file refresh, identities, revisions and malformed-cache behavior', () => {
+    const book = OwnedLorebookStore.create(me, { name: 'Summary refresh', entries: [{ title: 'A', content: 'original' }] })
+    const json = child(me, book.folderId, 'lorebook.json')!
+    fs.writeFileSync(storedFilePath(me, json.id), JSON.stringify({ entries: [{ id: book.entries[0].id, title: 'A', content: 'updated' }, { title: 'B', content: 'new' }] }))
+    const summary = OwnedLorebookStore.listSummary(me).find((item) => item.id === book.id)!
+    const refreshed = OwnedLorebookStore.requireOwn(book.id, me)
+    const { entries, ...rest } = refreshed
+    assert.deepEqual(summary, { ...rest, entryCount: entries.length })
+    assert.notEqual(summary.revision, book.revision)
+    assert.equal(entries[0].id, book.entries[0].id)
+    assert.equal(JSON.parse(readBlob(me, json.id)).entries[1].id, entries[1].id)
+
+    const global = ChatLorebookStore.create({ name: 'Summary malformed' })
+    for (const raw of ['{ broken', JSON.stringify({ entries: [] }), JSON.stringify([null, [], 1, {}, ...Array.from({ length: 500 }, () => ({}))])]) {
+      db.prepare('UPDATE chat_lorebooks SET entries = ? WHERE id = ?').run(raw, global.id)
+      const expected = ChatLorebookStore.find(global.id)!
+      const { entries: normalized, ...metadata } = expected
+      assert.deepEqual(ChatLorebookStore.listSummary().find((item) => item.id === global.id), { ...metadata, entryCount: normalized.length })
+    }
+    ChatLorebookStore.delete(global.id)
+    OwnedLorebookStore.delete(book.id, me)
+  })
+
+  await t.test('permanent entry identities survive writes, imports, deletions, duplicate IDs and database migration', async () => {
+    const { readLorebookFile } = await import('../src/services/codex-chat/chatCardImport')
+    const imported = readLorebookFile(Buffer.from(JSON.stringify({ entries: [{ content: 'A' }, { content: 'B' }] })), 'ids.json')
+    const book = ChatLorebookStore.create(imported)
+    assert.deepEqual(book.entries.map((entry) => entry.id), imported.entries.map((entry) => entry.id))
+    const oldIds = new Set(book.entries.map((entry) => entry.id))
+    const afterDelete = ChatLorebookStore.update(book.id, { entries: [book.entries[1]] })!
+    assert.equal(afterDelete.entries[0].id, book.entries[1].id)
+    const resent = ChatLorebookStore.update(book.id, { entries: [{ content: 'B without its ID' }] })!
+    assert.ok(!oldIds.has(resent.entries[0].id), 'id-less replacement cannot inherit a deleted positional identity')
+    const duplicate = ChatLorebookStore.update(book.id, { entries: [{ id: 'lore-0-0', content: 'legacy' }, { id: 'lore-0-0', content: 'duplicate' }] })!
+    assert.equal(duplicate.entries[0].id, 'lore-0-0')
+    assert.notEqual(duplicate.entries[1].id, 'lore-0-0')
+    assert.deepEqual(ChatLorebookStore.find(book.id), duplicate)
+    const again = ChatLorebookStore.update(book.id, { entries: [{ id: 'lore-0-0', content: 'legacy' }, { id: 'lore-0-0', content: 'new duplicate' }] })!
+    assert.notEqual(again.entries[1].id, duplicate.entries[1].id)
+
+    const { migrateLoreEntryIds } = await import('../src/services/codex-chat/chatLorebookIds')
+    const broken = ChatLorebookStore.create({ name: 'Malformed stored JSON' })
+    db.prepare('UPDATE chat_lorebooks SET entries = ? WHERE id = ?').run('{ not json', broken.id)
+    db.prepare('UPDATE chat_lorebooks SET entries = ? WHERE id = ?').run(JSON.stringify([{ id: 'lore-0-0', content: 'old' }, { content: 'missing', custom: 'preserve' }]), book.id)
+    db.prepare("DELETE FROM chat_settings_migrations WHERE name = 'permanent_lore_entry_ids_v1'").run()
+    assert.doesNotThrow(() => createUserSettingsSchema(db), 'malformed lore JSON must not prevent startup')
+    assert.deepEqual(ChatLorebookStore.find(broken.id)!.entries, [])
+    assert.equal((db.prepare('SELECT entries FROM chat_lorebooks WHERE id = ?').get(broken.id) as { entries: string }).entries, '{ not json')
+    const migrated = ChatLorebookStore.find(book.id)!
+    assert.equal(migrated.entries[0].id, 'lore-0-0')
+    assert.ok(migrated.entries[1].id)
+    const raw = JSON.parse((db.prepare('SELECT entries FROM chat_lorebooks WHERE id = ?').get(book.id) as { entries: string }).entries)
+    assert.equal(raw[1].custom, 'preserve')
+    assert.equal(raw[1].id, migrated.entries[1].id)
+    migrateLoreEntryIds(db)
+    assert.deepEqual(ChatLorebookStore.find(book.id), migrated, 'migration is durable and runs once')
+  })
+
+  await t.test('missing account/chat JSON blobs preserve the cache and ordinary saves repair them', () => {
+    const threadId = CodexChatStore.createThread(1, 'Missing blob', 'llm', profile.id)
+    for (const book of [
+      OwnedLorebookStore.create(me, { name: 'Missing blob', entries: [{ title: 'A', content: 'cached' }] }),
+      OwnedLorebookStore.saveChatBook(threadId, [{ title: 'A', content: 'cached' }])!,
+    ]) {
+      const json = child(me, book.folderId, 'lorebook.json')!
+      fs.unlinkSync(storedFilePath(me, json.id))
+      assert.deepEqual(OwnedLorebookStore.find(book.id, me)!.entries, book.entries)
+      assert.ok(OwnedLorebookStore.list(me, ['account', 'chat']).some((entry) => entry.id === book.id))
+      if (book.kind === 'chat') assert.deepEqual(OwnedLorebookStore.chatBookOf(threadId)!.entries, book.entries)
+      const saved = OwnedLorebookStore.update(book.id, me, { entries: book.entries })!
+      assert.deepEqual(JSON.parse(readBlob(me, json.id)).entries, saved.entries)
+      OwnedLorebookStore.delete(book.id, me)
+    }
+  })
+
+  await t.test('id-less replacements claim identical entries once, preserve cached legacy IDs, and normalize explicit IDs', async () => {
+    const { readLorebookFile } = await import('../src/services/codex-chat/chatCardImport')
+    const base = normalizeLorebook([
+      { id: 'lore-0-0', title: 'A', content: 'same' },
+      { id: 'lore-1-1', title: 'A', content: 'same' },
+      { id: 'lore-2-2', title: 'B', content: 'other' },
+    ])
+    const raw = [{ comment: ' A ', text: ' same ' }, { title: 'A', content: 'same' }, { title: 'B', content: 'other' }]
+    const global = ChatLorebookStore.create({ name: 'Replacement identities', entries: base })
+    const updated = ChatLorebookStore.update(global.id, { entries: raw })!
+    assert.deepEqual(updated.entries.map((entry) => entry.id), base.map((entry) => entry.id))
+    const imported = readLorebookFile(Buffer.from(JSON.stringify({ entries: raw })), 'same.json', updated.entries)
+    const reimported = ChatLorebookStore.update(global.id, { entries: imported.entries })!
+    assert.deepEqual(reimported.entries, updated.entries)
+    const mixed = normalizeLorebook([{ title: 'A', content: 'same' }, { ...base[0], id: ' lore-0-0 ' }, { title: 'A', content: 'same' }], base)
+    assert.deepEqual(mixed.slice(0, 2).map((entry) => entry.id), ['lore-1-1', 'lore-0-0'])
+    assert.ok(!base.some((entry) => entry.id === mixed[2].id), 'each matching ID is claimed at most once')
+    const changed = normalizeLorebook([{ title: 'A changed', content: 'same' }, { title: 'A', content: 'changed' }], base)
+    assert.ok(changed.every((entry) => !base.some((previous) => previous.id === entry.id)))
+    const normalized = normalizeLorebook([{ id: 'kai ', content: 'x' }, { id: 'kai', content: 'y' }, { id: 'x'.repeat(100), content: 'z' }])
+    assert.equal(normalized[0].id, 'kai')
+    assert.notEqual(normalized[1].id, 'kai')
+    assert.equal(normalized[2].id, 'x'.repeat(80))
+    const threadId = CodexChatStore.createThread(1, 'Legacy cached IDs', 'llm', profile.id)
+    for (const book of [
+      OwnedLorebookStore.create(me, { name: 'Legacy cached IDs', entries: base }),
+      OwnedLorebookStore.saveChatBook(threadId, base)!,
+    ]) {
+      const json = child(me, book.folderId, 'lorebook.json')!
+      fs.writeFileSync(storedFilePath(me, json.id), JSON.stringify({ entries: raw }))
+      const refreshed = OwnedLorebookStore.find(book.id, me)!
+      assert.deepEqual(refreshed.entries.map((entry) => entry.id), base.map((entry) => entry.id))
+      assert.deepEqual(JSON.parse(readBlob(me, json.id)).entries.map((entry: { id: string }) => entry.id), base.map((entry) => entry.id))
+      const saved = book.kind === 'chat' ? OwnedLorebookStore.saveChatBook(threadId, raw)! : OwnedLorebookStore.update(book.id, me, { entries: raw })!
+      assert.deepEqual(saved.entries.map((entry) => entry.id), base.map((entry) => entry.id))
+      FileStoreService.writeText(me, book.folderId, 'lorebook.json', JSON.stringify({ entries: [{ id: 'kai ', content: 'x' }, { id: 'x'.repeat(100), content: 'y' }] }))
+      assert.deepEqual(JSON.parse(readBlob(me, json.id)).entries.map((entry: { id: string }) => entry.id), ['kai', 'x'.repeat(80)], 'normalized IDs are persisted to source files')
+      OwnedLorebookStore.delete(book.id, me)
+    }
   })
 
   await t.test('a file link stays inside the book folder, is text only, and follows the file', () => {
@@ -142,7 +283,8 @@ test('lorebook files: account and chat books as file store folders, cache sync, 
     assert.equal(OwnedLorebookStore.chatBookOf(threadId), null)
     assert.equal(OwnedLorebookStore.saveChatBook(threadId, []), null)
     const lorebookRoot = child(me, null, LOREBOOK_ROOT_FOLDER)!
-    assert.equal(child(me, lorebookRoot.id, CHAT_LOREBOOK_FOLDER), null, 'no entries, no folder')
+    const existingChatRoot = child(me, lorebookRoot.id, CHAT_LOREBOOK_FOLDER)!
+    assert.equal(child(me, existingChatRoot.id, '바다 약속 2 3'), null, 'no entries, no folder for this chat (other tests already created the shared chat root)')
     const book = OwnedLorebookStore.addChatBookEntries(threadId, [{ id: 'ring', keys: ['반지'], content: '내일 저녁 반지를 준다.', constant: true }])!
     assert.equal(book.kind, 'chat')
     assert.equal(book.threadId, threadId)

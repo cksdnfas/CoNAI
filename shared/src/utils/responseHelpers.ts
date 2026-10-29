@@ -44,24 +44,3 @@ export function errorResponse(error: string | Error, details?: any): ApiResponse
     ...(details && { details })
   };
 }
-
-/**
- * Create a paginated response
- */
-export function paginatedResponse<T>(
-  items: T[],
-  total: number,
-  page: number,
-  limit: number
-): ApiResponse<PaginatedResponse<T>> {
-  return {
-    success: true,
-    data: {
-      items,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit)
-    }
-  };
-}

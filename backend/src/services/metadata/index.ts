@@ -27,7 +27,7 @@ export class MetadataExtractor {
     const fileExt = path.extname(filePath).toLowerCase();
     const buffer = await fs.promises.readFile(filePath);
     const rawData = await this.extractRawData(buffer, filePath, fileExt);
-    const metadata = await this.extractMetadata(filePath, buffer);
+    const metadata = await this.extractMetadata(filePath, buffer, rawData);
 
     return {
       metadata,
@@ -41,7 +41,7 @@ export class MetadataExtractor {
    * @param preloaded - The file's bytes when the caller already read them
    * @returns ImageMetadata
    */
-  static async extractMetadata(filePath: string, preloaded?: Buffer): Promise<ImageMetadata> {
+  static async extractMetadata(filePath: string, preloaded?: Buffer, preloadedRawData?: AIMetadata): Promise<ImageMetadata> {
     const startTime = Date.now();
     const fileName = path.basename(filePath);
     logger.debug(`⏱️ [MetadataExtractor] Starting extraction: ${fileName}`);
@@ -71,7 +71,7 @@ export class MetadataExtractor {
 
       // 1차 추출 (Primary extraction)
       const primaryStart = Date.now();
-      let aiInfo = await this.primaryExtraction(buffer, filePath, fileExt);
+      let aiInfo = await this.primaryExtraction(buffer, filePath, fileExt, preloadedRawData);
       logger.debug(`⏱️ [MetadataExtractor] Primary extraction: ${Date.now() - primaryStart}ms`);
 
       // 프롬프트 추출 실패 여부 확인 (빈 문자열과 공백만 있는 경우도 실패로 처리)
@@ -203,9 +203,10 @@ export class MetadataExtractor {
   private static async primaryExtraction(
     buffer: Buffer,
     filePath: string,
-    fileExt: string
+    fileExt: string,
+    preloadedRawData?: AIMetadata,
   ): Promise<AIMetadata> {
-    const rawData = await this.extractRawData(buffer, filePath, fileExt);
+    const rawData = preloadedRawData ?? await this.extractRawData(buffer, filePath, fileExt);
 
     // Parse raw data
     return parseRawMetadata(rawData);

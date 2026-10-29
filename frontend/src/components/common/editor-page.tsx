@@ -1,9 +1,9 @@
-import { useEffect, useRef, type ComponentType, type ReactNode } from 'react'
+import type { ComponentType, ReactNode } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { IconButton } from '@/components/ui/icon-button'
 import { SidebarItem } from '@/components/ui/sidebar'
 import { useI18n } from '@/i18n'
-import { hasOpenDialog } from '@/lib/keyboard-shortcut'
+import { usePageSaveShortcut } from '@/lib/keyboard-shortcut'
 import { cn } from '@/lib/utils'
 import { PageToolbar } from './page-toolbar'
 import { PageWithSidebar } from './page-with-sidebar'
@@ -101,21 +101,7 @@ export function EditorPage({ crumbs, title, status, actions, nav, navLabel, stor
   children: ReactNode
 }) {
   const { t } = useI18n()
-  const saveRef = useRef(onSave)
-  saveRef.current = onSave
-  const canSave = Boolean(onSave)
-  useEffect(() => {
-    if (!canSave) return
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || (event.key.toLowerCase() !== 's' && event.code !== 'KeyS')) return
-      // A dialog over the page saves (or ignores) the shortcut itself.
-      if (event.defaultPrevented || hasOpenDialog()) return
-      event.preventDefault()
-      if (!event.repeat) saveRef.current?.()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [canSave])
+  usePageSaveShortcut(onSave)
 
   const back = crumbs[crumbs.length - 1]
   const toolbar = (

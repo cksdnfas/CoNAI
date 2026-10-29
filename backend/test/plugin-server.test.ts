@@ -149,6 +149,35 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     } finally { await client.close(); await server.close() }
   })
 
+  await t.test('selected native registrations retain MCP results, live permissions and dynamic tools', async () => {
+    const { callPluginAppTool } = await import('../src/services/plugins/pluginAppBridge')
+    const { ALL_MCP_HTTP_SCOPES } = await import('../src/mcp/context')
+    const { createMcpServer } = await import('../src/mcp/server')
+    const { Client, InMemoryTransport } = await import('@modelcontextprotocol/client')
+    const context = { requester: admin, scopes: [...ALL_MCP_HTTP_SCOPES, 'configure' as const], source: 'plugin' as const }
+    const server = createMcpServer({ ...context, omitPluginTools: true, toolCatalog: false, toolAllowlist: ['list_image_groups', 'get_app_guide', 'p_chat_instructions_list_rules'] })
+    const client = new Client({ name: 'comparison', version: '1' })
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)])
+    try {
+      for (const [name, args] of [
+        ['list_image_groups', {}],
+        ['list_image_groups', { query: 12 }],
+        ['p_chat_instructions_list_rules', { profile_id: 5 }],
+      ] as Array<[string, Record<string, unknown>]>) {
+        assert.deepEqual(await callPluginAppTool(context, name, args), await client.callTool({ name, arguments: args }))
+      }
+      const guestId = Number(auth.prepare("INSERT INTO auth_accounts(username, password_hash, account_type) VALUES ('native-selector-guest', 'unused', 'guest')").run().lastInsertRowid)
+      const group = AuthPermissionGroup.createCustomGroup({ name: 'native-selector', permissionKeys: ['images.view'] })
+      const guestContext = { ...context, requester: { accountId: guestId, accountType: 'guest' as const } }
+      AuthPermissionGroup.addAccountMembership(group.id, guestId)
+      assert.notEqual((await callPluginAppTool(guestContext, 'list_image_groups', {})).isError, true)
+      AuthPermissionGroup.removeAccountMembership(group.id, guestId)
+      await assert.rejects(callPluginAppTool(guestContext, 'list_image_groups', {}), /permission|권한/i)
+      assert.notEqual((await callPluginAppTool(context, 'list_image_groups', {})).isError, true, 'another account does not inherit the revoked grant')
+    } finally { await client.close(); await server.close() }
+  })
+
   await t.test('trusted pages call any app tool without declaring it or waiting for approval', async () => {
     const context = app.pluginBrowserContext({ requester: admin, sessionId: 'server-admin-session' }, 'http://localhost:1666')
     const read = await app.runPluginAppTool('chat-instructions', { tool: 'list_image_groups', arguments: {} }, context)
@@ -373,6 +402,21 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await until(() => llm.getPluginLlmJob('llm-bridge', guest, only.jobId).status === 'completed', 'standalone translation')
     assert.equal(calls, beforeOnly + 1, 'translation-only never runs a character turn')
     assert.equal((llm.getPluginLlmJob('llm-bridge', guest, only.jobId).result?.translation?.json as any).content, 'Keep a potion.')
+    const { learnServerContextLimit } = await import('../src/services/codex-chat/serverContextLimit')
+    learnServerContextLimit({ providerName: 'plugin-test', model: 'translation-model' }, 'context length (8192 tokens)')
+    const oldAllowance = ChatProfileStore.find(profile.id)!.maxTokens
+    for (const allowance of [null, 8192, 16384]) {
+      ChatProfileStore.update(profile.id, { maxTokens: allowance })
+      const translationInput = { profileId: profile.id, message: JSON.stringify({ title: '회복약', keys: ['회복약'], content: '회복약을 보관한다.' }), translation: { only: true, direction: 'model', fields: ['title', 'keys.*', 'content'] } }
+      const budget = llm.measurePluginLlm('llm-bridge', guest, translationInput)
+      assert.ok(budget.outputReserve > 0 && budget.outputReserve < 8192)
+      assert.ok(budget.available! >= 0)
+      const job = llm.startPluginLlmJob('llm-bridge', guest, { ...translationInput, requestId: `translation-cap-${allowance}` })
+      await until(() => llm.getPluginLlmJob('llm-bridge', guest, job.jobId).status === 'completed', 'a fitted translation allowance is admitted')
+      assert.equal(JSON.parse(lastBody).max_tokens, allowance === null ? undefined : budget.outputReserve)
+      assert.equal(budget.available, budget.contextTokens! - budget.inputTokens - budget.outputReserve, 'one chunk reports its effective reserve, including an unset allowance')
+    }
+    ChatProfileStore.update(profile.id, { maxTokens: oldAllowance })
     ChatProfileStore.update(profile.id, { translationSlotId: null })
     replyText = '안녕, 이웃!'
 
@@ -1265,6 +1309,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await registry.setPluginEnabled('chat-instructions', false)
     await until(() => status().state === 'off', 'module stopped')
     assert.equal(serverTools.findPluginServerTool('p_chat_instructions_list_rules'), null)
+    await assert.rejects((await import('../src/services/plugins/pluginAppBridge')).callTrustedAppTool(admin, 'p_chat_instructions_list_rules', {}), /지원하지 않는 앱 도구/)
     assert.equal(await runtime.applyChatInstructionHooks('BASE', { engine: 'llm', threadId: 1, group: false, profile: { id: 5, name: '루나' } }, admin), 'BASE')
   })
 

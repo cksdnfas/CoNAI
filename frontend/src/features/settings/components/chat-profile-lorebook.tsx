@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { loreKeyLanguageTag } from '@conai/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, Trash2 } from 'lucide-react'
@@ -253,18 +253,39 @@ export function newLoreEntry(count: number): ChatLoreEntry {
 
 export function ChatLorebookEditor({ entries, onChange, filePlace = { kind: 'global' }, keyLanguage = null }: { entries: ChatLoreEntry[]; onChange: (entries: ChatLoreEntry[]) => void; filePlace?: LoreFilePlace; keyLanguage?: string | null }) {
   const { t } = useI18n()
+  const kind = filePlace.kind
+  const folderId = filePlace.kind === 'owned' ? filePlace.folderId : null
+  const place: LoreFilePlace = kind === 'global' ? { kind: 'global' } : { kind: 'owned', folderId }
   const [openId, setOpenId] = useState<string | null>(null)
-  const update = (id: string, patch: Partial<ChatLoreEntry>) => onChange(entries.map((entry) => entry.id === id ? { ...entry, ...patch } : entry))
-  const missing = keyLanguage ? t({ ko: '{tag} 없음', en: 'No {tag}' }, { tag: loreKeyLanguageTag(keyLanguage) }) : ''
+  const current = useRef({ entries, onChange })
+  useLayoutEffect(() => { current.current = { entries, onChange } }, [entries, onChange])
+  const update = (id: string, patch: Partial<ChatLoreEntry>) => {
+    const { entries, onChange } = current.current
+    onChange(entries.map((entry) => entry.id === id ? { ...entry, ...patch } : entry))
+  }
+  const remove = (id: string) => {
+    const { entries, onChange } = current.current
+    onChange(entries.filter((entry) => entry.id !== id))
+  }
   return <div className="space-y-2">
-    {entries.map((entry) => <CollapsibleRow key={entry.id} title={loreEntryTitle(entry) || t({ ko: '새 설정', en: 'New entry' })} meta={entry.constant ? t({ ko: '항상', en: 'Always' }) : lacksLanguageKeys(entry, keyLanguage) ? <span className="font-semibold text-warning">{missing}</span> : undefined} open={openId === entry.id} onOpenChange={(open) => setOpenId(open ? entry.id : null)} actions={<>
-      <Switch checked={entry.enabled} onCheckedChange={(enabled) => update(entry.id, { enabled })} aria-label={t({ ko: '로어 사용', en: 'Enable lore' })} />
-      <IconButton size="icon-sm" variant="ghost" label={t({ ko: '로어 삭제', en: 'Delete lore' })} onClick={() => onChange(entries.filter((item) => item.id !== entry.id))}><Trash2 /></IconButton>
-    </>}><ChatLoreEntryFields entry={entry} filePlace={filePlace} keyLanguage={keyLanguage} onChange={(patch) => update(entry.id, patch)} /></CollapsibleRow>)}
+    {entries.map((entry) => <LoreEntryRow key={entry.id} entry={entry} open={openId === entry.id} onOpen={setOpenId} onUpdate={update} onRemove={remove} filePlace={place} keyLanguage={keyLanguage} />)}
     {entries.length ? null : <EmptyState size="compact" icon={BookOpen} title={t({ ko: '아직 항목이 없어', en: 'No entries yet' })} />}
     <PromptAdder label={t({ ko: '항목 추가', en: 'Add entry' })} disabled={entries.length >= 500} onAdd={() => {
       const entry = newLoreEntry(entries.length)
       onChange([...entries, entry]); setOpenId(entry.id)
     }} />
   </div>
+}
+
+function LoreEntryRow({ entry, open, onOpen, onUpdate, onRemove, filePlace, keyLanguage }: {
+  entry: ChatLoreEntry; open: boolean; onOpen: (id: string | null) => void
+  onUpdate: (id: string, patch: Partial<ChatLoreEntry>) => void; onRemove: (id: string) => void
+  filePlace: LoreFilePlace; keyLanguage: string | null
+}) {
+  const { t } = useI18n()
+  const missing = keyLanguage ? t({ ko: '{tag} 없음', en: 'No {tag}' }, { tag: loreKeyLanguageTag(keyLanguage) }) : ''
+  return <CollapsibleRow title={loreEntryTitle(entry) || t({ ko: '새 설정', en: 'New entry' })} meta={entry.constant ? t({ ko: '항상', en: 'Always' }) : lacksLanguageKeys(entry, keyLanguage) ? <span className="font-semibold text-warning">{missing}</span> : undefined} open={open} onOpenChange={(open) => onOpen(open ? entry.id : null)} actions={<>
+    <Switch checked={entry.enabled} onCheckedChange={(enabled) => onUpdate(entry.id, { enabled })} aria-label={t({ ko: '로어 사용', en: 'Enable lore' })} />
+    <IconButton size="icon-sm" variant="ghost" label={t({ ko: '로어 삭제', en: 'Delete lore' })} onClick={() => onRemove(entry.id)}><Trash2 /></IconButton>
+  </>}><ChatLoreEntryFields entry={entry} filePlace={filePlace} keyLanguage={keyLanguage} onChange={(patch) => onUpdate(entry.id, patch)} /></CollapsibleRow>
 }

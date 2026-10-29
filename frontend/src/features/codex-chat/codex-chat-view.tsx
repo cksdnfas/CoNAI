@@ -1,8 +1,9 @@
 import { useChatThreadData } from './use-chat-thread-data'
+import { refetchActiveChatQuery, scheduleChatDirectoryRefresh } from './chat-query-refresh'
 import { useChatTranscriptWindow } from './use-chat-transcript-window'
 import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useIsMutating, useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import { ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Cpu, Eraser, FoldVertical, Image as ImageIcon, ListChecks, Maximize2, Minimize2, MoreHorizontal, PanelRight, Plus, RotateCw, Square, Target, Trash2, TriangleAlert, UserPlus, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -68,19 +69,21 @@ import { getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { getErrorMessage } from '@/lib/error-message'
 import { useMinWidth } from '@/lib/use-min-width'
 import { cn } from '@/lib/utils'
-import { ChatComposerNarrationBackdrop, ChatUserMessage, caretOnNarration, draftHasNarration, narrationColorStyle } from './chat-narration'
+import { ChatComposerNarrationBackdrop, ChatUserMessage, caretOnNarration, narrationColorStyle } from './chat-narration'
+import { ChatComposer } from './chat-composer'
 import { CHAT_MESSAGE_GAP_PX, CHAT_WIDTH_CLASS, chatBackgroundLook, chatTranscriptStyle, useChatAppearance, type ChatBackgroundFit } from './chat-appearance'
 import { ChatInfoPanelBody } from './chat-info-panel'
 import { ChatBlockChangesContext, type BlockAction } from './chat-display-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
-import { ChatPortrait, ChatStatusAside, ChatStatusFloating, ChatStatusStrip, useStatusPanelLayout, type ChatStatusBlock, type ChatStatusData } from './chat-status-panel'
+import { ChatStatusAside, ChatStatusFloating, ChatStatusStrip, useStatusPanelLayout, type ChatStatusBlock, type ChatStatusData } from './chat-status-panel'
+import { ChatStreamingMessage, ChatStreamingPortrait } from './chat-streaming-surfaces'
 import { ChatProfilePicker } from './chat-profile-picker'
 import { ChatThreadList, type ChatListPatch } from './chat-thread-list'
-import { patchChatRoomLists, useChatRoomSummaries, usePagedChatDraftRetention } from './use-chat-room-directory'
+import { applyChatReadReceipt, patchChatRoomLists, useChatRoomSummaries, usePagedChatDraftRetention } from './use-chat-room-directory'
 import { ChatAttachButton, ChatDraftAttachments, useChatFileDrop } from './chat-attachments'
 import { ChatFlagButton, ChatFlagManagerModal, ChatFlagTray, useChatFlags } from './chat-flags'
 import { useRoutineThreadIds } from './chat-routines'
-import { ChatSuggestButton, ChatSuggestTray, useReplySuggestions } from './chat-suggestions'
+import { ChatSuggestButton, ChatSuggestTray } from './chat-suggestions'
 import { ChatUserProfilePickModal, newChatUserProfile, useChatUserProfiles, userSpeakerOf } from './chat-user-profiles'
 import {
   CODEX_CHAT_THREADS_QUERY_KEY,
@@ -90,18 +93,16 @@ import {
   codexChatThreadQueryKey,
   PENDING_DRAFT_KEY,
   useCodexChat,
-  useCodexChatDrafts,
-  useCodexChatLiveTurn,
+  useCodexChatLiveState,
   type CodexChatApi,
 } from './codex-chat-context'
 import { CodexChatAssistantMessage, type ChatSpeaker } from './codex-chat-message'
-import { ChatLiveMessage, ChatSavedMessages } from './chat-transcript'
+import { ChatSavedMessages } from './chat-transcript'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
-import { CHAT_COMMANDS, ChatCommandList, type ChatCommand } from './chat-commands'
+import { CHAT_COMMANDS, ChatCommandList } from './chat-commands'
 import { ChatExportDialog, ChatSearchInput, ChatSearchResults } from './chat-search-export'
-import { GROUP_MEMBER_MAX, GroupAvatarStack, GroupInviteDialog, GroupMembersPopover, GroupTurnStatus, MentionList, mentionOptions, type GroupInviteMode, type MentionOption } from './chat-group'
-import { mentionQueryAt } from './chat-mentions'
+import { GROUP_MEMBER_MAX, GroupAvatarStack, GroupInviteDialog, GroupMembersPopover, GroupTurnStatus, MentionList, type GroupInviteMode } from './chat-group'
 import { parseMentions, type ChatReplyQuote, type StoredFileEntry } from '@conai/shared'
 import { ChatReplyPreview } from './chat-reply'
 import { ChatDeleteDialog } from './chat-delete-dialog'
@@ -113,7 +114,6 @@ const CodexEngineContextView = lazy(async () => ({ default: (await import('./cod
 const GroupContextView = lazy(async () => ({ default: (await import('./codex-chat-context-view')).GroupContextView }))
 const CodexChatGallery = lazy(async () => ({ default: (await import('./codex-chat-gallery')).CodexChatGallery }))
 
-const COMPOSER_MAX_HEIGHT_PX = 220
 /** Longer names leave the composer hint generic, so it stays on one line in narrow panels without cutting the name. */
 const COMPOSER_HINT_NAME_MAX = 10
 /** The chat list screen's scroll, kept while a chat covers it. */
@@ -171,7 +171,6 @@ function ComposerPickChip({ icon, label, disabled, onRemove }: { icon: ReactNode
 }
 
 function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: CodexChatViewProps & { chat: CodexChatApi }) {
-  const drafts = useCodexChatDrafts()
   const { t } = useI18n()
   const confirm = useConfirm()
   const { showSnackbar } = useSnackbar()
@@ -179,26 +178,17 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null)
   const [commandPending, setCommandPending] = useState(false)
-  const [commandIndex, setCommandIndex] = useState(0)
-  const [dismissedCommand, setDismissedCommand] = useState<string | null>(null)
   const [exportOpen, setExportOpen] = useState(false)
-  const [flagTrayOpen, setFlagTrayOpen] = useState(false)
   const [flagManagerOpen, setFlagManagerOpen] = useState(false)
   const routineThreadIds = useRoutineThreadIds()
   const isAdmin = useAuthStatusQuery().data?.isAdmin === true
   /** A new chat (one profile) or room (several, the first representing it) waiting for the user to say who they are in it. */
   const [pendingStart, setPendingStart] = useState<number[] | null>(null)
-  const flagButtonRef = useRef<HTMLButtonElement | null>(null)
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [invite, setInvite] = useState<GroupInviteMode | null>(null)
   /** The chat's info panel: docked beside the transcript on a wide page, a sheet elsewhere. */
   const [infoOpen, setInfoOpen] = useState(false)
-  const [caret, setCaret] = useState(0)
-  const [mentionIndex, setMentionIndex] = useState(0)
-  const [dismissedMention, setDismissedMention] = useState<string | null>(null)
-  const mentionListId = useId()
-  const commandListId = useId()
   // Status panel: docked / floating on a wide page (kept per browser), a fold-out strip elsewhere.
   const [statusLayout, setStatusLayout] = useStatusPanelLayout()
   const [statusKey, setStatusKey] = useState<string | null>(null)
@@ -207,7 +197,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const isWide = useMinWidth(1024)
   const hasSideList = useMinWidth(768)
   const { selectThread, listOpen, setListOpen, view, setView, messageFocus, clearMessageFocus, prepareChat, isStartingChat, editMessage, regenerate, continueReply } = chat
-  const liveTurn = useCodexChatLiveTurn()
+  const liveTurn = useCodexChatLiveState()
 
   const profilesQuery = useQuery({ queryKey: CHAT_PROFILES_QUERY_KEY, queryFn: listChatProfiles, staleTime: 30_000 })
   const profiles = useMemo(() => profilesQuery.data ?? [], [profilesQuery.data])
@@ -240,14 +230,13 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     else await startWith(profileIds)
   }, [startWith, userProfiles])
 
-  const keepPagedDrafts = usePagedChatDraftRetention(drafts, chat.keepDrafts)
+  const keepPagedDrafts = usePagedChatDraftRetention(chat.currentDrafts, chat.keepDrafts)
   const { threadsQuery, threads, activeThreadId, activeThread, threadQuery, thread, displayThread, loadEarlier, preserveHistory, loadingEarlier, earlierError, hasMoreBefore } = useChatThreadData({ ...chat, keepDrafts: keepPagedDrafts }, liveTurn?.threadId ?? null)
   const selectedRoomQuery = useChatRoomSummaries(activeThreadId === null ? [] : [activeThreadId], activeThread === null)
   // The new chat being prepared (not saved yet) stands in for a chat until its first message saves it.
   const pendingChat = activeThreadId === null ? chat.pendingChat : null
   const pendingProfile = pendingChat ? profilesById.get(pendingChat.profileId) ?? null : null
   const draftKey = activeThreadId ?? (pendingProfile ? PENDING_DRAFT_KEY : null)
-  const draft = draftKey !== null ? drafts[draftKey] ?? '' : ''
   const setChatDraft = chat.setDraft
   const setDraft = useCallback((next: string | ((current: string) => string)) => {
     if (draftKey !== null) setChatDraft(draftKey, next)
@@ -277,8 +266,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       showSnackbar({ message: getErrorMessage(error, t({ ko: '플래그를 바꾸지 못했어.', en: 'Could not change the flag.' })), tone: 'error' })
     })
   }, [activeFlagIds, activeThreadId, canToggleFlags, flags, queryClient, showSnackbar, t, togglePendingFlag])
-  const closeFlagTray = useCallback(() => setFlagTrayOpen(false), [])
-  useEffect(() => setFlagTrayOpen(false), [activeThreadId])
   // Group rooms: `profile` is the representative (the room's look); every member speaks with its own face and emoticons.
   const isGroup = displayThread?.kind === 'group'
   const group = isGroup ? threadQuery.data?.group ?? null : null
@@ -329,7 +316,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     mutationFn: async ({ threadId, enableSummary }: { threadId: number; enableSummary: boolean }) => {
       await summarizeCodexChatThread(threadId)
       if (enableSummary) await updateCodexChatThreadContext(threadId, { summaryEnabled: true })
-      await queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) })
+      await refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(threadId))
     },
   })
   const isCompacting = useIsMutating({ mutationKey: codexChatCompactMutationKey(activeThreadId) }) > 0
@@ -361,15 +348,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const fileDrop = useChatFileDrop(chat, isBusy || activeThreadId === null)
   const replacingMessageId = liveTurn?.threadId === activeThreadId ? liveTurn.replacingMessageId : threadQuery.data?.running?.replacingMessageId
   const messages: CodexChatMessage[] = useMemo(() => (threadQuery.data?.messages ?? []).filter((message) => message.id !== replacingMessageId), [threadQuery.data?.messages, replacingMessageId])
-  // Reply suggestions: made on request only, kept until the chat moves on (the last message changes).
-  const suggestButtonRef = useRef<HTMLButtonElement | null>(null)
-  const suggestions = useReplySuggestions({ threadId: activeThreadId, lastMessageId: messages.at(-1)?.id ?? null, enabled: Boolean(profile?.suggestEnabled) && !isBusy })
-  const pickSuggestion = useCallback((text: string) => {
-    setDraft(text)
-    setCaret(text.length)
-    suggestions.close()
-    composerRef.current?.focus()
-  }, [suggestions, setDraft])
   const media = threadQuery.data?.media
   const runningFromServer = serverRunning ? threadQuery.data?.running ?? null : null
   // Group rooms: every member answering on the server (an older server sends only the first one).
@@ -386,7 +364,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   // Off while the list covers the chat: coming back remounts the transcript, which scrolls down again.
   const isTranscript = activeView === 'chat' && !showList
   const { scrollRef, visibleMessages, flashMessageId, observeTranscript, showEarlierMessages, onTranscriptScroll, followLatest } = useChatTranscriptWindow({
-    activeThreadId, messages, isTranscript, messageFocus, clearMessageFocus, liveTurn, runningText: threadQuery.data?.running?.text,
+    activeThreadId, messages, isTranscript, messageFocus, clearMessageFocus, runningText: threadQuery.data?.running?.text,
     loadEarlier, preserveHistory, loadingEarlier, earlierError, hasMoreBefore,
     serverReplyLength: serverReplies.reduce((total, reply) => total + reply.text.length + reply.toolCalls.length, 0),
   })
@@ -401,7 +379,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     const markRead = () => {
       if (document.visibilityState !== 'visible') return
       void markCodexChatThreadRead(threadId, latestMessageId)
-        .then(() => queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }))
+        .then(() => applyChatReadReceipt(queryClient, threadId, latestMessageId))
         .catch(() => {})
     }
     markRead()
@@ -570,19 +548,22 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   }), [speakerProfiles, emoticonsById, isGroup, memberBlocks, blocksState])
   const portraitMessages = useMemo(() => {
     const live = liveTurn?.threadId === activeThreadId ? liveTurn : null
-    const replies = isGroup ? live?.replies ?? serverReplies : null
+    if (live && (isGroup ? live.portraitProfileId !== null : live.hasText)) {
+      return [{ role: 'assistant', content: ' ', speaker_profile_id: isGroup ? live.portraitProfileId : profile?.id }]
+    }
+    const replies = isGroup ? serverReplies : null
     const current = replies
       ? replies.filter((reply) => reply.text).map((reply) => ({ role: 'assistant', content: reply.text, speaker_profile_id: reply.profileId }))
-      : live?.text || runningFromServer?.text ? [{ role: 'assistant', content: live?.text || runningFromServer?.text || '', speaker_profile_id: profile?.id }] : []
-    return current.length ? [...messages, ...current] : messages
-  }, [activeThreadId, isGroup, liveTurn, messages, profile?.id, runningFromServer, serverReplies])
-  const portraitSignal = useMemo(() => resolveChatPortrait(portraitMessages, portraitProfiles, profile?.id ?? null), [portraitMessages, portraitProfiles, profile?.id])
+      : runningFromServer?.text ? [{ role: 'assistant', content: runningFromServer.text, speaker_profile_id: profile?.id }] : []
+    return current
+  }, [activeThreadId, isGroup, liveTurn, profile?.id, runningFromServer, serverReplies])
+  const portraitSignal = useMemo(() => resolveChatPortrait(portraitMessages.length ? [...messages, ...portraitMessages] : messages, portraitProfiles, profile?.id ?? null), [messages, portraitMessages, portraitProfiles, profile?.id])
   const portraitProfile = portraitSignal ? profilesById.get(portraitSignal.profileId) : null
   const hasPortrait = canViewImages && portraitSignal !== null && !!portraitProfile && isTranscript && thread !== null
   const hasPanel = hasStatus || hasPortrait
   const panelOpen = hasPortrait ? appearance.portrait : statusLayout.open
   const portraitShown = hasPortrait && appearance.portrait && (wideStatus || stripOpen)
-  const portrait = hasPortrait && appearance.portrait && portraitSignal && portraitProfile ? <ChatPortrait signal={portraitSignal} profile={portraitProfile} /> : undefined
+  const portrait = hasPortrait && appearance.portrait && portraitSignal && portraitProfile ? <ChatStreamingPortrait threadId={activeThreadId} messages={messages} fallback={portraitMessages} profiles={portraitProfiles} profilesById={profilesById} defaultProfileId={profile?.id ?? null} /> : undefined
   const toSpeaker = useCallback((entry: ChatProfileSummary): ChatSpeaker => ({
     id: entry.id, avatarHash: entry.avatarHash, avatarCrop: entry.avatarCrop, assetVersion: entry.assetVersion, hasAvatar: entry.hasAvatar, avatarThumbnailUrl: entry.avatarThumbnailUrl,
     name: entry.name, avatar: entry.avatar, engine: entry.engine, roleplay: entry.style?.roleplay ?? false, blocks: entry.style?.blocks, cast: entry.style?.cast,
@@ -715,57 +696,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     ? t({ ko: '그룹에 메시지', en: 'Message the group' })
     : profile && profile.name.length <= COMPOSER_HINT_NAME_MAX ? t({ ko: '{name}에게 메시지', en: 'Message {name}' }, { name: profile.name }) : t({ ko: '메시지 입력', en: 'Type a message' })
 
-  // The composer grows with its text, and with its hint when empty, so neither ever scrolls inside a one-line box.
-  const resizeComposer = useCallback(() => {
-    const node = composerRef.current
-    if (!node) return
-    node.style.height = 'auto'
-    node.style.height = `${Math.min(node.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`
-  }, [])
-  useLayoutEffect(resizeComposer, [draft, isTranscript, composerPlaceholder, resizeComposer])
-  useEffect(() => {
-    // A narrower panel rewraps the text: measure again when the composer's width changes.
-    const node = composerRef.current
-    if (!node || typeof ResizeObserver === 'undefined') return
-    let width = node.clientWidth
-    const observer = new ResizeObserver(() => {
-      if (node.clientWidth !== width) { width = node.clientWidth; resizeComposer() }
-    })
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [isTranscript, activeThreadId, resizeComposer])
-
   const profileMissing = thread !== null ? (isGroup ? !memberProfiles.some((member) => member.isEnabled) : !profile || !profile.isEnabled) : pendingProfile !== null && !pendingProfile.usable
   const codexUnavailable = isCodexThread && !codexStatus?.available
-  const isCommand = draft.startsWith('/') && !draft.startsWith('//')
-  const narrating = !isCommand && draftHasNarration(draft)
-  // Only the commands this chat can run: none of the chat-bound ones before it exists, no compaction in a room,
-  // no regenerate/edit in a Codex chat.
-  const commandFits = (name: ChatCommand['name']) => activeThreadId === null
-    ? !['clear', 'compact', 'note', 'retry', 'edit'].includes(name)
-    : !(isGroup && name === 'compact') && !(isCodexThread && (name === 'retry' || name === 'edit'))
-  const matchingCommands = CHAT_COMMANDS.filter((command) => commandFits(command.name) && command.name.startsWith(draft.slice(1).toLowerCase()))
-  const showCommands = isCommand && !/\s/.test(draft) && dismissedCommand !== draft && matchingCommands.length > 0
-  const selectedCommand = Math.min(commandIndex, matchingCommands.length - 1)
   // Group rooms: the user may cut in while members are still answering.
-  const sendBlocked = isGroup ? alternativeMutation.isPending || commandPending || isCompacting || (isCommand && isBusy) || (isStreaming && !streamingHere) : isBusy
-  const canSend = (activeThreadId !== null || (pendingChat?.greeting != null && !isStartingChat)) && (Boolean(draft.trim()) || chat.draftAttachments.length > 0 || chat.draftMediaAttachments.length > 0 || chat.draftPostRefs.length > 0 || picks.length > 0 || Boolean(choiceDraft?.labels.length)) && !chat.attachmentsUploading && !sendBlocked && (isCommand || (!profileMissing && !codexUnavailable && !connectionDown))
-  const mentionQuery = isGroup && !isCommand ? mentionQueryAt(draft, caret) : null
-  const mentionMatches = mentionQuery ? mentionOptions(mentionQuery.query, memberProfiles, group?.representativeId ?? null) : []
-  const showMentions = mentionMatches.length > 0 && dismissedMention !== draft
-  const selectedMention = Math.min(mentionIndex, mentionMatches.length - 1)
-  const pickMention = (option: MentionOption) => {
-    if (!mentionQuery) return
-    const next = `${draft.slice(0, mentionQuery.start)}@${option.name} ${draft.slice(caret)}`
-    const position = mentionQuery.start + option.name.length + 2
-    setDraft(next)
-    setCaret(position)
-    setMentionIndex(0)
-    window.requestAnimationFrame(() => {
-      composerRef.current?.focus()
-      composerRef.current?.setSelectionRange(position, position)
-    })
-  }
+  const sendBlocked = isGroup ? alternativeMutation.isPending || commandPending || isCompacting || (isStreaming && !streamingHere) : isBusy
 
   const runCommand = async (text: string) => {
     if (isBusy) return
@@ -779,7 +713,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     setDraft('')
     setCommandPending(true)
     try {
-      if (name === 'help') { setDraft('/'); setDismissedCommand(null); setCommandIndex(0); return }
+      if (name === 'help') { setDraft('/'); return }
       if (name === 'new') {
         const chosen = argument ? profiles.find((entry) => entry.usable && entry.name.toLowerCase() === argument.toLowerCase()) : profile
         if (!chosen?.usable) throw new Error(t({ ko: '쓸 수 있는 프로필 이름을 입력해줘.', en: 'Enter a usable profile name.' }))
@@ -822,26 +756,17 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     finally { setCommandPending(false) }
   }
 
-  const pickCommand = (command: ChatCommand) => {
-    if ('argument' in command) { setDraft(`/${command.name} `); composerRef.current?.focus() }
-    else void runCommand(`/${command.name}`)
-  }
-
   const pickSearchResult = (result: ChatSearchResult) => {
     selectThread(result.threadId)
     chat.focusMessage(result.messageId)
     setSearchOpen(false)
   }
 
-  const handleSend = () => {
-    if (!canSend) return
+  const handleSend = (draft: string) => {
     const literal = draft.startsWith('//') ? draft.slice(1) : undefined
     // A message sent from part-way up the chat still shows its answer.
-    if (!isCommand) {
-      followLatest()
-    }
-    if (isCommand) void runCommand(draft)
-    else if (activeThreadId !== null) void chat.send(activeThreadId, literal)
+    followLatest()
+    if (activeThreadId !== null) void chat.send(activeThreadId, literal)
     else if (pendingChat) void chat.sendPending(literal ?? draft)
   }
 
@@ -863,42 +788,6 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     setDeleteTarget({ threadId, book: books?.chatBook && books.chatBook.entries.length > 0 ? books.chatBook : null })
   }
 
-  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!event.nativeEvent.isComposing && showMentions) {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setDismissedMention(draft); return }
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault()
-        setMentionIndex((selectedMention + (event.key === 'ArrowDown' ? 1 : -1) + mentionMatches.length) % mentionMatches.length)
-        return
-      }
-      if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
-        event.preventDefault()
-        pickMention(mentionMatches[selectedMention])
-        return
-      }
-    }
-    if (!event.nativeEvent.isComposing && showCommands) {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setDismissedCommand(draft); return }
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault()
-        setCommandIndex((selectedCommand + (event.key === 'ArrowDown' ? 1 : -1) + matchingCommands.length) % matchingCommands.length)
-        return
-      }
-      if (event.key === 'Tab' || (event.key === 'Enter' && !event.shiftKey)) {
-        event.preventDefault()
-        const selected = matchingCommands[selectedCommand]
-        if (event.key === 'Tab') { setDraft(`/${selected.name} `); setDismissedCommand(null) }
-        else void runCommand(`/${selected.name}`)
-        return
-      }
-    }
-    // Enter sends; Shift+Enter breaks the line. Ignore Enter that commits an IME (Korean) composition.
-    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-      event.preventDefault()
-      handleSend()
-    }
-  }
-
   const untitled = t({ ko: '새 채팅', en: 'New chat' })
   const pickProfile = (profileId: number) => void beginChat([profileId])
   const pickGroup = (profileIds: number[]) => void beginChat(profileIds)
@@ -911,9 +800,10 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       ? <IconButton variant="ghost" size="icon-sm" onClick={() => selectThread(null)} label={t({ ko: '새 채팅', en: 'New chat' })}><ArrowLeft /></IconButton>
       : null
   const openThread = (threadId: number) => (threadId === activeThreadId ? setListOpen(false) : selectThread(threadId))
+  const liveThreadId = liveTurn?.threadId
   const runningThreadIds = new Set<number>([
     ...threads.filter((entry) => entry.running).map((entry) => entry.id),
-    ...(liveTurn ? [liveTurn.threadId] : []),
+    ...(liveThreadId !== undefined ? [liveThreadId] : []),
     ...(serverRunning && activeThreadId !== null ? [activeThreadId] : []),
   ])
   // Pin, archive and rename show at once; the server's answer (or a refetch on failure) settles it.
@@ -927,18 +817,21 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     }
     patchChatRoomLists(queryClient, threadId, apply({ id: threadId } as CodexChatThread))
     queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId), (current) => current ? { ...current, thread: apply(current.thread) } : current)
-    updateChatListState(threadId, patch).catch((error: unknown) => {
+    updateChatListState(threadId, patch).then((thread) => {
+      patchChatRoomLists(queryClient, threadId, thread)
+      queryClient.setQueryData<CodexChatThreadDetail>(codexChatThreadQueryKey(threadId), (current) => current ? { ...current, thread } : current)
+    }).catch((error: unknown) => {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 바꾸지 못했어.', en: 'Could not change the chat.' })), tone: 'error' })
+      void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(threadId))
     }).finally(() => {
-      void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
-      void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) })
+      void scheduleChatDirectoryRefresh(queryClient)
     })
   }
   const threadList = (dense: boolean) => <>
     {/* The page layout's list screen already sits on --page-gutter; only the panel adds its own inset. */}
     <div className={dense ? 'pb-2' : cn('pb-2 pt-3', layout === 'panel' && 'px-3')}><ChatSearchInput value={searchText} onChange={setSearchText} /></div>
     <div ref={dense ? undefined : restoreChatListScroll} onScroll={dense ? undefined : (event) => { chatListScrollTop = event.currentTarget.scrollTop }} className={cn('min-h-0 flex-1 overflow-y-auto', !dense && layout === 'panel' && 'px-1')}>
-      <ChatThreadList query={searchText} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} drafts={drafts} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />
+      <ChatThreadList query={searchText} profilesById={profilesById} activeThreadId={activeThreadId} runningThreadIds={runningThreadIds} routineThreadIds={routineThreadIds} dense={dense} onSelect={openThread} onUpdate={updateListEntry} onBulk={runBulk} />
       {searchText.trim() ? <ChatSearchResults query={searchText} disabled={false} onPick={pickSearchResult} /> : null}
     </div>
     {/* What the chats draw on (lorebooks, presets, blocks) and the routines that wake them, for administrators. */}
@@ -985,8 +878,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     </div>
   ) : isGroup && (liveGroupTurn || runningFromServer) ? (
     <GroupTurnStatus
-      speakers={(liveGroupTurn ? (liveGroupTurn.replies ?? []).map((reply) => reply.profileId) : serverReplies.map((reply) => reply.profileId)).flatMap((id) => profilesById.get(id) ?? [])}
-      queue={((liveGroupTurn ? liveGroupTurn.queue : runningFromServer?.queue) ?? []).flatMap((id) => profilesById.get(id) ?? [])}
+      speakers={(liveGroupTurn ? liveGroupTurn.speakerIds.split(',').filter(Boolean).map(Number) : serverReplies.map((reply) => reply.profileId)).flatMap((id) => profilesById.get(id) ?? [])}
+      queue={(liveGroupTurn ? liveGroupTurn.queueIds.split(',').filter(Boolean).map(Number) : runningFromServer?.queue ?? []).flatMap((id) => profilesById.get(id) ?? [])}
     />
   ) : null
 
@@ -1012,9 +905,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           {pendingOpening(pendingChat.greeting.after, 'after')}
         </> : null}
         <ChatSavedMessages messages={visibleMessages} contextMessages={messages} segments={threadQuery.data?.summarySegments} flashMessageId={flashMessageId} summaryUntilId={isGroup ? null : thread?.summary_until_message_id ?? null} media={media} actions={messageActions} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} agentSpeakerOf={speakerOf} mentions={isGroup ? memberNames : undefined} />
-        {liveTurn && liveTurn.threadId === activeThreadId ? (
-          <ChatLiveMessage turn={liveTurn} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
-        ) : null}
+        <ChatStreamingMessage threadId={activeThreadId} appearance={appearance} speaker={speaker} userSpeaker={userSpeaker} speakerOf={isGroup ? speakerOf : undefined} mentions={isGroup ? memberNames : undefined} />
         {runningFromServer && !isGroup && speaker ? <CodexChatAssistantMessage content={runningFromServer.text} routing={runningFromServer.routing} toolCalls={runningFromServer.toolCalls} streaming appearance={appearance} speaker={speaker} /> : null}
         {serverReplies.map((reply) => {
           const replySpeaker = speakerOf(reply.profileId)
@@ -1096,11 +987,19 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
 
   const draftQuote = chat.draftReply?.threadId === activeThreadId ? chat.draftReply.quote : null
   const draftMembers = speakerProfiles.filter((entry) => threadQuery.data?.group?.memberIds.includes(entry.id))
-  const draftMentioned = isGroup ? parseMentions(draft, draftMembers) : []
   const draftTarget = draftQuote ? messages.find((message) => message.id === draftQuote.messageId) : null
-  const draftRecipients = draftMentioned.length ? draftMentioned : draftTarget?.role === 'user' ? draftTarget.routing?.recipients ?? [] : draftQuote?.speakerProfileId ? [draftQuote.speakerProfileId] : []
-  const draftRecipientLabel = isGroup ? draftRecipients.map((id) => typeof id === 'number' ? profilesById.get(id)?.name : null).filter(Boolean).join(', ') || profile?.name : profile?.name
   const composer = (
+    <ChatComposer chat={chat} draftKey={draftKey} activeThreadId={activeThreadId} composerRef={composerRef}
+      isTranscript={isTranscript} placeholder={composerPlaceholder} isGroup={isGroup} isCodexThread={isCodexThread}
+      memberProfiles={memberProfiles} representativeId={group?.representativeId ?? null} isBusy={isBusy} sendBlocked={sendBlocked}
+      ready={activeThreadId !== null || (pendingChat?.greeting != null && !isStartingChat)} profileBlocked={profileMissing || codexUnavailable || Boolean(connectionDown)}
+      hasChoice={Boolean(choiceDraft?.labels.length)} suggestEnabled={Boolean(profile?.suggestEnabled)} lastMessageId={messages.at(-1)?.id ?? null}
+      onCommand={runCommand} onSend={handleSend}>
+    {({ draft, setDraft, caret, setCaret, setCommandIndex, setMentionIndex, flagTrayOpen, setFlagTrayOpen, flagButtonRef, closeFlagTray, suggestButtonRef, suggestions, pickSuggestion, narrating, isCommand, sendBlocked, canSend, commandListId, matchingCommands, selectedCommand, showCommands, pickCommand, mentionListId, mentionMatches, selectedMention, showMentions, pickMention, handleSend, handleComposerKeyDown }) => {
+      const draftMentioned = isGroup ? parseMentions(draft, draftMembers) : []
+      const draftRecipients = draftMentioned.length ? draftMentioned : draftTarget?.role === 'user' ? draftTarget.routing?.recipients ?? [] : draftQuote?.speakerProfileId ? [draftQuote.speakerProfileId] : []
+      const draftRecipientLabel = isGroup ? draftRecipients.map((id) => typeof id === 'number' ? profilesById.get(id)?.name : null).filter(Boolean).join(', ') || profile?.name : profile?.name
+      return (
     <div className={cn('relative w-full shrink-0 pb-4 pt-2', layout === 'page' ? cn('mx-auto px-(--page-gutter)', CHAT_WIDTH_CLASS[appearance.width]) : 'px-3')}>
       {showCommands ? <ChatCommandList id={commandListId} commands={matchingCommands} selected={selectedCommand} onSelect={pickCommand} /> : null}
       {showMentions ? <MentionList id={mentionListId} options={mentionMatches} selected={selectedMention} onSelect={pickMention} /> : null}
@@ -1193,6 +1092,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       </div>
       </div>
     </div>
+    ) }}
+    </ChatComposer>
   )
 
   const chatBody = backgroundUrl && profile ? (
@@ -1209,7 +1110,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       ? chatBody
       : threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || createGroupMutation.isPending || isBusy} onPick={pickProfile} onPickGroup={pickGroup} onImport={(file) => void handleImport(file)} onImportFiles={(entries) => void handleImportFiles(entries)} />
   } else if (activeView === 'gallery') {
-    body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} /></Suspense>
+    body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} pendingJobs={threadQuery.data?.pendingJobs ?? 0} /></Suspense>
   } else if (activeView === 'context') {
     const noteDefaults = { note: profile?.authorNote ?? '', depth: profile?.loreDepth ?? null }
     const loreProfiles = profile ? [{ id: profile.id, name: profile.name }] : []

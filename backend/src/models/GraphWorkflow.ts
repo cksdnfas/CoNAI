@@ -268,12 +268,16 @@ export class GraphWorkflowModel {
     return rows.map((row) => ({ ...row, final_result_node_count: counts.get(row.id) ?? 0 }))
   }
 
-  static update(id: number, workflowData: GraphWorkflowUpdateData): { updated: boolean; versionChanged: boolean } {
+  static update(id: number, workflowData: GraphWorkflowUpdateData, expectedRevision?: number): { updated: boolean; versionChanged: boolean; conflict: boolean; revision?: number } {
     const db = getUserSettingsDb()
-    const current = this.findById(id)
-    if (!current) {
-      return { updated: false, versionChanged: false }
-    }
+    return db.transaction(() => {
+      const current = this.findById(id)
+      if (!current) {
+        return { updated: false, versionChanged: false, conflict: false }
+      }
+      if (expectedRevision !== undefined && expectedRevision !== current.revision) {
+        return { updated: false, versionChanged: false, conflict: true }
+      }
 
     // Byte-identical graph saves (editor auto-saves) must not bump the version or write a snapshot,
     // otherwise partial-run reuse caches are invalidated and schedules get paused for review.
@@ -290,18 +294,20 @@ export class GraphWorkflowModel {
     }
 
     const updates = filterDefined(cleanData)
-    if (Object.keys(updates).length === 0) {
-      return { updated: false, versionChanged: false }
-    }
+      if (Object.keys(updates).length === 0) {
+        return { updated: false, versionChanged: false, conflict: false, revision: current.revision }
+      }
 
-    const nextVersion = graphChanged ? (workflowData.version ?? current.version + 1) : (workflowData.version ?? current.version)
+    const nextVersion = graphChanged
+      ? Math.max(workflowData.version ?? current.version + 1, current.version + 1)
+      : Math.max(workflowData.version ?? current.version, current.version)
     const finalUpdates = {
       ...updates,
       version: nextVersion,
       updated_date: sqlLiteral('CURRENT_TIMESTAMP'),
     }
 
-    const { sql, values } = buildUpdateQuery('graph_workflows', finalUpdates, { id })
+    const { sql, values } = buildUpdateQuery('graph_workflows', finalUpdates, { id, revision: current.revision })
     const info = db.prepare(sql).run(...values)
     const updated = info.changes > 0
     if (updated) {
@@ -312,7 +318,13 @@ export class GraphWorkflowModel {
       this.createVersionSnapshot(id, nextVersion, workflowData.graph, 'Workflow updated')
     }
 
-    return { updated, versionChanged: updated && nextVersion !== current.version }
+      return {
+        updated,
+        versionChanged: updated && nextVersion !== current.version,
+        conflict: !updated,
+        revision: updated ? current.revision + 1 : undefined,
+      }
+    }).immediate()
   }
 
   static delete(id: number): boolean {

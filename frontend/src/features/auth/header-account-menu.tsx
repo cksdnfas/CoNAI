@@ -166,7 +166,7 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
 
           {canOpenMine ? <MenuRow icon={UserRound} label={t({ ko: '내 설정', en: 'My settings' })} onClick={() => runAndClose(() => navigate('/settings?section=mine'))} /> : null}
 
-          {showSearch || menuChat ? <Separator /> : null}
+          {showSearch || foldedChat ? <Separator /> : null}
 
           {showSearch ? (
             <MenuRow
@@ -188,7 +188,7 @@ export function HeaderAccountMenu({ foldedSearch = false, foldedChat = false }: 
           ) : null}
 
           {/* Narrow (touch) headers have no Ctrl/⌘+K, so the palette sits with the other folded keys. */}
-          {menuChat ? <MenuRow icon={Command} label={t({ ko: '빠른 실행', en: 'Command palette' })} onClick={() => runAndClose(openCommandPalette)} /> : null}
+          {foldedChat ? <MenuRow icon={Command} label={t({ ko: '빠른 실행', en: 'Command palette' })} onClick={() => runAndClose(openCommandPalette)} /> : null}
 
           {isAnonymousSession || isSignedIn ? <Separator /> : null}
 

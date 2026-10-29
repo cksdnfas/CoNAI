@@ -3,14 +3,21 @@ import { normalizeLlmPresetRecord } from '../../services/llmPresetNormalization'
 
 export function normalizeLlmPresetCollectionPayload(
   value: unknown,
-  options: { collectionKey: string; label: string; valueType?: 'text' | 'json' },
+  options: { collectionKey: string; label: string; valueType?: 'text' | 'json'; current?: LlmPresetRecord[] },
 ): LlmPresetRecord[] {
   if (!Array.isArray(value)) {
     throw new Error(`${options.collectionKey} must be an array`);
   }
 
   const now = new Date().toISOString();
-  const normalizedPresets = value.map((entry) => normalizeLlmPresetRecord(entry, { ...options, mode: 'strict-write', now })!);
+  const previous = new Map(options.current?.map((preset) => [preset.id, preset]));
+  const normalizedPresets = value.map((entry) => {
+    const preset = normalizeLlmPresetRecord(entry, { ...options, mode: 'strict-write', now })!;
+    const existing = previous.get(preset.id);
+    return existing && existing.name === preset.name && existing.content === preset.content && existing.createdAt === preset.createdAt
+      ? { ...preset, updatedAt: existing.updatedAt }
+      : preset;
+  });
 
   const seenIds = new Set<string>();
   const seenNames = new Set<string>();

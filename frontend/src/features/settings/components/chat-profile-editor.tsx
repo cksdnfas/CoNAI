@@ -1,4 +1,5 @@
 import { useEffect, useImperativeHandle, useRef, useState, type Dispatch, type Ref, type SetStateAction } from 'react'
+import { chatDraftEqual } from '@/features/codex-chat/chat-draft-equal'
 import { useLocation, useNavigate, useSearchParams, type Location } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Eye, FileText, Image as ImageIcon, Palette, Sparkles, Trash2, UserRound, Wrench } from 'lucide-react'
@@ -37,12 +38,15 @@ import {
   CHAT_USER_PROFILES_QUERY_KEY,
   MODEL_SLOTS_QUERY_KEY,
   CHAT_PROFILE_SYNCED_KEYS,
+  ChatEditorResolution,
   chatProfileSaveInput,
   emoticonGroupsAfterServerChange,
   sameCharacterLink,
   createChatProfile,
   deleteChatProfile,
+  getChatAdminProfile,
   getChatProfileDefaults,
+  isChatRevisionConflict,
   listChatAdminProfiles,
   listChatBlocks,
   listChatLorebookSummaries,
@@ -59,8 +63,8 @@ import { getCodexGenerationModels } from '@/lib/api-image-generation-queue'
 import { getClaudeModels } from '@/lib/api-agent-cli'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
-import { CHAT_PROFILE_DEFAULTS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_DEFAULTS, type ChatProfileCharacterLinkInput } from '@conai/shared'
-import { useUnsavedSettingsGuard } from '../use-unsaved-settings-guard'
+import { CHAT_MAX_EMOTICON_GROUPS, CHAT_PROFILE_DEFAULTS, CHAT_PROFILE_TEXT_LIMITS, CHAT_TRANSLATION_DEFAULTS, type CharacterSetting, type ChatProfileCharacterLinkInput } from '@conai/shared'
+import { useEditorPageGuard } from '../use-unsaved-settings-guard'
 import { useProfileAssetRuns } from './chat-profile-asset-runs'
 import { ChatProfileAppearancePanel } from './chat-profile-editor-appearance'
 import { draftProfileAssetUrl } from './chat-profile-images'
@@ -82,7 +86,7 @@ export const chatProfileEditorPath = (id: number | 'new') => `${CHAT_PROFILES_PA
 /** What a new profile's page starts from: a copy, a card import or a proposal (kept in the history entry). */
 export type ChatProfileEditorPageState = { draft?: ChatProfileInput; copyOf?: number }
 
-function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefaults | undefined): Draft {
+export function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefaults | undefined): Draft {
   return {
     name: profile?.name ?? '',
     tagline: profile?.tagline ?? '',
@@ -149,6 +153,145 @@ function buildDraft(profile: ChatProfileInput | null, defaults: ChatProfileDefau
     isEnabled: profile?.isEnabled ?? true,
     sortOrder: profile?.sortOrder ?? 0,
   }
+}
+
+/** Keep edits made after a save started over the returned stored profile. */
+export function rebaseProfileDraft(saved: ChatProfile, submitted: Draft, current: Draft, defaults: ChatProfileDefaults | undefined) {
+  const next = buildDraft(saved, defaults)
+  for (const key of Object.keys(current) as Array<keyof Draft>) {
+    if (JSON.stringify(current[key]) === JSON.stringify(submitted[key])) continue
+    if (key === 'style') {
+      next.style = { ...current.style, emoticonGroupIds: emoticonGroupsAfterServerChange(submitted.style.emoticonGroupIds, saved.style.emoticonGroupIds, current.style.emoticonGroupIds) }
+    } else (next as unknown as Record<string, unknown>)[key] = current[key]
+  }
+  return next
+}
+
+/** Three-way merge at the editor's top-level fields; nested values such as style stay together. */
+export function mergeProfileDraft(previous: ChatProfile, latest: ChatProfile, draft: Draft, defaults: ChatProfileDefaults | undefined, before = buildDraft(previous, defaults)) {
+  const latestDraft = buildDraft(latest, defaults)
+  const next = { ...latestDraft }
+  const conflicts: Array<keyof Draft> = []
+  for (const key of Object.keys(draft) as Array<keyof Draft>) {
+    if (JSON.stringify(draft[key]) === JSON.stringify(before[key])) continue
+    ;(next as unknown as Record<string, unknown>)[key] = draft[key]
+    if (key === 'background') {
+      // Admin reads omit the legacy image itself, but carry its own revision.
+      if (previous.backgroundRevision !== latest.backgroundRevision) conflicts.push(key)
+    } else if (JSON.stringify(draft[key]) !== JSON.stringify(latestDraft[key])
+      && JSON.stringify(before[key]) !== JSON.stringify(latestDraft[key])) conflicts.push(key)
+  }
+  return { draft: next, conflicts }
+}
+
+type ExpectedProfileDraft = { id: number; revision: string; draft: Draft }
+
+const expectedProfileDraft = (base: ChatProfile, expected: ExpectedProfileDraft | null) =>
+  expected?.id === base.id && expected.revision === base.revision ? expected.draft : undefined
+
+/** A save may have started before the editor adopted a newer base or applied its own server changes. */
+export function mergeProfileConflict(base: ChatProfile, currentBase: ChatProfile | null, latest: ChatProfile, draft: Draft, defaults: ChatProfileDefaults | undefined, expected: ExpectedProfileDraft | null) {
+  const previous = currentBase?.id === base.id ? currentBase : base
+  return mergeProfileDraft(previous, latest, draft, defaults, expectedProfileDraft(previous, expected))
+}
+
+/** Loading latest discards only the fields that actually conflicted. */
+export function latestProfileConflicts(latest: ChatProfile, draft: Draft, conflicts: Array<keyof Draft>, defaults: ChatProfileDefaults | undefined) {
+  const stored = buildDraft(latest, defaults)
+  const next = { ...draft }
+  for (const key of conflicts) {
+    if (key === 'background') delete next.background
+    else (next as unknown as Record<string, unknown>)[key] = stored[key]
+  }
+  return next
+}
+
+/** The fields this editor's own asset application just wrote. */
+export function profileAssetDraft(current: Draft, result: ChatAssetApplyResult, slot: { kind: ChatAssetKind; hash: string }, updated?: ChatProfile) {
+  const next = { ...current }
+  if (slot.kind === 'reference') next.referenceHash = slot.hash
+  if (slot.kind === 'avatar') { if (next.avatarHash !== slot.hash) next.avatar = null; next.avatarHash = slot.hash; next.avatarCrop = null }
+  if (slot.kind === 'background') { next.backgroundHash = slot.hash; next.background = undefined }
+  const groupId = result.applied.expressionGroupId
+  if (groupId) next.style = { ...next.style, emoticonGroupIds: [groupId, ...next.style.emoticonGroupIds.filter((id) => id !== groupId)] }
+  if (updated && result.applied.profileFields.includes('avatarHash')) { next.avatarHash = updated.avatarHash; next.avatarCrop = updated.avatarCrop; next.avatar = updated.avatar }
+  return next
+}
+
+/** The exact effect of this editor's own server operation, not unrelated changes in its response. */
+export type ProfileOwnEffect =
+  | { kind: 'asset'; result: ChatAssetApplyResult; slot: { kind: ChatAssetKind; hash: string } }
+  | { kind: 'expression'; groupId: number }
+  | { kind: 'setting'; setting: CharacterSetting; submitted: Draft; previousGroupId: number | null }
+  | { kind: 'save'; submitted: Draft; keys: Array<keyof Draft>; linkChanged: boolean }
+
+const sameProfileValue = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right)
+
+/** Merge a server result against the base plus only the effect this editor actually caused. */
+export function mergeOwnProfileDraft(base: ChatProfile, updated: ChatProfile | null, current: Draft, defaults: ChatProfileDefaults | undefined, effect: ProfileOwnEffect, before = buildDraft(base, defaults)) {
+  let expected: Draft
+  let next: Draft
+  if (effect.kind === 'asset') {
+    expected = profileAssetDraft(before, effect.result, effect.slot, updated ?? undefined)
+    next = profileAssetDraft(current, effect.result, effect.slot, updated ?? undefined)
+  } else if (effect.kind === 'expression') {
+    const addGroup = (value: Draft) => ({ ...value, style: { ...value.style, emoticonGroupIds: [effect.groupId, ...value.style.emoticonGroupIds.filter((id) => id !== effect.groupId)] } })
+    expected = addGroup(before)
+    next = addGroup(current)
+  } else if (effect.kind === 'setting') {
+    const { setting, submitted, previousGroupId } = effect
+    const groups = [...(setting.expressionGroupId ? [setting.expressionGroupId] : []), ...before.style.emoticonGroupIds.filter((id) => id !== previousGroupId && id !== setting.expressionGroupId)].slice(0, CHAT_MAX_EMOTICON_GROUPS)
+    expected = { ...before, characterLink: { settingId: setting.id, synced: true }, appearance: setting.appearance, referenceHash: setting.referenceHash, avatarHash: setting.avatarHash, avatarCrop: setting.avatarCrop, avatar: null, style: { ...before.style, emoticonGroupIds: groups } }
+    next = { ...current }
+    const linkUnchanged = sameCharacterLink(current.characterLink, submitted.characterLink)
+    if (linkUnchanged) {
+      next.characterLink = expected.characterLink
+      next.style = { ...current.style, emoticonGroupIds: emoticonGroupsAfterServerChange(before.style.emoticonGroupIds, groups, current.style.emoticonGroupIds) }
+    }
+    for (const key of CHAT_PROFILE_SYNCED_KEYS) {
+      if (sameProfileValue(current[key], submitted[key])) (next as unknown as Record<string, unknown>)[key] = expected[key]
+    }
+  } else {
+    const stored = buildDraft(updated!, defaults)
+    expected = { ...before }
+    next = { ...current }
+    for (const key of effect.keys) {
+      ;(expected as unknown as Record<string, unknown>)[key] = stored[key]
+      if (key === 'style' && !sameProfileValue(current.style, effect.submitted.style)) {
+        next.style = { ...current.style, emoticonGroupIds: emoticonGroupsAfterServerChange(effect.submitted.style.emoticonGroupIds, stored.style.emoticonGroupIds, current.style.emoticonGroupIds) }
+      } else if (sameProfileValue(current[key], effect.submitted[key])) (next as unknown as Record<string, unknown>)[key] = stored[key]
+    }
+    if (effect.linkChanged) {
+      if (!effect.keys.includes('style')) {
+        expected.style = { ...before.style, emoticonGroupIds: stored.style.emoticonGroupIds }
+        next.style = { ...current.style, emoticonGroupIds: emoticonGroupsAfterServerChange(before.style.emoticonGroupIds, stored.style.emoticonGroupIds, current.style.emoticonGroupIds) }
+      }
+      if (updated!.characterLink?.synced) for (const key of CHAT_PROFILE_SYNCED_KEYS) {
+        ;(expected as unknown as Record<string, unknown>)[key] = stored[key]
+        if (sameProfileValue(current[key], effect.submitted[key])) (next as unknown as Record<string, unknown>)[key] = stored[key]
+      }
+    }
+  }
+  if (!updated) return { draft: next, pending: next, expected, conflicts: [] as Array<keyof Draft> }
+  const compared = effect.kind === 'save' && (effect.keys.includes('background') || effect.keys.includes('backgroundHash'))
+    ? { ...base, backgroundRevision: updated.backgroundRevision } : base
+  return { ...mergeProfileDraft(compared, updated, next, defaults, expected), pending: next, expected }
+}
+
+export function profileSettingNeedsRefresh(base: ChatProfile, setting: CharacterSetting | null) {
+  return Boolean(base.characterLink?.synced && setting?.id === base.characterLink.settingId && base.characterLink.revision !== setting.revision)
+}
+
+/** Apply an appearance panel patch over edits or server changes that arrived since its render. */
+export function rebaseAppearancePatch(base: Draft, current: Draft, patch: Partial<Draft>): Draft {
+  if (!patch.style) return { ...current, ...patch }
+  const style = { ...current.style }
+  for (const key of Object.keys(patch.style) as Array<keyof Draft['style']>) {
+    if (JSON.stringify(patch.style[key]) === JSON.stringify(base.style[key])) continue
+    if (key === 'emoticonGroupIds') style.emoticonGroupIds = emoticonGroupsAfterServerChange(base.style.emoticonGroupIds, patch.style.emoticonGroupIds, current.style.emoticonGroupIds)
+    else (style as unknown as Record<string, unknown>)[key] = patch.style[key]
+  }
+  return { ...current, ...patch, style }
 }
 
 /**
@@ -242,12 +385,16 @@ type ProfileEditorProps = {
 
 /** One editor's profile and draft, kept while the server defaults load, fail or retry. */
 function useProfileEditorDraft({ open, profile: initialProfile, initialDraft, draftLink, defaults }: Pick<ProfileEditorProps, 'open' | 'profile' | 'initialDraft' | 'draftLink' | 'defaults'>) {
+  const queryClient = useQueryClient()
+  const cached = initialProfile && queryClient.getQueryData<ChatProfile[]>(CHAT_ADMIN_PROFILES_QUERY_KEY)?.find((entry) => entry.id === initialProfile.id && entry.revision === initialProfile.revision)
+  // Proposal modals can pass a profile with proposed fields overlaid; its cached record is the actual base.
+  const initialBase = cached || initialProfile
   const defaultsQuery = useQuery({ queryKey: CHAT_PROFILE_DEFAULTS_QUERY_KEY, queryFn: getChatProfileDefaults, enabled: open && !defaults, staleTime: Infinity })
   const currentDefaults = defaults ?? defaultsQuery.data
-  const [profile, setProfile] = useState(initialProfile)
+  const [profile, setProfile] = useState(initialBase)
   const editorSession = useRef({ open: false, id: initialProfile?.id ?? null })
   const [draft, setDraft] = useState<Draft | null>(() => {
-    const built = profile || currentDefaults ? buildDraft(profile ?? initialDraft ?? null, currentDefaults) : null
+    const built = initialProfile || currentDefaults ? buildDraft(initialProfile ?? initialDraft ?? null, currentDefaults) : null
     return built && profile && draftLink !== undefined ? { ...built, characterLink: draftLink } : built
   })
   const [draftDefaults, setDraftDefaults] = useState(currentDefaults)
@@ -259,14 +406,18 @@ function useProfileEditorDraft({ open, profile: initialProfile, initialDraft, dr
   }
   useEffect(() => {
     if (open && (!editorSession.current.open || editorSession.current.id !== (initialProfile?.id ?? null))) {
-      setProfile(initialProfile)
-      const built = initialProfile || currentDefaults ? buildDraft(initialProfile ?? initialDraft ?? null, currentDefaults) : null
-      setDraft(built && initialProfile && draftLink !== undefined ? { ...built, characterLink: draftLink } : built)
+      // A new page moving to the id it just created is still the same editor and draft.
+      if (!editorSession.current.open || initialProfile?.id !== profile?.id) {
+        setProfile(initialBase)
+        const built = initialProfile || currentDefaults ? buildDraft(initialProfile ?? initialDraft ?? null, currentDefaults) : null
+        setDraft(built && initialProfile && draftLink !== undefined ? { ...built, characterLink: draftLink } : built)
+      }
     }
     editorSession.current = { open, id: initialProfile?.id ?? null }
-  }, [currentDefaults, initialDraft, open, initialProfile, draftLink])
+  }, [currentDefaults, initialDraft, open, initialProfile, initialBase, draftLink, profile])
 
-  const dirty = open && ((!profile && Boolean(initialDraft)) || (draft !== null && JSON.stringify(draft) !== JSON.stringify(buildDraft(profile ?? initialDraft ?? null, currentDefaults))))
+  const baseline = buildDraft(profile ?? initialDraft ?? null, currentDefaults)
+  const dirty = open && ((!profile && Boolean(initialDraft)) || (draft !== null && !chatDraftEqual(draft, baseline)))
   // Unsaved edits of a synced library setting's look (held by the editor below).
   const [settingDirty, setSettingDirty] = useState(false)
   return {
@@ -328,12 +479,11 @@ export function ChatProfileEditorModal(props: ProfileEditorProps) {
   )
 }
 
-/** Leaving the open profile (its address changes); a new one moving to its own id after its first save stays. */
+/** Leaving the open profile (its address changes). */
 function leavesProfile(current: Location, next: Location) {
   if (current.pathname !== next.pathname) return true
   const before = new URLSearchParams(current.search).get('profile')
   const after = new URLSearchParams(next.search).get('profile')
-  if (before === 'new' && after !== null && /^\d+$/.test(after)) return false
   return before !== after || new URLSearchParams(current.search).get('view') !== new URLSearchParams(next.search).get('view')
 }
 
@@ -348,15 +498,16 @@ export function ChatProfileEditorPage() {
   const location = useLocation()
   const [params] = useSearchParams()
   const raw = params.get('profile')
-  const id = raw && /^\d+$/.test(raw) ? Number(raw) : null
+  const invalid = raw !== 'new' && (!raw || !/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) < 1)
+  const id = invalid || raw === 'new' ? null : Number(raw)
   const pageState = (location.state ?? null) as ChatProfileEditorPageState | null
   const profilesQuery = useQuery({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, queryFn: listChatAdminProfiles })
   const found = id === null ? null : profilesQuery.data?.find((entry) => entry.id === id) ?? null
   const back = () => navigate(CHAT_PROFILES_PATH)
-  if (id !== null && !found) {
+  if (invalid || (id !== null && !found)) {
     return (
       <EditorPage crumbs={profileCrumbs(t, navigate)} title={t({ ko: '채팅 프로필', en: 'Chat profile' })}>
-        {profilesQuery.isPending ? <LoadingState variant="inline" /> : profilesQuery.isError
+        {!invalid && profilesQuery.isPending ? <LoadingState variant="inline" /> : !invalid && profilesQuery.isError
           ? <ErrorState title={t({ ko: '프로필을 불러오지 못했어', en: 'Could not load the profile' })} error={profilesQuery.error} onRetry={() => void profilesQuery.refetch()} />
           : <EmptyState icon={UserRound} title={t({ ko: '프로필을 찾지 못했어', en: 'Profile not found' })} action={<Button variant="secondary" size="sm" onClick={back}>{t({ ko: '프로필 목록', en: 'Profile list' })}</Button>} />}
       </EditorPage>
@@ -373,6 +524,7 @@ const profileCrumbs = (t: ReturnType<typeof useI18n>['t'], navigate: ReturnType<
 function ProfileEditorPageBody({ profile, initialDraft, copyOf, onClose }: { profile: ChatProfile | null; initialDraft?: ChatProfileInput; copyOf?: number; onClose: () => void }) {
   const { t } = useI18n()
   const navigate = useNavigate()
+  const location = useLocation()
   const state = useProfileEditorDraft({ open: true, profile, initialDraft, defaults: undefined })
   if (!state.draft) {
     return <EditorPage crumbs={profileCrumbs(t, navigate)} title={t({ ko: '새 프로필', en: 'New profile' })}><DefaultsState query={state.defaultsQuery} /></EditorPage>
@@ -391,13 +543,19 @@ function ProfileEditorPageBody({ profile, initialDraft, copyOf, onClose }: { pro
       copyOf={copyOf}
       defaults={state.currentDefaults}
       onClose={onClose}
+      pageLocation={location}
       // A new profile's page moves to its id (the same editor stays, so nothing in progress is lost).
-      onSaved={(saved) => { if (!profile) navigate(chatProfileEditorPath(saved.id), { replace: true }) }}
+      onSaved={(saved, allowNavigation) => {
+        if (!profile) {
+          const path = chatProfileEditorPath(saved.id)
+          allowNavigation(path, () => navigate(path, { replace: true }))
+        }
+      }}
     />
   )
 }
 
-function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dirty: profileDirty, onSettingDirtyChange, initialDraft, copyOf, defaults, onClose, onSaved, ref }: ProfileEditorProps & {
+function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dirty: profileDirty, onSettingDirtyChange, initialDraft, copyOf, defaults, onClose, onSaved, pageLocation, ref }: ProfileEditorProps & {
   layout: 'modal' | 'page'
   draft: Draft
   setDraft: Dispatch<SetStateAction<Draft>>
@@ -405,7 +563,8 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   dirty: boolean
   onSettingDirtyChange: (dirty: boolean) => void
   /** The page stays open after a save; the dialog closes instead. */
-  onSaved?: (profile: ChatProfile) => void
+  onSaved?: (profile: ChatProfile, allowNavigation: (path: string, navigate: () => void) => void) => void
+  pageLocation?: Location
   ref?: Ref<{ save: () => void }>
 }) {
   const { t } = useI18n()
@@ -414,12 +573,31 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const page = layout === 'page'
+  const locationRef = useRef(pageLocation)
+  locationRef.current = pageLocation
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const profileRef = useRef(profile)
+  profileRef.current = profile
+  const expectedRef = useRef<ExpectedProfileDraft | null>(null)
+  useEffect(() => {
+    if (!open) expectedRef.current = null
+  }, [open])
+  const isCurrentPage = (source: Location | undefined, savedId?: number) => {
+    const current = locationRef.current
+    if (!source || !current || !leavesProfile(source, current)) return true
+    const before = new URLSearchParams(source.search)
+    const after = new URLSearchParams(current.search)
+    return savedId !== undefined && source.pathname === current.pathname && before.get('profile') === 'new'
+      && after.get('view') === 'profiles' && Number(after.get('profile')) === savedId
+  }
   const [section, setSection] = useState<ProfileEditorSection>(profile ? 'character' : 'basic')
   const [showingList, setShowingList] = useState(true)
   const [assetImports, setAssetImports] = useState(0)
   const assetBusy = assetImports > 0
   const onAssetBusyChange = (busy: boolean) => setAssetImports((count) => Math.max(0, count + (busy ? 1 : -1)))
   const [previewDraft, setPreviewDraft] = useState<(ChatProfileInput & { id?: number }) | null>(null)
+  const creatingRef = useRef<{ submitted: Draft; promise: Promise<ChatProfile>; saveRequested: boolean } | null>(null)
   const patch = (next: Partial<Draft>) => setDraft((current) => ({ ...current, ...next }))
   const audience = useAudience(draft)
   const refreshProfiles = (lorebooksChanged = false) => Promise.all([
@@ -427,6 +605,92 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
     queryClient.invalidateQueries({ queryKey: CHAT_PROFILES_QUERY_KEY }),
     ...(lorebooksChanged ? [queryClient.invalidateQueries({ queryKey: CHAT_LOREBOOKS_QUERY_KEY })] : []),
   ])
+  const cacheProfile = (saved: ChatProfile) => {
+    const profiles = queryClient.getQueryData<ChatProfile[]>(CHAT_ADMIN_PROFILES_QUERY_KEY)
+    queryClient.setQueryData<ChatProfile[]>(CHAT_ADMIN_PROFILES_QUERY_KEY, profiles?.some((entry) => entry.id === saved.id)
+      ? profiles.map((entry) => entry.id === saved.id ? saved : entry)
+      : [...(profiles ?? []), saved])
+    if (!profiles) void queryClient.invalidateQueries({ queryKey: CHAT_ADMIN_PROFILES_QUERY_KEY, refetchType: 'none' })
+  }
+  const adoptProfile = (base: ChatProfile, next: Draft) => {
+    expectedRef.current = null
+    profileRef.current = base
+    draftRef.current = next
+    setProfile(base)
+    setDraft(next)
+  }
+  /** Every editor-owned write is compared with its own expected effects, never with a fresh record as the base. */
+  const adoptOwnProfile = (updated: ChatProfile | null, effect: ProfileOwnEffect, source = profileRef.current) => {
+    const currentBase = profileRef.current
+    if (!source) {
+      if (!updated || effect.kind !== 'save' || (currentBase && (currentBase.id !== updated.id || currentBase.revision !== updated.revision))) return false
+      adoptProfile(updated, rebaseProfileDraft(updated, effect.submitted, draftRef.current, defaults))
+      return true
+    }
+    if (currentBase && currentBase.id !== source.id) return false
+    const newerBase = currentBase && currentBase.revision !== source.revision
+    // A successful revision-checked save from an older base precedes the already-adopted base.
+    if (newerBase && effect.kind === 'save') return false
+    const mergeBase = currentBase ?? source
+    const merged = mergeOwnProfileDraft(mergeBase, updated, draftRef.current, defaults, effect, expectedProfileDraft(mergeBase, expectedRef.current))
+    if (newerBase || !updated || merged.conflicts.length) {
+      expectedRef.current = { id: mergeBase.id, revision: mergeBase.revision, draft: merged.expected }
+      draftRef.current = merged.pending
+      setDraft(merged.pending)
+      return false
+    }
+    adoptProfile(updated, merged.draft)
+    return true
+  }
+  /** A stale write rebases once; overlapping edits require an explicit choice. */
+  const writeProfile = async (base: ChatProfile, submitted: Draft, keys?: Array<keyof Draft>) => {
+    const input = (value: Draft, stored: ChatProfile) => {
+      const selected = keys ? Object.fromEntries(keys.map((key) => [key, value[key]])) as ChatProfileInput : value
+      return chatProfileSaveInput(selected, stored.characterLink ?? null)
+    }
+    try {
+      return { savedProfile: await updateChatProfile(base.id, input(submitted, base), base.revision), submitted, base }
+    } catch (error) {
+      if (!isChatRevisionConflict(error)) throw error
+      const latest = error.current as ChatProfile
+      if (!mounted.current || !isCurrentPage(pageLocation, latest.id)) throw error
+      const conflictDraft = draftRef.current
+      const merged = mergeProfileConflict(base, profileRef.current, latest, conflictDraft, defaults, expectedRef.current)
+      if (merged.conflicts.length) {
+        const load = await confirm({
+          title: t({ ko: '프로필이 다른 곳에서 바뀌었어', en: 'The profile changed elsewhere' }),
+          confirmLabel: t({ ko: '최신 불러오기', en: 'Load latest' }),
+          cancelLabel: t({ ko: '덮어쓰기', en: 'Overwrite' }),
+        })
+        if (JSON.stringify(draftRef.current) !== JSON.stringify(conflictDraft)) throw new ChatEditorResolution(t({ ko: '편집이 바뀌었어. 다시 저장해.', en: 'The draft changed. Save again.' }), error)
+        if (load) {
+          adoptProfile(latest, latestProfileConflicts(latest, merged.draft, merged.conflicts, defaults))
+          throw new ChatEditorResolution(t({ ko: '최신 프로필을 불러왔어.', en: 'Loaded the latest profile.' }), error)
+        }
+        const overwrite = await confirm({
+          title: t({ ko: '변경한 항목을 덮어쓸까?', en: 'Overwrite the changed fields?' }),
+          confirmLabel: t({ ko: '덮어쓰기', en: 'Overwrite' }),
+          cancelLabel: t({ ko: '계속 편집', en: 'Keep editing' }),
+          tone: 'destructive',
+        })
+        if (JSON.stringify(draftRef.current) !== JSON.stringify(conflictDraft)) throw new ChatEditorResolution(t({ ko: '편집이 바뀌었어. 다시 저장해.', en: 'The draft changed. Save again.' }), error)
+        if (!overwrite) throw new ChatEditorResolution(t({ ko: '저장을 멈췄어.', en: 'Save stopped.' }), error)
+      }
+      if (!mounted.current || !isCurrentPage(pageLocation, latest.id)) throw error
+      adoptProfile(latest, merged.draft)
+      return { savedProfile: await updateChatProfile(latest.id, input(merged.draft, latest), latest.revision), submitted: merged.draft, base: latest }
+    }
+  }
+  /** A save and an asset operation can both need the same new profile before either request returns. */
+  const createProfileOnce = (submitted: Draft) => {
+    if (creatingRef.current) return creatingRef.current
+    const promise = createChatProfile(chatProfileSaveInput(submitted), copyOf)
+    const request = { submitted, promise, saveRequested: false }
+    creatingRef.current = request
+    const clear = () => { if (creatingRef.current === request) creatingRef.current = null }
+    void promise.then(clear, clear)
+    return request
+  }
   /**
    * Saves what generation reads (name, appearance, reference); a new profile is created whole first. A changed library
    * link is stored too (with the look a detached profile keeps), so the server has detached it and copied the
@@ -435,44 +699,73 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
   const ensureProfile = async () => {
     const linkChanged = profile !== null && !sameCharacterLink(draft.characterLink, profile.characterLink ?? null)
     const syncedAfter = Boolean((linkChanged ? draft.characterLink : profile?.characterLink)?.synced)
-    const look = { appearance: draft.appearance, referenceHash: draft.referenceHash }
-    const updated = profile
-      // A synced profile's look is its setting's: only the name (and the link) is sent then.
-      ? await updateChatProfile(profile.id, linkChanged
-        ? chatProfileSaveInput({ name: draft.name, characterLink: draft.characterLink, ...(syncedAfter ? {} : { ...look, avatarHash: draft.avatarHash, avatarCrop: draft.avatarCrop }) })
-        : syncedAfter ? { name: draft.name } : { name: draft.name, ...look })
-      : await createChatProfile(chatProfileSaveInput(draft), copyOf)
-    setProfile(updated)
-    if (profile && linkChanged) {
-      // The server swapped the expression groups the link brings; the draft's list takes just that change.
-      // Synced now: the stored look is the setting's, so the draft takes it (the profile reads as unchanged there).
-      const storedLook = syncedAfter ? Object.fromEntries(CHAT_PROFILE_SYNCED_KEYS.map((key) => [key, updated[key]])) as Partial<Draft> : {}
-      setDraft((current) => ({ ...current, ...storedLook, style: { ...current.style, emoticonGroupIds: emoticonGroupsAfterServerChange(profile.style.emoticonGroupIds, updated.style.emoticonGroupIds, current.style.emoticonGroupIds) } }))
+    const creation = profile ? null : createProfileOnce(draft)
+    const keys: Array<keyof Draft> = linkChanged
+      ? ['name', 'characterLink', ...(syncedAfter ? [] : ['appearance', 'referenceHash', 'avatarHash', 'avatarCrop'] as Array<keyof Draft>)]
+      : syncedAfter ? ['name'] : ['name', 'appearance', 'referenceHash']
+    let submitted = draft
+    let source = profile
+    let savedKeys = keys
+    let updated: ChatProfile
+    if (profile) {
+      const saved = await writeProfile(profile, submitted, keys)
+      updated = saved.savedProfile
+      submitted = saved.submitted
+      source = saved.base
+    } else {
+      updated = await creation!.promise
+      submitted = creation!.submitted
+      savedKeys = Object.keys(submitted) as Array<keyof Draft>
+    }
+    if (creation && mounted.current && isCurrentPage(pageLocation, updated.id)) {
+      const current = draftRef.current
+      if (creation.submitted.name.trim() !== current.name.trim()
+        || (creation.submitted.appearance ?? '') !== (current.appearance ?? '')
+        || (creation.submitted.referenceHash ?? null) !== (current.referenceHash ?? null)
+        || !sameCharacterLink(creation.submitted.characterLink, current.characterLink)) {
+        const changedLink = !sameCharacterLink(current.characterLink, updated.characterLink ?? null)
+        const synced = Boolean((changedLink ? current.characterLink : updated.characterLink)?.synced)
+        const followupKeys: Array<keyof Draft> = changedLink
+          ? ['name', 'characterLink', ...(synced ? [] : ['appearance', 'referenceHash', 'avatarHash', 'avatarCrop'] as Array<keyof Draft>)]
+          : synced ? ['name'] : ['name', 'appearance', 'referenceHash']
+        const saved = await writeProfile(updated, current, followupKeys)
+        updated = saved.savedProfile
+        submitted = saved.submitted
+        source = saved.base
+        savedKeys = followupKeys
+      }
+    }
+    if (!mounted.current || !isCurrentPage(pageLocation, updated.id)) {
+      await refreshProfiles(!profile && updated.lorebookIds.length > 0)
+      return updated
+    }
+    // Another caller sharing this creation already adopted it (and maybe saved a follow-up): its base is the latest.
+    const adopted = profileRef.current
+    if (!source && adopted?.id === updated.id) return adopted
+    const changedLink = Boolean(source && savedKeys.includes('characterLink') && !sameCharacterLink(submitted.characterLink, source.characterLink ?? null))
+    if (!adoptOwnProfile(updated, { kind: 'save', submitted, keys: savedKeys, linkChanged: changedLink }, source)) {
+      throw new ChatEditorResolution(t({ ko: '프로필이 바뀌었어. 다시 시도해.', en: 'The profile changed. Try again.' }), undefined)
     }
     if (!profile) {
-      setDraft(buildDraft(updated, defaults))
-      showSnackbar({ message: t({ ko: '프로필을 저장했어.', en: 'Profile saved.' }), tone: 'info' })
+      if (!creation!.saveRequested) showSnackbar({ message: t({ ko: '프로필을 저장했어.', en: 'Profile saved.' }), tone: 'info' })
     }
     await refreshProfiles(!profile && updated.lorebookIds.length > 0)
+    if (!profile && page && mounted.current && isCurrentPage(pageLocation, updated.id)) {
+      cacheProfile(updated)
+      onSaved?.(updated, allowNavigation)
+    }
     return updated
   }
   /** An applied asset changes the saved profile; the draft takes over just those fields. */
-  const assetApplied = (result: ChatAssetApplyResult, slot: { kind: ChatAssetKind; hash: string }, updated?: ChatProfile) => {
-    if (updated) setProfile(updated)
-    setDraft((current) => {
-      const next = { ...current }
-      if (slot.kind === 'reference') next.referenceHash = slot.hash
-      if (slot.kind === 'avatar') { if (next.avatarHash !== slot.hash) next.avatar = null; next.avatarHash = slot.hash; next.avatarCrop = null }
-      if (slot.kind === 'background') { next.backgroundHash = slot.hash; next.background = undefined }
-      const groupId = result.applied.expressionGroupId
-      if (groupId) next.style = { ...next.style, emoticonGroupIds: [groupId, ...next.style.emoticonGroupIds.filter((id) => id !== groupId)] }
-      if (updated && result.applied.profileFields.includes('avatarHash')) { next.avatarHash = updated.avatarHash; next.avatarCrop = updated.avatarCrop; next.avatar = updated.avatar }
-      return next
-    })
+  const assetApplied = (result: ChatAssetApplyResult, slot: { kind: ChatAssetKind; hash: string }, updated?: ChatProfile, source?: ChatProfile | null) => {
+    adoptOwnProfile(updated ?? null, { kind: 'asset', result, slot }, source)
   }
-  const runs = useProfileAssetRuns({ open, profileId: profile?.id ?? null, ensureProfile, onApplied: assetApplied })
-  const link = useProfileCharacterLink({ open, profile, draft, setDraft, setProfile, ensureProfile })
+  const runs = useProfileAssetRuns({ open, profileId: profile?.id ?? null, ensureProfile, currentProfile: () => profileRef.current, onApplied: assetApplied })
+  const link = useProfileCharacterLink({ open, profile, draft, setDraft, adoptOwnProfile, ensureProfile })
   const dirty = profileDirty || link.dirty
+  const settingDirtyRef = useRef(link.dirty)
+  settingDirtyRef.current = link.dirty
+  const { mounted, allowNavigation } = useEditorPageGuard(page && dirty, t({ ko: '프로필에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This profile has unsaved changes that will be lost.' }), leavesProfile)
   useEffect(() => {
     onSettingDirtyChange(link.dirty)
     return () => onSettingDirtyChange(false)
@@ -504,34 +797,74 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
     // Synced: the setting's changed look is stored first (a conflict stops here with both drafts kept), then the
     // profile without the look's fields.
     mutationFn: async () => {
+      let submitted = draft
+      const sourceLocation = pageLocation
+      const pendingCreation = profile ? null : creatingRef.current
+      if (pendingCreation) pendingCreation.saveRequested = true
       await link.beforeSave()
-      const input = chatProfileSaveInput(draft, profile?.characterLink ?? null)
-      return profile ? updateChatProfile(profile.id, input) : createChatProfile(input, copyOf)
+      let base = profile
+      const setting = link.setting.baseRef.current
+      if (base && profileSettingNeedsRefresh(base, setting)) {
+        const latest = await getChatAdminProfile(base.id)
+        if (!mounted.current || !isCurrentPage(sourceLocation, latest.id)) throw new Error(t({ ko: '편집 중인 프로필이 바뀌어서 저장을 중단했어.', en: 'The open profile changed, so the save was stopped.' }))
+        const effect: ProfileOwnEffect = { kind: 'setting', setting: setting!, submitted, previousGroupId: base.expressionGroupId ?? null }
+        const merged = mergeOwnProfileDraft(base, latest, submitted, defaults, effect, expectedProfileDraft(base, expectedRef.current))
+        if (!merged.conflicts.length && adoptOwnProfile(latest, effect, base)) {
+          base = latest
+          submitted = merged.draft
+        }
+      }
+      let savedProfile: ChatProfile
+      let sourceBase = base
+      if (base) {
+        const saved = await writeProfile(base, submitted)
+        savedProfile = saved.savedProfile
+        submitted = saved.submitted
+        sourceBase = saved.base
+      }
+      else {
+        const request = pendingCreation ?? createProfileOnce(submitted)
+        request.saveRequested = true
+        savedProfile = await request.promise
+        if (JSON.stringify(submitted) !== JSON.stringify(request.submitted)) {
+          if (!mounted.current || !isCurrentPage(sourceLocation, savedProfile.id)) throw new Error(t({ ko: '편집 중인 프로필이 바뀌어서 저장을 중단했어.', en: 'The open profile changed, so the save was stopped.' }))
+          const saved = await writeProfile(savedProfile, submitted)
+          savedProfile = saved.savedProfile
+          submitted = saved.submitted
+          sourceBase = saved.base
+        } else submitted = request.submitted
+      }
+      return { savedProfile, submitted, sourceLocation, sourceBase }
     },
-    onSuccess: async (savedProfile) => {
+    onSuccess: async ({ savedProfile, submitted, sourceLocation, sourceBase }) => {
       const previous = profile?.lorebookIds ?? []
       // Lorebooks list their profiles by name: a link change or a rename of a linked profile refreshes them.
       await refreshProfiles(savedProfile.lorebookIds.length !== previous.length || savedProfile.lorebookIds.some((id) => !previous.includes(id))
         || (previous.length > 0 && savedProfile.name !== profile?.name))
-      if (!page) { onClose(); return }
-      setProfile(savedProfile)
-      setDraft(buildDraft(savedProfile, defaults))
+      if (!mounted.current || !isCurrentPage(sourceLocation, savedProfile.id)) return
       showSnackbar({ message: t({ ko: '저장했어.', en: 'Saved.' }), tone: 'info' })
-      onSaved?.(savedProfile)
+      if (!page && JSON.stringify(draftRef.current) === JSON.stringify(submitted) && !settingDirtyRef.current) { onClose(); return }
+      const changedLink = Boolean(sourceBase && !sameCharacterLink(submitted.characterLink, sourceBase.characterLink ?? null))
+      if (!adoptOwnProfile(savedProfile, { kind: 'save', submitted, keys: Object.keys(submitted) as Array<keyof Draft>, linkChanged: changedLink }, sourceBase)) return
+      if (page) cacheProfile(savedProfile)
+      onSaved?.(savedProfile, allowNavigation)
     },
-    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
+    onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: error instanceof ChatEditorResolution ? 'info' : 'error' }),
   })
   const deleteMutation = useMutation({
-    mutationFn: () => deleteChatProfile(profile?.id ?? 0),
-    onSuccess: async () => {
+    mutationFn: async () => {
+      const sourceLocation = pageLocation
+      await deleteChatProfile(profile?.id ?? 0)
+      return sourceLocation
+    },
+    onSuccess: async (sourceLocation) => {
       await refreshProfiles(Boolean(profile?.lorebookIds.length))
-      onClose()
+      if (!mounted.current || !isCurrentPage(sourceLocation)) return
+      if (page) allowNavigation(CHAT_PROFILES_PATH, onClose)
+      else onClose()
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '삭제하지 못했어.', en: 'Could not delete.' })), tone: 'error' }),
   })
-  // The page asks before leaving with unsaved edits; a running save or delete leaves on its own.
-  useUnsavedSettingsGuard(page && dirty && !saveMutation.isPending && !deleteMutation.isPending, t({ ko: '프로필에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This profile has unsaved changes that will be lost.' }), leavesProfile)
-
   const handleDelete = async () => {
     const confirmed = await confirm({
       title: t({ ko: '프로필 삭제', en: 'Delete profile' }),
@@ -550,6 +883,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
       tone: 'destructive',
     })
     if (!confirmed) return
+    expectedRef.current = null
     setDraft(buildDraft(profile ?? initialDraft ?? null, defaults))
     const settingBase = link.setting.baseRef.current
     if (link.dirty && settingBase) link.setting.patch(settingDraftOf(settingBase))
@@ -595,7 +929,7 @@ function ProfileEditor({ layout, open, profile, setProfile, draft, setDraft, dir
       <ChatProfileCharacterPanel open={open} draft={draft} patch={patch} onPreview={() => setPreviewDraft({ ...draft, id: profile?.id })} profile={profile} />
     ) : null}
     {section === 'appearance' ? (
-      <ChatProfileAppearancePanel draft={draft} patch={patch} profile={profile} dirty={dirty} onBusyChange={onAssetBusyChange} busy={assetBusy} runs={runs} ensureProfile={ensureProfile} onProfileChange={setProfile} link={link} />
+      <ChatProfileAppearancePanel draft={draft} patch={(next) => setDraft((current) => rebaseAppearancePatch(draft, current, next))} profile={profile} dirty={!page && dirty} onBusyChange={onAssetBusyChange} busy={assetBusy} runs={runs} ensureProfile={ensureProfile} onProfileChange={adoptOwnProfile} link={link} />
     ) : null}
     {section === 'model' ? (
       <ChatProfileModelPanel

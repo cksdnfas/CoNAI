@@ -1,11 +1,11 @@
-import type { Dispatch, SetStateAction } from 'react'
+import type { Dispatch, RefObject, SetStateAction } from 'react'
+import { useCallback, useRef } from 'react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
 import type { GraphExecutionRecord, GraphWorkflowExposedInput, GraphWorkflowFolderRecord, GraphWorkflowRecord, GraphWorkflowSummaryRecord, ModuleDefinitionRecord } from '@/lib/api-module-graph'
-import type { EditorSupportSectionKey } from './module-graph-types'
 import type { WorkflowValidationIssue } from './module-graph-types'
 import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-shared'
-import { useModuleGraphBrowseActions } from './use-module-graph-browse-actions'
+import { useModuleGraphBrowseActions, type GraphNavigationRevision } from './use-module-graph-browse-actions'
 import { useModuleGraphEditorInteractions } from './use-module-graph-editor-interactions'
 import { useModuleGraphExecutionActions } from './use-module-graph-execution-actions'
 import { applyNodeImageReplacements } from './module-graph-image-values'
@@ -16,6 +16,9 @@ export function useModuleGraphPageActions({
   confirmMessage,
   reactFlow,
   isDirty,
+  editorRevisionRef,
+  graphLoadRequestRef,
+  onDirectGraphNavigation,
   workflowView,
   nodes,
   edges,
@@ -53,8 +56,6 @@ export function useModuleGraphPageActions({
   setLastSavedSnapshot,
   onEditorGraphReplaced,
   setWorkflowView,
-  setIsEditorSupportOpen,
-  setActiveEditorSupportSection,
   setIsBrowseManageModalOpen,
   setFolderDeleteTarget,
   refetchModules,
@@ -70,6 +71,9 @@ export function useModuleGraphPageActions({
     fitView: (options?: { padding?: number; duration?: number }) => Promise<unknown> | unknown
   }
   isDirty: boolean
+  editorRevisionRef: RefObject<GraphNavigationRevision>
+  graphLoadRequestRef: RefObject<number>
+  onDirectGraphNavigation: () => void
   workflowView: 'browse' | 'edit'
   nodes: ModuleGraphNode[]
   edges: ModuleGraphEdge[]
@@ -108,8 +112,6 @@ export function useModuleGraphPageActions({
   /** Another workflow or a fresh draft replaced the editor graph. */
   onEditorGraphReplaced: () => void
   setWorkflowView: Dispatch<SetStateAction<'browse' | 'edit'>>
-  setIsEditorSupportOpen: Dispatch<SetStateAction<boolean>>
-  setActiveEditorSupportSection: Dispatch<SetStateAction<EditorSupportSectionKey>>
   setIsBrowseManageModalOpen: Dispatch<SetStateAction<boolean>>
   setFolderDeleteTarget: Dispatch<SetStateAction<GraphWorkflowFolderRecord | null>>
   refetchModules: () => Promise<unknown>
@@ -117,11 +119,15 @@ export function useModuleGraphPageActions({
   refetchGraphWorkflows: () => Promise<unknown>
   refetchGraphExecutions: () => Promise<unknown>
   refetchExecutionDetail: () => Promise<unknown>
-  enterWorkflowEditor: (section?: EditorSupportSectionKey) => void
+  enterWorkflowEditor: () => void
   showSnackbar: (input: { message: string; tone: 'info' | 'error' }) => void
 }) {
   const { t } = useI18n()
   const confirm = useConfirm()
+  const editorBaseRevisionRef = useRef<{ id: number; revision: number } | null>(null)
+  const onGraphRevisionLoaded = useCallback((id: number, revision: number) => {
+    editorBaseRevisionRef.current = { id, revision }
+  }, [])
 
   const confirmDiscardUnsavedChanges = async () => {
     if (workflowView !== 'edit' || !isDirty) {
@@ -209,6 +215,10 @@ export function useModuleGraphPageActions({
     handleRefreshWorkspace: handleRefreshBrowseWorkspace,
   } = useModuleGraphBrowseActions({
     isDirty,
+    editorRevisionRef,
+    graphLoadRequestRef,
+    onGraphRevisionLoaded,
+    onDirectGraphNavigation,
     selectedFolderId,
     selectedFolderRecord,
     selectedGraphRecord,
@@ -233,8 +243,6 @@ export function useModuleGraphPageActions({
     setLastSavedSnapshot,
     onEditorGraphReplaced,
     setWorkflowView,
-    setIsEditorSupportOpen,
-    setActiveEditorSupportSection,
     setIsBrowseManageModalOpen,
     setFolderDeleteTarget,
     refetchGraphWorkflowFolders,
@@ -267,6 +275,7 @@ export function useModuleGraphPageActions({
     draftWorkflowFolderId,
     selectedGraphId,
     selectedGraphRecord,
+    editorBaseRevisionRef,
     selectedNode,
     selectedExecution,
     selectedWorkflowValidationIssues,

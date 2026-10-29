@@ -2,10 +2,8 @@ import { requestApiData, requestJson } from '@/lib/api-request'
 import type { LibraryImageRef } from '@/lib/library-image-ref'
 
 import type {
-  CreateCodexModuleFromSnapshotPayload,
   CreateComfyModuleFromWorkflowPayload,
   CreateEnvelope,
-  CreateNaiModuleFromSnapshotPayload,
   GraphExecutionArtifactRecord,
   GraphExecutionFinalResultRecord,
   GraphExecutionLogRecord,
@@ -32,7 +30,6 @@ import type {
   GraphWorkflowScheduleType,
   GraphWorkflowSummaryRecord,
   GraphWorkflowUpdateResult,
-  GraphWorkflowVersionSummaryRecord,
   ModuleDefinitionRecord
 } from './api-module-graph-types'
 
@@ -92,28 +89,6 @@ export async function getModuleDefinitions(activeOnly = true) {
   }
 
   return requestApiData<ModuleDefinitionRecord[]>(`/api/module-definitions${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`)
-}
-
-/** Create a reusable NAI module from a captured generation-page snapshot. */
-export async function createNaiModuleFromSnapshot(payload: CreateNaiModuleFromSnapshotPayload) {
-  return requestApiData<CreateEnvelope>('/api/module-definitions/from-nai-snapshot', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
-}
-
-/** Create a reusable Codex module from the current generation-tab snapshot. */
-export async function createCodexModuleFromSnapshot(payload: CreateCodexModuleFromSnapshotPayload) {
-  return requestApiData<CreateEnvelope>('/api/module-definitions/from-codex-snapshot', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  })
 }
 
 /** Wrap an existing ComfyUI workflow as a reusable module definition. */
@@ -249,6 +224,7 @@ export async function updateGraphWorkflow(workflowId: number, payload: {
   folder_id?: number | null
   version?: number
   is_active?: boolean
+  expected_revision?: number
 }) {
   return requestApiData<GraphWorkflowUpdateResult>(`/api/graph-workflows/${workflowId}`, {
     method: 'PUT',
@@ -277,12 +253,6 @@ export async function importGraphWorkflow(payload: {
     },
     body: JSON.stringify(payload),
   })
-}
-
-/** List compact saved-version snapshots for one graph workflow. */
-export async function getGraphWorkflowVersionSummaries(workflowId: number, limit = 12) {
-  const searchParams = new URLSearchParams({ limit: String(limit) })
-  return requestApiData<GraphWorkflowVersionSummaryRecord[]>(`/api/graph-workflows/${workflowId}/versions?${searchParams.toString()}`)
 }
 
 /** Delete one saved graph workflow document. */
@@ -358,6 +328,7 @@ export async function createGraphWorkflowSchedule(payload: {
   run_enqueue_count?: number | null
   failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
+  expected_graph_version?: number
 }) {
   return requestApiData<CreateEnvelope>('/api/graph-workflows/schedules', {
     method: 'POST',
@@ -381,6 +352,8 @@ export async function updateGraphWorkflowSchedule(scheduleId: number, payload: {
   run_enqueue_count?: number | null
   failure_policy?: GraphWorkflowScheduleFailurePolicy | null
   input_values?: Record<string, unknown> | null
+  expected_revision?: number
+  expected_graph_version?: number
 }) {
   return requestApiData<CreateEnvelope>(`/api/graph-workflows/schedules/${scheduleId}`, {
     method: 'PUT',
@@ -392,16 +365,18 @@ export async function updateGraphWorkflowSchedule(scheduleId: number, payload: {
 }
 
 /** Pause one workflow autorun schedule. */
-export async function pauseGraphWorkflowSchedule(scheduleId: number) {
+export async function pauseGraphWorkflowSchedule(scheduleId: number, expected?: { expected_revision?: number; expected_graph_version?: number }) {
   return requestApiData<{ message: string }>(`/api/graph-workflows/schedules/${scheduleId}/pause`, {
     method: 'POST',
+    ...(expected ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(expected) } : {}),
   })
 }
 
 /** Resume one workflow autorun schedule after review. */
-export async function resumeGraphWorkflowSchedule(scheduleId: number) {
+export async function resumeGraphWorkflowSchedule(scheduleId: number, expected?: { expected_revision?: number; expected_graph_version?: number }) {
   return requestApiData<{ message: string }>(`/api/graph-workflows/schedules/${scheduleId}/resume`, {
     method: 'POST',
+    ...(expected ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(expected) } : {}),
   })
 }
 

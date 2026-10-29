@@ -147,12 +147,12 @@ export function registerPostTools(server: McpServer, context: McpRequestContext)
     snapshot: z.string().max(160).optional().describe('Reuse the first search response snapshot when paging.'),
     offset: z.number().int().min(0).optional(),
     limit: z.number().int().min(1).max(50).optional(),
-  }) }, ({ post_ids, query, category_id, tag, author_profile_id, status, kind, review_status, sort, snapshot, offset, limit }) => run(async (current) => {
+  }) }, ({ post_ids, query, category_id, tag, author_profile_id, status, kind, review_status, sort, snapshot, offset, limit }, ctx) => run(async (current) => {
     if ((context.research || post_ids) && status !== undefined && status !== 'published') throw new PostError('Scoped search only searches published posts.',403);
     const allowedPostIds = context.research ? context.research.allowedPostIds.filter(id => !post_ids || post_ids.includes(id)) : post_ids;
     const taskKey = context.chatContext ? knowledgeExecutionFromMcp(context).rootExecutionId : undefined;
     const taskConditionKey=context.chatContext&&query?.trim()?knowledgeTaskConditionKey(knowledgeExecutionFromMcp(context),query):undefined;
-    const found = await PostStore.list(current, { q: query, categoryId: category_id, tag, authorProfileId: author_profile_id, status, kind, reviewStatus: review_status, sort, snapshot, taskKey,taskConditionKey, offset, limit: limit ?? 10, allowedPostIds });
+    const found = await PostStore.list(current, { q: query, categoryId: category_id, tag, authorProfileId: author_profile_id, status, kind, reviewStatus: review_status, sort, snapshot, taskKey,taskConditionKey, offset, limit: limit ?? 10, allowedPostIds }, { signal: ctx?.mcpReq?.signal });
     const sourceVersions = new Map(PostStore.publishedSources(current, found.items.filter(post => post.status === 'published').map(post => post.id)).map(source => [source.id, source]));
     if (context.chatContext && query?.trim()) recordKnowledgeSearch(knowledgeExecutionFromMcp(context), query, found.items.filter(post => post.knowledge?.enabled).map(post => post.id));
     return {

@@ -1,3 +1,4 @@
+import { createApiFallbackError, type ApiErrorFallbackKey } from '@/i18n/api-error-fallbacks'
 import { buildApiUrl } from '@/lib/api-url'
 
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -21,6 +22,11 @@ interface RequestJsonOptions {
   defaultCache?: RequestCache
   /** Abort timeout in milliseconds; pass 0 to disable the default timeout. */
   timeoutMs?: number
+}
+
+interface RequestApiDataOptions extends RequestJsonOptions {
+  /** Reject successful envelopes whose data is falsy, for endpoints requiring a payload. */
+  requireData?: boolean
 }
 
 /** Detect bodies that stream a payload up to the server (FormData, raw binary). */
@@ -67,11 +73,14 @@ export class ApiRequestError extends Error {
   readonly status: number
   /** Machine-readable `code` from the error body, when the server sends one. */
   readonly code?: string
+  /** The error body's `data`, e.g. the current record of a rejected revision-checked save. */
+  readonly data?: unknown
 
-  constructor(message: string, status: number, code?: string) {
+  constructor(message: string, status: number, code?: string, data?: unknown) {
     super(message)
     this.status = status
     this.code = code
+    this.data = data
   }
 }
 
@@ -103,6 +112,10 @@ function errorCodeFromPayload(payload: ResponsePayload) {
   return typeof code === 'string' && code ? code : undefined
 }
 
+function errorDataFromPayload(payload: ResponsePayload) {
+  return payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as Record<string, unknown>).data : undefined
+}
+
 /** Execute a JSON API request with a default abort timeout and surface backend error messages. */
 export async function requestJson<T>(path: string, init?: RequestInit, options: RequestJsonOptions = {}): Promise<T> {
   const response = await fetch(buildApiUrl(path), {
@@ -119,16 +132,27 @@ export async function requestJson<T>(path: string, init?: RequestInit, options: 
   const payload = await readResponsePayload(response)
 
   if (!response.ok) {
-    throw new ApiRequestError(errorMessageFromPayload(payload) ?? `Request failed: ${response.status}`, response.status, errorCodeFromPayload(payload))
+    throw new ApiRequestError(errorMessageFromPayload(payload) ?? `Request failed: ${response.status}`, response.status, errorCodeFromPayload(payload), errorDataFromPayload(payload))
   }
 
   return payload as T
 }
 
 /** Execute an API-envelope JSON request and return the successful data payload. */
-export async function requestApiData<T>(path: string, init?: RequestInit, options: RequestJsonOptions = {}) {
+export function requestApiData<T>(path: string, init?: RequestInit, options?: RequestApiDataOptions): Promise<T>
+export function requestApiData<T>(path: string, fallbackKey: ApiErrorFallbackKey, init?: RequestInit, options?: RequestApiDataOptions): Promise<T>
+export async function requestApiData<T>(
+  path: string,
+  initOrFallbackKey?: RequestInit | ApiErrorFallbackKey,
+  initOrOptions?: RequestInit | RequestApiDataOptions,
+  fallbackOptions?: RequestApiDataOptions,
+): Promise<T> {
+  const fallbackKey = typeof initOrFallbackKey === 'string' ? initOrFallbackKey : undefined
+  const init = fallbackKey ? initOrOptions as RequestInit | undefined : initOrFallbackKey as RequestInit | undefined
+  const options = fallbackKey ? fallbackOptions : initOrOptions as RequestApiDataOptions | undefined
   const payload = await requestJson<ApiEnvelope<T>>(path, init, options)
-  if (!payload.success) {
+  if (!payload.success || (options?.requireData && !payload.data)) {
+    if (fallbackKey) throw createApiFallbackError(payload.error, fallbackKey)
     throw new Error(payload.error || 'Request failed')
   }
 

@@ -1,18 +1,18 @@
 import { useLayoutEffect, useMemo, useRef, type Dispatch, type SetStateAction } from 'react'
 import { useReactFlow } from '@xyflow/react'
 import { applyChatWorkflowOperations, describeChatWorkflowModule, normalizeChatWorkflowSnapshot, replayWorkflowLocalInputs, sanitizeChatWorkflowInputs, type ChatWorkflowSnapshot } from '@conai/shared'
-import { useChatPageRegistration, type WorkflowPageProposal } from '@/features/codex-chat/chat-page-context'
+import { useChatPage, useChatPageRegistration, type WorkflowPageProposal } from '@/features/codex-chat/chat-page-context'
 import { useI18n } from '@/i18n'
 import type { GraphWorkflowExposedInput, ModuleDefinitionRecord } from '@/lib/api-module-graph'
 import { createRandomUuid } from '@/lib/random-uuid'
-import { buildGraphPayload } from './module-graph-flow'
+import { buildGraphEditorSnapshot, buildGraphPayload } from './module-graph-flow'
 import { buildHandleId, buildModuleEdgePresentation, findNodePort, getModulePortCompatibility } from './module-graph-ports'
 import type { ModuleGraphEdge, ModuleGraphNode } from './module-graph-types'
 import { buildWorkflowRunInputDefaults, deriveWorkflowExposedInputsFromNodes, isWorkflowInputEnabledForNode, WORKFLOW_INPUT_DESCRIPTION_KEY, WORKFLOW_INPUT_LABEL_KEY } from './module-graph-workflow-inputs'
 
 type Draft = { name: string; description: string; nodes: ModuleGraphNode[]; edges: ModuleGraphEdge[]; runInputs: Record<string, unknown> }
 type Params = Draft & {
-  enabled: boolean; dirty: boolean; editorSessionId: string; selectedGraphId: number | null; debugMode: boolean; modules: ModuleDefinitionRecord[]
+  enabled: boolean; dirty: boolean; currentSnapshot: string; editorSessionId: string; selectedGraphId: number | null; debugMode: boolean; modules: ModuleDefinitionRecord[]
   setNodes: Dispatch<SetStateAction<ModuleGraphNode[]>>; setEdges: Dispatch<SetStateAction<ModuleGraphEdge[]>>
   setName: Dispatch<SetStateAction<string>>; setDescription: Dispatch<SetStateAction<string>>
   setRunInputs: Dispatch<SetStateAction<Record<string, unknown>>>; setExposedInputs: Dispatch<SetStateAction<GraphWorkflowExposedInput[]>>
@@ -20,25 +20,27 @@ type Params = Draft & {
 }
 
 /** Private inputs participate in concurrency checks locally, but never enter the chat snapshot. */
-function signature(draft: Draft, debugMode: boolean) {
-  return JSON.stringify({ name: draft.name, description: draft.description, graph: buildGraphPayload(draft.nodes, draft.edges, { debug_mode: debugMode, exposed_inputs: deriveWorkflowExposedInputsFromNodes(draft.nodes) }), runInputs: draft.runInputs })
+function signature(snapshot: string, draft: Pick<Draft, 'name' | 'description' | 'runInputs'>) {
+  // The editor snapshot trims these fields, but even whitespace-only changes invalidate chat proposals.
+  return `${snapshot}\n${JSON.stringify([draft.name, draft.description, draft.runInputs])}`
 }
 
 /** A typed native-editor adapter. It has no access to Save or Run actions. */
 export function useWorkflowChatPage(params: Params) {
   const { t } = useI18n()
   const flow = useReactFlow()
+  const connected = useChatPage()?.enabled === true
   const modules = useMemo(() => params.modules.map(describeChatWorkflowModule), [params.modules])
   const moduleSignature = useMemo(() => JSON.stringify(modules), [modules])
-  const { enabled, name, description, nodes, edges, runInputs, debugMode } = params
+  const { enabled, currentSnapshot, name, description, runInputs } = params
   // Serializing the whole graph is only worth it while a chat is connected to this page, and only when it changed.
   const draftSignature = useMemo(
-    () => enabled ? signature({ name, description, nodes, edges, runInputs }, debugMode) : '',
-    [enabled, name, description, nodes, edges, runInputs, debugMode],
+    () => enabled && connected ? signature(currentSnapshot, { name, description, runInputs }) : '',
+    [enabled, connected, currentSnapshot, name, description, runInputs],
   )
   const revision = useMemo(() => ({ draftSignature, moduleSignature, id: createRandomUuid() }), [draftSignature, moduleSignature]).id
   const snapshot = useMemo<ChatWorkflowSnapshot | null>(() => {
-    if (!params.enabled) return null
+    if (!params.enabled || !connected) return null
     try {
       const catalog = new Map(modules.map((module) => [module.id, module]))
       const graph = buildGraphPayload(params.nodes, params.edges)
@@ -50,7 +52,7 @@ export function useWorkflowChatPage(params: Params) {
         return { ...node, disabled: node.disabled === true, input_values: sanitizeChatWorkflowInputs(node.input_values, module), ...(module.runInputCapable ? { run_input: { enabled: isWorkflowInputEnabledForNode(original), label: String(node.input_values[WORKFLOW_INPUT_LABEL_KEY] ?? ''), description: String(node.input_values[WORKFLOW_INPUT_DESCRIPTION_KEY] ?? '') } } : {}) }
       }) })
     } catch { return null }
-  }, [params.enabled, params.nodes, params.edges, params.name, params.description, modules, revision])
+  }, [connected, params.enabled, params.nodes, params.edges, params.name, params.description, modules, revision])
   const live = useRef({ params, snapshot, modules, draftSignature, moduleSignature })
   useLayoutEffect(() => { live.current = { params, snapshot, modules, draftSignature, moduleSignature } })
 
@@ -93,7 +95,11 @@ export function useWorkflowChatPage(params: Params) {
       return result
     }, {})
     const next: Draft = { name: transaction.graph.name, description: transaction.graph.description, nodes, edges, runInputs }
-    const expectedSignature = signature(next, original.debugMode)
+    const expectedSnapshot = buildGraphEditorSnapshot({
+      name: next.name, description: next.description, nodes: next.nodes, edges: next.edges,
+      workflowMetadata: { exposed_inputs: deriveWorkflowExposedInputsFromNodes(next.nodes), debug_mode: original.debugMode },
+    })
+    const expectedSignature = signature(expectedSnapshot, next)
     const before: Draft = { name: original.name, description: original.description, nodes: original.nodes, edges: original.edges, runInputs: original.runInputs }
     const write = (draft: Draft) => {
       original.setNodes(draft.nodes); original.setEdges(draft.edges)
@@ -107,8 +113,8 @@ export function useWorkflowChatPage(params: Params) {
     return { isCurrent, restore: () => { if (!isCurrent()) throw new Error('적용 뒤 워크플로가 바뀌었어.'); write(before) } }
   }
 
-  useChatPageRegistration(snapshot ? {
+  useChatPageRegistration(params.enabled && (!connected || snapshot) ? {
     title: t({ ko: '노드 워크플로 편집기', en: 'Node workflow editor' }), kind: 'workflow', resourceId: `workflow:${params.selectedGraphId ?? 'draft'}:${params.editorSessionId}`,
-    fields: [], workflow: snapshot, dirty: params.dirty, apply: () => {}, applyWorkflow,
+    fields: [], ...(snapshot ? { workflow: snapshot } : {}), dirty: params.dirty, apply: () => {}, applyWorkflow,
   } : null)
 }

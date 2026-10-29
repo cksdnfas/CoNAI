@@ -19,6 +19,7 @@ import { useI18n } from '@/i18n'
 import { getImage, getImageDetailQueryKey } from '@/lib/api-images'
 import type { GenerationQueueJobRecord } from '@/lib/api-image-generation-types'
 import { cn } from '@/lib/utils'
+import { useNow } from '@/lib/use-now'
 import type { ImageRecord } from '@/types/image'
 import { GenerationHistoryReuseActions } from './generation-history-reuse-actions'
 import {
@@ -37,7 +38,6 @@ type GenerationResultStageProps = {
   isLoading: boolean
   activeJob: GenerationQueueJobRecord | null
   activeJobCount: number
-  nowMs: number
   /** Shortens the stage on narrow layouts. */
   compact?: boolean
   allowReuse?: boolean
@@ -53,9 +53,10 @@ type GenerationResultStageProps = {
  * `inline` is a bare gauge under the media (the stage/ETA text moves to its tooltip) so it never covers video controls;
  * the floating card is only used on an empty stage.
  */
-function StageJobProgress({ job, jobCount, nowMs, inline = false }: { job: GenerationQueueJobRecord; jobCount: number; nowMs: number; inline?: boolean }) {
+function StageJobProgress({ job, jobCount, inline = false }: { job: GenerationQueueJobRecord; jobCount: number; inline?: boolean }) {
   const { t, formatNumber } = useI18n()
   const isRunning = job.status === 'running'
+  const nowMs = useNow(1000, isRunning)
   const percent = getGenerationQueueProgressPercent(job, nowMs)
   const title = isRunning
     ? getGenerationQueueProgressStageLabel(job, t, formatNumber)
@@ -134,7 +135,6 @@ export function GenerationResultStage({
   isLoading,
   activeJob,
   activeJobCount,
-  nowMs,
   compact = false,
   allowReuse = true,
   shouldBlur,
@@ -356,7 +356,7 @@ export function GenerationResultStage({
 
           {activeJob && !selected ? (
             <div className="pointer-events-none absolute inset-3 flex items-center justify-center">
-              <StageJobProgress job={activeJob} jobCount={activeJobCount} nowMs={nowMs} />
+              <StageJobProgress job={activeJob} jobCount={activeJobCount} />
             </div>
           ) : null}
         </div>
@@ -365,7 +365,7 @@ export function GenerationResultStage({
       {/* Fixed-height slot: the gauge coming and going must not resize the media above it. */}
       {selected ? (
         <div className="flex h-1 shrink-0 items-center">
-          {activeJob ? <StageJobProgress job={activeJob} jobCount={activeJobCount} nowMs={nowMs} inline /> : null}
+          {activeJob ? <StageJobProgress job={activeJob} jobCount={activeJobCount} inline /> : null}
         </div>
       ) : null}
       {extraSounds ? (

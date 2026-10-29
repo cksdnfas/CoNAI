@@ -7,6 +7,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
+import { triggerBlobDownload } from '@/lib/api-client'
 import { invalidatePostScope, deletePost, exportPostKnowledge, restorePostKnowledge, trashPostKnowledge, updatePostKnowledge } from '@/lib/api-posts'
 import { getErrorMessage } from '@/lib/error-message'
 import { usePostReferenceEntry } from './post-chat-links'
@@ -59,12 +60,7 @@ export function PostActions({ post, onEdit, onGone }: { post: PostDetail; onEdit
   const download = useMutation({
     mutationFn: () => exportPostKnowledge(post.id),
     onSuccess: (manifest) => {
-      const url = URL.createObjectURL(new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' }))
-      const anchor = document.createElement('a')
-      anchor.href = url
-      anchor.download = `knowledge-${post.id}-v${manifest.contentVersion}.json`
-      anchor.click()
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      triggerBlobDownload(new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' }), `knowledge-${post.id}-v${manifest.contentVersion}.json`)
     },
     onError: onError(t({ ko: '문서를 내보내지 못했어.', en: 'Could not export the document.' })),
   })

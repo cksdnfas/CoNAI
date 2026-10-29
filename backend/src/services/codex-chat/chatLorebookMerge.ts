@@ -1,4 +1,5 @@
 import fs from 'fs'
+import { randomUUID } from 'crypto'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { FileStoreService } from '../fileStoreService'
 import { storedFilePath } from '../fileStorePaths'
@@ -14,7 +15,7 @@ import {
 } from './chatLorebookFiles'
 import { resolveProfileModel } from './chatModelRoles'
 import { ChatProfileStore } from './chatProfiles'
-import { completeSummary, SUMMARY_TIMEOUT_MS } from './llmChatContext'
+import { completeSummary } from './llmChatContext'
 
 /**
  * Merging one book (a chat book or an account book) into an account book of the same owner: the source's entries are
@@ -60,7 +61,6 @@ export class MergeDecisionsMissingError extends LorebookError {
 
 const CHOICES: readonly MergeChoice[] = ['source', 'target', 'both', 'merged']
 const MERGED_CONTENT_MAX_LENGTH = 20_000
-const ENTRY_ID_MAX_LENGTH = 80
 
 // ---- Books ----------------------------------------------------------------------------------------------------
 
@@ -250,9 +250,8 @@ export function applyMerge(sourceId: number, targetId: number, owner: string, de
       const ids = new Set(entries.map((entry) => entry.id))
       let order = entries.reduce((max, entry) => Math.max(max, entry.order), -1)
       const freeId = (base: string) => {
-        const stem = base.slice(0, ENTRY_ID_MAX_LENGTH - 5)
-        let id = base.slice(0, ENTRY_ID_MAX_LENGTH)
-        for (let n = 2; ids.has(id); n++) id = `${stem}-${n}`
+        let id = base
+        while (ids.has(id)) id = randomUUID()
         ids.add(id)
         return id
       }
@@ -319,8 +318,8 @@ function draftEntryText(entry: ChatLoreEntry) {
 
 /**
  * "프로필에게 맡기기": for each duplicate (or the given ones), the profile's summary model (its chat model when it has
- * none) writes one merged text. Nothing is saved; the drafts fill the "합친 결과" fields. The whole call is bounded by
- * the summary timeout; an entry that fails, or is not reached in time, comes back with its error.
+ * none) writes one merged text using the profile allowance and connection deadline. Nothing is saved; the drafts
+ * fill the "합친 결과" fields. Caller cancellation stops further requests; failures remain per-entry results.
  */
 export async function draftMerge(sourceId: number, targetId: number, owner: string, input: { profileId?: unknown; entryIds?: unknown; instruction?: unknown }, signal?: AbortSignal): Promise<{ drafts: MergeDraft[] }> {
   const preview = previewMerge(sourceId, targetId, owner)
@@ -333,16 +332,14 @@ export async function draftMerge(sourceId: number, targetId: number, owner: stri
   const instruction = typeof input.instruction === 'string' ? input.instruction.trim().slice(0, MERGE_INSTRUCTION_MAX_LENGTH) : ''
   const system = instruction || MERGE_DRAFT_INSTRUCTION
   const sourceLabel = preview.source.kind === 'chat' ? '채팅 책' : '원본 책'
-  const timeout = AbortSignal.timeout(SUMMARY_TIMEOUT_MS)
-  const bounded = signal ? AbortSignal.any([signal, timeout]) : timeout
   const drafts: MergeDraft[] = []
   for (const item of duplicates) {
-    if (bounded.aborted) {
-      drafts.push({ entryId: item.entry.id, error: '시간이 다 돼서 못 합쳤어.' })
+    if (signal?.aborted) {
+      drafts.push({ entryId: item.entry.id, error: signal.reason instanceof Error ? signal.reason.message : '합치기가 취소됐어.' })
       continue
     }
     try {
-      const content = await completeSummary(profile, system, `## A (${sourceLabel})\n${draftEntryText(item.entry)}\n\n## B (대상 책)\n${draftEntryText(item.duplicateOf as ChatLoreEntry)}`, bounded)
+      const content = await completeSummary(profile, system, `## A (${sourceLabel})\n${draftEntryText(item.entry)}\n\n## B (대상 책)\n${draftEntryText(item.duplicateOf as ChatLoreEntry)}`, signal)
       drafts.push({ entryId: item.entry.id, content })
     } catch (error) {
       drafts.push({ entryId: item.entry.id, error: error instanceof Error ? error.message : String(error) })

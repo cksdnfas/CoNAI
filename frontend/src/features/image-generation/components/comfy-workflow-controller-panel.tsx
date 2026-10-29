@@ -1,7 +1,6 @@
-import { useFeaturePermissions } from '@/features/auth/use-feature-permissions'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, BookmarkPlus, RotateCcw, Save, Server } from 'lucide-react'
+import { ArrowLeft, Save, Server } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
@@ -14,6 +13,7 @@ import { collectWorkflowNodeDraftIssues, hasWorkflowFieldValue } from '../image-
 import type { ComfyUIServerTestState, SelectedImageDraft, WorkflowFieldDraftValue } from '../image-generation-shared'
 import { GenerationControllerFieldStack } from './shared-generation-controller'
 import { GenerateActionBar, GenerateActionBarIconButton, GenerateActionDock } from './generate-action-bar'
+import { usePortalTargetById } from './generation-toolbar-status'
 import { IMAGE_GENERATION_TARGET_GROUP_KEY } from '@/features/groups/generation-target-group-store'
 import { WorkflowFieldGroupList } from './workflow-field-group-list'
 import { CharacterSettingLoadButton } from './character-setting-load-button'
@@ -187,7 +187,6 @@ type ComfyWorkflowControllerPanelProps = {
   /** Per-field messages from the last failed generate validation. */
   fieldIssues?: Record<string, string>
   splitPaneScroll?: boolean
-  headerPortalTargetId?: string
   compactActionBarContentTargetId?: string
   /** Wide page: render the form and `result` as the shared block layout instead of a single scroll column. */
   blockLayout?: { result: ReactNode }
@@ -209,8 +208,6 @@ type ComfyWorkflowControllerPanelProps = {
   /** Extra message above the fields, e.g. the viewer's queue limit on a public page. */
   notice?: ReactNode
   onResetDraft: () => void
-  /** Save this workflow and the current values as a chat generation preset (admins). */
-  onSaveChatPreset?: () => void
   onGenerateSelected: () => void
   /** Mark and focus the fields behind the readiness issues without submitting. */
   onRevealFieldIssues?: () => void
@@ -231,7 +228,6 @@ export function ComfyWorkflowControllerPanel({
   isRefreshingDropdownLists = false,
   fieldIssues,
   splitPaneScroll = false,
-  headerPortalTargetId,
   compactActionBarContentTargetId,
   blockLayout,
   onBack,
@@ -245,11 +241,9 @@ export function ComfyWorkflowControllerPanel({
   queueMaxCount = 32,
   notice,
   onResetDraft,
-  onSaveChatPreset,
   onGenerateSelected,
   onRevealFieldIssues,
 }: ComfyWorkflowControllerPanelProps) {
-  const { canUpdateWorkflows } = useFeaturePermissions()
   const { t } = useI18n()
   const routingSummary = useMemo(
     () => buildComfyWorkflowServerRoutingSummary(servers, serverTests),
@@ -258,27 +252,8 @@ export function ComfyWorkflowControllerPanel({
   const selectedServer = selectedTarget.startsWith('server:')
     ? routingSummary.serverById.get(Number(selectedTarget.slice('server:'.length))) ?? null
     : null
-  const [, setPortalRevision] = useState(0)
-  const useDrawerCompactChrome = Boolean(headerPortalTargetId)
   const useStickyActionBar = Boolean(compactActionBarContentTargetId) && !splitPaneScroll
-
-  useEffect(() => {
-    if ((!headerPortalTargetId && !compactActionBarContentTargetId) || typeof document === 'undefined') {
-      return
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      setPortalRevision((current) => current + 1)
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [compactActionBarContentTargetId, headerPortalTargetId])
-
-  const headerPortalTarget = headerPortalTargetId && typeof document !== 'undefined'
-    ? document.getElementById(headerPortalTargetId)
-    : null
-  const compactActionBarPortalTarget = compactActionBarContentTargetId && typeof document !== 'undefined'
-    ? document.getElementById(compactActionBarContentTargetId)
-    : null
+  const compactActionBarPortalTarget = usePortalTargetById(compactActionBarContentTargetId)
 
   const selectedTag = selectedTarget.startsWith('tag:') ? selectedTarget.slice('tag:'.length) : null
   const selectedTagRoutableCount = selectedTag
@@ -450,39 +425,6 @@ export function ComfyWorkflowControllerPanel({
     </div>
   )
 
-  const drawerHeaderContent = (
-    <div className="flex items-center gap-3">
-      <IconButton
-        variant="ghost"
-        size="icon-sm"
-        onClick={onBack}
-        label={t({ ko: '워크플로우 목록으로 돌아가기', en: 'Back to workflow list' })}
-      >
-        <ArrowLeft />
-      </IconButton>
-      <Heading level={3} as="div" className="min-w-0 flex-1 truncate">{workflowName}</Heading>
-      {onOpenModuleSave ? (
-        <IconButton variant="ghost" size="icon-sm" onClick={onOpenModuleSave} disabled={!(canUpdateWorkflows) || (isGenerating)} label={saveModuleLabel}>
-          <Save />
-        </IconButton>
-      ) : null}
-      {onSaveChatPreset ? (
-        <IconButton variant="ghost" size="icon-sm" onClick={onSaveChatPreset} disabled={isGenerating} label={t({ ko: '채팅 프리셋으로 저장', en: 'Save as chat preset' })}>
-          <BookmarkPlus />
-        </IconButton>
-      ) : null}
-      <IconButton
-        size="icon-sm"
-        variant="ghost"
-        onClick={onResetDraft}
-        disabled={isGenerating || workflowFields.length === 0}
-        label={resetLabel}
-      >
-        <RotateCcw />
-      </IconButton>
-    </div>
-  )
-
   const compactActionBarContent = (
     <GenerateActionBar
       variant="sticky"
@@ -492,8 +434,8 @@ export function ComfyWorkflowControllerPanel({
       generateDisabled={generateDisabled}
       isGenerating={isGenerating}
       repeat={queueRepeat}
-      secondaryActions={useDrawerCompactChrome ? undefined : saveModuleAction}
-      onReset={useDrawerCompactChrome || workflowFields.length === 0 ? undefined : onResetDraft}
+      secondaryActions={saveModuleAction}
+      onReset={workflowFields.length === 0 ? undefined : onResetDraft}
       resetLabel={resetLabel}
       leading={serverRouting && servers.length > 0 ? (
         <WorkflowTargetSelect
@@ -589,9 +531,7 @@ export function ComfyWorkflowControllerPanel({
 
   return (
     <section className={cn(splitPaneScroll ? 'flex min-h-0 flex-1 flex-col gap-6' : 'space-y-6')}>
-      {useDrawerCompactChrome
-        ? (headerPortalTarget ? createPortal(drawerHeaderContent, headerPortalTarget) : null)
-        : workflowAfterFields ? null : (
+      {workflowAfterFields ? null : (
           <div className="shrink-0 space-y-3">
             {desktopHeaderContent}
           </div>
@@ -600,10 +540,9 @@ export function ComfyWorkflowControllerPanel({
       <div className={cn(
         'space-y-6',
         splitPaneScroll && 'min-h-0 flex-1 overflow-y-auto pr-2 pb-1',
-        useDrawerCompactChrome ? 'px-5 pb-5' : undefined,
       )}>
         {fieldsContent}
-        {workflowAfterFields && !useDrawerCompactChrome ? desktopHeaderContent : null}
+        {workflowAfterFields ? desktopHeaderContent : null}
         <StackedPluginBlocks surface="comfy" />
 
         {useStickyActionBar && compactActionBarPortalTarget ? createPortal(compactActionBarContent, compactActionBarPortalTarget) : null}

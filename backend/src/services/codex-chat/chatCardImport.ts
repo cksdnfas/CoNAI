@@ -28,10 +28,10 @@ function readJsonFile(buffer: Buffer, failure: string): Record<string, unknown> 
 }
 
 /** World info keeps entries as an object keyed by uid; card books and NovelAI lorebooks as an array. */
-function bookEntries(book: Record<string, unknown>): ChatLoreEntry[] {
+function bookEntries(book: Record<string, unknown>, existing: ChatLoreEntry[] = []): ChatLoreEntry[] {
   const entries = Array.isArray(book.entries) ? book.entries : Object.values(object(book.entries))
   const raw = entries.slice(0, LOREBOOK_MAX_ENTRIES).filter((entry) => entry && typeof entry === 'object' && !Array.isArray(entry)).map(object)
-  const normalized = normalizeLorebook(raw)
+  const normalized = normalizeLorebook(raw, existing)
   const groups = new Map<string, number[]>()
   normalized.forEach((entry, index) => {
     if (entry.group) groups.set(entry.group, [...(groups.get(entry.group) ?? []), index])
@@ -164,12 +164,12 @@ export async function importChatCard(buffer: Buffer, modelSlotId: number | null)
  * A lorebook file: SillyTavern world info, a character card (PNG or JSON) with a book, a bare card book, a NovelAI
  * lorebook, or this app's own { name, entries }. `fileName` names a book that carries no name.
  */
-export function readLorebookFile(buffer: Buffer, fileName: string): { name: string; entries: ChatLoreEntry[] } {
+export function readLorebookFile(buffer: Buffer, fileName: string, existing: ChatLoreEntry[] = []): { name: string; entries: ChatLoreEntry[] } {
   if (buffer.length > CHAT_CARD_MAX_BYTES) throw new ChatProfileError('로어북은 8MB까지 가져올 수 있어.')
   const parsed = readJsonFile(buffer, '로어북 JSON 또는 카드 PNG를 읽지 못했어.')
   const card = parsed.spec ? object(parsed.data) : parsed
   const book = card.character_book !== undefined ? object(card.character_book) : parsed
-  const entries = bookEntries(book)
+  const entries = bookEntries(book, existing)
   if (entries.length === 0) throw new ChatProfileError('가져올 로어 항목이 없어.')
   const baseName = fileName.replace(/\.[^.]+$/, '')
   return { name: text(book.name, 80) || text(card.name, 80) || text(baseName, 80), entries }

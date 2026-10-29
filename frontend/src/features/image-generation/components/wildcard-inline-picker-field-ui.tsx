@@ -163,10 +163,10 @@ function findAbsoluteContainingBlock(node: HTMLElement) {
  * One random token in the overlay: its raw text stays (invisible) so wrapping matches the textarea, every line piece
  * gets the tone fill, and the label sits on the widest piece, so a token broken over two lines still shows its label.
  */
-function PromptRandomTokenChip({ raw, label, className }: { raw: string; label: string; className: string }) {
+function PromptRandomTokenChip({ raw, label, className, layoutKey }: { raw: string; label: string; className: string; layoutKey: string }) {
   const chipRef = useRef<HTMLSpanElement>(null)
   const [box, setBox] = useState<ChipLabelBox | null>(null)
-  const [, setResizeTick] = useState(0)
+  const [resizeTick, setResizeTick] = useState(0)
 
   // A field resize rewraps the text without re-rendering the overlay; re-measure then.
   useEffect(() => {
@@ -176,10 +176,17 @@ function PromptRandomTokenChip({ raw, label, className }: { raw: string; label: 
     }
     const observer = new ResizeObserver(() => setResizeTick((tick) => tick + 1))
     observer.observe(container)
-    return () => observer.disconnect()
+    let active = true
+    void document.fonts.ready.then(() => {
+      if (active) setResizeTick((tick) => tick + 1)
+    })
+    return () => {
+      active = false
+      observer.disconnect()
+    }
   }, [])
 
-  // Measured every render: typing, rewrapping and scrolling all re-render the overlay.
+  // Text edits can move a token even when its own text is unchanged; resizing can rewrap it.
   useLayoutEffect(() => {
     const chip = chipRef.current
     const container = chip ? findAbsoluteContainingBlock(chip) : null
@@ -196,7 +203,7 @@ function PromptRandomTokenChip({ raw, label, className }: { raw: string; label: 
     setBox((current) => (
       current && current.left === next.left && current.top === next.top && current.width === next.width && current.height === next.height ? current : next
     ))
-  })
+  }, [layoutKey, resizeTick])
 
   return (
     <span ref={chipRef} className={cn('rounded-sm ring-1 ring-inset [-webkit-box-decoration-break:clone] [box-decoration-break:clone]', className)}>
@@ -245,6 +252,7 @@ export function renderPromptFieldOverlay(
         <PromptRandomTokenChip
           key={range.random.key}
           raw={raw}
+          layoutKey={value}
           label={`${status.state === 'missing' ? '⚠ ' : '🎲 '}${formatPromptRandomTokenLabel({ ...range.random, source: status.source })}`}
           className={cn(
             status.state === 'missing' ? 'bg-destructive/12 text-destructive ring-destructive/50' : cn(PROMPT_RANDOM_SOURCE_TONE[status.source], 'ring-transparent'),

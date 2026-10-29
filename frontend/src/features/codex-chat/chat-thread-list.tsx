@@ -1,27 +1,23 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { AlarmClock, Archive, ArchiveRestore, Bell, BellOff, Check, CheckCheck, ChevronDown, ChevronRight, GitBranch, MoreHorizontal, Pencil, Pin, PinOff, SquareCheck, Trash2, X } from 'lucide-react'
+import { Archive, ArchiveRestore, CheckCheck, ChevronDown, ChevronRight, GitBranch, Trash2, X } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { IconButton } from '@/components/ui/icon-button'
 import { Input } from '@/components/ui/input'
 import { ListRow } from '@/components/ui/list-row'
 import { Panel } from '@/components/ui/panel'
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/modal'
 import { RowGroup } from '@/components/ui/row-group'
-import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import type { ChatProfileSummary, CodexChatThreadSummary } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
-import { GroupAvatarStack } from './chat-group'
 import { ChatDeleteDialog } from './chat-delete-dialog'
-import { ChatHealthDot, useChatHealth } from './chat-health'
-import { ChatProfileAvatar } from './chat-profile-avatar'
-import { UnreadCount } from './chat-unread-count'
-import { ChatTaskRing } from './chat-task-ui'
+import { useChatHealth } from './chat-health'
+import { ChatThreadRow } from './chat-thread-row'
+import { useCodexChatDrafts } from './codex-chat-context'
 import { parseServerDate } from '@/lib/server-time'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
-import { ChatRoomPageMore, useChatBranchParents, useChatRoomPages, useChatRoomSummaries } from './use-chat-room-directory'
+import { ChatRoomPageMore, compareChatRoomActivity, useChatBranchParents, useChatRoomPages, useChatRoomSummaries } from './use-chat-room-directory'
 
 export type ChatListPatch = { title?: string; pinned?: boolean; archived?: boolean; notify?: boolean }
 export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
@@ -30,6 +26,10 @@ export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
 type DateBucket = 'pinned' | 'today' | 'yesterday' | 'week' | 'older'
 const DATE_BUCKETS: DateBucket[] = ['pinned', 'today', 'yesterday', 'week', 'older']
 const DAY_MS = 86_400_000
+
+function compareChatThreads(a: CodexChatThreadSummary, b: CodexChatThreadSummary) {
+  return compareChatRoomActivity(a, b, true)
+}
 
 /**
  * The chats: pinned first, then the latest activity (as the server lists them), under date headings on the chats tab.
@@ -44,7 +44,7 @@ const DAY_MS = 86_400_000
  * Several chats are picked with "Select" in the row menu; while any is picked the faces turn into checks, a row click
  * ticks it, and a floating bar archives or deletes them (Esc lets go).
  */
-export function ChatThreadList({ query = '', profilesById, activeThreadId, runningThreadIds, routineThreadIds, drafts, dense = false, onSelect, onUpdate, onBulk }: {
+export function ChatThreadList({ query = '', profilesById, activeThreadId, runningThreadIds, routineThreadIds, dense = false, onSelect, onUpdate, onBulk }: {
   query?: string
   profilesById: Map<number, ChatProfileSummary>
   activeThreadId: number | null
@@ -52,15 +52,14 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
   runningThreadIds: ReadonlySet<number>
   /** Chats an automation routine wakes (a small clock on the row). */
   routineThreadIds?: ReadonlySet<number>
-  /** Unsent composer text per chat, shown instead of the latest message. */
-  drafts: Record<number, string>
   dense?: boolean
   onSelect: (threadId: number) => void
   onUpdate: (threadId: number, patch: ChatListPatch) => void
   /** Archive, unarchive or delete the picked chats; resolves true when all of them went through. */
   onBulk: (threadIds: number[], action: ChatBulkAction, backupDate?: string) => Promise<boolean>
 }) {
-  const { t, formatDate, formatNumber } = useI18n()
+  const { t, formatNumber } = useI18n()
+  const drafts = useCodexChatDrafts()
   const healthOf = useChatHealth()
   // A room is cut off only when no member can answer; it shows the first member's reason.
   const groupDown = (memberIds: number[]) => memberIds.length > 0 && memberIds.every((id) => healthOf(id)) ? healthOf(memberIds[0]) : null
@@ -76,7 +75,7 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
   const contextRooms = !search.trim() && activeRoom ? [activeRoom, ...loadedRooms] : loadedRooms
   const parents = useChatBranchParents(contextRooms)
   const threads = [...new Map([...(parents.data ?? []), ...contextRooms].map((room) => [room.id, room])).values()]
-    .sort((a, b) => (b.pinned ?? 0) - (a.pinned ?? 0) || b.updated_date.localeCompare(a.updated_date) || b.id - a.id)
+    .sort(compareChatThreads)
   const [tab, setTab] = useState<'chats' | 'automation'>('chats')
   // Opening a chat from elsewhere (a link, the board) shows the tab it is on.
   const activeTab = activeRoom?.automation ? 'automation' : 'chats'
@@ -104,18 +103,9 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [selecting, confirmingDelete])
-  const untitled = t({ ko: '새 채팅', en: 'New chat' })
   const today = new Date()
   /** Calendar days from `date` to today (0: today). */
   const daysAgo = (date: Date) => Math.round((new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime() - new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / DAY_MS)
-  // The clock today, then "yesterday", the weekday within a week and the date before that.
-  const whenLabel = (date: Date) => {
-    const days = daysAgo(date)
-    if (days <= 0) return formatDate(date, { hour: 'numeric', minute: '2-digit' })
-    if (days === 1) return t({ ko: '어제', en: 'Yesterday' })
-    if (days < 7) return formatDate(date, { weekday: 'short' })
-    return formatDate(date, date.getFullYear() === today.getFullYear() ? { month: 'short', day: 'numeric' } : { dateStyle: 'medium' })
-  }
   const bucketLabel: Record<DateBucket, string> = {
     pinned: t({ ko: '고정됨', en: 'Pinned' }), today: t({ ko: '오늘', en: 'Today' }), yesterday: t({ ko: '어제', en: 'Yesterday' }),
     week: t({ ko: '지난 7일', en: 'Previous 7 days' }), older: t({ ko: '이전', en: 'Earlier' }),
@@ -137,113 +127,21 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
     const branches = new Map<number, CodexChatThreadSummary[]>()
     const top: CodexChatThreadSummary[] = []
     for (const entry of section) {
-      const parent = entry.branch_purpose === 'preserve' ? entry.branched_from_thread_id ?? null : null
+      const parent = !entry.pinned && entry.branch_purpose === 'preserve' ? entry.branched_from_thread_id ?? null : null
       if (parent !== null && ids.has(parent)) branches.set(parent, [...(branches.get(parent) ?? []), entry])
       else top.push(entry)
     }
     return { top: top.sort((a, b) => (b.pinned ?? 0) - (a.pinned ?? 0)), branches }
   }
 
-  const previewOf = (entry: CodexChatThreadSummary, profileName: string | null) => {
-    const draft = drafts[entry.id]
-    if (draft?.trim()) return <><span className="text-secondary-text">{t({ ko: '초안', en: 'Draft' })}</span> {draft.replace(/\s+/g, ' ')}</>
-    const preview = entry.preview
-    if (!preview) return null
-    const text = preview.text || (preview.media ? t({ ko: '이미지', en: 'Image' }) : preview.files ? t({ ko: '파일', en: 'File' }) : null)
-    // Whose line it is: mine, or the character's in a 1:1 chat (a room's line could be any member's).
-    const who = preview.role === 'user' ? t({ ko: '나', en: 'Me' }) : entry.kind === 'group' ? null : profileName
-    return text && who ? `${who}: ${text}` : text
-  }
-
-  const row = (entry: CodexChatThreadSummary, nested = false) => {
-    const entryProfile = entry.profile_id ? profilesById.get(entry.profile_id) : undefined
-    const movedAt = parseServerDate(entry.updated_date)
-    const time = Number.isNaN(movedAt.getTime()) ? null : <time className="text-2xs tabular-nums text-muted-foreground" dateTime={movedAt.toISOString()}>{whenLabel(movedAt)}</time>
-    const preview = previewOf(entry, entryProfile?.name ?? null)
-    const checked = picked.has(entry.id)
-    return (
-      <div key={entry.id} className={cn('relative', nested && (dense ? 'pl-5' : 'pl-8'))}>
-        <ListRow asChild interactive size={dense ? 'md' : 'lg'} selected={selecting ? checked : entry.id === activeThreadId}>
-          <button
-            type="button"
-            aria-pressed={selecting ? checked : undefined}
-            // While picking, a row click ticks it.
-            onClick={() => (selecting ? togglePick(entry.id) : onSelect(entry.id))}
-            // Room for the row menu, which sits on the row's end.
-            className={cn('w-full', dense ? 'gap-2' : 'gap-3 px-3', !selecting && (dense ? 'pr-9' : 'pr-11'))}
-          >
-            <span className="relative flex shrink-0">
-              <span className={cn('flex', selecting && 'opacity-0')}>
-              {entry.kind === 'group'
-                ? <ChatHealthDot down={groupDown(entry.member_profile_ids ?? [])}><GroupAvatarStack profiles={(entry.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? [])} size={dense ? 'xs' : 'sm'} ringClassName="ring-background" /></ChatHealthDot>
-                : entryProfile ? <ChatHealthDot down={healthOf(entryProfile.id)}><ChatProfileAvatar name={entryProfile.name} avatar={entryProfile.avatar} profile={entryProfile} engine={entryProfile.engine} size={dense ? 'sm' : 'md'} /></ChatHealthDot> : <span className={dense ? 'size-6' : 'size-8'} />}
-              </span>
-              <span
-                aria-hidden
-                className={cn('absolute inset-0 grid place-items-center', !selecting && 'hidden')}
-              >
-                <span className={cn('grid size-4 place-items-center rounded-sm border-2', checked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/70')}>
-                  {checked ? <Check className="size-3" strokeWidth={3} /> : null}
-                </span>
-              </span>
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="flex min-w-0 items-center gap-1.5">
-                <span className={cn('truncate', dense ? 'font-medium' : 'font-semibold')}>{entry.title || untitled}</span>
-                {entry.pinned ? <Pin aria-label={t({ ko: '고정됨', en: 'Pinned' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
-                {routineThreadIds?.has(entry.id) ? <AlarmClock aria-label={t({ ko: '루틴', en: 'Routine' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
-                {entry.notify_enabled === false ? <BellOff aria-label={t({ ko: '알림 꺼짐', en: 'Muted' })} className="size-3 shrink-0 text-muted-foreground" /> : null}
-              </span>
-              {/* The side column ends the latest line with the time, so the title keeps the whole width. */}
-              {dense ? (
-                <span className="flex min-w-0 items-center gap-1.5">
-                  {preview ? <span className="min-w-0 truncate text-xs text-muted-foreground">{preview}</span> : null}
-                  <span className="ml-auto shrink-0">{time}</span>
-                </span>
-              ) : preview ? <span className="block truncate text-xs text-muted-foreground">{preview}</span> : null}
-            </span>
-            {/* Time on top, the unread count under it (the side column keeps only the marks and the count here). */}
-            <span className={cn('flex shrink-0', dense ? 'items-center gap-2' : 'flex-col items-end gap-1')}>
-              <span className="flex items-center gap-2">
-                {entry.task ? <ChatTaskRing summary={entry.task} /> : null}
-                {entry.running || runningThreadIds.has(entry.id) ? <span role="img" aria-label={t({ ko: '답변 중', en: 'Replying' })} className="size-1.5 rounded-full bg-success motion-safe:animate-pulse" /> : null}
-                {dense ? null : time}
-              </span>
-              {entry.unread_count ? <UnreadCount count={entry.unread_count} /> : null}
-            </span>
-          </button>
-        </ListRow>
-        {selecting ? null : <DropdownMenu>
-          <Tip content={t({ ko: '채팅 관리', en: 'Manage chat' })}>
-            <DropdownMenuTrigger asChild>
-              <IconButton
-                variant="ghost"
-                size="icon-xs"
-                tooltip={false}
-                label={t({ ko: '채팅 관리', en: 'Manage chat' })}
-                className="absolute right-2 top-1/2 -translate-y-1/2"
-              >
-                <MoreHorizontal />
-              </IconButton>
-            </DropdownMenuTrigger>
-          </Tip>
-          <DropdownMenuContent align="end" className="min-w-40">
-            <DropdownMenuItem onSelect={() => togglePick(entry.id)}><SquareCheck />{t({ ko: '선택', en: 'Select' })}</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onUpdate(entry.id, { pinned: !entry.pinned })}>
-              {entry.pinned ? <PinOff /> : <Pin />}{entry.pinned ? t({ ko: '고정 해제', en: 'Unpin' }) : t({ ko: '고정', en: 'Pin' })}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onUpdate(entry.id, { notify: entry.notify_enabled === false })}>
-              {entry.notify_enabled === false ? <Bell /> : <BellOff />}{entry.notify_enabled === false ? t({ ko: '알림 켜기', en: 'Turn on notifications' }) : t({ ko: '알림 끄기', en: 'Mute notifications' })}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRenaming({ id: entry.id, title: entry.title || '' })}><Pencil />{t({ ko: '이름 바꾸기', en: 'Rename' })}</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onUpdate(entry.id, { archived: !entry.archived })}>
-              {entry.archived ? <ArchiveRestore /> : <Archive />}{entry.archived ? t({ ko: '보관 해제', en: 'Unarchive' }) : t({ ko: '보관', en: 'Archive' })}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>}
-      </div>
-    )
-  }
+  const rename = (id: number, title: string) => setRenaming({ id, title })
+  const row = (entry: CodexChatThreadSummary, nested = false) => <ChatThreadRow
+    key={entry.id} entry={entry} profilesById={profilesById} draft={drafts[entry.id]}
+    nested={nested} dense={dense} checked={picked.has(entry.id)} selecting={selecting} active={entry.id === activeThreadId}
+    running={runningThreadIds.has(entry.id)} routine={routineThreadIds?.has(entry.id) ?? false}
+    down={entry.kind === 'group' ? groupDown(entry.member_profile_ids ?? []) : healthOf(entry.profile_id)}
+    onSelect={onSelect} onUpdate={onUpdate} onTogglePick={togglePick} onRename={rename}
+  />
 
   /** A folding row ("kept branches 2", "archive 5"): shows or hides what follows it. */
   const foldRow = (key: string, open: boolean, onToggle: () => void, icon: ReactNode, label: string, count?: number, nested = false) => (
@@ -259,11 +157,18 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
   /** `byDate`: the top rows go under the date headings (their branches stay under them). */
   const section = (entries: CodexChatThreadSummary[], byDate = false) => {
     const { top, branches } = arrange(entries)
+    const byId = new Map(entries.map((entry) => [entry.id, entry]))
+    const activeParents = new Set<number>()
+    let current = activeThreadId === null ? undefined : byId.get(activeThreadId)
+    while (current && !current.pinned && current.branch_purpose === 'preserve' && current.branched_from_thread_id && !activeParents.has(current.branched_from_thread_id)) {
+      activeParents.add(current.branched_from_thread_id)
+      current = byId.get(current.branched_from_thread_id)
+    }
     const render = (entry: CodexChatThreadSummary, nested = false): ReactNode => {
       const kept = branches.get(entry.id) ?? []
       if (kept.length === 0) return row(entry, nested)
       // The open chat never hides inside a folded group.
-      const open = openBranches.has(entry.id) || kept.some((branch) => branch.id === activeThreadId)
+      const open = openBranches.has(entry.id) || activeParents.has(entry.id)
       const toggle = () => setOpenBranches((current) => {
         const next = new Set(current)
         if (next.has(entry.id)) next.delete(entry.id)

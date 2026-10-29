@@ -9,7 +9,7 @@ export class WebPExtractor {
   /**
    * Extract parser-friendly raw metadata from WebP container metadata.
    */
-  static async extract(filePath: string): Promise<AIMetadata> {
-    return StandardMetadataExtractor.extract(filePath);
+  static async extract(source: string | Buffer): Promise<AIMetadata> {
+    return StandardMetadataExtractor.extract(source);
   }
 }

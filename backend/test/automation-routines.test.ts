@@ -133,11 +133,13 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
       graph_workflow_id: workflowId, name, schedule_type: 'interval', interval_minutes: 60, status: 'active', confirmed_graph_version: 1, next_run_at: due, run_as_account_id: runAs, ...extra,
     } as any)
     GraphWorkflowScheduleModel.update(schedule.id, { next_run_at: due })
+    const revisionBeforeRun = GraphWorkflowScheduleModel.findById(schedule.id)!.revision
     const legacy = make('legacy', null)
     const disabled = make('disabled account', 9)
     const guest = make('guest account', 2)
     await (GraphWorkflowScheduleService as any).pollDueSchedules()
 
+    assert.equal(GraphWorkflowScheduleModel.findById(schedule.id)!.revision, revisionBeforeRun, 'routine interval execution does not invalidate an open schedule editor')
     const ranAs = (id: number) => GraphExecutionModel.findById(GraphWorkflowScheduleModel.findById(id)!.last_execution_id!)?.requested_by_account_id
     assert.equal(ranAs(schedule.id), 1)
     assert.equal(ranAs(legacy), null)
@@ -162,6 +164,19 @@ test('automation routines: run-as schedules, timing, chat wakes, routines and no
     } as any)
     const restarted = make(failedRun(RUNNING_EXECUTION_RESTART_MESSAGE))
     const broken = make(failedRun('node exploded'))
+    const changedDueTime = make(failedRun(RUNNING_EXECUTION_RESTART_MESSAGE))
+    const oldDueSnapshot = GraphWorkflowScheduleModel.findById(changedDueTime)!
+    GraphWorkflowScheduleModel.update(changedDueTime, { next_run_at: '2099-01-01T00:00:00.000Z' })
+    assert.equal(GraphWorkflowScheduleModel.findById(changedDueTime)!.revision, oldDueSnapshot.revision)
+    await (GraphWorkflowScheduleService as any).handleDueSchedule(oldDueSnapshot, new Date())
+    assert.equal(GraphWorkflowScheduleModel.findById(changedDueTime)!.next_run_at, '2099-01-01T00:00:00.000Z')
+
+    const changedLastRun = make(failedRun(RUNNING_EXECUTION_RESTART_MESSAGE))
+    const oldRunSnapshot = GraphWorkflowScheduleModel.findById(changedLastRun)!
+    GraphWorkflowScheduleModel.update(changedLastRun, { last_execution_id: failedRun('new failure') })
+    assert.equal(GraphWorkflowScheduleModel.findById(changedLastRun)!.revision, oldRunSnapshot.revision)
+    await (GraphWorkflowScheduleService as any).handleDueSchedule(oldRunSnapshot, new Date())
+    assert.equal(GraphWorkflowScheduleModel.findById(changedLastRun)!.status, 'error_stopped')
     await (GraphWorkflowScheduleService as any).pollDueSchedules()
     assert.equal(GraphWorkflowScheduleModel.findById(restarted)!.status, 'active')
     assert.notEqual(GraphWorkflowScheduleModel.findById(restarted)!.last_execution_id, null)

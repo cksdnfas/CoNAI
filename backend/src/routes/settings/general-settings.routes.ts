@@ -35,6 +35,10 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const generalSettings: Partial<GeneralSettings> = req.body;
 
+    if (req.get('If-Match') && generalSettings.permissionGroupColors !== undefined) {
+      sendRouteBadRequest(res, '그룹 색상은 계정 설정에서 바꿔줘.');
+      return;
+    }
     if (!validateStringEnumIfDefined(res, generalSettings.language, validLanguages, `Invalid language. Must be one of: ${validLanguages.join(', ')}`)) return;
     if (!validateStringEnumIfDefined(res, generalSettings.imageSimilarityCheckMode, validImageSimilarityCheckModes, `Invalid image similarity check mode. Must be one of: ${validImageSimilarityCheckModes.join(', ')}`)) return;
     if (!validateBooleanIfDefined(res, generalSettings.promptForDownloadLocation, 'promptForDownloadLocation must be a boolean')) return;

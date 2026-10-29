@@ -43,35 +43,6 @@ export const normalizeSearchTerm = (searchTerm: string): string => {
   return removeWeights(searchTerm.trim());
 };
 
-/**
- * Compare two prompts for equality
- * Removes weights before comparison
- */
-export const comparePrompts = (prompt1: string, prompt2: string): boolean => {
-  const normalized1 = normalizeSearchTerm(prompt1);
-  const normalized2 = normalizeSearchTerm(prompt2);
-  return normalized1.toLowerCase() === normalized2.toLowerCase();
-};
-
-/**
- * Remove duplicates from prompt array
- * Uses normalized comparison (weight-free, case-insensitive)
- */
-export const deduplicatePrompts = (prompts: string[]): string[] => {
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const prompt of prompts) {
-    const normalized = normalizeSearchTerm(prompt).toLowerCase();
-    if (!seen.has(normalized)) {
-      seen.add(normalized);
-      result.push(removeWeights(prompt));
-    }
-  }
-
-  return result;
-};
-
 // =============================================================================
 // Prompt tokenizer
 // =============================================================================

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type UIEvent } from 'react'
 import type { CodexChatMessage } from '@/lib/api-codex-chat'
-import type { CodexChatApi, CodexChatLiveTurn } from './codex-chat-context'
+import type { CodexChatApi } from './codex-chat-context'
 
 const MESSAGE_PAGE_SIZE = 80
 const MESSAGE_FLASH_MS = 1600
@@ -8,13 +8,12 @@ const MESSAGE_FLASH_MS = 1600
 const readingPositions = new Map<number, { top: number; firstId: number | null }>()
 
 /** Message window, prepending, streaming follow, focus and scroll restoration belong to one lifecycle. */
-export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript, messageFocus, clearMessageFocus, liveTurn, runningText, serverReplyLength, hasMoreBefore, loadEarlier, loadingEarlier, earlierError, preserveHistory }: {
+export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript, messageFocus, clearMessageFocus, runningText, serverReplyLength, hasMoreBefore, loadEarlier, loadingEarlier, earlierError, preserveHistory }: {
   activeThreadId: number | null
   messages: CodexChatMessage[]
   isTranscript: boolean
   messageFocus: CodexChatApi['messageFocus']
   clearMessageFocus: CodexChatApi['clearMessageFocus']
-  liveTurn: CodexChatLiveTurn | null
   runningText?: string
   serverReplyLength: number
   hasMoreBefore: boolean
@@ -37,7 +36,6 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
   const focusIndex = messageFocus ? messages.findIndex((message) => message.id === messageFocus.messageId) : -1
   const windowCount = focusIndex >= 0 ? Math.max(visibleCount, messages.length - focusIndex) : visibleCount
   const visibleMessages = useMemo(() => messages.slice(-windowCount), [messages, windowCount])
-  const liveReplyLength = (liveTurn?.replies ?? []).reduce((total, reply) => total + reply.text.length + reply.toolCalls.size, 0) + serverReplyLength
   const scrollToBottom = useCallback(() => {
     const node = scrollRef.current
     if (node) node.scrollTop = node.scrollHeight
@@ -101,7 +99,7 @@ export function useChatTranscriptWindow({ activeThreadId, messages, isTranscript
   }, [messageFocus, isTranscript, focusIndex, loadingEarlier, earlierError, hasMoreBefore, messages, loadEarlier, clearMessageFocus])
   useEffect(() => {
     if (isTranscript && followBottomRef.current && !messageFocus) scrollToBottom()
-  }, [isTranscript, messages.length, liveTurn?.text, liveTurn?.toolCalls.size, liveReplyLength, runningText, messageFocus, scrollToBottom])
+  }, [isTranscript, messages.length, serverReplyLength, runningText, messageFocus, scrollToBottom])
   useEffect(() => {
     if (!messageFocus || !isTranscript) return
     const node = scrollRef.current?.querySelector<HTMLElement>(`[data-message-id="${messageFocus.messageId}"]`)

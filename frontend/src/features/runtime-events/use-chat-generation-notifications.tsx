@@ -7,6 +7,7 @@ import { Tip, TooltipProvider } from '@/components/ui/tooltip'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { CODEX_CHAT_ROUTE, CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey, defaultThreadId, useCodexChat } from '@/features/codex-chat/codex-chat-context'
+import { refetchActiveChatQuery, scheduleChatDirectoryRefresh } from '@/features/codex-chat/chat-query-refresh'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-client'
 import type { CodexChatThread } from '@/lib/api-codex-chat'
@@ -79,7 +80,7 @@ export function useChatGenerationNotifications() {
       const payload = envelope.payload as ChatReactionCreatedEventPayload
       if (!chat?.canUse || !auth || (auth.hasCredentials && !auth.authenticated) || payload.requestedByAccountId !== accountId) return
       void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(payload.threadId) })
-      void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      void scheduleChatDirectoryRefresh(queryClient)
       return
     }
     if (envelope.name === 'chat.message.updated') {
@@ -94,8 +95,8 @@ export function useChatGenerationNotifications() {
       if (!chat?.canUse || !auth || (auth.hasCredentials && !auth.authenticated) || payload.requestedByAccountId !== accountId) return
       // The unread counts live in the chat list. A turn this tab is streaming refetches its chat when it ends; a
       // group room saves members one by one meanwhile, so its transcript is left to that.
-      if (chat.currentLiveTurn()?.threadId !== payload.threadId) void queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(payload.threadId) })
-      void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
+      if (chat.currentLiveTurn()?.threadId !== payload.threadId) void refetchActiveChatQuery(queryClient, codexChatThreadQueryKey(payload.threadId))
+      void scheduleChatDirectoryRefresh(queryClient)
       return
     }
     if (envelope.name !== 'chat.generation.finished' || !chat?.canUse || !auth || (auth.hasCredentials && !auth.authenticated)) return

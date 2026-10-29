@@ -15,13 +15,14 @@ import { useDefaultJudge } from './chat-judge-connection-select'
 import { readChatToolPresetFile } from './chat-tool-preset-file'
 
 /** Settings › Chat › 자원: the judge presets (questions a decision model answers about chat turns, group rooms, status fields and assets). */
-export function ChatJudgePresetGroup({ editor, setEditor }: { editor: { preset: ChatJudgePreset | null } | null; setEditor: (editor: { preset: ChatJudgePreset | null } | null) => void }) {
+export function ChatJudgePresetGroup({ editor, setEditor, visible }: { editor: { preset: ChatJudgePreset | null } | null; setEditor: (editor: { preset: ChatJudgePreset | null } | null) => void; visible: boolean }) {
   const { t } = useI18n()
-  const defaultJudge = useDefaultJudge()
+  const enabled = visible || editor !== null
+  const defaultJudge = useDefaultJudge(enabled)
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
   const importRef = useRef<HTMLInputElement>(null)
-  const presetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets })
+  const presetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets, enabled })
   const presets = presetsQuery.data ?? []
 
   const refresh = () => Promise.all([
@@ -51,7 +52,7 @@ export function ChatJudgePresetGroup({ editor, setEditor }: { editor: { preset: 
 
   return (
     <>
-      <RowGroup
+      {visible ? <RowGroup
         headingClassName="text-resource-judge"
         heading={t({ ko: '판단 프리셋', en: 'Judge presets' })}
         count={presetsQuery.isSuccess ? presets.length : undefined}
@@ -95,7 +96,7 @@ export function ChatJudgePresetGroup({ editor, setEditor }: { editor: { preset: 
           />
         ))}
         {presetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(presetsQuery.error, t({ ko: '판단 프리셋을 불러오지 못했어.', en: 'Could not load judge presets.' }))}</p> : null}
-      </RowGroup>
+      </RowGroup> : null}
       <ChatJudgePresetEditorModal
         open={editor !== null}
         preset={editor?.preset ?? null}

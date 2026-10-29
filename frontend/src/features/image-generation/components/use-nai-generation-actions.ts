@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { getNaiFixedModelSettings, PROMPT_LEGACY_WILDCARD_PATTERN, PROMPT_RANDOM_TOKEN_PATTERN } from '@conai/shared'
 import { useI18n } from '@/i18n'
@@ -67,12 +67,13 @@ export function useNaiGenerationActions({
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const [isNaiGenerating, setIsNaiGenerating] = useState(false)
+  const generatingRef = useRef(false)
   const [isUpscaling, setIsUpscaling] = useState(false)
   const { requestPath: targetGroupPath } = useGenerationTargetGroupPath(IMAGE_GENERATION_TARGET_GROUP_KEY)
 
   /** Submit one NAI image-generation request from the current form state. */
   const handleNaiGenerate = useCallback(async () => {
-    if (isNaiGenerating) {
+    if (isNaiGenerating || generatingRef.current) {
       return
     }
 
@@ -151,6 +152,8 @@ export function useNaiGenerationActions({
       return
     }
 
+    generatingRef.current = true
+    setIsNaiGenerating(true)
     try {
       const sampleCount = clampNaiSampleCount(naiForm.samples)
       const useCharacterPositions = shouldUseNaiCharacterPositions(naiForm)
@@ -161,7 +164,6 @@ export function useNaiGenerationActions({
 
       const promptPresets = resolveNaiPromptPresets(naiForm)
       const sampling = resolveNaiSamplingSettings(naiForm)
-      setIsNaiGenerating(true)
       const response = await createGenerationQueueJob({
         service_type: 'novelai',
         requested_group_path: targetGroupPath,
@@ -204,6 +206,7 @@ export function useNaiGenerationActions({
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t('image-generation.components.use.nai.generation.actions.nai.image.generation.failed')), tone: 'error' })
     } finally {
+      generatingRef.current = false
       setIsNaiGenerating(false)
     }
   }, [

@@ -1,8 +1,10 @@
-import { useMemo, useState, type MouseEvent } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Download, File, FileAudio, FileText, FileVideo, Folder, ImageIcon, RefreshCw } from 'lucide-react'
+import { useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useInfiniteQuery } from '@tanstack/react-query'
+import { VirtuosoGrid } from 'react-virtuoso'
+import { ArrowLeft, Download, File, FileAudio, FileText, FileVideo, Folder, ImageIcon, RefreshCw, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MediaCard } from '@/components/common/media-card'
+import { SearchField } from '@/components/common/search-field'
 import { CodeBlock } from '@/components/ui/code-block'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -10,6 +12,8 @@ import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { Modal } from '@/components/ui/modal'
 import { useI18n } from '@/i18n'
+import { useImageListColumnCount } from '@/features/images/components/image-list/use-image-list-column-count'
+import { triggerBrowserDownload } from '@/lib/api-client'
 import type { WorkflowArtifactEntry } from '@/lib/api-image-generation-types'
 import { getGenerationWorkflowArtifacts } from '@/lib/api-image-generation-workflows'
 import { getPublicGenerationWorkflowArtifacts } from '@/lib/api-public-workflows'
@@ -17,6 +21,7 @@ import { cn } from '@/lib/utils'
 import { FLOATING_DROPDOWN_MENU_CLASS } from './floating-dropdown-utils'
 import { getErrorMessage } from '../image-generation-shared'
 import { formatFileSize } from '@/lib/format-size'
+import { useDebouncedValue } from '@/lib/use-debounced-value'
 
 type WorkflowArtifactExplorerPanelProps = {
   workflowId: number
@@ -149,10 +154,11 @@ function ArtifactCard({
 
       {entry.downloadUrl ? (
         <span className="absolute top-3 right-3 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          <IconButton asChild size="icon-xs" variant="overlay" label={t({ ko: '{name} 다운로드', en: 'Download {name}' }, { name: entry.name })}>
-            <a href={entry.downloadUrl} download={isDirectory ? `${entry.name}.zip` : entry.name} onClick={(event) => event.stopPropagation()}>
-              <Download className="h-3 w-3" />
-            </a>
+          <IconButton size="icon-xs" variant="overlay" label={t({ ko: '{name} 다운로드', en: 'Download {name}' }, { name: entry.name })} onClick={(event) => {
+            event.stopPropagation()
+            triggerBrowserDownload(entry.downloadUrl!, isDirectory ? `${entry.name}.zip` : entry.name)
+          }}>
+            <Download className="h-3 w-3" />
           </IconButton>
         </span>
       ) : null}
@@ -165,11 +171,33 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
   const [currentPath, setCurrentPath] = useState('')
   const [hoverPreview, setHoverPreview] = useState<HoverPreviewState | null>(null)
   const [artifactModal, setArtifactModal] = useState<ArtifactModalState | null>(null)
-  const artifactsQuery = useQuery({
-    queryKey: ['workflow-artifacts', publicWorkflowSlug ?? 'private', workflowId, currentPath, refreshNonce],
-    queryFn: () => publicWorkflowSlug
-      ? getPublicGenerationWorkflowArtifacts(publicWorkflowSlug, currentPath)
-      : getGenerationWorkflowArtifacts(workflowId, currentPath),
+  const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null)
+  const [search, setSearch] = useState('')
+  const debouncedSearch = useDebouncedValue(search.trim())
+  const activeSearch = search.trim() ? debouncedSearch : ''
+  const [refreshVersion, setRefreshVersion] = useState(0)
+  const refreshNext = useRef(false)
+  const snapshotRef = useRef<{ scope: string; id: string | null } | null>(null)
+  const snapshotScope = JSON.stringify([publicWorkflowSlug, workflowId, currentPath, refreshNonce, refreshVersion])
+  const columnCount = useImageListColumnCount(scrollContainer, 152, 16)
+  const artifactsQuery = useInfiniteQuery({
+    queryKey: ['workflow-artifacts', publicWorkflowSlug ?? 'private', workflowId, currentPath, refreshNonce, refreshVersion, activeSearch],
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) => {
+      if (snapshotRef.current?.scope !== snapshotScope) snapshotRef.current = { scope: snapshotScope, id: null }
+      const refresh = pageParam === null && refreshNext.current
+      if (refresh) refreshNext.current = false
+      const params = { limit: 60, search: activeSearch, cursor: pageParam, snapshot: !refresh && pageParam === null ? snapshotRef.current.id : undefined, refresh }
+      const page = await (publicWorkflowSlug
+        ? getPublicGenerationWorkflowArtifacts(publicWorkflowSlug, currentPath, params)
+        : getGenerationWorkflowArtifacts(workflowId, currentPath, params))
+      if (snapshotRef.current?.scope === snapshotScope) snapshotRef.current.id = page.snapshot
+      return page
+    },
+    getNextPageParam: (page) => page.nextCursor,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    enabled: search.trim() === activeSearch,
   })
 
   const breadcrumbs = useMemo(() => {
@@ -183,7 +211,7 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
     ]
   }, [currentPath, t])
 
-  const entries = artifactsQuery.data?.entries ?? []
+  const entries = (artifactsQuery.data?.pages ?? []).flatMap((page) => page.entries)
   const hoverPreviewStyle = hoverPreview
     ? {
         left: Math.min(hoverPreview.x + 18, Math.max(16, window.innerWidth - 304)),
@@ -214,13 +242,15 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
     }
 
     if (entry.downloadUrl) {
-      const anchor = document.createElement('a')
-      anchor.href = entry.downloadUrl
-      anchor.download = entry.name
-      document.body.appendChild(anchor)
-      anchor.click()
-      anchor.remove()
+      triggerBrowserDownload(entry.downloadUrl, entry.name)
     }
+  }
+
+  const openDirectory = (path: string) => {
+    setHoverPreview(null)
+    setSearch('')
+    if (splitPaneScroll && scrollContainer) scrollContainer.scrollTop = 0
+    setCurrentPath(path)
   }
 
   return (
@@ -244,7 +274,7 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
                     size="sm"
                     className="max-w-[12rem]"
                     aria-current={index === breadcrumbs.length - 1 ? 'location' : undefined}
-                    onClick={() => setCurrentPath(crumb.path)}
+                    onClick={() => openDirectory(crumb.path)}
                   >
                     <span className="truncate">{crumb.label}</span>
                   </Button>
@@ -253,9 +283,12 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
             </nav>
           </div>
         </div>
-        <IconButton size="icon-sm" variant="ghost" onClick={() => void artifactsQuery.refetch()} label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}>
-          <RefreshCw />
-        </IconButton>
+        <div className="flex items-center gap-2">
+          <SearchField value={search} onChange={setSearch} placeholder={t({ ko: '이름 검색', en: 'Search by name' })} />
+          <IconButton size="icon-sm" variant="ghost" onClick={() => { refreshNext.current = true; setRefreshVersion((version) => version + 1) }} label={t('image-generation.components.wildcard.explorer.sidebar.panel.refresh')}>
+            <RefreshCw />
+          </IconButton>
+        </div>
       </div>
 
       {artifactsQuery.isError ? (
@@ -267,22 +300,44 @@ export function WorkflowArtifactExplorerPanel({ workflowId, publicWorkflowSlug =
         </div>
       ) : null}
 
-      <div className={cn('overflow-auto py-4', splitPaneScroll && 'min-h-0 flex-1')}>
+      <div ref={setScrollContainer} className={cn('overflow-auto py-4', splitPaneScroll && 'min-h-0 flex-1')}>
         {currentPath ? (
-          <Button type="button" variant="ghost" size="sm" className="mb-4" onClick={() => setCurrentPath(getParentPath(currentPath))}>
+          <Button type="button" variant="ghost" size="sm" className="mb-4" onClick={() => openDirectory(getParentPath(currentPath))}>
             <Folder className="text-warning" />
             ..
           </Button>
         ) : null}
 
-        {entries.length > 0 ? (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-4">
-            {entries.map((entry) => (
-              <ArtifactCard key={entry.relativePath} entry={entry} onOpenDirectory={setCurrentPath} onHoverPreviewChange={setHoverPreview} onOpenFile={(item) => void handleOpenFile(item)} />
-            ))}
-          </div>
-        ) : !artifactsQuery.isLoading ? (
-          <EmptyState icon={Folder} title={t('image-generation.components.workflow.artifact.explorer.panel.no.saved.results.yet')} />
+        {entries.length > 0 && (!splitPaneScroll || scrollContainer) ? (
+          <VirtuosoGrid
+            key={`${currentPath}\0${activeSearch}`}
+            data={entries}
+            useWindowScroll={!splitPaneScroll}
+            customScrollParent={splitPaneScroll ? scrollContainer ?? undefined : undefined}
+            style={{
+              ['--image-list-column-repeat' as string]: String(columnCount),
+              ['--image-list-column-gap' as string]: '16px',
+              ['--image-list-row-gap' as string]: '16px',
+            }}
+            listClassName="image-list-grid"
+            itemClassName="image-list-grid-item"
+            computeItemKey={(_, entry) => entry.relativePath}
+            endReached={() => {
+              if (artifactsQuery.hasNextPage && !artifactsQuery.isFetching) void artifactsQuery.fetchNextPage()
+            }}
+            itemContent={(_, entry) => (
+              <div className="h-52 w-full">
+                <ArtifactCard entry={entry} onOpenDirectory={openDirectory} onHoverPreviewChange={setHoverPreview} onOpenFile={(item) => void handleOpenFile(item)} />
+              </div>
+            )}
+          />
+        ) : entries.length === 0 && artifactsQuery.data ? (
+          <EmptyState icon={activeSearch ? Search : Folder} title={activeSearch ? t({ ko: '검색 결과가 없어', en: 'No search results' }) : t('image-generation.components.workflow.artifact.explorer.panel.no.saved.results.yet')} />
+        ) : null}
+        {artifactsQuery.hasNextPage ? (
+          <Button variant="ghost" disabled={artifactsQuery.isFetching} onClick={() => void artifactsQuery.fetchNextPage()}>
+            {artifactsQuery.isFetchingNextPage ? t({ ko: '불러오는 중', en: 'Loading' }) : t({ ko: '더 불러오기', en: 'Load more' })}
+          </Button>
         ) : null}
       </div>
 

@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ALargeSmall, Check, Layers, Pencil, Plus, RotateCcw, Star, Trash2 } from 'lucide-react'
+import { Check, Layers, Pencil, Plus, RotateCcw, Star, Trash2 } from 'lucide-react'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -451,8 +451,6 @@ function SlotOverlay({ file, appearance, onApply, onNew, onSaveSlots, onClose }:
     </div>
   )
 }
-
-export const CHAT_APPEARANCE_ICON = ALargeSmall
 
 type AppearanceTab = 'text' | 'layout' | 'pictures' | 'background' | 'composer'
 const TABS: AppearanceTab[] = ['text', 'layout', 'pictures', 'background', 'composer']

@@ -81,7 +81,10 @@ export type ChatPortraitSignal = { profileId: number; source: 'expression' | 're
 
 /** Recompute from the active transcript; a room carries only the latest speaker's own prior expression. */
 export function resolveChatPortrait(messages: readonly ChatPortraitMessage[], profiles: readonly ChatPortraitProfile[], defaultProfileId: number | null): ChatPortraitSignal | null {
-  const latest = [...messages].reverse().find((message) => message.role === 'assistant')
+  let latest: ChatPortraitMessage | undefined
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === 'assistant') { latest = messages[index]; break }
+  }
   const profileId = latest?.speaker_profile_id ?? defaultProfileId
   const profile = profiles.find((entry) => entry.id === profileId)
   if (!profile?.expressionGroupId) return null

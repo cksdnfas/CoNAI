@@ -423,6 +423,7 @@ async function executeDirectComfyModule(context: ExecutionContext, node: GraphWo
     collectedOutputs = await comfyService.collectGeneratedOutputs(promptId, {
       shouldCancel: cancelHooks.shouldCancel,
       onCancelRequested: cancelHooks.onCancelRequested,
+      signal: context.signal,
     })
   } catch (error) {
     // 취소로 끊긴 폴링은 노드 실패가 아니라 협조적 중단이다.

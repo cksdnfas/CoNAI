@@ -22,6 +22,7 @@ export function AppearanceTab({
   appearanceDraft,
   savedAppearance,
   isDirty,
+  draftLocked = false,
   onPatchAppearance,
   onReset,
   onExport,
@@ -129,7 +130,7 @@ export function AppearanceTab({
             <Button size="sm" variant="secondary" onClick={onRevertImportPreview}>
               <Undo2 />{t({ ko: '되돌리기', en: 'Revert' })}
             </Button>
-            <Button size="sm" onClick={onApplyImportPreview}>
+            <Button size="sm" onClick={onApplyImportPreview} disabled={draftLocked}>
               <Check />{t({ ko: '적용', en: 'Apply' })}
             </Button>
           </div>
@@ -149,7 +150,7 @@ export function AppearanceTab({
                 <IconButton size="icon-sm" variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={isSaving || importPreviewFileName !== null} label={t({ ko: '외형 가져오기 (미리보기 후 적용)', en: 'Import appearance (preview first)' })}>
                   <Upload className="h-4 w-4" />
                 </IconButton>
-                <IconButton size="icon-sm" variant="ghost" onClick={onReset} disabled={isSaving} label={t({ ko: '기본값으로 되돌리기', en: 'Restore defaults' })}>
+                <IconButton size="icon-sm" variant="ghost" onClick={onReset} disabled={isSaving || draftLocked} label={t({ ko: '기본값으로 되돌리기', en: 'Restore defaults' })}>
                   <RotateCcw className="h-4 w-4" />
                 </IconButton>
               </>
@@ -177,38 +178,38 @@ export function AppearanceTab({
                 <Pencil className="size-4" aria-hidden />
                 {t({ ko: '편집', en: 'Edit' })}
               </Button>
-              <Button type="button" size="sm" variant="ghost" onClick={() => void onResetAppIcon().catch(() => {})} disabled={isSaving || isLoadingAppIcon || !editorProps.appearanceDraft.appIconDataUrl}>
+              <Button type="button" size="sm" variant="ghost" onClick={() => void onResetAppIcon().catch(() => {})} disabled={isSaving || isLoadingAppIcon || !editorProps.appearanceDraft.appIconDataUrl || draftLocked}>
                 <RotateCcw className="size-4" aria-hidden />
                 {t({ ko: '기본 마크', en: 'Default mark' })}
               </Button>
             </SettingRow>
-            <AppearanceThemeRows {...editorProps} />
+            <fieldset disabled={draftLocked} className="contents"><AppearanceThemeRows {...editorProps} /></fieldset>
           </RowGroup>
 
           <RowGroup heading={t({ ko: '글꼴', en: 'Font' })}>
-            <AppearanceFontRows {...editorProps} />
+            <fieldset disabled={draftLocked} className="contents"><AppearanceFontRows {...editorProps} /></fieldset>
           </RowGroup>
 
           <RowGroup heading={t({ ko: '레이아웃 및 마감', en: 'Layout and finish' })}>
-            <AppearanceFinishRows {...editorProps} />
+            <fieldset disabled={draftLocked} className="contents"><AppearanceFinishRows {...editorProps} /></fieldset>
           </RowGroup>
 
           <RowGroup heading={t({ ko: '목록 및 카드', en: 'Lists and cards' })}>
-            <AppearanceListRows {...editorProps} />
+            <fieldset disabled={draftLocked} className="contents"><AppearanceListRows {...editorProps} /></fieldset>
           </RowGroup>
 
           <RowGroup heading={t({ ko: '배지 색상', en: 'Badge colors' })}>
-            <AppearanceBadgeColorRows {...editorProps} />
+            <fieldset disabled={draftLocked} className="contents"><AppearanceBadgeColorRows {...editorProps} /></fieldset>
           </RowGroup>
 
           <RowGroup heading={t({ ko: '테마 슬롯', en: 'Theme slots' })} actions={<InstantApplyHint />}>
-            <AppearanceTabSlotSection
+            <fieldset disabled={draftLocked} className="contents"><AppearanceTabSlotSection
               appearanceDraft={editorProps.appearanceDraft}
               savedAppearance={savedAppearance}
               isSaving={isSaving}
               onPatchAppearance={onPatchAppearance}
               onSavePresetSlots={onSavePresetSlots}
-            />
+            /></fieldset>
           </RowGroup>
         </>
       ) : (
@@ -229,7 +230,7 @@ export function AppearanceTab({
           }}
         />
       ) : null}
-      {appIconSource ? <AppIconEditor key={appIconSource.id} source={appIconSource} isSaving={isSavingAppIcon} onRegister={onRegisterAppIcon} onClose={onCloseAppIconEditor} /> : null}
+      {appIconSource ? <AppIconEditor key={appIconSource.id} source={appIconSource} isSaving={isSavingAppIcon} registerBlocked={draftLocked} onRegister={onRegisterAppIcon} onClose={onCloseAppIconEditor} /> : null}
     </div>
   )
 }

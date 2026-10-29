@@ -24,6 +24,7 @@ export type RuntimeJobKind =
   | 'auto-tag-collection-sync'
   | 'prompt-similarity-rebuild'
   | 'file-verification'
+  | 'metadata-reextract-all'
   | 'sprite-extract'
   | 'sprite-extract-batch'
   | 'sprite-normalize'
@@ -59,6 +60,7 @@ export const RUNTIME_JOB_KINDS: readonly RuntimeJobKind[] = [
   'auto-tag-collection-sync',
   'prompt-similarity-rebuild',
   'file-verification',
+  'metadata-reextract-all',
   'sprite-extract',
   'sprite-extract-batch',
   'sprite-normalize',

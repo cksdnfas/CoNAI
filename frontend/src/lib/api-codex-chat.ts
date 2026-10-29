@@ -1,4 +1,4 @@
-import { requestApiData, requestJson } from '@/lib/api-request'
+import { ApiRequestError, requestApiData, requestJson } from '@/lib/api-request'
 import { buildApiUrl } from '@/lib/api-url'
 import type { QueryClient } from '@tanstack/react-query'
 import type { ChatAssetVisionReview, ChatAssetBatch, ChatAssetBatchInput, ChatAssetApplyInput, ChatAssetApplyResult, ChatAssetOwner, CharacterSetting, ChatProfileCharacterLink, ChatProfileCharacterLinkInput } from '@conai/shared'
@@ -135,6 +135,7 @@ export const CHAT_ADMIN_PROFILES_QUERY_KEY = ['codex-chat-admin-profiles'] as co
 export const CHAT_ADMIN_SETTINGS_QUERY_KEY = ['codex-chat-admin-settings'] as const
 export const CHAT_LOREBOOKS_QUERY_KEY = ['codex-chat-lorebooks'] as const
 export const CHAT_LOREBOOK_SUMMARIES_QUERY_KEY = [...CHAT_LOREBOOKS_QUERY_KEY, 'summary'] as const
+export const chatLorebookQueryKey = (lorebookId: number) => [...CHAT_LOREBOOKS_QUERY_KEY, 'detail', lorebookId] as const
 export const CHAT_BLOCKS_QUERY_KEY = ['codex-chat-blocks'] as const
 export const CHAT_TOOL_PRESETS_QUERY_KEY = ['codex-chat-tool-presets'] as const
 export const CHAT_GENERATION_PRESETS_QUERY_KEY = ['codex-chat-generation-presets'] as const
@@ -383,11 +384,6 @@ export function getChatMediaUsage(hashes: string[]) {
   return requestApiData<{ profiles: string[]; messages: number }>('/api/codex-chat/admin/chat-media/usage', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ hashes }) })
 }
 
-/** The chat background image of a profile. */
-export function chatProfileBackgroundUrl(profileId: number, version: string) {
-  return buildApiUrl(`/api/codex-chat/profiles/${profileId}/background?v=${encodeURIComponent(version)}`)
-}
-
 export function chatProfileAssetUrl(profileId: number, kind: ChatProfileAssetKind, version?: string | null) {
   return buildApiUrl(`/api/codex-chat/profiles/${profileId}/assets/${kind}${version ? `?v=${encodeURIComponent(version)}` : ''}`)
 }
@@ -475,6 +471,7 @@ export type ChatLorebookKind = 'global' | 'account' | 'chat'
 /** A shared lorebook; profiles link it by id, so editing or re-importing it reaches every linked profile. */
 export interface ChatLorebook {
   id: number
+  revision: string
   name: string
   kind?: ChatLorebookKind
   entries: ChatLoreEntry[]
@@ -501,6 +498,7 @@ export function listChatLorebookSummaries() {
 /** A book the chat's requests attach besides its own: linked to this chat, or brought by the profile (a room: members). */
 export interface ThreadLoreBook {
   id: number
+  revision: string
   name: string
   kind: ChatLorebookKind
   via: 'thread' | 'profile'
@@ -516,6 +514,11 @@ export interface ThreadLorebooks {
   /** The linked account book save_lore writes to; null: the chat's own book. */
   recordBookId: number | null
   books: ThreadLoreBook[]
+}
+
+export interface ThreadLorebookSummary {
+  bookCount: number
+  entryCount: number
 }
 
 export type LoreMergeChoice = 'source' | 'target' | 'both' | 'merged'
@@ -661,6 +664,10 @@ export const CHAT_GENERATION_PRESET_FILE_MARK = 'conai_generation_preset'
 
 /** `agentEnabled`: other profiles may call this one during a chat; `agentDescription` tells them when. */
 export interface ChatProfile extends ChatProfileAssetFields, ChatProfileAgentSettings {
+  revision: string
+  backgroundRevision: number
+  /** The effective expression group on synced profiles; also returned by the single-profile admin read. */
+  expressionGroupId?: number | null
   /** Linked shared lorebooks, in priority order. */
   lorebookIds: number[]
   /** Linked shared display blocks, in display order; the server fills `style.blocks` from them. */
@@ -769,7 +776,7 @@ export interface ChatCardImportReport {
 }
 
 /** `background`: a new image (data URL), null to remove it, left out to keep the current one. */
-export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl' | 'characterLink'>> & {
+export type ChatProfileInput = Partial<Omit<ChatProfile, 'id' | 'revision' | 'backgroundRevision' | 'expressionGroupId' | 'createdDate' | 'updatedDate' | 'backgroundVersion' | 'suggestWriterReady' | 'assetVersion' | 'hasAvatar' | 'avatarThumbnailUrl' | 'characterLink'>> & {
   background?: string | null
   /** The library link to set (null removes it; left out keeps it). While synced the appearance fields are not sent. */
   characterLink?: ChatProfileCharacterLinkInput
@@ -781,6 +788,24 @@ export const CHAT_PROFILE_SYNCED_KEYS = ['appearance', 'referenceHash', 'avatarH
 /** Two library links name the same setting and sync (a stored link's name and path aside). */
 export function sameCharacterLink(left: ChatProfileCharacterLinkInput | undefined, right: ChatProfileCharacterLinkInput | undefined) {
   return (left?.settingId ?? null) === (right?.settingId ?? null) && Boolean(left?.synced) === Boolean(right?.synced)
+}
+
+/** The current record returned with a rejected revision-checked save. */
+export class ChatRevisionConflictError extends ApiRequestError {
+  readonly current: unknown
+  constructor(message: string, current: unknown) {
+    super(message, 409, 'revision_conflict')
+    this.current = current
+  }
+}
+
+/** A deliberate resolution or cancellation, not a failed request. */
+export class ChatEditorResolution extends Error {
+  constructor(message: string, cause: unknown) { super(message, { cause }) }
+}
+
+export function isChatRevisionConflict(error: unknown): error is ChatRevisionConflictError {
+  return error instanceof ChatRevisionConflictError
 }
 
 /**
@@ -1074,6 +1099,10 @@ export function listChatAdminProfiles() {
   return requestApiData<ChatProfile[]>('/api/codex-chat/admin/profiles', { cache: 'no-store' })
 }
 
+export function getChatAdminProfile(profileId: number) {
+  return requestApiData<ChatProfile>(`/api/codex-chat/admin/profiles/${profileId}`, { cache: 'no-store' })
+}
+
 /** Every chat profile in this order; returns the reordered admin list. */
 export function reorderChatProfiles(ids: number[]) {
   return requestApiData<ChatProfile[]>('/api/codex-chat/admin/profiles/order', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ids }) })
@@ -1106,6 +1135,10 @@ export function listChatLorebooks() {
   return requestApiData<ChatLorebook[]>('/api/codex-chat/admin/lorebooks')
 }
 
+export function getChatLorebook(lorebookId: number, signal?: AbortSignal) {
+  return requestApiData<ChatLorebook>(`/api/codex-chat/admin/lorebooks/${lorebookId}`, { signal, cache: 'no-store' })
+}
+
 export function createChatLorebook(input: { name: string; entries?: ChatLoreEntry[] }) {
   return requestApiData<ChatLorebook>('/api/codex-chat/admin/lorebooks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
@@ -1118,8 +1151,8 @@ export function importChatLorebook(file: File, lorebookId?: number) {
   return requestApiData<ChatLorebook>(path, { method: 'POST', body })
 }
 
-export function updateChatLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[] }) {
-  return requestApiData<ChatLorebook>(`/api/codex-chat/admin/lorebooks/${lorebookId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+export function updateChatLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[]; revision?: string }) {
+  return requestRevisionChecked<ChatLorebook>(`/api/codex-chat/admin/lorebooks/${lorebookId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
 export function deleteChatLorebook(lorebookId: number) {
@@ -1344,10 +1377,6 @@ export function deleteChatUserProfile(userProfileId: number) {
   return requestApiData<unknown>(`/api/codex-chat/user-profiles/${userProfileId}`, { method: 'DELETE' })
 }
 
-export function reorderChatUserProfiles(ids: number[]) {
-  return requestApiData<ChatUserProfile[]>('/api/codex-chat/user-profiles/order', { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ids }) })
-}
-
 export const CHAT_FLAGS_QUERY_KEY = ['codex-chat-flags'] as const
 export const CHAT_FLAG_LIMITS = { perAccount: 20, name: 30, content: 2000 }
 
@@ -1471,8 +1500,8 @@ export function readThreadFlagIds(thread: Pick<CodexChatThread, 'flag_ids'> | nu
   }
 }
 
-export function updateChatProfile(profileId: number, patch: ChatProfileInput) {
-  return requestApiData<ChatProfile>(`/api/codex-chat/admin/profiles/${profileId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+export function updateChatProfile(profileId: number, patch: ChatProfileInput, revision?: string) {
+  return requestRevisionChecked<ChatProfile>(`/api/codex-chat/admin/profiles/${profileId}`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ ...patch, ...(revision === undefined ? {} : { revision }) }) })
 }
 
 /** Marks a chat proposal saved (after the card's save or the editor's) so the card shows "saved" on every reload. */
@@ -1705,20 +1734,33 @@ export function chatBackupDate(date = new Date()) {
 /** Where a backup made today lands in the file store. */
 export const CHAT_BACKUP_FOLDER = '채팅 백업'
 
+/** A revision-checked save: a stale revision becomes ChatRevisionConflictError carrying the current record. */
+async function requestRevisionChecked<T>(path: string, init: RequestInit): Promise<T> {
+  try {
+    return await requestApiData<T>(path, init)
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 409 && error.code === 'revision_conflict') throw new ChatRevisionConflictError(error.message, error.data)
+    throw error
+  }
+}
+
 /** Like requestApiData, but a 409 carrying a merge preview becomes LoreDecisionsNeededError. */
 async function requestWithMergePreview<T>(path: string, init: RequestInit): Promise<T> {
-  const response = await fetch(buildApiUrl(path), { ...init, credentials: 'include', headers: { Accept: 'application/json', ...(init.headers ?? {}) } })
-  const payload = (response.headers.get('content-type') ?? '').includes('application/json') ? await response.json() as { success?: boolean; data?: unknown; error?: string } : null
-  if (response.status === 409) {
-    const data = payload?.data as { status?: string; preview?: LoreMergePreview; missing?: string[] } | undefined
-    if (data?.status === 'decisions' && data.preview) throw new LoreDecisionsNeededError(payload?.error ?? 'decisions', data.preview, data.missing ?? [])
+  try {
+    return await requestApiData<T>(path, init, { timeoutMs: 0 })
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.status === 409) {
+      const data = error.data as { status?: string; preview?: LoreMergePreview; missing?: string[] } | undefined
+      if (data?.status === 'decisions' && data.preview) throw new LoreDecisionsNeededError(error.message, data.preview, data.missing ?? [])
+    }
+    throw error
   }
-  if (!response.ok || !payload?.success) throw new Error(payload?.error || `Request failed: ${response.status}`)
-  return payload.data as T
 }
 
 export const OWN_LOREBOOKS_QUERY_KEY = ['codex-chat-own-lorebooks'] as const
+export const ownLorebookQueryKey = (lorebookId: number) => [...OWN_LOREBOOKS_QUERY_KEY, 'detail', lorebookId] as const
 export const threadLorebooksQueryKey = (threadId: number) => ['codex-chat-thread-lorebooks', threadId] as const
+export const threadLorebookSummaryQueryKey = (threadId: number) => [...threadLorebooksQueryKey(threadId), 'summary'] as const
 
 /** A file store folder or text file linked to a chat or a profile; `write` lets its characters write there. */
 export type LinkedFileLink = { id: string; write: boolean }
@@ -1764,30 +1806,74 @@ export function listOwnLorebooks() {
   return requestApiData<OwnedChatLorebook[]>('/api/codex-chat/lorebooks')
 }
 
+export function getOwnLorebook(lorebookId: number, signal?: AbortSignal) {
+  return requestApiData<OwnedChatLorebook>(`/api/codex-chat/lorebooks/${lorebookId}`, { signal, cache: 'no-store' })
+}
+
 export function createOwnLorebook(input: { name: string; entries?: ChatLoreEntry[] }) {
   return requestApiData<OwnedChatLorebook>('/api/codex-chat/lorebooks', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify(input) })
 }
 
 /** Null: an emptied chat book went away. */
-export function updateOwnLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[] }) {
-  return requestApiData<OwnedChatLorebook | null>(`/api/codex-chat/lorebooks/${lorebookId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+export function updateOwnLorebook(lorebookId: number, patch: { name?: string; entries?: ChatLoreEntry[]; revision?: string }) {
+  return requestRevisionChecked<OwnedChatLorebook | null>(`/api/codex-chat/lorebooks/${lorebookId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
 export function deleteOwnLorebook(lorebookId: number) {
   return requestApiData<{ deleted: boolean }>(`/api/codex-chat/lorebooks/${lorebookId}`, { method: 'DELETE' })
 }
 
-export function linkLorebookToProfile(lorebookId: number, profileId: number, linked: boolean) {
-  return requestApiData<{ lorebookIds: number[] }>(`/api/codex-chat/lorebooks/${lorebookId}/profiles/${profileId}`, { method: linked ? 'PUT' : 'DELETE' })
-}
-
 export function getThreadLorebooks(threadId: number) {
   return requestApiData<ThreadLorebooks>(`/api/codex-chat/threads/${threadId}/lorebooks`, { cache: 'no-store' })
 }
 
+export function getThreadLorebookSummary(threadId: number) {
+  return requestApiData<ThreadLorebookSummary>(`/api/codex-chat/threads/${threadId}/lorebooks?summary=1`, { cache: 'no-store' })
+}
+
 /** Replace the chat book's entries; it is made with its first entry (null once emptied). */
-export function saveThreadLorebook(threadId: number, entries: ChatLoreEntry[]) {
-  return requestApiData<OwnedChatLorebook | null>(`/api/codex-chat/threads/${threadId}/lorebook`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ entries }) })
+export function saveThreadLorebook(threadId: number, entries: ChatLoreEntry[], revision?: string) {
+  return requestRevisionChecked<OwnedChatLorebook | null>(`/api/codex-chat/threads/${threadId}/lorebook`, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ entries, revision }) })
+}
+
+function sameLoreValue(left: unknown, right: unknown): boolean {
+  if (left === right) return true
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object' || Array.isArray(left) !== Array.isArray(right)) return false
+  const a = left as Record<string, unknown>
+  const b = right as Record<string, unknown>
+  const keys = Object.keys(a).filter((key) => a[key] !== undefined)
+  return keys.length === Object.keys(b).filter((key) => b[key] !== undefined).length && keys.every((key) => sameLoreValue(a[key], b[key]))
+}
+
+/** Permanent IDs identify entries, never array positions. Draft order, then latest-only additions in their order. */
+export function mergeLoreEntries(base: ChatLoreEntry[], latest: ChatLoreEntry[], draft: ChatLoreEntry[]) {
+  const before = new Map(base.map((entry) => [entry.id, entry]))
+  const remote = new Map(latest.map((entry) => [entry.id, entry]))
+  const local = new Map(draft.map((entry) => [entry.id, entry]))
+  const conflicts: string[] = []
+  const entries: ChatLoreEntry[] = []
+  for (const id of new Set([...local.keys(), ...remote.keys(), ...before.keys()])) {
+    const original = before.get(id)
+    const mine = local.get(id)
+    const theirs = remote.get(id)
+    const mineChanged = !sameLoreValue(original, mine)
+    const theirsChanged = !sameLoreValue(original, theirs)
+    if (mineChanged && theirsChanged && !sameLoreValue(mine, theirs)) conflicts.push(id)
+    const chosen = mineChanged ? mine : theirs
+    if (chosen) entries.push(chosen)
+  }
+  return { entries, conflicts }
+}
+
+/** Replace only conflicting entries; unrelated local and remote changes have already been merged. */
+export function latestLoreEntryConflicts(merged: ChatLoreEntry[], latest: ChatLoreEntry[], conflicts: string[]) {
+  const ids = new Set(conflicts)
+  const remote = new Map(latest.map((entry) => [entry.id, entry]))
+  const present = new Set(merged.map((entry) => entry.id))
+  return [
+    ...merged.flatMap((entry) => ids.has(entry.id) ? remote.get(entry.id) ?? [] : entry),
+    ...latest.filter((entry) => ids.has(entry.id) && !present.has(entry.id)),
+  ]
 }
 
 /** Keep the chat book as an account book, linked to this chat (and recorded into when the chat book was). */
@@ -1928,27 +2014,30 @@ async function streamChatOperation(path: string, method: 'POST' | 'PATCH', body:
   })
 
   if (!response.ok || !response.body) {
-    const payload = await response.json().catch(() => null) as { error?: string } | null
-    throw new Error(payload?.error || `Request failed: ${response.status}`)
+    const payload = await response.json().catch(() => null) as { error?: string; code?: string; data?: unknown } | null
+    throw new ApiRequestError(payload?.error || `Request failed: ${response.status}`, response.status, payload?.code, payload?.data)
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
   let buffer = ''
-  for (;;) {
-    const { value, done } = await reader.read()
-    if (done) {
-      break
-    }
-    buffer += value
-    let newlineIndex = buffer.indexOf('\n')
-    while (newlineIndex >= 0) {
-      const line = buffer.slice(0, newlineIndex).trim()
-      buffer = buffer.slice(newlineIndex + 1)
-      if (line) {
-        onEvent(JSON.parse(line) as CodexChatStreamEvent)
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += value
+      let newlineIndex = buffer.indexOf('\n')
+      while (newlineIndex >= 0) {
+        const line = buffer.slice(0, newlineIndex).trim()
+        buffer = buffer.slice(newlineIndex + 1)
+        if (line) onEvent(JSON.parse(line) as CodexChatStreamEvent)
+        newlineIndex = buffer.indexOf('\n')
       }
-      newlineIndex = buffer.indexOf('\n')
     }
+    if (buffer.trim()) onEvent(JSON.parse(buffer.trim()) as CodexChatStreamEvent)
+  } finally {
+    // Cancellation can reject after a transport abort; keep the original parse/callback/transport error.
+    await reader.cancel().catch(() => undefined)
+    reader.releaseLock()
   }
 }
 

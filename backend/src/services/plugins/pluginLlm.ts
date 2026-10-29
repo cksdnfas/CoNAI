@@ -128,7 +128,11 @@ function buildText(profile: ChatProfile, input: z.infer<typeof measureSchema>, r
     const language = input.translation.direction === 'model' ? profile.translationModelLanguage : profile.translationDisplayLanguage
     const plan = planStructuredTranslation(profile, json, input.translation.fields, language)
     if (!plan) throw new PluginError('번역 모델과 입력을 확인해줘.')
-    return { request: null, admissionReserve: plan.target.generation.maxTokens ?? 0, measured: measurement(Math.max(0, ...plan.chunks.map(chunk => chunk.inputTokens)), plan.outputReserve, plan.contextTokens, plan.target.transport === 'claude-code' ? 'claude-code' : 'api') }
+    const admissionReserve = Math.max(0, ...plan.chunks.map(chunk => chunk.maxTokens ?? plan.outputReserve))
+    const measured = measurement(Math.max(0, ...plan.chunks.map(chunk => chunk.inputTokens)), admissionReserve, plan.contextTokens, plan.target.transport === 'claude-code' ? 'claude-code' : 'api')
+    // Peaks in different chunks are not one request. Report and admit against each actual chunk.
+    if (plan.contextTokens !== null) measured.available = Math.min(plan.contextTokens, ...plan.chunks.map(chunk => plan.contextTokens! - chunk.inputTokens - (chunk.maxTokens ?? plan.outputReserve)))
+    return { request: null, admissionReserve, measured, translationFits: plan.chunks.every(chunk => chunk.fits) }
   }
   // Omit only display blocks for JSON, preserving all persona, example, lore and translation instructions.
   const replyProfile = input.structuredOutput === undefined ? profile : { ...profile, style: { ...profile.style, blocks: [] } }
@@ -150,7 +154,12 @@ function buildText(profile: ChatProfile, input: z.infer<typeof measureSchema>, r
   return { request, admissionReserve: budget.admissionReserve, measured: measurement(inputTokens, budget.outputReserve, budget.contextTokens, resolved.engine) }
 }
 
-function assertMeasuredFits({ measured, admissionReserve }: ReturnType<typeof prepareText>) {
+function assertMeasuredFits(prepared: ReturnType<typeof prepareText>) {
+  if ('translationFits' in prepared) {
+    if (!prepared.translationFits) throw new PluginError('번역 입력과 출력을 모델 컨텍스트에 맞출 수 없어. 입력이나 출력 설정을 확인해줘.', 413)
+    return
+  }
+  const { measured, admissionReserve } = prepared
   if (measured.contextTokens !== null && measured.inputTokens + admissionReserve > measured.contextTokens) {
     throw new PluginError(`문맥이 모델 한도를 넘었어 (입력 약 ${measured.inputTokens} + 출력 ${admissionReserve} > 한도 ${measured.contextTokens} 토큰). 입력을 줄여줘.`, 413)
   }
@@ -345,7 +354,7 @@ function registerJob() {
           let json: unknown
           try { json = JSON.parse(input.message) } catch { throw new PluginError('번역할 JSON을 확인해줘.') }
           const language = input.translation.direction === 'model' ? profile.translationModelLanguage : profile.translationDisplayLanguage
-          const translated = await translateStructuredFields(profile, json, input.translation.fields, language, controller.signal, { replyId: `plugin:${pluginId}:${ctx.jobId}` }, false, { followConnectionTimeout: true })
+          const translated = await translateStructuredFields(profile, json, input.translation.fields, language, controller.signal, { replyId: `plugin:${pluginId}:${ctx.jobId}` }, false)
           controller.signal.throwIfAborted(); ctx.throwIfCancelled(); profileAccess(pluginId, requester, input.profileId, digest)
           if (!translated) throw new PluginError('번역에 실패했어. 프로필의 번역 모델을 확인해줘.')
           const output = { text: '', json, truncated: false, model: 'translation', engine: profile.engine, translation: { status: 'completed' as const, language, json: translated } }
@@ -375,7 +384,7 @@ function registerJob() {
           // A persona can answer in the display language despite the model-language directive: that answer is the
           // source as written, labelled with its real language, and has nothing to translate.
           const written = hasTranslation(profile) && structuredProseIn(source, input.translation.fields, language)
-          const translated = hasTranslation(profile) && !written ? await translateStructuredFields(profile, source, input.translation.fields, language, translationSignal, { replyId: `plugin:${pluginId}:${ctx.jobId}` }, false, { followConnectionTimeout: true }) : null
+          const translated = hasTranslation(profile) && !written ? await translateStructuredFields(profile, source, input.translation.fields, language, translationSignal, { replyId: `plugin:${pluginId}:${ctx.jobId}` }, false) : null
           controller.signal.throwIfAborted(); ctx.throwIfCancelled(); profileAccess(pluginId, requester, input.profileId, digest)
           translation = { status: !hasTranslation(profile) ? 'disabled' : written || translated ? 'completed' : 'failed', language, ...(hasTranslation(profile) ? { sourceLanguage: written ? language : profile.translationModelLanguage } : {}), ...(translated ? { json: translated } : {}) }
         }

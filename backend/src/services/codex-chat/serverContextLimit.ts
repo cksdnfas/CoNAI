@@ -1,3 +1,4 @@
+import { rawMessagesEstimate } from '../llmUsage'
 import { resolveChatCompletionTarget, type ChatCompletionTarget } from './llmChatCompletion'
 import { resolveProfileModel } from './chatModelRoles'
 import type { ChatProfile } from './chatProfiles'
@@ -41,6 +42,13 @@ export function learnServerContextLimit(target: Pick<ChatCompletionTarget, 'prov
 
 /** Below this a cap cut to the room left is no reply at all: the request fails instead. */
 export const MIN_FITTED_REPLY_TOKENS = 256
+
+/** Summary output room after a raw-estimate margin; false means it does not fit, null means the limit is unknown. */
+export function summaryContextRoom(limit: number | null, messages: Array<{ role: string; content: unknown }>): number | null | false {
+  if (limit === null) return null
+  const room = limit - Math.ceil(rawMessagesEstimate(messages) * 1.05)
+  return room < MIN_FITTED_REPLY_TOKENS ? false : room
+}
 
 /**
  * The output room a server named when it refused a prompt + max_tokens larger than its context: Strata says "at most

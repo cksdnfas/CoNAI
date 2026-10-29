@@ -328,10 +328,11 @@ export function judgeDirectiveText(judged: JudgedTurn | null | undefined, withhe
  * `availableTools`: the tools this turn offers; null when they cannot be steered per turn (Codex), where an item that
  * steers tools does nothing and only the directives of tool-less yes items go through.
  */
-export function readReplyHistory(profile: ChatProfile, source: ChatHistorySource, afterId = Number.MAX_SAFE_INTEGER) {
+export function readReplyHistory(profile: ChatProfile, source: ChatHistorySource, afterId = Number.MAX_SAFE_INTEGER, recentTurns?: number) {
   const setup = judgeSetupOf(profile)
   return CodexChatStore.listContextMessages(source, {
     afterId,
+    recentTurns,
     recentMessages: Math.max(2, profile.loreScanDepth),
     textMessages: Math.max(2, setup?.preset.context.window ?? 0, ...(setup?.preset.items.map((item) => item.window) ?? [])),
   })

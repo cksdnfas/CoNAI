@@ -4,18 +4,22 @@ import type {
   GeneralSettings,
   PublicHeaderNavigationSettings,
 } from '@conai/shared'
-import { fetchApiData } from '@/lib/api-client'
+import { requestApiData } from '@/lib/api-request'
+
+export type NativeSettingsVersions = PageSettingsVersions & {
+  pageSettingsRevisions?: NonNullable<PageSettingsVersions['pageSettingsRevisions']> & { 'ai-runtime'?: string }
+}
 
 export async function getAppSettings() {
-  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings', 'settings.app.load')
+  return requestApiData<AppSettings & NativeSettingsVersions>('/api/settings', 'settings.app.load')
 }
 
 export async function getPublicHeaderNavigationSettings() {
-  return fetchApiData<PublicHeaderNavigationSettings>('/api/settings/header-navigation-public', 'settings.headerNavigationPublic.load')
+  return requestApiData<PublicHeaderNavigationSettings>('/api/settings/header-navigation-public', 'settings.headerNavigationPublic.load')
 }
 
 export async function updateGeneralSettings(settings: Partial<GeneralSettings>, revision?: string) {
-  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/general', 'settings.general.update', {
+  return requestApiData<AppSettings & PageSettingsVersions>('/api/settings/general', 'settings.general.update', {
     method: 'PUT',
     headers: { ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),

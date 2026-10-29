@@ -48,9 +48,9 @@ function buildRawDataFromText(text: string): AIMetadata {
 
 /** Read standard EXIF/XMP metadata carriers from any Sharp-supported image file. */
 export class StandardMetadataExtractor {
-  static async extract(filePath: string): Promise<AIMetadata> {
+  static async extract(source: string | Buffer): Promise<AIMetadata> {
     try {
-      const metadata = await sharp(filePath).metadata();
+      const metadata = await sharp(source).metadata();
 
       if (metadata.xmp) {
         const xmpString = metadata.xmp.toString('utf8');

@@ -22,6 +22,7 @@ import {
   type WildcardRecord,
   type WildcardTool,
 } from '@/lib/api-wildcards'
+import { ApiRequestError } from '@/lib/api-request'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { ToolbarSearchField } from '@/components/common/search-field'
 import { useI18n } from '@/i18n'
@@ -57,6 +58,7 @@ type WildcardEditorState =
   | {
     mode: 'edit'
     wildcard: WildcardRecord
+    revision: string
   }
   | null
 
@@ -121,7 +123,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ wildcardId, input }: { wildcardId: number; input: Parameters<typeof updateWildcard>[1] }) => updateWildcard(wildcardId, input),
+    mutationFn: ({ wildcardId, input, revision }: { wildcardId: number; input: Parameters<typeof updateWildcard>[1]; revision: string }) => updateWildcard(wildcardId, input, revision),
     onSuccess: async (result) => {
       setEditorState(null)
       showSnackbar({ message: t('image-generation.components.wildcard.generation.panel.item.saved'), tone: 'info' })
@@ -129,7 +131,15 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
       setSelectedWildcardId(result.id)
     },
     onError: (error) => {
-      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.wildcard.generation.panel.failed.to.save.item')), tone: 'error' })
+      const conflict = error instanceof ApiRequestError && error.status === 409 && error.code === 'revision_conflict'
+      // The open draft keeps its own token; an editor opened later starts from the current record.
+      if (conflict) void queryClient.invalidateQueries({ queryKey: ['wildcards'] })
+      showSnackbar({
+        message: conflict
+          ? t({ ko: '저장된 내용이 바뀌었어. 초안은 그대로야.', en: 'The saved content changed. Your draft is intact.' })
+          : getErrorMessage(error, t('image-generation.components.wildcard.generation.panel.failed.to.save.item')),
+        tone: 'error',
+      })
     },
   })
 
@@ -262,9 +272,15 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
       return
     }
 
+    if (!selectedWildcard.assistant_revision) {
+      showSnackbar({ message: t({ ko: '편집 정보를 불러오지 못했어. 새로고침해줘.', en: 'Could not load edit information. Refresh and try again.' }), tone: 'error' })
+      return
+    }
+
     setEditorState({
       mode: 'edit',
       wildcard: selectedWildcard,
+      revision: selectedWildcard.assistant_revision,
     })
   }
 
@@ -327,6 +343,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
 
     await updateMutation.mutateAsync({
       wildcardId: editorState.wildcard.id,
+      revision: editorState.revision,
       input: {
         ...input,
         type: editorState.wildcard.type,

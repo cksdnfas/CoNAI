@@ -501,9 +501,9 @@ export const KnowledgeStore = {
     return { knowledge: getKnowledgeState(postId, actor)!, issues: knowledgeIssues(postId,actor) };
   },
 
-  async reviewQueue(actor: PostActor, query: { offset?: unknown; limit?: unknown } = {}): Promise<PostKnowledgeReviewQueue> {
+  async reviewQueue(actor: PostActor, query: { offset?: unknown; limit?: unknown } = {}, options?: { signal?: AbortSignal }): Promise<PostKnowledgeReviewQueue> {
     requireKey(actor, 'posts.knowledge.review');
-    const list = await PostStore.list(actor, { kind: 'knowledge', reviewStatus: 'needs_review', status: 'all', ...query });
+    const list = await PostStore.list(actor, { kind: 'knowledge', reviewStatus: 'needs_review', status: 'all', ...query }, options);
     return { items: list.items.map(post => ({ post, issues: knowledgeIssues(post.id,actor) })), total: list.total };
   },
 

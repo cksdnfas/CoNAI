@@ -1,4 +1,4 @@
-import { fetchApiData as requestBackupSourceData } from '@/lib/api-client'
+import { requestApiData as requestBackupSourceData } from '@/lib/api-request'
 import type { BackupSource, BackupSourceInput, BackupSourceUpdateInput } from '@/types/folder'
 
 export async function getBackupSources(activeOnly = false) {

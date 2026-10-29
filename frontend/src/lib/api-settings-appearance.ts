@@ -1,6 +1,6 @@
 import type { PageSettingsVersions } from '@conai/shared'
 import type { AppearanceSettings, AppSettings } from '@conai/shared'
-import { fetchApiData } from '@/lib/api-client'
+import { requestApiData } from '@/lib/api-request'
 
 export interface AppearanceFontUploadResult {
   target: 'sans' | 'mono'
@@ -18,15 +18,15 @@ export interface WallpaperRuntimeSettings {
 }
 
 export async function getPublicAppearanceSettings() {
-  return fetchApiData<AppearanceSettings>('/api/settings/appearance-public', 'settings.appearancePublic.load')
+  return requestApiData<AppearanceSettings>('/api/settings/appearance-public', 'settings.appearancePublic.load')
 }
 
 export async function getWallpaperRuntimeSettings() {
-  return fetchApiData<WallpaperRuntimeSettings>('/api/wallpaper-runtime/settings', 'settings.wallpaperRuntime.load')
+  return requestApiData<WallpaperRuntimeSettings>('/api/wallpaper-runtime/settings', 'settings.wallpaperRuntime.load')
 }
 
 export async function updateAppearanceSettings(settings: Partial<AppearanceSettings>, revision?: string) {
-  return fetchApiData<AppSettings & PageSettingsVersions>('/api/settings/appearance', 'settings.appearance.update', {
+  return requestApiData<AppSettings & PageSettingsVersions>('/api/settings/appearance', 'settings.appearance.update', {
     method: 'PUT',
     headers: { ...(revision ? { 'If-Match': revision } : {}), 'Content-Type': 'application/json' },
     body: JSON.stringify(settings),
@@ -38,7 +38,7 @@ export async function uploadAppearanceFont(file: File, target: 'sans' | 'mono') 
   formData.append('font', file)
   formData.append('target', target)
 
-  return fetchApiData<AppearanceFontUploadResult>('/api/settings/appearance/font-upload', 'settings.appearanceFont.upload', {
+  return requestApiData<AppearanceFontUploadResult>('/api/settings/appearance/font-upload', 'settings.appearanceFont.upload', {
     method: 'POST',
     body: formData,
   })

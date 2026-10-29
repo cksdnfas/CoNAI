@@ -1,30 +1,8 @@
-import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { fetchJson } from '@/lib/api-client'
 import { requestApiData } from '@/lib/api-request'
-import type { GraphWorkflowBrowseContentRecord } from '@/lib/api-module-graph'
 import type { ImageRecord } from '@/types/image'
-import type { ApiResponse } from '@/types/image'
 import type { AppearanceSettings, WallpaperSchedule } from '@conai/shared'
 
-async function requestWallpaperRuntimeData<T>(path: string, fallbackKey: Parameters<typeof createApiFallbackError>[1]) {
-  const response = await fetchJson<ApiResponse<T>>(path)
-  if (!response.success) {
-    throw createApiFallbackError(response.error, fallbackKey)
-  }
-  return response.data
-}
-
 const BASE = '/api/wallpaper-runtime'
-
-/** Load the read-only workflow browse snapshot used by wallpaper live widgets. */
-export async function getWallpaperRuntimeBrowseContent(folderId?: number | null) {
-  const searchParams = new URLSearchParams()
-  if (typeof folderId === 'number') {
-    searchParams.set('folder_id', String(folderId))
-  }
-
-  return requestWallpaperRuntimeData<GraphWorkflowBrowseContentRecord>(`${BASE}/browse-content${searchParams.size > 0 ? `?${searchParams.toString()}` : ''}`, 'wallpaperRuntime.browseContent.load')
-}
 
 export interface WallpaperWorkflowActivity {
   windowHours: number
@@ -49,7 +27,7 @@ export async function getWallpaperRuntimeGroupPreviewImages(groupId: number, par
   searchParams.set('count', String(params?.count ?? 1))
   searchParams.set('includeChildren', String(params?.includeChildren ?? true))
 
-  return requestWallpaperRuntimeData<ImageRecord[]>(`${BASE}/groups/${groupId}/preview-images?${searchParams.toString()}`, 'wallpaperRuntime.groupPreview.load')
+  return requestApiData<ImageRecord[]>(`${BASE}/groups/${groupId}/preview-images?${searchParams.toString()}`, 'wallpaperRuntime.groupPreview.load')
 }
 
 export interface WallpaperRuntimeSettingsRecord {

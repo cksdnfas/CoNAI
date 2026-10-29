@@ -1,4 +1,4 @@
-import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphExecutionStatus, GraphExecutionTriggerType, GraphWorkflowDocument, GraphWorkflowNameRecord, GraphWorkflowScheduleFailurePolicy, GraphWorkflowScheduleStatus, GraphWorkflowScheduleType, GraphWorkflowSummaryRecord, ModuleAuthoringSource, ModuleEngineType, ModulePortDefinition, ModuleUiFieldDefinition } from '@conai/shared'
+import type { GraphExecutionArtifactRecord, GraphExecutionFinalResultRecord, GraphExecutionStatus, GraphExecutionTriggerType, GraphWorkflowDocument, GraphWorkflowNameRecord, GraphWorkflowScheduleRecord, GraphWorkflowSummaryRecord, ModuleAuthoringSource, ModuleEngineType, ModulePortDefinition, ModuleUiFieldDefinition } from '@conai/shared'
 
 export type {
   GraphExecutionArtifactRecord,
@@ -17,6 +17,7 @@ export type {
   GraphWorkflowNameRecord,
   GraphWorkflowNode,
   GraphWorkflowScheduleFailurePolicy,
+  GraphWorkflowScheduleRecord,
   GraphWorkflowScheduleStatus,
   GraphWorkflowScheduleType,
   GraphWorkflowSummaryRecord,
@@ -54,6 +55,7 @@ export interface ModuleDefinitionRecord {
 }
 
 export interface GraphWorkflowRecord extends GraphWorkflowSummaryRecord {
+  revision: number
   graph: GraphWorkflowDocument
 }
 
@@ -94,40 +96,6 @@ export interface GraphExecutionRecord {
   error_message?: string | null
   queue_position?: number | null
   cancel_requested?: boolean
-  created_date: string
-  updated_date: string
-}
-
-export interface GraphWorkflowScheduleRecord {
-  id: number
-  graph_workflow_id: number
-  name: string
-  schedule_type: GraphWorkflowScheduleType
-  status: GraphWorkflowScheduleStatus
-  timezone?: string | null
-  run_at?: string | null
-  interval_minutes?: number | null
-  daily_time?: string | null
-  max_run_count?: number | null
-  run_enqueue_count?: number | null
-  failure_policy?: GraphWorkflowScheduleFailurePolicy | null
-  input_values?: string | null
-  confirmed_graph_version?: number | null
-  confirmed_input_signature?: string | null
-  stop_reason_code?: string | null
-  stop_reason_message?: string | null
-  last_execution_id?: number | null
-  next_run_at?: string | null
-  last_enqueued_at?: string | null
-  completed_run_count?: number
-  queued_run_count?: number
-  running_run_count?: number
-  failed_run_count?: number
-  reserved_run_count?: number
-  remaining_run_count?: number | null
-  /** The account the schedule runs as (who last saved it); null on schedules saved before that was recorded. */
-  run_as_account_id?: number | null
-  run_as_account_name?: string | null
   created_date: string
   updated_date: string
 }
@@ -270,6 +238,7 @@ export interface CreateEnvelope {
 }
 
 export interface GraphWorkflowUpdateResult extends CreateEnvelope {
+  revision: number
   schedule_maintenance?: GraphWorkflowScheduleMaintenanceResult | null
 }
 

@@ -8,6 +8,7 @@ import { asyncHandler } from '../../middleware/asyncHandler'
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../../services/workflowArtifactService'
 import { WorkflowResponse } from '../../types/workflow'
 import { requireImagesView } from '../../middleware/imageAccess'
+import { parseDirectoryPageRequest } from '../../services/directoryListingSnapshot'
 
 const router = Router()
 router.use('/:id/artifacts', requireImagesView)
@@ -44,8 +45,15 @@ router.get('/:id/artifacts', asyncHandler(async (req: Request, res: Response) =>
     return
   }
 
+  let options: ReturnType<typeof parseDirectoryPageRequest>
   try {
-    const listing = await listWorkflowArtifacts(workflow, typeof req.query.path === 'string' ? req.query.path : '')
+    options = parseDirectoryPageRequest(req.query)
+  } catch (error) {
+    return res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'Invalid listing parameters' } as WorkflowResponse)
+  }
+
+  try {
+    const listing = await listWorkflowArtifacts(workflow, typeof req.query.path === 'string' ? req.query.path : '', undefined, options)
     return res.json({
       success: true,
       data: {
@@ -54,6 +62,7 @@ router.get('/:id/artifacts', asyncHandler(async (req: Request, res: Response) =>
         artifactDirectoryMode: workflow.artifact_directory_mode,
         relativePath: listing.relativePath,
         entries: listing.entries,
+        ...(listing.total !== undefined ? { total: listing.total, nextCursor: listing.nextCursor, snapshot: listing.snapshot } : {}),
       },
     } as WorkflowResponse)
   } catch (error) {

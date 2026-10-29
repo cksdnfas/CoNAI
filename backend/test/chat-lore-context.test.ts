@@ -203,6 +203,103 @@ test('lore context: books per request, the index, always-on entries, linked file
     assert.ok(view.books.find((book) => book.name === '카이')?.folderId)
   })
 
+  await t.test('thread lorebook summaries preserve ownership, deduplicate books and refresh stale files', async () => {
+    const express = (await import('express')).default
+    const router = (await import('../src/routes/codex-chat-lorebooks.routes')).default
+    const app = express()
+    app.use(express.json())
+    app.use((req, _res, next) => {
+      req.session = { accountId: req.headers['x-test-account'] === '2' ? 2 : 1, accountType: 'admin' } as typeof req.session
+      next()
+    })
+    app.use('/api/codex-chat', router)
+    const server = app.listen(0, '127.0.0.1')
+    await new Promise<void>((resolve) => server.once('listening', resolve))
+    const previousLunaBooks = ChatProfileStore.find(luna.id)!.lorebookIds
+    const previousTaste = OwnedLorebookStore.find(taste.id, me)!
+    try {
+      const address = server.address() as import('node:net').AddressInfo
+      const url = `http://127.0.0.1:${address.port}/api/codex-chat/threads`
+      const booksUrl = `http://127.0.0.1:${address.port}/api/codex-chat/lorebooks`
+      const booksResponse = await fetch(booksUrl)
+      const summariesResponse = await fetch(`${booksUrl}?summary=1`)
+      assert.equal(booksResponse.status, 200)
+      assert.equal(summariesResponse.status, 200)
+      const books = (await booksResponse.json() as { data: Array<Record<string, unknown>> }).data
+      const summaries = (await summariesResponse.json() as { data: Array<Record<string, unknown>> }).data
+      assert.deepEqual(summaries, books.map(({ entries: _entries, ...book }) => book), 'summary retains every field and count except entry bodies')
+      assert.ok(books.some((book) => book.kind === 'global' && Array.isArray(book.entries) && book.entries.length === 0 && Number(book.entryCount) > 0))
+      const revisionThread = CodexChatStore.createThread(1, 'Revision checks', 'llm', kai.id)
+      const put = async (entries: unknown[], revision?: unknown, account = '1') => {
+        const response = await fetch(`${url}/${revisionThread}/lorebook`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-test-account': account }, body: JSON.stringify({ entries, revision }),
+        })
+        return { status: response.status, body: await response.json() as { code?: string; data: import('../src/services/codex-chat/chatLorebookFiles').OwnedLorebook | null } }
+      }
+      assert.equal((await put([], 1)).status, 400)
+      assert.equal((await put([], null)).status, 400)
+      assert.equal((await put([], 'absent', '2')).status, 404)
+      assert.equal((await put([], 'absent')).body.data, null)
+      const absentConflict = await put([{ content: 'stale' }], 'old')
+      assert.equal(absentConflict.status, 409)
+      assert.equal(absentConflict.body.code, 'revision_conflict')
+      assert.equal(absentConflict.body.data, null)
+      const created = await put([{ content: 'A' }, { content: 'B' }], 'absent')
+      assert.equal(created.status, 200)
+      const original = created.body.data!
+      assert.deepEqual(OwnedLorebookStore.chatBookOf(revisionThread)!.entries.map((entry) => entry.id), original.entries.map((entry) => entry.id))
+      const createConflict = await put([{ content: 'other creation' }], 'absent')
+      assert.equal(createConflict.status, 409)
+      assert.equal(createConflict.body.data!.revision, original.revision)
+      const saved = await put([original.entries[1]], original.revision)
+      assert.equal(saved.status, 200)
+      assert.equal(saved.body.data!.entries[0].id, original.entries[1].id)
+      assert.equal((await put(original.entries, original.revision)).status, 409)
+      assert.equal((await put([], saved.body.data!.revision)).body.data, null)
+      const deletedConflict = await put(original.entries, saved.body.data!.revision)
+      assert.equal(deletedConflict.status, 409)
+      assert.equal(deletedConflict.body.data, null, 'a stale revision cannot recreate an emptied book')
+      const recreated = await put([{ content: 'new after deletion' }])
+      assert.equal(recreated.status, 200, 'revision omission remains compatible')
+      assert.ok(!original.entries.some((entry) => entry.id === recreated.body.data!.entries[0].id))
+      assert.equal((await put([], recreated.body.data!.revision)).status, 200)
+      const readSummary = async (id: number) => {
+        const response = await fetch(`${url}/${id}/lorebooks?summary=1`)
+        assert.equal(response.status, 200)
+        return (await response.json() as { data: unknown }).data
+      }
+      assert.deepEqual(await readSummary(threadId), { bookCount: 4, entryCount: 7 })
+
+      const foreignThread = CodexChatStore.createThread(2, '다른 채팅', 'llm', luna.id)
+      const foreignBook = OwnedLorebookStore.saveChatBook(foreignThread, [{ content: 'private chat lore' }])!
+      const legacy = ChatLorebookStore.create({ name: '이전 책', entries: [] })
+      db.prepare('UPDATE chat_lorebooks SET entries = ? WHERE id = ?').run(JSON.stringify([{}, 'invalid', null, {}, []]), legacy.id)
+      setProfileBooks(luna.id, [harbor.id, kaiBook.id, theirs.id, foreignBook.id, legacy.id])
+      const roomId = ChatGroupStore.create(1, '방', [kai.id, luna.id], kai.id)
+      OwnedLorebookStore.setThreadLinks(roomId, [taste.id, kaiBook.id])
+      OwnedLorebookStore.saveChatBook(roomId, [{ content: 'room lore' }])
+      assert.deepEqual(await readSummary(roomId), { bookCount: 6, entryCount: 9 })
+      const members = [ChatProfileStore.find(kai.id)!, ChatProfileStore.find(luna.id)!]
+      assert.deepEqual(lore.threadLorebookSummary(CodexChatStore.findThreadById(roomId)!, Array.from({ length: 40 }, (_,index) => members[index % members.length])),
+        { bookCount: 6, entryCount: 9 }, 'member overlap does not multiply books or entries')
+
+      const full = await (await fetch(`${url}/${roomId}/lorebooks`)).json() as { data: { chatBook: { entries: Array<{ content: string }> }; books: Array<{ entries: unknown[] }>; entryUsage: unknown } }
+      assert.equal(full.data.chatBook.entries[0].content, 'room lore')
+      assert.equal(full.data.books.length, 5)
+      assert.ok('entryUsage' in full.data, 'the editor still receives the full response')
+      const denied = await fetch(`${url}/${roomId}/lorebooks?summary=1`, { headers: { 'x-test-account': '2' } })
+      assert.equal(denied.status, 404)
+      assert.doesNotMatch(await denied.text(), /room lore|private chat lore/)
+
+      FileStoreService.writeText(me, previousTaste.folderId, 'lorebook.json', JSON.stringify({ entries: [...previousTaste.entries, { id: 'extra', content: 'new lore' }] }), { silent: true })
+      assert.deepEqual(await readSummary(roomId), { bookCount: 6, entryCount: 10 }, 'a changed source file refreshes before counting')
+    } finally {
+      setProfileBooks(luna.id, previousLunaBooks)
+      OwnedLorebookStore.update(taste.id, me, { entries: previousTaste.entries })
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()))
+    }
+  })
+
   await t.test("the export lists the chat book's entries under 로어북", () => {
     const markdown = exportChatMarkdown(thread(), CodexChatStore.listMessages(threadId), [], '카이', 'http://localhost')
     assert.ok(markdown.includes('## 로어북\n\n- 바다 약속: 내일 저녁 바다에서 반지를 주기로 했다. 아직 모른다.\n- 먹물 실종: 고양이 먹물이 사흘째 안 보인다. (자료: 자료/전단지.md)\n'), markdown)

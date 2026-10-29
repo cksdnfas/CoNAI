@@ -55,6 +55,9 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     assert.equal(preset.prompting.guideFile?.path, '가이드/nai.md')
     assert.equal(preset.prompting.guideFile?.owner, owner)
     assert.equal(presetGuideText(preset), '짧게.\n\n[가이드/nai.md]\n태그는 영어로.\n표정을 꼭 넣어.')
+    const completeGuide = '가이드 전체 문장. '.repeat(2000) + '끝까지 보존'
+    FileStoreService.updateText(owner, file.id, completeGuide)
+    assert.ok(presetGuideText(preset).endsWith(completeGuide), 'the guide is not clipped to its old 12 KB prefix')
     FileStoreService.rename(owner, file.id, 'scene.md')
     assert.equal(ChatGenerationPresetStore.find(preset.id)!.prompting.guideFile?.path, '가이드/scene.md')
     // Linking needs the saver's store; keeping the same file does not ask for it again.
@@ -81,6 +84,27 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     assert.deepEqual(parsed.data, { prompt: '1girl, smile', size: 'Wide' })
     assert.equal(z.object(shape).safeParse(parseWriterAnswer('{"size": "Huge"}')).success, false)
     assert.equal(parseWriterAnswer('no json'), null)
+  })
+
+  await t.test('unreadable linked guides never prevent inline tool registration', async () => {
+    const { registerChatGenerationTools } = await import('../src/mcp/tools/chatGenerationTools')
+    const { MAX_TEXT_DOCUMENT_BYTES } = await import('../src/services/fileStoreService')
+    const folder = FileStoreService.ensureFolder(owner, null, 'bad-guides')
+    const file = FileStoreService.writeText(owner, folder.id, 'guide.txt', 'valid')
+    const preset = ChatGenerationPresetStore.create({ name: 'bad guide', kind: 'nai', prompting: { guide: 'inline fallback', guideFileId: file.id } }, { guideOwner })
+    const { filePath } = FileStoreService.resolveFile(owner, file.id)
+    for (const bytes of [Buffer.from([0xb0, 0xa1]), Buffer.from('contains\0nul'), Buffer.alloc(MAX_TEXT_DOCUMENT_BYTES + 1, 'x')]) {
+      fs.writeFileSync(filePath, bytes)
+      const descriptions: string[] = []
+      registerChatGenerationTools({ registerTool: (_name: string, options: { description: string }) => { descriptions.push(options.description) } } as never,
+        { scopes: ['generate'], source: 'llm-chat', generationPresetIds: [preset.id] })
+      assert.equal(descriptions.length, 1)
+      assert.match(descriptions[0], /inline fallback/)
+      assert.match(descriptions[0], /guide.*skipped/i)
+    }
+    fs.writeFileSync(filePath, 'valid')
+    FileStoreService.rename(owner, file.id, 'guide.png')
+    assert.match(presetGuideText(ChatGenerationPresetStore.find(preset.id)!), /guide.*skipped/i)
   })
 
   await t.test('generated pictures join the latest user message', () => {
@@ -144,8 +168,12 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     })
     const preset = ChatGenerationPresetStore.create({ name: '뒤에', kind: 'nai', prompting: { timing: 'after', guide: '표정을 꼭 넣어.' } })
     const profile = ChatProfileStore.create({ name: '루나', engine: 'llm', providerName: 'test', model: 'chat-model', appearance: 'silver hair' })
+    const { learnServerContextLimit } = await import('../src/services/codex-chat/serverContextLimit')
+    learnServerContextLimit({ providerName: 'test', model: 'chat-model' }, 'context length (8192 tokens)')
     const thread = CodexChatStore.findThreadById(CodexChatStore.createThread(1, '옥상', 'llm', profile.id))!
     const contextOf = (replyId: string) => ({ scopes: [], source: 'llm-chat' as const, requester: { accountId: 1, accountType: null }, chatContext: { threadId: thread.id, profileId: profile.id, kind: 'direct' as const, replyId } })
+    CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: 'OLDER-TURN ' + 'older context '.repeat(5000), tool_calls: [], status: 'completed', error: null })
+    CodexChatStore.addMessage({ thread_id: thread.id, role: 'assistant', content: 'OLDER-ANSWER', tool_calls: [], status: 'completed', error: null })
     CodexChatStore.addMessage({ thread_id: thread.id, role: 'user', content: '옥상에 가자', tool_calls: [], status: 'completed', error: null })
     CodexChatStore.addMessage({ thread_id: thread.id, role: 'assistant', content: '루나가 난간에 기대 웃었다.', tool_calls: [], status: 'completed', error: null, routing: { replyId: 'reply-done', replyTo: null, recipients: [] } })
     CodexChatStore.addMessage({ thread_id: thread.id, role: 'assistant', content: '루나가', tool_calls: [], status: 'interrupted', error: null, routing: { replyId: 'reply-cut', replyTo: null, recipients: [] } })
@@ -162,6 +190,7 @@ test('chat generation prompting: preset settings, guide, writer answers and defe
     assert.match(String(user.content), /옥상에 가자/)
     assert.match(String(user.content), /웃는 얼굴/)
     assert.match(String(user.content), /silver hair/)
+    assert.doesNotMatch(String(user.content), /OLDER-TURN|OLDER-ANSWER/, 'only the oversized older turn is dropped')
     const row = (id: number) => dbModule.getUserSettingsDb().prepare('SELECT state, error FROM chat_deferred_generations WHERE id = ?').get(id) as { state: string; error: string | null }
     // The written prompt reaches the job submission (refused here: the profile does not link the preset's tool).
     assert.equal(row(done).state, 'failed')

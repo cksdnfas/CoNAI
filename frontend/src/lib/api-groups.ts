@@ -1,4 +1,5 @@
-import { buildApiUrl, fetchJson } from '@/lib/api-client'
+import { buildApiUrl } from '@/lib/api-client'
+import { requestJson } from '@/lib/api-request'
 import type { GroupMoveOptions, GroupMoveResult } from '@conai/shared'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { resolveGroupRematchJobResponse } from '@/lib/api-group-rematch-jobs'
@@ -61,7 +62,7 @@ function normalizeGroupFileCounts(counts: GroupFileCounts): GroupFileCounts {
 export const GROUPS_HIERARCHY_ALL_QUERY_KEY = ['groups-hierarchy-all', 'custom'] as const
 
 export async function getGroupsHierarchyAll() {
-  const response = await fetchJson<ApiResponse<GroupWithHierarchy[]>>('/api/groups/hierarchy/all')
+  const response = await requestJson<ApiResponse<GroupWithHierarchy[]>>('/api/groups/hierarchy/all')
   if (!response.success) {
     throw createApiFallbackError(response.error, 'groups.hierarchy.load')
   }
@@ -69,7 +70,7 @@ export async function getGroupsHierarchyAll() {
 }
 
 export async function getGroup(groupId: number) {
-  const response = await fetchJson<ApiResponse<GroupRecord>>(`/api/groups/${groupId}`)
+  const response = await requestJson<ApiResponse<GroupRecord>>(`/api/groups/${groupId}`)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'groups.detail.load')
   }
@@ -77,7 +78,7 @@ export async function getGroup(groupId: number) {
 }
 
 export async function getGroupBreadcrumb(groupId: number) {
-  const response = await fetchJson<ApiResponse<GroupBreadcrumbItem[]>>(`/api/groups/${groupId}/breadcrumb`)
+  const response = await requestJson<ApiResponse<GroupBreadcrumbItem[]>>(`/api/groups/${groupId}/breadcrumb`)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'groups.breadcrumb.load')
   }
@@ -112,7 +113,7 @@ export async function getGroupImages(groupId: number, params?: {
     searchParams.set('collection_type', params.collectionType)
   }
 
-  const response = await fetchJson<ApiResponse<GroupImagesPayload>>(`/api/groups/${groupId}/images?${searchParams.toString()}`, init)
+  const response = await requestJson<ApiResponse<GroupImagesPayload>>(`/api/groups/${groupId}/images?${searchParams.toString()}`, init)
   if (!response.success) {
     throw createApiFallbackError(response.error, 'groups.images.load')
   }
@@ -120,7 +121,7 @@ export async function getGroupImages(groupId: number, params?: {
 }
 
 export async function createGroup(input: GroupMutationInput) {
-  const response = await fetchJson<ApiResponse<GroupMutationResult>>('/api/groups', {
+  const response = await requestJson<ApiResponse<GroupMutationResult>>('/api/groups', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -136,7 +137,7 @@ export async function createGroup(input: GroupMutationInput) {
 }
 
 export async function updateGroup(groupId: number, input: Partial<GroupMutationInput>) {
-  const response = await fetchJson<ApiResponse<GroupMutationMessage>>(`/api/groups/${groupId}`, {
+  const response = await requestJson<ApiResponse<GroupMutationMessage>>(`/api/groups/${groupId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -153,7 +154,7 @@ export async function updateGroup(groupId: number, input: Partial<GroupMutationI
 
 /** Delete groups in one transaction; without `cascade` their child groups move to the top level. */
 export async function deleteGroups(groupIds: number[], options?: { cascade?: boolean }) {
-  const response = await fetchJson<ApiResponse<{ deleted: number; missing_ids: number[] }>>('/api/groups/bulk-delete', {
+  const response = await requestJson<ApiResponse<{ deleted: number; missing_ids: number[] }>>('/api/groups/bulk-delete', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -170,7 +171,7 @@ export async function deleteGroups(groupIds: number[], options?: { cascade?: boo
 
 /** Move groups under one parent (`null`: top level); an invalid move cancels the whole batch. */
 export async function moveGroups(groupIds: number[], parentId: number | null, options: GroupMoveOptions = {}) {
-  const response = await fetchJson<ApiResponse<GroupMoveResult>>('/api/groups/bulk-move', {
+  const response = await requestJson<ApiResponse<GroupMoveResult>>('/api/groups/bulk-move', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -185,24 +186,8 @@ export async function moveGroups(groupIds: number[], parentId: number | null, op
   return response.data
 }
 
-export async function addImageToGroup(groupId: number, compositeHash: string) {
-  const response = await fetchJson<ApiResponse<GroupMutationMessage & { converted?: boolean }>>(`/api/groups/${groupId}/images`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ composite_hash: compositeHash }),
-  })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'groups.image.add')
-  }
-
-  return response.data
-}
-
 export async function addImagesToGroup(groupId: number, compositeHashes: string[]) {
-  const response = await fetchJson<ApiResponse<GroupBulkAddResult>>(`/api/groups/${groupId}/images/bulk`, {
+  const response = await requestJson<ApiResponse<GroupBulkAddResult>>(`/api/groups/${groupId}/images/bulk`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -218,7 +203,7 @@ export async function addImagesToGroup(groupId: number, compositeHashes: string[
 }
 
 export async function removeImagesFromGroup(groupId: number, compositeHashes: string[]) {
-  const response = await fetchJson<ApiResponse<GroupBulkRemoveResult>>(`/api/groups/${groupId}/images/bulk-remove`, {
+  const response = await requestJson<ApiResponse<GroupBulkRemoveResult>>(`/api/groups/${groupId}/images/bulk-remove`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -234,7 +219,7 @@ export async function removeImagesFromGroup(groupId: number, compositeHashes: st
 }
 
 export async function runGroupAutoCollect(groupId: number) {
-  const response = await fetchJson<ApiResponse<GroupAutoCollectResult | GroupRematchJobRecord<GroupAutoCollectResult>>>(`/api/groups/${groupId}/auto-collect`, {
+  const response = await requestJson<ApiResponse<GroupAutoCollectResult | GroupRematchJobRecord<GroupAutoCollectResult>>>(`/api/groups/${groupId}/auto-collect`, {
     method: 'POST',
   })
 
@@ -246,7 +231,7 @@ export async function runGroupAutoCollect(groupId: number) {
 }
 
 export async function runAllGroupsAutoCollect() {
-  const response = await fetchJson<ApiResponse<GroupAutoCollectAllResult | GroupRematchJobRecord<GroupAutoCollectAllResult>>>('/api/groups/auto-collect-all', {
+  const response = await requestJson<ApiResponse<GroupAutoCollectAllResult | GroupRematchJobRecord<GroupAutoCollectAllResult>>>('/api/groups/auto-collect-all', {
     method: 'POST',
   })
 
@@ -259,7 +244,7 @@ export async function runAllGroupsAutoCollect() {
 
 export async function getGroupFileCounts(groupId: number, options?: { includeChildren?: boolean }) {
   const searchParams = new URLSearchParams({ include_children: String(options?.includeChildren ?? false) })
-  const response = await fetchJson<ApiResponse<GroupFileCounts>>(`/api/groups/${groupId}/file-counts?${searchParams.toString()}`)
+  const response = await requestJson<ApiResponse<GroupFileCounts>>(`/api/groups/${groupId}/file-counts?${searchParams.toString()}`)
 
   if (!response.success) {
     throw createApiFallbackError(response.error, 'groups.fileCounts.load')
@@ -273,18 +258,13 @@ export async function getGroupPreviewImages(groupId: number, params?: { includeC
   searchParams.set('count', String(params?.count ?? 1))
   searchParams.set('includeChildren', String(params?.includeChildren ?? true))
 
-  const response = await fetchJson<ApiResponse<ImageRecord[]>>(`/api/groups/${groupId}/preview-images?${searchParams.toString()}`)
+  const response = await requestJson<ApiResponse<ImageRecord[]>>(`/api/groups/${groupId}/preview-images?${searchParams.toString()}`)
 
   if (!response.success) {
     throw createApiFallbackError(response.error, 'groups.preview.load')
   }
 
   return response.data
-}
-
-export async function getGroupPreviewImage(groupId: number, params?: { includeChildren?: boolean }) {
-  const images = await getGroupPreviewImages(groupId, { includeChildren: params?.includeChildren, count: 1 })
-  return images[0] ?? null
 }
 
 export async function downloadGroupArchive(
@@ -333,7 +313,7 @@ export async function downloadGroupArchive(
 export const groupEmoticonsQueryKey = (groupId: number) => ['group-emoticons', groupId] as const
 
 export async function getGroupEmoticons(groupId: number) {
-  const response = await fetchJson<ApiResponse<{ entries: EmoticonEntry[]; promptBudget: number }>>(`/api/groups/${groupId}/emoticons`)
+  const response = await requestJson<ApiResponse<{ entries: EmoticonEntry[]; promptBudget: number }>>(`/api/groups/${groupId}/emoticons`)
   if (!response.success || !response.data) {
     throw createApiFallbackError(response.error, 'groups.images.load')
   }
@@ -342,7 +322,7 @@ export async function getGroupEmoticons(groupId: number) {
 
 /** `keywords: null` puts an image back on its file-name keyword. */
 export async function setGroupEmoticonKeywords(groupId: number, items: Array<{ compositeHash: string; keywords: string[] | null }>) {
-  const response = await fetchJson<ApiResponse<EmoticonKeywordResult>>(`/api/groups/${groupId}/emoticons/keywords`, {
+  const response = await requestJson<ApiResponse<EmoticonKeywordResult>>(`/api/groups/${groupId}/emoticons/keywords`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ items: items.map((item) => ({ composite_hash: item.compositeHash, keywords: item.keywords })) }),
@@ -354,7 +334,7 @@ export async function setGroupEmoticonKeywords(groupId: number, items: Array<{ c
 }
 
 export async function addGroupEmoticons(groupId: number, items: Array<{ compositeHash: string; keywords?: string[] }>) {
-  const response = await fetchJson<ApiResponse<{ added: number; missing: string[]; conflicts: EmoticonKeywordResult['conflicts'] }>>(`/api/groups/${groupId}/emoticons`, {
+  const response = await requestJson<ApiResponse<{ added: number; missing: string[]; conflicts: EmoticonKeywordResult['conflicts'] }>>(`/api/groups/${groupId}/emoticons`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ items: items.map((item) => ({ composite_hash: item.compositeHash, keywords: item.keywords })) }),

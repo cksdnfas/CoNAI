@@ -1,4 +1,4 @@
-import { fetchApiData as requestCustomNodeData } from '@/lib/api-client'
+import { requestApiData as requestCustomNodeData } from '@/lib/api-request'
 
 export type CustomNodePortDataType = 'image' | 'mask' | 'prompt' | 'text' | 'number' | 'boolean' | 'json' | 'any'
 export type CustomNodeUiDataType = CustomNodePortDataType | 'select'

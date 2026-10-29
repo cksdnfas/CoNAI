@@ -36,7 +36,7 @@ import {
 } from '@/lib/api-codex-chat'
 import { getErrorMessage } from '@/lib/error-message'
 import { CHAT_JUDGE_PRESETS_QUERY_KEY, listChatJudgePresets, type ChatJudgePreset } from '@/lib/api-chat-judge'
-import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
+import { useChatPage, useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageNumber, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { ChatBlockEditorModal } from './chat-block-editor-modal'
 import { readChatBlockFile } from './chat-block-file'
@@ -90,25 +90,28 @@ export function ChatSettingsResources({ tab = 'presets' }: { tab?: 'presets' | '
   const [judgeEditor, setJudgeEditor] = useState<{ preset: ChatJudgePreset | null } | null>(null)
   const generationImportRef = useRef<HTMLInputElement>(null)
 
-  const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks })
-  const ownLorebooksQuery = useQuery({ queryKey: OWN_LOREBOOKS_QUERY_KEY, queryFn: listOwnLorebooks })
-  const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks })
-  const presetsQuery = useQuery({ queryKey: CHAT_TOOL_PRESETS_QUERY_KEY, queryFn: listChatToolPresets })
-  const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets })
-  const judgePresetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets })
+  // The assistant can open resources from any tab; otherwise only the visible tab needs its lists.
+  const wantsAllResources = useChatPage()?.enabled === true
+  const lorebooksQuery = useQuery({ queryKey: CHAT_LOREBOOKS_QUERY_KEY, queryFn: listChatLorebooks, enabled: tab === 'lorebooks' || wantsAllResources })
+  const ownLorebooksQuery = useQuery({ queryKey: OWN_LOREBOOKS_QUERY_KEY, queryFn: listOwnLorebooks, enabled: tab === 'lorebooks' || wantsAllResources })
+  const blocksQuery = useQuery({ queryKey: CHAT_BLOCKS_QUERY_KEY, queryFn: listChatBlocks, enabled: tab === 'blocks' || wantsAllResources })
+  const presetsQuery = useQuery({ queryKey: CHAT_TOOL_PRESETS_QUERY_KEY, queryFn: listChatToolPresets, enabled: tab === 'presets' || wantsAllResources })
+  const generationPresetsQuery = useQuery({ queryKey: CHAT_GENERATION_PRESETS_QUERY_KEY, queryFn: listChatGenerationPresets, enabled: tab === 'presets' || wantsAllResources })
+  const judgePresetsQuery = useQuery({ queryKey: CHAT_JUDGE_PRESETS_QUERY_KEY, queryFn: listChatJudgePresets, enabled: tab === 'presets' || wantsAllResources })
+  const accountLorebooks = (ownLorebooksQuery.data ?? []).filter((book) => book.kind === 'account')
 
   // A connected chat opens the editors listed here (view); each editor registers what it may fill and save.
   const listed = {
-    lorebook: [...(lorebooksQuery.data ?? []), ...(ownLorebooksQuery.data ?? [])].map((book) => ({ id: book.id, name: book.name, kind: book.kind ?? 'global' })),
-    generation_preset: (generationPresetsQuery.data ?? []).map((preset) => ({ id: preset.id, name: preset.name, kind: preset.kind })),
-    judge_preset: (judgePresetsQuery.data ?? []).map((preset) => ({ id: preset.id, name: preset.name })),
-    block: (blocksQuery.data ?? []).map((shared) => ({ id: shared.id, name: shared.name })),
-    tool_preset: (presetsQuery.data ?? []).map((preset) => ({ id: preset.id, name: preset.name })),
+    ...(lorebooksQuery.isSuccess && ownLorebooksQuery.isSuccess ? { lorebook: [...lorebooksQuery.data, ...accountLorebooks].map((book) => ({ id: book.id, name: book.name, kind: book.kind ?? 'global' })) } : {}),
+    ...(generationPresetsQuery.isSuccess ? { generation_preset: generationPresetsQuery.data.map((preset) => ({ id: preset.id, name: preset.name, kind: preset.kind })) } : {}),
+    ...(judgePresetsQuery.isSuccess ? { judge_preset: judgePresetsQuery.data.map((preset) => ({ id: preset.id, name: preset.name })) } : {}),
+    ...(blocksQuery.isSuccess ? { block: blocksQuery.data.map((shared) => ({ id: shared.id, name: shared.name })) } : {}),
+    ...(presetsQuery.isSuccess ? { tool_preset: presetsQuery.data.map((preset) => ({ id: preset.id, name: preset.name })) } : {}),
   }
   useChatPageRegistration({
     kind: 'settings', title: t({ ko: '채팅 자원', en: 'Chat resources' }), resourceId: 'chat-resources', priority: 5, fields: [],
     data: { section: 'chat', view: 'resources', ...listed },
-    actions: [pageAction('resource.open', t({ ko: '자원 편집기 열기', en: 'Open resource editor' }), t({ ko: '로어북(lorebook)·생성 프리셋(generation_preset)·판단 프리셋(judge_preset)·표시 블록(block)·도구 프리셋(tool_preset) 편집기를 열어. id를 빼면 새로 만들기, 있으면 data의 목록 id. 새 로어북은 kind=account면 공유 계정 로어북이야.', en: 'Open an editor for a lorebook, generation preset, judge preset, display block or tool preset. Without id: a new one; with id: one from the lists in data. A new lorebook with kind=account is a shared account book.' }), pageObject({ kind: pageChoice(['lorebook', 'generation_preset', 'judge_preset', 'block', 'tool_preset']), id: pageNumber(1, undefined, true), lorebookKind: pageChoice(['global', 'account']) }, ['kind']))],
+    actions: [pageAction('resource.open', t({ ko: '자원 편집기 열기', en: 'Open resource editor' }), t({ ko: '로어북(lorebook)·생성 프리셋(generation_preset)·판단 프리셋(judge_preset)·표시 블록(block)·도구 프리셋(tool_preset) 편집기를 열어. id를 빼면 새로 만들기, 있으면 data의 목록 id. 로어북의 lorebookKind는 global 또는 account야.', en: 'Open an editor for a lorebook, generation preset, judge preset, display block or tool preset. Without id: a new one; with id: one from the lists in data. A lorebook’s lorebookKind is global or account.' }), pageObject({ kind: pageChoice(['lorebook', 'generation_preset', 'judge_preset', 'block', 'tool_preset']), id: pageNumber(1, undefined, true), lorebookKind: pageChoice(['global', 'account']) }, ['kind']))],
     apply: () => {},
     applyAction: (id, args, assertCurrent) => {
       assertCurrent()
@@ -122,8 +125,9 @@ export function ChatSettingsResources({ tab = 'presets' }: { tab?: 'presets' | '
         return item
       }
       if (kind === 'lorebook') {
-        const books: Array<ChatLorebook | OwnedChatLorebook> = [...(lorebooksQuery.data ?? []), ...(ownLorebooksQuery.data ?? [])]
-        navigate(lorebookEditorPath(find(books) ?? (args.lorebookKind === 'account' ? 'new-account' : 'new')))
+        const books: Array<ChatLorebook | OwnedChatLorebook> = [...(lorebooksQuery.data ?? []), ...accountLorebooks]
+        const matching = args.lorebookKind ? books.filter((book) => (book.kind ?? 'global') === args.lorebookKind) : books
+        navigate(lorebookEditorPath(find(matching) ?? (args.lorebookKind === 'account' ? 'new-account' : 'new')))
       } else if (kind === 'generation_preset') setGenerationEditor({ preset: find(generationPresetsQuery.data) })
       else if (kind === 'judge_preset') setJudgeEditor({ preset: find(judgePresetsQuery.data) })
       else if (kind === 'block') setBlockEditor({ shared: find(blocksQuery.data) })
@@ -209,8 +213,7 @@ export function ChatSettingsResources({ tab = 'presets' }: { tab?: 'presets' | '
   })
 
   const lorebooks = lorebooksQuery.data ?? []
-  // The account's own books (folders under 로어북/ in its file store); chat books are managed from each chat.
-  const accountLorebooks = (ownLorebooksQuery.data ?? []).filter((book) => book.kind === 'account')
+  // The account's own books are folders under 로어북/; chat books are managed from each chat.
   const blocks = blocksQuery.data ?? []
   const presets = presetsQuery.data ?? []
   const generationPresets = generationPresetsQuery.data ?? []
@@ -224,7 +227,7 @@ export function ChatSettingsResources({ tab = 'presets' }: { tab?: 'presets' | '
 
   return (
     <div className="space-y-8">
-      <div hidden={tab !== 'presets'} className="space-y-8">
+      {tab === 'presets' ? <div className="space-y-8">
       <RowGroup
         headingClassName={KIND_CLASS.tool}
         heading={toolPresetsLabel}
@@ -293,10 +296,10 @@ export function ChatSettingsResources({ tab = 'presets' }: { tab?: 'presets' | '
         {generationPresetsQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(generationPresetsQuery.error, t({ ko: '생성 프리셋을 불러오지 못했어.', en: 'Could not load generation presets.' }))}</p> : null}
       </RowGroup>
 
-      <ChatJudgePresetGroup editor={judgeEditor} setEditor={setJudgeEditor} />
-      </div>
+      </div> : null}
+      <ChatJudgePresetGroup editor={judgeEditor} setEditor={setJudgeEditor} visible={tab === 'presets'} />
 
-      <div hidden={tab !== 'blocks'}>
+      {tab === 'blocks' ? <div>
       <RowGroup
         headingClassName={KIND_CLASS.block}
         heading={blocksLabel}
@@ -333,8 +336,8 @@ export function ChatSettingsResources({ tab = 'presets' }: { tab?: 'presets' | '
         {blocksQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(blocksQuery.error, t({ ko: '표시 블록을 불러오지 못했어.', en: 'Could not load display blocks.' }))}</p> : null}
       </RowGroup>
 
-      </div>
-      <div hidden={tab !== 'lorebooks'}>
+      </div> : null}
+      {tab === 'lorebooks' ? <div>
       <RowGroup
         headingClassName={KIND_CLASS.lorebook}
         heading={lorebooksLabel}
@@ -387,7 +390,7 @@ export function ChatSettingsResources({ tab = 'presets' }: { tab?: 'presets' | '
         {lorebooksQuery.isError ? <p className="py-3 text-sm text-destructive">{getErrorMessage(lorebooksQuery.error, t({ ko: '로어북을 불러오지 못했어.', en: 'Could not load lorebooks.' }))}</p> : null}
       </RowGroup>
 
-      </div>
+      </div> : null}
 
       <ChatBlockEditorModal
         open={blockEditor !== null}

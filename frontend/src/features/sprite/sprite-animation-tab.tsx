@@ -37,6 +37,12 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
   const [saveRun, setSaveRun] = useState(true)
   const [savedHashes, setSavedHashes] = useState<string[]>([])
   const [starting, setStarting] = useState(false)
+  const preparing = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    if (!active) return
+    return () => { preparing.current?.abort() }
+  }, [active])
 
   const job = useRuntimeJob<SpriteAnimationResult>(jobId, {
     onCompleted: (completed) => {
@@ -50,11 +56,22 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
     onCancelled: () => setJobId(null),
   })
 
+  const prepareSheet = async (hash: string) => {
+    preparing.current?.abort()
+    const controller = new AbortController()
+    preparing.current = controller
+    const image = await getImage(hash, { signal: controller.signal }).catch(() => null)
+    if (controller.signal.aborted || !image?.composite_hash || !image.width || !image.height) return null
+    const grid = await detectSheetGrid(image.composite_hash, image.width, image.height, controller.signal)
+    if (controller.signal.aborted) return null
+    return { sheet: { hash: image.composite_hash, name: getImageListDisplayName(image), width: image.width, height: image.height }, grid }
+  }
   const pick = async (hashes: string[]) => {
-    const image = hashes[0] ? await getImage(hashes[0]).catch(() => null) : null
-    if (!image?.composite_hash || !image.width || !image.height) return
-    const grid = await detectSheetGrid(image.composite_hash, image.width, image.height)
-    setSheet({ hash: image.composite_hash, name: getImageListDisplayName(image), width: image.width, height: image.height })
+    if (!hashes[0]) return
+    const prepared = await prepareSheet(hashes[0])
+    if (!prepared) return
+    const { sheet, grid } = prepared
+    setSheet(sheet)
     setOptions((current) => ({ ...current, columns: grid.columns, rows: grid.rows, frameCount: grid.frameCount, spacing: 0 }))
   }
 
@@ -77,7 +94,7 @@ export function SpriteAnimationTab({ active }: { active: boolean }) {
     }
   }
 
-  useSpriteAnimationChatPage({ active, sheet, pickSheet: (hash) => pick([hash]), options, setOptions, invalid, running, canRun, canSave: has('images.upload'), run, savedHashes })
+  useSpriteAnimationChatPage({ active, sheet, setSheet, prepareSheet, options, setOptions, invalid, running, canRun, canSave: has('images.upload'), run, savedHashes })
 
   const left = (
     <div className="flex min-w-0 flex-col">

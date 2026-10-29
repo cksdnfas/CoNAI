@@ -54,6 +54,55 @@ function shownInputs(value?: string | null): ChatPageData {
 const text = (value: ChatPageData | undefined) => typeof value === 'string' ? value.trim() : undefined
 const number = (value: ChatPageData | undefined) => typeof value === 'number' ? value : undefined
 
+/** Save a reviewed reservation card through the same revision-checked API as the editor. */
+export async function saveWorkflowReservationSchedule(args: Record<string, ChatPageData>, schedules: GraphWorkflowScheduleRecord[]) {
+  const scheduleId = number(args.scheduleId)
+  const existing = scheduleId === undefined ? null : schedules.find((schedule) => schedule.id === scheduleId)
+  if (scheduleId !== undefined && !existing) throw new Error('그 자동 실행이 목록에 없어. 화면을 다시 읽어줘.')
+  const type = (text(args.type) ?? existing?.schedule_type) as typeof TYPES[number] | undefined
+  const name = text(args.name) ?? existing?.name ?? ''
+  const workflowId = number(args.workflowId) ?? existing?.graph_workflow_id
+  if (!name || !type || workflowId === undefined) throw new Error('새 자동 실행에는 workflowId, name, type이 필요해.')
+  if (existing && number(args.workflowId) !== undefined && number(args.workflowId) !== existing.graph_workflow_id) throw new Error('저장된 자동 실행의 워크플로는 바꿀 수 없어. 새로 만들어줘.')
+  const runAtText = text(args.runAt) ?? existing?.run_at ?? ''
+  const runAt = type === 'once' ? new Date(runAtText) : null
+  if (type === 'once' && (!runAtText || Number.isNaN(runAt!.getTime()))) throw new Error('1회 실행에는 runAt(YYYY-MM-DDTHH:mm)이 필요해.')
+  const intervalMinutes = number(args.intervalMinutes) ?? existing?.interval_minutes ?? null
+  if (type === 'interval' && !(intervalMinutes && intervalMinutes > 0)) throw new Error('반복 실행에는 intervalMinutes가 필요해.')
+  const dailyTime = text(args.dailyTime) ?? existing?.daily_time ?? ''
+  if (type === 'daily' && !/^\d{2}:\d{2}$/.test(dailyTime)) throw new Error('매일 실행에는 dailyTime(HH:mm)이 필요해.')
+  const maxRuns = number(args.maxRuns) ?? (existing?.max_run_count && existing.max_run_count > 0 ? existing.max_run_count : 0)
+  let inputValues: Record<string, unknown> | null = existing ? storedInputs(existing.input_values) : {}
+  if (text(args.inputValuesJson) !== undefined) {
+    try { inputValues = JSON.parse(text(args.inputValuesJson) || '{}') } catch { throw new Error('inputValuesJson은 JSON 객체여야 해.') }
+    if (!inputValues || typeof inputValues !== 'object' || Array.isArray(inputValues)) throw new Error('inputValuesJson은 JSON 객체여야 해.')
+  }
+  const payload = {
+    name,
+    schedule_type: type,
+    ...(typeof args.active === 'boolean'
+      ? { status: args.active ? 'active' as const : 'paused' as const }
+      : existing ? {} : { status: 'active' as const }),
+    run_at: runAt ? runAt.toISOString() : null,
+    interval_minutes: type === 'interval' ? intervalMinutes : null,
+    daily_time: type === 'daily' ? dailyTime : null,
+    max_run_count: maxRuns > 0 ? maxRuns : -1,
+    run_enqueue_count: number(args.perRun) ?? existing?.run_enqueue_count ?? 1,
+    failure_policy: (text(args.onFailure) ?? existing?.failure_policy ?? 'stop') as 'stop' | 'continue',
+    input_values: inputValues && Object.keys(inputValues).length > 0 ? inputValues : null,
+  }
+  if (existing) {
+    if (args.active === true && existing.workflow_version == null) throw new Error('워크플로를 새로 불러와줘.')
+    await updateGraphWorkflowSchedule(existing.id, {
+      ...payload,
+      expected_revision: existing.revision,
+      ...(existing.workflow_version != null ? { expected_graph_version: existing.workflow_version } : {}),
+    })
+  } else {
+    await createGraphWorkflowSchedule({ graph_workflow_id: workflowId, ...payload })
+  }
+}
+
 /**
  * The workflow reservations (예약) screen for a connected chat: the autoruns and their recent runs, with every change
  * (save, pause, resume, run now, delete, cancel or clear runs) as a commit card that calls the same route as its button.
@@ -95,44 +144,6 @@ export function useWorkflowReservationsChatPage({ enabled, view, automationPause
     ] : []),
   ]
 
-  const saveSchedule = async (args: Record<string, ChatPageData>) => {
-    const scheduleId = number(args.scheduleId)
-    const existing = scheduleId === undefined ? null : schedules.find((schedule) => schedule.id === scheduleId)
-    if (scheduleId !== undefined && !existing) throw new Error('그 자동 실행이 목록에 없어. 화면을 다시 읽어줘.')
-    const type = (text(args.type) ?? existing?.schedule_type) as typeof TYPES[number] | undefined
-    const name = text(args.name) ?? existing?.name ?? ''
-    const workflowId = number(args.workflowId) ?? existing?.graph_workflow_id
-    if (!name || !type || workflowId === undefined) throw new Error('새 자동 실행에는 workflowId, name, type이 필요해.')
-    if (existing && number(args.workflowId) !== undefined && number(args.workflowId) !== existing.graph_workflow_id) throw new Error('저장된 자동 실행의 워크플로는 바꿀 수 없어. 새로 만들어줘.')
-    const runAtText = text(args.runAt) ?? existing?.run_at ?? ''
-    const runAt = type === 'once' ? new Date(runAtText) : null
-    if (type === 'once' && (!runAtText || Number.isNaN(runAt!.getTime()))) throw new Error('1회 실행에는 runAt(YYYY-MM-DDTHH:mm)이 필요해.')
-    const intervalMinutes = number(args.intervalMinutes) ?? existing?.interval_minutes ?? null
-    if (type === 'interval' && !(intervalMinutes && intervalMinutes > 0)) throw new Error('반복 실행에는 intervalMinutes가 필요해.')
-    const dailyTime = text(args.dailyTime) ?? existing?.daily_time ?? ''
-    if (type === 'daily' && !/^\d{2}:\d{2}$/.test(dailyTime)) throw new Error('매일 실행에는 dailyTime(HH:mm)이 필요해.')
-    const maxRuns = number(args.maxRuns) ?? (existing?.max_run_count && existing.max_run_count > 0 ? existing.max_run_count : 0)
-    let inputValues: Record<string, unknown> | null = existing ? storedInputs(existing.input_values) : {}
-    if (text(args.inputValuesJson) !== undefined) {
-      try { inputValues = JSON.parse(text(args.inputValuesJson) || '{}') } catch { throw new Error('inputValuesJson은 JSON 객체여야 해.') }
-      if (!inputValues || typeof inputValues !== 'object' || Array.isArray(inputValues)) throw new Error('inputValuesJson은 JSON 객체여야 해.')
-    }
-    const payload = {
-      name,
-      schedule_type: type,
-      status: (typeof args.active === 'boolean' ? args.active : existing ? existing.status === 'active' : true) ? 'active' as const : 'paused' as const,
-      run_at: runAt ? runAt.toISOString() : null,
-      interval_minutes: type === 'interval' ? intervalMinutes : null,
-      daily_time: type === 'daily' ? dailyTime : null,
-      max_run_count: maxRuns > 0 ? maxRuns : -1,
-      run_enqueue_count: number(args.perRun) ?? existing?.run_enqueue_count ?? 1,
-      failure_policy: (text(args.onFailure) ?? existing?.failure_policy ?? 'stop') as 'stop' | 'continue',
-      input_values: inputValues && Object.keys(inputValues).length > 0 ? inputValues : null,
-    }
-    if (existing) await updateGraphWorkflowSchedule(existing.id, payload)
-    else await createGraphWorkflowSchedule({ graph_workflow_id: workflowId, ...payload })
-  }
-
   useChatPageRegistration(enabled ? {
     kind: 'workflow_runner', title: t({ ko: '워크플로 예약', en: 'Workflow reservations' }), resourceId: 'workflow-reservations', priority: 10, fields: [],
     data: {
@@ -141,7 +152,7 @@ export function useWorkflowReservationsChatPage({ enabled, view, automationPause
       workflows: workflows.slice(0, WORKFLOW_ROWS).map((workflow) => ({ id: workflow.id, name: workflow.name })),
       schedules: schedules.slice(0, SCHEDULE_ROWS).map((schedule) => ({
         id: schedule.id, name: schedule.name, workflowId: schedule.graph_workflow_id, workflow: workflowName.get(schedule.graph_workflow_id) ?? null,
-        type: schedule.schedule_type, status: schedule.status,
+        type: schedule.schedule_type, status: schedule.status, revision: schedule.revision, workflowVersion: schedule.workflow_version ?? null,
         ...(schedule.run_at ? { runAt: schedule.run_at } : {}), ...(schedule.interval_minutes ? { intervalMinutes: schedule.interval_minutes } : {}), ...(schedule.daily_time ? { dailyTime: schedule.daily_time } : {}),
         ...(schedule.timezone ? { timezone: schedule.timezone } : {}),
         maxRuns: schedule.max_run_count && schedule.max_run_count > 0 ? schedule.max_run_count : 0, perRun: schedule.run_enqueue_count ?? 1, onFailure: schedule.failure_policy ?? 'stop',
@@ -162,9 +173,17 @@ export function useWorkflowReservationsChatPage({ enabled, view, automationPause
       assertCurrent()
       const scheduleId = number(args.scheduleId)
       const ids = Array.isArray(args.executionIds) ? args.executionIds.filter((value): value is number => typeof value === 'number') : []
-      if (id === 'workflow.schedule_save') await saveSchedule(args)
-      else if (id === 'workflow.schedule_pause') await pauseGraphWorkflowSchedule(scheduleId!)
-      else if (id === 'workflow.schedule_resume') await resumeGraphWorkflowSchedule(scheduleId!)
+      if (id === 'workflow.schedule_save') await saveWorkflowReservationSchedule(args, schedules)
+      else if (id === 'workflow.schedule_pause' || id === 'workflow.schedule_resume') {
+        const schedule = schedules.find((item) => item.id === scheduleId)
+        if (!schedule) throw new Error('그 자동 실행이 목록에 없어. 화면을 다시 읽어줘.')
+        if (id === 'workflow.schedule_resume') {
+          if (schedule.workflow_version == null) throw new Error('워크플로를 새로 불러와줘.')
+          await resumeGraphWorkflowSchedule(schedule.id, { expected_revision: schedule.revision, expected_graph_version: schedule.workflow_version })
+        } else {
+          await pauseGraphWorkflowSchedule(schedule.id, { expected_revision: schedule.revision })
+        }
+      }
       else if (id === 'workflow.schedule_run_now') await runGraphWorkflowScheduleNow(scheduleId!)
       else if (id === 'workflow.schedule_delete') await deleteGraphWorkflowSchedule(scheduleId!)
       else if (id === 'workflow.run_cancel') {

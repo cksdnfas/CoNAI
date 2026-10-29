@@ -34,6 +34,7 @@ export function WorkflowScheduleRow({ schedule, workflowName, cover, compact = f
     : auth?.hasCredentials ? t({ ko: '실행 계정 없음', en: 'No run-as account' }) : null
   const details = [
     workflowName,
+    schedule.workflow_version != null ? `v${schedule.workflow_version}` : null,
     perRun > 1 ? t({ ko: '한 번에 {count}개', en: '{count} per run' }, { count: formatNumber(perRun) }) : null,
     !compact && schedule.failure_policy === 'continue' ? t({ ko: '실패해도 계속', en: 'Continues on failure' }) : null,
     !compact ? runAs : null,

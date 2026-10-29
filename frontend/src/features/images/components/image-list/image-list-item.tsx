@@ -1,10 +1,10 @@
-import { memo, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useState } from 'react'
+import { memo, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode, useContext, useEffect, useState } from 'react'
 import { HistoryAudioResult, HistorySoundBar } from '@/features/audio/history-audio-result'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { ImagePreviewPlaceholder } from '@/features/images/components/image-preview-placeholder'
 import { getImagePreviewStateLabel, resolveImagePreviewState } from '@/features/images/components/image-preview-state'
 import { ImageEditAction } from '@/features/images/components/detail/image-edit-action'
-import { ChatDockReferenceButton } from '@/features/codex-chat/chat-reference'
+import { ChatDockReferenceButton, ChatImageListActionsContext, ChatThumbOverlay } from '@/features/codex-chat/chat-reference'
 import { useI18n } from '@/i18n'
 import { isFromOwnDom } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
@@ -71,6 +71,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
   onPreviewIntent,
 }: ImageListItemProps) {
   const { t } = useI18n()
+  const chatActions = useContext(ChatImageListActionsContext)
   const previewUrl = getImageListPreviewUrl(image)
   const imageId = itemId ?? getImageListItemId(image)
   const displayName = getImageListDisplayName(image)
@@ -168,7 +169,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     onActivate?.(image, imageId, href, { shiftKey: event.shiftKey })
   }
 
-  const quickActions = showDefaultQuickActions && !selectionMode ? (
+  const quickActions = chatActions ? null : showDefaultQuickActions && !selectionMode ? (
     <div
       className="absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
       onMouseDown={(event) => event.stopPropagation()}
@@ -180,7 +181,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
     </div>
   ) : renderOverlay ? <div className="absolute right-2 top-2 z-30">{renderOverlay}</div> : null
 
-  return (
+  const tile = (
     <div
       role={interactive ? 'button' : undefined}
       tabIndex={interactive ? 0 : undefined}
@@ -222,6 +223,7 @@ const ImageListItemComponent = memo(function ImageListItemComponent({
       <div className="image-list-selection-frame pointer-events-none absolute inset-0 z-20 rounded-sm" />
     </div>
   )
+  return chatActions ? <ChatThumbOverlay actions={renderOverlay} actionsClassName="z-30">{tile}</ChatThumbOverlay> : tile
 })
 
 ImageListItemComponent.displayName = 'ImageListItem'

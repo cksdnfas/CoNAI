@@ -70,8 +70,11 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
   baseRef.current = base
   const draftRef = useRef(draft)
   draftRef.current = draft
+  const deletedRef = useRef(false)
 
   const targetKey = !target ? '' : 'settingId' in target ? `setting:${target.settingId}` : `new:${target.newIn ?? 'root'}`
+  const sessionRef = useRef(0)
+  const creatingRef = useRef<{ session: number; submitted: SettingDraft; promise: Promise<CharacterSetting> } | null>(null)
   const [loadedKey, setLoadedKey] = useState('')
   /** A draft the next load of its setting starts from (an undo bringing back edits made before a link change). */
   const [seeded, setSeeded] = useState<{ base: CharacterSetting; draft: SettingDraft } | null>(null)
@@ -80,8 +83,10 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
   // A new setting that was just created keeps its draft when the page switches to its id.
   if (loadedKey !== targetKey) {
     setLoadedKey(targetKey)
+    deletedRef.current = false
     if (targetKey.startsWith('new:')) setDraftSerial((count) => count + 1)
     if (!(loadedKey.startsWith('new:') && settingId !== null && base?.id === settingId)) {
+      sessionRef.current += 1
       const fresh = emptySettingDraft(target && 'newIn' in target ? target.newIn : null)
       setBase(null)
       setInitial(fresh)
@@ -151,6 +156,7 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
 
   /** Update the stored setting with the draft's changes in `keys`; a stale revision re-reads, merges and retries once. */
   const writeChanges = async (keys: readonly DraftKey[]) => {
+    const sourceSession = sessionRef.current
     let current = baseRef.current!
     for (let attempt = 0; ; attempt += 1) {
       const changes = changesFrom(current, keys)
@@ -160,6 +166,7 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
       } catch (error) {
         if (attempt > 0 || !isCharacterRevisionConflict(error)) throw error
         const latest = await getCharacterSetting(current.id)
+        if (sessionRef.current !== sourceSession) throw new Error(t({ ko: '편집 중인 외형 설정이 바뀌어서 저장을 중단했어.', en: 'The open setting changed, so the save was stopped.' }), { cause: error })
         const merged = mergeDraft(settingDraftOf(current), settingDraftOf(latest), draftRef.current)
         adopt(latest, merged.draft)
         if (merged.conflicts.length) throw new Error(conflictMessage(merged.conflicts), { cause: error })
@@ -169,36 +176,73 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
   }
 
   const createFromDraft = () => {
-    const value = draftRef.current
-    return createCharacterSetting({
-      folderId: value.folderId,
-      name: value.name.trim(),
-      appearance: value.appearance,
-      ...(canViewImages ? { referenceHash: value.referenceHash, avatarHash: value.avatarHash, avatarCrop: value.avatarCrop } : {}),
+    if (creatingRef.current?.session === sessionRef.current) return creatingRef.current
+    const submitted = draftRef.current
+    const promise = createCharacterSetting({
+      folderId: submitted.folderId,
+      name: submitted.name.trim(),
+      appearance: submitted.appearance,
+      ...(canViewImages ? { referenceHash: submitted.referenceHash, avatarHash: submitted.avatarHash, avatarCrop: submitted.avatarCrop } : {}),
     })
+    const request = { session: sessionRef.current, submitted, promise }
+    creatingRef.current = request
+    const clear = () => { if (creatingRef.current === request) creatingRef.current = null }
+    void promise.then(clear, clear)
+    return request
   }
 
   /** Saves what image generation reads (name, appearance, reference); a new setting is created whole here. */
   const ensureSetting = async () => {
+    const sourceSession = sessionRef.current
     if (!baseRef.current) {
-      const created = await createFromDraft()
-      rebase(created)
+      const { submitted, promise } = createFromDraft()
+      const created = await promise
       void refreshCharacterViews(queryClient, { folderIds: [created.folderId], settingIds: [created.id] })
-      onCreated(created)
+      if (sessionRef.current === sourceSession) {
+        adopt(created, mergeDraft(submitted, settingDraftOf(created), draftRef.current).draft)
+        onCreated(created)
+        if (Object.keys(changesFrom(created, ['name', 'appearance', 'referenceHash'])).length) {
+          const updated = await writeChanges(['name', 'appearance', 'referenceHash'])
+          if (sessionRef.current === sourceSession) rebase(updated)
+          return updated
+        }
+      }
       return created
     }
     const updated = await writeChanges(['name', 'appearance', 'referenceHash'])
-    rebase(updated)
+    if (sessionRef.current === sourceSession) rebase(updated)
     return updated
   }
 
   const saveMutation = useMutation({
-    mutationFn: () => baseRef.current ? writeChanges(SETTING_DRAFT_KEYS) : createFromDraft(),
-    onSuccess: (saved) => {
-      const created = !baseRef.current
-      const previousFolder = baseRef.current?.folderId ?? saved.folderId
-      adopt(saved, settingDraftOf(saved))
+    mutationFn: async () => {
+      const sourceSession = sessionRef.current
+      let submitted = draftRef.current
+      const previousFolder = baseRef.current?.folderId ?? submitted.folderId
+      let saved: CharacterSetting
+      if (baseRef.current) saved = await writeChanges(SETTING_DRAFT_KEYS)
+      else {
+        const request = createFromDraft()
+        saved = await request.promise
+        if (!same(submitted, request.submitted)) {
+          if (sessionRef.current !== sourceSession) throw new Error(t({ ko: '편집 중인 외형 설정이 바뀌어서 저장을 중단했어.', en: 'The open setting changed, so the save was stopped.' }))
+          // The concurrent ensureSetting may have adopted the result while this request was pending.
+          const currentBase = baseRef.current as CharacterSetting | null
+          if (currentBase?.id !== saved.id) {
+            adopt(saved, mergeDraft(request.submitted, settingDraftOf(saved), draftRef.current).draft)
+            onCreated(saved)
+          }
+          submitted = draftRef.current
+          saved = await writeChanges(SETTING_DRAFT_KEYS)
+        } else submitted = request.submitted
+      }
+      return { saved, submitted, sourceSession, previousFolder }
+    },
+    onSuccess: ({ saved, submitted, sourceSession, previousFolder }) => {
       void refreshCharacterViews(queryClient, { folderIds: [previousFolder, saved.folderId], settingIds: [saved.id] })
+      if (sessionRef.current !== sourceSession) return
+      const created = !baseRef.current
+      adopt(saved, mergeDraft(submitted, settingDraftOf(saved), draftRef.current).draft)
       // The editor page stays on the saved setting; a new one moves to its own address.
       if (created) onCreated(saved)
     },
@@ -215,6 +259,8 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
     onSuccess: (_, setting) => {
       queryClient.removeQueries({ queryKey: characterSettingQueryKey(setting.id) })
       void refreshCharacterViews(queryClient, { folderIds: [setting.folderId], settingIds: [setting.id] })
+      if (baseRef.current?.id !== setting.id) return
+      deletedRef.current = true
       onClose()
     },
     onError: (error) => {
@@ -271,6 +317,8 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
     draftRef,
     /** The latest stored setting the draft started from. */
     baseRef,
+    /** A successful delete can leave the now-removed setting without a second discard prompt. */
+    deletedRef,
     /** Start the next load of `base`'s setting from `draft` (edits made over `base`), instead of the stored values. */
     seed: (seedBase: CharacterSetting, seedDraft: SettingDraft) => setSeeded({ base: seedBase, draft: seedDraft }),
     dirty,
@@ -287,12 +335,13 @@ export function useCharacterSettingEditor({ target, onCreated, onClose }: {
      * fields with `revision`, the same once-retry and kept draft on a real conflict as `save`.
      */
     commit: async () => {
+      const sourceSession = sessionRef.current
       const current = baseRef.current
       if (!current) throw new Error(t({ ko: '저장된 외형 설정이 아니야.', en: 'This setting is not saved.' }))
       const saved = await writeChanges(SETTING_DRAFT_KEYS)
       if (saved !== current) {
-        rebase(saved)
         void refreshCharacterViews(queryClient, { folderIds: [current.folderId, saved.folderId], settingIds: [saved.id] })
+        if (sessionRef.current === sourceSession) rebase(saved)
       }
       return saved
     },

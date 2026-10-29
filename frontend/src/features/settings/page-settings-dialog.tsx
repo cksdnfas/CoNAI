@@ -19,7 +19,9 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context'
 import { pageAction, pageChoice, pageObject } from '@/features/codex-chat/page-action-helpers'
 import { readPageSettings, savePageSettings } from '@/lib/api-page-settings'
-import { useUnsavedSettingsGuard } from './use-unsaved-settings-guard'
+import { useUnsavedSettingsGuard, type GuardedLeave } from './use-unsaved-settings-guard'
+import { publishOwnPageSettingsSave } from './use-settings-revision'
+import { parseSettingsTab } from './settings-tabs'
 import { VideoOptimizationTab } from './components/video-optimization-tab'
 import type { VideoOptimizationSettings } from '@conai/shared'
 import { VIDEO_OPTIMIZATION_PRESETS } from './video-optimization-presets'
@@ -33,6 +35,11 @@ const affectedQueries: Record<PageSettingsScopeId, string[]> = {
   tagger: ['app-settings', 'tagger-status', 'tagger-models'], kaloscope: ['app-settings', 'kaloscope-status'],
   embedding: ['app-settings', 'embedding-status', 'image-viewer-settings'], posts: ['post-settings'], chat: ['codex-chat-admin-settings', 'codex-chat-status', 'codex-chat-thread', 'codex-chat-diagnostics'],
 }
+
+// A sheet belongs to one router location; the inline editor stays mounted only within its settings section.
+const leavesSheet: GuardedLeave = (current, next) => current.key !== next.key
+const leavesInlineSection: GuardedLeave = (current, next) => current.pathname !== next.pathname
+  || parseSettingsTab(new URLSearchParams(current.search).get('section')) !== parseSettingsTab(new URLSearchParams(next.search).get('section'))
 
 export default function PageSettingsDialog({ title }: { title: string }) {
   const { scopes, scope, open, close } = usePageSettings()
@@ -61,7 +68,7 @@ function SettingsEditor({ scope, scopes, title, onSelect, onClose, inline = fals
   const values = { ...snapshot?.values, ...patch }
   const dirty = Object.keys(patch).length > 0
   const discardMessage = t({ ko: '저장하지 않은 설정 변경을 버릴까?', en: 'Discard unsaved settings changes?' })
-  useUnsavedSettingsGuard(dirty || saving, discardMessage)
+  useUnsavedSettingsGuard(dirty || saving, discardMessage, inline ? leavesInlineSection : leavesSheet)
   const apply = (changes: Record<string, PageSettingValue>) => {
     if (savingRef.current || !snapshot) return
     if (scope === 'video-optimization' && changes.preset) {
@@ -89,6 +96,7 @@ function SettingsEditor({ scope, scopes, title, onSelect, onClose, inline = fals
     setError(null)
     try {
       const next = await savePageSettings(scope, snapshot.revision, patch)
+      publishOwnPageSettingsSave({ scope, before: snapshot.revision, after: next.revision })
       client.setQueryData(['page-settings', scope], next)
       setBase(next)
       setPatch({})

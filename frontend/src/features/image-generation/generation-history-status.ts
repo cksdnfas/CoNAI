@@ -56,49 +56,6 @@ export function resolveHistoryDisplayStatus(record: GenerationHistoryRecord): Ge
   return record.actual_composite_hash || hasHistoryAudioResult(record) ? 'completed' : 'processing'
 }
 
-export function getHistoryCancellationBadgeLabel(record: GenerationHistoryRecord) {
-  if ((record.queue_cancel_requested ?? 0) <= 0) {
-    return null
-  }
-
-  if (record.queue_status === 'cancelled') {
-    return '사용자 취소'
-  }
-
-  if (record.queue_status === 'completed' || (record.generation_status === 'completed' && record.actual_composite_hash)) {
-    return '취소 요청 후 완료'
-  }
-
-  if (record.queue_status === 'failed' || record.generation_status === 'failed') {
-    return '취소 요청 후 종료'
-  }
-
-  return '취소 요청됨'
-}
-
-export function getHistoryCancellationDetail(record: GenerationHistoryRecord) {
-  const badgeLabel = getHistoryCancellationBadgeLabel(record)
-  if (!badgeLabel) {
-    return null
-  }
-
-  if (badgeLabel === '사용자 취소') {
-    return '사용자 취소로 정리된 기록이야.'
-  }
-
-  if (badgeLabel === '취소 요청 후 완료') {
-    return '취소 요청은 들어갔지만 업스트림 작업이 먼저 끝났어.'
-  }
-
-  if (badgeLabel === '취소 요청 후 종료') {
-    return record.error_message && record.error_message.trim().length > 0
-      ? record.error_message.trim()
-      : '취소 요청 뒤에 작업이 종료됐어.'
-  }
-
-  return '취소 요청이 들어간 상태야.'
-}
-
 export type HistoryRunRecoveryState = 'active' | 'completed' | 'retryable-failed' | 'retryable-cancelled' | 'failed-no-retry'
 
 /** Queue replay is only exposed when the backend has a failed/cancelled queue job id to clone. */
@@ -133,15 +90,4 @@ export function getHistoryRunRecoveryState(record: GenerationHistoryRecord): His
   }
 
   return 'failed-no-retry'
-}
-
-/** Resolve a compact label for the history status badge. */
-export function getHistoryStatusLabel(status: GenerationHistoryRecord['generation_status'], record?: GenerationHistoryRecord) {
-  if (record && isHistoryMissingLinkedResult(record)) return '결과 없음'
-  if (record?.postprocess_status === 'failed' && record.actual_composite_hash) return '후처리 실패'
-  if (record && isHistoryPostprocessPending(record)) return '후처리 중'
-  if (status === 'completed') return '완료'
-  if (status === 'failed') return '생성 실패'
-  if (status === 'processing') return '작업 중'
-  return '대기 중'
 }

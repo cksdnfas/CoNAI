@@ -6,7 +6,7 @@ import { IconButton } from '@/components/ui/icon-button'
 import { ResourceRow } from '@/components/ui/resource-row'
 import { RowGroup } from '@/components/ui/row-group'
 import { useI18n } from '@/i18n'
-import { getAppSettings } from '@/lib/api-settings-general'
+import { getLlmPresetSnapshot, LLM_PRESET_EDITOR_QUERY_KEY, type LlmPresetSnapshot } from '@/lib/api-settings-llm'
 import { LlmPresetEditorModal } from './llm-preset-editor-modal'
 import { LLM_PRESET_SECTIONS, type LlmPresetModalState } from './llm-connections-tab-utils'
 import { useLlmPresetMutations } from './llm-prompt-preset-mutations'
@@ -19,12 +19,12 @@ import { SettingsEmptyRow, SettingsRowsSkeleton } from './settings-rows'
  */
 export function LlmPromptPresets() {
   const { t } = useI18n()
-  const [modalState, setModalState] = useState<LlmPresetModalState>(null)
-  const settingsQuery = useQuery({ queryKey: ['app-settings'], queryFn: getAppSettings })
-  const collections = settingsQuery.data?.llm ?? { systemPromptPresets: [], promptPresets: [], structuredOutputJsonPresets: [] }
-  useLlmPromptPresetsChatPage(collections)
+  const [editor, setEditor] = useState<{ state: NonNullable<LlmPresetModalState>; snapshot: LlmPresetSnapshot } | null>(null)
+  const settingsQuery = useQuery({ queryKey: LLM_PRESET_EDITOR_QUERY_KEY, queryFn: getLlmPresetSnapshot })
+  const collections = settingsQuery.data ?? { systemPromptPresets: [], promptPresets: [], structuredOutputJsonPresets: [] }
+  useLlmPromptPresetsChatPage(settingsQuery.data)
 
-  const { saveMutation, deleteMutation } = useLlmPresetMutations(collections)
+  const { saveMutation, deleteMutation } = useLlmPresetMutations(editor?.snapshot)
 
   const rows = LLM_PRESET_SECTIONS.flatMap((section) => collections[section.key].map((preset) => ({ section, preset })))
 
@@ -34,7 +34,7 @@ export function LlmPromptPresets() {
         heading={t({ ko: '워크플로 프롬프트', en: 'Workflow prompts' })}
         count={settingsQuery.isSuccess ? rows.length : undefined}
         actions={(
-          <IconButton size="icon-sm" variant="ghost" onClick={() => setModalState({ mode: 'create', presetType: LLM_PRESET_SECTIONS[0].key })} label={t({ ko: '프롬프트 프리셋 추가', en: 'Add prompt preset' })}>
+          <IconButton size="icon-sm" variant="ghost" disabled={!settingsQuery.data} onClick={() => { if (settingsQuery.data) setEditor({ state: { mode: 'create', presetType: LLM_PRESET_SECTIONS[0].key }, snapshot: settingsQuery.data }) }} label={t({ ko: '프롬프트 프리셋 추가', en: 'Add prompt preset' })}>
             <Plus className="h-4 w-4" />
           </IconButton>
         )}
@@ -47,19 +47,19 @@ export function LlmPromptPresets() {
             leading={<FileText />}
             name={preset.name}
             extra={<Chip size="sm" tone="muted">{t(section.shortLabel)}</Chip>}
-            onOpen={() => setModalState({ mode: 'edit', presetType: section.key, preset })}
+            onOpen={() => { if (settingsQuery.data) setEditor({ state: { mode: 'edit', presetType: section.key, preset }, snapshot: settingsQuery.data }) }}
           />
         ))}
       </RowGroup>
 
-      {modalState ? <LlmPresetEditorModal
-        state={modalState}
+      {editor ? <LlmPresetEditorModal
+        state={editor.state}
         isSaving={saveMutation.isPending}
         isDeleting={deleteMutation.isPending}
-        onClose={() => setModalState(null)}
-        onTypeChange={(presetType) => setModalState((current) => (current?.mode === 'create' ? { mode: 'create', presetType } : current))}
-        onSave={(draft) => saveMutation.mutate({ kind: modalState.presetType, draft }, { onSuccess: () => setModalState(null) })}
-        onDelete={(preset) => deleteMutation.mutate({ kind: modalState.presetType, id: preset.id }, { onSuccess: () => setModalState(null) })}
+        onClose={() => setEditor(null)}
+        onTypeChange={(presetType) => setEditor((current) => current?.state.mode === 'create' ? { ...current, state: { mode: 'create', presetType } } : current)}
+        onSave={(draft) => saveMutation.mutate({ kind: editor.state.presetType, draft }, { onSuccess: () => setEditor(null) })}
+        onDelete={(preset) => deleteMutation.mutate({ kind: editor.state.presetType, id: preset.id }, { onSuccess: () => setEditor(null) })}
       /> : null}
     </>
   )

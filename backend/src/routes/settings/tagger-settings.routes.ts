@@ -37,6 +37,10 @@ router.put(
   asyncHandler(async (req: Request, res: Response) => {
     const taggerSettings: Partial<TaggerSettings> = req.body;
 
+    if (req.get('If-Match') && taggerSettings.pythonPath !== undefined) {
+      sendRouteBadRequest(res, 'Python 경로는 AI 런타임에서 바꿔줘.');
+      return;
+    }
     if (!validateNumberInRangeIfDefined(res, taggerSettings.generalThreshold, 0, 1, 'General threshold must be between 0 and 1')) return;
     if (!validateNumberInRangeIfDefined(res, taggerSettings.characterThreshold, 0, 1, 'Character threshold must be between 0 and 1')) return;
     if (!validateStringEnumIfDefined(res, taggerSettings.model, validTaggerModels, `Invalid model. Must be one of: ${validTaggerModels.join(', ')}`)) return;
@@ -65,13 +69,13 @@ router.put(
     }
 
     if (!verifyPageSettingsWrite(res)) return;
-    const updatedSettings = settingsService.updateTaggerSettings(taggerSettings);
+    settingsService.updateTaggerSettings(taggerSettings);
     await imageTaggerService.reloadConfig();
     autoTagScheduler.restart();
 
     res.json({
       success: true,
-      data: updatedSettings,
+      data: settingsService.loadSettings(),
       message: 'Tagger settings updated successfully',
     });
     return;

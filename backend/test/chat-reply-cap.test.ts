@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ChatProfileStore } from '../src/services/codex-chat/chatProfiles'
 import { streamChatCompletion, type ChatCompletionMessage, type ChatCompletionTarget } from '../src/services/codex-chat/llmChatCompletion'
-import { estimateMessagesTokens, fitChatContext, replyCapFor, replyReserveFor } from '../src/services/codex-chat/llmChatContext'
+import { estimateMessagesTokens, fitChatContext, recordPromptUsage, replyCapFor, replyReserveFor, withChatTokenModel } from '../src/services/codex-chat/llmChatContext'
 import { replyRoomFromRefusal } from '../src/services/codex-chat/serverContextLimit'
 import { mockModelRows } from './modelRowMocks'
 import { parseNumberDraft } from '../../frontend/src/lib/number-shorthand'
@@ -43,7 +43,7 @@ test('a refusal that leaves no real room is not retried', async (t) => {
 })
 
 test('max output tokens are a ceiling: the window keeps room for the conversation and the cap is cut to what is left', (t) => {
-  mockModelRows(t, { 1: ['test', 'test'] }, 1)
+  mockModelRows(t, { 1: ['test', 'test'], 2: ['test', 'new-tokenizer'] }, 1)
   // A cap near the whole context books at most a quarter of it for the window; small caps stay as they are.
   assert.equal(replyReserveFor(65000, 50000), 16250)
   assert.equal(replyReserveFor(262144, 50000), 50000)
@@ -66,6 +66,12 @@ test('max output tokens are a ceiling: the window keeps room for the conversatio
   // Only a prompt that leaves not even a short answer's room fails.
   profile.contextTokens = prompt + 1000
   assert.throws(() => fitChatContext(profile, messages, [], 50000), /컨텍스트 한도를 넘었어/)
+  // Reusing a profile after a model change must not reuse the old tokenizer's calibrated ratio.
+  t.mock.method(ChatProfileStore, 'find', () => profile)
+  withChatTokenModel(profile, () => recordPromptUsage(profile.id, 100, 200))
+  assert.equal(withChatTokenModel(profile, () => estimateMessagesTokens(profile.id, messages)), prompt * 2)
+  profile.modelSlotId = 2
+  assert.equal(withChatTokenModel(profile, () => estimateMessagesTokens(profile.id, messages)), prompt)
 })
 
 test('token fields read "260K" as people write it; plain number fields do not', () => {

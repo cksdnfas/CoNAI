@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils'
 import { HEADER_PIN_SETTING_PATH, isAppNavLinkActive, type AppNavGroup } from './app-navigation'
 
 /**
- * One grouped header menu (라이브러리·만들기·확장): its pages that are not pinned, each with a line about it. The key is
- * tinted while the current page is one of them; an administrator also gets the way to the pin setting.
+ * One grouped header menu (라이브러리·만들기·확장) for pages that are not pinned. The key is tinted while the current
+ * page is one of them; an administrator also gets the way to the pin setting.
  */
 export function AppNavGroupMenu({ group }: { group: AppNavGroup }) {
   const { t } = useI18n()

@@ -70,10 +70,22 @@ export function resolveSettingsLocation(params: URLSearchParams): string | null 
   const raw = params.get('section')
   const section = parseSettingsTab(raw)
   const view = params.get('view')
+  if (raw !== section) {
+    next.set('section', section)
+    const groups: Record<string, string> = { appearance: 'appearance', folders: 'folders', metadata: 'metadata', 'image-save': 'image-save', 'llm-connections': 'connections', integration: 'pacing', 'integration-tools': 'comfyui' }
+    if (raw && groups[raw] && !next.has('group')) next.set('group', groups[raw])
+  }
   if (section === 'chat') {
-    if (view === 'resources') return '/chat/resources'
-    if (view === 'routines') return '/chat/resources?tab=routines'
-    if (view === 'profiles') return '/characters?view=profiles'
+    if (view === 'resources' || view === 'routines' || view === 'profiles') {
+      next.delete('section')
+      next.delete('view')
+      next.delete('group')
+      next.delete('setting')
+      if (view === 'routines') next.set('tab', 'routines')
+      if (view === 'profiles') next.set('view', 'profiles')
+      const query = next.toString()
+      return `${view === 'profiles' ? '/characters' : '/chat/resources'}${query ? `?${query}` : ''}`
+    }
     if (view === 'mine') { next.set('section', 'mine'); next.delete('view') }
     else if (view === 'judge') { next.set('section', 'llm'); next.set('group', 'log'); next.delete('view') }
   }
@@ -81,11 +93,6 @@ export function resolveSettingsLocation(params: URLSearchParams): string | null 
     next.set('section', 'posts'); next.set('group', 'topics'); next.delete('view')
   } else if ((section === 'llm' || section === 'posts') && view) {
     next.set('group', view === 'judge' ? 'log' : view); next.delete('view')
-  }
-  if (!next.has('section') || (raw && LEGACY_SETTINGS_TAB_MAP[raw])) {
-    next.set('section', section)
-    const groups: Record<string, string> = { appearance: 'appearance', folders: 'folders', metadata: 'metadata', 'image-save': 'image-save', 'llm-connections': 'connections', integration: 'pacing', 'integration-tools': 'comfyui' }
-    if (raw && groups[raw] && !next.has('group')) next.set('group', groups[raw])
   }
   const row = SETTINGS_ROW_BY_ID[next.get('setting') ?? '']
   if (row && row.section === parseSettingsTab(next.get('section')) && !next.has('group')) next.set('group', row.group)

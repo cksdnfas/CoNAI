@@ -105,17 +105,19 @@ export function useGroupPageQueries({
     enabled: canViewImages && Number.isFinite(selectedGroupId) && downloadScope === 'group',
   })
 
-  /** `skipGroupIds`: deleted groups, whose queries must not refetch while their page is still being left. */
-  const refreshCustomGroupQueries = async (options?: { skipGroupIds?: ReadonlySet<number> }) => {
+  /** Skip deleted groups, and omit media queries when only the hierarchy or details changed. */
+  const refreshCustomGroupQueries = async (options?: { skipGroupIds?: ReadonlySet<number>; includeMedia?: boolean }) => {
     const skip = options?.skipGroupIds
     const keep = skip ? { predicate: (query: { queryKey: readonly unknown[] }) => !skip.has(Number(query.queryKey[2])) } : {}
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['groups-hierarchy-all', 'custom'] }),
       queryClient.invalidateQueries({ queryKey: ['group-detail', 'custom'], ...keep }),
       queryClient.invalidateQueries({ queryKey: ['group-breadcrumb', 'custom'], ...keep }),
-      queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'], ...keep }),
-      queryClient.invalidateQueries({ queryKey: ['group-file-counts', 'custom'], ...keep }),
-      queryClient.invalidateQueries({ queryKey: ['group-cover-images', 'custom'], ...keep }),
+      ...(options?.includeMedia === false ? [] : [
+        queryClient.invalidateQueries({ queryKey: ['group-images', 'custom'], ...keep }),
+        queryClient.invalidateQueries({ queryKey: ['group-file-counts', 'custom'], ...keep }),
+        queryClient.invalidateQueries({ queryKey: ['group-cover-images', 'custom'], ...keep }),
+      ]),
     ])
   }
 

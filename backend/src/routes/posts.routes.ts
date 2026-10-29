@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { requireAdmin, requirePermission } from '../middleware/authMiddleware';
 import { requireImagesView } from '../middleware/imageAccess';
-import { asyncHandler } from '../middleware/asyncHandler';
+import { asyncHandler, cancellableAsyncHandler } from '../middleware/asyncHandler';
 import { FileStoreError, FileStoreService, parseFileId } from '../services/fileStoreService';
 import { filePreviewMime, getFileThumbnail } from '../services/fileStorePreview';
 import { PostError, actorFromRequest } from '../services/posts/postActor';
@@ -53,7 +53,14 @@ router.delete('/categories/:id', requireAdmin, (req, res) => {
 router.get('/tags', (req, res) => res.json({ success: true, data: PostTagStore.list(Number(req.query.limit ?? 200)) }));
 
 router.get('/knowledge/search-status', (req,res) => res.json({ success: true,data: postSemanticStatus(actorFromRequest(req)) }));
-router.get('/knowledge/review-queue', review, asyncHandler(async (req,res) => res.json({ success: true,data: await KnowledgeStore.reviewQueue(actorFromRequest(req),req.query) })));
+router.get('/knowledge/review-queue', review, cancellableAsyncHandler(async (req, res, signal) => {
+  try {
+    const data = await KnowledgeStore.reviewQueue(actorFromRequest(req), req.query, { signal });
+    if (!signal.aborted) res.json({ success: true, data });
+  } catch (error) {
+    if (!signal.aborted || error !== signal.reason) throw error;
+  }
+}));
 router.get('/knowledge/evaluations/status', (req,res) => res.json({ success: true,data: KnowledgeEvaluationStore.status(actorFromRequest(req)) }));
 router.get('/knowledge/proposals', (req,res) => res.json({ success: true,data: KnowledgeProposalStore.list(actorFromRequest(req),req.query) }));
 router.post('/knowledge/proposals', write, (req,res) => res.status(201).json({ success: true,data: KnowledgeProposalStore.create(actorFromRequest(req),req.body ?? {}) }));
@@ -72,7 +79,14 @@ router.delete('/comments/:id', comment, (req, res) => {
 });
 router.post('/comments/:id/hidden', requireAdmin, (req, res) => res.json({ success: true, data: PostCommentStore.setHidden(actorFromRequest(req), id(req), req.body?.hidden !== false) }));
 
-router.get('/', asyncHandler(async (req, res) => res.json({ success: true, data: await PostStore.list(actorFromRequest(req), {...req.query,taskKey:undefined,taskConditionKey:undefined}) })));
+router.get('/', cancellableAsyncHandler(async (req, res, signal) => {
+  try {
+    const data = await PostStore.list(actorFromRequest(req), {...req.query,taskKey:undefined,taskConditionKey:undefined}, { signal });
+    if (!signal.aborted) res.json({ success: true, data });
+  } catch (error) {
+    if (!signal.aborted || error !== signal.reason) throw error;
+  }
+}));
 router.post('/', write, (req, res) => res.status(201).json({ success: true, data: PostStore.create(actorFromRequest(req), req.body ?? {}) }));
 router.get('/:id', (req, res) => res.json({ success: true, data: PostStore.get(actorFromRequest(req), id(req)) }));
 router.get('/:id/topic-evaluation', (req, res) => res.json({ success: true, data: PostStore.get(actorFromRequest(req),id(req)).topicEvaluation }));

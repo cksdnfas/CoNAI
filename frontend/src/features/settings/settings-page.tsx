@@ -1,5 +1,6 @@
 import { useSettingsRevision } from './use-settings-revision'
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { useSettingsDraftSlot } from './use-settings-draft-slot'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShieldAlert } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -8,7 +9,8 @@ import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { HEADER_NAVIGATION_QUERY_KEY } from '@/components/layout/app-navigation'
 import { Button } from '@/components/ui/button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { reextractAllImageMetadata, updateGenerationThrottleSettings, updateImageSaveSettings, updateMetadataSettings, updateThumbnailSettings, updateVideoOptimizationSettings } from '@/lib/api-settings'
+import { reextractAllImageMetadata, updateGenerationThrottleSettings, updateImageSaveSettings, updateMetadataSettings, updateThumbnailSettings, updateVideoOptimizationSettings, type MetadataReextractAllResult } from '@/lib/api-settings'
+import { useRuntimeJobAction } from '@/lib/use-runtime-job'
 import { getAppSettings, updateGeneralSettings } from '@/lib/api-settings-general'
 import { getPostsSettings, updatePostsSettings } from '@/lib/api-posts'
 import { getMcpHttpSettings, updateMcpHttpEnabled } from '@/lib/api-settings-mcp'
@@ -158,13 +160,8 @@ export function SettingsPage() {
   const rawSection = searchParams.get('section')
   const activeTab = parseSettingsTab(rawSection)
   const [generalDraft, setGeneralDraft] = useState<GeneralSettings | null>(null)
-  const [metadataDraft, setMetadataDraft] = useState<MetadataExtractionSettings | null>(null)
-  const [imageSaveDraft, setImageSaveDraft] = useState<ImageSaveSettings | null>(null)
-  const [thumbnailDraft, setThumbnailDraft] = useState<ThumbnailSettings | null>(null)
-  const [generationThrottleDraft, setGenerationThrottleDraft] = useState<GenerationThrottleSettings | null>(null)
-  const [videoOptimizationDraft, setVideoOptimizationDraft] = useState<VideoOptimizationSettings | null>(null)
-  const [postsDraft, setPostsDraft] = useState<PostsSettings | null>(null)
   const [isSavingAll, setIsSavingAll] = useState(false)
+  const savingAllRef = useRef(false)
   const canOpenSettings = authStatusQuery.data?.isAdmin === true || authStatusQuery.data?.hasCredentials !== true
 
   const setActiveTab = (tab: SettingsTab) => {
@@ -223,12 +220,6 @@ export function SettingsPage() {
   const { tabProps: foldersTabProps } = useFolderSettingsTab({ isActive: activeTab === 'library' || activeTab === 'maintenance', notifyInfo, notifyError })
 
   const effectiveGeneralDraft = generalDraft ?? settingsQuery.data?.general ?? null
-  const effectiveMetadataDraft = metadataDraft ?? settingsQuery.data?.metadataExtraction ?? null
-  const effectiveImageSaveDraft = imageSaveDraft ?? settingsQuery.data?.imageSave ?? null
-  const effectiveThumbnailDraft = thumbnailDraft ?? settingsQuery.data?.thumbnail ?? null
-  const effectiveGenerationThrottleDraft = generationThrottleDraft ?? settingsQuery.data?.generationThrottle ?? null
-  const effectiveVideoOptimizationDraft = videoOptimizationDraft ?? settingsQuery.data?.videoOptimization ?? null
-  const effectivePostsDraft = postsDraft ?? postsSettingsQuery.data ?? null
   const contentEvaluation = useContentEvaluationSettings(canOpenSettings && activeTab === 'posts')
   const savedAppearance = settingsQuery.data?.appearance ?? DEFAULT_APPEARANCE_SETTINGS
   const savedGeneral = settingsQuery.data?.general
@@ -240,20 +231,61 @@ export function SettingsPage() {
       pickGeneralFields(savedGeneral, GENERAL_SECTION_FIELDS[section]),
     ),
   )
-  const isMetadataDraftDirty = Boolean(effectiveMetadataDraft && settingsQuery.data?.metadataExtraction && !areSettingsDraftsEqual(effectiveMetadataDraft, settingsQuery.data.metadataExtraction))
-  const isImageSaveDraftDirty = Boolean(effectiveImageSaveDraft && settingsQuery.data?.imageSave && !areSettingsDraftsEqual(effectiveImageSaveDraft, settingsQuery.data.imageSave))
-  const isThumbnailDraftDirty = Boolean(effectiveThumbnailDraft && settingsQuery.data?.thumbnail && !areSettingsDraftsEqual(effectiveThumbnailDraft, settingsQuery.data.thumbnail))
-  const isGenerationThrottleDraftDirty = Boolean(effectiveGenerationThrottleDraft && settingsQuery.data?.generationThrottle && !areSettingsDraftsEqual(effectiveGenerationThrottleDraft, settingsQuery.data.generationThrottle))
-  const isPostsDraftDirty = Boolean(effectivePostsDraft && postsSettingsQuery.data && !areSettingsDraftsEqual(effectivePostsDraft, postsSettingsQuery.data))
-  const isVideoOptimizationDraftDirty = Boolean(effectiveVideoOptimizationDraft && settingsQuery.data?.videoOptimization && !areSettingsDraftsEqual(effectiveVideoOptimizationDraft, settingsQuery.data.videoOptimization))
-
   const generalRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.general, GENERAL_SECTIONS.some(isGeneralSectionDirty))
-  const metadataRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.['metadata'], isMetadataDraftDirty)
-  const imageSaveRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.['image-save'], isImageSaveDraftDirty)
-  const thumbnailRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.['thumbnail'], isThumbnailDraftDirty)
-  const generationThrottleRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.['generation-throttle'], isGenerationThrottleDraftDirty)
-  const videoOptimizationRevision = useSettingsRevision(settingsQuery.data?.pageSettingsRevisions?.['video-optimization'], isVideoOptimizationDraftDirty)
-  const postsRevision = useSettingsRevision(postsSettingsQuery.data?.pageSettingsRevisions?.posts, isPostsDraftDirty)
+  const { draft: effectiveMetadataDraft, setDraft: setMetadataDraft, section: metadataSection } = useSettingsDraftSlot<MetadataExtractionSettings>({
+    id: 'metadata', label: t({ ko: '메타데이터', en: 'Metadata' }), tab: 'library',
+    saved: settingsQuery.data?.metadataExtraction, revision: settingsQuery.data?.pageSettingsRevisions?.metadata,
+    update: async (draft, revision) => {
+      const settings = await updateMetadataSettings(draft, revision)
+      return { draft: settings.metadataExtraction, sync: () => syncSettingsCache(settings) }
+    },
+  })
+  const { draft: effectiveImageSaveDraft, setDraft: setImageSaveDraft, section: imageSaveSection } = useSettingsDraftSlot<ImageSaveSettings>({
+    id: 'image-save', label: t({ ko: '이미지 저장', en: 'Image saving' }), tab: 'media',
+    saved: settingsQuery.data?.imageSave, revision: settingsQuery.data?.pageSettingsRevisions?.['image-save'],
+    update: async (draft, revision) => {
+      const settings = await updateImageSaveSettings(draft, revision)
+      return { draft: settings.imageSave, sync: () => syncSettingsCache(settings) }
+    },
+  })
+  const { draft: effectiveThumbnailDraft, setDraft: setThumbnailDraft, section: thumbnailSection } = useSettingsDraftSlot<ThumbnailSettings>({
+    id: 'thumbnail', label: t({ ko: '썸네일', en: 'Thumbnail' }), tab: 'media',
+    saved: settingsQuery.data?.thumbnail, revision: settingsQuery.data?.pageSettingsRevisions?.thumbnail,
+    update: async (draft, revision) => {
+      const settings = await updateThumbnailSettings(draft, revision)
+      return { draft: settings.thumbnail, sync: () => syncSettingsCache(settings) }
+    },
+  })
+  const { draft: effectiveGenerationThrottleDraft, setDraft: setGenerationThrottleDraft, section: generationThrottleSection } = useSettingsDraftSlot<GenerationThrottleSettings>({
+    id: 'generation-throttle', label: t({ ko: '생성 텀', en: 'Generation pacing' }), tab: 'generation',
+    saved: settingsQuery.data?.generationThrottle, revision: settingsQuery.data?.pageSettingsRevisions?.['generation-throttle'],
+    update: async (draft, revision) => {
+      const settings = await updateGenerationThrottleSettings(draft, revision)
+      return { draft: settings.generationThrottle, sync: () => syncSettingsCache(settings) }
+    },
+  })
+  const { draft: effectiveVideoOptimizationDraft, setDraft: setVideoOptimizationDraft, section: videoOptimizationSection } = useSettingsDraftSlot<VideoOptimizationSettings>({
+    id: 'video-optimization', label: t({ ko: '영상 저장', en: 'Video saving' }), tab: 'media',
+    saved: settingsQuery.data?.videoOptimization, revision: settingsQuery.data?.pageSettingsRevisions?.['video-optimization'],
+    update: async (draft, revision) => {
+      const settings = await updateVideoOptimizationSettings(draft, revision)
+      return { draft: settings.videoOptimization, sync: () => syncSettingsCache(settings) }
+    },
+  })
+  const { draft: effectivePostsDraft, setDraft: setPostsDraft, section: postsSection } = useSettingsDraftSlot<PostsSettings>({
+    id: 'posts', label: t({ ko: '게시판', en: 'Posts' }), tab: 'posts',
+    saved: postsSettingsQuery.data, revision: postsSettingsQuery.data?.pageSettingsRevisions?.posts,
+    update: async (draft, revision) => {
+      const settings = await updatePostsSettings(draft, revision)
+      return { draft: settings, sync: () => queryClient.setQueryData(['post-settings'], settings) }
+    },
+  })
+  const isMetadataDraftDirty = metadataSection.isDirty
+  const isImageSaveDraftDirty = imageSaveSection.isDirty
+  const isThumbnailDraftDirty = thumbnailSection.isDirty
+  const isGenerationThrottleDraftDirty = generationThrottleSection.isDirty
+  const isVideoOptimizationDraftDirty = videoOptimizationSection.isDirty
+  const isPostsDraftDirty = postsSection.isDirty
 
   const { tabProps: appearanceTabProps, draftSection: appearanceDraftSection } = useAppearanceSettingsTab({
     isActive: activeTab === 'general',
@@ -290,67 +322,23 @@ export function SettingsPage() {
     },
   })
 
-  const metadataMutation = useMutation({
-    mutationFn: (patch: Parameters<typeof updateMetadataSettings>[0]) => updateMetadataSettings(patch, metadataRevision()),
-    onSuccess: (settings) => {
-      syncSettingsCache(settings)
-      setMetadataDraft(settings.metadataExtraction)
-    },
-  })
-
-  const metadataReextractMutation = useMutation({
-    mutationFn: reextractAllImageMetadata,
-    onSuccess: (result) => {
-      const skippedText = result.skippedMissingCount > 0
-        ? t({ ko: ', 원본 누락 {count}개 제외', en: ', skipped {count} missing originals' }, { count: result.skippedMissingCount })
-        : ''
+  const metadataReextractJob = useRuntimeJobAction<MetadataReextractAllResult>(reextractAllImageMetadata, {
+    resumeKind: 'metadata-reextract-all',
+    onCompleted: (job) => {
+      const result = job.result
       notifyInfo(t(
-        { ko: '전체 메타데이터 재추출을 큐에 등록했어: {queued}/{total}개{skipped}', en: 'Queued metadata re-extraction: {queued}/{total}{skipped}' },
-        { queued: result.queuedCount, total: result.totalCandidates, skipped: skippedText },
+        { ko: '메타데이터 재추출 완료: 등록 {queued}/{total}개, 누락 {skipped}개, 실패 {failed}개', en: 'Metadata re-extraction complete: queued {queued}/{total}, missing {skipped}, failed {failed}' },
+        { queued: formatNumber(result?.queuedCount ?? 0), total: formatNumber(result?.totalCandidates ?? 0), skipped: formatNumber(result?.skippedMissingCount ?? 0), failed: formatNumber(result?.failedCount ?? 0) },
       ))
     },
-    onError: (error) => {
+    onCancelled: () => {
+      notifyInfo(t({ ko: '메타데이터 재추출을 중단했어. 이미 등록한 항목은 마저 처리해.', en: 'Metadata re-extraction stopped. Already queued items will finish.' }))
+    },
+    onFailed: (job) => {
+      notifyError(job.failureMessage ?? t({ ko: '메타데이터 재추출에 실패했어.', en: 'Metadata re-extraction failed.' }))
+    },
+    onStartError: (error) => {
       notifyError(error instanceof Error ? error.message : t({ ko: '전체 메타데이터 재추출을 시작하지 못했어.', en: 'Failed to start metadata re-extraction.' }))
-    },
-  })
-
-  const imageSaveMutation = useMutation({
-    mutationFn: (patch: Parameters<typeof updateImageSaveSettings>[0]) => updateImageSaveSettings(patch, imageSaveRevision()),
-    onSuccess: (settings) => {
-      syncSettingsCache(settings)
-      setImageSaveDraft(settings.imageSave)
-    },
-  })
-
-  const thumbnailMutation = useMutation({
-    mutationFn: (patch: Parameters<typeof updateThumbnailSettings>[0]) => updateThumbnailSettings(patch, thumbnailRevision()),
-    onSuccess: (settings) => {
-      syncSettingsCache(settings)
-      setThumbnailDraft(settings.thumbnail)
-    },
-  })
-
-  const generationThrottleMutation = useMutation({
-    mutationFn: (patch: Parameters<typeof updateGenerationThrottleSettings>[0]) => updateGenerationThrottleSettings(patch, generationThrottleRevision()),
-    onSuccess: (settings) => {
-      syncSettingsCache(settings)
-      setGenerationThrottleDraft(settings.generationThrottle)
-    },
-  })
-
-  const videoOptimizationMutation = useMutation({
-    mutationFn: (patch: Parameters<typeof updateVideoOptimizationSettings>[0]) => updateVideoOptimizationSettings(patch, videoOptimizationRevision()),
-    onSuccess: (settings) => {
-      syncSettingsCache(settings)
-      setVideoOptimizationDraft(settings.videoOptimization)
-    },
-  })
-
-  const postsMutation = useMutation({
-    mutationFn: (patch: Parameters<typeof updatePostsSettings>[0]) => updatePostsSettings(patch, postsRevision()),
-    onSuccess: (settings) => {
-      queryClient.setQueryData(['post-settings'], settings)
-      setPostsDraft(settings)
     },
   })
 
@@ -377,67 +365,13 @@ export function SettingsPage() {
       )),
     })),
     appearanceDraftSection,
-    {
-      id: 'metadata',
-      label: t({ ko: '메타데이터', en: 'Metadata' }),
-      tab: 'library',
-      isDirty: isMetadataDraftDirty,
-      save: async () => {
-        if (effectiveMetadataDraft) await metadataMutation.mutateAsync(effectiveMetadataDraft)
-      },
-      discard: () => setMetadataDraft(null),
-    },
-    {
-      id: 'image-save',
-      label: t({ ko: '이미지 저장', en: 'Image saving' }),
-      tab: 'media',
-      isDirty: isImageSaveDraftDirty,
-      save: async () => {
-        if (effectiveImageSaveDraft) await imageSaveMutation.mutateAsync(effectiveImageSaveDraft)
-      },
-      discard: () => setImageSaveDraft(null),
-    },
-    {
-      id: 'thumbnail',
-      label: t({ ko: '썸네일', en: 'Thumbnail' }),
-      tab: 'media',
-      isDirty: isThumbnailDraftDirty,
-      save: async () => {
-        if (effectiveThumbnailDraft) await thumbnailMutation.mutateAsync(effectiveThumbnailDraft)
-      },
-      discard: () => setThumbnailDraft(null),
-    },
-    {
-      id: 'video-optimization',
-      label: t({ ko: '영상 저장', en: 'Video saving' }),
-      tab: 'media',
-      isDirty: isVideoOptimizationDraftDirty,
-      save: async () => {
-        if (effectiveVideoOptimizationDraft) await videoOptimizationMutation.mutateAsync(effectiveVideoOptimizationDraft)
-      },
-      discard: () => setVideoOptimizationDraft(null),
-    },
+    metadataSection,
+    imageSaveSection,
+    thumbnailSection,
+    videoOptimizationSection,
     ...autoDraftSections,
-    {
-      id: 'generation-throttle',
-      label: t({ ko: '생성 텀', en: 'Generation pacing' }),
-      tab: 'generation',
-      isDirty: isGenerationThrottleDraftDirty,
-      save: async () => {
-        if (effectiveGenerationThrottleDraft) await generationThrottleMutation.mutateAsync(effectiveGenerationThrottleDraft)
-      },
-      discard: () => setGenerationThrottleDraft(null),
-    },
-    {
-      id: 'posts',
-      label: t({ ko: '게시판', en: 'Posts' }),
-      tab: 'posts',
-      isDirty: isPostsDraftDirty,
-      save: async () => {
-        if (effectivePostsDraft) await postsMutation.mutateAsync(effectivePostsDraft)
-      },
-      discard: () => setPostsDraft(null),
-    },
+    generationThrottleSection,
+    postsSection,
   ]
   const dirtySections = draftSections.filter((section) => section.isDirty)
   const chatSources: SettingsChatSources = {
@@ -475,12 +409,14 @@ export function SettingsPage() {
   } : {}
 
   const handleSaveAll = async () => {
-    if (isSavingAll || dirtySections.length === 0) {
+    if (savingAllRef.current || dirtySections.length === 0) {
       return
     }
 
+    savingAllRef.current = true
     setIsSavingAll(true)
     const failures = await saveSettingsDraftSections(dirtySections, t({ ko: '저장에 실패했어.', en: 'Save failed.' }))
+    savingAllRef.current = false
     setIsSavingAll(false)
 
     if (failures.length === 0) {
@@ -516,8 +452,10 @@ export function SettingsPage() {
       cancelVerifyAllFiles: foldersTabProps.onCancelVerifyAllFiles,
       verifyAllFilesJob: foldersTabProps.verifyAllFilesJob,
       isVerifyingAllFiles: foldersTabProps.isVerifyingAllFiles,
-      reextractAll: () => metadataReextractMutation.mutateAsync(),
-      isReextracting: metadataReextractMutation.isPending,
+      reextractAll: () => metadataReextractJob.run(),
+      cancelReextractAll: () => metadataReextractJob.cancel(),
+      reextractJob: metadataReextractJob.job,
+      isReextracting: metadataReextractJob.isStarting || metadataReextractJob.isRunning,
     },
   }
   useChatPageRegistration(canOpenSettings && activeTab !== 'mine' ? {
@@ -533,24 +471,30 @@ export function SettingsPage() {
     ],
     // Unsaved sections keep a connected chat from navigating away and losing them.
     dirty: dirtySections.length > 0,
-    apply: (patch) => applySettingsChatPatch(patch, chatSources, {
-      general: setGeneralDraft,
-      appearance: appearanceTabProps.onPatchAppearance,
-      metadata: setMetadataDraft,
-      imageSave: setImageSaveDraft,
-      thumbnail: setThumbnailDraft,
-      videoOptimization: setVideoOptimizationDraft,
-      generationThrottle: setGenerationThrottleDraft,
-      aiRuntime: autoTabProps.onPatchAiRuntime,
-      tagger: autoTabProps.onPatchTagger,
-      kaloscope: autoTabProps.onPatchKaloscope,
-      embedding: autoTabProps.onPatchEmbedding,
-      posts: setPostsDraft,
-      ratingWeights: ({ general_weight, sensitive_weight, questionable_weight, explicit_weight }) => autoTabProps.onPatchRatingWeights({ general_weight, sensitive_weight, questionable_weight, explicit_weight }),
-      ratingTier: autoTabProps.onPatchRatingTier,
-    }),
+    apply: (patch) => {
+      if (savingAllRef.current) throw new Error(t({ ko: '설정 저장이 끝날 때까지 기다려줘.', en: 'Wait for settings to finish saving.' }))
+      applySettingsChatPatch(patch, chatSources, {
+        general: setGeneralDraft,
+        appearance: appearanceTabProps.onPatchAppearance,
+        metadata: setMetadataDraft,
+        imageSave: setImageSaveDraft,
+        thumbnail: setThumbnailDraft,
+        videoOptimization: setVideoOptimizationDraft,
+        generationThrottle: setGenerationThrottleDraft,
+        aiRuntime: autoTabProps.onPatchAiRuntime,
+        tagger: autoTabProps.onPatchTagger,
+        kaloscope: autoTabProps.onPatchKaloscope,
+        embedding: autoTabProps.onPatchEmbedding,
+        posts: setPostsDraft,
+        ratingWeights: ({ general_weight, sensitive_weight, questionable_weight, explicit_weight }) => autoTabProps.onPatchRatingWeights({ general_weight, sensitive_weight, questionable_weight, explicit_weight }),
+        ratingTier: autoTabProps.onPatchRatingTier,
+      })
+    },
     applyAction: async (id, args, assertCurrent) => {
       assertCurrent()
+      if (savingAllRef.current && (id === 'settings.save' || id === 'settings.rating_tier_add' || (id === 'resource.save' && args.kind === 'app_mark'))) {
+        throw new Error(t({ ko: '설정 저장이 끝날 때까지 기다려줘.', en: 'Wait for settings to finish saving.' }))
+      }
       if (activeTab === 'general' && args.kind === 'app_mark' && (id === 'resource.open' || id === 'resource.save')) {
         if (appearanceTabProps.isSavingAppIcon) throw new Error(t({ ko: '앱 마크 등록이 끝날 때까지 기다려줘.', en: 'Wait until the app mark finishes registering.' }))
         if (id === 'resource.save') {
@@ -568,7 +512,7 @@ export function SettingsPage() {
   } : null, { preserveOnSearchChange: true })
 
   useUnsavedSettingsGuard(
-    dirtySections.length > 0,
+    dirtySections.length > 0 || isSavingAll,
     t({ ko: '저장하지 않은 설정 변경이 있어. 이 페이지를 떠나면 사라져. 계속할까?', en: 'You have unsaved settings changes. They will be lost if you leave this page. Continue?' }),
   )
 
@@ -690,44 +634,45 @@ export function SettingsPage() {
       toolbar={<PageToolbar title={t(SETTINGS_TAB_LABELS[activeTab])}><SettingsSearch /></PageToolbar>}
     >
       <SettingsJumpTarget>
+        <div aria-busy={isSavingAll || undefined}>
         <Suspense fallback={<SettingsSectionFallback />}>
           {activeTab === 'mine' ? <ChatSettingsMine /> : null}
           {activeTab === 'general' ? (
             <div className="space-y-8">
               <SettingsContents groups={[{ id: 'display', label: t({ ko: '언어·공용 표시', en: 'Language and shared display' }) }, { id: 'appearance', label: t({ ko: '테마', en: 'Theme' }) }]} />
-              <SettingsGroup id="display" title={t({ ko: '언어·공용 표시', en: 'Language and shared display' })}><GeneralPreferencesSectionsLazy sections={['basic', 'appearance']} {...generalSectionsProps} /></SettingsGroup>
-              <SettingsGroup id="appearance" title={t({ ko: '테마', en: 'Theme' })}><AppearanceTabLazy {...appearanceTabProps} /></SettingsGroup>
+              <SettingsGroup id="display" title={t({ ko: '언어·공용 표시', en: 'Language and shared display' })}><fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['basic', 'appearance']} {...generalSectionsProps} /></fieldset></SettingsGroup>
+              <SettingsGroup id="appearance" title={t({ ko: '테마', en: 'Theme' })}><AppearanceTabLazy {...appearanceTabProps} draftLocked={isSavingAll} /></SettingsGroup>
             </div>
           ) : null}
 
           {activeTab === 'library' ? (
             <div className="space-y-8">
               <SettingsContents groups={[{ id: 'similarity', label: t({ ko: '유사도', en: 'Similarity' }) }, { id: 'folders', label: t({ ko: '폴더', en: 'Folders' }) }, { id: 'metadata', label: t({ ko: '메타데이터', en: 'Metadata' }) }]} />
-              <SettingsGroup id="similarity" title={t({ ko: '유사도', en: 'Similarity' })}><GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} /><PageSettingsSection scope="similarity" /></SettingsGroup>
+              <SettingsGroup id="similarity" title={t({ ko: '유사도', en: 'Similarity' })}><fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} /></fieldset><PageSettingsSection scope="similarity" /></SettingsGroup>
               <RegistrySettingsGroup id="library.folders"><FoldersTabLazy {...foldersTabProps} /></RegistrySettingsGroup>
               <SettingsGroup id="metadata" title={t({ ko: '메타데이터', en: 'Metadata' })}>
-              <MetadataTabLazy
+              <fieldset disabled={isSavingAll} className="contents"><MetadataTabLazy
                 metadataDraft={effectiveMetadataDraft}
                 onPatchMetadata={patchMetadataDraft}
                 hasChanges={isMetadataDraftDirty}
-              />
+              /></fieldset>
               </SettingsGroup>
             </div>
           ) : null}
 
           {activeTab === 'media' ? (
-            <ImageSaveTabLazy
+            <fieldset disabled={isSavingAll} className="contents"><ImageSaveTabLazy
               {...imageSaveTabProps}
               throttle="none"
-            />
+            /></fieldset>
           ) : null}
 
           {activeTab === 'posts' ? (
-            <PostsSettingsTabLazy draft={effectivePostsDraft} onPatch={patchPostsDraft} dirty={isPostsDraftDirty} contentEvaluation={contentEvaluation.tabProps} />
+            <fieldset disabled={isSavingAll} className="contents"><PostsSettingsTabLazy draft={effectivePostsDraft} onPatch={patchPostsDraft} dirty={isPostsDraftDirty} contentEvaluation={contentEvaluation.tabProps} /></fieldset>
           ) : null}
 
           {activeTab === 'auto' ? (
-            <AutoTabLazy {...autoTabProps} />
+            <AutoTabLazy {...autoTabProps} draftLocked={isSavingAll} />
           ) : null}
 
           {activeTab === 'generation' ? (
@@ -735,18 +680,18 @@ export function SettingsPage() {
               <SettingsContents groups={[{ id: 'nai', label: 'NovelAI' }, { id: 'comfyui', label: 'ComfyUI' }, { id: 'pacing', label: t({ ko: '실행 간격', en: 'Pacing' }) }, { id: 'schedules', label: t({ ko: '예약 작업', en: 'Schedules' }) }]} />
               <GenerationConnections comfyExtra={<IntegrationToolsTabLazy />} />
               <SettingsGroup id="pacing" title={t({ ko: '실행 간격', en: 'Pacing' })}>
-              <ImageSaveTabLazy
+              <fieldset disabled={isSavingAll} className="contents"><ImageSaveTabLazy
                 {...imageSaveTabProps}
                 throttle="pacing"
                 showMediaSettings={false}
-              />
+              /></fieldset>
               </SettingsGroup>
               <SettingsGroup id="schedules" title={t({ ko: '예약 작업', en: 'Schedules' })}>
-              <ImageSaveTabLazy
+              <fieldset disabled={isSavingAll} className="contents"><ImageSaveTabLazy
                 {...imageSaveTabProps}
                 throttle="reservations"
                 showMediaSettings={false}
-              />
+              /></fieldset>
               </SettingsGroup>
             </div>
           ) : null}
@@ -761,7 +706,7 @@ export function SettingsPage() {
             <div className="space-y-8">
               <SettingsContents groups={[{ id: 'mcp', label: 'MCP' }, { id: 'safety', label: t({ ko: '안전·정리', en: 'Safety and cleanup' }) }]} />
               <RegistrySettingsGroup id="system.mcp"><McpHttpSettingsCardLazy /></RegistrySettingsGroup>
-              <SettingsGroup id="safety" title={t({ ko: '안전·정리', en: 'Safety and cleanup' })}><GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} /></SettingsGroup>
+              <SettingsGroup id="safety" title={t({ ko: '안전·정리', en: 'Safety and cleanup' })}><fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} /></fieldset></SettingsGroup>
             </div>
           ) : null}
 
@@ -778,13 +723,17 @@ export function SettingsPage() {
               verifyAllFilesJob={foldersTabProps.verifyAllFilesJob}
               onCancelVerifyAllFiles={foldersTabProps.onCancelVerifyAllFiles}
               isCancellingVerifyAllFiles={foldersTabProps.isCancellingVerifyAllFiles}
-              onReextractAll={() => void metadataReextractMutation.mutateAsync()}
-              isReextracting={metadataReextractMutation.isPending}
+              onReextractAll={() => void metadataReextractJob.run()}
+              isReextracting={metadataReextractJob.isStarting || metadataReextractJob.isRunning}
+              reextractJob={metadataReextractJob.job}
+              onCancelReextractAll={() => void metadataReextractJob.cancel().catch((error) => notifyError(error instanceof Error ? error.message : t({ ko: '재추출을 중단하지 못했어.', en: 'Could not stop metadata re-extraction.' })))}
+              isCancellingReextractAll={metadataReextractJob.isCancelling}
               autoTabProps={autoTabProps}
             />
             </RegistrySettingsGroup>
           ) : null}
         </Suspense>
+        </div>
         <SettingsSaveBar
           dirtySections={dirtySections}
           isSaving={isSavingAll}

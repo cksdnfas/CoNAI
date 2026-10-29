@@ -28,7 +28,7 @@ import { loadPostsSettings } from './postsSettings';
 import { commentMatches, removePostSearchDocument, postSearchFilter, trashPostSearchFilter, refreshPostSearchIndex, writePostSearchDocument, createPostRelevanceResolver } from './postSearch';
 import { findKnowledgeRow, getKnowledgeStates, visibleKnowledgeSources, requireKnowledgeRevision, syncKnowledgeContent, normalizeKnowledgeSources, saveKnowledgeSources, KnowledgeStore } from './knowledgeStore';
 import { cachedKnowledgeMultipliers, getKnowledgeQuality, knowledgeTaskFitMultiplier, knowledgeSearchTaskKey, issueKnowledgeSearchReceipts } from './knowledgeAssessment';
-import { semanticPostCandidates } from '../embeddings/postSemantic';
+import { postSnapshotVersion, semanticPostCandidates, semanticPostCandidatesSync, type PostSemanticMemo } from '../embeddings/postSemantic';
 import { notifySemanticChange } from '../embeddings/semanticSignal';
 import { selectCommentPage, selectCommentRows, type CommentPageInput } from './postCommentQueries';
 
@@ -412,20 +412,35 @@ export const PostStore = {
       .all(...ids) as Array<{ id: number; revision: number; contentVersion: number | null; contentHash: string }>;
   },
 
-  async list(actor: PostActor, query: PostListQuery): Promise<PostListResult> {
+  async list(actor: PostActor, query: PostListQuery, options?: { signal?: AbortSignal; rankingRetries?: number; semanticMemo?: PostSemanticMemo }): Promise<PostListResult> {
+    options?.signal?.throwIfAborted();
     requireKey(actor, 'posts.view');
+    const retries = options?.rankingRetries ?? 0;
+    const semanticMemo = options?.semanticMemo ?? {};
     const offset = query.offset === undefined ? 0 : Number(query.offset);
     const limit = query.limit === undefined ? 20 : Number(query.limit);
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new PostError('잘못된 목록 범위야.');
     if (query.sort !== undefined && query.sort !== '' && query.sort !== 'relevance' && query.sort !== 'recent') throw new PostError('잘못된 정렬이야.');
+    if (query.allowedPostIds !== undefined) validateScopedPostIds(query.allowedPostIds);
+    if (query.kind !== undefined && query.kind !== '' && query.kind !== 'all' && query.kind !== 'knowledge' && query.kind !== 'post') throw new PostError('잘못된 문서 종류 필터야.');
+    if (query.reviewStatus !== undefined && query.reviewStatus !== '' && !['unreviewed','verified','needs_review'].includes(String(query.reviewStatus))) throw new PostError('검토 상태 필터가 잘못됐어.');
+    const status = query.status === undefined || query.status === '' ? 'published' : String(query.status);
+    if (!['published', 'draft', 'hidden', 'all'].includes(status)) throw new PostError('잘못된 상태 필터야.');
+    const trashedOnly = query.deleted === 'only';
+    // A retry uses the index already refreshed for this request; normal post writes maintain it.
+    if (!retries && !trashedOnly && typeof query.q === 'string' && query.q.trim()) {
+      await refreshPostSearchIndex();
+      options?.signal?.throwIfAborted();
+    }
+    const setupVersion = query.sort === 'relevance' || query.snapshot || query.q || query.kind === 'knowledge' ? postSnapshotVersion() : null;
     const where: string[] = [];
     const params: unknown[] = [];
+    let categoryScope: { id: number; whereIndex: number; paramIndex: number; count: number } | undefined;
+    let searchScope: { filter: ReturnType<typeof postSearchFilter>; whereIndex: number; paramIndex: number; count: number; semantic: boolean } | undefined;
     if (query.allowedPostIds !== undefined) {
-      validateScopedPostIds(query.allowedPostIds);
       where.push(query.allowedPostIds.length ? `p.id IN (${query.allowedPostIds.map(() => '?').join(',')}) AND p.status='published'` : '0');
       params.push(...query.allowedPostIds);
     }
-    const trashedOnly = query.deleted === 'only';
     where.push(trashedOnly ? 'EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.deleted_at IS NOT NULL)' : 'NOT EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.deleted_at IS NOT NULL)');
     if (trashedOnly && !actor.isAdmin) {
       if (actor.accountId === null) where.push('0');
@@ -433,13 +448,9 @@ export const PostStore = {
     }
     if (query.kind === 'knowledge') where.push('EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.enabled=1)');
     else if (query.kind === 'post') where.push('NOT EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.enabled=1)');
-    else if (query.kind !== undefined && query.kind !== '' && query.kind !== 'all') throw new PostError('잘못된 문서 종류 필터야.');
     if (query.reviewStatus !== undefined && query.reviewStatus !== '') {
-      if (!['unreviewed','verified','needs_review'].includes(String(query.reviewStatus))) throw new PostError('검토 상태 필터가 잘못됐어.');
       where.push('EXISTS(SELECT 1 FROM post_knowledge k WHERE k.post_id=p.id AND k.review_status=?)'); params.push(query.reviewStatus);
     }
-    const status = query.status === undefined || query.status === '' ? 'published' : String(query.status);
-    if (!['published', 'draft', 'hidden', 'all'].includes(status)) throw new PostError('잘못된 상태 필터야.');
     if (status === 'all') {
       if (!actor.isAdmin) {
         if (actor.accountId === null) where.push("p.status = 'published'");
@@ -457,6 +468,7 @@ export const PostStore = {
     if (query.categoryId !== undefined && query.categoryId !== '') {
       const categoryId = parseCategoryId(query.categoryId, false) as number;
       const ids = categoryWithDescendants(categoryId);
+      categoryScope = { id: categoryId, whereIndex: where.length, paramIndex: params.length, count: ids.length };
       where.push(`p.category_id IN (${ids.map(() => '?').join(',')})`);
       params.push(...ids);
     }
@@ -471,19 +483,22 @@ export const PostStore = {
     let terms: string[] = [];
     let semantic: Array<{ postId: number; score: number; contentHash: string }> = [];
     if (typeof query.q === 'string' && query.q.trim()) {
-      if(!trashedOnly) await refreshPostSearchIndex();
+      options?.signal?.throwIfAborted();
       const filter = trashedOnly?trashPostSearchFilter(query.q):postSearchFilter(query.q);
       terms = filter.terms;
       if (!query.snapshot && !trashedOnly && query.allowedPostIds === undefined) {
-        try { semantic = await semanticPostCandidates(actor, query.q); } catch { /* keyword search remains available */ }
+        if (retries < 2 || semanticMemo.vector === undefined) {
+          try { semantic = await semanticPostCandidates(actor, query.q, options?.signal, semanticMemo, retries >= 2); } catch { options?.signal?.throwIfAborted(); /* keyword search remains available */ }
+        }
       }
       // During snapshot continuation candidate IDs are fixed, with live visibility rechecked below.
       if (!query.snapshot) {
+        searchScope = { filter, whereIndex: where.length, paramIndex: params.length, count: filter.params.length + semantic.length, semantic: !trashedOnly && query.allowedPostIds === undefined };
         where.push(semantic.length ? `(${filter.sql} OR p.id IN (${semantic.map(() => '?').join(',')}))` : filter.sql);
         params.push(...filter.params, ...semantic.map(item => item.postId));
       }
     }
-    const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    let clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const order = status === 'published' ? 'p.pinned DESC, p.published_at DESC, p.id DESC' : 'p.updated_at DESC, p.id DESC';
     const policy = loadPostsSettings().knowledge;
     const ranking = Boolean(query.snapshot || query.sort === 'relevance' || (query.sort !== 'recent' && (terms.length || (query.kind === 'knowledge' && policy.rankingEnabled))));
@@ -497,38 +512,117 @@ export const PostStore = {
         if (!found || found.expiresAt < Date.now() || found.key !== key) throw new PostError('검색 페이지가 만료됐어. 처음부터 다시 검색해줘.',409,'SEARCH_SNAPSHOT_EXPIRED');
         stored = found;
       } else {
-        const scores = new Map(semantic.map(item => [item.postId,item.score]));
+        if (retries < 2 && setupVersion !== null && setupVersion !== postSnapshotVersion()) {
+          return PostStore.list(actor, query, { ...options, rankingRetries: retries + 1, semanticMemo });
+        }
+        let scores = new Map(semantic.map(item => [item.postId,item.score]));
         const taskCondition=typeof query.q==='string'&&query.q.trim()?(typeof query.taskConditionKey==='string'?query.taskConditionKey:knowledgeSearchTaskKey(query.q)):null;
         // Keep only rank metadata across batches; large post bodies never accumulate for the whole match set.
         type Candidate = Pick<PostRow, 'id' | 'title' | 'body' | 'pinned'> & { rated: number };
         const ranked: Array<{ id: number; pinned: number; band: number; score: number }> = [];
         const rated = policy.enabled && policy.rankingEnabled ? `COALESCE((SELECT enabled FROM post_knowledge WHERE post_id=p.id),0)
           AND EXISTS(SELECT 1 FROM post_assessment_heads h JOIN post_assessment_events e ON e.id=h.event_id WHERE e.post_id=p.id)` : '0';
-        const page = db().prepare(`SELECT p.id,p.title,${terms.length ? 'p.body' : "'' AS body"},p.pinned,(${rated}) AS rated
+        const preparePage = () => db().prepare(`SELECT p.id,p.title,${terms.length ? 'p.body' : "'' AS body"},p.pinned,(${rated}) AS rated
           FROM posts p ${clause} ${clause ? 'AND' : 'WHERE'} p.id>? ORDER BY p.id LIMIT 200`);
+        const version = postSnapshotVersion();
+        const policyStamp = policy.enabled && policy.rankingEnabled ? JSON.stringify(policy) : null;
+        const stableVersion = () => version === postSnapshotVersion()
+          && (policyStamp === null || policyStamp === JSON.stringify(loadPostsSettings().knowledge));
+        const yieldBatch = async () => {
+          await new Promise<void>(resolve => setImmediate(resolve));
+          options?.signal?.throwIfAborted();
+          return stableVersion();
+        };
+        const rankBatch = (candidates: Candidate[]) => {
+          const relevanceBand = createPostRelevanceResolver(terms, typeof query.q === 'string' ? query.q : '', candidates.map(row => row.id));
+          const qualityCache = cachedKnowledgeMultipliers(candidates.filter(row => row.rated).map(row => row.id), policy);
+          for (const row of candidates) {
+            let quality = 1,fit=1;
+            if (row.rated) {
+              try { quality = qualityCache.get(row.id) ?? getKnowledgeQuality(actor,row.id,{ writeCache: retries < 2 }).qualityMultiplier; } catch { /* neutral score on aggregation failure */ }
+              if(taskCondition) {
+                try {fit=knowledgeTaskFitMultiplier(actor,row.id,taskCondition,typeof query.taskKey==='string'?query.taskKey:undefined);} catch { /* fit cache failure must not stop keyword search */ }
+              }
+            }
+            const relevance = 1+Math.max(0,Math.min(1,scores.get(row.id) ?? 0));
+            ranked.push({ id: row.id, pinned: row.pinned, band: relevanceBand(row),score: relevance*quality*fit });
+          }
+        };
+        const compare = (a: typeof ranked[number], b: typeof ranked[number]) => a.band-b.band || b.score-a.score || b.pinned-a.pinned || b.id-a.id;
+        let source = ranked;
+        if (retries >= 2) {
+          options?.signal?.throwIfAborted();
+          db().transaction(() => {
+            // Pin all ranking inputs without blocking writers; stale quality aggregates are computed without caching.
+            db().prepare(`SELECT EXISTS(SELECT 1 FROM main.posts), EXISTS(SELECT 1 FROM search_db.search_documents),
+              EXISTS(SELECT 1 FROM vector_db.vectors)`).get();
+            if (categoryScope) {
+              const ids = categoryWithDescendants(categoryScope.id);
+              where[categoryScope.whereIndex] = `p.category_id IN (${ids.map(() => '?').join(',')})`;
+              params.splice(categoryScope.paramIndex, categoryScope.count, ...ids);
+              if (searchScope) searchScope.paramIndex += ids.length - categoryScope.count;
+            }
+            if (searchScope) {
+              try { semantic = searchScope.semantic ? semanticPostCandidatesSync(actor, semanticMemo.vector) : []; }
+              catch (error) {
+                options?.signal?.throwIfAborted();
+                console.warn('[PostSemantic] keyword fallback:', error instanceof Error ? error.message : error);
+                semantic = [];
+              }
+              scores = new Map(semantic.map(item => [item.postId,item.score]));
+              const { filter } = searchScope;
+              where[searchScope.whereIndex] = semantic.length ? `(${filter.sql} OR p.id IN (${semantic.map(() => '?').join(',')}))` : filter.sql;
+              params.splice(searchScope.paramIndex, searchScope.count, ...filter.params, ...semantic.map(item => item.postId));
+            }
+            clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+            const page = preparePage();
+            let after = 0;
+            for (;;) {
+              const candidates = page.all(...params, after) as Candidate[];
+              if (!candidates.length) break;
+              rankBatch(candidates);
+              after = candidates[candidates.length - 1].id;
+            }
+            ranked.sort(compare);
+          })();
+        } else {
+        const page = preparePage();
         let after = 0;
         for (;;) {
           const candidates = page.all(...params, after) as Candidate[];
           if (!candidates.length) break;
-          const relevanceBand = createPostRelevanceResolver(terms, typeof query.q === 'string' ? query.q : '', candidates.map(row => row.id));
-            const qualityCache = cachedKnowledgeMultipliers(candidates.filter(row => row.rated).map(row => row.id), policy);
-            for (const row of candidates) {
-              let quality = 1,fit=1;
-              if (row.rated) {
-                try { quality = qualityCache.get(row.id) ?? getKnowledgeQuality(actor,row.id).qualityMultiplier; } catch { /* neutral score on aggregation failure */ }
-                if(taskCondition) {
-                  try {fit=knowledgeTaskFitMultiplier(actor,row.id,taskCondition,typeof query.taskKey==='string'?query.taskKey:undefined);} catch { /* fit cache failure must not stop keyword search */ }
-                }
-              }
-              // A keyword candidate always keeps baseline relevance; optional semantic proximity is a bounded bonus.
-              const relevance = 1+Math.max(0,Math.min(1,scores.get(row.id) ?? 0));
-              ranked.push({ id: row.id, pinned: row.pinned, band: relevanceBand(row),score: relevance*quality*fit });
-          }
+          rankBatch(candidates);
           after = candidates[candidates.length - 1].id;
+          if (!await yieldBatch()) return PostStore.list(actor, query, { ...options, rankingRetries: retries + 1, semanticMemo });
         }
-        ranked.sort((a,b) => a.band-b.band || b.score-a.score || b.pinned-a.pinned || b.id-a.id);
+        // Sort bounded runs, then merge cooperatively; the complete ordered ID list is still
+        // required by continuation snapshots.
+        for (let start = 0; start < ranked.length; start += 200) {
+          const run = ranked.slice(start, start + 200).sort(compare);
+          for (let i = 0; i < run.length; i++) ranked[start + i] = run[i];
+          if (start && start % 4000 === 0 && !await yieldBatch()) return PostStore.list(actor, query, { ...options, rankingRetries: retries + 1, semanticMemo });
+        }
+        let target = new Array<typeof ranked[number]>(ranked.length);
+        for (let width = 200; width < ranked.length; width *= 2) {
+          let work = 0;
+          for (let start = 0; start < ranked.length; start += width * 2) {
+            const middle = Math.min(start + width, ranked.length);
+            const end = Math.min(start + width * 2, ranked.length);
+            let left = start, right = middle;
+            for (let out = start; out < end; out++) {
+              target[out] = left < middle && (right >= end || compare(source[left], source[right]) <= 0) ? source[left++] : source[right++];
+              if (++work === 4000) {
+                work = 0;
+                if (!await yieldBatch()) return PostStore.list(actor, query, { ...options, rankingRetries: retries + 1, semanticMemo });
+              }
+            }
+          }
+          [source, target] = [target, source];
+        }
+        if (!stableVersion()) return PostStore.list(actor, query, { ...options, rankingRetries: retries + 1, semanticMemo });
+        }
         scoreVersion = `${policy.policyVersion}:r2:${createHash('sha256').update(JSON.stringify(policy)).digest('hex').slice(0,12)}`;
-        snapshot = randomUUID(); stored = { key,ids: ranked.map(item => item.id),scoreVersion,expiresAt: Date.now()+120_000 };
+        snapshot = randomUUID(); stored = { key,ids: source.map(item => item.id),scoreVersion,expiresAt: Date.now()+120_000 };
         for (const [token,value] of searchSnapshots) if (value.expiresAt<Date.now()) searchSnapshots.delete(token);
         while (searchSnapshots.size>=100) searchSnapshots.delete(searchSnapshots.keys().next().value!);
         searchSnapshots.set(snapshot,stored);

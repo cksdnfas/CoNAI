@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { getGenerationQueue } from '@/lib/api-image-generation-queue'
@@ -33,17 +33,5 @@ export function useGenerationStageQueue({ serviceType, workflowId }: { serviceTy
   }, [accountId, queueQuery.data?.records, serviceType, workflowId])
 
   const activeJob = jobs[0] ?? null
-  const isRunning = activeJob?.status === 'running'
-  // 남은 시간/예상 진행률은 시작 시각 기준이라 실행 중에만 1초마다 다시 그린다(네트워크 요청 없음).
-  const [nowMs, setNowMs] = useState(() => Date.now())
-  useEffect(() => {
-    if (!isRunning) {
-      return
-    }
-
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [isRunning])
-
-  return { activeJob, activeJobCount: jobs.length, nowMs }
+  return { activeJob, activeJobCount: jobs.length }
 }

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import pLimit from 'p-limit';
 import { runtimePaths } from '../../config/runtimePaths';
 import { ImageFileModel } from '../../models/Image/ImageFileModel';
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel';
@@ -12,7 +13,14 @@ import { enrichCompactImageWithFileView, enrichImageWithFileView } from './utils
 type ImageListData = NonNullable<ImageListResponse['data']>;
 type ImageListItem = ReturnType<typeof enrichCompactImageWithFileView>;
 const THUMBNAIL_EXISTENCE_CACHE_TTL_MS = 30_000;
-const thumbnailExistenceCache = new Map<string, { exists: boolean; expiresAt: number }>();
+const { LRUCache } = require('lru-cache') as {
+  LRUCache: new <K, V>(options: { max: number; ttl: number }) => {
+    get(key: K): V | undefined;
+    set(key: K, value: V, options?: { ttl?: number }): void;
+  };
+};
+const thumbnailExistenceCache = new LRUCache<string, Promise<boolean>>({ max: 5000, ttl: THUMBNAIL_EXISTENCE_CACHE_TTL_MS });
+const thumbnailExistenceLimit = pLimit(16);
 
 export interface BatchThumbnailLookupResult {
   success: boolean;
@@ -168,13 +176,13 @@ function resolveThumbnailFilePath(thumbnailPath: string): string {
 }
 
 /** True when the row's stored thumbnail (or video poster) is present on disk. */
-function hasStoredThumbnail(metadata: Pick<ImageMetadataRecord, 'thumbnail_path'>): boolean {
+async function hasStoredThumbnail(metadata: Pick<ImageMetadataRecord, 'thumbnail_path'>): Promise<boolean> {
   return Boolean(metadata.thumbnail_path) && cachedFileExists(resolveThumbnailFilePath(metadata.thumbnail_path!));
 }
 
 /** Resolve the best thumbnail path for non-video files without changing fallback order. */
-function resolveThumbnailPath(metadata: ImageMetadataRecord, file: ImageFileRecord): string {
-  if (hasStoredThumbnail(metadata)) {
+async function resolveThumbnailPath(metadata: ImageMetadataRecord, file: ImageFileRecord): Promise<string> {
+  if (await hasStoredThumbnail(metadata)) {
     return metadata.thumbnail_path!;
   }
 
@@ -182,24 +190,36 @@ function resolveThumbnailPath(metadata: ImageMetadataRecord, file: ImageFileReco
 }
 
 /** Cache filesystem existence checks across repeated thumbnail batches. */
-function cachedFileExists(filePath: string): boolean {
-  const now = Date.now();
+function cachedFileExists(filePath: string): Promise<boolean> {
   const cached = thumbnailExistenceCache.get(filePath);
-  if (cached && cached.expiresAt > now) {
-    return cached.exists;
+  if (cached) {
+    return cached;
   }
 
-  const exists = fs.existsSync(filePath);
-  thumbnailExistenceCache.set(filePath, { exists, expiresAt: now + THUMBNAIL_EXISTENCE_CACHE_TTL_MS });
-  return exists;
+  const pending = thumbnailExistenceLimit(async () => {
+    try {
+      await fs.promises.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+  // Share in-flight checks without letting queue time consume the result TTL.
+  thumbnailExistenceCache.set(filePath, pending, { ttl: 0 });
+  void pending.then((exists) => {
+    if (thumbnailExistenceCache.get(filePath) === pending) {
+      thumbnailExistenceCache.set(filePath, Promise.resolve(exists));
+    }
+  });
+  return pending;
 }
 
 /** Build one batch-thumbnail lookup result while keeping per-hash failures isolated. */
-function buildBatchThumbnailLookupResult(
+async function buildBatchThumbnailLookupResult(
   hash: string,
   metadata: ImageMetadataRecord | undefined,
   file: ImageFileRecord | undefined,
-): BatchThumbnailLookupResult {
+): Promise<BatchThumbnailLookupResult> {
   try {
     if (!metadata) {
       return { success: false, error: 'Not found' };
@@ -221,7 +241,7 @@ function buildBatchThumbnailLookupResult(
     // produced one. Before HEAVY-2 they always pointed at the original file here,
     // which is why a batch lookup for a page of videos resolved to raw video bytes.
     if (file.mime_type && file.mime_type.startsWith('video/')) {
-      if (hasStoredThumbnail(metadata)) {
+      if (await hasStoredThumbnail(metadata)) {
         return {
           success: true,
           thumbnailPath: metadata.thumbnail_path!,
@@ -238,7 +258,7 @@ function buildBatchThumbnailLookupResult(
 
     return {
       success: true,
-      thumbnailPath: resolveThumbnailPath(metadata, file),
+      thumbnailPath: await resolveThumbnailPath(metadata, file),
       mimeType: 'image/webp'
     };
   } catch (error) {
@@ -250,7 +270,7 @@ function buildBatchThumbnailLookupResult(
 }
 
 /** Build the batch-thumbnail lookup payload for the full hash list. */
-export function buildBatchThumbnailLookupResults(hashes: string[]): BatchThumbnailLookupResults {
+export async function buildBatchThumbnailLookupResults(hashes: string[]): Promise<BatchThumbnailLookupResults> {
   const results: BatchThumbnailLookupResults = {};
   const uniqueHashes = Array.from(new Set(hashes));
   const metadataByHash = new Map(
@@ -264,8 +284,11 @@ export function buildBatchThumbnailLookupResults(hashes: string[]): BatchThumbna
     }
   }
 
-  hashes.forEach((hash) => {
-    results[hash] = buildBatchThumbnailLookupResult(hash, metadataByHash.get(hash), fileByHash.get(hash));
+  const lookupResults = await Promise.all(uniqueHashes.map((hash) =>
+    buildBatchThumbnailLookupResult(hash, metadataByHash.get(hash), fileByHash.get(hash)),
+  ));
+  uniqueHashes.forEach((hash, index) => {
+    results[hash] = lookupResults[index];
   });
 
   return results;

@@ -33,9 +33,10 @@ function drawIcon(canvas: HTMLCanvasElement, image: ImageBitmap, edit: IconEdit,
   return context
 }
 
-export function AppIconEditor({ source, isSaving, onRegister, onClose }: {
+export function AppIconEditor({ source, isSaving, registerBlocked = false, onRegister, onClose }: {
   source: AppIconSource
   isSaving: boolean
+  registerBlocked?: boolean
   onRegister: (dataUrl: string) => Promise<void>
   onClose: () => void
 }) {
@@ -81,7 +82,7 @@ export function AppIconEditor({ source, isSaving, onRegister, onClose }: {
   }, [image, edit])
 
   const handleRegister = async () => {
-    if (!image || isSaving || savingRef.current) throw new Error(t({ ko: '이미지가 준비될 때까지 기다려줘.', en: 'Wait until the image is ready.' }))
+    if (!image || isSaving || registerBlocked || savingRef.current) throw new Error(t({ ko: '이미지와 설정 저장이 준비될 때까지 기다려줘.', en: 'Wait until the image is ready and settings have finished saving.' }))
     savingRef.current = true
     setSaveError(null)
     try {
@@ -123,13 +124,14 @@ export function AppIconEditor({ source, isSaving, onRegister, onClose }: {
         ...(typeof patch.flip === 'boolean' ? { flip: patch.flip } : {}),
       }))
     },
-    save: image && !isSaving ? handleRegister : undefined,
+    save: image && !isSaving && !registerBlocked ? handleRegister : undefined,
   })
 
   const register = () => { void handleRegister().catch(() => {}) }
   const disabled = !image || isSaving
+  const registerDisabled = disabled || registerBlocked
   return (
-    <Modal open title={title} onClose={() => { if (!savingRef.current && !isSaving) onClose() }} onSave={disabled ? undefined : register} size="md" sidePanelInset={CHAT_DOCK_INSET}>
+    <Modal open title={title} onClose={() => { if (!savingRef.current && !isSaving) onClose() }} onSave={registerDisabled ? undefined : register} size="md" sidePanelInset={CHAT_DOCK_INSET}>
       <ModalBody>
         <div
           role="application" tabIndex={disabled ? -1 : 0}
@@ -180,7 +182,7 @@ export function AppIconEditor({ source, isSaving, onRegister, onClose }: {
       </ModalBody>
       <ModalFooter>
         <Button variant="ghost" disabled={isSaving} onClick={onClose}>{t({ ko: '취소', en: 'Cancel' })}</Button>
-        <Button disabled={disabled} onClick={register} aria-busy={isSaving || undefined}>
+        <Button disabled={registerDisabled} onClick={register} aria-busy={isSaving || undefined}>
           {isSaving ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : null}
           {isSaving ? t({ ko: '등록 중', en: 'Registering' }) : t({ ko: '등록', en: 'Register' })}
         </Button>

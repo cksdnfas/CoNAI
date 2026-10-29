@@ -44,7 +44,7 @@ test('group room memory: the room summary, what its members see, and recall', { 
 
   // The summary model: a segment repeats the stretch's keyword, a plot says it is one. Long enough (Korean, ~1 token
   // per character) that three segments outgrow the summary budget (15% of 8000), short enough to be recalled.
-  const FILLER = '가'.repeat(500)
+  const FILLER = Array.from({ length: 500 }, (_, i) => String.fromCharCode(0xac00 + i)).join('')
   const requests: string[] = []
   t.mock.method(globalThis, 'fetch', async (_url: unknown, init: RequestInit) => {
     if (init.method !== 'POST') return new Response('', { status: 404 })

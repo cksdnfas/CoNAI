@@ -45,6 +45,34 @@ const THUMBNAIL_SIZE = 512;
 const THUMBNAIL_QUALITY = 82;
 let vibeAssetFileIndex: Map<string, string> | null = null;
 let characterAssetMetadataIndex: Map<string, string> | null = null;
+type VibeSummary = Omit<StoredNaiVibeAsset, 'encoded' | 'image_data_url'>;
+type CharacterSummary = Omit<StoredNaiCharacterReferenceAsset, 'image_data_url'>;
+let vibeSummaries: Map<string, { filePath: string; record: VibeSummary }> | null = null;
+let characterSummaries: Map<string, CharacterSummary> | null = null;
+const loadedVibeModels = new Set<string>();
+let allVibeModelsLoaded = false;
+
+/** Initialization, repair, and mutations must not overwrite one another across awaits. */
+function assetQueue() {
+  let tail: Promise<void> = Promise.resolve();
+  return function enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = tail.then(operation);
+    tail = result.then(() => undefined, () => undefined);
+    return result;
+  };
+}
+const withVibes = assetQueue();
+const withCharacterReferences = assetQueue();
+
+function vibeSummary(record: StoredNaiVibeAsset): VibeSummary {
+  const { encoded, image_data_url, ...summary } = record;
+  return summary;
+}
+
+function characterSummary(record: StoredNaiCharacterReferenceAsset): CharacterSummary {
+  const { image_data_url, ...summary } = record;
+  return summary;
+}
 
 async function ensureDirectory(targetPath: string) {
   await fs.promises.mkdir(targetPath, { recursive: true });
@@ -271,7 +299,7 @@ async function ensureCharacterReferenceAssetFiles(
 }
 
 /** Persist one encoded vibe payload so the user can reuse it without re-encoding. */
-export async function saveNaiVibeAsset(input: {
+async function saveNaiVibeAssetUnlocked(input: {
   label?: string;
   description?: string;
   model: string;
@@ -316,30 +344,29 @@ export async function saveNaiVibeAsset(input: {
   const filePath = path.join(modelDir, `${assetId}.json`);
   await writeJsonFile(filePath, record);
   vibeAssetFileIndex?.set(assetId, filePath);
+  vibeSummaries?.set(assetId, { filePath, record: vibeSummary(record) });
   return buildStoredAssetResponse(record);
 }
 
 /** List all stored vibe payloads, optionally scoped to one model family. */
-export async function listNaiVibeAssets(model?: string) {
+async function listNaiVibeAssetsUnlocked(model?: string) {
   await ensureDirectory(VIBE_ROOT);
-  const indexedPaths = Array.from((await getVibeAssetFileIndex()).values());
   const targetModelDir = model ? path.join(VIBE_ROOT, slugifyModel(model)) : null;
-
-  const records: StoredNaiVibeAsset[] = [];
-  for (const filePath of indexedPaths) {
-    if (targetModelDir && path.dirname(filePath) !== targetModelDir) {
-      continue;
+  vibeSummaries ??= new Map();
+  if (!allVibeModelsLoaded && (!targetModelDir || !loadedVibeModels.has(targetModelDir))) {
+    for (const [assetId, filePath] of await getVibeAssetFileIndex()) {
+      if ((targetModelDir && path.dirname(filePath) !== targetModelDir) || vibeSummaries.has(assetId)) continue;
+      const record = await readJsonFile<StoredNaiVibeAsset>(filePath);
+      if (!record) continue;
+      vibeSummaries.set(assetId, { filePath, record: vibeSummary(await ensureVibeAssetFiles(record, filePath)) });
     }
-
-    const record = await readJsonFile<StoredNaiVibeAsset>(filePath);
-    if (!record) {
-      continue;
-    }
-
-    records.push(await ensureVibeAssetFiles(record, filePath));
+    if (targetModelDir) loadedVibeModels.add(targetModelDir);
+    else allVibeModelsLoaded = true;
   }
 
-  return records
+  return [...vibeSummaries.values()]
+    .filter(({ filePath }) => !targetModelDir || path.dirname(filePath) === targetModelDir)
+    .map(({ record }) => record)
     .sort((left, right) => right.created_date.localeCompare(left.created_date))
     .map((record) => buildStoredAssetResponse(record));
 }
@@ -363,13 +390,15 @@ async function loadNaiVibeAssetRecord(assetId: string) {
 }
 
 /** Load one stored vibe payload with its full encoded payload. */
-export async function getNaiVibeAsset(assetId: string) {
+async function getNaiVibeAssetUnlocked(assetId: string) {
   const record = await loadNaiVibeAssetRecord(assetId);
+  const filePath = vibeAssetFileIndex?.get(assetId);
+  if (record && filePath) vibeSummaries?.set(assetId, { filePath, record: vibeSummary(record) });
   return record ? buildStoredAssetResponse(record) : null;
 }
 
 /** Delete one stored vibe payload. */
-export async function deleteNaiVibeAsset(assetId: string) {
+async function deleteNaiVibeAssetUnlocked(assetId: string) {
   const filePath = await findVibeAssetFilePath(assetId);
   if (!filePath) {
     return false;
@@ -392,12 +421,13 @@ export async function deleteNaiVibeAsset(assetId: string) {
 
   if (deleted) {
     vibeAssetFileIndex?.delete(assetId);
+    vibeSummaries?.delete(assetId);
   }
   return deleted;
 }
 
 /** Update one stored vibe payload's editable metadata. */
-export async function updateNaiVibeAsset(assetId: string, input: {
+async function updateNaiVibeAssetUnlocked(assetId: string, input: {
   label?: string;
   description?: string;
 }) {
@@ -417,11 +447,12 @@ export async function updateNaiVibeAsset(assetId: string, input: {
   };
 
   await writeJsonFile(filePath, nextRecord);
+  vibeSummaries?.set(assetId, { filePath, record: vibeSummary(nextRecord) });
   return buildStoredAssetResponse(nextRecord);
 }
 
 /** Persist one character-reference image and its prepared letterboxed derivative. */
-export async function saveNaiCharacterReferenceAsset(input: {
+async function saveNaiCharacterReferenceAssetUnlocked(input: {
   label?: string;
   description?: string;
   image: string;
@@ -460,31 +491,30 @@ export async function saveNaiCharacterReferenceAsset(input: {
   const metadataPath = path.join(CHARACTER_REFERENCE_ROOT, `${assetId}.json`);
   await writeJsonFile(metadataPath, metadata);
   characterAssetMetadataIndex?.set(assetId, metadataPath);
+  characterSummaries?.set(assetId, characterSummary(metadata));
   return buildStoredAssetResponse(metadata);
 }
 
 /** List all saved character-reference assets. */
-export async function listNaiCharacterReferenceAssets() {
+async function listNaiCharacterReferenceAssetsUnlocked() {
   await ensureDirectory(CHARACTER_REFERENCE_ROOT);
-  const records: StoredNaiCharacterReferenceAsset[] = [];
-
-  const metadataPaths = Array.from((await getCharacterAssetMetadataIndex()).values());
-  for (const metadataPath of metadataPaths) {
-    const record = await readJsonFile<StoredNaiCharacterReferenceAsset>(metadataPath);
-    if (!record) {
-      continue;
+  if (!characterSummaries) {
+    const summaries = new Map<string, CharacterSummary>();
+    for (const [assetId, metadataPath] of await getCharacterAssetMetadataIndex()) {
+      const record = await readJsonFile<StoredNaiCharacterReferenceAsset>(metadataPath);
+      if (!record) continue;
+      summaries.set(assetId, characterSummary(await ensureCharacterReferenceAssetFiles(record, metadataPath)));
     }
-
-    records.push(await ensureCharacterReferenceAssetFiles(record, metadataPath));
+    characterSummaries = summaries;
   }
 
-  return records
+  return [...characterSummaries.values()]
     .sort((left, right) => right.created_date.localeCompare(left.created_date))
     .map((record) => buildStoredAssetResponse(record));
 }
 
 /** Delete one stored character-reference asset and its derived files. */
-export async function deleteNaiCharacterReferenceAsset(assetId: string) {
+async function deleteNaiCharacterReferenceAssetUnlocked(assetId: string) {
   const targets = [
     path.join(CHARACTER_REFERENCE_ROOT, `${assetId}.png`),
     path.join(CHARACTER_REFERENCE_ROOT, `${assetId}.json`),
@@ -502,12 +532,13 @@ export async function deleteNaiCharacterReferenceAsset(assetId: string) {
 
   if (deleted) {
     characterAssetMetadataIndex?.delete(assetId);
+    characterSummaries?.delete(assetId);
   }
   return deleted;
 }
 
 /** Update one stored character-reference asset's editable metadata. */
-export async function updateNaiCharacterReferenceAsset(assetId: string, input: {
+async function updateNaiCharacterReferenceAssetUnlocked(assetId: string, input: {
   label?: string;
   description?: string;
 }) {
@@ -529,5 +560,16 @@ export async function updateNaiCharacterReferenceAsset(assetId: string, input: {
   };
 
   await writeJsonFile(metadataPath, nextRecord);
+  characterSummaries?.set(assetId, characterSummary(nextRecord));
   return buildStoredAssetResponse(nextRecord);
 }
+
+export const saveNaiVibeAsset = (...args: Parameters<typeof saveNaiVibeAssetUnlocked>) => withVibes(() => saveNaiVibeAssetUnlocked(...args));
+export const listNaiVibeAssets = (...args: Parameters<typeof listNaiVibeAssetsUnlocked>) => withVibes(() => listNaiVibeAssetsUnlocked(...args));
+export const getNaiVibeAsset = (...args: Parameters<typeof getNaiVibeAssetUnlocked>) => withVibes(() => getNaiVibeAssetUnlocked(...args));
+export const updateNaiVibeAsset = (...args: Parameters<typeof updateNaiVibeAssetUnlocked>) => withVibes(() => updateNaiVibeAssetUnlocked(...args));
+export const deleteNaiVibeAsset = (...args: Parameters<typeof deleteNaiVibeAssetUnlocked>) => withVibes(() => deleteNaiVibeAssetUnlocked(...args));
+export const saveNaiCharacterReferenceAsset = (...args: Parameters<typeof saveNaiCharacterReferenceAssetUnlocked>) => withCharacterReferences(() => saveNaiCharacterReferenceAssetUnlocked(...args));
+export const listNaiCharacterReferenceAssets = () => withCharacterReferences(listNaiCharacterReferenceAssetsUnlocked);
+export const updateNaiCharacterReferenceAsset = (...args: Parameters<typeof updateNaiCharacterReferenceAssetUnlocked>) => withCharacterReferences(() => updateNaiCharacterReferenceAssetUnlocked(...args));
+export const deleteNaiCharacterReferenceAsset = (...args: Parameters<typeof deleteNaiCharacterReferenceAssetUnlocked>) => withCharacterReferences(() => deleteNaiCharacterReferenceAssetUnlocked(...args));

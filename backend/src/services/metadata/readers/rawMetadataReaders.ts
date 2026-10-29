@@ -58,7 +58,7 @@ async function readJpegRawMetadata(context: RawMetadataReaderContext): Promise<R
     return null;
   }
 
-  const rawData = await JpegExtractor.extract(context.filePath);
+  const rawData = await JpegExtractor.extract(context.buffer);
   return Object.keys(rawData).length > 0 ? rawData : null;
 }
 
@@ -70,7 +70,7 @@ async function readWebPContainerRawMetadata(context: RawMetadataReaderContext): 
     return null;
   }
 
-  const rawData = await WebPExtractor.extract(context.filePath);
+  const rawData = await WebPExtractor.extract(context.buffer);
   return Object.keys(rawData).length > 0 ? rawData : null;
 }
 

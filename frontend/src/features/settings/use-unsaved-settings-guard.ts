@@ -1,7 +1,6 @@
-import { createContext, createElement, useCallback, useContext, useEffect, useId, useState, type PropsWithChildren } from 'react'
+import { createContext, createElement, useCallback, useContext, useEffect, useId, useRef, useState, type PropsWithChildren } from 'react'
 import { useBeforeUnload, useBlocker, type BlockerFunction, type Location } from 'react-router-dom'
 import { useBlockerConfirm } from '@/components/ui/use-blocker-confirm'
-import { shouldBypassOverlayHistoryBackNavigation } from '@/components/ui/use-overlay-back-close'
 
 /** Which navigations leave a guarded draft: false = another path, true = another path or query, or a custom test. */
 export type GuardedLeave = boolean | ((current: Location, next: Location) => boolean)
@@ -30,7 +29,7 @@ export function UnsavedSettingsGuardProvider({ children }: PropsWithChildren) {
     if (hasUnsavedChanges) { event.preventDefault(); event.returnValue = '' }
   }, [hasUnsavedChanges]))
   const shouldBlock = useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => (
-    Object.values(guards).some((guard) => leavesDraft(guard.leaves, currentLocation, nextLocation)) && !shouldBypassOverlayHistoryBackNavigation()
+    Object.values(guards).some((guard) => leavesDraft(guard.leaves, currentLocation, nextLocation))
   ), [guards])
   useBlockerConfirm(useBlocker(shouldBlock), [...new Set(Object.values(guards).map((guard) => guard.message))].join('\n'))
   return createElement(GuardContext.Provider, { value: register }, children)
@@ -41,4 +40,27 @@ export function useUnsavedSettingsGuard(hasUnsavedChanges: boolean, confirmMessa
   const register = useContext(GuardContext)
   const id = useId()
   useEffect(() => hasUnsavedChanges ? register(id, { message: confirmMessage, leaves }) : undefined, [hasUnsavedChanges, confirmMessage, leaves, register, id])
+}
+
+/** A page editor's guarded leave and its own successful save/delete navigation. */
+export function useEditorPageGuard(hasUnsavedChanges: boolean, confirmMessage: string, leaves: GuardedLeave, allowLeave?: (current: Location, next: Location) => boolean) {
+  const mounted = useRef(true)
+  const allowedNavigation = useRef<string | null>(null)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+  const guardedLeave = useCallback((current: Location, next: Location) => {
+    if (allowedNavigation.current === `${next.pathname}${next.search}`) {
+      allowedNavigation.current = null
+      return false
+    }
+    return !allowLeave?.(current, next) && leavesDraft(leaves, current, next)
+  }, [allowLeave, leaves])
+  useUnsavedSettingsGuard(hasUnsavedChanges, confirmMessage, guardedLeave)
+  const allowNavigation = useCallback((path: string, navigate: () => void) => {
+    allowedNavigation.current = path
+    try { navigate() } finally { allowedNavigation.current = null }
+  }, [])
+  return { mounted, allowNavigation }
 }

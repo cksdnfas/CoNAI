@@ -10,7 +10,7 @@ export class JpegExtractor {
   /**
    * Extract metadata from JPEG file.
    */
-  static async extract(filePath: string): Promise<AIMetadata> {
-    return StandardMetadataExtractor.extract(filePath);
+  static async extract(source: string | Buffer): Promise<AIMetadata> {
+    return StandardMetadataExtractor.extract(source);
   }
 }

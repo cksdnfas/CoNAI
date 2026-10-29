@@ -8,7 +8,8 @@ import type { AddressInfo } from 'node:net'
 
 /** A fake OpenAI-compatible server answering from a script: a tool call, a text, or an error; summaries on request. */
 function scriptedServer() {
-  const script: Array<{ kind: 'tool'; promptTokens?: number; name?: string; args?: Record<string, unknown> } | { kind: 'text'; text: string } | { kind: 'error' }> = []
+  const script: Array<{ kind: 'tool'; promptTokens?: number; name?: string; args?: Record<string, unknown> } | { kind: 'text'; text: string; reasoning?: string; hold?: boolean } | { kind: 'error' }> = []
+  let closedStreams = 0
   const requests: Array<{ messages: Array<{ role: string; content: unknown }>; tools: unknown[]; summary: boolean; body: Record<string, unknown>; usage: { inputTokens: number; outputTokens: number } }> = []
   const server = http.createServer((req, res) => {
     let body = ''
@@ -32,7 +33,11 @@ function scriptedServer() {
         send({ tool_calls: [{ index: 0, id: `call_${requests.length}`, type: 'function', function: { name: step.name ?? 'lookup', arguments: JSON.stringify(step.args ?? { topic: 'apples' }) } }] })
         send({}, 'tool_calls')
       } else {
-        send({ role: 'assistant', content: step.text })
+        send({ role: 'assistant', content: step.text, reasoning_content: step.reasoning })
+        if (step.hold) {
+          res.on('close', () => { closedStreams += 1 })
+          return
+        }
         send({}, 'stop')
       }
       const prompt = step.kind === 'tool' && step.promptTokens ? step.promptTokens : Math.ceil(JSON.stringify(messages).length / 4)
@@ -41,7 +46,7 @@ function scriptedServer() {
       res.end('data: [DONE]\n\n')
     })
   })
-  return { server, script, requests }
+  return { server, script, requests, get closedStreams() { return closedStreams } }
 }
 
 test('pi sessions: tool rounds, forked turns, failures leave no trace, compaction, cleanup', { timeout: 120000 }, async (t) => {
@@ -278,6 +283,34 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
     assert.equal(mock.requests.length, 2, 'a provider ignoring the final no-tools turn cannot start another request')
     assert.equal(noncompliant.result.turns, 2)
     assert.equal(noncompliant.result.stopReason, 'turn_limit')
+  })
+
+  await t.test('opt-in loop protection stops open text and reasoning streams without saving the failed turn', async () => {
+    const loop = 'repeat this sentence. '.repeat(80)
+    for (const channel of ['text', 'reasoning'] as const) {
+      mock.script.push({ kind: 'text', text: channel === 'text' ? `Complete answer.\n${loop}` : 'Complete answer.', reasoning: channel === 'reasoning' ? `Plan.\n${loop}` : undefined, hold: true })
+      let saved = false
+      const result = await streamPiChatCompletion({
+        target: target({ resumeId: null, onDone: () => { saved = true } }),
+        messages: [{ role: 'user', content: 'Explain.' }],
+        signal: AbortSignal.timeout(10000), stopLoops: true,
+      })
+      assert.equal(result.finishReason, 'repetition')
+      assert.equal(result.content, 'Complete answer.')
+      assert.equal(result.reasoning, channel === 'reasoning' ? 'Plan.' : '')
+      assert.equal(saved, false)
+      assert.deepEqual(files(), [])
+    }
+    mock.script.push({ kind: 'text', text: loop, reasoning: loop })
+    const unguarded = await streamPiChatCompletion({
+      target: target({ resumeId: null, onDone: () => {} }),
+      messages: [{ role: 'user', content: 'Explain.' }],
+      signal: AbortSignal.timeout(10000),
+    })
+    assert.equal(unguarded.finishReason, 'stop')
+    assert.equal(unguarded.content, loop)
+    assert.equal(unguarded.reasoning, loop)
+    assert.equal(mock.closedStreams, 2, 'loop detection cancels both provider streams')
   })
 
   await t.test('a pi profile keeps its chat as a pi session value; deleting the chat drops the folder', async (sub) => {

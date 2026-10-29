@@ -117,7 +117,7 @@ test('plugin blocks survive normalizing, are never required and stay within the 
   assert.equal(isGenerationLayoutRequiredBlock('nai', 'plugin:helper:notes'), false)
 })
 
-test('the plugin blocks on screen follow the installed plugins', () => {
+test('plugin placements survive disabled plugins and stay within the saved layout limit', () => {
   const preset = createDefaultGenerationLayoutPreset('nai')
   assert.equal(withPluginBlocks(preset, []), preset)
   const added = withPluginBlocks(preset, ['plugin:helper:notes'])
@@ -127,7 +127,21 @@ test('the plugin blocks on screen follow the installed plugins', () => {
   assert.deepEqual(withPluginBlocks(moved, ['plugin:helper:notes']), moved)
   const single = { ...preset, columns: [{ weight: 100, blocks: preset.columns.flatMap((column) => column.blocks).filter((block) => block !== 'action').concat('action') }] }
   assert.deepEqual(withPluginBlocks(single, ['plugin:helper:notes']).columns[0].blocks.slice(-2), ['plugin:helper:notes', 'action'])
-  const gone = withPluginBlocks(setLayoutBlockHidden(moved, 'plugin:helper:notes', true), [])
-  assert.equal(allBlocks(gone).some((block) => block.startsWith('plugin:')), false)
-  assert.deepEqual(gone.hidden, [])
+  const hidden = setLayoutBlockHidden(moved, 'plugin:helper:notes', true)
+  const disabled = withPluginBlocks(hidden, [], ['helper'])
+  assert.equal(disabled, hidden)
+  assert.deepEqual(normalizeGenerationLayoutPresets('nai', [disabled]), [hidden])
+  assert.equal(withPluginBlocks(disabled, ['plugin:helper:notes'], ['helper']), disabled)
+  assert.equal(withPluginBlocks(hidden, []), hidden, 'an unloaded list cannot remove saved placements')
+  const uninstalled = withPluginBlocks(hidden, [], [])
+  assert.ok(!allBlocks(uninstalled).includes('plugin:helper:notes'))
+  assert.deepEqual(uninstalled.hidden, [])
+
+  const blocks = Array.from({ length: 8 }, (_, index) => `plugin:helper:block-${index}` as const)
+  const full = withPluginBlocks(preset, blocks, ['helper'])
+  assert.equal(withPluginBlocks(full, ['plugin:other:new'], ['helper', 'other']), full)
+  assert.deepEqual(normalizeGenerationLayoutPresets('nai', [full]), [full])
+  const replaced = withPluginBlocks(setLayoutBlockHidden(full, blocks[0], true), ['plugin:other:new'], ['other'])
+  assert.deepEqual(allBlocks(replaced).filter((block) => block.startsWith('plugin:')), ['plugin:other:new'])
+  assert.deepEqual(replaced.hidden, [])
 })

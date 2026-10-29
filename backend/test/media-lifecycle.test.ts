@@ -70,6 +70,146 @@ test('thumbnail paths resolve inside the temp dir whatever separators they were 
   assert.equal(resolveThumbnailAbsolutePath('', tempDir), null)
 })
 
+test('thumbnail batch lookups share bounded asynchronous misses and preserve response fallbacks', { timeout: 10_000 }, async (t) => {
+  await booted
+  const { queryListRoutes } = await import('../src/routes/images/query-list.routes')
+  const { MediaMetadataModel } = await import('../src/models/Image/MediaMetadataModel')
+  const { ImageFileModel } = await import('../src/models/Image/ImageFileModel')
+  const { ImageSafetyService } = await import('../src/services/imageSafetyService')
+  const { MediaPostprocessVisibilityService } = await import('../src/services/mediaPostprocessVisibilityService')
+  const hashes = Array.from({ length: 32 }, (_, index) => index.toString(16).padStart(48, '0'))
+  t.mock.method(MediaMetadataModel, 'findByHashes', (requested) => requested
+    .filter((hash) => hash !== hashes[5])
+    .map((hash) => {
+      const index = hashes.indexOf(hash)
+      return {
+        composite_hash: hash,
+        thumbnail_path: index === 4 ? null : `batch-${index}${index === 1 || index === 3 ? '-missing' : ''}.webp`,
+        rating_score: index === 6 ? 1 : 0,
+      } as any
+    }))
+  t.mock.method(ImageFileModel, 'findActiveByHashes', (requested) => requested
+    .filter((hash) => hash !== hashes[7])
+    .map((hash) => ({
+      composite_hash: hash,
+      original_file_path: `original-${hash}`,
+      mime_type: hash === hashes[2] || hash === hashes[3] ? 'video/mp4' : 'image/png',
+    } as any)))
+  t.mock.method(ImageSafetyService, 'isHidden', (score) => score === 1)
+  t.mock.method(MediaPostprocessVisibilityService, 'isReadyRecord', (metadata) => metadata.composite_hash !== hashes[8])
+
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => { release = resolve })
+  t.after(() => release())
+  let waveStarted!: () => void
+  const firstWave = new Promise<void>((resolve) => { waveStarted = resolve })
+  let active = 0
+  let peakActive = 0
+  let checks = 0
+  t.mock.method(fs, 'existsSync', () => { throw new Error('synchronous existence check') })
+  t.mock.method(fs.promises, 'access', async (filePath) => {
+    checks++
+    active++
+    peakActive = Math.max(peakActive, active)
+    if (active === 16) waveStarted()
+    try {
+      await gate
+      if (String(filePath).endsWith('-missing.webp')) throw new Error('missing')
+    } finally {
+      active--
+    }
+  })
+
+  const route = (queryListRoutes as any).stack.find((layer: any) => layer.route?.path === '/batch/thumbnails').route
+  const request = () => new Promise<any>((resolve, reject) => {
+    route.stack[0].handle({ query: { hashes: hashes.join(',') } }, { json: resolve }, reject)
+  })
+  const firstRequest = request()
+  const secondRequest = request()
+  await firstWave
+  assert.equal(active, 16)
+  release()
+  const [first, second] = await Promise.all([firstRequest, secondRequest])
+
+  assert.equal(peakActive, 16)
+  assert.equal(checks, 27, 'concurrent requests share each distinct thumbnail check')
+  assert.deepEqual(second, first)
+  assert.deepEqual(JSON.parse(JSON.stringify(first)), first, 'the response contains resolved JSON values')
+  assert.equal(first.success, true)
+  assert.deepEqual(first.data[hashes[0]], { success: true, thumbnailPath: 'batch-0.webp', mimeType: 'image/webp' })
+  assert.deepEqual(first.data[hashes[1]], { success: true, thumbnailPath: `original-${hashes[1]}`, mimeType: 'image/webp' })
+  assert.deepEqual(first.data[hashes[2]], { success: true, thumbnailPath: 'batch-2.webp', mimeType: 'image/webp' })
+  assert.deepEqual(first.data[hashes[3]], { success: true, thumbnailPath: `original-${hashes[3]}`, mimeType: 'video/mp4' })
+  assert.deepEqual(first.data[hashes[4]], { success: true, thumbnailPath: `original-${hashes[4]}`, mimeType: 'image/webp' })
+  assert.deepEqual(first.data[hashes[5]], { success: false, error: 'Not found' })
+  assert.deepEqual(first.data[hashes[6]], { success: false, error: 'Hidden by safety policy' })
+  assert.deepEqual(first.data[hashes[7]], { success: false, error: 'File not found' })
+  assert.deepEqual(first.data[hashes[8]], { success: false, error: 'Not found' })
+  assert.deepEqual(await request(), first)
+  assert.equal(checks, 27, 'positive and negative cache hits avoid another check')
+})
+
+test('full rescan reconciles only its unchanged baseline and serializes watcher scans', { timeout: 30_000 }, async (t) => {
+  const { db, runtimePaths } = await booted
+  const { FolderScanService } = await import('../src/services/folderScan')
+  const { FileDiscoveryService } = await import('../src/services/folderScan/fileDiscoveryService')
+  const { FastRegistrationService } = await import('../src/services/folderScan/fastRegistrationService')
+  const { BackgroundProcessorService } = await import('../src/services/backgroundProcessorService')
+  const folderId = (db.prepare('SELECT id FROM watched_folders ORDER BY id LIMIT 1').get() as { id: number }).id
+  const missing = path.join(runtimePaths.uploadsDir, 'scan-missing.png')
+  const changed = path.join(runtimePaths.uploadsDir, 'scan-changed.png')
+  const external = path.join(runtimePaths.uploadsDir, 'scan-external.png')
+  const watched = path.join(runtimePaths.uploadsDir, 'scan-watched.png')
+  const unchanged = path.join(runtimePaths.uploadsDir, 'scan-unchanged.png')
+  fs.mkdirSync(runtimePaths.uploadsDir, { recursive: true })
+  t.after(() => {
+    db.prepare('DELETE FROM image_files WHERE original_file_path IN (?, ?, ?, ?, ?)').run(missing, changed, external, watched, unchanged)
+    for (const file of [watched, unchanged]) fs.rmSync(file, { force: true })
+  })
+  insertFile(db, null, missing)
+  const changedId = insertFile(db, null, changed)
+  const unchangedId = insertFile(db, null, unchanged)
+  const mtime = new Date('2020-01-01T00:00:00.000Z')
+  db.prepare("UPDATE image_files SET file_modified_date = ?, last_verified_date = '2099-01-01T00:00:00.000Z' WHERE id = ?").run(mtime.toISOString(), unchangedId)
+
+  let discovered!: () => void
+  const discoveryStarted = new Promise<void>((resolve) => { discovered = resolve })
+  let resume!: () => void
+  const discoveryMayFinish = new Promise<void>((resolve) => { resume = resolve })
+  t.mock.method(FileDiscoveryService, 'collectFiles', async () => {
+    discovered()
+    await discoveryMayFinish
+    return []
+  })
+  t.mock.method(BackgroundProcessorService, 'triggerHashGeneration', () => {})
+
+  const fullScan = FolderScanService.scanFolder(folderId, true)
+  await Promise.race([discoveryStarted, fullScan.then(() => { throw new Error('scan finished before discovery') })])
+  writeFile(watched)
+  const watcherScan = FolderScanService.scanFolder(folderId, false, { candidateFiles: [watched], quietIfNoChanges: true })
+  await new Promise<void>((resolve) => setImmediate(resolve))
+  assert.equal(db.prepare('SELECT id FROM image_files WHERE original_file_path = ?').get(watched), undefined)
+  insertFile(db, null, external)
+  db.prepare("UPDATE image_files SET last_verified_date = '2099-01-01T00:00:00.000Z' WHERE id = ?").run(changedId)
+  writeFile(unchanged, 'x', mtime)
+  const result = { folderId, totalScanned: 0, newImages: 0, existingImages: 0, updatedPaths: 0, missingImages: 0, errors: [], duration: 0, thumbnailsGenerated: 0, backgroundTasks: 0 }
+  await FastRegistrationService.processFastRegistration([unchanged], folderId, result, { quietIfIdle: true, verifyUnchanged: true })
+  await FastRegistrationService.processFastRegistration([unchanged], folderId, result, { quietIfIdle: true, verifyUnchanged: true })
+  const verified = (db.prepare('SELECT last_verified_date FROM image_files WHERE id = ?').get(unchangedId) as { last_verified_date: string }).last_verified_date
+  assert.equal(verified, '2099-01-01T00:00:00.002Z', 'repeated verifications cannot restore the baseline revision')
+  resume()
+  const fullResult = await fullScan
+  await watcherScan
+
+  const status = (file: string) => (db.prepare('SELECT file_status FROM image_files WHERE original_file_path = ?').get(file) as { file_status: string }).file_status
+  assert.equal(fullResult.missingImages, 1)
+  assert.equal(status(missing), 'missing', 'an unchanged genuinely absent row is reconciled')
+  assert.equal(status(changed), 'active', 'a row changed after the baseline is not reconciled')
+  assert.equal(status(external), 'active', 'a row registered after the baseline is not reconciled')
+  assert.equal(status(unchanged), 'active', 'an unchanged watcher verification from another process protects its row')
+  assert.equal(status(watched), 'active', 'the queued watcher scan registers its newly created file')
+})
+
 test('concurrent thumbnail generation publishes once, cleans failed output and recovers after temp cleanup', async (t) => {
   const { runtimePaths } = await booted
   const { ThumbnailGenerator } = await import('../src/utils/thumbnailGenerator')

@@ -15,7 +15,8 @@ export function useCharacterSettingRuns(editor: CharacterSettingEditorState, gen
     owner: base ? { kind: 'setting', id: base.id } : null,
     ensureOwner: async () => ({ kind: 'setting', id: (await editor.ensureSetting()).id }),
     refresh: (target, results, batchId) => refreshCharacterSettingAssets(queryClient, target.id, results, batchId),
-    onApplied: (_, slot, updated) => {
+    onApplied: (result, slot, updated) => {
+      if (result.owner.kind !== 'setting' || editor.baseRef.current?.id !== result.owner.id) return
       const patch = slot.kind === 'reference' ? { referenceHash: slot.hash } : slot.kind === 'avatar' ? { avatarHash: slot.hash, avatarCrop: null } : {}
       if (updated) editor.rebase(updated, patch)
       else editor.patch(patch)

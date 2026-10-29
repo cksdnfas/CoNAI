@@ -48,7 +48,7 @@ The public workflow route has its own access flow; being inside the shell does n
 ## App shell navigation
 
 `components/layout/app-navigation.ts` is the one navigation model: each built-in page's path, pinnable header key,
-menu group (라이브러리 · 만들기 · 확장, or none for `/access` and `/settings`) and one-line description, plus the
+menu group (라이브러리 · 만들기 · 확장, or none for `/access` and `/settings`), plus the
 enabled plugin pages, filtered by the account's page permissions (names and icons from `page-access-catalog.tsx`).
 The header shows the pinned pages and `AppNavGroupMenu` (`app-nav-menu.tsx`); below md `AppBottomNav`
 (`app-bottom-nav.tsx`) shows the first four pins and 전체 (`/access`, which lists the same groups). Settings and
@@ -125,6 +125,24 @@ live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `e
 - Server-side automation uses MCP tools over the same domain services. A navigation entry alone is not full feature support.
 - Chat thread queries/selection live in `features/codex-chat/use-chat-thread-data.ts`; transcript windowing, streaming
   follow and focus restoration live in `use-chat-transcript-window.ts`. Both chat layouts share them.
+- The chat view delegates the composer (`chat-composer.tsx`), live turn state (`chat-live-state-provider.tsx`),
+  streamed messages (`chat-streaming-surfaces.tsx`) and portraits (`use-chat-portrait.ts`), so typing and streaming
+  do not re-render the whole view. Directory events share one coalesced refresh (`chat-query-refresh.ts`); tail-only
+  changes refetch active threads' tails after in-flight reads settle; sends and read receipts patch room lists locally.
+  The chat gallery uses the shared virtualized media list and polls only pending work. Page registration detects
+  content changes without serializing payloads.
+- Post galleries and SNS slides batch image records (`usePostMediaRecords`) and share per-hash `['post-media', hash]`
+  records. Group hierarchy-only refreshes skip media queries. Feed-safety caches keep only current items.
+- Workflow chat builds graph signatures/snapshots only while a chat is connected. Generation panels share
+  `useHistorySettingsLoad`, `useGenerationImageSaveOptions` and `usePortalTargetById`; private and public Comfy
+  workflows share `useComfyWorkflowDraft` (account-scoped, debounced, flushed on switch/unmount) and field validation.
+  Ticking clocks use `lib/use-now.ts`; result progress ticks inside its own component.
+- The Save picker and private/public artifact explorers use server search and 60-item cursor pages over a directory
+  snapshot and keep their virtualized grids.
+- `requestJson` handles raw responses; `requestApiData` handles envelopes, localized fallbacks and required data while
+  preserving `ApiRequestError` status/code/data. Revision-checked settings drafts share `useSettingsDraftSlot`;
+  general settings keep per-section saving. Long maintenance work (scan, verify, metadata re-extraction) runs as
+  runtime jobs followed with `useRuntimeJob`/`useRuntimeJobAction`.
 - Posts share `use-post-comments.ts` between the page assistant and rendered threads. Root/reply cursors load bounded
   server pages; focused comments and quote context do not require downloading the entire discussion.
 - Preserve the shared virtualized list in `features/images/components/image-list/` (Virtuoso + ViSelect), stable media
@@ -154,6 +172,8 @@ See [plugin contracts](../plugins/README.md).
 Unsaved-change guards register through `useUnsavedSettingsGuard` (`features/settings/use-unsaved-settings-guard.ts`).
 Its provider in the app shell owns the app's only `useBlocker`, because React Router consults just the last registered
 blocker; never call `useBlocker` elsewhere. Pass `true` to also guard query changes, or a stable
-`(current, next) => boolean` for a narrower scope (the workflows tab).
+`(current, next) => boolean` for a narrower scope (the workflows tab). Page editors use `useEditorPageGuard` (same
+file), which wraps it and lets the editor's own navigation after a save or delete through (`allowNavigation`); their
+Ctrl/⌘ S goes through `usePageSaveShortcut` (`lib/keyboard-shortcut.ts`).
 
 `npm run typecheck`, `npx eslint .`, `npm run build` (run in `frontend/`).

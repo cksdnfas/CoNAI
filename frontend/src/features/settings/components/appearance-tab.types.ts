@@ -10,6 +10,7 @@ export interface AppearanceTabProps {
   appearanceDraft: AppearanceSettings | null
   savedAppearance: AppearanceSettings
   isDirty: boolean
+  draftLocked?: boolean
   onPatchAppearance: (patch: Partial<AppearanceSettings>) => void
   onReset: () => void
   onExport: () => void

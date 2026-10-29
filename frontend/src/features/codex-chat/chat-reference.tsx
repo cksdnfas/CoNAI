@@ -1,6 +1,6 @@
 import { buildChatImageRecord } from './chat-image-record'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { createContext, useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation } from 'react-router-dom'
 import { ImageIcon, Play, Reply } from 'lucide-react'
@@ -68,12 +68,15 @@ const LONG_PRESS_MOVE_TOLERANCE_PX = 10
 /** The click a browser fires after lifting a long-pressed finger must not also open the lightbox. */
 const LONG_PRESS_CLICK_SUPPRESS_MS = 450
 
+/** Only the chat gallery opts shared list cells into the chat's hover/long-press action wrapper. */
+export const ChatImageListActionsContext = createContext(false)
+
 /**
  * Hover (or keyboard focus) on a thumbnail slides its actions in over the image's corner; nothing shows at rest so
  * the picture stays clean. Touch has no hover: a still finger held on the thumbnail pins the actions in place (same
  * rules as long-press selection in the image list) until a tap elsewhere or a scroll; the lightbox toolbar has them too.
  */
-export function ChatThumbOverlay({ children, actions, className }: { children: ReactNode; actions: ReactNode; className?: string }) {
+export function ChatThumbOverlay({ children, actions, className, actionsClassName }: { children: ReactNode; actions: ReactNode; className?: string; actionsClassName?: string }) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const [pinned, setPinned] = useState(false)
   const pressRef = useRef<{ pointerId: number; x: number; y: number; timer: number } | null>(null)
@@ -155,6 +158,7 @@ export function ChatThumbOverlay({ children, actions, className }: { children: R
       <div className={cn(
         'pointer-events-none absolute right-1 top-1 flex translate-y-1 scale-95 gap-1 opacity-0 transition duration-200 ease-out group-hover/thumb:pointer-events-auto group-hover/thumb:translate-y-0 group-hover/thumb:scale-100 group-hover/thumb:opacity-100 group-focus-within/thumb:pointer-events-auto group-focus-within/thumb:translate-y-0 group-focus-within/thumb:scale-100 group-focus-within/thumb:opacity-100 motion-reduce:transition-none',
         pinned && 'pointer-events-auto translate-y-0 scale-100 opacity-100',
+        actionsClassName,
       )}>
         {actions}
       </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, type Location } from 'react-router-dom'
 import { CHAT_PROFILE_TEXT_LIMITS } from '@conai/shared'
 import { FolderInput, Link2, Trash2 } from 'lucide-react'
@@ -11,7 +11,7 @@ import { EditorGroup } from '@/components/ui/editor-group'
 import { ErrorState } from '@/components/ui/error-state'
 import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
 import { LoadingState } from '@/components/ui/loading-state'
-import { useUnsavedSettingsGuard } from '@/features/settings/use-unsaved-settings-guard'
+import { useEditorPageGuard } from '@/features/settings/use-unsaved-settings-guard'
 import { useI18n } from '@/i18n'
 import type { CharacterFolder } from '@/lib/api-character-library'
 import { emptySettingDraft, folderPath, settingDraftOf } from '../character-library-shared'
@@ -20,12 +20,11 @@ import { useCharacterSettingRuns } from '../use-character-setting-runs'
 import { CharacterFolderPickerModal } from './character-folder-nav'
 import { CharacterSettingAppearanceEditor } from './character-setting-appearance'
 
-/** The open setting's address changes (a new draft getting its id stays on it). */
+/** The open setting's address changes. */
 function leavesSetting(current: Location, next: Location) {
   if (current.pathname !== next.pathname) return true
   const before = new URLSearchParams(current.search)
   const after = new URLSearchParams(next.search)
-  if (before.has('new') && after.has('setting')) return false
   return before.get('setting') !== after.get('setting') || before.get('new') !== after.get('new')
 }
 
@@ -55,7 +54,17 @@ export function CharacterSettingEditorPage({ editor, folders, canEdit, admin, ro
   const generation = canEdit && admin
   const runs = useCharacterSettingRuns(editor, generation)
   const dirty = canEdit && editor.dirty
-  useUnsavedSettingsGuard(dirty, t({ ko: '외형 설정에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This appearance setting has unsaved changes that will be lost.' }), leavesSetting)
+  const { baseRef, deletedRef } = editor
+  const allowLeave = useCallback((current: Location, next: Location) => {
+    if (current.pathname === next.pathname) {
+      const before = new URLSearchParams(current.search)
+      const after = new URLSearchParams(next.search)
+      if (deletedRef.current && !after.has('setting') && !after.has('new')) return true
+      if (before.has('new') && after.get('setting') === String(baseRef.current?.id) && before.get('view') === after.get('view')) return true
+    }
+    return false
+  }, [baseRef, deletedRef])
+  useEditorPageGuard(dirty, t({ ko: '외형 설정에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This appearance setting has unsaved changes that will be lost.' }), leavesSetting, allowLeave)
 
   const byId = new Map(folders.map((folder) => [folder.id, folder]))
   const crumbs: PathCrumb[] = [

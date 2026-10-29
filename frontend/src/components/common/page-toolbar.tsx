@@ -87,7 +87,7 @@ export function SidebarToggle({ className }: { className?: string }) {
 
 /**
  * One ~56px page row with no surface: [sidebar toggle] title / start · flexible middle · right actions.
- * Replaces PageHeader title rows. Inside PageWithSidebar the sidebar toggle is added automatically whenever the
+ * Inside PageWithSidebar the sidebar toggle is added automatically whenever the
  * sidebar is not visible (desktop collapsed, or any narrow screen). Wraps onto a second line on narrow screens.
  */
 export function PageToolbar({ title, start, children, actions, className, sticky = true }: PageToolbarProps) {
