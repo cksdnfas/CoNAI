@@ -32,13 +32,13 @@ const HOOK_TIMEOUT_MS = 3_000
 const ACTION_TIMEOUT_MS = 30_000
 const NOTIFY_TIMEOUT_MS = 10_000
 const REQUEST_TIMEOUT_MS = 10 * 60_000
-const TOOL_TIMEOUT_MS = 10 * 60_000
+const JOB_TIMEOUT_MS = 10 * 60_000
 const RESULT_LIMIT = 512 * 1024
 const CRASH_WINDOW_MS = 5 * 60_000
 const CRASH_LIMIT = 3
 
 type Invocation = { requester: McpRequester | undefined; baseUrl?: string; workspace?: McpRequestContext['workspace']; signal?: AbortSignal; job?: RuntimeJobContext }
-type Waiting = { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout; invocation: string; controller: AbortController; cleanup: () => void }
+type Waiting = { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: NodeJS.Timeout | undefined; invocation: string; controller: AbortController; cleanup: () => void }
 type Server = {
   pluginId: string; digest: string; worker: Worker | null
   state: PluginServerStatus['state']; error: string | null
@@ -47,6 +47,7 @@ type Server = {
   crashes: number[]; stopping: boolean; restartTimer: NodeJS.Timeout | null
 }
 const servers = new Map<string, Server>()
+const syncing = new Map<string, Promise<void>>()
 let started = false
 /** A server state changed: plugin lists refetch. No plugin id, so disabled plugins stay hidden from non-administrators. */
 const announceServerState = () => publishRuntimeEvent({ name: 'plugin.server.changed', topic: 'plugins', visibility: 'all', payload: {} })
@@ -377,14 +378,21 @@ async function stopWorker(server: Server) {
 /** Brings one plugin's server in line with its row: running when enabled with a module, at the installed digest. */
 export function syncPluginServer(pluginId: string) {
   if (!started) return
-  let wanted: ReturnType<typeof getPlugin> | null = null
-  try { wanted = getPlugin(pluginId) } catch { wanted = null }
-  if (wanted && !wanted.definition.server) wanted = null
-  const current = servers.get(pluginId)
-  const restart = current && (!wanted || current.digest !== wanted.digest || (!current.worker && !current.restartTimer))
   const run = async () => {
+    if (!started) return
+    const desired = () => {
+      try {
+        const plugin = getPlugin(pluginId)
+        return plugin.definition.server ? plugin : null
+      } catch { return null }
+    }
+    let wanted = desired()
+    const current = servers.get(pluginId)
+    const restart = current && (!wanted || current.digest !== wanted.digest || (!current.worker && !current.restartTimer))
     if (current && restart) {
       await stopWorker(current)
+      if (!started) return
+      wanted = desired()
       if (!wanted) servers.delete(pluginId)
       else {
         // A new package starts with a clean record; a crash restart keeps counting.
@@ -394,7 +402,11 @@ export function syncPluginServer(pluginId: string) {
     }
     if (wanted && !servers.get(pluginId)?.worker) startWorker(pluginId)
   }
-  return run().catch(error => console.warn(`[plugin:${pluginId}] server sync failed:`, error))
+  const queued = (syncing.get(pluginId) ?? Promise.resolve()).then(run)
+    .catch(error => { console.warn(`[plugin:${pluginId}] server sync failed:`, error) })
+  syncing.set(pluginId, queued)
+  void queued.finally(() => { if (syncing.get(pluginId) === queued) syncing.delete(pluginId) })
+  return queued
 }
 
 export function startPluginServers() {
@@ -410,6 +422,7 @@ export function startPluginServers() {
 export async function closePluginServers() {
   started = false
   stopEvents?.(); stopEvents = null
+  await Promise.all(syncing.values())
   await Promise.all([...servers.values()].map(stopWorker))
   servers.clear()
 }
@@ -420,7 +433,7 @@ export function pluginServerStatus(pluginId: string): PluginServerStatus {
   return { state: server.state, error: server.error, tools: [...server.tools.values()].map(tool => ({ name: tool.name, description: tool.description })), hooks: [...server.hooks].sort() }
 }
 
-function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request' | 'job', name: string, input: unknown, context: Record<string, unknown>, invocation: Invocation, timeoutMs: number, signal?: AbortSignal) {
+function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request' | 'job', name: string, input: unknown, context: Record<string, unknown>, invocation: Invocation, timeoutMs: number | undefined, signal?: AbortSignal) {
   const server = servers.get(pluginId)
   const worker = server?.worker
   if (!server || !worker || server.state !== 'ready') return Promise.reject(new PluginError('플러그인 서버가 실행 중이 아니야.', 503))
@@ -431,7 +444,7 @@ function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request' | 'job', nam
   const controller = new AbortController()
   server.invocations.set(token, { ...invocation, signal: controller.signal })
   return new Promise<unknown>((resolve, reject) => {
-    const timer = setTimeout(() => finish(server, id, { error: '플러그인 서버가 제때 답하지 않았어.' }), timeoutMs)
+    const timer = timeoutMs === undefined ? undefined : setTimeout(() => finish(server, id, { error: '플러그인 서버가 제때 답하지 않았어.' }), timeoutMs)
     const abort = () => finish(server, id, { error: '플러그인 요청을 취소했어.' })
     server.waiting.set(id, { resolve, reject, timer, invocation: token, controller, cleanup: () => signal?.removeEventListener('abort', abort) })
     signal?.addEventListener('abort', abort, { once: true })
@@ -444,7 +457,7 @@ function invoke(pluginId: string, kind: 'hook' | 'tool' | 'request' | 'job', nam
 const accountOf = (requester: McpRequester | undefined) => requester ? { id: requester.accountId, type: requester.accountType } : null
 
 setPluginTaskInvoker((pluginId, data, requester, job) => invoke(pluginId, 'job', '', data,
-  { account: accountOf(requester), jobId: job.jobId }, { requester, job }, TOOL_TIMEOUT_MS, job.signal))
+  { account: accountOf(requester), jobId: job.jobId }, { requester, job }, JOB_TIMEOUT_MS, job.signal))
 
 /** A plugin page's `api.server(body)`: the module's `onRequest({ body, account, page })`. */
 export async function requestPluginServer(pluginId: string, body: unknown, requester: McpRequester | undefined, page: Record<string, unknown>, baseUrl?: string, workspace?: McpRequestContext['workspace'], signal?: AbortSignal) {
@@ -464,7 +477,7 @@ function toolResult(value: unknown): PluginServerToolResult {
 setPluginServerToolInvoker(async (tool, args, requester, signal, run) => {
   try {
     if (signal?.aborted) throw new PluginError('취소됐어.', 499)
-    return toolResult(await invoke(tool.pluginId, 'tool', tool.localName, args, { account: accountOf(requester), tool: tool.name, ...(run ? { run } : {}) }, { requester }, TOOL_TIMEOUT_MS, signal))
+    return toolResult(await invoke(tool.pluginId, 'tool', tool.localName, args, { account: accountOf(requester), tool: tool.name, ...(run ? { run } : {}) }, { requester }, undefined, signal))
   } catch (error) {
     return { isError: true, content: [{ type: 'text', text: error instanceof Error ? error.message : String(error) }] }
   }

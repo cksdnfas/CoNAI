@@ -1,4 +1,5 @@
 import { validateChatMediaAttachments } from './chatMediaAttachments'
+import { deletingThreads } from './chatThreadReservation'
 import { randomUUID } from 'crypto'
 import { chatExecutionRoot } from './chatExecutionRoot'
 import type { ChatExecutionContext, ChatMessageRouting, ChatRecipient, ChatRoutineRouting, ChatTaskRouting } from '@conai/shared'
@@ -499,7 +500,7 @@ async function startRun(threadId: number, listener: (event: CodexChatStreamEvent
 
 export const GroupChatService = {
   isRunning(threadId: number) {
-    return runs.has(threadId) || LlmChatService.isRunning(threadId)
+    return deletingThreads.has(threadId) || runs.has(threadId) || LlmChatService.isRunning(threadId)
   },
 
   /** The room's summarize button: fold everything not summarized yet with the room's summarizer (see groupSummarizer). */
@@ -695,7 +696,7 @@ export const GroupChatService = {
    * A member's reply rewritten by hand (API LLM members only: a Codex member keeps its own memory of what it said).
    * The Codex members of the room forget the old text and get the room's recent past again.
    */
-  editReplyText(requester: McpRequester, threadId: number, messageId: number, content: string) {
+  editReplyText(requester: McpRequester, threadId: number, messageId: number, content: string, tail?: number) {
     requireGroup(requester, threadId)
     if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const message = CodexChatStore.findMessage(threadId, messageId)
@@ -705,7 +706,7 @@ export const GroupChatService = {
     if (!content.trim()) throw new CodexChatError('답변 내용을 입력해줘.')
     CodexChatStore.editAssistantMessage(threadId, messageId, content.trim())
     resetCodexMemory(requester, threadId)
-    return GroupChatService.getThread(requester, threadId)
+    return GroupChatService.getThread(requester, threadId, tail)
   },
 
   /** Stop the members answering now and drop the queue; waits (bounded) until the cut replies are stored. */
@@ -727,25 +728,32 @@ export const GroupChatService = {
     }
   },
 
-  clearThread(requester: McpRequester, threadId: number) {
+  clearThread(requester: McpRequester, threadId: number, tail?: number) {
     requireGroup(requester, threadId)
     if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     CodexChatStore.clearThread(threadId, '')
     resetCodexMemory(requester, threadId)
-    return GroupChatService.getThread(requester, threadId)
+    return GroupChatService.getThread(requester, threadId, tail)
   },
 
-  async deleteThread(requester: McpRequester, threadId: number) {
+  async deleteThread(requester: McpRequester, threadId: number, beforeDelete?: () => void, preserve?: () => void) {
     requireGroup(requester, threadId)
-    await GroupChatService.stop(threadId)
-    const codexThreadIds = ChatGroupStore.members(threadId).map((member) => member.codex_thread_id)
-    if (GroupChatService.isRunning(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
-    CodexChatStore.deleteThread(threadId)
-    for (const codexThreadId of codexThreadIds) deleteCodexRollout(requester, codexThreadId)
-    deleteClaudeSessions(threadId)
+    if (deletingThreads.has(threadId)) throw new CodexChatError('대화를 삭제 중이야.', 409)
+    deletingThreads.add(threadId)
+    try {
+      await GroupChatService.stop(threadId)
+      const codexThreadIds = ChatGroupStore.members(threadId).map((member) => member.codex_thread_id)
+      if (runs.has(threadId) || LlmChatService.hasActiveWork(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
+      beforeDelete?.()
+      CodexChatStore.deleteThread(threadId, preserve)
+      for (const codexThreadId of codexThreadIds) deleteCodexRollout(requester, codexThreadId)
+      deleteClaudeSessions(threadId)
+    } finally {
+      deletingThreads.delete(threadId)
+    }
   },
 
-  addMembers(requester: McpRequester, threadId: number, profileIds: unknown) {
+  addMembers(requester: McpRequester, threadId: number, profileIds: unknown, tail?: number) {
     requireGroup(requester, threadId)
     if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const current = memberProfiles(threadId)
@@ -756,10 +764,10 @@ export const GroupChatService = {
     assertJoinable(requester, profiles as ChatProfile[], current)
     assertUserNameFree(ChatUserProfileStore.forThread(CodexChatStore.findThreadById(threadId)), [...current, ...(profiles as ChatProfile[])])
     ChatGroupStore.addMembers(threadId, ids)
-    return GroupChatService.getThread(requester, threadId)
+    return GroupChatService.getThread(requester, threadId, tail)
   },
 
-  removeMember(requester: McpRequester, threadId: number, profileId: number) {
+  removeMember(requester: McpRequester, threadId: number, profileId: number, tail?: number) {
     requireGroup(requester, threadId)
     if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const members = ChatGroupStore.members(threadId)
@@ -767,21 +775,21 @@ export const GroupChatService = {
     if (members.length <= 1) throw new CodexChatError('마지막 참가자는 내보낼 수 없어.', 409)
     deleteCodexRollout(requester, ChatGroupStore.removeMember(threadId, profileId))
     deleteClaudeMemberSession(threadId, profileId)
-    return GroupChatService.getThread(requester, threadId)
+    return GroupChatService.getThread(requester, threadId, tail)
   },
 
   /** One member's reply token cap in this room (null follows the room's cap, then the profile's). */
-  updateMember(requester: McpRequester, threadId: number, profileId: number, patch: { maxTokens?: unknown }) {
+  updateMember(requester: McpRequester, threadId: number, profileId: number, patch: { maxTokens?: unknown }, tail?: number) {
     requireGroup(requester, threadId)
     if (!ChatGroupStore.member(threadId, profileId)) throw new CodexChatError('이 방의 참가자가 아니야.', 404)
     if (patch.maxTokens !== undefined) {
       ChatGroupStore.setMemberMaxTokens(threadId, profileId, replyCapOf(patch.maxTokens))
     }
-    return GroupChatService.getThread(requester, threadId)
+    return GroupChatService.getThread(requester, threadId, tail)
   },
 
   /** Representative, title, the per-room limits, the room's reply token cap (null restores a default) and its judge preset (null: none). */
-  updateRoom(requester: McpRequester, threadId: number, patch: { representativeId?: unknown; title?: unknown; chainLimit?: unknown; windowLimit?: unknown; maxTokens?: unknown; judgePresetId?: unknown }) {
+  updateRoom(requester: McpRequester, threadId: number, patch: { representativeId?: unknown; title?: unknown; chainLimit?: unknown; windowLimit?: unknown; maxTokens?: unknown; judgePresetId?: unknown }, tail?: number) {
     requireGroup(requester, threadId)
     if (patch.judgePresetId !== undefined) {
       const id = patch.judgePresetId === null || patch.judgePresetId === '' ? null : ChatJudgePresetStore.existing(Number(patch.judgePresetId))
@@ -811,6 +819,6 @@ export const GroupChatService = {
       chain: patch.chainLimit === undefined ? undefined : limit(patch.chainLimit, GROUP_LIMITS.chain),
       window: patch.windowLimit === undefined ? undefined : limit(patch.windowLimit, GROUP_LIMITS.window),
     })
-    return GroupChatService.getThread(requester, threadId)
+    return GroupChatService.getThread(requester, threadId, tail)
   },
 }

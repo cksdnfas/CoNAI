@@ -10,6 +10,7 @@ import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useI18n } from '@/i18n'
 import { acknowledgeChatPageProposal, answerChatPageCommand, checkChatPageProposal } from '@/lib/api-codex-chat'
+import { requestApiData } from '@/lib/api-request'
 import { createRuntimeEventStream } from '@/lib/runtime-event-stream'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { listAccessiblePageAccessItems } from '@/features/auth/page-access-catalog'
@@ -197,6 +198,8 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   /** `${instanceId}:${fieldId}` → JSON of the value the chat filled. */
   const [filled, setFilled] = useState(new Map<string, string>())
   const handledCommands = useRef(new Set<string>())
+  const activeCommands = useRef(new Set<string>())
+  const cancelledCommands = useRef(new Set<string>())
   const snapshot = useMemo<ChatPageSnapshot | null>(() => enabled && connection ? {
     instanceId: activeEditor?.instanceId ?? instanceId, connectionId: connection.id, path: location.pathname, title,
     kind: activeEditor?.kind ?? 'page', resourceId: activeEditor?.resourceId ?? null, fields: activeEditor?.fields ?? [],
@@ -332,14 +335,25 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
   }, [activity])
   /** Runs one immediate operation the chat asked for, only from the registry of the screen it was checked against. */
   const runCommand = useCallback(async (event: ChatPageCommandEvent) => {
+    if (event.type === 'cancel') {
+      if (event.connectionId !== connectionRef.current) return
+      if (activeCommands.current.has(event.commandId)) cancelledCommands.current.add(event.commandId)
+      handledCommands.current.add(event.commandId)
+      return
+    }
     if (event.connectionId !== connectionRef.current || event.expiresAt < Date.now() || handledCommands.current.has(event.commandId)) return
     handledCommands.current.add(event.commandId)
+    activeCommands.current.add(event.commandId)
     if (event.type !== 'capture') {
       if (drivingTimer.current !== null) window.clearTimeout(drivingTimer.current)
       setDriving(true)
     }
     if (handledCommands.current.size > 200) handledCommands.current = new Set([...handledCommands.current].slice(-100))
     try {
+      if (event.requiresClaim) await requestApiData<void>(`/api/codex-chat/page-commands/${encodeURIComponent(event.commandId)}/claim`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ connectionId: event.connectionId }),
+      })
+      if (cancelledCommands.current.has(event.commandId) || event.expiresAt < Date.now()) throw new Error('중단된 페이지 작업이야.')
       const live = current.current
       if (!live.snapshot || !live.editor) throw new Error('연결된 페이지가 없어.')
       if (event.type !== 'capture' && live.snapshot.instanceId !== event.instanceId) throw new Error('그사이 화면이 바뀌었어. get_current_page로 지금 화면을 읽고 다시 해.')
@@ -349,6 +363,7 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
         requireChatPageTarget(current.current.snapshot, target)
       }
       const assertCurrent = () => {
+        if (cancelledCommands.current.has(event.commandId)) throw new Error('중단된 페이지 작업이야.')
         assertTargetCurrent()
         // Native drafts check again after loading inputs and before replacing their captured state.
         // Extensions validate their own revisions and can report a new snapshot before returning.
@@ -382,6 +397,8 @@ export function ChatPageProvider({ children }: PropsWithChildren) {
     } catch (error) {
       await answerChatPageCommand(event.commandId, { ok: false, error: error instanceof Error ? error.message : '페이지 작업이 실패했어.' }).catch(() => undefined)
     } finally {
+      activeCommands.current.delete(event.commandId)
+      cancelledCommands.current.delete(event.commandId)
       if (event.type !== 'capture') drivingTimer.current = window.setTimeout(() => { drivingTimer.current = null; setDriving(false) }, 1500)
     }
   }, [record])

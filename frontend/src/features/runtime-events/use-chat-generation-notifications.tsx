@@ -3,7 +3,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertTriangle, ArrowRight, Ban, ImageOff } from 'lucide-react'
 import { useSnackbar } from '@/components/ui/snackbar-context'
-import { Tip, TooltipProvider } from '@/components/ui/tooltip'
+import { IconButton } from '@/components/ui/icon-button'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { hasAuthPermission } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { CODEX_CHAT_ROUTE, CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey, defaultThreadId, useCodexChat } from '@/features/codex-chat/codex-chat-context'
@@ -53,11 +54,9 @@ function ChatGenerationSnackbar({ payload, accountId, message, onOpen }: { paylo
         <div className="truncate text-xs text-muted-foreground">{payload.chat.threadTitle}</div>
       </div>
       <TooltipProvider>
-        <Tip content={t({ ko: '채팅으로 가기', en: 'Go to chat' })}>
-          <a href={`#${CODEX_CHAT_ROUTE}`} onClick={(event) => { event.preventDefault(); onOpen() }} aria-label={t({ ko: '채팅으로 가기', en: 'Go to chat' })} className="shrink-0 rounded-sm p-1 text-muted-foreground transition hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/35">
-            <ArrowRight className="size-4" />
-          </a>
-        </Tip>
+        <IconButton variant="ghost" size="icon-xs" className="shrink-0" label={t({ ko: '채팅으로 가기', en: 'Go to chat' })} onClick={onOpen}>
+          <ArrowRight />
+        </IconButton>
       </TooltipProvider>
     </div>
   )

@@ -11,6 +11,7 @@ import { floatingSurfaceClassName } from '@/components/ui/floating-surface'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
 import { useSnackbar } from '@/components/ui/snackbar-context'
+import { Textarea } from '@/components/ui/textarea'
 import { ChatProfileAvatar } from '@/features/codex-chat/chat-profile-avatar'
 import { mentionQueryAt } from '@/features/codex-chat/chat-mentions'
 import { useI18n } from '@/i18n'
@@ -37,9 +38,8 @@ function mentionedIds(text: string, picked: Map<number, string>) {
 export type PostCommentDraft = { top: string; reply: { to: number; text: string } | null; edit: { id: number; text: string } | null }
 export const EMPTY_COMMENT_DRAFT: PostCommentDraft = { top: '', reply: null, edit: null }
 
-/** A one-line box that grows with its text, with its buttons inside (comment, reply and edit boxes). */
+/** The frame of a one-line box that grows with its text (Textarea `inline`), with its buttons inside (comment, reply and edit boxes). */
 const BOX = 'theme-input-surface flex items-end gap-0.5 rounded-sm border py-1 pr-1 pl-3 transition focus-within:border-primary/55 focus-within:ring-2 focus-within:ring-primary/15'
-const BOX_INPUT = 'max-h-60 min-h-7 flex-1 resize-none bg-transparent py-1 text-sm text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground'
 
 /** A comment box; `@` opens the list of bots the viewer may call. Its text is held by the caller. */
 function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, placeholder, text, setText }: {
@@ -147,8 +147,9 @@ function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, pla
         </div>
       ) : null}
       <div className={BOX}>
-        <textarea
+        <Textarea
           ref={inputRef}
+          variant="inline"
           rows={1}
           value={text}
           autoFocus={autoFocus}
@@ -157,7 +158,7 @@ function CommentComposer({ postId, parentId, mentionable, autoFocus, onDone, pla
           onChange={(event) => { setText(event.target.value); setCaret(event.target.selectionStart ?? event.target.value.length); setDismissed(null) }}
           onSelect={(event) => setCaret(event.currentTarget.selectionStart ?? 0)}
           onKeyDown={onKeyDown}
-          className={BOX_INPUT}
+          className="flex-1"
         />
         {onDone && parentId ? <IconButton size="icon-sm" variant="ghost" label={t({ ko: '답글 닫기', en: 'Close reply' })} onClick={onDone}><X /></IconButton> : null}
         <IconButton size="icon-sm" variant="ghost" label={t({ ko: '등록', en: 'Post' })} disabled={!text.trim() || mutation.isPending} onClick={() => mutation.mutate()}><Send /></IconButton>
@@ -277,7 +278,7 @@ function CommentRow({ comment, quoted, mentionNames, canReply, onReply, onMentio
           ) : null}
           {editing !== null ? (
             <div className={BOX}>
-              <textarea rows={1} value={editing} autoFocus className={BOX_INPUT} aria-label={t({ ko: '댓글 고치기', en: 'Edit comment' })}
+              <Textarea variant="inline" rows={1} value={editing} autoFocus className="flex-1" aria-label={t({ ko: '댓글 고치기', en: 'Edit comment' })}
                 onChange={(event) => setEditing(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.nativeEvent.isComposing) return

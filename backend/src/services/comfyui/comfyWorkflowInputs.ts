@@ -3,13 +3,12 @@ import type { MarkedField, WorkflowRecord } from '../../types/workflow'
 import { ComfyUIServerModel, WorkflowServerModel } from '../../models/ComfyUIServer'
 import { ComfyUIService } from '../comfyuiService'
 import { reconcileComfyModelSelectionValues } from '../comfyModelSelectionResolver'
-import { prepareComfyPromptData } from '../prepareComfyPromptData'
+import { ComfyInputValidationError, prepareComfyPromptData, validateComfyPromptData } from '../prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
-import { ImageUploadService } from '../imageUploadService'
 import { isComfySeedJsonPath } from './seedControl'
 import { isChatMcpSource, type McpRequestContext } from '../../mcp/context'
 import { validateMcpToolArguments } from '../../mcp/requestSecurity'
-import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireContextPermission, requireRequesterPermission } from '../../middleware/featureAccess'
 import { isProtectedWorkflowKey } from '@conai/shared'
 
 const MINIMAX_DIRECTOR_EDITOR = 'minimax_h3_director_dasiwa'
@@ -125,17 +124,12 @@ function buildMiniMaxAssets(mediaItems: MiniMaxMediaInput[], timelineItems: Arra
     const itemId = String(timelineItems[index]?.id ?? '')
     if (!itemId) return
     const fallbackExtension = media.type === 'video' ? 'mp4' : media.type === 'audio' ? 'wav' : 'png'
-    const managedFilePath = media.composite_hash
-      ? ImageUploadService.getActiveFilePath(media.composite_hash)
-      : null
-    if (media.composite_hash && !managedFilePath) {
-      throw new Error(`Managed media asset not found: ${media.composite_hash}`)
-    }
+    if (media.file_path) throw new ComfyInputValidationError('서버 파일 경로는 워크플로 입력으로 사용할 수 없어.')
     const asset = {
       fileName: media.file_name ?? `mcp-${media.type ?? 'image'}-${index}.${fallbackExtension}`,
       dataUrl: media.data_url,
       mimeType: media.mime_type,
-      filePath: managedFilePath ?? media.file_path,
+      composite_hash: media.composite_hash,
     }
     if (Object.values(asset).some((value) => hasMeaningfulValue(value))) {
       assets[itemId] = asset
@@ -329,6 +323,7 @@ export function normalizeMcpWorkflowInputs(markedFields: MarkedField[], supplied
     }
     if (value !== undefined) normalized[field.id] = value
   }
+  validateComfyPromptData(markedFields, normalized)
   return normalized
 }
 
@@ -380,6 +375,9 @@ export async function prepareMcpComfyWorkflow(params: {
     validateMcpToolArguments([params.suppliedInputs, ...markedFields.map((field) => field.default_value)], () => requireRequesterPermission(params.context?.requester, 'images.view'))
   }
   const promptData = normalizeMcpWorkflowInputs(markedFields, params.suppliedInputs)
+  if (validateComfyPromptData(markedFields, promptData) && params.context) {
+    requireContextPermission(params.context, 'images.view')
+  }
   const comfyService = createMcpComfyService(params.server)
   const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, promptData, {
     uploadNameBase: `mcp_workflow_${params.workflow.id}`,

@@ -15,7 +15,7 @@ interface GroupRootOverviewProps {
   groups: GroupWithHierarchy[]
   countMaps: GroupCountMaps
   sourceKey: 'custom' | 'folders'
-  loadPreviewImages: (groupId: number, params?: { includeChildren?: boolean; count?: number }) => Promise<ImageRecord[]>
+  loadCoverImages: (groupId: number) => Promise<ImageRecord[]>
   onOpenGroup: (groupId: number) => void
   isLoading?: boolean
   error?: unknown
@@ -27,7 +27,7 @@ export function GroupRootOverview({
   groups,
   countMaps,
   sourceKey,
-  loadPreviewImages,
+  loadCoverImages,
   onOpenGroup,
   isLoading = false,
   error = null,
@@ -62,7 +62,7 @@ export function GroupRootOverview({
                 className="w-full"
                 onClick={() => onOpenGroup(group.id)}
                 mediaClassName="aspect-4/3 w-full"
-                media={<GroupCoverMosaic groupId={group.id} sourceKey={sourceKey} imageCount={totalCount} loadPreviewImages={loadPreviewImages} className="size-full" />}
+                media={<GroupCoverMosaic groupId={group.id} sourceKey={sourceKey} imageCount={totalCount} loadCoverImages={loadCoverImages} className="size-full" />}
                 leading={<GroupColorDot color={group.color} size="md" />}
                 title={group.name}
                 meta={<>

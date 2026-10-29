@@ -10,6 +10,7 @@ import { buildRuntimeInputSignature } from './graph-workflow-executor/shared'
 import { resolveAutomationRunAs } from './automationRunAs'
 import { AutomationSwitch } from './automationSwitch'
 import { followingRunAt, initialRunAt } from './scheduleTiming'
+import { GRAPH_IMAGE_AUTHORITY_INPUT } from './graph-workflow-executor/graphImageAuthority'
 
 const DEFAULT_POLL_INTERVAL_MS = 15_000
 
@@ -258,7 +259,9 @@ export class GraphWorkflowScheduleService {
       ? Math.max(0, schedule.max_run_count - reservedRunCount)
       : requestedEnqueueCount
     const allowedEnqueueCount = Math.min(requestedEnqueueCount, remainingRunCount)
-    const inputValues = parseInputValues(schedule)
+    const inputValues = { ...parseInputValues(schedule) }
+    delete inputValues[GRAPH_IMAGE_AUTHORITY_INPUT]
+    if (!runAs) inputValues[GRAPH_IMAGE_AUTHORITY_INPUT] = 'legacy-schedule'
     const executionIds = GraphWorkflowExecutionQueue.enqueueMany(
       schedule.graph_workflow_id,
       allowedEnqueueCount,

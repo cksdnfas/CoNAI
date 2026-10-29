@@ -77,6 +77,10 @@ export async function upscaleNaiImage(payload: NAIUpscalePayload) {
   })
 }
 
+/** Saved vibes for one model, or every model (`undefined`); the generation panel and graph nodes share these entries. */
+export const naiVibeAssetsQueryKey = (model?: string) => ['nai-vibe-assets', model ?? 'all'] as const
+export const NAI_CHARACTER_REFERENCE_ASSETS_QUERY_KEY = ['nai-character-reference-assets'] as const
+
 /** Load saved reusable vibe-transfer assets. */
 export async function listNaiVibeAssets(model?: string) {
   const searchParams = new URLSearchParams()

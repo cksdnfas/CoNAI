@@ -532,11 +532,10 @@ export const CodexChatStore = {
    * (which keep a file from being deleted) go with them. A book the chat should keep or merge is dealt with before
    * this (see the thread delete route); a kept book is no longer the chat's, so it stays.
    */
-  deleteThread(threadId: number) {
-    cancelThreadSummary(threadId)
+  deleteThread(threadId: number, preserve?: () => void) {
     const db = getUserSettingsDb()
-    db.transaction(() => {
-      cancelAgentCallsForThread(threadId)
+    const abortAgents = db.transaction(() => {
+      const abort = cancelAgentCallsForThread(threadId)
       db.prepare('DELETE FROM codex_chat_messages WHERE thread_id = ?').run(threadId)
       db.prepare('DELETE FROM chat_group_members WHERE thread_id = ?').run(threadId)
       ChatSummaryStore.clear(threadId)
@@ -547,13 +546,23 @@ export const CodexChatStore = {
       // Its branches stay, as chats of their own.
       db.prepare('UPDATE codex_chat_threads SET branched_from_thread_id = NULL, branched_at_message_id = NULL WHERE branched_from_thread_id = ?').run(threadId)
       db.prepare('DELETE FROM codex_chat_threads WHERE id = ?').run(threadId)
+      // Preserve only after removal has succeeded, while its transaction can still roll back both changes.
+      preserve?.()
+      return abort
     })()
-    pendingAutomaticTitles.delete(threadId)
-    try {
-      OwnedLorebookStore.threadDeleted(threadId)
-    } catch (error) {
-      console.warn(`[lorebook] Chat ${threadId}: its book could not be removed:`, error instanceof Error ? error.message : error)
+    const afterCommit = () => {
+      if (CodexChatStore.findThreadById(threadId)) return
+      cancelThreadSummary(threadId)
+      abortAgents()
+      pendingAutomaticTitles.delete(threadId)
+      try {
+        OwnedLorebookStore.threadDeleted(threadId)
+      } catch (error) {
+        console.warn(`[lorebook] Chat ${threadId}: its book could not be removed:`, error instanceof Error ? error.message : error)
+      }
     }
+    if (db.inTransaction) setImmediate(afterCommit)
+    else afterCommit()
   },
 
   listMessages(threadId: number, options: { tail?: number; before?: number; after?: number } = {}) {
@@ -727,9 +736,17 @@ export const CodexChatStore = {
   },
 
   /** Display state needs fenced replies, without tool outputs, alternatives, attachments or diagnostics. */
-  listBlockMessages(threadId: number, untilId = Number.MAX_SAFE_INTEGER) {
-    return getUserSettingsDb().prepare("SELECT id, role, content, speaker_profile_id FROM codex_chat_messages WHERE thread_id = ? AND id <= ? AND role = 'assistant' AND instr(content, '```') > 0 ORDER BY id")
-      .all(threadId, untilId) as Array<Pick<CodexChatMessageRecord, 'id' | 'role' | 'content' | 'speaker_profile_id'>>
+  listBlockMessages(threadId: number, untilId = Number.MAX_SAFE_INTEGER, afterId = 0) {
+    return getUserSettingsDb().prepare("SELECT id, role, content, speaker_profile_id FROM codex_chat_messages WHERE thread_id = ? AND id > ? AND id <= ? AND role = 'assistant' AND instr(content, '```') > 0 ORDER BY id")
+      .all(threadId, afterId, untilId) as Array<Pick<CodexChatMessageRecord, 'id' | 'role' | 'content' | 'speaker_profile_id'>>
+  },
+
+  /** The revision of history rewrites and the last actual message in this snapshot. */
+  blockHistoryVersion(threadId: number, untilId = Number.MAX_SAFE_INTEGER) {
+    return getUserSettingsDb().prepare(`SELECT context_revision,
+      COALESCE((SELECT revision FROM chat_block_history_revisions WHERE thread_id = t.id), 0) AS block_revision,
+      COALESCE((SELECT id FROM codex_chat_messages WHERE thread_id = t.id AND id <= ? ORDER BY id DESC LIMIT 1), 0) AS through
+      FROM codex_chat_threads t WHERE t.id = ?`).get(untilId, threadId) as { context_revision: number; block_revision: number; through: number } | undefined
   },
 
   latestMessageId(threadId: number, before?: number) {

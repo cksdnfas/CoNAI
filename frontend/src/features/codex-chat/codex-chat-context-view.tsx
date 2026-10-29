@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, Eraser, LoaderCircle, ScrollText, Shrink, TriangleAlert } from 'lucide-react'
 import { SegmentedControl } from '@/components/common/segmented-control'
@@ -13,7 +13,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { editChatSummarySegment, getThreadLinkedFiles, summarizeCodexChatThread, threadLinkedFilesQueryKey, thinkingMayFillCap, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatProfileSummary, type ChatSummarySegment, type CodexChatThread, type CodexChatThreadDetail } from '@/lib/api-codex-chat'
+import { editChatSummarySegment, getThreadLinkedFiles, summarizeCodexChatThread, threadLinkedFilesQueryKey, thinkingMayFillCap, updateCodexChatThreadContext, updateGroupChat, updateGroupChatMember, type ChatGroupInfo, type ChatProfileSummary, type ChatSummarySegment, type CodexChatThread } from '@/lib/api-codex-chat'
 import { cn } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/error-message'
 import { LorebookBlock } from './chat-lorebook-block'
@@ -21,6 +21,7 @@ import { LinkedFilesBlock } from './chat-linked-files-block'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatUserProfileRow } from './chat-user-profiles'
 import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatCompactMutationKey, codexChatThreadQueryKey } from './codex-chat-context'
+import { applyChatThreadUpdate, runChatThreadDetailMutation } from './chat-query-refresh'
 import { CHAT_MODEL_OPTIONS_QUERY_KEY, listChatModelOptions } from '@/lib/api-codex-chat'
 import { parseServerDate } from '@/lib/server-time'
 import { ChatModelOptionItems } from './chat-model-option-items'
@@ -33,7 +34,7 @@ function GenerationReactionSettings({ thread }: { thread: CodexChatThread }) {
   const models = useQuery({ queryKey: CHAT_MODEL_OPTIONS_QUERY_KEY, queryFn: listChatModelOptions, staleTime: 60_000 })
   const mutation = useMutation({
     mutationFn: (patch: { reactionEnabled?: boolean; reactionModelSlotId?: number | null }) => updateCodexChatThreadContext(thread.id, patch),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
+    onSuccess: (updated) => applyChatThreadUpdate(queryClient, updated),
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
   return (
@@ -59,6 +60,11 @@ type SummaryMode = 'profile' | 'on' | 'off'
 
 const NOTE_SAVE_DELAY_MS = 600
 
+/** A newer stored note replaces the draft only while the draft still is the text it agreed with (and differs in content). */
+function adoptStoredNote(draft: string, agreed: string, stored: string) {
+  return draft === agreed && draft.trim() !== stored.trim() ? stored : draft
+}
+
 /** What a chat's note falls back to: the profile's default note and depth. Group rooms have none (each member has its own). */
 export type AuthorNoteDefaults = { note: string; depth: number | null }
 
@@ -75,23 +81,41 @@ export function AuthorNoteBlock({ thread, defaults }: { thread: CodexChatThread;
   const [draft, setDraft] = useState(stored)
   const latest = useRef({ draft: stored, stored })
   latest.current = { draft, stored }
+  // The text the draft last agreed with: the stored note, or the text sent while its save is on the way. Only a draft
+  // still equal to it takes a newer stored value; anything typed since stays.
+  const agreed = useRef(stored)
+  const saving = useRef(0)
 
   useEffect(() => {
-    setDraft(stored)
+    if (saving.current > 0) return
+    setDraft((current) => adoptStoredNote(current, agreed.current, stored))
+    agreed.current = stored
   }, [stored])
 
   const mutation = useMutation({
     mutationFn: (patch: { authorNote?: string | null; authorNoteDepth?: number | null }) => updateCodexChatThreadContext(thread.id, patch),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
+    onSuccess: (updated) => applyChatThreadUpdate(queryClient, updated),
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
-  const { mutate } = mutation
+  const { mutate, mutateAsync } = mutation
+  const saveNote = useCallback((text: string) => {
+    agreed.current = text
+    saving.current += 1
+    void mutateAsync({ authorNote: text.trim() || null }).then((updated) => {
+      const saved = updated.author_note ?? ''
+      setDraft((current) => adoptStoredNote(current, text, saved))
+      if (agreed.current === text) agreed.current = saved
+    }, () => {
+      // Not saved: the text stays the user's own edit, never something a later stored value may replace.
+      if (agreed.current === text) agreed.current = latest.current.stored
+    }).finally(() => { saving.current -= 1 })
+  }, [mutateAsync])
 
   useEffect(() => {
     if (draft.trim() === stored.trim()) return
-    const timer = window.setTimeout(() => mutate({ authorNote: draft.trim() || null }), NOTE_SAVE_DELAY_MS)
+    const timer = window.setTimeout(() => saveNote(draft), NOTE_SAVE_DELAY_MS)
     return () => window.clearTimeout(timer)
-  }, [draft, stored, mutate])
+  }, [draft, stored, saveNote])
 
   // Leaving the view before the delay still saves what was typed.
   useEffect(() => () => {
@@ -144,19 +168,18 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
   const { t } = useI18n()
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
-  const applied = (detail: CodexChatThreadDetail) => {
-    queryClient.setQueryData(codexChatThreadQueryKey(thread.id), detail)
+  const applied = () => {
     void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
   }
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
-  const roomMutation = useMutation({ mutationFn: (maxTokens: number | null) => updateGroupChat(thread.id, { maxTokens }), onSuccess: applied, onError })
+  const roomMutation = useMutation({ mutationFn: (maxTokens: number | null) => runChatThreadDetailMutation(queryClient, thread.id, () => updateGroupChat(thread.id, { maxTokens })), onSuccess: applied, onError })
   const summaryMutation = useMutation({
     mutationFn: (summaryEnabled: boolean) => updateCodexChatThreadContext(thread.id, { summaryEnabled }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
+    onSuccess: (updated) => applyChatThreadUpdate(queryClient, updated),
     onError,
   })
   const memberMutation = useMutation({
-    mutationFn: ({ profileId, maxTokens }: { profileId: number; maxTokens: number | null }) => updateGroupChatMember(thread.id, profileId, { maxTokens }),
+    mutationFn: ({ profileId, maxTokens }: { profileId: number; maxTokens: number | null }) => runChatThreadDetailMutation(queryClient, thread.id, () => updateGroupChatMember(thread.id, profileId, { maxTokens })),
     onSuccess: applied,
     onError,
   })
@@ -169,7 +192,7 @@ export function GroupContextView({ thread, group, profilesById, segments }: {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 *:shrink-0">
       <ChatUserProfileRow thread={thread} />
-      <AuthorNoteBlock thread={thread} defaults={{ note: '', depth: null }} />
+      <AuthorNoteBlock key={thread.id} thread={thread} defaults={{ note: '', depth: null }} />
       {llmMembers.length > 0 ? <GenerationReactionSettings thread={thread} /> : null}
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={(group?.memberIds ?? thread.member_profile_ids ?? []).flatMap((id) => profilesById.get(id) ?? []).map(({ id, name }) => ({ id, name }))} />
       <LinkedFilesBlock threadId={thread.id} workspaceEnabled={thread.kind !== 'group'} />
@@ -265,7 +288,7 @@ function MinutesRow({ thread }: { thread: CodexChatThread }) {
   const chosen = thread.minutes_folder_id ?? null
   const mutation = useMutation({
     mutationFn: (minutesFolderId: string | null) => updateCodexChatThreadContext(thread.id, { minutesFolderId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) }),
+    onSuccess: (updated) => applyChatThreadUpdate(queryClient, updated),
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
   if (folders.length === 0 && chosen === null) return null
@@ -303,8 +326,7 @@ function SummarySegmentEditor({ threadId, segment, label, muted }: { threadId: n
   }, [segment.content])
 
   const mutation = useMutation({
-    mutationFn: () => editChatSummarySegment(threadId, segment.id, draft),
-    onSuccess: (detail) => queryClient.setQueryData(codexChatThreadQueryKey(threadId), detail),
+    mutationFn: () => runChatThreadDetailMutation(queryClient, threadId, () => editChatSummarySegment(threadId, segment.id, draft)),
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),
   })
   const dirty = draft.trim() !== segment.content.trim()
@@ -419,11 +441,10 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
   const { showSnackbar } = useSnackbar()
   const queryClient = useQueryClient()
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) })
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' })
   const contextMutation = useMutation({
     mutationFn: (patch: Parameters<typeof updateCodexChatThreadContext>[1]) => updateCodexChatThreadContext(thread.id, patch),
-    onSuccess: refresh,
+    onSuccess: (updated) => applyChatThreadUpdate(queryClient, updated),
     onError,
   })
 
@@ -435,7 +456,7 @@ export function CodexChatContextView({ thread, profiles, segments, profileTurns,
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 *:shrink-0">
       <ChatUserProfileRow thread={thread} />
-      <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
+      <AuthorNoteBlock key={thread.id} thread={thread} defaults={noteDefaults} />
       <GenerationReactionSettings thread={thread} />
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />
       <LinkedFilesBlock threadId={thread.id} workspaceEnabled={thread.kind !== 'group'} />
@@ -511,7 +532,7 @@ export function CodexEngineContextView({ thread, profiles, noteDefaults }: { thr
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pb-4 *:shrink-0">
       <ChatUserProfileRow thread={thread} />
-      <AuthorNoteBlock thread={thread} defaults={noteDefaults} />
+      <AuthorNoteBlock key={thread.id} thread={thread} defaults={noteDefaults} />
       <LorebookBlock threadId={thread.id} loreAutoSave={thread.lore_auto_save} profiles={profiles} />
       <LinkedFilesBlock threadId={thread.id} workspaceEnabled={thread.kind !== 'group'} />
       {/* One line: context / model window. Running totals live in its tooltip. */}

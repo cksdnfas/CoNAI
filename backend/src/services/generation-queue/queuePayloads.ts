@@ -40,6 +40,7 @@ export function parseComfyQueuePayload(record: GenerationQueueJobRecord) {
   return {
     promptData: promptData as Record<string, any>,
     imageSaveOptions: imageSaveOptions as GeneratedImageSaveOptions | undefined,
+    mcpImageGrant: payload.__conaiMcpImageGrant,
   }
 }
 

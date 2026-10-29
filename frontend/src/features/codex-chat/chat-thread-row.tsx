@@ -28,7 +28,7 @@ export function ChatThreadRow({ entry, profilesById, draft, nested, dense, check
   const preview = draft?.trim() ? <><span className="text-secondary-text">{t({ ko: '초안', en: 'Draft' })}</span> {draft.replace(/\s+/g, ' ')}</> : text && who ? `${who}: ${text}` : text
   return <div className={cn('relative', nested && (dense ? 'pl-5' : 'pl-8'))}>
     <ListRow asChild interactive size={dense ? 'md' : 'lg'} selected={selecting ? checked : active}>
-      <button type="button" aria-pressed={selecting ? checked : undefined} onClick={() => selecting ? onTogglePick(entry.id) : onSelect(entry.id)} className={cn('w-full', dense ? 'gap-2' : 'gap-3 px-3', !selecting && (dense ? 'pr-9' : 'pr-11'))}>
+      <button type="button" aria-pressed={selecting ? checked : undefined} aria-current={!selecting && active ? 'true' : undefined} onClick={() => selecting ? onTogglePick(entry.id) : onSelect(entry.id)} className={cn('w-full', dense ? 'gap-2' : 'gap-3 px-3', !selecting && (dense ? 'pr-9' : 'pr-11'))}>
         <span className="relative flex shrink-0">
           <span className={cn('flex', selecting && 'opacity-0')}><ChatRoomFace thread={entry} profilesById={profilesById} size={dense ? 'sm' : 'md'} ringClassName="ring-background" down={down} variant="thread" /></span>
           <span aria-hidden className={cn('absolute inset-0 grid place-items-center', !selecting && 'hidden')}>

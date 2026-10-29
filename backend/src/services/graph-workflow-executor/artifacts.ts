@@ -4,6 +4,7 @@ import { GraphExecutionArtifactModel } from '../../models/GraphExecutionArtifact
 import { runtimePaths } from '../../config/runtimePaths'
 import { ImageMetadataWriteService, type ImageOutputFormat } from '../imageMetadataWriteService'
 import { settingsService } from '../settingsService'
+import { createTrustedGraphMedia } from './trustedGraphMedia'
 import { applyMiniMaxDirectorPortInputs } from '../moduleDefinitions/minimaxDirectorPorts'
 import { isGraphExecutionAborted, throwIfGraphExecutionAborted } from './execution-abort'
 import {
@@ -341,7 +342,16 @@ async function resolveArtifactForTarget(context: ExecutionContext, edge: GraphWo
   }
 
   if (canTargetConsumeFileReference(context, edge, artifact.type)) {
-    return artifact
+    if (isFinalResultTarget(context, edge)) return artifact
+    const metadata = normalizeArtifactMetadata(artifact.metadata ?? {})
+    return {
+      ...artifact,
+      value: createTrustedGraphMedia(
+        artifact.storagePath,
+        path.basename(artifact.storagePath),
+        resolveArtifactMimeType(artifact.storagePath, metadata, artifact.type),
+      ),
+    }
   }
 
   const metadata = normalizeArtifactMetadata(artifact.metadata ?? {})

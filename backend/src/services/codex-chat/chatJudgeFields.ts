@@ -1,6 +1,7 @@
 import type { ChatJudgeItemResult } from '@conai/shared'
 import { choiceQuestion, type JudgeQuestion } from '../judge/judgeEngine'
-import { extractBlockPatches, foldBlockState, parseBlockEdits, usableBlocks, type BlockData } from './chatBlockState'
+import { extractBlockPatches, usableBlocks, type BlockData } from './chatBlockState'
+import { threadBlockState } from './chatBlockCheckpoint'
 import { askBuiltQuestions, judgeSetupOf, judgeStateOf, logJudgeRun } from './chatJudge'
 import type { JudgeLogItem } from './chatJudgeLogs'
 import type { ChatProfile } from './chatProfiles'
@@ -66,16 +67,16 @@ async function settleFields(setup: NonNullable<ReturnType<typeof judgeSetupOf>>,
   if (!message || message.role !== 'assistant' || message.status !== 'completed' || !message.content.trim()) return
   if (params.speakerId !== undefined && message.speaker_profile_id !== params.speakerId) return
   const upTo = CodexChatStore.listJudgeMessages(params.threadId, setup.preset.fields.window, params.messageId)
-  const folded = foldBlockState(params.profile, CodexChatStore.listBlockMessages(params.threadId, params.messageId), parseBlockEdits(thread.block_edits), params.speakerId)
+  const folded = threadBlockState(params.profile, thread.block_edits, [], params.speakerId, { threadId: params.threadId, untilMessageId: params.messageId })
   if (!folded) return
   const blocks = usableBlocks(params.profile.style.blocks)
   const keys = new Set(blocks.map((block) => block.key))
   const written = new Set(extractBlockPatches(message.content, keys).flatMap(({ key, data }) => Object.keys(data).map((field) => `${key}.${field}`)))
-  const candidates = fieldsToAsk(blocks, folded.state, written)
+  const candidates = fieldsToAsk(blocks, folded, written)
   if (candidates.length === 0) return
 
   const questions = candidates.map((candidate, at) => questionOf(candidate, at, params.profile.name))
-  const state = { ...judgeStateOf(params.profile, thread, upTo, setup.preset.fields.window), status: Object.fromEntries(blocks.map((block) => [block.key, folded.state[block.key] ?? {}])) }
+  const state = { ...judgeStateOf(params.profile, thread, upTo, setup.preset.fields.window), status: Object.fromEntries(blocks.map((block) => [block.key, folded[block.key] ?? {}])) }
   const asked = await askBuiltQuestions(setup, state, questions, undefined, { purpose: 'judge', threadId: params.threadId, profileId: params.profile.id })
 
   const patches = new Map<string, BlockData>()

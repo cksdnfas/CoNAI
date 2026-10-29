@@ -12,7 +12,6 @@ import {
 import {
   ensureDarkerTone,
   ensureTextContrast,
-  getContrastRatio,
   getContrastTextColor,
   mixColors,
   resolveThemeMode,
@@ -44,14 +43,6 @@ const EMPHASIS_FONT_WEIGHT_VALUES = {
     extrabold: '900',
   },
 } as const
-
-export interface AppearanceContrastIssue {
-  id: 'primary-text' | 'secondary-text' | 'primary-surface' | 'secondary-surface'
-  label: string
-  ratio: number
-  recommendedRatio: number
-  severity: 'warning'
-}
 
 export function resolveAppearanceColors(appearance: AppearanceThemeSettings) {
   if (appearance.accentPreset === 'custom') {
@@ -231,49 +222,6 @@ export function buildAppearanceVariables(appearance: AppearanceThemeSettings) {
     '--theme-badge-rating': appearance.ratingBadgeColor,
     '--theme-badge-rating-soft': toAlphaColor(appearance.ratingBadgeColor, 0.14),
   }
-}
-
-export function getAppearanceContrastIssues(appearance: AppearanceThemeSettings): AppearanceContrastIssue[] {
-  const { primary, secondary } = resolveAppearanceColors(appearance)
-  const surface = resolveSurfacePalette(appearance)
-  const checks = [
-    {
-      id: 'primary-text' as const,
-      label: 'Primary text on primary accent',
-      ratio: getContrastRatio(getContrastTextColor(primary), primary),
-      recommendedRatio: 4.5,
-    },
-    {
-      id: 'secondary-text' as const,
-      label: 'Text on secondary accent',
-      ratio: getContrastRatio(getContrastTextColor(secondary), secondary),
-      recommendedRatio: 4.5,
-    },
-    {
-      id: 'primary-surface' as const,
-      label: 'Primary accent against current surface',
-      ratio: getContrastRatio(primary, surface.surfaceContainer),
-      recommendedRatio: 2.4,
-    },
-    {
-      id: 'secondary-surface' as const,
-      label: 'Secondary accent against current surface',
-      ratio: getContrastRatio(secondary, surface.surfaceContainer),
-      recommendedRatio: 1.8,
-    },
-  ]
-
-  return checks.flatMap((check) => {
-    if (check.ratio === null || check.ratio >= check.recommendedRatio) {
-      return []
-    }
-
-    return [{
-      ...check,
-      ratio: Number(check.ratio.toFixed(2)),
-      severity: 'warning' as const,
-    }]
-  })
 }
 
 const activeUploadedFontFaces = new Map<string, { url: string; face: FontFace }>()

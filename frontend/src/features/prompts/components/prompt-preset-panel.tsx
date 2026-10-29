@@ -7,6 +7,7 @@ import { pageAction } from '@/features/codex-chat/page-action-helpers'
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { Copy, Pencil, Plus, Trash2 } from 'lucide-react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
+import { SaveConflictAlert, SaveConflictOverwriteButton } from '@/components/common/save-conflict-alert'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { CodeBlock } from '@/components/ui/code-block'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -51,6 +52,9 @@ type PromptPresetTreeEntry = {
   path: string[]
 }
 
+const PRESETS_QUERY_KEY = ['prompt-presets', 'hierarchical'] as const
+const loadPresetTree = () => getPromptPresets({ hierarchical: true, withItems: true })
+
 let promptPresetDraftSequence = 0
 
 function createPromptPresetItemDraft(description = '', value = ''): PromptPresetItemDraft {
@@ -93,6 +97,7 @@ function PromptPresetEditorModal({
   preset,
   defaultParentId,
   isSubmitting,
+  conflict = false,
   onClose,
   onSubmit,
 }: {
@@ -102,8 +107,11 @@ function PromptPresetEditorModal({
   preset?: PromptPresetRecord | null
   defaultParentId?: number | null
   isSubmitting?: boolean
+  /** The last save was refused because the preset changed elsewhere; the draft is kept and may overwrite it. */
+  conflict?: boolean
   onClose: () => void
-  onSubmit: (input: PromptPresetMutationInput) => Promise<void>
+  /** `overwrite`: save over the newer version (the caller reads its latest revision first). */
+  onSubmit: (input: PromptPresetMutationInput, overwrite: boolean) => Promise<void>
 }) {
   const { t } = useI18n()
   const [name, setName] = useState('')
@@ -160,10 +168,13 @@ function PromptPresetEditorModal({
     })
   }
 
-  const handleSubmit = async (event: FormEvent) => {
+  const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
+    return submitDraft(false)
+  }
+  const submitDraft = async (overwrite: boolean) => {
     try {
-      await onSubmit(normalizePromptPresetInput(name, description, parentId, drafts))
+      await onSubmit(normalizePromptPresetInput(name, description, parentId, drafts), overwrite)
     } catch {
       // The mutation reports the error; keep the editor and its draft open.
     }
@@ -184,6 +195,11 @@ function PromptPresetEditorModal({
     >
       <form ref={formRef} onSubmit={(event) => void handleSubmit(event)}>
         <ModalBody spacing="lg">
+          {conflict ? (
+            <SaveConflictAlert>
+              <SaveConflictOverwriteButton disabled={isSubmitting} onClick={() => void submitDraft(true)} />
+            </SaveConflictAlert>
+          ) : null}
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_18rem]">
             <div className="space-y-4">
               <Field label={t('prompts.components.prompt.preset.panel.name')}>
@@ -265,10 +281,7 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
   const [selectedPresetId, setSelectedPresetId] = useState<number | null>(null)
   const [editorState, setEditorState] = useState<PromptPresetEditorState>(null)
 
-  const presetsQuery = useQuery({
-    queryKey: ['prompt-presets', 'hierarchical'],
-    queryFn: () => getPromptPresets({ hierarchical: true, withItems: true }),
-  })
+  const presetsQuery = useQuery({ queryKey: PRESETS_QUERY_KEY, queryFn: loadPresetTree })
 
   const entries = useMemo(() => flattenPromptPresetTree(presetsQuery.data ?? []), [presetsQuery.data])
   const selectedPreset = entries.find((entry) => entry.preset.id === selectedPresetId)?.preset ?? null
@@ -286,8 +299,11 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t('prompts.components.prompt.preset.panel.failed.to.create.preset')), tone: 'error' }),
   })
 
+  // The open draft keeps its own token; a refused save offers to overwrite with the latest token (SaveConflictAlert).
+  const [editorConflict, setEditorConflict] = useState(false)
   const updateMutation = useMutation({
     mutationFn: ({ presetId, input, revision }: { presetId: number; input: PromptPresetMutationInput; revision: string }) => updatePromptPreset(presetId, input, revision),
+    onMutate: () => setEditorConflict(false),
     onSuccess: async (result) => {
       setEditorState(null)
       setSelectedPresetId(result.id)
@@ -295,17 +311,25 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
       await queryClient.invalidateQueries({ queryKey: ['prompt-presets'] })
     },
     onError: (error) => {
-      const conflict = error instanceof ApiRequestError && error.status === 409 && error.code === 'revision_conflict'
-      // The open draft keeps its own token; an editor opened later starts from the current record.
-      if (conflict) void queryClient.invalidateQueries({ queryKey: ['prompt-presets'] })
-      showSnackbar({
-        message: conflict
-          ? t({ ko: '저장된 내용이 바뀌었어. 초안은 그대로야.', en: 'The saved content changed. Your draft is intact.' })
-          : getErrorMessage(error, t('prompts.components.prompt.preset.panel.failed.to.save.preset')),
-        tone: 'error',
-      })
+      if (error instanceof ApiRequestError && error.status === 409 && error.code === 'revision_conflict') {
+        setEditorConflict(true)
+        void queryClient.invalidateQueries({ queryKey: ['prompt-presets'] })
+        return
+      }
+      showSnackbar({ message: getErrorMessage(error, t('prompts.components.prompt.preset.panel.failed.to.save.preset')), tone: 'error' })
     },
   })
+
+  /** The stored preset's current edit token (the list is the only read that carries it). */
+  const readLatestPresetRevision = async (presetId: number) => {
+    try {
+      const presets = await queryClient.fetchQuery({ queryKey: PRESETS_QUERY_KEY, queryFn: loadPresetTree, staleTime: 0 })
+      return flattenPromptPresetTree(presets).find((entry) => entry.preset.id === presetId)?.preset.assistant_revision ?? null
+    } catch (error) {
+      showSnackbar({ message: getErrorMessage(error, t({ ko: '최신 내용을 확인하지 못했어.', en: 'Could not check the latest version.' })), tone: 'error' })
+      return null
+    }
+  }
 
   const deleteMutation = useMutation({
     mutationFn: ({ presetId, cascade }: { presetId: number; cascade: boolean }) => deletePromptPreset(presetId, { cascade }),
@@ -335,6 +359,7 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
       showSnackbar({ message: t({ ko: '편집 정보를 불러오지 못했어. 새로고침해줘.', en: 'Could not load edit information. Refresh and try again.' }), tone: 'error' })
       return
     }
+    setEditorConflict(false)
     setEditorState({ mode: 'edit', preset, revision: preset.assistant_revision })
   }
 
@@ -452,8 +477,9 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
         preset={editorState?.mode === 'edit' ? editorState.preset : null}
         defaultParentId={editorState?.mode === 'create' ? editorState.defaultParentId : null}
         isSubmitting={createMutation.isPending || updateMutation.isPending}
-        onClose={() => setEditorState(null)}
-        onSubmit={async (input) => {
+        conflict={editorState?.mode === 'edit' && editorConflict}
+        onClose={() => { setEditorState(null); setEditorConflict(false) }}
+        onSubmit={async (input, overwrite) => {
           if (!input.name) {
             showSnackbar({ message: t('prompts.components.prompt.preset.panel.enter.preset.name'), tone: 'error' })
             return
@@ -464,7 +490,14 @@ export function PromptPresetPanel({ toolbarProps }: { toolbarProps: PromptPageTo
           }
 
           if (editorState?.mode === 'edit') {
-            await updateMutation.mutateAsync({ presetId: editorState.preset.id, input, revision: editorState.revision })
+            let revision: string | null = editorState.revision
+            if (overwrite) {
+              revision = await readLatestPresetRevision(editorState.preset.id)
+              if (!revision) return
+              // Keep the edited preset object so the open draft is not reset.
+              setEditorState({ ...editorState, revision })
+            }
+            await updateMutation.mutateAsync({ presetId: editorState.preset.id, input, revision })
             return
           }
 

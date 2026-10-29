@@ -47,7 +47,8 @@ function table() {
     if (!(db.prepare('PRAGMA table_info(chat_agent_calls)').all() as Array<{ name: string }>).some(column => column.name === 'publish_failed')) {
       db.exec('ALTER TABLE chat_agent_calls ADD COLUMN publish_failed INTEGER NOT NULL DEFAULT 0')
     }
-    ensured.add(db)
+    // A first use inside a surrounding transaction can be rolled back along with CREATE TABLE.
+    if (!db.inTransaction) ensured.add(db)
   }
   return db
 }
@@ -220,9 +221,13 @@ export function cancelAgentCallsForThread(threadId: number) {
     db.prepare(`UPDATE chat_agent_calls SET status = CASE WHEN status = 'running' THEN 'cancelled' ELSE status END,
       finished_at = COALESCE(finished_at, ?), expires_at = COALESCE(expires_at, ?), reaction_state = 'done'
       WHERE id = ?`).run(new Date(now).toISOString(), new Date(now + 3_600_000).toISOString(), call.id)
-    running.get(call.id)?.abort()
-    reacting.get(call.id)?.abort()
-    processing.get(call.id)?.controller.abort()
+  }
+  return () => {
+    for (const call of calls) {
+      running.get(call.id)?.abort()
+      reacting.get(call.id)?.abort()
+      processing.get(call.id)?.controller.abort()
+    }
   }
 }
 

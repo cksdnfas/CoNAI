@@ -139,31 +139,62 @@ export interface UseRuntimeJobActionResult<TResult> extends UseRuntimeJobResult<
  * 202 응답 → 잡 추적을 한 번에 다루는 래퍼. 버튼 하나짜리 UI 용.
  * 시작 응답을 캐시에 심어 두므로 첫 렌더부터 진행률이 보인다.
  * `resumeKind` 를 주면 마운트할 때 그 종류의 실행 중인 잡을 찾아 이어서 추적한다 (새로고침해도 진행률 유지).
+ * 종류 하나에 잡이 여럿일 수 있으면(그룹별 자동수집) `resume` 으로 대상의 실행 중인 잡을 찾는다; key 가 바뀌면 다시 찾는다.
  */
 export function useRuntimeJobAction<TResult = unknown>(
   start: () => Promise<RuntimeJobRecord<TResult>>,
-  options: UseRuntimeJobOptions<TResult> & { onStartError?: (error: unknown) => void; resumeKind?: RuntimeJobKind } = {},
+  options: UseRuntimeJobOptions<TResult> & {
+    onStartError?: (error: unknown) => void
+    resumeKind?: RuntimeJobKind
+    resume?: { key: string; find: () => Promise<RuntimeJobRecord<TResult> | null> }
+  } = {},
 ): UseRuntimeJobActionResult<TResult> {
   const queryClient = useQueryClient()
   const [jobId, setJobId] = useState<string | null>(null)
   const tracked = useRuntimeJob<TResult>(jobId, options)
-  const resumeKind = options.resumeKind
+  const { resume, resumeKind } = options
+  const resumeKey = resume ? resume.key : resumeKind
 
   const resumeQuery = useQuery({
-    queryKey: [RUNTIME_JOB_QUERY_KEY, 'resume', resumeKind],
-    queryFn: async () => (await listRuntimeJobs({ kind: resumeKind, status: ['queued', 'running'], limit: 1 }))[0] ?? null,
-    enabled: resumeKind !== undefined,
+    queryKey: [RUNTIME_JOB_QUERY_KEY, 'resume', resumeKey],
+    queryFn: resume
+      ? resume.find
+      : async () => ((await listRuntimeJobs({ kind: resumeKind, status: ['queued', 'running'], limit: 1 }))[0] as RuntimeJobRecord<TResult> | undefined) ?? null,
+    enabled: resumeKey !== undefined,
     staleTime: 0,
   })
 
+  const followsTarget = resume !== undefined
   useEffect(() => {
     const running = resumeQuery.data
     if (!running) {
       return
     }
+    // A resume answer can be older than the job's own cache (a cached answer read again on remount): never undo a finish.
+    if (isRuntimeJobTerminal(queryClient.getQueryData<RuntimeJobRecord>(runtimeJobQueryKey(running.jobId))?.status)) {
+      return
+    }
     queryClient.setQueryData(runtimeJobQueryKey(running.jobId), running)
-    setJobId((current) => current ?? running.jobId)
-  }, [queryClient, resumeQuery.data])
+    if (!followsTarget) {
+      setJobId((current) => current ?? running.jobId)
+      return
+    }
+    // Per target: a live job found replaces one that has already finished; a job still being followed keeps being followed.
+    setJobId((current) => (
+      current === null || isRuntimeJobTerminal(queryClient.getQueryData<RuntimeJobRecord>(runtimeJobQueryKey(current))?.status)
+        ? running.jobId
+        : current
+    ))
+  }, [followsTarget, queryClient, resumeQuery.data])
+
+  // Per target: once the followed job ends, look again so the open target's own running job is picked up.
+  const followedJobEnded = isRuntimeJobTerminal(tracked.job?.status)
+  const refetchResume = resumeQuery.refetch
+  useEffect(() => {
+    if (followsTarget && followedJobEnded) {
+      void refetchResume()
+    }
+  }, [followedJobEnded, followsTarget, refetchResume])
 
   const startMutation = useMutation({
     mutationFn: start,

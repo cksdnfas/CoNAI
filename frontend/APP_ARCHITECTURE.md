@@ -78,6 +78,10 @@ connection controllers and dialogs are imported from image-generation without du
 - `src/lib/` — API clients (`api-*.ts`), query client, appearance/theme system, formatting utilities.
 - `src/types/` — frontend-only view types.
 
+Dirty open `Modal`s use `lib/use-unload-guard.ts` for the browser reload/tab-close warning. The unsaved-settings
+provider reuses it alongside the shared navigation blocker. `lib/use-debounced-persist.ts` writes a stable owner's
+draft after a delay and flushes pending edits on owner change or unmount.
+
 ## Character library
 
 `features/characters/character-library-page.tsx` owns the folder tree, paged name search and editor URL state.
@@ -131,6 +135,19 @@ live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `e
   changes refetch active threads' tails after in-flight reads settle; sends and read receipts patch room lists locally.
   The chat gallery uses the shared virtualized media list and polls only pending work. Page registration detects
   content changes without serializing payloads.
+- Context settings responses patch the open row with `applyChatThreadUpdate`; an interrupted read is invalidated.
+  Chat edit mutations may request `?tail=N` (1–500), returning a bounded transcript with `messagesFrom` when older
+  messages remain; reply edits and variant switches also return `changedMessage` and `previousContextRevision`.
+  Without `tail` the legacy full response remains. `applyChatThreadDetail` merges the loaded range safely.
+- Streaming Markdown is split by `chat-markdown-stream.ts` and parsed block by block; saved messages parse as one
+  document. Resolved generation thumbnails use the thread media map; unresolved history is fetched and polled.
+  `/chat` shares the sidebar's paged room cache: page-assistant `data.threads` contains loaded rooms only,
+  `roomsHaveMore` signals more, and `list_chat_rooms` finds others. An open chat shows loading/error states rather
+  than the new-profile picker.
+- Group cover requests use `lib/batch-loader.ts` and the group/auto-folder `preview-images?ids=` routes (up to 100
+  distinct IDs, same image-view access as individual previews). Group rematch jobs use `useRuntimeJobAction`:
+  `resumeKind` follows all-group/rebuild jobs, while `resume: {key, find}` follows the selected group's
+  `GET /api/groups/:id/auto-collect`. A readable job may include `viewerCanCancel: false`.
 - Post galleries and SNS slides batch image records (`usePostMediaRecords`) and share per-hash `['post-media', hash]`
   records. Group hierarchy-only refreshes skip media queries. Feed-safety caches keep only current items.
 - Workflow chat builds graph signatures/snapshots only while a chat is connected. Generation panels share
@@ -144,7 +161,9 @@ live catalog at `/#/dev/ui`. Use `components/ui`; the `[ds/*]` lint guards in `e
   general settings keep per-section saving. Long maintenance work (scan, verify, metadata re-extraction) runs as
   runtime jobs followed with `useRuntimeJob`/`useRuntimeJobAction`.
 - Posts share `use-post-comments.ts` between the page assistant and rendered threads. Root/reply cursors load bounded
-  server pages; focused comments and quote context do not require downloading the entire discussion.
+  server pages; focused comments and quote context do not require downloading the entire discussion. The post editor
+  guards unsaved navigation and Cancel; on 409 it keeps all draft fields while the user loads a latest revision, then
+  the next save overwrites that revision.
 - Preserve the shared virtualized list in `features/images/components/image-list/` (Virtuoso + ViSelect), stable media
   identity, bounded loading and video preview lifecycle. Do not build a separate engine per page.
 - Container masonry pagination checks both the request state and viewport distance after each page; filtered-out pages must not permanently lock loading at the same visible item count.

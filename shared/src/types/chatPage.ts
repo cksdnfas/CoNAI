@@ -62,4 +62,4 @@ export type ChatPageCommand =
   /** A node-graph transaction already checked against the editor's revision; the editor re-checks it before writing. */
   | { type: 'workflow'; revision: string; operations: ChatWorkflowOperation[]; modules: ChatWorkflowModule[]; label: string }
 
-export type ChatPageCommandEvent = ChatPageCommand & { commandId: string; connectionId: string; instanceId: string; threadId: number; expiresAt: number }
+export type ChatPageCommandEvent = (ChatPageCommand | { type: 'cancel' }) & { commandId: string; connectionId: string; instanceId: string; threadId: number; expiresAt: number; requiresClaim?: true }

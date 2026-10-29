@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { VirtuosoMasonry, type ItemContent } from '@virtuoso.dev/masonry'
 import type { PostCategory, PostSummary } from '@conai/shared'
 import { EyeOff, FileClock, Images, MessageCircle, MessageSquare, Pin } from 'lucide-react'
@@ -6,6 +6,7 @@ import { ActionContextMenu, type ActionMenuEntry } from '@/components/ui/action-
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ToggleChip } from '@/components/ui/chip'
+import { ListRow } from '@/components/ui/list-row'
 import { useImageListColumnCount } from '@/features/images/components/image-list/use-image-list-column-count'
 import { useI18n } from '@/i18n'
 import { buildApiUrl } from '@/lib/api-url'
@@ -79,6 +80,18 @@ function TagRow({ tags, onTag }: { tags: string[]; onTag: (tag: string) => void 
   )
 }
 
+/**
+ * Enter / Space on the row or card itself opens it. Keys from controls inside (tag chips) are theirs. The row stays a
+ * `role="button"` element because it holds those chip buttons, which a real `<button>` may not contain.
+ */
+function openOnKey(open: () => void) {
+  return (event: KeyboardEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
+    event.preventDefault()
+    open()
+  }
+}
+
 /** Rows: cover, title, meta, two lines of text and tags. */
 export function PostFeed({ posts, categories, onOpen, onTag, menu, menuOnClick = false }: ListProps) {
   const { canViewImages } = usePostPermissions()
@@ -88,18 +101,21 @@ export function PostFeed({ posts, categories, onOpen, onTag, menu, menuOnClick =
         const cover = canViewImages ? coverUrl(post.media) : null
         return (
           <ActionContextMenu key={post.id} entries={menu?.(post) ?? []} openOnClick={menuOnClick}>
-            <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }}
-              className={cn('grid cursor-pointer gap-4 border-b border-line py-4 outline-none first:pt-1 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40', cover && 'sm:grid-cols-[9rem_1fr]')}>
-              {cover ? <img src={cover} alt="" loading="lazy" className="aspect-[4/3] w-full rounded-sm bg-surface-low object-cover sm:w-36" /> : null}
-              <div className="flex min-w-0 flex-col gap-1.5">
-                <PostTitle post={post} className="truncate text-base" />
-                <PostMeta post={post} categories={categories} />
-                {post.excerpt ? <p className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</p> : null}
-                <MatchedComment post={post} />
-                <TagRow tags={post.tags} onTag={onTag} />
-                <PostTopicSummary value={post.topicEvaluation} />
+            <ListRow asChild interactive size="lg">
+              <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={openOnKey(() => onOpen(post))}>
+                <div className={cn('grid w-full gap-4 py-2', cover && 'sm:grid-cols-[9rem_1fr]')}>
+                  {cover ? <img src={cover} alt="" loading="lazy" className="aspect-[4/3] w-full rounded-sm bg-surface-low object-cover sm:w-36" /> : null}
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <PostTitle post={post} className="truncate text-base" />
+                    <PostMeta post={post} categories={categories} />
+                    {post.excerpt ? <p className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</p> : null}
+                    <MatchedComment post={post} />
+                    <TagRow tags={post.tags} onTag={onTag} />
+                    <PostTopicSummary value={post.topicEvaluation} />
+                  </div>
+                </div>
               </div>
-            </div>
+            </ListRow>
           </ActionContextMenu>
         )
       })}
@@ -119,7 +135,7 @@ const PostCard: ItemContent<PostSummary, CardContext> = ({ data: post, context }
   return (
     <div className="pb-5">
       <ActionContextMenu entries={menu?.(post) ?? []} openOnClick={menuOnClick}>
-        <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }}
+        <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={openOnKey(() => onOpen(post))}
           className="flex cursor-pointer flex-col gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
           {cover ? <img src={cover} alt="" loading="lazy" className="block h-auto w-full rounded-sm bg-surface-low" /> : (
             <p className="line-clamp-6 border-l-2 border-line pl-3 text-sm text-muted-foreground">{post.excerpt}</p>
@@ -215,7 +231,7 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible, loadMedia }: Omi
               }}
             >
               {media.map((item, mediaIndex) => (
-                <div key={item.ref} role="button" tabIndex={0} className="size-full shrink-0 cursor-pointer snap-center" onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }} aria-label={post.title}>
+                <div key={item.ref} role="button" tabIndex={0} className="size-full shrink-0 cursor-pointer snap-center" onClick={() => onOpen(post)} onKeyDown={openOnKey(() => onOpen(post))} aria-label={post.title}>
                   {loadMedia && Math.abs(mediaIndex - index) <= 1 ? <SnsMedia hash={item.ref} record={records.data?.[item.ref]} active={active && mediaIndex === index} /> : null}
                 </div>
               ))}
@@ -230,12 +246,12 @@ function SnsSlide({ post, categories, onOpen, onTag, onVisible, loadMedia }: Omi
             ) : null}
           </div>
         ) : (
-          <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }} className="flex min-h-0 flex-1 cursor-pointer items-center rounded-sm bg-surface-low p-6 text-lg leading-relaxed">
+          <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={openOnKey(() => onOpen(post))} className="flex min-h-0 flex-1 cursor-pointer items-center rounded-sm bg-surface-low p-6 text-lg leading-relaxed">
             <span className="line-clamp-12">{post.excerpt || post.title}</span>
           </div>
         )}
         <div className="flex flex-col gap-1">
-          <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={(event) => { if (event.key === 'Enter') onOpen(post) }} className="cursor-pointer">
+          <div role="button" tabIndex={0} onClick={() => onOpen(post)} onKeyDown={openOnKey(() => onOpen(post))} className="cursor-pointer">
             <PostTitle post={post} className="truncate" />
           </div>
           {media.length > 0 && post.excerpt ? <p className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</p> : null}

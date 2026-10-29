@@ -18,11 +18,12 @@ export const CHAT_BACKUP_FOLDER = '채팅 백업'
  * `links` names what the chat was tied to in the account (flags on, user profile, linked account lorebooks) by id and
  * name, so an import can tie it again to the same ones, or to ones of the same name in another account.
  */
-export function exportChatJson(requester: McpRequester, threadId: number) {
+export function exportChatJson(requester: McpRequester, threadId: number, options: { readOnlyLorebooks?: boolean } = {}) {
   const detail = CodexChatService.getThread(requester, threadId)
   const profile = detail.thread.profile_id ? ChatProfileStore.find(detail.thread.profile_id) : null
-  const book = OwnedLorebookStore.chatBookOf(threadId)
+  const book = options.readOnlyLorebooks ? OwnedLorebookStore.chatBookReadOnly(threadId) : OwnedLorebookStore.chatBookOf(threadId)
   const owner = fileOwnerKey(requester.accountId)
+  const findBook = (id: number) => options.readOnlyLorebooks ? OwnedLorebookStore.findReadOnly(id, owner) : OwnedLorebookStore.find(id, owner)
   const flagIds = readIdList(detail.thread.flag_ids)
   const userProfile = ChatUserProfileStore.forThread(detail.thread)
   return {
@@ -41,7 +42,7 @@ export function exportChatJson(requester: McpRequester, threadId: number) {
       flags: ChatFlagStore.resolve(requester, flagIds).map(({ id, name }) => ({ id, name })),
       userProfile: userProfile ? { id: userProfile.id, name: userProfile.name } : null,
       lorebooks: OwnedLorebookStore.threadLinks(threadId).flatMap((id) => {
-        const linked = OwnedLorebookStore.find(id, owner)
+        const linked = findBook(id)
         return linked ? [{ id: linked.id, name: linked.name }] : []
       }),
       // File store folders and files linked to the chat (tied again by id in the same store).
@@ -52,7 +53,7 @@ export function exportChatJson(requester: McpRequester, threadId: number) {
       // The linked book save_lore writes to (null: the chat's own book).
       loreRecordBook: (() => {
         const id = OwnedLorebookStore.recordBookId(threadId)
-        const linked = id === null ? null : OwnedLorebookStore.find(id, owner)
+        const linked = id === null ? null : findBook(id)
         return linked ? { id: linked.id, name: linked.name } : null
       })(),
     },
@@ -82,8 +83,8 @@ export function backupFileName(title: string, threadId: number) {
 }
 
 /** Save a chat file into the requester's file store: `채팅 백업/<date>/<title> (#id).json`. */
-export function backupChatToFiles(requester: McpRequester, threadId: number, date: string) {
-  const file = exportChatJson(requester, threadId)
+export function backupChatToFiles(requester: McpRequester, threadId: number, date: string, options: { readOnlyLorebooks?: boolean } = {}) {
+  const file = exportChatJson(requester, threadId, options)
   const owner = fileOwnerKey(requester.accountId)
   const root = FileStoreService.ensureFolder(owner, null, CHAT_BACKUP_FOLDER)
   const day = FileStoreService.ensureFolder(owner, root.id, date)

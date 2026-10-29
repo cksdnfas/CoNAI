@@ -73,10 +73,3 @@ export function resolveFloatingDropdownRect(anchor: HTMLElement, options: Resolv
 /** A fixed menu on the popover layer, placed with getFloatingDropdownStyle. */
 export const FLOATING_DROPDOWN_MENU_CLASS = cn('fixed z-popover', floatingSurfaceClassName)
 
-export function getFloatingDropdownItemClassName({ selected, className }: { selected?: boolean; className?: string }) {
-  return cn(
-    'flex w-full items-center justify-between gap-3 rounded-sm px-3 py-2 text-left text-sm transition-colors',
-    selected ? 'bg-primary/12 text-foreground' : 'text-muted-foreground hover:bg-surface-highest hover:text-foreground',
-    className,
-  )
-}

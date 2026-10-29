@@ -1,7 +1,7 @@
 import { CodexIcon } from '@/components/common/provider-icons'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { createPortal } from 'react-dom'
-import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUp, ArrowDown, LogIn, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,7 @@ import { Select } from '@/components/ui/select'
 import { createGenerationQueueJob, getCodexGenerationModels, getCodexGenerationStatus } from '@/lib/api-image-generation-queue'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { useDebouncedPersist } from '@/lib/use-debounced-persist'
 import { getErrorMessage, type SelectedImageDraft } from '../image-generation-shared'
 import { confirmHistorySettingsOverwrite, getHistorySettingsLoadedMessage } from '../history-settings-mapping'
 import { ImageAttachmentPickerButton } from './image-attachment-picker'
@@ -277,13 +278,7 @@ export function CodexGenerationPanel({
   })
   const refetchCodexStatus = codexStatusQuery.refetch
 
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      persistCodexFormDraft(draftStorageOwner, codexForm)
-    }, 250)
-
-    return () => window.clearTimeout(timeout)
-  }, [codexForm, draftStorageOwner])
+  useDebouncedPersist(draftStorageOwner, codexForm, persistCodexFormDraft)
 
   const operationLabel = useMemo(() => {
     if (codexForm.imageMode === 'edit' && codexForm.referenceImage && codexForm.maskImage) {

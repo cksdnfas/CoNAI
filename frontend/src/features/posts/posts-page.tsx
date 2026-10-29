@@ -488,8 +488,9 @@ export function PostsPage() {
 
   let content
   if (view === 'edit') {
+    // Once the post is loaded the editor stays: a failed background refresh must not replace the draft with an error.
     if (editId && postQuery.isPending) content = <LoadingState />
-    else if (editId && postQuery.isError) content = <ErrorState title={t({ ko: '글을 불러오지 못했어.', en: 'Could not load the post.' })} error={postQuery.error} />
+    else if (editId && !postQuery.data) content = <ErrorState title={t({ ko: '글을 불러오지 못했어.', en: 'Could not load the post.' })} error={postQuery.error} />
     else content = (
       <PostEditor key={editId ?? 'new'} post={editId ? postQuery.data ?? null : null} categories={categories} defaultCategoryId={categoryId}
         onCancel={() => (editId ? update({ edit: null, post: String(editId) }) : openList())}

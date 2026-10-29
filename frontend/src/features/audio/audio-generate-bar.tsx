@@ -25,7 +25,7 @@ import {
   type AudioOrder,
   type AudioWorkflowSummary,
 } from '@/lib/api-audio'
-import { getGenerationComfyUIServers } from '@/lib/api-image-generation-workflows'
+import { comfyUIServersQueryKey, getGenerationComfyUIServers } from '@/lib/api-image-generation-workflows'
 import { getErrorMessage } from '@/lib/error-message'
 import { createRandomUuid } from '@/lib/random-uuid'
 import { cn } from '@/lib/utils'
@@ -94,7 +94,7 @@ export function AudioGenerateBar({ group, autoFocus = false, canGenerate, canAdd
   const queryClient = useQueryClient()
   const { showSnackbar } = useSnackbar()
   const workflows = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'workflows'], queryFn: listAudioWorkflows, enabled: canGenerate })
-  const servers = useQuery({ queryKey: [AUDIO_QUERY_KEY, 'servers'], queryFn: () => getGenerationComfyUIServers(true), enabled: canGenerate, retry: false })
+  const servers = useQuery({ queryKey: comfyUIServersQueryKey(true), queryFn: () => getGenerationComfyUIServers(true), enabled: canGenerate, retry: false })
   const [text, setText] = useState(group.prompt)
   // Keep the last generation settings across effects; migrate the current effect's saved values on first use.
   const [prefs, setPrefs] = useState<GenerationPrefs>(() => readPrefs(GENERATION_PREFS_KEY, readPrefs(legacyGroupPrefsKey(group.id), { seconds: '3', count: '4', seed: '' })))

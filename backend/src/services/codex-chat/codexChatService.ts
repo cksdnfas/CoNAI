@@ -1,4 +1,5 @@
 import { prepareChatSend } from './chatSendPreparation'
+import { deletingThreads } from './chatThreadReservation'
 import type { ChatExecutionContext } from '@conai/shared'
 import { isCodexChatCreationTool } from '@conai/shared'
 import { beginDirectReply, requireReplyTarget } from './chatReplies'
@@ -158,7 +159,6 @@ const sessions = new Map<string, Session>()
 const startingSessions = new Map<string, Promise<Session>>()
 // Closed sessions can still be persisting a reply; deletion and busy checks must see those turns.
 const finalizingTurns = new Map<TurnState, Session>()
-const deletingThreads = new Set<number>()
 
 function turnCompletion() {
   let resolveFinished!: TurnState['resolveFinished']
@@ -1065,14 +1065,14 @@ export const CodexChatService = {
     return Promise.allSettled(promises).then(() => undefined)
   },
 
-  clearThread(requester: McpRequester, threadId: number) {
+  clearThread(requester: McpRequester, threadId: number, tail?: number) {
     const thread = requireThread(requester, threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
     CodexChatStore.clearThread(threadId, profile ? () => addChatOpening(threadId, profile, userPersonaForThread(thread)) : '')
     deleteCodexRollout(requester, thread.codex_thread_id)
     deleteClaudeSessions(threadId)
-    return CodexChatService.getThread(requester, threadId)
+    return CodexChatService.getThread(requester, threadId, tail)
   },
 
   /** Shared exact-message deletion, including native history/session invalidation. Missing rows are harmless. */
@@ -1133,7 +1133,13 @@ export const CodexChatService = {
     return LlmChatService.rewriteMessage(requester, thread, messageId, content, listener)
   },
 
-  selectAlternative(requester: McpRequester, threadId: number, messageId: number, index: number) {
+  selectAlternative(requester: McpRequester, threadId: number, messageId: number, index: number, tail?: number) {
+    CodexChatService.applyAlternative(requester, threadId, messageId, index)
+    return CodexChatService.getThread(requester, threadId, tail)
+  },
+
+  /** The switch alone, for callers that build their own detail (group rooms). */
+  applyAlternative(requester: McpRequester, threadId: number, messageId: number, index: number) {
     const thread = requireThread(requester, threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (thread.engine !== 'llm') throw new CodexChatError('답변 전환은 API LLM 채팅에서만 가능해.', 409)
@@ -1149,11 +1155,10 @@ export const CodexChatService = {
         deleteClaudeMemberSession(threadId, member.profileId)
       }
     }
-    return CodexChatService.getThread(requester, threadId)
   },
 
   /** A reply's text rewritten by hand, without regenerating anything (API LLM direct chats). */
-  editReplyText(requester: McpRequester, threadId: number, messageId: number, content: string) {
+  editReplyText(requester: McpRequester, threadId: number, messageId: number, content: string, tail?: number) {
     const thread = requireThread(requester, threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (thread.engine !== 'llm' || thread.kind !== 'direct') throw new CodexChatError('답변 수정은 API LLM 1:1 채팅에서만 가능해.', 409)
@@ -1161,7 +1166,7 @@ export const CodexChatService = {
     if (!message || message.role !== 'assistant') throw new CodexChatError('답변을 찾을 수 없어.', 404)
     if (!content.trim()) throw new CodexChatError('답변 내용을 입력해줘.')
     CodexChatStore.editAssistantMessage(threadId, messageId, content.trim())
-    return CodexChatService.getThread(requester, threadId)
+    return CodexChatService.getThread(requester, threadId, tail)
   },
 
   /** Carry on the last reply where the token cap cut it, as a new variant of it (API LLM direct chats). */
@@ -1259,6 +1264,11 @@ export const CodexChatService = {
     } : startingThreads.has(threadId) ? { text: '', toolCalls: [] } : null
   },
 
+  /** Read only the authorized thread row when no transcript or derived state is needed. */
+  getThreadRecord(requester: McpRequester, threadId: number) {
+    return requireThread(requester, threadId)
+  },
+
   /** The transcript, a reply still running, and the media kind of every image it references (for players). */
   getThread(requester: McpRequester, threadId: number, tail?: number) {
     const thread = requireThread(requester, threadId)
@@ -1306,8 +1316,7 @@ export const CodexChatService = {
     }
     const edits = parseBlockEdits(thread.block_edits)
     if (edits.length >= BLOCK_EDITS_MAX) throw new CodexChatError('직접 고친 횟수가 너무 많아. 대화를 비우면 다시 고칠 수 있어.', 400)
-    const messages = CodexChatStore.listMessages(threadId)
-    const afterMessageId = messages.length > 0 ? messages[messages.length - 1].id : 0
+    const afterMessageId = CodexChatStore.latestMessageId(threadId) ?? 0
     const id = `e${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
     CodexChatStore.setBlockEdits(threadId, [...edits, { id, key, afterMessageId, data, at: new Date().toISOString(), ...(isGroup ? { profileId: profile.id } : {}) }])
   },
@@ -1318,16 +1327,16 @@ export const CodexChatService = {
     return collectCodexChatMedia(attachJobResults(CodexChatStore.listMessages(threadId)).messages)
   },
 
-  async deleteThread(requester: McpRequester, threadId: number, beforeDelete?: () => void) {
+  async deleteThread(requester: McpRequester, threadId: number, beforeDelete?: () => void, preserve?: () => void) {
     const thread = requireThread(requester, threadId)
     if (deletingThreads.has(threadId)) throw new CodexChatError('대화를 삭제 중이야.', 409)
     deletingThreads.add(threadId)
     try {
     if (thread.engine === 'llm') {
       await LlmChatService.stop(threadId)
-      if (LlmChatService.isRunning(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
+      if (LlmChatService.hasActiveWork(threadId)) throw new CodexChatError('답변 중단을 처리 중이야. 잠시 후 다시 삭제해줘.', 409)
       beforeDelete?.()
-      CodexChatStore.deleteThread(threadId)
+      CodexChatStore.deleteThread(threadId, preserve)
       deleteClaudeSessions(threadId)
       return
     }
@@ -1341,7 +1350,7 @@ export const CodexChatService = {
       await startingFinished.get(threadId)?.promise
     }
     beforeDelete?.()
-    CodexChatStore.deleteThread(threadId)
+    CodexChatStore.deleteThread(threadId, preserve)
     deleteCodexRollout(requester, thread.codex_thread_id)
     } finally {
       deletingThreads.delete(threadId)

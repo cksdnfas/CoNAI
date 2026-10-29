@@ -220,6 +220,8 @@ LoRA 폴더는 자동수집 대상에서 제외됩니다. 필요한 경우 커�
 4. 이미지 필드가 있으면 이미지 선택
 5. 생성 실행
 
+이미지 입력에는 라이브러리 이미지를 고르거나 파일을 올려. API에서는 이미지 조회 권한이 있는 `composite_hash`, workflow-input-asset·queue-input 참조, data URL이나 base64를 쓸 수 있어. 이미지 객체의 `path`, `file_path`, `filePath`, `storagePath`, `originalPath`, `original_file_path`에 서버 파일 경로를 넣으면 400으로 거부돼. 단독 이미지 문자열은 서버 파일을 읽는 경로가 아니라 base64 입력 데이터로 다뤄.
+
 실행 중에는 대기열과 생성 이력에서 현재 ComfyUI 노드 진행률을 확인할 수 있습니다. WebSocket 연결이 잠시 끊겨도 재연결 백오프와 상태 조회를 사용해 화면을 복구합니다.
 
 ### 캐릭터 라이브러리에서 불러오기

@@ -2,18 +2,24 @@ import {
   getAutoFolderGroup,
   getAutoFolderGroupBreadcrumb,
   getAutoFolderGroupImages,
-  getAutoFolderGroupPreviewImages,
   getAutoFolderGroupsHierarchyAll,
+  getAutoFolderGroupsPreviewImages,
 } from '@/lib/api-auto-folder-groups'
 import {
   getGroup,
   getGroupBreadcrumb,
   getGroupImages,
-  getGroupPreviewImages,
   getGroupsHierarchyAll,
+  getGroupsPreviewImages,
+  GROUP_PREVIEW_BATCH_MAX,
 } from '@/lib/api-groups'
+import { createBatchLoader } from '@/lib/batch-loader'
 import type { GroupBreadcrumbItem, GroupFileCounts, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import type { ImageRecord } from '@/types/image'
+
+/** Images in one group cover mosaic. */
+export const GROUP_COVER_IMAGE_COUNT = 4
+const COVER_PARAMS = { includeChildren: true, count: GROUP_COVER_IMAGE_COUNT }
 
 export const groupSources = {
   custom: {
@@ -22,7 +28,8 @@ export const groupSources = {
     getGroup,
     getBreadcrumb: getGroupBreadcrumb,
     getImages: getGroupImages,
-    getPreviewImages: getGroupPreviewImages,
+    // Covers that scroll into view together share one request; each group keeps its own cache entry.
+    loadCoverImages: createBatchLoader((ids: number[]) => getGroupsPreviewImages(ids, COVER_PARAMS), { maxBatch: GROUP_PREVIEW_BATCH_MAX, missing: [] as ImageRecord[] }),
   },
   folders: {
     key: 'folders',
@@ -30,7 +37,7 @@ export const groupSources = {
     getGroup: getAutoFolderGroup,
     getBreadcrumb: getAutoFolderGroupBreadcrumb,
     getImages: getAutoFolderGroupImages,
-    getPreviewImages: getAutoFolderGroupPreviewImages,
+    loadCoverImages: createBatchLoader((ids: number[]) => getAutoFolderGroupsPreviewImages(ids, COVER_PARAMS), { maxBatch: GROUP_PREVIEW_BATCH_MAX, missing: [] as ImageRecord[] }),
   },
 } as const
 

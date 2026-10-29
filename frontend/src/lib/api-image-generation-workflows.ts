@@ -161,6 +161,9 @@ export async function getGenerationWorkflowArtifacts(workflowId: number, relativ
   return response.data
 }
 
+/** The one cache entry per server list variant (settings' generation connections use `false` too). */
+export const comfyUIServersQueryKey = (activeOnly: boolean) => ['generation-comfyui-servers', activeOnly] as const
+
 /** Load the registered ComfyUI servers. */
 export async function getGenerationComfyUIServers(activeOnly = true) {
   const searchParams = new URLSearchParams()

@@ -6,6 +6,7 @@ import { CHAT_PAGE_KIND_TOOLS, CHAT_PAGE_TOOLS, CHAT_ROOM_TOOLS, CHAT_SETTINGS_T
 import { errorResult } from './toolResults';
 import { PLUGIN_SERVER_TOOL_PREFIX, pluginProfileTools } from '../services/plugins/pluginServerTools';
 import { isChatProposalToolAvailable } from '../services/codex-chat/chatProposals';
+import { inProcessMcpClient, NO_TOOL_DEADLINE } from './inProcessClient';
 
 /**
  * A chat agent sees the app's tools as a table of contents instead of every definition at once: the chat's own tools
@@ -17,7 +18,6 @@ export const CATALOG_OPEN_TOOL = 'open_tools';
 export const CATALOG_RUN_TOOL = 'run_tool';
 /** Fewer catalogued tools than this are listed directly: the catalog would cost more than it saves. */
 const CATALOG_MIN_TOOLS = 10;
-const CATALOG_CALL_TIMEOUT_MS = 30 * 60_000;
 /** Page at tool boundaries; a single larger definition is kept intact. */
 const CATALOG_PAGE_CHARS = 12_000;
 
@@ -129,7 +129,7 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
       const client = () => connecting ??= (async () => {
         const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
         await inner.connect(serverTransport);
-        const connected = new Client({ name: 'conai-catalog-client', version: '1.0.0' });
+        const connected = inProcessMcpClient({ name: 'conai-catalog-client', version: '1.0.0' });
         await connected.connect(clientTransport);
         return connected;
       })();
@@ -210,7 +210,7 @@ export function createToolCatalog(server: McpServer, registerDirect: (args: unkn
         if (!isChatProposalToolAvailable(chatContext, tool)) return errorResult(`${tool} is not available in this reply.`);
         try {
           const connected = await client();
-          const result = await connected.callTool({ name: tool, arguments: args ?? {} }, { signal: ctx?.mcpReq?.signal, timeout: CATALOG_CALL_TIMEOUT_MS });
+          const result = await connected.callTool({ name: tool, arguments: args ?? {} }, { signal: ctx?.mcpReq?.signal, timeout: NO_TOOL_DEADLINE });
           const content = Array.isArray(result.content) ? result.content as Array<{ type?: string; text?: string }> : [];
           // Wrong arguments come back with the tool's schema, so the next call can be right without another lookup.
           if (result.isError && content.some((part) => part.type === 'text' && part.text?.includes('Input validation error'))) {

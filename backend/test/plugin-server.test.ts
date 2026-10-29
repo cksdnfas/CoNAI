@@ -133,6 +133,18 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await assert.rejects(runtime.requestPluginServer('chat-instructions', { op: 'nope' }, admin, {}), /알 수 없는 요청/)
   })
 
+  await t.test('a concurrent disable and re-enable reconciles to the latest enabled state', async () => {
+    const disabling = registry.setPluginEnabled('chat-instructions', false)
+    await Promise.resolve()
+    const enabling = registry.setPluginEnabled('chat-instructions', true, adminId)
+    await Promise.all([disabling, enabling])
+    assert.equal(registry.getPlugin('chat-instructions').enabled, 1)
+    await until(() => status().state === 'ready', 're-enabled worker ready')
+    assert.deepEqual(status().hooks, ['chat.instructions'])
+    const result = await runtime.requestPluginServer('chat-instructions', { op: 'list' }, admin, {}) as { rules: unknown[] }
+    assert.equal(result.rules.length, 2)
+  })
+
   await t.test('the MCP layer lists and runs registered tools', async () => {
     const { createMcpServer } = await import('../src/mcp/server')
     const { ALL_MCP_HTTP_SCOPES } = await import('../src/mcp/context')
@@ -176,6 +188,40 @@ test('trusted plugins run a server module with their own data, hooks and tools',
       await assert.rejects(callPluginAppTool(guestContext, 'list_image_groups', {}), /permission|권한/i)
       assert.notEqual((await callPluginAppTool(context, 'list_image_groups', {})).isError, true, 'another account does not inherit the revoked grant')
     } finally { await client.close(); await server.close() }
+  })
+
+  await t.test('plugin app tool calls have no implicit deadline and remain cancellable', async (s) => {
+    const { callPluginAppTool } = await import('../src/services/plugins/pluginAppBridge')
+    const { ALL_MCP_HTTP_SCOPES } = await import('../src/mcp/context')
+    const { FileStoreService } = await import('../src/services/fileStoreService')
+    const context = { requester: admin, scopes: [...ALL_MCP_HTTP_SCOPES, 'configure' as const], source: 'plugin' as const }
+    let entered!: () => void
+    let release!: () => void
+    let started = new Promise<void>(resolve => { entered = resolve })
+    s.mock.method(FileStoreService, 'move', async () => {
+      entered()
+      await new Promise<void>(resolve => { release = resolve })
+    })
+    s.mock.timers.enable({ apis: ['setTimeout'] })
+    try {
+      let settled = false
+      const call = callPluginAppTool(context, 'move_files', { file_ids: ['0'.repeat(32)], parent_id: null })
+      void call.then(() => { settled = true }, () => { settled = true })
+      await started
+      s.mock.timers.tick(11 * 60_000)
+      await Promise.resolve()
+      assert.equal(settled, false)
+      release()
+      assert.notEqual((await call).isError, true)
+
+      started = new Promise<void>(resolve => { entered = resolve })
+      const controller = new AbortController()
+      const cancelling = callPluginAppTool(context, 'move_files', { file_ids: ['0'.repeat(32)], parent_id: null }, controller.signal)
+      await started
+      controller.abort()
+      await assert.rejects(cancelling)
+      release()
+    } finally { s.mock.timers.reset() }
   })
 
   await t.test('trusted pages call any app tool without declaring it or waiting for approval', async () => {
@@ -1374,26 +1420,54 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     await registry.setPluginEnabled('chat-instructions', false)
   })
 
-  await t.test('slow hooks are skipped, failures stay inside the call and a crashed module comes back', async () => {
+  await t.test('slow hooks are skipped, failures stay inside the call and a crashed module comes back', async (s) => {
     const lab = path.join(root, 'lab-plugin')
     fs.mkdirSync(lab)
     fs.writeFileSync(path.join(lab, 'plugin.json'), JSON.stringify({ apiVersion: 1, id: 'lab', name: 'lab', version: '1.0.0', description: '', capabilities: ['server'], server: { entry: 'server.mjs' }, pages: [{ id: 'main', title: 'lab', entry: 'index.html', accepts: [], actions: [] }] }))
     fs.writeFileSync(path.join(lab, 'index.html'), '<!doctype html><title>lab</title>')
     fs.writeFileSync(path.join(lab, 'server.mjs'), `export function activate(conai) {
-      let cancelled = false;
+      let cancelled = false, toolCancelled = false, pendingTool = null;
       conai.onRequest(({ body }, { signal }) => {
         if (body.op === 'cancelled') return cancelled;
+        if (body.op === 'tool-waiting') return pendingTool !== null;
+        if (body.op === 'tool-cancelled') return toolCancelled;
+        if (body.op === 'release-tool') { pendingTool?.(); return true; }
         return new Promise((resolve, reject) => signal.addEventListener('abort', () => { cancelled = true; reject(signal.reason); }, { once: true }));
       });
       conai.hooks.on('chat.instructions', () => new Promise(resolve => setTimeout(() => resolve('SLOW'), 5000)))
       conai.tools.register({ name: 'fail', scope: 'read', inputSchema: { type: 'object' }, handler: () => { throw new Error('boom') } })
       conai.tools.register({ name: 'crash', scope: 'read', inputSchema: { type: 'object' }, handler: () => process.exit(3) })
+      conai.tools.register({ name: 'wait', scope: 'read', inputSchema: { type: 'object' }, handler: (_, { signal }) => new Promise((resolve, reject) => {
+        pendingTool = () => { pendingTool = null; resolve('finished'); };
+        signal.addEventListener('abort', () => { pendingTool = null; toolCancelled = true; reject(signal.reason); }, { once: true });
+      }) })
       conai.tools.register({ name: 'bad name!', scope: 'read', handler: () => 1 })
     }`)
     await registry.installPlugin(packageOf(lab))
     await registry.setPluginEnabled('lab', true, adminId)
     const lab_ = () => runtime.pluginServerStatus('lab')
-    await until(() => lab_().state === 'ready' && lab_().tools.length === 2, 'lab ready')
+    await until(() => lab_().state === 'ready' && lab_().tools.length === 3, 'lab ready')
+    await s.test('plugin server tools have no implicit deadline and propagate cancellation', async (r) => {
+      r.mock.timers.enable({ apis: ['setTimeout'] })
+      try {
+        let settled = false
+        const call = serverTools.callPluginServerTool('p_lab_wait', {}, admin)
+        void call.then(() => { settled = true }, () => { settled = true })
+        assert.equal(await runtime.requestPluginServer('lab', { op: 'tool-waiting' }, admin, {}), true)
+        r.mock.timers.tick(11 * 60_000)
+        await Promise.resolve()
+        assert.equal(settled, false)
+        await runtime.requestPluginServer('lab', { op: 'release-tool' }, admin, {})
+        assert.match(JSON.stringify((await call).content), /finished/)
+
+        const controller = new AbortController()
+        const cancelling = serverTools.callPluginServerTool('p_lab_wait', {}, admin, controller.signal)
+        assert.equal(await runtime.requestPluginServer('lab', { op: 'tool-waiting' }, admin, {}), true)
+        controller.abort()
+        assert.equal((await cancelling).isError, true)
+        assert.equal(await runtime.requestPluginServer('lab', { op: 'tool-cancelled' }, admin, {}), true)
+      } finally { r.mock.timers.reset() }
+    })
     const cancellation = new AbortController()
     const waiting = runtime.requestPluginServer('lab', {}, admin, {}, undefined, undefined, cancellation.signal)
     const rejected = assert.rejects(waiting, /취소/)
@@ -1408,7 +1482,7 @@ test('trusted plugins run a server module with their own data, hooks and tools',
     assert.match(JSON.stringify(failed.content), /boom/)
     const crashed = await serverTools.callPluginServerTool('p_lab_crash', {}, admin)
     assert.equal(crashed.isError, true)
-    await until(() => lab_().state === 'ready' && lab_().tools.length === 2, 'lab restarted after a crash')
+    await until(() => lab_().state === 'ready' && lab_().tools.length === 3, 'lab restarted after a crash')
     await registry.removePlugin('lab')
   })
 

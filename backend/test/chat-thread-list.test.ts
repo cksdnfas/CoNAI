@@ -165,6 +165,95 @@ test('chat list: previews, pin/archive/rename, branch origin', { timeout: 60000 
     }
   })
 
+  await t.test('bounded edits keep old replies, variants, clearing and group membership consistent', async (st) => {
+    const express = (await import('express')).default
+    const router = (await import('../src/routes/codex-chat.routes')).default
+    const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
+    const { ChatSharedBlockStore } = await import('../src/services/codex-chat/chatDisplayBlocks')
+    const app = express()
+    app.use(express.json())
+    app.use((req, _res, next) => {
+      req.session = { accountId: req.headers['x-test-account'] === '2' ? 2 : 1, accountType: 'admin' } as typeof req.session
+      next()
+    })
+    app.use('/api/codex-chat', router)
+    const server = app.listen(0, '127.0.0.1')
+    await new Promise<void>(resolve => server.once('listening', resolve))
+    try {
+      const address = server.address() as import('node:net').AddressInfo
+      const base = `http://127.0.0.1:${address.port}/api/codex-chat/threads`
+      const id = newThread()
+      const old = say(id, 'assistant', 'first answer')
+      CodexChatStore.addAlternative(id, old, { content: 'other answer', tool_calls: [], status: 'completed', error: null, created_at: new Date().toISOString() })
+      for (let index = 0; index < 100; index++) say(id, 'user', `later ${index}`)
+      const block = ChatSharedBlockStore.create({ name: 'bounded group state', block: { key: 'status', example: '{"hp":2}' } })
+      const other = ChatProfileStore.create({ name: 'group second', engine: 'llm', providerName: 'test', model: 'm', mcpEnabled: false, blockIds: [block.id] })
+      const third = ChatProfileStore.create({ name: 'group third', engine: 'llm', providerName: 'test', model: 'm', mcpEnabled: false })
+      const room = GroupChatService.create(requester, { profileIds: [profile.id, other.id], representativeId: profile.id, userProfileId: null })
+      const groupOld = say(room.id, 'assistant', 'group answer', { speaker_profile_id: profile.id })
+      for (let index = 0; index < 100; index++) say(room.id, 'user', `group ${index}`)
+      const originalList = CodexChatStore.listMessages.bind(CodexChatStore)
+      const reads: Array<number | undefined> = []
+      st.mock.method(CodexChatStore, 'listMessages', (threadId, options = {}) => {
+        reads.push(options.tail)
+        return originalList(threadId, options)
+      })
+      const request = async (path: string, method: string, body?: unknown) => {
+        const response = await fetch(`${base}${path}`, { method, headers: { 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+        const result = await response.json() as any
+        assert.equal(response.status, 200, JSON.stringify(result))
+        return result.data
+      }
+      const beforeVariant = CodexChatStore.findThreadById(id)!.context_revision
+      const variant = await request(`/${id}/messages/${old}/alternative?tail=5`, 'POST', { index: 0 })
+      assert.equal(variant.previousContextRevision, beforeVariant)
+      assert.equal(variant.changedMessage.id, old)
+      assert.equal(variant.changedMessage.content, 'first answer')
+      assert.equal(variant.changedMessage.active_alternative, 0)
+      assert.equal(variant.messages.length, 5)
+      assert.equal(variant.messagesFrom, variant.messages[0].id)
+      assert.equal(variant.messageCount, 101)
+      assert.equal(variant.hasMoreBefore, true)
+
+      const edited = await request(`/${id}/messages/${old}/text?tail=5`, 'PATCH', { content: 'hand edited' })
+      assert.equal(edited.changedMessage.content, 'hand edited')
+      assert.equal(edited.previousContextRevision, variant.thread.context_revision)
+      assert.deepEqual(edited.messages.map((message: any) => message.id), variant.messages.map((message: any) => message.id))
+      assert.equal((await fetch(`${base}/${id}/messages/${old}/text?tail=5`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-test-account': '2' }, body: JSON.stringify({ content: 'private' }) })).status, 404)
+      assert.equal((await fetch(`${base}/${id}/messages/${old}/text?tail=0`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content: 'invalid' }) })).status, 400)
+      assert.equal(CodexChatStore.findMessage(id, old)?.content, 'hand edited')
+
+      const groupEdit = await request(`/${room.id}/messages/${groupOld}/text?tail=5`, 'PATCH', { content: 'group edited' })
+      assert.equal(groupEdit.changedMessage.content, 'group edited')
+      assert.equal(groupEdit.messages.length, 5)
+      const groupRevision = groupEdit.thread.context_revision
+      const blockEdit = await request(`/${room.id}/blocks/status?tail=5`, 'PATCH', { profileId: other.id, data: { hp: 7 } })
+      assert.equal(blockEdit.memberBlocks[other.id].state.status.hp, 7)
+      assert.equal(blockEdit.thread.context_revision, groupRevision)
+      assert.equal(blockEdit.messages.length, 5)
+      const added = await request(`/${room.id}/members?tail=5`, 'POST', { profileIds: [third.id] })
+      assert.deepEqual(added.group.memberIds, [profile.id, other.id, third.id])
+      assert.equal(added.thread.context_revision, groupRevision)
+      assert.equal(added.messages.length, 5)
+      const removed = await request(`/${room.id}/members/${other.id}?tail=5`, 'DELETE')
+      assert.deepEqual(removed.group.memberIds, [profile.id, third.id])
+      assert.equal(removed.thread.context_revision, groupRevision)
+      assert.equal(removed.messages.length, 5)
+      const cleared = await request(`/${id}/clear?tail=5`, 'POST')
+      assert.ok(cleared.thread.context_revision > edited.thread.context_revision)
+      assert.ok(cleared.messages.every((message: any) => message.id !== old))
+      assert.equal(cleared.hasMoreBefore, false)
+      assert.ok(reads.every((limit) => limit !== undefined), `bounded edits must not list the full transcript: ${reads}`)
+
+      const legacy = await request(`/${room.id}/group`, 'PATCH', { title: 'legacy' })
+      assert.equal(legacy.messages.length, 101, 'callers without tail retain the complete legacy response')
+      assert.equal(legacy.messagesFrom, undefined)
+      assert.ok(Buffer.byteLength(JSON.stringify(added)) < Buffer.byteLength(JSON.stringify(legacy)))
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+    }
+  })
+
   await t.test('tail detail keeps state from earlier replies and manual edits, including group member state', async () => {
     const { ChatSharedBlockStore } = await import('../src/services/codex-chat/chatDisplayBlocks')
     const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')

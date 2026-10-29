@@ -148,13 +148,14 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
     },
   })
   const refetchHistory = historyQuery.refetch
-  const refreshHistory = useCallback(async (options: { watchForNewRows?: boolean } = {}) => {
+  const refreshHistory = useCallback(async (options: { watchForNewRows?: boolean; firstPageOnly?: boolean } = {}) => {
     if (options.watchForNewRows) {
       setHistoryRefreshWatchUntil(Date.now() + GENERATION_HISTORY_REFRESH_WATCH_MS)
     }
 
-    // 명시적 새로고침(버튼/삭제/재실행/부모 nonce)만 전 페이지를 다시 읽는다.
-    isFullHistoryRefreshRef.current = true
+    // 명시적 새로고침(버튼/삭제/재실행)만 전 페이지를 다시 읽는다. 생성 요청(부모 nonce)은 첫 페이지만 읽고,
+    // 새 행으로 경계가 밀렸을 때만 뒤 페이지를 다시 읽는다(queryFn 의 경계 검사).
+    isFullHistoryRefreshRef.current = !options.firstPageOnly
     try {
       await refetchHistory()
     } finally {
@@ -174,7 +175,7 @@ export function useGenerationHistoryFeed({ refreshNonce, serviceType, workflowId
       return
     }
 
-    void refreshHistory({ watchForNewRows: true })
+    void refreshHistory({ watchForNewRows: true, firstPageOnly: true })
   }, [enabled, refreshNonce, refreshHistory])
 
   const historyRecords = useMemo(

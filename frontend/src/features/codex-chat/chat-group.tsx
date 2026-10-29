@@ -24,7 +24,6 @@ import {
   type ChatGroupInfo,
   type ChatProfileSummary,
   type ChatUserProfile,
-  type CodexChatThreadDetail,
 } from '@/lib/api-codex-chat'
 import { CHAT_JUDGE_PRESET_NAMES_QUERY_KEY, listChatJudgePresetNames } from '@/lib/api-chat-judge'
 import { getErrorMessage } from '@/lib/error-message'
@@ -33,7 +32,8 @@ import { ComposerSuggestList, ComposerSuggestOption } from './chat-commands'
 import { ChatProfileAvatar } from './chat-profile-avatar'
 import { ChatUserProfileSelect } from './chat-user-profiles'
 import { EVERYONE_MENTION } from './chat-mentions'
-import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-chat-context'
+import { CODEX_CHAT_THREADS_QUERY_KEY } from './codex-chat-context'
+import { runChatThreadDetailMutation } from './chat-query-refresh'
 
 const STACK_MAX = 3
 export const GROUP_MEMBER_MAX = 6
@@ -96,13 +96,12 @@ export function GroupMembersPopover({ threadId, group, profilesById, disabled, o
   const [open, setOpen] = useState(false)
   const members = group.memberIds.flatMap((id) => profilesById.get(id) ?? [])
 
-  const applied = (detail: CodexChatThreadDetail) => {
-    queryClient.setQueryData(codexChatThreadQueryKey(threadId), detail)
+  const applied = () => {
     void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
   }
   const onError = (error: unknown) => showSnackbar({ message: getErrorMessage(error, t({ ko: '바꾸지 못했어.', en: 'Could not change it.' })), tone: 'error' })
-  const updateMutation = useMutation({ mutationFn: (patch: Parameters<typeof updateGroupChat>[1]) => updateGroupChat(threadId, patch), onSuccess: applied, onError })
-  const removeMutation = useMutation({ mutationFn: (profileId: number) => removeGroupChatMember(threadId, profileId), onSuccess: applied, onError })
+  const updateMutation = useMutation({ mutationFn: (patch: Parameters<typeof updateGroupChat>[1]) => runChatThreadDetailMutation(queryClient, threadId, () => updateGroupChat(threadId, patch)), onSuccess: applied, onError })
+  const removeMutation = useMutation({ mutationFn: (profileId: number) => runChatThreadDetailMutation(queryClient, threadId, () => removeGroupChatMember(threadId, profileId)), onSuccess: applied, onError })
   const busy = disabled || updateMutation.isPending || removeMutation.isPending
 
   const remove = async (profile: ChatProfileSummary) => {
@@ -198,8 +197,9 @@ export function GroupInviteDialog({ open, mode, profiles, userProfiles = [], onC
     mutationFn: async () => {
       if (mode?.kind === 'create') return (await createGroupChat({ profileIds: [mode.baseProfileId, ...picked], representativeId: mode.baseProfileId, title: (titleEdited ? title : defaultTitle).trim() || undefined, userProfileId })).id
       if (mode?.kind === 'add') {
-        queryClient.setQueryData(codexChatThreadQueryKey(mode.threadId), await addGroupChatMembers(mode.threadId, picked))
-        return mode.threadId
+        const threadId = mode.threadId
+        await runChatThreadDetailMutation(queryClient, threadId, () => addGroupChatMembers(threadId, picked))
+        return threadId
       }
       return null
     },

@@ -14,6 +14,9 @@ import { GenerationHistoryService } from '../services/generationHistoryService';
 import { GenerationQueueModel } from '../models/GenerationQueue';
 import { enqueueGenerationJobs } from '../services/generation-queue/queueEnqueue';
 import { externalizeQueueInputDataUrls } from '../services/generation-queue/queueInputStore';
+import { ComfyInputValidationError, validateComfyPromptData } from '../services/prepareComfyPromptData';
+import { WorkflowInputAssetError } from '../services/workflowInputAssetStore';
+import { MCP_QUEUE_IMAGE_GRANT_KEY } from '../services/generation-queue/queueMcpImageGrant';
 import { resolveWorkflowRoleQueueLimitState } from '../services/generation-queue/queueRoleLimitPolicy';
 import { settingsService } from '../services/settingsService';
 import { listWorkflowArtifacts, resolveWorkflowArtifactPath } from '../services/workflowArtifactService';
@@ -462,6 +465,11 @@ router.post('/:slug/queue', requirePermission('generation.execute'), asyncHandle
     return;
   }
 
+  if (Object.prototype.hasOwnProperty.call(request_payload, MCP_QUEUE_IMAGE_GRANT_KEY)) {
+    res.status(400).json({ success: false, error: 'MCP queue image authorization is server-issued' });
+    return;
+  }
+
   const promptData = (request_payload as Record<string, unknown>).prompt_data;
   if (!promptData || typeof promptData !== 'object' || Array.isArray(promptData)) {
     res.status(400).json({ success: false, error: 'request_payload.prompt_data must be an object' });
@@ -486,15 +494,22 @@ router.post('/:slug/queue', requirePermission('generation.execute'), asyncHandle
   const imageSaveSettings = settingsService.loadSettings().imageSave;
   let normalizedRequestPayload: Record<string, unknown>;
   try {
+    const markedFields = parseMarkedFields(workflow.marked_fields);
+    const normalizedPromptData = normalizeWorkflowNumericPromptValues(markedFields, promptData as Record<string, unknown>);
+    if (validateComfyPromptData(markedFields, normalizedPromptData)) {
+      let allowed = false;
+      requireImagesView(req, res, () => { allowed = true; });
+      if (!allowed) return;
+    }
     // PAYLOAD-3: store base64 image inputs once and keep only references in the payload.
     // This route already expands one request into up to 32 jobs, so the shared-input win is direct.
     // The whole payload is walked, not just prompt_data: a client may send base64 beside it as well.
     normalizedRequestPayload = externalizeQueueInputDataUrls({
       ...request_payload,
-      prompt_data: normalizeWorkflowNumericPromptValues(parseMarkedFields(workflow.marked_fields), promptData as Record<string, unknown>),
+      prompt_data: normalizedPromptData,
     }).value;
   } catch (error) {
-    if (error instanceof WorkflowNumericFieldValidationError) {
+    if (error instanceof WorkflowNumericFieldValidationError || error instanceof ComfyInputValidationError) {
       res.status(400).json({ success: false, error: error.message });
       return;
     }
@@ -527,6 +542,10 @@ router.post('/:slug/queue', requirePermission('generation.execute'), asyncHandle
     }, { count: parsedEnqueueCount.count, roleLimitWorkflow: workflow }).jobIds;
   } catch (error) {
     if (sendQueueRoleLimitError(res, error)) return;
+    if (error instanceof WorkflowInputAssetError) {
+      res.status(400).json({ success: false, error: error.message });
+      return;
+    }
     throw error;
   }
   const records = jobIds.map((jobId) => GenerationQueueModel.findListRecordById(jobId));

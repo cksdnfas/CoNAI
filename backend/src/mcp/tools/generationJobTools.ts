@@ -19,6 +19,8 @@ import { normalizeWorkflowNumericPromptValues } from '../../services/workflowNum
 import { parseGenerationQueueRoutingTag } from '../../services/generationQueueRouting';
 import { assertChatNaiSampleCount, isChatMcpSource, type McpRequestContext } from '../context';
 import { normalizeMcpWorkflowInputs, parseMcpMarkedFields, requireChatWorkflowInputs } from '../../services/comfyui/comfyWorkflowInputs';
+import { validateComfyPromptData } from '../../services/prepareComfyPromptData';
+import { createMcpQueueImageGrant, createTrustedQueueImageGrant, MCP_QUEUE_IMAGE_GRANT_KEY, requireCurrentMcpKeyImagePermission } from '../../services/generation-queue/queueMcpImageGrant';
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup';
 import { requireMcpResourceOwner, requireMcpToolAccess } from '../toolAccess';
 import { requireContextPermission, requireRequesterPermission } from '../../middleware/featureAccess';
@@ -136,7 +138,11 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
   if (context.chatContext && !options.afterReply) requireActiveChatReply(context.chatContext);
   if (isChatMcpSource(context.source)) requireMcpToolAccess(context, toolName, input, options.afterReply ? 'after-reply' : 'reply');
   const { service_type, workflow_id, server_id, server_tag, inputs, request_payload, group_id, group_path, priority = 100, idempotency_key, request_summary } = input;
+  if (request_payload && Object.prototype.hasOwnProperty.call(request_payload, MCP_QUEUE_IMAGE_GRANT_KEY)) {
+    throw new Error('MCP queue image authorization is server-issued');
+  }
   let usesImages = false;
+  let usesComfyLibrary = false;
   const requireManagedMedia = () => { usesImages = true; requireRequesterPermission(context.requester, 'images.view'); };
   if (service_type === 'comfyui') requireContextPermission(context, 'workflows.view');
   if (isChatMcpSource(context.source)) validateMcpToolArguments(input, requireManagedMedia);
@@ -208,10 +214,26 @@ async function enqueueGenerationJob(context: McpRequestContext, input: McpGenera
       rawInputs,
     );
     // Externalized as a whole: a caller's request_payload may carry base64 outside prompt_data too.
+    const normalizedInputs = normalizeMcpWorkflowInputs(markedFields, suppliedInputs);
+    usesComfyLibrary = validateComfyPromptData(markedFields, normalizedInputs);
+    if (usesComfyLibrary) {
+      usesImages = true;
+      if (!context.requester && context.keyGroup !== undefined) {
+        if (!context.keyId) throw new Error('Invalid MCP key authorization for queued image input');
+        requireCurrentMcpKeyImagePermission(context.keyId);
+      } else {
+        requireContextPermission(context, 'images.view');
+      }
+    }
     payload = externalizeQueueInputDataUrls({
       ...payload,
-      prompt_data: normalizeMcpWorkflowInputs(markedFields, suppliedInputs),
+      prompt_data: normalizedInputs,
     }).value;
+    if (usesComfyLibrary && !context.requester && context.keyGroup !== undefined) {
+      payload = { ...payload, [MCP_QUEUE_IMAGE_GRANT_KEY]: createMcpQueueImageGrant(context, workflow_id, payload.prompt_data as Record<string, unknown>) };
+    } else if (usesComfyLibrary && !context.requester && context.keyGroup === undefined && context.source === undefined) {
+      payload = { ...payload, [MCP_QUEUE_IMAGE_GRANT_KEY]: createTrustedQueueImageGrant('stdio', workflow_id, payload.prompt_data as Record<string, unknown>) };
+    }
   } else {
     routing = resolveMcpGenerationRoutingInput({
       serviceType: service_type,

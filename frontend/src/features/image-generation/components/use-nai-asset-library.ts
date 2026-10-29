@@ -11,6 +11,8 @@ import {
   getNaiVibeAsset,
   listNaiCharacterReferenceAssets,
   listNaiVibeAssets,
+  NAI_CHARACTER_REFERENCE_ASSETS_QUERY_KEY,
+  naiVibeAssetsQueryKey,
   saveNaiCharacterReferenceAsset,
   saveNaiVibeAsset,
   updateNaiCharacterReferenceAsset,
@@ -68,13 +70,13 @@ export function useNaiAssetLibrary({
   const [savedCharacterReferenceSearch, setSavedCharacterReferenceSearch] = useState('')
 
   const savedVibesQuery = useQuery({
-    queryKey: ['image-generation-nai-vibe-assets', naiForm.model],
+    queryKey: naiVibeAssetsQueryKey(naiForm.model),
     queryFn: () => listNaiVibeAssets(naiForm.model),
     enabled: canReadAssets,
   })
 
   const savedCharacterReferencesQuery = useQuery({
-    queryKey: ['image-generation-nai-character-reference-assets'],
+    queryKey: NAI_CHARACTER_REFERENCE_ASSETS_QUERY_KEY,
     queryFn: listNaiCharacterReferenceAssets,
     enabled: canReadAssets,
   })

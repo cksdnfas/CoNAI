@@ -39,6 +39,7 @@ export async function updateWatchedFolder(folderId: number, updates: WatchedFold
   })
 }
 
+/** Unregister a folder only. The server rejects the legacy deleteFiles flag rather than deleting files. */
 export async function deleteWatchedFolder(folderId: number, deleteFiles = false) {
   const searchParams = new URLSearchParams()
   if (deleteFiles) {

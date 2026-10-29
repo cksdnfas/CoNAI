@@ -12,7 +12,10 @@ const router = Router();
 
 function handleMetadataEditError(res: Response, error: unknown, fallbackMessage: string) {
   if (error instanceof ImageMetadataEditError) {
-    return res.status(error.status).json(errorResponse(error.message));
+    return res.status(error.status).json({
+      ...errorResponse(error.message),
+      ...(error.status === 409 ? { code: 'revision_conflict' } : {}),
+    });
   }
 
   return res.status(500).json(errorResponse(error instanceof Error ? error.message : fallbackMessage));

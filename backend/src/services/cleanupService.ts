@@ -6,6 +6,7 @@ import { GenerationQueueModel } from '../models/GenerationQueue';
 import { getUserSettingsDb } from '../database/userSettingsDb';
 import { externalizeStoredQueuePayloads } from './generation-queue/queueInputStore';
 import { requestGenerationResultRetentionPrune } from './generationResultRetentionService';
+import { pruneDeletedWorkflowInputAssets } from './workflowInputAssetStore';
 
 /** Reclaim the file space only when the backfill freed enough to be worth a full rewrite of user.db. */
 const QUEUE_PAYLOAD_VACUUM_THRESHOLD_BYTES = 256 * 1024 * 1024;
@@ -59,6 +60,7 @@ function cleanupDetailForRecord(
 export class CleanupService {
   private static periodicCleanupTimer: NodeJS.Timeout | null = null;
   private static cleanupInProgress = false;
+  private static workflowInputCleanupInProgress = false;
 
   /**
    * Move inline base64 inputs still sitting in stored queue payloads to the queue input store, then
@@ -333,6 +335,7 @@ export class CleanupService {
   static async runPeriodicCleanup(): Promise<void> {
     console.log('⏰ Running periodic cleanup for generation history...');
 
+    await this.runWorkflowInputCleanup();
     const report = await this.executeCleanup({ dryRun: false });
 
     if (report.deleted > 0 || report.updated > 0) {
@@ -348,6 +351,7 @@ export class CleanupService {
       return;
     }
 
+    void this.runWorkflowInputCleanup();
     this.periodicCleanupTimer = setInterval(() => {
       void this.runPeriodicCleanupSafely();
     }, intervalMs);
@@ -363,6 +367,19 @@ export class CleanupService {
 
     clearInterval(this.periodicCleanupTimer);
     this.periodicCleanupTimer = null;
+  }
+
+  private static async runWorkflowInputCleanup(): Promise<void> {
+    if (this.workflowInputCleanupInProgress) return;
+    this.workflowInputCleanupInProgress = true;
+    try {
+      const removed = await pruneDeletedWorkflowInputAssets();
+      if (removed) console.log(`🧹 Removed ${removed} expired workflow input assets`);
+    } catch (error) {
+      console.warn('⚠️ Workflow input asset cleanup failed:', error instanceof Error ? error.message : error);
+    } finally {
+      this.workflowInputCleanupInProgress = false;
+    }
   }
 
   private static async runPeriodicCleanupSafely(): Promise<void> {

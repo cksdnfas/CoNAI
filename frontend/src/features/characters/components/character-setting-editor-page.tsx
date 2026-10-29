@@ -10,6 +10,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EditorGroup } from '@/components/ui/editor-group'
 import { ErrorState } from '@/components/ui/error-state'
 import { FloatingSaveBar } from '@/components/ui/floating-save-bar'
+import { ListRow } from '@/components/ui/list-row'
 import { LoadingState } from '@/components/ui/loading-state'
 import { useEditorPageGuard } from '@/features/settings/use-unsaved-settings-guard'
 import { useI18n } from '@/i18n'
@@ -102,10 +103,12 @@ export function CharacterSettingEditorPage({ editor, folders, canEdit, admin, ro
   const aside = synced ? (
     <EditorGroup label={t({ ko: '동기화 중인 프로필', en: 'Synced profiles' })} description={t({ ko: '{count}개', en: '{count}' }, { count: synced })}>
       {base?.linkedProfiles.length ? (
-        <ul className="space-y-0.5">
+        <ul>
           {base.linkedProfiles.map((profile) => (
             <li key={profile.id}>
-              <Link to={`/characters?view=profiles&profile=${profile.id}`} className="block truncate rounded-sm px-1.5 py-1 text-sm text-foreground hover:bg-fill">{profile.name}</Link>
+              <ListRow asChild interactive size="sm">
+                <Link to={`/characters?view=profiles&profile=${profile.id}`}><span className="truncate">{profile.name}</span></Link>
+              </ListRow>
             </li>
           ))}
         </ul>

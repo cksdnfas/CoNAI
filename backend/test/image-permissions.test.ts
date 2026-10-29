@@ -209,6 +209,71 @@ test('permissions: independent pages, features, migration, grants, scopes and ro
       AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
     }
   })
+  await t.test('batch group cover previews need image viewing like the per-group route', async () => {
+    const { GroupModel } = await import('../src/models/Group')
+    const first = GroupModel.create({ name: 'Batch preview one' })
+    const second = GroupModel.create({ name: 'Batch preview two' })
+    for (const base of ['/api/groups', '/api/auto-folder-groups']) {
+      const url = `${base}/preview-images?ids=${first},${second},${first}&count=4`
+      assert.equal(await status(url, undefined, 'GET', 'batch-preview-visitor'), 401, `${base}: signed-out visitors are refused`)
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: [] })
+      try {
+        assert.equal(await status(url, accountId), 403, `${base}: without images.view`)
+        assert.equal(await status(`${base}/${first}/preview-images?count=4`, accountId), 403, `${base}: the per-group route agrees`)
+      } finally {
+        AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
+      }
+      const response = await fetch(origin + url, { headers: { 'x-test-account': String(accountId) } })
+      assert.equal(response.status, 200)
+      const payload = await response.json() as { data: Record<string, unknown[]> }
+      assert.deepEqual(Object.keys(payload.data).sort(), [String(first), String(second)].sort(), `${base}: one entry per distinct id`)
+      assert.ok(Object.values(payload.data).every(Array.isArray))
+      for (const bad of ['', 'ids=0', 'ids=1,x', `ids=${Array.from({ length: 101 }, (_, index) => index + 1).join(',')}`]) {
+        assert.equal(await status(`${base}/preview-images?${bad}`, accountId), 400, `${base}: ${bad || 'no ids'}`)
+      }
+    }
+  })
+  await t.test('group rematch jobs: anyone allowed to start the kind sees its progress; only the starter or admin cancels', async () => {
+    const { RuntimeJobStore } = await import('../src/services/runtimeJobs/runtimeJobStore')
+    const { groupAutoCollectSingletonKey } = await import('../src/services/runtimeJobs/handlers/groupRematchHandlers')
+    const { GroupModel } = await import('../src/models/Group')
+    const starterId = Number(auth.prepare("INSERT INTO auth_accounts (username, password_hash, account_type) VALUES ('rematch-starter', 'unused', 'guest')").run().lastInsertRowid)
+    const groupId = GroupModel.create({ name: 'Shared rematch target' })
+    const shared = RuntimeJobStore.create({ kind: 'group-auto-collect', params: { groupId }, singletonKey: groupAutoCollectSingletonKey(groupId), requestedByAccountId: starterId })
+    const privateJob = RuntimeJobStore.create({ kind: 'metadata-reextract-all', requestedByAccountId: starterId })
+    const rebuild = RuntimeJobStore.create({ kind: 'auto-folder-rebuild', requestedByAccountId: starterId })
+    type JobBody = { jobId: string; viewerCanCancel?: boolean }
+    const read = async <T>(url: string, id: number) => ((await (await fetch(origin + url, { headers: { 'x-test-account': String(id) } })).json()) as { data: T }).data
+    const liveJob = () => read<JobBody | null>(`/api/groups/${groupId}/auto-collect`, accountId)
+    const listed = async (kind: string, id = accountId) => (await read<JobBody[]>(`/api/jobs?kind=${kind}&status=queued,running`, id)).map((job) => job.jobId)
+    try {
+      assert.equal(await status(`/api/jobs/${shared.jobId}`, accountId), 403, 'view-only account cannot read a job it could not start')
+      assert.equal(await liveJob(), null, 'nor is it offered for resume')
+      assert.ok(!(await listed('auto-folder-rebuild')).includes(rebuild.jobId), 'nor listed for resume')
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view', 'images.edit'] })
+      const response = await fetch(`${origin}/api/jobs/${shared.jobId}`, { headers: { 'x-test-account': String(accountId) } })
+      assert.equal(response.status, 200, 'an account allowed to start the kind reads the joined job')
+      const joined = ((await response.json()) as { data: JobBody & { progress: unknown } }).data
+      assert.equal(joined.jobId, shared.jobId)
+      assert.equal(joined.viewerCanCancel, false, 'and is told it cannot cancel it')
+      const live = await liveJob()
+      assert.equal(live?.jobId, shared.jobId, 'and resumes it when the group page opens')
+      assert.equal(live?.viewerCanCancel, false)
+      const rebuildListed = (await read<JobBody[]>('/api/jobs?kind=auto-folder-rebuild&status=queued,running', accountId)).find((job) => job.jobId === rebuild.jobId)
+      assert.equal(rebuildListed?.viewerCanCancel, false, 'list-based resume sees the shared kind too, without cancel')
+      assert.ok((await listed('group-auto-collect')).includes(shared.jobId))
+      assert.ok(!(await listed('metadata-reextract-all')).includes(privateJob.jobId), 'other kinds stay listed to the starter')
+      assert.ok(!(await read<JobBody[]>('/api/jobs?status=queued', accountId)).some((job) => job.jobId === privateJob.jobId))
+      assert.equal(await status(`/api/jobs/${shared.jobId}/cancel`, accountId, 'POST'), 403, 'reading is not cancelling')
+      assert.equal(await status(`/api/jobs/${privateJob.jobId}`, accountId), 403, 'other kinds stay starter/admin only')
+      assert.equal(RuntimeJobStore.get(shared.jobId)?.status, 'queued')
+      assert.equal((await read<JobBody>(`/api/jobs/${shared.jobId}`, starterId)).viewerCanCancel, undefined, 'the starter keeps its cancel')
+      assert.ok((await listed('auto-folder-rebuild', starterId)).includes(rebuild.jobId))
+    } finally {
+      AuthPermissionGroup.updateCustomGroup(group.id, { name: group.name, permissionKeys: ['images.view'] })
+      for (const job of [shared, privateJob, rebuild]) RuntimeJobStore.markCancelled(job.jobId, 'test cleanup')
+    }
+  })
   await t.test('CLI sign-in management is admin-only and Claude tool grants are independent and revocable', async () => {
     for (const agent of ['codex', 'claude']) {
       assert.equal(await status(`/api/settings/agent-cli/${agent}/login`), 403)

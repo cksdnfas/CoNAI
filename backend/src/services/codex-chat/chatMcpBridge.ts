@@ -1,9 +1,10 @@
-import { Client, InMemoryTransport } from '@modelcontextprotocol/client'
+import { InMemoryTransport } from '@modelcontextprotocol/client'
 import type { ChatExecutionContext } from '@conai/shared'
 import type { McpRequester } from '../../mcp/context'
 import type { ChatResearchExecution } from './chatResearch'
 import { createMcpServer } from '../../mcp/server'
 import { CATALOG_RUN_TOOL, catalogToolNames } from '../../mcp/toolCatalog'
+import { inProcessMcpClient, NO_TOOL_DEADLINE } from '../../mcp/inProcessClient'
 import type { ChatScope } from './chatSettings'
 import type { ChatCompletionTool } from './llmChatCompletion'
 
@@ -17,7 +18,7 @@ export async function openChatMcpBridge(requester: McpRequester, scopes: ChatSco
   const server = createMcpServer({ scopes: [...scopes], requester, source: 'llm-chat', toolAllowlist, generationPresetIds: options.generationPresetIds ?? [], chatContext: options.chatContext, contentRatingLimit: options.contentRatingLimit, toolCatalog: options.toolCatalog, toolCatalogBudget: options.toolCatalogBudget, research: options.research })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await server.connect(serverTransport)
-  const client = new Client({ name: 'conai-llm-chat', version: '1.0.0' })
+  const client = inProcessMcpClient({ name: 'conai-llm-chat', version: '1.0.0' })
   await client.connect(clientTransport)
 
   // A profile with no general tools and no connected page advertises no tools capability.
@@ -41,12 +42,12 @@ export async function openChatMcpBridge(requester: McpRequester, scopes: ChatSco
     async call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ChatMcpToolResult> {
       signal?.throwIfAborted()
       if (catalogTools.has(name) && toolNames.has(CATALOG_RUN_TOOL)) {
-        return await client.callTool({ name: CATALOG_RUN_TOOL, arguments: { tool: name, arguments: args } }, { signal, timeout: 30 * 60_000 }) as ChatMcpToolResult
+        return await client.callTool({ name: CATALOG_RUN_TOOL, arguments: { tool: name, arguments: args } }, { signal, timeout: NO_TOOL_DEADLINE }) as ChatMcpToolResult
       }
       if (!toolNames.has(name)) {
         return { isError: true, content: [{ type: 'text', text: `Unknown or not permitted tool: ${name}` }] }
       }
-      return await client.callTool({ name, arguments: args }, { signal }) as ChatMcpToolResult
+      return await client.callTool({ name, arguments: args }, { signal, timeout: NO_TOOL_DEADLINE }) as ChatMcpToolResult
     },
     async close() {
       await client.close().catch(() => undefined)

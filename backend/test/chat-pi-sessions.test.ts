@@ -122,6 +122,28 @@ test('pi sessions: tool rounds, forked turns, failures leave no trace, compactio
     assert.equal(mock.requests[0].body.reasoning_budget_tokens, 128)
   })
 
+  await t.test('native tool lifecycle spans the awaited call', async () => {
+    mock.script.push({ kind: 'tool' }, { kind: 'text', text: 'Tool finished.' })
+    let release!: () => void
+    let entered!: () => void
+    const started = new Promise<void>((resolve) => { entered = resolve })
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const lifecycle: string[] = []
+    const result = streamPiChatCompletion({
+      target: target({ resumeId: sessionId, onDone: (id) => { sessionId = id } }),
+      messages: [{ role: 'system', content: 'You are a test.' }, { role: 'user', content: 'wait for the tool' }],
+      tools, signal: new AbortController().signal,
+      onToolStart: () => lifecycle.push('start'),
+      onToolEnd: () => lifecycle.push('end'),
+      callTool: async () => { entered(); await held; return { content: [{ type: 'text', text: 'done' }] } },
+    })
+    await started
+    assert.deepEqual(lifecycle, ['start'])
+    release()
+    assert.match((await result).content, /Tool finished/)
+    assert.deepEqual(lifecycle, ['start', 'end'])
+  })
+
   await t.test('a later turn forks the session: the model sees the earlier turn, the old file goes', async () => {
     mock.requests.length = 0
     mock.script.push({ kind: 'text', text: 'Still red.' })

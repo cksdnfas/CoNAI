@@ -16,6 +16,7 @@ import { ActionContextMenu, ActionMenuButton, type ActionMenuEntry } from '@/com
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
+import { Heading } from '@/components/ui/heading'
 import { IconButton } from '@/components/ui/icon-button'
 import { RowGroup } from '@/components/ui/row-group'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -256,7 +257,7 @@ function AppearanceLibraryPage() {
     <PageToolbar
       start={<>
         <CharacterViewSwitch />
-        {query ? <h1 className="truncate text-base font-bold tracking-tight text-foreground">{t({ ko: '‘{query}’ 검색 결과', en: 'Results for ‘{query}’' }, { query })}</h1> : (
+        {query ? <Heading level={3} as="h1" className="truncate">{t({ ko: '‘{query}’ 검색 결과', en: 'Results for ‘{query}’' }, { query })}</Heading> : (
           <PathBreadcrumbs
             ariaLabel={t({ ko: '폴더 경로', en: 'Folder path' })}
             items={[{ key: 'root', label: rootLabel, onClick: () => openFolder(null) }, ...path.map((folder) => ({ key: String(folder.id), label: folder.name, onClick: () => openFolder(folder.id) }))]}

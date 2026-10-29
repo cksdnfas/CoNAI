@@ -10,12 +10,12 @@ interface GroupSubgroupStripProps {
   groups: GroupWithHierarchy[]
   countMaps: GroupCountMaps
   sourceKey: 'custom' | 'folders'
-  loadPreviewImages: (groupId: number, params?: { includeChildren?: boolean; count?: number }) => Promise<ImageRecord[]>
+  loadCoverImages: (groupId: number) => Promise<ImageRecord[]>
   onOpenGroup: (groupId: number) => void
 }
 
 /** The current group's direct children as one scrollable row of compact cover chips. */
-export function GroupSubgroupStrip({ groups, countMaps, sourceKey, loadPreviewImages, onOpenGroup }: GroupSubgroupStripProps) {
+export function GroupSubgroupStrip({ groups, countMaps, sourceKey, loadCoverImages, onOpenGroup }: GroupSubgroupStripProps) {
   const { t, formatNumber } = useI18n()
 
   if (groups.length === 0) {
@@ -33,7 +33,7 @@ export function GroupSubgroupStrip({ groups, countMaps, sourceKey, loadPreviewIm
             className="shrink-0 py-1"
             onClick={() => onOpenGroup(group.id)}
             mediaClassName="size-9 shrink-0"
-            media={<GroupCoverMosaic groupId={group.id} sourceKey={sourceKey} imageCount={totalCount} loadPreviewImages={loadPreviewImages} className="size-full" />}
+            media={<GroupCoverMosaic groupId={group.id} sourceKey={sourceKey} imageCount={totalCount} loadCoverImages={loadCoverImages} className="size-full" />}
             leading={<GroupColorDot color={group.color} />}
             title={<span className="block max-w-40 truncate">{group.name}</span>}
             meta={formatNumber(totalCount)}

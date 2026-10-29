@@ -100,25 +100,8 @@ function resolveCompositeHash(metadata: ArtifactMetadata, valueObject: ArtifactM
     ?? null
 }
 
-function resolveStoragePath(sourceArtifact: RuntimeArtifact, metadata: ArtifactMetadata, valueObject: ArtifactMetadata) {
-  return sourceArtifact.storagePath
-    ?? optionalString(metadata.storagePath)
-    ?? optionalString(metadata.storage_path)
-    ?? optionalString(metadata.outputPath)
-    ?? optionalString(metadata.output_path)
-    ?? optionalString(metadata.originalFilePath)
-    ?? optionalString(metadata.original_file_path)
-    ?? optionalString(metadata.filePath)
-    ?? optionalString(metadata.file_path)
-    ?? optionalString(valueObject.storagePath)
-    ?? optionalString(valueObject.storage_path)
-    ?? optionalString(valueObject.outputPath)
-    ?? optionalString(valueObject.output_path)
-    ?? optionalString(valueObject.originalFilePath)
-    ?? optionalString(valueObject.original_file_path)
-    ?? optionalString(valueObject.filePath)
-    ?? optionalString(valueObject.file_path)
-    ?? null
+function resolveStoragePath(sourceArtifact: RuntimeArtifact) {
+  return sourceArtifact.storagePath ?? null
 }
 
 function resolveMimeType(metadata: ArtifactMetadata, valueObject: ArtifactMetadata, storagePath: string | null) {
@@ -324,7 +307,7 @@ function buildMetadataPatch(
 export function resolveFinalResultPromotionCandidate(sourceArtifact: RuntimeArtifact): FinalResultPromotionCandidate {
   const { metadata, valueObject } = resolveArtifactMetadata(sourceArtifact)
   const compositeHash = resolveCompositeHash(metadata, valueObject)
-  const storagePath = resolveStoragePath(sourceArtifact, metadata, valueObject)
+  const storagePath = resolveStoragePath(sourceArtifact)
   const mimeType = resolveMimeType(metadata, valueObject, storagePath)
   const originalFileName = resolveOriginalFileName(metadata, valueObject, storagePath)
   const generationParams = resolveGenerationParameters(metadata)

@@ -1,10 +1,12 @@
 import fs from 'fs'
 import path from 'path'
+import { resolveUploadsPath } from '../config/runtimePaths'
 import { type MarkedField } from '../types/workflow'
 import { normalizeBase64ImageData } from '../utils/base64ImageData'
 import { ComfyUIService } from './comfyuiService'
 import { ImageUploadService } from './imageUploadService'
 import { MEDIA_HASH_PATTERN } from './codex-chat/chatMediaLinks'
+import { getTrustedGraphMedia } from './graph-workflow-executor/trustedGraphMedia'
 import { isQueueInputRef, resolveQueueInputFilePath } from './generation-queue/queueInputStore'
 import {
   isWorkflowInputAssetRef,
@@ -19,6 +21,7 @@ interface WorkflowImageFieldPayload {
   original_file_path?: string
   filePath?: string
   path?: string
+  file_path?: string
   mimeType?: string
   composite_hash?: string
 }
@@ -51,18 +54,48 @@ function buildComfyImageUploadName(fileName: string | undefined, fallbackBase: s
   return `${baseName}_${Date.now()}${ext}`
 }
 
-function normalizeImagePayloadPath(payload: WorkflowImageFieldPayload) {
-  const candidate = payload.storagePath
-    ?? payload.originalPath
-    ?? payload.original_file_path
-    ?? payload.filePath
-    ?? payload.path
+const MEDIA_PATH_KEYS = ['storagePath', 'originalPath', 'original_file_path', 'filePath', 'file_path', 'path'] as const
 
-  if (typeof candidate !== 'string' || candidate.trim().length === 0) {
-    return null
+export class ComfyInputValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ComfyInputValidationError'
   }
+}
 
-  return candidate
+function validateMediaValue(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const payload = value as Record<string, unknown>
+  if (MEDIA_PATH_KEYS.some((key) => typeof payload[key] === 'string' && (payload[key] as string).trim())) {
+    throw new ComfyInputValidationError('서버 파일 경로는 워크플로 입력으로 사용할 수 없어. 이미지 해시나 업로드를 사용해줘.')
+  }
+  if (payload.composite_hash !== undefined && payload.composite_hash !== null && payload.composite_hash !== '') {
+    if (typeof payload.composite_hash !== 'string' || !MEDIA_HASH_PATTERN.test(payload.composite_hash)) {
+      throw new ComfyInputValidationError('이미지 해시가 올바르지 않아.')
+    }
+    return true
+  }
+  return false
+}
+
+/** Validate every uploadable field before any upload; return whether a library image is referenced. */
+export function validateComfyPromptData(
+  markedFields: Array<{ id: string; type?: string; node_editor?: string }>,
+  promptData: Record<string, unknown>,
+): boolean {
+  let usesLibrary = false
+  for (const field of markedFields) {
+    const value = promptData[field.id]
+    if (field.type === 'image') {
+      usesLibrary = validateMediaValue(value) || usesLibrary
+    } else if (field.type === 'node' && field.node_editor === MINIMAX_H3_DIRECTOR_EDITOR && isRecord(value)) {
+      const meta = value[MINIMAX_H3_DIRECTOR_META_KEY]
+      if (isRecord(meta) && isRecord(meta.assets)) {
+        for (const asset of Object.values(meta.assets)) usesLibrary = validateMediaValue(asset) || usesLibrary
+      }
+    }
+  }
+  return usesLibrary
 }
 
 function getComfyMediaUploadInput(value: unknown): ComfyMediaUploadInput | null {
@@ -70,12 +103,17 @@ function getComfyMediaUploadInput(value: unknown): ComfyMediaUploadInput | null 
     return null
   }
 
+  validateMediaValue(value)
+
+  const trustedGraphMedia = getTrustedGraphMedia(value)
+  if (trustedGraphMedia) return trustedGraphMedia
+
   // PAYLOAD-3: an enqueue-time stored input. Resolving to a path also means the upload streams
   // from disk instead of holding a decoded multi-MB buffer in memory.
   if (isQueueInputRef(value)) {
     const storedPath = resolveQueueInputFilePath(value)
     if (!storedPath) {
-      throw new Error(`Stored queue image input ${value.sha256} is no longer available on disk`)
+      throw new ComfyInputValidationError(`Stored queue image input ${value.sha256} is no longer available on disk`)
     }
 
     return {
@@ -88,7 +126,7 @@ function getComfyMediaUploadInput(value: unknown): ComfyMediaUploadInput | null 
   if (isWorkflowInputAssetRef(value)) {
     const storedPath = resolveWorkflowInputAssetFilePath(value)
     if (!storedPath) {
-      throw new Error(`Workflow input asset ${value.id} is no longer available on disk`)
+      throw new ComfyInputValidationError(`Workflow input asset ${value.id} is no longer available on disk`)
     }
 
     return {
@@ -101,18 +139,10 @@ function getComfyMediaUploadInput(value: unknown): ComfyMediaUploadInput | null 
   if (typeof value === 'object') {
     const payload = value as WorkflowImageFieldPayload
     if (payload.composite_hash) {
-      if (!MEDIA_HASH_PATTERN.test(payload.composite_hash)) throw new Error('이미지 해시가 올바르지 않아.')
-      const filePath = ImageUploadService.getActiveFilePath(payload.composite_hash)
-      if (!filePath || !fs.existsSync(filePath)) throw new Error('라이브러리에서 이미지를 찾을 수 없어.')
+      const storedPath = ImageUploadService.getActiveFilePath(payload.composite_hash)
+      const filePath = storedPath ? resolveUploadsPath(storedPath) : null
+      if (!filePath || !fs.existsSync(filePath)) throw new ComfyInputValidationError('라이브러리에서 이미지를 찾을 수 없어.')
       return { fileName: path.basename(filePath), filePath, mimeType: payload.mimeType }
-    }
-    const filePath = normalizeImagePayloadPath(payload)
-    if (filePath) {
-      return {
-        fileName: payload.fileName || path.basename(filePath),
-        filePath,
-        mimeType: payload.mimeType,
-      }
     }
 
     if (typeof payload.dataUrl !== 'string' || payload.dataUrl.trim().length === 0) {
@@ -409,6 +439,7 @@ export async function prepareComfyPromptData(
   promptData: Record<string, any>,
   options: { uploadNameBase?: string } = {},
 ): Promise<Record<string, any>> {
+  validateComfyPromptData(markedFields, promptData)
   const preparedPromptData = { ...promptData }
 
   for (const field of markedFields) {

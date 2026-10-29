@@ -3,6 +3,14 @@ import fs from 'fs'
 import path from 'path'
 import { parseJsonishInput } from '../../utils/jsonishInput'
 import { resolveUploadsPath } from '../../config/runtimePaths'
+import { ComfyInputValidationError } from '../prepareComfyPromptData'
+import { ImageUploadService } from '../imageUploadService'
+import { isLibraryImageRef } from '../workflowInputImages'
+import { isQueueInputRef, resolveQueueInputFilePath } from '../generation-queue/queueInputStore'
+import { isWorkflowInputAssetRef, resolveWorkflowInputAssetFilePath } from '../workflowInputAssetStore'
+import { assertNoApiFilePaths } from './apiFileInput'
+import { requireGraphImageAuthority } from './graphImageAuthority'
+import { getTrustedGraphMedia } from './trustedGraphMedia'
 import { throwIfExecutionAborted } from './execution-abort'
 import { buildRuntimeArtifact, completeSystemNode } from './system-module-artifacts'
 import {
@@ -253,18 +261,6 @@ function parseMultipartFileValue(key: string, value: unknown): ApiMultipartFileV
   return parseRawBase64FileValue(key, value)
 }
 
-/** Resolve a stable file extension for common data URL MIME types. */
-function getObjectStringValue(value: Record<string, unknown>, keys: string[]) {
-  for (const key of keys) {
-    const entryValue = value[key]
-    if (typeof entryValue === 'string' && entryValue.trim().length > 0) {
-      return entryValue.trim()
-    }
-  }
-
-  return null
-}
-
 function inferMimeTypeFromPath(filePath: string) {
   const extension = path.extname(filePath).toLowerCase()
   if (extension === '.png') return 'image/png'
@@ -279,100 +275,48 @@ function inferMimeTypeFromPath(filePath: string) {
   return 'application/octet-stream'
 }
 
-function decodeUploadsRelativePath(value: string) {
-  try {
-    return decodeURIComponent(value)
-  } catch {
-    return value
+function resolveApiFileReference(context: ExecutionContext, value: unknown): ApiFileReference | null {
+  const trusted = getTrustedGraphMedia(value)
+  if (trusted) return trusted
+  if (isQueueInputRef(value)) {
+    const filePath = resolveQueueInputFilePath(value)
+    if (!filePath) throw new ComfyInputValidationError('저장된 큐 입력 파일을 찾을 수 없어.')
+    return { filePath, fileName: value.fileName || path.basename(filePath), mimeType: value.mimeType || inferMimeTypeFromPath(value.fileName || filePath) }
   }
+  if (isWorkflowInputAssetRef(value)) {
+    const filePath = resolveWorkflowInputAssetFilePath(value)
+    if (!filePath) throw new ComfyInputValidationError('워크플로 입력 파일을 찾을 수 없어.')
+    return { filePath, fileName: value.fileName, mimeType: value.mimeType || inferMimeTypeFromPath(value.fileName) }
+  }
+  if (isLibraryImageRef(value)) {
+    requireGraphImageAuthority(context)
+    const storedPath = ImageUploadService.getActiveFilePath(value.composite_hash)
+    if (!storedPath) throw new ComfyInputValidationError('라이브러리에서 이미지를 찾을 수 없어.')
+    const filePath = resolveUploadsPath(storedPath)
+    return { filePath, fileName: path.basename(filePath), mimeType: inferMimeTypeFromPath(filePath) }
+  }
+  return null
 }
 
-function normalizeUploadsRelativePath(value: string) {
-  return decodeUploadsRelativePath(value)
-    .replace(/\\/g, '/')
-    .replace(/^\/+/, '')
-    .replace(/^uploads\//i, '')
-}
-
-function isUploadsPublicPath(value: string) {
-  const normalizedPath = normalizeUploadsRelativePath(value)
-  return normalizedPath.startsWith('images/')
-    || normalizedPath.startsWith('API/images/')
-    || normalizedPath.startsWith('videos/')
-}
-
-function resolveApiFileReferencePath(rawPath: string) {
-  const trimmedPath = rawPath.trim()
-  if (!trimmedPath) {
-    return trimmedPath
-  }
-
-  try {
-    const url = new URL(trimmedPath)
-    if (url.protocol === 'http:' || url.protocol === 'https:') {
-      if (isUploadsPublicPath(url.pathname)) {
-        return resolveUploadsPath(normalizeUploadsRelativePath(url.pathname))
-      }
-      return trimmedPath
-    }
-  } catch {
-    // Not a URL; resolve as a filesystem path or uploads-relative public path below.
-  }
-
-  if (isUploadsPublicPath(trimmedPath)) {
-    return resolveUploadsPath(normalizeUploadsRelativePath(trimmedPath))
-  }
-
-  return path.isAbsolute(trimmedPath) ? trimmedPath : resolveUploadsPath(trimmedPath)
-}
-
-function resolveApiFileReference(value: unknown): ApiFileReference | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return null
-  }
-
-  const record = value as Record<string, unknown>
-  const rawPath = getObjectStringValue(record, [
-    'storagePath',
-    'storage_path',
-    'outputPath',
-    'output_path',
-    'originalFilePath',
-    'original_file_path',
-    'imagePath',
-    'image_path',
-    'filePath',
-    'file_path',
-  ])
-  if (!rawPath) {
-    return null
-  }
-
-  const filePath = resolveApiFileReferencePath(rawPath)
-  const mimeType = getObjectStringValue(record, ['mimeType', 'mime_type', 'outputMimeType', 'output_mime_type', 'contentType', 'content_type']) ?? inferMimeTypeFromPath(filePath)
-  const fileName = getObjectStringValue(record, ['fileName', 'file_name', 'originalFileName', 'original_file_name', 'outputFileName', 'output_file_name']) ?? path.basename(filePath)
-  return { filePath, mimeType, fileName }
-}
-
-async function materializeApiFileReferenceValue(value: unknown): Promise<unknown> {
+async function materializeApiFileReferenceValue(context: ExecutionContext, value: unknown): Promise<unknown> {
   if (parseDataUrl(value)) {
     return value
   }
 
-  const fileReference = resolveApiFileReference(value)
+  const fileReference = resolveApiFileReference(context, value)
   if (fileReference) {
     const buffer = await fs.promises.readFile(fileReference.filePath)
     return bufferToDataUrl(buffer, fileReference.mimeType)
   }
 
   if (Array.isArray(value)) {
-    return Promise.all(value.map((entryValue) => materializeApiFileReferenceValue(entryValue)))
+    return Promise.all(value.map((entryValue) => materializeApiFileReferenceValue(context, entryValue)))
   }
 
   if (value && typeof value === 'object') {
     const entries = await Promise.all(Object.entries(value as Record<string, unknown>).map(async ([key, entryValue]) => [
       key,
-      await materializeApiFileReferenceValue(entryValue),
+      await materializeApiFileReferenceValue(context, entryValue),
     ] as const))
     return Object.fromEntries(entries)
   }
@@ -578,7 +522,9 @@ export async function executeApiRequestNode(
     ...normalizeApiKeyValueMap(resolvedInputs.headers),
     ...normalizeApiPrefixedInputMap(resolvedInputs, API_HEADERS_FIELD_PREFIX),
   })
-  const bodyValue = await materializeApiFileReferenceValue(buildApiBodyValue(entries, resolvedInputs.payload))
+  const inputBody = buildApiBodyValue(entries, resolvedInputs.payload)
+  assertNoApiFilePaths(inputBody)
+  const bodyValue = await materializeApiFileReferenceValue(context, inputBody)
 
   if (method === 'GET' && bodyValue !== undefined) {
     const queryValue = bodyValue && typeof bodyValue === 'object' && !Array.isArray(bodyValue)
@@ -640,7 +586,8 @@ export async function executeBase64EncodeNode(
   resolvedInputs: Record<string, any>,
 ) {
   const inputMode = typeof resolvedInputs.input_mode === 'string' ? resolvedInputs.input_mode : 'auto'
-  const value = await materializeApiFileReferenceValue(resolvedInputs.value)
+  assertNoApiFilePaths(resolvedInputs.value)
+  const value = await materializeApiFileReferenceValue(context, resolvedInputs.value)
   const dataUrl = inputMode === 'data_url' || inputMode === 'auto' ? parseDataUrl(value) : null
   const base64 = dataUrl
     ? dataUrl.base64

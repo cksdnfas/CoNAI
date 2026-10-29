@@ -65,8 +65,12 @@ export class CodexAppServerClient extends EventEmitter {
     child.stderr?.on('data', (chunk) => {
       this.stderrTail = `${this.stderrTail}${chunk.toString()}`.slice(-STDERR_TAIL_LENGTH)
     })
+    child.stdin?.on('error', (error) => this.failInput(error))
     child.once('error', (error) => this.handleExit(`Codex app-server failed to start: ${error.message}`))
-    child.once('close', (code, signal) => this.handleExit(`Codex app-server exited (${signal ?? code ?? 'unknown'})`))
+    child.once('close', (code, signal) => {
+      this.resolveExited()
+      this.handleExit(`Codex app-server exited (${signal ?? code ?? 'unknown'})`)
+    })
   }
 
   static async start(options: { args: string[]; env: NodeJS.ProcessEnv; cwd: string; chatOnly?: boolean }) {
@@ -125,10 +129,18 @@ export class CodexAppServerClient extends EventEmitter {
   }
 
   private write(message: JsonRpcMessage) {
-    if (this.exited || !this.child.stdin?.writable) {
+    if (this.exited) return
+    if (!this.child.stdin?.writable) {
+      this.failInput(new Error('stdin is not writable'))
       return
     }
-    this.child.stdin.write(`${JSON.stringify(message)}\n`)
+    try { this.child.stdin.write(`${JSON.stringify(message)}\n`) }
+    catch (error) { this.failInput(error instanceof Error ? error : new Error(String(error))) }
+  }
+
+  private failInput(error: Error) {
+    this.close()
+    this.handleExit(`Codex app-server stdin failed: ${error.message}`)
   }
 
   private handleLine(line: string) {
@@ -173,7 +185,6 @@ export class CodexAppServerClient extends EventEmitter {
       return
     }
     this.exited = true
-    this.resolveExited()
     const detail = this.lastStderr ? `${reason}: ${this.lastStderr.split('\n').slice(-3).join(' ')}` : reason
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer)

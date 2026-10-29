@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { ImageFileModel } from '../../models/Image/ImageFileModel'
 import { MediaMetadataModel } from '../../models/Image/MediaMetadataModel'
+import { requireGraphImageAuthority } from './graphImageAuthority'
 import { type GraphWorkflowNode } from '../../types/moduleGraph'
 import { saveArtifactBuffer } from './artifacts'
 import { buildRuntimeArtifact } from './system-module-artifacts'
@@ -80,6 +81,7 @@ export async function executeLoadPromptFromReference(
   moduleDefinition: ParsedModuleDefinition,
   resolvedInputs: Record<string, any>,
 ) {
+  requireGraphImageAuthority(context)
   const compositeHash = resolveCompositeHashFromReference(
     resolvedInputs.reference,
     resolvedInputs.composite_hash,
@@ -125,6 +127,7 @@ export async function executeLoadImageFromReference(
   moduleDefinition: ParsedModuleDefinition,
   resolvedInputs: Record<string, any>,
 ) {
+  requireGraphImageAuthority(context)
   const compositeHash = resolveCompositeHashFromReference(
     resolvedInputs.reference,
     resolvedInputs.composite_hash,
@@ -215,6 +218,7 @@ export async function executeRandomImageFromLibrary(
   node: GraphWorkflowNode,
   moduleDefinition: ParsedModuleDefinition,
 ) {
+  requireGraphImageAuthority(context)
   const metadata = MediaMetadataModel.getRandomImage()
   if (!metadata || typeof metadata.composite_hash !== 'string' || !metadata.composite_hash.trim()) {
     throw new Error('Random Image From Library requires at least one indexed image in the library')
@@ -319,6 +323,7 @@ export async function executeRandomVideoFromLibrary(
   node: GraphWorkflowNode,
   moduleDefinition: ParsedModuleDefinition,
 ) {
+  requireGraphImageAuthority(context)
   const metadata = MediaMetadataModel.getRandomVideo()
   if (!metadata || typeof metadata.composite_hash !== 'string' || !metadata.composite_hash.trim()) {
     throw new Error('Random Video From Library requires at least one indexed video in the library')

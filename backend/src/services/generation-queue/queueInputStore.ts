@@ -4,6 +4,13 @@ import path from 'path'
 import { runtimePaths } from '../../config/runtimePaths'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
 import { chunkSqliteValues, sqliteInPlaceholders } from '../../utils/sqliteBatch'
+import {
+  collectWorkflowInputAssetRefs,
+  isWorkflowInputAssetRef,
+  registerWorkflowInputAssetRefs,
+  releaseWorkflowInputAssetRefs,
+  type WorkflowInputAssetRef,
+} from '../workflowInputAssetStore'
 
 /**
  * PAYLOAD-3: content-addressed store for base64 image inputs.
@@ -83,22 +90,25 @@ export function storeQueueInputBuffer(buffer: Buffer, options: { mimeType?: stri
   const sha256 = crypto.createHash('sha256').update(buffer).digest('hex')
   const absolutePath = resolveQueueInputPath(sha256)
 
-  if (!fs.existsSync(absolutePath)) {
-    fs.mkdirSync(path.dirname(absolutePath), { recursive: true })
-    // Write to a unique temp name and rename, so a crash mid-write can never leave a
-    // truncated file sitting at the address its hash promises.
-    const stagingPath = `${absolutePath}.${process.pid}.${Date.now()}.part`
-    fs.writeFileSync(stagingPath, buffer)
-    try {
-      fs.renameSync(stagingPath, absolutePath)
-    } catch (error) {
-      // A concurrent enqueue may have landed the identical blob first; that is a success.
-      if (!fs.existsSync(absolutePath)) {
-        throw error
+  // Serialize publishing/reusing with the collector; a reused blob needs a fresh in-flight grace period.
+  getUserSettingsDb().transaction(() => {
+    if (!fs.existsSync(absolutePath)) {
+      fs.mkdirSync(path.dirname(absolutePath), { recursive: true })
+      const stagingPath = `${absolutePath}.${process.pid}.${Date.now()}.part`
+      fs.writeFileSync(stagingPath, buffer)
+      try {
+        fs.renameSync(stagingPath, absolutePath)
+      } catch (error) {
+        if (!fs.existsSync(absolutePath)) {
+          throw error
+        }
+        fs.rmSync(stagingPath, { force: true })
       }
-      fs.rmSync(stagingPath, { force: true })
+    } else {
+      const now = new Date()
+      fs.utimesSync(absolutePath, now, now)
     }
-  }
+  }).immediate()
 
   return {
     __ref: QUEUE_INPUT_REF_KIND,
@@ -205,8 +215,8 @@ export function hydrateQueueInputDataUrls<T>(value: T): T {
   return walk(value, 0) as T
 }
 
-/** Collect every stored reference inside one payload object. */
-export function collectQueueInputRefs(value: unknown): QueueInputRef[] {
+/** Collect queue blobs and workflow asset claims from one payload object. */
+export function collectQueueInputRefs(value: unknown): Array<QueueInputRef | WorkflowInputAssetRef> {
   const refs: QueueInputRef[] = []
 
   const walk = (node: unknown, depth: number) => {
@@ -232,7 +242,7 @@ export function collectQueueInputRefs(value: unknown): QueueInputRef[] {
   }
 
   walk(value, 0)
-  return refs
+  return [...refs, ...collectWorkflowInputAssetRefs(value)]
 }
 
 /**
@@ -240,7 +250,7 @@ export function collectQueueInputRefs(value: unknown): QueueInputRef[] {
  * Called from `GenerationQueueModel.create`, so every enqueue path — user routes, public
  * workflow routes, graph executors and retries — registers its claims without knowing about it.
  */
-export function registerQueueInputRefs(jobId: number, refs: QueueInputRef[]) {
+export function registerQueueInputRefs(jobId: number, refs: Array<QueueInputRef | WorkflowInputAssetRef>) {
   if (refs.length === 0) {
     return 0
   }
@@ -253,9 +263,11 @@ export function registerQueueInputRefs(jobId: number, refs: QueueInputRef[]) {
 
   let inserted = 0
   for (const ref of refs) {
+    if (isWorkflowInputAssetRef(ref)) continue
     inserted += insert.run(jobId, ref.sha256, ref.bytes ?? 0).changes
   }
 
+  registerWorkflowInputAssetRefs(jobId, refs.filter(isWorkflowInputAssetRef))
   return inserted
 }
 
@@ -321,6 +333,7 @@ export function releaseQueueInputsForJobs(jobIds: number[]) {
     return { releasedFiles: 0, releasedBytes: 0 }
   }
 
+  releaseWorkflowInputAssetRefs(jobIds)
   const db = getUserSettingsDb()
   // A cold backlog can compact far more jobs than SQLite's bind-parameter ceiling allows.
   const chunks = chunkSqliteValues(jobIds)
@@ -375,10 +388,14 @@ export function releaseQueueInputsForJobs(jobIds: number[]) {
  * Covers the one window the refcount cannot: a crash between writing the blob and inserting the
  * refcount row. The mtime grace keeps it from racing an enqueue that is still assembling its jobs.
  */
-export function sweepOrphanQueueInputFiles(options: { graceMs?: number } = {}) {
+export async function sweepOrphanQueueInputFiles(options: { graceMs?: number } = {}) {
   const storeDir = getQueueInputStoreDir()
-  if (!fs.existsSync(storeDir)) {
-    return { scanned: 0, removed: 0, removedBytes: 0 }
+  let root: fs.Dir
+  try {
+    root = await fs.promises.opendir(storeDir)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { scanned: 0, removed: 0, removedBytes: 0 }
+    throw error
   }
 
   const graceMs = Math.max(0, options.graceMs ?? ORPHAN_SWEEP_GRACE_MS)
@@ -390,37 +407,41 @@ export function sweepOrphanQueueInputFiles(options: { graceMs?: number } = {}) {
   let removed = 0
   let removedBytes = 0
 
-  for (const shard of fs.readdirSync(storeDir, { withFileTypes: true })) {
+  for await (const shard of root) {
     if (!shard.isDirectory()) {
       continue
     }
 
     const shardDir = path.join(storeDir, shard.name)
-    for (const entry of fs.readdirSync(shardDir, { withFileTypes: true })) {
+    const directory = await fs.promises.opendir(shardDir)
+    for await (const entry of directory) {
       if (!entry.isFile()) {
         continue
       }
 
       scanned += 1
+      if (scanned % 32 === 0) await new Promise<void>((resolve) => setImmediate(resolve))
       const absolutePath = path.join(shardDir, entry.name)
 
       try {
-        const stats = fs.statSync(absolutePath)
+        const stats = await fs.promises.stat(absolutePath)
         if (stats.mtimeMs > cutoff) {
           continue
         }
-
-        // `.part` staging files are always debris once they are older than the grace period.
-        const sha256 = entry.name.endsWith('.bin') ? entry.name.slice(0, -'.bin'.length) : null
-        if (sha256 && isReferenced.get(sha256)) {
-          continue
+        const deleted = db.transaction(() => {
+          const latest = fs.statSync(absolutePath)
+          if (latest.mtimeMs > cutoff) return null
+          const sha256 = entry.name.endsWith('.bin') ? entry.name.slice(0, -'.bin'.length) : null
+          if (sha256 && isReferenced.get(sha256)) return null
+          fs.rmSync(absolutePath, { force: true })
+          return { size: latest.size }
+        }).immediate()
+        if (deleted) {
+          removed += 1
+          removedBytes += deleted.size
         }
-
-        fs.rmSync(absolutePath, { force: true })
-        removed += 1
-        removedBytes += stats.size
-      } catch {
-        // Concurrent removal; nothing to do.
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
       }
     }
   }

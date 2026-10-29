@@ -16,6 +16,10 @@ import type { ModuleGraphResponse } from '../../types/moduleGraph'
 import { parseGraphExecutionInputValues, parseGraphRouteInteger } from './route-helpers'
 import { GenerationTargetGroupService } from '../../services/generationTargetGroupService'
 import { getRequesterAccountId } from '../requester-session-helpers'
+import { ComfyInputValidationError, validateComfyPromptData } from '../../services/prepareComfyPromptData'
+import type { GraphWorkflowDocument } from '../../types/moduleGraph'
+import { GRAPH_IMAGE_AUTHORITY_INPUT } from '../../services/graph-workflow-executor/graphImageAuthority'
+import { assertNoApiFilePaths } from '../../services/graph-workflow-executor/apiFileInput'
 
 /**
  * 실행 단위 기본 결과 그룹(output_group_id | output_group_path)을 해석한다.
@@ -32,6 +36,25 @@ function resolveExecutionOutputGroup(req: Request, res: Response): { groupId: nu
     return undefined
   }
   return { groupId: resolved.groupId }
+}
+
+/** Apply the same upload-value boundary to supplied graph media and Director inputs before enqueue. */
+function validateGraphMediaInputs(graph: GraphWorkflowDocument, inputValues?: Record<string, unknown>) {
+  if (!inputValues) return
+  if (Object.prototype.hasOwnProperty.call(inputValues, GRAPH_IMAGE_AUTHORITY_INPUT)) {
+    throw new ComfyInputValidationError('그래프 이미지 권한은 서버에서만 설정할 수 있어.')
+  }
+  const exposed = new Map((graph.metadata?.exposed_inputs ?? []).map((input) => [input.id, input]))
+  for (const [id, rawValue] of Object.entries(inputValues)) {
+    const input = exposed.get(id)
+    assertNoApiFilePaths(rawValue, input?.port_key)
+    const mediaInput = !input || ['image', 'mask', 'video', 'audio', 'any'].includes(input.data_type)
+    const values = Array.isArray(rawValue) ? rawValue : [rawValue]
+    for (const value of values) {
+      if (mediaInput) validateComfyPromptData([{ id, type: 'image' }], { [id]: value })
+      validateComfyPromptData([{ id, type: 'node', node_editor: 'minimax_h3_director_dasiwa' }], { [id]: value })
+    }
+  }
 }
 
 /** Upper bound for one batch preview request; the page only previews the newest completed runs. */
@@ -199,9 +222,11 @@ export function createGraphWorkflowExecutionRoutes() {
 
     try {
       const inputValues = parseGraphExecutionInputValues(req.body?.input_values)
-      if (!GraphWorkflowModel.findById(id)) {
+      const workflow = GraphWorkflowModel.findById(id)
+      if (!workflow) {
         return res.status(404).json({ success: false, error: 'Graph workflow not found' } as ModuleGraphResponse)
       }
+      validateGraphMediaInputs(JSON.parse(workflow.graph_json) as GraphWorkflowDocument, inputValues)
       const outputGroup = resolveExecutionOutputGroup(req, res)
       if (!outputGroup) {
         return
@@ -209,6 +234,7 @@ export function createGraphWorkflowExecutionRoutes() {
       const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, undefined, false, { outputGroupId: outputGroup.groupId, requestedByAccountId: getRequesterAccountId(req) })
       return res.status(201).json({ success: true, data: result } as ModuleGraphResponse)
     } catch (error) {
+      if (error instanceof ComfyInputValidationError) return sendRouteBadRequest(res, error.message)
       console.error('Error executing graph workflow:', error)
       return res.status(500).json({
         success: false,
@@ -237,6 +263,7 @@ export function createGraphWorkflowExecutionRoutes() {
       }
 
       const inputValues = parseGraphExecutionInputValues(req.body?.input_values)
+      validateGraphMediaInputs(graph as GraphWorkflowDocument, inputValues)
       const forceRerun = req.body?.force_rerun === true
       const outputGroup = resolveExecutionOutputGroup(req, res)
       if (!outputGroup) {
@@ -245,6 +272,7 @@ export function createGraphWorkflowExecutionRoutes() {
       const result = GraphWorkflowExecutionQueue.enqueue(id, inputValues, nodeId, forceRerun, { outputGroupId: outputGroup.groupId, requestedByAccountId: getRequesterAccountId(req) })
       return res.status(201).json({ success: true, data: result } as ModuleGraphResponse)
     } catch (error) {
+      if (error instanceof ComfyInputValidationError) return sendRouteBadRequest(res, error.message)
       console.error('Error executing graph node:', error)
       return res.status(500).json({
         success: false,

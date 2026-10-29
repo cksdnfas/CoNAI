@@ -3,10 +3,12 @@ import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import type { RuntimeJobRecord } from '@/types/runtime-job'
 import { IconButton } from '@/components/ui/icon-button'
+import { useSnackbar } from '@/components/ui/snackbar-context'
+import { getErrorMessage } from '@/lib/error-message'
 
 interface RuntimeJobProgressProps {
   job: RuntimeJobRecord | undefined
-  /** 취소 핸들러. 주지 않으면 취소 버튼을 렌더하지 않는다. */
+  /** 취소 핸들러. 주지 않거나 서버가 이 계정은 취소할 수 없다고 하면(`viewerCanCancel: false`) 취소 버튼을 렌더하지 않는다. */
   cancel?: () => void | Promise<void>
   isCancelling?: boolean
   className?: string
@@ -20,6 +22,7 @@ interface RuntimeJobProgressProps {
  */
 export function RuntimeJobProgress({ job, cancel, isCancelling = false, className }: RuntimeJobProgressProps) {
   const { t, formatNumber } = useI18n()
+  const { showSnackbar } = useSnackbar()
 
   if (!job) {
     return null
@@ -35,12 +38,17 @@ export function RuntimeJobProgress({ job, cancel, isCancelling = false, classNam
           {formatNumber(job.progress.processed)} / {formatNumber(job.progress.total)} ({formatNumber(job.progress.percentage)}%)
         </span>
 
-        {isRunning && cancel ? (
+        {isRunning && cancel && job.viewerCanCancel !== false ? (
           <IconButton
             size="icon-xs"
             variant="ghost"
             disabled={isCancelling}
-            onClick={() => void cancel()}
+            onClick={() => {
+              void Promise.resolve(cancel()).catch((error: unknown) => showSnackbar({
+                message: getErrorMessage(error, t({ ko: '작업을 취소하지 못했어.', en: 'Could not cancel the job.' })),
+                tone: 'error',
+              }))
+            }}
             label={isCancelling ? t({ ko: '취소하는 중...', en: 'Cancelling...' }) : t({ ko: '취소', en: 'Cancel' })}
           >
             {isCancelling ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}

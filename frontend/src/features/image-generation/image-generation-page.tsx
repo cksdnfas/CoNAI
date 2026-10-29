@@ -6,7 +6,7 @@ import { SegmentedControl } from '@/components/common/segmented-control'
 import { useI18n } from '@/i18n'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
-import { getGenerationWorkflow } from '@/lib/api-image-generation-workflows'
+import { getGenerationWorkflows } from '@/lib/api-image-generation-workflows'
 import { formatCountDisplay, countStateFromQuery } from '@/lib/count-display'
 import type { GenerationResultView } from './components/generation-result-area'
 import { GenerationNarrowSplit, type GenerationNarrowView } from './components/generation-narrow-split'
@@ -105,17 +105,22 @@ function ImageGenerationPageContent() {
       return next
     }, { replace: options?.replace })
   }, [setSearchParams])
-  const selectedComfyWorkflowQuery = useQuery({
-    queryKey: ['image-generation-selected-comfy-workflow', selectedComfyWorkflowId],
-    queryFn: () => getGenerationWorkflow(selectedComfyWorkflowId as number),
-    enabled: selectedComfyWorkflowId !== null,
+  // The result view comes from the same workflow list the ComfyUI panel reads (and refetches after an editor save);
+  // null while that list loads, so neither the history nor the explorer is fetched for the wrong mode. A failed list or
+  // a workflow missing from it falls back to the history view, so the result area never waits forever.
+  const selectedComfyWorkflowResultModeQuery = useQuery({
+    queryKey: ['image-generation-workflows'],
+    queryFn: () => getGenerationWorkflows(true, 'all'),
+    enabled: activeTab === 'comfyui' && selectedComfyWorkflowId !== null,
+    select: (workflows) => workflows.find((workflow) => workflow.id === selectedComfyWorkflowId)?.result_view_mode ?? null,
   })
-  const selectedComfyWorkflowResultMode = activeTab === 'comfyui'
-    ? selectedComfyWorkflowQuery.data?.result_view_mode ?? 'history'
-    : 'history'
-  const shouldShowArtifactExplorer = activeTab === 'comfyui' && selectedComfyWorkflowId !== null && selectedComfyWorkflowResultMode === 'artifact_explorer'
-  const shouldShowHistory = activeTab === 'nai' || activeTab === 'codex' || (activeTab === 'comfyui' && selectedComfyWorkflowId !== null && !shouldShowArtifactExplorer)
-  const shouldShowResultPanel = shouldShowHistory || shouldShowArtifactExplorer
+  const selectedComfyWorkflowResultMode = activeTab === 'comfyui' && selectedComfyWorkflowId !== null
+    ? selectedComfyWorkflowResultModeQuery.data ?? (selectedComfyWorkflowResultModeQuery.isPending ? null : 'history')
+    : null
+  const isComfyResultModePending = activeTab === 'comfyui' && selectedComfyWorkflowId !== null && selectedComfyWorkflowResultMode === null
+  const shouldShowArtifactExplorer = selectedComfyWorkflowResultMode === 'artifact_explorer'
+  const shouldShowHistory = activeTab === 'nai' || activeTab === 'codex' || selectedComfyWorkflowResultMode === 'history'
+  const shouldShowResultPanel = shouldShowHistory || shouldShowArtifactExplorer || isComfyResultModePending
   const historyServiceType = activeTab === 'nai'
     ? 'novelai'
     : activeTab === 'codex'
@@ -238,7 +243,7 @@ function ImageGenerationPageContent() {
       onViewChange={setResultView}
       recentStrip={layoutSurface ? resolveRecentStripPlacement(generationLayout.presetOf(layoutSurface)) : undefined}
     />
-  ) : null
+  ) : isComfyResultModePending ? <PanelFallback /> : null
 
   const blockLayoutProps = useBlockLayout ? { result: <Suspense fallback={<PanelFallback />}>{resultPanel}</Suspense> } : undefined
   const controllerPanel = activeTab === 'nai'

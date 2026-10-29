@@ -43,10 +43,6 @@ export function persistImageDetailRenderMode(mode: ImageDetailRenderMode) {
   window.localStorage.setItem(IMAGE_DETAIL_RENDER_MODE_STORAGE_KEY, mode)
 }
 
-export function getImageDetailRenderModeLabel(mode: ImageDetailRenderMode) {
-  return mode === 'original' ? '원본' : '썸네일'
-}
-
 export function getNextImageDetailRenderMode(mode: ImageDetailRenderMode): ImageDetailRenderMode {
   return mode === 'original' ? 'thumbnail' : 'original'
 }

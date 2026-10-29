@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import sharp from 'sharp'
 import { resolveUploadsPath, runtimePaths } from '../config/runtimePaths'
+import { requireRequesterImagePermission } from '../middleware/imageAccess'
 import type { ModulePortDefinition } from '../types/moduleGraph'
 import { BackgroundProcessorService } from './backgroundProcessorService'
 import { MEDIA_HASH_PATTERN, MEDIA_MAX_PIXELS, MEDIA_MIME_TYPES, sniffMediaExtension } from './codex-chat/chatMediaLinks'
@@ -115,10 +116,14 @@ export async function materializeLibraryImageInputs(
   engineType: string,
   exposedInputs: ModulePortDefinition[],
   inputs: Record<string, any>,
+  authorizeLibraryRead: () => void = () => requireRequesterImagePermission({ accountId: null, accountType: null }),
 ): Promise<Record<string, any>> {
   if (engineType === 'comfyui') return inputs
   const isCodex = engineType === 'codex' || (engineType === 'system' && exposedInputs.some((port) => port.key === 'references'))
-  const readImage = (ref: LibraryImageRef) => readLibraryImageAsDataUrl(ref, isCodex ? CODEX_MAX_ATTACHMENT_BYTES : Infinity, isCodex ? 4096 : undefined)
+  const readImage = (ref: LibraryImageRef) => {
+    authorizeLibraryRead()
+    return readLibraryImageAsDataUrl(ref, isCodex ? CODEX_MAX_ATTACHMENT_BYTES : Infinity, isCodex ? 4096 : undefined)
+  }
   let next = inputs
   for (const port of exposedInputs) {
     // Codex/system Codex nodes use an ordered JSON references port with the same data_url field as the API.

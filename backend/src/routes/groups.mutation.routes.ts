@@ -5,7 +5,10 @@ import { GroupRematchJobService } from '../services/groupRematchJobService';
 import { GroupCreateData, GroupUpdateData, errorResponse, successResponse, validateId } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
 import { createCustomGroup, deleteCustomGroups, GroupMutationError, moveCustomGroups, updateCustomGroup } from '../services/groupMutationService';
-import { getRequesterAccountId } from './requester-session-helpers';
+import { getRequesterAccountId, isAdminRequest } from './requester-session-helpers';
+import { RuntimeJobStore } from '../services/runtimeJobs/runtimeJobStore';
+import { groupAutoCollectSingletonKey } from '../services/runtimeJobs/handlers/groupRematchHandlers';
+import { presentJobForRequester, SHARED_LIBRARY_JOB_VIEW_PERMISSION } from './runtime-jobs.routes';
 
 const router = Router();
 
@@ -278,6 +281,27 @@ router.get('/auto-collect-jobs/:jobId', asyncHandler(async (req: Request, res: R
     const errorMessage = error instanceof Error ? error.message : 'Failed to load auto collection job';
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
     return res.status(statusCode).json(errorResponse(errorMessage));
+  }
+}));
+
+/**
+ * The group's queued or running auto-collect job (runtime job record), or null, so a page opened again picks up its
+ * progress. The job's group is its singleton key. Visible like `GET /api/jobs/:jobId`: unowned jobs, the starter,
+ * admins, or any account allowed to start it (images.edit; its permission keys were just resolved by allowImagesView).
+ */
+router.get('/:id/auto-collect', asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const id = parseRouteId(req.params.id);
+    const job = RuntimeJobStore.findLiveBySingletonKey(groupAutoCollectSingletonKey(id));
+    const owner = job ? RuntimeJobStore.getOwnership(job.jobId)?.requestedByAccountId ?? null : null;
+    const startPermission = SHARED_LIBRARY_JOB_VIEW_PERMISSION['group-auto-collect'] as string;
+    const visible = job !== null && (
+      owner === null || isAdminRequest(req) || owner === getRequesterAccountId(req) || req.session?.permissionKeys?.includes(startPermission) === true
+    );
+    return res.json(successResponse(visible ? presentJobForRequester(req, job) : null));
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Failed to load auto collection job';
+    return res.status(errorMessage.includes('Invalid') ? 400 : 500).json(errorResponse(errorMessage));
   }
 }));
 

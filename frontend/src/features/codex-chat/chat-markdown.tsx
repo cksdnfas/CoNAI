@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { buildApiUrl } from '@/lib/api-url'
 import { BlockChangeChips, ChatDisplayBlocksContext, parseBlockPayload, useChatDisplayBlock } from './chat-display-block'
 import { isolatedChatPreview } from './chat-preview'
+import { splitSettledMarkdown } from './chat-markdown-stream'
 import { injectChatEmoticons, type ChatEmoticonMap } from '@conai/shared'
 /** The profile's emoticons for this reply: keyword (lower case) → image, and whose emoticon route serves them. */
 export type { ChatEmoticonMap } from '@conai/shared'
@@ -181,6 +182,15 @@ const MARKDOWN_COMPONENTS: Components = {
   ),
 }
 
+/**
+ * A streaming reply parses each loose list item as its own block (`<ol start=N>`), so its numbering comes from `start`;
+ * stored replies keep the list renderer above unchanged.
+ */
+const STREAMING_MARKDOWN_COMPONENTS: Components = {
+  ...MARKDOWN_COMPONENTS,
+  ol: ({ children, start }) => <ol start={start} className="my-2 list-decimal space-y-1 pl-5">{children}</ol>,
+}
+
 type HastNode = { type: string; tagName?: string; value?: string; children?: HastNode[]; properties?: Record<string, unknown> }
 
 const DIALOGUE_CLASS = 'text-(--chat-rp-dialogue)'
@@ -252,11 +262,21 @@ function rehypeRoleplay() {
   return (tree: HastNode) => walk(tree)
 }
 
+const REMARK_PLUGINS = [remarkGfm]
+type RehypePlugins = ComponentProps<typeof ReactMarkdown>['rehypePlugins']
+
+/** One parse of Markdown; memoized so a streaming reply's finished blocks are not parsed again every frame. */
+const MarkdownBlock = memo(function MarkdownBlock({ text, rehypePlugins, components = MARKDOWN_COMPONENTS }: { text: string; rehypePlugins: RehypePlugins; components?: Components }) {
+  return <ReactMarkdown remarkPlugins={REMARK_PLUGINS} rehypePlugins={rehypePlugins} components={components} urlTransform={urlTransform}>{text}</ReactMarkdown>
+})
+
 /**
  * A reply as Markdown (GitHub flavour: tables, task lists, strikethrough). Raw HTML is not rendered; fence it to preview.
  * `roleplay` colours "dialogue", *narration* and 'thoughts' with the profile's colours (CSS variables on the transcript).
+ * `streaming`: parsed block by block, so each frame re-parses only the block still being written; the stored reply
+ * parses as one document.
  */
-export const ChatMarkdown = memo(function ChatMarkdown({ text, roleplay = false, blocks, emoticons = null, hiddenGroupIds, mentions }: {
+export const ChatMarkdown = memo(function ChatMarkdown({ text, roleplay = false, blocks, emoticons = null, hiddenGroupIds, mentions, streaming = false }: {
   text: string
   roleplay?: boolean
   blocks?: ChatDisplayBlock[]
@@ -264,16 +284,18 @@ export const ChatMarkdown = memo(function ChatMarkdown({ text, roleplay = false,
   hiddenGroupIds?: ReadonlySet<number>
   /** Group rooms: member names whose `@name` mentions are highlighted. */
   mentions?: readonly string[]
+  streaming?: boolean
 }) {
   const blocksByKey = useMemo(() => new Map((blocks ?? []).filter((block) => block.enabled && block.key).map((block) => [block.key, block])), [blocks])
   const rehypePlugins = useMemo(() => [...(roleplay ? [rehypeRoleplay] : []), ...(mentions?.length ? [rehypeMentions(mentions)] : [])], [roleplay, mentions])
+  const source = injectChatEmoticons(fenceBareHtml(text), emoticons, hiddenGroupIds)
   return (
     <ChatEmoticonsContext.Provider value={emoticons}>
       <ChatDisplayBlocksContext.Provider value={blocksByKey}>
         <div className={cn('chat-markdown break-words text-foreground', roleplay && '[&_em]:text-(--chat-rp-narration)')}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={MARKDOWN_COMPONENTS} urlTransform={urlTransform}>
-            {injectChatEmoticons(fenceBareHtml(text), emoticons, hiddenGroupIds)}
-          </ReactMarkdown>
+          {streaming
+            ? splitSettledMarkdown(source).map((block, index) => <MarkdownBlock key={index} text={block} rehypePlugins={rehypePlugins} components={STREAMING_MARKDOWN_COMPONENTS} />)
+            : <MarkdownBlock text={source} rehypePlugins={rehypePlugins} />}
         </div>
       </ChatDisplayBlocksContext.Provider>
     </ChatEmoticonsContext.Provider>

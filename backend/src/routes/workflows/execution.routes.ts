@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { routeParam } from '../routeParam';
 import { WorkflowModel } from '../../models/Workflow';
 import { createComfyUIService } from '../../services/comfyuiService';
-import { prepareComfyPromptData } from '../../services/prepareComfyPromptData';
+import { ComfyInputValidationError, prepareComfyPromptData, validateComfyPromptData } from '../../services/prepareComfyPromptData';
 import { executeComfyGeneration } from '../../services/comfyGenerationExecutor';
 import { WorkflowResponse, GenerationStatusResponse } from '../../types/workflow';
 import { asyncHandler } from '../../middleware/asyncHandler';
@@ -23,6 +23,7 @@ import {
   WorkflowNumericFieldValidationError,
 } from '../../services/workflowNumericFieldPolicy';
 import { requirePermission } from '../../middleware/authMiddleware';
+import { requireImagesView } from '../../middleware/imageAccess';
 import { assignGeneratedMediaToGroup, GenerationTargetGroupService } from '../../services/generationTargetGroupService';
 import { getRequesterAccountId } from '../requester-session-helpers';
 
@@ -93,6 +94,11 @@ router.post('/:id/generate', requirePermission('generation.execute'), asyncHandl
         return res.status(400).json({ success: false, error: error.message } as WorkflowResponse);
       }
       throw error;
+    }
+    if (validateComfyPromptData(markedFields, normalizedPromptData)) {
+      let allowed = false;
+      requireImagesView(req, res, () => { allowed = true; });
+      if (!allowed) return;
     }
     const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, normalizedPromptData);
     const parsedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui');
@@ -243,6 +249,9 @@ router.post('/:id/generate', requirePermission('generation.execute'), asyncHandl
 
     return res.status(202).json(response);
   } catch (error) {
+    if (error instanceof ComfyInputValidationError) {
+      return res.status(400).json({ success: false, error: error.message } as WorkflowResponse);
+    }
     console.error('Error starting image generation:', error);
     const response: WorkflowResponse = {
       success: false,
@@ -354,51 +363,6 @@ router.get('/history/:historyId', asyncHandler(async (req: Request, res: Respons
     const response: WorkflowResponse = {
       success: false,
       error: 'Failed to get generation status'
-    };
-    return res.status(500).json(response);
-  }
-}));
-
-/**
- * ComfyUI 서버 연결 테스트
- * GET /api/workflows/:id/test-connection
- */
-router.get('/:id/test-connection', asyncHandler(async (req: Request, res: Response) => {
-  const id = parseInt(routeParam(req.params.id));
-
-  if (isNaN(id)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid workflow ID'
-    } as WorkflowResponse);
-  }
-
-  try {
-    const workflow = await WorkflowModel.findById(id);
-    if (!workflow) {
-      return res.status(404).json({
-        success: false,
-        error: 'Workflow not found'
-      } as WorkflowResponse);
-    }
-
-    const comfyService = createComfyUIService(workflow.api_endpoint);
-    const isConnected = await comfyService.testConnection();
-
-    const response: WorkflowResponse = {
-      success: true,
-      data: {
-        connected: isConnected,
-        api_endpoint: workflow.api_endpoint
-      }
-    };
-
-    return res.json(response);
-  } catch (error) {
-    console.error('Error testing connection:', error);
-    const response: WorkflowResponse = {
-      success: false,
-      error: 'Failed to test connection'
     };
     return res.status(500).json(response);
   }

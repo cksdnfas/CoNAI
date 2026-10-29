@@ -8,9 +8,8 @@ import { fillCharacterPlaceholders } from './chatPlaceholders'
 /**
  * Display block state: each enabled block of a profile is a JSON object the chat keeps per thread. It starts from
  * the block's example values; every assistant reply may carry a ```key fence with the fields that changed, and the
- * user can set or reset a block by hand. The state is never stored as such — it is folded from the messages (and
- * the hand edits, kept on the thread) whenever it is needed, so regenerating, switching an alternative or deleting
- * messages cannot leave it stale.
+ * user can set or reset a block by hand. The authoritative state is folded from messages and hand edits; transient
+ * checkpoints (chatBlockCheckpoint.ts) are discarded when their inputs change.
  */
 
 export type BlockData = Record<string, unknown>
@@ -176,12 +175,13 @@ export function parseBlockEdits(value: string | null | undefined): BlockEdit[] {
  * it was made after. Null when the profile has no usable block. `speakerId`: group rooms, fold only this member's
  * replies and edits (its blocks are its own).
  */
-export function foldBlockState(profile: ChatProfile, messages: ReadonlyArray<FoldMessage>, edits: BlockEdit[], speakerId?: number): ChatBlocksState | null {
+export function foldBlockState(profile: ChatProfile, messages: ReadonlyArray<FoldMessage>, edits: BlockEdit[], speakerId?: number, initialState?: Record<string, BlockData>): ChatBlocksState | null {
   const blocks = usableBlocks(profile.style.blocks)
   if (blocks.length === 0) return null
   const byKey = new Map(blocks.map((block) => [block.key, block]))
   const keys = new Set(byKey.keys())
-  const state: Record<string, BlockData> = Object.fromEntries(blocks.map((block) => [block.key, initialBlockData(block, profile)]))
+  // A checkpoint contains the state after an earlier prefix and only receives later messages and edits.
+  const state: Record<string, BlockData> = initialState ? { ...initialState } : Object.fromEntries(blocks.map((block) => [block.key, initialBlockData(block, profile)]))
   const result: ChatBlocksState = { state, changes: {}, edits: {} }
   const own = (edit: BlockEdit) => (speakerId === undefined ? edit.profileId === undefined : edit.profileId === speakerId)
   const pending = edits.filter((edit) => keys.has(edit.key) && own(edit)).sort((a, b) => a.afterMessageId - b.afterMessageId)

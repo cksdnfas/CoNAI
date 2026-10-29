@@ -29,7 +29,8 @@ function db() {
         PRIMARY KEY (thread_id, reply_id, file_id)
       );
     `)
-    ensured.add(database)
+    // A first use inside a surrounding transaction can be rolled back along with CREATE TABLE.
+    if (!database.inTransaction) ensured.add(database)
   }
   return database
 }

@@ -167,7 +167,22 @@ export function getHistoryMediaVersion(record: GenerationHistoryResponse['record
   ].join(':')
 }
 
+/**
+ * One ImageRecord per history record object. Query refreshes keep unchanged records by reference (structural sharing),
+ * so reusing their mapped object lets memoized list cells skip re-rendering; a changed record maps anew.
+ */
+const mappedHistoryImages = new WeakMap<GenerationHistoryResponse['records'][number], ImageRecord>()
+
 export function mapHistoryRecordToImageRecord(record: GenerationHistoryResponse['records'][number]): ImageRecord {
+  let image = mappedHistoryImages.get(record)
+  if (!image) {
+    image = buildHistoryImageRecord(record)
+    mappedHistoryImages.set(record, image)
+  }
+  return image
+}
+
+function buildHistoryImageRecord(record: GenerationHistoryResponse['records'][number]): ImageRecord {
   const imageSource = resolveHistoryImageSource(record)
   const displayStatus = resolveHistoryDisplayStatus(record)
   const hasLinkedImage = Boolean(record.actual_composite_hash)

@@ -40,7 +40,8 @@ import { listStoredFolders } from '@/lib/api-files'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { LorebookMergeDialog } from './lorebook-merge-dialog'
-import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey, useCodexChat } from './codex-chat-context'
+import { CODEX_CHAT_THREADS_QUERY_KEY, useCodexChat } from './codex-chat-context'
+import { applyChatThreadUpdate } from './chat-query-refresh'
 
 const CHAT_BOOK = 'chat'
 const LOREBOOK_ROOT_FOLDER = '로어북'
@@ -169,11 +170,9 @@ export function LorebookBlock({ threadId, profiles, loreAutoSave }: {
   const statusQuery = useQuery({ queryKey: CHAT_STATUS_QUERY_KEY, queryFn: getCodexChatStatus, staleTime: 60_000, retry: false })
   const autoSaveMutation = useMutation({
     mutationFn: (value: boolean | null) => updateCodexChatThreadContext(threadId, { loreAutoSave: value }),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(threadId) }),
-        queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
-      ])
+    onSuccess: async (updated) => {
+      await applyChatThreadUpdate(queryClient, updated)
+      await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
     },
     onError,
   })

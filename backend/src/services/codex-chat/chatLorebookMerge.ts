@@ -64,12 +64,17 @@ const MERGED_CONTENT_MAX_LENGTH = 20_000
 
 // ---- Books ----------------------------------------------------------------------------------------------------
 
-function booksOf(sourceId: number, targetId: number, owner: string) {
-  if (sourceId === targetId) throw new LorebookError('같은 로어북끼리는 병합할 수 없어.')
-  const target = OwnedLorebookStore.find(targetId, owner)
+export function requireMergeTarget(targetId: number, owner: string, readOnly = false) {
+  const target = readOnly ? OwnedLorebookStore.findReadOnly(targetId, owner) : OwnedLorebookStore.find(targetId, owner)
   if (!target) throw new LorebookError('병합할 로어북을 찾을 수 없어.', 404)
   if (target.kind !== 'account') throw new LorebookError('계정 로어북에만 병합할 수 있어.')
-  const source = OwnedLorebookStore.find(sourceId, owner)
+  return target
+}
+
+function booksOf(sourceId: number, targetId: number, owner: string, readOnly = false) {
+  if (sourceId === targetId) throw new LorebookError('같은 로어북끼리는 병합할 수 없어.')
+  const target = requireMergeTarget(targetId, owner, readOnly)
+  const source = readOnly ? OwnedLorebookStore.findReadOnly(sourceId, owner) : OwnedLorebookStore.find(sourceId, owner)
   if (!source) throw new LorebookError('가져올 로어북을 찾을 수 없어.', 404)
   return { source, target }
 }
@@ -176,8 +181,8 @@ function planFiles(owner: string, source: OwnedLorebook, target: OwnedLorebook):
 // ---- Preview --------------------------------------------------------------------------------------------------
 
 /** What a merge would do: each source entry new or a duplicate (with the target entry it matches), and the files. */
-export function previewMerge(sourceId: number, targetId: number, owner: string, options: { entryIds?: unknown } = {}): MergePreview {
-  const { source, target } = booksOf(sourceId, targetId, owner)
+export function previewMerge(sourceId: number, targetId: number, owner: string, options: { entryIds?: unknown; readOnly?: boolean } = {}): MergePreview {
+  const { source, target } = booksOf(sourceId, targetId, owner, options.readOnly)
   return {
     source,
     target,
@@ -207,9 +212,16 @@ function decisionsFor(preview: MergePreview, value: unknown) {
   return byId
 }
 
-/** Throws MergeDecisionsMissingError when a duplicate has no decision; nothing is changed. */
-export function assertMergeDecisions(preview: MergePreview, decisions: unknown) {
-  decisionsFor(preview, decisions)
+function assertMergeLimit(count: number) {
+  if (count > LOREBOOK_MAX_ENTRIES) throw new LorebookError(`합치면 항목이 ${LOREBOOK_MAX_ENTRIES}개를 넘어.`, 409)
+}
+
+/** Validate duplicate decisions and the resulting entry count without changing either book. */
+export function assertMergeAllowed(preview: MergePreview, decisions: unknown) {
+  const selected = decisionsFor(preview, decisions)
+  // Each duplicate in a preview points to a target entry; only "both" appends another entry.
+  const added = preview.items.filter((item) => item.status === 'new' || selected.get(item.entry.id)?.choice === 'both').length
+  assertMergeLimit(preview.target.entries.length + added)
 }
 
 // ---- Apply ----------------------------------------------------------------------------------------------------
@@ -223,7 +235,11 @@ function unionKeys(a: string[], b: string[]) {
  * then the target written through its lorebook.json. The source is left as it is.
  */
 export function applyMerge(sourceId: number, targetId: number, owner: string, decisionsValue: unknown, options: { entryIds?: unknown } = {}): MergeResult {
-  const preview = previewMerge(sourceId, targetId, owner, options)
+  return applyMergePreview(previewMerge(sourceId, targetId, owner, options), owner, decisionsValue)
+}
+
+/** Apply a preview already validated under the caller's deletion reservation. */
+export function applyMergePreview(preview: MergePreview, owner: string, decisionsValue: unknown): MergeResult {
   const decisions = decisionsFor(preview, decisionsValue)
   const { target } = preview
   const db = getUserSettingsDb()
@@ -293,7 +309,7 @@ export function applyMerge(sourceId: number, targetId: number, owner: string, de
           updated++
         }
       }
-      if (entries.length > LOREBOOK_MAX_ENTRIES) throw new LorebookError(`합치면 항목이 ${LOREBOOK_MAX_ENTRIES}개를 넘어.`, 409)
+      assertMergeLimit(entries.length)
       const book = OwnedLorebookStore.update(target.id, owner, { entries }) as OwnedLorebook
       return { book, added, updated, skipped, files: copied.length }
     }).immediate()

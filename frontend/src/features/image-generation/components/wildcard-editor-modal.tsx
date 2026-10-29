@@ -1,6 +1,7 @@
 import { Download, FileDown, FileJson, FileUp, Folder, FolderOpen, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { HierarchyPicker } from '@/components/common/hierarchy-picker'
+import { SaveConflictAlert, SaveConflictOverwriteButton } from '@/components/common/save-conflict-alert'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AnchoredPopup } from '@/components/ui/anchored-popup'
 import { Button } from '@/components/ui/button'
@@ -48,8 +49,11 @@ interface WildcardEditorModalProps {
   wildcard?: WildcardRecord | null
   defaultParentId?: number | null
   isSubmitting?: boolean
+  /** The last save was refused because the item changed elsewhere; the draft is kept and may overwrite it. */
+  conflict?: boolean
   onClose: () => void
-  onSubmit: (input: WildcardEditorModalInput) => Promise<void>
+  /** `overwrite`: save over the newer version (the caller reads its latest revision first). */
+  onSubmit: (input: WildcardEditorModalInput, overwrite: boolean) => Promise<void>
 }
 
 type WildcardItemDraft = {
@@ -468,6 +472,7 @@ export function WildcardEditorModal({
   wildcard,
   defaultParentId = null,
   isSubmitting = false,
+  conflict = false,
   onClose,
   onSubmit,
 }: WildcardEditorModalProps) {
@@ -626,9 +631,13 @@ export function WildcardEditorModal({
     }
   }
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    return submitDraft(false)
+  }
 
+  /** `overwrite`: after a revision conflict, save this draft over the newer version. */
+  const submitDraft = async (overwrite: boolean) => {
     const trimmedName = name.trim()
     if (!trimmedName) {
       setFormError(t(wildcardEditorKey('name.is.required')))
@@ -657,7 +666,7 @@ export function WildcardEditorModal({
           comfyui: comfyuiItems,
           nai: naiItems,
         },
-      })
+      }, overwrite)
     } catch {
       // The mutation reports the error; keep the editor and its draft open.
     }
@@ -684,6 +693,11 @@ export function WildcardEditorModal({
             <AlertTitle>{t(wildcardEditorKey('input.review.needed'))}</AlertTitle>
             <AlertDescription>{formError}</AlertDescription>
           </Alert>
+        ) : null}
+        {conflict ? (
+          <SaveConflictAlert>
+            <SaveConflictOverwriteButton disabled={isSubmitting} onClick={() => void submitDraft(true)} />
+          </SaveConflictAlert>
         ) : null}
 
         <ModalBody spacing="lg">

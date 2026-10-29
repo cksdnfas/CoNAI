@@ -198,6 +198,8 @@ async function runPiChatCompletion(params: {
   onUsage?: (usage: LlmTokenCounts) => void
   /** Any sign of life (a tool running, a compaction), so a quiet stretch is not taken for a stuck server. */
   onActivity?: () => void
+  onToolStart?: () => void
+  onToolEnd?: () => void
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
   catalogued?: ReadonlySet<string>
   maxToolRounds?: number
@@ -332,6 +334,8 @@ async function runPiChatCompletion(params: {
   const abort = () => { void agent.abort() }
   params.signal.addEventListener('abort', abort, { once: true })
   const unsubscribe = agent.subscribe((event: AgentSessionEvent) => {
+    if (event.type === 'tool_execution_start') params.onToolStart?.()
+    if (event.type === 'tool_execution_end') params.onToolEnd?.()
     params.onActivity?.()
     // Nothing here can read codemode's output files (pi's file tools are off): they go as soon as the script ends.
     if (event.type === 'tool_execution_end' && event.toolName === CODEMODE_TOOL) {

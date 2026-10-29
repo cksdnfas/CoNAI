@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import type { PostMediaRef } from '@conai/shared'
@@ -141,6 +141,17 @@ export function LibraryMedia({ hash, caption, tile = false, autoPlay = true, cla
   const open = () => viewer?.openImageView(gallery
     ? { compositeHash: hash, compositeHashes: gallery.hashes, sourceItems: gallery.items }
     : { compositeHash: hash, compositeHashes: mediaHashes.includes(hash) ? mediaHashes : [hash] })
+  // The picture opens the viewer by keyboard too (Enter / Space) when there is a viewer to open.
+  const zoomProps = viewer ? {
+    role: 'button',
+    tabIndex: 0,
+    'aria-label': caption || t({ ko: '크게 보기', en: 'View larger' }),
+    onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return
+      event.preventDefault()
+      open()
+    },
+  } : {}
 
   let body: ReactNode
   if (query.isError) body = <MediaPlaceholder icon={<ImageOff className="size-4" />} label={t({ ko: '지워졌거나 볼 수 없는 미디어야', en: 'Media removed or unavailable' })} />
@@ -156,14 +167,15 @@ export function LibraryMedia({ hash, caption, tile = false, autoPlay = true, cla
         playsInline
         preload="metadata"
         onClick={open}
-        className="block h-auto w-full cursor-zoom-in rounded-sm bg-black"
+        {...zoomProps}
+        className="block h-auto w-full cursor-zoom-in rounded-sm bg-black outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         style={{ aspectRatio: ratio }}
       />
     )
   } else {
     // Thumbnails are still frames, so anything that moves loads its original; still images take the thumbnail in a gallery.
     const src = kind === 'animated' || !tile ? fileUrl(hash) : thumbnailUrl(hash)
-    body = <img src={src} alt={caption ?? ''} loading="lazy" draggable={false} onClick={open} className="block h-auto w-full cursor-zoom-in rounded-sm" style={{ aspectRatio: ratio }} />
+    body = <img src={src} alt={caption ?? ''} loading="lazy" draggable={false} onClick={open} {...zoomProps} className="block h-auto w-full cursor-zoom-in rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40" style={{ aspectRatio: ratio }} />
   }
 
   return (

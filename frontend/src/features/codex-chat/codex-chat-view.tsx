@@ -1,5 +1,5 @@
 import { useChatThreadData } from './use-chat-thread-data'
-import { refetchActiveChatQuery, scheduleChatDirectoryRefresh } from './chat-query-refresh'
+import { applyChatThreadUpdate, refetchActiveChatQuery, runChatThreadDetailMutation, scheduleChatDirectoryRefresh } from './chat-query-refresh'
 import { useChatTranscriptWindow } from './use-chat-transcript-window'
 import { resolveChatPortrait } from '@conai/shared'
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
@@ -15,7 +15,8 @@ import { IconButton } from '@/components/ui/icon-button'
 import { pageGutterStyle, SidebarColumn } from '@/components/common/sidebar-layout'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Tip } from '@/components/ui/tooltip'
-import { Spinner } from '@/components/ui/loading-state'
+import { ErrorState } from '@/components/ui/error-state'
+import { LoadingState, Spinner } from '@/components/ui/loading-state'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
@@ -322,9 +323,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const isCompacting = useIsMutating({ mutationKey: codexChatCompactMutationKey(activeThreadId) }) > 0
   const serverRunning = Boolean(threadQuery.data?.running) && !streamingHere && !isCompacting
   const alternativeMutation = useMutation({
-    mutationFn: ({ id, index }: { id: number; index: number }) => selectChatAlternative(activeThreadId as number, id, index),
+    mutationFn: ({ id, index }: { id: number; index: number }) => runChatThreadDetailMutation(queryClient, activeThreadId as number, () => selectChatAlternative(activeThreadId as number, id, index)),
     onSuccess: async (detail) => {
-      queryClient.setQueryData(codexChatThreadQueryKey(detail.thread.id), detail)
       await queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(detail.thread.id) })
       await queryClient.invalidateQueries({ queryKey: threadLorebooksQueryKey(detail.thread.id) })
     },
@@ -447,7 +447,7 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
   const handleEditReply = useCallback(async (id: number, content: string) => {
     if (activeThreadId === null || isBusy) return false
     try {
-      queryClient.setQueryData(codexChatThreadQueryKey(activeThreadId), await editChatReplyText(activeThreadId, id, content))
+      await runChatThreadDetailMutation(queryClient, activeThreadId, () => editChatReplyText(activeThreadId, id, content))
       return true
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '답변을 고치지 못했어.', en: 'Could not edit the reply.' })), tone: 'error' })
@@ -582,10 +582,9 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     if (activeThreadId === null) return
     try {
       const separator = isGroup ? key.indexOf(':') : -1
-      const detail = separator > 0
-        ? await editChatBlock(activeThreadId, key.slice(separator + 1), data, Number(key.slice(0, separator)))
-        : await editChatBlock(activeThreadId, key, data)
-      queryClient.setQueryData(codexChatThreadQueryKey(activeThreadId), detail)
+      await runChatThreadDetailMutation(queryClient, activeThreadId, () => separator > 0
+        ? editChatBlock(activeThreadId, key.slice(separator + 1), data, Number(key.slice(0, separator)))
+        : editChatBlock(activeThreadId, key, data))
     } catch (error) {
       showSnackbar({ message: getErrorMessage(error, t({ ko: '상태를 바꾸지 못했어.', en: 'Could not change the status.' })), tone: 'error' })
       throw error
@@ -710,7 +709,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       showSnackbar({ message: t({ ko: '없는 커맨드야. /help로 목록을 열어봐.', en: 'Unknown command. Use /help.' }), tone: 'error' })
       return
     }
-    setDraft('')
+    // What was typed stays until the command went through: a failed or declined one can be fixed and run again.
+    const typed = draftKey !== null ? chat.currentDrafts()[draftKey] ?? '' : ''
     setCommandPending(true)
     try {
       if (name === 'help') { setDraft('/'); return }
@@ -723,14 +723,12 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
       else if (activeThreadId !== null) {
         if (name === 'clear') {
           if (!await confirm({ title: t({ ko: '대화 비우기', en: 'Clear chat' }), description: isCodexThread ? t({ ko: '대화와 Codex 기억을 비울까? 원본 파일과 생성 이미지는 남아.', en: 'Clear the conversation and Codex memory? Original files and generated images stay.' }) : t({ ko: '대화를 비울까? 원본 파일과 생성 이미지는 남아.', en: 'Clear the conversation? Original files and generated images stay.' }), confirmLabel: t({ ko: '비우기', en: 'Clear' }), tone: 'destructive' })) return
-          const detail = await clearCodexChatThread(activeThreadId)
-          queryClient.setQueryData(codexChatThreadQueryKey(activeThreadId), detail)
+          await runChatThreadDetailMutation(queryClient, activeThreadId, () => clearCodexChatThread(activeThreadId))
           setEditingMessageId(null)
           await queryClient.invalidateQueries({ queryKey: codexChatMediaQueryKey(activeThreadId) })
           await queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
         } else if (name === 'note') {
-          await updateCodexChatThreadContext(activeThreadId, { authorNote: argument || null })
-          await queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(activeThreadId) })
+          await applyChatThreadUpdate(queryClient, await updateCodexChatThreadContext(activeThreadId, { authorNote: argument || null }))
           showSnackbar({ message: argument ? t({ ko: '작가 노트를 바꿨어.', en: "Author's note updated." }) : t({ ko: '작가 노트를 지웠어.', en: "Author's note cleared." }) })
         } else {
           if (isCodexThread && name !== 'compact') throw new Error(t({ ko: 'API LLM 채팅에서만 쓸 수 있어.', en: 'Available in API LLM chats only.' }))
@@ -743,7 +741,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
             showSnackbar({ message: isCodexThread ? t({ ko: '대화를 압축했어.', en: 'Chat compacted.' }) : t({ ko: '대화를 요약했어.', en: 'Chat summarized.' }) })
           } else if (name === 'retry') {
             if (lastReplyId === null) throw new Error(t({ ko: '다시 생성할 답변이 없어.', en: 'No answer to regenerate.' }))
-            await regenerate(activeThreadId, lastReplyId)
+            // A regeneration that did not go through (already reported) keeps what was typed.
+            if (!await regenerate(activeThreadId, lastReplyId)) return
           } else if (name === 'edit') {
             const lastUser = [...messages].reverse().find((message) => message.role === 'user')
             if (!lastUser) throw new Error(t({ ko: '수정할 메시지가 없어.', en: 'No message to edit.' }))
@@ -752,6 +751,8 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
           }
         }
       }
+      // Typing done while it ran is kept.
+      setDraft((current) => (current === typed ? '' : current))
     } catch (error) { showSnackbar({ message: getErrorMessage(error, t({ ko: '커맨드 실행 실패', en: 'Command failed' })), tone: 'error' }) }
     finally { setCommandPending(false) }
   }
@@ -1104,11 +1105,18 @@ function CodexChatViewContent({ chat, layout, onClose, onExpand, onCollapse }: C
     </div>
   ) : <>{transcript}{composer}</>
   let body: ReactNode
-  if (activeThreadId === null || !thread) {
+  if (activeThreadId === null) {
     // The unsaved new chat shows its greeting and the composer; otherwise there is no chat yet: the picker.
     body = pendingProfile
       ? chatBody
       : threadsQuery.isPending ? null : <ChatProfilePicker profiles={profiles} threads={threads} layout={layout} disabled={isStartingChat || createGroupMutation.isPending || isBusy} onPick={pickProfile} onPickGroup={pickGroup} onImport={(file) => void handleImport(file)} onImportFiles={(entries) => void handleImportFiles(entries)} />
+  } else if (!thread) {
+    // An opened chat that is still loading or could not be read is never the new-chat picker.
+    body = threadQuery.isError ? (
+      <div className={cn('py-4', layout === 'page' ? 'px-(--page-gutter)' : 'px-3')}>
+        <ErrorState title={t({ ko: '채팅을 불러오지 못했어.', en: 'Could not load the chat.' })} error={threadQuery.error} onRetry={() => void threadQuery.refetch()} isRetrying={threadQuery.isFetching} />
+      </div>
+    ) : <LoadingState />
   } else if (activeView === 'gallery') {
     body = <Suspense fallback={null}><CodexChatGallery threadId={activeThreadId} columns={layout === 'page' ? 'wide' : 'narrow'} pendingJobs={threadQuery.data?.pendingJobs ?? 0} /></Suspense>
   } else if (activeView === 'context') {

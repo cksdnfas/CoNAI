@@ -436,11 +436,7 @@ export class DeletionService {
 
     // 1. 연결된 이미지 composite hash가 있으면 이미지 삭제 로직 실행
     if (history.composite_hash) {
-      try {
-        await this.deleteImage(history.composite_hash);
-      } catch (error) {
-        console.warn(`⚠️ Failed to delete linked image: ${history.composite_hash}`, error);
-      }
+      await this.deleteImage(history.composite_hash);
     }
 
     // 2. 히스토리 레코드 삭제

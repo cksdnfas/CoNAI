@@ -122,8 +122,11 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     },
   })
 
+  // The open draft keeps its own token; a refused save offers to overwrite with the latest token (SaveConflictAlert).
+  const [editorConflict, setEditorConflict] = useState(false)
   const updateMutation = useMutation({
     mutationFn: ({ wildcardId, input, revision }: { wildcardId: number; input: Parameters<typeof updateWildcard>[1]; revision: string }) => updateWildcard(wildcardId, input, revision),
+    onMutate: () => setEditorConflict(false),
     onSuccess: async (result) => {
       setEditorState(null)
       showSnackbar({ message: t('image-generation.components.wildcard.generation.panel.item.saved'), tone: 'info' })
@@ -131,15 +134,12 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
       setSelectedWildcardId(result.id)
     },
     onError: (error) => {
-      const conflict = error instanceof ApiRequestError && error.status === 409 && error.code === 'revision_conflict'
-      // The open draft keeps its own token; an editor opened later starts from the current record.
-      if (conflict) void queryClient.invalidateQueries({ queryKey: ['wildcards'] })
-      showSnackbar({
-        message: conflict
-          ? t({ ko: '저장된 내용이 바뀌었어. 초안은 그대로야.', en: 'The saved content changed. Your draft is intact.' })
-          : getErrorMessage(error, t('image-generation.components.wildcard.generation.panel.failed.to.save.item')),
-        tone: 'error',
-      })
+      if (error instanceof ApiRequestError && error.status === 409 && error.code === 'revision_conflict') {
+        setEditorConflict(true)
+        void queryClient.invalidateQueries({ queryKey: ['wildcards'] })
+        return
+      }
+      showSnackbar({ message: getErrorMessage(error, t('image-generation.components.wildcard.generation.panel.failed.to.save.item')), tone: 'error' })
     },
   })
 
@@ -277,6 +277,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
       return
     }
 
+    setEditorConflict(false)
     setEditorState({
       mode: 'edit',
       wildcard: selectedWildcard,
@@ -328,7 +329,7 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
     })
   }
 
-  const handleSubmitEditor = async (input: WildcardEditorModalInput) => {
+  const handleSubmitEditor = async (input: WildcardEditorModalInput, overwrite: boolean) => {
     if (!editorState) {
       return
     }
@@ -341,9 +342,21 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
       return
     }
 
+    let revision = editorState.revision
+    if (overwrite) {
+      // Take the stored record's current token and keep this draft; the edited record object stays so the draft is not reset.
+      const latest = await queryClient.fetchQuery({ ...wildcardDetailQueryOptions(editorState.wildcard.id), staleTime: 0 }).catch((error: unknown) => {
+        showSnackbar({ message: getErrorMessage(error, t({ ko: '최신 내용을 확인하지 못했어.', en: 'Could not check the latest version.' })), tone: 'error' })
+        return null
+      })
+      if (!latest?.assistant_revision) return
+      revision = latest.assistant_revision
+      setEditorState({ ...editorState, revision })
+    }
+
     await updateMutation.mutateAsync({
       wildcardId: editorState.wildcard.id,
-      revision: editorState.revision,
+      revision,
       input: {
         ...input,
         type: editorState.wildcard.type,
@@ -514,7 +527,8 @@ export function WildcardGenerationPanel({ refreshNonce }: WildcardGenerationPane
         wildcard={editorState?.mode === 'edit' ? editorState.wildcard : null}
         defaultParentId={editorState?.mode === 'create' ? editorState.defaultParentId : null}
         isSubmitting={createMutation.isPending || updateMutation.isPending}
-        onClose={() => setEditorState(null)}
+        conflict={editorState?.mode === 'edit' && editorConflict}
+        onClose={() => { setEditorState(null); setEditorConflict(false) }}
         onSubmit={handleSubmitEditor}
       />
     </>

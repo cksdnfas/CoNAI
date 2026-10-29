@@ -1,9 +1,9 @@
 import { useImagePermissions } from '@/features/auth/use-image-permissions'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createElement, useState } from 'react'
+import { createElement, useRef, useState } from 'react'
 import type { GroupMoveOptions } from '@conai/shared'
 import { GroupMergeConfirmationDetails } from './components/group-merge-confirmation-details'
-import { downloadAutoFolderGroupArchive, rebuildAutoFolderGroups } from '@/lib/api-auto-folder-groups'
+import { downloadAutoFolderGroupArchive, startAutoFolderGroupRebuild } from '@/lib/api-auto-folder-groups'
 import {
   addImagesToGroup,
   createGroup,
@@ -11,15 +11,18 @@ import {
   downloadGroupArchive,
   moveGroups,
   removeImagesFromGroup,
-  runAllGroupsAutoCollect,
-  runGroupAutoCollect,
+  startAllGroupsAutoCollect,
+  getLiveGroupAutoCollectJob,
+  startGroupAutoCollect,
   updateGroup,
 } from '@/lib/api-groups'
+import { useRuntimeJobAction } from '@/lib/use-runtime-job'
+import type { RuntimeJobRecord } from '@/types/runtime-job'
 import { withChatMediaDeleteWarning } from '@/features/images/chat-media-delete-warning'
 import { removeBulkDeletedImagesFromListCaches } from '@/features/images/image-list-cache'
 import { useImageDeleteUndo } from '@/features/images/use-image-delete-undo'
 import { deleteImagesBulk } from '@/lib/api-images'
-import type { GroupDownloadType, GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
+import type { GroupAutoCollectAllResult, GroupAutoCollectResult, GroupDownloadType, GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import type { GroupEditorState, GroupSourceDefinition } from './group-page-shared'
 import { useI18n } from '@/i18n'
 import { formatGroupBulkAddNotice, formatGroupBulkRemoveNotice } from './group-bulk-result-messages'
@@ -28,6 +31,16 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 
 /** The open group delete / move confirmation and the groups it acts on. */
 export type GroupBulkDialogState = { kind: 'delete' | 'move'; ids: number[] }
+
+/**
+ * The group of each single-group auto-collect job seen this session (runtime job records do not carry it; the server
+ * keys the job by group). Module scope, so a job resumed after leaving and returning to the page still knows its group.
+ */
+const autoCollectJobGroups = new Map<string, number>()
+function rememberAutoCollectGroup<T extends { jobId: string }>(job: T, groupId: number): T {
+  autoCollectJobGroups.set(job.jobId, groupId)
+  return job
+}
 
 /** Own mutation wiring and user-triggered action handlers for the group page. */
 export function useGroupPageActions({
@@ -170,44 +183,68 @@ export function useGroupPageActions({
     },
   })
 
-  const autoCollectMutation = useMutation({
-    mutationFn: runGroupAutoCollect,
-    onSuccess: async (result) => {
-      showSnackbar({
-        message: t({ ko: '자동수집 실행 완료: {added}개 추가, {removed}개 정리', en: 'Auto-collect complete: {added} added, {removed} removed' }, { added: formatNumber(result.images_added), removed: formatNumber(result.images_removed) }),
-        tone: 'info',
-      })
-      await refreshCustomGroupQueries()
+  // Rematch work runs as runtime jobs: the page follows their progress, and leaving it does not leave a request waiting.
+  const jobFailure = (fallback: string) => (job: RuntimeJobRecord) => showSnackbar({ message: job.failureMessage || fallback, tone: 'error' })
+  const startFailure = (fallback: string) => (error: unknown) => showSnackbar({ message: error instanceof Error ? error.message : fallback, tone: 'error' })
+  const autoCollectTargetRef = useRef<number | null>(null)
+  // The group shown pending while its start request is still out (no job record yet).
+  const [autoCollectStartGroupId, setAutoCollectStartGroupId] = useState<number | null>(null)
+  const autoCollectJob = useRuntimeJobAction<GroupAutoCollectResult>(() => {
+    const groupId = autoCollectTargetRef.current
+    if (groupId === null) return Promise.reject(new Error(t('groups.use.group.page.actions.auto.collect.failed')))
+    return startGroupAutoCollect(groupId).then((job) => rememberAutoCollectGroup(job, groupId))
+  }, {
+    // Opening a group again picks up its job still running (started here before, or by the assistant).
+    resume: isCustomSource && selectedGroupId
+      ? { key: `group-auto-collect:${selectedGroupId}`, find: () => getLiveGroupAutoCollectJob(selectedGroupId).then((job) => job && rememberAutoCollectGroup(job, selectedGroupId)) }
+      : undefined,
+    onCompleted: (job) => {
+      if (job.result) {
+        showSnackbar({
+          message: t({ ko: '자동수집 실행 완료: {added}개 추가, {removed}개 정리', en: 'Auto-collect complete: {added} added, {removed} removed' }, { added: formatNumber(job.result.images_added), removed: formatNumber(job.result.images_removed) }),
+          tone: 'info',
+        })
+      }
+      void refreshCustomGroupQueries()
     },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.auto.collect.failed'), tone: 'error' })
-    },
+    onFailed: jobFailure(t('groups.use.group.page.actions.auto.collect.failed')),
+    onCancelled: () => void refreshCustomGroupQueries(),
+    onStartError: startFailure(t('groups.use.group.page.actions.auto.collect.failed')),
   })
 
-  const autoCollectAllMutation = useMutation({
-    mutationFn: runAllGroupsAutoCollect,
-    onSuccess: async (result) => {
-      showSnackbar({
-        message: t({ ko: '전체 자동수집 완료: {groups}개 그룹, {added}개 추가, {removed}개 정리', en: 'All auto-collect jobs complete: {groups} groups, {added} added, {removed} removed' }, { groups: formatNumber(result.total_groups), added: formatNumber(result.total_images_added), removed: formatNumber(result.total_images_removed) }),
-        tone: 'info',
-      })
-      await refreshCustomGroupQueries()
+  const autoCollectAllJob = useRuntimeJobAction<GroupAutoCollectAllResult>(startAllGroupsAutoCollect, {
+    resumeKind: 'all-auto-collect',
+    onCompleted: (job) => {
+      if (job.result) {
+        showSnackbar({
+          message: t({ ko: '전체 자동수집 완료: {groups}개 그룹, {added}개 추가, {removed}개 정리', en: 'All auto-collect jobs complete: {groups} groups, {added} added, {removed} removed' }, { groups: formatNumber(job.result.total_groups), added: formatNumber(job.result.total_images_added), removed: formatNumber(job.result.total_images_removed) }),
+          tone: 'info',
+        })
+      }
+      void refreshCustomGroupQueries()
     },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.failed.to.run.auto.collect.for.all'), tone: 'error' })
-    },
+    onFailed: jobFailure(t('groups.use.group.page.actions.failed.to.run.auto.collect.for.all')),
+    onCancelled: () => void refreshCustomGroupQueries(),
+    onStartError: startFailure(t('groups.use.group.page.actions.failed.to.run.auto.collect.for.all')),
   })
 
-  const rebuildAutoFolderGroupsMutation = useMutation({
-    mutationFn: rebuildAutoFolderGroups,
-    onSuccess: async () => {
+  const rebuildAutoFolderGroupsJob = useRuntimeJobAction(startAutoFolderGroupRebuild, {
+    resumeKind: 'auto-folder-rebuild',
+    onCompleted: () => {
       showSnackbar({ message: t('groups.use.group.page.actions.watched.folder.groups.were.rebuilt'), tone: 'info' })
-      await refreshFolderGroupQueries()
+      void refreshFolderGroupQueries()
     },
-    onError: (error) => {
-      showSnackbar({ message: error instanceof Error ? error.message : t('groups.use.group.page.actions.failed.to.rebuild.watched.folder.groups'), tone: 'error' })
-    },
+    onFailed: jobFailure(t('groups.use.group.page.actions.failed.to.rebuild.watched.folder.groups')),
+    onCancelled: () => void refreshFolderGroupQueries(),
+    onStartError: startFailure(t('groups.use.group.page.actions.failed.to.rebuild.watched.folder.groups')),
   })
+  const isAutoCollectRunning = autoCollectJob.isStarting || autoCollectJob.isRunning
+  /** Start (or join) one group's auto-collect job; the assistant's group.auto_collect uses it too. */
+  const runAutoCollect = (groupId: number) => {
+    autoCollectTargetRef.current = groupId
+    setAutoCollectStartGroupId(groupId)
+    return autoCollectJob.run()
+  }
 
   const downloadGroupArchiveMutation = useMutation({
     mutationFn: async ({ type, scope }: { type: GroupDownloadType; scope: 'group' | 'selection' }) => {
@@ -371,7 +408,7 @@ export function useGroupPageActions({
       return
     }
 
-    await autoCollectMutation.mutateAsync(selectedGroupId)
+    await runAutoCollect(selectedGroupId)
   }
 
   const handleRunAutoCollectAll = async () => {
@@ -384,7 +421,7 @@ export function useGroupPageActions({
       return
     }
 
-    await autoCollectAllMutation.mutateAsync()
+    await autoCollectAllJob.run()
   }
 
   const handleRebuildAutoFolderGroups = async () => {
@@ -397,7 +434,7 @@ export function useGroupPageActions({
       return
     }
 
-    await rebuildAutoFolderGroupsMutation.mutateAsync()
+    await rebuildAutoFolderGroupsJob.run()
   }
 
   const handleOpenGroupDownloadModal = () => {
@@ -511,9 +548,12 @@ export function useGroupPageActions({
     updateGroupMutation,
     deleteGroupsMutation,
     moveGroupsMutation,
-    autoCollectMutation,
-    autoCollectAllMutation,
-    rebuildAutoFolderGroupsMutation,
+    autoCollectJob,
+    // Pending only on the group whose job it is.
+    isAutoCollectPending: isAutoCollectRunning && (autoCollectJob.job ? autoCollectJobGroups.get(autoCollectJob.job.jobId) : autoCollectStartGroupId) === selectedGroupId,
+    runAutoCollect,
+    autoCollectAllJob,
+    rebuildAutoFolderGroupsJob,
     downloadGroupArchiveMutation,
     assignToGroupMutation,
     dropImagesToGroupMutation,

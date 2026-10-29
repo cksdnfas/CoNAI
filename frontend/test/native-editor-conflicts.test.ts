@@ -147,16 +147,24 @@ test('native preset and wildcard editors retain their draft and read revision ac
     assert.ok(fieldWithValue(draft), 'refresh must not replace the open draft')
     await submit()
     assert.equal(writes.at(-1)?.revision, `${view}-1`, 'the write uses the revision captured when the draft opened')
-    assert.equal(messages.at(-1), '저장된 내용이 바뀌었어. 초안은 그대로야.')
     assert.ok(fieldWithValue(draft), 'the rejected save leaves the draft in the editor')
     assert.equal(view === 'preset' ? preset.items![0].value : wildcard.items![0].content, `${view} assistant`)
+    await submit()
+    assert.equal(writes.at(-1)?.revision, `${view}-1`, 'a plain retry keeps the stale token and is refused again')
+
+    // The conflict offers a way out: overwrite with this draft, using the stored record's current token.
+    const overwrite = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) => button.textContent?.trim() === '내 내용으로 덮어쓰기')
+    await click(overwrite)
+    assert.equal(writes.at(-1)?.revision, `${view}-2`, 'overwrite reads the latest revision first')
+    assert.equal(view === 'preset' ? preset.items![0].value : wildcard.items![0].content, draft, 'the draft replaces the newer version')
+    assert.equal(document.querySelector('[role="dialog"] form'), null, 'a successful overwrite closes the editor')
 
     await act(async () => root.render(null))
     await render(view)
     await openEditor(view)
-    await edit(fieldWithValue(`${view} assistant`), `${view} fresh edit`)
+    await edit(fieldWithValue(draft), `${view} fresh edit`)
     await submit()
-    assert.equal(writes.at(-1)?.revision, `${view}-2`, 'a newly opened draft uses the latest read revision')
+    assert.equal(writes.at(-1)?.revision, `${view}-saved`, 'a newly opened draft uses the latest read revision')
     assert.equal(view === 'preset' ? preset.items![0].value : wildcard.items![0].content, `${view} fresh edit`)
     assert.equal(document.querySelector('[role="dialog"] form'), null, 'a successful save closes the editor')
 

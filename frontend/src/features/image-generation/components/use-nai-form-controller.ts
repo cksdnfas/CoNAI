@@ -4,6 +4,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useI18n } from '@/i18n'
 import { resolveAccountDraftOwner } from '@/features/auth/auth-permissions'
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { useDebouncedPersist } from '@/lib/use-debounced-persist'
 import {
   canUseNaiCharacterPositions,
   clampNaiQueueCount,
@@ -87,6 +88,10 @@ function placeNaiCharacterReferenceByIdentity(references: NAICharacterReferenceD
   return placeNaiCharacterReference(references, index >= 0 ? index : null, image)
 }
 
+const writeNaiFormDraft = (owner: string, state: { form: NAIFormDraft; selectedCharacterIndex: number | null }) => {
+  persistNaiFormDraft(owner, state.form, state.selectedCharacterIndex)
+}
+
 /** Own the editable NAI form state and all local form-manipulation handlers for the panel. */
 export function useNaiFormController({
   showSnackbar,
@@ -104,13 +109,8 @@ export function useNaiFormController({
   const canUseCharacterPositions = useMemo(() => canUseNaiCharacterPositions(naiForm.characters.length), [naiForm.characters.length])
   const useCharacterPositions = useMemo(() => shouldUseNaiCharacterPositions(naiForm), [naiForm])
 
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      persistNaiFormDraft(draftStorageOwner, naiForm, selectedCharacterIndex)
-    }, 250)
-
-    return () => window.clearTimeout(timeout)
-  }, [draftStorageOwner, naiForm, selectedCharacterIndex])
+  const persistedState = useMemo(() => ({ form: naiForm, selectedCharacterIndex }), [naiForm, selectedCharacterIndex])
+  useDebouncedPersist(draftStorageOwner, persistedState, writeNaiFormDraft)
 
   useEffect(() => {
     if (naiForm.characterPositionAiChoice || canUseCharacterPositions) {

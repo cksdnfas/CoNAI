@@ -14,7 +14,7 @@ import { Tip } from '@/components/ui/tooltip'
 import { getNaiFixedNegativeHint, type SelectedImageDraft } from '@/features/image-generation/image-generation-shared'
 import { getNaiFixedModelSettings } from '@conai/shared'
 import { useI18n, type TranslationInput } from '@/i18n'
-import { getLlmPresetOptions } from '@/lib/api-settings-llm'
+import { getLlmPresetOptions, LLM_PRESET_OPTIONS_QUERY_KEY } from '@/lib/api-settings-llm'
 import type { GraphExecutionArtifactRecord, ModuleEngineType, ModulePortDefinition, ModuleUiFieldDefinition } from '@/lib/api-module-graph'
 import { ExecutionArtifactCard } from './execution-artifact-card'
 import { ModuleGraphKeyValueListInput } from './module-graph-key-value-list-input'
@@ -116,7 +116,7 @@ export function NodeInspectorPanel({
   const isSystemCallLlmNode = selectedNodeOperationKey === 'system.call_llm'
   const isSystemLoadLlmPresetNode = selectedNodeOperationKey === 'system.load_llm_preset'
   const llmPresetsQuery = useQuery({
-    queryKey: ['llm-preset-options', 'node-inspector-panel'],
+    queryKey: LLM_PRESET_OPTIONS_QUERY_KEY,
     queryFn: () => getLlmPresetOptions(),
     enabled: isSystemLoadLlmPresetNode,
     staleTime: 30_000,

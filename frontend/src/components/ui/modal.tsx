@@ -9,6 +9,7 @@ import { stopAtPortalEdge } from '@/lib/portal-events'
 import { cn } from '@/lib/utils'
 import { useOverlayBackClose } from './use-overlay-back-close'
 import { lockBodyScroll } from '@/lib/body-scroll-lock'
+import { useUnloadGuard } from '@/lib/use-unload-guard'
 
 interface ModalProps extends PropsWithChildren {
   open: boolean
@@ -174,6 +175,8 @@ function Modal({ open, title, description, status, headerContent, leading, onClo
 
   // A declined back-close stays open; the hook re-pushes its history entry.
   useOverlayBackClose({ open, onClose: requestClose, enabled: closeOnBack })
+  // Reloading or closing the tab over unsaved edits asks as well.
+  useUnloadGuard(open && dirty)
 
   useEffect(() => {
     if (!open) {

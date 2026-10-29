@@ -15,6 +15,8 @@ import fs from 'fs';
 import { allowImagesView } from '../middleware/imageAccess';
 import { requirePermission } from '../middleware/authMiddleware';
 import { getRequesterAccountId } from './requester-session-helpers';
+import { parseGroupPreviewBatchIds, sendGroupReadBadRequest } from './groups.read.routes';
+import { parsePositiveIntegerQuery } from './routeValidation';
 
 const router = Router();
 router.use((req, res, next) => {
@@ -83,6 +85,29 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
     return res.status(statusCode).json(errorResponse(errorMessage));
   }
+}));
+
+/**
+ * 여러 그룹의 미리보기 이미지를 한 번에 조회 (그룹 커버 모자이크)
+ * GET /api/auto-folder-groups/preview-images?ids=1,2,3&count=4&includeChildren=true
+ * GET 이므로 위의 이미지 보기 권한 검사를 그대로 거친다.
+ */
+router.get('/preview-images', asyncHandler(async (req: Request, res: Response) => {
+  const ids = parseGroupPreviewBatchIds(req.query.ids);
+  if (ids.ok === false) {
+    return sendGroupReadBadRequest(res, ids.error);
+  }
+  const countResult = parsePositiveIntegerQuery(req.query.count, 8, { max: 20, error: 'count must be an integer between 1 and 20' });
+  if (countResult.ok === false) {
+    return sendGroupReadBadRequest(res, countResult.error);
+  }
+
+  const includeChildren = req.query.includeChildren !== 'false';
+  const previews: Record<string, unknown[]> = {};
+  for (const id of ids.value) {
+    previews[id] = AutoFolderGroupImageModel.findPreviewImages(id, countResult.value, includeChildren).map((image) => enrichCompactImageWithFileView(image));
+  }
+  return res.json(successResponse(previews));
 }));
 
 /**

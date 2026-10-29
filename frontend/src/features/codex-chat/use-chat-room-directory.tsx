@@ -12,6 +12,11 @@ export function compareChatRoomActivity(a: CodexChatThreadSummary, b: CodexChatT
   return (pinnedFirst ? (b.pinned ?? 0) - (a.pinned ?? 0) : 0) || b.updated_date.localeCompare(a.updated_date) || b.id - a.id
 }
 
+/** The chat list's active rooms (pinned first); the /chat page reads the same cache for its assistant data. */
+export function activeChatRoomOptions(query: string): ChatRoomListOptions {
+  return { archive: 'active', pinnedFirst: true, query }
+}
+
 export function useChatRoomPages(options: ChatRoomListOptions, enabled = true) {
   const { status } = useRuntimeEventStream()
   const query = useInfiniteQuery({

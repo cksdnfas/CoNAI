@@ -3,7 +3,8 @@ import path from 'path'
 import { resolveUploadsPath } from '../../config/runtimePaths'
 import { createComfyUIService } from '../comfyuiService'
 import { FileDiscoveryService } from '../folderScan/fileDiscoveryService'
-import { prepareComfyPromptData } from '../prepareComfyPromptData'
+import { prepareComfyPromptData, validateComfyPromptData } from '../prepareComfyPromptData'
+import { requireGraphImageAuthority } from './graphImageAuthority'
 import { reconcileComfyModelSelectionValues } from '../comfyModelSelectionResolver'
 import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
 import { normalizeWorkflowNumericPromptValues } from '../workflowNumericFieldPolicy'
@@ -16,6 +17,9 @@ import { normalizeGenerationQueueRoutingTag } from '../generationQueueRouting'
 import { readQueueDebugMeta } from '../generation-queue/queueDebugMeta'
 import { externalizeQueueInputDataUrls } from '../generation-queue/queueInputStore'
 import { enqueueGenerationJobs } from '../generation-queue/queueEnqueue'
+import { createMcpQueueImageGrant, createTrustedQueueImageGrant, MCP_QUEUE_IMAGE_GRANT_KEY } from '../generation-queue/queueMcpImageGrant'
+import { releaseUnclaimedGraphInputs, storeGraphQueueInputFile, type WorkflowInputAssetRef } from '../workflowInputAssetStore'
+import { getTrustedGraphMedia } from './trustedGraphMedia'
 import { ImageUploadService } from '../imageUploadService'
 import { saveArtifactBuffer, saveCanonicalMediaArtifactReference, saveMetadataArtifact, shouldMaterializeRuntimeArtifactValue } from './artifacts'
 import { resolveComfyGraphOutputDescriptor, resolveComfyOutputMimeType } from './comfyArtifactOutput'
@@ -324,21 +328,62 @@ async function executeQueueBackedComfyModule(context: ExecutionContext, node: Gr
   const target = resolveGraphComfyExecutionTarget(node)
   const workflow = validateQueueTarget(sourceWorkflowId, target)
   const queuePromptData = buildQueuePromptData(context, node, workflow, resolvedInputs)
-  const queuePayload = buildQueuePayload(queuePromptData, context)
+  const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : []
+  const imageAuthority = validateComfyPromptData(markedFields, queuePromptData) ? requireGraphImageAuthority(context) : null
   const primaryOutputPort = moduleDefinition.output_ports.find((port) => port.key !== 'metadata') ?? {
     key: 'image',
     data_type: 'image' as const,
   }
+  const graphCopies: WorkflowInputAssetRef[] = []
+  const materialize = async (value: unknown): Promise<unknown> => {
+    const trusted = getTrustedGraphMedia(value)
+    if (trusted) {
+      throwIfExecutionAborted(context, node.id)
+      const ref = await storeGraphQueueInputFile(trusted.filePath, { ...trusted, executionId: context.executionId })
+      graphCopies.push(ref)
+      throwIfExecutionAborted(context, node.id)
+      return ref
+    }
+    if (Array.isArray(value)) {
+      const items = []
+      for (const entry of value) items.push(await materialize(entry))
+      return items
+    }
+    if (!value || typeof value !== 'object') return value
+    const result: Record<string, unknown> = {}
+    for (const [key, entry] of Object.entries(value)) result[key] = await materialize(entry)
+    return result
+  }
+  let jobId: number
+  try {
+    const materializedPrompt = await materialize(queuePromptData) as Record<string, unknown>
+    const queuePayload = buildQueuePayload(materializedPrompt, context)
+    if (imageAuthority?.kind === 'mcp-key') {
+      queuePayload[MCP_QUEUE_IMAGE_GRANT_KEY] = createMcpQueueImageGrant(
+        { scopes: ['generate'], keyId: imageAuthority.keyId, keyGroup: imageAuthority.groupKey },
+        workflow.id,
+        queuePayload.prompt_data as Record<string, unknown>,
+      )
+    } else if (imageAuthority?.kind === 'stdio' || imageAuthority?.kind === 'legacy-schedule') {
+      queuePayload[MCP_QUEUE_IMAGE_GRANT_KEY] = createTrustedQueueImageGrant(imageAuthority.kind, workflow.id, queuePayload.prompt_data as Record<string, unknown>)
+    }
 
-  const [jobId] = enqueueGenerationJobs({
-    service_type: 'comfyui',
-    workflow_id: workflow.id,
-    workflow_name: workflow.name,
-    requested_server_id: target.requestedServerId,
-    requested_server_tag: target.requestedServerTag,
-    request_payload: queuePayload,
-    request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
-  }).jobIds
+    throwIfExecutionAborted(context, node.id)
+    ;[jobId] = enqueueGenerationJobs({
+      service_type: 'comfyui',
+      workflow_id: workflow.id,
+      workflow_name: workflow.name,
+      requested_by_account_id: context.requestedByAccountId ?? null,
+      requested_server_id: target.requestedServerId,
+      requested_server_tag: target.requestedServerTag,
+      request_payload: queuePayload,
+      request_summary: `${context.workflow.name} · ${node.label || moduleDefinition.name}`,
+    }, {
+      withinTransaction: ({ jobIds }) => jobIds.forEach((id) => GenerationQueueModel.markGraphOrigin(id)),
+    }).jobIds
+  } finally {
+    releaseUnclaimedGraphInputs(graphCopies)
+  }
 
   writeExecutionLog({
     executionId: context.executionId,
@@ -372,6 +417,7 @@ async function executeQueueBackedComfyModule(context: ExecutionContext, node: Gr
 }
 
 async function executeDirectComfyModule(context: ExecutionContext, node: GraphWorkflowNode, moduleDefinition: ParsedModuleDefinition, resolvedInputs: Record<string, any>) {
+  throwIfExecutionAborted(context, node.id)
   const templateDefaults = moduleDefinition.template_defaults || {}
   const workflowJson = templateDefaults.workflow_json
   const markedFields = templateDefaults.marked_fields || []
@@ -381,6 +427,9 @@ async function executeDirectComfyModule(context: ExecutionContext, node: GraphWo
     throw new Error(`ComfyUI module ${moduleDefinition.name} is missing workflow_json or api_endpoint`)
   }
 
+  if (validateComfyPromptData(markedFields, resolvedInputs)) {
+    requireGraphImageAuthority(context)
+  }
   const comfyService = createComfyUIService(apiEndpoint)
   const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, resolvedInputs, {
     uploadNameBase: node.id,

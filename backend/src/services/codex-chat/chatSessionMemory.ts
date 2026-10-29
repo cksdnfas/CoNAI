@@ -4,7 +4,8 @@ import { REPLY_GUIDANCE } from './chatReplies'
 import type { ChatProfile } from './chatProfiles'
 import { loadChatSettings } from './chatSettings'
 import { OUTCOME_KEY, PAGE_VIEW_KEY } from './chatPageContext'
-import { blockStateHash, blockStateText, foldBlockState, parseBlockEdits } from './chatBlockState'
+import { blockStateHash, blockStateText } from './chatBlockState'
+import { threadBlockState } from './chatBlockCheckpoint'
 import { authorNoteText, estimateTokens, fillCharacterPlaceholders, resolveAuthorNote, type ChatContextMeta } from './llmChatContext'
 import { contextSource, contextSections, limitContextMeta, loreDiagnostics, type ContextSource } from './chatContextDiagnostics'
 import { booksForRequest, hasLoreFiles, loreIndexText, selectRequestLore } from './chatLoreContext'
@@ -197,9 +198,8 @@ export function pendingUserPersona(user: ChatUserPersona, sent: Set<string>) {
  * (or after a compaction), tracked as `state:<hash>` beside the lore keys.
  */
 export function pendingBlockState(thread: Pick<CodexChatThreadRecord, 'block_edits'> | null, profile: ChatProfile, messages: CodexChatMessageRecord[], sent: Set<string>, speakerId?: number, historySource?: ChatHistorySource) {
-  const history = historySource ? CodexChatStore.listBlockMessages(historySource.threadId, historySource.untilMessageId).filter((message) => message.id !== historySource.excludeMessageId) : messages
-  const folded = foldBlockState(profile, history, parseBlockEdits(thread?.block_edits), speakerId)
-  const text = folded ? blockStateText(profile.style.blocks, folded.state) : ''
+  const state = threadBlockState(profile, thread?.block_edits, messages, speakerId, historySource)
+  const text = state ? blockStateText(profile.style.blocks, state) : ''
   if (!text) return { text: '', keys: [] as string[] }
   const key = `state:${blockStateHash(text)}`
   return sent.has(key) ? { text: '', keys: [] } : { text, keys: [key] }

@@ -6,7 +6,7 @@ import { GenerationQueueModel } from '../../models/GenerationQueue'
 import { GenerationHistoryService } from '../generationHistoryService'
 import { BackgroundProcessorService } from '../backgroundProcessorService'
 import { createComfyUIService } from '../comfyuiService'
-import { prepareComfyPromptData } from '../prepareComfyPromptData'
+import { prepareComfyPromptData, validateComfyPromptData } from '../prepareComfyPromptData'
 import { resolveWorkflowPromptValues } from '../workflowPromptValueResolver'
 import { executeComfyGeneration, isComfyGenerationCancelledError } from '../comfyGenerationExecutor'
 import { resolveComfyAbandonedCancelResult } from '../comfyuiService'
@@ -32,6 +32,7 @@ import { clearGenerationQueueLiveProgress, setGenerationQueueLiveProgress } from
 import { publishQueueJobEvent, publishQueueJobProgressEvent } from '../runtime-events/runtimeEventPublishers'
 import { requireMcpToolAccess } from '../../mcp/toolAccess'
 import { requireRequesterPermission } from '../../middleware/featureAccess'
+import { requireMcpQueueImageGrant } from './queueMcpImageGrant'
 import { isChatMcpSource, type McpRequestContext } from '../../mcp/context'
 import { parseStoredRequestPayload } from './queuePayloads'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
@@ -190,6 +191,13 @@ async function executeComfyUiJob(job: GenerationQueueJobRecord, assignedServer: 
   const apiEndpoint = assignedServer?.endpoint ?? workflow.api_endpoint
   const comfyService = createComfyUIService(apiEndpoint, assignedServer)
   const markedFields = workflow.marked_fields ? JSON.parse(workflow.marked_fields) : []
+  if (validateComfyPromptData(markedFields, payload.promptData)) {
+    if (job.requested_by_account_id == null && payload.mcpImageGrant !== undefined) {
+      requireMcpQueueImageGrant(payload.mcpImageGrant, workflow.id, payload.promptData)
+    } else {
+      requireRequesterPermission({ accountId: job.requested_by_account_id ?? null, accountType: null }, 'images.view')
+    }
+  }
   const preparedPromptData = await prepareComfyPromptData(comfyService, markedFields, payload.promptData)
   const parsedPromptData = resolveWorkflowPromptValues(markedFields, preparedPromptData, 'comfyui', {
     modelPathSeparator: comfyService.isModalBackend() ? 'posix' : 'windows',

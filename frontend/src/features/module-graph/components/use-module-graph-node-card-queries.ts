@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib/api-image-generation-workflows'
-import { getLlmPresetOptions } from '@/lib/api-settings-llm'
+import { comfyUIServersQueryKey, getGenerationComfyUIServers, getGenerationWorkflowServers } from '@/lib/api-image-generation-workflows'
+import { getLlmPresetOptions, LLM_PRESET_OPTIONS_QUERY_KEY } from '@/lib/api-settings-llm'
 
 interface ModuleGraphNodeCardQueryEnablementOptions {
   canConfigureComfyTarget: boolean
@@ -33,13 +33,13 @@ export function useModuleGraphNodeCardQueries({
     needsLlmPresetOptions,
   })
   const llmPresetsQuery = useQuery({
-    queryKey: ['llm-preset-options', 'module-graph-node-card'],
+    queryKey: LLM_PRESET_OPTIONS_QUERY_KEY,
     queryFn: () => getLlmPresetOptions(),
     enabled: enabled.llmPresets,
     staleTime: 30_000,
   })
   const comfyServersQuery = useQuery({
-    queryKey: ['generation-comfyui-servers', 'module-graph-node-card'],
+    queryKey: comfyUIServersQueryKey(true),
     queryFn: () => getGenerationComfyUIServers(true),
     enabled: enabled.comfyServers,
     staleTime: 30_000,

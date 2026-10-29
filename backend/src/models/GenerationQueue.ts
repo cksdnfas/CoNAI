@@ -30,6 +30,8 @@ function asPlainObject(value: unknown) {
 }
 
 type QueueDebugColumns = { debug_enabled: number | null; debug_meta: string | null }
+const GRAPH_QUEUE_ORIGIN_KEY = '__conaiGraphQueueOrigin'
+const EXCLUDE_GRAPH_ORIGIN_SQL = `CASE WHEN json_valid(debug_meta) THEN COALESCE(json_extract(debug_meta, '$.${GRAPH_QUEUE_ORIGIN_KEY}'), 0) ELSE 0 END <> 1`
 
 /** Read the two debug columns through the covering index, falling back if the index is absent. */
 function readQueueDebugColumns(db: ReturnType<typeof getUserSettingsDb>, id: number) {
@@ -68,7 +70,9 @@ function parseDebugMetaJson(debugMetaJson: string | null) {
 
 /** Read the enqueue-time debug bag so 029's columns can be seeded without re-parsing the payload later. */
 function readCreateDebugSection(payload: Record<string, unknown> | undefined) {
-  const debugSection = asPlainObject(payload?._debug)
+  const suppliedDebug = asPlainObject(payload?._debug)
+  const debugSection = suppliedDebug ? { ...suppliedDebug } : null
+  if (debugSection) delete debugSection[GRAPH_QUEUE_ORIGIN_KEY]
 
   return {
     debugEnabled: debugSection !== null
@@ -95,6 +99,7 @@ type GenerationQueueFilters = {
   serviceType?: GenerationQueueJobRecord['service_type']
   workflowId?: number
   requesterAccountId?: number
+  excludeGraphOrigin?: boolean
   limit?: number
   offset?: number
 }
@@ -102,7 +107,7 @@ type GenerationQueueFilters = {
 type GenerationQueueFindAllInput = GenerationQueueJobStatus[] | GenerationQueueFilters
 type GenerationQueueStatusCountFilters = Pick<GenerationQueueFilters, 'serviceType' | 'workflowId'>
 type GenerationQueueRecentCompletedFilters = GenerationQueueStatusCountFilters & { limit?: number }
-type GenerationQueueCountFilters = Pick<GenerationQueueFilters, 'statuses' | 'serviceType' | 'workflowId' | 'requesterAccountId'>
+type GenerationQueueCountFilters = Pick<GenerationQueueFilters, 'statuses' | 'serviceType' | 'workflowId' | 'requesterAccountId' | 'excludeGraphOrigin'>
 type GenerationQueueServerDispatchCandidateFilters = {
   serverId: number
   routingTags: string[]
@@ -234,6 +239,9 @@ function appendQueueFilterClauses(
   if (filters.requesterAccountId !== undefined) {
     clauses.push('requested_by_account_id = ?')
     values.push(filters.requesterAccountId)
+  }
+  if (filters.excludeGraphOrigin) {
+    clauses.push(EXCLUDE_GRAPH_ORIGIN_SQL)
   }
 }
 
@@ -483,7 +491,7 @@ export class GenerationQueueModel {
    * The old implementation rewrote the whole `request_payload` blob for this;
    * now only a small JSON object is read back and written.
    */
-  static updateDebugMeta(id: number, meta: Record<string, unknown>) {
+  static updateDebugMeta(id: number, meta: Record<string, unknown>, options?: { graphOrigin?: boolean }) {
     const db = getUserSettingsDb()
     const current = this.readDebugState(id)
     if (!current) {
@@ -491,6 +499,10 @@ export class GenerationQueueModel {
     }
 
     const currentMeta = parseDebugMetaJson(current.debugMetaJson) ?? {}
+    const graphOrigin = options?.graphOrigin === true || this.isGraphOrigin(id)
+    const nextMeta = { ...currentMeta, ...meta }
+    delete nextMeta[GRAPH_QUEUE_ORIGIN_KEY]
+    if (graphOrigin) nextMeta[GRAPH_QUEUE_ORIGIN_KEY] = true
     // `debug_enabled` 도 함께 확정해 029 이전 행을 첫 쓰기에서 컬럼 기반으로 승격시킨다.
     // 그래야 이후 읽기가 폴백 SQL(=페이로드 오버플로 페이지 워크)을 두 번 다시 타지 않는다.
     const info = db.prepare(`
@@ -499,9 +511,19 @@ export class GenerationQueueModel {
           debug_enabled = ?,
           updated_date = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(JSON.stringify({ ...currentMeta, ...meta }), current.debugEnabled ? 1 : 0, id)
+    `).run(JSON.stringify(nextMeta), current.debugEnabled ? 1 : 0, id)
 
     return info.changes > 0
+  }
+
+  /** The origin is stored by the server, never copied from a caller's payload. */
+  static markGraphOrigin(id: number) {
+    if (!this.updateDebugMeta(id, {}, { graphOrigin: true })) throw new Error(`Queue job ${id} not found`)
+  }
+
+  static isGraphOrigin(id: number) {
+    const row = readQueueDebugColumns(getUserSettingsDb(), id)
+    return parseDebugMetaJson(row?.debug_meta ?? null)?.[GRAPH_QUEUE_ORIGIN_KEY] === true
   }
 
   /** Find one queue job for API responses without hydrating heavyweight request payloads. */
@@ -914,6 +936,7 @@ export class GenerationQueueModel {
       WHERE status IN ('queued', 'dispatching', 'running')
         AND requested_by_account_id IS NOT NULL
         AND cancel_requested = 0
+        AND ${EXCLUDE_GRAPH_ORIGIN_SQL}
       LIMIT 1
     `).get() as { present: number } | undefined
 

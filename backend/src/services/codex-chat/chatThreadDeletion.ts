@@ -4,7 +4,7 @@ import { CodexChatStore } from './codexChatStore'
 import { CodexChatService } from './codexChatService'
 import { GroupChatService } from './groupChatService'
 import { OwnedLorebookStore } from './chatLorebookFiles'
-import { applyMerge, assertMergeDecisions, previewMerge, type MergeResult } from './chatLorebookMerge'
+import { applyMergePreview, assertMergeAllowed, previewMerge, requireMergeTarget, type MergeResult } from './chatLorebookMerge'
 import { backupChatToFiles, backupDateOf } from './chatBackup'
 import { ChatAppearanceStore } from './chatAppearance'
 
@@ -19,25 +19,33 @@ export async function deleteChatThread(requester: McpRequester, threadId: number
   const option: ThreadLorebookOption = options.lorebook ?? { action: 'delete', targetId: null, decisions: undefined }
   const owner = fileOwnerKey(requester.accountId)
   const thread = CodexChatStore.findThread(threadId, requester.accountId)
-  const chatBook = thread ? OwnedLorebookStore.chatBookOf(threadId) : null
-  if (chatBook && option.action === 'merge') assertMergeDecisions(previewMerge(chatBook.id, option.targetId as number, owner), option.decisions)
-  if (options.backup === true) backupChatToFiles(requester, threadId, backupDateOf(options.backupDate))
-  let lorebook: { action: ThreadLorebookOption['action']; bookId: number | null; merge?: Omit<MergeResult, 'book'> } = { action: chatBook ? option.action : 'delete', bookId: null }
-  if (chatBook && option.action === 'keep') {
-    lorebook = { action: 'keep', bookId: OwnedLorebookStore.keepChatBook(threadId).id }
-  } else if (chatBook && option.action === 'merge') {
-    const { book, ...counts } = applyMerge(chatBook.id, option.targetId as number, owner, option.decisions)
-    lorebook = { action: 'merge', bookId: book.id, merge: counts }
-  }
-  try {
-    if (thread?.kind === 'group') await GroupChatService.deleteThread(requester, threadId)
-    else await CodexChatService.deleteThread(requester, threadId, options.beforeDelete)
-  } catch (error) {
-    if (chatBook && lorebook.action === 'merge') {
-      try { OwnedLorebookStore.delete(chatBook.id, owner) } catch { /* an attached file can keep the book until the next deletion */ }
+  const validate = () => {
+    const chatBook = thread ? OwnedLorebookStore.chatBookReadOnly(threadId) : null
+    if (option.action === 'keep' && chatBook) OwnedLorebookStore.previewKeepChatBook(threadId)
+    if (option.action === 'merge' && thread) {
+      if (chatBook) assertMergeAllowed(previewMerge(chatBook.id, option.targetId as number, owner, { readOnly: true }), option.decisions)
+      else requireMergeTarget(option.targetId as number, owner, true)
     }
-    throw error
   }
+  validate()
+  let lorebook: { action: ThreadLorebookOption['action']; bookId: number | null; merge?: Omit<MergeResult, 'book'> } = { action: 'delete', bookId: null }
+  const beforeDelete = () => {
+    options.beforeDelete?.()
+    validate()
+    if (options.backup === true) backupChatToFiles(requester, threadId, backupDateOf(options.backupDate), { readOnlyLorebooks: true })
+  }
+  const preserve = () => {
+    const chatBook = OwnedLorebookStore.chatBookReadOnly(threadId)
+    if (chatBook && option.action === 'keep') {
+      lorebook = { action: 'keep', bookId: OwnedLorebookStore.keepChatBook(threadId).id }
+    } else if (chatBook && option.action === 'merge') {
+      const preview = previewMerge(chatBook.id, option.targetId as number, owner, { readOnly: true })
+      const { book, ...counts } = applyMergePreview(preview, owner, option.decisions)
+      lorebook = { action: 'merge', bookId: book.id, merge: counts }
+    }
+  }
+  if (thread?.kind === 'group') await GroupChatService.deleteThread(requester, threadId, beforeDelete, preserve)
+  else await CodexChatService.deleteThread(requester, threadId, beforeDelete, preserve)
   ChatAppearanceStore.threadDeleted(requester.accountId, threadId)
   return { lorebook }
 }

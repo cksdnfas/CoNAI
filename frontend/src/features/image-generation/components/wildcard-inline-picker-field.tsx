@@ -167,7 +167,7 @@ export function WildcardInlinePickerField({
     () => detectedTokenSummaries.find((token) => token.key === activeDetectedTokenKey) ?? null,
     [activeDetectedTokenKey, detectedTokenSummaries],
   )
-  const detectedCharacters = useWildcardInlineDetectedCharacters(value, syntaxSettings.characterRelatedTags)
+  const detectedCharacters = useWildcardInlineDetectedCharacters(value, syntaxSettings.characterRelatedTags, isFocused ? caretPosition : -1)
   const activeDetectedCharacter = useMemo(
     () => detectedCharacters.find((character) => character.candidate.key === activeDetectedCharacterKey) ?? null,
     [activeDetectedCharacterKey, detectedCharacters],

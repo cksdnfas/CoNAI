@@ -9,7 +9,6 @@ import { asyncHandler } from '../middleware/asyncHandler';
 import { streamRangeFile } from './images/query-file-response-helpers';
 import {
   markWorkflowInputAssetForDeletion,
-  pruneDeletedWorkflowInputAssets,
   resolveWorkflowInputAssetPath,
   storeWorkflowInputAssetFile,
 } from '../services/workflowInputAssetStore';
@@ -72,7 +71,6 @@ router.post('/', requirePermission('generation.execute'), parseWorkflowInputAsse
   }
 
   try {
-    pruneDeletedWorkflowInputAssets();
     const ref = storeWorkflowInputAssetFile(req.file.path, {
       fileName: req.file.originalname,
       mimeType: req.file.mimetype,

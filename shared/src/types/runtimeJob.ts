@@ -111,4 +111,6 @@ export interface RuntimeJobRecord<TResult = unknown> {
   startedAt: string | null
   completedAt: string | null
   updatedAt: string
+  /** False when this requester may read the job but not cancel it (a shared-library job another account started). */
+  viewerCanCancel?: boolean
 }

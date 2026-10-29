@@ -30,7 +30,7 @@ import { useChatPageDataPermissions } from '@/features/codex-chat/use-chat-page-
 import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
 import { useI18n } from '@/i18n'
 import { triggerBrowserDownload } from '@/lib/api-client'
-import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, listStoredFileRevisions, listStoredFiles, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, retryStoredFileIndex, storedFileDownloadUrl, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
+import { FILES_QUERY_KEY, MAX_TEXT_DOCUMENT_BYTES, TEXT_FILE_PATTERN, createStoredFolder, deleteStoredFiles, listStoredFileRevisions, listStoredFiles, moveStoredFiles, renameStoredFile, restoreStoredFileRevision, searchStoredFiles, retryStoredFileIndex, storedFileDownloadUrl, storedFileRevisionsQueryKey, storedFileThumbnailUrl, uploadStoredFiles } from '@/lib/api-files'
 import { formatFileSize } from '@/lib/format-size'
 import { getErrorMessage } from '@/lib/error-message'
 import { FilePreview } from './file-preview'
@@ -192,7 +192,7 @@ export function FileBrowser({ parentId, onNavigate, onPick, pickLabel, onPickFol
   const chatPage = !isPicker && chatCanReadFiles && !browsingSystem
   // The previewed text file's earlier versions, so the connected chat can put one back (a review card).
   const previewVersioned = chatPage && preview !== null && preview.kind === 'file' && TEXT_FILE_PATTERN.test(preview.name)
-  const versionsQuery = useQuery({ queryKey: [...FILES_QUERY_KEY, accountKey, 'revisions', preview?.id, preview?.updatedAt], queryFn: () => listStoredFileRevisions(preview!.id), enabled: previewVersioned })
+  const versionsQuery = useQuery({ queryKey: storedFileRevisionsQueryKey(accountKey, preview?.id, preview?.updatedAt), queryFn: () => listStoredFileRevisions(preview!.id), enabled: previewVersioned })
   const versions = previewVersioned ? versionsQuery.data?.revisions ?? [] : []
   const editableDocuments = entries.filter((entry) => entry.kind === 'file' && TEXT_FILE_PATTERN.test(entry.name) && entry.size <= MAX_TEXT_DOCUMENT_BYTES)
   const saveName = (dialog: NonNullable<NameDialog>) => mutation.mutateAsync(() => (dialog.id ? renameStoredFile(dialog.id, dialog.name) : createStoredFolder(parentId, dialog.name)))

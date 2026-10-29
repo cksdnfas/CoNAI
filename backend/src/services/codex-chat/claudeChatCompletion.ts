@@ -107,6 +107,8 @@ export async function streamClaudeChatCompletion(params: {
   signal: AbortSignal
   onContent?: (text: string) => void
   onReasoning?: (text: string) => void
+  onToolStart?: () => void
+  onToolEnd?: () => void
   callTool?: (name: string, args: Record<string, unknown>, id: string) => Promise<ChatMcpToolResult>
   maxToolRounds?: number
   research?: import('./chatResearch').ChatResearchExecution
@@ -126,7 +128,9 @@ export async function streamClaudeChatCompletion(params: {
     server.setRequestHandler('tools/call', async (request) => {
       params.signal.throwIfAborted()
       if (!tools.some((tool) => tool.function.name === request.params.name) || !params.callTool) throw new Error('Unknown or not permitted tool')
-      return await params.callTool(request.params.name, request.params.arguments ?? {}, randomUUID()) as CallToolResult
+      params.onToolStart?.()
+      try { return await params.callTool(request.params.name, request.params.arguments ?? {}, randomUUID()) as CallToolResult }
+      finally { params.onToolEnd?.() }
     })
     return server
   })
@@ -188,7 +192,7 @@ export async function streamClaudeChatCompletion(params: {
     params.signal.throwIfAborted()
     return await new Promise<ChatCompletionResult>((resolve, reject) => {
       const child = spawn(cli.command, [...cli.prefixArgs, ...args], { cwd, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32' })
-      const timeout = scheduleCodexProcessTimeout(child, params.target.timeoutMs ?? 30 * 60000)
+      const timeout = params.target.timeoutMs == null ? null : scheduleCodexProcessTimeout(child, params.target.timeoutMs)
       let buffer = ''
       let content = ''
       let reasoning = ''
@@ -232,7 +236,7 @@ export async function streamClaudeChatCompletion(params: {
       child.stderr.on('data', () => {})
       child.stdin.on('error', () => {})
       child.stdin.end(input)
-      const cleanup = () => { timeout.clear(); if (abortTimer) clearTimeout(abortTimer); params.signal.removeEventListener('abort', abort) }
+      const cleanup = () => { timeout?.clear(); if (abortTimer) clearTimeout(abortTimer); params.signal.removeEventListener('abort', abort) }
       child.once('error', () => { cleanup(); reject(new Error('Claude Code CLI 실행에 실패했어.')) })
       child.once('close', (code) => {
         cleanup()
@@ -240,7 +244,7 @@ export async function streamClaudeChatCompletion(params: {
           params.signal.throwIfAborted()
           if (buffer.trim()) read(buffer.trim())
           if (failure) throw failure
-          if (timeout.timedOut) throw new Error('Claude Code 응답 제한 시간을 초과했어.')
+          if (timeout?.timedOut) throw new Error('Claude Code 응답 제한 시간을 초과했어.')
           // Out of turns (the tool round limit) cuts a reply short; it does not fail it: what it wrote and did stays.
           const turnLimited = result?.subtype === 'error_max_turns'
           // Native max-turn receipts can include the denied continuation (2.1.302: maxTurns + 1).

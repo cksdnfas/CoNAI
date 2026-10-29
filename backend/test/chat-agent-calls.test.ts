@@ -97,6 +97,52 @@ test('profile agents: admission, no recursion, expiry logs and unread isolation'
     assert.equal((db.prepare('SELECT COUNT(*) AS n FROM chat_agent_calls').get() as { n: number }).n, 0)
   })
 
+  await t.test('failed deletion does not abort a live agent or summary; successful deletion cancels after commit', async child => {
+    const { summaryRuns } = await import('../src/services/codex-chat/chatSummaryRuns')
+    const id = CodexChatStore.createThread(1, 'Deletion caller', 'llm', caller.id)
+    const context: ChatExecutionContext = { threadId: id, profileId: caller.id, kind: 'direct', replyId: 'deletion-caller' }
+    const close = registerChatReply(context, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+    const call = callChatAgent(requester, context, { agentProfileId: agent.id, instruction: 'work' })
+    const summary = new AbortController()
+    summaryRuns.set(id, { controller: summary, finished: Promise.resolve(null) })
+    const aborts = child.mock.method(AbortController.prototype, 'abort')
+    try {
+      assert.throws(() => CodexChatStore.deleteThread(id, () => { throw new Error('preservation failed') }), /preservation failed/)
+      assert.equal(aborts.mock.calls.length, 0)
+      assert.equal(summary.signal.aborted, false)
+      assert.equal((db.prepare('SELECT status FROM chat_agent_calls WHERE id = ?').get(call.callId) as { status: string }).status, 'running')
+      assert.ok(CodexChatStore.findThread(id, 1))
+      CodexChatStore.deleteThread(id)
+      assert.equal(summary.signal.aborted, true)
+      assert.equal((db.prepare('SELECT status FROM chat_agent_calls WHERE id = ?').get(call.callId) as { status: string }).status, 'cancelled')
+      assert.ok(aborts.mock.calls.length >= 2)
+      await new Promise<void>(resolve => setImmediate(resolve))
+      assert.equal((db.prepare('SELECT status FROM chat_agent_calls WHERE id = ?').get(call.callId) as { status: string }).status, 'cancelled')
+    } finally { summaryRuns.delete(id); close() }
+  })
+
+  await t.test('an outer transaction rollback leaves a scheduled summary and agent record intact', async () => {
+    const { summaryRuns } = await import('../src/services/codex-chat/chatSummaryRuns')
+    const id = CodexChatStore.createThread(1, 'Outer deletion', 'llm', caller.id)
+    const callId = Number(db.prepare(`INSERT INTO chat_agent_calls
+      (account_key, caller_thread_id, caller_profile_id, agent_profile_id, agent_name, caller_name, instruction, on_done, status, created_at)
+      VALUES ('1', ?, ?, ?, 'Agent', 'Caller', 'work', 'notify', 'running', ?)`).run(id, caller.id, agent.id, new Date().toISOString()).lastInsertRowid)
+    const summary = new AbortController()
+    summaryRuns.set(id, { controller: summary, finished: Promise.resolve(null) })
+    try {
+      assert.throws(() => db.transaction(() => { CodexChatStore.deleteThread(id); throw new Error('rollback') })(), /rollback/)
+      await new Promise<void>(resolve => setImmediate(resolve))
+      assert.equal(summary.signal.aborted, false)
+      assert.equal((db.prepare('SELECT status FROM chat_agent_calls WHERE id = ?').get(callId) as { status: string }).status, 'running')
+      assert.ok(CodexChatStore.findThread(id, 1))
+      db.transaction(() => { CodexChatStore.deleteThread(id) })()
+      assert.equal(summary.signal.aborted, false)
+      await new Promise<void>(resolve => setImmediate(resolve))
+      assert.equal(summary.signal.aborted, true)
+      assert.equal((db.prepare('SELECT status FROM chat_agent_calls WHERE id = ?').get(callId) as { status: string }).status, 'cancelled')
+    } finally { summaryRuns.delete(id) }
+  })
+
   await t.test('expired failed calls write a log before deleting; completed calls delete without a log', async () => {
     const owner = fileOwnerKey(1)
     const files = new Map<number, { created: string; modified: string }>()

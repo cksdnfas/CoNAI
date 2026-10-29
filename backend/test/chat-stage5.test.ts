@@ -237,4 +237,96 @@ test('stage 5: lore provenance, usage, undo, branches, greetings and tone', { ti
     assert.ok(JSON.stringify(withTone.messages).includes('말투: 차분하게 말해'))
     assert.ok(JSON.stringify(withTone.messages).includes('[참고 설정]'))
   })
+
+  await t.test('status checkpoints reuse appended history and invalidate on earlier edits and variants', async (s) => {
+    const { foldBlockState, parseBlockEdits } = await import('../src/services/codex-chat/chatBlockState')
+    const { threadBlockStateText } = await import('../src/services/codex-chat/llmChatContext')
+    const { pendingBlockState } = await import('../src/services/codex-chat/chatSessionMemory')
+    const { rewriteStoredMessages } = await import('../src/services/codex-chat/chatCardAssets')
+    const id = freshThread()
+    const block = normalizeBlock({ key: 'status', example: '{"hp":10}', fields: [{ name: 'hp', min: 0, max: 100, step: 5 }] })!
+    let stateProfile = { ...profile, style: { ...profile.style, blocks: [block] } }
+    const add = (role: 'user' | 'assistant', content: string, speaker_profile_id?: number) => CodexChatStore.addMessage({
+      thread_id: id, role, content, speaker_profile_id, tool_calls: [], status: 'completed', error: null,
+    }, [], { notify: false })
+    const fence = (hp: number, extra = '') => `\`\`\`status\n${JSON.stringify({ hp, ...(extra ? { note: extra } : {}) })}\n\`\`\``
+    const ids: number[] = []
+    for (let n = 0; n < 120; n++) {
+      add('user', `turn ${n}`)
+      ids.push(add('assistant', fence(n % 2 ? 80 : 30, n === 10 ? 'old-marker' : ''), profile.id))
+    }
+    const original = CodexChatStore.listBlockMessages.bind(CodexChatStore)
+    const reads: number[] = []
+    s.mock.method(CodexChatStore, 'listBlockMessages', (threadId: number, untilId?: number, afterId?: number) => {
+      const rows = original(threadId, untilId, afterId)
+      if (threadId === id) reads.push(...rows.map((message) => message.id))
+      return rows
+    })
+    const compare = (untilMessageId = CodexChatStore.latestMessageId(id)!, excludeMessageId?: number, speakerId?: number) => {
+      const current = thread(id)
+      const source = { threadId: id, untilMessageId, excludeMessageId }
+      const full = foldBlockState(stateProfile, original(id, untilMessageId).filter((message) => message.id !== excludeMessageId), parseBlockEdits(current.block_edits), speakerId)
+      const expected = full ? blockStateText(stateProfile.style.blocks, full.state) : ''
+      const actual = threadBlockStateText(stateProfile, current, [], speakerId, source)
+      assert.equal(actual, expected)
+      assert.equal(pendingBlockState(current, stateProfile, [], new Set(), speakerId, source).text, expected)
+      return actual
+    }
+    compare()
+    assert.equal(reads.length, 120, 'the initial fold reads the existing fenced replies once')
+    reads.length = 0
+    add('user', 'next turn')
+    const next = add('assistant', fence(55), profile.id)
+    compare()
+    assert.deepEqual(reads, [next], 'a new turn reads only its new fenced reply')
+
+    reads.length = 0
+    CodexChatStore.editAssistantMessage(id, ids[10], fence(15, 'edited-marker'))
+    const edited = compare()
+    assert.match(edited, /edited-marker/)
+    assert.equal(reads.length, 121, 'rewriting an earlier reply invalidates the checkpoint')
+    CodexChatStore.addAlternative(id, ids[20], { content: fence(95, 'variant-marker'), tool_calls: [], status: 'completed', error: null, created_at: '' })
+    assert.match(compare(), /variant-marker/)
+    CodexChatStore.selectAlternative(id, ids[20], 0)
+    assert.equal(compare(), edited)
+    const old = CodexChatStore.findMessage(id, ids[30])!.content
+    const revision = thread(id).context_revision
+    assert.equal(CodexChatStore.appendToReply(id, ids[30], old, `\n\n${fence(60, 'judged-marker')}`), true)
+    assert.equal(thread(id).context_revision, revision, 'a judge fence is not a history rewrite')
+    assert.match(compare(), /judged-marker/)
+    rewriteStoredMessages(new Map([['judged-marker', 'new-marker']]), (text) => text.replaceAll('judged-marker', 'new-marker'))
+    assert.equal(thread(id).context_revision, revision, 'media localization is not a history rewrite')
+    assert.match(compare(), /new-marker/)
+    const { ChatSummaryStore } = await import('../src/services/codex-chat/chatMemory')
+    assert.equal(ChatSummaryStore.addSegment(id, { from: ids[0], until: ids[30], content: '이미 계산된 요약' }, revision), true)
+    assert.equal(thread(id).summary, '이미 계산된 요약')
+
+    add('assistant', fence(1, 'other-speaker'), profile.id + 1)
+    assert.match(compare(), /other-speaker/)
+    assert.doesNotMatch(compare(undefined, undefined, profile.id), /other-speaker/)
+    assert.throws(() => db.transaction(() => {
+      add('assistant', fence(5, 'rolled-back'), profile.id)
+      assert.match(compare(), /rolled-back/)
+      throw new Error('roll back')
+    })(), /roll back/)
+    add('assistant', fence(5, 'after-rollback'), profile.id)
+    assert.match(compare(), /after-rollback/)
+
+    CodexChatStore.setBlockEdits(id, [
+      { id: 'earlier', key: 'status', afterMessageId: ids[15], data: { hp: 20 }, at: '' },
+      { id: 'later', key: 'status', afterMessageId: ids[80], data: { hp: 70 }, at: '' },
+    ])
+    compare(ids[50])
+    compare(ids[90])
+    compare(ids[90], ids[25])
+    compare(ids[90], undefined, profile.id)
+    stateProfile = { ...stateProfile, style: { ...stateProfile.style, blocks: [{ ...block, example: '{"hp":40}' }] } }
+    compare()
+    CodexChatStore.deleteMessages(id, [ids[5]])
+    compare()
+    CodexChatStore.truncateAfter(id, ids[50])
+    compare()
+    CodexChatStore.clearThread(id, '')
+    compare(0)
+  })
 })

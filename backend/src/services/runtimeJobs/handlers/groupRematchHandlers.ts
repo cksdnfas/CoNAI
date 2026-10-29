@@ -129,11 +129,16 @@ async function runAutoFolderRebuild(ctx: RuntimeJobContext<AutoFolderRebuildJobP
   return result
 }
 
+/** The one live auto-collect job of a group is found by this key (`GET /api/groups/:id/auto-collect`). */
+export function groupAutoCollectSingletonKey(groupId: number | null | undefined): string {
+  return `group-auto-collect:${groupId ?? 'unknown'}`
+}
+
 export function registerGroupRematchJobHandlers(): void {
   RuntimeJobRunner.register<GroupAutoCollectJobParams, unknown>({
     kind: 'group-auto-collect',
     // 그룹별 1개. 다른 그룹의 재매칭은 서로를 막지 않는다.
-    singletonKey: (params) => `group-auto-collect:${params?.groupId ?? 'unknown'}`,
+    singletonKey: (params) => groupAutoCollectSingletonKey(params?.groupId),
     execution: 'subprocess',
     handler: runGroupAutoCollect,
   })

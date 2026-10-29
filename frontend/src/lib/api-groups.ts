@@ -1,8 +1,9 @@
 import { buildApiUrl } from '@/lib/api-client'
-import { requestJson } from '@/lib/api-request'
+import { requestApiData, requestJson } from '@/lib/api-request'
+import type { RuntimeJobRecord } from '@/types/runtime-job'
 import type { GroupMoveOptions, GroupMoveResult } from '@conai/shared'
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
-import { resolveGroupRematchJobResponse } from '@/lib/api-group-rematch-jobs'
+import { startGroupRematchJob } from '@/lib/api-group-rematch-jobs'
 import { getDownloadFileName, prepareDownloadTarget, readDownloadBlob, saveDownloadBlob } from '@/lib/download-utils'
 import type { ApiResponse, ImageRecord } from '@/types/image'
 import type {
@@ -20,7 +21,6 @@ import type {
   GroupMutationMessage,
   GroupMutationResult,
   GroupRecord,
-  GroupRematchJobRecord,
   GroupWithHierarchy,
 } from '@/types/group'
 
@@ -218,28 +218,19 @@ export async function removeImagesFromGroup(groupId: number, compositeHashes: st
   return response.data
 }
 
-export async function runGroupAutoCollect(groupId: number) {
-  const response = await requestJson<ApiResponse<GroupAutoCollectResult | GroupRematchJobRecord<GroupAutoCollectResult>>>(`/api/groups/${groupId}/auto-collect`, {
-    method: 'POST',
-  })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'groups.autoCollect.run')
-  }
-
-  return resolveGroupRematchJobResponse(response.data)
+/** Start one group's auto-collect job (runtime job `group-auto-collect`). */
+export function startGroupAutoCollect(groupId: number) {
+  return startGroupRematchJob<GroupAutoCollectResult>(`/api/groups/${groupId}/auto-collect`, 'groups.autoCollect.run')
 }
 
-export async function runAllGroupsAutoCollect() {
-  const response = await requestJson<ApiResponse<GroupAutoCollectAllResult | GroupRematchJobRecord<GroupAutoCollectAllResult>>>('/api/groups/auto-collect-all', {
-    method: 'POST',
-  })
+/** That group's queued or running auto-collect job, or null (resumes its progress when the page opens again). */
+export function getLiveGroupAutoCollectJob(groupId: number) {
+  return requestApiData<RuntimeJobRecord<GroupAutoCollectResult> | null>(`/api/groups/${groupId}/auto-collect`, 'groups.autoCollect.run')
+}
 
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'groups.autoCollectAll.run')
-  }
-
-  return resolveGroupRematchJobResponse(response.data)
+/** Start the auto-collect job for every custom group (runtime job `all-auto-collect`). */
+export function startAllGroupsAutoCollect() {
+  return startGroupRematchJob<GroupAutoCollectAllResult>('/api/groups/auto-collect-all', 'groups.autoCollectAll.run')
 }
 
 export async function getGroupFileCounts(groupId: number, options?: { includeChildren?: boolean }) {
@@ -253,18 +244,23 @@ export async function getGroupFileCounts(groupId: number, options?: { includeChi
   return normalizeGroupFileCounts(response.data)
 }
 
-export async function getGroupPreviewImages(groupId: number, params?: { includeChildren?: boolean; count?: number }) {
-  const searchParams = new URLSearchParams()
-  searchParams.set('count', String(params?.count ?? 1))
-  searchParams.set('includeChildren', String(params?.includeChildren ?? true))
+/** Most groups one preview request may name (the server enforces the same limit). */
+export const GROUP_PREVIEW_BATCH_MAX = 100
 
-  const response = await requestJson<ApiResponse<ImageRecord[]>>(`/api/groups/${groupId}/preview-images?${searchParams.toString()}`)
+/** Query string shared by the custom and watched-folder batch preview routes. */
+export function groupPreviewBatchQuery(groupIds: number[], params: { includeChildren: boolean; count: number }) {
+  return new URLSearchParams({ ids: groupIds.join(','), count: String(params.count), includeChildren: String(params.includeChildren) }).toString()
+}
+
+/** Preview images of several custom groups in one request, by group id. */
+export async function getGroupsPreviewImages(groupIds: number[], params: { includeChildren: boolean; count: number }) {
+  const response = await requestJson<ApiResponse<Record<string, ImageRecord[]>>>(`/api/groups/preview-images?${groupPreviewBatchQuery(groupIds, params)}`)
 
   if (!response.success) {
     throw createApiFallbackError(response.error, 'groups.preview.load')
   }
 
-  return response.data
+  return new Map(Object.entries(response.data).map(([id, images]) => [Number(id), images]))
 }
 
 export async function downloadGroupArchive(

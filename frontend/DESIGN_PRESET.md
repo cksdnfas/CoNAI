@@ -313,6 +313,8 @@ buttons up one tone.
 - Rows must be direct siblings: never put `space-y-*` / `gap-*` between them.
 
 ### Form pieces (inside editors / panels)
+- `Input variant="title"` is an in-place document heading with a hairline; `variant="bare"` is the text slot inside a
+  caller-owned frame. `Textarea variant="inline"` grows inside a caller-owned composer frame.
 - `Field` (`label`, `info?`) is a `<label>` around one control; `FieldGroup` (same props, `components/ui/field`) is the
   same overline label over content that holds several controls or buttons (`role="group"` + `aria-labelledby`).
   `FramedField` (`components/common/field-tabs`) = FieldGroup + the field frame.
@@ -326,6 +328,8 @@ buttons up one tone.
   = `CollapsibleRow`.
 
 ### Shared blocks
+- `SaveConflictAlert` (`components/common/save-conflict-alert`) keeps a refused draft visible and hosts resolution
+  actions. `SaveConflictOverwriteButton` is the shared overwrite action; the caller must fetch the latest revision.
 - Floating surface (`components/ui/floating-surface`): `floatingSurfaceClassName` (surface-high, elevation-2, md radius)
   is the look of every hand-positioned menu, suggestion list, hover card and floating toolbar; Popover / DropdownMenu /
   ActionMenu build on it (`floatingMenuClassName`, `floatingMenuItemClassName`, `floatingMotionClassName`). Never
@@ -342,6 +346,8 @@ buttons up one tone.
 
 ### Dialogs (`Modal`, `ConfirmDialog`, `EditorFooter`)
 Dialogs are for short jobs: a question, a name, a choice, a small form. An editor with more than two sections is a page.
+- An open `Modal` with `dirty` set also requests the browser's native warning on reload or tab close via
+  `useUnloadGuard`; the existing dirty-close confirmation still applies inside the app.
 - `size` is required and has four steps: `sm` 26rem (a question and two buttons; `ConfirmDialog` uses this look),
   `md` 36rem (one to six fields), `lg` 56rem (choosing from a list or tree, one-column editors), `xl` 72rem (a work
   surface: viewer, media library, split editors). There is no free width.

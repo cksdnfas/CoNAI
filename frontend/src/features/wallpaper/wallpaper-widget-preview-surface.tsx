@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { flushSync } from 'react-dom'
 import { ImagePreviewMedia } from '@/features/images/components/image-preview-media'
 import { getImageListMediaKind, getImageListPreviewUrl } from '@/features/images/components/image-list/image-list-utils'
-import { buildPreviewImageRecord } from '@/features/images/components/inline-media-preview'
-import { parseMetadataValue } from '@/features/module-graph/module-graph-shared'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
 import {
@@ -56,21 +54,6 @@ interface WallpaperPreviewImageSurfaceProps {
   previewCloseEasing?: WallpaperAnimationEasing
   onPointerEnter?: () => void
   onPointerLeave?: () => void
-}
-
-/** Build one preview record from artifact metadata for wallpaper image widgets. */
-export function getWallpaperArtifactPreviewImage(src: string, alt: string, metadata?: string | null) {
-  const parsedMetadata = parseMetadataValue(metadata)
-  const mimeType = parsedMetadata && typeof parsedMetadata === 'object' && !Array.isArray(parsedMetadata) && typeof parsedMetadata.mimeType === 'string'
-    ? parsedMetadata.mimeType
-    : null
-
-  return buildPreviewImageRecord({
-    src,
-    mimeType,
-    fileName: alt,
-    alt,
-  })
 }
 
 function isSameWallpaperPreviewImage(left: WallpaperWidgetPreviewImage, right: WallpaperWidgetPreviewImage) {

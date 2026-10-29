@@ -144,9 +144,17 @@ test('ComfyUI human and assistant saves keep the opened token and draft after a 
     }
   })
   const headers: string[] = []
-  t.mock.method(globalThis, 'fetch', async (_input, init) => {
-    headers.push(new Headers(init?.headers).get('If-Match') ?? '')
-    return Response.json({ success: false, code: 'revision_conflict', error: 'Different server wording' }, { status: 409 })
+  let stored = { name: 'newer server value', token: 'newer-token' }
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    if (!init?.method || init.method === 'GET') {
+      assert.ok(String(input).endsWith('/api/workflows/7'))
+      return Response.json({ success: true, data: { ...workflow, name: stored.name, assistant_revision: stored.token, color: '#ff0000' } })
+    }
+    const token = new Headers(init.headers).get('If-Match') ?? ''
+    headers.push(token)
+    if (token !== stored.token) return Response.json({ success: false, code: 'revision_conflict', error: 'Different server wording' }, { status: 409 })
+    stored = { name: JSON.parse(String(init.body)).name, token: 'saved-token' }
+    return Response.json({ success: true, data: { id: 7 } })
   })
   const messages: string[] = []
   let closes = 0
@@ -176,6 +184,20 @@ test('ComfyUI human and assistant saves keep the opened token and draft after a 
   assert.equal(controller.isDirty, true)
   assert.equal(closes, 0)
   assert.ok(messages.every((message) => message.includes('changed')))
+  assert.equal(controller.conflict, true, 'the refused save offers the overwrite')
+  await act(async () => controller.patchDraft({ name: '' }))
+  await act(async () => { await controller.overwriteConflict() })
+  assert.equal(headers.length, 2, 'an invalid draft is not sent')
+  assert.equal(controller.isSaving, false, 'an invalid overwrite never locks the editor')
+  assert.ok(messages.at(-1)?.includes('name is required'))
+  assert.equal(controller.conflict, true, 'the overwrite is still offered')
+  await act(async () => controller.patchDraft({ name: 'my draft' }))
+  await act(async () => { await controller.overwriteConflict() })
+  assert.equal(controller.isSaving, false)
+  assert.deepEqual(headers.slice(2), ['newer-token'], 'overwrite saves with the latest token')
+  assert.equal(stored.name, 'my draft', 'the draft replaces the newer version')
+  assert.equal(controller.conflict, false)
+  assert.equal(closes, 1)
 })
 
 test('schedule editor keeps its reviewed revisions and draft when the schedule changes', async (t) => {

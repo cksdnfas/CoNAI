@@ -14,7 +14,7 @@ function normalizedId(value: unknown) {
 }
 
 /** Mutate only IDs. Id-less replacements claim identical existing title/body pairs, in stored order. */
-export function stampLoreEntryIds(entries: unknown[], existing: ReadonlyArray<{ id: string; title: string; content: string }> = []): boolean {
+export function stampLoreEntryIds(entries: unknown[], existing: ReadonlyArray<{ id: string; title: string; content: string }> = [], createId: () => string = randomUUID): boolean {
   const seen = new Set<string>()
   // Explicit IDs have priority even when an id-less entry appears before them in the input.
   const explicit = new Set(entries.flatMap((entry) => entry && typeof entry === 'object' && 'id' in entry ? [normalizedId(entry.id)] : []))
@@ -40,7 +40,7 @@ export function stampLoreEntryIds(entries: unknown[], existing: ReadonlyArray<{ 
       }
     }
     if (!id || seen.has(id)) {
-      do { id = randomUUID() } while (reserved.has(id))
+      do { id = createId() } while (reserved.has(id))
       reserved.add(id)
     }
     if (row.id !== id) {

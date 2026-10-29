@@ -2,6 +2,8 @@ import { isAdminRequest } from './requester-session-helpers';
 import { Router, Request, Response } from 'express';
 import { errorResponse, successResponse } from '@conai/shared';
 import { asyncHandler } from '../middleware/asyncHandler';
+import { requirePermission } from '../middleware/authMiddleware';
+import { AuthAccessControlService } from '../services/authAccessControlService';
 import { routeParam } from './routeParam';
 import { RuntimeJobRunner } from '../services/runtimeJobs/runtimeJobRunner';
 import { RuntimeJobStore } from '../services/runtimeJobs/runtimeJobStore';
@@ -38,6 +40,29 @@ function canAccessJob(req: Request, requestedByAccountId: number | null): boolea
   return resolveRequestAccountId(req) === requestedByAccountId;
 }
 
+/**
+ * Group rematch jobs act on the shared library, and pressing their button joins a job another account already started.
+ * Any account allowed to start the kind (the start routes' permission) may therefore read its status and progress.
+ * Read only: cancel stays with the starter or an admin (`canAccessJob`).
+ */
+export const SHARED_LIBRARY_JOB_VIEW_PERMISSION: Partial<Record<RuntimeJobKind, string>> = {
+  'group-auto-collect': 'images.edit',
+  'all-auto-collect': 'images.edit',
+  'auto-folder-rebuild': 'images.edit',
+};
+
+/** Whether the requester may start, and so read, every job of this shared-library kind. */
+function canViewSharedLibraryJobs(req: Request, kind: RuntimeJobKind | undefined): boolean {
+  const permission = kind ? SHARED_LIBRARY_JOB_VIEW_PERMISSION[kind] : undefined;
+  return permission !== undefined && AuthAccessControlService.hasPermission(resolveRequestAccountId(req), permission);
+}
+
+/** The job as this requester sees it: one they may read but not cancel says so, and the UI hides its Cancel. */
+export function presentJobForRequester(req: Request, job: RuntimeJobRecord): RuntimeJobRecord {
+  const owner = RuntimeJobStore.getOwnership(job.jobId)?.requestedByAccountId ?? null;
+  return canAccessJob(req, owner) ? job : { ...job, viewerCanCancel: false };
+}
+
 function parseKindFilter(value: unknown): RuntimeJobKind | undefined {
   return typeof value === 'string' && (RUNTIME_JOB_KINDS as readonly string[]).includes(value)
     ? (value as RuntimeJobKind)
@@ -59,15 +84,18 @@ function parseStatusFilter(value: unknown): RuntimeJobStatus[] | undefined {
  * 잡 목록 조회 (kind / status / limit 필터)
  */
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
+  const kind = parseKindFilter(req.query.kind);
+  // A list of one shared-library kind is whole for an account allowed to start it, so a joined job resumes too.
+  const sharedView = !isAdminRequest(req) && canViewSharedLibraryJobs(req, kind);
   const jobs = RuntimeJobStore.list({
-    kind: parseKindFilter(req.query.kind),
+    kind,
     status: parseStatusFilter(req.query.status),
     limit: Number(req.query.limit) || undefined,
     // 가시성 필터는 SQL 에서 끝낸다. 애플리케이션에서 걸러내면 limit 이 먼저 잘려 목록이 빈다.
-    visibleToAccountId: isAdminRequest(req) ? undefined : resolveRequestAccountId(req),
+    visibleToAccountId: isAdminRequest(req) || sharedView ? undefined : resolveRequestAccountId(req),
   });
 
-  return res.json(successResponse(jobs.map(jobSummary)));
+  return res.json(successResponse(jobs.map((job) => (sharedView ? presentJobForRequester(req, job) : jobSummary(job)))));
 }));
 
 /**
@@ -82,16 +110,24 @@ router.get('/:jobId', asyncHandler(async (req: Request, res: Response) => {
     return res.status(404).json(errorResponse('Job not found'));
   }
 
-  if (!canAccessJob(req, ownership.requestedByAccountId)) {
-    return res.status(403).json(errorResponse('Forbidden'));
-  }
-
   const job = RuntimeJobStore.get(jobId);
   if (!job) {
     return res.status(404).json(errorResponse('Job not found'));
   }
 
-  return res.json(successResponse(job.kind === 'plugin-llm' ? jobSummary(job) : RuntimeJobStore.get(jobId, { includeResultFile: true })));
+  const sendJob = () => res.json(successResponse(job.kind === 'plugin-llm' ? jobSummary(job) : RuntimeJobStore.get(jobId, { includeResultFile: true })));
+  if (canAccessJob(req, ownership.requestedByAccountId)) {
+    return sendJob();
+  }
+
+  const viewPermission = SHARED_LIBRARY_JOB_VIEW_PERMISSION[job.kind];
+  if (!viewPermission) {
+    return res.status(403).json(errorResponse('Forbidden'));
+  }
+  return requirePermission(viewPermission)(req, res, () => res.json(successResponse({
+    ...RuntimeJobStore.get(jobId, { includeResultFile: true }),
+    viewerCanCancel: false,
+  })));
 }));
 
 /**

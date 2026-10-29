@@ -11,6 +11,8 @@ const textareaVariants = cva(
         settings: 'theme-settings-control theme-input-surface border px-3 py-2',
         detail: 'theme-input-surface border px-3 py-2',
         detailNested: 'theme-input-surface border px-3 py-2',
+        /** One line that grows with its text inside a caller-framed composer (comment boxes); the frame owns the ring. */
+        inline: 'max-h-60 min-h-7 resize-none bg-transparent py-1 placeholder:text-muted-foreground focus:ring-0 [field-sizing:content]',
       },
       mono: { true: 'font-mono', false: '' },
       textSize: { xs: 'text-xs', sm: 'text-sm' },

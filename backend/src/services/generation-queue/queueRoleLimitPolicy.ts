@@ -99,6 +99,7 @@ export function resolveWorkflowRoleQueueLimitState(input: {
     statuses: ACTIVE_QUEUE_STATUSES,
     workflowId: input.workflow.id,
     requesterAccountId: input.accountId,
+    excludeGraphOrigin: true,
   })
 
   return {

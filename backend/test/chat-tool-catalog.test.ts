@@ -367,6 +367,61 @@ test('chat tool catalog: contents, open, run, validation and routing', { timeout
     await bridge.close()
   }
 
+  await t.test('direct and catalogued tool calls have no implicit deadline and remain cancellable', async (s) => {
+    const { setPluginServerTool, clearPluginServerTools, setPluginServerToolInvoker, withPluginProfileTools } = await import('../src/services/plugins/pluginServerTools')
+    const name = 'p_catalog_wait'
+    setPluginServerTool({ name, pluginId: 'catalog-wait', localName: 'wait', description: 'Wait for the caller.', scope: 'read', inputSchema: { type: 'object', properties: {} } })
+    try {
+      for (const direct of [false, true]) {
+        const exercise = async () => {
+          const bridge = await openChatMcpBridge(admin, [...CHAT_SCOPES], null, { chatContext })
+          let entered!: () => void
+          let release!: () => void
+          let cancelled!: () => void
+          let observedSignal: AbortSignal | undefined
+          let started = new Promise<void>((resolve) => { entered = resolve })
+          let cancellationSeen = new Promise<void>((resolve) => { cancelled = resolve })
+          setPluginServerToolInvoker(async (_tool, _args, _requester, signal) => new Promise((resolve, reject) => {
+            observedSignal = signal
+            release = () => resolve({ content: [{ type: 'text', text: 'finished' }] })
+            signal?.addEventListener('abort', () => { cancelled(); reject(signal.reason) }, { once: true })
+            entered()
+          }))
+          s.mock.timers.enable({ apis: ['setTimeout'] })
+          try {
+            assert.equal(bridge.catalogTools.has(name), !direct)
+            const controller = new AbortController()
+            let settled = false
+            const call = bridge.call(name, {}, controller.signal)
+            void call.then(() => { settled = true }, () => { settled = true })
+            await started
+            s.mock.timers.tick(31 * 60_000)
+            await Promise.resolve()
+            assert.equal(settled, false, 'the SDK default and old catalog deadline have both elapsed')
+            release()
+            assert.match(text(await call), /finished/)
+
+            started = new Promise<void>((resolve) => { entered = resolve })
+            cancellationSeen = new Promise<void>((resolve) => { cancelled = resolve })
+            const cancelling = bridge.call(name, {}, controller.signal)
+            await started
+            assert.ok(observedSignal)
+            controller.abort()
+            await assert.rejects(cancelling)
+            await cancellationSeen
+            assert.equal(observedSignal.aborted, true)
+          } finally {
+            s.mock.timers.reset()
+            await bridge.close()
+          }
+        }
+        if (direct) {
+          await withPluginProfileTools({ threadId, profileId: profile.id, requestId: 'no-deadline', pluginId: 'catalog-wait', accountId: null, tools: ['wait'] }, exercise)
+        } else await exercise()
+      }
+    } finally { clearPluginServerTools('catalog-wait') }
+  })
+
   // The admin tool picker lists every tool by name, not the catalog's two entries.
   const picker = await openChatMcpBridge(admin, [...CHAT_SCOPES], null, { toolCatalog: false })
   try {

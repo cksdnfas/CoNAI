@@ -62,10 +62,6 @@ export function resolveModuleGraphNodeLayout(module: ModuleDefinitionRecord): Mo
   return resolveModuleGraphNodeOperationRegistration(module)?.layoutKey ?? 'default'
 }
 
-export function resolveModuleGraphNodeDynamicInputPortKeys(module: ModuleDefinitionRecord, data: ModuleGraphNode['data']) {
-  return resolveModuleGraphNodeOperationRegistration(module)?.resolveDynamicInputPortKeys?.(data) ?? []
-}
-
 export function resolveModuleGraphNodeCustomControls(module: ModuleDefinitionRecord): ReadonlySet<ModuleGraphNodeCustomControlKey> {
   const operationKey = getModuleOperationKey(module)
   const controls = new Set<ModuleGraphNodeCustomControlKey>(operationKey ? MODULE_GRAPH_NODE_CUSTOM_CONTROL_REGISTRY[operationKey] ?? [] : [])

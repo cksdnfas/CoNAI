@@ -33,7 +33,8 @@ import {
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
 import { ChatProfileAvatar } from './chat-profile-avatar'
-import { CODEX_CHAT_THREADS_QUERY_KEY, codexChatThreadQueryKey } from './codex-chat-context'
+import { CODEX_CHAT_THREADS_QUERY_KEY } from './codex-chat-context'
+import { applyChatThreadUpdate } from './chat-query-refresh'
 import { ChatModelOptionItems } from './chat-model-option-items'
 
 /** The account's user profiles (everyone keeps their own). */
@@ -261,8 +262,8 @@ export function ChatUserProfileRow({ thread }: { thread: CodexChatThread }) {
   const current = userSpeakerOf(thread, profiles)
   const mutation = useMutation({
     mutationFn: (userProfileId: number | null) => updateCodexChatThreadContext(thread.id, { userProfileId }),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: codexChatThreadQueryKey(thread.id) })
+    onSuccess: async (updated) => {
+      await applyChatThreadUpdate(queryClient, updated)
       void queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY })
     },
     onError: (error) => showSnackbar({ message: getErrorMessage(error, t({ ko: '저장하지 못했어.', en: 'Could not save.' })), tone: 'error' }),

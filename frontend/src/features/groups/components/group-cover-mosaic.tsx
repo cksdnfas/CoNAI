@@ -4,27 +4,27 @@ import { ImagePreviewMedia } from '@/features/images/components/image-preview-me
 import { useInView } from '@/lib/use-in-view'
 import { cn } from '@/lib/utils'
 import type { ImageRecord } from '@/types/image'
-
-const COVER_IMAGE_COUNT = 4
+import { GROUP_COVER_IMAGE_COUNT } from '../group-page-shared'
 
 interface GroupCoverMosaicProps {
   groupId: number
   sourceKey: string
   imageCount: number
-  loadPreviewImages: (groupId: number, params?: { includeChildren?: boolean; count?: number }) => Promise<ImageRecord[]>
+  /** The source's batched cover loader (`groupSources[key].loadCoverImages`). */
+  loadCoverImages: (groupId: number) => Promise<ImageRecord[]>
   className?: string
 }
 
 /** A 2x2 mosaic of the group's preview images (one image fills the frame; empty groups show a folder). */
-export function GroupCoverMosaic({ groupId, sourceKey, imageCount, loadPreviewImages, className }: GroupCoverMosaicProps) {
+export function GroupCoverMosaic({ groupId, sourceKey, imageCount, loadCoverImages, className }: GroupCoverMosaicProps) {
   const [ref, view] = useInView<HTMLDivElement>('200px')
   const previewQuery = useQuery({
     queryKey: ['group-cover-images', sourceKey, groupId],
-    queryFn: () => loadPreviewImages(groupId, { includeChildren: true, count: COVER_IMAGE_COUNT }),
+    queryFn: () => loadCoverImages(groupId),
     enabled: imageCount > 0 && view.visible,
     staleTime: 60_000,
   })
-  const images = (previewQuery.data ?? []).slice(0, COVER_IMAGE_COUNT)
+  const images = (previewQuery.data ?? []).slice(0, GROUP_COVER_IMAGE_COUNT)
 
   return (
     <div ref={ref} className={cn('relative overflow-hidden bg-fill', className)}>

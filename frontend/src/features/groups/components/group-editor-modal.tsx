@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Modal, ModalBody } from '@/components/ui/modal'
 import { buildGroupCountMaps, getGroupHierarchyTotalCount } from '@/features/groups/group-count-utils'
 import { collectDescendantGroupIds } from '@/features/groups/group-option-utils'
-import { getGroupPreviewImages } from '@/lib/api-groups'
+import { groupSources } from '../group-page-shared'
 import type { GroupMutationInput, GroupRecord, GroupWithHierarchy } from '@/types/group'
 import { AutoCollectChipEditor, type AutoCollectEditorState } from './auto-collect-chip-editor'
 import { GroupCoverMosaic } from './group-cover-mosaic'
@@ -168,7 +168,7 @@ export function GroupEditorModal({
       title={mode === 'create' ? t({ ko: '새 그룹', en: 'New group' }) : t({ ko: '그룹 편집', en: 'Edit group' })}
       description={editedGroup ? summary : undefined}
       leading={editedGroup ? (
-        <GroupCoverMosaic groupId={editedGroup.id} sourceKey="custom" imageCount={imageTotal} loadPreviewImages={getGroupPreviewImages} className="size-10 rounded-lg" />
+        <GroupCoverMosaic groupId={editedGroup.id} sourceKey="custom" imageCount={imageTotal} loadCoverImages={groupSources.custom.loadCoverImages} className="size-10 rounded-lg" />
       ) : undefined}
       size="md"
       dirty={dirty}

@@ -114,12 +114,6 @@ export function persistRelatedTagOptions(options: CharacterRelatedTagOptionsStat
   window.localStorage.setItem(RELATED_TAG_OPTIONS_STORAGE_KEY, JSON.stringify(options))
 }
 
-export function getRootLabel(section: DanbooruBrowserSection) {
-  if (section === 'tags') return 'Tags'
-  if (section === 'artists') return 'Artists'
-  return 'Characters'
-}
-
 export function getLocalizedTreeLabel(node: Pick<DanbooruBrowserTreeNode, 'id' | 'section' | 'label' | 'translatedLabel'>, language: string) {
   if (node.label.toLowerCase() === 'unclassified') return language === 'ko' ? '미분류' : 'Unclassified'
   if (language !== 'ko') return node.label

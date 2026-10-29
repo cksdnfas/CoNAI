@@ -54,6 +54,7 @@
 - `view`는 탐색·선택, `draft`는 초안 변경이다. 등록된 경로로 즉시 실행하고 결과 화면을 반환한다. 초안은 현재 상태가 맞을 때 되돌릴 수 있다.
 - `direct`는 파일 이름·이동과 실행 중단이다. 현재 화면 리비전을 브라우저에서 확인하고 기존 API 권한·검증으로 즉시 실행하며 초안 되돌리기는 제공하지 않는다. 확장 플러그인은 이 등급을 선언할 수 없다.
 - `commit`은 그 외 저장·실행 등 확정 작업으로 검토 카드를 거친다. 제안 생성과 실제 적용을 구분한다.
+- 답변 중단은 `chatPageBridge.ts`의 대기 명령도 취소한다. 브라우저는 명령 실행 직전에 해당 연결로 claim해야 하며 취소·만료·재전달된 미시작 명령은 claim할 수 없다. claim 허가는 시작 경계이므로 그 이후의 효과가 반드시 중단되거나 되돌아간다고 가정하지 않는다.
 - 프로필의 `maxTokens`·`contextTokens`는 모델 토큰 수 설정이므로 페이지 스키마와 데이터에 허용한다. 인증 토큰 등 비밀 필드 차단과 숫자 범위 검증은 유지하며, `profile.draft`는 초안만 채우고 `profile.save`는 검토 카드를 거친다.
 - 페이지·모달·선택·리비전이 달라진 제안은 덮어쓰지 않는다. 페이지 접근과 작업 권한은 각각 확인한다.
 - 새 입력이나 버튼은 해당 기능의 상태 변경/API 경로와 어댑터를 함께 연결한다. 작업 ID를 추가할 때 공유 검증·권한 매핑·서버 적용·결과 반영을 같이 확인한다.
@@ -66,6 +67,8 @@
 사용자 흐름은 [채팅 가이드](docs/GUIDE/CHAT.md)에 기록한다. 변경한 기능별로 조회·입력·확정·결과 확인 중 어느 단계까지 연결했는지 확인하며 오래된 전체 지원 표를 별도로 늘리지 않는다.
 
 채팅 화면의 조회·선택·폴링은 `use-chat-thread-data.ts`, 메시지 표시 범위·스트리밍 스크롤·검색 결과 위치 복원은 `use-chat-transcript-window.ts`가 맡는다. 패널과 전체 페이지는 같은 훅을 사용하며 메시지 저장·실행은 기존 채팅 provider와 서버 경로를 유지한다.
+
+채팅 블록·요약 편집, 답변 텍스트 편집·변형 전환, `/clear`, 그룹 설정·참가자 변경은 선택적 `?tail=N`(1–500)을 받는다. 지정하면 최근 메시지와 전역 방 상태를 반환하고 이전 메시지가 남을 때 `messagesFrom`과 `hasMoreBefore`를 제공한다. 답변 편집과 변형 전환은 범위 밖 수정도 합칠 수 있도록 `changedMessage`와 변경 전 `previousContextRevision`을 더한다. 생략하면 기존 전체 응답이다. 프론트는 `applyChatThreadDetail`로 꼬리를 합치고 충돌·진행 중 조회를 처리한다.
 
 입력창(`chat-composer.tsx`)·턴 상태(`chat-live-state-provider.tsx`)·스트리밍 표시(`chat-streaming-surfaces.tsx`)·초상화(`use-chat-portrait.ts`)는 채팅 화면에서 분리해 키 입력과 스트리밍 프레임이 화면 전체를 다시 그리지 않게 한다. 방 목록 갱신은 `chat-query-refresh.ts`의 병합 갱신 하나로 모으고, 답변 종료·압축처럼 끝부분만 바뀌면 열린 대화의 꼬리만 다시 읽는다. 진행 중인 조회가 있으면 끝난 뒤 다시 읽어 오래된 값을 남기지 않으며, 오프라인으로 멈춘 조회는 기다리지 않는다. 보낸 메시지·읽음 표시는 서버 요청 없이 목록을 직접 고친다. `useChatPageRegistration`은 직렬화 대신 내용 비교(`chat-draft-equal.ts`)로 변경을 감지하며 내용이 바뀔 때만 페이지 리비전이 바뀐다. 채팅 갤러리는 공용 가상 목록을 쓰고 처리 중인 생성이 있을 때만 다시 확인한다.
 
@@ -86,6 +89,8 @@
 채팅 모양은 `user.db`의 `user_preferences`에 계정별 슬롯과 채팅별 값을 분리해 저장한다. `chatAppearance.ts`는 기존 `save/chat-appearance/<account>.json`을 최초 접근 시 한 트랜잭션으로 이관하고 원본 파일을 보존한다. 이관 표시와 값이 함께 커밋되며 읽기·파싱·저장 실패는 빈 설정으로 확정하지 않는다. 이관 이후 DB가 정본이고 한 채팅 변경은 그 채팅의 행만 갱신한다.
 
 채팅 요청 최적화: API 답변은 라우팅·의미 검색·판단·컨텍스트 준비에 같은 기록을 재사용하며, 번역된 사용자 메시지만 갱신한다. 상태 블록·인용 복원에 필요한 과거 기록은 유지한다. 요약 입력은 요약 모델의 서버 컨텍스트에 맞추고, 다른 모델의 토큰 보정률을 재사용하지 않는다. 현재 요청이 들어갈 수 있으면 진행 중인 선행 요약을 기다리지 않으며, 그룹 선행 요약도 낮은 요청 우선순위를 쓴다. 세션 엔진 전체 실행에는 외부 재시도를 걸지 않는다.
+
+`chatBlockCheckpoint.ts`는 상태 블록 접기를 턴 사이에 재사용하고 메시지 변경·삭제를 별도의 `chat_block_history_revisions`로 무효화한다. 판단 결과 추가와 미디어 링크 재작성은 `context_revision`을 올리지 않아 요약·대화 범위를 불필요하게 무효화하지 않는다. 채팅 삭제는 병합 가능 여부를 먼저 검사하고 방을 예약·중단한 뒤 `CodexChatStore.deleteThread`의 트랜잭션에서 로어북 보관·병합을 처리한다. 결정 누락, 500개 초과, 잘못된 대상은 사전에 거부하며 삭제 실패 시 책은 채팅에 남는다. Codex app-server stdin 오류는 해당 세션만 종료한다.
 
 답변 기록은 채팅·프로필의 `context_turns`만큼만 읽는다(인용·상태 블록용 과거 기록은 필요할 때 따로 읽음). 요약 대기·계획은 커서 뒤에 남은 턴 수를 SQL로 세고 가장 최근 창 기준으로 맞춘 뒤, 토큰 크기 단위로 앞쪽 페이지를 읽어 접는다. 진행 중인 요약이 있고 미요약 턴이 창을 넘으면 답변이 기다린다. 요약·판단·로어 키 채우기·로어북 병합·외형 초안·자산 분석·생성 프롬프트·추천·번역 같은 보조 요청은 `chatAuxiliarySettings.ts`의 규칙(채팅 `max_tokens` → 실행 프로필 → 제공자 기본값)과 연결 시간 제한을 따르며 기능별 고정 상한·시간 제한을 두지 않는다. 사용자가 상한을 작게 정하면 보조 결과가 잘릴 수 있고, 미완성 요약은 원래 기록을 유지한다. 요약·판단은 `stopLoops` 반복 감지(본문과 추론, API·Pi 전송 모두)로 같은 출력의 반복을 멈추며, 반복으로 멈춘 요약은 기록을 바꾸지 않고 물러난다. 판단은 먼저 JSON을 해석해 완성된 답을 살린다. 방 초기화·삭제는 진행 중인 백그라운드 요약을 취소한다. 추천 답변·이미지 프롬프트처럼 대화 기록을 넣는 보조 요청은 글자 수로 자르지 않고 가장 오래된 턴부터 통째로 빼서 문맥에 맞춘다. 생성 프리셋에 연결된 지침 파일을 읽을 수 없으면(2 MiB 초과, UTF-8 아님 등) 건너뛰고 도구 설명에 알린다. 1:1·방·Codex 전송은 `chatSendPreparation.ts`의 공용 검증을 쓰고 메시지가 저장된 뒤에만 작업 알림을 보낸다. Codex 턴은 등록 이후 모든 단계를 마무리 Promise 하나로 보호하고, 방 삭제는 그 마무리를 기다리며 삭제 중 새 전송을 막는다. 저장된 답변은 정리 단계가 실패해도 성공으로 끝나며 실패는 한 번만 보고한다.
 
@@ -139,6 +144,8 @@ API 연결의 일시적 장애 재시도와 출력 이후 재전송 금지는 `s
 
 채팅은 필요한 도구를 `open_tools`로 탐색하고 `run_tool`로 호출하는 카탈로그와 직접 제공되는 도구를 함께 사용한다. 외부 클라이언트의 도구 노출과 채팅의 노출은 같지 않다. 새 도구는 적절한 카테고리·권한·설명·입출력 제한과 호출 후 상태 확인을 연결한다. 카탈로그를 통하더라도 기존 검증과 권한 검사를 유지한다. 서버가 `tool_calls`로 바꾸지 못하고 본문에 남긴 도구 호출(Hermes JSON·Qwen XML)은 `backend/src/services/codex-chat/textToolCalls.ts`가 복구한다. 직접 API 라운드는 `llmChatService.ts`의 `streamReply`에서, pi는 `piChatCompletion.ts`의 `message_end` 확장에서 같은 함수를 쓰며, 제공된 도구와 카탈로그 도구(`run_tool` 경유)만 실행한다.
 
+`inProcessClient.ts`는 채팅의 직접·카탈로그 도구 호출과 플러그인의 네이티브 도구 호출에 암묵적 호출 타이머를 두지 않고 취소 신호를 전달한다. 플러그인 서버 도구에도 고정 기한은 없으며 각 작업·모델의 설정된 제한은 별도다. `llmChatCompletion.ts`의 스트림 유휴 감시는 도구 실행 중 일시 정지하고, Claude 프로세스 기한은 설정된 경우에만 건다. 외부 MCP는 서버별 호출 제한을 유지한다.
+
 직접 API 답변의 `save_lore`·`propose_profile_assets`는 해당 종류의 제안이 실제 저장되면 남은 라운드에서 제외한다(실패 횟수가 아니라 `ChatProposalStore`의 현재 reply ID 기준). 카탈로그도 이미 사용한 자산 제안의 스키마를 다시 제공하지 않는다. 1:1 `chat_reply_to`는 이전 메시지를 인용할 때만 필요하며 `message_id`가 필수이고 수신자 선택은 없다. 이전 메시지가 없으면 제공하지 않는다(Codex의 세션 고정 도구 목록은 예외). 플러그인 wake도 전용 방의 이전 대화를 유지하므로 이전 메시지가 있으면 인용할 수 있다. 기존 Qwen XML 복구는 공백·HTML escape를 지원하며, 직접 API의 마지막 텍스트 전용 라운드에서도 인식한 마크업은 발화로 저장하지 않고 도구 실행 상한은 유지한다. 미제공 도구의 유효한 호출 문법도 발화에서 제거하되 실행 권한은 주지 않는다.
 
 일반 플러그인 profile 실행의 `pluginTools`로 명시한 도구는 `toolCatalog.isDirectChatTool`에서 이번 실행의 전체 입력 스키마를 처음부터 제공한다. 나머지 네이티브·플러그인 도구의 지연 카탈로그와 계정·프로필 권한 검사는 그대로다. 플러그인의 네이티브 도구 단건 호출은 `server.ts`가 도구 이름→등록 함수 메타데이터를 재사용해 필요한 등록만 실행한다. 모르는 이름은 전체 등록에서 찾고, 플러그인 서버 도구·외부 MCP 도구는 호출마다 조회하며, 권한은 실행 시점에 검사한다. MCP 서버/클라이언트 연결은 계정 간 공유를 피하려고 호출마다 만든다.
@@ -152,6 +159,8 @@ MCP 결과의 라이브러리 텍스트(프롬프트·메타데이터·자동 �
 배경화면 도구(`list_wallpapers`·`set_live_wallpaper`·`save_wallpaper_schedule`)는 편집 화면과 같은 `services/wallpaperSettings.ts` 검증과 `updateAppearanceSettings` 저장을 쓰고, 변경 도구는 `toolAccess.ts`의 `ADMIN_ONLY_TOOLS`로 관리자만 실행한다. 일정 판정은 라이브 화면과 공유하는 `@conai/shared`의 `resolveScheduledWallpaperPresetId`를 사용한다. 라이브 화면은 설정을 5분 주기로 다시 읽는다. 위젯·배경 편집은 페이지 연결(`wallpaper-chat-page.ts`)이 담당한다.
 
 HTTP MCP는 설정에서 활성화하고 키로 인증한다. 외부 노출·계정 경계는 엄격하게 유지한다. 신뢰된 내부 작업에 과거 문서의 “모든 변경마다 별도 승인·백업” 절차를 일괄 적용하지 않는다. 실제 제품의 검토 카드와 권한, 사용자가 승인한 작업 범위를 따른다. 사용법은 [MCP 가이드](docs/GUIDE/MCP_GUIDE.md)를 참고한다.
+
+ComfyUI 라이브러리 입력은 계정의 `images.view`를 검사한다. 계정 없는 HTTP MCP 작업은 `queueMcpImageGrant.ts`의 서버 서명으로 키·그룹·워크플로·입력을 묶고 등록, 디스패치, 관리자 재시도 때 키의 **현재** 그룹 권한을 다시 읽는다. 키 삭제나 현재 그룹의 조회 권한 회수는 거부되지만, 다른 그룹으로 옮겨도 그 그룹에 `images.view`가 있으면 허용된다. 그래프의 라이브러리 읽기는 `graphImageAuthority.ts`가 매번 같은 현재 권한을 확인한다. stdio MCP와 계정 없는 레거시 예약은 서버가 기록한 신뢰 출처를 사용하고, 로그인 해제 시 기존 내부 접근 정책을 유지한다.
 
 ## 지식·작업 기록·평가
 
@@ -197,6 +206,14 @@ Codex 프로젝트 홈과 Claude·Pi 프로젝트 세션은 기존 일반 채팅
 
 이미지·영상·생성물의 식별과 저장 흐름을 재사용한다. 히스토리 항목 제거, 라이브러리 등록 해제, 원본 파일 삭제는 영향이 다르므로 섞지 않는다. 임시 생성 자산은 `runtimePaths`의 런타임 영역에 두고 수명과 정리 경로를 확인한다. 오디오는 별도 저장 흐름을 가지므로 모든 생성 결과를 이미지 저장 경로에 강제로 합치지 않는다.
 
+ComfyUI 요청 이미지 객체의 `path`·`filePath`·`file_path`·`storagePath`·`originalPath`·`original_file_path`는 거부한다(HTTP 400, MCP 도구 오류). `composite_hash`(이미지 조회 권한 필요), workflow-input-asset, queue-input, data URL 또는 base64를 사용한다. 그래프 HTTP 실행은 미디어·Director 자산과 API 파일 참조 경로 필드를 실행 행 생성 전에 검사한다. `system.api_request`는 라이브러리·입력 자산·큐 입력·신뢰된 그래프 산출물 참조만 파일로 해석하며, 최종 결과 승격도 요청 값의 경로가 아닌 산출물의 `storagePath`만 사용한다. 내장 API와 ComfyUI의 단독 이미지 문자열은 서버 경로가 아닌 데이터다(API는 그대로 전달할 수 있고 ComfyUI는 base64로 처리한다). 관리자 설치 custom JS 노드는 신뢰된 코드이며 요청에서 받은 경로를 출력하는 노드는 이 보장 밖이다. `GET /api/workflows/canvas-images`는 관리자와 이미지 조회 권한이 모두 필요하며, 워크플로의 미사용 test-connection 라우트는 없다(ComfyUI 서버 연결 검사는 별도다).
+
+`workflowInputAssetStore.ts`는 보존·재시도 가능한 큐 작업의 입력 참조를 등록한다. 일반 자산은 삭제 표시된 것만 백그라운드에서 정리하며, 대기·실행 중 그래프가 있으면 미루고 표시 없는 자산은 나이만으로 수거하지 않는다. 업로드 중 정리는 하지 않는다. 새 그래프→큐 복사본은 마지막 재시도 가능한 작업의 참조를 해제할 때 즉시 지우며 다른 그래프 실행은 이를 막지 않는다. 등록 전 복사본은 소유 그래프가 작업에 넘기는 동안 보호하고, 작업 삭제 등으로 참조 행이 먼저 사라진 고아는 주기 수거한다. 변경 전에 만든 복사본은 출처 표시가 없어 기존 30일 유예와 그래프 대기 규칙을 따른다. `generationQueueService.ts`는 queue-input 고아 파일도 주기적으로 정리한다.
+
+그래프가 만든 ComfyUI 큐 작업은 이미지 접근 검사에 원 요청 계정을 보존하되 사용자 역할별 큐 한도 집계에서 제외한다. 관리자의 재시도는 그래프 출처를 유지하지만, 비관리자의 재시도는 일반 작업으로 한도에 포함되며 초과 시 429다. 그래프 출처 큐 작업만으로는 예약 동시 실행 수를 줄이지 않는다. 수동 그래프 실행 자체와 일반 사용자 큐 작업에는 기존 예약 우선 정책이 계속 적용된다.
+
+메타데이터 저장은 이미지별 직렬화와 저장 시작 시점의 원본·수정 대상 필드 검사로 동시 변경을 409 `revision_conflict`로 거부한다. 무관한 스캔·태그 변경은 충돌로 취급하지 않으며 하드 링크를 지원하지 않는 경우 복사 경로를 쓴다. 생성 이력의 파일 동반 삭제가 실패하면 이력은 남고 오류를 반환한다. 감시 폴더 제거는 원본을 지우지 않고 등록을 해제하며 레거시 `delete_files` 쿼리를 거부한다.
+
 목록 성능은 공용 가상 목록·선택 엔진, 쿼리 범위와 인덱스, 썸네일/영상 프리뷰를 함께 확인한다. 화면별로 별도 목록 엔진을 만들지 않는다. 캐시 갱신은 [app-query-client.ts](frontend/src/lib/app-query-client.ts)와 `frontend/src/features/runtime-events/`의 이벤트 연결을 확인한다.
 
 정적 이미지 썸네일은 `ThumbnailGenerator`에서 출력 경로별 진행 중 작업을 공유하고 임시 파일을 완성한 뒤 이름을 바꿔 공개한다. 생성 실패는 임시 파일과 진행 상태를 정리해 재시도할 수 있고, temp 폴더 정리 뒤에도 디렉터리를 다시 만든다. 서버 폴더 썸네일도 같은 파일 상태의 요청을 합치며 디코딩 후 원본의 경로·크기·수정 시각을 다시 확인한다.
@@ -220,6 +237,8 @@ Save 선택기와 워크플로 산출물(비공개·공개) 목록은 `directory
 워크플로 실행 이력의 더 보기는 20개 단위 offset 조회를 이어 붙인다. 서버의 요청당 200개 제한을 전체 이력 제한으로 사용하지 않으며, 목록 갱신 중 다음 페이지 요청을 겹치지 않는다. 선택한 실행 상태의 폴링은 SSE가 살아 있으면 중지하고 연결이 끊기면 재개한다. `files.changed`의 파일함 재조회는 400ms 지연·최대 2.5초 대기로 병합한다. 워크플로 예약 응답 계약은 `shared/src/types/moduleGraph.ts` 하나를 백엔드·프론트가 다시 내보낸다.
 
 `RuntimeJobRunner`는 `RuntimeJobStore.markRunning`의 원자적 `queued → running` 전환에 성공한 실행만 핸들러·로컬 취소 제어·하트비트를 시작한다. 이미 실행 중이거나 종료된 작업을 다시 실행하려는 요청은 기존 작업 행과 실행 소유권을 바꾸지 않는다.
+
+그룹 커버는 `GET /api/groups/preview-images?ids=`와 `/api/auto-folder-groups/preview-images?ids=`로 서로 다른 ID 최대 100개를 묶어 읽으며 단건 경로와 같은 이미지 조회 권한을 쓴다. 프론트의 `batch-loader.ts`가 같은 작업의 요청을 합친다. `group-auto-collect`·`all-auto-collect`·`auto-folder-rebuild`는 `useRuntimeJobAction`으로 추적하며 그룹별 작업은 `GET /api/groups/:id/auto-collect`와 `resume: {key, find}`, 전체 작업은 `resumeKind`로 이어 본다. `images.edit` 계정은 다른 계정의 해당 작업도 단건 또는 종류별 `/api/jobs` 목록에서 볼 수 있지만 취소는 시작자·관리자에게 남는다. 소유자가 없는 작업은 기존 무소유 접근 규칙을 쓴다. 읽기 전용 응답의 `viewerCanCancel: false`를 따른다.
 
 큐 상태 이벤트의 `audio_scopes`는 실제 오디오 주문·결과가 속한 그룹과 프로젝트만 지정한다. 빈 배열은 오디오 갱신을 생략하며, 일반 ComfyUI 작업의 오디오 결과도 포함한다. 오디오 전체 검색은 `/api/audio/groups` 한 번으로 조회하고 `list_audio_groups`의 `project_id` 생략도 같은 서비스를 사용한다. SQL 검색은 기존 JavaScript의 유니코드 소문자·부분 문자열 비교를 유지한다. 주문 목록은 작업·큐 상태·결과를 목록 단위로 읽으며, 상태가 달라진 작업만 캐시에 기록한다.
 
@@ -277,6 +296,8 @@ Git 저장소 설치·업데이트는 `pluginSources.ts`가 담당한다. 호스
 
 `shared/src/types/plugin.ts`, `backend/src/services/plugins/`, `frontend/src/features/plugins/`가 manifest·설치·실행·격리 화면을 담당한다. `/settings?section=plugins`에서 관리하고 `/extensions`에서 실행·작업을 조회한다. `/ext/<pluginId>/<pageId>`는 `kind: extension` 어시스턴트 계약을 사용한다. 설치·활성화한 플러그인은 앱 기능이며 `capabilities`·`appTools`는 호환 정보다. 서버 모듈 유무와 무관하게 현재 계정의 앱 권한을 적용하고, 페이지를 여는 데 파일 권한을 요구하지 않는다.
 
+`pluginServerRuntime.ts`는 플러그인별 서버 시작·중지·재시작을 직렬화하고 중지 뒤 현재 활성 상태를 다시 읽는다. 빠른 비활성화·활성화도 같은 서버 수명 경로를 사용한다.
+
 자산·미디어는 전역 CORS 이전의 credential-free 라우트다. iframe·MessageChannel·null origin 검증은 유지한다. 파일 선택은 초기 문맥이며 실제 파일 접근은 FileStoreService의 계정 기능 권한을 따른다. 프로젝트는 호스트가 연결하며 UI 편집 여부는 계정의 files.edit에서 정한다. `pluginInstanceAppContext`와 `pluginServerRuntime`이 서버 모듈에도 프로젝트 문맥을 전달하고, WorkspaceService의 쓰기 잠금·리비전 검사를 재사용한다. `pluginAppPolicy`는 활성 채팅처럼 없는 실행 문맥이 필요한 도구를 제외한다. 화면의 직접 앱 호출은 멱등 plugin-action 작업으로 즉시 시작한다. AI/MCP 변경과 명시적인 propose* 저장은 기존 호스트 검토를 유지한다. `server.entry`가 있으면 Node worker와 전용 저장소를 사용한다. [SDK](plugins/README.md), [사용자 가이드](docs/GUIDE/PLUGINS.md)를 참고한다.
 
 서버 모듈의 `conai.llm`과 모든 활성 플러그인 페이지의 `api.llm`은 `pluginLlm.ts`에서 사용 가능한 프로필 조회·프로필 이미지 조회(`asset`)·단일 답변 시작·상태/본문 조회·취소를 제공한다. 이미지는 `chatProfileAssets.ts`의 기존 라이브러리·레거시·안전 설정과 이미지 조회 권한을 재사용하며, 크기가 제한된 WebP와 크롭 정보를 반환한다. `chatProfileReply.ts`의 프롬프트 구성과 기존 모델 실행 경로를 워크플로와 공유하고, `plugin-llm` 런타임 작업으로 동시 실행·취소·재시작 실패 처리를 재사용한다. `text` 호출의 프로필 로어는 인증된 요청자의 `fileOwnerKey`를 내부 `loreOwner`로 전달해 global·공용 파일 기반 로어북을 실행마다 조회한다. 개인 채팅과 채팅 로어북은 읽지 않으며 호출자가 소유자나 채팅을 지정할 수 없다. 요청 ID는 플러그인·계정에 묶으며 원본 입력은 영구 작업 인자에 저장하지 않는다. 어항 같은 개별 기능의 화면·기억·행동 규칙은 플러그인에 둔다. 실행·이미지 권한·멱등·취소 회귀는 `backend/test/plugin-server.test.ts`, 로어 범위는 `backend/test/chat-lore-context.test.ts`, 기존 프롬프트 호환성은 `backend/test/workflow-llm-nodes.test.ts`로 확인한다.
@@ -289,7 +310,7 @@ Git 저장소 설치·업데이트는 `pluginSources.ts`가 담당한다. 호스
 
 조사 상태·요약의 라이브 자료 경계는 `PostStore.publishedSources`의 단일 배치 조회를 사용한다. `ChatResearchExecution.validateSources`는 API 제공자 요청 직전, 네이티브 실행 시작·도구 호출·완료와 실행 중 1초마다 모든 지정 ID를 확인한다. 네이티브 내부 요청 직전의 원자적 확인은 보장하지 않는다. `finalModelRound`는 API 마지막 호출을 텍스트 전용으로 만들고 `purpose:'summary'`는 모든 엔진의 도구를 제거한다. 기존 `posts_search`의 `post_ids`(1–100, published 전용)와 페이지 한도 50은 같은 SQL을 사용하며 `revision`·`content_version`·`content_hash`를 반환한다. 플러그인은 상태 반환 전에 현재 자료로 인용/결과 접근과 변경 여부를 검사한다. 회귀는 `backend/test/plugin-server.test.ts`와 `backend/test/mcp-posts-files-tools.test.ts`에 둔다.
 
-`mode: profile`의 선택적 `research`는 `shared/src/types/plugin.ts`의 `PluginResearchInput`/`PluginResearchResult` 계약이다. `backend/src/services/plugins/pluginLlm.ts`가 입력·엔진·권한을 확인하고 `backend/src/services/plugins/pluginProfileRun.ts`가 계정/플러그인/프로필/슬롯/활동/요청별 방과 reply registry를 연결한다. `buildChatProfileReplyMessages(useLorebooks:false)` 문맥으로 기존 `llmChatService.generateLlmGroupReply`의 API/Claude/Pi 실행기를 사용하며 Pi는 새 private session만 사용한다. Codex는 `codexChatService.runCodexResearchReply`가 기존 app-server 시작·설정 검증·알림·사용량 처리를 공유하고 `codexChatAccess`→MCP 인증에 호스트 전용 research capability를 연결한다. 임시 홈/토큰은 종료·취소 시 정리하고 셸·외부 도구·파일 변경은 열지 않는다. API 요청 1–32(기본 8), Claude/Pi 턴 1–32(기본 8), 모든 엔진 도구 1–100(기본 24), 기존 timeout 최대 600초다. `modelCalls:null`은 네이티브 내부 호출 수 미관측, `turns:null`은 API/Codex 턴 수 미관측이며 `limits`는 실제 적용 상한만 반환한다. Codex 모델/턴/출력 토큰 상한은 지원하지 않는다. MCP 범위·게시글 SQL·실제 원문 증거·jobs 멱등/취소/권한은 그대로 재사용한다. 상세는 [SDK 조사 계약](plugins/README.md#isolated-read-only-post-research), 공개 회귀는 `backend/test/plugin-server.test.ts`와 `backend/test/chat-pi-sessions.test.ts`를 참조한다.
+`mode: profile`의 선택적 `research`는 `shared/src/types/plugin.ts`의 `PluginResearchInput`/`PluginResearchResult` 계약이다. `pluginLlm.ts`가 입력·엔진·권한을 확인하고 `pluginProfileRun.ts`가 계정/플러그인/프로필/슬롯/활동/요청별 방과 reply registry를 연결한다. API/Claude/Pi와 Codex는 기존 실행 경로를 사용하고 임시 홈·토큰을 종료·취소 시 정리한다. 셸·외부 도구·파일 변경은 열지 않는다. `chatResearch.ts`는 전역 도구 반복 한도 N에 따라 직접 API 요청 또는 Claude/Pi 턴을 N+1로 제한하며 별도 도구 호출 개수 상한은 없다. 이전 개별 한도 필드는 받아도 무시한다. 요약은 도구 없이 한 번 실행한다. `modelCalls:null`과 `turns:null`은 해당 엔진에서 관측하지 못한다는 뜻이며 `limits`는 실제 적용 상한만 반환한다. MCP 범위·게시글 권한·원문 증거·작업 멱등/취소는 그대로다. 상세는 [SDK 조사 계약](plugins/README.md#isolated-read-only-post-research)을 따른다.
 
 `pluginLlm.ts`의 `mode: profile`은 `pluginProfileRun.ts` → `ensureAutomationRoom` / `wakeChatRoom` → 기존 채팅 엔진으로 실행한다. 플러그인·계정·프로필별 전용 대화에서 프로필의 도구 카탈로그·권한·생성 프리셋·검토를 재사용하며 별도 도구 실행 루프를 만들지 않는다. `profileRun`은 실제 메시지의 도구 결과를 크기 제한 안에서 반환하고, 재조회 시 `attachJobResults`로 지연 생성 결과를 갱신한다. 대화는 자동화 목록의 `plugin` 종류로 남고 SDK `navigation.openChat`으로 연다. 기존 생략/`text` 모드는 상태 없는 답변 계약을 유지한다. `plugin-server.test.ts`에서 모델 도구 호출 → 실제 파일 작업 → 모델 결과 재입력, 권한 회수·계정 격리·멱등·취소를 검증한다.
 

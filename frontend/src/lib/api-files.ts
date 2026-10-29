@@ -4,6 +4,9 @@ import { buildApiUrl } from './api-url'
 import { UPLOAD_LIMITS } from './upload-limits'
 
 export const FILES_QUERY_KEY = ['file-store'] as const
+/** A file's version list, per viewing account (the browser's chat context and the versions panel share it). */
+export const storedFileRevisionsQueryKey = (accountKey: string | number, fileId: string | undefined, updatedAt: string | undefined) =>
+  [...FILES_QUERY_KEY, accountKey, 'revisions', fileId, updatedAt] as const
 const headers = { 'Content-Type': 'application/json' }
 
 export const listStoredFiles = (parentId: string | null, offset = 0, signal?: AbortSignal) => requestApiData<FileStoreListing>(`/api/files?parentId=${parentId ?? ''}&offset=${offset}`, { signal })

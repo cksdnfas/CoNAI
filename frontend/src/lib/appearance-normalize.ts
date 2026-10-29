@@ -298,18 +298,3 @@ export function normalizeAppearanceSettings(raw: unknown, fallback: AppearanceSe
     wallpaperActivePresetId: fallback.wallpaperActivePresetId,
   }
 }
-
-export function normalizeAppearanceImport(raw: unknown, fallback: AppearanceSettings): AppearanceSettings | null {
-  const appearance = normalizeAppearanceThemeImport(raw, extractAppearanceTheme(fallback))
-  if (!appearance) {
-    return null
-  }
-
-  return {
-    ...appearance,
-    appIconDataUrl: fallback.appIconDataUrl,
-    presetSlots: fallback.presetSlots,
-    wallpaperLayoutPresets: fallback.wallpaperLayoutPresets,
-    wallpaperActivePresetId: fallback.wallpaperActivePresetId,
-  }
-}

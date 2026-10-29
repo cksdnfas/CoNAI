@@ -15,6 +15,7 @@ import {
   resolveQueueFailureMessage,
 } from './generation-queue/queueJobExecutors'
 import { parseStoredRequestPayload, resolveFailureMessage } from './generation-queue/queuePayloads'
+import { requireMcpQueueImageGrant, MCP_QUEUE_IMAGE_GRANT_KEY } from './generation-queue/queueMcpImageGrant'
 import { QueueServiceThrottle, type ThrottledServiceType } from './generation-queue/queueServiceThrottle'
 import { QueueTerminalJobWaiters } from './generation-queue/queueTerminalWaiters'
 import { publishQueueJobEvent } from './runtime-events/runtimeEventPublishers'
@@ -60,6 +61,7 @@ export class GenerationQueueService {
   private static comfyDispatchRunning = false
   private static comfyDispatchPending = false
   private static orphanReconcileHandle: ReturnType<typeof setInterval> | null = null
+  private static orphanInputSweep: Promise<void> | null = null
 
   /** Start queue recovery hooks and dispatcher once per process. */
   static start() {
@@ -75,6 +77,7 @@ export class GenerationQueueService {
     // Phase 2: 상류 orphan 정리. 이게 돌아야 orphan 프롬프트가 is_idle 판정을 막아 큐를 세우는 일이 풀린다.
     this.orphanReconcileHandle = setInterval(() => {
       this.runOrphanReconcile()
+      this.sweepOrphanQueueInputs()
     }, ORPHAN_RECONCILE_INTERVAL_MS)
     this.orphanReconcileHandle.unref?.()
     this.runOrphanReconcile()
@@ -117,6 +120,7 @@ export class GenerationQueueService {
   /** Stop accepting work, cancel owned workers, and keep the DB open until they settle. */
   static async stopAndDrain() {
     const stopped = this.stop()
+    await this.orphanInputSweep
     while (this.activeWorkerKeys.size > 0) {
       await new Promise<void>((resolve) => setTimeout(resolve, 25))
     }
@@ -131,14 +135,17 @@ export class GenerationQueueService {
    * touching a blob whose enqueue is still in flight.
    */
   private static sweepOrphanQueueInputs() {
-    try {
-      const swept = sweepOrphanQueueInputFiles()
+    if (this.orphanInputSweep) return
+    const sweep = sweepOrphanQueueInputFiles().then((swept) => {
       if (swept.removed > 0) {
         console.log(`🧹 Removed ${swept.removed} unreferenced queue input file(s) (${Math.round(swept.removedBytes / 1024)}KB)`)
       }
-    } catch (error) {
+    }).catch((error) => {
       console.warn('⚠️ Failed to sweep unreferenced queue input files:', error)
-    }
+    }).finally(() => {
+      if (this.orphanInputSweep === sweep) this.orphanInputSweep = null
+    })
+    this.orphanInputSweep = sweep
   }
 
   private static runOrphanReconcile() {
@@ -443,7 +450,7 @@ export class GenerationQueueService {
   }
 
   /** Create a new queued retry job from one finished failed/cancelled job. */
-  static retryJob(id: number, options?: { force?: boolean; roleLimitWorkflow?: EnqueueGenerationJobsOptions['roleLimitWorkflow'] }) {
+  static retryJob(id: number, options?: { force?: boolean; roleLimitWorkflow?: EnqueueGenerationJobsOptions['roleLimitWorkflow']; preserveGraphOrigin?: boolean }) {
     // 재시도는 원본 페이로드를 그대로 복제해야 하므로 여기서는 전체 하이드레이션이 필수다.
     const existing = GenerationQueueModel.findById(id)
     if (!existing) {
@@ -465,6 +472,13 @@ export class GenerationQueueService {
     if (requestPayload.pruned === true) {
       throw new Error(`Queue job ${id} request payload was pruned by retention cleanup, so it can no longer be retried`)
     }
+    if (existing.service_type === 'comfyui' && existing.workflow_id && requestPayload[MCP_QUEUE_IMAGE_GRANT_KEY] !== undefined) {
+      const promptData = requestPayload.prompt_data
+      if (!promptData || typeof promptData !== 'object' || Array.isArray(promptData)) {
+        throw new Error('Invalid MCP queue image authorization')
+      }
+      requireMcpQueueImageGrant(requestPayload[MCP_QUEUE_IMAGE_GRANT_KEY], existing.workflow_id, promptData as Record<string, unknown>)
+    }
 
     // CC-3: NovelAI 는 접수 시점에 Anlas 가 빠지므로 모호한 실패의 자동 재시도는 이중 과금이 된다.
     const isAmbiguousNaiSubmit = existing.failure_code === NAI_SUBMIT_AMBIGUOUS_FAILURE_CODE
@@ -476,6 +490,7 @@ export class GenerationQueueService {
     const retrySummary = existing.request_summary
       ? `${existing.request_summary} (retry)`
       : `Retry of queue job ${existing.id}`
+    const graphOrigin = options?.preserveGraphOrigin === true && GenerationQueueModel.isGraphOrigin(existing.id)
 
     const [retryJobId] = enqueueGenerationJobs({
       service_type: existing.service_type,
@@ -489,7 +504,10 @@ export class GenerationQueueService {
       requested_server_tag: existing.requested_server_tag ?? null,
       request_payload: requestPayload,
       request_summary: retrySummary,
-    }, { roleLimitWorkflow: options?.roleLimitWorkflow }).jobIds
+    }, {
+      roleLimitWorkflow: graphOrigin ? null : options?.roleLimitWorkflow,
+      withinTransaction: graphOrigin ? ({ jobIds }) => jobIds.forEach((jobId) => GenerationQueueModel.markGraphOrigin(jobId)) : undefined,
+    }).jobIds
 
     // E5: 재시도는 신규 잡 생성이다 (enqueueGenerationJobs 가 created 이벤트를 낸다).
     return GenerationQueueModel.findListRecordById(retryJobId)

@@ -274,6 +274,198 @@ test('lorebook merge: chat book end of life (delete, keep, merge), duplicates, d
     assert.deepEqual(book(target.id).entries.map((entry) => [entry.title, entry.content, entry.keys.join(',')]), [['항구', '안개 낀 항구. 배가 많다.', '항구,배'], ['노을', '노을이 진다.', '노을']])
   })
 
+  await t.test('refused preservation is read-only and does not stop the room or write a backup', async (s) => {
+    const { deleteChatThread } = await import('../src/services/codex-chat/chatThreadDeletion')
+    const { LlmChatService } = await import('../src/services/codex-chat/llmChatService')
+    const { summaryRuns } = await import('../src/services/codex-chat/chatSummaryRuns')
+    const requester = { accountId: null, accountType: null }
+    const target = OwnedLorebookStore.create(me, { name: '읽기 전용 대상', entries: [{ id: 'target', title: '중복', content: '대상' }] })
+    const source = chatWithBook('읽기 전용 원본', [{ id: 'source', title: '중복', content: '이전 원본' }])
+    const file = child(source.chatBook.folderId, 'lorebook.json')!
+    const pathToBook = storedFilePath(me, file.id)
+    const raw = JSON.parse(fs.readFileSync(pathToBook, 'utf8'))
+    delete raw.entries[0].id
+    raw.entries[0].content = '파일에서 바뀐 원본'
+    const bytes = JSON.stringify(raw)
+    fs.writeFileSync(pathToBook, bytes)
+    const before = db.prepare('SELECT entries, source_stamp, revision FROM chat_lorebooks WHERE id = ?').get(source.chatBook.id)
+    const filesBefore = db.prepare('SELECT COUNT(*) AS count FROM stored_file_entries').get()
+    const summary = new AbortController()
+    summaryRuns.set(source.threadId, { controller: summary, finished: Promise.resolve(null) })
+    const stops = s.mock.method(LlmChatService, 'stop', async () => {})
+    const writes = s.mock.method(FileStoreService, 'writeText')
+    const ids: string[] = []
+    try {
+      for (let n = 0; n < 2; n++) {
+        await assert.rejects(deleteChatThread(requester, source.threadId, {
+          backup: true, lorebook: { action: 'merge', targetId: target.id, decisions: undefined },
+        }), (error: Error) => {
+          assert.ok(error instanceof MergeDecisionsMissingError)
+          ids.push(error.preview.items[0].entry.id)
+          return true
+        })
+      }
+      assert.equal(ids[0], ids[1], 'an unstamped source has stable preview IDs without writing the file')
+      assert.equal(fs.readFileSync(pathToBook, 'utf8'), bytes)
+      assert.deepEqual(db.prepare('SELECT entries, source_stamp, revision FROM chat_lorebooks WHERE id = ?').get(source.chatBook.id), before)
+      assert.deepEqual(db.prepare('SELECT COUNT(*) AS count FROM stored_file_entries').get(), filesBefore)
+      assert.equal(stops.mock.calls.length, 0)
+      assert.equal(writes.mock.calls.length, 0)
+      assert.equal(summary.signal.aborted, false)
+      assert.ok(threadExists(source.threadId))
+      await assert.rejects(deleteChatThread(requester, source.threadId, {
+        backup: true, lorebook: { action: 'merge', targetId: 99999999, decisions: [] },
+      }), /로어북을 찾을 수 없어/)
+      assert.equal(stops.mock.calls.length, 0)
+      summaryRuns.delete(source.threadId)
+      const deleted = await deleteChatThread(requester, source.threadId, {
+        backup: true, lorebook: { action: 'merge', targetId: target.id, decisions: [{ entryId: ids[0], choice: 'source' }] },
+      })
+      assert.equal(deleted.lorebook.action, 'merge')
+      assert.equal(book(target.id).entries[0].content, '파일에서 바뀐 원본')
+    } finally { summaryRuns.delete(source.threadId) }
+
+    const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
+    const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
+    const second = ChatProfileStore.create({ name: '검증 참가자', engine: 'llm', providerName: 'conn' })
+    const groupId = ChatGroupStore.create(null, '검증 그룹', [profile.id, second.id], profile.id)
+    OwnedLorebookStore.saveChatBook(groupId, [{ id: 'group', title: '중복', content: '그룹 원본' }])
+    const groupStops = s.mock.method(GroupChatService, 'stop', async () => {})
+    await assert.rejects(deleteChatThread(requester, groupId, {
+      backup: true, lorebook: { action: 'merge', targetId: target.id, decisions: undefined },
+    }), MergeDecisionsMissingError)
+    assert.equal(groupStops.mock.calls.length, 0)
+    assert.ok(threadExists(groupId))
+
+    const full = chatWithBook('이름이 가득 찬 책', [{ id: 'kept', content: '유지' }])
+    const root = child(null, LOREBOOK_ROOT_FOLDER)!
+    for (let n = 1; n <= 100; n++) FileStoreService.createFolder(me, root.id, n === 1 ? full.chatBook.name : `${full.chatBook.name} (${n})`)
+    const beforeStops = stops.mock.calls.length
+    const beforeWrites = writes.mock.calls.length
+    await assert.rejects(deleteChatThread(requester, full.threadId, {
+      backup: true, lorebook: { action: 'keep', targetId: null, decisions: undefined },
+    }), /보관할 폴더 이름/)
+    assert.equal(stops.mock.calls.length, beforeStops)
+    assert.equal(writes.mock.calls.length, beforeWrites)
+    assert.equal(OwnedLorebookStore.chatBookOf(full.threadId)?.id, full.chatBook.id)
+  })
+
+  await t.test('over-limit merge deletion is refused before stopping or changing anything', async (s) => {
+    const { deleteChatThread } = await import('../src/services/codex-chat/chatThreadDeletion')
+    const { assertMergeAllowed } = await import('../src/services/codex-chat/chatLorebookMerge')
+    const { LOREBOOK_MAX_ENTRIES } = await import('../src/services/codex-chat/chatLorebook')
+    const { LlmChatService } = await import('../src/services/codex-chat/llmChatService')
+    const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
+    const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
+    const { summaryRuns } = await import('../src/services/codex-chat/chatSummaryRuns')
+    const requester = { accountId: null, accountType: null }
+    const entries = Array.from({ length: LOREBOOK_MAX_ENTRIES }, (_, n) => ({ id: `full-${n}`, title: `Entry ${n}`, content: `Target ${n}` }))
+    const target = OwnedLorebookStore.create(me, { name: '항목 가득 찬 병합 대상', entries })
+    const direct = chatWithBook('새 항목 병합', [{ id: 'new', title: 'New entry', content: 'New' }])
+    const second = ChatProfileStore.create({ name: '항목 제한 참가자', engine: 'llm', providerName: 'conn' })
+    const groupId = ChatGroupStore.create(null, '중복 항목 병합', [profile.id, second.id], profile.id)
+    OwnedLorebookStore.saveChatBook(groupId, [{ id: 'duplicate', title: 'Entry 0', content: 'Source' }])
+    const groupBook = OwnedLorebookStore.chatBookOf(groupId)!
+    const ids = [direct.threadId, groupId]
+    const books = [target, direct.chatBook, groupBook]
+    const bookFiles = books.map((item) => storedFilePath(me, child(item.folderId, 'lorebook.json')!.id))
+    const beforeFiles = bookFiles.map((file) => fs.readFileSync(file))
+    const beforeEntries = db.prepare('SELECT * FROM stored_file_entries ORDER BY id').all()
+    const beforeBooks = db.prepare('SELECT * FROM chat_lorebooks WHERE id IN (?, ?, ?) ORDER BY id').all(...books.map((item) => item.id))
+    const beforeThreads = db.prepare('SELECT * FROM codex_chat_threads WHERE id IN (?, ?) ORDER BY id').all(...ids)
+    const summaries = ids.map((id) => {
+      const controller = new AbortController()
+      summaryRuns.set(id, { controller, finished: Promise.resolve(null) })
+      return controller
+    })
+    const directStops = s.mock.method(LlmChatService, 'stop', async () => {})
+    const groupStops = s.mock.method(GroupChatService, 'stop', async () => {})
+    const writes = s.mock.method(FileStoreService, 'writeText')
+    let guards = 0
+    try {
+      for (const [threadId, decisions] of [
+        [direct.threadId, []],
+        [groupId, [{ entryId: 'duplicate', choice: 'both' }]],
+      ] as const) {
+        await assert.rejects(deleteChatThread(requester, threadId, {
+          backup: true, beforeDelete: () => { guards++ },
+          lorebook: { action: 'merge', targetId: target.id, decisions },
+        }), (error: Error & { status?: number }) => error.status === 409 && /항목이 500개를 넘어/.test(error.message))
+      }
+      assert.equal(directStops.mock.calls.length, 0)
+      assert.equal(groupStops.mock.calls.length, 0)
+      assert.equal(writes.mock.calls.length, 0)
+      assert.equal(guards, 0)
+      assert.ok(summaries.every((controller) => !controller.signal.aborted))
+      assert.deepEqual(db.prepare('SELECT * FROM stored_file_entries ORDER BY id').all(), beforeEntries)
+      assert.deepEqual(db.prepare('SELECT * FROM chat_lorebooks WHERE id IN (?, ?, ?) ORDER BY id').all(...books.map((item) => item.id)), beforeBooks)
+      assert.deepEqual(db.prepare('SELECT * FROM codex_chat_threads WHERE id IN (?, ?) ORDER BY id').all(...ids), beforeThreads)
+      assert.deepEqual(bookFiles.map((file) => fs.readFileSync(file)), beforeFiles)
+
+      const preview = previewMerge(groupBook.id, target.id, me, { readOnly: true })
+      for (const choice of ['target', 'source', 'merged'] as const) {
+        assert.doesNotThrow(() => assertMergeAllowed(preview, [{ entryId: 'duplicate', choice, content: 'Merged' }]))
+      }
+      const almost = OwnedLorebookStore.create(me, { name: '항목 한계 직전 대상', entries: entries.slice(0, -1) })
+      const boundary = chatWithBook('한계에 맞는 병합', [{ id: 'boundary', title: 'Boundary entry', content: 'Fits' }])
+      const merged = await deleteChatThread(requester, boundary.threadId, {
+        lorebook: { action: 'merge', targetId: almost.id, decisions: [] },
+      })
+      assert.equal(merged.lorebook.merge?.added, 1)
+      assert.equal(book(almost.id).entries.length, LOREBOOK_MAX_ENTRIES)
+      assert.equal(threadExists(boundary.threadId), false)
+    } finally {
+      for (const id of ids) summaryRuns.delete(id)
+    }
+  })
+
+  await t.test('failed deletion leaves a chat book attached for both preservation choices', async () => {
+    const { deleteChatThread } = await import('../src/services/codex-chat/chatThreadDeletion')
+    const requester = { accountId: null, accountType: null }
+    const target = OwnedLorebookStore.create(me, { name: '삭제 실패 대상', entries: [] })
+    for (const action of ['keep', 'merge'] as const) {
+      const source = chatWithBook(`삭제 실패 ${action}`, [{ id: 'source', title: '보존', content: '원본 내용' }])
+      db.exec(`CREATE TEMP TRIGGER refuse_chat_deletion BEFORE DELETE ON codex_chat_threads WHEN OLD.id = ${source.threadId} BEGIN SELECT RAISE(ABORT, 'deletion failed'); END`)
+      try {
+        await assert.rejects(deleteChatThread(requester, source.threadId, { lorebook: { action, targetId: target.id, decisions: [] } }), /deletion failed/)
+      } finally {
+        db.exec('DROP TRIGGER refuse_chat_deletion')
+      }
+      assert.ok(threadExists(source.threadId))
+      assert.equal(OwnedLorebookStore.chatBookOf(source.threadId)?.id, source.chatBook.id)
+      assert.equal(book(source.chatBook.id).entries[0].content, '원본 내용')
+      assert.deepEqual(book(target.id).entries, [])
+    }
+  })
+
+  await t.test('deletion reserves direct and group rooms while their replies stop', async (s) => {
+    const { deleteChatThread } = await import('../src/services/codex-chat/chatThreadDeletion')
+    const { CodexChatService } = await import('../src/services/codex-chat/codexChatService')
+    const { LlmChatService } = await import('../src/services/codex-chat/llmChatService')
+    const { GroupChatService } = await import('../src/services/codex-chat/groupChatService')
+    const { ChatGroupStore } = await import('../src/services/codex-chat/chatGroupStore')
+    const requester = { accountId: null, accountType: null }
+    const second = ChatProfileStore.create({ name: '두 번째', engine: 'llm', providerName: 'conn' })
+    for (const group of [false, true]) {
+      const threadId = group ? ChatGroupStore.create(null, '삭제 대기 그룹', [profile.id, second.id], profile.id) : CodexChatStore.createThread(null, '삭제 대기', 'llm', profile.id)
+      OwnedLorebookStore.saveChatBook(threadId, [{ id: 'reserved', content: '아직 채팅에 연결됨' }])
+      const bookId = OwnedLorebookStore.chatBookOf(threadId)!.id
+      let release!: () => void
+      const stopped = new Promise<void>((resolve) => { release = resolve })
+      if (group) s.mock.method(GroupChatService, 'stop', async () => stopped)
+      else s.mock.method(LlmChatService, 'stop', async () => stopped)
+      const deleting = deleteChatThread(requester, threadId, { lorebook: { action: 'keep', targetId: null, decisions: undefined } })
+      assert.equal(group ? GroupChatService.isRunning(threadId) : CodexChatService.isRunning(threadId), true)
+      await assert.rejects(deleteChatThread(requester, threadId), /삭제 중/)
+      assert.equal(OwnedLorebookStore.chatBookOf(threadId)?.id, bookId)
+      release()
+      await deleting
+      assert.equal(threadExists(threadId), false)
+      assert.equal(book(bookId).kind, 'account')
+      s.mock.restoreAll()
+    }
+  })
+
   await t.test('merge draft: the profile model writes merged texts, per-entry errors, nothing saved', async (s) => {
     const target = OwnedLorebookStore.create(me, { name: '초안 대상', entries: [
       { id: 'cat', title: '먹물', keys: ['먹물'], content: '검은 고양이.' },

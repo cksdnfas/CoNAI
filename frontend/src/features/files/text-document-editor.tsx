@@ -1,9 +1,9 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { File, TriangleAlert } from 'lucide-react'
+import { File } from 'lucide-react'
 import { FieldTabs } from '@/components/common/field-tabs'
+import { SaveConflictAlert, SaveConflictOverwriteButton } from '@/components/common/save-conflict-alert'
 import { SegmentedControl } from '@/components/common/segmented-control'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -238,14 +238,10 @@ export function TextDocumentEditor<T extends TextDocument>({ entry, store, onClo
           </div>
         )}
         {conflict ? (
-          <Alert variant="warning">
-            <TriangleAlert />
-            <AlertDescription className="flex flex-wrap items-center gap-2">
-              <span className="min-w-0 flex-1">{t({ ko: '다른 곳에서 이 문서가 바뀌었어.', en: 'This document was changed elsewhere.' })}</span>
-              <Button size="sm" variant="secondary" disabled={save.isPending} onClick={() => void reloadLatest()}>{t({ ko: '최신본 불러오기', en: 'Load latest' })}</Button>
-              <Button size="sm" variant="secondary" disabled={save.isPending} onClick={() => void overwrite()}>{t({ ko: '내 내용으로 덮어쓰기', en: 'Overwrite with mine' })}</Button>
-            </AlertDescription>
-          </Alert>
+          <SaveConflictAlert message={t({ ko: '다른 곳에서 이 문서가 바뀌었어.', en: 'This document was changed elsewhere.' })}>
+            <Button size="sm" variant="secondary" disabled={save.isPending} onClick={() => void reloadLatest()}>{t({ ko: '최신본 불러오기', en: 'Load latest' })}</Button>
+            <SaveConflictOverwriteButton disabled={save.isPending} onClick={() => void overwrite()} />
+          </SaveConflictAlert>
         ) : null}
         {content}
       </ModalBody>

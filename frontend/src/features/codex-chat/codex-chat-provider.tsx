@@ -268,14 +268,15 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
 
   /**
    * Moving to another chat puts the composer's attachments, reply and picks aside for the chat being left and brings
-   * back what the next one had (its text is kept per chat already). Staying in the same chat keeps them as they are.
+   * back what the next one had (its text is kept per chat already). Staying in the same chat keeps them as they are,
+   * and so does `carry`: the new chat just saved from the one being prepared takes over its composer.
    */
-  const switchComposer = useCallback((next: number | null | undefined) => {
+  const switchComposer = useCallback((next: number | null | undefined, carry = false) => {
     const from = resolveThread(selectedRef.current)
     const to = resolveThread(next)
     selectedRef.current = next
     setSelectedThreadId(next)
-    if (from === to) return
+    if (from === to || carry) return
     if (from !== null) {
       const stash = { attachments: attachmentsRef.current, media: mediaAttachmentsRef.current, posts: postRefsRef.current, reply: draftReplyRef.current, picks: picksRef.current }
       if (stash.attachments.length || stash.media.length || stash.posts.length || stash.reply || stash.picks.length) stashRef.current.set(from, stash)
@@ -608,28 +609,36 @@ export function CodexChatProvider({ children }: PropsWithChildren) {
     setIsStartingChat(true)
     let created: CodexChatThread
     try {
-      created = await createCodexChatThread(pending.profileId, pending.userProfileId, pending.greeting.index, pending.flagIds)
-    } catch (error) {
-      showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 만들지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
-      return
+      try {
+        created = await createCodexChatThread(pending.profileId, pending.userProfileId, pending.greeting.index, pending.flagIds)
+      } catch (error) {
+        showSnackbar({ message: getErrorMessage(error, t({ ko: '채팅을 만들지 못했어.', en: 'Could not start a chat.' })), tone: 'error' })
+        return
+      }
+      // Loaded before the first message goes out (the opening only), as an opened chat would be: the stored messages
+      // must not show next to the streamed one. The prepared chat stays on screen meanwhile.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
+        queryClient.fetchQuery({ queryKey: codexChatThreadQueryKey(created.id), queryFn: () => getCodexChatThread(created.id, 80) }).catch(() => undefined),
+      ])
     } finally {
       startingRef.current = false
       setIsStartingChat(false)
     }
     const threadId = created.id
-    // Saved: from here it is an ordinary chat. A first message that fails comes back as that chat's draft.
+    // The new chat starts from the default appearance slot, copied on the server.
+    void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })
+    // The user moved on meanwhile: the saved chat keeps the message as its draft instead of pulling them back.
+    if (pendingRef.current !== pending) {
+      setDraft(threadId, text)
+      return
+    }
+    // Saved: from here it is an ordinary chat, which takes over the composer's references, files and picks. A first
+    // message that fails comes back as that chat's draft.
     pendingRef.current = null
     setPendingChat(null)
     setDraft(PENDING_DRAFT_KEY, '')
-    // Loaded before the first message goes out (the opening only), as an opened chat would be: the stored messages must
-    // not show next to the streamed one.
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: CODEX_CHAT_THREADS_QUERY_KEY }),
-      queryClient.fetchQuery({ queryKey: codexChatThreadQueryKey(threadId), queryFn: () => getCodexChatThread(threadId, 80) }).catch(() => undefined),
-    ])
-    // The new chat starts from the default appearance slot, copied on the server.
-    void queryClient.invalidateQueries({ queryKey: CHAT_APPEARANCE_QUERY_KEY })
-    switchComposer(threadId)
+    switchComposer(threadId, true)
     setListOpen(false)
     setView('chat')
     await reply(threadId, undefined, text, created)

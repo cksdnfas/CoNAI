@@ -86,10 +86,6 @@ export function buildFinalResultLifecycleWarningSourceLabel(
   return label || null
 }
 
-export function findFinalResultPromotionWarningLog(logs?: readonly GraphExecutionLogRecord[] | null) {
-  return logs?.find((log) => log.event_type === FINAL_RESULT_PROMOTION_FAILED_EVENT) ?? null
-}
-
 /** Return final-result lifecycle warnings in the same priority order used by the summary banner. */
 export function listFinalResultLifecycleWarnings(logs?: readonly GraphExecutionLogRecord[] | null): FinalResultLifecycleWarning[] {
   if (!logs || logs.length === 0) {
@@ -108,10 +104,6 @@ export function listFinalResultLifecycleWarnings(logs?: readonly GraphExecutionL
     ...promotionWarnings,
     ...missingSourceLogs.map((log) => buildFinalResultLifecycleWarning('source_artifact_missing', log)),
   ]
-}
-
-export function findFinalResultLifecycleWarning(logs?: readonly GraphExecutionLogRecord[] | null): FinalResultLifecycleWarning | null {
-  return listFinalResultLifecycleWarnings(logs)[0] ?? null
 }
 
 function findLatestLogByEventType(logs: readonly GraphExecutionLogRecord[], eventType: string, nodeId?: string | null) {

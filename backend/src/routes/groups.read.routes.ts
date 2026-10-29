@@ -16,7 +16,20 @@ const GROUP_PREVIEW_COUNT_ERROR = 'count must be an integer between 1 and 20';
 const GROUP_IMAGE_PAGE_ERROR = 'page must be a positive integer';
 const GROUP_IMAGE_LIMIT_ERROR = `limit must be an integer between 1 and ${PAGINATION.MAX_LIMIT}`;
 
-function sendGroupReadBadRequest(res: Response, error: string) {
+/** Most groups one batch preview request may name (the frontend batches cover requests to this size). */
+export const GROUP_PREVIEW_BATCH_MAX = 100;
+
+/** `ids=1,2,3` of a batch preview request: positive integers, deduplicated, at most GROUP_PREVIEW_BATCH_MAX. */
+export function parseGroupPreviewBatchIds(raw: unknown): { ok: true; value: number[] } | { ok: false; error: string } {
+  const error = `ids must be 1 to ${GROUP_PREVIEW_BATCH_MAX} comma-separated positive integers`;
+  if (typeof raw !== 'string' || raw.trim() === '') return { ok: false, error };
+  const parts = raw.split(',');
+  if (!parts.every((part) => /^[1-9]\d{0,9}$/.test(part.trim()))) return { ok: false, error };
+  const ids = [...new Set(parts.map((part) => Number(part.trim())))];
+  return ids.length <= GROUP_PREVIEW_BATCH_MAX ? { ok: true, value: ids } : { ok: false, error };
+}
+
+export function sendGroupReadBadRequest(res: Response, error: string) {
   return res.status(400).json(errorResponse(error));
 }
 
@@ -52,6 +65,31 @@ router.get('/:id/thumbnail', asyncHandler(async (req: Request, res: Response) =>
     const statusCode = errorMessage.includes('Invalid') ? 400 : 500;
     return res.status(statusCode).json(errorResponse(errorMessage));
   }
+}));
+
+/**
+ * Preview images of several groups in one request (group cover mosaics): `ids=1,2,3`, same `count` / `includeChildren`
+ * as the per-group route. Mounted under the groups router, so the same image-view access applies.
+ */
+router.get('/preview-images', asyncHandler(async (req: Request, res: Response) => {
+  const ids = parseGroupPreviewBatchIds(req.query.ids);
+  if (ids.ok === false) {
+    return sendGroupReadBadRequest(res, ids.error);
+  }
+  const countResult = parsePositiveIntegerQuery(req.query.count, 8, {
+    max: GROUP_PREVIEW_IMAGE_COUNT_MAX,
+    error: GROUP_PREVIEW_COUNT_ERROR,
+  });
+  if (countResult.ok === false) {
+    return sendGroupReadBadRequest(res, countResult.error);
+  }
+
+  const includeChildren = req.query.includeChildren !== 'false';
+  const previews: Record<string, unknown[]> = {};
+  for (const id of ids.value) {
+    previews[id] = ImageGroupModel.findPreviewImages(id, countResult.value, includeChildren).map((image) => enrichCompactImageWithFileView(image));
+  }
+  return res.json(successResponse(previews));
 }));
 
 router.get('/:id/preview-images', asyncHandler(async (req: Request, res: Response) => {

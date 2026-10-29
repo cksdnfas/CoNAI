@@ -1,4 +1,5 @@
 import { prepareChatSend } from './chatSendPreparation'
+import { deletingThreads } from './chatThreadReservation'
 import { requestChatModel, withChatTokenModel } from './llmChatContext'
 import { addChatOpening } from './chatGreeting'
 import type { ChatExecutionContext, ChatPageSnapshot, ChatProposal } from '@conai/shared'
@@ -140,7 +141,7 @@ const activeTurns = new Map<number, LlmTurn>()
 
 /** A reply (or reaction) runs, or an order holds the chat. */
 function busy(threadId: number) {
-  return activeTurns.has(threadId) || isChatOrderRunning(threadId)
+  return deletingThreads.has(threadId) || activeTurns.has(threadId) || isChatOrderRunning(threadId)
 }
 
 function emit(turn: LlmTurn, event: CodexChatStreamEvent) {
@@ -972,6 +973,9 @@ export const LlmChatService = {
 
   isRunning(threadId: number) {
     return busy(threadId)
+  },
+  hasActiveWork(threadId: number) {
+    return activeTurns.has(threadId) || isChatOrderRunning(threadId)
   },
   replyFinished(threadId: number) {
     return activeTurns.get(threadId)?.finished

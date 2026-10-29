@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { randomBytes } from 'crypto';
 import { db } from '../database/init';
 import { resolveUploadsPath } from '../config/runtimePaths';
 import { ImageFileModel } from '../models/Image/ImageFileModel';
@@ -9,8 +10,9 @@ import { AIMetadata } from './metadata/types';
 import { ImageMetadataWriteService, ImageOutputFormat } from './imageMetadataWriteService';
 import { MediaPostprocessVisibilityService } from './mediaPostprocessVisibilityService';
 import { QueryCacheService } from './QueryCacheService';
-import { copyToRecycleBin } from '../utils/recycleBin';
+import { copyToRecycleBin, forgetRecycleBinOrigins, moveFileWithoutReplacing } from '../utils/recycleBin';
 import { ImageFileRecord, ImageMetadataRecord } from '../types/image';
+import { nativeEditRevision } from './nativeEditRevision';
 
 export class ImageMetadataEditError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -65,9 +67,9 @@ function buildEditedFileName(originalName: string, format: ImageOutputFormat): s
   const parsed = path.parse(originalName);
   const extension = format === 'jpeg' ? '.jpg' : `.${format}`;
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
-  const baseName = (parsed.name || 'image').replace(/(?:__metaedit_\d{14})+$/g, '');
+  const baseName = (parsed.name || 'image').replace(/(?:__metaedit_\d{14}(?:_[a-f0-9]{32})?)+$/g, '');
   const safeName = baseName.replace(/[\\/:*?"<>|]/g, '_');
-  return `${safeName}__metaedit_${stamp}${extension}`;
+  return `${safeName}__metaedit_${stamp}_${randomBytes(16).toString('hex')}${extension}`;
 }
 
 function buildOutputMimeType(format: ImageOutputFormat): string {
@@ -195,20 +197,69 @@ function buildEditableMetadataSnapshot(metadata: ImageMetadataRecord) {
   };
 }
 
-function buildUniqueSiblingPath(targetPath: string): string {
-  if (!fs.existsSync(targetPath)) {
-    return targetPath;
-  }
+const imageSaveLocks = new Map<string, Promise<void>>();
 
-  const parsed = path.parse(targetPath);
-  let index = 1;
-  while (true) {
-    const candidate = path.join(parsed.dir, `${parsed.name} (${index})${parsed.ext}`);
-    if (!fs.existsSync(candidate)) {
-      return candidate;
-    }
-    index += 1;
+async function serializeImageSave<T>(compositeHash: string, save: () => Promise<T>): Promise<T> {
+  const previous = imageSaveLocks.get(compositeHash);
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  imageSaveLocks.set(compositeHash, current);
+  if (previous) await previous;
+  try {
+    return await save();
+  } finally {
+    release();
+    if (imageSaveLocks.get(compositeHash) === current) imageSaveLocks.delete(compositeHash);
   }
+}
+
+function sourceFileRevision(filePath: string) {
+  const stats = fs.statSync(filePath);
+  return { dev: stats.dev, ino: stats.ino, size: stats.size, mtimeMs: stats.mtimeMs, ctimeMs: stats.ctimeMs };
+}
+
+function sourceConflict(): ImageMetadataEditError {
+  return new ImageMetadataEditError('다른 작업에서 이미지가 바뀌었어. 새로 읽고 다시 저장해줘.', 409);
+}
+
+function editableSourceRevision(file: ImageFileRecord | null, metadata: ImageMetadataRecord | null, patch: Partial<AIMetadata>, source: ReturnType<typeof sourceFileRevision>) {
+  return nativeEditRevision({
+    file: file ? {
+      id: file.id,
+      composite_hash: file.composite_hash,
+      original_file_path: file.original_file_path,
+      file_status: file.file_status,
+      file_type: file.file_type,
+      folder_id: file.folder_id,
+      mime_type: file.mime_type,
+    } : null,
+    metadata: metadata ? {
+      raw_nai_parameters: metadata.raw_nai_parameters,
+      ...((patch.positive_prompt !== undefined || patch.prompt !== undefined) ? { prompt: metadata.prompt } : {}),
+      ...((patch.negative_prompt !== undefined || patch.uc !== undefined) ? { negative_prompt: metadata.negative_prompt } : {}),
+      ...(patch.model !== undefined ? { model_name: metadata.model_name } : {}),
+      ...(patch.steps !== undefined ? { steps: metadata.steps } : {}),
+      ...(patch.sampler !== undefined ? { sampler: metadata.sampler } : {}),
+    } : null,
+    source,
+  });
+}
+
+function assertSourceRevision(compositeHash: string, target: EditableImageTarget, patch: Partial<AIMetadata>, expectedRevision: string) {
+  let currentSource;
+  try {
+    currentSource = sourceFileRevision(target.originalPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw sourceConflict();
+    throw error;
+  }
+  const currentRevision = editableSourceRevision(
+    ImageFileModel.findById(target.activeFile.id),
+    MediaMetadataModel.findByHash(compositeHash),
+    patch,
+    currentSource,
+  );
+  if (currentRevision !== expectedRevision) throw sourceConflict();
 }
 
 async function sleep(ms: number) {
@@ -328,17 +379,28 @@ export class ImageMetadataEditService {
   static async saveMetadata(compositeHash: string, input: SaveImageMetadataInput): Promise<SaveImageMetadataResult> {
     const target = await getEditableImageTarget(compositeHash);
     const metadataPatch = parseMetadataPatch(input.metadataPatch);
-
     if (!metadataPatch || Object.keys(metadataPatch).length === 0) {
       throw new ImageMetadataEditError('metadataPatch is required', 400);
     }
+    const sourceRevision = editableSourceRevision(target.activeFile, target.metadata, metadataPatch, sourceFileRevision(target.originalPath));
+    return serializeImageSave(compositeHash, () => this.saveMetadataLocked(compositeHash, metadataPatch, target, sourceRevision));
+  }
 
+  private static async saveMetadataLocked(
+    compositeHash: string,
+    metadataPatch: Partial<AIMetadata>,
+    target: EditableImageTarget,
+    sourceRevision: string,
+  ): Promise<SaveImageMetadataResult> {
     let stagedFilePath: string | null = null;
     let nextFilePath: string | null = null;
     let recycleBinPath: string | null = null;
+    let ownsStagedFile = false;
+    let ownsNextFile = false;
     let saveCommitted = false;
 
     try {
+      assertSourceRevision(compositeHash, target, metadataPatch, sourceRevision);
       const outputFormat = resolveStoredOutputFormat(target.activeFile);
       const inputBuffer = await fs.promises.readFile(target.originalPath);
       const rewritten = await ImageMetadataWriteService.writeBufferAsFormatBuffer(inputBuffer, {
@@ -353,11 +415,19 @@ export class ImageMetadataEditService {
 
       const targetDirectory = path.dirname(target.originalPath);
       const nextRelativeName = buildEditedFileName(path.basename(target.activeFile.original_file_path), outputFormat);
-      nextFilePath = buildUniqueSiblingPath(path.join(targetDirectory, nextRelativeName));
+      nextFilePath = path.join(targetDirectory, nextRelativeName);
       stagedFilePath = `${nextFilePath}.stage`;
 
-      await fs.promises.writeFile(stagedFilePath, rewritten.buffer);
-      await fs.promises.rename(stagedFilePath, nextFilePath);
+      const stage = await fs.promises.open(stagedFilePath, 'wx');
+      ownsStagedFile = true;
+      try {
+        await stage.writeFile(rewritten.buffer);
+      } finally {
+        await stage.close();
+      }
+      await moveFileWithoutReplacing(stagedFilePath, nextFilePath);
+      ownsNextFile = true;
+      ownsStagedFile = false;
       stagedFilePath = null;
 
       recycleBinPath = await copyToRecycleBin(target.originalPath, 'metadata-edit');
@@ -369,15 +439,14 @@ export class ImageMetadataEditService {
       const committedNextFilePath = nextFilePath;
       const committedRecycleBinPath = recycleBinPath;
       const nextFileStat = await fs.promises.stat(committedNextFilePath);
-      const metadataUpdates = buildMetadataRecordUpdates(target.metadata, metadataPatch);
-      const nextMetadataSnapshot = {
-        ...buildEditableMetadataSnapshot(target.metadata),
-        ...metadataUpdates,
-      };
-
       let nextImageFileId = 0;
 
       db.transaction(() => {
+        assertSourceRevision(compositeHash, target, metadataPatch, sourceRevision);
+        const currentMetadata = MediaMetadataModel.findByHash(compositeHash)!;
+        const metadataUpdates = buildMetadataRecordUpdates(currentMetadata, metadataPatch);
+        const previousMetadataSnapshot = buildEditableMetadataSnapshot(currentMetadata);
+        const nextMetadataSnapshot = { ...previousMetadataSnapshot, ...metadataUpdates };
         ImageFileModel.updateStatus(target.activeFile.id, 'deleted');
         nextImageFileId = ImageFileModel.create({
           composite_hash: compositeHash,
@@ -396,7 +465,7 @@ export class ImageMetadataEditService {
           previous_file_path: target.originalPath,
           replacement_file_path: committedNextFilePath,
           recycle_bin_path: committedRecycleBinPath,
-          previous_metadata_json: JSON.stringify(buildEditableMetadataSnapshot(target.metadata)),
+          previous_metadata_json: JSON.stringify(previousMetadataSnapshot),
           next_metadata_json: JSON.stringify(nextMetadataSnapshot),
         });
       })();
@@ -422,16 +491,20 @@ export class ImageMetadataEditService {
       };
     } catch (error) {
       if (!saveCommitted) {
-        if (stagedFilePath && fs.existsSync(stagedFilePath)) {
+        if (ownsStagedFile && stagedFilePath && fs.existsSync(stagedFilePath)) {
           await fs.promises.unlink(stagedFilePath).catch(() => undefined);
         }
 
-        if (nextFilePath && fs.existsSync(nextFilePath)) {
+        if (ownsNextFile && nextFilePath && fs.existsSync(nextFilePath)) {
           await fs.promises.unlink(nextFilePath).catch(() => undefined);
         }
 
         if (recycleBinPath && fs.existsSync(recycleBinPath)) {
-          await fs.promises.unlink(recycleBinPath).catch(() => undefined);
+          await fs.promises.unlink(recycleBinPath).then(() => {
+            forgetRecycleBinOrigins([path.basename(recycleBinPath!)]);
+          }).catch((cleanupError) => {
+            console.warn('Failed to clean up an uncommitted metadata backup:', cleanupError);
+          });
         }
       }
 

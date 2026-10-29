@@ -6,6 +6,7 @@ import { GraphExecutionNodeIoModel } from '../models/GraphExecutionNodeIo'
 import { GraphWorkflowModel } from '../models/GraphWorkflow'
 import { ModuleDefinitionModel } from '../models/ModuleDefinition'
 import { getIncomingArtifacts, loadRuntimeArtifactsByNode, resolveNodeInputs } from './graph-workflow-executor/artifacts'
+import { requireGraphImageAuthority } from './graph-workflow-executor/graphImageAuthority'
 import { materializeLibraryImageInputs } from './workflowInputImages'
 import { executeComfyModule } from './graph-workflow-executor/execute-comfy'
 import { executeCustomJsModule } from './graph-workflow-executor/execute-custom-js'
@@ -532,6 +533,7 @@ export class GraphWorkflowExecutor {
               moduleDefinition.engine_type,
               moduleDefinition.exposed_inputs,
               resolveNodeInputs(node, moduleDefinition, incomingArtifacts),
+              () => { requireGraphImageAuthority(context) },
             )
 
             writeExecutionLog({

@@ -8,6 +8,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import type { CustomDropdownList, GenerationWorkflow, GenerationWorkflowDetail } from '@/lib/api-image-generation-types'
 import {
   createGenerationWorkflow,
+  comfyUIServersQueryKey,
   deleteGenerationWorkflow,
   getGenerationComfyUIServers,
   getGenerationCustomDropdownLists,
@@ -126,7 +127,7 @@ function ComfyGenerationPanelContent({
   })
 
   const serversQuery = useQuery({
-    queryKey: ['image-generation-comfyui-servers', 'all'],
+    queryKey: comfyUIServersQueryKey(false),
     queryFn: () => getGenerationComfyUIServers(false),
   })
 

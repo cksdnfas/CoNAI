@@ -18,6 +18,8 @@ import {
   getNaiVibeAsset,
   listNaiCharacterReferenceAssets,
   listNaiVibeAssets,
+  NAI_CHARACTER_REFERENCE_ASSETS_QUERY_KEY,
+  naiVibeAssetsQueryKey,
 } from '@/lib/api-image-generation-nai'
 import type { StoredNaiCharacterReferenceAsset, StoredNaiVibeAsset } from '@/lib/api-image-generation-types'
 
@@ -195,7 +197,7 @@ function NaiVibeNodeInput({ value, onChange, model }: Omit<NaiReusableAssetInput
   const formDrafts = useMemo<NAIVibeDraft[]>(() => drafts.map((draft) => ({ ...draft, image: toImageDraft(draft.image) })), [drafts])
 
   const savedVibesQuery = useQuery({
-    queryKey: ['module-graph-nai-vibe-assets'],
+    queryKey: naiVibeAssetsQueryKey(),
     queryFn: () => listNaiVibeAssets(),
   })
 
@@ -279,7 +281,7 @@ function NaiCharacterReferenceNodeInput({ value, onChange }: Omit<NaiReusableAss
   const formDrafts = useMemo<NAICharacterReferenceDraft[]>(() => drafts.map((draft) => ({ ...draft, image: toImageDraft(draft.image) })), [drafts])
 
   const savedCharacterReferencesQuery = useQuery({
-    queryKey: ['module-graph-nai-character-reference-assets'],
+    queryKey: NAI_CHARACTER_REFERENCE_ASSETS_QUERY_KEY,
     queryFn: listNaiCharacterReferenceAssets,
   })
 

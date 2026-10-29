@@ -4,7 +4,7 @@ import { getUserSettingsDb } from '../database/userSettingsDb'
 import multer from 'multer'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { resolveChatPageCommand } from '../services/codex-chat/chatPageBridge'
+import { claimChatPageCommand, resolveChatPageCommand } from '../services/codex-chat/chatPageBridge'
 import { ChatTaskRunner, ChatTaskStore } from '../services/codex-chat/chatTasks'
 import { automationRoomKinds, chatNotifyDefault, chatUnreadCount } from '../services/codex-chat/chatRoomWake'
 import { getCodexModelSuggestions } from '../services/codexGenerationOptions'
@@ -75,6 +75,31 @@ import chatAdminPresetsRouter from './codex-chat-admin-presets.routes'
 const MESSAGE_MAX_LENGTH = 20000
 
 const router = express.Router()
+
+/** Mutations keep their legacy full response unless the caller opts into the normal tail contract. */
+function mutationTail(req: Request, res: Response): number | undefined | null {
+  if (req.query.tail === undefined) return undefined
+  const tail = Number(req.query.tail)
+  if (!Number.isSafeInteger(tail) || tail < 1 || tail > 500) {
+    sendRouteBadRequest(res, 'tail must be 1-500')
+    return null
+  }
+  return tail
+}
+
+function mutationDetail(req: Request, detail: ReturnType<typeof CodexChatService.getThread> | ReturnType<typeof GroupChatService.getThread>, tail: number | undefined, changed?: { messageId: number; previousContextRevision: number }) {
+  if (tail === undefined) return detail
+  if (!changed) return { ...detail, hasMoreBefore: detail.messagesFrom !== undefined }
+  const requester = requesterFrom(req)
+  const message = detail.messages.find((entry) => entry.id === changed.messageId) ?? CodexChatStore.findMessage(detail.thread.id, changed.messageId)
+  if (!message) throw new CodexChatError('답변을 찾을 수 없어.', 404)
+  const visible = detail.messages.some((entry) => entry.id === changed.messageId)
+    ? message
+    : visibleContextMessages(detail.thread, attachJobResults([message]).messages, requester.accountId)[0]
+  const extraMedia = canRequesterViewImages(requester) ? Object.fromEntries(collectCodexChatMedia([visible]).map((item) => [item.compositeHash, { mimeType: item.mimeType, width: item.width, height: item.height, historyId: item.historyId, postprocessStatus: item.postprocessStatus }])) : {}
+  return { ...detail, media: { ...detail.media, ...extraMedia }, hasMoreBefore: detail.messagesFrom !== undefined, changedMessage: visible, previousContextRevision: changed.previousContextRevision }
+}
+
 router.use('/admin/profiles/:profileId/asset-batches', chatAssetBatchesRouter)
 router.use('/admin/external-mcp', externalMcpRouter)
 router.use('/admin/profiles/:profileId/expressions', chatProfileExpressionsRouter)
@@ -403,6 +428,14 @@ router.post('/threads/:threadId/task/:action', requireChatAccess, (req: Request,
   }
 })
 
+/** A cancelled or already-started command cannot be claimed by a delayed/reconnecting tab. */
+router.post('/page-commands/:commandId/claim', requireChatAccess, (req: Request, res: Response) => {
+  try {
+    claimChatPageCommand(requesterFrom(req), String(req.params.commandId), req.body?.connectionId)
+    res.json({ success: true })
+  } catch (error) { sendChatError(res, error) }
+})
+
 /** POST /api/codex-chat/page-commands/:commandId — the connected browser tab's answer to a page operation the chat ran. */
 router.post('/page-commands/:commandId', requireChatAccess, (req: Request, res: Response) => {
   try {
@@ -463,9 +496,12 @@ router.post('/threads/group', requireChatAccess, (req: Request, res: Response) =
 router.patch('/threads/:threadId/group', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
+  const tail = mutationTail(req, res)
+  if (tail === null) return
   try {
     const body = (req.body ?? {}) as Record<string, unknown>
-    res.json({ success: true, data: GroupChatService.updateRoom(requesterFrom(req), threadId, { representativeId: body.representativeId, title: body.title, chainLimit: body.chainLimit, windowLimit: body.windowLimit, maxTokens: body.maxTokens, judgePresetId: body.judgePresetId }) })
+    const detail = GroupChatService.updateRoom(requesterFrom(req), threadId, { representativeId: body.representativeId, title: body.title, chainLimit: body.chainLimit, windowLimit: body.windowLimit, maxTokens: body.maxTokens, judgePresetId: body.judgePresetId }, tail)
+    res.json({ success: true, data: mutationDetail(req, detail, tail) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -474,8 +510,10 @@ router.patch('/threads/:threadId/group', requireChatAccess, (req: Request, res: 
 router.post('/threads/:threadId/members', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
+  const tail = mutationTail(req, res)
+  if (tail === null) return
   try {
-    res.json({ success: true, data: GroupChatService.addMembers(requesterFrom(req), threadId, req.body?.profileIds) })
+    res.json({ success: true, data: mutationDetail(req, GroupChatService.addMembers(requesterFrom(req), threadId, req.body?.profileIds, tail), tail) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -487,9 +525,11 @@ router.patch('/threads/:threadId/members/:profileId', requireChatAccess, (req: R
   const profileId = parseId(req.params.profileId)
   if (threadId === null) return
   if (profileId === null) { sendRouteBadRequest(res, 'Invalid profile id'); return }
+  const tail = mutationTail(req, res)
+  if (tail === null) return
   try {
     const body = (req.body ?? {}) as Record<string, unknown>
-    res.json({ success: true, data: GroupChatService.updateMember(requesterFrom(req), threadId, profileId, { maxTokens: body.maxTokens }) })
+    res.json({ success: true, data: mutationDetail(req, GroupChatService.updateMember(requesterFrom(req), threadId, profileId, { maxTokens: body.maxTokens }, tail), tail) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -500,8 +540,10 @@ router.delete('/threads/:threadId/members/:profileId', requireChatAccess, (req: 
   const profileId = parseId(req.params.profileId)
   if (threadId === null) return
   if (profileId === null) { sendRouteBadRequest(res, 'Invalid profile id'); return }
+  const tail = mutationTail(req, res)
+  if (tail === null) return
   try {
-    res.json({ success: true, data: GroupChatService.removeMember(requesterFrom(req), threadId, profileId) })
+    res.json({ success: true, data: mutationDetail(req, GroupChatService.removeMember(requesterFrom(req), threadId, profileId, tail), tail) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -558,7 +600,7 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
   if (threadId === null) return
   const body = (req.body ?? {}) as Record<string, unknown>
   try {
-    const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
+    const thread = CodexChatService.getThreadRecord(requesterFrom(req), threadId)
     if (CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     // The author's note applies to every kind of chat; the window and summary settings only to direct LLM chats.
@@ -680,7 +722,7 @@ router.patch('/threads/:threadId/context', requireChatAccess, (req: Request, res
         ChatSummaryStore.replaceAll(threadId, summary || null, summary ? thread.summary_until_message_id : null)
       }
     }).immediate()
-    res.json({ success: true, data: CodexChatService.getThread(requesterFrom(req), threadId).thread })
+    res.json({ success: true, data: CodexChatService.getThreadRecord(requesterFrom(req), threadId) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -694,12 +736,15 @@ router.patch('/threads/:threadId/summary-segments/:segmentId', requireChatAccess
   if (segmentId === null) { sendRouteBadRequest(res, 'Invalid segment id'); return }
   const content = typeof req.body?.content === 'string' ? req.body.content.trim().slice(0, 20000) : ''
   if (!content) { sendRouteBadRequest(res, 'content must be a non-empty string'); return }
+  const tail = mutationTail(req, res)
+  if (tail === null) return
   try {
-    const { thread } = CodexChatService.getThread(requesterFrom(req), threadId)
+    const thread = CodexChatService.getThreadRecord(requesterFrom(req), threadId)
     if (CodexChatService.isRunning(threadId) || GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     if (isSummarizing(threadId)) throw new CodexChatError('요약이 아직 진행 중이야.', 409)
     if (!ChatSummaryStore.editSegment(threadId, segmentId, content)) throw new CodexChatError('그 요약 구간을 찾을 수 없어.', 404)
-    res.json({ success: true, data: thread.kind === 'group' ? GroupChatService.getThread(requesterFrom(req), threadId) : CodexChatService.getThread(requesterFrom(req), threadId) })
+    const detail = thread.kind === 'group' ? GroupChatService.getThread(requesterFrom(req), threadId, tail) : CodexChatService.getThread(requesterFrom(req), threadId, tail)
+    res.json({ success: true, data: mutationDetail(req, detail, tail) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -725,11 +770,14 @@ router.patch('/threads/:threadId/blocks/:key', requireChatAccess, (req: Request,
     sendRouteBadRequest(res, 'profileId must be an integer')
     return
   }
+  const tail = mutationTail(req, res)
+  if (tail === null) return
   try {
     const group = isGroupThread(req, threadId)
     if (group ? GroupChatService.isRunning(threadId) : CodexChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
     CodexChatService.editBlock(requesterFrom(req), threadId, key, reset ? null : body.data as Record<string, unknown>, profileId)
-    res.json({ success: true, data: group ? GroupChatService.getThread(requesterFrom(req), threadId) : CodexChatService.getThread(requesterFrom(req), threadId) })
+    const detail = group ? GroupChatService.getThread(requesterFrom(req), threadId, tail) : CodexChatService.getThread(requesterFrom(req), threadId, tail)
+    res.json({ success: true, data: mutationDetail(req, detail, tail) })
   } catch (error) {
     sendChatError(res, error)
   }
@@ -744,7 +792,8 @@ router.post('/threads/:threadId/suggest', requireChatAccess, asyncHandler(async 
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
   const controller = new AbortController()
-  req.on('close', () => controller.abort())
+  const onClose = () => { if (!res.writableFinished) controller.abort() }
+  res.on('close', onClose)
   try {
     const { thread, messages } = CodexChatService.getThread(requesterFrom(req), threadId)
     const profile = thread.profile_id ? ChatProfileStore.find(thread.profile_id) : null
@@ -755,6 +804,8 @@ router.post('/threads/:threadId/suggest', requireChatAccess, asyncHandler(async 
   } catch (error) {
     if (controller.signal.aborted) return
     sendChatError(res, error)
+  } finally {
+    res.off('close', onClose)
   }
 }))
 
@@ -1297,8 +1348,11 @@ router.post('/threads/:threadId/interrupt', requireChatAccess, asyncHandler(asyn
 router.post('/threads/:threadId/clear', requireChatAccess, (req: Request, res: Response) => {
   const threadId = parseThreadId(req, res)
   if (threadId === null) return
+  const tail = mutationTail(req, res)
+  if (tail === null) return
   try {
-    res.json({ success: true, data: isGroupThread(req, threadId) ? GroupChatService.clearThread(requesterFrom(req), threadId) : CodexChatService.clearThread(requesterFrom(req), threadId) })
+    const detail = isGroupThread(req, threadId) ? GroupChatService.clearThread(requesterFrom(req), threadId, tail) : CodexChatService.clearThread(requesterFrom(req), threadId, tail)
+    res.json({ success: true, data: mutationDetail(req, detail, tail) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -1330,14 +1384,20 @@ router.post('/threads/:threadId/messages/:messageId/alternative', requireChatAcc
     sendRouteBadRequest(res, '메시지와 답변 번호를 확인해줘.')
     return
   }
+  const tail = mutationTail(req, res)
+  if (tail === null) return
   try {
     if (GroupChatService.isRunning(threadId)) throw new CodexChatError('이전 답변이 아직 진행 중이야.', 409)
+    const requester = requesterFrom(req)
+    const previousContextRevision = CodexChatService.getThreadRecord(requester, threadId).context_revision
     if (isGroupThread(req, threadId)) {
-      CodexChatService.selectAlternative(requesterFrom(req), threadId, messageId, req.body.index)
-      res.json({ success: true, data: GroupChatService.getThread(requesterFrom(req), threadId) })
+      CodexChatService.applyAlternative(requester, threadId, messageId, req.body.index)
+      const detail = GroupChatService.getThread(requester, threadId, tail)
+      res.json({ success: true, data: mutationDetail(req, detail, tail, { messageId, previousContextRevision }) })
       return
     }
-    res.json({ success: true, data: CodexChatService.selectAlternative(requesterFrom(req), threadId, messageId, req.body.index) })
+    const detail = CodexChatService.selectAlternative(requester, threadId, messageId, req.body.index, tail)
+    res.json({ success: true, data: mutationDetail(req, detail, tail, { messageId, previousContextRevision }) })
   } catch (error) { sendChatError(res, error) }
 })
 
@@ -1386,9 +1446,13 @@ router.patch('/threads/:threadId/messages/:messageId/text', requireChatAccess, (
     sendRouteBadRequest(res, '메시지 내용을 확인해줘.')
     return
   }
+  const tail = mutationTail(req, res)
+  if (tail === null) return
   try {
     const requester = requesterFrom(req)
-    res.json({ success: true, data: isGroupThread(req, threadId) ? GroupChatService.editReplyText(requester, threadId, messageId, req.body.content) : CodexChatService.editReplyText(requester, threadId, messageId, req.body.content) })
+    const previousContextRevision = CodexChatService.getThreadRecord(requester, threadId).context_revision
+    const detail = isGroupThread(req, threadId) ? GroupChatService.editReplyText(requester, threadId, messageId, req.body.content, tail) : CodexChatService.editReplyText(requester, threadId, messageId, req.body.content, tail)
+    res.json({ success: true, data: mutationDetail(req, detail, tail, { messageId, previousContextRevision }) })
   } catch (error) { sendChatError(res, error) }
 })
 

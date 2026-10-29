@@ -1,10 +1,11 @@
 import { createApiFallbackError } from '@/i18n/api-error-fallbacks'
 import { buildApiUrl } from '@/lib/api-client'
 import { requestJson } from '@/lib/api-request'
-import { resolveGroupRematchJobResponse } from '@/lib/api-group-rematch-jobs'
+import { startGroupRematchJob } from '@/lib/api-group-rematch-jobs'
+import { groupPreviewBatchQuery } from '@/lib/api-groups'
 import { getDownloadFileName, prepareDownloadTarget, readDownloadBlob, saveDownloadBlob } from '@/lib/download-utils'
 import type { ApiResponse, ImageRecord } from '@/types/image'
-import type { GroupBreadcrumbItem, GroupDownloadType, GroupFileCounts, GroupImagesPayload, GroupRecord, GroupRematchJobRecord, GroupWithHierarchy } from '@/types/group'
+import type { GroupBreadcrumbItem, GroupDownloadType, GroupFileCounts, GroupImagesPayload, GroupRecord, GroupWithHierarchy } from '@/types/group'
 
 interface AutoFolderGroupApiRecord {
   id: number
@@ -159,30 +160,20 @@ export async function getAutoFolderGroupFileCounts(groupId: number, options?: { 
   return normalizeGroupFileCounts(response.data)
 }
 
-export async function rebuildAutoFolderGroups() {
-  const response = await requestJson<ApiResponse<AutoFolderGroupRebuildResult | GroupRematchJobRecord<AutoFolderGroupRebuildResult>>>('/api/auto-folder-groups/rebuild', {
-    method: 'POST',
-  })
-
-  if (!response.success) {
-    throw createApiFallbackError(response.error, 'autoFolderGroups.rebuild')
-  }
-
-  return resolveGroupRematchJobResponse(response.data)
+/** Start the watched-folder group rebuild (runtime job `auto-folder-rebuild`). */
+export function startAutoFolderGroupRebuild() {
+  return startGroupRematchJob<AutoFolderGroupRebuildResult>('/api/auto-folder-groups/rebuild', 'autoFolderGroups.rebuild')
 }
 
-export async function getAutoFolderGroupPreviewImages(groupId: number, params?: { includeChildren?: boolean; count?: number }) {
-  const searchParams = new URLSearchParams()
-  searchParams.set('count', String(params?.count ?? 1))
-  searchParams.set('includeChildren', String(params?.includeChildren ?? true))
-
-  const response = await requestJson<ApiResponse<ImageRecord[]>>(`/api/auto-folder-groups/${groupId}/preview-images?${searchParams.toString()}`)
+/** Preview images of several watched-folder groups in one request, by group id. */
+export async function getAutoFolderGroupsPreviewImages(groupIds: number[], params: { includeChildren: boolean; count: number }) {
+  const response = await requestJson<ApiResponse<Record<string, ImageRecord[]>>>(`/api/auto-folder-groups/preview-images?${groupPreviewBatchQuery(groupIds, params)}`)
 
   if (!response.success) {
     throw createApiFallbackError(response.error, 'autoFolderGroups.preview.load')
   }
 
-  return response.data
+  return new Map(Object.entries(response.data).map(([id, images]) => [Number(id), images]))
 }
 
 export async function downloadAutoFolderGroupArchive(

@@ -286,9 +286,9 @@ export class WatchedFolderService {
   }
 
   /**
-   * 폴더 등록 해제. 원본 파일 삭제 옵션은 기존 호출 시그니처로만 유지한다.
+   * 폴더 등록 해제. 원본 파일은 삭제하지 않는다.
    */
-  static async deleteFolder(id: number, _deleteFiles: boolean = false): Promise<boolean> {
+  static async deleteFolder(id: number): Promise<boolean> {
     const folder = db.prepare(`
       SELECT id, folder_name, is_default FROM watched_folders WHERE id = ?
     `).get(id) as Pick<WatchedFolder, 'id' | 'folder_name' | 'is_default'> | undefined;

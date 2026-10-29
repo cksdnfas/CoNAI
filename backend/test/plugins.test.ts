@@ -180,7 +180,11 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
     assert.equal(isContextToolAllowed(discoveryContext, 'list_plugin_pages', false), true, 'explicit extension connection supplies discovery even without general read scopes')
     assert.equal(isDirectChatTool(discoveryContext, 'list_plugin_pages'), true)
     const server = new McpServer({ name: 'plugin-page-test', version: '1' })
-    registerChatPageActionTools(server, { source: 'llm-chat', scopes: ['read'], requester, chatContext: { threadId: 1, profileId: 1, kind: 'direct', replyId: randomUUID(), page } })
+    const { registerChatReply } = await import('../src/services/codex-chat/chatReplyRegistry')
+    const replyContext = { threadId: 1, profileId: 1, kind: 'direct' as const, replyId: randomUUID(), page }
+    // Page commands are routed only from a reply that is still running.
+    const releaseReply = registerChatReply(replyContext, new AbortController().signal, () => ({ replyTo: null, recipients: ['user'] }))
+    registerChatPageActionTools(server, { source: 'llm-chat', scopes: ['read'], requester, chatContext: replyContext })
     const client = new Client({ name: 'plugin-page-test', version: '1' })
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
     let dispatched = 0
@@ -201,7 +205,7 @@ test('extensions enforce package, caller, approval and opaque-origin boundaries'
       assert.equal(leave.isError, true)
       assert.match(JSON.stringify(leave), /저장하지 않은 변경/)
       assert.equal(dispatched, 1, 'dirty editor cannot dispatch a view action that loses its draft')
-    } finally { unsubscribe(); await client.close(); await server.close() }
+    } finally { unsubscribe(); releaseReply(); await client.close(); await server.close() }
   })
   await t.test('extension result deltas preserve changed, removed and newly opened document state', async () => {
     const { pageOperationView } = await import('../src/mcp/tools/chatPageView')

@@ -275,6 +275,25 @@ function resolveHistoryHash(record: GenerationHistoryRecord | undefined) {
   return record?.actual_composite_hash ?? record?.composite_hash ?? null
 }
 
+const historyHashIndexes = new WeakMap<Record<string, CodexChatMediaInfo>, Map<number, string>>()
+
+/**
+ * History rows the thread's media map already resolved (finished, image in the library, post-processing done) → their
+ * image, built once per map: those results show without asking the history row again.
+ */
+function finishedHistoryHashes(media: Record<string, CodexChatMediaInfo> | undefined) {
+  if (!media) return null
+  let index = historyHashIndexes.get(media)
+  if (!index) {
+    index = new Map()
+    for (const [hash, info] of Object.entries(media)) {
+      if (info.historyId !== undefined && (info.postprocessStatus == null || info.postprocessStatus === 'ready')) index.set(info.historyId, hash)
+    }
+    historyHashIndexes.set(media, index)
+  }
+  return index
+}
+
 /** A generation result: polls the history row until its image lands, then shows it like any library image. */
 function HistoryThumb({ historyId, size, media, onOpen }: { historyId: number; size: ThumbSize; media?: Record<string, CodexChatMediaInfo>; onOpen: (compositeHash: string) => void }) {
   const { status: streamStatus } = useRuntimeEventStream()
@@ -490,28 +509,33 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
   const pendingJobIds = [...new Set(generatedCalls.flatMap((call) => call.pendingJobIds ?? []))].filter((jobId) => !failedJobIds.has(jobId) && resolvedJobs[jobId] === undefined)
   const historyIds = [...new Set([...generatedCalls.flatMap((call) => call.historyIds), ...generatedCalls.flatMap((call) => (call.pendingJobIds ?? []).flatMap((jobId) => (resolvedJobs[jobId] !== undefined ? [resolvedJobs[jobId]] : [])))])]
   const foundHistoryIds = [...new Set(foundCalls.flatMap((call) => call.historyIds))].filter((historyId) => !historyIds.includes(historyId))
+  // Results the thread's media map already resolved need no history request; only the rest are asked (and polled).
+  const knownHashes = finishedHistoryHashes(media)
+  const queriedIds = [...historyIds, ...foundHistoryIds].filter((historyId) => !knownHashes?.has(historyId))
+  const historyQueries = useQueries({ queries: queriedIds.map((historyId) => historyQueryOptions(historyId, streamStatus)) })
+  const records = new Map(queriedIds.map((historyId, index) => [historyId, historyQueries[index]?.data?.record]))
+  /** A history row's image once it is finished (from the media map, else its polled row). */
+  const finishedHash = (historyId: number) => {
+    const known = knownHashes?.get(historyId)
+    if (known) return known
+    const record = records.get(historyId)
+    return record?.generation_status === 'completed' ? resolveHistoryHash(record) : null
+  }
   // History rows resolve to library images too; skip hashes a history thumbnail already shows.
-  const historyQueries = useQueries({ queries: historyIds.map((historyId) => historyQueryOptions(historyId, streamStatus)) })
-  const foundHistoryQueries = useQueries({ queries: foundHistoryIds.map((historyId) => historyQueryOptions(historyId, streamStatus)) })
-  const historyHashes = new Set(historyQueries.map((query) => resolveHistoryHash(query.data?.record)).filter(Boolean))
+  const historyHashes = new Set(historyIds.map((historyId) => knownHashes?.get(historyId) ?? resolveHistoryHash(records.get(historyId))).filter(Boolean))
   const compositeHashes = [...new Set(generatedCalls.flatMap((call) => call.compositeHashes))].filter((hash) => !historyHashes.has(hash))
   const generatedHashes = new Set([...historyHashes, ...compositeHashes])
   // Looked-up history rows count once their image exists (no polling placeholders in the grid).
   const foundHashes = [...new Set([
-    ...foundHistoryQueries.flatMap((query) => {
-      const record = query.data?.record
-      const hash = record?.generation_status === 'completed' ? resolveHistoryHash(record) : null
-      return hash ? [hash] : []
-    }),
+    ...foundHistoryIds.flatMap((historyId) => finishedHash(historyId) ?? []),
     ...foundCalls.flatMap((call) => call.compositeHashes),
   ])].filter((hash) => !generatedHashes.has(hash))
   const foundItems = foundHashes.map((hash) => buildChatImageRecord(hash, undefined, media?.[hash]))
   // The lightbox pages through this message's images only, in the order the thumbnails show them.
   const lightboxItems: ImageRecord[] = [
-    ...historyQueries.flatMap((query) => {
-      const record = query.data?.record
-      const hash = record?.generation_status === 'completed' ? resolveHistoryHash(record) : null
-      return hash ? [buildChatImageRecord(hash, record, media?.[hash])] : []
+    ...historyIds.flatMap((historyId) => {
+      const hash = finishedHash(historyId)
+      return hash ? [buildChatImageRecord(hash, records.get(historyId), media?.[hash])] : []
     }),
     ...compositeHashes.map((hash) => buildChatImageRecord(hash, undefined, media?.[hash])),
   ]
@@ -531,7 +555,12 @@ function CodexChatToolMedia({ calls, size = 'md', layout = 'grid', media }: { ca
     ...deferredCalls.map((call) => <DeferredThumb key={call.id} call={call} size={tileSize} />),
     ...pendingJobIds.map((jobId) => <PendingJobThumb key={`j${jobId}`} jobId={jobId} size={tileSize} onResolved={resolveJob} />),
     ...failedJobs.map((job) => <FailedJobThumb key={`f${job.jobId}`} job={job} size={tileSize} />),
-    ...historyIds.map((historyId) => <HistoryThumb key={`h${historyId}`} historyId={historyId} size={tileSize} media={media} onOpen={openLightbox} />),
+    ...historyIds.map((historyId) => {
+      const known = knownHashes?.get(historyId)
+      return known
+        ? <ChatImageThumb key={`h${historyId}`} image={buildChatImageRecord(known, undefined, media?.[known])} size={tileSize} onOpen={() => openLightbox(known)} />
+        : <HistoryThumb key={`h${historyId}`} historyId={historyId} size={tileSize} media={media} onOpen={openLightbox} />
+    }),
     ...compositeHashes.map((hash) => <ChatImageThumb key={hash} image={buildChatImageRecord(hash, undefined, media?.[hash])} size={tileSize} onOpen={() => openLightbox(hash)} />),
   ]
 
@@ -770,7 +799,7 @@ export const CodexChatAssistantMessage = memo(function CodexChatAssistantMessage
   const { avatarSize } = appearance
   // A delegated agent's result says so (and whether it failed) on its card, under the agent's own name.
   const ownExtra = toolCalls.length > 0 && appearance.showToolChips ? <ToolCallsBadge calls={toolCalls} /> : null
-  const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} hiddenGroupIds={speaker?.hiddenEmoticonGroupIds} mentions={speaker?.mentions} />
+  const markdown = (text: string) => <ChatMarkdown text={text} roleplay={speaker?.roleplay} blocks={speaker?.blocks} emoticons={speaker?.emoticons} hiddenGroupIds={speaker?.hiddenEmoticonGroupIds} mentions={speaker?.mentions} streaming={streaming} />
   const avatarOf = (who: ChatProfileAssetFields & { id?: number; name: string; avatar?: string | null }, engine: ChatEngine) => avatarSize === 'none' ? null : (
     <ChatProfileAvatar name={who.name} avatar={who.avatar} profile={'id' in who ? who : undefined} engine={engine} size={AVATAR_SIZE[avatarSize]} className={avatarSize === 'lg' ? 'size-14 text-lg' : undefined} />
   )

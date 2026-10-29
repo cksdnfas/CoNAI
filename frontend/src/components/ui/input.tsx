@@ -11,6 +11,10 @@ const inputVariants = cva(
         settings: 'theme-settings-control theme-input-surface h-9 border',
         detail: 'theme-input-surface h-10 border px-3',
         detailNested: 'theme-input-surface h-10 border px-3',
+        /** A document title typed in place (post editor): heading type over one hairline, no field box. */
+        title: 'rounded-none border-b border-line bg-transparent pb-2 text-2xl font-bold placeholder:text-muted-foreground/60 focus:border-primary/60 focus:ring-0',
+        /** The text slot inside a caller-framed field (tag chips box): no surface or ring of its own. */
+        bare: 'bg-transparent placeholder:text-muted-foreground focus:ring-0',
       },
       controlSize: { compact: 'h-7 px-2 text-xs' },
       mono: { true: 'font-mono tabular-nums', false: '' },

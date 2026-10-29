@@ -278,7 +278,10 @@ router.post('/:id/scan', asyncHandler(async (req: Request, res: Response) => {
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = parseWatchedFolderRouteId(req.params.id);
-  const deleteFiles = req.query.delete_files === 'true';
+
+  if (req.query.delete_files !== undefined) {
+    return sendWatchedFolderBadRequest(res, '파일 삭제는 지원하지 않아. 감시 폴더 등록만 해제할 수 있어.');
+  }
 
   if (isInvalidWatchedFolderRouteId(id)) {
     return sendWatchedFolderBadRequest(res, WATCHED_FOLDER_ROUTE_MESSAGES.invalidFolderId);
@@ -303,16 +306,14 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
     // Continue with deletion even if watcher stop fails
   }
 
-  const success = await WatchedFolderService.deleteFolder(id, deleteFiles);
+  const success = await WatchedFolderService.deleteFolder(id);
 
   if (!success) {
     return sendWatchedFolderNotFound(res);
   }
 
   return res.json(successResponse({
-    message: deleteFiles
-      ? '폴더와 관련 파일이 삭제되었습니다'
-      : '폴더가 삭제되었습니다 (메타데이터는 유지됨)'
+    message: '감시 폴더 등록을 해제했어. 원본 파일은 디스크에 남고, 이 폴더의 이미지는 라이브러리에서 빠져.'
   }));
 }));
 

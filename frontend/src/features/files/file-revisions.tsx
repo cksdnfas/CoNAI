@@ -9,7 +9,8 @@ import { ListRow } from '@/components/ui/list-row'
 import { LoadingState } from '@/components/ui/loading-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { useI18n } from '@/i18n'
-import { FILES_QUERY_KEY, listStoredFileRevisions, readStoredFileRevision, readWholeStoredFileText, restoreStoredFileRevision } from '@/lib/api-files'
+import { useAuthStatusQuery } from '@/features/auth/use-auth-status-query'
+import { FILES_QUERY_KEY, listStoredFileRevisions, readStoredFileRevision, readWholeStoredFileText, restoreStoredFileRevision, storedFileRevisionsQueryKey } from '@/lib/api-files'
 import { formatFileSize } from '@/lib/format-size'
 import { getErrorMessage } from '@/lib/error-message'
 import { cn } from '@/lib/utils'
@@ -36,7 +37,9 @@ export function FileRevisionsPanel({ entry, canRestore, onRestored }: { entry: S
   const queryClient = useQueryClient()
   const writer = useWriterLabel()
   const [selected, setSelected] = useState<string | null>(null)
-  const list = useQuery({ queryKey: [...FILES_QUERY_KEY, 'revisions', entry.id, entry.updatedAt], queryFn: () => listStoredFileRevisions(entry.id) })
+  const auth = useAuthStatusQuery()
+  const accountKey = auth.data?.accountId ?? (auth.data?.hasCredentials ? 'anonymous' : 'bootstrap')
+  const list = useQuery({ queryKey: storedFileRevisionsQueryKey(accountKey, entry.id, entry.updatedAt), queryFn: () => listStoredFileRevisions(entry.id) })
   const chosen = selected ?? list.data?.revisions[0]?.id ?? null
   const current = useQuery({ queryKey: [...FILES_QUERY_KEY, 'whole-text', entry.id, entry.updatedAt], queryFn: () => readWholeStoredFileText(entry.id), enabled: chosen !== null })
   const version = useQuery({ queryKey: [...FILES_QUERY_KEY, 'revision', entry.id, chosen], queryFn: () => readStoredFileRevision(entry.id, chosen as string), enabled: chosen !== null })

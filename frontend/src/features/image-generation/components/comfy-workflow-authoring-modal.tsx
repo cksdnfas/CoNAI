@@ -10,6 +10,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { ArrowLeft, ChevronDown, ChevronUp, CircleCheck, CloudOff, LayoutGrid, Loader2, Save, Search, TriangleAlert, Upload, Workflow } from 'lucide-react'
+import { SaveConflictAlert, SaveConflictOverwriteButton } from '@/components/common/save-conflict-alert'
 import { TextTabs } from '@/components/common/text-tabs'
 import { Button } from '@/components/ui/button'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -114,6 +115,8 @@ export function ComfyWorkflowAuthoringModal({
     authoringMiniMapBgColor,
     authoringMiniMapMaskColor,
     authoringMiniMapNodeColor,
+    conflict,
+    overwriteConflict,
     draft,
     dropdownListNames,
     editorTab,
@@ -379,6 +382,11 @@ export function ComfyWorkflowAuthoringModal({
       {...fileDropHandlers}
     >
       {bar}
+      {conflict ? (
+        <SaveConflictAlert>
+          <SaveConflictOverwriteButton disabled={isSaving} onClick={() => void overwriteConflict()} />
+        </SaveConflictAlert>
+      ) : null}
       {isFileDragOver ? (
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center gap-2 bg-primary/8 text-sm font-medium text-foreground ring-2 ring-inset ring-primary/50">
           <Upload className="size-4" />

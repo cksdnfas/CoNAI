@@ -7,7 +7,7 @@ import { useI18n } from '@/i18n'
 import { useGlobalAppearanceSettingsQuery } from '@/lib/use-global-appearance-settings'
 import { useIsCoarsePointer } from '@/lib/use-is-coarse-pointer'
 import type { CustomDropdownList, GenerationWorkflowDetail, WorkflowKind, WorkflowMarkedField } from '@/lib/api-image-generation-types'
-import { checkComfyWorkflow, convertComfyUiWorkflow, createGenerationWorkflow, updateGenerationWorkflow } from '@/lib/api-image-generation-workflows'
+import { checkComfyWorkflow, convertComfyUiWorkflow, createGenerationWorkflow, getGenerationWorkflow, updateGenerationWorkflow } from '@/lib/api-image-generation-workflows'
 import { useComfyAuthorChatPage } from './use-comfy-author-chat-page'
 import { listAuthPermissionGroups } from '@/lib/api-auth'
 import {
@@ -151,6 +151,9 @@ export function useComfyWorkflowAuthoringController({
   const [searchIndex, setSearchIndex] = useState(0)
   const [selectedFieldPath, setSelectedFieldPath] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+  const overwriteInFlightRef = useRef(false)
+  // A save refused for a stale token keeps the draft; the editor offers to overwrite with the latest token.
+  const [conflict, setConflict] = useState(false)
   // A pasted or loaded ComfyUI "Save" workflow is converted to the API format once; a failure keeps its reason.
   const [uiConversion, setUiConversion] = useState<{ json: string; status: 'converting' | 'failed'; message: string } | null>(null)
   const uiConversionAttemptRef = useRef<string | null>(null)
@@ -212,6 +215,7 @@ export function useComfyWorkflowAuthoringController({
     setSearchQueryState('')
     setSearchIndex(0)
     setIsSaving(false)
+    setConflict(false)
     setUiConversion(null)
     uiConversionAttemptRef.current = null
     pendingLoadedJsonRef.current = null
@@ -520,7 +524,8 @@ export function useComfyWorkflowAuthoringController({
     return null
   }
 
-  const handleSave = async (revision?: string, propagate = false) => {
+  /** Save the draft over `base`, the stored workflow it was read from. */
+  const saveDraft = async (base: GenerationWorkflowDetail | null, revision?: string, propagate = false) => {
     if (isSaving) { if (propagate) throw new Error('워크플로를 저장하고 있어.'); return }
     const saveError = getSaveError()
     if (saveError) {
@@ -533,10 +538,10 @@ export function useComfyWorkflowAuthoringController({
       const payload = buildComfyWorkflowPayload({
         artifactDirectoryMode: draft.artifactDirectoryMode,
         artifactRootPath: draft.artifactRootPath,
-        color: loadedWorkflow?.color ?? '#2196f3',
+        color: base?.color ?? '#2196f3',
         kind: draft.kind,
         description: draft.description,
-        isActive: loadedWorkflow?.is_active ?? true,
+        isActive: base?.is_active ?? true,
         isPublicPage: draft.isPublicPage,
         markedFields: markedFieldsWithNodeSources,
         publicQueueMaxCount: draft.publicQueueMaxCount,
@@ -546,9 +551,9 @@ export function useComfyWorkflowAuthoringController({
         workflowJson: draft.workflowJson,
         workflowName: draft.name,
       })
-      let workflowId = loadedWorkflow?.id
+      let workflowId = base?.id
       if (mode === 'edit' && workflowId) {
-        const loadedRevision = loadedWorkflow?.assistant_revision
+        const loadedRevision = base?.assistant_revision
         if (!loadedRevision || (revision && revision !== loadedRevision)) {
           throw new Error(t({ ko: '워크플로를 새로 불러와줘.', en: 'Reload the workflow first.' }))
         }
@@ -560,14 +565,45 @@ export function useComfyWorkflowAuthoringController({
         workflowId = response.data.id
       }
       setSavedSnapshot(JSON.stringify(draft))
+      setConflict(false)
       showSnackbar({ message: mode === 'edit' ? t({ ko: 'ComfyUI 워크플로우를 수정했어.', en: 'Updated the ComfyUI workflow.' }) : t({ ko: 'ComfyUI 워크플로우를 저장했어.', en: 'Saved the ComfyUI workflow.' }), tone: 'info' })
       onSaved?.(workflowId as number)
       onClose()
     } catch (error) {
-      const conflict = error instanceof ApiRequestError && error.status === 409 && error.code === 'revision_conflict'
-      showSnackbar({ message: conflict ? t({ ko: '워크플로가 바뀌었어. 새로 불러와줘.', en: 'The workflow changed. Reload it.' }) : getErrorMessage(error, mode === 'edit' ? t({ ko: '워크플로우 수정에 실패했어.', en: 'Failed to update the workflow.' }) : t({ ko: '워크플로우 저장에 실패했어.', en: 'Failed to save the workflow.' })), tone: 'error' })
+      const revisionConflict = error instanceof ApiRequestError && error.status === 409 && error.code === 'revision_conflict'
+      if (revisionConflict) setConflict(true)
+      showSnackbar({ message: revisionConflict ? t({ ko: '다른 곳에서 워크플로가 바뀌었어. 고친 내용은 그대로 있어.', en: 'The workflow changed elsewhere. Your edits are kept.' }) : getErrorMessage(error, mode === 'edit' ? t({ ko: '워크플로우 수정에 실패했어.', en: 'Failed to update the workflow.' }) : t({ ko: '워크플로우 저장에 실패했어.', en: 'Failed to save the workflow.' })), tone: 'error' })
       if (propagate) throw error
     } finally {
+      setIsSaving(false)
+    }
+  }
+  const handleSave = (revision?: string, propagate = false) => saveDraft(loadedWorkflow, revision, propagate)
+  /** After a revision conflict: read the stored workflow's current token and save this draft over it. */
+  const overwriteConflict = async () => {
+    const workflowId = loadedWorkflow?.id
+    if (mode !== 'edit' || !workflowId || isSaving || overwriteInFlightRef.current) return
+    // An invalid draft is refused before the saving state, so it never locks the editor.
+    const saveError = getSaveError()
+    if (saveError) {
+      showSnackbar({ message: saveError, tone: 'error' })
+      return
+    }
+    // Saving starts with the read, so the overwrite and save buttons are disabled and a second click cannot save twice.
+    overwriteInFlightRef.current = true
+    setIsSaving(true)
+    try {
+      let latest: GenerationWorkflowDetail
+      try {
+        latest = await getGenerationWorkflow(workflowId)
+      } catch (error) {
+        showSnackbar({ message: getErrorMessage(error, t({ ko: '최신 워크플로를 확인하지 못했어.', en: 'Could not check the latest workflow.' })), tone: 'error' })
+        return
+      }
+      setLoadedWorkflow(latest)
+      await saveDraft(latest)
+    } finally {
+      overwriteInFlightRef.current = false
       setIsSaving(false)
     }
   }
@@ -590,7 +626,7 @@ export function useComfyWorkflowAuthoringController({
   })
 
   return {
-    activeSearchCount, authoringMiniMapBgColor, authoringMiniMapMaskColor, authoringMiniMapNodeColor,
+    activeSearchCount, authoringMiniMapBgColor, authoringMiniMapMaskColor, authoringMiniMapNodeColor, conflict, overwriteConflict,
     dropdownListNames: dropdownLists.map((list) => list.name), draft, editorTab, graphNodes, handleFieldLocate,
     handleFieldPatch, handleFieldRemove, handleFieldSelect, handleFileUpload, handleReorderMarkedField,
     handleReorderMarkedFieldGroup, handleSave, handleWorkflowJsonChange, isCoarsePointer, isConvertingUiWorkflow, isDirty, isSaving,

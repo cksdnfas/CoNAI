@@ -17,7 +17,7 @@ import { ChatThreadRow } from './chat-thread-row'
 import { useCodexChatDrafts } from './codex-chat-context'
 import { parseServerDate } from '@/lib/server-time'
 import { useDebouncedValue } from '@/lib/use-debounced-value'
-import { ChatRoomPageMore, compareChatRoomActivity, useChatBranchParents, useChatRoomPages, useChatRoomSummaries } from './use-chat-room-directory'
+import { activeChatRoomOptions, ChatRoomPageMore, compareChatRoomActivity, useChatBranchParents, useChatRoomPages, useChatRoomSummaries } from './use-chat-room-directory'
 
 export type ChatListPatch = { title?: string; pinned?: boolean; archived?: boolean; notify?: boolean }
 export type ChatBulkAction = 'archive' | 'unarchive' | 'delete'
@@ -66,7 +66,7 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
   const [openBranches, setOpenBranches] = useState<ReadonlySet<number>>(() => new Set())
   const [archiveOpen, setArchiveOpen] = useState(false)
   const search = useDebouncedValue(query)
-  const activePage = useChatRoomPages({ archive: 'active', pinnedFirst: true, query: search })
+  const activePage = useChatRoomPages(activeChatRoomOptions(search))
   const archivePage = useChatRoomPages({ archive: 'archived', pinnedFirst: true, query: search }, archiveOpen)
   const loadedRooms = [...activePage.rooms, ...(archiveOpen ? archivePage.rooms : [])]
   const selected = useChatRoomSummaries(activeThreadId === null ? [] : [activeThreadId], !loadedRooms.some((room) => room.id === activeThreadId))
@@ -191,10 +191,9 @@ export function ChatThreadList({ query = '', profilesById, activeThreadId, runni
     }
     return DATE_BUCKETS.flatMap((key) => {
       const rows = buckets.get(key)
-      return rows ? [<div key={key}>
-        <p className={cn('pb-1 pt-3 text-2xs font-semibold text-muted-foreground', dense ? 'px-2' : 'px-3')}>{bucketLabel[key]}</p>
+      return rows ? [<RowGroup key={key} heading={bucketLabel[key]} className="mt-3">
         {rows.map((entry) => render(entry))}
-      </div>] : []
+      </RowGroup>] : []
     })
   }
 

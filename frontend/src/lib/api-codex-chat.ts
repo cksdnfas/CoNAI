@@ -1012,6 +1012,9 @@ export interface CodexChatThreadDetail {
   /** A `tail` fetch: the id of the first message sent, and how many the thread has in all. */
   messagesFrom?: number
   messageCount?: number
+  /** A bounded reply edit also returns the changed message and the revision immediately before the edit. */
+  changedMessage?: CodexChatMessage
+  previousContextRevision?: number
   /** Whether an older server page exists before the first loaded message. */
   hasMoreBefore?: boolean
   /** Client cache only: older pages were explicitly requested, so refresh/restore their range too. */
@@ -1546,7 +1549,7 @@ export function suggestChatReplies(threadId: number, signal?: AbortSignal) {
 
 /** Set a display block's values by hand (the whole object), or `null` to put back its starting values. Rooms name the member. */
 export function editChatBlock(threadId: number, key: string, data: Record<string, unknown> | null, profileId?: number) {
-  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/blocks/${encodeURIComponent(key)}`, {
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/blocks/${encodeURIComponent(key)}?tail=80`, {
     method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ ...(data === null ? { reset: true } : { data }), ...(profileId === undefined ? {} : { profileId }) }),
   })
 }
@@ -1557,7 +1560,7 @@ export function updateCodexChatThreadContext(threadId: number, patch: { loreAuto
 
 /** Rewrite one stretch of an LLM chat's summary by hand. */
 export function editChatSummarySegment(threadId: number, segmentId: number, content: string) {
-  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/summary-segments/${segmentId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ content }) })
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/summary-segments/${segmentId}?tail=80`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ content }) })
 }
 
 export function summarizeCodexChatThread(threadId: number) {
@@ -1565,7 +1568,7 @@ export function summarizeCodexChatThread(threadId: number) {
 }
 
 export function clearCodexChatThread(threadId: number) {
-  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/clear`, { method: 'POST' })
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/clear?tail=80`, { method: 'POST' })
 }
 
 export type ChatSearchResult = { messageId: number; threadId: number; title: string; profileId: number | null; role: 'user' | 'assistant'; createdDate: string; excerpt: string }
@@ -1581,7 +1584,7 @@ export async function exportChat(threadId: number, format: 'md' | 'json') {
 }
 
 export function selectChatAlternative(threadId: number, messageId: number, index: number) {
-  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/alternative`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ index }) })
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/alternative?tail=80`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ index }) })
 }
 
 export function listCodexChatThreads() {
@@ -1655,20 +1658,20 @@ export function createGroupChat(input: { profileIds: number[]; representativeId:
 
 /** `null` limits restore the defaults; a `null` maxTokens lets each profile's own cap apply. */
 export function updateGroupChat(threadId: number, patch: { representativeId?: number; title?: string; chainLimit?: number | null; windowLimit?: number | null; maxTokens?: number | null; judgePresetId?: number | null }) {
-  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/group`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/group?tail=80`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
 /** One member's reply token cap in the room (null follows the room's cap, then the profile's). */
 export function updateGroupChatMember(threadId: number, profileId: number, patch: { maxTokens?: number | null }) {
-  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/members/${profileId}`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/members/${profileId}?tail=80`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify(patch) })
 }
 
 export function addGroupChatMembers(threadId: number, profileIds: number[]) {
-  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/members`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileIds }) })
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/members?tail=80`, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ profileIds }) })
 }
 
 export function removeGroupChatMember(threadId: number, profileId: number) {
-  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/members/${profileId}`, { method: 'DELETE' })
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/members/${profileId}?tail=80`, { method: 'DELETE' })
 }
 
 /** `tail`: only the last messages (see CodexChatThreadDetail.messagesFrom); merge with mergeThreadTail. */
@@ -1683,7 +1686,18 @@ export function getCodexChatThread(threadId: number, tail?: number, before?: num
  */
 export function mergeThreadTail(full: CodexChatThreadDetail, tail: CodexChatThreadDetail): CodexChatThreadDetail | null {
   if (tail.messagesFrom === undefined) return tail
-  if (full.thread.id !== tail.thread.id || full.thread.context_revision !== tail.thread.context_revision) return null
+  if (full.thread.id !== tail.thread.id) return null
+  if (full.thread.context_revision !== tail.thread.context_revision) {
+    // Only this exact, single-message rewrite can safely retain the previous pages. Any intervening rewrite
+    // requires a fresh history instead; the response carries the changed message even outside the tail.
+    const changed = tail.changedMessage
+    if (!changed || tail.previousContextRevision !== full.thread.context_revision
+      || tail.thread.context_revision <= full.thread.context_revision) return null
+    const outsideTail = changed.id < tail.messagesFrom && full.messages.some((message) => message.id === changed.id)
+    full = { ...full, thread: { ...full.thread, context_revision: tail.thread.context_revision },
+      messages: full.messages.map((message) => message.id === changed.id ? changed : message),
+      historyLoaded: full.historyLoaded || outsideTail }
+  }
   const from = tail.messagesFrom
   const combined = [...full.messages.filter((message) => message.id < from), ...tail.messages]
   const added = (tail.messageCount ?? tail.messages.length) - (full.messageCount ?? full.messages.length)
@@ -1981,7 +1995,7 @@ export function streamChatContinue(threadId: number, messageId: number, onEvent:
 
 /** Rewrite a reply's text by hand, without regenerating (API LLM direct chats). */
 export function editChatReplyText(threadId: number, messageId: number, content: string) {
-  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/text`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ content }) })
+  return requestApiData<CodexChatThreadDetail>(`/api/codex-chat/threads/${threadId}/messages/${messageId}/text?tail=80`, { method: 'PATCH', headers: JSON_HEADERS, body: JSON.stringify({ content }) })
 }
 
 /** A new chat holding this one up to the message (API LLM direct chats). */

@@ -200,10 +200,11 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   let window = params.messages.filter((message) => ids.has(message.id))
   params = { ...params, books: params.books ?? booksForRequest({ thread: params.thread, profile: params.profile }) }
   const lore = selectChatLore(params.profile, window, userPersonaForThread(params.thread), { thread: params.thread, books: params.books, toolOffered: offersLoreFileTool(params.tools), linkedOffered: offersLinkedFiles(params.tools), history: params.messages, historySource: params.history?.source, speakerProfileId: params.profile.id, judged: params.judged?.loreKeys, semantic: params.judged?.semantic?.loreKeys })
-  let context = buildGroupWindowMessages(params, window, sendable.length, lore)
+  const stateText = threadBlockStateText(params.profile, params.thread, params.messages, params.profile.id, params.history?.source)
+  let context = buildGroupWindowMessages(params, window, sendable.length, lore, stateText)
   const budget = params.profile.contextTokens
   const reserve = replyReserveFor(budget, params.maxTokens) + (params.extraTokens ?? 0)
-  const fits = (messages: CodexChatMessageRecord[]) => budget === null || estimateMessagesTokens(params.profile.id, buildGroupWindowMessages(params, messages, sendable.length, lore).messages, params.tools) + reserve <= budget
+  const fits = (messages: CodexChatMessageRecord[]) => budget === null || estimateMessagesTokens(params.profile.id, buildGroupWindowMessages(params, messages, sendable.length, lore, stateText).messages, params.tools) + reserve <= budget
   if (budget !== null && window.length > 1 && !fits(window)) {
     // How many of the latest messages fit, found by halving (each try rebuilds the request).
     let low = 1
@@ -214,10 +215,10 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
       else high = middle - 1
     }
     window = latestWindow(window, low)
-    context = buildGroupWindowMessages(params, window, sendable.length, lore)
+    context = buildGroupWindowMessages(params, window, sendable.length, lore, stateText)
   }
   if (params.onMeta) {
-    const meta = buildContextMeta(params.profile, params.thread, params.messages, window, groupSummaryOn(params.thread), context.lore, context.recalled, params.tools, context.messages, params.history?.source)
+    const meta = buildContextMeta(params.profile, params.thread, params.messages, window, groupSummaryOn(params.thread), context.lore, context.recalled, params.tools, context.messages, params.history?.source, stateText)
     if (meta.version === 2 && params.history && meta.window) {
       meta.window.droppedTurns = splitTurns(params.history.outline.filter((message) => message.sendable && message.id > until))
         .filter((turn) => !turn.some((message) => window.some((entry) => entry.id === message.id))).length
@@ -229,7 +230,7 @@ export function buildGroupLlmMessages(params: GroupLlmContext): ChatCompletionMe
   return context.messages
 }
 
-function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMessageRecord[], total: number, lore: ChatLore) {
+function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMessageRecord[], total: number, lore: ChatLore, stateText: string) {
   const { profile, thread, members, withTools } = params
   const user = userPersonaForThread(thread)
   const names = new Map(members.map((member) => [member.id, member.name]))
@@ -264,7 +265,7 @@ function buildGroupWindowMessages(params: GroupLlmContext, window: CodexChatMess
   // Summaries the room's plot already took in come back when the latest exchange touches them, like in a direct chat.
   const recalled = summaryOn && params.segments ? recalledSegments(profile, params.segments, params.messages, { contextTokens: profile.contextTokens }, params.judged?.recallKeep, params.judged?.semantic?.recall) : []
   const recall = recallText(recalled)
-  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread, params.messages, profile.id, params.history?.source), recall, rejectedLoreFor(thread.id, params.tools))
+  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), stateText, recall, rejectedLoreFor(thread.id, params.tools))
   const reference = buildReplyContext(params.messages, params.routing, { group: true, historySource: params.history?.source, positions: params.history?.outline, maxChars: Math.max(256, Math.min(6000, Math.floor((profile.contextTokens ?? 24000) / 4))), visibleIds: new Set(window.map((message) => message.id)), nameOf: (message) => speakerName(message, names, user) })
   const directive = [reference, hiddenHistoryNote(thread, total - window.length), flagDirectiveFor(params.messages, profile, user), postHistoryText(profile, user), mentionReminder(members, profile)].filter(Boolean).join('\n\n')
   const result = appendUserDirective([...system, ...insertDepthBlocks(conversation, blocks)], directive)

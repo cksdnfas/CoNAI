@@ -5,7 +5,7 @@ import type { McpRequestContext, McpRequester } from '../context'
 import { notePageViewShown, requireChatPageAccess, requireChatPageActionAccess, requireChatPageDataAccess } from '../../services/codex-chat/chatPageContext'
 import { ChatProposalStore } from '../../services/codex-chat/chatProposals'
 import { chatPageNativeActionRevision } from '../../services/codex-chat/chatPageNativeActions'
-import { currentChatPage, newChatPageCommandId, runChatPageCommand } from '../../services/codex-chat/chatPageBridge'
+import { chatPageReplySignal, currentChatPage, newChatPageCommandId, runChatPageCommand } from '../../services/codex-chat/chatPageBridge'
 import { pageFailure, pageOperationView, pageResult, ratingFilteredPage } from './chatPageView'
 import { contextContentLimit } from '../../services/codex-chat/chatContentRating'
 import { knowledgePageForExecution } from '../../services/posts/knowledge/knowledgePage'
@@ -74,7 +74,7 @@ export function registerChatPageActionTools(server: McpServer, context: McpReque
       if (tier === 'commit') throw new Error('저장·확정 작업이야. propose_page_action으로 검토 카드를 만들어.')
       if (chatPageActionLeavesScreen(actionId, action) && page.dirty) throw new Error('이 화면에 저장하지 않은 변경이 있어. 떠나거나 다른 항목을 열기 전에 사용자가 저장하거나 버려야 해.')
       const commandId = newChatPageCommandId()
-      const next = knowledgePageForExecution(context, await runChatPageCommand(requester, page, context.chatContext!.threadId, { type: 'action', actionId, label: action.label, tier, ...(tier === 'direct' ? { revision: page.revision } : {}), arguments: validated }, { commandId }))
+      const next = knowledgePageForExecution(context, await runChatPageCommand(requester, page, context.chatContext!.threadId, { type: 'action', actionId, label: action.label, tier, ...(tier === 'direct' ? { revision: page.revision } : {}), arguments: validated }, { commandId, signal: chatPageReplySignal(context) }))
       const shownUnder = ratingLimit()
       if (context.source === 'codex-chat') notePageViewShown(context.chatContext!.threadId, requester, next, shownUnder)
       return { ...pageResult({ status: 'done', tier, action: action.label, page: pageOperationView(requester, page, next, shownUnder) }), structuredContent: { pageOperation: { commandId, tier, label: pageOperationLabel(action.label, actionId, validated) } } }

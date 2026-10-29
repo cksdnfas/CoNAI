@@ -2,6 +2,7 @@ import { WINDOWS_RESERVED_NAME } from '../../utils/pathResolver'
 import { statRevision } from '../../utils/fileHash'
 import fs from 'fs'
 import path from 'path'
+import { createHash } from 'crypto'
 import type Database from 'better-sqlite3'
 import { loreKeyLanguageLabel, type StoredFileEntry } from '@conai/shared'
 import { getUserSettingsDb } from '../../database/userSettingsDb'
@@ -166,7 +167,7 @@ function parseLorebookJson(value: unknown): unknown[] | null {
 }
 
 /** The book's lorebook.json: null when there is none; `entries` null when it cannot be read as a lorebook. */
-function readLorebookJson(owner: string, folderId: string, existing: ChatLoreEntry[]): { stamp: string; entries: ChatLoreEntry[] | null } | null {
+function readLorebookJson(owner: string, folderId: string, existing: ChatLoreEntry[], readOnly = false): { stamp: string; entries: ChatLoreEntry[] | null } | null {
   const file = FileStoreService.findChild(owner, folderId, LOREBOOK_JSON)
   if (!file || file.kind !== 'file') return null
   let revision: string
@@ -178,14 +179,22 @@ function readLorebookJson(owner: string, folderId: string, existing: ChatLoreEnt
   let stamp = stampOf(owner, { ...file, revision })
   if (file.size > LOREBOOK_JSON_MAX_BYTES) return { stamp, entries: null }
   let value: unknown
+  let text: string
   try {
-    value = JSON.parse(fs.readFileSync(storedFilePath(owner, file.id), 'utf8').replace(/^﻿/, '')) as unknown
+    text = fs.readFileSync(storedFilePath(owner, file.id), 'utf8').replace(/^﻿/, '')
+    value = JSON.parse(text) as unknown
   } catch {
     return { stamp, entries: null }
   }
   const raw = parseLorebookJson(value)
   if (!raw) return { stamp, entries: null }
-  if (stampLoreEntryIds(raw, existing)) {
+  let nextId = 0
+  const seed = readOnly ? createHash('sha256').update(file.id).update('\0').update(text).digest() : null
+  const previewId = () => {
+    const hex = createHash('sha256').update(seed!).update(String(nextId++)).digest('hex')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
+  }
+  if (stampLoreEntryIds(raw, existing, readOnly ? previewId : undefined) && !readOnly) {
     // Preserve the source format and unknown fields. Never replace a newer file while assigning identities.
     const written = FileStoreService.writeText(owner, folderId, LOREBOOK_JSON, `${JSON.stringify(value, null, 2)}\n`, {
       silent: true, history: false, replaceId: file.id, expectedRevision: revision,
@@ -285,6 +294,15 @@ function sourceChanged(row: Pick<LorebookRow, 'kind' | 'owner_key' | 'folder_id'
 /** Re-read lorebook.json only when it is not the file the cache came from. */
 function refreshIfStale(row: LorebookRow): LorebookRow {
   return sourceChanged(row) ? refreshBook(row) : row
+}
+
+/** A preview reads the current file and relinks entries without rewriting either file or cache. */
+function readOnlyBook(row: LorebookRow): OwnedLorebook {
+  const book = toOwned(row)
+  if (!row.owner_key || !row.folder_id || !sourceChanged(row)) return book
+  const read = readLorebookJson(row.owner_key, row.folder_id, book.entries, true)
+  const entries = read?.entries === null || !read ? book.entries : withSafeFiles(read.entries, `Book ${row.id}`)
+  return { ...book, entries: relink(row.owner_key, row.folder_id, entries).entries }
 }
 
 /** Drop a book row and every link to it (profiles, chats). Its folder is the caller's business. */
@@ -454,6 +472,24 @@ function requireOwn(bookId: number, owner: string): LorebookRow {
   return refreshIfStale(requireOwnRow(bookId, owner))
 }
 
+/** Choose the same keep name in read-only validation and in the eventual move. */
+function keepBookName(threadId: number, row: LorebookRow, rootId: string | null) {
+  const owner = row.owner_key as string
+  const folderId = row.folder_id as string
+  const parentId = (getUserSettingsDb().prepare('SELECT parent_id FROM stored_file_entries WHERE id = ?').get(folderId) as { parent_id: string | null } | undefined)?.parent_id ?? null
+  const base = folderName(row.name) || `채팅 ${threadId}`
+  const taken = (name: string) => [rootId, parentId].some((parent) => {
+    const other = parent ? FileStoreService.findChild(owner, parent, name) : null
+    return other !== null && other.id !== folderId
+  }) || name.toLowerCase() === CHAT_LOREBOOK_FOLDER.toLowerCase()
+  let name = base
+  for (let n = 2; taken(name); n++) {
+    if (n > 100) throw new LorebookError('보관할 폴더 이름을 정하지 못했어.', 409)
+    name = `${base.slice(0, LOREBOOK_NAME_MAX_LENGTH - 6)} (${n})`
+  }
+  return name
+}
+
 /** A folder name under `parentId` that nothing else uses: the name, else with the chat id, else counted. */
 function freeFolderName(owner: string, parentId: string, base: string, threadId: number) {
   const candidates = [base, `${base} (${threadId})`]
@@ -579,6 +615,10 @@ export const OwnedLorebookStore = {
 
   find(bookId: number, owner: string): OwnedLorebook | null {
     try { return this.requireOwn(bookId, owner) } catch { return null }
+  },
+
+  findReadOnly(bookId: number, owner: string): OwnedLorebook | null {
+    try { return readOnlyBook(requireOwnRow(bookId, owner)) } catch { return null }
   },
 
   /** A new account book: `로어북/<name>/` with lorebook.json, lorebook.md and an empty 자료/. */
@@ -748,6 +788,11 @@ export const OwnedLorebookStore = {
     return row ? toOwned(refreshIfStale(row)) : null
   },
 
+  chatBookReadOnly(threadId: number): OwnedLorebook | null {
+    const row = chatBookRow(threadId)
+    return row ? readOnlyBook(row) : null
+  },
+
   /** Replace the chat book's entries; the book (and its folder) comes into being with its first entry. */
   saveChatBook(threadId: number, value: unknown, revision?: string): OwnedLorebook | null {
     // Refresh file sources before the checked transaction, as for account-book saves.
@@ -804,6 +849,14 @@ export const OwnedLorebookStore = {
    * gets a ` (2)`-style suffix) and the book stops belonging to the chat. `link`: the chat keeps using it, as an
    * account book linked to this chat (refused before anything moves when the chat already links the most it can).
    */
+  previewKeepChatBook(threadId: number) {
+    const row = chatBookRow(threadId)
+    if (!row) throw new LorebookError('이 채팅에는 로어북이 없어.', 404)
+    const root = FileStoreService.findChild(row.owner_key as string, null, LOREBOOK_ROOT_FOLDER)
+    if (root && root.kind !== 'folder') throw new FileStoreError(`같은 이름의 항목이 있어: ${LOREBOOK_ROOT_FOLDER}`, 409)
+    return keepBookName(threadId, row, root?.id ?? null)
+  },
+
   keepChatBook(threadId: number, options: { link?: boolean } = {}): OwnedLorebook {
     const found = chatBookRow(threadId)
     if (!found) throw new LorebookError('이 채팅에는 로어북이 없어.', 404)
@@ -815,17 +868,7 @@ export const OwnedLorebookStore = {
     const db = getUserSettingsDb()
     return db.transaction(() => {
       const root = lorebookRoot(owner)
-      const parentId = (db.prepare('SELECT parent_id FROM stored_file_entries WHERE id = ?').get(folderId) as { parent_id: string | null } | undefined)?.parent_id ?? null
-      const base = folderName(row.name) || `채팅 ${threadId}`
-      const taken = (name: string) => [root.id, parentId].some((parent) => {
-        const other = parent ? FileStoreService.findChild(owner, parent, name) : null
-        return other !== null && other.id !== folderId
-      }) || name.toLowerCase() === CHAT_LOREBOOK_FOLDER.toLowerCase()
-      let name = base
-      for (let n = 2; taken(name); n++) {
-        if (n > 100) throw new LorebookError('보관할 폴더 이름을 정하지 못했어.', 409)
-        name = `${base.slice(0, LOREBOOK_NAME_MAX_LENGTH - 6)} (${n})`
-      }
+      const name = keepBookName(threadId, row, root.id)
       if (name !== row.name) FileStoreService.rename(owner, folderId, name)
       FileStoreService.move(owner, [folderId], root.id)
       db.prepare("UPDATE chat_lorebooks SET kind = 'account', thread_id = NULL, name = ?, updated_date = CURRENT_TIMESTAMP WHERE id = ?").run(name, row.id)

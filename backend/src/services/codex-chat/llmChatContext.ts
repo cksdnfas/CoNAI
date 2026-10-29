@@ -12,7 +12,8 @@ import { bothSidesSpeak, isCodexChatCreationTool, splitExampleDialogue, stripEch
 import { messageAddress, REPLY_GUIDANCE } from './chatReplies'
 import { CHAT_ROOM_TOOLS, isChatOwnTool } from '../../mcp/context'
 import { CATALOG_OPEN_TOOL } from '../../mcp/toolCatalog'
-import { blockStateText, foldBlockState, parseBlockEdits, stripBlockFences, usableBlockKeys } from './chatBlockState'
+import { blockStateText, stripBlockFences, usableBlockKeys } from './chatBlockState'
+import { threadBlockState } from './chatBlockCheckpoint'
 import { fillCharacterPlaceholders } from './chatPlaceholders'
 import { userPersonaForThread, userPersonaPrompt, type ChatUserPersona } from './chatUserProfiles'
 import { resolveProfileModel } from './chatModelRoles'
@@ -408,10 +409,8 @@ export function buildLeadingMessages(profile: ChatProfile, thread: Pick<CodexCha
 
 /** The display block state of a chat as the model reads it ('' without blocks). `speakerId`: a room member's own. */
 export function threadBlockStateText(profile: ChatProfile, thread: Pick<CodexChatThreadRecord, 'block_edits'>, messages: ReadonlyArray<Pick<CodexChatMessageRecord, 'id' | 'role' | 'content' | 'speaker_profile_id'>>, speakerId?: number, historySource?: ChatHistorySource) {
-  const history = historySource && usableBlockKeys(profile.style.blocks).size
-    ? CodexChatStore.listBlockMessages(historySource.threadId, historySource.untilMessageId).filter((message) => message.id !== historySource.excludeMessageId) : messages
-  const folded = foldBlockState(profile, history, parseBlockEdits(thread.block_edits), speakerId)
-  return folded ? blockStateText(profile.style.blocks, folded.state) : ''
+  const state = threadBlockState(profile, thread.block_edits, messages, speakerId, historySource)
+  return state ? blockStateText(profile.style.blocks, state) : ''
 }
 
 /** Keyword lore as the block that goes into the conversation (the same marks Codex gets), '' when there is none. */
@@ -634,7 +633,7 @@ export function auxiliaryInstructionText(profile: ChatProfile, user: ChatUserPer
   }
 }
 
-export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], sent: CodexChatMessageRecord[], summaryEnabled: boolean, lore: ChatLore, recalled: ReturnType<typeof recalledSegments>, tools: ChatCompletionTool[], request: ChatCompletionMessage[], historySource?: ChatHistorySource): ChatContextMeta {
+export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRecord, messages: CodexChatMessageRecord[], sent: CodexChatMessageRecord[], summaryEnabled: boolean, lore: ChatLore, recalled: ReturnType<typeof recalledSegments>, tools: ChatCompletionTool[], request: ChatCompletionMessage[], historySource?: ChatHistorySource, stateText?: string): ChatContextMeta {
   const meta: ChatContextMeta = {
     windowFromMessageId: sent[0]?.id ?? null, sentMessages: sent.length,
     summaryUntilMessageId: summaryEnabled && thread.summary ? thread.summary_until_message_id : null,
@@ -658,7 +657,7 @@ export function buildContextMeta(profile: ChatProfile, thread: CodexChatThreadRe
       ...contextSource('lore-index', lore.index), ...contextSource('constant-lore', lore.constant),
       ...contextSource('summary', summary),
       ...contextSource('author-note', resolveAuthorNote(thread, profile, user).text),
-      ...contextSource('state', threadBlockStateText(profile, thread, messages, thread.kind === 'group' ? profile.id : undefined, historySource)),
+      ...contextSource('state', stateText ?? threadBlockStateText(profile, thread, messages, thread.kind === 'group' ? profile.id : undefined, historySource)),
       ...contextSource('flags', flagDirectiveFor(messages, profile, user), [...messages].reverse().find((message) => message.role === 'user')?.id),
       ...sent.flatMap((message) => contextSource('window', message.content, message.id)),
       ...tools.flatMap((tool) => contextSource('tool-definition', JSON.stringify(tool), tool.function.name)),
@@ -680,10 +679,11 @@ function buildRequestContext(profile: ChatProfile, thread: CodexChatThreadRecord
   const system = buildLeadingMessages(profile, thread, config, tools.some((tool) => !isChatOwnTool(tool.function.name)), lore, user)
   const recalled = config.summaryEnabled ? recalledSegments(profile, segments, messages, { contextTokens: config.contextTokens ?? null }, judged?.recallKeep, judged?.semantic?.recall) : []
   const recall = recallText(recalled)
-  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), threadBlockStateText(profile, thread ?? { block_edits: null }, messages, undefined, historySource), recall, rejectedLoreFor(thread?.id, tools))
+  const stateText = threadBlockStateText(profile, thread ?? { block_edits: null }, messages, undefined, historySource)
+  const blocks = depthBlocks(lore, profile.loreDepth, resolveAuthorNote(thread, profile, user), stateText, recall, rejectedLoreFor(thread?.id, tools))
   const directive = [flagDirectiveFor(messages, profile, user), postHistoryText(profile, user)].filter(Boolean).join('\n\n')
   const fixedTokens = estimateMessagesTokens(profile.id, system, tools) + estimateDepthBlocks(profile.id, blocks) + estimateTokens(profile.id, directive)
-  return { system, blocks, directive, fixedTokens, lore, recalled }
+  return { system, blocks, directive, fixedTokens, lore, recalled, stateText }
 }
 
 export function buildChatPromptPreview(profile: ChatProfile, tools: ChatCompletionTool[]) {
@@ -967,7 +967,7 @@ export function buildChatMessages(params: {
   judged?: JudgedContext | null
 }): ChatCompletionMessage[] {
   const { profile, thread, config, tools } = params
-  const { system, blocks, directive, fixedTokens, lore, recalled } = buildRequestContext(profile, thread, params.messages, config, tools, params.segments, params.books, params.judged, params.historySource)
+  const { system, blocks, directive, fixedTokens, lore, recalled, stateText } = buildRequestContext(profile, thread, params.messages, config, tools, params.segments, params.books, params.judged, params.historySource)
   const routing = [...params.messages].reverse().find((message) => message.role === 'user')?.routing
   const maxChars = Math.max(256, Math.min(6000, Math.floor((config.contextTokens ?? 24000) / 4)))
   const replyOptions = {
@@ -986,7 +986,7 @@ export function buildChatMessages(params: {
   const request = appendUserDirective([...system, ...conversation], [reference, directive].filter(Boolean).join('\n\n'))
   const sent = window.flat()
   if (params.onMeta) {
-    const meta = buildContextMeta(profile, thread, params.messages, sent, config.summaryEnabled, lore, recalled, tools, request, params.historySource)
+    const meta = buildContextMeta(profile, thread, params.messages, sent, config.summaryEnabled, lore, recalled, tools, request, params.historySource, thread.kind === 'group' ? undefined : stateText)
     meta.estimatedTokens += params.extraTokens ?? 0
     params.onMeta(meta)
   }

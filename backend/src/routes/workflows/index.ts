@@ -3,6 +3,8 @@ import crudRoutes from './crud.routes';
 import executionRoutes from './execution.routes';
 import artifactsRoutes from './artifacts.routes';
 import serversRoutes from './servers.routes';
+import { requireImagesView } from '../../middleware/imageAccess';
+import { requireAdmin } from '../../middleware/authMiddleware';
 
 const router = Router();
 
@@ -22,7 +24,6 @@ const router = Router();
  *   POST   /api/workflows/:id/generate
  *   GET    /api/workflows/:id/history
  *   GET    /api/workflows/history/:historyId
- *   GET    /api/workflows/:id/test-connection
  *   GET    /api/workflows/canvas-images
  *
  * Server Management:
@@ -31,11 +32,13 @@ const router = Router();
  *   DELETE /api/workflows/:id/servers/:serverId
  */
 
+// Static execution paths must precede the CRUD `/:id` route.
+// The legacy response includes the server's absolute canvas directory.
+router.use('/canvas-images', requireAdmin, requireImagesView);
+router.use('/', executionRoutes);
+
 // Mount CRUD routes
 router.use('/', crudRoutes);
-
-// Mount execution routes
-router.use('/', executionRoutes);
 
 // Mount artifact browsing routes
 router.use('/', artifactsRoutes);

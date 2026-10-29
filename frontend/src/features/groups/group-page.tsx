@@ -15,6 +15,7 @@ import { useSnackbar } from '@/components/ui/snackbar-context'
 import { Skeleton } from '@/components/ui/skeleton'
 import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
+import { RuntimeJobProgress } from '@/components/common/runtime-job-progress'
 import { useDesktopPageLayout } from '@/lib/use-desktop-page-layout'
 import { cn } from '@/lib/utils'
 import type { CountState } from '@/lib/count-display'
@@ -125,9 +126,11 @@ export function GroupPage() {
     updateGroupMutation,
     deleteGroupsMutation,
     moveGroupsMutation,
-    autoCollectMutation,
-    autoCollectAllMutation,
-    rebuildAutoFolderGroupsMutation,
+    autoCollectJob,
+    isAutoCollectPending,
+    runAutoCollect,
+    autoCollectAllJob,
+    rebuildAutoFolderGroupsJob,
     downloadGroupArchiveMutation,
     assignToGroupMutation,
     removeGroupImagesMutation,
@@ -183,6 +186,13 @@ export function GroupPage() {
     refreshFolderGroupQueries,
   })
 
+  const isAutoCollectAllRunning = autoCollectAllJob.isStarting || autoCollectAllJob.isRunning
+  const isRebuildRunning = rebuildAutoFolderGroupsJob.isStarting || rebuildAutoFolderGroupsJob.isRunning
+  // The running rematch job this view is about, shown with its progress and a cancel key.
+  const visibleJob = isCustomSource
+    ? (isAutoCollectAllRunning ? autoCollectAllJob : isAutoCollectPending ? autoCollectJob : null)
+    : (isRebuildRunning ? rebuildAutoFolderGroupsJob : null)
+
   useGroupChatPage({
     sourceKey: selectedSource.key,
     isCustomSource,
@@ -200,7 +210,7 @@ export function GroupPage() {
     openGroup: handleOpenGroup,
     createGroup: (input) => createGroupMutation.mutateAsync(input),
     updateGroup: (targetGroupId, input) => updateGroupMutation.mutateAsync({ groupId: targetGroupId, input }),
-    runAutoCollect: (targetGroupId) => autoCollectMutation.mutateAsync(targetGroupId),
+    runAutoCollect,
     moveGroups: (ids, parentId) => moveGroupsMutation.mutateAsync({ ids, parentId }),
     deleteGroups: (ids, cascade) => deleteGroupsMutation.mutateAsync({ ids, cascade }),
   })
@@ -273,11 +283,11 @@ export function GroupPage() {
       {isCustomSource ? (
         <>
           <IconButton
-            label={autoCollectAllMutation.isPending ? t('groups.group.page.running.all.auto.collect.jobs') : t('groups.group.page.auto.collect.all')}
+            label={isAutoCollectAllRunning ? t('groups.group.page.running.all.auto.collect.jobs') : t('groups.group.page.auto.collect.all')}
             variant="ghost"
             size="icon-sm"
             onClick={() => void handleRunAutoCollectAll()}
-            disabled={autoCollectAllMutation.isPending}
+            disabled={isAutoCollectAllRunning}
           >
             <Play />
           </IconButton>
@@ -299,11 +309,11 @@ export function GroupPage() {
         </>
       ) : (
         <IconButton
-          label={rebuildAutoFolderGroupsMutation.isPending ? t('groups.group.page.rebuilding.watched.folders') : t('groups.group.page.rebuild.watched.folders')}
+          label={isRebuildRunning ? t('groups.group.page.rebuilding.watched.folders') : t('groups.group.page.rebuild.watched.folders')}
           variant="ghost"
           size="icon-sm"
           onClick={() => void handleRebuildAutoFolderGroups()}
-          disabled={rebuildAutoFolderGroupsMutation.isPending}
+          disabled={isRebuildRunning}
         >
           <RotateCcw />
         </IconButton>
@@ -325,7 +335,7 @@ export function GroupPage() {
         conditionCount: countAutoCollectConditions(selectedGroupQuery.data.auto_collect_conditions),
       } : undefined}
       compact={!isWideLayout}
-      isAutoCollectPending={autoCollectMutation.isPending}
+      isAutoCollectPending={isAutoCollectPending}
       isDownloadPending={downloadGroupArchiveMutation.isPending && downloadScope === 'group'}
       isDeletePending={deleteGroupsMutation.isPending}
       onOpenRoot={handleOpenRoot}
@@ -356,6 +366,7 @@ export function GroupPage() {
       contentClassName={cn((selectedGroupImageIds.length > 0 || (showManageView && managedGroupIds.length > 0)) && 'pb-24')}
     >
         <section className="min-w-0 space-y-5">
+          {visibleJob?.job ? <RuntimeJobProgress job={visibleJob.job} cancel={visibleJob.cancel} isCancelling={visibleJob.isCancelling} /> : null}
           {showManageView ? (
             <GroupManageView
               groups={allGroups}
@@ -371,7 +382,7 @@ export function GroupPage() {
               groups={rootGroups}
               countMaps={groupCountMaps}
               sourceKey={selectedSource.key}
-              loadPreviewImages={selectedSource.getPreviewImages}
+              loadCoverImages={selectedSource.loadCoverImages}
               onOpenGroup={handleOpenGroup}
               isLoading={groupsQuery.isLoading}
               error={groupsQuery.isError && allGroups.length === 0 ? groupsQuery.error : null}
@@ -396,7 +407,7 @@ export function GroupPage() {
                 groups={childGroups}
                 countMaps={groupCountMaps}
                 sourceKey={selectedSource.key}
-                loadPreviewImages={selectedSource.getPreviewImages}
+                loadCoverImages={selectedSource.loadCoverImages}
                 onOpenGroup={handleOpenGroup}
               />
 

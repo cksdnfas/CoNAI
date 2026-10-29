@@ -7,6 +7,10 @@ import { WorkflowModel } from '../../models/Workflow'
 import { GenerationQueueService } from '../../services/generationQueueService'
 import { parseCodexGenerationRequest } from '../../services/codexGenerationOptions'
 import { externalizeQueueInputDataUrls } from '../../services/generation-queue/queueInputStore'
+import { ComfyInputValidationError, validateComfyPromptData } from '../../services/prepareComfyPromptData'
+import { requireImagesView } from '../../middleware/imageAccess'
+import { WorkflowInputAssetError } from '../../services/workflowInputAssetStore'
+import { MCP_QUEUE_IMAGE_GRANT_KEY } from '../../services/generation-queue/queueMcpImageGrant'
 import { enqueueGenerationJobs } from '../../services/generation-queue/queueEnqueue'
 import { hasGenerationQueueServerRoutingTag } from '../../services/generationQueueRouting'
 import { GenerationTargetGroupService } from '../../services/generationTargetGroupService'
@@ -75,6 +79,11 @@ export function createGenerationQueueActionRoutes() {
 
       return
 
+    }
+
+    if (Object.prototype.hasOwnProperty.call(request_payload, MCP_QUEUE_IMAGE_GRANT_KEY)) {
+      sendRouteBadRequest(res, 'MCP queue image authorization is server-issued')
+      return
     }
 
     if (priority !== undefined && (!Number.isInteger(priority) || priority < 0 || priority > 100000)) {
@@ -281,6 +290,12 @@ export function createGenerationQueueActionRoutes() {
       }
 
       try {
+        const normalizedPromptData = normalizeWorkflowNumericPromptValues(workflowMarkedFields, promptData)
+        if (validateComfyPromptData(workflowMarkedFields, normalizedPromptData)) {
+          let allowed = false
+          requireImagesView(req, res, () => { allowed = true })
+          if (!allowed) return
+        }
 
         // PAYLOAD-3: base64 image inputs are written once to the content-addressed store and the
         // payload keeps only a reference. With `enqueue_count` up to 32, this turns "32 × 5MB in
@@ -290,13 +305,13 @@ export function createGenerationQueueActionRoutes() {
 
           ...request_payload,
 
-          prompt_data: normalizeWorkflowNumericPromptValues(workflowMarkedFields, promptData),
+          prompt_data: normalizedPromptData,
 
         }).value
 
       } catch (error) {
 
-        if (error instanceof WorkflowNumericFieldValidationError) {
+        if (error instanceof WorkflowNumericFieldValidationError || error instanceof ComfyInputValidationError) {
 
           sendRouteBadRequest(res, error.message)
 
@@ -391,6 +406,10 @@ export function createGenerationQueueActionRoutes() {
     } catch (error) {
 
       if (sendQueueRoleLimitError(res, error)) return
+      if (error instanceof WorkflowInputAssetError) {
+        sendRouteBadRequest(res, error.message)
+        return
+      }
 
       throw error
 
@@ -427,13 +446,14 @@ export function createGenerationQueueActionRoutes() {
     const { jobId, job } = resolvedJob
 
     // 재시도는 원 요청자 계정으로 새 활성 잡을 만들므로, 관리자가 아닌 요청자는 등급 제한을 넘겨 쓸 수 없게 한다.
-    const retryWorkflow = !isAdminRequest(req) && typeof job.workflow_id === 'number'
+    const isAdmin = isAdminRequest(req)
+    const retryWorkflow = !isAdmin && typeof job.workflow_id === 'number'
       ? await WorkflowModel.findById(job.workflow_id)
       : null
 
     try {
 
-      const retryRecord = GenerationQueueService.retryJob(jobId, { roleLimitWorkflow: retryWorkflow })
+      const retryRecord = GenerationQueueService.retryJob(jobId, { roleLimitWorkflow: retryWorkflow, preserveGraphOrigin: isAdmin })
       const responseRecord = retryRecord ? GenerationQueueModel.findListRecordById(retryRecord.id) : null
 
       res.status(201).json({

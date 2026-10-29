@@ -1,6 +1,6 @@
 import { useSettingsRevision } from './use-settings-revision'
 import { useSettingsDraftSlot } from './use-settings-draft-slot'
-import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ShieldAlert } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -8,6 +8,7 @@ import { PageToolbar } from '@/components/common/page-toolbar'
 import { PageWithSidebar } from '@/components/common/page-with-sidebar'
 import { HEADER_NAVIGATION_QUERY_KEY } from '@/components/layout/app-navigation'
 import { Button } from '@/components/ui/button'
+import { ErrorState } from '@/components/ui/error-state'
 import { useSnackbar } from '@/components/ui/snackbar-context'
 import { reextractAllImageMetadata, updateGenerationThrottleSettings, updateImageSaveSettings, updateMetadataSettings, updateThumbnailSettings, updateVideoOptimizationSettings, type MetadataReextractAllResult } from '@/lib/api-settings'
 import { useRuntimeJobAction } from '@/lib/use-runtime-job'
@@ -625,6 +626,11 @@ export function SettingsPage() {
     isSectionDirty: isGeneralSectionDirty,
   }
 
+  /** Sections drawn from a settings file that could not be read say so, with a retry, instead of loading forever. */
+  const whenLoaded = (query: typeof settingsQuery | typeof postsSettingsQuery, sections: ReactNode) => (query.isError && !query.data ? (
+    <ErrorState title={t({ ko: '설정을 불러오지 못했어.', en: 'Could not load the settings.' })} error={query.error} onRetry={() => void query.refetch()} isRetrying={query.isFetching} />
+  ) : sections)
+
   return (
     <PageWithSidebar
       storageKey="settings"
@@ -640,58 +646,58 @@ export function SettingsPage() {
           {activeTab === 'general' ? (
             <div className="space-y-8">
               <SettingsContents groups={[{ id: 'display', label: t({ ko: '언어·공용 표시', en: 'Language and shared display' }) }, { id: 'appearance', label: t({ ko: '테마', en: 'Theme' }) }]} />
-              <SettingsGroup id="display" title={t({ ko: '언어·공용 표시', en: 'Language and shared display' })}><fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['basic', 'appearance']} {...generalSectionsProps} /></fieldset></SettingsGroup>
-              <SettingsGroup id="appearance" title={t({ ko: '테마', en: 'Theme' })}><AppearanceTabLazy {...appearanceTabProps} draftLocked={isSavingAll} /></SettingsGroup>
+              <SettingsGroup id="display" title={t({ ko: '언어·공용 표시', en: 'Language and shared display' })}>{whenLoaded(settingsQuery, <fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['basic', 'appearance']} {...generalSectionsProps} /></fieldset>)}</SettingsGroup>
+              <SettingsGroup id="appearance" title={t({ ko: '테마', en: 'Theme' })}>{whenLoaded(settingsQuery, <AppearanceTabLazy {...appearanceTabProps} draftLocked={isSavingAll} />)}</SettingsGroup>
             </div>
           ) : null}
 
           {activeTab === 'library' ? (
             <div className="space-y-8">
               <SettingsContents groups={[{ id: 'similarity', label: t({ ko: '유사도', en: 'Similarity' }) }, { id: 'folders', label: t({ ko: '폴더', en: 'Folders' }) }, { id: 'metadata', label: t({ ko: '메타데이터', en: 'Metadata' }) }]} />
-              <SettingsGroup id="similarity" title={t({ ko: '유사도', en: 'Similarity' })}><fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} /></fieldset><PageSettingsSection scope="similarity" /></SettingsGroup>
+              <SettingsGroup id="similarity" title={t({ ko: '유사도', en: 'Similarity' })}>{whenLoaded(settingsQuery, <fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['library']} {...generalSectionsProps} /></fieldset>)}<PageSettingsSection scope="similarity" /></SettingsGroup>
               <RegistrySettingsGroup id="library.folders"><FoldersTabLazy {...foldersTabProps} /></RegistrySettingsGroup>
               <SettingsGroup id="metadata" title={t({ ko: '메타데이터', en: 'Metadata' })}>
-              <fieldset disabled={isSavingAll} className="contents"><MetadataTabLazy
+              {whenLoaded(settingsQuery, <fieldset disabled={isSavingAll} className="contents"><MetadataTabLazy
                 metadataDraft={effectiveMetadataDraft}
                 onPatchMetadata={patchMetadataDraft}
                 hasChanges={isMetadataDraftDirty}
-              /></fieldset>
+              /></fieldset>)}
               </SettingsGroup>
             </div>
           ) : null}
 
-          {activeTab === 'media' ? (
+          {activeTab === 'media' ? whenLoaded(settingsQuery, (
             <fieldset disabled={isSavingAll} className="contents"><ImageSaveTabLazy
               {...imageSaveTabProps}
               throttle="none"
             /></fieldset>
-          ) : null}
+          )) : null}
 
-          {activeTab === 'posts' ? (
+          {activeTab === 'posts' ? whenLoaded(postsSettingsQuery, (
             <fieldset disabled={isSavingAll} className="contents"><PostsSettingsTabLazy draft={effectivePostsDraft} onPatch={patchPostsDraft} dirty={isPostsDraftDirty} contentEvaluation={contentEvaluation.tabProps} /></fieldset>
-          ) : null}
+          )) : null}
 
-          {activeTab === 'auto' ? (
+          {activeTab === 'auto' ? whenLoaded(settingsQuery, (
             <AutoTabLazy {...autoTabProps} draftLocked={isSavingAll} />
-          ) : null}
+          )) : null}
 
           {activeTab === 'generation' ? (
             <div className="space-y-8">
               <SettingsContents groups={[{ id: 'nai', label: 'NovelAI' }, { id: 'comfyui', label: 'ComfyUI' }, { id: 'pacing', label: t({ ko: '실행 간격', en: 'Pacing' }) }, { id: 'schedules', label: t({ ko: '예약 작업', en: 'Schedules' }) }]} />
               <GenerationConnections comfyExtra={<IntegrationToolsTabLazy />} />
               <SettingsGroup id="pacing" title={t({ ko: '실행 간격', en: 'Pacing' })}>
-              <fieldset disabled={isSavingAll} className="contents"><ImageSaveTabLazy
+              {whenLoaded(settingsQuery, <fieldset disabled={isSavingAll} className="contents"><ImageSaveTabLazy
                 {...imageSaveTabProps}
                 throttle="pacing"
                 showMediaSettings={false}
-              /></fieldset>
+              /></fieldset>)}
               </SettingsGroup>
               <SettingsGroup id="schedules" title={t({ ko: '예약 작업', en: 'Schedules' })}>
-              <fieldset disabled={isSavingAll} className="contents"><ImageSaveTabLazy
+              {whenLoaded(settingsQuery, <fieldset disabled={isSavingAll} className="contents"><ImageSaveTabLazy
                 {...imageSaveTabProps}
                 throttle="reservations"
                 showMediaSettings={false}
-              /></fieldset>
+              /></fieldset>)}
               </SettingsGroup>
             </div>
           ) : null}
@@ -706,7 +712,7 @@ export function SettingsPage() {
             <div className="space-y-8">
               <SettingsContents groups={[{ id: 'mcp', label: 'MCP' }, { id: 'safety', label: t({ ko: '안전·정리', en: 'Safety and cleanup' }) }]} />
               <RegistrySettingsGroup id="system.mcp"><McpHttpSettingsCardLazy /></RegistrySettingsGroup>
-              <SettingsGroup id="safety" title={t({ ko: '안전·정리', en: 'Safety and cleanup' })}><fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} /></fieldset></SettingsGroup>
+              <SettingsGroup id="safety" title={t({ ko: '안전·정리', en: 'Safety and cleanup' })}>{whenLoaded(settingsQuery, <fieldset disabled={isSavingAll} className="contents"><GeneralPreferencesSectionsLazy sections={['safety']} {...generalSectionsProps} /></fieldset>)}</SettingsGroup>
             </div>
           ) : null}
 

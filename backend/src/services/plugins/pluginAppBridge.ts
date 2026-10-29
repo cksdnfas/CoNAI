@@ -1,5 +1,6 @@
-import { Client, InMemoryTransport } from '@modelcontextprotocol/client'
+import { InMemoryTransport, type Client } from '@modelcontextprotocol/client'
 import { ALL_MCP_HTTP_SCOPES, type McpRequestContext, type McpRequester } from '../../mcp/context'
+import { inProcessMcpClient, NO_TOOL_DEADLINE } from '../../mcp/inProcessClient'
 import { requireMcpToolAccess } from '../../mcp/toolAccess'
 import { validateMcpToolArguments } from '../../mcp/requestSecurity'
 import { requireRequesterImagePermission } from '../../middleware/imageAccess'
@@ -9,7 +10,7 @@ import { PluginError } from './pluginStore'
 export async function withPluginAppClient<T>(context: McpRequestContext, names: string[], use: (client: Client) => Promise<T>): Promise<T> {
   const { createMcpServer } = await import('../../mcp/server')
   const server = createMcpServer({ ...context, source: 'plugin', chatContext: undefined, generationPresetIds: [], generationPresetSnapshot: undefined, omitPluginTools: true, toolCatalog: false, toolAllowlist: names })
-  const client = new Client({ name: 'conai-plugin-host', version: '1' })
+  const client = inProcessMcpClient({ name: 'conai-plugin-host', version: '1' })
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   try { await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]); return await use(client) }
   finally { await client.close().catch(() => undefined); await server.close().catch(() => undefined) }
@@ -33,7 +34,7 @@ export async function callPluginAppTool(context: McpRequestContext, name: string
   requireMcpToolAccess(native, name, args)
   validateMcpToolArguments(args, () => requireRequesterImagePermission(native.requester))
   return withPluginAppClient(native, [name], async client => {
-    const result = await client.callTool({ name, arguments: args }, { timeout: 10 * 60_000, signal })
+    const result = await client.callTool({ name, arguments: args }, { timeout: NO_TOOL_DEADLINE, signal })
     // Preserve native small image/audio previews as well as text; cap the complete response.
     const safe = { ...result }
     const text = JSON.stringify(safe)

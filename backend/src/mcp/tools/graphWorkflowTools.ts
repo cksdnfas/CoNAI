@@ -11,6 +11,7 @@ import type { McpRequestContext } from '../context'
 import { McpArtifactService } from '../../services/mcpArtifactService'
 import { mcpGroupPathSchema, resolveMcpTargetGroup } from './mcpTargetGroup'
 import { errorResult, textResult } from '../toolResults'
+import { GRAPH_IMAGE_AUTHORITY_INPUT, withMcpGraphImageAuthority } from '../../services/graph-workflow-executor/graphImageAuthority'
 
 function parseGraphDocument(graphJson: string): GraphWorkflowDocument {
   const parsed = JSON.parse(graphJson)
@@ -55,6 +56,7 @@ function createGraphInputTemplate(inputs: GraphWorkflowExposedInput[]) {
 }
 
 function validateGraphInputs(exposedInputs: GraphWorkflowExposedInput[], supplied: Record<string, unknown>) {
+  if (Object.prototype.hasOwnProperty.call(supplied, GRAPH_IMAGE_AUTHORITY_INPUT)) throw new Error('Graph image authority is server-issued')
   const inputById = new Map(exposedInputs.map(input => [input.id, input]))
   const unknownIds = Object.keys(supplied).filter(id => !inputById.has(id))
   if (unknownIds.length > 0) throw new Error(`Unknown graph workflow input(s): ${unknownIds.join(', ')}`)
@@ -178,7 +180,7 @@ export function registerGraphWorkflowTools(server: McpServer, context: McpReques
         const graph = parseGraphDocument(workflow.graph_json)
         const runtimeInputs = validateGraphInputs(graph.metadata?.exposed_inputs ?? [], input_values as Record<string, unknown>)
         const outputGroupId = resolveMcpTargetGroup(group_id, group_path)
-        const result = await GraphWorkflowExecutor.execute(workflow_id, { runtimeInputValues: runtimeInputs, outputGroupId: outputGroupId ?? null, requestedByAccountId: context.requester?.accountId ?? null })
+        const result = await withMcpGraphImageAuthority(context, () => GraphWorkflowExecutor.execute(workflow_id, { runtimeInputValues: runtimeInputs, outputGroupId: outputGroupId ?? null, requestedByAccountId: context.requester?.accountId ?? null }))
         const compactResult = await compactGraphExecution(result.executionId, context)
         return textResult(compactResult)
       } catch (error) {

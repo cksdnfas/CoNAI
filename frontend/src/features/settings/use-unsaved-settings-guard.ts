@@ -1,6 +1,7 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useId, useRef, useState, type PropsWithChildren } from 'react'
-import { useBeforeUnload, useBlocker, type BlockerFunction, type Location } from 'react-router-dom'
+import { useBlocker, type BlockerFunction, type Location } from 'react-router-dom'
 import { useBlockerConfirm } from '@/components/ui/use-blocker-confirm'
+import { useUnloadGuard } from '@/lib/use-unload-guard'
 
 /** Which navigations leave a guarded draft: false = another path, true = another path or query, or a custom test. */
 export type GuardedLeave = boolean | ((current: Location, next: Location) => boolean)
@@ -24,10 +25,7 @@ export function UnsavedSettingsGuardProvider({ children }: PropsWithChildren) {
     setGuards((current) => ({ ...current, [id]: guard }))
     return () => setGuards((current) => { const next = { ...current }; delete next[id]; return next })
   }, [])
-  const hasUnsavedChanges = Object.keys(guards).length > 0
-  useBeforeUnload(useCallback((event: BeforeUnloadEvent) => {
-    if (hasUnsavedChanges) { event.preventDefault(); event.returnValue = '' }
-  }, [hasUnsavedChanges]))
+  useUnloadGuard(Object.keys(guards).length > 0)
   const shouldBlock = useCallback<BlockerFunction>(({ currentLocation, nextLocation }) => (
     Object.values(guards).some((guard) => leavesDraft(guard.leaves, currentLocation, nextLocation))
   ), [guards])

@@ -1,14 +1,18 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { Location } from 'react-router-dom'
 import type { PostCategory, PostCommentMode, PostDetail, PostStatus } from '@conai/shared'
 import { CHAT_PAGE_LIMITS, POST_LIMITS } from '@conai/shared'
 import { AudioLines, FolderTree, Image as ImageIcon, Link as LinkIcon, Paperclip } from 'lucide-react'
 import { FieldTabs } from '@/components/common/field-tabs'
 import type { PlainTextEditorHandle } from '@/components/common/plain-text-editor'
+import { SaveConflictAlert } from '@/components/common/save-conflict-alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Chip } from '@/components/ui/chip'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { IconButton } from '@/components/ui/icon-button'
+import { Input } from '@/components/ui/input'
 import { LoadingState } from '@/components/ui/loading-state'
 import { Select } from '@/components/ui/select'
 import { useSnackbar } from '@/components/ui/snackbar-context'
@@ -16,7 +20,9 @@ import { useChatPageRegistration } from '@/features/codex-chat/chat-page-context
 import { useChatDraftTransaction } from '@/features/codex-chat/use-chat-draft-transaction'
 import { pageAction, pageArray, pageFreeText, pageNumber, pageObject, pageText } from '@/features/codex-chat/page-action-helpers'
 import { useI18n } from '@/i18n'
-import { invalidatePostScope, createPost, updatePost, getPostsSettings } from '@/lib/api-posts'
+import { useEditorPageGuard } from '@/features/settings/use-unsaved-settings-guard'
+import { invalidatePostScope, createPost, getPost, updatePost, getPostsSettings } from '@/lib/api-posts'
+import { ApiRequestError } from '@/lib/api-request'
 import { getErrorMessage } from '@/lib/error-message'
 import { replaceExactText, type ExactTextEdit } from '@/lib/exact-text-edits'
 import { PostAttachPicker, type AttachTab } from './post-attach-picker'
@@ -29,6 +35,10 @@ const PlainTextEditor = lazy(() => import('@/components/common/plain-text-editor
 const PostRichEditor = lazy(() => import('./post-rich-editor').then((module) => ({ default: module.PostRichEditor })))
 
 type Picker = AttachTab | null
+
+/** The editor is left when the page or its `edit` target changes (`?edit=new` → `?post=5`). */
+const editTarget = (location: Location) => new URLSearchParams(location.search).get('edit')
+const leavesPostEditor = (current: Location, next: Location) => current.pathname !== next.pathname || editTarget(current) !== editTarget(next)
 
 const HEADER_TOP = 'var(--theme-shell-header-height)'
 
@@ -90,14 +100,15 @@ function TagInput({ tags, onChange }: { tags: string[]; onChange: (tags: string[
       {tags.map((tag) => (
         <Chip key={tag} tone="primary" removeLabel={t({ ko: '{tag} 빼기', en: 'Remove {tag}' }, { tag })} onRemove={() => onChange(tags.filter((item) => item !== tag))}>#{tag}</Chip>
       ))}
-      <input
+      <Input
+        variant="bare"
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={onKeyDown}
         onBlur={() => { if (draft.trim()) add(draft) }}
         placeholder={tags.length ? '' : t({ ko: '태그', en: 'Tags' })}
         aria-label={t({ ko: '태그 추가', en: 'Add tag' })}
-        className="min-w-24 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        className="w-auto min-w-24 flex-1"
       />
     </div>
   )
@@ -123,8 +134,15 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const [status, setStatus] = useState<PostStatus>(post?.status ?? 'published')
   const [commentMode, setCommentMode] = useState<PostCommentMode>(post?.commentMode ?? 'open')
   const [pinned, setPinned] = useState(post?.pinned ?? false)
-  // The draft's own base: a refreshed post must not lend its newer revision to this older draft.
-  const [baseRevision] = useState(post?.revision)
+  // The draft's own base: the post as read when the editor opened. A refreshed post must not lend its newer revision
+  // to this older draft; only "load latest, keep my text" after a refused save moves the base on.
+  const [base, setBase] = useState(post)
+  const [conflict, setConflict] = useState(false)
+  const [rebasing, setRebasing] = useState(false)
+  const confirm = useConfirm()
+  // Set just before the editor's own move away (after a save, or a confirmed cancel) so the leave guard lets it pass.
+  const leavingRef = useRef(false)
+  const allowLeave = useCallback(() => leavingRef.current, [])
   const [tab, setTab] = useState<'write' | 'source' | 'preview'>('write')
   const [bodyOffset, setBodyOffset] = useState(0)
   const commitBody = useChatDraftTransaction(body, setBody)
@@ -138,14 +156,36 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const save = useMutation({
     mutationFn: () => {
       const input = { title, body, categoryId, tags, status, commentMode, ...(isAdmin ? { pinned } : {}) }
-      return post ? updatePost(post.id, { ...input, expectedRevision: baseRevision ?? post.revision }) : createPost(input)
+      return post ? updatePost(post.id, { ...input, expectedRevision: (base ?? post).revision }) : createPost(input)
     },
+    onMutate: () => setConflict(false),
     onSuccess: async (saved) => {
       await invalidatePostScope(queryClient, saved.id, 'post')
+      leavingRef.current = true
       onSaved(saved)
     },
-    onError: (error) => showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '글을 저장하지 못했어.', en: 'Could not save the post.' })) }),
+    onError: (error) => {
+      // Someone saved first: keep the draft and offer to rebase it on the latest version (see rebaseOnLatest).
+      if (post && error instanceof ApiRequestError && error.status === 409) { setConflict(true); return }
+      showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '글을 저장하지 못했어.', en: 'Could not save the post.' })) })
+    },
   })
+
+  /** Take the latest saved version as the draft's base, keeping every field as typed; the next save overwrites it. */
+  const rebaseOnLatest = async () => {
+    if (!post) return
+    setRebasing(true)
+    try {
+      const latest = await getPost(post.id)
+      setBase(latest)
+      setConflict(false)
+      showSnackbar({ tone: 'info', message: t({ ko: '최신본을 기준으로 바꿨어. 저장하면 내 글로 덮어써.', en: 'Now based on the latest version. Saving replaces it with your text.' }) })
+    } catch (error) {
+      showSnackbar({ tone: 'error', message: getErrorMessage(error, t({ ko: '최신본을 불러오지 못했어.', en: 'Could not load the latest version.' })) })
+    } finally {
+      setRebasing(false)
+    }
+  }
 
   /** Put embed lines at the caret, each on its own line. */
   const insert = (lines: string[]) => {
@@ -171,9 +211,20 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
   const categoryLabel = categoryLabels.find((item) => item.id === categoryId)?.label ?? NO_CATEGORY
   const assistantStatuses: PostStatus[] = isAdmin || post?.status === 'hidden' ? ['published', 'draft', 'hidden'] : ['published', 'draft']
   const bodyFits = body.length <= BODY_CHUNK
-  const dirty = post
-    ? title !== post.title || body !== post.body || categoryId !== post.categoryId || tags.join('\u0000') !== post.tags.join('\u0000') || status !== post.status || commentMode !== post.commentMode || (isAdmin && pinned !== post.pinned)
+  const dirty = base
+    ? title !== base.title || body !== base.body || categoryId !== base.categoryId || tags.join('\u0000') !== base.tags.join('\u0000') || status !== base.status || commentMode !== base.commentMode || (isAdmin && pinned !== base.pinned)
     : Boolean(title.trim() || body.trim())
+  useEditorPageGuard(dirty, t({ ko: '글에 저장하지 않은 변경이 있어. 나가면 사라져.', en: 'This post has unsaved changes that will be lost.' }), leavesPostEditor, allowLeave)
+  const cancel = async () => {
+    if (dirty && !(await confirm({
+      title: t({ ko: '고친 내용을 버릴까?', en: 'Discard your changes?' }),
+      description: t({ ko: '저장하지 않은 변경이 사라져.', en: 'Unsaved changes will be lost.' }),
+      confirmLabel: t({ ko: '버리기', en: 'Discard' }),
+      tone: 'destructive',
+    }))) return
+    leavingRef.current = true
+    onCancel()
+  }
   useChatPageRegistration(save.isPending || post?.knowledge ? null : {
     kind: 'posts',
     title: post ? t({ ko: '글 고치기', en: 'Edit post' }) : t({ ko: '새 글', en: 'New post' }),
@@ -227,14 +278,21 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 pb-16">
-      <input
+      {conflict ? (
+        <SaveConflictAlert>
+          <Button size="sm" variant="secondary" disabled={save.isPending || rebasing} onClick={() => void rebaseOnLatest()}>
+            {t({ ko: '최신본 불러오고 내 글 유지', en: 'Load latest, keep my text' })}
+          </Button>
+        </SaveConflictAlert>
+      ) : null}
+      <Input
+        variant="title"
         value={title}
         onChange={(event) => setTitle(event.target.value)}
         maxLength={POST_LIMITS.title}
         placeholder={t({ ko: '제목', en: 'Title' })}
         aria-label={t({ ko: '제목', en: 'Title' })}
         autoFocus={!post}
-        className="w-full border-b border-line bg-transparent pb-2 text-2xl font-bold outline-none placeholder:text-muted-foreground/60 focus:border-primary/60"
       />
       <div className="flex flex-wrap items-center gap-2">
         <Select variant="settings" className="w-full sm:w-56" aria-label={t({ ko: '카테고리', en: 'Category' })} value={categoryId ?? ''} onChange={(event) => setCategoryId(event.target.value ? Number(event.target.value) : null)}>
@@ -305,7 +363,7 @@ export function PostEditor({ post, categories, defaultCategoryId, onSaved, onCan
           </label>
         ) : null}
         <span className="flex-1" />
-        <Button variant="ghost" onClick={onCancel} disabled={save.isPending}>{t({ ko: '취소', en: 'Cancel' })}</Button>
+        <Button variant="ghost" onClick={() => void cancel()} disabled={save.isPending}>{t({ ko: '취소', en: 'Cancel' })}</Button>
         <Button onClick={() => save.mutate()} disabled={!title.trim() || save.isPending}>{t({ ko: '저장', en: 'Save' })}</Button>
       </div>
       {settings.data?.topicEvaluation.autoEnabled ? <p className="text-xs text-muted-foreground">{t(status === 'draft'
