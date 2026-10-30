@@ -96,14 +96,15 @@ function LogRow({ run }: { run: ChatJudgeLogRun }) {
   return (
     <div className="border-t border-line first:border-t-0">
       {/* eslint-disable-next-line no-restricted-syntax -- a full-width disclosure row; Button would pad and centre it */}
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="grid w-full cursor-pointer grid-cols-[1rem_7.5rem_minmax(8rem,12rem)_minmax(0,1fr)_auto] items-center gap-3 rounded-sm py-2.5 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="grid w-full cursor-pointer grid-cols-[1rem_7.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 rounded-sm md:grid-cols-[1rem_7.5rem_minmax(8rem,12rem)_minmax(0,1fr)_auto] py-2.5 text-left text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/40">
         <ChevronRight className={cn('size-4 text-muted-foreground transition-transform', open && 'rotate-90')} />
         <span className="tabular-nums text-xs text-muted-foreground">{formatDateTime(parseServerDate(run.createdAt), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
         <span className="min-w-0">
           <span className="block truncate font-medium">{run.profileName || (run.profileId === null ? t({ ko: '그룹 방', en: 'Group room' }) : `#${run.profileId}`)}</span>
           <span className="block truncate text-xs text-muted-foreground">{run.threadTitle || (run.source ? `${t({ ko: '플러그인', en: 'Plugin' })} · ${run.source}` : run.threadId === null ? t({ ko: '자산 묶음', en: 'Asset batch' }) : `#${run.threadId}`)} · {judgeStageLabel(run.stage, t)}</span>
         </span>
-        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+        {/* Phones: the verdicts take a second line under the profile, so the fixed columns never outgrow the screen. */}
+        <span className="col-span-3 col-start-2 row-start-2 flex min-w-0 flex-wrap items-center gap-1.5 md:col-span-1 md:col-start-auto md:row-start-auto">
           {run.items.map((item) => (
             <span key={item.itemId} className="inline-flex items-center gap-1">
               <span className="text-xs">{item.name}</span>

@@ -448,6 +448,9 @@ Do not restyle buttons with `bg-*`, `border`, `rounded-*` or `shadow-*` override
 - Horizontal scroll: the `scroll-x` class (overflow-x auto, overflow-y hidden), plus `theme-nav-scroll` to hide the bar.
   A bare `overflow-x-auto` also makes overflow-y auto, so a 1px underline or focus ring below the row grows a stray
   vertical scrollbar (`[ds/scroll-x]`).
+- Phone width: no row may be wider than the screen. Fixed grid columns plus gaps must fit about 20rem; otherwise move a
+  column to a second line below `md`. `#root` clips stray overflow (`index.css`) so fixed overlays keep the screen
+  width, but the clipped content is still cut off and has to be fixed in its own row.
 - When a piece repeats in two places and no shared component fits, add one to `components/common` (or a feature-local
   shared file) instead of copying the class string.
 

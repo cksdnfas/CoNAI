@@ -441,6 +441,15 @@
   }
 
   /*
+   * On phones one element wider than the screen widens the layout viewport, and every fixed overlay (dialogs, bottom
+   * sheets, the header) then sizes to it and spills past the screen. Root/body overflow propagates to the viewport and
+   * does not stop that, so the app root clips instead; `clip` makes no scroll container, so sticky parts keep working.
+   */
+  #root {
+    overflow-x: clip;
+  }
+
+  /*
    * Native select popups can't paint translucent fills (--field), so Chrome falls back to a white list while the
    * options keep the light foreground text. Give every option an opaque themed surface instead.
    */
